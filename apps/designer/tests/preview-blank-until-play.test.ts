@@ -73,4 +73,15 @@ describe('Preview — D-087 blank until play (broadcast flag)', () => {
     // The omitted-override slot carries the D-087 marker comment.
     expect(html).toContain('D-087');
   });
+
+  it('limits editable expired countdowns to the stopped main Canvas', () => {
+    const canvas = preview.load(SCENE, false, true).html;
+    const broadcast = preview.load(SCENE, true, false).html;
+    expect(canvas).toContain('const PAINT_EDITOR_BACKDROP = true;');
+    expect(broadcast).toContain('const PAINT_EDITOR_BACKDROP = false;');
+    for (const html of [canvas, broadcast]) {
+      expect(html).toContain('editCountdowns: PAINT_EDITOR_BACKDROP && !lifecycleActive');
+      expect(html).toContain('if (restoreAuthoring && currentScene) void applyScene(currentScene)');
+    }
+  });
 });

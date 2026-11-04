@@ -100,7 +100,7 @@ describe('D-171 — no look in scope: the next free plate-N in the whole project
   });
 });
 
-describe('B-187 — inside a LOOK: free in THAT look (the owner’s l1 / l1,l2 / l1,l2,l3)', () => {
+describe('D-171 — inside a LOOK: free in THAT look', () => {
   // Main holds a root plate `presenter` (on screen in every look) and two looks: A (2 plates)
   // and B (1 plate). The looks' own compositions are where the author draws.
   const looks = (aKeys: string[], bKeys: string[], rootKey = 'presenter') =>

@@ -3,7 +3,13 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { sha256Hex, unpack, verify } from '@cg/vcg-format';
-import { cgCss, cgJs, ExporterSingleFile, type ImageAssetSource } from '@cg/single-file-export';
+import {
+  cgCss,
+  cgJs,
+  ExporterSingleFile,
+  type ImageAssetLibrary,
+  type ImageAssetSource,
+} from '@cg/single-file-export';
 import type { AssetMeta } from '@cg/shared-ipc';
 import type { Manifest, Scene, TickerElement } from '@cg/shared-schema';
 import { Exporter } from '../src/platform/Exporter.js';
@@ -49,6 +55,22 @@ function stubAssets(): AssetStore {
     get: async (id: string) => (id === FONT_ASSET_ID ? fontMeta : null),
     bytes: async (id: string) => (id === FONT_ASSET_ID ? WOFF2 : null),
   } as unknown as AssetStore;
+}
+
+function emptyAssets(): AssetStore {
+  return {
+    list: async () => [],
+    get: async () => null,
+    bytes: async () => null,
+  } as unknown as AssetStore;
+}
+
+function sharedFontLibrary(): ImageAssetLibrary {
+  return {
+    list: async () => [fontMeta],
+    get: async (id: string) => (id === FONT_ASSET_ID ? fontMeta : null),
+    bytes: async (id: string) => (id === FONT_ASSET_ID ? WOFF2 : null),
+  };
 }
 
 function makeExporter(): Exporter {
@@ -237,6 +259,53 @@ describe('Exporter preflight — D-121 re-scopes vcg-ticker-fonts-not-bundled', 
     const warn = issues.find((i) => i.code === 'vcg-ticker-fonts-not-bundled');
     expect(warn).toBeDefined();
     expect(warn?.message).toContain(BUNDLED_FAMILY);
+    expect(issues.some((issue) => issue.code === 'missing-font')).toBe(true);
+  });
+});
+
+describe('D-126 — shared fonts resolve in both export formats', () => {
+  it('packages a font from Shared Library when the project store has no copy', async () => {
+    const exporter = new Exporter({
+      assets: emptyAssets(),
+      sharedFonts: sharedFontLibrary(),
+      cgJs: 'export const x = 1;',
+      cgCss: '',
+    });
+
+    const issues = await exporter.preflight(tickerScene(BUNDLED_FAMILY));
+    expect(issues.some((issue) => issue.code === 'vcg-ticker-fonts-not-bundled')).toBe(false);
+
+    const { files, manifest } = await unpack(
+      (await exporter.produce(tickerScene(BUNDLED_FAMILY))).vcg,
+    );
+    expect(files.get(FONT_PATH)).toEqual(WOFF2);
+    expect(manifest.assetIndex.find((entry) => entry.id === FONT_ASSET_ID)?.kind).toBe('font');
+  });
+
+  it('inlines a shared font into single-file HTML with no project copy', async () => {
+    const { html, issues } = await new ExporterSingleFile({
+      cgJsIife: '/* runtime */',
+      cgCss: '',
+      fontsCss: '',
+      assets: emptyAssets(),
+      sharedFonts: sharedFontLibrary(),
+    }).produce(tickerScene(BUNDLED_FAMILY));
+
+    expect(html).toContain(`@font-face{font-family:"${BUNDLED_FAMILY}"`);
+    expect(html).toContain(`data:font/woff2;base64,${Buffer.from(WOFF2).toString('base64')}`);
+    expect(issues.some((issue) => issue.code === 'missing-font')).toBe(false);
+  });
+
+  it('warns in single-file export when a referenced shared font was removed', async () => {
+    const { issues } = await new ExporterSingleFile({
+      cgJsIife: '/* runtime */',
+      cgCss: '',
+      fontsCss: '',
+      assets: emptyAssets(),
+      sharedFonts: { list: async () => [], get: async () => null, bytes: async () => null },
+    }).produce(tickerScene(BUNDLED_FAMILY));
+
+    expect(issues.some((issue) => issue.code === 'missing-font')).toBe(true);
   });
 });
 

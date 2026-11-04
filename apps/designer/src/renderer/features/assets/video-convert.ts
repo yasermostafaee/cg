@@ -56,6 +56,7 @@ import coreJsUrl from '@ffmpeg/core?url';
 import coreWasmUrl from '@ffmpeg/core/wasm?url';
 import {
   buildConvertArgs,
+  buildDecodeCheckArgs,
   buildPosterArgs,
   encodedFrameOf,
   isImageSequence,
@@ -64,7 +65,9 @@ import {
   sequenceFrameName,
   sequenceInput,
   type CropRect,
+  type PixelAspectMode,
   type SourceProbe,
+  type VideoColorInterpretation,
   type VideoSource,
 } from './video-convert-args.js';
 import { buildAudioConvertArgs, probedMono } from './audio-convert-args.js';
@@ -244,14 +247,15 @@ export type ProbeResult =
   | {
       ok: false;
       /**
-       * WHY the probe failed — the two paths must never share one message:
-       * `no-stream` = ffmpeg genuinely found no decodable video in THIS file
-       * (the log tail names the codec/container reason); `converter-crashed` =
+       * WHY the probe failed — these paths must never share one message:
+       * `no-stream` = ffmpeg found no readable video track; `decode-failed` = metadata exists but
+       * neither the poster nor a bounded frame-zero check could decode a frame;
+       * `converter-crashed` =
        * OUR worker died (FS error / abort) — the file may be perfectly fine,
        * so the UI must not blame it (the pre-fix bug read every post-crash
        * import as "unsupported format").
        */
-      reason: 'no-stream' | 'converter-crashed';
+      reason: 'no-stream' | 'decode-failed' | 'converter-crashed';
       logTail: string[];
     };
 
@@ -260,10 +264,9 @@ export type ProbeResult =
  * plus a first-frame PNG for the modal's crop preview. The probe exec exits
  * non-zero BY DESIGN (no output file) — the log carries the metadata.
  *
- * Resilience rules (from the first real-archive attempt): a failed POSTER
- * extraction downgrades to `posterUrl: null` (numeric crop still works); only a
- * source with NO parseable video stream fails — and then the ffmpeg log tail
- * travels with the failure so the operator sees WHY, not a dead end.
+ * Resilience rules (from the first real-archive attempt): a failed MID-CLIP poster falls back to a
+ * bounded frame-zero decode. If that succeeds, the source stays usable with `posterUrl: null`
+ * (numeric crop still works). If it also fails, conversion is refused before the long encode.
  *
  * Rejects (does not resolve) when `opts.signal` aborts — the caller that
  * aborted is gone, so no ProbeResult shape exists for it; the shared worker is
@@ -302,28 +305,40 @@ export async function probeSource(
         return { ok: false as const, reason: 'no-stream' as const, logTail: lines.slice(-8) };
       }
       let posterUrl: string | null = null;
-      try {
-        const posterPath = '/poster.png';
-        // Mid-clip poster (decision (a)); frame 0 only when the duration is unknown.
-        const posterSec = probe.durationMs > 0 ? posterTimeMs(probe.durationMs) / 1000 : undefined;
-        const code = await ff.exec(buildPosterArgs(input, posterPath, posterSec, inputOptions));
-        if (code === 0) {
-          const png = await ff.readFile(posterPath);
-          await ff.deleteFile(posterPath).catch(() => undefined);
-          const bytes = typeof png === 'string' ? new TextEncoder().encode(png) : png;
-          const ab = new ArrayBuffer(bytes.byteLength);
-          new Uint8Array(ab).set(bytes);
-          posterUrl = URL.createObjectURL(new Blob([ab], { type: 'image/png' }));
-        }
-      } catch (posterErr) {
-        // Preview-less import beats no import — but a THROW here means the
-        // runtime is suspect; drop it so the actual conversion starts fresh.
-        console.error(
-          '[video-convert] poster extraction threw — continuing without a preview:',
-          posterErr,
+      const posterPath = '/poster.png';
+      const posterLines: string[] = [];
+      // Mid-clip poster (decision (a)); frame 0 only when the duration is unknown. A clean non-zero
+      // exit is not enough to reject the source: fast seeking can fail on a decodable clip, so a
+      // bounded frame-zero decode below is the compatibility proof.
+      const posterSec = probe.durationMs > 0 ? posterTimeMs(probe.durationMs) / 1000 : undefined;
+      const posterCode = await withLogCapture(ff, posterLines, () =>
+        ff.exec(
+          buildPosterArgs(input, posterPath, posterSec, inputOptions, probe.sampleAspectRatio),
+        ),
+      );
+      if (posterCode === 0) {
+        const png = await ff.readFile(posterPath);
+        await ff.deleteFile(posterPath).catch(() => undefined);
+        const bytes = typeof png === 'string' ? new TextEncoder().encode(png) : png;
+        const ab = new ArrayBuffer(bytes.byteLength);
+        new Uint8Array(ab).set(bytes);
+        posterUrl = URL.createObjectURL(new Blob([ab], { type: 'image/png' }));
+      } else {
+        await ff.deleteFile(posterPath).catch(() => undefined);
+        const decodePath = '/decode-check.rgba';
+        const decodeLines: string[] = [];
+        const decodeCode = await withLogCapture(ff, decodeLines, () =>
+          ff.exec(buildDecodeCheckArgs(input, decodePath, inputOptions)),
         );
-        dropWorker(ff);
-        posterUrl = null;
+        await ff.deleteFile(decodePath).catch(() => undefined);
+        if (decodeCode !== 0) {
+          dropWorker(ff);
+          return {
+            ok: false as const,
+            reason: 'decode-failed' as const,
+            logTail: [...posterLines.slice(-4), ...decodeLines.slice(-8)].slice(-10),
+          };
+        }
       }
       // Success-path FS hygiene: leave nothing mounted between calls (the
       // conversion re-mounts via mountSource; a later import starts clean).
@@ -761,6 +776,12 @@ export async function convertToWebm(opts: {
   file: VideoSource;
   targetFps: number;
   crop?: CropRect | undefined;
+  /** Non-square source pixels, normalized after crop into the square-pixel stored form. */
+  sampleAspectRatio?: SourceProbe['sampleAspectRatio'];
+  /** Trust the file's display shape, or deliberately treat its coded pixels as square. */
+  pixelAspectMode?: PixelAspectMode | undefined;
+  /** Optional legacy QuickTime/RV32 channel interpretation used by VLC 3. */
+  colorInterpretation?: VideoColorInterpretation | undefined;
   /** D-128 — un-premultiply a matted-against-black source (fringe fix). OPT-IN. */
   premultipliedAlpha?: boolean | undefined;
   /** D-128 — the alpha-bleed robustness layer (transparent-region colour fill). OPT-IN. */
@@ -801,6 +822,9 @@ export async function convertToWebm(opts: {
               outputPath: output,
               targetFps: opts.targetFps,
               crop: opts.crop,
+              sampleAspectRatio: opts.sampleAspectRatio,
+              pixelAspectMode: opts.pixelAspectMode,
+              colorInterpretation: opts.colorInterpretation,
               premultipliedAlpha: opts.premultipliedAlpha,
               alphaBleed: opts.alphaBleed,
             }),

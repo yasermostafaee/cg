@@ -78,6 +78,6 @@ test.describe('D-112 — per-instance hold overrides (writable nested rows)', ()
 
     // The drill-in stays — open the child (a no-out-point child resolves to D-114 `static`).
     await app.page.getByRole('button', { name: /Open .* to edit its content/ }).click();
-    await expect(app.page.getByRole('combobox', { name: 'Playout mode' })).toHaveValue('static');
+    await expect(app.page.getByRole('combobox', { name: 'Playback mode' })).toHaveValue('static');
   });
 });

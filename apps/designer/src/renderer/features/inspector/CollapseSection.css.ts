@@ -83,5 +83,7 @@ export const body = style({
   display: 'flex',
   flexDirection: 'column',
   gap: '0.1rem',
+  paddingInlineStart: '0.6rem',
   paddingBottom: '0.25rem',
+  boxSizing: 'border-box',
 });

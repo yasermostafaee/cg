@@ -9,7 +9,7 @@ import type { Element, Playout, Scene } from '@cg/shared-schema';
  *
  * Three things are pinned here, and they are three different claims:
  *
- *  1. **The gate lost its CONTENT half** (`design.md` §9.2 / §3.5). "Pin content start" is
+ *  1. **The gate lost its CONTENT half** (`design.md` §9.2 / §3.5). "Set hold start" is
  *     offered on every composition with an out-point, shapes-only scenes included — the
  *     loop range is the two shipped markers and needs no ticker to mean something.
  *  2. **The out-point path is UNCHANGED, deliberately.** §9.2 settled that authoring a loop
@@ -23,10 +23,10 @@ import type { Element, Playout, Scene } from '@cg/shared-schema';
  *     hint rendered. A hint that rendered the wrong reason would pass a presence check and
  *     teach the operator the wrong fix.
  *
- * The Lottie case is a REGRESSION GUARD, not a fix: `hasContentElement` already counted an
- * opted-in Lottie, so removing the gate changes nothing for it. The earlier claim that this
- * change "resolves a discrepancy" was false and is withdrawn (§8 risk 5); the test exists to
- * keep the case true, not to prove a change.
+ * The Lottie case is a REGRESSION GUARD, not a fix: the former content-presence gate already
+ * counted an opted-in Lottie, so removing that gate changed nothing for it. The earlier claim
+ * that this change "resolves a discrepancy" was false and is withdrawn (§8 risk 5); the test
+ * exists to keep the case true, not to prove a change.
  */
 
 const { designerStore, editSceneOf } = await import('../src/renderer/state/store.js');
@@ -48,7 +48,7 @@ const T = {
   zIndex: 0,
 } as const;
 
-function shape(id: string): Element {
+function shape(id: string, timed = false): Element {
   return {
     ...T,
     id,
@@ -56,6 +56,7 @@ function shape(id: string): Element {
     type: 'shape',
     shape: 'rect',
     fill: { kind: 'solid', color: '#FF0000' },
+    ...(timed ? { lifespan: { in: 0, out: 100 } } : {}),
   } as unknown as Element;
 }
 
@@ -150,21 +151,43 @@ function mount(s: Scene): void {
   });
 }
 
+function rerender(): void {
+  act(() => {
+    root.render(createElement(PlayoutSection, { scene: editScene() }));
+  });
+}
+
 const button = (re: RegExp): HTMLButtonElement | null =>
-  [...host.querySelectorAll('button')].find((b) => re.test(b.textContent ?? '')) ?? null;
+  [...host.querySelectorAll('button')].find((b) =>
+    re.test(b.getAttribute('aria-label') ?? b.textContent ?? ''),
+  ) ?? null;
 const click = (b: HTMLButtonElement): void => act(() => b.click());
+const choose = (select: HTMLSelectElement, value: string): void => {
+  act(() => {
+    select.value = value;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+};
 const loopState = (): string =>
   host.querySelector<HTMLElement>('[data-testid="hold-loop-state"]')?.textContent ?? '';
+const holdLoopHelp = (): string => {
+  const tip = host.querySelector<HTMLButtonElement>(
+    '[data-testid="hold-loop-state"] [data-testid="info-tip"]',
+  );
+  expect(tip).not.toBeNull();
+  click(tip!);
+  return document.body.querySelector('[role="dialog"]')?.textContent ?? '';
+};
 
 describe('the loop range is authorable wherever an out-point exists', () => {
-  it('a SHAPES-ONLY scene with an out-point offers "Pin content start" — the content gate is gone', () => {
+  it('a SHAPES-ONLY scene with an Outro start offers "Set hold start"', () => {
     mount(scene([shape('rect-1')]));
-    expect(button(/pin content start/i)).not.toBeNull();
+    expect(button(/set hold start/i)).not.toBeNull();
   });
 
   it('and pinning writes the marker, so the affordance is real rather than merely present', () => {
     mount(scene([shape('rect-1')]));
-    click(button(/pin content start/i)!);
+    click(button(/set hold start/i)!);
     expect(editScene().lifecycle?.contentStart).toBeTypeOf('number');
   });
 
@@ -172,142 +195,124 @@ describe('the loop range is authorable wherever an out-point exists', () => {
     // REGRESSION GUARD, not a fix — this already held, because the affordance's old gate
     // counted opted-in media exactly as the canonical predicate does.
     mount(scene([holdingLottie('lot')]));
-    expect(button(/pin content start/i)).not.toBeNull();
+    expect(button(/set hold start/i)).not.toBeNull();
   });
 
-  it('with NO out-point there is no loop-range surface at all — only "Add out point"', () => {
+  it('with NO Outro start there is no loop-range surface — only "Set outro start"', () => {
     mount(scene([tickerEl('tick')], { lifecycle: null }));
-    expect(button(/pin content start/i)).toBeNull();
+    expect(button(/set hold start/i)).toBeNull();
     expect(loopState()).toBe('');
-    expect(button(/add out point/i)).not.toBeNull();
+    expect(button(/set outro start/i)).not.toBeNull();
   });
 });
 
 describe('authoring a loop range never creates an out-point', () => {
-  it('the loop-range surface does not call setLifecycle — pinning, and resetting to auto', () => {
+  it('the loop-range surface does not call setLifecycle — setting and clearing Hold start', () => {
     const spy = vi.spyOn(designerStore, 'setLifecycle');
 
     mount(scene([shape('rect-1')]));
-    click(button(/pin content start/i)!);
+    click(button(/set hold start/i)!);
     expect(spy).not.toHaveBeenCalled();
 
-    // The pinned half of the surface too — "Reset to auto" is the other control on it.
+    // The explicit half of the surface too — Clear returns Hold start to its derived value.
     mount(scene([shape('rect-1')], { lifecycle: { outPoint: 75, contentStart: 40 } }));
-    click(button(/reset to auto/i)!);
+    click(button(/clear hold start/i)!);
     expect(spy).not.toHaveBeenCalled();
 
     // The CONTROL that proves the spy discriminates: the out-point path, which is a
     // different surface and DOES write the lifecycle, exactly as it always has.
-    click(button(/clear out point/i)!);
+    click(button(/clear outro start/i)!);
     expect(spy).toHaveBeenCalledWith(null);
   });
 });
 
-describe('the three loops are named apart, and an inert range says why', () => {
-  it('ACTIVE: a content-driven hold with a real driver names the range and distinguishes the other two loops', () => {
+describe('composition-owned Hold behaviour (D-187)', () => {
+  it('Freeze is explicit and keeps the settled out-point picture', () => {
     mount(
-      scene([tickerEl('tick'), shape('rect-1')], {
+      scene([shape('rect-1', true)], {
         lifecycle: { outPoint: 75, contentStart: 40 },
-        playout: { mode: 'auto-out', holdSource: 'content-driven' },
+        playout: { mode: 'manual', holdBehavior: 'freeze' },
       }),
     );
-    const text = loopState();
-    expect(text).toMatch(/hold loop/i);
-    expect(text).toMatch(/frames 40 → 75/);
-    // `DESIGNER-FIX-0905` — the state is a TAG, read at a glance.
-    expect(text).toMatch(/^active/i);
-    // The CLAIM: the content survives the repeat. This is the item, so the surface says it.
-    expect(text).toMatch(/never restarts|keeps running/i);
-    // And it is not either of the other two loops — that distinction is TEACHING, read once,
-    // behind the row's `i` at reading size (the shared modal, portaled to `document.body`).
-    expect(text).not.toMatch(/preview loop/i);
-    const tip = host.querySelector<HTMLButtonElement>(
-      '[data-testid="hold-loop-state"] [data-testid="info-tip"]',
-    );
-    expect(tip).not.toBeNull();
-    click(tip!);
-    const modal = document.body.querySelector('[role="dialog"]')?.textContent ?? '';
-    expect(modal).toMatch(/preview loop/i);
-    expect(modal).toMatch(/loop cycle/i);
-    expect(modal).toMatch(/hold loop/i);
+    expect(loopState()).toMatch(/^freeze/i);
+    expect(loopState()).toMatch(/hold at frame 75/i);
+    expect(host.querySelector('[aria-label="rect-1 repeats during Hold"]')).toBeNull();
   });
 
-  it('DEGENERATE: a range whose start is at the out point reads EMPTY, whatever the mode', () => {
-    // `DESIGNER-FIX-0905` §2 — "38 → 38 shown as the degenerate loop it is": the runtime's own
-    // rule (`startHoldLoop`: `to <= from` parks), stated as the row's tag rather than left for
-    // the author to notice in the numbers.
+  it.each([
+    ['manual', undefined],
+    ['auto-out', 'timed'],
+    ['auto-out', 'content-driven'],
+    ['loop-cycle', 'timed'],
+  ] as const)('Loop middle is active for %s / %s Hold', (mode, holdSource) => {
     mount(
-      scene([tickerEl('tick'), shape('rect-1')], {
+      scene([tickerEl('tick'), shape('rect-1', true)], {
+        lifecycle: { outPoint: 75, contentStart: 40 },
+        playout: {
+          mode,
+          holdBehavior: 'loop',
+          ...(holdSource === undefined ? {} : { holdSource }),
+        },
+      }),
+    );
+    expect(loopState()).toMatch(/^loop/i);
+    expect(loopState()).toMatch(/middle frames 40 → 75/i);
+  });
+
+  it('an empty Middle range is reported as empty', () => {
+    mount(
+      scene([shape('rect-1', true)], {
         lifecycle: { outPoint: 38, contentStart: 38 },
-        playout: { mode: 'auto-out', holdSource: 'content-driven' },
+        playout: { mode: 'manual', holdBehavior: 'loop' },
       }),
     );
-    const text = loopState();
-    expect(text).toMatch(/^empty/i);
-    expect(text).toMatch(/frames 38 → 38/);
-    expect(text).toMatch(/nothing to replay/i);
-    expect(text).not.toMatch(/no playback effect/i);
+    expect(loopState()).toMatch(/^empty/i);
+    expect(loopState()).toMatch(/frames 38 → 38/);
+    expect(holdLoopHelp()).toMatch(/nothing to replay/i);
   });
 
-  it('INERT (no drivers): it names the MISSING DRIVER, not the hold select', () => {
-    // A shapes-only scene with the select on content-driven: B-032 resolves that back to
-    // `timed` everywhere, so "switch the select" would be a lie — it is already switched.
+  it('the unpinned Middle range still states the effective frames', () => {
     mount(
-      scene([shape('rect-1')], {
-        lifecycle: { outPoint: 75, contentStart: 40 },
-        playout: { mode: 'auto-out', holdSource: 'content-driven' },
-      }),
-    );
-    const text = loopState();
-    expect(text).toMatch(/^inert/i);
-    expect(text).toMatch(/no playback effect/i);
-    expect(text).toMatch(/no effective hold driver/i);
-    expect(text).toMatch(/ticker|sequence|countdown/i);
-    // The wrong advice, explicitly excluded.
-    expect(text).not.toMatch(/set hold to content-driven/i);
-  });
-
-  it('INERT (timed hold): with a real driver present it names the HOLD SOURCE as the missing condition', () => {
-    mount(
-      scene([tickerEl('tick'), shape('rect-1')], {
-        lifecycle: { outPoint: 75, contentStart: 40 },
-        playout: { mode: 'auto-out', holdSource: 'timed', holdMs: 2000 },
-      }),
-    );
-    const text = loopState();
-    expect(text).toMatch(/no playback effect/i);
-    expect(text).toMatch(/hold is timed/i);
-    expect(text).toMatch(/content-driven/i);
-    // NOT the driver reason — this composition has one.
-    expect(text).not.toMatch(/no effective hold driver/i);
-  });
-
-  it('INERT (manual): `holdSource` is ignored entirely, so the MODE is named — even with drivers and the select on content-driven', () => {
-    // §9.1 correction 4: there are THREE hold states, and under `manual` there is no hold
-    // source at all. Naming the select here would send the operator to a control that is
-    // already correct.
-    mount(
-      scene([tickerEl('tick')], {
-        lifecycle: { outPoint: 75, contentStart: 40 },
-        playout: { mode: 'manual', holdSource: 'content-driven' },
-      }),
-    );
-    const text = loopState();
-    expect(text).toMatch(/no playback effect/i);
-    expect(text).toMatch(/manual hold/i);
-    expect(text).toMatch(/auto-out|loop-cycle/i);
-    expect(text).not.toMatch(/no effective hold driver/i);
-  });
-
-  it('the UNPINNED range still states its frames — it is present by default, not on demand', () => {
-    // No `contentStart`: the surface reports the range it WOULD loop, from the same default
-    // the pin button writes, so the operator can see the loop before authoring anything.
-    mount(
-      scene([tickerEl('tick'), shape('rect-1')], {
+      scene([shape('rect-1', true)], {
         lifecycle: { outPoint: 75 },
-        playout: { mode: 'auto-out', holdSource: 'content-driven' },
+        playout: { mode: 'manual', holdBehavior: 'loop' },
       }),
     );
     expect(loopState()).toMatch(/frames \d+ → 75/);
+  });
+
+  it('lists only loop-capable picture elements and persists unchecked elements as one-shot', () => {
+    mount(
+      scene([shape('Plate', true), holdingLottie('Sting'), tickerEl('Crawl')], {
+        lifecycle: { outPoint: 75, contentStart: 40 },
+        playout: { mode: 'manual', holdBehavior: 'loop' },
+      }),
+    );
+
+    const plate = host.querySelector<HTMLInputElement>('[aria-label="Plate repeats during Hold"]');
+    const sting = host.querySelector<HTMLInputElement>('[aria-label="Sting repeats during Hold"]');
+    expect(plate?.checked).toBe(true);
+    expect(sting?.checked).toBe(true);
+    expect(host.querySelector('[aria-label="Crawl repeats during Hold"]')).toBeNull();
+
+    act(() => plate!.click());
+    expect(editScene().playout?.holdLoopElementIds).toEqual(['Sting']);
+  });
+
+  it('changing the composition selector reveals and hides the repeat checklist immediately', () => {
+    mount(
+      scene([shape('Plate', true)], {
+        lifecycle: { outPoint: 75, contentStart: 40 },
+        playout: { mode: 'manual', holdBehavior: 'freeze' },
+      }),
+    );
+    const select = host.querySelector<HTMLSelectElement>('[aria-label="On hold"]');
+    expect(select?.value).toBe('freeze');
+    choose(select!, 'loop');
+    rerender();
+    expect(host.querySelector('[aria-label="Plate repeats during Hold"]')).not.toBeNull();
+    choose(host.querySelector<HTMLSelectElement>('[aria-label="On hold"]')!, 'freeze');
+    rerender();
+    expect(host.querySelector('[aria-label="Plate repeats during Hold"]')).toBeNull();
   });
 });

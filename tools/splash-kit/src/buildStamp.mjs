@@ -88,10 +88,10 @@ export function createBuildStamp(appDir) {
    * build without waiting for the app or searching Windows. `0.0.0` remains a development
    * placeholder and is deliberately omitted rather than advertised as a release.
    */
-  const stampText =
-    stamp.version === '0.0.0'
-      ? `${stamp.sha} · ${stamp.builtAt}`
-      : `v${stamp.version} · ${stamp.sha} · ${stamp.builtAt}`;
+  const parts = [];
+  if (stamp.version !== '0.0.0') parts.push(`Version ${stamp.version}`);
+  parts.push(`Built ${stamp.builtAt}`);
+  const stampText = parts.join(' · ');
 
   const plugin = {
     name: 'cg-build-stamp',

@@ -222,7 +222,7 @@ SAME `ZoomIn` / `ZoomOut` pair.
 Each of the three panel "add" buttons SHALL render the `lucide-react` `Plus` icon
 via the shared `Icon` at ONE consistent size, replacing the per-panel `+` glyph
 text — these are the Project Assets "Add asset", Compositions "New composition",
-and Shared Library "Add library image" controls — and their `iconButton` boxes
+and Shared Library "Add shared asset" controls — and their `iconButton` boxes
 SHALL match (no divergent `fontSize`). Each control keeps its existing
 `aria-label` / `title` / handlers.
 

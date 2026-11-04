@@ -40,10 +40,46 @@ mutation path; moving the controls does not copy field state or add a second mod
 nested fields share the same column contract, with namespace headings supplying the path. The active
 Variables tab already names the surface, so the panel does not repeat a second VARIABLES heading.
 
+At rest, long values stay ellipsized so every row remains scannable. Native hover text exposes the
+complete Title, binding summary, type and namespace heading. While Title has focus, its cell spans
+the adjacent Type / binding column and that read-only cell is hidden; Actions keep their original
+column. This gives author-entered text useful editing space without introducing horizontal scrolling
+or a persistent resizable-table state.
+
+The direct composition-instance `name` remains the stable data namespace used by payloads. Its
+visible `label` is derived from the referenced composition's current name, so a rename updates the
+author-facing heading without silently breaking external data keys.
+
+### 4. Bind mode is a distinct targeting tool
+
+Each field row has one fixed binding toggle. When unbound it has the accessible name **Bind from
+canvas** and a link glyph; when bound the same control becomes **Unbind** with an unlink glyph.
+Unbind clears the field's relationship without moving the operator to a second action in the binding
+summary. The toggle's hover and active Bind states use the binding violet, not the ordinary blue
+selection/accent colour; the Unbind hover uses danger red so removal is unambiguous. Activating Bind
+replaces the normal pointer with the same pointer plus a clear violet chain-link badge across both
+canvas and pasteboard. The dark editing surround receives a violet inset frame with a soft shadow for
+the entire Bind mode, so the pending action is visible even before the pointer reaches an element
+without changing the truthful boundary of the output itself. Pointer movement runs the same
+`resolveBinding` compatibility check as the final click; a compatible topmost element receives a
+dashed violet frame derived from the same effective transform, animated path bounds and layout
+quantisation as the selection gizmo. It has no handles and never reuses the blue selection colour.
+Leaving the target clears only the target frame; cancelling with Escape or committing also clears
+the editing-surround Bind frame.
+
+A compact status card at the top of the work area says **Select an element** and names the compatible
+element families derived from the same field-type matrix as `resolveBinding` (for example, Text,
+Live Source and Lottie text for a text field). It is guidance, not a second compatibility rule, and
+disappears with Bind mode.
+
 ## Risks / Trade-offs
 
 - A narrow pane can make a literal HTML table overflow. The implementation uses a compact CSS grid
   with table semantics/labels and responsive wrapping rather than fixed pixel columns.
+- Native hover text is intentionally a lightweight disclosure rather than a second persistent row;
+  focused Title expansion supplies the corresponding authoring affordance.
+- Compatibility resolution now runs during Bind hover as well as click. It is a local, synchronous
+  element/type check; no document mutation or asset conversion occurs during pointer movement.
 - Hiding empty namespaces must not hide a non-empty descendant; recursive visibility is tested at
   more than one nesting level.
 

@@ -1,5 +1,5 @@
 import type { Element, Scene, Transform } from '@cg/shared-schema';
-import { anim, EASE, kf, track } from './anim.js';
+import { anim, EASE, kf, kfLinear, track } from './anim.js';
 
 /**
  * «آرم شبکه» — a corner channel bug built around a replaceable APASAI logo
@@ -28,14 +28,12 @@ const H = 1080;
 const FAM = 'asset-logo-bug-vazir';
 
 // ── Palette (shared broadcast-news family) ─────────────────────────────────
-const GOLD = '#E3B04B';
 const WHITE = '#FFFFFF';
 
-// Bound-field copy. Each of these is BOTH the element's base text and the
-// field's `default`, so the Designer shows real Persian (never a raw token) and
+// Bound-field copy is BOTH the element's base text and the field's `default`,
+// so the Designer shows real Persian (never a raw token) and
 // an operator who sends no value gets the same string on air.
 const CHANNEL_DEFAULT = 'شبکه جدید';
-const TAG_DEFAULT = 'پخش زنده';
 
 // ── Footprint comp geometry — nested at (1392, 40) in the full frame ──────
 const MARK_W = 448;
@@ -85,35 +83,13 @@ const markChildren: Element[] = [
       opacity: track(kf(8, 0), kf(20, 1), kf(100, 1), kf(114, 0)),
     }),
   },
-  // Gold separator between mark and wordmark.
-  {
-    id: 'lb-sep',
-    name: 'separator',
-    type: 'shape',
-    transform: tf(314, 42, 3, 44),
-    opacity: 1,
-    visible: true,
-    locked: false,
-    zIndex: 3,
-    shape: 'rect',
-    fill: { kind: 'solid', color: GOLD },
-    animation: anim({
-      'scale.y': track(
-        kf(26, 0, EASE.outExpo),
-        kf(44, 1, EASE.outExpo),
-        kf(78, 1, EASE.inCubic),
-        kf(92, 0, EASE.inCubic),
-      ),
-      opacity: track(kf(26, 0), kf(38, 1), kf(82, 1), kf(92, 0)),
-    }),
-  },
   // Wordmark — carries the `channel` data key (base text = its default); sits
   // LEFT of the mark (RTL layout).
   {
     id: 'lb-word',
     name: 'wordmark',
     type: 'text',
-    transform: tf(28, 24, 274, 44, { ax: 0, ay: 0 }),
+    transform: tf(28, 50, 274, 44, { ax: 0, ay: 0 }),
     opacity: 1,
     visible: true,
     locked: false,
@@ -137,39 +113,11 @@ const markChildren: Element[] = [
       opacity: track(kf(32, 0), kf(52, 1), kf(74, 1), kf(92, 0)),
       'position.x': track(
         kf(32, 44, EASE.outExpo),
+        kfLinear(44, 28),
         kf(54, 28, EASE.outExpo),
         kf(74, 28, EASE.inCubic),
         kf(92, 44, EASE.inCubic),
       ),
-    }),
-  },
-  // Sub-tag — carries the `tag` data key (base text = its default).
-  {
-    id: 'lb-tag',
-    name: 'sub-tag',
-    type: 'text',
-    transform: tf(28, 72, 274, 26, { ax: 0, ay: 0 }),
-    opacity: 1,
-    visible: true,
-    locked: false,
-    zIndex: 4,
-    text: TAG_DEFAULT,
-    font: {
-      family: FAM,
-      weight: 500,
-      style: 'normal',
-      size: 15,
-      lineHeight: 1.3,
-      letterSpacing: 0,
-    },
-    color: GOLD,
-    align: 'start',
-    direction: 'rtl',
-    fitMode: 'fixed',
-    overflow: 'clip',
-    animation: anim({
-      opacity: track(kf(44, 0), kf(62, 0.95), kf(70, 0.95), kf(82, 0)),
-      'position.y': track(kf(44, 80, EASE.outExpo), kf(64, 72, EASE.outExpo)),
     }),
   },
 ];
@@ -254,19 +202,8 @@ export const logoBugScene: Scene = {
       direction: 'rtl',
       default: CHANNEL_DEFAULT,
     },
-    {
-      id: 'tag',
-      label: 'Tag (زیرنوشت)',
-      required: false,
-      type: 'text',
-      direction: 'rtl',
-      default: TAG_DEFAULT,
-    },
   ],
-  bindings: [
-    { fieldId: 'channel', target: { kind: 'text', elementId: 'lb-word' } },
-    { fieldId: 'tag', target: { kind: 'text', elementId: 'lb-tag' } },
-  ],
+  bindings: [{ fieldId: 'channel', target: { kind: 'text', elementId: 'lb-word' } }],
   fonts: [
     {
       family: FAM,

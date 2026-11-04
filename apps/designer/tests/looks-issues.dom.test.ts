@@ -202,7 +202,7 @@ describe('the LOOKS refusal family appears in the section, in the wording of the
       }),
     );
     expect(text).toContain('export will refuse');
-    expect(text).toContain('DIFFERENT looks is fine');
+    expect(text).toContain('DIFFERENT Presets is fine');
   });
 
   it('🔴 a root plate overlapping a plate of the active look is surfaced, naming the look', () => {
@@ -214,7 +214,7 @@ describe('the LOOKS refusal family appears in the section, in the wording of the
       }),
     );
     expect(text).toContain('export will refuse');
-    expect(text).toContain('when look "look-a" is active');
+    expect(text).toContain('when Preset "look-a" is active');
   });
 
   it('🔴 a SECOND multi-frame group is surfaced with the v1 bound', () => {

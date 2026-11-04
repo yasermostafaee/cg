@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type {
   AnchorPoint,
   Element,
+  FieldBinding,
   LottieElement,
   LottiePhases,
   Scene,
@@ -45,7 +46,7 @@ import { getActiveSharedImage } from '../sharedLibrary/activeSharedImage.js';
 import { resolveBinding } from '../fields/bind-resolver.js';
 import * as lottieAssetCache from '../assets/lottieAssetCache.js';
 import { probeStoredVideo } from '../assets/video-asset-probe.js';
-import { effectivePathBoxPoints } from '../timeline/keyframe-helpers.js';
+import { effectivePathBoxPoints, effectivePathLocalRect } from '../timeline/keyframe-helpers.js';
 import { topmostHit } from './hit-test.js';
 import {
   PEN_CLOSE_PX,
@@ -62,14 +63,17 @@ import { collectGroupMoveTargets } from './group-move.js';
 import { drillTarget } from './drill.js';
 import {
   clampDeltaToPasteboard,
+  gizmoCorners,
+  gizmoCornersOfRect,
   pasteboardSceneBounds,
   pixelSnapActive,
   quantiseDragCommit,
+  quantizeBoxToLayout,
   screenToScene,
   snapAxis,
   snapDragToPixel,
 } from './geometry.js';
-import { Gizmo, MultiGizmo, lockCursor } from './Gizmo.js';
+import { Gizmo, MultiGizmo, lockCursor, type ElementFrameResolver } from './Gizmo.js';
 import { TextEditor } from './TextEditor.js';
 import * as s from './CanvasOverlay.css.js';
 import { hasNoActiveCell, renderedTransformAt } from '../../state/slices/arrangements.js';
@@ -89,6 +93,20 @@ const ARROW_SVG =
   '<path d="M5 3L5 18.5L9 14.8L14.6 14.8Z" filter="url(#cgsh)" ' +
   'fill="#0B0E16" stroke="#fff" stroke-width="0.9" stroke-linejoin="round"/></svg>';
 export const ARROW_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(ARROW_SVG)}") 7 4, default`;
+
+/** Bind mode keeps the normal pointer tip and adds a violet chain badge beside it. */
+const BIND_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 32 32">' +
+  '<defs><filter id="cgsh" x="-50%" y="-50%" width="200%" height="200%">' +
+  '<feDropShadow dx="0" dy="0.7" stdDeviation="0.7" flood-color="#000" flood-opacity="0.5"/>' +
+  '</filter></defs>' +
+  '<path d="M4 2.5L4 18L8.2 14.3L13.8 14.3Z" filter="url(#cgsh)" ' +
+  'fill="#0B0E16" stroke="#fff" stroke-width="0.9" stroke-linejoin="round"/>' +
+  `<circle cx="22" cy="22" r="8.7" fill="#171B2D" stroke="${colors.binding}" stroke-width="1.5" filter="url(#cgsh)"/>` +
+  '<path d="M20.5 18.7h-1.4a3.3 3.3 0 0 0 0 6.6h1.4M23.5 18.7h1.4a3.3 3.3 0 0 1 0 6.6h-1.4M19.7 22h4.6" ' +
+  `fill="none" stroke="${colors.binding}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>` +
+  '</svg>';
+export const BIND_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(BIND_SVG)}") 5 3, default`;
 
 /** Initial size for a stamped logo: the image's aspect, longest side ≤ 320px. */
 function logoSize(image: AssetMeta): { width: number; height: number } {
@@ -295,6 +313,8 @@ interface Props {
    */
   frameOffset: { x: number; y: number };
   currentFrame: number;
+  /** B-381 — frames actually painted for root elements during lifecycle playback. */
+  elementFrames?: ReadonlyMap<string, number> | undefined;
   /** Hand-tool drag delta callback (deltaX, deltaY in scene pixels). */
   onPan?: (dx: number, dy: number) => void;
   /** `D-157` — live preflight issues, so the canvas MARKS what is blocking the export. */
@@ -320,6 +340,7 @@ export function CanvasOverlay({
   scale,
   frameOffset,
   currentFrame,
+  elementFrames,
   onPan,
   issues = [],
 }: Props): JSX.Element {
@@ -335,10 +356,18 @@ export function CanvasOverlay({
   // B-037 — the pointer's scene position while a pen draft is live (null otherwise),
   // driving the rubber-band + close-affordance feedback overlay.
   const [penPointer, setPenPointer] = useState<{ x: number; y: number } | null>(null);
+  // D-193 — the compatible element under the bind cursor. It is presentation-only;
+  // the binding is still committed solely by pointer-down through resolveBinding.
+  const [bindHoverId, setBindHoverId] = useState<string | null>(null);
   // The frame-origin box (scene 0,0). The pointer LAYER spans the whole pasteboard;
   // this inner box is inset by `frameOffset`, so its rect is the scene origin used by
   // both the gizmo/`canvas-surface` positioning and click→scene mapping.
   const frameRef = useRef<HTMLDivElement>(null);
+  // B-381 — one geometry clock for every overlay path. Lifecycle playback may paint
+  // checked Middle-loop members at the root cursor while unchecked members continue on
+  // their independent tail; absent telemetry falls back to the authored playhead.
+  const frameForElement: ElementFrameResolver = (elementId) =>
+    elementFrames?.get(elementId) ?? currentFrame;
 
   const allElements: Element[] = [];
   {
@@ -374,14 +403,15 @@ export function CanvasOverlay({
   // single-click select, double-click-to-edit — follows the morphed outline,
   // including regions grown beyond the static base shape.
   const allElementsAtFrame: Element[] = allElements.map((el) => {
-    const boxPoints = el.type === 'path' ? effectivePathBoxPoints(el, currentFrame) : null;
+    const elementFrame = frameForElement(el.id);
+    const boxPoints = el.type === 'path' ? effectivePathBoxPoints(el, elementFrame) : null;
     return {
       ...el,
       // D-154 — hit-test the ARRANGED rect, so a click selects the box where it is drawn.
       // B-175 — through the ONE read side, the same one the gizmo draws and the gestures
       // compute from. `drillTarget` reads its instance out of THIS list, which is why the
       // double-click drill was already correct while the gestures were not.
-      transform: renderedTransformAt(el, currentFrame),
+      transform: renderedTransformAt(el, elementFrame),
       ...(boxPoints !== null ? { points: boxPoints } : {}),
     };
   });
@@ -480,6 +510,18 @@ export function CanvasOverlay({
     return screenToScene(clientX, clientY, rect, scale);
   }
 
+  function bindingForHit(fieldId: string, hit: Element): FieldBinding | null {
+    const field = scene.fields.find((candidate) => candidate.id === fieldId);
+    if (field === undefined) return null;
+    return resolveBinding(
+      field,
+      hit,
+      hit.type === 'lottie'
+        ? { lottieLayers: lottieLayerNames(lottieAssetCache.get(hit.assetId)) }
+        : undefined,
+    );
+  }
+
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>): void {
     if (e.button !== 0) return;
     // Don't steal pointer events while a text editor is up — let
@@ -500,20 +542,10 @@ export function CanvasOverlay({
     if (bindModeFieldId !== null) {
       const hit = topmostHit(allElementsAtFrame, scenePoint);
       if (hit !== null) {
-        const field = scene.fields.find((f) => f.id === bindModeFieldId);
-        if (field !== undefined) {
-          // D-125 Phase 3c — a Lottie target needs the clip's layer names (parsed
-          // animation from the cache); every other element type resolves from the
-          // (field, element) pair alone.
-          const binding = resolveBinding(
-            field,
-            hit,
-            hit.type === 'lottie'
-              ? { lottieLayers: lottieLayerNames(lottieAssetCache.get(hit.assetId)) }
-              : undefined,
-          );
-          if (binding !== null) designerStore.addBinding(binding);
-        }
+        // D-125 Phase 3c — bindingForHit supplies a Lottie's parsed layer names;
+        // every other element resolves from the field/element pair alone.
+        const binding = bindingForHit(bindModeFieldId, hit);
+        if (binding !== null) designerStore.addBinding(binding);
       }
       designerStore.setBindMode(null);
       return;
@@ -547,12 +579,12 @@ export function CanvasOverlay({
       // the single-element drag (today's keyframe-aware path, unchanged).
       const isMember = selection.size > 1 && selection.has(hit.id);
       if (isMember && !hit.locked) {
-        beginGroupDrag(hit.id, scale, currentFrame, e.nativeEvent);
+        beginGroupDrag(hit.id, scale, currentFrame, frameForElement, e.nativeEvent);
       } else {
         designerStore.setSelection([hit.id]);
         // A locked element can be selected (to recolor / unlock it) but not
         // moved — and its resize/rotate gizmo is hidden (see render below).
-        if (!hit.locked) beginDrag(hit.id, scale, currentFrame, e.nativeEvent);
+        if (!hit.locked) beginDrag(hit.id, scale, frameForElement, e.nativeEvent);
       }
       return;
     }
@@ -631,11 +663,12 @@ export function CanvasOverlay({
         chose, and `look-source-duplicate` is the rule that states it. An unassigned plate
         cannot collide with anything.
 
-        🔴 `B-187` / D-171 — the plate gets the next free `plate-N` IN ITS
+        🔴 `D-171` (owner, 2026-11-02) — the plate gets the next free `plate-N` IN ITS
         LOOK, MARKED `routeKeyAuto` until the author confirms or renames it. The tool still
         chooses, but now it SAYS it chose: the Inspector shows "auto", which is the condition
         on which the owner reopened this. The name never collides where one source is one seat
-        (`state/auto-source-id.ts`), and the operator still maps it in CG Control.
+        (`state/auto-source-id.ts`), and the operator still maps it in CG Control. Existing
+        authored `live-N` ids are data and remain unchanged.
       */
       const id = `el-${String(Date.now())}`;
       const st = designerStore.get();
@@ -680,6 +713,15 @@ export function CanvasOverlay({
   }
 
   function onPointerMove(e: React.PointerEvent<HTMLDivElement>): void {
+    if (bindModeFieldId !== null) {
+      const hit = topmostHit(allElementsAtFrame, viewportToScene(e.clientX, e.clientY));
+      const compatible = hit !== null && bindingForHit(bindModeFieldId, hit) !== null ? hit : null;
+      setBindHoverId((current) =>
+        current === compatible?.id ? current : (compatible?.id ?? null),
+      );
+    } else if (bindHoverId !== null) {
+      setBindHoverId(null);
+    }
     // B-037 — track the pointer (scene coords) while a pen draft is live, driving
     // the rubber-band + close-affordance feedback; cleared when idle so a stale
     // position never paints.
@@ -718,7 +760,7 @@ export function CanvasOverlay({
     if (hit.type === 'composition') {
       const child = scene.compositions?.find((c) => c.id === hit.compositionId);
       if (child === undefined) return;
-      const target = drillTarget(hit, child, scenePoint, currentFrame);
+      const target = drillTarget(hit, child, scenePoint, frameForElement(hit.id));
       if (target === null) return;
       designerStore.openCompositionAndSelect(target.compositionId, target.shapeId);
     }
@@ -726,7 +768,7 @@ export function CanvasOverlay({
 
   const cursorStyle =
     bindModeFieldId !== null
-      ? 'crosshair'
+      ? BIND_CURSOR
       : tool === 'cursor'
         ? ARROW_CURSOR
         : tool === 'hand'
@@ -795,10 +837,15 @@ export function CanvasOverlay({
     <div
       ref={layerRef}
       className={s.layer}
+      data-testid="canvas-input-overlay"
+      data-bind-mode={bindModeFieldId !== null ? 'true' : 'false'}
       style={{ cursor: cursorStyle }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
-      onPointerLeave={() => setPenPointer(null)}
+      onPointerLeave={() => {
+        setPenPointer(null);
+        setBindHoverId(null);
+      }}
       onContextMenu={onContextMenu}
       onDoubleClick={onDoubleClick}
       onDragOver={onDragOver}
@@ -830,6 +877,13 @@ export function CanvasOverlay({
             selected offender's resize handles stay on top: the author's next move is to drag
             this box apart, and the mark must never be in the way of doing so. */}
         <ErrorMarkOverlay scene={scene} issues={issues} scale={scale} />
+        {bindModeFieldId !== null && bindHoverId !== null && (
+          <BindTargetOutline
+            element={allElements.find((candidate) => candidate.id === bindHoverId) ?? null}
+            scale={scale}
+            elementFrame={frameForElement(bindHoverId)}
+          />
+        )}
         {/* B-037 — no gizmo while the pen is armed: addElement auto-selects the
             in-progress draft, and the gizmo's corner/edge/rotation hit-zones sit
             exactly where pen clicks go (the first anchor is always on the draft's
@@ -845,7 +899,7 @@ export function CanvasOverlay({
           editingPathId === null &&
           editingEl === null &&
           bindModeFieldId === null && (
-            <Gizmo element={selectedEl} scale={scale} currentFrame={currentFrame} />
+            <Gizmo element={selectedEl} scale={scale} frameForElement={frameForElement} />
           )}
         {/* D-109/D-124 — the path edit overlay (anchors + handles) mounts ONLY in
             point-edit mode (double-click the path to enter; a single click shows the
@@ -860,7 +914,7 @@ export function CanvasOverlay({
           editingEl === null &&
           bindModeFieldId === null && <PathEditor element={selectedEl} scale={scale} />}
         {selectedEls.length > 1 && editingEl === null && bindModeFieldId === null && (
-          <MultiGizmo elements={selectedEls} scale={scale} currentFrame={currentFrame} />
+          <MultiGizmo elements={selectedEls} scale={scale} frameForElement={frameForElement} />
         )}
         {/* B-037 — draw-state feedback while a pen draft is live: placed-anchor
             markers, the rubber band to the pointer, and the first-anchor close
@@ -882,6 +936,48 @@ export function CanvasOverlay({
       {/* D-071 Phase B — the snap/alignment guides moved to CanvasArea so they span
           the full visible canvas (the pasteboard), not just this frame-bound stage. */}
     </div>
+  );
+}
+
+/** D-193 — a dashed violet target frame, visually unrelated to blue selection. */
+function BindTargetOutline({
+  element,
+  scale,
+  elementFrame,
+}: {
+  element: Element | null;
+  scale: number;
+  elementFrame: number;
+}): JSX.Element | null {
+  if (element === null) return null;
+  const transform = renderedTransformAt(element, elementFrame);
+  const liveRect = effectivePathLocalRect(element, elementFrame);
+  const corners =
+    liveRect === null
+      ? gizmoCorners(quantizeBoxToLayout(transform), scale)
+      : gizmoCornersOfRect(transform, liveRect, scale);
+  const points = `${String(corners.tl.x)},${String(corners.tl.y)} ${String(corners.tr.x)},${String(corners.tr.y)} ${String(corners.br.x)},${String(corners.br.y)} ${String(corners.bl.x)},${String(corners.bl.y)}`;
+  return (
+    <svg className={s.bindTargetLayer} aria-hidden>
+      <polygon
+        points={points}
+        fill="none"
+        stroke={colors.onAccent}
+        strokeWidth={6}
+        strokeLinejoin="round"
+        opacity={0.78}
+      />
+      <polygon
+        data-testid="bind-target-outline"
+        data-target-id={element.id}
+        points={points}
+        fill="none"
+        stroke={colors.binding}
+        strokeWidth={3}
+        strokeDasharray="7 4"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
@@ -994,7 +1090,12 @@ function beginPan(ev: PointerEvent, onPan?: (dx: number, dy: number) => void): v
   window.addEventListener('pointerup', onUp);
 }
 
-function beginDrag(elementId: string, scale: number, currentFrame: number, ev: PointerEvent): void {
+function beginDrag(
+  elementId: string,
+  scale: number,
+  frameForElement: ElementFrameResolver,
+  ev: PointerEvent,
+): void {
   const state = designerStore.get();
   if (state.scene === null) return;
   // Look up the element in the *active composition* — the project root's
@@ -1026,7 +1127,7 @@ function beginDrag(elementId: string, scale: number, currentFrame: number, ev: P
   // was already the intent of this line; with an arrangement active `effectiveTransformAt`
   // stopped being visually effective, and the box jumped to its authored position on the
   // first pointer-move. Same fault as `beginResize`, on the gesture the author uses most.
-  const t0 = renderedTransformAt(element, currentFrame);
+  const t0 = renderedTransformAt(element, frameForElement(element.id));
   const startPos = { x: t0.position.x, y: t0.position.y };
   const w = t0.size.w * t0.scale.x;
   const h = t0.size.h * t0.scale.y;
@@ -1043,7 +1144,7 @@ function beginDrag(elementId: string, scale: number, currentFrame: number, ev: P
       // B-175 — snap to where a box IS DRAWN (the `buildSnapTargets` twin in `Gizmo.tsx`
       // says the same thing): a target read off the authored rect is an alignment the
       // author cannot see.
-      const t = renderedTransformAt(el, currentFrame);
+      const t = renderedTransformAt(el, frameForElement(el.id));
       const ew = t.size.w * t.scale.x;
       const eh = t.size.h * t.scale.y;
       xTargets.push(t.position.x, t.position.x + ew / 2, t.position.x + ew);
@@ -1155,6 +1256,7 @@ function beginGroupDrag(
   anchorId: string,
   scale: number,
   currentFrame: number,
+  frameForElement: ElementFrameResolver,
   ev: PointerEvent,
 ): void {
   const state = designerStore.get();
@@ -1169,6 +1271,8 @@ function beginGroupDrag(
     doc.resolution,
     // B-175 — the ONE read side, the same resolver the nudge door passes.
     renderedTransformAt,
+    // B-381 — every group member and snap target uses the frame the runtime painted for it.
+    frameForElement,
   );
   if (anchor === null) return;
   const anc = anchor;

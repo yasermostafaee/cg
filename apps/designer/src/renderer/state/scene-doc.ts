@@ -136,6 +136,87 @@ export function renameCompositionAndLinkedLooks(
 }
 
 /**
+ * Delete a composition as one authored object, including any Look that owns it.
+ *
+ * A Look is represented in three places: a registry row, a composition instance in the
+ * group's home document, and the backing composition itself. Deleting through either the
+ * Looks inspector or the Compositions panel must remove all three in the same scene update;
+ * otherwise the two panels describe different projects. The link is resolved by instance id
+ * and `compositionId`, never by the user-editable Look/composition name.
+ */
+export function deleteCompositionAndLinkedLooks(
+  scene: Scene,
+  compositionId: string,
+): { scene: Scene; removedLookIds: string[]; removedLookNames: string[] } {
+  const linkedInstanceIds = new Set<string>();
+
+  const collectLinkedInstances = (children: readonly Element[]): void => {
+    for (const element of children) {
+      if (element.type === 'composition' && element.compositionId === compositionId) {
+        linkedInstanceIds.add(element.id);
+      }
+      if (element.type === 'container') collectLinkedInstances(element.children);
+    }
+  };
+  for (const doc of [scene, ...(scene.compositions ?? [])]) {
+    for (const layer of doc.layers) collectLinkedInstances(layer.children);
+  }
+
+  const removedLookIds: string[] = [];
+  const removedLookNames: string[] = [];
+  const cleanLookGroups = <T extends Scene | Composition>(doc: T): T => {
+    if ((doc.lookGroups?.length ?? 0) === 0) return doc;
+    let changed = false;
+    const lookGroups = (doc.lookGroups ?? []).map((group) => {
+      const removed = group.looks.filter((look) => linkedInstanceIds.has(look.instanceId));
+      if (removed.length === 0) return group;
+      changed = true;
+      for (const look of removed) {
+        removedLookIds.push(look.id);
+        removedLookNames.push(look.name);
+      }
+      const looks = group.looks.filter((look) => !linkedInstanceIds.has(look.instanceId));
+      const next = { ...group, looks };
+      if (removed.some((look) => look.id === group.defaultLookId)) {
+        if (looks[0] !== undefined) next.defaultLookId = looks[0].id;
+        else delete next.defaultLookId;
+      }
+      return next;
+    });
+    return changed ? ({ ...doc, lookGroups } as T) : doc;
+  };
+
+  const stripRefs = (children: readonly Element[]): Element[] => {
+    const out: Element[] = [];
+    for (const element of children) {
+      if (element.type === 'composition' && element.compositionId === compositionId) continue;
+      if (element.type === 'container') {
+        out.push({ ...element, children: stripRefs(element.children) });
+      } else {
+        out.push(element);
+      }
+    }
+    return out;
+  };
+  const cleanLayers = (layers: readonly Layer[]): Layer[] =>
+    layers.map((layer) => ({ ...layer, children: stripRefs(layer.children) }));
+
+  const cleanRoot = cleanLookGroups(scene);
+  const nextScene: Scene = {
+    ...cleanRoot,
+    layers: cleanLayers(cleanRoot.layers),
+    compositions: (cleanRoot.compositions ?? [])
+      .filter((composition) => composition.id !== compositionId)
+      .map((composition) => {
+        const cleanComposition = cleanLookGroups(composition);
+        return { ...cleanComposition, layers: cleanLayers(cleanComposition.layers) };
+      }),
+  };
+  if (scene.entryCompositionId === compositionId) delete nextScene.entryCompositionId;
+  return { scene: nextScene, removedLookIds, removedLookNames };
+}
+
+/**
  * D-025 — the active document's OWN fields/bindings (per-composition). Mutations
  * to data keys / bindings go through here so they scope to the open composition,
  * not the project root.

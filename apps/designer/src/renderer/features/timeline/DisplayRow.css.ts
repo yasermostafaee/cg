@@ -6,7 +6,7 @@ const ROW = `${DISPLAY_ROW_HEIGHT}px`;
 
 export const labelCell = style({
   color: colors.textMuted,
-  padding: '0 0.6rem 0 2rem',
+  padding: '0 0.6rem 0 3.2rem',
   display: 'grid',
   gridTemplateColumns: '1fr 64px 16px',
   alignItems: 'center',

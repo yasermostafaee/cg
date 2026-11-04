@@ -53,6 +53,22 @@ describe('projects.* channel schemas', () => {
     ).toBeTruthy();
   });
 
+  it('projects.new accepts 30 fps, a reference-safe square-pixel preset and linked duration', () => {
+    expect(
+      ProjectsNewChannel.request.parse({
+        name: 'Thirty',
+        templateType: 'custom',
+        resolution: { width: 1280, height: 720 },
+        frameRate: 30,
+        durationFrames: 300,
+      }),
+    ).toMatchObject({
+      resolution: { width: 1280, height: 720 },
+      frameRate: 30,
+      durationFrames: 300,
+    });
+  });
+
   it('projects.open allows omitting path (file-dialog path)', () => {
     expect(ProjectsOpenChannel.request.parse({})).toBeTruthy();
     expect(ProjectsOpenChannel.request.parse({ path: 'C:/x.json' })).toBeTruthy();
@@ -138,12 +154,20 @@ describe('assets.* channel schemas', () => {
         sourceWidth: 1920,
         sourceHeight: 1080,
         crop: { x: 100, y: 50, width: 640, height: 480 },
+        pixelAspectMode: 'pixels' as const,
+        colorInterpretation: 'legacy-vlc' as const,
       },
     };
     expect(AssetMetaSchema.parse(video)).toEqual(video);
     // crop is optional — a full-frame conversion carries provenance without it
     const noCrop = { ...video, provenance: { ...video.provenance, crop: undefined } };
     expect(AssetMetaSchema.parse(noCrop).provenance?.crop).toBeUndefined();
+    // Additive field: packages made before picture-shape selection remain valid and mean source.
+    const legacyShape = {
+      ...video,
+      provenance: { ...video.provenance, pixelAspectMode: undefined },
+    };
+    expect(AssetMetaSchema.parse(legacyShape).provenance?.pixelAspectMode).toBeUndefined();
   });
 
   it('D-128 — assets.storeBytes takes raw bytes + filename + kind (+ provenance)', () => {

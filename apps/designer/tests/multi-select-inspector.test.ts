@@ -285,6 +285,26 @@ describe('MultiSelectSection — live edit + single-undo commit (D-053)', () => 
     expect(layer().children.map((element) => element.transform.position)).toEqual(before);
   });
 
+  it('B-360 — a one-row portrait layout hides controls that cannot change it', () => {
+    const projects = new ProjectStore(new MemoryWorkspace(), new MemoryKv());
+    const { scene } = projects.newScene('demo', 'lower-third');
+    designerStore.setScene(scene, null);
+    for (const id of ['portrait-1', 'portrait-2', 'portrait-3']) {
+      designerStore.addElement({ ...defaultLiveSource(id, 0, 0), expectedAspect: 9 / 16 });
+    }
+    const children = editSceneOf(
+      designerStore.get().scene,
+      designerStore.get().activeCompositionId,
+    )!.layers[0]!.children;
+    const c = render(children);
+
+    expect(input(c, 'horizontal gap')).not.toBeNull();
+    expect(input(c, 'vertical gap')).toBeNull();
+    expect(c.textContent).not.toContain('More frames on top');
+    expect(c.textContent).not.toContain('More frames on bottom');
+    expect(c.textContent).toContain('Arrange evenly');
+  });
+
   it('a typed edit updates EVERY selected element live on keystroke, and one boundary on blur makes it ONE undo across all', () => {
     const projects = new ProjectStore(new MemoryWorkspace(), new MemoryKv());
     const { scene } = projects.newScene('demo', 'lower-third');

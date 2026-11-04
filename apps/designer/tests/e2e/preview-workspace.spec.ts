@@ -1,6 +1,133 @@
 import { test, expect } from './fixtures/designer.js';
 
 test.describe('D-173 — large command-first Preview workspace', () => {
+  test('responsive containment at 1024×768 keeps transport, fields and Close usable', async ({
+    app,
+  }, testInfo) => {
+    const viewport = { width: 1024, height: 768 };
+    await app.page.setViewportSize(viewport);
+    await app.page.getByTestId('starter-card').filter({ hasText: 'زیرنویس معرفی' }).click();
+    await app.expectStudio();
+    await app.openPreviewModal();
+
+    const dialog = app.previewDialog;
+    const close = dialog.getByRole('button', { name: 'Close', exact: true });
+    const play = dialog.getByRole('button', { name: 'Play', exact: true });
+    const pause = dialog.getByRole('button', { name: 'Pause', exact: true });
+    const stop = dialog.getByRole('button', { name: 'Stop', exact: true });
+    const name = dialog.getByRole('textbox', { name: 'Name (نام)', exact: true });
+    const role = dialog.getByRole('textbox', { name: 'Role (سمت)', exact: true });
+    const update = dialog.getByRole('button', { name: 'Update all', exact: true });
+    await expect(play).toBeEnabled();
+
+    // Real browser boxes and intersection checks cover both viewport overflow and clipping
+    // by the dialog's stage/data regions; a visible-but-offscreen control is insufficient.
+    const box = await dialog.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.y).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width);
+    expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height);
+    for (const control of [close, play, pause, stop, name, role, update]) {
+      await expect(control).toBeInViewport({ ratio: 1 });
+    }
+    const containment = await dialog.locator('iframe').evaluate((iframe) => {
+      const frame = iframe.getBoundingClientRect();
+      const boundaries = [
+        {
+          name: 'viewport',
+          left: 0,
+          top: 0,
+          right: innerWidth,
+          bottom: innerHeight,
+          x: true,
+          y: true,
+        },
+      ];
+      for (
+        let ancestor = iframe.parentElement;
+        ancestor !== null;
+        ancestor = ancestor.parentElement
+      ) {
+        const style = getComputedStyle(ancestor);
+        const x = style.overflowX !== 'visible';
+        const y = style.overflowY !== 'visible';
+        if (!x && !y) continue;
+        const rect = ancestor.getBoundingClientRect();
+        boundaries.push({
+          name: `${ancestor.tagName}.${ancestor.className}`,
+          left: rect.left + Number.parseFloat(style.borderLeftWidth),
+          top: rect.top + Number.parseFloat(style.borderTopWidth),
+          right: rect.right - Number.parseFloat(style.borderRightWidth),
+          bottom: rect.bottom - Number.parseFloat(style.borderBottomWidth),
+          x,
+          y,
+        });
+      }
+      return {
+        frame: {
+          left: frame.left,
+          top: frame.top,
+          right: frame.right,
+          bottom: frame.bottom,
+          width: frame.width,
+          height: frame.height,
+        },
+        boundaries,
+      };
+    });
+    await testInfo.attach('preview-responsive-containment-geometry', {
+      body: JSON.stringify(containment, null, 2),
+      contentType: 'application/json',
+    });
+    // Chrome reports a 0.99927 intersection ratio for a perfectly contained 558.03125 px
+    // iframe after raster rounding. Compare actual fractional edges instead of rounding
+    // to clientWidth or allowing a lower visibility ratio: no real overflow is tolerated.
+    expect(containment.frame.width).toBeGreaterThan(0);
+    expect(containment.frame.height).toBeGreaterThan(0);
+    for (const boundary of containment.boundaries) {
+      if (boundary.x) {
+        expect(containment.frame.left, boundary.name).toBeGreaterThanOrEqual(boundary.left);
+        expect(containment.frame.right, boundary.name).toBeLessThanOrEqual(boundary.right);
+      }
+      if (boundary.y) {
+        expect(containment.frame.top, boundary.name).toBeGreaterThanOrEqual(boundary.top);
+        expect(containment.frame.bottom, boundary.name).toBeLessThanOrEqual(boundary.bottom);
+      }
+    }
+    await expect(dialog.getByText('Variables', { exact: true })).toBeInViewport({ ratio: 1 });
+
+    // Use the ordinary data and transport doors, rather than merely inspecting their boxes.
+    await app.setPreviewField('Name (نام)', 'Guest Name');
+    await expect(name).toHaveValue('Guest Name');
+    await expect(name).toHaveCSS('direction', 'ltr');
+    await app.setPreviewField('Name (نام)', 'مریم رضایی');
+    await expect(name).toHaveCSS('direction', 'rtl');
+    await app.setPreviewField('Role (سمت)', 'کارشناس برنامه');
+    await expect(update).toBeEnabled();
+    await app.updateAllPreviewFields();
+    await app.play();
+    await expect(app.previewElement('tt-name')).toHaveText('مریم رضایی');
+    await expect(app.previewElement('tt-role')).toHaveText('کارشناس برنامه');
+    await expect(app.previewElement('tt-name')).toHaveCSS('opacity', '1');
+    await app.pause();
+    await expect(dialog.getByRole('button', { name: 'Resume', exact: true })).toBeEnabled();
+    const screenshot = testInfo.outputPath('preview-responsive-1024x768.png');
+    await app.page.screenshot({ path: screenshot });
+    await testInfo.attach('preview-responsive-1024x768', {
+      path: screenshot,
+      contentType: 'image/png',
+    });
+    const elapsed = dialog.getByLabel('Elapsed preview time');
+    const pausedElapsed = await elapsed.textContent();
+    await app.play(); // The public Play fixture selects Resume while paused.
+    await expect(elapsed).not.toHaveText(pausedElapsed ?? '');
+    await app.stop();
+    await expect(close).toBeInViewport({ ratio: 1 });
+    await close.click();
+    await expect(dialog).not.toBeVisible();
+  });
+
   test('D-196 — one Preset remains visible and selected below the fixed transport', async ({
     app,
   }) => {
@@ -11,7 +138,7 @@ test.describe('D-173 — large command-first Preview workspace', () => {
 
     const commands = app.previewDialog.getByRole('group', { name: 'Playout commands' });
     const presets = app.previewDialog.getByRole('group', { name: 'Preview preset' });
-    const only = presets.getByRole('button', { name: 'look-1', exact: true });
+    const only = presets.getByRole('button', { name: 'preset-1', exact: true });
     await expect(commands).toBeVisible();
     await expect(presets).toBeVisible();
     await expect(only).toHaveAttribute('aria-pressed', 'true');
@@ -30,7 +157,7 @@ test.describe('D-173 — large command-first Preview workspace', () => {
 
   test('uses the viewport, keeps commands above Variables, and pauses elapsed time', async ({
     app,
-  }, testInfo) => {
+  }) => {
     await app.newProject('Preview workspace');
     await app.addTextElement();
     await app.setDataKey('headline');
@@ -120,7 +247,6 @@ test.describe('D-173 — large command-first Preview workspace', () => {
     const updatedFrameBox = await frameValue.boundingBox();
     expect(updatedFrameBox).not.toBeNull();
     expect(updatedFrameBox!.width).toBeCloseTo(initialFrameBox!.width, 1);
-    await dialog.screenshot({ path: testInfo.outputPath('preview-workspace.png') });
   });
 
   test('stops elapsed time when the graphic completes itself', async ({ app }) => {
@@ -214,5 +340,109 @@ test.describe('D-173 — large command-first Preview workspace', () => {
     await app.stop();
     await expect(staticFrame).toHaveText('00 / 50');
     await expect(staticElapsed).toHaveText('00:00:00');
+  });
+
+  test('B-382 — truly empty manual Freeze parks at Out while elapsed caps nominally', async ({
+    app,
+  }) => {
+    await app.newProject('Empty freeze preview clock');
+    await app.setSceneDuration(30);
+    await app.addOutPoint(); // frame 23 at 50 fps
+    await app.setPlayoutTiming('manual');
+    await app.page.getByRole('combobox', { name: 'On hold' }).selectOption('freeze');
+    await app.openPreviewModal();
+    await expect(app.previewFrame.locator('[data-cg-element-id]')).toHaveCount(0);
+
+    const frame = app.previewDialog.getByLabel('Preview frame').locator('strong');
+    const elapsed = app.previewDialog.getByLabel('Elapsed preview time').locator('strong');
+    await app.play();
+    await expect(frame).toHaveText('23 / 30', { timeout: 1_500 });
+    await expect(elapsed).toHaveText('00:00:60', { timeout: 1_500 });
+    await app.page.waitForTimeout(150);
+    await expect(frame).toHaveText('23 / 30');
+    await expect(elapsed).toHaveText('00:00:60');
+
+    await app.stop();
+    await expect(frame).toHaveText('00 / 30');
+    await expect(elapsed).toHaveText('00:00:00');
+  });
+
+  test('B-382 — truly empty manual Middle loop is open-ended and wraps before Out', async ({
+    app,
+  }) => {
+    await app.newProject('Empty middle loop preview clock');
+    await app.setSceneDuration(30);
+    await app.addOutPoint(); // frame 23
+    await app.page.getByRole('button', { name: 'Set hold start' }).click();
+    await app.dragContentStartMarkerToFraction(1 / 3); // frame 10
+    await app.setPlayoutTiming('manual');
+    await app.page.getByRole('combobox', { name: 'On hold' }).selectOption('loop');
+    await app.openPreviewModal();
+
+    const frame = app.previewDialog.getByLabel('Preview frame').locator('strong');
+    await frame.evaluate((node) => {
+      const samples: number[] = [];
+      const capture = (): void => {
+        samples.push(Number.parseInt(node.textContent ?? '', 10));
+      };
+      capture();
+      Reflect.set(window, '__emptyMiddleSamples', samples);
+      new MutationObserver(capture).observe(node, { childList: true, subtree: true });
+    });
+    await app.play();
+    const currentFrame = async (): Promise<number> =>
+      Number.parseInt((await frame.textContent()) ?? '', 10);
+    // Observe two high→low transitions. The first enters Middle after Intro; the second proves
+    // the half-open [10, 23) range repeats instead of parking or including frame 23.
+    await expect.poll(currentFrame, { timeout: 1_500, intervals: [10] }).toBeGreaterThanOrEqual(20);
+    await expect.poll(currentFrame, { timeout: 500, intervals: [10] }).toBeLessThanOrEqual(12);
+    await expect.poll(currentFrame, { timeout: 500, intervals: [10] }).toBeGreaterThanOrEqual(20);
+    await expect.poll(currentFrame, { timeout: 500, intervals: [10] }).toBeLessThanOrEqual(12);
+
+    const samples = await frame.evaluate(
+      () => Reflect.get(window, '__emptyMiddleSamples') as number[],
+    );
+    expect(samples.filter(Number.isFinite).every((value) => value !== 23)).toBe(true);
+    await app.page.waitForTimeout(650); // past the nominal 600 ms scene duration
+    const before = await app.previewDialog.getByLabel('Elapsed preview time').textContent();
+    await app.page.waitForTimeout(150);
+    await expect(app.previewDialog.getByLabel('Elapsed preview time')).not.toHaveText(before ?? '');
+
+    await app.stop();
+    await expect(frame).toHaveText('00 / 30');
+  });
+
+  test('B-382 — truly empty Auto-out defers collapsed stop through Hold and Outro', async ({
+    app,
+  }) => {
+    await app.newProject('Empty auto-out preview clock');
+    await app.setSceneDuration(30);
+    await app.setPlayoutTiming('auto-out'); // default Out point = frame 23
+    const hold = app.page.getByRole('spinbutton', { name: 'Hold duration in milliseconds' });
+    await hold.fill('300');
+    await hold.blur();
+    await app.openPreviewModal();
+    await expect(app.previewFrame.locator('[data-cg-element-id]')).toHaveCount(0);
+
+    const frame = app.previewDialog.getByLabel('Preview frame').locator('strong');
+    const elapsed = app.previewDialog.getByLabel('Elapsed preview time').locator('strong');
+    await app.play();
+    // Runtime's paint legs collapse and it naturally stops around the 300 ms Hold. The authored
+    // display must nevertheless finish 460 ms Intro + 300 ms Hold + 140 ms Outro.
+    await app.page.waitForTimeout(550);
+    await expect(frame).toHaveText('23 / 30');
+    const afterCollapsedStop = Number.parseInt(
+      (await elapsed.textContent())?.split(':').at(-1) ?? '0',
+      10,
+    );
+    expect(afterCollapsedStop).toBeGreaterThanOrEqual(45);
+    await expect(frame).toHaveText('30 / 30', { timeout: 1_500 });
+    await expect(elapsed).toHaveText('00:00:90');
+    await app.page.waitForTimeout(150);
+    await expect(elapsed).toHaveText('00:00:90');
+
+    await app.stop();
+    await expect(frame).toHaveText('00 / 30');
+    await expect(elapsed).toHaveText('00:00:00');
   });
 });

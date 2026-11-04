@@ -21,6 +21,7 @@ import {
   primeScene as primeSceneLottie,
 } from '../assets/lottieAssetCache.js';
 import { getAll as sharedUrlGetAll } from '../sharedLibrary/sharedImageUrlCache.js';
+import { getAll as sharedFontUrlGetAll } from '../sharedLibrary/sharedFontUrlCache.js';
 import { useSharedImages } from '../sharedLibrary/useSharedImages.js';
 import { Modal } from '../shell/Modal.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
@@ -155,7 +156,17 @@ export function PreviewModal({
   const sharedImages = useSharedImages();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
-  const [html, setHtml] = useState<string | null>(null);
+  const documentGenerationRef = useRef(0);
+  const [previewDocument, setPreviewDocument] = useState<{
+    scene: Scene;
+    html: string;
+    generation: number;
+  } | null>(null);
+  const [readyGeneration, setReadyGeneration] = useState<number | null>(null);
+  const transportReady =
+    previewDocument !== null &&
+    previewDocument.scene === scene &&
+    readyGeneration === previewDocument.generation;
   // Measured stage size, so the composition scales to fit whatever the (large)
   // modal gives us rather than a fixed thumbnail.
   const [stageSize, setStageSize] = useState({ w: 0, h: 0 });
@@ -307,6 +318,9 @@ export function PreviewModal({
   // sync).
   useEffect(() => {
     let alive = true;
+    const generation = ++documentGenerationRef.current;
+    setReadyGeneration(null);
+    setPreviewDocument(null);
     setOverrides({});
     setPaused(false);
     acceptRuntimeFramesRef.current = false;
@@ -320,7 +334,7 @@ export function PreviewModal({
     // and paint only on Play. The editor canvas omits this flag (stays visible
     // for editing).
     void window.cg.preview.load({ scene, broadcast: true }).then((res) => {
-      if (alive) setHtml(res.html);
+      if (alive) setPreviewDocument({ scene, html: res.html, generation });
     });
     return () => {
       alive = false;
@@ -359,7 +373,7 @@ export function PreviewModal({
       out: () => post({ action: 'out' }),
       next: () => post({ action: 'next' }),
       previous: () => post({ action: 'previous' }),
-      reset: () => post({ action: 'reset' }),
+      reset: (fields) => post({ action: 'reset', fields }),
       pause: () => post({ action: 'pause' }),
       resume: () => post({ action: 'resume' }),
     }),
@@ -375,6 +389,9 @@ export function PreviewModal({
   // Momentary playout commands. Play resumes when paused; otherwise plays with the
   // current data. None of them is a toggle — each is a one-shot command.
   const onPlay = useCallback(() => {
+    // The generated document installs its listener after its asynchronous boot. A command
+    // before its own ready signal would be lost, while starting these counters would lie.
+    if (!transportReady) return;
     if (paused) {
       acceptRuntimeFramesRef.current = true;
       dispatch.resume();
@@ -394,27 +411,41 @@ export function PreviewModal({
       dispatch.play(values);
       setApplied(values);
     }
-  }, [dispatch, paused, scene.activeRange?.in, scene.frameRange.in, startElapsed, values]);
+  }, [
+    dispatch,
+    paused,
+    scene.activeRange?.in,
+    scene.frameRange.in,
+    startElapsed,
+    transportReady,
+    values,
+  ]);
   const onPause = useCallback(() => {
+    if (!transportReady) return;
     dispatch.pause();
     setPaused(true);
     pauseElapsed();
-  }, [dispatch, pauseElapsed]);
+  }, [dispatch, pauseElapsed, transportReady]);
   const onStop = useCallback(() => {
+    if (!transportReady) return;
     acceptRuntimeFramesRef.current = false;
     dispatch.stop();
     setPaused(false);
     setRuntimeFrame(scene.activeRange?.in ?? scene.frameRange.in);
     resetElapsed();
-  }, [dispatch, resetElapsed, scene.activeRange?.in, scene.frameRange.in]);
-  const onNext = useCallback(() => dispatch.next(), [dispatch]);
-  const onPrevious = useCallback(() => dispatch.previous(), [dispatch]);
+  }, [dispatch, resetElapsed, scene.activeRange?.in, scene.frameRange.in, transportReady]);
+  const onNext = useCallback(() => {
+    if (transportReady) dispatch.next();
+  }, [dispatch, transportReady]);
+  const onPrevious = useCallback(() => {
+    if (transportReady) dispatch.previous();
+  }, [dispatch, transportReady]);
   const onReset = useCallback(() => {
     const seeded = previewSeed(scene.id, aggregate);
     setValues(seeded);
     setApplied(seeded);
     acceptRuntimeFramesRef.current = false;
-    dispatch.reset();
+    dispatch.reset(seeded);
     setPaused(false);
     setRuntimeFrame(scene.frameRange.in);
     resetElapsed();
@@ -483,8 +514,10 @@ export function PreviewModal({
   // Apply the session overrides by rebuilding the preview runtime with them (the
   // stored scene + non-persistent per-scope overrides). The iframe preserves typed
   // field values across the rebuild, and the stored scene is untouched. No-op until
-  // the operator actually changes a knob on some scope.
+  // the operator actually changes a knob on some scope. Settings prepared during
+  // boot must wait for the document's listener too, rather than being dropped.
   useEffect(() => {
+    if (!transportReady) return;
     const hasAny = Object.values(overrides).some((o) => Object.keys(o).length > 0);
     if (!hasAny) return;
     post({
@@ -492,7 +525,7 @@ export function PreviewModal({
       scene,
       // D-039ext / D-040 — merge project + shared caches so a shared image (logo element
       // OR ticker image separator) resolves in the preview, as it does on the canvas.
-      assetUrls: { ...assetUrlGetAll(), ...sharedUrlGetAll() },
+      assetUrls: { ...assetUrlGetAll(), ...sharedUrlGetAll(), ...sharedFontUrlGetAll() },
       // D-125 — carry the parsed Lottie map so a rebuilt runtime keeps its players.
       // B-137 — SCENE-SCOPED: the whole-cache form kept this map non-empty after a
       // Lottie was deleted, which kept forcing the rebuild that strands a playing video.
@@ -500,12 +533,13 @@ export function PreviewModal({
       playoutOverride: overrides[''],
       scopeOverrides: overrides,
     });
-  }, [overrides, scene, post]);
+  }, [overrides, scene, post, transportReady]);
 
   // Seed our iframe (only ours) once it signals readiness.
   useEffect(() => {
     function onMessage(evt: MessageEvent<unknown>): void {
       const msg = evt.data as { kind?: string; state?: string; frame?: number } | undefined;
+      if (previewDocument === null || previewDocument.scene !== scene) return;
       if (evt.source !== iframeRef.current?.contentWindow) return;
       if (msg?.kind === 'cg-preview-frame' && typeof msg.frame === 'number') {
         if (acceptRuntimeFramesRef.current) setRuntimeFrame(msg.frame);
@@ -527,7 +561,7 @@ export function PreviewModal({
       // play-path font await would be a no-op on the only surface that plays.
       post({
         action: 'asset-urls',
-        assetUrls: { ...assetUrlGetAll(), ...sharedUrlGetAll() },
+        assetUrls: { ...assetUrlGetAll(), ...sharedUrlGetAll(), ...sharedFontUrlGetAll() },
       });
       // D-125 — seed the parsed Lottie map too (the srcDoc boot has an empty one), so a
       // Lottie mounts its player on this dedicated preview iframe.
@@ -547,11 +581,12 @@ export function PreviewModal({
         if (shown !== null)
           post({ action: 'rehearse-step', clockId: shown.clockId, step: shown.step });
       }
+      setReadyGeneration(previewDocument.generation);
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
     // `scene` joins the deps because the seeded Lottie map is now scoped to it.
-  }, [post, aggregate, currentElapsed, elapsedLimitMs, pauseElapsed, scene]);
+  }, [post, aggregate, currentElapsed, elapsedLimitMs, pauseElapsed, previewDocument, scene]);
 
   // Tear down on close — stop the runtime; the iframe unmounts with the modal.
   useEffect(() => () => post({ action: 'stop' }), [post]);
@@ -578,11 +613,14 @@ export function PreviewModal({
             totalFrames={scene.frameRange.out}
           />
           <div ref={stageRef} className={s.stage}>
-            {html !== null && (
+            {previewDocument !== null && previewDocument.scene === scene && (
               <iframe
+                // Remount even when HTML is identical: a reused iframe keeps its WindowProxy,
+                // so an obsolete document's queued ready event could unlock its replacement.
+                key={previewDocument.generation}
                 ref={iframeRef}
                 title="cgpreview-modal"
-                srcDoc={html}
+                srcDoc={previewDocument.html}
                 className={s.stageFrame}
                 style={{
                   width: resW,
@@ -596,6 +634,7 @@ export function PreviewModal({
         <div className={s.sidebar}>
           <div className={s.fixedBar}>
             <PreviewTransport
+              ready={transportReady}
               lookChoices={lookChoices}
               activeLookId={previewLookId}
               onLookChange={onPreviewLookChange}

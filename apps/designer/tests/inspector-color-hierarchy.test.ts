@@ -23,7 +23,10 @@ describe('marker-tied actions share ONE colour source with the timeline markers'
     // Before this change both lived as hardcoded hex in TimelineDock.css.ts, so an
     // Inspector button could only match them by copying the literal.
     expect(colors.markerOut).toBe('#ffae57');
-    expect(colors.markerIn).toBe('#57b6ff');
+    expect(colors.markerIn).toBe(colors.checkPass);
+    expect(colors.markerIn).toBe('#5FAE80');
+    expect(colors.markerIn).not.toBe(colors.accent);
+    expect(colors.accent).toBe('#38BDF8');
   });
 
   it('the timeline marker styles resolve their colour from those tokens', async () => {
@@ -38,7 +41,9 @@ describe('marker-tied actions share ONE colour source with the timeline markers'
     expect(src).toContain('background: colors.markerIn');
     // …and no stray copy of the literals is left behind to drift.
     expect(src).not.toContain('#ffae57');
-    expect(src).not.toContain('#57b6ff');
+    expect(src).not.toContain('#5FAE80');
+    expect(src).toMatch(/loopRangeBand = style\([\s\S]*?background: colors\.markerInSurface/);
+    expect(src).toMatch(/bodyPlayhead = style\([\s\S]*?colors\.accent/);
   });
 
   it('the Button markerOut / markerIn variants resolve from the SAME tokens', async () => {
@@ -54,10 +59,34 @@ describe('marker-tied actions share ONE colour source with the timeline markers'
     expect(src).toMatch(/markerIn:\s*\{[\s\S]*?background:\s*colors\.markerInSurface/);
   });
 
+  it('the loop range stays above selected colored bars without hatching or boundary halos', async () => {
+    const fs = await import('node:fs/promises');
+    const src = await fs.readFile(
+      new URL('../src/renderer/features/timeline/TimelineDock.css.ts', import.meta.url),
+      'utf8',
+    );
+    const band = src.slice(
+      src.indexOf('export const loopRangeBand'),
+      src.indexOf('export const loopRangeLine'),
+    );
+    const line = src.slice(
+      src.indexOf('export const loopRangeLine'),
+      src.indexOf('export const phaseMarkerOut'),
+    );
+    expect(band).toContain('zIndex: 2');
+    expect(band).toContain('linear-gradient(rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.18))');
+    expect(band).not.toContain('repeating-linear-gradient');
+    expect(band).toContain("pointerEvents: 'none'");
+    expect(line).not.toContain('filter:');
+    expect(line).not.toContain('boxShadow:');
+    expect(line).not.toContain('opacity: 0.55');
+    expect(line).toContain("pointerEvents: 'none'");
+  });
+
   it('the marker surfaces are tints OF their marker colour (same rgb triplet)', () => {
-    // #ffae57 → rgb(255, 174, 87); #57b6ff → rgb(87, 182, 255).
+    // Orange Outro and green Hold retain the same hue in their translucent surfaces.
     expect(colors.markerOutSurface).toContain('255, 174, 87');
-    expect(colors.markerInSurface).toContain('87, 182, 255');
+    expect(colors.markerInSurface).toContain('95, 174, 128');
   });
 });
 
@@ -68,7 +97,7 @@ describe('caution is its own token, distinct from danger', () => {
     expect(colors.caution).not.toBe(colors.danger);
   });
 
-  it('the infinite-driver chip and the won’t-auto-close banner use CAUTION, not danger', async () => {
+  it('the infinite-driver chip and compact hold state use CAUTION, not danger', async () => {
     const fs = await import('node:fs/promises');
     const src = await fs.readFile(
       new URL('../src/renderer/features/inspector/PlayoutSection.tsx', import.meta.url),
@@ -77,13 +106,11 @@ describe('caution is its own token, distinct from danger', () => {
     // The "loops forever" chip.
     expect(src).toMatch(/infiniteWarnStyle[\s\S]*?color:\s*colors\.caution/);
     expect(src).toMatch(/infiniteWarnStyle[\s\S]*?background:\s*colors\.cautionSurface/);
-    // The "won't auto-close" banner: caution COLOUR, but still an assertive
-    // announcement — colour and role are independent axes. #352 derived the role from
-    // the variant, so recolouring the banner silently dropped it out of the alert
-    // channel (the guard-infinite-hold-driver E2E caught it); the explicit role pins
-    // that a future restyle can't do it again.
-    expect(src).toMatch(/<Callout variant="caution" role="alert">/);
-    expect(src).not.toContain('<Callout variant="danger">');
+    // The consequence stays compact and uses the shared caution tag; its teaching and remedies
+    // live behind Info rather than a paragraph-sized Callout.
+    expect(src).toMatch(/testId="never-closes-state"[\s\S]*?prose\.tagCaution/);
+    expect(src).toContain('Holds until stop');
+    expect(src).not.toContain('<Callout variant="caution"');
     // The chip must NOT have kept the old danger colour.
     expect(src).not.toMatch(/infiniteWarnStyle[\s\S]*?color:\s*colors\.danger/);
   });
@@ -100,16 +127,14 @@ describe('caution is its own token, distinct from danger', () => {
 });
 
 describe('destructive Inspector actions reuse the existing pale-red treatment', () => {
-  it('clear-out-point and reset-to-auto use the danger Button variant (not a new red)', async () => {
+  it('Clear Outro start and Auto Hold start use the danger Button variant', async () => {
     const fs = await import('node:fs/promises');
     const src = await fs.readFile(
       new URL('../src/renderer/features/inspector/PlayoutSection.tsx', import.meta.url),
       'utf8',
     );
-    expect(src).toMatch(/variant="danger"[\s\S]{0,200}Clear out point/);
-    // A wide window: this button carries an explanatory comment between the variant and
-    // the label (why `title` and not `aria-label`).
-    expect(src).toMatch(/variant="danger"[\s\S]{0,700}Reset to auto/);
+    expect(src).toMatch(/variant="danger"[\s\S]{0,220}aria-label="Clear outro start"/);
+    expect(src).toMatch(/variant="danger"[\s\S]{0,220}aria-label="Clear hold start"/);
   });
 
   it('marker-creating actions wear their marker variant', async () => {
@@ -118,8 +143,8 @@ describe('destructive Inspector actions reuse the existing pale-red treatment', 
       new URL('../src/renderer/features/inspector/PlayoutSection.tsx', import.meta.url),
       'utf8',
     );
-    expect(src).toMatch(/variant="markerOut"[\s\S]{0,200}Add out point/);
-    expect(src).toMatch(/variant="markerIn"[\s\S]{0,200}Pin content start/);
+    expect(src).toMatch(/variant="markerOut"[\s\S]{0,220}aria-label="Set outro start"/);
+    expect(src).toMatch(/variant="markerIn"[\s\S]{0,220}aria-label="Set hold start"/);
   });
 });
 
@@ -246,7 +271,8 @@ describe('action labels do not promise a dialog they never open', () => {
       new URL('../src/renderer/features/inspector/PlayoutSection.tsx', import.meta.url),
       'utf8',
     );
-    // "Pin content start" acts immediately; the `…` convention promises a follow-up step.
-    expect(src).not.toContain('Pin content start…');
+    // Marker actions act immediately; the `…` convention would promise a follow-up step.
+    expect(src).not.toContain('Set hold start…');
+    expect(src).not.toContain('Set outro start…');
   });
 });

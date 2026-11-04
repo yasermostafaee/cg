@@ -85,6 +85,8 @@ describe('D-164 — the image2 input', () => {
       '1.500',
       '-i',
       '/mnt/%06d.png',
+      '-map',
+      '0:v:0',
       '-frames:v',
       '1',
       '-f',

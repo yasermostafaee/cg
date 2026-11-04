@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ManifestSchema, SceneSchema } from '@cg/shared-schema';
 import { pack } from '../src/pack.js';
+import { readManifestCompatibility } from '../src/unpack.js';
 import { readZip } from '../src/zip.js';
 import {
   fixtureCgCss,
@@ -66,6 +67,44 @@ describe('pack', () => {
     // Manifest itself isn't part of integrity (would be circular).
     const declaredPaths = manifest.integrity.files.map((f) => f.path).sort();
     expect(declaredPaths).not.toContain('manifest.json');
+  });
+
+  it('retains a 30 fps small-canvas scene in both exported core records', async () => {
+    const scene = {
+      ...fixtureScene,
+      resolution: { width: 1280, height: 720 },
+      frameRate: 30 as const,
+    };
+    const buf = await pack({
+      scene,
+      manifestExtras: {
+        ...fixtureManifestExtras,
+        compatibility: {
+          ...fixtureManifestExtras.compatibility,
+          minRuntimeVersion: '1.1.0',
+        },
+      },
+      indexHtml: fixtureIndexHtml,
+      cgJs: fixtureCgJs,
+      cgCss: fixtureCgCss,
+    });
+    const files = await readZip(buf);
+    const templateBytes = files.get('template.json');
+    const manifestBytes = files.get('manifest.json');
+    if (!templateBytes || !manifestBytes) throw new Error('expected exported core records');
+
+    expect(SceneSchema.parse(JSON.parse(dec(templateBytes)) as unknown)).toMatchObject({
+      resolution: { width: 1280, height: 720 },
+      frameRate: 30,
+    });
+    expect(ManifestSchema.parse(JSON.parse(dec(manifestBytes)) as unknown)).toMatchObject({
+      resolution: { width: 1280, height: 720 },
+      frameRate: 30,
+    });
+    await expect(readManifestCompatibility(buf)).resolves.toEqual({
+      name: fixtureManifestExtras.name,
+      minRuntimeVersion: '1.1.0',
+    });
   });
 
   it('throws when an asset path collides with a core artifact', async () => {

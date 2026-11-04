@@ -1,18 +1,18 @@
 import { test, expect } from './fixtures/designer.js';
 
 /**
- * D-104 — a composition whose only finite content lives inside a NESTED
- * composition still participates in the content-driven hold: `hasContentElement`
- * recurses into `composition` instances, so the Playout section OFFERS the
- * hold-source control for such a parent (acceptance bullet 1, the user-facing
- * surface). The runtime side — the parent holds until the nested content
+ * D-104/D-189 — a composition whose only finite content lives inside a NESTED
+ * composition participates in the content-driven hold. D-189 keeps the authored
+ * Hold-source choice visible even before that content exists; adding the nested
+ * driver replaces the safe Timed fallback with the authored behavior. The runtime
+ * side — the parent holds until the nested content
  * completes, starts it after the parent's intro, and holds until stop() for
  * infinite nested content (bullets 1/3/4) — is covered by the
  * @cg/template-runtime unit tests (nested-content-lifecycle.test.ts), which run
  * the SAME runtime source the preview and export use.
  */
-test.describe('D-104 — nested-composition content offers the content-driven hold', () => {
-  test('the hold-source control is offered when finite content lives in a nested composition', async ({
+test.describe('D-104/D-189 — nested content activates an always-reachable Hold source', () => {
+  test('content-driven intent falls back safely, then activates when nested content is added', async ({
     app,
   }) => {
     await app.newProject('NestedHold');
@@ -26,23 +26,36 @@ test.describe('D-104 — nested-composition content offers the content-driven ho
     // The parent (comp1) has NO direct content; it only nests TitleBlock.
     await app.openComposition('comp1');
 
-    // Before nesting, an auto-out parent with no content offers no hold control
-    // (setPlayoutTiming deselects, so the COMPOSITION inspector is shown).
+    // Before nesting, the authored choice is already available with concise values.
     await app.setPlayoutTiming('auto-out');
-    await expect(app.page.getByRole('combobox', { name: 'Hold source' })).toHaveCount(0);
+    const holdSource = app.page.getByRole('combobox', { name: 'Hold source' });
+    await expect(holdSource).toBeVisible();
+    await expect(holdSource.locator('option')).toHaveText(['Timed', 'Content-driven']);
+    await expect(
+      app.page.getByRole('combobox', { name: 'Playback mode' }).locator('option'),
+    ).toHaveText(['Static', 'Manual', 'Auto-out', 'Loop cycle']);
 
-    // After nesting the content-bearing composition, the parent's finite content
-    // lives inside the nested instance ⇒ the hold-source control is offered.
+    await holdSource.selectOption('content-driven');
+    await expect(holdSource).toHaveValue('content-driven');
+    await expect(app.page.getByTestId('hold-source-fallback-state')).toContainText(
+      'No active hold driver · using Timed',
+    );
+    await expect(
+      app.page.getByRole('spinbutton', { name: 'Hold duration in milliseconds' }),
+    ).toBeVisible();
+
+    // After nesting the content-bearing composition, the saved choice stays Content-driven
+    // and becomes effective immediately.
     await app.nestCompositionInstance('TitleBlock');
     // The nested instance is auto-selected and sits at the origin (covering the
     // canvas), so deselect via Escape — a canvas click would re-hit it — to return
     // to the COMPOSITION inspector.
     await app.page.keyboard.press('Escape');
-    const holdSource = app.page.getByRole('combobox', { name: 'Hold source' });
     await expect(holdSource).toBeVisible();
-
-    // And it is selectable to content-driven (the D-104 authoring choice).
-    await holdSource.selectOption('content-driven');
     await expect(holdSource).toHaveValue('content-driven');
+    await expect(app.page.getByTestId('hold-source-fallback-state')).toHaveCount(0);
+    await expect(
+      app.page.getByRole('spinbutton', { name: 'Hold duration in milliseconds' }),
+    ).toHaveCount(0);
   });
 });

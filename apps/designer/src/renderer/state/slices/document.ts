@@ -1,6 +1,5 @@
 import type { Lifecycle, Playout, Scene } from '@cg/shared-schema';
-import { migrateScene } from '@cg/shared-schema';
-import { activeRangeOf, playoutOf } from '@cg/shared-schema';
+import { activeRangeOf, migrateScene, playoutOf } from '@cg/shared-schema';
 import {
   current,
   getNoticeTimer,
@@ -372,13 +371,13 @@ export const documentSlice = {
     const doc = activeDocOf(current.scene);
     const active = activeRangeOf(doc);
     const prev = doc.lifecycle;
-    // D-104 follow-up — PRESERVE the content-start marker across an out-point drag, but
-    // re-clamp it (dragging the out-point below it pulls it along). Session V — the
-    // clamp arithmetic is clampLifecycleTo, THE one rule every writer shares.
-    const lifecycle = clampLifecycleTo(active, {
-      outPoint: Math.round(marker.outPoint),
-      ...(prev?.contentStart !== undefined ? { contentStart: prev.contentStart } : {}),
-    })!;
+    // Preserve the Hold-start marker across an Outro-start drag. Crossing it pulls Hold start
+    // onto the same frame, symmetrically with a Hold-start drag advancing Outro start.
+    const outPoint = Math.max(active.in, Math.min(active.out, Math.round(marker.outPoint)));
+    const contentStart =
+      prev?.contentStart === undefined ? undefined : Math.min(prev.contentStart, outPoint);
+    const lifecycle: Lifecycle =
+      contentStart === undefined ? { outPoint } : { outPoint, contentStart };
     if (
       prev !== undefined &&
       prev.outPoint === lifecycle.outPoint &&
@@ -403,7 +402,8 @@ export const documentSlice = {
 
   /**
    * D-104 follow-up — set / clear the active composition's content-start marker (the frame
-   * where ticker / clock / sequence begins). Clamped to `[active.in, outPoint]`. `null`
+   * where ticker / clock / sequence begins). Dragging it through Outro start moves Outro start
+   * forward too; the explicitly-authored markers may coincide to create an empty Middle. `null`
    * clears it (back to the runtime's `entranceSettleFrame()` heuristic). A no-op when no
    * out-point exists yet — the marker lives inside the lifecycle's entrance.
    */
@@ -418,11 +418,13 @@ export const documentSlice = {
       return;
     }
     const active = activeRangeOf(doc);
-    const cs = Math.max(active.in, Math.min(prev.outPoint, Math.round(frame)));
-    if (prev.contentStart === cs) return;
+    const requested = Math.max(active.in, Math.min(active.out, Math.round(frame)));
+    const outPoint = requested >= prev.outPoint ? requested : prev.outPoint;
+    const cs = Math.min(requested, outPoint);
+    if (prev.contentStart === cs && prev.outPoint === outPoint) return;
     set({
       scene: withActiveDoc(current.scene, {
-        lifecycle: { outPoint: prev.outPoint, contentStart: cs },
+        lifecycle: { outPoint, contentStart: cs },
       }),
     });
   },

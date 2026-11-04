@@ -31,10 +31,11 @@ export function LookPicker({
   if (looks.length === 0) return null;
   return (
     <Select
+      wrapperClassName={s.lookPickerWrap}
       className={s.lookPicker}
       value={activeId ?? ''}
-      aria-label="Active look"
-      title="Which look the canvas shows — a fresh take enters the default (★)"
+      aria-label="Active preset"
+      title="Which Preset the authoring canvas shows"
       onChange={(e) => onPick(e.target.value)}
     >
       {looks.map((l) => (

@@ -187,4 +187,77 @@ describe('FrameDriver', () => {
     expect(frames).toEqual([0, 1, 2]);
     d.stop();
   });
+
+  it('finishes the current loop pass at range.out without wrapping', () => {
+    const clock = makeClock();
+    const frames: number[] = [];
+    let ended = 0;
+    const d = new FrameDriver({
+      frameRate: 50,
+      range: { in: 10, out: 15 },
+      onFrame: (f) => frames.push(f),
+      raf: clock.raf,
+      cancel: clock.cancel,
+      now: clock.now,
+    });
+    d.start();
+    clock.advance(20); // 11
+    clock.advance(20); // 12
+    expect(d.finishCurrentLoop(() => (ended += 1))).toBe(true);
+    expect(d.finishCurrentLoop(() => (ended += 100))).toBe(true); // first request owns the seam
+    clock.advance(20); // 13
+    clock.advance(20); // 14
+    clock.advance(20); // 15, graceful end — never wraps to 10
+    clock.advance(200);
+    expect(frames).toEqual([10, 11, 12, 13, 14, 15]);
+    expect(ended).toBe(1);
+    expect(d.finishCurrentLoop(() => (ended += 1))).toBe(false); // already ended
+  });
+
+  it('preserves a pending graceful loop exit across Pause/Resume', () => {
+    const clock = makeClock();
+    const frames: number[] = [];
+    let ended = 0;
+    const d = new FrameDriver({
+      frameRate: 50,
+      range: { in: 0, out: 5 },
+      onFrame: (f) => frames.push(f),
+      raf: clock.raf,
+      cancel: clock.cancel,
+      now: clock.now,
+    });
+    d.start();
+    clock.advance(40); // frame 2
+    d.pause();
+    d.finishCurrentLoop(() => (ended += 1)); // completion may arrive while playback is paused
+    clock.advance(1000);
+    expect(frames.at(-1)).toBe(2);
+    d.resume();
+    clock.advance(60); // remaining frames 3, 4, then boundary 5
+    expect(frames.at(-1)).toBe(5);
+    expect(ended).toBe(1);
+  });
+
+  it('refuses graceful finishing for once-mode and empty loop ranges', () => {
+    const clock = makeClock();
+    const once = new FrameDriver({
+      frameRate: 50,
+      range: { in: 0, out: 5 },
+      mode: 'once',
+      onFrame: () => undefined,
+      raf: clock.raf,
+      cancel: clock.cancel,
+      now: clock.now,
+    });
+    const emptyLoop = new FrameDriver({
+      frameRate: 50,
+      range: { in: 5, out: 5 },
+      onFrame: () => undefined,
+      raf: clock.raf,
+      cancel: clock.cancel,
+      now: clock.now,
+    });
+    expect(once.finishCurrentLoop(() => undefined)).toBe(false);
+    expect(emptyLoop.finishCurrentLoop(() => undefined)).toBe(false);
+  });
 });

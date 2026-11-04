@@ -4041,6 +4041,11 @@ reopen.
 
 ## [x] B-219 — deleting a look leaves an ORPHAN composition the Looks panel does not mention, and the next `+ Look` is named `look-1` again ⟨priority: medium — two panels contradicting each other in one frame⟩ — FILED AND CLOSED IN CODE 2026-09-05 (`DESIGNER-FIX-0905` §5; `openspec/changes/inspector-state-over-prose/` 5.1–5.4); Linux `gate:e2e` DISCHARGED for `c305f9ad` — <https://github.com/yasermostafaee/cg/actions/runs/33921378832> (`E2E (Playwright)` RAN, 621 s, `success`) — archived 2026-10-04 (`openspec/changes/archive/2026-10-04-inspector-state-over-prose/`); status corrected by DESIGNER-TRIAGE-01
 
+**Current contract supersedes this historical fix (owner, 2026-11-03; [[D-195]]):** Look lifecycle
+now belongs only to the Compositions panel, and deleting a registered Look atomically deletes its
+registration, home instance and backing composition. The material below records the earlier reusable-
+orphan model and its then-valid evidence; it is not the current product behaviour.
+
 **Repro (owner, screenshot):** a multi-frame group with three looks. Remove all three from the Looks
 section.
 
@@ -4403,15 +4408,18 @@ all-Live, mixed-kind and all-unlocked cases.
 **Repro / Actual:** add several Live Sources and try to make a balanced multi-frame composition.
 Every plate had to be resized and positioned separately; no command made the inter-frame gaps or
 the outer centring agree. **Fix:** a Live-Source-only multi-selection now exposes `Auto layout`.
-It chooses near-square rows, preserves every plate's declared aspect, gives every row one common
-height, centres the complete group, and lets the author set horizontal and vertical gaps
+It evaluates the available row counts against the selected plates' declared aspects, chooses the
+layout that gives every plate the largest common height, centres the complete group, and lets the
+author set horizontal and vertical gaps
 independently; changing either gap updates the arrangement live. Two plates can be side by side or
 top/bottom, and changing that mode rearranges them immediately. When a remainder exists (for example
 three plates), the author chooses whether the fuller row is at the top or bottom (`2+1` / `1+2`),
 and **Swap frame order** exchanges seats without changing layer/z order — useful when a portrait and
-a 16:9 plate need to trade sides. The complete transform fan-out is one Undo entry and remains
+a 16:9 plate need to trade sides. Three portrait `9:16` plates on a `16:9` canvas therefore use one
+three-column row when it fits them substantially larger than `2+1`; three wide plates remain `2+1`.
+The complete transform fan-out is one Undo entry and remains
 keyframe-aware. **Acceptance:** `live-source-auto-layout.test.ts` pins row choice, symmetry,
-independent gaps, vertical pairs, seat swapping and mixed-aspect fitting;
+portrait three-column choice, independent gaps, vertical pairs, seat swapping and mixed-aspect fitting;
 `multi-select-inspector.test.ts` pins one-step Undo; Playwright `live-source.spec.ts` measures the
 rendered 2+1 geometry in Chromium.
 
@@ -4474,3 +4482,219 @@ by its canvas position, but the row appended text such as `element el-1793551207
 `elementId` inside the issue for click-to-select and canvas marking, but never render it as copy in
 the Issues row. **Acceptance:** `issues-panel.dom.test.ts` verifies the human position remains, the
 internal id is absent from text, and clicking the row still selects the correct element.
+
+## [~] B-369 — A drag entering the timeline ruler from another surface moved the playhead ⟨priority: medium — unrelated canvas/Inspector drags changed the current frame⟩ — FILED 2026-11-02 by the owner · `openspec/changes/timeline-ruler-owned-scrub/`
+
+**Repro / Actual:** begin a drag anywhere outside the timeline, keep the pointer held, and cross
+the timeline ruler. The ruler treated any pointer move with a pressed button as its own scrub and
+moved the playhead, even though the gesture did not start there. **Required:** only a primary-pointer
+gesture that begins on the ruler may scrub; foreign held drags crossing it are inert. Pointer-up,
+cancel and lost capture end ownership. **Acceptance:** a DOM regression test enters with a foreign
+held pointer, verifies no scrub, then verifies a ruler-owned captured drag still scrubs and stops on
+release.
+
+## [x] B-370 — Playout info icons did not share one alignment column ⟨priority: medium — contextual help made the Inspector look ragged⟩ — FILED 2026-11-02 by the owner · `openspec/changes/align-inspector-info-icons/`
+
+**Repro / Actual:** open a loop-cycle composition and inspect Playout. Template settings and
+Operator defaults placed help at the panel edge, Delay placed it after a short label, and Out point
+and Content start placed it inside their label width. The icons formed several unrelated vertical
+lines. **Required:** every contextual-help icon in this Playout group occupies the final fixed grid
+column of its row; labels, values and actions keep their own columns. **Acceptance:** a DOM test
+proves each rendered help button is the final direct item of its row, and visual/browser coverage
+confirms the shared right-edge alignment.
+
+## [x] B-371 — Static Preview jumped from frame 0 to the end and did not visibly reset on replay ⟨priority: medium — frame/time status disagreed during a basic rehearsal⟩ — FILED 2026-11-02 by the owner · `openspec/changes/preview-runtime-frame-counter/`
+
+**Repro / Actual:** open an empty 50-frame composition at 50 fps, or add only a static rectangle, and
+press Preview Play. Runtime correctly collapses a range with no frame-dependent pixels to repaint,
+but exposing that optimisation made the status jump directly from `0 / 50` to `50 / 50`. Pressing
+Play again restarted elapsed time while the frame readout appeared stuck at 50. **Fix:** whenever the
+root has no keyframe/lifespan/Lottie-driven sweep and no content-driven hold, derive the displayed
+authored frame from Preview's elapsed rehearsal clock; genuinely frame-driven compositions continue
+to use root Runtime telemetry. A fresh Play synchronously resets both counters before dispatch.
+**Acceptance:** DOM coverage pins `0 → 25 → 50` at 50 fps and loop wrap; Playwright uses a static
+rectangle and observes frame 50 on the first run plus a visible `0 → …` reset on the second.
+
+## [x] B-372 — Preview Stop cleared the picture but only paused its counters ⟨priority: medium — stopped state looked like a paused run⟩ — FILED 2026-11-02 by the owner · `openspec/changes/preview-command-data-workspace/`
+
+**Repro / Actual:** play a static rectangle in Preview, then press Stop. The rectangle clears, but
+frame and elapsed time remain frozen at their last running values. **Fix:** Pause alone preserves the
+current counters; Stop resets both to the active-range start and zero time. Ignore late root-frame
+messages emitted while Runtime completes Stop's outro so they cannot restore the terminal frame.
+Natural self-completion remains distinct and preserves its completed value. **Acceptance:** browser
+coverage plays and stops a static rectangle, verifies `00 / 50` and `00:00:00`, waits for late
+messages, then verifies the reset remains stable.
+
+## [x] B-373 — The composition lifecycle section was misleadingly titled Playout ⟨priority: medium — the heading described an external system rather than the authored behaviour⟩ — FILED 2026-11-02 by the owner · `openspec/changes/polish-composition-inspector-hierarchy/`
+
+**Repro / Actual:** inspect a composition. The section containing mode, hold, out point and content
+start is titled **Playout**, even though it configures the composition's own lifecycle and does not
+connect to or configure the Playout application. **Required:** title the author-facing group
+**Playback** and use the same wording in its accessible mode label; internal schema and source names
+remain unchanged. **Acceptance:** focused DOM coverage finds the **Playback** heading and no visible
+**Playout** heading in the composition Inspector.
+
+## [x] B-374 — Composition width and height labels sat outside their inputs ⟨priority: medium — the size row looked unlike every other paired dimension control⟩ — FILED 2026-11-02 by the owner · `openspec/changes/polish-composition-inspector-hierarchy/`
+
+**Repro / Actual:** with no element selected, the composition size row renders separate `W` and `H`
+text between two standalone inputs. The extra labels disturb the field alignment. **Required:** use
+the shared paired-vector control so `W` and `H` live inside their corresponding input segments,
+while preserving the existing composition width/height commit path. **Acceptance:** focused DOM
+coverage verifies one grouped size control with internal `W`/`H` axes and edits both dimensions.
+
+## [~] B-375 — Timeline scrubbing stopped moving Video after Play was paused ⟨priority: high — the author could not judge the clip by dragging the playhead⟩ — FILED 2026-11-02 by the owner · `openspec/changes/polish-video-import-and-timeline-feedback/`
+
+**Repro / Actual:** at initial rest, dragging the Designer timeline playhead positions a Video. Press
+Play, press Pause, then drag the playhead: the index moves but the Video stays frozen. Pause preserves
+`timelinePlaybackMode: lifecycle`, so Canvas marks every subsequent scrub `runtimeOwned` and the
+iframe correctly refuses to fight the paused lifecycle driver. **Required:** a ruler-owned scrub is
+an explicit switch back to static authoring: release lifecycle ownership before setting its frame,
+rebuild once, then let the normal media `positionAt` path paint it. **Acceptance:** browser coverage
+plays and pauses a Video, drags to a different frame, and observes its visible `currentTime` change;
+ordinary Pause without a scrub remains resumable.
+
+## [~] B-376 — The timeline playhead stayed parked on Out point while the authored hold range visibly looped ⟨priority: medium — the index contradicted the animation on canvas⟩ — FILED 2026-11-02 by the owner · `openspec/changes/polish-video-import-and-timeline-feedback/`
+
+**Repro / Actual:** use a content-driven hold with a non-empty Middle loop, then play it on the main
+canvas or in Preview. Time-driven media advances through `[Content start → Out point]`, but the root
+controller reports only its parked lifecycle boundary and leaves the timeline/frame counter fixed at
+Out point. **Required:** report the root hold-loop frames as the active playhead, including the wrap
+back to Content start, while keeping content drivers uninterrupted and nested-scope frames isolated.
+**Acceptance:** runtime tests observe advance and wrap during the hold; browser coverage sees the
+Designer timeline index move inside the loop and continue into Outro when the hold completes.
+
+## [~] B-377 — Follow Video Freeze and Outro were not reflected by the Preview cursor ⟨priority: high — the timeline index contradicted the picture⟩ — FILED 2026-11-02; contract superseded 2026-11-03 by the owner · `openspec/changes/align-follow-media-cursor-and-freeze-frame/`
+
+**Repro / Actual:** attach a Video to **Follow composition**, choose **Freeze**, and use a
+content-driven hold. The original cursor kept circling through Middle while the Video held, then
+skipped visible Outro telemetry. An interim correction parked Follow Freeze at Content start, which
+created a second exception beside native Out-point Freeze. **Required:** remove that exception:
+Follow Video, every other element and the root cursor all derive Freeze from composition Out point.
+When content completes, cursor and picture advance forward through composition Outro instead of
+wrapping to Content start or jumping to the last frame. Loop middle continues to advance/wrap and
+content-driver lifecycle remains uninterrupted. **Acceptance:** deterministic controller/runtime
+tests cover the shared Out-point Freeze, Loop middle and an asynchronous element Outro; browser
+coverage verifies the Video picture and timeline index agree through Hold and exit.
+
+## [~] B-378 — Lifecycle Freeze leaked into every post-Intro frame during manual timeline scrub ⟨priority: high — the author could not inspect the Video Middle⟩ — FILED 2026-11-02; clarified 2026-11-03 by the owner · `openspec/changes/align-follow-media-cursor-and-freeze-frame/`
+
+**Repro / Actual:** open `freeze-test.cgproj`, keep the composition on **Freeze**, then drag the
+timeline index past Content start. The index moves, but lifecycle Hold policy replaces the authored
+one-pass Video mapping and hides the intervening source frames. **Required:** Freeze is a running
+lifecycle Hold policy only. A manual ruler scrub walks the Video's Intro and Middle forward once and
+switches to the derived Outro mapping at Out point; it never freezes or wraps the static authoring
+cursor. D-186 separately removes the per-Video Freeze-frame override. **Acceptance:** driver and
+browser tests scrub past Content start and observe the corresponding source time while actual Play
+parks the Video only on the composition Out-point-derived picture.
+
+## [~] B-379 — Composition Freeze moved the cursor back to Content start while pictures stayed at Out point ⟨priority: high — the timeline contradicted the rendered result⟩ — FILED 2026-11-03 by the owner · `openspec/changes/align-follow-media-cursor-and-freeze-frame/`
+
+**Repro / Actual:** open `rectangle-test.cgproj` (`Content start = 31`, `Out point = 38`), keep
+composition Hold on **Freeze**, then Play. Intro correctly paints through frame 38 and the Rectangle
+keeps the frame-38 picture, but the reported root cursor jumps back to frame 31 for the Hold. The
+B-377 Content-start telemetry exception leaked into global Freeze. **Required:** one rule for native,
+Lottie and Follow Video: rendered pictures and root cursor remain at Out point; Content start belongs
+only to Loop middle. Manual, timed and content-driven Hold, Pause/Resume and both Canvas and Preview
+SHALL preserve that rule, then continue Outro forward from Out point. **Acceptance:** deterministic
+controller/runtime tests cover all element kinds on the same boundary, and browser tests observe an
+animated Rectangle and Follow Video plus both frame counters agreeing on Out point before Outro
+continues forward.
+
+## [x] B-380 — Empty/static Canvas Play jumped directly from the entrance to the end ⟨priority: medium — a basic authoring rehearsal made one authored second look instantaneous⟩ — FILED 2026-11-03 by the owner · `openspec/changes/canvas-lifecycle-playback/`
+
+**Repro / Actual:** create an empty 50-frame composition at 50 fps and press ordinary Play under
+the main canvas. Runtime correctly collapses a leg with no frame-dependent pixels to repaint, but
+the timeline exposed the boundary telemetry directly and jumped from frame 0 to frame 50. The same
+optimisation must not make the authoring cursor look instantaneous. **Required:** while ordinary
+lifecycle Play owns an empty/static root, advance only the visible Canvas cursor from authored
+elapsed time, ignore collapsed boundary reports for that cursor, preserve Pause/Resume, and reset a
+fresh Play to the entrance. Runtime paint, lifecycle timing, Preview behaviour and on-air output
+remain unchanged. **Acceptance:** browser coverage uses a truly empty composition, observes an
+intermediate frame before the end, pauses and resumes without a jump, and proves a fresh Play starts
+from the entrance again; a static Rectangle remains covered as the non-empty parity case.
+
+## [x] B-381 — Selection geometry drifted away from an element using an independent Hold clock ⟨priority: high — the visible selection no longer described the selected object⟩ — FILED 2026-11-03 by the owner · `openspec/changes/align-selection-overlay-with-element-clocks/`
+
+**Repro / Actual:** select an animated element, set the composition to **Loop middle**, and exclude
+that element from **Repeat during Hold**. The root cursor wraps through the Middle while the element
+continues once on its independent tail clock, but the selection box, hit-test and transform gestures
+keep evaluating the element at the root frame. The box therefore separates from the painted object
+and a drag can begin from the wrong geometry. **Required:** expose observation-only visual-frame
+telemetry for each root element and make every Canvas selection read path use that element's current
+visual frame during lifecycle playback, falling back to the root authoring frame during ordinary
+scrub. Runtime paint and on-air timing remain unchanged. **Acceptance:** deterministic runtime and
+browser tests cover checked and unchecked Loop participants, composition Freeze across native and
+Follow-media elements, single and multiple selection, and a drag that begins without a jump.
+
+## [x] B-382 — Empty/static Preview did not match the Canvas lifecycle clock ⟨priority: high — the two authoring surfaces contradicted each other⟩ — FILED 2026-11-03 by the owner · `openspec/changes/canvas-lifecycle-playback/`
+
+**Repro / Actual:** open a genuinely empty composition in the Preview modal. The legacy Preview
+counter projects elapsed time across the whole active range, so Manual Freeze continues past the
+authored Outro start and Manual Loop never repeats the Middle, while the Canvas correctly parks or
+wraps. Empty Auto-out also accepts Runtime's collapsed stop before its authored Intro/Hold/Outro
+display clock completes. **Required:** reuse one authored lifecycle projection for empty/static
+Canvas and Preview, keep the elapsed-duration rules appropriate to each mode, and defer only a
+collapsed early stop until the authored finite display completes. Animated, media-driven and
+content-driven roots continue to use Runtime telemetry. **Acceptance:** browser coverage compares a
+truly empty Canvas and Preview in Static, Freeze and Loop modes, including replay, Stop and an
+Auto-out with a collapsed Runtime leg.
+
+## [~] B-383 — Non-square video pixels failed verification after a successful conversion ⟨priority: high — a valid MOV waited through conversion and then imported nothing⟩ — FILED 2026-11-03 by the owner · `openspec/changes/validate-video-import-capability/`
+
+**Repro / Actual:** import `logo dena.mov` (QuickTime Animation/QTRLE, coded 1445×2120,
+SAR 2107:1445). The converter preserves the source sample-aspect metadata, so Chromium reports the
+converted picture as 2107×2120 while the verifier expects the coded 1445×2120 and rejects it only
+after the long encode. Ignoring the aspect metadata would instead squeeze the circular logo into an
+oval. **Required:** identify non-square pixels during the fast probe, present the source using its
+display aspect, and bake a square-pixel canonical WebM that preserves that appearance. Crop remains
+authored in source pixels; its stored output dimensions and verification expectation are derived
+from the same sample-aspect ratio. The operator can explicitly use coded `Pixel dimensions` when
+the file's display metadata is wrong; no non-uniform scene Scale is required. **Acceptance:** a
+QTRLE MOV with non-square pixels previews at
+the intended display shape, converts to square pixels, verifies at the derived dimensions and can
+be placed; the two picture-shape recipes stay distinct in dedupe; ordinary 1:1 sources keep the
+existing filter-free fast path.
+
+## [x] B-385 — A renamed composition kept its stale Variables namespace heading ⟨priority: high — the author could not identify the current composition in Variables⟩ — FILED 2026-11-03 by the owner · `openspec/changes/designer-variables-tab/`
+
+**Repro / Actual:** place one composition inside another, rename the child composition, and open the
+parent's Variables tab. The namespace heading kept the insertion-time instance name although the
+composition list showed the new name. **Required:** keep the instance namespace stable for operator
+payload compatibility, but derive the visible heading from the referenced composition's current
+name. **Acceptance:** shared-schema coverage renames the child and proves the payload namespace does
+not change while its display label does.
+
+## [x] B-386 — Long Variable titles and bindings could neither be read nor comfortably edited ⟨priority: high — the narrow pane hid author-entered data⟩ — FILED 2026-11-03 by the owner · `openspec/changes/designer-variables-tab/`
+
+**Repro / Actual:** enter a long operator-facing Title or bind a field to an element with a long
+name. Both values are clipped by the compact table and the Title input remains confined to its small
+column while editing. **Required:** preserve the scan-friendly four-column table at rest, expose the
+complete values on hover, and temporarily give a focused Title the adjacent Type / binding column
+without moving Actions. Native input scrolling must continue to follow the caret for even longer
+text. **Acceptance:** DOM coverage verifies the complete hover values and browser/CSS coverage
+verifies the focused editing width and fixed Actions column.
+
+## [~] B-387 — Canvas tools overlapped the Inspector at the minimum supported window width ⟨priority: high — a supported layout became visually corrupt⟩ — FILED 2026-11-03 by the owner · `openspec/changes/designer-responsive-toolbar-look-visibility/`
+
+**Repro / Actual:** open the Designer near its supported `1024px` minimum width. The fixed-width
+left rail and Inspector leave the Canvas header narrower than its complete tool strip, Look picker
+and zoom controls; the left-side tools and Look picker overflow across the Inspector tabs.
+**Required:** respond to the Canvas area's actual width. Keep Select and Hand directly reachable and
+move the remaining drawing/data tools plus the multi-frame action into a labelled **More canvas
+tools** menu below the measured fit threshold; keep the full ordered strip at wider widths. When
+Looks exist, constrain the Look selector's outer shell instead of letting it consume all free space,
+and align it with the tool controls. The zoom group must remain inside the Canvas header.
+**Acceptance:** browser coverage proves compact selection at `1024×700`, then resizes a Look project
+through 1600, 1366, 1180 and 1024px while pinning the bounded Look width and header containment; the
+existing wide-layout ordering test continues to pin the full strip.
+
+## [~] B-388 — A registered Look exposed a Hide eye that could not hide it ⟨priority: high — the timeline offered a control whose result the Look state immediately overrode⟩ — FILED 2026-11-03 by the owner · `openspec/changes/designer-responsive-toolbar-look-visibility/`
+
+**Repro / Actual:** create a multi-frame group with Looks, return to the main composition and click
+the eye on a Look instance. The authored `visible:false` is stored, but Look visibility is one-of-N
+and the active Look's resolved visibility immediately wins, so its contents stay on the Canvas.
+**Required:** registered Look instances do not expose the ordinary Hide/Show eye; the Look picker is
+their sole visibility owner and deliberately has no all-off state. Their lock remains aligned, and
+ordinary elements inside each Look keep their Hide/Show control. **Acceptance:** the Looks browser
+walk proves both managed root rows have no Hide/Show button, keep Lock/Unlock, and the picker still
+switches the rendered visible set.

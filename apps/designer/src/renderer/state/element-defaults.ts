@@ -215,17 +215,20 @@ export function defaultRepeater(
   y: number,
   child: { id: string; fields?: readonly DynamicField[] | undefined },
 ): RepeaterElement {
-  // Seed ONLY fields that carry a standard `default` — writing a key for a
-  // default-less kind (e.g. an image field's `defaultAssetId`) would OVERRIDE
-  // that field's real default at apply time (`fieldId in values` wins over
-  // the fallback); an omitted key falls back correctly at runtime.
+  // Seed canonical child-field defaults. A default-less image stays omitted so
+  // it cannot override the field fallback; an authored image default uses the
+  // same `{ assetId }` FieldValue shape Preview and CG Control send.
   const seedRow = (n: number): ListItem =>
     ({
       id: `row-${String(n)}`,
       ...Object.fromEntries(
-        (child.fields ?? [])
-          .filter((f) => 'default' in f)
-          .map((f) => [f.id, (f as { default: unknown }).default]),
+        (child.fields ?? []).flatMap((f) => {
+          if ('default' in f) return [[f.id, (f as { default: unknown }).default] as const];
+          if (f.type === 'image' && f.defaultAssetId !== undefined) {
+            return [[f.id, { assetId: f.defaultAssetId }] as const];
+          }
+          return [];
+        }),
       ),
     }) as ListItem;
   return {
@@ -471,8 +474,8 @@ export function defaultImage(
  * `opts.width`/`opts.height` size the element to the animation's native canvas
  * (both default to a 480×270 box when unknown); `opts.phases` seeds the intro /
  * outro mapping when markers were found (omitted ⇒ the whole clip is the intro,
- * frozen at its last frame). `speed` defaults to 1×, `loopMode` to 'none', and
- * `holdBehavior` to 'freeze' so a freshly-imported clip plays once and holds.
+ * frozen at its last frame). `speed` defaults to 1× and `loopMode` to 'none'. D-187 keeps
+ * the Hold choice on the owning composition, so a new element stores no local duplicate.
  */
 export function defaultLottie(
   id: string,
@@ -493,7 +496,6 @@ export function defaultLottie(
     assetId,
     speed: opts?.speed ?? 1,
     loopMode: 'none',
-    holdBehavior: 'freeze',
     ...(opts?.phases ? { phases: opts.phases } : {}),
   };
 }
@@ -503,10 +505,8 @@ export function defaultLottie(
  * asset id, so the factory is the "after-import" step (both entry points — the
  * import modal's place-on-confirm and the drag-from-assets drop — call here).
  * `durationMs` is the converted clip's duration, probed at import / drop;
- * `width`/`height` size the element to the STORED clip's dimensions (post-crop).
- * `holdBehavior` defaults to `'loop'` in the schema — the inverse of the
- * Lottie's `freeze`, because video furniture is authored as a loop — so the
- * factory deliberately does not set it.
+ * `width`/`height` size the element to the STORED clip's dimensions (post-crop). D-187 keeps
+ * the Hold choice on the owning composition, so a new element stores no local duplicate.
  */
 export function defaultVideo(
   id: string,
@@ -527,7 +527,6 @@ export function defaultVideo(
     transform: baseTransform(x, y, opts?.width ?? 480, opts?.height ?? 270),
     assetId,
     durationMs,
-    holdBehavior: 'loop',
   };
 }
 

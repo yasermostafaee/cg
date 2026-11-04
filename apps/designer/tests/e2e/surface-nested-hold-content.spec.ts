@@ -47,7 +47,7 @@ test.describe('D-108/D-112 — surface nested-composition content that drives th
     // D-114 `static`, not the parent's `auto-out`) so the child's own content can be edited there.
     await expect(drillIn(app)).toHaveCount(1);
     await drillIn(app).click();
-    await expect(app.page.getByRole('combobox', { name: 'Playout mode' })).toHaveValue('static');
+    await expect(app.page.getByRole('combobox', { name: 'Playback mode' })).toHaveValue('static');
   });
 
   test('toggling the nested row off persists as a per-instance override across a re-render', async ({

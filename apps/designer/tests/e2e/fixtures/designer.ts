@@ -118,19 +118,36 @@ export class DesignerApp {
       | 'Ellipse'
       | 'Pen'
       | 'Image loader'
-      | 'Live Source'
+      | 'Plate'
       | 'Hand (pan)',
   ): Promise<void> {
-    await this.page.getByRole('button', { name: label, exact: true }).click();
+    const toolbar = this.page.getByRole('toolbar', { name: 'Canvas tools' });
+    const direct = toolbar.getByRole('button', { name: label, exact: true });
+    if ((await direct.count()) > 0 && (await direct.isVisible())) {
+      await direct.click();
+      return;
+    }
+    await toolbar.getByRole('button', { name: 'More canvas tools' }).click();
+    await toolbar.getByRole('menuitemradio', { name: label, exact: true }).click();
   }
 
-  /** Add the authored multi-frame group, then register Looks through its Inspector. */
+  /** Create the Looks multi-frame group from either the wide strip or compact menu. */
   async addMultiFrameGroup(): Promise<void> {
-    await this.page.getByRole('button', { name: 'Add multi-frame group', exact: true }).click();
+    const toolbar = this.page.getByRole('toolbar', { name: 'Canvas tools' });
+    const direct = toolbar.getByRole('button', { name: 'Add multi-frame group', exact: true });
+    if ((await direct.count()) > 0 && (await direct.isVisible())) {
+      await direct.click();
+      return;
+    }
+    const more = toolbar.getByRole('button', { name: 'More canvas tools' });
+    if ((await more.getAttribute('aria-expanded')) !== 'true') await more.click();
+    await toolbar.getByRole('menuitem', { name: 'Add multi-frame group', exact: true }).click();
   }
 
+  /** Add a registered Look from the dedicated lower section of the Compositions panel. */
   async addLook(): Promise<void> {
-    await this.page.getByRole('button', { name: '+ Look', exact: true }).click();
+    await this.showCompositions();
+    await this.page.getByRole('button', { name: 'Add Preset', exact: true }).click();
   }
 
   // ── shared image library (D-040) ───────────────────────────────────────────
@@ -160,8 +177,9 @@ export class DesignerApp {
   async addSharedImage(filename = 'logo.png', bytes?: Buffer): Promise<void> {
     const data = bytes ?? Buffer.concat([DesignerApp.PNG_1X1, Buffer.from(filename)]);
     await this.showSharedLibrary();
+    await this.page.getByRole('button', { name: 'Add shared asset', exact: true }).click();
     const chooser = this.page.waitForEvent('filechooser');
-    await this.page.getByRole('button', { name: 'Add library image', exact: true }).click();
+    await this.page.getByRole('menuitem', { name: 'Image…', exact: true }).click();
     await (await chooser).setFiles({ name: filename, mimeType: 'image/png', buffer: data });
     // The new thumbnail (button with the file's display name) appears once imported.
     await expect(
@@ -169,6 +187,16 @@ export class DesignerApp {
         name: new RegExp(filename.replace(/\.[^.]+$/, '')),
       }),
     ).toBeVisible();
+  }
+
+  /** Import a real font file into the device-level Shared Library. */
+  async addSharedFont(filePath: string): Promise<void> {
+    await this.showSharedLibrary();
+    await this.page.getByRole('button', { name: 'Add shared asset', exact: true }).click();
+    const chooser = this.page.waitForEvent('filechooser');
+    await this.page.getByRole('menuitem', { name: 'Font…', exact: true }).click();
+    await (await chooser).setFiles(filePath);
+    await expect(this.sharedLibraryGrid.getByText(/Exo/i)).toBeVisible();
   }
 
   /** Click a shared-library thumbnail to make it the logo tool's active image. */
@@ -215,7 +243,7 @@ export class DesignerApp {
    * Inspector until kept or renamed.
    */
   async addLiveSource(pos: { x: number; y: number } = { x: 200, y: 160 }): Promise<void> {
-    await this.selectTool('Live Source');
+    await this.selectTool('Plate');
     await this.canvas.click({ position: pos });
   }
 
@@ -233,7 +261,7 @@ export class DesignerApp {
    * SUBSTRING by default, so an un-exact `{ name: 'source' }` elsewhere now matches this field too.
    */
   get liveSourceIdInput(): Locator {
-    return this.inspector.getByRole('combobox', { name: 'Live Source source id', exact: true });
+    return this.inspector.getByRole('combobox', { name: 'Plate source id', exact: true });
   }
 
   /**
@@ -320,10 +348,10 @@ export class DesignerApp {
     await this.canvas.click({ position: pos });
   }
 
-  /** D-020 — add the default out point via the COMPOSITION inspector link. */
+  /** D-020/D-188 — set the default Outro start from the composition Inspector. */
   async addOutPoint(): Promise<void> {
     await this.deselect();
-    await this.page.getByRole('button', { name: 'Add out point' }).click();
+    await this.page.getByRole('button', { name: 'Set outro start' }).click();
   }
 
   /**
@@ -672,19 +700,19 @@ export class DesignerApp {
    */
   async setPlayoutTiming(mode: 'manual' | 'auto-out' | 'loop-cycle'): Promise<void> {
     await this.deselect();
-    const select = this.page.getByRole('combobox', { name: 'Playout mode' });
+    const select = this.page.getByRole('combobox', { name: 'Playback mode' });
     await select.waitFor({ state: 'visible' });
     // D-114 — manual / auto-out / loop-cycle require an out-point (they are disabled in the select
     // without one; a no-out-point composition is `static`). Seed one first when absent — the old
     // "select auto-out seeds an out-point" behavior, now explicit — then select the mode.
-    const addOut = this.page.getByRole('button', { name: 'Add out point' });
+    const addOut = this.page.getByRole('button', { name: 'Set outro start' });
     if (await addOut.isVisible().catch(() => false)) await addOut.click();
     await select.selectOption(mode);
   }
 
   /**
    * D-028 — set the composition's hold source (the select only renders when the
-   * composition contains a ticker and the mode isn't manual). Deselects first.
+   * composition is in an Auto-out or Loop-cycle mode). Deselects first.
    */
   async setHoldSource(source: 'timed' | 'content-driven'): Promise<void> {
     await this.deselect();
@@ -715,7 +743,7 @@ export class DesignerApp {
    * the full frame range). Pointer-drag mirroring the out-point marker.
    */
   async dragContentStartMarkerToFraction(frac: number): Promise<void> {
-    const marker = this.page.getByRole('separator', { name: 'Content start marker' });
+    const marker = this.page.getByRole('separator', { name: 'Hold start marker' });
     const lane = this.page.getByTestId('scene-row-lane');
     await expect(marker).toBeVisible();
     const lbox = await lane.boundingBox();
@@ -874,12 +902,12 @@ export class DesignerApp {
 
   // ── export ─────────────────────────────────────────────────────────────────
 
-  /** Click "Export HTML" (per-composition bar) and capture the single-file HTML download. */
+  /** D-174 — exercise the hidden internal HTML-export hook and capture its download. */
   async exportHtml(): Promise<{ filename: string; html: string }> {
     const downloadPromise = this.page.waitForEvent('download');
     await this.compositionActionBar
-      .getByRole('button', { name: 'Export HTML', exact: true })
-      .click();
+      .getByTestId('internal-export-html')
+      .evaluate((button: HTMLButtonElement) => button.click());
     const download: Download = await downloadPromise;
     const stream = await download.createReadStream();
     const chunks: Buffer[] = [];

@@ -7,7 +7,7 @@ import { SequenceDriver } from '../src/sequence-driver.js';
 import { TickerDriver } from '../src/ticker-driver.js';
 
 /**
- * D-133 §2 — THE HOLD LOOP: a content-driven hold renders as a repeating
+ * D-133/D-187 — THE HOLD LOOP: a composition-authored Loop middle renders as a repeating
  * `[contentStart → outPoint]` instead of a parked out-point frame.
  *
  * The item is not "the playhead wraps" — that half is cheap. The item is **what the wrap
@@ -30,7 +30,8 @@ import { TickerDriver } from '../src/ticker-driver.js';
  * The ticker: viewport 400 px (its own width), one 20-char item ⇒ 200 px at
  * `tickerMeasure`, gap 10, speed 200 px/s. A finite `repeat: 3` completes when the last
  * item has fully left the band: `3W + 2g + V = 1020 px` ⇒ **5100 ms** of crawl, so a
- * ticker started at 600 ms completes at **5700 ms** — three seams into the hold.
+ * ticker started at 600 ms completes at **5700 ms** — three seams into the hold. Graceful
+ * content completion then drains the current Middle pass (5400 → 6600) before Outro begins.
  *
  * The composition frame is read off an opacity track keyframed `0@30 → 1@90 → 0@100`, so
  * the painted frame is recoverable from one style read: rising 0→1 is a loop pass, a drop
@@ -253,7 +254,11 @@ function scene(children: Element[], playout?: Playout): Scene {
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 100 },
     lifecycle: { outPoint: 90, contentStart: 30 },
-    playout: playout ?? { mode: 'auto-out', holdSource: 'content-driven' },
+    playout: playout ?? {
+      mode: 'auto-out',
+      holdSource: 'content-driven',
+      holdBehavior: 'loop',
+    },
     editorBackdrop: 'transparent',
     layers: [
       { id: 'pl', name: 'main', visible: true, locked: false, blendMode: 'normal', children },
@@ -408,18 +413,20 @@ describe('the hold renders as a repeating [contentStart → outPoint]', () => {
     const values = xs.map((s) => s.x!);
     expect(values.every((v, i) => i === 0 || v >= values[i - 1]!)).toBe(true);
 
-    await run(clock, 300); // t ≈ 5900 — past the ticker's own completion at 5700 ms
+    await run(clock, 200); // t ≈ 5800 — content completed, but the current Middle pass is live
+    expect(exitAt).toBeNull();
 
-    // NO REPEAT WAS CONSUMED BY A WRAP — the ticker's three passes take exactly as long as
-    // its own clock says (started at 600 ms, 1020 px at 200 px/s = 5100 ms), so the exit
-    // falls where it would with no loop at all. A wrap that reset or advanced the run would
-    // move this number; it is asserted against the ticker's arithmetic, not against itself.
+    await run(clock, 840); // t ≈ 6640 — the 5400 → 6600 pass drained, then Outro began
+
+    // NO REPEAT WAS CONSUMED BY A WRAP — the ticker still completes on its own clock at
+    // 5700 ms, but automatic Loop-middle exit is intentionally quantized to the end of the
+    // pass that was on screen. It neither jumps at 5700 nor wraps once more at 6600.
     expect(exitAt).not.toBeNull();
-    expect(exitAt!).toBeGreaterThanOrEqual(5700);
-    expect(exitAt!).toBeLessThanOrEqual(5740); // one 20 ms sampling step of slack
+    expect(exitAt!).toBeGreaterThanOrEqual(6600);
+    expect(exitAt!).toBeLessThanOrEqual(6640); // one 20 ms sampling step of slack
   });
 
-  it('the CONTROL: the same ticker with no loop to wrap exits at the SAME moment', async () => {
+  it('the CONTROL: the same ticker with no active Middle loop exits at content completion', async () => {
     // Identical scene minus the animation, so the range has nothing to replay and the hold
     // parks exactly as it did before D-133. If the two exit moments agreed only by
     // construction the previous test would be asserting the loop against itself; this is
@@ -457,17 +464,27 @@ describe('the hold renders as a repeating [contentStart → outPoint]', () => {
     await run(clock, 5600);
     expect(events).toEqual([]);
 
-    // The ticker completes at 5700 ms: playback leaves the loop instead of wrapping at
-    // 6600 ms, and the OUT leg [90 → 100] runs — the probe falls from its out-point value
-    // towards the exit, which no wrap could produce (a wrap paints the loop START, ~0,
-    // and then RISES).
-    await run(clock, 200); // t ≈ 5800 — inside the 200 ms outro
+    // The ticker completes at 5700 ms, in the middle of the 5400 → 6600 pass. It must NOT
+    // jump to frame 90 and must NOT wrap to frame 30 at 6600.
+    await run(clock, 200); // t ≈ 5800 — still inside the current Middle pass
+    expect(events).toEqual([]);
+    expect(probeOpacity()).toBeGreaterThan(0.2);
+    expect(probeOpacity()).toBeLessThan(0.5);
+
+    await run(clock, 780); // t ≈ 6580 — immediately before the pass boundary
+    expect(events).toEqual([]);
+    expect(probeOpacity()).toBeGreaterThan(0.9);
+
+    // At 6600 the graceful boundary paints frame 90 and flows directly through the
+    // OUT leg [90 → 100]. Twenty milliseconds later it is visibly falling, proving
+    // there was no extra wrap back to the Middle start.
+    await run(clock, 40); // t ≈ 6620 — inside the 200 ms Outro
     expect(events).toContain('stop.start');
     const mid = probeOpacity();
     expect(mid).toBeLessThan(1);
     expect(mid).toBeGreaterThan(0.1);
 
-    await run(clock, 300); // t ≈ 6100 — past the outro's end
+    await run(clock, 300); // t ≈ 6920 — past the Outro end
     expect(events).toContain('stop.end');
     expect(document.body.classList.contains('cg-pending')).toBe(true);
   });

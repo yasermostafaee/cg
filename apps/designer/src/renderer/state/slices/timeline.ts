@@ -227,16 +227,12 @@ export const timelineSlice = {
     set({ timelineZoom: clamped });
   },
 
-  /** `DELTA-RUN-NEXT-VERSION-01-G` — the transport started or stopped PLAYING (not a scrub). */
-  setTimelinePlaying(playing: boolean): void {
-    if (current.timelinePlaying === playing) return;
-    set({ timelinePlaying: playing });
-  },
-
-  /** The lifecycle owns ordinary Play; reverse and authoring loops own only the playhead. */
+  /** D-175 — select and start/pause/settle one of the two canvas playback paths. */
   setTimelinePlayback(mode: 'lifecycle' | 'playhead' | null, playing: boolean): void {
     const nextPlaying = mode === null ? false : playing;
-    if (current.timelinePlaybackMode === mode && current.timelinePlaying === nextPlaying) return;
+    if (current.timelinePlaybackMode === mode && current.timelinePlaying === nextPlaying) {
+      return;
+    }
     set({ timelinePlaybackMode: mode, timelinePlaying: nextPlaying });
   },
 

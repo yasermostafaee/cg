@@ -13,7 +13,7 @@ import {
   tickerScene,
 } from './index.js';
 
-/** D-119's five audited starters followed by D-179's six production examples. */
+/** The audited core and production examples, with both original weather styles retained. */
 const EXPECTED_IDS = [
   'irib-news',
   'ticker',
@@ -23,6 +23,7 @@ const EXPECTED_IDS = [
   'iran-premier-league',
   'iran-weather-pages',
   'iran-weather-forecast',
+  'iran-weather-cards',
   'image-folder-sequence',
   'countdown-steps',
   'multibox',
@@ -339,7 +340,9 @@ describe('starter templates', () => {
       expect(clock.target?.kind).toBe('datetime');
       expect(clock.afterZero).toBe('hide-digits');
       expect(clock.drivesHold).toBe(false);
-      expect(clock.steps?.steps.map((step) => step.atMs)).toEqual([300_000, 60_000, 0]);
+      expect(clock.steps?.steps.map((step) => step.atMs)).toEqual([
+        3_600_000, 1_800_000, 600_000, 300_000, 60_000, 0,
+      ]);
       expect(clock.steps?.steps.at(-1)?.changes).toEqual(
         expect.arrayContaining([
           { elementId: 'countdown-clock', property: 'visible', value: false },
@@ -361,9 +364,21 @@ describe('starter templates', () => {
       position: { x: 260, y: 820 },
       size: { w: 1400, h: 164 },
     });
-    expect(onair?.layers.flatMap((layer) => layer.children).some((el) => el.type === 'image')).toBe(
+    const elements = onair?.layers.flatMap((layer) => layer.children) ?? [];
+    expect(elements.find((element) => element.id === 'countdown-azan-icon')).toMatchObject({
+      type: 'image',
+      assetId: 'countdown-azan-icon',
+      fit: 'contain',
+    });
+    expect(elements.some((element) => element.type === 'text' && element.text === 'مغرب')).toBe(
       false,
     );
+    expect(getStarter('countdown-steps')?.assets).toContainEqual({
+      key: 'countdown-azan-icon',
+      kind: 'image',
+      filename: 'azan-mosque.svg',
+      url: '/starters/assets/azan-mosque.svg',
+    });
     expect(countdownStepsScene.fields.find((field) => field.id === 'eventTime')).toMatchObject({
       type: 'text',
       label: 'زمان اذان',
@@ -371,6 +386,58 @@ describe('starter templates', () => {
     expect(countdownStepsScene.fields.find((field) => field.id === 'announcement')).toMatchObject({
       type: 'text',
       default: 'اذان مغرب به افق تهران',
+    });
+  });
+
+  it('D-179: all five Azan warning colors are distinct, readable and ordinary editable Steps', () => {
+    const onair = countdownStepsScene.compositions?.find(
+      (composition) => composition.id === 'comp-countdown-steps-onair',
+    );
+    const elements = onair?.layers.flatMap((layer) => layer.children) ?? [];
+    const clock = elements.find((element) => element.type === 'clock');
+    if (clock?.type !== 'clock') throw new Error('Missing Azan countdown');
+    const thresholds = clock.steps?.steps.filter((step) => step.atMs > 0) ?? [];
+    const colors = thresholds.map((step) => {
+      const change = step.changes?.find(
+        (entry) => entry.elementId === 'countdown-clock-bg' && entry.property === 'fill',
+      );
+      if (change?.property !== 'fill' || typeof change.value !== 'string')
+        throw new Error(`Missing editable plate color for ${step.name}`);
+      expect(step.changes).toContainEqual({
+        elementId: 'countdown-clock',
+        property: 'textColor',
+        value: '#FFFFFF',
+      });
+      // White digits stay readable at every threshold, not only in the initial screenshot.
+      const linear = (channel: number): number => {
+        const value = channel / 255;
+        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+      };
+      const luminance = (
+        [
+          [1, 0.2126],
+          [3, 0.7152],
+          [5, 0.0722],
+        ] as const
+      ).reduce(
+        (sum, [start, weight]) =>
+          sum + weight * linear(Number.parseInt(change.value.slice(start, start + 2), 16)),
+        0,
+      );
+      expect(1.05 / (luminance + 0.05), step.name).toBeGreaterThan(4.5);
+      return change.value;
+    });
+    expect(new Set(colors).size).toBe(5);
+    const plate = elements.find((element) => element.id === 'countdown-bg');
+    expect(plate).toMatchObject({
+      type: 'shape',
+      fill: {
+        kind: 'linear',
+        stops: [
+          { at: 0, color: '#FFF9ED' },
+          { at: 1, color: '#E3F0E8' },
+        ],
+      },
     });
   });
 
@@ -454,8 +521,8 @@ describe('starter templates', () => {
     expect(low.font.weight).toBe(high.font.weight);
     expect(low.transform.position.y).toBe(high.transform.position.y);
     expect(low.transform.size).toEqual(high.transform.size);
-    expect(high.align).toBe('center');
-    expect(low.align).toBe('center');
+    expect(high.align).toBe('end');
+    expect(low.align).toBe('end');
     expect(high.backgroundColor).toBeUndefined();
     expect(low.backgroundColor).toBeUndefined();
     expect(low.color).toBe('#7DD3FC');
@@ -473,7 +540,7 @@ describe('starter templates', () => {
         text: label,
         align: 'center',
         transform: {
-          position: { x: value.transform.position.x },
+          position: { x: value.transform.position.x + 24 },
           size: { w: value.transform.size.w },
         },
       });
@@ -549,9 +616,11 @@ describe('starter templates', () => {
     expect(outPoint - (entry.lifecycle?.contentStart ?? 0)).toBeGreaterThanOrEqual(cascadeFrames);
     expect(entry.frameRange.out - outPoint).toBeGreaterThanOrEqual(cascadeFrames);
     expect(panel).toMatchObject({
-      fill: { kind: 'linear', stops: [{ color: '#111B2CEB' }, { color: '#172337E3' }] },
+      fill: { kind: 'linear', stops: [{ color: '#111B2C37' }, { color: '#172337E3' }] },
     });
-    for (const id of ['az-stadium-bg', 'az-bg-scrim', 'az-bg', 'az-head-bg']) {
+    // The owner's newer scrim intentionally reaches zero at Hold, so only the
+    // backgrounds still visible on Hold participate in the subsequent fade-out.
+    for (const id of ['az-stadium-bg', 'az-bg', 'az-head-bg']) {
       const element = elements.find((candidate) => candidate.id === id);
       const frames = element?.animation?.tracks.opacity?.keyframes ?? [];
       expect(
@@ -565,7 +634,7 @@ describe('starter templates', () => {
     }
   });
 
-  it('D-179: league preserves the owner-saved centered heading and frame-84 refinements', () => {
+  it('D-179: league preserves the owner-saved heading and newer scrim keyframes', () => {
     const entry = iranPremierLeagueScene.compositions?.find(
       (composition) => composition.id === iranPremierLeagueScene.entryCompositionId,
     );
@@ -596,11 +665,17 @@ describe('starter templates', () => {
     expect(
       elements
         .find((element) => element.id === 'az-bg-scrim')
-        ?.animation?.tracks.opacity?.keyframes.find((frame) => frame.frame === 84),
-    ).toMatchObject({
-      value: 0,
-      easing: 'linear',
-    });
+        ?.animation?.tracks.opacity?.keyframes.map(({ frame, value, easing }) => ({
+          frame,
+          value,
+          easing,
+        })),
+    ).toEqual([
+      { frame: 0, value: 0, easing: 'ease-out' },
+      { frame: 20, value: 0.64, easing: 'ease-out' },
+      { frame: 110, value: 0, easing: 'linear' },
+      { frame: 200, value: 0, easing: 'ease-out' },
+    ]);
     expect(entry?.bindings).toHaveLength(2);
   });
 

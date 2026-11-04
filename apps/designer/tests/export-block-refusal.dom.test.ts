@@ -39,8 +39,8 @@ const OVERLAP: ExportIssue = {
   severity: 'error',
   code: 'live-source-overlap',
   message:
-    'Live Source "guest-1" overlaps "guest-2". Each is composited on its own CasparCG layer, ' +
-    'so overlapping plates put two live sources over the same pixels and which one shows is a ' +
+    'Plate "guest-1" overlaps "guest-2". Each is composited on its own CasparCG layer, ' +
+    'so overlapping plates put two live inputs over the same pixels and which one shows is a ' +
     'z-order accident.',
   elementId: 'guest-1',
 };
@@ -157,11 +157,9 @@ describe('D-157 — the blocked Export names what and where', () => {
     expect(exportButton(c).getAttribute('aria-disabled')).toBeNull();
   });
 
-  it('the HTML export carries the same refusal, so the two doors cannot disagree', () => {
+  it('D-174 — the normal authoring DOM contains no HTML export control or empty placeholder', () => {
     const c = render([OVERLAP]);
-    const html = c.querySelector('button[aria-label="Export HTML"]') as HTMLButtonElement;
-    expect(html.disabled).toBe(false);
-    expect(html.getAttribute('data-export-blocked')).toBe('errors');
-    expect(html.getAttribute('title')).toContain('guest-1');
+    expect(c.querySelector('button[aria-label="Export HTML"]')).toBeNull();
+    expect(c.querySelector('[data-testid="internal-export-html"]')).toBeNull();
   });
 });

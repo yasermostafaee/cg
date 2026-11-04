@@ -41,7 +41,9 @@ const SPEC: Record<PickKind, KindSpec> = {
     // (including the client archive's rawvideo/BGRA .avi); the in-app converter
     // produces the ONE canonical stored form (VP8+alpha WebM), so the STORED
     // kind stays webm regardless of what was picked.
-    accept: 'video/*,.avi,.mov,.mkv,.mpg,.mpeg,.wmv,.flv,.m4v,.ts,.mts,.m2ts,.3gp,.ogv',
+    // Explicit extensions keep the native chooser's hint aligned with the real selection gate.
+    // Container is only the first gate; the modal proves codec decode before conversion (D-190).
+    accept: '.mp4,.webm,.avi,.mov,.mkv,.mpg,.mpeg,.wmv,.flv,.m4v,.ts,.mts,.m2ts,.3gp,.ogv',
     extensions: [
       'mp4',
       'webm',
@@ -99,7 +101,11 @@ export function fileExtension(filename: string): string {
  */
 export function isSupportedFile(kind: PickKind, file: { name: string; type?: string }): boolean {
   const spec = SPEC[kind];
-  if (spec.extensions.includes(fileExtension(file.name))) return true;
+  const ext = fileExtension(file.name);
+  if (spec.extensions.includes(ext)) return true;
+  // A named-but-unknown video extension must not bypass the immediate gate merely by claiming a
+  // broad MIME. MIME is retained only for genuinely extension-less video files.
+  if (kind === 'video' && ext !== '') return false;
   return file.type !== undefined && file.type !== '' && spec.mimes.includes(file.type);
 }
 

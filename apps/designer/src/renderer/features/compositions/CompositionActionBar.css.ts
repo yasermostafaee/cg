@@ -36,6 +36,7 @@ export const actions = style({
 export const action = style({
   flex: 1,
   minWidth: 0,
+  height: '32px',
 });
 
 /** Leading glyph (aria-hidden — the accessible name comes from each button's aria-label). */

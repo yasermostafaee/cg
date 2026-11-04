@@ -18,7 +18,7 @@ test.describe('D-068 — Shared Library search + view toggle', () => {
     await expect(grid.getByRole('button', { name: /channel-logo/ })).toBeVisible();
     await expect(grid.getByRole('button', { name: /lower-bug/ })).toBeVisible();
 
-    const search = app.page.getByRole('searchbox', { name: 'Search library images' });
+    const search = app.page.getByRole('searchbox', { name: 'Search shared library' });
     await search.fill('LOGO'); // case-insensitive
     await expect(grid.getByRole('button', { name: /channel-logo/ })).toBeVisible();
     await expect(grid.getByRole('button', { name: /lower-bug/ })).toHaveCount(0);

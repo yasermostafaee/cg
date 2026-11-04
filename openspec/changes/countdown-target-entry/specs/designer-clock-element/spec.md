@@ -1,5 +1,31 @@
 ## MODIFIED Requirements
 
+### Requirement: A stopped countdown remains editable on the authoring Canvas
+
+An idle authoring Canvas SHALL display countdowns and their Step-associated elements in their
+authored base state independently of whether a wall-clock deadline has passed. Automatic expiry
+SHALL NOT hide otherwise visible design elements or remove the countdown digits needed to select
+and edit the design. Intentionally authored hidden elements SHALL remain hidden. Explicit Step
+rehearsal SHALL remain an intentional override rather than becoming a new stored state.
+
+Real Canvas playback, dedicated Preview and on-air output SHALL retain normal wall-clock target,
+Step and after-zero behavior. Returning to a stopped authoring Canvas SHALL restore its editable
+base state without shifting the deadline or modifying stored visibility.
+
+#### Scenario: An expired target is opened for editing
+
+- **GIVEN** a direct or nested countdown has a target in the real past and zero Steps hide design parts
+- **WHEN** the author opens or edits the composition without starting playback
+- **THEN** authored-visible countdown digits and associated elements remain available for selection
+- **AND** the stored deadline and intentionally hidden elements remain unchanged
+
+#### Scenario: Playing an expired target retains its real zero behavior
+
+- **WHEN** the author starts real Canvas playback or dedicated Preview with that past target
+- **THEN** the countdown applies its normal zero Step and after-zero policy without inventing a future target
+- **WHEN** the author returns to stopped Canvas editing
+- **THEN** its authored base presentation is restored
+
 ### Requirement: A fresh accelerated Preview rehearsal
 
 Each fresh Play in accelerated Designer Preview SHALL begin its virtual clock at the current real
@@ -99,15 +125,17 @@ a local date/time rather than a raw ISO literal.
 - **AND** the generated ISO target raises no pattern validation error
 - **AND** changing the calendar does not change the stored instant
 
-### Requirement: The direct countdown starter closes through authored animation
+### Requirement: Countdown close-on-zero uses authored animation
 
-Every visual part of the direct full-screen countdown starter SHALL have an editable exit track.
-The content-driven zero completion SHALL run the normal composition outro before the stage clears.
+A countdown composition authored to close at zero SHALL run its ordinary editable exit tracks.
+Content-driven zero completion SHALL run the normal composition outro before the stage clears.
 An explicit Preview duration override SHALL replace both the authored deadline and bound target
 values for that rehearsal, including subsequent field updates, without changing stored values.
+This close-on-zero policy SHALL NOT override a separately authored hold/announcement policy such
+as the D-179 Azan starter, which remains until manual Stop.
 
 #### Scenario: Rehearsing zero exits the full graphic
 
-- **WHEN** the countdown starter is rehearsed with a three-second duration
+- **WHEN** a close-on-zero countdown composition is rehearsed with a three-second duration
 - **THEN** reaching zero fades the background and furniture through their exit tracks
 - **AND** the stage clears only after that outro completes

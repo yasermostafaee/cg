@@ -93,8 +93,8 @@ const cityCard: NonNullable<Scene['compositions']>[number] = {
         radius: 12,
       }),
       {
-        ...text('weather-temp', 'دما', '۱۸', tf(62, 8, 150, 56), FAM, 30, 900, PALETTE.white, 2, {
-          align: 'center',
+        ...text('weather-temp', 'دما', '۱۸', tf(62, 8, 100, 56), FAM, 30, 900, PALETTE.white, 2, {
+          align: 'end',
           direction: 'ltr',
         }),
         valueRules: {
@@ -119,8 +119,8 @@ const cityCard: NonNullable<Scene['compositions']>[number] = {
           ],
         },
       } as Element,
-      text('weather-degree', 'درجه', '°', tf(194, 7, 34, 56), FAM, 27, 700, PALETTE.white, 3, {
-        align: 'center',
+      text('weather-degree', 'درجه', '°', tf(164, 7, 24, 56), FAM, 27, 700, PALETTE.white, 3, {
+        align: 'start',
         direction: 'ltr',
       }),
       text(

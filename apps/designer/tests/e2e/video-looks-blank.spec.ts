@@ -180,9 +180,9 @@ test('B-217 — a background video survives look switches and undo, stays PAUSED
   await app.deselect();
 
   // ── the multi-frame group, two looks, a plate in each, and a second video INSIDE look-1 ──
-  await app.page.getByRole('button', { name: 'Add multi-frame group' }).click();
-  await app.inspector.getByRole('button', { name: '+ Look' }).click();
-  await app.inspector.getByRole('button', { name: 'Edit contents of look-1' }).click();
+  await app.addMultiFrameGroup();
+  await app.addLook();
+  await app.openComposition('preset-1');
   // A look is its own composition with its own duration; size it to fit the clip too.
   await app.setSceneDuration(500);
   await app.addLiveSource(at(0.4, 0.4));
@@ -200,8 +200,8 @@ test('B-217 — a background video survives look switches and undo, stays PAUSED
   if (inLookId === undefined)
     throw new Error(`in-look video not rendered: ${idsAfterLook1.join()}`);
 
-  await app.inspector.getByRole('button', { name: '+ Look' }).click();
-  await app.inspector.getByRole('button', { name: 'Edit contents of look-2' }).click();
+  await app.addLook();
+  await app.openComposition('preset-2');
   await app.setSceneDuration(500);
   await app.addLiveSource(at(0.4, 0.4));
   await app.setLiveSourceId('live-1');
@@ -209,7 +209,7 @@ test('B-217 — a background video survives look switches and undo, stays PAUSED
   await app.openComposition(homeName);
   await app.scrubToFrame(100);
 
-  const picker = app.page.getByLabel('Active look');
+  const picker = app.page.getByLabel('Active preset');
   await expect(picker).toBeVisible();
   // The last look added is the one the canvas shows; start from look-1 so the round trip below
   // is hide → show for the in-look video.

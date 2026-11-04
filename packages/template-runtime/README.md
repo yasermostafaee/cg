@@ -420,9 +420,9 @@ replays the crawl from its entering edge / re-runs the count / restarts the rota
 item 1 (a fresh run per cycle), and a `content-driven` wait (taken at `outPoint`) always
 awaits the run it already started.
 
-#### The HOLD LOOP — what a content-driven hold RENDERS (D-133)
+#### The HOLD LOOP — what a composition Hold renders (D-133 / D-187)
 
-A hold used to be one parked frame. A **content-driven** hold now **replays
+A hold used to be one parked frame. A composition set to **Loop middle** now **replays
 `[contentStart → outPoint]`** underneath the running content — `startHoldLoop()` opens a
 single `FrameDriver` in `'loop'` mode over that range at hold entry, and `startOutro()`
 stops it. Nothing about the hold's start condition, its end condition, or the OUT phase
@@ -436,22 +436,41 @@ driver — there is no path from it to one. That is structural, not a guard: a c
 hold holds _because_ its drivers run on their own clocks, independent of the composition
 frame, so a crawl's position is not a function of the frame and wrapping the frame cannot
 move it. A ticker set to repeat 3× flows unbroken across every seam and consumes no repeat
-through a wrap; when it completes, playback passes the loop end without wrapping and the OUT
-phase runs. If an implementation ever needs a guard here, it has been built wrong.
+through a wrap; when it completes, the loop clock drains the pass currently on screen to
+`outPoint` and the OUT phase continues from that same boundary without wrapping. Operator Stop
+does not wait for this drain and starts the OUT phase immediately. If an implementation ever
+needs a content-driver guard at the wrap, it has been built wrong.
 (`tests/hold-loop-range.test.ts` asserts this on the mechanism — prototype spies on every
 content driver's lifecycle methods — because the requirement is satisfiable by accident.)
 
 Two conditions keep it narrow, and both reuse existing answers rather than adding one:
 
-- **Content-driven holds only.** `manual` / `static` return before the branch (they ignore
-  `holdSource` entirely), and B-032 has already resolved a driver-less `content-driven` back
-  to `timed` in `effectivePlayoutFor` — so reaching `startHoldLoop` means real drivers exist.
-  Under any other hold the range is **INERT**: the timeline still parks on `outPoint`.
-- **A range with something to replay.** A degenerate range (`contentStart` at or past
-  `outPoint` — including `entranceSettleFrame`'s "there is NO entrance" fallback, which
-  returns `outPoint` verbatim), or one in which nothing paints differently from its end,
-  keeps the parked frame. The second test is `playRange`'s OWN collapse predicate, extracted
-  as `frameDependent` and shared — one definition, two readers.
+- **Composition Loop middle only.** Manual, timed and content-driven Holds all use the authored
+  composition choice; Freeze keeps the native picture and root-frame observer parked at
+  `outPoint`. A visible Follow Lottie retains the explicit Content-start observer exception. A
+  Follow Video instead parks its source at the derived Outro start while its composition cursor
+  remains at `outPoint`, so exit continues forward without a seam jump. A selected Video/Lottie keeps
+  a clock-only Middle on air under Loop middle even when no native frame needs repainting, so
+  automatic exit shares its boundary. `static` has no authored Middle/Outro lifecycle and remains
+  a cut.
+- **A non-degenerate range.** A range with `contentStart` at or past `outPoint` keeps the parked
+  frame; this includes an absent marker whose runtime entrance-settle fallback is `outPoint`.
+  The Designer's **Set hold start** action seeds an explicit marker one frame earlier when there
+  is room, but that authoring convenience does not rewrite marker-less runtime semantics. When
+  nothing in a non-empty range paints differently, on-air output also keeps its rAF off. The Designer's
+  optional root-frame observer still runs a clock-only cursor across that range so a looping
+  Video/Lottie and its timeline index stay aligned without redundant composition repaint.
+
+The runtime also has a narrower authoring observation seam for geometry:
+`RuntimeBootOptions.onRootElementFrames`. After each global-root animation paint it emits one
+batch of `{ elementId, frame }` entries for the animated elements just painted. The callback is
+**observation only** (its errors are swallowed), is never consulted by a controller or driver,
+and excludes nested composition scopes. This distinction matters in a Hold: the root cursor can
+wrap through Middle while an unchecked element finishes a local tail, or Follow Lottie Freeze can
+park root telemetry at Content start after native furniture settled at Out point. Follow Video
+shares that native Out-point cursor. The Designer uses
+the element batch to draw authoring affordances at the same frames; broadcast output installs no
+observer and therefore has no extra state or timing path.
 
 ⚠ Per-frame gates are part of a frame, so an element whose `lifespan` excludes part of the
 loop range disappears and reappears on every pass. That is the honest meaning of replaying
@@ -460,7 +479,8 @@ the range; it is recorded, not special-cased.
 **Invariants**
 
 - `pause()` / `resume()` freeze and continue **both** the driver and the hold-timer
-  countdown — including the hold loop, which is the same `driver` field.
+  countdown — including a graceful content-exit request pending on the hold loop, which is the
+  same `driver` field.
 - A **settled** controller (its lifecycle finished: `auto-out` exited, or a finite
   `loop-cycle` ran out of cycles) is a **no-op on `stop()`** — a cascaded parent
   `stop()` must not replay the exit on a child that's already done. An infinite
@@ -801,15 +821,16 @@ media clock, so `VideoDriver` does not paint frames — it keeps the element in
 lockstep with the injected `RuntimeClock` through a `VideoHandle`
 (`play`/`pause`/`seek`/`currentTime`/`seeking`/`dead`/`recover`), built in
 `runtime.ts` around the scene-builder's registered `<video>`. Phase mapping:
-intro `[introStartMs → introEndMs]` (`introStartMs` defaults to 0), hold loops
-`[loopStart, loopEnd]` or freezes at `introEndMs`, outro
+intro `[introStartMs → introEndMs]` (`introStartMs` defaults to 0). The composition owns Hold:
+Freeze parks at a runtime-derived target (`introEndMs` for manual clips; derived `outroStartMs` for
+Follow Video); a checked Loop-middle participant repeats
+`[loopStart, loopEnd]`; an unchecked participant continues once to its authored end. Outro
 `[outroStartMs → outroEndMs]` (`outroEndMs` defaults to `durationMs`) through the
 same element-outro seam as a Lottie. The window bounds serve the FOLLOW phase
 source exactly as the Lottie's (see above) — video consumes `followWindowMs`
-directly (ms-native, no unit adapter), and under follow an ABSENT idle range
-resolves the hold to a FREEZE at `H` even for `holdBehavior: 'loop'` (looping the
-whole clip would abandon the held look follow promises to keep; the stored value
-is untouched).
+directly (ms-native, no unit adapter). Legacy element-level Hold values remain parseable but do not
+decide runtime behaviour; the resolved composition policy is passed to the driver as
+`freeze` / `loop` / `continue`.
 
 **THE SEEK POLICY (2026-07-25 — the fragile-alpha-seek root cause):** on
 VP8+alpha WebM whose alpha side-stream keyframes misalign with the main
@@ -908,9 +929,10 @@ the whole lifecycle is deterministic under a fake clock.
 
 The composition lifecycle maps onto the animation's own frame space **by phase**
 (never rescaled onto `outPoint`): `play()` → `reset()`+`start()` drives
-`[introStart → introEnd]` once (`introStart` defaults to `ip`); the HOLD
-**freezes** at `introEnd` or **loops** `[idleIn, idleOut]` per `holdBehavior`;
-`out()`/`stop()` → `playOutro()` drives `[outroStart → outroEnd]` once
+`[introStart → introEnd]` once (`introStart` defaults to `ip`); the composition-owned HOLD
+**freezes** at `introEnd`, **loops** `[idleIn, idleOut]` when the element is checked, or advances
+once to its authored end when it is unchecked; `out()`/`stop()` → `playOutro()` drives
+`[outroStart → outroEnd]` once
 (`outroEnd` defaults to `op`).
 
 **The window bounds (`introStart` / `outroEnd`) exist for the FOLLOW phase source**

@@ -20,11 +20,14 @@ function app(version: string): string {
 describe('the startup build stamp', () => {
   it('puts a real release version on the first frame', () => {
     expect(createBuildStamp(app('0.12.6')).stampText).toMatch(
-      /^v0\.12\.6 · .+ · \d{4}-\d{2}-\d{2}$/,
+      /^Version 0\.12\.6 · Built \d{4}-\d{2}-\d{2}$/,
     );
   });
 
-  it('does not advertise the development placeholder as a release', () => {
-    expect(createBuildStamp(app('0.0.0')).stampText).not.toContain('0.0.0');
+  it('does not advertise unavailable development identities', () => {
+    const text = createBuildStamp(app('0.0.0')).stampText;
+    expect(text).not.toContain('0.0.0');
+    expect(text).not.toContain('nogit');
+    expect(text).toMatch(/^Built \d{4}-\d{2}-\d{2}$/);
   });
 });

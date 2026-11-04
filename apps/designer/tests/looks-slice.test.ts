@@ -109,6 +109,7 @@ describe('addLook — a real composition, instanced at root, registered by insta
 
     const group = activeLookGroup(scene());
     const look = group?.looks[0];
+    expect(look?.name).toBe('preset-1');
     expect(group?.defaultLookId).toBe('look-1');
     expect(designerStore.get().activeLookId).toBe('look-1');
 
@@ -136,12 +137,13 @@ describe('addLook — a real composition, instanced at root, registered by insta
     designerStore.addLook();
     const group = activeLookGroup(scene());
     expect(group?.looks.map((l) => l.id)).toEqual(['look-1', 'look-2']);
+    expect(group?.looks.map((l) => l.name)).toEqual(['preset-1', 'preset-2']);
     expect(group?.defaultLookId).toBe('look-1');
   });
 });
 
-describe('removeLook — the registration and the INSTANCE go; the composition stays', () => {
-  it('removes instance + registration, promotes the default heir, keeps the sub-scene comp', () => {
+describe('removeLook — registration, instance and backing composition are one lifecycle', () => {
+  it('removes all three and promotes the default heir', () => {
     fresh();
     designerStore.createLookGroup();
     designerStore.addLook();
@@ -157,8 +159,11 @@ describe('removeLook — the registration and the INSTANCE go; the composition s
     expect(after?.defaultLookId).toBe('look-2');
     const rootChildren = activeLayersOf(scene()!).flatMap((l) => [...l.children]);
     expect(rootChildren.some((el) => el.id === first?.instanceId)).toBe(false);
-    // The authored sub-scene is recoverable work — it stays in the project.
-    expect(scene()?.compositions?.length).toBe(compCountBefore);
+    expect(scene()?.compositions?.length).toBe(compCountBefore - 1);
+    expect(designerStore.get().notice).toMatch(
+      /Preset “preset-1”.*composition “preset-1”.*deleted/i,
+    );
+    expect(designerStore.get().noticeTone).toBe('neutral');
   });
 });
 
@@ -191,6 +196,6 @@ describe('editLookContents — the same navigation as the Compositions panel', (
     const st = designerStore.get();
     expect(st.activeCompositionId).not.toBeNull();
     const comp = st.scene?.compositions?.find((c) => c.id === st.activeCompositionId);
-    expect(comp?.name).toBe('look-1');
+    expect(comp?.name).toBe('preset-1');
   });
 });

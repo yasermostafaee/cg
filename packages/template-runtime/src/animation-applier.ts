@@ -199,6 +199,13 @@ const CORNER_PROPS = [
   'cornerRadius.bl',
 ] as const satisfies readonly AnimatableProperty[];
 
+const PADDING_SIDE_PROPS = [
+  'padding.top',
+  'padding.right',
+  'padding.bottom',
+  'padding.left',
+] as const satisfies readonly AnimatableProperty[];
+
 const FILTER_PROPS = [
   'filter.blur',
   'filter.brightness',
@@ -268,34 +275,18 @@ function applyCornerRadius(
   if (v !== undefined) entry.node.style.borderRadius = `${v}px`;
 }
 
-const PADDING_SIDE_PROPS = [
-  'padding.top',
-  'padding.right',
-  'padding.bottom',
-  'padding.left',
-] as const satisfies readonly AnimatableProperty[];
-
-/**
- * D-172 — uniform padding is one numeric track; per-side tracks win whenever one
- * exists and fall back to the authored side values. This mirrors border-radius so
- * a migrated track paints identically in Designer preview and exported playout.
- */
+/** D-172 — uniform or per-side text padding, with the value shape choosing the mode. */
 function applyPadding(
   entry: AnimatedElement,
   tracks: ElementAnimation['tracks'],
   frame: number,
 ): void {
-  // D-056 — content-driven kinds have no box padding.
-  if (isTimeDriven(entry.source.type)) return;
-  const authored = (
-    entry.source as {
-      padding?: number | { top: number; right: number; bottom: number; left: number };
-    }
-  ).padding;
+  if (entry.source.type !== 'text') return;
+  const sourcePadding = entry.source.padding;
   const base =
-    typeof authored === 'number'
-      ? { top: authored, right: authored, bottom: authored, left: authored }
-      : (authored ?? { top: 0, right: 0, bottom: 0, left: 0 });
+    typeof sourcePadding === 'number'
+      ? { top: sourcePadding, right: sourcePadding, bottom: sourcePadding, left: sourcePadding }
+      : (sourcePadding ?? { top: 0, right: 0, bottom: 0, left: 0 });
 
   if (PADDING_SIDE_PROPS.some((property) => tracks[property] !== undefined)) {
     const top = readNumericTrack(tracks, 'padding.top', frame) ?? base.top;
@@ -309,7 +300,6 @@ function applyPadding(
   const uniform = readNumericTrack(tracks, 'padding', frame);
   if (uniform !== undefined) entry.node.style.padding = `${uniform}px`;
 }
-
 function applyStroke(
   entry: AnimatedElement,
   tracks: ElementAnimation['tracks'],

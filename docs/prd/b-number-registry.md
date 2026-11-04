@@ -3691,14 +3691,285 @@ found no existing `B-361` heading before filing.
 
 ⇒ **Next free after this entry is `B-362`**, **`D-169`**, **`P-075`**, **`R-105`** and **`C-049`**.
 
+### 2026-11-02 — Designer and CG Control follow-ups take `B-362` through `B-369`
+
+- `B-362` — a Live Source could be rotated from the canvas although Rotation was withheld in the
+  Inspector — [bugs-designer.md](bugs-designer.md).
+- `B-363` — single-select Scale remained editable while the Live Source aspect was locked —
+  [bugs-designer.md](bugs-designer.md).
+- `B-364` — a Look and its backing composition exposed unrelated names —
+  [bugs-designer.md](bugs-designer.md).
+- `B-365` — confirming an automatically generated Live Source id permanently removed its Auto
+  control — [bugs-designer.md](bugs-designer.md).
+- `B-366` — the Issues dialog exposed internal timestamp-like element ids —
+  [bugs-designer.md](bugs-designer.md).
+- `B-367` — the Shared-files Save path action was vertically misaligned with its input —
+  [bugs-runtime.md](bugs-runtime.md).
+- `B-368` — an authored fixed text file was not loaded until the operator pressed Reload —
+  [bugs-runtime.md](bugs-runtime.md).
+- `B-369` — a drag entering the timeline ruler from another surface moved the playhead —
+  [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the working-tree PRD heading audit found `B-362` through `B-368` already
+allocated by their accepted changes, found no `B-369`, and the collision audit exposed the accidental
+reuse of `B-367` for the timeline bug. The timeline bug was moved to the next unclaimed number.
+
+⇒ **Next free after this entry is `B-370`**, **`D-169`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-02 — align Inspector help affordances takes `B-370`
+
+- `B-370` — Playout info icons occupied different horizontal positions and made related rows look
+  ragged — [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the registry named `B-370` as next free and the tracked PRD-heading sweep
+found no existing `B-370` heading before filing.
+
+⇒ **Next free after this entry is `B-371`**, **`D-169`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-02 — replayable empty Preview clock takes `B-371`
+
+- `B-371` — a composition with no frame-dependent paint exposed Runtime's collapsed `0 → end`
+  render jump and did not visibly reset its frame counter on a second Preview Play —
+  [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the registry named `B-371` as next free and the tracked PRD-heading sweep
+found no existing `B-371` heading before filing.
+
+⇒ **Next free after this entry is `B-372`**, **`D-169`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-02 — Preview Stop counter reset takes `B-372`
+
+- `B-372` — Preview Stop removed the graphic but left frame/time counters paused at their running
+  values — [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the registry named `B-372` as next free and the tracked PRD-heading sweep
+found no existing `B-372` heading before filing.
+
+⇒ **Next free after this entry is `B-373`**, **`D-169`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-02 — composition Inspector wording and size fields take `B-373` and `B-374`
+
+- `B-373` — the composition lifecycle section was labelled **Playout**, although it authors the
+  composition's own playback behaviour rather than a Playout connection —
+  [bugs-designer.md](bugs-designer.md).
+- `B-374` — the composition size row placed `W` and `H` between its inputs, breaking the aligned
+  field rhythm used by element size controls — [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the registry named `B-373` as next free and the tracked PRD-heading sweep
+found no existing `B-373` or `B-374` heading before filing. The same sweep found Designer features
+through `D-182`, so the next Designer feature allocated by this pass is `D-183`.
+
+⇒ **Next free after this entry is `B-375`**, **`D-185`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-02 — Video import and timeline feedback take `D-185`, `B-375` and `B-376`
+
+- `D-185` — routine Video import keeps Crop visible and hides uncommon alpha repairs under Advanced
+  corrections — [designer.md](designer.md).
+- `B-375` — a paused lifecycle kept ownership of Video and discarded later timeline scrubs —
+  [bugs-designer.md](bugs-designer.md).
+- `B-376` — a content-driven Middle loop repainted the canvas while the reported root playhead stayed
+  parked at Out point — [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the registry named `B-375` and `D-185` as next free and the working-tree
+heading audit found no existing `B-375`, `B-376` or `D-185` allocation.
+
+⇒ **Next free after this entry is `B-377`**, **`D-186`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-02/03 — Follow-media cursor and composition-derived Freeze take `B-377` and `D-186`
+
+- `B-377` — Preview's root cursor diverged from a Follow Video during Freeze and skipped the
+  element-owned Outro — [bugs-designer.md](bugs-designer.md).
+- `D-186` — superseded in place by the owner's final rule: composition Freeze has no authored Video
+  override; every element and the root cursor hold at Out point and exit forward —
+  [designer.md](designer.md).
+
+Measured free before use: the registry named `B-377` and `D-186` as next free and the working-tree
+heading audit found no existing allocation for either number.
+
+⇒ **Next free after this entry is `B-378`**, **`D-187`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-02 — Composition-owned mixed Hold playback takes `D-187`
+
+- `D-187` — the composition owns Freeze/Loop middle; Freeze uses one Out-point anchor, while under
+  Loop selected elements repeat and unchecked animated elements/media advance once on independent
+  local clocks — [designer.md](designer.md).
+
+Measured free before use: the registry named `D-187` as next free and the working-tree heading audit
+found no existing allocation for that number.
+
+⇒ **Next free after this entry is `B-378`**, **`D-188`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-02/03 — Freeze-mode timeline scrub takes `B-378`
+
+- `B-378` — dragging the timeline index through a Follow Video's Middle incorrectly applied the
+  running-lifecycle Freeze policy to every post-Intro frame —
+  [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the registry named `B-378` as next free and the working-tree heading audit
+found no existing `B-378` allocation.
+
+⇒ **Next free after this entry is `B-379`**, **`D-188`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-03 — composition Freeze cursor/picture parity takes `B-379`
+
+- `B-379` — composition Freeze painted the Out-point picture but moved only its reported root cursor
+  back to Content start; the final rule covers native and Follow media alike —
+  [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the registry named `B-379` as next free and the working-tree heading audit
+found no existing `B-379` allocation.
+
+⇒ **Next free after this entry is `B-380`**, **`D-188`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-03 — empty Canvas lifecycle clock takes `B-380`
+
+- `B-380` — ordinary Canvas Play exposed Runtime's collapsed empty/static render leg by jumping
+  the timeline cursor directly from the entrance to the end — [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the registry named `B-380` as next free and the working-tree PRD-heading
+audit found no existing `B-380` allocation.
+
+⇒ **Next free after this entry is `B-381`**, **`D-188`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-03 — selection geometry follows per-element clocks takes `B-381`
+
+- `B-381` — during a mixed Middle loop, the selection box and its gestures used the root cursor
+  even when the selected element was painting from an independent local clock —
+  [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the registry named `B-381` as next free and the working-tree PRD-heading
+audit found no existing `B-381` allocation.
+
+⇒ **Next free after this entry is `B-382`**, **`D-188`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-03 — empty Preview lifecycle parity takes `B-382`
+
+- `B-382` — the Preview modal's legacy empty/static display clock did not follow the Canvas
+  Freeze, Middle-loop, Hold or Outro lifecycle — [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the registry named `B-382` as next free and the working-tree PRD-heading
+audit found no existing `B-382` allocation.
+
+⇒ **Next free after this entry is `B-383`**, **`D-188`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-03 — clearer Playback phase-marker actions take `D-188`
+
+- `D-188` — the Playback Inspector names the lifecycle boundaries by their actual phases and uses
+  short, larger Set/Clear actions — [designer.md](designer.md).
+
+Measured free before use: the registry named `D-188` as next free and the working-tree PRD-heading
+audit found no existing `D-188` allocation.
+
+⇒ **Next free after this entry is `B-383`**, **`D-189`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-03 — persistent concise Hold-source authoring takes `D-189`
+
+- `D-189` — Auto-out and Loop-cycle always expose the authored Hold source with short values and a
+  visible safe-Timed fallback when no effective driver exists — [designer.md](designer.md).
+
+Measured free before use: the registry named `D-189` as next free and the working-tree PRD-heading
+audit found no existing `D-189` allocation.
+
+⇒ **Next free after this entry is `B-383`**, **`D-190`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-03 — video compatibility preflight and square-pixel normalization take `B-383` and `D-190`
+
+- `B-383` — non-square source pixels survived conversion metadata and made browser-reported
+  dimensions disagree with verification after a long encode — [bugs-designer.md](bugs-designer.md).
+- `D-190` — Video import discloses proven presets and refuses extension/decode incompatibility before
+  conversion — [designer.md](designer.md).
+
+Measured free before use: the registry named `B-383` and `D-190` as next free and the working-tree
+heading audit found no existing allocation for either number.
+
+⇒ **Next free after this entry is `B-384`**, **`D-191`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-03 — direct project import from Landing takes `D-191`
+
+- `D-191` — Landing exposes **Import project** beside **New project** and routes it through the same
+  disk-open operation as File → Open — [designer.md](designer.md).
+
+Measured free before use: the registry named `D-191` as next free and the working-tree heading audit
+found no existing `D-191` allocation.
+
+⇒ **Next free after this entry is `B-384`**, **`D-192`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-03 — 30 fps/reference-safe New Project presets take `D-192`; early Runtime-contract preflight takes `B-384`
+
+- `D-192` — New Project adds 30 fps, clearly named reference-safe canvas presets and aligned
+  in-field Duration units; larger true output formats remain a documented architecture migration —
+  [designer.md](designer.md).
+- `B-384` — Runtime reads the forward-compatible manifest contract before its strict scene parse, so
+  a 30 fps package can tell a 1.0 station to update instead of surfacing a schema failure —
+  [bugs-runtime.md](bugs-runtime.md).
+
+Measured free before use: the registry named `B-384` and `D-192` as next free and the tracked plus
+working-tree heading audit found no existing allocation for either number.
+
+⇒ **Next free after this entry is `B-385`**, **`D-193`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-03 — current Variables names and long-value editing take `B-385` and `B-386`
+
+- `B-385` — a renamed composition left its insertion-time namespace heading in Variables —
+  [bugs-designer.md](bugs-designer.md).
+- `B-386` — long Variable titles and binding summaries were clipped without a practical read/edit
+  path — [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the registry named `B-385` as next free and the tracked plus working-tree
+heading audit found no existing allocation for `B-385` or `B-386`.
+
+⇒ **Next free after this entry is `B-387`**, **`D-193`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-03 — explicit Bind targeting takes `D-193`
+
+- `D-193` — Bind-from-canvas uses link/unlink glyphs, a link-badged pointer and a distinct target
+  outline on compatible hovered elements — [designer.md](designer.md).
+
+Measured free before use: the registry named `D-193` as next free and the tracked plus working-tree
+heading audit found no existing `D-193` allocation.
+
+⇒ **Next free after this entry is `B-387`**, **`D-194`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-03 — responsive Canvas tools and honest Look visibility take `B-387` and `B-388`
+
+- `B-387` — the Canvas tool strip overflowed into the Inspector at a supported narrow width —
+  [bugs-designer.md](bugs-designer.md).
+- `B-388` — registered Look instances exposed an eye whose authored Hide was immediately overridden
+  by one-of-N Look visibility — [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the registry named `B-387` as next free and the tracked plus working-tree
+heading audit found no existing allocation for `B-387` or `B-388`.
+
+⇒ **Next free after this entry is `B-389`**, **`D-194`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-03 — distinct registered-Look identity takes `D-194`
+
+- `D-194` — registered Looks use a dedicated multi-panel icon and restrained violet type accent in
+  the Compositions panel and Timeline — [designer.md](designer.md).
+
+Measured free before use: the registry named `D-194` as next free and the tracked plus working-tree
+heading audit found no existing allocation for `D-194`.
+
+⇒ **Next free after this entry is `B-389`**, **`D-195`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-03 — single-surface Look lifecycle takes `D-195`
+
+- `D-195` — the Compositions panel owns Look create/rename/default/delete and multi-frame-group
+  removal; Inspector lifecycle controls are retired — [designer.md](designer.md).
+
+Measured free before use: the registry named `D-195` as next free and the tracked plus working-tree
+heading audit found no existing allocation for `D-195`.
+
+⇒ **Next free after this entry is `B-389`**, **`D-196`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
 ### 2026-11-04 — reliable in-app log archive download takes `B-389`
 
 - `B-389` — CG Control reads CG Bridge's one-use log archive before offering a local Blob download,
   so browser download-manager interception cannot consume the ticket without saving the file —
   [bugs-runtime.md](bugs-runtime.md).
 
-Measured free before use: the working-tree allocation ledger already reserves `B-362` through `B-388`;
-the tracked plus working-tree heading audit found no existing allocation for `B-389`.
+Measured free before use: the registry named `B-389` as next free and the tracked plus working-tree
+heading audit found no existing allocation for `B-389`.
 
 ⇒ **Next free after this entry is `B-390`**, **`D-196`**, **`P-075`**, **`R-105`** and **`C-049`**.
 

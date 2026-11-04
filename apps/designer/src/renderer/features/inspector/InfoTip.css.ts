@@ -22,6 +22,9 @@ export const stateText = style([
     display: 'flex',
     alignItems: 'flex-start',
     gap: '0.15rem',
+    width: '100%',
+    maxWidth: 'none',
+    boxSizing: 'border-box',
     color: colors.text,
   },
 ]);
@@ -33,6 +36,9 @@ export const stateMuted = style([
     display: 'flex',
     alignItems: 'flex-start',
     gap: '0.15rem',
+    width: '100%',
+    maxWidth: 'none',
+    boxSizing: 'border-box',
   },
 ]);
 

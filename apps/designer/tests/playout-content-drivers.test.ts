@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Element, Scene } from '@cg/shared-schema';
-import {
-  contentHoldElementsOf,
-  hasContentElement,
-} from '../src/renderer/features/inspector/PlayoutSection.js';
+import { contentHoldElementsOf } from '../src/renderer/features/inspector/PlayoutSection.js';
 
 /**
  * D-128 — the Playout panel's "Which content closes the graphic?" enumeration MUST
@@ -11,7 +8,8 @@ import {
  * `drivesHold: Yes` was ABSENT from the closer list and from the "every driver
  * repeats forever" warning, which was therefore computed from a driver set that
  * excluded the video. Media `drivesHold` is OPT-IN (`=== true`), the INVERSE of a
- * ticker/sequence, and a `loop` hold is the infinite (never-completes) case.
+ * ticker/sequence. D-187 moved the Freeze/Loop choice to the composition; media
+ * can still be a finite or infinite closer according to that shared choice.
  */
 
 const T = {
@@ -37,6 +35,7 @@ function video(
     id,
     name: id,
     type: 'video',
+    durationMs: 5000,
     visible: o.visible ?? true,
     holdBehavior: o.holdBehavior ?? 'loop',
     ...(o.drivesHold !== undefined ? { drivesHold: o.drivesHold } : {}),
@@ -72,8 +71,11 @@ function ticker(id: string, o: { repeat?: 'once' | 'infinite' } = {}): Element {
   } as unknown as Element;
 }
 
-function scene(children: Element[]): Scene {
+function scene(children: Element[], holdBehavior: 'freeze' | 'loop' = 'freeze'): Scene {
   return {
+    frameRange: { in: 0, out: 100 },
+    lifecycle: { outPoint: 75, contentStart: 25 },
+    playout: { mode: 'auto-out', holdSource: 'content-driven', holdBehavior },
     layers: [{ id: 'pl', name: 'main', visible: true, locked: false, children }],
     compositions: [],
   } as unknown as Scene;
@@ -81,18 +83,14 @@ function scene(children: Element[]): Scene {
 
 describe('D-128 — media joins the content-driven hold closer list', () => {
   it('lists a drivesHold FREEZE video as a FINITE closer (opt-in reading, not !== false)', () => {
-    const items = contentHoldElementsOf(
-      scene([video('v', { drivesHold: true, holdBehavior: 'freeze' })]),
-    );
+    const items = contentHoldElementsOf(scene([video('v', { drivesHold: true })], 'freeze'));
     expect(items).toEqual([
       { id: 'v', name: 'v', type: 'video', drivesHold: true, infinite: false },
     ]);
   });
 
   it('lists a drivesHold LOOP video as an INFINITE (never-completes) driver', () => {
-    const items = contentHoldElementsOf(
-      scene([video('v', { drivesHold: true, holdBehavior: 'loop' })]),
-    );
+    const items = contentHoldElementsOf(scene([video('v', { drivesHold: true })], 'loop'));
     expect(items[0]).toMatchObject({ type: 'video', drivesHold: true, infinite: true });
   });
 
@@ -105,7 +103,7 @@ describe('D-128 — media joins the content-driven hold closer list', () => {
 
   it('lists a drivesHold lottie too (media parity)', () => {
     const items = contentHoldElementsOf(
-      scene([lottie('l', { drivesHold: true, holdBehavior: 'idle-loop' })]),
+      scene([lottie('l', { drivesHold: true, holdBehavior: 'idle-loop' })], 'loop'),
     );
     expect(items[0]).toMatchObject({ type: 'lottie', drivesHold: true, infinite: true });
   });
@@ -135,18 +133,5 @@ describe('D-128 — media joins the content-driven hold closer list', () => {
     expect(afterExclude).toEqual([
       { id: 'v', name: 'v', type: 'video', drivesHold: true, infinite: false },
     ]);
-  });
-});
-
-describe('D-128 — hasContentElement offers content-driven hold for opted-in media', () => {
-  it('a lone drivesHold:true video makes content-driven available', () => {
-    expect(hasContentElement(scene([video('v', { drivesHold: true })]))).toBe(true);
-  });
-  it('a lone video that is NOT opted in does not (nothing would drive the hold)', () => {
-    expect(hasContentElement(scene([video('v')]))).toBe(false);
-    expect(hasContentElement(scene([video('v', { drivesHold: false })]))).toBe(false);
-  });
-  it('a ticker still offers it regardless (unchanged)', () => {
-    expect(hasContentElement(scene([ticker('t')]))).toBe(true);
   });
 });

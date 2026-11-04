@@ -23,6 +23,8 @@ import {
   primeAll as primeAllAssets,
 } from './features/assets/assetUrlCache.js';
 import { primeAll as primeAllSharedImages } from './features/sharedLibrary/sharedImageUrlCache.js';
+import { primeAll as primeAllSharedFonts } from './features/sharedLibrary/sharedFontUrlCache.js';
+import { useSharedFontFaces } from './features/sharedLibrary/sharedFontFaces.js';
 import { useIssues } from './hooks/useIssues.js';
 import { useSeparatorRepairOnOpen } from './hooks/useSeparatorRepairOnOpen.js';
 import { designerStore, editSceneOf, shallowEqual, useDesignerSelector } from './state/store.js';
@@ -192,6 +194,7 @@ function LeftRail({
  * in the top toolbar; project selection lives on the landing page.
  */
 export function App(): JSX.Element {
+  useSharedFontFaces();
   // Deliberately excludes `currentFrame`: the playhead tick fires every frame
   // during playback, and the frame-dependent surfaces (canvas, transport,
   // inspector, timeline) now read it themselves. Keeping App off `currentFrame`
@@ -281,6 +284,7 @@ export function App(): JSX.Element {
   // left panel is open. New imports prime themselves (CanvasArea subscribes).
   useEffect(() => {
     void primeAllSharedImages();
+    void primeAllSharedFonts();
   }, []);
 
   // Suppress the native browser context menu app-wide. Our own menus

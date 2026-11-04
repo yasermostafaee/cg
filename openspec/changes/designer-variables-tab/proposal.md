@@ -11,6 +11,12 @@ composition-level Variables surface that remains easy to scan while they select 
 - Present root fields and non-empty nested namespaces in a compact table.
 - Omit Sequence/nested-composition namespaces whose aggregate contains no dynamic fields.
 - Show one concise empty state only when the whole composition has no variables.
+- Keep a nested namespace's stable payload key while showing the referenced composition's current
+  name, and make clipped Title/binding values readable and long Titles practical to edit.
+- Give each field one fixed Bind/Unbind toggle with explicit chain glyphs, violet Bind states and a
+  red Unbind hover, and make Bind-from-canvas mark the dark editing surround with a violet shadowed
+  inset frame, explain which element families can be selected, use a clear link-badged pointer and
+  show a target outline distinct from ordinary selection.
 
 ## Capabilities
 

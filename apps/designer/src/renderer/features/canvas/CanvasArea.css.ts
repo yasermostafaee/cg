@@ -14,8 +14,8 @@ export const wrap = style({
 export const header = style({
   display: 'flex',
   alignItems: 'center',
-  gap: '0.3rem',
-  padding: '0.25rem 0.4rem',
+  gap: '0.22rem',
+  padding: '0.22rem 0.35rem',
   background: colors.panel,
   border: `1px solid ${colors.border}`,
   borderRadius: '0.22rem',
@@ -87,6 +87,61 @@ export const viewport = style({
   display: 'flex',
   width: '100%',
   boxSizing: 'border-box',
+});
+
+/**
+ * D-193 — Bind marks the DARK editing surround, not the output frame. A
+ * non-interactive inset frame sits above the scrolling canvas/rulers so the
+ * author immediately sees that this whole work area is waiting for a target,
+ * while the actual graphic boundary remains visually truthful.
+ */
+export const bindWorkArea = style({
+  selectors: {
+    '&::after': {
+      content: '',
+      position: 'absolute',
+      inset: '2px',
+      border: `2px solid ${colors.binding}`,
+      borderRadius: '0.3rem',
+      boxShadow: `inset 0 0 38px 5px rgba(167, 139, 250, 0.23), 0 0 18px rgba(167, 139, 250, 0.34)`,
+      pointerEvents: 'none',
+      zIndex: 8,
+    },
+  },
+});
+
+export const bindInstruction = style({
+  position: 'absolute',
+  top: '12px',
+  left: '50%',
+  zIndex: 9,
+  transform: 'translateX(-50%)',
+  maxWidth: 'calc(100% - 32px)',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: '0.16rem',
+  padding: '0.48rem 0.75rem',
+  border: `1px solid ${colors.binding}`,
+  borderRadius: '0.35rem',
+  background: 'rgba(23, 27, 45, 0.94)',
+  boxShadow: '0 6px 18px rgba(0, 0, 0, 0.38)',
+  color: colors.text,
+  fontSize: '0.72rem',
+  lineHeight: 1.2,
+  textAlign: 'center',
+  whiteSpace: 'nowrap',
+  pointerEvents: 'none',
+});
+
+export const bindInstructionTitle = style({
+  color: colors.binding,
+  fontSize: '0.78rem',
+  fontWeight: 700,
+});
+
+export const bindInstructionHint = style({
+  color: colors.textMuted,
 });
 
 export const outer = style({

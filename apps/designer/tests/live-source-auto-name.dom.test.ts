@@ -82,7 +82,7 @@ function rerender(): void {
 }
 
 const idInput = (c: HTMLElement): HTMLInputElement | null =>
-  c.querySelector('input[aria-label="Live Source source id"]');
+  c.querySelector('input[aria-label="Plate source id"]');
 
 function commit(input: HTMLInputElement, value: string): void {
   act(() => {

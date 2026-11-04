@@ -81,6 +81,15 @@ two halves that must never be applied separately: the **visually-effective trans
 current frame** (`effectiveTransformAt`, so an animated element is picked where the operator
 sees it) and, when an arrangement owns this box, its **CELL** (`arrangedTransform`).
 
+During lifecycle Preview, "the current frame" can be different for each element. The iframe
+installs the runtime's observation-only `onRootElementFrames` callback and posts
+`cg-preview-element-frames`; `CanvasArea` keeps that telemetry in a **session-only map** and
+`CanvasOverlay` creates the one `frameForElement(id)` resolver used by hit-testing, single and
+multi gizmos, drag, resize, rotate, snap, drill and group-move geometry. Missing ids fall back to
+the displayed root playhead. Scrub, rebuild, a fresh Play and Stop clear or ignore the map, so
+ordinary timeline editing remains playhead-driven and a stale runtime cannot position a new
+session's affordances. This bridge is read-only: it never writes a frame back to the iframe.
+
 **Why it is a function and not a convention.** `D-154` fixed the WRITE side at its one
 chokepoint (`commitAnimatable` → `commitToActiveCell`) and the READ side by editing the three
 call sites it was looking at. The write side could not drift; the read side drifted
@@ -99,7 +108,8 @@ Two consequences worth knowing:
 - **`collectGroupMoveTargets` takes the resolver as a REQUIRED parameter** rather than
   importing it, because that module is documented pure and the one read side reads the store.
   It is deliberately not defaulted — a default is how a new caller silently gets the authored
-  rect back.
+  rect back. Its additional B-381 element-frame resolver is optional only for non-lifecycle
+  callers; `CanvasOverlay` always supplies the shared resolver in production.
 - **A box the active arrangement gives NO CELL refuses every gesture at the door**
   (`hasNoActiveCell`, the same `activeCellFor` + `isNoCell` pair the write side refuses with).
   `NO_CELL` is zero-sized and `computeRectResize` divides by `Math.max(rect.w, 1e-6)`; the
@@ -633,6 +643,13 @@ scrub tick back to the running controller. Empty/static roots use the shared aut
 projection in `fields/preview-elapsed.ts`, preserving Runtime's collapsed-paint optimisation.
 Manual scrubbing leaves lifecycle mode before positioning media. Natural completion restores the
 static authoring scene and re-arms a fresh Play.
+
+The stopped main Canvas boots the runtime with `editCountdowns: true`. This display-only context
+keeps an expired countdown's zero digits and ordinary authored element visibility editable, instead
+of selecting a wall-clock Step before playback. `visible: false` is not overridden; explicit Steps
+dialog rehearsal still uses the real Step effects. Runtime Play clears the editing context before
+applying fields/steps, and returning to a static authoring frame restores it through the existing
+rebuild. The dedicated Preview and output omit the option. No deadline, field or scene is rewritten.
 
 - **Unit (pure logic):** `geometry.ts`, `hit-test.ts`, `drill.ts` are in the Vitest
   coverage scope (`apps/designer/vitest.config.ts`). See

@@ -4,9 +4,9 @@ import { test, expect } from './fixtures/designer.js';
  * D-111 — guard against an infinite-repeat content element silently driving the hold.
  * A `ticker` / `sequence` with `repeat: 'infinite'` that participates in a content-driven
  * hold (`drivesHold !== false`) never completes, so the graphic holds until stop(). The
- * Playout checklist (D-107) flags each such row ("loops forever") and — when EVERY driver
- * is infinite — escalates to a prominent alert. Excluding the element clears it; a finite
- * driver (a countdown clock) shows no warning. UI-only; the runtime is unchanged.
+ * Playout checklist (D-107) flags each such row ("loops forever") and keeps a compact
+ * "Holds until stop" state with its explanation behind Info. Excluding the element clears it;
+ * a finite driver (a countdown clock) shows no warning. UI-only; the runtime is unchanged.
  */
 test.describe('D-111 — infinite-repeat hold driver discoverability', () => {
   test('an infinite-repeat ticker is flagged per-row + prominently; excluding it clears both', async ({
@@ -22,14 +22,18 @@ test.describe('D-111 — infinite-repeat hold driver discoverability', () => {
     await expect(check).toHaveCount(1);
     await expect(check).toBeChecked();
 
-    // Per-row "loops forever" flag + (since it is the ONLY driver and infinite) a prominent alert.
+    // Per-row flag plus one compact consequence and a door to the full explanation.
     await expect(app.page.getByText(/loops forever/)).toBeVisible();
-    await expect(app.inspector.getByRole('alert')).toBeVisible();
+    const state = app.inspector.getByTestId('never-closes-state');
+    await expect(state).toContainText('Holds until stop');
+    await expect(
+      state.getByRole('button', { name: 'About Why this graphic holds until stop' }),
+    ).toBeVisible();
 
     // Excluding the infinite driver clears BOTH — the graphic can auto-close again.
     await check.uncheck();
     await expect(app.page.getByText(/loops forever/)).toHaveCount(0);
-    await expect(app.inspector.getByRole('alert')).toHaveCount(0);
+    await expect(app.inspector.getByTestId('never-closes-state')).toHaveCount(0);
   });
 
   test('a finite content driver (countdown clock) shows no warning (no false positive)', async ({
@@ -46,8 +50,8 @@ test.describe('D-111 — infinite-repeat hold driver discoverability', () => {
     await expect(check).toHaveCount(1);
     await expect(check).toBeChecked();
 
-    // Finite driver ⇒ no "loops forever" flag and no prominent alert.
+    // Finite driver ⇒ no row flag and no compact warning state.
     await expect(app.page.getByText(/loops forever/)).toHaveCount(0);
-    await expect(app.inspector.getByRole('alert')).toHaveCount(0);
+    await expect(app.inspector.getByTestId('never-closes-state')).toHaveCount(0);
   });
 });

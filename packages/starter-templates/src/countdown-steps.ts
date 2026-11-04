@@ -1,77 +1,82 @@
 import type { Element } from '@cg/shared-schema';
-import { galleryScene, gradient, reveal, shape, solid, text, tf } from './gallery-helpers.js';
+import {
+  galleryScene,
+  gradient,
+  image,
+  reveal,
+  shape,
+  solid,
+  text,
+  tf,
+} from './gallery-helpers.js';
 
 const FAM = 'asset-countdown-steps-vazir';
 const TITLE = 'تا اذان مغرب به افق تهران';
 const ANNOUNCEMENT = 'اذان مغرب به افق تهران';
 // A teaching deadline, not a calculated prayer time. The normal bound date/time field owns it.
 const DEMO_TARGET = new Date(Date.now() + 7 * 60_000).toISOString();
-const IVORY = '#EEF0EB';
+const INK = '#174B46';
+const TIMER_INK = '#FFFFFF';
+// Ordinary, inspectable countdown Steps; each threshold colors the same editable timer plate.
+const TIME_STAGES = [
+  { minutes: 60, name: 'شصت دقیقه تا اذان', color: '#0F766E' },
+  { minutes: 30, name: 'سی دقیقه تا اذان', color: '#245D9B' },
+  { minutes: 10, name: 'ده دقیقه تا اذان', color: '#66529B' },
+  { minutes: 5, name: 'پنج دقیقه تا اذان', color: '#9A5A18' },
+  { minutes: 1, name: 'یک دقیقه تا اذان', color: '#A33E48' },
+] as const;
 
 const children: Element[] = [
-  shape(
-    'countdown-bg',
-    'پلیت اذان',
-    tf(0, 0, 1400, 164),
-    gradient(135, '#111B2CF2', '#1F2C43F2'),
-    0,
-    {
-      radius: 26,
-      stroke: { color: '#A4B1C652', width: 1 },
-      shadow: { offsetX: 0, offsetY: 12, blur: 30, color: '#00000066' },
-    },
-  ),
+  shape('countdown-bg', 'پلیت اذان', tf(0, 0, 1400, 164), gradient(135, '#FFF9ED', '#E3F0E8'), 0, {
+    radius: 26,
+    stroke: { color: '#FFFFFFCC', width: 1 },
+    shadow: { offsetX: 0, offsetY: 12, blur: 30, color: '#052E2B4D' },
+  }),
   shape(
     'countdown-top-accent',
     'خط روشن',
     tf(40, 12, 1090, 2),
-    gradient(90, '#9D94B400', '#9D94B4'),
+    gradient(90, '#B58A3D00', '#B58A3D'),
     1,
   ),
   shape(
     'countdown-badge',
     'نشان اوقات شرعی',
     tf(1160, 18, 220, 128),
-    gradient(135, '#47516C', '#333F58'),
+    gradient(135, '#DFEFE5', '#C6E2D5'),
     1,
     {
       radius: 20,
-      stroke: { color: '#B7ACD23D', width: 1 },
+      stroke: { color: '#98BBAA66', width: 1 },
     },
   ),
   text(
     'countdown-badge-label',
     'برچسب اوقات شرعی',
     'اوقات شرعی',
-    tf(1174, 33, 192, 32),
+    tf(1174, 114, 192, 24),
     FAM,
-    21,
+    17,
     500,
-    '#D6D8E1',
+    '#35635B',
     2,
     {
       align: 'center',
     },
   ),
-  text(
-    'countdown-badge-name',
-    'نام نوبت اذان',
-    'مغرب',
-    tf(1174, 68, 192, 58),
-    FAM,
-    42,
-    800,
-    IVORY,
+  image(
+    'countdown-azan-icon',
+    'نشان مسجد و هلال',
+    'countdown-azan-icon',
+    tf(1182, 24, 176, 88),
     2,
-    {
-      align: 'center',
-    },
+    'contain',
   ),
-  shape('countdown-clock-bg', 'قاب شمارش', tf(28, 22, 340, 120), solid('#0A1321CC'), 1, {
+  shape('countdown-clock-bg', 'قاب شمارش', tf(28, 22, 340, 120), solid('#1D6477'), 1, {
     radius: 18,
-    stroke: { color: '#8898AF38', width: 1 },
+    stroke: { color: '#FFFFFF99', width: 1 },
   }),
-  text('countdown-title', 'عنوان', TITLE, tf(410, 34, 710, 64), FAM, 40, 800, IVORY, 2, {
+  text('countdown-title', 'عنوان', TITLE, tf(410, 34, 710, 64), FAM, 40, 800, INK, 2, {
     align: 'start',
   }),
   text(
@@ -82,7 +87,7 @@ const children: Element[] = [
     FAM,
     21,
     500,
-    '#B8C3D3',
+    '#48665D',
     2,
     {
       align: 'start',
@@ -105,7 +110,7 @@ const children: Element[] = [
       lineHeight: 1.15,
       letterSpacing: 1,
     },
-    color: IVORY,
+    color: TIMER_INK,
     align: 'center',
     verticalAlign: 'middle',
     mode: 'countdown',
@@ -116,33 +121,25 @@ const children: Element[] = [
     afterZero: 'hide-digits',
     steps: {
       before: {
-        name: 'بیش از پنج دقیقه',
+        name: 'بیش از یک ساعت',
         transition: { kind: 'fade', ms: 300 },
         changes: [
-          { elementId: 'countdown-clock', property: 'textColor', value: IVORY },
+          { elementId: 'countdown-clock', property: 'textColor', value: TIMER_INK },
+          { elementId: 'countdown-clock-bg', property: 'fill', value: '#1D6477' },
           { elementId: 'countdown-zero', property: 'visible', value: false },
         ],
       },
       steps: [
-        {
-          name: 'پنج دقیقه تا اذان',
-          atMs: 300_000,
+        ...TIME_STAGES.map(({ minutes, name, color }) => ({
+          name,
+          atMs: minutes * 60_000,
           transition: { kind: 'fade', ms: 350 },
           changes: [
-            { elementId: 'countdown-clock', property: 'textColor', value: '#E0D8ED' },
+            { elementId: 'countdown-clock', property: 'textColor', value: TIMER_INK },
+            { elementId: 'countdown-clock-bg', property: 'fill', value: color },
             { elementId: 'countdown-zero', property: 'visible', value: false },
           ],
-        },
-        {
-          name: 'یک دقیقه تا اذان',
-          atMs: 60_000,
-          transition: { kind: 'fade', ms: 350 },
-          changes: [
-            { elementId: 'countdown-clock', property: 'textColor', value: '#FFFFFF' },
-            { elementId: 'countdown-clock-bg', property: 'fill', value: '#29354C' },
-            { elementId: 'countdown-zero', property: 'visible', value: false },
-          ],
-        },
+        })),
         {
           name: 'اذان مغرب',
           atMs: 0,
@@ -167,7 +164,7 @@ const children: Element[] = [
       FAM,
       45,
       800,
-      IVORY,
+      INK,
       3,
       {
         align: 'center',

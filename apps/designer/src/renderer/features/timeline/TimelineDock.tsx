@@ -430,24 +430,29 @@ export function TimelineDock({
    * being drawn for every composition that holds, with nothing added by hand.
    *
    * So the start is the EFFECTIVE content start, not only the pinned one: the marker when
-   * the operator has pinned it, else the same default `contentStartDefaultFrom` that "Pin
-   * content start" would write. ONE definition, now three callers (the Inspector's pin, the
-   * follow-window hint, this) — extended by a call, never copied, so what the timeline draws
-   * and what pinning produces can never disagree. An UNPINNED start draws dashed: it is
+   * the operator has authored it, else the marker-less runtime mirror
+   * `contentStartDefaultFrom`. The Set action deliberately has its own one-frame seed helper;
+   * that authoring convenience must not change what an unpinned scene renders. An UNPINNED
+   * start draws dashed: it is
    * derived, and the timeline should not present a derivation as an authored decision.
    *
-   * A degenerate range (`contentStartDefaultFrom` returns the out-point verbatim when there
-   * is no entrance to settle) draws nothing — a zero-width band and two coincident lines
-   * read as one stray marker, which is worse than silence. The Playout panel is where that
-   * composition is told what its loop range is and how to move it.
+   * A legacy/imported degenerate range still draws both boundaries. They keep the same frame
+   * value but receive a tiny visual offset below, so an empty Middle is visible and editable
+   * instead of silently disappearing.
    */
   const loopRange = ((): { from: number; to: number; pinned: boolean } | null => {
     const lc = scene.lifecycle;
     if (lc === undefined) return null;
     const from = lc.contentStart ?? contentStartDefaultFrom(scene.layers, active.in, lc.outPoint);
-    return from < lc.outPoint
-      ? { from, to: lc.outPoint, pinned: lc.contentStart !== undefined }
-      : null;
+    return { from, to: lc.outPoint, pinned: lc.contentStart !== undefined };
+  })();
+
+  const coincidentLoopOffsets = ((): { start?: string; end?: string } => {
+    if (loopRange === null || loopRange.from !== loopRange.to) return {};
+    const pct = markerPct(loopRange.from);
+    if (pct <= 0) return { start: 'translateX(0)', end: 'translateX(3px)' };
+    if (pct >= 100) return { start: 'translateX(-3px)', end: 'translateX(0)' };
+    return { start: 'translateX(-1.5px)', end: 'translateX(1.5px)' };
   })();
 
   // Clicking empty timeline space or the (non-selectable) Scene row clears the
@@ -594,6 +599,10 @@ export function TimelineDock({
                 frameOut={frameOut}
                 stride={tickStride}
                 onScrub={(f) => {
+                  // B-375 — a paused real lifecycle still owns its Video/Lottie drivers. A ruler
+                  // drag is an explicit authoring seek, so release that lifecycle before moving
+                  // the frame. CanvasArea then rebuilds the static authoring runtime once and the
+                  // scrub reaches media.positionAt instead of being discarded as runtime-owned.
                   designerStore.setTimelinePlayback(null, false);
                   designerStore.setCurrentFrame(f);
                 }}
@@ -637,6 +646,7 @@ export function TimelineDock({
                     style={{
                       left: `${markerPct(loopRange.from).toFixed(3)}%`,
                       borderLeft: `1.5px ${loopRange.pinned ? 'solid' : 'dashed'} ${colors.markerIn}`,
+                      transform: coincidentLoopOffsets.start,
                     }}
                     aria-hidden
                   />
@@ -646,6 +656,7 @@ export function TimelineDock({
                     style={{
                       left: `${markerPct(loopRange.to).toFixed(3)}%`,
                       borderLeft: `1.5px solid ${colors.markerOut}`,
+                      transform: coincidentLoopOffsets.end,
                     }}
                     aria-hidden
                   />
@@ -691,8 +702,8 @@ export function TimelineDock({
                     onPointerDown={(e) => startMarkerDrag(e)}
                     role="separator"
                     aria-orientation="vertical"
-                    aria-label="Out point marker"
-                    title="Out point — where the intro ends / the hold sits / the exit begins"
+                    aria-label="Outro start marker"
+                    title="Outro start"
                   />
                 )}
                 {scene.lifecycle?.contentStart !== undefined && (
@@ -702,8 +713,8 @@ export function TimelineDock({
                     onPointerDown={(e) => startContentMarkerDrag(e)}
                     role="separator"
                     aria-orientation="vertical"
-                    aria-label="Content start marker"
-                    title="Content start — where the ticker / clock / sequence begins (reset it in the Playout panel)"
+                    aria-label="Hold start marker"
+                    title="Hold start"
                   />
                 )}
               </div>

@@ -379,6 +379,53 @@ describe('applyAnimationAtFrame', () => {
     }
   });
 
+  it('D-172 — animates one uniform text-padding track on all four sides', () => {
+    const { source, node } = makeText();
+    const src: TextElement = { ...source, padding: 6 };
+    applyAnimationAtFrame(
+      {
+        id: src.id,
+        node,
+        source: src,
+        animation: {
+          tracks: {
+            padding: {
+              keyframes: [
+                { frame: 0, value: 6, easing: 'linear' },
+                { frame: 10, value: 18, easing: 'linear' },
+              ],
+            },
+          },
+        },
+      },
+      10,
+    );
+    expect(node.style.padding).toBe('18px');
+  });
+
+  it('D-172 — animates one padding side while the others keep their authored values', () => {
+    const { source, node } = makeText();
+    const src: TextElement = {
+      ...source,
+      padding: { top: 1, right: 2, bottom: 3, left: 4 },
+    };
+    applyAnimationAtFrame(
+      {
+        id: src.id,
+        node,
+        source: src,
+        animation: {
+          tracks: {
+            'padding.right': {
+              keyframes: [{ frame: 10, value: 20, easing: 'linear' }],
+            },
+          },
+        },
+      },
+      10,
+    );
+    expect(node.style.padding).toBe('1px 20px 3px 4px');
+  });
   it('writes text.color to color only for text elements', () => {
     const { source, node } = makeText();
     const entry: AnimatedElement = {

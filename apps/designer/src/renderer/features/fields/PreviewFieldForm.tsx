@@ -41,7 +41,7 @@ export interface PreviewDispatch {
   next(): void;
   /** D-163 — back one page (the runtime's previous()). */
   previous(): void;
-  reset(): void;
+  reset(fields?: NestedFieldValues): void;
   pause(): void;
   resume(): void;
 }

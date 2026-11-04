@@ -1,5 +1,11 @@
 # Media phases gain a third source: FOLLOW THE COMPOSITION
 
+> **Current-contract amendment (owner, 2026-11-03):** D-176/D-186/D-187 supersede this change's
+> per-media Hold authoring. Follow still stores a composition relationship and derives media
+> windows, but composition Playback alone chooses Freeze/Loop. Freeze derives every held picture
+> from composition Out point; `holdAt`/`freezeAtMs` do not choose a Follow hold picture. The original
+> `H` model below remains implementation history, not the current Freeze contract.
+
 ## Why
 
 A Lottie or video used as a TICKER BACKDROP needs its phases to bracket the composition's own

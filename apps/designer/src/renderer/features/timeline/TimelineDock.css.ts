@@ -264,17 +264,19 @@ export const groupChevron = style({
  * The band in between makes the range readable at a glance.
  *
  * `left` / `width` are applied inline (they are frame positions). The band sits at
- * z-index 1 — under the dimmed inactive tail (2) and the pinned scene lane (3), so it
- * tints the lanes without washing out the row it would otherwise sit on top of; the two
- * lines sit at 5, above the sticky scene lane, exactly like the playhead one layer up.
+ * z-index 2 — above even the selected lifespan bars (1), but under the later inactive
+ * tail (2) and pinned scene lane (3). A restrained dark wash helps the green tint remain
+ * legible on saturated layer colors, without patterns or halos. The lines sit at 5, above the
+ * sticky scene lane, exactly like the playhead one layer up.
  */
 export const loopRangeBand = style({
   position: 'absolute',
   top: 0,
   bottom: 0,
   background: colors.markerInSurface,
+  backgroundImage: 'linear-gradient(rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.18))',
   pointerEvents: 'none',
-  zIndex: 1,
+  zIndex: 2,
 });
 
 // `left` and the per-end colour/dash are applied inline.
@@ -284,7 +286,6 @@ export const loopRangeLine = style({
   bottom: 0,
   width: 0,
   pointerEvents: 'none',
-  opacity: 0.55,
   zIndex: 5,
 });
 
@@ -307,7 +308,7 @@ export const phaseMarkerOut = style({
   background: colors.markerOut,
 });
 
-// D-104 follow-up — the content-start ("in") marker; a distinct cyan vs the out-point's amber.
+// Hold start uses green, distinct from the blue playhead and the Outro marker's amber.
 // Colour from the `markerIn` TOKEN, shared with the Inspector's "Pin content start".
 export const phaseMarkerIn = style({
   position: 'absolute',

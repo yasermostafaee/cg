@@ -22,6 +22,10 @@ interface Props {
  */
 export function FrameRuler({ frameIn, frameOut, stride, onScrub }: Props): JSX.Element {
   const ref = useRef<HTMLDivElement | null>(null);
+  // A held button is not enough to mean "scrub": an unrelated drag can start over the
+  // canvas/Inspector and then cross this ruler. Only the pointer whose press STARTED here may
+  // move the playhead.
+  const scrubPointerRef = useRef<number | null>(null);
   const ticks = tickFrames(frameIn, frameOut, stride);
   // Same stride drives the ruler's own background lines so labels sit
   // directly above their gridline rather than landing between two.
@@ -35,12 +39,21 @@ export function FrameRuler({ frameIn, frameOut, stride, onScrub }: Props): JSX.E
   }
 
   function handlePointerDown(e: React.PointerEvent<HTMLDivElement>): void {
+    if (e.button !== 0) return;
+    scrubPointerRef.current = e.pointerId;
     e.currentTarget.setPointerCapture(e.pointerId);
     onScrub(frameAt(e.clientX));
   }
   function handlePointerMove(e: React.PointerEvent<HTMLDivElement>): void {
-    if (e.buttons === 0) return;
+    if (scrubPointerRef.current !== e.pointerId) return;
+    if (e.buttons === 0) {
+      scrubPointerRef.current = null;
+      return;
+    }
     onScrub(frameAt(e.clientX));
+  }
+  function finishScrub(e: React.PointerEvent<HTMLDivElement>): void {
+    if (scrubPointerRef.current === e.pointerId) scrubPointerRef.current = null;
   }
 
   return (
@@ -56,6 +69,9 @@ export function FrameRuler({ frameIn, frameOut, stride, onScrub }: Props): JSX.E
       aria-valuemax={frameOut}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
+      onPointerUp={finishScrub}
+      onPointerCancel={finishScrub}
+      onLostPointerCapture={finishScrub}
     >
       {ticks.map((f) => (
         <span

@@ -10,6 +10,12 @@ is **Jalali**.
 
 ## What Changes
 
+- **Stopped Canvas remains editable.** Wall-clock expiry does not hide countdown digits or apply
+  automatic Step visibility changes to the stopped authoring picture. Restore authored base
+  visibility without overriding intentional hidden elements; an explicit Step rehearsal remains
+  deliberate. Real Canvas Play, Preview and on-air output retain actual deadline/zero semantics.
+  Stop returns to the editable authoring state without retargeting or modifying the project.
+
 - **Preview replay follow-up.** Every fresh accelerated Play starts from the current real time,
   rather than the last run's accelerated future. Resume retains its clock; past absolute deadlines
   remain past. Runtime output and stored targets are unchanged. Duration rehearsals replay in full
@@ -19,8 +25,9 @@ is **Jalali**.
   editors from the same bindings as CG Control and uses its existing masked date/time control.
   Switching a legacy starter's `\\d` time pattern to a date target updates the standard pattern;
   custom author constraints remain unchanged. Advanced timing shows a readable deadline. The direct
-  full-screen countdown starter gives every visual part an ordinary editable exit animation, so
-  zero closes the whole graphic rather than cutting the static background.
+  countdown's normal close-on-zero policy gives every visual part an ordinary editable exit
+  animation. The later D-179 Azan starter uses a different authored policy: announce at zero and
+  remain until manual Stop; it is not a full-screen auto-closing example.
 
 - **2.1 — one masked date input and one masked time input, each with a picker.** `YYYY/MM/DD` in the
   calendar shown and `HH:MM:SS`, 24-hour: digits in any set, the separators the mask's, an impossible

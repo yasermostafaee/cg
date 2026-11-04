@@ -14,6 +14,9 @@ const _sharedFallback = {
   textMuted: chrome.textMuted,
 } as const;
 
+/** Positive Designer status and Hold-range identity share the existing restrained green. */
+const positive = '#5FAE80';
+
 export const colors = {
   background: '#1c1f31',
   panel: '#272b40',
@@ -25,11 +28,14 @@ export const colors = {
   // pick); D-094's no-border base + secondary/danger/selected affordances are unchanged.
   accent: '#38BDF8',
   accentMuted: '#0EA5E9',
-  /** Registered Preset identity — distinct from neutral compositions and blue selection. */
+  /** Quiet positive status, distinct from Runtime's saturated on-air green. */
+  checkPass: positive,
+  /** Bind-from-canvas targeting — violet stays distinct from blue selection and red issues. */
+  binding: '#A78BFA',
+  bindingSurface: 'rgba(167, 139, 250, 0.14)',
+  /** Registered Look identity — distinct from neutral compositions and blue selection. */
   look: '#C084FC',
   lookSurface: 'rgba(192, 132, 252, 0.13)',
-  /** Quiet positive status for connected/valid structured data. */
-  checkPass: '#5FAE80',
   /** Label/glyph colour that sits ON an accent fill (the primary button). The light
    *  sky-blue accent takes a near-black on-accent (8.9:1, legible) — kept from D-094. */
   onAccent: '#06121F',
@@ -50,14 +56,14 @@ export const colors = {
   /**
    * TIMELINE MARKER COLOURS — the single source for each marker AND for the Inspector
    * button that creates it, so the two can never drift apart. `markerOut` is the D-020
-   * out-point marker ("Add out point"); `markerIn` is the D-104 content-start marker
-   * ("Pin content start"), which the instructional copy already calls "the cyan marker".
+   * Outro-start marker; `markerIn` is the Hold-start marker. Green Hold ranges stay
+   * distinct from the blue playhead/index bar and the orange Outro boundary.
    */
   markerOut: '#ffae57',
-  markerIn: '#57b6ff',
+  markerIn: positive,
   /** Faint marker-tinted fills for those two Inspector actions. */
   markerOutSurface: 'rgba(255, 174, 87, 0.14)',
-  markerInSurface: 'rgba(87, 182, 255, 0.14)',
+  markerInSurface: 'rgba(95, 174, 128, 0.14)',
   /** Border colour used for unselected keyframe diamonds (D-009). */
   keyframeBorder: '#676f8f',
 } as const;

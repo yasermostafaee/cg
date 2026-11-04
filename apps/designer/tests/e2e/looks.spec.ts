@@ -99,12 +99,14 @@ test('the 6-box debate: group → six sources → two looks → the selector swi
   // here, through a `+ Source` field, before any look existed. The list is derived from the
   // plates now, so the sources come into existence below, as each plate is pointed at a key,
   // and the panel MIRRORS them rather than owning them.
-  await app.page.getByRole('button', { name: 'Add multi-frame group' }).click();
-  await expect(app.inspector.getByText('Sources — used by the plates')).toBeVisible();
+  await app.addMultiFrameGroup();
+  // D-195 — the empty Inspector teaching block is intentionally gone; lifecycle now lives in
+  // the Compositions panel, whose Add Preset action proves the group is ready.
+  await expect(app.page.getByRole('button', { name: 'Add Preset' })).toBeVisible();
 
   // ── look-1: the 6-box, authored freely as a full sub-scene ────────────────
-  await app.inspector.getByRole('button', { name: '+ Look' }).click();
-  await app.inspector.getByRole('button', { name: 'Edit contents of look-1' }).click();
+  await app.addLook();
+  await app.openComposition('preset-1');
   const writeField = async (name: string, value: number): Promise<void> => {
     const field = app.inspector.getByRole('spinbutton', { name, exact: true });
     await field.fill(String(value));
@@ -133,8 +135,8 @@ test('the 6-box debate: group → six sources → two looks → the selector swi
 
   // ── look-2: the solo, its own sub-scene with its own geometry ─────────────
   await app.openComposition(homeName);
-  await app.inspector.getByRole('button', { name: '+ Look' }).click();
-  await app.inspector.getByRole('button', { name: 'Edit contents of look-2' }).click();
+  await app.addLook();
+  await app.openComposition('preset-2');
   await app.addLiveSource(at(0.4, 0.4));
   // The SAME key look-1 uses — one carrier entry, one default input, two looks.
   await app.setLiveSourceId('live-1');
@@ -158,8 +160,19 @@ test('the 6-box debate: group → six sources → two looks → the selector swi
   // The POSITIVE CONTROL for the export below: the refusal family must be silent, or
   // the export's alert-and-no-download failure mode reads as a bare timeout.
   await expect(app.inspector.getByText('export will refuse')).toHaveCount(0);
-  const picker = app.page.getByLabel('Active look');
+  const picker = app.page.getByLabel('Active preset');
   await expect(picker).toBeVisible();
+
+  // B-388 — the one-of-N Look picker owns root Look visibility. An eye on the managed
+  // instance used to write `visible:false`, which the active Look immediately overrode; the
+  // control therefore lied. Look contents remain ordinary hideable layers, but the two managed
+  // root instances expose only their lock control.
+  for (const name of ['preset-1', 'preset-2']) {
+    const row = app.page.locator('.cg-tl-row[data-element-id]', { hasText: name }).first();
+    await expect(row).toBeVisible();
+    await expect(row.getByRole('button', { name: /^(Hide|Show) element$/ })).toHaveCount(0);
+    await expect(row.getByRole('button', { name: /^(Lock|Unlock) element$/ })).toHaveCount(1);
+  }
 
   const visiblePlates = app.canvasFrame.locator('[data-cg-live-source]:visible');
 
@@ -188,6 +201,28 @@ test('the 6-box debate: group → six sources → two looks → the selector swi
     .boundingBox();
   if (soloBox === null || gridBox === null) throw new Error('a live-1 plate not rendered');
   expect(Math.abs(soloBox.x - gridBox.x) + Math.abs(soloBox.y - gridBox.y)).toBeGreaterThan(5);
+
+  // D-196 — Preview gets its own session-only Look switch. It starts from the canvas choice,
+  // changes the running Preview immediately, and does not require leaving the modal.
+  await app.openPreviewModal();
+  const previewLooks = app.previewDialog.getByRole('group', { name: 'Preview preset' });
+  const previewLook1 = previewLooks.getByRole('button', { name: 'preset-1', exact: true });
+  const previewLook2 = previewLooks.getByRole('button', { name: 'preset-2', exact: true });
+  await expect(previewLook1).toHaveAttribute('aria-pressed', 'true');
+  const previewLook1Box = await previewLook1.boundingBox();
+  const previewLook2Box = await previewLook2.boundingBox();
+  expect(previewLook1Box).not.toBeNull();
+  expect(previewLook2Box).not.toBeNull();
+  expect(Math.abs((previewLook1Box?.width ?? 0) - (previewLook2Box?.width ?? 0))).toBeLessThan(1);
+  await app.previewDialog.getByRole('button', { name: 'Play', exact: true }).click();
+  const previewPlates = app.previewFrame.locator('[data-cg-live-source]:visible');
+  await expect(previewPlates).toHaveCount(6);
+  await previewLook2.click();
+  await expect(previewLook2).toHaveAttribute('aria-pressed', 'true');
+  await expect(previewPlates).toHaveCount(1);
+  await previewLook1.click();
+  await expect(previewPlates).toHaveCount(6);
+  await app.previewDialog.getByRole('button', { name: 'Close' }).click();
 
   // §6.7 (scoped) — the export CARRIES the looks: the single-file HTML embeds the
   // authored group, so what leaves the Designer is the LOOKS template. (A `.vcg`

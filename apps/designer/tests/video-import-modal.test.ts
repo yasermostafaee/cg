@@ -188,6 +188,26 @@ describe('VideoImportModal (D-128)', () => {
     // scene is null in this harness → project fps falls back to 50 ≠ 29.97 → warn
     expect(document.body.textContent).toContain("conforming to the project channel's 50 fps");
     expect(document.body.textContent).toContain('judder');
+    expect(document.querySelector('[data-testid="video-color-interpretation"]')).toBeNull();
+  });
+
+  it('keeps Crop visible and starts uncommon alpha repairs inside closed Advanced corrections (D-185)', async () => {
+    await renderModal();
+    const advanced = document.querySelector<HTMLDetailsElement>(
+      '[data-testid="video-advanced-corrections"]',
+    );
+    expect(advanced).not.toBeNull();
+    expect(advanced!.open).toBe(false);
+    expect(advanced!.contains(cropToggle())).toBe(false);
+    expect(advanced!.querySelector('[data-testid="video-premultiplied-toggle"]')).not.toBeNull();
+    expect(advanced!.querySelector('[data-testid="video-alpha-bleed-toggle"]')).not.toBeNull();
+
+    act(() => {
+      advanced!.querySelector('summary')!.click();
+    });
+    expect(advanced!.open).toBe(true);
+    expect(advanced!.querySelectorAll('[data-testid="info-tip"]')).toHaveLength(2);
+    expect(document.body.textContent).not.toContain('Off (default) —');
   });
 
   it('StrictMode double-mount ABORTS the first probe via cleanup; the survivor drives the modal to a working import (D-128 race guard)', async () => {
@@ -268,10 +288,28 @@ describe('VideoImportModal (D-128)', () => {
       logTail: ['[avi @ 0x1] Format avi detected only with low score of 1', 'Invalid data found'],
     });
     await renderModal();
-    expect(document.body.textContent).toContain('could not be read as a video');
+    expect(document.body.textContent).toContain('contains no readable video track');
+    expect(document.body.textContent).toContain('MP4 or MOV / H.264');
     const log = document.querySelector('[data-testid="video-probe-log"]');
     expect(log?.textContent).toContain('Invalid data found');
     expect(button('Convert & import').disabled).toBe(true);
+  });
+
+  it('a stream whose first frame cannot decode is refused with an export remedy before conversion (D-190)', async () => {
+    probeSource.mockResolvedValue({
+      ok: false,
+      reason: 'decode-failed',
+      logTail: ['Unknown decoder', 'Error while decoding stream #0:0'],
+    });
+    await renderModal();
+    expect(document.body.textContent).toContain('could not decode its first frame');
+    expect(document.body.textContent).toContain('QuickTime Animation');
+    expect(document.body.textContent).toContain('Technical details');
+    expect(document.querySelector('[data-testid="video-probe-log"]')?.textContent).toContain(
+      'Unknown decoder',
+    );
+    expect(button('Convert & import').disabled).toBe(true);
+    expect(convertToWebm).not.toHaveBeenCalled();
   });
 
   it('a converter crash shows the reload message and NEVER blames the file', async () => {
@@ -282,7 +320,7 @@ describe('VideoImportModal (D-128)', () => {
     });
     await renderModal();
     // the poisoned-worker path must not read as "unsupported format"
-    expect(document.body.textContent).not.toContain('could not be read as a video');
+    expect(document.body.textContent).not.toContain('could not decode its first frame');
     expect(document.body.textContent).toContain('does NOT mean');
     expect(document.body.textContent).toContain('try the import again');
     expect(document.querySelector('[data-testid="video-probe-log"]')?.textContent).toContain(
@@ -305,6 +343,204 @@ describe('VideoImportModal (D-128)', () => {
       button('Convert & import').click();
     });
     expect(storeBytes).toHaveBeenCalled();
+  });
+
+  it('normalizes a non-square QTRLE source to display dimensions for conversion and verification (B-383)', async () => {
+    const sar = { numerator: 2107, denominator: 1445 };
+    probeSource.mockResolvedValue({
+      ok: true,
+      probe: {
+        fps: 30,
+        width: 1445,
+        height: 2120,
+        durationMs: 14_300,
+        container: 'mov,mp4,m4a,3gp,3g2,mj2',
+        codec: 'qtrle',
+        pixelFormat: 'argb',
+        sampleAspectRatio: sar,
+      },
+      posterUrl: 'blob:poster',
+    });
+    convertToWebm.mockResolvedValue(new Uint8Array([7]));
+    verifyConvertedClip.mockResolvedValue({
+      ok: true,
+      durationMs: 14_300,
+      width: 2107,
+      height: 2120,
+    });
+    await renderModal();
+    expect(document.querySelector('[data-testid="video-probe-meta"]')?.textContent).toContain(
+      '1445×2120 → 2107×2120 square pixels',
+    );
+    expect(document.body.textContent).toContain('QTRLE');
+    expect(document.body.textContent).toContain('ARGB + alpha');
+    const pictureShape = document.querySelector<HTMLSelectElement>(
+      '[data-testid="video-picture-shape"]',
+    );
+    expect(pictureShape?.value).toBe('source');
+    expect(pictureShape?.textContent).toContain('From file · 2107×2120');
+    const pictureShapeRow = document.querySelector('[data-testid="video-picture-shape-row"]');
+    const pictureShapeTip = pictureShapeRow?.querySelector('[data-testid="info-tip"]');
+    expect(pictureShapeRow?.children).toHaveLength(3);
+    expect(pictureShapeRow?.children[0]?.textContent).toBe('Picture shape');
+    expect(pictureShapeRow?.children[1]?.querySelector('select')).toBe(pictureShape);
+    expect(pictureShapeRow?.children[2]).toBe(pictureShapeTip);
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    expect(convertToWebm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sampleAspectRatio: sar,
+        pixelAspectMode: 'source',
+        colorInterpretation: 'standard',
+      }),
+    );
+    expect(verifyConvertedClip).toHaveBeenCalledWith(expect.any(Uint8Array), 2107, 2120);
+    expect(storeBytes).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provenance: expect.objectContaining({
+          pixelAspectMode: 'source',
+          colorInterpretation: 'standard',
+        }),
+      }),
+    );
+  });
+
+  it('offers a QTRLE-only VLC 3 color match and bakes the selected preview into conversion', async () => {
+    const sar = { numerator: 2107, denominator: 1445 };
+    probeSource.mockResolvedValue({
+      ok: true,
+      probe: {
+        fps: 30,
+        width: 1445,
+        height: 2120,
+        durationMs: 14_300,
+        codec: 'qtrle',
+        pixelFormat: 'argb',
+        sampleAspectRatio: sar,
+      },
+      posterUrl: 'blob:poster',
+    });
+    convertToWebm.mockResolvedValue(new Uint8Array([7]));
+    verifyConvertedClip.mockResolvedValue({
+      ok: true,
+      durationMs: 14_300,
+      width: 2107,
+      height: 2120,
+    });
+    await renderModal();
+    const select = document.querySelector<HTMLSelectElement>(
+      '[data-testid="video-color-interpretation"]',
+    );
+    const poster = document.querySelector<HTMLImageElement>('img[alt^="First frame"]');
+    expect(select?.value).toBe('standard');
+    expect(poster?.style.filter).toBe('');
+    const colorRow = document.querySelector('[data-testid="video-color-interpretation-row"]');
+    const colorTip = colorRow?.querySelector('[data-testid="info-tip"]');
+    expect(colorRow?.children).toHaveLength(3);
+    expect(colorRow?.children[0]?.textContent).toBe('Color');
+    expect(colorRow?.children[1]?.querySelector('select')).toBe(select);
+    expect(colorRow?.children[2]).toBe(colorTip);
+    act(() => {
+      select!.value = 'legacy-vlc';
+      select!.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(poster?.style.filter).toContain('video-legacy-vlc-colors');
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    expect(convertToWebm).toHaveBeenCalledWith(
+      expect.objectContaining({ colorInterpretation: 'legacy-vlc' }),
+    );
+    expect(storeBytes).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provenance: expect.objectContaining({ colorInterpretation: 'legacy-vlc' }),
+      }),
+    );
+  });
+
+  it('updates Picture shape output dimensions when a coded-pixel crop is edited', async () => {
+    const sar = { numerator: 2107, denominator: 1445 };
+    probeSource.mockResolvedValue({
+      ok: true,
+      probe: {
+        fps: 30,
+        width: 1445,
+        height: 2120,
+        durationMs: 14_300,
+        codec: 'qtrle',
+        pixelFormat: 'argb',
+        sampleAspectRatio: sar,
+      },
+      posterUrl: 'blob:poster',
+    });
+    await renderModal();
+    act(() => cropToggle().click());
+    const setCropValue = (label: string, value: string): void => {
+      const input = numericInput(label);
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      act(() => {
+        setter.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    };
+    setCropValue('W', '1000');
+    setCropValue('H', '800');
+
+    const pictureShape = document.querySelector<HTMLSelectElement>(
+      '[data-testid="video-picture-shape"]',
+    );
+    expect(pictureShape?.textContent).toContain('From file · 1458×800');
+    expect(pictureShape?.textContent).toContain('Pixel dimensions · 1000×800');
+    expect(document.querySelector('[data-testid="video-probe-meta"]')?.textContent).toContain(
+      '1445×2120 → 2107×2120 square pixels',
+    );
+  });
+
+  it('can treat coded pixels as square when a file display setting makes the picture look stretched', async () => {
+    const sar = { numerator: 2107, denominator: 1445 };
+    probeSource.mockResolvedValue({
+      ok: true,
+      probe: {
+        fps: 30,
+        width: 1445,
+        height: 2120,
+        durationMs: 14_300,
+        sampleAspectRatio: sar,
+      },
+      posterUrl: 'blob:poster',
+    });
+    convertToWebm.mockResolvedValue(new Uint8Array([7]));
+    verifyConvertedClip.mockResolvedValue({
+      ok: true,
+      durationMs: 14_300,
+      width: 1445,
+      height: 2120,
+    });
+    await renderModal();
+    const pictureShape = document.querySelector<HTMLSelectElement>(
+      '[data-testid="video-picture-shape"]',
+    );
+    expect(pictureShape).not.toBeNull();
+    act(() => {
+      pictureShape!.value = 'pixels';
+      pictureShape!.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(document.querySelector('[data-testid="video-probe-meta"]')?.textContent).not.toContain(
+      '→ 2107×2120',
+    );
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    expect(convertToWebm).toHaveBeenCalledWith(
+      expect.objectContaining({ sampleAspectRatio: sar, pixelAspectMode: 'pixels' }),
+    );
+    expect(verifyConvertedClip).toHaveBeenCalledWith(expect.any(Uint8Array), 1445, 2120);
+    expect(storeBytes).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provenance: expect.objectContaining({ pixelAspectMode: 'pixels' }),
+      }),
+    );
   });
 
   it('a source with Duration: N/A takes the duration from the CONVERTED clip verification', async () => {
@@ -877,6 +1113,8 @@ describe('VideoImportModal (D-128)', () => {
         sourceSha256: 'a'.repeat(64), // the dedupe key (computed during the encode) travels along
         sourceBytes: FILE_SIZE,
         crop: { x: 100, y: 0, width: 320, height: 360 },
+        pixelAspectMode: 'source',
+        colorInterpretation: 'standard',
         premultipliedAlpha: false, // the OFF default is recorded in provenance
         alphaBleed: false, // fast path: the bleed is opt-in and its state is recorded too
       },

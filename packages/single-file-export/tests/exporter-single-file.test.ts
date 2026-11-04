@@ -169,6 +169,92 @@ describe('ExporterSingleFile', () => {
   });
 });
 
+describe('ExporterSingleFile — D-139 conditional image closure', () => {
+  it('inlines an image used only by a value-rule branch', async () => {
+    const bytesById = new Map([
+      ['base-picture', new Uint8Array([1, 2, 3])],
+      ['storm-picture', new Uint8Array([9, 8, 7, 6])],
+    ]);
+    const assets = {
+      get: async (assetId: string) =>
+        bytesById.has(assetId)
+          ? ({
+              assetId,
+              filename: `${assetId}.png`,
+              kind: 'image',
+              sha256: assetId,
+              byteSize: bytesById.get(assetId)?.byteLength ?? 0,
+            } as AssetMeta)
+          : null,
+      bytes: async (assetId: string) => bytesById.get(assetId) ?? null,
+    } as unknown as ImageAssetSource;
+    const exporter = new ExporterSingleFile({
+      cgJsIife:
+        'var CG = { createRuntime: function () { return { ready: Promise.resolve() }; }, installCasparGlobals: function () {}, applyOutputPosition: function () {} };',
+      cgCss: '',
+      fontsCss: '',
+      assets,
+    });
+    const scene: Scene = {
+      ...makeScene(),
+      fields: [
+        { id: 'weather', label: 'Weather', required: false, type: 'text', default: 'clear' },
+      ],
+      layers: [
+        {
+          id: 'L',
+          name: 'Pictures',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [
+            {
+              id: 'weather-icon',
+              name: 'Weather icon',
+              type: 'image',
+              transform: {
+                position: { x: 0, y: 0 },
+                size: { w: 100, h: 100 },
+                scale: { x: 1, y: 1 },
+                rotation: 0,
+                anchor: { x: 0, y: 0 },
+              },
+              opacity: 1,
+              visible: true,
+              locked: false,
+              zIndex: 0,
+              assetId: 'base-picture',
+              source: 'project',
+              fit: 'contain',
+              preserveAspect: true,
+              valueRules: {
+                input: { kind: 'field', fieldId: 'weather' },
+                rules: [
+                  {
+                    condition: { comparator: '=', value: 'storm' },
+                    effect: {
+                      elementId: 'weather-icon',
+                      property: 'image',
+                      value: { assetId: 'storm-picture', source: 'project' },
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    } as unknown as Scene;
+
+    const { html, issues } = await exporter.produce(scene);
+
+    expect(html).toContain(
+      `"storm-picture":"data:image/png;base64,${Buffer.from([9, 8, 7, 6]).toString('base64')}"`,
+    );
+    expect(issues.some((issue) => issue.code === 'missing-asset')).toBe(false);
+  });
+});
+
 describe('ExporterSingleFile — B-129 the editor backdrop never reaches the artifact', () => {
   it('embeds a scene whose backdrop is transparent, from a scene that had a colour', () => {
     // The artifact side of the split, on the OTHER exporter — asserted here as well as

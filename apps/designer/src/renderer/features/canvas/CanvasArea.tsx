@@ -5,6 +5,7 @@ import type { Element, Scene } from '@cg/shared-schema';
 import { lookGroupOf } from '@cg/shared-schema';
 import { rootUsesAuthoredFrameClock } from '../fields/preview-elapsed.js';
 import { colors } from '../../theme.js';
+import { cx } from '../../cx.js';
 import {
   getAll as assetUrlGetAll,
   subscribe as assetUrlSubscribe,
@@ -20,12 +21,19 @@ import {
   prime as primeSharedImage,
   primeAll as primeAllSharedImages,
 } from '../sharedLibrary/sharedImageUrlCache.js';
-import { ARROW_CURSOR, CanvasOverlay } from './CanvasOverlay.js';
+import {
+  getAll as sharedFontUrlGetAll,
+  subscribe as sharedFontUrlSubscribe,
+  prime as primeSharedFont,
+  primeAll as primeAllSharedFonts,
+} from '../sharedLibrary/sharedFontUrlCache.js';
+import { ARROW_CURSOR, BIND_CURSOR, CanvasOverlay } from './CanvasOverlay.js';
 import { LookPicker } from './LookPicker.js';
 import { CanvasToolbar } from './CanvasToolbar.js';
 import { arrangementViewOf, boxInstanceIds } from '../../state/slices/arrangements.js';
 import { shownSequenceItem } from '../../state/slices/view.js';
 import { PreviewHost } from './PreviewHost.js';
+import { bindingTargetHint } from '../fields/bind-resolver.js';
 import { B042Probe, b042ProbeEnabled } from './B042Probe.js';
 import {
   clampZoom as clampZoomPure,
@@ -168,7 +176,7 @@ function drawPixelGrid(
  * disjoint uuid id-spaces, so the merge is unambiguous.
  */
 function mergedAssetUrls(): Record<string, string> {
-  return { ...assetUrlGetAll(), ...sharedUrlGetAll() };
+  return { ...assetUrlGetAll(), ...sharedUrlGetAll(), ...sharedFontUrlGetAll() };
 }
 
 /** Every image element's assetId in a scene (main + comps, recursing containers). */
@@ -220,12 +228,24 @@ export function CanvasArea({
   issues = [],
 }: Props): JSX.Element {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const previewReadyRef = useRef(false);
+  const playbackRef = useRef<{
+    mode: 'lifecycle' | 'playhead' | null;
+    playing: boolean;
+  }>({ mode: null, playing: false });
+  const acceptLifecycleElementFramesRef = useRef(false);
   const outerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   // D-120 — the pixel-grid <canvas> (a non-scrolling viewport-sized overlay layer); redrawn
   // imperatively whenever the ruler origin / zoom / viewport changes (see the effect below).
   const gridCanvasRef = useRef<HTMLCanvasElement>(null);
   const [html, setHtml] = useState<string | null>(null);
+  // B-381 — session-only frames last painted onto root animated elements. The composition cursor
+  // can legitimately differ during mixed Hold playback, so selection geometry resolves through
+  // this map while the real lifecycle owns the canvas. It is never persisted into the document.
+  const [lifecycleElementFrames, setLifecycleElementFrames] = useState<ReadonlyMap<string, number>>(
+    () => new Map(),
+  );
   const [zoom, setZoom] = useState<number>(ZOOM_DEFAULT);
   // Live mirror of `zoom` so the (once-bound) wheel listener + the zoom helpers read
   // the current value without re-subscribing.
@@ -267,11 +287,6 @@ export function CanvasArea({
     }),
     shallowEqual,
   );
-  const previewReadyRef = useRef(false);
-  const playbackRef = useRef<{ mode: 'lifecycle' | 'playhead' | null; playing: boolean }>({
-    mode: null,
-    playing: false,
-  });
   // Screen offset (within the scroll viewport) of the scene's (0,0), so the
   // pinned rulers and the guide lines stay aligned with the canvas as it
   // zooms / scrolls / resizes.
@@ -341,6 +356,8 @@ export function CanvasArea({
   useEffect(() => {
     const current = latestSceneRef.current;
     previewReadyRef.current = false;
+    acceptLifecycleElementFramesRef.current = false;
+    setLifecycleElementFrames(new Map());
     if (current === null) {
       setHtml(null);
       return;
@@ -446,6 +463,8 @@ export function CanvasArea({
       const sceneToSend = pendingSceneRef.current;
       pendingSceneRef.current = null;
       if (sceneToSend === null) return;
+      acceptLifecycleElementFramesRef.current = false;
+      setLifecycleElementFrames(new Map());
       iframeRef.current?.contentWindow?.postMessage(
         {
           kind: 'cg-preview',
@@ -494,10 +513,12 @@ export function CanvasArea({
     }
     const offAssets = assetUrlSubscribe(repost);
     const offShared = sharedUrlSubscribe(repost);
+    const offSharedFonts = sharedFontUrlSubscribe(repost);
     const offLottie = lottieAssetSubscribe(repostLottie);
     return () => {
       offAssets();
       offShared();
+      offSharedFonts();
       offLottie();
     };
   }, []);
@@ -522,6 +543,15 @@ export function CanvasArea({
     void primeAllSharedImages();
     return window.cg.sharedImages.onImported((image) => {
       void primeSharedImage(image);
+    });
+  }, []);
+
+  useEffect(() => {
+    void primeAllSharedFonts();
+    const api = window.cg.sharedFonts;
+    if (api === undefined) return;
+    return api.onImported((font) => {
+      void primeSharedFont(font);
     });
   }, []);
 
@@ -582,12 +612,17 @@ export function CanvasArea({
             payload?: string;
             frame?: number;
             state?: string;
+            entries?: unknown;
+            reset?: boolean;
           }
         | undefined;
+      if (evt.source !== iframeRef.current?.contentWindow) return;
       if (msg?.kind === 'cg-preview-ready') {
+        acceptLifecycleElementFramesRef.current = true;
+        setLifecycleElementFrames(new Map());
+        previewReadyRef.current = true;
         const cw = iframeRef.current?.contentWindow;
         if (cw === undefined || cw === null) return;
-        previewReadyRef.current = true;
         const playback = designerStore.get();
         cw.postMessage(
           {
@@ -599,6 +634,8 @@ export function CanvasArea({
           },
           '*',
         );
+        // D-175 — a Play click that landed while srcdoc was still booting is replayed once the
+        // iframe confirms its handler exists. Normal ready-at-rest keeps the authoring frame.
         if (playback.timelinePlaybackMode === 'lifecycle' && playback.timelinePlaying) {
           cw.postMessage({ kind: 'cg-preview', action: 'play', fields: {} }, '*');
         }
@@ -654,18 +691,57 @@ export function CanvasArea({
         console.error('[cg-preview]', msg.label, msg.payload);
       }
       if (msg?.kind === 'cg-preview-frame' && typeof msg.frame === 'number') {
+        const playback = designerStore.get();
         if (
-          designerStore.get().timelinePlaybackMode === 'lifecycle' &&
+          playback.timelinePlaybackMode === 'lifecycle' &&
           (scene === null || !rootUsesAuthoredFrameClock(scene))
-        )
+        ) {
           designerStore.setCurrentFrame(msg.frame);
+        }
+      }
+      if (msg?.kind === 'cg-preview-element-frames') {
+        if (msg.reset === true) {
+          // The iframe emits reset immediately before synchronously removing the old runtime.
+          // Frames received after this point therefore belong to the replacement runtime.
+          acceptLifecycleElementFramesRef.current = true;
+          setLifecycleElementFrames(new Map());
+        } else if (
+          acceptLifecycleElementFramesRef.current &&
+          designerStore.get().timelinePlaybackMode === 'lifecycle' &&
+          Array.isArray(msg.entries)
+        ) {
+          setLifecycleElementFrames((previous) => {
+            const next = new Map(previous);
+            let changed = false;
+            for (const raw of msg.entries as unknown[]) {
+              if (raw === null || typeof raw !== 'object') continue;
+              const { elementId, frame } = raw as { elementId?: unknown; frame?: unknown };
+              if (
+                typeof elementId !== 'string' ||
+                typeof frame !== 'number' ||
+                !Number.isFinite(frame)
+              ) {
+                continue;
+              }
+              const value = Math.round(frame);
+              if (next.get(elementId) === value) continue;
+              next.set(elementId, value);
+              changed = true;
+            }
+            return changed ? next : previous;
+          });
+        }
       }
       if (msg?.kind === 'cg-preview-state' && msg.state === 'stopped') {
+        acceptLifecycleElementFramesRef.current = false;
+        setLifecycleElementFrames(new Map());
+        const playback = designerStore.get();
         if (
-          designerStore.get().timelinePlaybackMode === 'lifecycle' &&
+          playback.timelinePlaybackMode === 'lifecycle' &&
           (scene === null || !rootUsesAuthoredFrameClock(scene))
-        )
+        ) {
           designerStore.setTimelinePlayback(null, false);
+        }
       }
     }
     window.addEventListener('message', onMessage);
@@ -680,26 +756,33 @@ export function CanvasArea({
     shownItemKey,
   ]);
 
+  // D-175 — ordinary forward Play uses the page's REAL runtime lifecycle. The explicit
+  // playhead-only modes never enter this branch; their currentFrame stream remains a scrub below.
   useEffect(() => {
     const next = { mode: timelinePlaybackMode, playing: timelinePlaying };
     const prev = playbackRef.current;
     playbackRef.current = next;
-    if (!previewReadyRef.current || next.mode !== 'lifecycle') return;
+    if (!previewReadyRef.current) return;
     const cw = iframeRef.current?.contentWindow;
-    if (cw === undefined || cw === null) return;
+    if (cw === undefined || cw === null || next.mode !== 'lifecycle') return;
     if (next.playing) {
-      cw.postMessage(
-        {
-          kind: 'cg-preview',
-          action: prev.mode === 'lifecycle' && !prev.playing ? 'resume' : 'play',
-          fields: {},
-        },
-        '*',
-      );
+      const action = prev.mode === 'lifecycle' && !prev.playing ? 'resume' : 'play';
+      if (action === 'play') {
+        acceptLifecycleElementFramesRef.current = true;
+        setLifecycleElementFrames(new Map());
+      }
+      cw.postMessage({ kind: 'cg-preview', action, fields: {} }, '*');
     } else if (prev.mode === 'lifecycle' && prev.playing) {
       cw.postMessage({ kind: 'cg-preview', action: 'pause' }, '*');
     }
   }, [timelinePlaybackMode, timelinePlaying]);
+
+  useEffect(() => {
+    if (timelinePlaybackMode !== 'lifecycle') {
+      acceptLifecycleElementFramesRef.current = false;
+      setLifecycleElementFrames(new Map());
+    }
+  }, [timelinePlaybackMode]);
 
   // D-060 — expose the live preview document so the selection gizmo (and the
   // auto→fixed one-shot size commit) can measure an auto-sized text box's rendered
@@ -722,6 +805,8 @@ export function CanvasArea({
         // DELTA-RUN-NEXT-VERSION-01-G — PLAYING sounds each sound at its place; a scrub, a step or
         // a stopped playhead is silent (`runtime.auditionSounds`).
         playing: timelinePlaybackMode === 'playhead' && timelinePlaying,
+        // D-175 — a root frame reflected from the real lifecycle updates the editor chrome only.
+        // The iframe must not feed it back into runtime.tick() and fight its own controller.
         runtimeOwned: timelinePlaybackMode === 'lifecycle',
       },
       '*',
@@ -1024,12 +1109,16 @@ export function CanvasArea({
   // the canvas, so the dark margin around the scene shows the same cursor.
   const outerCursor =
     bindModeFieldId !== null
-      ? 'crosshair'
+      ? BIND_CURSOR
       : tool === 'cursor'
         ? ARROW_CURSOR
         : tool === 'hand'
           ? 'grab'
           : 'crosshair';
+  const bindModeField =
+    bindModeFieldId === null
+      ? undefined
+      : scene.fields.find((candidate) => candidate.id === bindModeFieldId);
 
   // Scene coordinates under a viewport point. D-071 Phase B — scene (0,0) is the
   // FRAME top-left, which is INSET into the pasteboard by `frameOffset` (scene px), so
@@ -1086,7 +1175,7 @@ export function CanvasArea({
     <div className={s.wrap}>
       <PreviewHost />
       <div className={s.header} aria-label="Canvas header">
-        {showToolbar && <CanvasToolbar tool={tool} />}
+        {showToolbar && <CanvasToolbar tool={tool} compact={viewport.w < 720} />}
         {/* multibox-layout-switch C2 — always visible, because the right panel switches to
             element properties the moment you select something to adjust. */}
         {/* A′'s ArrangementPicker is DISABLED, not deleted (owner, 2026-08-19) — see
@@ -1137,7 +1226,21 @@ export function CanvasArea({
           <Icon icon={ZoomOut} size={16} />
         </Control>
       </div>
-      <div className={s.viewport}>
+      <div
+        className={cx(s.viewport, bindModeFieldId !== null && s.bindWorkArea)}
+        data-testid="canvas-work-area"
+        data-bind-active={bindModeFieldId !== null ? 'true' : 'false'}
+      >
+        {bindModeFieldId !== null && (
+          <div className={s.bindInstruction} data-testid="bind-instruction" role="status">
+            <strong className={s.bindInstructionTitle}>Select an element</strong>
+            <span className={s.bindInstructionHint}>
+              {bindModeField === undefined
+                ? 'Compatible elements are highlighted'
+                : `Compatible: ${bindingTargetHint(bindModeField)}`}
+            </span>
+          </div>
+        )}
         <div
           className={s.outer}
           style={{ cursor: outerCursor }}
@@ -1191,6 +1294,9 @@ export function CanvasArea({
                   scale={zoom}
                   frameOffset={frameOffset}
                   currentFrame={currentFrame}
+                  elementFrames={
+                    timelinePlaybackMode === 'lifecycle' ? lifecycleElementFrames : undefined
+                  }
                   onPan={applyPan}
                   issues={issues}
                 />

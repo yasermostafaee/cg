@@ -20,6 +20,7 @@ export type HexColor = z.infer<typeof HexColorSchema>;
 export const FrameRateSchema = z.union([
   z.literal(25),
   z.literal(29.97),
+  z.literal(30),
   z.literal(50),
   z.literal(59.94),
   z.literal(60),

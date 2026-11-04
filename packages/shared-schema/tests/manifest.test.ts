@@ -51,6 +51,10 @@ describe('Manifest', () => {
     expect(ManifestSchema.parse(minimalManifest).id).toBe('tpl-1');
   });
 
+  it('accepts a 30 fps manifest', () => {
+    expect(ManifestSchema.parse({ ...minimalManifest, frameRate: 30 }).frameRate).toBe(30);
+  });
+
   it('accepts an optional signing block', () => {
     const m = {
       ...minimalManifest,

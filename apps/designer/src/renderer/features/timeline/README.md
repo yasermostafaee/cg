@@ -156,12 +156,12 @@ Three pieces, and the split matters:
 
 The lines and the band are siblings of `BodyPlayhead`, the shipped full-height overlay, so
 "full height" is a structural property rather than a styling one. The start position is the
-**effective** content start: the marker when pinned, else the same
-[`contentStartDefaultFrom`](../inspector/content-start-default.ts) the Inspector's "Pin
-content start" writes — one definition, three callers, so what is drawn and what pinning
-produces cannot disagree. An **unpinned** start draws dashed: it is derived, and a
-derivation must not be presented as an authored decision. A **degenerate** range (no
-entrance to settle ⇒ the effective content start IS the out-point) draws nothing.
+**effective** content start: the marker when pinned, else the runtime entrance-settle
+derivation. An **unpinned** start draws dashed: it is derived, and a derivation must not be
+presented as an authored decision. With no earlier settle it may coincide with the out-point.
+The Inspector's **Set hold start** action is a separate authoring convenience: it seeds an
+explicit marker one frame earlier when the active range has room. Coincident boundaries stay
+visually offset so an empty Middle remains visible and editable.
 
 ⚠ **Three different loops can be true of one composition at once, so none of them is called
 plain "loop".** They are named for where they live: **Preview loop** (this app's transport

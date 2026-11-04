@@ -166,7 +166,7 @@ describe('B-148 — two separate plates set to one source', () => {
     const { repeated, marked } = ruleAndSurface(s);
     expect(repeated.map((i) => i.elementId)).toEqual(['cam-a', 'cam-b']);
     expect(repeated[0]?.message).toBe(
-      'Source "guest-1" is shown in 2 places — Live Source "Cam A" and Live Source "Cam B". ' +
+      'Source "guest-1" is shown in 2 places — Plate "Cam A" and Plate "Cam B". ' +
         'One source is ONE seat, so only one of them can get the picture and the others stay ' +
         'empty on air. Give each plate its own source id.',
     );

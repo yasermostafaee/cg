@@ -72,7 +72,7 @@ import type { RuntimeClock } from './types.js';
  * | ----------------- | -------------------------------------------------------- |
  * | IN                | `reset()`+`start()` → play `[0 → introEnd]`               |
  * | HOLD              | `loop` (default): loop `[loopStart → loopEnd]`; `freeze`: |
- * |                   | pause at `introEnd`                                       |
+ * |                   | pause at `freezeAt` (defaults to `introEnd`)               |
  * | OUT               | `playOutro()` → play `[outroStart → duration]` ONCE       |
  *
  * ABSENT phases (decision (b)): the WHOLE clip is the intro, the hold LOOPS the
@@ -141,6 +141,12 @@ export interface VideoDriverOptions {
   introDelayMs?: number | undefined;
   /** End of the intro / the hold point (ms). Absent phases ⇒ `durationMs`. */
   introEndMs: number;
+  /**
+   * Runtime-derived media position parked during a Freeze hold. Defaults to `introEndMs` for
+   * manual clips; composition-following Video supplies its derived `outroStartMs` so exit can
+   * continue forward without a seam jump. This is never an authored element property.
+   */
+  freezeTargetMs?: number | undefined;
   /** Start of the outro (ms). `>= outroEnd` ⇒ NO outro (degenerate). */
   outroStartMs: number;
   /**
@@ -156,7 +162,7 @@ export interface VideoDriverOptions {
   /** Hold-loop end (ms): `outroStart` with phases, `durationMs` without, or `idle.end`. */
   loopEndMs: number;
   /** HOLD behaviour after the intro (decision (a) — default `loop`). */
-  holdBehavior: 'loop' | 'freeze';
+  holdBehavior: 'loop' | 'freeze' | 'continue';
   /**
    * Re-seek only when |video.currentTime − expected| exceeds this (ms). Decision
    * (e): the Phase-1 spike measured max |drift| 26.6 ms over a 60 s hold loop and
@@ -224,11 +230,12 @@ export class VideoDriver implements ElementOutroDriver {
     introStartMs: number;
     introDelayMs: number;
     introEndMs: number;
+    freezeTargetMs: number;
     outroStartMs: number;
     outroEndMs: number;
     loopStartMs: number;
     loopEndMs: number;
-    holdBehavior: 'loop' | 'freeze';
+    holdBehavior: 'loop' | 'freeze' | 'continue';
     driftThresholdMs: number;
     resyncThresholdMs: number;
     resumeGraceMs: number;
@@ -251,6 +258,8 @@ export class VideoDriver implements ElementOutroDriver {
   private lastRecoverAt = Number.NEGATIVE_INFINITY;
   /** True once a FREEZE hold is reached — `resume()` must NOT reopen it. */
   private settledHold = false;
+  /** D-187 — the unchecked once-only tail already reached its authored end. */
+  private continuedToEnd = false;
   private destroyed = false;
   private mode: 'intro' | 'outro' = 'intro';
   private outroResolve: (() => void) | null = null;
@@ -268,6 +277,7 @@ export class VideoDriver implements ElementOutroDriver {
       introStartMs: options.introStartMs ?? 0,
       introDelayMs: options.introDelayMs ?? 0,
       introEndMs: options.introEndMs,
+      freezeTargetMs: options.freezeTargetMs ?? options.introEndMs,
       outroStartMs: options.outroStartMs,
       outroEndMs: options.outroEndMs ?? options.durationMs,
       loopStartMs: options.loopStartMs,
@@ -303,6 +313,7 @@ export class VideoDriver implements ElementOutroDriver {
     this.recoverIfDead(true);
     this.running = false;
     this.settledHold = false;
+    this.continuedToEnd = false;
     this.mode = 'intro';
     this.complete = this.armComplete();
     this.handle.pause();
@@ -388,8 +399,9 @@ export class VideoDriver implements ElementOutroDriver {
   /**
    * The CONTENT-DRIVEN HOLD signal, separate from {@link playOutro}. Contributed
    * to the hold aggregation ONLY when the element opts in (`drivesHold === true`).
-   * A `freeze` video resolves at the hold point (`introEnd`); a `loop` video NEVER
-   * resolves — it holds until `stop()`, exactly like an infinite ticker.
+   * A `freeze` video resolves at the hold point (`introEnd`); a `continue` video resolves at
+   * its authored end; a `loop` video NEVER resolves — it holds until `stop()`, exactly like an
+   * infinite ticker.
    */
   whenComplete(): Promise<void> {
     return this.complete;
@@ -405,6 +417,23 @@ export class VideoDriver implements ElementOutroDriver {
    */
   playOutro(): Promise<void> {
     if (this.destroyed) return Promise.resolve();
+    // D-187 — an unchecked Video already owns a monotonic local clock through the Middle and
+    // Outro. Leaving Hold must await that clock, never seek it backwards to `outroStart` and
+    // replay a tail it may already have completed.
+    if (this.o.holdBehavior === 'continue') {
+      if (this.continuedToEnd) return Promise.resolve();
+      this.settleOutro();
+      if (!this.running && !this.settledHold) this.resume();
+      const done = new Promise<void>((resolve) => {
+        this.outroResolve = resolve;
+      });
+      const remainingMs = Math.max(0, this.o.outroEndMs - this.handle.currentTime() * 1000);
+      this.outroBackstop = this.setTimer(
+        () => this.settleOutro(),
+        remainingMs + OUTRO_BACKSTOP_MARGIN_MS,
+      );
+      return done;
+    }
     // Degenerate/absent outro — the window has no length (`outroEnd` is `durationMs`
     // unless a follow window bounds it, so this is the shipped `>= durationMs` check
     // for every manual/absent-phases clip).
@@ -448,15 +477,14 @@ export class VideoDriver implements ElementOutroDriver {
   /**
    * Clip-time (ms) the injected clock expects at `elapsedMs` of active time.
    * Intro is `[introStart, introEnd]` (introStart 0 unless a follow window offsets it);
-   * a `freeze` hold clamps to `introEnd`; a `loop` hold wraps within
+   * a `freeze` hold clamps to the runtime-derived Freeze target (default `introEnd`); a `loop` hold wraps within
    * `[loopStart, loopEnd]`; the outro is `[outroStart → outroEnd]`.
    *
-   * THE ONE MAPPING (D-135 §5 / §9.5 (a)) — the driver's own clock (`tick`) and the
-   * Designer's playhead ({@link positionAt}) both resolve the clip time HERE. `mode`
-   * defaults to the driver's own lifecycle mode for the clock path; the playhead path
-   * passes it explicitly, because the playhead's phase comes from the composition's
-   * frame, not from this driver's state. Negative elapsed clamps to the window start
-   * (the playhead can sit before the composition's active-in) — never extrapolated back.
+   * LIFECYCLE MAPPING (D-135/D-175) — the driver's own clock (`tick`) resolves the
+   * active Intro/Hold/Outro clip time here. Manual timeline positioning deliberately
+   * uses {@link positionedClipMs}: authoring scrub walks the media Middle once, while
+   * Freeze/Loop/Continue are policies of a running composition Hold (B-378).
+   * Negative elapsed clamps to the window start — never extrapolated back.
    */
   private expectedClipMs(rawElapsedMs: number, mode: 'intro' | 'outro' = this.mode): number {
     const elapsedMs = Math.max(0, rawElapsedMs);
@@ -470,19 +498,22 @@ export class VideoDriver implements ElementOutroDriver {
     if (active < 0) return this.o.introStartMs;
     const introSpanMs = this.o.introEndMs - this.o.introStartMs;
     if (active < introSpanMs) return this.o.introStartMs + active;
-    if (this.o.holdBehavior === 'freeze') return this.o.introEndMs;
+    if (this.o.holdBehavior === 'freeze') return this.o.freezeTargetMs;
+    if (this.o.holdBehavior === 'continue') {
+      return Math.min(this.o.introEndMs + (active - introSpanMs), this.o.outroEndMs);
+    }
     const span = this.o.loopEndMs - this.o.loopStartMs;
     if (span <= 0) return this.o.loopStartMs;
     return this.o.loopStartMs + ((active - introSpanMs) % span);
   }
 
   /**
-   * D-135 §5 — POSITION the element at the Designer playhead, through the same mapping
-   * the driver's own clock reconciles against ({@link expectedClipMs}). The Designer
-   * canvas has no `play()` path at all — its transport advances the store's frame and
-   * the canvas posts one `scrub` per change — so SCRUB and PLAY on that surface are the
-   * same stream of calls into here, which is why they cannot disagree (§9.5 (a): ONE
-   * mechanism for all four transport modes; the forward-1× hybrid was REJECTED).
+   * D-135/B-378 — POSITION the element at the Designer playhead. This is deliberately
+   * NOT the lifecycle Hold mapping: ordinary forward Play now owns a real runtime
+   * lifecycle (D-175), while a manual timeline scrub is an authoring view of the clip.
+   * The lifecycle Freeze target therefore applies only when that lifecycle reaches Hold;
+   * dragging the index bar continues through the media Middle instead of replacing every
+   * post-Intro frame with the held picture.
    *
    * `introElapsedMs` is time since the composition's IN; `outroElapsedMs`, when
    * non-null, is time since the composition's OUT-POINT and WINS. A DEGENERATE outro
@@ -508,9 +539,21 @@ export class VideoDriver implements ElementOutroDriver {
     const hasOutro = this.o.outroStartMs < this.o.outroEndMs;
     const ms =
       outroElapsedMs === null || !hasOutro
-        ? this.expectedClipMs(introElapsedMs, 'intro')
+        ? this.positionedClipMs(introElapsedMs)
         : this.expectedClipMs(outroElapsedMs, 'outro');
     this.handle.seek(ms / 1000);
+  }
+
+  /**
+   * B-378 — the static timeline's one-pass clip mapping. Intro delay/window remain authored,
+   * then the playhead walks forward through the media Middle exactly once until the Outro
+   * boundary. Runtime Freeze/Loop/Continue policy never enters this calculation.
+   */
+  private positionedClipMs(rawElapsedMs: number): number {
+    const elapsedMs = Math.max(0, rawElapsedMs);
+    const activeMs = Math.max(0, elapsedMs - this.o.introDelayMs);
+    const middleEndMs = Math.max(this.o.introEndMs, this.o.outroStartMs);
+    return Math.min(this.o.introStartMs + activeMs, middleEndMs);
   }
 
   private tick(): void {
@@ -547,8 +590,24 @@ export class VideoDriver implements ElementOutroDriver {
       return;
     }
     // Hold reached.
+    if (this.o.holdBehavior === 'continue') {
+      const tailMs = Math.max(0, this.o.outroEndMs - this.o.introEndMs);
+      if (elapsedMs >= this.o.introDelayMs + (this.o.introEndMs - this.o.introStartMs) + tailMs) {
+        this.seekMs(this.o.outroEndMs);
+        this.handle.pause();
+        this.continuedToEnd = true;
+        this.settledHold = true;
+        this.running = false;
+        this.cancelFrame();
+        this.completeResolve();
+        this.settleOutro();
+        return;
+      }
+      this.reconcile(this.expectedClipMs(elapsedMs));
+      return;
+    }
     if (this.o.holdBehavior === 'freeze') {
-      this.seekMs(this.o.introEndMs);
+      this.seekMs(this.o.freezeTargetMs);
       this.handle.pause();
       this.settledHold = true;
       this.running = false;
@@ -631,6 +690,9 @@ export class VideoDriver implements ElementOutroDriver {
     // clip that already started), which keeps a rebase during the park benign.
     if (actualMs < this.o.introEndMs) return delay + Math.max(0, actualMs - this.o.introStartMs);
     if (this.o.holdBehavior === 'freeze') return delay + introSpanMs;
+    if (this.o.holdBehavior === 'continue') {
+      return delay + introSpanMs + Math.max(0, actualMs - this.o.introEndMs);
+    }
     const span = this.o.loopEndMs - this.o.loopStartMs;
     if (span <= 0) return delay + introSpanMs;
     // First-cycle phase that matches the media; the loop simply continues from there.

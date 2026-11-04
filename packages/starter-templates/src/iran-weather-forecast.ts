@@ -81,15 +81,15 @@ const card: NonNullable<Scene['compositions']>[number] = {
           align: 'center',
         },
       ),
-      text('forecast-high', 'بیشینه', '۲۲', tf(151, 320, 96, 80), FAM, 52, 800, '#FFF6DF', 2, {
-        align: 'center',
+      text('forecast-high', 'بیشینه', '۲۲', tf(127, 320, 96, 80), FAM, 52, 800, '#FFF6DF', 2, {
+        align: 'end',
         direction: 'ltr',
       }),
       text(
         'forecast-high-degree',
         'درجهٔ بیشینه',
         '°',
-        tf(249, 326, 24, 36),
+        tf(225, 326, 24, 36),
         FAM,
         26,
         600,
@@ -100,15 +100,15 @@ const card: NonNullable<Scene['compositions']>[number] = {
           direction: 'ltr',
         },
       ),
-      text('forecast-low', 'کمینه', '۱۲', tf(24, 320, 96, 80), FAM, 52, 800, '#7DD3FC', 2, {
-        align: 'center',
+      text('forecast-low', 'کمینه', '۱۲', tf(0, 320, 96, 80), FAM, 52, 800, '#7DD3FC', 2, {
+        align: 'end',
         direction: 'ltr',
       }),
       text(
         'forecast-low-degree',
         'درجهٔ کمینه',
         '°',
-        tf(122, 326, 24, 36),
+        tf(98, 326, 24, 36),
         FAM,
         26,
         600,

@@ -40,8 +40,42 @@ export interface PlayoutControllerOptions {
   needsFrameSweep?: ((inF: number, outF: number) => boolean) | undefined;
   /** Paint every animated element at `frame`. */
   applyFrame: (frame: number) => void;
-  /** Optional authoring observation, separate from paint and lifecycle ownership. */
+  /** D-187 — paint a Hold-loop frame only for the elements checked in Playback. */
+  applyHoldFrame?: ((frame: number) => void) | undefined;
+  /** D-187 — false when Loop middle has no checked, renderable participant. */
+  holdLoopEnabled?: boolean | undefined;
+  /** D-187 — whether checked native elements require DOM painting during the loop. */
+  holdFrameDependent?: boolean | undefined;
+  /** D-187 — paint unchecked native elements once from Out point to the active end. */
+  applyHoldTailFrame?: ((frame: number) => void) | undefined;
+  /** D-187 — whether an unchecked native tail exists for this composition. */
+  holdTailEnabled?: boolean | undefined;
+  /** D-187 — paint Outro frames only onto the checked repeat participants. */
+  applyOutroFrame?: ((frame: number) => void) | undefined;
+  /** D-187 — whether the checked native Outro needs a real frame sweep. */
+  outroFrameDependent?: boolean | undefined;
+  /**
+   * D-182/B-376 — observe the root composition playhead, independently from paint optimisation.
+   *
+   * An active content-driven hold loop is visible composition playback, so this observer follows its
+   * authored Middle range even when time-driven Video/Lottie is the only moving picture. In that
+   * observer-only case the controller keeps paint collapsed and advances telemetry without redundant
+   * `applyFrame` calls. Runtime output does not install this observer.
+   */
   observeFrame?: ((frame: number) => void) | undefined;
+  /**
+   * B-377/B-379 — a visible Follow Lottie may own a different held look: its root telemetry parks
+   * at Content start while native elements and Follow Video remain on the Out-point picture Intro
+   * actually painted. Kept explicit so a general Freeze can never inherit the Lottie exception
+   * merely by sharing `holdBehavior: freeze`.
+   */
+  observeFreezeAtHoldEntry?: boolean | undefined;
+  /**
+   * B-377 — report the composition Outro while a Follow media driver owns the asynchronous
+   * element-outro gate. The observer-only sweep is suppressed for ordinary/manual media whose
+   * outro duration is not composition-owned.
+   */
+  observeOutroGate?: boolean | undefined;
   /** The final outro is starting — the graphic is going off air. */
   onExitStart: () => void;
   /** Fully settled hidden (outro finished). */
@@ -241,6 +275,10 @@ export class PlayoutController {
   // the element outro was in flight; resume() plays it (the controller-level mirror
   // of the runtime's `pendingExitOutro` for out()/stop(), D-105 parity).
   private pendingOutroLeg: (() => void) | null = null;
+  /** D-187 — unchecked native animation advances once, independently from the Middle loop. */
+  private holdTailDriver: FrameDriver | null = null;
+  private holdTailDone: Promise<void> | null = null;
+  private holdTailResolve: (() => void) | null = null;
 
   constructor(options: PlayoutControllerOptions) {
     this.o = options;
@@ -446,6 +484,7 @@ export class PlayoutController {
     if (this.paused) return;
     this.paused = true;
     this.driver?.pause();
+    this.holdTailDriver?.pause();
     if (this.holdTimer !== null) {
       this.clock.clearTimeout(this.holdTimer);
       this.holdTimer = null;
@@ -460,6 +499,7 @@ export class PlayoutController {
     if (!this.paused) return;
     this.paused = false;
     this.driver?.resume();
+    this.holdTailDriver?.resume();
     // `TIMING-BUILD-21` §7 — `gap` re-arms exactly as `hold` does. Both are a pending timer the
     // pause froze; leaving `gap` out would strand a paused looping template off screen forever.
     if (
@@ -562,14 +602,30 @@ export class PlayoutController {
   private onIntroEnd(): void {
     this.phase = 'hold';
     // The intro played `[active.in → outPoint]` (entrance + static settle) and the driver
-    // left the graphic painted at `outPoint`; a TIMED hold simply keeps that frame, and a
-    // CONTENT-DRIVEN one replays the loop range over it (D-133 — `startHoldLoop` below).
+    // left the graphic painted at `outPoint`. D-187 makes the Hold picture an authored
+    // COMPOSITION choice: Freeze keeps it there; Loop middle replays `[contentStart → outPoint]`
+    // for manual, timed and content-driven holds alike.
     // Content already started at the entrance-settle frame (onContentStart) — here we only
     // start the hold TIMING. (A looping idle while holding is D-021's opt-in, not this.)
     this.stopDriver();
-    // D-114 — `manual` and `static` both hold the out-point frozen until `stop()`; `static`
-    // additionally has no outro (a no-out-point composition — it cuts on stop, see `startOutro`).
-    if (this.o.playout.mode === 'manual' || this.o.playout.mode === 'static') return;
+    const holdBehavior = this.o.playout.holdBehavior ?? 'freeze';
+    if (holdBehavior === 'freeze') {
+      if (this.o.observeFreezeAtHoldEntry === true) {
+        // B-377/B-379 — only a visible Follow Lottie uses the composition's Content-start look.
+        // Native elements and Follow Video keep telemetry on Out point, which is already the last
+        // frame reported by Intro. This is observation only: it neither repaints the scene nor
+        // seeks a media element.
+        this.o.observeFrame?.(this.holdEntry());
+      }
+    } else {
+      this.startHoldTail();
+    }
+    // D-114 — `manual` holds until `stop()`; `static` has no authored Middle/Outro and cuts.
+    if (this.o.playout.mode === 'manual') {
+      if ((this.o.playout.holdBehavior ?? 'freeze') === 'loop') this.startHoldLoop();
+      return;
+    }
+    if (this.o.playout.mode === 'static') return;
     if (this.o.playout.holdSource === 'content-driven') {
       // The hold lasts until the scope's content completes. A token guards
       // against stale resolutions (stop()/a later cycle); a null wait (no
@@ -584,19 +640,21 @@ export class PlayoutController {
         this.scheduleHold(0, () => this.startOutro());
         return;
       }
-      // D-133 — RENDER the hold as the repeating loop range instead of a parked frame.
       // Started AFTER `waitForContent()` so a zero-length hold above never opens one.
-      this.startHoldLoop();
+      if ((this.o.playout.holdBehavior ?? 'freeze') === 'loop') this.startHoldLoop();
       void wait.then(() => {
-        if (token === this.holdToken && this.phase === 'hold') this.startOutro();
+        if (token === this.holdToken && this.phase === 'hold') {
+          this.finishContentDrivenHold(token);
+        }
       });
       return;
     }
+    if ((this.o.playout.holdBehavior ?? 'freeze') === 'loop') this.startHoldLoop();
     this.scheduleHold(this.o.playout.holdMs ?? 0, () => this.startOutro());
   }
 
   /**
-   * D-133 — THE HOLD LOOP: render a content-driven hold as a repeating
+   * D-133/D-187 — THE HOLD LOOP: render a composition Hold as a repeating
    * `[contentStart → outPoint]` instead of a parked `outPoint` frame.
    *
    * 🔴 **This is a re-render of the COMPOSITION FRAME and nothing else.** The only thing
@@ -612,30 +670,39 @@ export class PlayoutController {
    * crawl's position is not a function of the frame, so wrapping the frame cannot move it.
    *
    * Scope, deliberately narrow:
-   *  - CONTENT-DRIVEN holds only — §9.1's answer is that the range is INERT under any other
-   *    hold, and the caller's branch is what enforces it. Note that `playout` here is the
-   *    EFFECTIVE playout, so B-032 has already resolved a driver-less `content-driven` back
-   *    to `timed`: reaching this method means real drivers exist.
-   *  - A degenerate range (`contentStart` at or past `outPoint` — including
-   *    `entranceSettleFrame`'s "there is NO entrance" fallback, which returns `outPoint`
-   *    verbatim) has nothing to replay, so the hold parks exactly as it does today.
-   *  - A range with nothing frame-dependent in it would paint the same pixels every wrap,
-   *    so it keeps the parked frame and its rAF stays off. That reuses `playRange`'s OWN
-   *    collapse predicate through the shared `frameDependent` — one rule, one call site's
-   *    worth of logic, not a second copy that can drift.
+   *  - the owning composition explicitly selected Loop middle; the caller reaches this method
+   *    for manual, timed and content-driven holds without changing what ENDS that hold.
+   *  - A degenerate range (`contentStart` at or past `outPoint` — including an absent marker
+   *    whose `entranceSettleFrame` fallback returns `outPoint`) has nothing to replay, so the
+   *    hold parks.
+   *  - A range with nothing frame-dependent in it would paint the same pixels every wrap. It keeps
+   *    paint parked, but selected Video/Lottie still need a clock-only loop so automatic completion
+   *    can drain at the same composition boundary on air. Preview's observer needs the same clock
+   *    for truthful cursor telemetry. With neither selected media nor an observer, rAF stays off.
    */
   private startHoldLoop(): void {
+    // A Preview observer still owns the truthful composition cursor even when the checklist has
+    // no paintable participant (for example, a ticker-only composition). On-air output installs
+    // no observer, so the same case remains clock-free there.
+    if (this.o.holdLoopEnabled === false && this.o.observeFrame === undefined) return;
     const from = this.holdEntry();
     const to = this.outPoint();
-    const paintsFrames = this.frameDependent(from, to);
-    if (to <= from || (!paintsFrames && this.o.observeFrame === undefined)) return;
+    if (to <= from) return;
+    const paintsFrames = this.o.holdFrameDependent ?? this.frameDependent(from, to);
+    if (!paintsFrames && this.o.observeFrame === undefined && this.o.holdLoopEnabled !== true) {
+      return;
+    }
     this.stopDriver();
     this.driver = new FrameDriver({
       frameRate: this.o.frameRate,
       range: { in: from, out: to },
       mode: 'loop',
+      // B-376 — this is the root composition's visible playhead during the active hold. Report it
+      // with the same frame that is painted so the Designer index advances and wraps with the
+      // Middle loop. This wrapper still reaches composition paint only; content-driver lifecycle
+      // remains structurally unreachable from this FrameDriver.
       onFrame: (frame: number): void => {
-        if (paintsFrames) this.o.applyFrame(frame);
+        if (paintsFrames) (this.o.applyHoldFrame ?? this.o.applyFrame)(frame);
         this.o.observeFrame?.(frame);
       },
       raf: this.clock.raf,
@@ -643,6 +710,57 @@ export class PlayoutController {
       now: this.clock.now,
     });
     this.driver.start();
+  }
+
+  /**
+   * D-187 — a content source may finish anywhere inside a Middle pass. Loop-middle
+   * completion drains that pass to the Out point before Outro begins, avoiding the
+   * visible jump from an arbitrary Middle frame to the Outro start. Operator Stop is
+   * intentionally not routed here and remains immediate.
+   */
+  private finishContentDrivenHold(token: number): void {
+    if (token !== this.holdToken || this.phase !== 'hold') return;
+    if (
+      (this.o.playout.holdBehavior ?? 'freeze') === 'loop' &&
+      this.driver?.finishCurrentLoop(() => {
+        if (token === this.holdToken && this.phase === 'hold') this.startOutro();
+      }) === true
+    ) {
+      return;
+    }
+    // Freeze, a degenerate Middle range, or a loop with no active visual clock has
+    // no pass to drain. Preserve the existing immediate automatic exit.
+    this.startOutro();
+  }
+
+  /**
+   * D-187 — the unchecked half of a mixed Hold. It advances exactly once from the Out point to
+   * the active end and is deliberately a SECOND driver: the Middle cursor may wrap any number of
+   * times without changing this driver's elapsed time or repainting its elements backwards.
+   */
+  private startHoldTail(): void {
+    if (this.o.holdTailEnabled !== true || this.o.applyHoldTailFrame === undefined) return;
+    const from = this.outPoint();
+    const to = this.o.active.out;
+    if (to <= from) return;
+    this.stopHoldTail(true);
+    this.holdTailDone = new Promise<void>((resolve) => {
+      this.holdTailResolve = resolve;
+    });
+    this.holdTailDriver = new FrameDriver({
+      frameRate: this.o.frameRate,
+      range: { in: from, out: to },
+      mode: 'once',
+      onFrame: this.o.applyHoldTailFrame,
+      onEnd: () => {
+        this.holdTailDriver = null;
+        this.resolveHoldTail();
+      },
+      raf: this.clock.raf,
+      cancel: this.clock.cancel,
+      now: this.clock.now,
+    });
+    this.holdTailDriver.start();
   }
 
   private startOutro(): void {
@@ -659,8 +777,23 @@ export class PlayoutController {
     // stored `static` with a stray out-point still hard-cuts. Other modes play `[outPoint→end]`
     // (empty when there is no marker, today's behavior).
     const from = this.o.playout.mode === 'static' ? this.o.active.out : this.outPoint();
-    const playLeg = (): void => {
-      this.playRange(from, this.o.active.out, () => this.onOutroEnd());
+    const tailGate = this.holdTailDone;
+    const finishLeg = (): void => {
+      if (tailGate === null) {
+        this.onOutroEnd();
+        return;
+      }
+      const token = this.exitToken;
+      void tailGate.then(() => {
+        if (token === this.exitToken && this.phase === 'outro') this.onOutroEnd();
+      });
+    };
+    const playLeg = (gateWasObserved = false): void => {
+      // An observer-only Follow-media Outro already reported this range while the visible media
+      // played. Do not report the same range a second time when the background leg is visually
+      // static and collapses. A genuinely frame-dependent background still owns its later pass.
+      const observeBackground = !(gateWasObserved && !this.frameDependent(from, this.o.active.out));
+      this.playRange(from, this.o.active.out, finishLeg, false, observeBackground, true);
     };
     // D-125 §D6.2b — element outros BEFORE the background leg, on EVERY exit path (this
     // is the single convergence point — see PlayoutControllerOptions.beforeOutro). A
@@ -670,12 +803,23 @@ export class PlayoutController {
       playLeg();
       return;
     }
+    const observeGate =
+      this.o.observeOutroGate === true &&
+      this.o.observeFrame !== undefined &&
+      this.o.active.out > from;
+    if (observeGate) this.startObservedOutroGate(from, this.o.active.out);
     const token = this.exitToken;
     void gate.then(() => {
       // Superseded while the element outro played — play() reset this controller
       // (B-031/B-033: the new run owns the scene) or the phase moved on. A stale
       // resolution must NOT start a background leg.
       if (token !== this.exitToken || this.phase !== 'outro') return;
+      if (observeGate) {
+        this.stopDriver();
+        // The element-owned Outro has now visibly completed. Clamp telemetry to the same terminal
+        // composition frame even if rAF rounding left the observer one frame short.
+        this.o.observeFrame?.(this.o.active.out);
+      }
       if (this.paused) {
         // D-105 parity — paused mid-element-outro: hold the half-played frame and
         // defer the background leg to resume(), so the graphic never closes while
@@ -683,11 +827,31 @@ export class PlayoutController {
         // in practice the gate cannot resolve while paused — this guard exists so the
         // invariant ("never close while paused") holds by construction, not by the
         // pause cascade's ordering.
-        this.pendingOutroLeg = playLeg;
+        this.pendingOutroLeg = () => playLeg(observeGate);
         return;
       }
-      playLeg();
+      playLeg(observeGate);
     });
+  }
+
+  /**
+   * B-377 — a Follow media Outro is composition-owned but plays inside `beforeOutro`, before the
+   * root background leg begins. This observer-only driver makes that visible phase legible to the
+   * Designer without painting a composition frame or changing the gate's authority.
+   */
+  private startObservedOutroGate(from: number, to: number): void {
+    this.stopDriver();
+    this.driver = new FrameDriver({
+      frameRate: this.o.frameRate,
+      range: { in: from, out: to },
+      mode: 'once',
+      onFrame: (frame: number): void => this.o.observeFrame?.(frame),
+      onEnd: () => undefined,
+      raf: this.clock.raf,
+      cancel: this.clock.cancel,
+      now: this.clock.now,
+    });
+    this.driver.start();
   }
 
   private onOutroEnd(): void {
@@ -763,10 +927,9 @@ export class PlayoutController {
    * Does anything in `[inF, outF]` paint differently from `outF`? Keyframes are one reason;
    * a `lifespan` gate boundary (or a Lottie settle) crossing the leg is another.
    *
-   * ONE definition, two readers: `playRange`'s collapse decision below and D-133's
-   * `startHoldLoop` (a range with nothing frame-dependent in it has nothing to replay).
-   * Extracted rather than copied — a second local copy is exactly how the two would drift
-   * apart, and they must answer the same question about the same range.
+   * `playRange` uses this for its paint-collapse decision. D-133's `startHoldLoop` also uses it to
+   * skip redundant composition paints, while an optional authoring observer can still advance the
+   * root cursor over a time-driven media loop.
    */
   private frameDependent(inF: number, outF: number): boolean {
     return this.o.hasAnimation || (this.o.needsFrameSweep?.(inF, outF) ?? false);
@@ -810,15 +973,23 @@ export class PlayoutController {
     outF: number,
     onEnd: () => void,
     mustConsumeDuration = false,
+    observe = true,
+    outro = false,
   ): void {
     this.stopDriver();
-    const frameDependent = this.frameDependent(inF, outF);
+    const frameDependent = outro
+      ? (this.o.outroFrameDependent ?? this.frameDependent(inF, outF))
+      : this.frameDependent(inF, outF);
+    // D-182 — Preview observes the authored lifecycle, but observation MUST NOT change it.
+    // A visually-static leg therefore keeps the existing instantaneous collapse. Report its
+    // start boundary before the collapsed end so a loop wrap remains visible to the host without
+    // delaying content-start, hold or outro callbacks relative to on-air output.
     const applyLifecycleFrame = (frame: number): void => {
-      this.o.applyFrame(frame);
-      this.o.observeFrame?.(frame);
+      (outro ? (this.o.applyOutroFrame ?? this.o.applyFrame) : this.o.applyFrame)(frame);
+      if (observe) this.o.observeFrame?.(frame);
     };
     if (outF <= inF || (!frameDependent && !mustConsumeDuration)) {
-      if (outF > inF) this.o.observeFrame?.(inF);
+      if (observe && outF > inF) this.o.observeFrame?.(inF);
       applyLifecycleFrame(outF);
       onEnd();
       return;
@@ -866,9 +1037,23 @@ export class PlayoutController {
     }
   }
 
+  private resolveHoldTail(): void {
+    const resolve = this.holdTailResolve;
+    this.holdTailResolve = null;
+    this.holdTailDone = null;
+    resolve?.();
+  }
+
+  private stopHoldTail(resolve: boolean): void {
+    this.holdTailDriver?.stop();
+    this.holdTailDriver = null;
+    if (resolve) this.resolveHoldTail();
+  }
+
   private reset(): void {
     this.clearHold();
     this.stopDriver();
+    this.stopHoldTail(true);
     this.phase = 'idle';
     this.paused = false;
     this.exitAnnounced = false;

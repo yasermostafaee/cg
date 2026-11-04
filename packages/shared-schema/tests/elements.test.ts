@@ -249,9 +249,9 @@ describe('LottieElement', () => {
       loopMode: 'loop' as const,
       segment: [0, 120] as [number, number],
     };
-    // D-125 — `holdBehavior` carries a `.default('freeze')`, so the parsed element
-    // gains it even when the stored JSON omits it (input ⊂ output).
-    expect(LottieElementSchema.parse(l)).toEqual({ ...l, holdBehavior: 'freeze' });
+    // D-187 — Hold is composition-owned. A media-local legacy value is tolerated when
+    // present, but no default is injected into a newly parsed element.
+    expect(LottieElementSchema.parse(l)).toEqual(l);
   });
 
   it('a pre-D-125 Lottie (bare assetId, no phases/holdBehavior/drivesHold) parses unchanged', () => {
@@ -264,9 +264,8 @@ describe('LottieElement', () => {
       loopMode: 'none' as const,
     };
     const parsed = LottieElementSchema.parse(legacy);
-    // Additive only: the sole injected field is the holdBehavior default; no phases,
-    // no drivesHold (so absent ⇒ does NOT drive — the inverse default).
-    expect(parsed).toEqual({ ...legacy, holdBehavior: 'freeze' });
+    expect(parsed).toEqual(legacy);
+    expect(parsed.holdBehavior).toBeUndefined();
     expect(parsed.phases).toBeUndefined();
     expect(parsed.drivesHold).toBeUndefined();
   });
@@ -338,26 +337,24 @@ describe('VideoPlaceholderElement', () => {
 });
 
 describe('VideoElement (D-128)', () => {
-  it('a minimal video element parses and gains the loop default', () => {
+  it('a minimal video element parses without an element-local Hold default', () => {
     const v = {
       ...baseProps,
       type: 'video' as const,
       assetId: 'asset-clip',
       durationMs: 4000,
     };
-    // `holdBehavior` carries `.default('loop')` — the INVERSE of the Lottie's freeze
-    // (video furniture is authored as a loop), injected when the stored JSON omits it.
-    expect(VideoElementSchema.parse(v)).toEqual({ ...v, holdBehavior: 'loop' });
+    expect(VideoElementSchema.parse(v)).toEqual(v);
   });
 
-  it('defaults: no phases, no drivesHold (absent ⇒ does NOT drive), hold loops', () => {
+  it('defaults: no phases, no drivesHold and no element-local Hold value', () => {
     const parsed = VideoElementSchema.parse({
       ...baseProps,
       type: 'video' as const,
       assetId: 'asset-clip',
       durationMs: 1600,
     });
-    expect(parsed.holdBehavior).toBe('loop');
+    expect(parsed.holdBehavior).toBeUndefined();
     expect(parsed.phases).toBeUndefined();
     expect(parsed.drivesHold).toBeUndefined();
   });
@@ -395,7 +392,7 @@ describe('VideoElement (D-128)', () => {
     expect(parsed.phases !== undefined && 'source' in parsed.phases).toBe(false);
   });
 
-  it('media-phases-follow-composition — the third source + holdAt (ms) round-trip', () => {
+  it('media-phases-follow-composition — strips the retired Freeze frame while preserving legacy data', () => {
     const v = {
       ...baseProps,
       type: 'video' as const,
@@ -407,10 +404,20 @@ describe('VideoElement (D-128)', () => {
         outroStart: 600,
         source: 'composition' as const,
         holdAt: 3000,
+        freezeAtMs: 1750,
         idle: { start: 2500, end: 3500 },
       },
     };
-    expect(VideoElementSchema.parse(v)).toEqual(v);
+    expect(VideoElementSchema.parse(v)).toEqual({
+      ...v,
+      phases: {
+        introEnd: 400,
+        outroStart: 600,
+        source: 'composition',
+        holdAt: 3000,
+        idle: { start: 2500, end: 3500 },
+      },
+    });
   });
 
   it('rejects an invalid phase ordering (introEnd > outroStart)', () => {
@@ -442,7 +449,7 @@ describe('VideoElement (D-128)', () => {
       assetId: 'asset-clip',
       durationMs: 2500,
     };
-    expect(ElementSchema.parse(v)).toEqual({ ...v, holdBehavior: 'loop' });
+    expect(ElementSchema.parse(v)).toEqual(v);
   });
 });
 
@@ -537,6 +544,29 @@ describe('D-010 — new optional style fields round-trip', () => {
     expect(parsed.cornerRadius).toBe(12);
     expect(parsed.textShadow?.blur).toBe(2);
     expect(parsed.filter?.brightness).toBe(110);
+  });
+
+  it('accepts one uniform text-padding value without rewriting old per-side documents', () => {
+    const t = {
+      ...baseProps,
+      type: 'text' as const,
+      text: 'hi',
+      font: {
+        family: 'Vazirmatn',
+        weight: 400,
+        style: 'normal' as const,
+        size: 32,
+        lineHeight: 1.2,
+        letterSpacing: 0,
+      },
+      color: '#FFFFFF',
+      align: 'start' as const,
+      direction: 'auto' as const,
+      fitMode: 'fixed' as const,
+      overflow: 'clip' as const,
+      padding: 14,
+    };
+    expect(TextElementSchema.parse(t).padding).toBe(14);
   });
 
   it('accepts a shape element with shadow + filter + dashed stroke', () => {

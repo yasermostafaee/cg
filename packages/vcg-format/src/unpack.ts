@@ -1,5 +1,5 @@
 import { ManifestSchema, SceneSchema, type Manifest, type Scene } from '@cg/shared-schema';
-import { readZip } from './zip.js';
+import { readZip, readZipEntry } from './zip.js';
 
 export interface UnpackResult {
   scene: Scene;
@@ -31,6 +31,53 @@ export class VcgNotATemplateError extends Error {
 const decoder = new TextDecoder();
 function decodeUtf8(bytes: Uint8Array): string {
   return decoder.decode(bytes);
+}
+
+/**
+ * The deliberately small, forward-compatible part of `manifest.json` needed
+ * before a strict manifest/scene parse.
+ *
+ * Do not replace this with `ManifestSchema`: an older Runtime's strict schema
+ * is precisely what may reject a newer scene value (for example 30 fps) before
+ * it can explain that the station is behind.
+ */
+export interface ManifestCompatibilityHeader {
+  readonly name?: string;
+  readonly minRuntimeVersion: string;
+}
+
+/**
+ * Read only the compatibility header from `manifest.json`.
+ *
+ * This is a preflight, not package verification. A missing/malformed header is
+ * still classified by the existing `verify()`/`unpack()` path; callers may
+ * catch this error and defer to that authoritative validation.
+ */
+export async function readManifestCompatibility(
+  buf: Uint8Array,
+): Promise<ManifestCompatibilityHeader> {
+  let manifestBuf: Uint8Array | undefined;
+  try {
+    manifestBuf = await readZipEntry(buf, 'manifest.json');
+  } catch (e) {
+    throw new VcgUnreadableError(e instanceof Error ? e.message : String(e));
+  }
+  if (manifestBuf === undefined) {
+    throw new VcgNotATemplateError('Missing manifest.json in .vcg');
+  }
+
+  const raw = jsonOf(manifestBuf, 'manifest.json');
+  if (!isRecord(raw) || !isRecord(raw.compatibility)) {
+    throw new Error('manifest.json has no readable compatibility block');
+  }
+  const minRuntimeVersion = raw.compatibility.minRuntimeVersion;
+  if (typeof minRuntimeVersion !== 'string' || minRuntimeVersion.length === 0) {
+    throw new Error('manifest.json has no readable compatibility.minRuntimeVersion');
+  }
+  return {
+    ...(typeof raw.name === 'string' ? { name: raw.name } : {}),
+    minRuntimeVersion,
+  };
 }
 
 /**
@@ -70,4 +117,8 @@ function jsonOf(bytes: Uint8Array, name: string): unknown {
       `${name} is not JSON: ${e instanceof Error ? e.message : String(e)}`,
     );
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

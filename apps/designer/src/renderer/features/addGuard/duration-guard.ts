@@ -202,7 +202,7 @@ export function resolveDurationGuardExtend(): void {
   });
 }
 
-/** Add as backdrop — follow the composition (media only; `holdAt` is the Inspector's to tune). */
+/** Add as backdrop — follow the composition-owned intro/middle/outro timing (media only). */
 export function resolveDurationGuardBackdrop(): void {
   const p = pending;
   if (p === null || p.commitBackdrop === null) return;

@@ -9,8 +9,8 @@
  * - **An OLD package in a NEW app — NOT guarded, and deliberately.** The Runtime app rebuilds
  *   the served HTML from the scene at IMPORT using its own bundled runtime
  *   (`apps/runtime/src/renderer/features/library/templateDelivery.ts`), so the `cg.js` inside
- *   the package is never served and an old package is not old CODE. `P-031`'s
- *   compatibility-floor policy covers the rest: nothing has shipped, so no conversion is owed.
+ *   the package is never served and an old package is not old CODE. `P-031`'s compatibility
+ *   floor is now set at release `0.11.4`: packages that release could open keep opening.
  * - 🔴 **A NEW package in an OLD app — THIS is the gap.** The package may declare something the
  *   older app's runtime cannot render, and the operator finds out at the worst moment.
  *
@@ -42,7 +42,14 @@
  * escalate.
  */
 
-/** The rendering contract this build implements. See the header for when to bump it. */
+/**
+ * The rendering contract this build implements. See the header for when to bump it.
+ *
+ * `1.1.0` adds the standard 30 fps scene/manifest value and the structured Repeater
+ * data/animation contract. A 1.0 Runtime cannot honor those authored values, so
+ * packages must declare the newer floor instead of failing later or playing
+ * differently from the Designer.
+ */
 export const CG_RUNTIME_VERSION = '1.1.0';
 
 /** A parsed `major.minor.patch`. Pre-release and build metadata are not modelled. */

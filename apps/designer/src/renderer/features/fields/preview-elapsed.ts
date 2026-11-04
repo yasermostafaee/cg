@@ -13,11 +13,6 @@ import { timingScopeList } from './PreviewScopeTiming.js';
 /** The two root lifecycle values an operator may tune for this Preview session. */
 export type PreviewRootTimingOverride = Partial<Pick<Playout, 'holdMs' | 'repeat'>>;
 
-/** Read the newer composition-owned Middle behaviour without widening this release's schema. */
-function holdBehaviorOf(playout: Playout): 'freeze' | 'loop' {
-  return (playout as Playout & { holdBehavior?: 'freeze' | 'loop' }).holdBehavior ?? 'freeze';
-}
-
 function withRootTimingOverride(scene: Scene, override?: PreviewRootTimingOverride): Scene {
   if (override === undefined) return scene;
   const playout = playoutOf(scene);
@@ -53,13 +48,13 @@ export function previewElapsedLimitMs(
     return (
       playout.mode === 'loop-cycle' ||
       playout.holdSource === 'content-driven' ||
-      (playout.mode === 'manual' && holdBehaviorOf(playout) === 'loop')
+      (playout.mode === 'manual' && (playout.holdBehavior ?? 'freeze') === 'loop')
     );
   });
   if (nestedOpenEnded || rootPlayout.holdSource === 'content-driven') return null;
   if (rootPlayout.mode === 'static') return nominalMs;
   if (rootPlayout.mode === 'manual') {
-    return holdBehaviorOf(rootPlayout) === 'loop' ? null : nominalMs;
+    return (rootPlayout.holdBehavior ?? 'freeze') === 'loop' ? null : nominalMs;
   }
   if (rootPlayout.mode === 'loop-cycle' && repeatOf(rootPlayout) === 'infinite') return null;
 
@@ -110,8 +105,10 @@ export function canvasDisplayFrame(scene: Scene, runtimeFrame: number, elapsedMs
 
     const holdElapsedMs = passElapsedMs - introMs;
     if (playout.mode === 'manual' || holdElapsedMs < holdMs) {
-      if (holdBehaviorOf(playout) !== 'loop') return outPoint;
+      if ((playout.holdBehavior ?? 'freeze') !== 'loop') return outPoint;
       const contentStart = scene.lifecycle?.contentStart ?? outPoint;
+      // Runtime's Middle is the half-open interval [Content start, Out point). Including Out in
+      // the modulo adds one phantom frame and makes every synthetic wrap drift by one frame.
       const holdSpan = outPoint - contentStart;
       if (holdSpan <= 0) return outPoint;
       return contentStart + (Math.floor(holdElapsedMs / frameMs) % holdSpan);

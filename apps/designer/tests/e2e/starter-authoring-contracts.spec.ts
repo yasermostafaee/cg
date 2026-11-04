@@ -104,13 +104,14 @@ test('forecast keeps equal-size high and low values with separate readable label
     [high, app.previewElement('forecast-high-label').first()],
     [low, app.previewElement('forecast-low-label').first()],
   ] as const) {
-    await expect(number).toHaveCSS('text-align', 'center');
+    await expect(number).toHaveCSS('text-align', 'end');
     await expect(label).toHaveCSS('text-align', 'center');
     const [numberBox, labelBox] = await Promise.all([number.boundingBox(), label.boundingBox()]);
     expect(numberBox).not.toBeNull();
     expect(labelBox).not.toBeNull();
-    expect(
-      Math.abs(numberBox!.x + numberBox!.width / 2 - labelBox!.x - labelBox!.width / 2),
-    ).toBeLessThan(1);
+    // The compact number/degree pair sits over a stable centered label column.
+    // Its numeric box reserves room on the left for negative values.
+    expect(labelBox!.x).toBeGreaterThan(numberBox!.x);
+    expect(labelBox!.width).toBeCloseTo(numberBox!.width, 1);
   }
 });

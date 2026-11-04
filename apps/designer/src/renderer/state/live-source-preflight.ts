@@ -202,11 +202,11 @@ function label(el: Element): string {
  */
 function plateRef(el: Element, box?: Aabb): string {
   const name = el.name.trim();
-  if (name !== '' && name !== DEFAULT_LIVE_SOURCE_NAME) return `Live Source "${name}"`;
+  if (name !== '' && name !== DEFAULT_LIVE_SOURCE_NAME) return `Plate "${name}"`;
   if (box !== undefined && Number.isFinite(box.minX) && Number.isFinite(box.minY)) {
-    return `The unnamed Live Source at (${String(Math.round(box.minX))}, ${String(Math.round(box.minY))})`;
+    return `The unnamed Plate at (${String(Math.round(box.minX))}, ${String(Math.round(box.minY))})`;
   }
-  return 'The unnamed Live Source';
+  return 'The unnamed Plate';
 }
 
 /** The four Live Source preflight checks, over the whole project. */
@@ -264,7 +264,7 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
     the same control and the same remedy, and the branch is gone with the thing it branched on.
   */
   const chooseASource =
-    'Set one in the Inspector\'s "Live Source" panel, in the "source id" box — a symbolic ' +
+    'Set one in the Inspector\'s "Plate" panel, in the "source id" box — a symbolic ' +
     'name such as "guest-1", never a device. Existing sources are offered as you type; ' +
     'typing a new name is how a new source comes into existence.';
 
@@ -311,7 +311,7 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
           severity: 'error',
           code: 'live-source-device-id',
           message:
-            `Live Source "${label(element)}" names a source id that is not symbolic ` +
+            `Plate "${label(element)}" names a source id that is not symbolic ` +
             `("${element.routeKey}"). A template names sources by id only — mapping an id to a ` +
             `DECKLINK input, a route://, a media file or an NDI source is an INSTALLATION ` +
             `concern, configured in CG Control.`,
@@ -326,7 +326,7 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
           severity: 'error',
           code: 'live-source-device-id',
           message:
-            `Live Source "${label(element)}" names a KEY source id that is not symbolic ` +
+            `Plate "${label(element)}" names a KEY source id that is not symbolic ` +
             `("${element.keySourceId}").`,
           elementId: element.id,
         });
@@ -336,7 +336,7 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
           severity: 'error',
           code: 'live-source-off-frame',
           message:
-            `Live Source "${label(element)}" is entirely outside ${doc.where}'s frame. It is a ` +
+            `Plate "${label(element)}" is entirely outside ${doc.where}'s frame. It is a ` +
             `compositing contract with the runtime, so it is NOT dropped from the export the way ` +
             `an off-frame graphic is — move it back on frame or delete it.`,
           elementId: element.id,
@@ -346,7 +346,7 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
           severity: 'error',
           code: 'live-source-off-frame',
           message:
-            `Live Source "${label(element)}" extends past ${doc.where}'s frame. The composited ` +
+            `Plate "${label(element)}" extends past ${doc.where}'s frame. The composited ` +
             `source would be placed partly off-screen.`,
           elementId: element.id,
         });
@@ -359,7 +359,7 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
             `${plateRef(element, box)} carries a position/size/scale/rotation keyframe. ` +
             `The picture is placed ONCE from the static rect, so a moving plate would slide ` +
             `its frame and title away from the picture. Remove the keyframes from this plate — ` +
-            `animating a Live Source is out of scope in v1.`,
+            `animating a Plate is out of scope in v1.`,
           elementId: element.id,
         });
       } else {
@@ -372,7 +372,7 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
             severity: 'error',
             code: 'live-source-animated',
             message:
-              `Live Source "${label(element)}" sits inside "${label(animated)}", which is ` +
+              `Plate "${label(element)}" sits inside "${label(animated)}", which is ` +
               `ANIMATED. The plate itself has no keyframes, but an animated parent moves it just ` +
               `the same — and the composited source is placed ONCE, from a rect read statically, ` +
               `so it would stop matching on the next frame. Remove the geometry keyframes from ` +
@@ -394,8 +394,8 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
           severity: 'error',
           code: 'live-source-rotated',
           message:
-            `Live Source "${label(element)}" is rotated (${String(element.transform.rotation)}°). ` +
-            `A live source is composited into an AXIS-ALIGNED box, so a rotated plate declares ` +
+            `Plate "${label(element)}" is rotated (${String(element.transform.rotation)}°). ` +
+            `A live input is composited into an AXIS-ALIGNED box, so a rotated plate declares ` +
             `its bounding box instead — larger than the frame you drew, with the picture showing ` +
             `outside it. Set the plate's rotation back to 0.`,
           elementId: element.id,
@@ -407,7 +407,7 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
             severity: 'error',
             code: 'live-source-rotated',
             message:
-              `Live Source "${label(element)}" sits inside "${label(rotated)}", which is rotated ` +
+              `Plate "${label(element)}" sits inside "${label(rotated)}", which is rotated ` +
               `(${String(rotated.transform.rotation)}°). The plate's own rotation is 0, but it is ` +
               `composited into an AXIS-ALIGNED box either way, so it declares its bounding box ` +
               `and the picture shows outside the frame. Set "${label(rotated)}" back to 0°, or ` +
@@ -433,8 +433,8 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
             severity: 'error',
             code: 'live-source-overlap',
             message:
-              `Live Source "${label(self.element)}" overlaps "${label(other.element)}". Each is ` +
-              `composited on its own CasparCG layer, so overlapping plates put two live sources ` +
+              `Plate "${label(self.element)}" overlaps "${label(other.element)}". Each is ` +
+              `composited on its own CasparCG layer, so overlapping plates put two live inputs ` +
               `over the same pixels and which one shows is a z-order accident.`,
             elementId: self.element.id,
           });
@@ -484,9 +484,9 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
             severity: 'error',
             code: 'live-source-overlap',
             message:
-              `Live Source "${label(self.element)}" overlaps "${label(other.element)}" in ` +
+              `Plate "${label(self.element)}" overlaps "${label(other.element)}" in ` +
               `arrangement "${arrangement.name}". Each is composited on its own CasparCG ` +
-              `layer, so overlapping plates put two live sources over the same pixels and ` +
+              `layer, so overlapping plates put two live inputs over the same pixels and ` +
               `which one shows is a z-order accident. The same two plates in DIFFERENT ` +
               `arrangements are fine — they are never on air together.`,
             elementId: self.element.id,
@@ -583,11 +583,11 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
             severity: 'error',
             code: 'look-source-duplicate',
             message:
-              `Source "${routeKey}" appears ${String(plates.length)} times when look ` +
-              `"${look.name}" is active (a plate outside every look is on screen in EVERY ` +
-              `look). One source is ONE seat, so only one frame can show it. Referencing ` +
-              `the same source from DIFFERENT looks is fine — it gives them the same ` +
-              `default input, and the operator can point either look elsewhere.`,
+              `Plate "${routeKey}" appears ${String(plates.length)} times when Preset ` +
+              `"${look.name}" is active (a plate outside every Preset is on screen in EVERY ` +
+              `Preset). One Plate is ONE seat, so only one frame can show it. Referencing ` +
+              `the same Plate from DIFFERENT Presets is fine — it gives them the same ` +
+              `default input, and the operator can point either Preset elsewhere.`,
             elementId: f.element.id,
           });
         }
@@ -617,11 +617,11 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
               severity: 'error',
               code: 'live-source-overlap',
               message:
-                `Live Source "${label(self.element)}" overlaps "${label(other.element)}" ` +
-                `when look "${look.name}" is active. Each is composited on its own CasparCG ` +
-                `layer, so overlapping plates put two live sources over the same pixels and ` +
+                `Plate "${label(self.element)}" overlaps "${label(other.element)}" ` +
+                `when Preset "${look.name}" is active. Each is composited on its own CasparCG ` +
+                `layer, so overlapping plates put two live inputs over the same pixels and ` +
                 `which one shows is a z-order accident. The same two plates in DIFFERENT ` +
-                `looks are fine — they are never on air together.`,
+                `Presets are fine — they are never on air together.`,
               elementId: self.element.id,
             });
           }
@@ -776,7 +776,7 @@ function nearMissIssues(scene: Scene): ExportIssue[] {
         // The LATER key is named as the suspect and carries the mark: in document order of
         // first use it is the one just typed, so the sentence reads the way the author acted.
         message:
-          `Live Source id "${b}" is one character from "${a}", which this template already ` +
+          `Plate id "${b}" is one character from "${a}", which this template already ` +
           `uses. If they are meant to be the same input, make them the same id — two spellings ` +
           `are two sources, and the operator would have to map both. If they really are two ` +
           `inputs, nothing is wrong and the export is not blocked.`,

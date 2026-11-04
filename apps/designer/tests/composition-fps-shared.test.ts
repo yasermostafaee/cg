@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import type { FrameRate } from '@cg/shared-schema';
 import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
 import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
@@ -7,7 +8,7 @@ afterEach(() => {
   designerStore._reset();
 });
 
-function fresh(frameRate?: 25 | 29.97 | 50 | 59.94 | 60): void {
+function fresh(frameRate?: FrameRate): void {
   const projects = new ProjectStore(new MemoryWorkspace(), new MemoryKv());
   const { scene } = projects.newScene('fps', 'custom', frameRate ? { frameRate } : {});
   designerStore.setScene(scene, null);
@@ -38,11 +39,11 @@ describe('D-026 — fps is a single shared PROJECT setting', () => {
   });
 
   it('a new composition does not introduce its own fps', () => {
-    fresh(60);
+    fresh(30);
     const id = designerStore.addComposition()!;
     const comp = designerStore.get().scene!.compositions!.find((c) => c.id === id)!;
     expect((comp as Record<string, unknown>).frameRate).toBeUndefined();
     designerStore.setActiveComposition(id);
-    expect(activeFps()).toBe(60);
+    expect(activeFps()).toBe(30);
   });
 });

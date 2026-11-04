@@ -286,8 +286,6 @@ export interface StopOptions {
 export type RenderMode = 'author' | 'output';
 
 export interface RuntimeBootOptions {
-  /** Read-only root lifecycle playhead telemetry for authoring hosts. Never changes paint timing. */
-  onRootFrame?: (frame: number) => void;
   /**
    * Where the runtime renders. Defaults to `document.body`. In the
    * designer preview iframe this can be a sub-element instead.
@@ -318,6 +316,13 @@ export interface RuntimeBootOptions {
    * `'author'` caller. Only the Preview modal passes `false`.
    */
   paintEditorBackdrop?: boolean;
+
+  /**
+   * Stopped Designer canvas only: keep countdown digits and authored Step visibility editable
+   * without changing the deadline. Explicit Step rehearsal still wins; play() ends this override.
+   * Ignored in output mode. The dedicated Preview must omit it.
+   */
+  editCountdowns?: boolean;
 
   /**
    * D-062 — image `assetId` → resolved URL. After building the scene the runtime
@@ -366,6 +371,33 @@ export interface RuntimeBootOptions {
    * Defaults to the platform `requestAnimationFrame` / `setTimeout`.
    */
   clock?: RuntimeClock;
+
+  /**
+   * D-182 — optional host-side observation of the GLOBAL ROOT composition frame.
+   *
+   * Called from the root controller's authored lifecycle playhead: intro/outro report every frame;
+   * an ordinary parked hold stays fixed; an active Middle loop reports its advance and wrap; and a
+   * visible Follow Lottie may park at Content start. Follow Video and native Freeze stay at Out
+   * point. A Follow media-owned exit gate reports the root Outro while that media visibly exits.
+   * Installing the observer reports collapsed-leg boundaries without making them consume time, so
+   * Preview cannot change runtime/on-air timing. Throwing observers are isolated from playback.
+   */
+  onRootFrame?: (frame: number) => void;
+
+  /**
+   * B-381 — optional authoring-only observation of the frame last painted onto each animated
+   * element in the GLOBAL ROOT composition.
+   *
+   * The root cursor is not an element clock during mixed Hold playback: checked participants may
+   * wrap through Middle while unchecked elements advance once on a local tail, and a visible Follow
+   * Lottie may park root telemetry at Content start after native furniture settled at Out point.
+   * Follow Video shares the native Out-point cursor. This callback reports only those painted
+   * element frames, in one batch per paint. It is
+   * observation-only, excludes nested scopes, and is never installed by broadcast output.
+   */
+  onRootElementFrames?: (
+    entries: readonly { readonly elementId: string; readonly frame: number }[],
+  ) => void;
 
   /**
    * D-028 — external override for the root scope's `content-driven` hold (test
@@ -572,6 +604,8 @@ export interface FieldScope {
  * (see `bindings.ts`), and the pre-B-089 gate restored that post-binding value.
  */
 export interface LifespanGateEntry {
+  /** D-187 — loop-checklist membership follows the owning element id. */
+  elementId: string;
   node: HTMLElement;
   lifespan: FrameRange;
   /** Display value the scene-builder settled on, restored when entering range. */

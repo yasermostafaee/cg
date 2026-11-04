@@ -8,6 +8,13 @@ Upstream: <https://github.com/basmilius/meteocons>. License: MIT; the complete n
 included in `meteocons-LICENSE.txt` and embedded as an XML comment in each SVG so project and
 template exports carry attribution with the image bytes. SVG animations retain `repeatCount="indefinite"`.
 
+`weather-sky-broadcast.png` is a separate background for the additional `iran-weather-cards`
+starter, registered under asset key `weather-broadcast-sky`. It was created
+with the built-in image-generation tool on 2026-11-04. Prompt direction: a natural-daylight blue and
+white cloud sky, with no UI, text or broadcast branding. The generated result is stored directly at
+`apps/designer/public/starters/assets/weather-sky-broadcast.png`; existing weather artwork is not
+modified or replaced. The owner's photo/video files are visual references only, not bundled assets.
+
 ## Iran Premier League
 
 Standings and club crest sources were read on 2026-11-04 from the page requested by the owner:

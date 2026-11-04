@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { ClockElement, Element, Scene } from '@cg/shared-schema';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ClockElement, Element, Scene, TextElement } from '@cg/shared-schema';
 import { createRuntime, installCasparGlobals } from '@cg/template-runtime';
 import { Preview } from '../src/platform/preview.js';
 
@@ -103,14 +103,13 @@ window.addEventListener = ((type: string, h: (e: Event) => void, o?: unknown) =>
 }) as typeof window.addEventListener;
 
 /** Run the document's module script with the real runtime injected for its import. */
-function bootPreviewDoc(s: Scene): void {
+function bootPreviewDoc(s: Scene, broadcast = true): void {
   const p = new Preview({ cgJs: '', cgCss: '' });
-  const { html } = p.load(s, true, false);
+  const { html } = p.load(s, broadcast, false);
   const m = /<script type="module">([\s\S]*?)<\/script>/.exec(html);
   if (m === null) throw new Error('the preview document has no module script');
   const body = (m[1] as string).replace(/^\s*import[\s\S]*?;\s*$/gm, '');
   capturing = true;
-  // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
   const fn = new Function('createRuntime', 'installCasparGlobals', body) as (
     a: unknown,
     b: unknown,
@@ -130,6 +129,7 @@ const settle = async (ms = 60): Promise<void> => {
 };
 
 const w = (): Record<string, unknown> => window as unknown as Record<string, unknown>;
+const originalFonts = Object.getOwnPropertyDescriptor(document, 'fonts');
 
 beforeEach(() => {
   posted.length = 0;
@@ -146,11 +146,291 @@ beforeEach(() => {
 afterEach(() => {
   capturing = false;
   for (const h of booted.splice(0)) window.removeEventListener('message', h as EventListener);
+  (w()['cg'] as ReturnType<typeof createRuntime> | undefined)?.remove?.();
   document.body.innerHTML = '';
   document.body.className = '';
   delete w()['cg'];
   delete w()['out'];
   delete w()['play'];
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  if (originalFonts) Object.defineProperty(document, 'fonts', originalFonts);
+  else Reflect.deleteProperty(document, 'fonts');
+});
+
+describe('D-173 — dedicated Preview Reset ends the actual rehearsal', () => {
+  function resetScene(): Scene {
+    const font = {
+      family: 'Arial',
+      weight: 400,
+      style: 'normal' as const,
+      size: 24,
+      lineHeight: 1.2,
+      letterSpacing: 0,
+    };
+    const s = scene({
+      ...bg,
+      animation: {
+        tracks: {
+          opacity: {
+            keyframes: [
+              { frame: 0, value: 1, easing: 'linear' },
+              { frame: 10, value: 1, easing: 'linear' },
+              { frame: 100, value: 0, easing: 'linear' },
+            ],
+          },
+        },
+      },
+    });
+    s.frameRange.out = 100;
+    s.lifecycle = { outPoint: 10 };
+    s.playout = { mode: 'manual', holdSource: 'timed', holdMs: 0 };
+    s.layers[0]!.children.push(
+      {
+        ...T,
+        id: 'headline',
+        name: 'Headline',
+        type: 'text',
+        text: 'Default headline',
+        font,
+        color: '#ffffff',
+        align: 'start',
+        direction: 'ltr',
+      } as TextElement,
+      {
+        ...T,
+        id: 'clock',
+        name: 'Clock',
+        type: 'clock',
+        mode: 'countdown',
+        target: { kind: 'duration', ms: 10_000 },
+        afterZero: 'hold',
+        font,
+        color: '#ffffff',
+        align: 'center',
+        verticalAlign: 'middle',
+        format: 'HH:mm:ss',
+        digits: 'latin',
+      } as ClockElement,
+    );
+    s.fields = [
+      {
+        id: 'headline',
+        label: 'Headline',
+        type: 'text',
+        required: false,
+        default: 'Default headline',
+      },
+    ];
+    s.bindings = [{ fieldId: 'headline', target: { kind: 'text', elementId: 'headline' } }];
+    return s;
+  }
+
+  it.each(['playing', 'paused', 'closing'] as const)(
+    'immediately removes %s content, restores defaults and waits for explicit Play',
+    async (state) => {
+      bootPreviewDoc(resetScene());
+      await settle();
+      post({ action: 'play', fields: { headline: 'Prepared headline' } });
+      await settle(500);
+      expect(document.body.classList.contains('cg-pending')).toBe(false);
+      expect(document.querySelector('[data-cg-element-id="headline"]')?.textContent).toBe(
+        'Prepared headline',
+      );
+      if (state === 'paused') post({ action: 'pause' });
+      if (state === 'closing') post({ action: 'stop' });
+      await settle(40);
+      // Positive control: the authored 3.6-second outro has not finished by itself.
+      expect(document.body.classList.contains('cg-pending')).toBe(false);
+      const oldRuntime = w()['cg'];
+      const oldClock = document.querySelector('[data-cg-clock-time]')!;
+      const oldBackground = document.querySelector<HTMLElement>('[data-cg-element-id="bg"]')!;
+      post({ action: 'reset' });
+      expect(oldBackground.isConnected).toBe(false);
+      const frozenClock = oldClock.textContent;
+      const frozenBackground = oldBackground.style.opacity;
+      await settle();
+      expect(w()['cg']).not.toBe(oldRuntime);
+      expect(document.body.classList.contains('cg-pending')).toBe(true);
+      expect(document.querySelector('[data-cg-element-id="headline"]')?.textContent).toBe(
+        'Default headline',
+      );
+      await settle(1_100);
+      expect(oldClock.textContent).toBe(frozenClock);
+      expect(oldBackground.style.opacity).toBe(frozenBackground);
+      expect(document.body.classList.contains('cg-pending')).toBe(true);
+      post({ action: 'play', fields: {} });
+      await settle();
+      expect(document.body.classList.contains('cg-pending')).toBe(false);
+      expect(document.querySelector('[data-cg-clock-time]')?.textContent).toBe('00:00:10');
+      expect(errors('message.handler')).toHaveLength(0);
+    },
+  );
+
+  it('cancels a pending old Play and orders an explicit new Play after Reset', async () => {
+    bootPreviewDoc(resetScene());
+    await settle();
+    post({ action: 'play', fields: { headline: 'Old pending data' } });
+    post({ action: 'reset' });
+    await settle();
+    expect(document.body.classList.contains('cg-pending')).toBe(true);
+    expect(document.querySelector('[data-cg-element-id="headline"]')?.textContent).toBe(
+      'Default headline',
+    );
+    post({ action: 'reset' });
+    post({ action: 'play', fields: { headline: 'Fresh explicit data' } });
+    await settle();
+    expect(document.body.classList.contains('cg-pending')).toBe(false);
+    expect(document.querySelector('[data-cg-element-id="headline"]')?.textContent).toBe(
+      'Fresh explicit data',
+    );
+    expect(errors('control.dropped')).toHaveLength(0);
+    expect(errors('message.handler')).toHaveLength(0);
+  });
+
+  it('keeps the latest duplicate Reset seed, then applies a following Update before Play', async () => {
+    bootPreviewDoc(resetScene());
+    await settle();
+    post({ action: 'reset', fields: { headline: 'Obsolete reset seed' } });
+    post({ action: 'reset', fields: { headline: 'Latest reset seed' } });
+    await settle();
+    expect(document.body.classList.contains('cg-pending')).toBe(true);
+    expect(document.querySelector('[data-cg-element-id="headline"]')?.textContent).toBe(
+      'Latest reset seed',
+    );
+    post({ action: 'update', fields: { headline: 'Fresh update' } });
+    post({ action: 'play', fields: { headline: 'Fresh update' } });
+    await settle();
+    expect(document.body.classList.contains('cg-pending')).toBe(false);
+    expect(document.querySelector('[data-cg-element-id="headline"]')?.textContent).toBe(
+      'Fresh update',
+    );
+    expect(errors('message.handler')).toHaveLength(0);
+    expect(errors('control.dropped')).toHaveLength(0);
+  });
+
+  it('cancels Play already awaiting a font without reviving content after Reset', async () => {
+    const s = resetScene();
+    s.fonts = [
+      { family: 'asset-reset-font', source: 'bundled', weights: [400], styles: ['normal'] },
+    ];
+    bootPreviewDoc(s);
+    await settle();
+    let release!: (buffer: ArrayBuffer) => void;
+    const waiting = new Promise<ArrayBuffer>((resolve) => {
+      release = resolve;
+    });
+    const fetchFont = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async () => new Response(await waiting));
+    vi.stubGlobal('fetch', fetchFont);
+    vi.stubGlobal(
+      'FontFace',
+      class {
+        load() {
+          return Promise.resolve(this);
+        }
+      },
+    );
+    Object.defineProperty(document, 'fonts', {
+      configurable: true,
+      value: {
+        ready: Promise.resolve(),
+        add: vi.fn<FontFaceSet['add']>(),
+        addEventListener: vi.fn<FontFaceSet['addEventListener']>(),
+        removeEventListener: vi.fn<FontFaceSet['removeEventListener']>(),
+      },
+    });
+    post({ action: 'asset-urls', assetUrls: { 'reset-font': 'https://example.test/font.woff2' } });
+    await settle(10);
+    post({ action: 'play', fields: { headline: 'Old awaiting Play' } });
+    await settle(10);
+    expect(fetchFont.mock.calls.length).toBeGreaterThanOrEqual(2);
+    post({ action: 'reset', fields: { headline: 'Reset seed' } });
+    release(new ArrayBuffer(0));
+    await settle();
+    expect(document.body.classList.contains('cg-pending')).toBe(true);
+    expect(document.querySelector('[data-cg-element-id="headline"]')?.textContent).toBe(
+      'Reset seed',
+    );
+    expect(errors('font.load')).toHaveLength(0);
+    expect(errors('message.handler')).toHaveLength(0);
+  });
+
+  it('restores the exact seeded repeater rows instead of old values or authored fallbacks', async () => {
+    const s = resetScene();
+    const child = resetScene();
+    child.id = 'reset-row';
+    child.layers[0]!.children = [child.layers[0]!.children[1]!];
+    s.compositions = [child];
+    s.layers[0]!.children.push({
+      ...T,
+      id: 'rows',
+      name: 'Rows',
+      type: 'repeater',
+      compositionId: child.id,
+      direction: 'column',
+      flow: 'ltr',
+      gap: 0,
+      items: [{ id: 'row-1', headline: 'Authored row' }],
+    } as Element);
+    s.fields!.push({
+      id: 'rows',
+      label: 'Rows',
+      type: 'list',
+      required: false,
+      default: [{ id: 'row-1', headline: 'Authored row' }],
+    });
+    s.bindings!.push({ fieldId: 'rows', target: { kind: 'repeater-items', elementId: 'rows' } });
+    bootPreviewDoc(s);
+    await settle();
+    post({ action: 'play', fields: { rows: [{ id: 'old', headline: 'Old applied row' }] } });
+    await settle();
+    expect(document.querySelector('[data-cg-element-id="rows"]')?.textContent).toContain(
+      'Old applied row',
+    );
+    post({
+      action: 'reset',
+      fields: {
+        rows: [
+          { id: 'file-1', headline: 'Connected first row' },
+          { id: 'file-2', headline: 'Connected second row' },
+        ],
+      },
+    });
+    await settle();
+    const rows = document.querySelector('[data-cg-element-id="rows"]')!;
+    expect(rows.textContent).toContain('Connected first row');
+    expect(rows.textContent).toContain('Connected second row');
+    expect(rows.textContent).not.toContain('Old applied row');
+    expect(rows.textContent).not.toContain('Authored row');
+    expect(document.body.classList.contains('cg-pending')).toBe(true);
+  });
+
+  it('still reports a genuine current-generation failure after Reset', async () => {
+    bootPreviewDoc(resetScene());
+    await settle();
+    post({ action: 'reset' });
+    post({ action: 'scene-replace', scene: scene(brokenBg) });
+    await settle();
+    expect(errors('message.handler')).toHaveLength(1);
+    expect(errors('message.handler')[0]?.payload).toContain('scene-replace');
+  });
+
+  it('keeps the authoring Canvas field-only Reset and its existing runtime', async () => {
+    bootPreviewDoc(resetScene(), false);
+    await settle();
+    const original = w()['cg'];
+    post({ action: 'update', fields: { headline: 'Canvas data' } });
+    await settle();
+    post({ action: 'reset' });
+    await settle();
+    expect(w()['cg']).toBe(original);
+    expect(document.body.classList.contains('cg-pending')).toBe(false);
+    expect(document.querySelector('[data-cg-element-id="headline"]')?.textContent).toBe(
+      'Default headline',
+    );
+  });
 });
 
 describe('an undeliverable control reports instead of vanishing', () => {

@@ -36,10 +36,13 @@ let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 let onAssetsImported: ((m: AssetMeta) => void) | null = null;
 let onSharedImported: ((m: AssetMeta) => void) | null = null;
+let onSharedFontImported: ((m: AssetMeta) => void) | null = null;
 let assetsList: AssetMeta[] = [];
 let sharedList: AssetMeta[] = [];
+let sharedFontList: AssetMeta[] = [];
 let assetsPick: () => Promise<File[]> = () => Promise.resolve([]);
 let sharedPick: () => Promise<File[]> = () => Promise.resolve([]);
+let sharedFontPick: () => Promise<File[]> = () => Promise.resolve([]);
 // store resolves with the meta and fires onImported (the real store emits `imported`);
 // a name in `failNames` makes that file's store reject.
 let failNames = new Set<string>();
@@ -50,15 +53,16 @@ let holdStores = false;
 // (B-021) never reach store at all.
 let storedNames: string[] = [];
 
-function storeImpl(panel: 'assets' | 'shared', file: File): Promise<unknown> {
+function storeImpl(panel: 'assets' | 'shared' | 'shared-font', file: File): Promise<unknown> {
   storedNames.push(file.name);
   if (failNames.has(file.name)) return Promise.reject(new Error(`fail ${file.name}`));
   if (holdStores) return new Promise<never>(() => undefined);
-  const m = meta(file.name);
+  const m = meta(file.name, panel === 'shared-font' ? 'font' : 'image');
   return Promise.resolve().then(() => {
     if (panel === 'assets') onAssetsImported?.(m);
-    else onSharedImported?.(m);
-    return panel === 'assets' ? { asset: m } : { image: m };
+    else if (panel === 'shared') onSharedImported?.(m);
+    else onSharedFontImported?.(m);
+    return panel === 'assets' ? { asset: m } : panel === 'shared' ? { image: m } : { font: m };
   });
 }
 
@@ -85,6 +89,17 @@ function installBridge(): void {
       url: () => Promise.resolve(null),
       pick: () => sharedPick(),
       store: (file: File) => storeImpl('shared', file),
+      remove: () => Promise.resolve({ ok: true }),
+    },
+    sharedFonts: {
+      list: () => Promise.resolve(sharedFontList),
+      onImported: (h: (m: AssetMeta) => void) => {
+        onSharedFontImported = h;
+        return noop;
+      },
+      url: () => Promise.resolve(null),
+      pick: () => sharedFontPick(),
+      store: (file: File) => storeImpl('shared-font', file),
       remove: () => Promise.resolve({ ok: true }),
     },
   };
@@ -132,10 +147,13 @@ afterEach(() => {
   container = null;
   onAssetsImported = null;
   onSharedImported = null;
+  onSharedFontImported = null;
   assetsList = [];
   sharedList = [];
+  sharedFontList = [];
   assetsPick = () => Promise.resolve([]);
   sharedPick = () => Promise.resolve([]);
+  sharedFontPick = () => Promise.resolve([]);
   failNames = new Set<string>();
   holdStores = false;
   storedNames = [];
@@ -165,12 +183,17 @@ describe('useImportPending (D-067)', () => {
 });
 
 describe('SharedLibraryPanel import (D-067 multiselect + prepend)', () => {
+  function pickShared(kind: 'Image…' | 'Font…' = 'Image…'): void {
+    act(() => byLabel('Add shared asset').click());
+    act(() => buttonByText(kind).click());
+  }
+
   it('cancelling the picker shows no loading tile', async () => {
     installBridge();
     sharedPick = () => Promise.resolve([]); // cancelled
     render(SharedLibraryPanel);
     await settle();
-    act(() => byLabel('Add library image').click());
+    pickShared();
     await settle();
     expect(tiles()).toBe(0);
   });
@@ -182,7 +205,7 @@ describe('SharedLibraryPanel import (D-067 multiselect + prepend)', () => {
       Promise.resolve([fileNamed('a.png'), fileNamed('b.png'), fileNamed('c.png')]);
     render(SharedLibraryPanel);
     await settle();
-    act(() => byLabel('Add library image').click());
+    pickShared();
     await settle();
     expect(tiles()).toBe(3);
   });
@@ -193,7 +216,7 @@ describe('SharedLibraryPanel import (D-067 multiselect + prepend)', () => {
       Promise.resolve([fileNamed('a.png'), fileNamed('b.png'), fileNamed('c.png')]);
     render(SharedLibraryPanel);
     await settle();
-    act(() => byLabel('Add library image').click());
+    pickShared();
     await settle();
     expect(tiles()).toBe(0);
     expect(thumbTitles('shared')).toEqual(['a.png', 'b.png', 'c.png']); // top, selection order
@@ -207,7 +230,7 @@ describe('SharedLibraryPanel import (D-067 multiselect + prepend)', () => {
     render(SharedLibraryPanel);
     await settle();
 
-    act(() => byLabel('Add library image').click());
+    pickShared();
     await settle();
     expect(tiles()).toBe(0); // every tile cleared, including the failed one
     expect(thumbTitles('shared')).toEqual(['a.png', 'c.png']); // b skipped, others imported
@@ -221,7 +244,7 @@ describe('SharedLibraryPanel import (D-067 multiselect + prepend)', () => {
     await settle();
     expect(thumbTitles('shared')).toEqual(['old.png']);
 
-    act(() => byLabel('Add library image').click());
+    pickShared();
     await settle();
     expect(thumbTitles('shared')).toEqual(['new.png', 'old.png']); // newest on top
   });
@@ -234,9 +257,20 @@ describe('SharedLibraryPanel import (D-067 multiselect + prepend)', () => {
     await settle();
     expect(thumbTitles('shared')).toEqual(['b.png', 'a.png']); // newest-first display
 
-    act(() => byLabel('Add library image').click());
+    pickShared();
     await settle();
     expect(thumbTitles('shared')).toEqual(['a.png', 'b.png']); // re-imported 'a' moved to top
+  });
+
+  it('font import uses the shared font store and renders a font tile', async () => {
+    installBridge();
+    sharedFontPick = () => Promise.resolve([fileNamed('brand.woff2')]);
+    render(SharedLibraryPanel);
+    await settle();
+    pickShared('Font…');
+    await settle();
+    expect(storedNames).toEqual(['brand.woff2']);
+    expect(thumbTitles('shared')).toEqual(['brand.woff2']);
   });
 });
 
@@ -299,13 +333,18 @@ describe('ProjectAssetsPanel import (D-067)', () => {
  * same batch still import + prepend.
  */
 describe('post-pick file-type validation (B-021)', () => {
+  function pickSharedImage(): void {
+    act(() => byLabel('Add shared asset').click());
+    act(() => buttonByText('Image…').click());
+  }
+
   it('shared library: all-unsupported selection → no store, no tile, only a notice', async () => {
     installBridge();
     sharedPick = () =>
       Promise.resolve([fileNamed('a.pdf'), fileNamed('b.mp3'), fileNamed('c.mp4')]);
     render(SharedLibraryPanel);
     await settle();
-    act(() => byLabel('Add library image').click());
+    pickSharedImage();
     await settle();
     expect(storedNames).toEqual([]); // nothing reached the store
     expect(tiles()).toBe(0); // no loading/broken tiles
@@ -322,7 +361,7 @@ describe('post-pick file-type validation (B-021)', () => {
       Promise.resolve([fileNamed('logo.png'), fileNamed('doc.pdf'), fileNamed('song.mp3')]);
     render(SharedLibraryPanel);
     await settle();
-    act(() => byLabel('Add library image').click());
+    pickSharedImage();
     await settle();
     expect(storedNames).toEqual(['logo.png']); // only the image was stored
     expect(tiles()).toBe(0);
@@ -359,5 +398,24 @@ describe('post-pick file-type validation (B-021)', () => {
     expect(tiles()).toBe(0);
     expect(noticeText()).toContain('evil.exe');
     expect(noticeText()).not.toContain('brand.ttf');
+  });
+
+  it('project assets, Video…: proven formats are visible and an unknown extension is refused before the modal', async () => {
+    installBridge();
+    assetsPick = () => Promise.resolve([fileNamed('broadcast-source.mxf')]);
+    render(ProjectAssetsPanel);
+    await settle();
+    act(() => byLabel('Add asset').dispatchEvent(new Event('pointerdown', { bubbles: true })));
+    expect(document.body.textContent).toContain('MOV · MP4 · WebM · AVI');
+    const videoButton = [...container!.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Video…'),
+    );
+    if (videoButton === undefined) throw new Error('no Video… button');
+    act(() => videoButton.click());
+    await settle();
+    expect(noticeText()).toContain('broadcast-source.mxf');
+    expect(noticeText()).toContain('MP4 or MOV / H.264');
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(storedNames).toEqual([]);
   });
 });

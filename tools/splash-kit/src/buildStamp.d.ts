@@ -12,7 +12,7 @@ export interface BuildStampResult {
   readonly plugin: Plugin;
   /** Feed the app's `define` as `__CG_BUILD__: JSON.stringify(stamp)`. */
   readonly stamp: BuildStamp;
-  /** What the splash's foot prints — `sha · YYYY-MM-DD`. */
+  /** What the splash's foot prints — operator-facing Version / Built labels (no SHA). */
   readonly stampText: string;
 }
 

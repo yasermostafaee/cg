@@ -32,16 +32,6 @@ interface Props {
  *
  * Escape clears bind mode globally (handled in CanvasArea).
  */
-/**
- * Whether "Bind from canvas" is allowed for a field: only while the field has NO
- * binding yet (one binding per field). Removing the existing binding re-enables
- * it. Exported for regression coverage. Relax this if a field should be bindable
- * to several different targets at once.
- */
-export function canBindFromCanvas(fieldId: string, bindings: readonly FieldBinding[]): boolean {
-  return !bindings.some((b) => b.fieldId === fieldId);
-}
-
 export function FieldsPanel({ scene, bindModeFieldId }: Props): JSX.Element {
   const nameOf = elementNameResolver(scene);
   // D-025 — this composition's OWN fields (editable here) plus its nested child
@@ -111,11 +101,14 @@ function NamespaceGroup({ group }: { group: CompositionFieldGroup }): JSX.Elemen
   const { fields, groups } = group.aggregate;
   const visibleFields = fields.filter((field) => !isFixedFileFieldId(field.id));
   const visibleGroups = groups.filter(namespaceHasFields);
+  const heading = group.label ?? group.name;
   return (
     <div className={s.nsGroup}>
-      <div className={s.nsTitle}>{group.label ?? group.name}</div>
+      <div className={s.nsTitle} title={heading}>
+        {heading}
+      </div>
       {visibleFields.length > 0 && (
-        <div className={s.table} role="table" aria-label={`${group.label ?? group.name} variables`}>
+        <div className={s.table} role="table" aria-label={`${heading} variables`}>
           <TableHeader />
           <div role="rowgroup">
             {visibleFields.map((f) => (
@@ -128,10 +121,10 @@ function NamespaceGroup({ group }: { group: CompositionFieldGroup }): JSX.Elemen
                 <span className={s.cardId} role="cell" title={f.id}>
                   {f.id}
                 </span>
-                <span className={s.readonlyLabel} role="cell">
+                <span className={s.readonlyLabel} role="cell" title={f.label || f.id}>
                   {f.label || f.id}
                 </span>
-                <span className={s.cardType} role="cell">
+                <span className={s.cardType} role="cell" title={f.type}>
                   {f.type}
                 </span>
                 <span role="cell" aria-label="Read-only nested variable" />
@@ -162,11 +155,21 @@ function FieldRow({
     .map((b, idx) => ({ b, idx }))
     .filter(({ b }) => b.fieldId === field.id);
   const bindActive = bindModeFieldId === field.id;
-  // One binding per field: "Bind from canvas" is enabled only while the field has
-  // no binding yet. To bind a different target the operator removes the existing
-  // binding (×) first, which re-enables it. (If we later want a field bound to
-  // several elements, relax this — see canBindFromCanvas.)
-  const canBind = canBindFromCanvas(field.id, bindings);
+  const isBound = ownBindings.length > 0;
+
+  function toggleBinding(): void {
+    if (isBound) {
+      // One fixed action owns both states. Legacy documents can contain more than
+      // one binding for a field, so Unbind clears every relationship represented
+      // by this one toggle. Descending indices remain valid as the array shrinks.
+      for (const { idx } of [...ownBindings].sort((a, b) => b.idx - a.idx)) {
+        designerStore.removeBindingAt(idx);
+      }
+      return;
+    }
+    designerStore.setBindMode(bindActive ? null : field.id);
+  }
+
   return (
     <div className={s.fieldRow} data-testid={`field-card-${field.id}`} role="row">
       <span className={s.cardId} role="cell" title={field.id}>
@@ -179,30 +182,30 @@ function FieldRow({
           ariaLabel={`Title for ${field.id}`}
           value={field.label}
           resetKey={field.id}
+          title={field.label}
           onCommit={(label) =>
             designerStore.updateField(field.id, { label } as Partial<DynamicField>)
           }
         />
       </div>
       <div className={s.fieldDetails} role="cell">
-        <span className={s.cardType}>{field.type}</span>
+        <span className={s.cardType} title={field.type}>
+          {field.type}
+        </span>
         <BindingList bindings={ownBindings} nameOf={nameOf} />
       </div>
       <div className={s.cardActions} role="cell">
         <Control
           size="sm"
-          disabled={!canBind}
+          className={s.bindingToggle}
+          data-testid={`binding-toggle-${field.id}`}
+          data-binding-state={isBound ? 'bound' : 'unbound'}
           aria-pressed={bindActive}
-          aria-label={bindActive ? 'Click a canvas element' : 'Bind from canvas'}
-          selected={bindActive}
-          title={
-            canBind
-              ? 'Bind this field to a canvas element'
-              : 'Already bound — remove the binding (×) to bind a different target'
-          }
-          onClick={() => designerStore.setBindMode(bindActive ? null : field.id)}
+          aria-label={isBound ? 'Unbind' : bindActive ? 'Cancel binding' : 'Bind from canvas'}
+          title={isBound ? 'Unbind' : bindActive ? 'Cancel binding' : 'Bind from canvas'}
+          onClick={toggleBinding}
         >
-          <Icon icon={Link2} size={13} />
+          <Icon icon={isBound ? Unlink2 : Link2} size={14} />
         </Control>
         <Control
           size="sm"
@@ -229,19 +232,20 @@ function BindingList({
   }
   return (
     <div className={s.bindList}>
-      {bindings.map(({ b, idx }) => (
-        <div key={idx} className={s.bindRow}>
-          <span className={s.bindingText}>→ {describeBinding(b, nameOf)}</span>
-          <Control
-            size="xs"
-            title="Unbind (keeps the field)"
-            aria-label="Unbind"
-            onClick={() => designerStore.removeBindingAt(idx)}
-          >
-            <Icon icon={Unlink2} size={11} />
-          </Control>
-        </div>
-      ))}
+      {bindings.map(({ b, idx }) => {
+        const description = `→ ${describeBinding(b, nameOf)}`;
+        return (
+          <div key={idx} className={s.bindRow}>
+            <span
+              className={s.bindingText}
+              title={description}
+              data-testid={`binding-text-${b.fieldId}-${String(idx)}`}
+            >
+              {description}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }

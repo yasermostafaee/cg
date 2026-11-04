@@ -28,6 +28,7 @@ afterEach(() => {
   container = null;
   designerStore._reset();
   delete (window as { cg?: unknown }).cg;
+  delete (window as { CG_E2E?: boolean }).CG_E2E;
 });
 
 /** The bridge's export namespace, with the answer held until the test releases it. */
@@ -106,14 +107,13 @@ const button = (c: HTMLElement, name: string): HTMLButtonElement =>
   c.querySelector(`button[aria-label="${name}"]`) as HTMLButtonElement;
 
 describe('B-349 — the Export button answers', () => {
-  it('🔴 while exporting: both buttons wait, and the pressed one shows how far it is', async () => {
+  it('🔴 while exporting: the delivery action waits and shows how far it is', async () => {
     const bridge = stubExport();
     const c = render();
     act(() => button(c, 'Export .vcg').click());
     // The save dialog is open: the pipeline has not reported yet.
     expect(button(c, 'Export .vcg').textContent).toBe('Exporting…');
     expect(button(c, 'Export .vcg').disabled).toBe(true);
-    expect(button(c, 'Export HTML').disabled).toBe(true);
     bridge.progress({ step: 'pack', progress: 0.6 });
     expect(button(c, 'Export .vcg').textContent).toBe('Exporting… 60 %');
     await bridge.answer({ outcome: 'written', filename: 'telavat.vcg', bytes: 29_225_439 });
@@ -132,6 +132,7 @@ describe('B-349 — the Export button answers', () => {
 
   it('D-170 — both export paths suggest the project name while the payload stays composition-scoped', async () => {
     const bridge = stubExport();
+    (window as { CG_E2E?: boolean }).CG_E2E = true;
     const c = render();
 
     act(() => button(c, 'Export .vcg').click());
@@ -139,7 +140,9 @@ describe('B-349 — the Export button answers', () => {
     expect(bridge.requests().disk?.scene.name).toBe('comp1');
     await bridge.answer({ outcome: 'cancelled' });
 
-    act(() => button(c, 'Export HTML').click());
+    const html = c.querySelector<HTMLButtonElement>('[data-testid="internal-export-html"]');
+    expect(html).not.toBeNull();
+    act(() => html?.click());
     expect(bridge.requests().html?.suggestedName).toBe('telavat');
     expect(bridge.requests().html?.scene.name).toBe('comp1');
     await bridge.answerHtml({
@@ -208,8 +211,8 @@ describe('B-349 — the Export button answers', () => {
   });
 });
 
-describe('B-351 — too large for CG Control refuses the .vcg only', () => {
-  it('🔴 the .vcg button is blocked by it; the HTML button, which never goes through CG Bridge, is not', () => {
+describe('B-351 / D-174 — delivery refusal and the internal HTML seam', () => {
+  it('🔴 the .vcg button is blocked; no author-facing HTML action is rendered', () => {
     stubExport();
     const c = render([
       {
@@ -220,6 +223,7 @@ describe('B-351 — too large for CG Control refuses the .vcg only', () => {
       },
     ]);
     expect(button(c, 'Export .vcg').getAttribute('data-export-blocked')).toBe('errors');
-    expect(button(c, 'Export HTML').getAttribute('data-export-blocked')).toBeNull();
+    expect(button(c, 'Export HTML')).toBeNull();
+    expect(c.querySelector('[data-testid="internal-export-html"]')).toBeNull();
   });
 });

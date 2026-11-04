@@ -160,6 +160,18 @@ export const toast = style({
   lineHeight: 1.4,
   boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
   zIndex: 5000,
+  selectors: {
+    '&[data-tone="neutral"]': {
+      background: '#1c1f2d',
+      color: '#e5e7f3',
+      borderColor: '#64748b',
+    },
+    '&[data-tone="success"]': {
+      background: '#14532d',
+      color: '#f0fdf4',
+      borderColor: '#4ade80',
+    },
+  },
 });
 
 export const toastSuccess = style({
@@ -173,7 +185,7 @@ export const toastClose = style({
   lineHeight: '16px',
   textAlign: 'center',
   background: 'transparent',
-  color: '#fca5a5',
+  color: 'currentColor',
   border: 'none',
   borderRadius: '0.2rem',
   fontSize: '0.95rem',

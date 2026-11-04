@@ -97,7 +97,10 @@ test('league builds top to bottom, contains all 18 rows, then closes bottom to t
     .locator('iframe')
     .screenshot({ path: testInfo.outputPath('league-held.png') });
 
-  const backgrounds = ['az-stadium-bg', 'az-bg-scrim', 'az-bg'];
+  // The latest saved project intentionally clears its scrim before Hold; it must
+  // remain clear during Stop, while the stadium and main panel fade after the rows.
+  await expect(frame.locator('[data-cg-element-id="az-bg-scrim"]')).toHaveCSS('opacity', '0');
+  const backgrounds = ['az-stadium-bg', 'az-bg'];
   const baseline = await frame.evaluate(
     (ids) =>
       ids.map((id) => {
@@ -122,8 +125,12 @@ test('league builds top to bottom, contains all 18 rows, then closes bottom to t
       let outOfOrder = false;
       let allRowsGone = false;
       let backgroundFadedBeforeRows = false;
+      let scrimStayedHidden = true;
+      const scrim = document.querySelector('[data-cg-element-id="az-bg-scrim"]');
+      if (scrim === null) throw new Error('Missing league scrim');
       const until = performance.now() + 8_000;
       while (performance.now() < until) {
+        if (Number(getComputedStyle(scrim).opacity) !== 0) scrimStayedHidden = false;
         if (document.body.classList.contains('cg-pending')) {
           return {
             started,
@@ -132,6 +139,7 @@ test('league builds top to bottom, contains all 18 rows, then closes bottom to t
             outOfOrder,
             allRowsGone,
             backgroundFadedBeforeRows,
+            scrimStayedHidden,
             settled: true,
           };
         }
@@ -162,6 +170,7 @@ test('league builds top to bottom, contains all 18 rows, then closes bottom to t
         outOfOrder,
         allRowsGone,
         backgroundFadedBeforeRows,
+        scrimStayedHidden,
         settled: false,
       };
     },
@@ -169,11 +178,12 @@ test('league builds top to bottom, contains all 18 rows, then closes bottom to t
   );
   expect(exit).toEqual({
     started: Array.from({ length: 18 }, (_, index) => 17 - index),
-    fading: [true, true, true],
+    fading: [true, true],
     sawReverseBuildDown: true,
     outOfOrder: false,
     allRowsGone: true,
     backgroundFadedBeforeRows: false,
+    scrimStayedHidden: true,
     settled: true,
   });
 });

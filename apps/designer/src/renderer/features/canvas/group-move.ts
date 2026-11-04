@@ -46,6 +46,8 @@ export function collectGroupMoveTargets(
   currentFrame: number,
   resolution: { width: number; height: number },
   transformAt: (el: Element, frame: number) => Transform,
+  /** B-381 — optional per-element runtime clock; non-lifecycle callers keep the playhead. */
+  frameForElement?: (elementId: string) => number,
 ): GroupMoveTargets {
   const movers: { id: string; x: number; y: number }[] = [];
   let anchor: GroupMoveTargets['anchor'] = null;
@@ -57,7 +59,7 @@ export function collectGroupMoveTargets(
   let maxY = -Infinity;
   for (const layer of layers) {
     for (const el of layer.children) {
-      const t = transformAt(el, currentFrame);
+      const t = transformAt(el, frameForElement?.(el.id) ?? currentFrame);
       const ew = t.size.w * t.scale.x;
       const eh = t.size.h * t.scale.y;
       if (selection.has(el.id)) {

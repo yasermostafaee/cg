@@ -19,6 +19,7 @@ const starters = [
   ['iran-premier-league', 'جدول لیگ برتر ایران'],
   ['iran-weather-pages', 'آب‌وهوای مراکز استان‌ها'],
   ['iran-weather-forecast', 'پیش‌بینی چندروزهٔ هوا'],
+  ['iran-weather-cards', 'آب‌وهوای شهرها — کارت‌های تصویری'],
   ['image-folder-sequence', 'توالی تصاویر پوشه'],
   ['countdown-steps', 'شمارش معکوس اذان'],
   ['multibox', 'میزگرد چندقابه'],
@@ -27,6 +28,8 @@ const starters = [
 test('renders the complete production poster set from authored scenes', async ({ app }) => {
   test.setTimeout(240_000);
   const out = OUT as string;
+  const runtimeErrors: string[] = [];
+  app.page.on('pageerror', (error) => runtimeErrors.push(error.stack ?? error.message));
   const requested = process.env.CG_STARTER_CAPTURE_IDS?.split(',').filter(Boolean);
   if (requested !== undefined)
     expect(requested.every((id) => starters.some(([candidate]) => candidate === id))).toBe(true);
@@ -59,7 +62,7 @@ test('renders the complete production poster set from authored scenes', async ({
     }
 
     const stage = app.previewFrame.locator('.cg-stage').first();
-    await expect(stage).toBeVisible();
+    await expect(stage, `${id}: ${runtimeErrors.join('\n')}`).toBeVisible();
     const file = path.join(out, `${id}.png`);
     await stage.screenshot({ path: file, animations: 'disabled' });
     expect(fs.statSync(file).size, id).toBeGreaterThan(5000);

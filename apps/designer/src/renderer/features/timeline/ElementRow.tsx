@@ -12,6 +12,7 @@ import {
   Key,
   MoveHorizontal,
   PenTool,
+  PanelsTopLeft,
   Rows3,
   Spline,
   Square,
@@ -30,11 +31,13 @@ import {
   arrangementViewOf,
   boxInstanceIds,
 } from '../../state/slices/arrangements.js';
+import { activeLookGroup } from '../../state/slices/looks.js';
 import { activeFieldData } from '../../state/scene-doc.js';
 import { cx } from '../../cx.js';
 import { Control } from '../../ui/Control.js';
 import { Icon } from '../../ui/Icon.js';
 import { Tag } from '../../ui/Tag.js';
+import { colors } from '../../theme.js';
 import * as s from './ElementRow.css.js';
 
 export { ELEMENT_ROW_HEIGHT } from './metrics.js';
@@ -135,6 +138,13 @@ function ElementRowLabel(props: Props): JSX.Element {
   // opinion behind it, so it gets its own words rather than the ◆ marker's "you set this".
   const hiddenByNoCell =
     activeArrangement !== null && !onScreen && arrangementOpinion === undefined;
+  // B-388 — a registered Look instance is not an ordinary hideable layer. The Look picker
+  // owns its one-of-N visibility and deliberately has no "none" state; writing authored
+  // `visible:false` here was therefore immediately overridden by the active Look and made the
+  // eye lie. Content *inside* the Look keeps its normal visibility control.
+  const isRegisteredLook =
+    scene !== null &&
+    (activeLookGroup(scene)?.looks.some((look) => look.instanceId === element.id) ?? false);
   // D-098 — a layer bound to data (a field binding in the active composition targets it) gets a
   // small key icon AFTER its name (kept visible even when the name ellipsizes). Stable boolean →
   // no per-frame re-render.
@@ -206,11 +216,23 @@ function ElementRowLabel(props: Props): JSX.Element {
       <span className={s.typeIcon}>
         <LayerTypeIcon
           element={element}
-          color={element.timelineColor ?? lifespanColorFor(element)}
+          color={
+            isRegisteredLook ? colors.look : (element.timelineColor ?? lifespanColorFor(element))
+          }
+          isLook={isRegisteredLook}
         />
       </span>
       <span className={s.name}>
-        <span className={cx(s.nameText, isSelected && s.nameSelected)}>{element.name}</span>
+        <span
+          className={cx(
+            s.nameText,
+            isRegisteredLook && s.nameLook,
+            isSelected && s.nameSelected,
+            isRegisteredLook && isSelected && s.nameLookSelected,
+          )}
+        >
+          {element.name}
+        </span>
         {/* DELTA-RUN-NEXT-VERSION-01-F — a fact, not a toggle: it waits hidden for a step's cue. */}
         {element.type === 'composition' && element.startsHidden === true && (
           <Tag data-testid="layer-starts-hidden" title="Shown only when a countdown step shows it">
@@ -247,44 +269,47 @@ function ElementRowLabel(props: Props): JSX.Element {
           <span aria-hidden>◆</span>
         </Control>
       )}
-      <Control
-        variant="bare"
-        className={cx('cg-tl-toggle', s.toggleButton, onScreen && s.toggleButtonActive)}
-        title={
-          activeArrangement === null
-            ? onScreen
-              ? 'Hide element'
-              : 'Show element'
-            : hiddenByNoCell
-              ? `Hidden in "${activeArrangement.name}" — this arrangement has no cell for it. ` +
-                `Its source is held, not torn down. Click to show it anyway.`
-              : onScreen
-                ? `Hide in "${activeArrangement.name}" only`
-                : `Show in "${activeArrangement.name}" only`
-        }
-        aria-label={onScreen ? 'Hide element' : 'Show element'}
-        aria-pressed={!onScreen}
-        onClick={(e) => {
-          e.stopPropagation();
-          // 🔴 With an arrangement active the eye writes THAT arrangement's opinion —
-          // input 2 of `resolveVisibility` — and never the authored `visible`. Editing the
-          // authored value while looking at one arrangement would silently change every
-          // other arrangement too, which is the opposite of what the author just asked for.
-          if (activeArrangement !== null) {
-            designerStore.setArrangementElementVisibility(
-              activeArrangement.id,
-              element.id,
-              !onScreen,
-            );
-            return;
+      {isRegisteredLook && <span className={s.togglePlaceholder} aria-hidden />}
+      {!isRegisteredLook && (
+        <Control
+          variant="bare"
+          className={cx('cg-tl-toggle', s.toggleButton, onScreen && s.toggleButtonActive)}
+          title={
+            activeArrangement === null
+              ? onScreen
+                ? 'Hide element'
+                : 'Show element'
+              : hiddenByNoCell
+                ? `Hidden in "${activeArrangement.name}" — this arrangement has no cell for it. ` +
+                  `Its source is held, not torn down. Click to show it anyway.`
+                : onScreen
+                  ? `Hide in "${activeArrangement.name}" only`
+                  : `Show in "${activeArrangement.name}" only`
           }
-          designerStore.updateElement(element.id, {
-            visible: !element.visible,
-          } as Partial<Element>);
-        }}
-      >
-        {onScreen ? <EyeOpenIcon /> : <EyeClosedIcon />}
-      </Control>
+          aria-label={onScreen ? 'Hide element' : 'Show element'}
+          aria-pressed={!onScreen}
+          onClick={(e) => {
+            e.stopPropagation();
+            // 🔴 With an arrangement active the eye writes THAT arrangement's opinion —
+            // input 2 of `resolveVisibility` — and never the authored `visible`. Editing the
+            // authored value while looking at one arrangement would silently change every
+            // other arrangement too, which is the opposite of what the author just asked for.
+            if (activeArrangement !== null) {
+              designerStore.setArrangementElementVisibility(
+                activeArrangement.id,
+                element.id,
+                !onScreen,
+              );
+              return;
+            }
+            designerStore.updateElement(element.id, {
+              visible: !element.visible,
+            } as Partial<Element>);
+          }}
+        >
+          {onScreen ? <EyeOpenIcon /> : <EyeClosedIcon />}
+        </Control>
+      )}
       <Control
         variant="bare"
         className={cx('cg-tl-toggle', s.toggleButton, element.locked && s.lockLocked)}
@@ -310,7 +335,8 @@ function ElementRowLabel(props: Props): JSX.Element {
  * sequence / repeater); kinds with no toolbar tool get a sensible lucide
  * equivalent. Exported for the B-052 icon-mapping unit test.
  */
-export function layerTypeIcon(element: Element): LucideIcon {
+export function layerTypeIcon(element: Element, isLook = false): LucideIcon {
+  if (isLook) return PanelsTopLeft;
   switch (element.type) {
     case 'text':
       return Type;
@@ -372,8 +398,18 @@ export function layerTypeIcon(element: Element): LucideIcon {
  * colour. Renders the shared lucide `Icon` (matching the canvas toolbar for shared
  * kinds); the per-layer `color` rides through `currentColor` via the inline style.
  */
-function LayerTypeIcon({ element, color }: { element: Element; color: string }): JSX.Element {
-  return <Icon icon={layerTypeIcon(element)} size={12} style={{ color, display: 'block' }} />;
+function LayerTypeIcon({
+  element,
+  color,
+  isLook,
+}: {
+  element: Element;
+  color: string;
+  isLook: boolean;
+}): JSX.Element {
+  return (
+    <Icon icon={layerTypeIcon(element, isLook)} size={12} style={{ color, display: 'block' }} />
+  );
 }
 
 function EyeOpenIcon(): JSX.Element {
@@ -457,6 +493,9 @@ function LockOpenIcon(): JSX.Element {
 
 function ElementRowLane(props: Props): JSX.Element {
   const { element, isSelected, frameRange, lifespanColor, onContextMenu } = props;
+  const scene = useDesignerSelector((state) => state.scene);
+  const isRegisteredLook =
+    scene !== null && activeLookGroup(scene)?.looks.some((look) => look.instanceId === element.id);
   const span = Math.max(1, frameRange.out - frameRange.in);
   const lifespan = element.lifespan ?? frameRange;
   const leftPct = ((lifespan.in - frameRange.in) / span) * 100;
@@ -549,7 +588,7 @@ function ElementRowLane(props: Props): JSX.Element {
         style={{
           left: `${leftPct.toFixed(3)}%`,
           width: `${widthPct.toFixed(3)}%`,
-          background: lifespanColor,
+          background: isRegisteredLook ? colors.look : lifespanColor,
         }}
         onPointerDown={(e) => startDrag('move', e)}
       >

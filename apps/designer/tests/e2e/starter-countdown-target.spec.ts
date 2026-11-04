@@ -1,5 +1,42 @@
 import { expect, test } from './fixtures/designer.js';
 
+test('Azan uses five readable minute colors and a replaceable mosque icon', async ({ app }) => {
+  await app.page.getByTestId('starter-card').filter({ hasText: 'شمارش معکوس اذان' }).click();
+  await app.expectStudio();
+  await app.openPreviewModal();
+  const forceStep = app.previewDialog.getByTestId('preview-step-force');
+  await expect(forceStep.locator('option')).toHaveText([
+    'Step: live',
+    'بیش از یک ساعت',
+    'شصت دقیقه تا اذان · ≤ 60 min',
+    'سی دقیقه تا اذان · ≤ 30 min',
+    'ده دقیقه تا اذان · ≤ 10 min',
+    'پنج دقیقه تا اذان · ≤ 5 min',
+    'یک دقیقه تا اذان · ≤ 1 min',
+    'اذان مغرب · At zero',
+  ]);
+  await app.play();
+  const icon = app.previewElement('countdown-azan-icon');
+  await expect(icon).toBeVisible();
+  await expect(icon).toHaveJSProperty('tagName', 'IMG');
+  await expect
+    .poll(() => icon.evaluate((node) => (node as HTMLImageElement).naturalWidth))
+    .toBeGreaterThan(0);
+  await expect(app.previewElement('countdown-badge-time')).toHaveCount(0);
+  const colors = [
+    'rgb(15, 118, 110)',
+    'rgb(36, 93, 155)',
+    'rgb(102, 82, 155)',
+    'rgb(154, 90, 24)',
+    'rgb(163, 62, 72)',
+  ];
+  for (const [index, color] of colors.entries()) {
+    await forceStep.selectOption(`countdown-clock|${index}`);
+    await expect(app.previewElement('countdown-clock-bg')).toHaveCSS('background-color', color);
+    await expect(app.previewElement('countdown-clock')).toHaveCSS('color', 'rgb(255, 255, 255)');
+  }
+});
+
 test('Azan lower-third uses the shared date picker, replaces zero with its message and stays until Stop', async ({
   app,
 }, testInfo) => {

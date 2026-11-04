@@ -68,6 +68,10 @@ export const nameText = style({
   minWidth: 0,
 });
 
+export const nameLook = style({ color: '#bcc2e0', fontWeight: 650 });
+/** Selection remains the strongest state even for the distinct violet Look subtype. */
+export const nameLookSelected = style({ color: colors.accent, fontWeight: 700 });
+
 // D-098 — the bound-layer key indicator; never shrinks, so it stays visible after a long
 // (ellipsized) name.
 export const boundKey = style({
@@ -97,6 +101,12 @@ export const toggleButton = style({
 });
 
 export const toggleButtonActive = style({ color: colors.text });
+
+/** Keeps the lock in its usual final column when a Look's invalid eye control is omitted. */
+export const togglePlaceholder = style({
+  width: '16px',
+  height: '16px',
+});
 
 // Locked state — red icon on a faint red chip so a locked layer is obvious.
 export const lockLocked = style({

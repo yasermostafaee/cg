@@ -194,4 +194,21 @@ describe('element-defaults', () => {
     expect(r.items[0]).toEqual({ id: 'row-1', name: 'تیم' });
     expect('logo' in (r.items[0] as Record<string, unknown>)).toBe(false);
   });
+
+  it('defaultRepeater seeds an authored image default in canonical form', () => {
+    const r = defaultRepeater('el-1', 0, 0, {
+      id: 'rowc',
+      fields: [
+        {
+          id: 'logo',
+          label: 'Logo',
+          required: false,
+          type: 'image',
+          accept: ['png'],
+          defaultAssetId: 'sunny',
+        },
+      ],
+    });
+    expect(r.items[0]).toEqual({ id: 'row-1', logo: { assetId: 'sunny' } });
+  });
 });

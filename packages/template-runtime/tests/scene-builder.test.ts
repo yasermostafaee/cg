@@ -279,6 +279,18 @@ describe('buildScene', () => {
     expect(el?.style.background).toMatch(/radial-gradient/);
   });
 
+  it('D-172 — one text-padding value paints the same inset on every side', () => {
+    const scene = structuredClone(lowerThirdScene);
+    const txt = scene.layers[0]?.children.find((e) => e.id === 'name');
+    if (txt === undefined || txt.type !== 'text') throw new Error('fixture changed');
+    txt.padding = 14;
+    const el = buildScene(scene).elementMap.get('name');
+    expect(el?.style.paddingTop).toBe('14px');
+    expect(el?.style.paddingRight).toBe('14px');
+    expect(el?.style.paddingBottom).toBe('14px');
+    expect(el?.style.paddingLeft).toBe('14px');
+  });
+
   it('D-057 — a text element paints BOTH text-shadow (textShadow) and box-shadow (shadow)', () => {
     const scene = structuredClone(lowerThirdScene);
     const txt = scene.layers[0]?.children.find((e) => e.id === 'name');

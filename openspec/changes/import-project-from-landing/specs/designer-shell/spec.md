@@ -1,15 +1,39 @@
-## ADDED Requirements
+# designer-shell Delta
 
-### Requirement: Landing imports an existing project directly
+## MODIFIED Requirements
 
-The Designer SHALL implement the following accepted authoring behavior without modifying stored scene timing or broadcast commands.
+### Requirement: Landing view as the entry screen
 
-#### Scenario: Open an existing project
+The Designer SHALL render a Landing view whenever no scene is open. The Landing view MUST display a
+list of starter projects, a list of recent projects, and adjacent **New project** and **Import
+project** affordances. **Import project** MUST use the same disk-project open operation as File →
+Open; it MUST NOT require a temporary project.
 
-- **WHEN** the author chooses Import project and a valid .cgproj
-- **THEN** the project opens directly in Studio without creating a temporary project
+#### Scenario: Designer opens with no active scene
 
-#### Scenario: Cancel import
+- **WHEN** the Designer is opened and no scene is active
+- **THEN** the entire viewport is filled by Landing, with adjacent **New project** and **Import
+  project** actions, and no Studio shell is rendered
 
-- **WHEN** the file picker is cancelled
-- **THEN** Landing remains unchanged
+#### Scenario: Operator imports a saved project from Landing
+
+- **WHEN** the operator chooses **Import project** on Landing and selects a valid `.cgproj`
+- **THEN** the same disk-open operation used by File → Open loads the selected project as the active
+  scene and switches directly to Studio
+- **AND** no starter or temporary project is created first
+
+#### Scenario: Operator cancels Landing import
+
+- **WHEN** the operator chooses **Import project** and cancels the file picker
+- **THEN** Landing remains visible with no active scene and no New Project dialog
+
+#### Scenario: Operator picks a starter
+
+- **WHEN** the operator clicks a starter card on the Landing view
+- **THEN** the matching starter scene is loaded as the active scene and the Designer switches to the
+  Studio view
+
+#### Scenario: Operator picks a recent project
+
+- **WHEN** the operator clicks a recent-project entry on the Landing view
+- **THEN** the project at that path is opened and the Designer switches to the Studio view

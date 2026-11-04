@@ -15,6 +15,19 @@ export interface CropRect {
   height: number;
 }
 
+/**
+ * How a non-square-pixel source should be baked into the square-pixel WebM.
+ * `source` trusts the file's display-aspect metadata; `pixels` is the explicit escape hatch for
+ * archive files whose metadata is wrong and treats each coded source pixel as square.
+ */
+export type PixelAspectMode = 'source' | 'pixels';
+
+/** Standard decoded channels, or VLC 3's legacy QuickTime/RV32 presentation. */
+export type VideoColorInterpretation = 'standard' | 'legacy-vlc';
+
+/** Match VLC 3's legacy RV32 channel presentation while preserving decoded alpha. */
+export const LEGACY_VLC_COLOR_FILTER = 'colorchannelmixer=0:1:0:0:1:0:0:0:0:0:0:1:0:0:0:1';
+
 /** What the probe pass extracts from ffmpeg's banner log for a mounted source. */
 export interface SourceProbe {
   /** Native frame rate as ffmpeg reports it (e.g. 25, 29.97). */
@@ -22,6 +35,17 @@ export interface SourceProbe {
   width: number;
   height: number;
   durationMs: number;
+  /** Container names reported by ffmpeg (for example `mov,mp4,m4a,3gp,3g2,mj2`). */
+  container?: string | undefined;
+  /** The first video stream's decoder name, for operator-facing compatibility details. */
+  codec?: string | undefined;
+  /** The first video stream's decoded pixel format, when ffmpeg reports one. */
+  pixelFormat?: string | undefined;
+  /**
+   * Non-square source pixels. Crop remains authored in coded source pixels; the canonical output
+   * scales the post-crop width by this ratio and stores square pixels.
+   */
+  sampleAspectRatio?: { numerator: number; denominator: number } | undefined;
 }
 
 /**
@@ -94,9 +118,12 @@ const VP8_ALPHA_ARGS = [
  * encoder streams keyframe together): seeks stop being terminal on the produced
  * WebM. RE-IMPORT IMPLICATION: assets from ≤ .4 remain seek-fragile — they still
  * play and air correctly, and the recovery paths handle them, but re-importing
- * them under .5 removes their seek fragility at the source.
+ * them under .5 removes their seek fragility at the source;
+ * `2026-11-03.6` = appearance-preserving square-pixel output for sources whose sample-aspect ratio
+ * is not 1:1, plus explicit picture-shape and legacy VLC 3 colour interpretations. The default
+ * remains standards-based; each alternate recipe is recorded separately in provenance/dedupe.
  */
-export const CONVERTER_REVISION = '2026-07-25.5';
+export const CONVERTER_REVISION = '2026-11-03.6';
 
 /**
  * D-128 — the geq expressions of the alpha pipeline. Why `geq` and not ffmpeg's
@@ -157,15 +184,51 @@ const GEQ_BLED_OPAQUE =
  * is why the premultiplied path branches BEFORE its unpremultiply (the premult
  * input IS truecolour·α) and the straight path premultiplies first.
  */
-function buildAlphaGraph(crop: CropRect | undefined, premultiplied: boolean): string {
-  const cropStage =
-    crop !== undefined ? `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},` : '';
+function geometryStages(
+  crop: CropRect | undefined,
+  sampleAspectRatio: SourceProbe['sampleAspectRatio'],
+  pixelAspectMode: PixelAspectMode = 'source',
+  colorInterpretation: VideoColorInterpretation = 'standard',
+): string[] {
+  const stages: string[] = [];
+  if (crop !== undefined) stages.push(`crop=${crop.width}:${crop.height}:${crop.x}:${crop.y}`);
+  if (
+    sampleAspectRatio !== undefined &&
+    sampleAspectRatio.numerator !== sampleAspectRatio.denominator
+  ) {
+    // Crop is deliberately first: its coordinates stay in the source's coded-pixel grid. Source
+    // mode then bakes the file's display shape into square pixels. Pixel mode deliberately skips
+    // that scale, but still clears SAR so the MOV metadata cannot stretch the stored WebM again.
+    if (pixelAspectMode === 'source') {
+      stages.push(
+        `scale=max(1\\,round(iw*${String(sampleAspectRatio.numerator)}/${String(sampleAspectRatio.denominator)})):ih`,
+      );
+    }
+    stages.push('setsar=1');
+  }
+  if (colorInterpretation === 'legacy-vlc') {
+    // Pin RGBA before the legacy permutation: the MOV decoder exposes ARGB and the mixer must not
+    // inherit a packed/native layout whose channel order varies by platform.
+    stages.push('format=rgba', LEGACY_VLC_COLOR_FILTER);
+  }
+  return stages;
+}
+
+function buildAlphaGraph(
+  crop: CropRect | undefined,
+  premultiplied: boolean,
+  sampleAspectRatio: SourceProbe['sampleAspectRatio'],
+  pixelAspectMode: PixelAspectMode,
+  colorInterpretation: VideoColorInterpretation,
+): string {
+  const geometry = geometryStages(crop, sampleAspectRatio, pixelAspectMode, colorInterpretation);
+  const geometryStage = geometry.length > 0 ? `${geometry.join(',')},` : '';
   const bleedBranch = premultiplied
     ? `[fb]boxblur=12:2,${GEQ_BLED_OPAQUE}[bled]`
     : `[fb]${GEQ_PREMULT},boxblur=12:2,${GEQ_BLED_OPAQUE}[bled]`;
   const straightBranch = premultiplied ? `[fs]${GEQ_UNPREMULT}[straight]` : `[fs]null[straight]`;
   return (
-    `[0:v]${cropStage}format=rgba,split=3[fs][fb][fa];` +
+    `[0:v:0]${geometryStage}${colorInterpretation === 'standard' ? 'format=rgba,' : ''}split=3[fs][fb][fa];` +
     `${bleedBranch};` +
     `${straightBranch};` +
     `[bled][straight]overlay=format=auto[comp];` +
@@ -205,28 +268,51 @@ export function buildConvertArgs(opts: {
   outputPath: string;
   targetFps: number;
   crop?: CropRect | undefined;
+  sampleAspectRatio?: SourceProbe['sampleAspectRatio'];
+  pixelAspectMode?: PixelAspectMode | undefined;
+  colorInterpretation?: VideoColorInterpretation | undefined;
   premultipliedAlpha?: boolean | undefined;
   alphaBleed?: boolean | undefined;
 }): string[] {
   const premultiplied = opts.premultipliedAlpha === true;
   const bleed = opts.alphaBleed === true;
-  const cropChain =
-    opts.crop !== undefined
-      ? `crop=${opts.crop.width}:${opts.crop.height}:${opts.crop.x}:${opts.crop.y}`
-      : '';
+  const pixelAspectMode = opts.pixelAspectMode ?? 'source';
+  const colorInterpretation = opts.colorInterpretation ?? 'standard';
+  const geometryChain = geometryStages(
+    opts.crop,
+    opts.sampleAspectRatio,
+    pixelAspectMode,
+    colorInterpretation,
+  ).join(',');
   const filterArgs: string[] = bleed
-    ? ['-filter_complex', buildAlphaGraph(opts.crop, premultiplied), '-map', '[out]']
+    ? [
+        '-filter_complex',
+        buildAlphaGraph(
+          opts.crop,
+          premultiplied,
+          opts.sampleAspectRatio,
+          pixelAspectMode,
+          colorInterpretation,
+        ),
+        '-map',
+        '[out]',
+      ]
     : premultiplied
-      ? ['-vf', `${cropChain !== '' ? `${cropChain},` : ''}format=rgba,${GEQ_UNPREMULT}`]
-      : cropChain !== ''
-        ? ['-vf', cropChain]
+      ? [
+          '-vf',
+          `${geometryChain !== '' ? `${geometryChain},` : ''}${colorInterpretation === 'standard' ? 'format=rgba,' : ''}${GEQ_UNPREMULT}`,
+        ]
+      : geometryChain !== ''
+        ? ['-vf', geometryChain]
         : [];
+  const mapArgs = bleed ? [] : ['-map', '0:v:0'];
   return [
     '-y',
     ...(opts.inputOptions ?? []),
     '-i',
     opts.inputPath,
     ...filterArgs,
+    ...mapArgs,
     ...VP8_ALPHA_ARGS,
     '-r',
     String(opts.targetFps),
@@ -337,20 +423,70 @@ export function buildPosterArgs(
   atSec?: number,
   /** `D-164` — an image sequence's input options (they precede `-i`, as the seek does). */
   inputOptions: readonly string[] = [],
+  sampleAspectRatio?: SourceProbe['sampleAspectRatio'],
+  colorInterpretation: VideoColorInterpretation = 'standard',
 ): string[] {
   const seek = atSec !== undefined && atSec > 0 ? ['-ss', atSec.toFixed(3)] : [];
+  const geometry = geometryStages(undefined, sampleAspectRatio, 'source', colorInterpretation);
   return [
     '-y',
     ...inputOptions,
     ...seek,
     '-i',
     inputPath,
+    '-map',
+    '0:v:0',
+    ...(geometry.length > 0 ? ['-vf', geometry.join(',')] : []),
     '-frames:v',
     '1',
     '-f',
     'image2',
     outputPath,
   ];
+}
+
+/**
+ * A tiny real decode used by the compatibility preflight when the optional mid-clip poster fails.
+ * Scaling one decoded frame to 1×1 keeps memory bounded while proving the bundled decoder can start.
+ */
+export function buildDecodeCheckArgs(
+  inputPath: string,
+  outputPath: string,
+  inputOptions: readonly string[] = [],
+): string[] {
+  return [
+    '-y',
+    ...inputOptions,
+    '-i',
+    inputPath,
+    '-map',
+    '0:v:0',
+    '-frames:v',
+    '1',
+    '-vf',
+    'scale=1:1',
+    '-pix_fmt',
+    'rgba',
+    '-f',
+    'rawvideo',
+    outputPath,
+  ];
+}
+
+/** Display/stored square-pixel dimensions for a full source or a coded-pixel crop. */
+export function displayDimensions(
+  probe: Pick<SourceProbe, 'width' | 'height' | 'sampleAspectRatio'>,
+  crop?: CropRect,
+  pixelAspectMode: PixelAspectMode = 'source',
+): { width: number; height: number } {
+  const codedWidth = crop?.width ?? probe.width;
+  const height = crop?.height ?? probe.height;
+  const sar = probe.sampleAspectRatio;
+  const width =
+    sar === undefined || pixelAspectMode === 'pixels'
+      ? codedWidth
+      : Math.max(1, Math.round((codedWidth * sar.numerator) / sar.denominator));
+  return { width, height };
 }
 
 /**
@@ -377,7 +513,14 @@ export function parseProbeLog(lines: readonly string[]): SourceProbe | null {
   let width: number | null = null;
   let height: number | null = null;
   let durationMs: number | null = null;
+  let container: string | undefined;
+  let codec: string | undefined;
+  let pixelFormat: string | undefined;
+  let sampleAspectRatio: SourceProbe['sampleAspectRatio'];
+  let foundVideoStream = false;
   for (const line of lines) {
+    const input = /^Input #\d+,\s*(.+?),\s+from\s/.exec(line.trim());
+    if (input !== null) container = input[1]?.trim();
     const dur = /Duration:\s*(\d+):(\d{2}):(\d{2})\.(\d{2})/.exec(line);
     if (dur !== null) {
       durationMs =
@@ -386,7 +529,16 @@ export function parseProbeLog(lines: readonly string[]): SourceProbe | null {
         Number(dur[3]) * 1000 +
         Number(dur[4]) * 10;
     }
-    if (line.includes('Video:')) {
+    if (line.includes('Video:') && !foundVideoStream) {
+      foundVideoStream = true;
+      // FFmpeg can append scan metadata directly to the pixel-format token
+      // (`argb(progressive)`). Keep the canonical base format so capability
+      // checks such as the opt-in VLC 3 QTRLE colour mapping remain stable.
+      const stream = /Video:\s*([^\s,(]+)(?:\s*\([^)]*\))?,\s*([^,\s(]+)/.exec(line);
+      if (stream !== null) {
+        codec = stream[1];
+        pixelFormat = stream[2];
+      }
       const dims = /,\s*(\d{2,5})x(\d{2,5})(?:\s*\[|,|\s*$)/.exec(line);
       if (dims !== null) {
         width = Number(dims[1]);
@@ -394,6 +546,14 @@ export function parseProbeLog(lines: readonly string[]): SourceProbe | null {
       }
       const rate = /,\s*([\d.]+)\s+fps/.exec(line);
       if (rate !== null) fps = Number(rate[1]);
+      const sar = /\bSAR\s+(\d+):(\d+)/.exec(line);
+      if (sar !== null) {
+        const numerator = Number(sar[1]);
+        const denominator = Number(sar[2]);
+        if (numerator > 0 && denominator > 0 && numerator !== denominator) {
+          sampleAspectRatio = { numerator, denominator };
+        }
+      }
     }
   }
   if (width === null || height === null) return null;
@@ -401,7 +561,16 @@ export function parseProbeLog(lines: readonly string[]): SourceProbe | null {
   // `Duration: N/A` — neither may abort the import. fps 0 = "unknown" (the
   // conform proceeds warning-free); durationMs 0 = "unknown" (the modal measures
   // the CONVERTED output instead, which is authoritative anyway).
-  return { fps: fps ?? 0, width, height, durationMs: durationMs ?? 0 };
+  return {
+    fps: fps ?? 0,
+    width,
+    height,
+    durationMs: durationMs ?? 0,
+    ...(container !== undefined ? { container } : {}),
+    ...(codec !== undefined ? { codec } : {}),
+    ...(pixelFormat !== undefined ? { pixelFormat } : {}),
+    ...(sampleAspectRatio !== undefined ? { sampleAspectRatio } : {}),
+  };
 }
 
 /**
@@ -427,6 +596,8 @@ export function buildProvenance(opts: {
   probe: SourceProbe;
   targetFps: number;
   crop?: CropRect | undefined;
+  pixelAspectMode?: PixelAspectMode | undefined;
+  colorInterpretation?: VideoColorInterpretation | undefined;
   /** sha256 of the source bytes — the pre-convert dedupe key (D-128). */
   sourceSha256?: string | undefined;
   /** Source file size in bytes. */
@@ -450,6 +621,10 @@ export function buildProvenance(opts: {
     ...(opts.sourceSha256 !== undefined ? { sourceSha256: opts.sourceSha256 } : {}),
     ...(opts.sourceBytes !== undefined ? { sourceBytes: opts.sourceBytes } : {}),
     ...(opts.crop !== undefined ? { crop: opts.crop } : {}),
+    ...(opts.pixelAspectMode !== undefined ? { pixelAspectMode: opts.pixelAspectMode } : {}),
+    ...(opts.colorInterpretation !== undefined
+      ? { colorInterpretation: opts.colorInterpretation }
+      : {}),
     ...(opts.premultipliedAlpha !== undefined
       ? { premultipliedAlpha: opts.premultipliedAlpha }
       : {}),
@@ -494,6 +669,8 @@ export function matchesConversionParams(
   match: {
     targetFps: number;
     crop: CropRect | undefined;
+    pixelAspectMode?: PixelAspectMode;
+    colorInterpretation?: VideoColorInterpretation;
     premultipliedAlpha?: boolean;
     alphaBleed?: boolean;
     /**
@@ -507,6 +684,8 @@ export function matchesConversionParams(
     p.converterRevision === CONVERTER_REVISION &&
     p.targetFps === match.targetFps &&
     cropsEqual(p.crop, match.crop) &&
+    (p.pixelAspectMode ?? 'source') === (match.pixelAspectMode ?? 'source') &&
+    (p.colorInterpretation ?? 'standard') === (match.colorInterpretation ?? 'standard') &&
     (p.premultipliedAlpha === true) === (match.premultipliedAlpha === true) &&
     (p.alphaBleed === true) === (match.alphaBleed === true) &&
     (p.sequence?.fps ?? null) === (match.sequenceFps ?? null)
@@ -521,6 +700,8 @@ export function findDuplicateVideoAsset<
     sourceSha256: string;
     targetFps: number;
     crop: CropRect | undefined;
+    pixelAspectMode?: PixelAspectMode;
+    colorInterpretation?: VideoColorInterpretation;
     premultipliedAlpha?: boolean;
     alphaBleed?: boolean;
     sequenceFps?: number | undefined;

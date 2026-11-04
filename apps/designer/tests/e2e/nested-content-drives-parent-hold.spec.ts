@@ -4,8 +4,8 @@ import { test, expect } from './fixtures/designer.js';
  * B-031 — a content-driven nested composition drives its PARENT's hold. The preview half:
  * the per-scope timing now offers the content-driven hold source for a parent whose closing
  * content lives entirely inside a nested composition (the per-scope `hasContent` recurses
- * nested instances, matching the inspector's `hasContentElement`; previously it was shallow,
- * so the parent was only offered a numeric/timed hold).
+ * nested instances; previously it was shallow, so the parent was only offered a numeric/timed
+ * hold in Preview).
  *
  * The runtime effect — the parent holds until the nested content-driven comp self-settles,
  * honoring per-element `drivesHold` — is covered deterministically by the

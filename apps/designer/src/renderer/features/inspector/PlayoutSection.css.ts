@@ -1,4 +1,4 @@
-import { style } from '@vanilla-extract/css';
+import { globalStyle, style } from '@vanilla-extract/css';
 import { colors } from '../../theme.js';
 import { inlineMuted } from './prose.css.js';
 
@@ -46,10 +46,21 @@ export const nestedRow = style({
  * prose is no longer the container for actions.
  */
 export const actionRow = style({
-  display: 'flex',
+  display: 'grid',
+  gridTemplateColumns: '74px minmax(0, 1fr) 56px 20px',
   alignItems: 'center',
   gap: '0.4rem',
   marginTop: '0.4rem',
+  width: '100%',
+  minWidth: 0,
+});
+
+/** D-188 — one stable, easy-to-hit action column for every lifecycle marker state. */
+export const actionButton = style({
+  width: '56px',
+  minWidth: '56px',
+  minHeight: '28px',
+  paddingInline: '0.45rem',
 });
 
 /** The setting's name — matches the inspector's other row labels. */
@@ -59,12 +70,33 @@ export const actionLabel = style({
   flex: '0 0 74px',
 });
 
+/** Compact setting label with its click-to-read help affordance. */
 /** The setting's CURRENT value, the thing the button acts on. */
 export const actionValue = style({
   color: colors.text,
   fontSize: '0.7rem',
   fontVariantNumeric: 'tabular-nums',
-  flex: '1 1 auto',
+  minWidth: 0,
+});
+
+/** Standard Inspector row with one fixed, right-aligned help column. */
+export const infoRow = style({
+  display: 'grid',
+  gridTemplateColumns: '90px minmax(0, 1fr) 20px',
+  alignItems: 'center',
+  gap: '0.4rem',
+  fontSize: '0.72rem',
+  padding: '0.1rem 0',
+});
+
+globalStyle(`${actionRow} > [data-testid='info-tip']`, {
+  justifySelf: 'end',
+  marginInlineStart: 0,
+});
+
+globalStyle(`${infoRow} > [data-testid='info-tip']`, {
+  justifySelf: 'end',
+  marginInlineStart: 0,
 });
 
 /**

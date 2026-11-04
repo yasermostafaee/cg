@@ -22,7 +22,7 @@ import * as s from './LandingView.css.js';
  *   ┌──────────────────────────────────────────────────────────┐
  *   │ cg Designer                                              │
  *   │ HTML CG template builder                                 │
- *   │ [ + New project ]                                        │
+ *   │ [ + New project ] [ Import project ]                     │
  *   │                                                          │
  *   │ START FROM A TEMPLATE                                    │
  *   │ ┌────────────┐ ┌────────────┐ ┌────────────┐            │

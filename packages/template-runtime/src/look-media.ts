@@ -181,13 +181,14 @@ export class LookMediaPark {
       🔴 **`B-217` — A REVIVE IS OWED ONLY TO A DRIVER THE PAUSE ACTUALLY STOPPED.** This used
       to add the member to the set unconditionally, and `resume()` on a VideoDriver or a
       LottieDriver does not "continue" — it STARTS a driver that was never running (the ticker
-      and sequence drivers refuse; the media drivers do not). The Designer canvas never plays,
-      so every driver there is idle: one look switch away and back was enough to set a clip
-      playing in the static editor, and the playhead then could not position it (`positionAt`
-      is a no-op for a running driver) until the next rebuild. Measured 2026-09-04 in
-      `video-looks-blank.spec.ts`. On air nothing changes: a running driver is still recorded
-      and still resumed. The set is never REMOVED from here — a member paused by an earlier
-      reassert is not running now, and still owes its resume.
+      and sequence drivers refuse; the media drivers do not). The Designer canvas is idle in its
+      static and explicit playhead-only modes (D-175 starts drivers only for ordinary lifecycle
+      Play): one look switch away and back was enough to set an idle clip playing in the editor,
+      and the playhead then could not position it (`positionAt` is a no-op for a running driver)
+      until the next rebuild. Measured 2026-09-04 in `video-looks-blank.spec.ts`. On air and during
+      canvas lifecycle Play nothing changes: a running driver is still recorded and still resumed.
+      The set is never REMOVED from here — a member paused by an earlier reassert is not running
+      now, and still owes its resume.
     */
     if (member.driver.isRunning()) this.#paused.add(member);
     member.driver.pause();

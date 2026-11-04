@@ -1,8 +1,12 @@
 import {
   CUT_LOOK_TRANSITION,
   compositionClosure,
+  compositionInstancesOf,
   lookGroupOf,
+  uniqueInstanceName,
   type Composition,
+  type Element,
+  type Layer,
   type Look,
   type LookGroup,
   type Scene,
@@ -10,7 +14,8 @@ import {
 import { current, set } from '../store-core.js';
 import {
   activeDocOf,
-  activeLayersOf,
+  deleteCompositionAndLinkedLooks,
+  freshElementId,
   renameCompositionAndLinkedLooks,
   withActiveDoc,
 } from '../scene-doc.js';
@@ -71,6 +76,49 @@ export function projectLookGroup(scene: Scene | null): LookGroup | undefined {
 }
 
 /**
+ * Composition ids currently registered as Looks. A Look stores its INSTANCE id, so resolve that
+ * reference through every possible group-home document rather than guessing from its name.
+ */
+export function registeredLookCompositionIds(scene: Scene | null): ReadonlySet<string> {
+  const ids = new Set<string>();
+  if (scene === null) return ids;
+  const group = projectLookGroup(scene);
+  if (group === undefined || group.looks.length === 0) return ids;
+  const instanceIds = new Set(group.looks.map((look) => look.instanceId));
+  for (const doc of [scene, ...(scene.compositions ?? [])]) {
+    for (const layer of doc.layers) {
+      for (const element of layer.children) {
+        if (element.type === 'composition' && instanceIds.has(element.id)) {
+          ids.add(element.compositionId);
+        }
+      }
+    }
+  }
+  return ids;
+}
+
+/** The registered Look backed by `compositionId`, resolved through its real instance link. */
+export function registeredLookForComposition(
+  scene: Scene | null,
+  compositionId: string,
+): Look | undefined {
+  if (scene === null) return undefined;
+  const group = projectLookGroup(scene);
+  if (group === undefined) return undefined;
+  const instanceIds = new Set<string>();
+  for (const doc of [scene, ...(scene.compositions ?? [])]) {
+    for (const layer of doc.layers) {
+      for (const element of layer.children) {
+        if (element.type === 'composition' && element.compositionId === compositionId) {
+          instanceIds.add(element.id);
+        }
+      }
+    }
+  }
+  return group.looks.find((look) => instanceIds.has(look.instanceId));
+}
+
+/**
  * The look the canvas is currently showing, or null. Resolved rather than read: a stale
  * session id (its look deleted, another composition opened) must read as "the default",
  * never as a claim about a look that no longer exists.
@@ -88,14 +136,21 @@ function writeGroup(next: LookGroup): Scene | null {
   return withActiveDoc(current.scene, { lookGroups: [next] });
 }
 
+/** Write the project's single Look group no matter which composition is currently open. */
+function writeProjectGroup(scene: Scene, next: LookGroup): Scene {
+  if (lookGroupOf(scene) !== undefined) return { ...scene, lookGroups: [next] };
+  return {
+    ...scene,
+    compositions: (scene.compositions ?? []).map((composition) =>
+      lookGroupOf(composition) !== undefined ? { ...composition, lookGroups: [next] } : composition,
+    ),
+  };
+}
+
 /**
- * ⭐ `DESIGNER-FIX-0905` §5 / `B-219` — **the default name avoids every existing COMPOSITION
- * name too, not only every look id.** A removed look leaves its composition in the project by
- * design (see `removeLook`); this namer used to count only `group.looks`, so after removing
- * `look-1`…`look-3` the next `+ Look` was `look-1` again — a SECOND composition named `look-1`
- * beside the orphan (measured: a fresh empty entry, not a reuse and not an adoption, but
- * indistinguishable from either in the Compositions panel). A collidable default is the
- * mechanism behind all three readings, so the default no longer collides.
+ * The default name avoids every existing composition name/id as well as every Look id. Ordinary
+ * full-frame compositions can be promoted to Looks, so a collision would still make the panel
+ * ambiguous even though deleting a registered Look now deletes its backing composition too.
  */
 function freshLookId(group: LookGroup, compositions: readonly Composition[]): string {
   const taken = new Set<string>([
@@ -108,11 +163,29 @@ function freshLookId(group: LookGroup, compositions: readonly Composition[]): st
   return `look-${String(n)}`;
 }
 
-/** The composition a look's INSTANCE references, found in the group's home document. */
+/**
+ * User-facing default name for a newly authored Preset. The stored Look id deliberately keeps its
+ * legacy `look-N` shape so existing runtime payloads and saved projects need no migration.
+ */
+function freshPresetName(group: LookGroup, compositions: readonly Composition[]): string {
+  const taken = new Set<string>([
+    ...group.looks.flatMap((look) => [look.id, look.name]),
+    ...compositions.flatMap((composition) => [composition.id, composition.name]),
+  ]);
+  let n = group.looks.length + 1;
+  while (taken.has(`preset-${String(n)}`)) n++;
+  return `preset-${String(n)}`;
+}
+
+/** The composition a Look's INSTANCE references, found project-wide by immutable instance id. */
 function lookCompositionId(scene: Scene, look: Look): string | undefined {
-  for (const layer of activeLayersOf(scene)) {
-    for (const el of layer.children) {
-      if (el.id === look.instanceId) return (el as { compositionId?: string }).compositionId;
+  for (const doc of [scene, ...(scene.compositions ?? [])]) {
+    for (const layer of doc.layers) {
+      for (const element of layer.children) {
+        if (element.id === look.instanceId && element.type === 'composition') {
+          return element.compositionId;
+        }
+      }
     }
   }
   return undefined;
@@ -123,7 +196,7 @@ function lookCompositionId(scene: Scene, look: Look): string | undefined {
  * home is the document a look is instanced into, so it is the one composition that can never
  * itself become a look.
  */
-function lookGroupHomeId(scene: Scene): string | null | undefined {
+export function projectLookGroupHomeId(scene: Scene): string | null | undefined {
   if (lookGroupOf(scene) !== undefined) return null;
   const home = (scene.compositions ?? []).find((c) => lookGroupOf(c) !== undefined);
   return home === undefined ? undefined : home.id;
@@ -132,11 +205,9 @@ function lookGroupHomeId(scene: Scene): string | null | undefined {
 /**
  * ⭐ `DESIGNER-FIX-0905` §5 — **the compositions that can become a look, and are not one.**
  *
- * A composition is a REUSABLE object a look points at, not a look's private storage:
- * `removeLook` keeps it on purpose, as recoverable work. The defect was that nothing said so
- * where it mattered and nothing let the author reuse it — the Looks panel read "No looks
- * yet" while the Compositions panel listed `look-1`, `look-2`, `look-3`. This is the list the
- * panel offers back, with **Make it a look** beside each.
+ * A composition may be explicitly promoted into a Look from the Compositions panel. Registered
+ * Looks themselves have a synchronized lifecycle and are therefore excluded from this candidate
+ * list.
  *
  * Eligible: every composition the size of the group's home document (a look is always
  * full-frame — a smaller one is a box, a title, a sub-part, and would be offered for the wrong
@@ -148,7 +219,7 @@ export function detachedLookCompositions(scene: Scene | null): Composition[] {
   if (scene === null) return [];
   const group = projectLookGroup(scene);
   if (group === undefined) return [];
-  const homeId = lookGroupHomeId(scene);
+  const homeId = projectLookGroupHomeId(scene);
   if (homeId === undefined) return [];
   const compositions = scene.compositions ?? [];
   const home = homeId === null ? scene : compositions.find((c) => c.id === homeId);
@@ -180,27 +251,78 @@ export function detachedLookCompositions(scene: Scene | null): Composition[] {
  * (an existing one) share, so the two cannot come to register differently.
  */
 function registerLook(compId: string, lookId: string, name: string): string | null {
-  const instanceId = designerStore.addCompositionInstance(compId);
-  if (instanceId === null) return null;
-
-  const withLook = activeLookGroup(current.scene);
-  if (withLook === undefined) return null;
+  if (current.scene === null) return null;
+  const homeId = projectLookGroupHomeId(current.scene);
+  const withLook = projectLookGroup(current.scene);
+  const composition = (current.scene.compositions ?? []).find(
+    (candidate) => candidate.id === compId,
+  );
+  if (homeId === undefined || withLook === undefined || composition === undefined) return null;
+  const home =
+    homeId === null
+      ? current.scene
+      : current.scene.compositions?.find((candidate) => candidate.id === homeId);
+  if (home === undefined) return null;
+  const instanceId = freshElementId();
+  const instance: Element = {
+    id: instanceId,
+    name: uniqueInstanceName(
+      composition.name,
+      compositionInstancesOf({ layers: home.layers }).map((candidate) => candidate.name),
+    ),
+    type: 'composition',
+    compositionId: compId,
+    transform: {
+      position: { x: 0, y: 0 },
+      size: { w: composition.resolution.width, h: composition.resolution.height },
+      scale: { x: 1, y: 1 },
+      rotation: 0,
+      anchor: { x: 0, y: 0 },
+    },
+    opacity: 1,
+    visible: true,
+    locked: false,
+    zIndex: 0,
+  };
+  const addToHome = (layers: readonly Layer[]): Layer[] =>
+    layers.length === 0
+      ? [
+          {
+            id: `L${String(Date.now())}`,
+            name: 'Layer 1',
+            visible: true,
+            locked: false,
+            children: [instance],
+            blendMode: 'normal',
+          },
+        ]
+      : layers.map((layer, index) =>
+          index === 0 ? { ...layer, children: [...layer.children, instance] } : layer,
+        );
   const look: Look = {
     id: lookId,
     name,
     instanceId,
     entered: CUT_LOOK_TRANSITION,
   };
-  const scene = writeGroup({
+  const nextGroup: LookGroup = {
     ...withLook,
     looks: [...withLook.looks, look],
     defaultLookId: withLook.defaultLookId ?? look.id,
-  });
-  // `addElement` auto-selects the new instance, which flips the right panel to
-  // ELEMENT properties — hiding this very section the moment a look is created (the
-  // panel-switches-away phenomenon the section docstring warns about). The author's
-  // next act lives in the looks list, so creation leaves nothing selected.
-  if (scene !== null) set({ scene, activeLookId: look.id, selection: new Set<string>() });
+  };
+  const sceneWithInstance: Scene =
+    homeId === null
+      ? { ...current.scene, layers: addToHome(current.scene.layers) }
+      : {
+          ...current.scene,
+          compositions: (current.scene.compositions ?? []).map((candidate) =>
+            candidate.id === homeId
+              ? { ...candidate, layers: addToHome(candidate.layers) }
+              : candidate,
+          ),
+        };
+  const scene = writeProjectGroup(sceneWithInstance, nextGroup);
+  set({ scene, activeLookId: look.id, selection: new Set<string>() });
   return look.id;
 }
 
@@ -222,6 +344,67 @@ export const looksSlice = {
   },
 
   /**
+   * Remove the project's multi-frame group and every Look it owns. The UI confirms first when
+   * the group is non-empty; this store action performs the accepted operation atomically so one
+   * undo restores the group, registrations, instances and backing compositions together.
+   */
+  removeLookGroup(): void {
+    if (current.scene === null) return;
+    const group = projectLookGroup(current.scene);
+    const homeId = projectLookGroupHomeId(current.scene);
+    if (group === undefined || homeId === undefined) return;
+    const compositionIds = group.looks
+      .map((look) => lookCompositionId(current.scene as Scene, look))
+      .filter((id): id is string => id !== undefined);
+    let nextScene = current.scene;
+    for (const compositionId of compositionIds) {
+      nextScene = deleteCompositionAndLinkedLooks(nextScene, compositionId).scene;
+    }
+    if (homeId === null) {
+      nextScene = { ...nextScene };
+      delete nextScene.lookGroups;
+    } else {
+      nextScene = {
+        ...nextScene,
+        compositions: (nextScene.compositions ?? []).map((composition) => {
+          if (composition.id !== homeId) return composition;
+          const next = { ...composition };
+          delete next.lookGroups;
+          return next;
+        }),
+      };
+    }
+    const activeWasDeleted =
+      current.activeCompositionId !== null && compositionIds.includes(current.activeCompositionId);
+    const home =
+      homeId === null
+        ? nextScene
+        : nextScene.compositions?.find((composition) => composition.id === homeId);
+    set({
+      scene: nextScene,
+      activeLookId: null,
+      ...(activeWasDeleted
+        ? {
+            activeCompositionId: homeId,
+            selection: new Set<string>(),
+            selectedKeyframe: null,
+            selectedKeyframes: [],
+            keyframeInspectorOpen: false,
+            currentFrame: home?.frameRange.in ?? nextScene.frameRange.in,
+            timelinePlaying: false,
+            timelinePlaybackMode: null,
+          }
+        : {}),
+    });
+    designerStore.showNotice(
+      group.looks.length === 0
+        ? 'Multi-frame group removed.'
+        : `Multi-frame group and ${String(group.looks.length)} Preset${group.looks.length === 1 ? '' : 's'} deleted.`,
+      { tone: 'neutral' },
+    );
+  },
+
+  /**
    * Add a LOOK: a new full-frame composition (the sub-scene), instanced at (0, 0) at
    * full size in the group's home document, registered by the instance's element id.
    * The first look becomes the default (the schema requires a default once any look
@@ -229,35 +412,39 @@ export const looksSlice = {
    */
   addLook(): string | null {
     if (current.scene === null) return null;
-    const group = activeLookGroup(current.scene);
+    const group = projectLookGroup(current.scene);
     if (group === undefined) return null;
 
     // The sub-scene composition, sized to the home document. Created WITHOUT navigating
     // into it (unlike `addComposition`) — authoring enters it explicitly via
     // `editLookContents` or the canvas double-click drill (D-024).
-    const doc = activeDocOf(current.scene);
+    const homeId = projectLookGroupHomeId(current.scene);
+    const doc =
+      homeId === null
+        ? current.scene
+        : current.scene.compositions?.find((composition) => composition.id === homeId);
+    if (doc === undefined) return null;
     const existingComps = current.scene.compositions ?? [];
     let n = existingComps.length + 1;
     while (existingComps.some((c) => c.id === `comp-${String(n)}`)) n++;
     const lookId = freshLookId(group, existingComps);
+    const presetName = freshPresetName(group, existingComps);
     const compId = `comp-${String(n)}`;
     const comp = {
       id: compId,
-      name: lookId,
+      name: presetName,
       resolution: { ...doc.resolution },
       frameRange: { in: 0, out: Math.max(1, current.scene.frameRange.out) },
       editorBackdrop: 'transparent' as const,
       layers: [],
     };
     set({ scene: { ...current.scene, compositions: [...existingComps, comp] } });
-    return registerLook(compId, lookId, lookId);
+    return registerLook(compId, lookId, presetName);
   },
 
   /**
-   * ⭐ `DESIGNER-FIX-0905` §5 — **make an EXISTING composition a look**: the reuse door a
-   * removed look's composition never had. Instances it full-frame in the group's home
-   * document and registers it, through the same path `addLook` takes for a fresh one — the
-   * authored sub-scene, plates and all, comes back as it was. No composition is created.
+   * Make an EXISTING eligible composition a Look. Instance it full-frame in the group's home
+   * document and register it through the same path `addLook` uses. No composition is created.
    *
    * The look's id is the composition's name when that is a free, id-shaped `look-N` (so a
    * restored `look-1` is `look-1` again — the id reaches the export, and an operator's
@@ -267,7 +454,7 @@ export const looksSlice = {
    */
   addLookFromComposition(compId: string): string | null {
     if (current.scene === null) return null;
-    const group = activeLookGroup(current.scene);
+    const group = projectLookGroup(current.scene);
     if (group === undefined) return null;
     if (!detachedLookCompositions(current.scene).some((c) => c.id === compId)) return null;
     const comp = (current.scene.compositions ?? []).find((c) => c.id === compId);
@@ -282,49 +469,25 @@ export const looksSlice = {
   },
 
   /**
-   * Remove a look: its registration and its INSTANCE go; its COMPOSITION stays in the
-   * project (the authored sub-scene is recoverable work, listed in the Compositions
-   * panel — deleting it is the author's separate, explicit act). A removed default
-   * promotes the first survivor, mirroring `removeArrangement`'s heir rule: a group with
-   * looks but no default is unsavable by schema.
-   *
-   * `DESIGNER-FIX-0905` §5 — and it SAYS SO, at the moment it matters: a notice names the
-   * composition that stays and the two doors it now has (the Looks panel's **Make it a
-   * look**, the Compositions panel's delete). The panels used to contradict each other in
-   * silence.
+   * Remove one authored Look object: registration, home-document instance and backing
+   * composition. The shared composition deletion path owns the atomic cleanup so deleting
+   * from either the Inspector or Compositions panel produces the same project.
    */
   removeLook(id: string): void {
-    const group = activeLookGroup(current.scene);
+    const group = projectLookGroup(current.scene);
     const look = group?.looks.find((l) => l.id === id);
     if (group === undefined || look === undefined || current.scene === null) return;
     const compId = lookCompositionId(current.scene, look);
-    const compName = (current.scene.compositions ?? []).find((c) => c.id === compId)?.name;
-    const remaining = group.looks.filter((l) => l.id !== id);
-    const next: LookGroup = { ...group, looks: remaining };
-    if (group.defaultLookId === id) {
-      if (remaining[0] !== undefined) next.defaultLookId = remaining[0].id;
-      else delete next.defaultLookId;
-    }
-    const scene = writeGroup(next);
-    if (scene !== null) {
-      set({ scene, ...(current.activeLookId === id ? { activeLookId: null } : {}) });
-    }
-    designerStore.removeElement(look.instanceId);
-    if (compName !== undefined) {
-      designerStore.showNotice(
-        `Look “${look.name}” removed. Its composition “${compName}” stays in the project — ` +
-          'make it a look again from the Looks panel, or delete it in the Compositions panel.',
-      );
-    }
+    if (compId !== undefined) designerStore.deleteComposition(compId);
   },
 
   renameLook(id: string, name: string): void {
-    const group = activeLookGroup(current.scene);
+    const group = projectLookGroup(current.scene);
     const trimmed = name.trim();
     if (group === undefined || trimmed === '' || current.scene === null) return;
     const look = group.looks.find((candidate) => candidate.id === id);
     if (look === undefined) return;
-    let scene = writeGroup({
+    let scene: Scene | null = writeProjectGroup(current.scene, {
       ...group,
       looks: group.looks.map((candidate) =>
         candidate.id === id ? { ...candidate, name: trimmed } : candidate,
@@ -339,10 +502,10 @@ export const looksSlice = {
 
   /** Which look a fresh TAKE enters — scene state, the schema's required default. */
   setDefaultLook(id: string): void {
-    const group = activeLookGroup(current.scene);
+    if (current.scene === null) return;
+    const group = projectLookGroup(current.scene);
     if (group === undefined || !group.looks.some((l) => l.id === id)) return;
-    const scene = writeGroup({ ...group, defaultLookId: id });
-    if (scene !== null) set({ scene });
+    set({ scene: writeProjectGroup(current.scene, { ...group, defaultLookId: id }) });
   },
 
   /** Which look the CANVAS shows — session state, driven by the picker. */
@@ -356,19 +519,12 @@ export const looksSlice = {
    * beside the look it belongs to.
    */
   editLookContents(id: string): void {
-    const group = activeLookGroup(current.scene);
+    const group = projectLookGroup(current.scene);
     const look = group?.looks.find((l) => l.id === id);
     if (look === undefined || current.scene === null) return;
-    const instance = (function find(): { compositionId?: string } | undefined {
-      for (const layer of activeLayersOf(current.scene as Scene)) {
-        for (const el of layer.children) {
-          if (el.id === look.instanceId) return el as { compositionId?: string };
-        }
-      }
-      return undefined;
-    })();
-    if (instance?.compositionId === undefined) return;
+    const compositionId = lookCompositionId(current.scene, look);
+    if (compositionId === undefined) return;
     set({ activeLookId: look.id });
-    designerStore.openCompositionAndSelect(instance.compositionId, null);
+    designerStore.openCompositionAndSelect(compositionId, null);
   },
 } as const;

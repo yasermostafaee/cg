@@ -94,7 +94,7 @@ export function TransformSection({ element, selectedKeyframe }: Props): JSX.Elem
       ? (withheldReason(element, 'opacity') ?? 'Not available for this element')
       : undefined;
   const scaleWithheld = aspectLocked
-    ? 'Scale is unavailable while this Live Source keeps its aspect locked. Resize with Width or Height.'
+    ? 'Scale is unavailable while this Plate keeps its aspect locked. Resize with Width or Height.'
     : undefined;
 
   // Commit a property's STORED value (the shared field props convert the

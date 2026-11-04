@@ -1351,16 +1351,13 @@ export const LottiePhasesSchema = z.object({
   /**
    * Animation frame where the intro ends and the hold begins.
    *
-   * Session Y — under `source: 'composition'` an AUTHORED value WINS (the clip's own intro,
-   * scheduled to finish at the effective content start); ABSENT (what attach writes now) the
-   * window is DERIVED (`followWindowMs` / `lottieFollowWindow`). The pre-Y attach SEED
-   * SIGNATURE (`introEnd == lottieClipMidpoint`, `outroStart == op`) derives as if absent —
-   * see `lottieFollowClipFacts`. OPTIONAL since session Y so attach can write the source alone.
+   * Under `source: 'composition'` this legacy value is ignored: the composition's content start
+   * defines the intro boundary. It remains optional/readable so older projects load unchanged.
    */
   introEnd: z.number().nonnegative().optional(),
-  /** Animation frame where the outro begins. `introEnd ≤ outroStart`. Session Y: optional; authored wins under follow (the clip's own `[outroStart → op]`), absent derives END-anchored. */
+  /** Animation frame where the outro begins. Ignored under composition-owned Follow. */
   outroStart: z.number().nonnegative().optional(),
-  /** Optional `[in, out]` idle-loop range inside the hold window. Under `'composition'` it COMPOSES with the derived hold time (idle is never derived — absent means freeze). */
+  /** Optional `[in, out]` idle-loop range for manual/marker timing. Ignored under Follow. */
   idle: z.tuple([z.number().nonnegative(), z.number().nonnegative()]).optional(),
   /**
    * Where the mapping comes from: bodymovin markers, manual marking, or — the third source
@@ -1371,9 +1368,8 @@ export const LottiePhasesSchema = z.object({
    */
   source: z.enum(['markers', 'manual', 'composition']),
   /**
-   * The clip time whose look the composition HOLDS (`H`), in ANIMATION frames — meaningful ONLY
-   * under `source: 'composition'`, ignored otherwise. Absent ⇒ `H` = clip start + entrance span,
-   * which degenerates exactly to "play the clip from its head". Optional + additive.
+   * Legacy authored hold frame. Kept for backward-compatible parsing; composition-owned Follow
+   * ignores it and derives the boundary from the composition's content start.
    */
   holdAt: z.number().nonnegative().optional(),
 });
@@ -1392,10 +1388,10 @@ export const LottieElementSchema = ElementBaseSchema.extend({
    */
   phases: LottiePhasesSchema.optional(),
   /**
-   * D-125 §D2.2 — HOLD behaviour: `freeze` at the hold frame (default) or `idle-loop`
-   * the mapped idle segment. Defaults to `freeze` so a pre-D-125 Lottie is unchanged.
+   * @deprecated D-187 — preserved only as inert input tolerance. Hold behaviour is authored on
+   * the owning composition's Playout record and runtime ignores this element-local value.
    */
-  holdBehavior: z.enum(['freeze', 'idle-loop']).default('freeze'),
+  holdBehavior: z.enum(['freeze', 'idle-loop']).optional(),
   /**
    * D-125 §D2.1 — whether this Lottie DRIVES the composition's content-driven hold.
    * The INVERSE default of the ticker/clock/sequence `drivesHold` (absent ⇒ drives):
@@ -1619,16 +1615,13 @@ export const VideoPhasesSchema = z
     /**
      * End of the IN phase (ms from clip start). The hold point.
      *
-     * Session Y — under `source: 'composition'` an AUTHORED value WINS (the clip's own intro,
-     * scheduled to finish at the effective content start); ABSENT (what attach writes now) the
-     * window is DERIVED (`followWindowMs`). The pre-Y attach SEED SIGNATURE
-     * (`introEnd == round(durationMs/2)`, `outroStart == durationMs`) derives as if absent —
-     * see `videoFollowClipFacts`. OPTIONAL since session Y so attach can write the source alone.
+     * Under `source: 'composition'` this legacy value is ignored: the composition's content start
+     * defines the intro boundary. It remains optional/readable so older projects load unchanged.
      */
     introEnd: z.number().nonnegative().optional(),
-    /** Start of the OUT phase (ms); the outro is `[outroStart → clip end]`. Session Y: optional; authored wins under follow, absent derives END-anchored. */
+    /** Start of the manual OUT phase (ms). Ignored under composition-owned Follow. */
     outroStart: z.number().nonnegative().optional(),
-    /** Optional hold segment looped instead of `[introEnd → outroStart]`. Under `'composition'` it COMPOSES with the derived hold time (idle is never derived — absent means freeze at `H`). */
+    /** Optional manual hold segment. Ignored under Follow. */
     idle: z
       .object({ start: z.number().nonnegative(), end: z.number().nonnegative() })
       .refine((r) => r.start <= r.end, { message: 'idle.start must not exceed idle.end' })
@@ -1642,9 +1635,8 @@ export const VideoPhasesSchema = z
      */
     source: z.enum(['manual', 'composition']).optional(),
     /**
-     * The clip time whose look the composition HOLDS (`H`), in MS — meaningful ONLY under
-     * `source: 'composition'`, ignored otherwise. Absent ⇒ `H` = entrance span ("play the clip
-     * from its head"). Optional + additive.
+     * Legacy authored hold time. Kept for backward-compatible parsing; composition-owned Follow
+     * ignores it and derives the boundary from the composition's content start.
      */
     holdAt: z.number().nonnegative().optional(),
   })
@@ -1673,11 +1665,10 @@ export const VideoElementSchema = ElementBaseSchema.extend({
   /** Clip duration in ms, captured at conversion (validation + timeline span). */
   durationMs: z.number().positive(),
   /**
-   * HOLD behaviour — the INVERSE of the Lottie's `freeze` default (D-128 note
-   * (d)): video furniture is authored as a loop, so on reaching the hold point
-   * the clip LOOPS by default; `freeze` is the opt-in alternative.
+   * @deprecated D-187 — preserved only as inert input tolerance. Hold behaviour is authored on
+   * the owning composition's Playout record and runtime ignores this element-local value.
    */
-  holdBehavior: z.enum(['loop', 'freeze']).default('loop'),
+  holdBehavior: z.enum(['loop', 'freeze']).optional(),
   /**
    * Whether this video DRIVES the composition's content-driven hold — the
    * Lottie's inverse default (D-128 note (j)): absent/`false` ⇒ does NOT drive

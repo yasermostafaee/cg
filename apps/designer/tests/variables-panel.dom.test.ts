@@ -209,6 +209,37 @@ describe('D-166 — composition Variables tab', () => {
     expect(projected().fields.some((field) => field.id === 'headline')).toBe(false);
   });
 
+  it('B-386 — exposes complete long titles and binding summaries as hover text', () => {
+    const scene = setupVariablesScene();
+    const longTitle = 'A very long operator-facing title that cannot fit the narrow Variables pane';
+    const longElementName = 'Ticker with a deliberately long descriptive canvas name';
+    const layers = scene.layers.map((entry) => ({
+      ...entry,
+      children: entry.children.map((element) =>
+        element.id === 'child-inst' ? { ...element, name: longElementName } : element,
+      ),
+    }));
+    const fields = scene.fields.map((field) =>
+      field.id === 'headline' ? { ...field, label: longTitle } : field,
+    );
+    renderPanel({
+      ...scene,
+      layers,
+      fields,
+      bindings: [{ fieldId: 'headline', target: { kind: 'text', elementId: 'child-inst' } }],
+    });
+    click('#designer-variables-tab');
+
+    expect(
+      container
+        ?.querySelector<HTMLInputElement>('input[aria-label="Title for headline"]')
+        ?.getAttribute('title'),
+    ).toBe(longTitle);
+    expect(
+      container?.querySelector('[data-testid="binding-text-headline-0"]')?.getAttribute('title'),
+    ).toBe(`→ text on ${longElementName}`);
+  });
+
   it('shows one concise empty state and no per-sequence noise', () => {
     renderPanel(setupEmptyScene());
     click('#designer-variables-tab');

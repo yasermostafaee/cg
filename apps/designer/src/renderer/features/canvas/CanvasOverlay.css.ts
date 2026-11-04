@@ -8,6 +8,16 @@ export const layer = style({
   pointerEvents: 'auto',
 });
 
+export const bindTargetLayer = style({
+  position: 'absolute',
+  inset: 0,
+  width: '100%',
+  height: '100%',
+  overflow: 'visible',
+  pointerEvents: 'none',
+  zIndex: 6,
+});
+
 export const toolHint = style({
   position: 'absolute',
   top: '8px',

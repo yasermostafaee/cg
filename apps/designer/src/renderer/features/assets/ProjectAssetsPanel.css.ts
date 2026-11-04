@@ -106,7 +106,7 @@ export const menu = style({
   border: `1px solid ${colors.border}`,
   borderRadius: '0.25rem',
   boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
-  minWidth: '140px',
+  minWidth: '230px',
   padding: '0.25rem 0',
   zIndex: 60,
   fontSize: '0.74rem',
@@ -122,6 +122,23 @@ export const menuItem = style({
   padding: '0.4rem 0.7rem',
   fontSize: '0.78rem',
   cursor: 'pointer',
+});
+
+export const videoMenuRow = style({
+  display: 'grid',
+  gridTemplateColumns: 'minmax(0, 1fr) 30px',
+  alignItems: 'center',
+});
+
+export const videoMenuButton = style({
+  display: 'grid',
+  gap: 2,
+});
+
+export const menuHint = style({
+  color: colors.textMuted,
+  fontSize: '0.65rem',
+  fontWeight: 400,
 });
 
 export const menuItemDanger = style({ color: '#f87171' });

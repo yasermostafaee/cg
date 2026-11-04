@@ -16,6 +16,7 @@ const EXPECTED_LABELS = [
   'جدول لیگ برتر ایران',
   'آب‌وهوای مراکز استان‌ها',
   'پیش‌بینی چندروزهٔ هوا',
+  'آب‌وهوای شهرها — کارت‌های تصویری',
   'توالی تصاویر پوشه',
   'شمارش معکوس اذان',
   'میزگرد چندقابه',
@@ -168,12 +169,14 @@ test.describe('D-119 + D-179 — starter landing catalog', () => {
     app,
   }) => {
     await app.goto();
-    // «آرم شبکه» — its wordmark + sub-tag are both bound fields.
+    // The owner's simplified logo keeps the bound wordmark, without its former sub-tag/separator.
     await app.page.getByTestId('starter-card').nth(2).click();
     await app.expectStudio();
 
     await expect(app.canvasFrame.locator('[data-cg-element-id="lb-word"]')).toHaveText('شبکه جدید');
-    await expect(app.canvasFrame.locator('[data-cg-element-id="lb-tag"]')).toHaveText('پخش زنده');
+    await expect(app.canvasFrame.locator('[data-cg-element-id="lb-tag"]')).toHaveCount(0);
+    await expect(app.canvasFrame.locator('[data-cg-element-id="lb-sep"]')).toHaveCount(0);
+    await expect(app.canvasFrame.locator('[data-cg-element-id="lb-mark"]')).toHaveCount(1);
     await expect(app.canvasFrame.locator('body')).not.toContainText('{{');
   });
 });

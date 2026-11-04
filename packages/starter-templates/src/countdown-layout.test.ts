@@ -104,7 +104,7 @@ describe('countdown starter authored motion coordinates', () => {
       await advance(3000);
       expect(root.querySelector('[data-cg-clock-time]')?.textContent).not.toBe('');
       await advance(3000);
-      expect(root.querySelector('[data-cg-cd0]')?.getAttribute('data-cg-cd0')).toBe('2');
+      expect(root.querySelector('[data-cg-cd0]')?.getAttribute('data-cg-cd0')).toBe('5');
       expect(root.querySelector('[data-cg-clock-time]')?.textContent).toBe('');
       expect(root.querySelector('[data-cg-element-id="countdown-zero"]')?.textContent).toBe(
         'اذان مغرب به افق تهران',

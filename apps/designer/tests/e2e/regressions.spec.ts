@@ -22,7 +22,7 @@ test.describe('Regressions', () => {
     await expect(app.dataKeyInput).toHaveValue(''); // B's own value, not A's draft
   });
 
-  test('B-008 — "Bind from canvas" is disabled once the field is bound', async ({ app }) => {
+  test('B-008 / D-193 — a bound field exposes Unbind in the same toggle', async ({ app }) => {
     await app.newProject('B008');
     await app.addTextElement({ x: 220, y: 140 });
     // A data key creates the field AND its convenience binding to this element.
@@ -30,8 +30,11 @@ test.describe('Regressions', () => {
 
     await app.deselect();
     await app.page.getByRole('tab', { name: 'Variables' }).click();
-    const bind = app.fieldCard('title').getByRole('button', { name: /Bind from canvas/ });
-    await expect(bind).toBeDisabled(); // already bound — can't add another
+    const toggle = app.page.getByTestId('binding-toggle-title');
+    await expect(toggle).toBeEnabled();
+    await expect(toggle).toHaveAccessibleName('Unbind');
+    await toggle.click();
+    await expect(toggle).toHaveAccessibleName('Bind from canvas');
   });
 
   test('B-006 — a colour edit applies to the shape in the preview', async ({ app }) => {

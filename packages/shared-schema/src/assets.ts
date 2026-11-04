@@ -92,6 +92,13 @@ export const VideoProvenanceSchema = z.object({
     })
     .optional(),
   /**
+   * How a non-square-pixel source was interpreted before the stored WebM was normalized to square
+   * pixels. Absent means `source`, which is the only behavior of assets created before this field.
+   */
+  pixelAspectMode: z.enum(['source', 'pixels']).optional(),
+  /** Optional compatibility mapping for legacy VLC 3 QuickTime/RV32 colour presentation. */
+  colorInterpretation: z.enum(['standard', 'legacy-vlc']).optional(),
+  /**
    * D-128 — the converter revision that produced this asset. Bumped whenever the
    * conversion OUTPUT changes (e.g. the premultiplied-alpha fringe fix), so a
    * future item can flag stale assets that predate a correctness fix and prompt a

@@ -70,6 +70,14 @@ coordinates therefore feed both a standalone ticker and one inside a hidden or s
   values are numbers, hex colours, or D-110 whole-shape path snapshots — the
   path morph interpolates anchors by stable id via the schema's shared
   `lerpPathSnapshot` and feeds the same `pathD` builder the static render uses),
+- exposes an **optional, observation-only root-element frame seam**
+  (`RuntimeBootOptions.onRootElementFrames`) after animation paint. It reports the
+  global root's animated element ids with the frame each element was actually
+  painted at; nested composition scopes are deliberately excluded, observer
+  failures are isolated, and broadcast hosts do not install it. The Designer
+  preview is the sole production consumer: it relays the batches to the authoring
+  shell so canvas geometry can follow elements whose Hold clocks differ without
+  feeding anything back into runtime timing or paint,
 - **renders a content-driven HOLD as a repeating `[contentStart → outPoint]`** — D-133's
   hold loop: the furniture replays the range while the content runs, instead of the
   timeline parking on one frame. It is a RENDERING of the existing hold, not a new phase

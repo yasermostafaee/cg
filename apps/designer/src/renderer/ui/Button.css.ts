@@ -119,7 +119,7 @@ export const variant = styleVariants({
   /**
    * MARKER-TIED actions — an Inspector button that creates/controls a timeline marker
    * wears that marker's own colour, so the button and the mark it drops read as one
-   * thing ("drag the cyan marker" now has a cyan button beside it). A faint tint + a
+   * thing (the green Hold-start marker has a matching green action). A faint tint + a
    * marker-coloured label: recognizable, not loud. Colours come from the SAME tokens the
    * timeline markers use (`theme.markerOut` / `markerIn`) — one source, no drift.
    */

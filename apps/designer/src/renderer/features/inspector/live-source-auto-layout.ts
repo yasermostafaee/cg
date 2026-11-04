@@ -41,6 +41,80 @@ export function liveSourceRowCounts(
   return bias === 'more-bottom' ? counts.reverse() : counts;
 }
 
+function rowCountsFor(count: number, rows: number, bias: LiveSourceLayoutBias): number[] {
+  const base = Math.floor(count / rows);
+  const extra = count % rows;
+  const counts = Array.from({ length: rows }, (_, index) => (index < extra ? base + 1 : base));
+  return bias === 'more-bottom' ? counts.reverse() : counts;
+}
+
+function commonHeightForRows(
+  aspects: readonly number[],
+  rowCounts: readonly number[],
+  resolution: Resolution,
+  margin: number,
+  horizontalGap: number,
+  verticalGap: number,
+): number {
+  const heightLimit =
+    (resolution.height - margin * 2 - verticalGap * Math.max(0, rowCounts.length - 1)) /
+    rowCounts.length;
+  let commonHeight = heightLimit;
+  let offset = 0;
+  for (const rowCount of rowCounts) {
+    const aspectSum = aspects
+      .slice(offset, offset + rowCount)
+      .reduce((sum, aspect) => sum + aspect, 0);
+    const widthLimit =
+      (resolution.width - margin * 2 - horizontalGap * Math.max(0, rowCount - 1)) / aspectSum;
+    commonHeight = Math.min(commonHeight, widthLimit);
+    offset += rowCount;
+  }
+  return commonHeight;
+}
+
+/**
+ * Pick the row count that gives every selected plate the largest common height.
+ * This makes the decision aspect-aware: three 16:9 plates naturally remain 2+1,
+ * while three portrait plates can use the 16:9 canvas much better as one row.
+ */
+function bestRowCounts(
+  aspects: readonly number[],
+  resolution: Resolution,
+  bias: LiveSourceLayoutBias,
+  margin: number,
+  horizontalGap: number,
+  verticalGap: number,
+): readonly number[] {
+  const count = aspects.length;
+  const balanced = liveSourceRowCounts(count, bias);
+  let best = [...balanced];
+  let bestHeight = commonHeightForRows(
+    aspects,
+    best,
+    resolution,
+    margin,
+    horizontalGap,
+    verticalGap,
+  );
+  for (let rows = 1; rows <= count; rows += 1) {
+    const candidate = rowCountsFor(count, rows, bias);
+    const height = commonHeightForRows(
+      aspects,
+      candidate,
+      resolution,
+      margin,
+      horizontalGap,
+      verticalGap,
+    );
+    if (height > bestHeight + 0.01) {
+      best = candidate;
+      bestHeight = height;
+    }
+  }
+  return best;
+}
+
 function aspectOf(element: VideoPlaceholderElement): number {
   if (element.expectedAspect !== undefined && element.expectedAspect > 0) {
     return element.expectedAspect;
@@ -48,6 +122,25 @@ function aspectOf(element: VideoPlaceholderElement): number {
   const effectiveWidth = Math.abs(element.transform.size.w * element.transform.scale.x);
   const effectiveHeight = Math.abs(element.transform.size.h * element.transform.scale.y);
   return effectiveHeight > 0 ? effectiveWidth / effectiveHeight : 16 / 9;
+}
+
+/** The effective rows for the current plates and controls; shared with the Inspector UI. */
+export function liveSourceAutoLayoutRowCounts(
+  elements: readonly VideoPlaceholderElement[],
+  resolution: Resolution,
+  bias: LiveSourceLayoutBias,
+  options: LiveSourceLayoutOptions = {},
+): readonly number[] {
+  if (elements.length < 1 || resolution.width <= 0 || resolution.height <= 0) return [];
+  if (elements.length === 2) {
+    return liveSourceRowCounts(elements.length, bias, options.twoPlateLayout ?? 'horizontal');
+  }
+  const shortSide = Math.min(resolution.width, resolution.height);
+  const margin = shortSide * 0.05;
+  const horizontalGap = Math.max(0, options.horizontalGap ?? shortSide * 0.025);
+  const verticalGap = Math.max(0, options.verticalGap ?? shortSide * 0.025);
+  const ordered = options.reverse === true ? [...elements].reverse() : elements;
+  return bestRowCounts(ordered.map(aspectOf), resolution, bias, margin, horizontalGap, verticalGap);
 }
 
 /**
@@ -68,32 +161,22 @@ export function calculateLiveSourceAutoLayout(
   const margin = shortSide * 0.05;
   const horizontalGap = Math.max(0, options.horizontalGap ?? shortSide * 0.025);
   const verticalGap = Math.max(0, options.verticalGap ?? shortSide * 0.025);
-  const rowCounts = liveSourceRowCounts(
-    elements.length,
-    bias,
-    options.twoPlateLayout ?? 'horizontal',
-  );
   const ordered = options.reverse === true ? [...elements].reverse() : elements;
   const aspects = ordered.map(aspectOf);
-
-  const heightLimit =
-    (resolution.height - margin * 2 - verticalGap * Math.max(0, rowCounts.length - 1)) /
-    rowCounts.length;
-  let commonHeight = heightLimit;
-  let offset = 0;
-  for (const rowCount of rowCounts) {
-    const rowAspects = aspects.slice(offset, offset + rowCount);
-    const aspectSum = rowAspects.reduce((sum, aspect) => sum + aspect, 0);
-    const widthLimit =
-      (resolution.width - margin * 2 - horizontalGap * Math.max(0, rowCount - 1)) / aspectSum;
-    commonHeight = Math.min(commonHeight, widthLimit);
-    offset += rowCount;
-  }
+  const rowCounts = liveSourceAutoLayoutRowCounts(elements, resolution, bias, options);
+  const commonHeight = commonHeightForRows(
+    aspects,
+    rowCounts,
+    resolution,
+    margin,
+    horizontalGap,
+    verticalGap,
+  );
   if (!Number.isFinite(commonHeight) || commonHeight <= 0) return [];
 
   const groupHeight = commonHeight * rowCounts.length + verticalGap * (rowCounts.length - 1);
   let y = (resolution.height - groupHeight) / 2;
-  offset = 0;
+  let offset = 0;
   const result: LiveSourceLayoutItem[] = [];
   for (const rowCount of rowCounts) {
     const rowElements = ordered.slice(offset, offset + rowCount);

@@ -34,6 +34,7 @@ import * as s from './PreviewTransport.css.js';
  * ON by default, and it mutes the page's own runtime (the switch CG Control's PVW keeps OFF).
  */
 export function PreviewTransport({
+  ready,
   lookChoices = [],
   activeLookId = '',
   onLookChange,
@@ -54,6 +55,8 @@ export function PreviewTransport({
   forcedStep = '',
   onForceStep,
 }: {
+  /** Only the currently mounted preview document can unlock its playout commands. */
+  ready: boolean;
   /** D-196 — session-only Preset choices for a multi-frame Preview. */
   lookChoices?: readonly { value: string; label: string }[];
   activeLookId?: string;
@@ -85,23 +88,39 @@ export function PreviewTransport({
   return (
     <div className={s.bar}>
       <div className={s.commands} role="group" aria-label="Playout commands">
-        <Button className={s.command} onClick={onPlay}>
+        <Button
+          className={s.command}
+          onClick={onPlay}
+          disabled={!ready}
+          title={ready ? undefined : 'Preview loading'}
+        >
           <Icon icon={Play} size={16} />
           {paused ? 'Resume' : 'Play'}
         </Button>
-        <Button className={s.command} onClick={onPause} aria-disabled={paused} disabled={paused}>
+        <Button
+          className={s.command}
+          onClick={onPause}
+          aria-disabled={!ready || paused}
+          disabled={!ready || paused}
+          title={ready ? undefined : 'Preview loading'}
+        >
           <Icon icon={Pause} size={16} />
           Pause
         </Button>
-        <Button className={s.command} onClick={onStop} title="Stop and clear">
+        <Button
+          className={s.command}
+          onClick={onStop}
+          disabled={!ready}
+          title={ready ? 'Stop and clear' : 'Preview loading'}
+        >
           <Icon icon={Square} size={16} />
           Stop
         </Button>
         <Button
           className={`${s.command} ${s.step}`}
           onClick={onPrevious}
-          disabled={!canStep}
-          title={canStep ? undefined : 'No previous item'}
+          disabled={!ready || !canStep}
+          title={!ready ? 'Preview loading' : canStep ? undefined : 'No previous item'}
         >
           <Icon icon={SkipBack} size={16} />
           Previous
@@ -109,8 +128,8 @@ export function PreviewTransport({
         <Button
           className={`${s.command} ${s.step}`}
           onClick={onNext}
-          disabled={!canStep}
-          title={canStep ? undefined : 'No next item'}
+          disabled={!ready || !canStep}
+          title={!ready ? 'Preview loading' : canStep ? undefined : 'No next item'}
         >
           <Icon icon={SkipForward} size={16} />
           Next

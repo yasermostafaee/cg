@@ -240,7 +240,7 @@ describe('B.2 — the same source twice in ONE look is refused; across looks it 
     });
     const issues = byCode(s, 'look-source-duplicate');
     expect(issues.map((i) => i.elementId).sort()).toEqual(['a-1', 'a-dup']);
-    expect(issues[0]?.message).toContain('DIFFERENT looks is fine');
+    expect(issues[0]?.message).toContain('DIFFERENT Presets is fine');
   });
 
   it('⭐ the SAME source in TWO looks is ACCEPTED — they start on the same input', () => {
@@ -267,7 +267,7 @@ describe('B.3 — the visible-set overlap pass, and the v1 single-group refusal'
     });
     const issues = byCode(s, 'live-source-overlap');
     expect(issues.length).toBeGreaterThan(0);
-    expect(issues.some((i) => i.message.includes('look "look-b"'))).toBe(true);
+    expect(issues.some((i) => i.message.includes('Preset "look-b"'))).toBe(true);
     // Reported against BOTH participants (the D-137 rule).
     const ids = new Set(issues.map((i) => i.elementId));
     expect(ids.has('root-1')).toBe(true);

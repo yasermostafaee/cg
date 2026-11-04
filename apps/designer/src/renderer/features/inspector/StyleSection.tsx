@@ -5,6 +5,7 @@ import type { LottieTiming } from '@cg/lottie-bridge';
 import {
   DEFAULT_LIVE_FIT_MODE,
   LIVE_FIT_MODES,
+  elementLoopsOnHold,
   elementDigitsOf,
   FieldDigitsSchema,
   fieldDigitsOf,
@@ -12,6 +13,7 @@ import {
   followsComposition,
   ImageFitSchema,
   NumberFieldDigitsSchema,
+  playoutOf,
   SequenceEdgeSchema,
   sequenceItemsBinding,
   sequenceStepsByOperator,
@@ -20,7 +22,7 @@ import type {
   DynamicField,
   FieldDigits,
   FollowAnchors,
-  FollowWindow,
+  HoldBehavior,
   LiveFitMode,
 } from '@cg/shared-schema';
 import type {
@@ -94,7 +96,7 @@ import { DigitsField } from './DigitsField.js';
 import { activeDocOf, activeFieldData, activeLayersOf } from '../../state/scene-doc.js';
 import { nextAutoSourceId } from '../../state/auto-source-id.js';
 import { lottieFollowAttachPhases, videoFollowAttachPhases } from '../../state/follow-attach.js';
-import { deriveLookSources, videoFollowClipFacts } from '@cg/shared-schema';
+import { deriveLookSources } from '@cg/shared-schema';
 import { contentStartDefaultFrom } from './content-start-default.js';
 import * as lottieAssetCache from '../assets/lottieAssetCache.js';
 import { useAssetUrl, useAssets } from '../assets/useAssets.js';
@@ -782,7 +784,7 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
     if (value === element.routeKey) return;
     if (!LiveSourceIdSchema.safeParse(value).success) {
       designerStore.showNotice(
-        `“${value}” is not a Live Source id. Use letters, digits, “_” and “-”, starting ` +
+        `“${value}” is not a Plate id. Use letters, digits, “_” and “-”, starting ` +
           'with a letter or digit — a template names sources SYMBOLICALLY (e.g. “guest-1”). ' +
           'Which device or channel that id resolves to is set per installation, in CG Control.',
       );
@@ -831,7 +833,7 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
   const holds = element.routeKey ?? UNASSIGNED;
   return (
     <>
-      <CollapseSection title="Live Source" defaultExpanded>
+      <CollapseSection title="Plate" defaultExpanded>
         {/* `B-365` — name the automatic policy before the value it controls. Confirming a
             generated id used to delete the only state that could restore Auto, so the control
             vanished permanently. `false` keeps that generated-id lineage without claiming that
@@ -859,7 +861,7 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
         )}
         <TextField
           label="source id"
-          ariaLabel="Live Source source id"
+          ariaLabel="Plate source id"
           value={holds}
           resetKey={`${id}-${String(rejectSeq)}`}
           disabled={element.routeKeyAuto === true}
@@ -954,7 +956,7 @@ function LiveSourceQuickLayout({ element }: { element: VideoPlaceholderElement }
           variant="secondary"
           selected={activeMode === 'canvas'}
           aria-pressed={activeMode === 'canvas'}
-          aria-label="Fit Live Source to canvas"
+          aria-label="Fit Plate to canvas"
           title="Use the largest centred size that fits the canvas while keeping the source aspect."
           onClick={() => {
             setActiveMode('canvas');
@@ -968,7 +970,7 @@ function LiveSourceQuickLayout({ element }: { element: VideoPlaceholderElement }
           variant="secondary"
           selected={activeMode === 'margin'}
           aria-pressed={activeMode === 'margin'}
-          aria-label="Fit Live Source with margin"
+          aria-label="Fit Plate with margin"
           title="Fit and centre the plate inside the selected minimum margin. Further margin edits apply immediately."
           onClick={() => {
             setActiveMode('margin');
@@ -1483,14 +1485,14 @@ function LottieTimingPanel({
   outPoint,
 }: {
   timing: LottieTiming;
-  holdBehavior: LottieElement['holdBehavior'];
+  holdBehavior: ElementHoldBehavior;
   outPoint: number | null;
 }): JSX.Element {
   const settle = timing.settleOffset;
   const overruns = settle !== null && outPoint !== null && settle > outPoint;
   // The runtime only loops when the idle span is non-empty (`idleOut > idleIn`); a
   // zero-length hold falls back to freeze, so the copy must too.
-  const loops = holdBehavior === 'idle-loop' && timing.hold.frames > 0;
+  const loops = holdBehavior === 'loop' && timing.hold.frames > 0;
   const clearFrames = timing.outro.compFrames;
   return (
     <div className={lt.panel} data-testid="lottie-timing">
@@ -1510,9 +1512,11 @@ function LottieTimingPanel({
           <p className={lt.muted}>
             {loops
               ? `on hold: loops every ${String(timing.hold.compFrames)} comp frames (${secs(timing.hold.seconds)})`
-              : // FREEZE — the hold segment never plays, so quoting its duration (as Phase 3a
-                // did) is actively misleading. State the behaviour, no number.
-                'on hold: freezes · holds until OUT'}
+              : holdBehavior === 'continue'
+                ? 'on hold: plays forward once to the end'
+                : // FREEZE — the hold segment never plays, so quoting its duration (as Phase 3a
+                  // did) is actively misleading. State the behaviour, no number.
+                  'on hold: freezes · holds until OUT'}
           </p>
           <div className={lt.secondary}>
             after OUT: <span className={lt.secondaryNum}>{clearFrames}</span> comp frames (
@@ -1543,9 +1547,10 @@ function LottieTimingPanel({
  * assembled inside the selector would re-render forever); the object is built in render.
  * `null` when the active document has no lifecycle — nothing to follow — or no scene.
  *
- * The effective content start is the marker when placed, else the SAME keyframes-only
- * default the Playout section's pin uses (`contentStartDefaultFrom` — extracted, not
- * copied). The runtime's richer heuristic additionally folds in other Lotties' settles;
+ * The effective content start is the marker when placed, else the keyframes-only
+ * marker-less runtime mirror (`contentStartDefaultFrom`). The Set action has a separate
+ * one-frame seed so authoring convenience does not leak into Follow behavior. The runtime's
+ * richer heuristic additionally folds in other Lotties' settles;
  * see the extraction's own note for why that pre-existing display gap is not widened here.
  */
 function useFollowAnchors(): FollowAnchors | null {
@@ -1582,6 +1587,19 @@ function useFollowAnchors(): FollowAnchors | null {
   return { activeIn, contentStart, outPoint, activeOut, fps };
 }
 
+type ElementHoldBehavior = HoldBehavior | 'continue';
+
+/** D-187 — Playback owns both the composition choice and this element's loop membership. */
+function useElementHoldBehavior(elementId: string): ElementHoldBehavior {
+  return useDesignerSelector((s) => {
+    const scene = s.scene;
+    if (scene === null) return 'freeze';
+    const playout = playoutOf(activeDocOf(scene));
+    if ((playout.holdBehavior ?? 'freeze') === 'freeze') return 'freeze';
+    return elementLoopsOnHold(playout, elementId) ? 'loop' : 'continue';
+  });
+}
+
 /**
  * The §9.1 rule, settled twice now: an inert control that does not explain itself is a
  * defect. A follow-source element in a composition with NO lifecycle derives nothing —
@@ -1593,13 +1611,49 @@ function useFollowAnchors(): FollowAnchors | null {
  * ("no lifecycle anchors to derive the window from, so the clip behaves as if it had no
  * phase markers") is read once, behind the `i`.
  */
-function FollowNoAnchors(): JSX.Element {
+type CompositionFollowPhases = NonNullable<LottieElement['phases'] | VideoElement['phases']>;
+
+/**
+ * Leaving an inert Follow relationship cannot bake a derived window because no anchors exist.
+ * Restore any ignored authored values as manual; a source-only attach returns to the honest
+ * phase-less state instead of inventing midpoint marks.
+ */
+function detachFollowWithoutAnchors(
+  phases: CompositionFollowPhases,
+): CompositionFollowPhases | undefined {
+  const hasAuthoredValues =
+    phases.introEnd !== undefined ||
+    phases.outroStart !== undefined ||
+    phases.idle !== undefined ||
+    phases.holdAt !== undefined;
+  return hasAuthoredValues ? { ...phases, source: 'manual' } : undefined;
+}
+
+function FollowNoAnchors({
+  elementId,
+  phases,
+}: {
+  elementId: string;
+  phases: CompositionFollowPhases;
+}): JSX.Element {
   return (
-    <StateLine testId="follow-no-anchors" tone="text" tip={<FollowTip />}>
-      <span className={prose.tagCaution}>inert</span>
-      Following nothing yet — this composition has no out point. Set one in Playout to activate
-      follow.
-    </StateLine>
+    <div className={lt.panel}>
+      <StateLine testId="follow-no-anchors" tone="text" tip={<FollowTip />}>
+        <span className={prose.tagCaution}>inert</span>
+        Following nothing yet — this composition has no out point. Set one in Playback to activate
+        follow.
+      </StateLine>
+      <Button
+        variant="secondary"
+        onClick={() =>
+          designerStore.updateElement(elementId, {
+            phases: detachFollowWithoutAnchors(phases),
+          } as Partial<Element>)
+        }
+      >
+        Detach
+      </Button>
+    </div>
   );
 }
 
@@ -1616,180 +1670,71 @@ function FollowTip(): JSX.Element {
       <p>
         With no out point there are no anchors to derive from, so the clip behaves as if it had no
         phase markers: the whole clip plays as the intro and it holds its last frame. Adding an out
-        point in the Playout section is what activates follow.
+        point in the Playback section is what activates follow.
       </p>
     </InfoTip>
   );
 }
 
-/** The derived window's clamp warnings — the EXISTING hint styling, no second warning surface. */
-function FollowClampHints({
-  clamps,
-  seam,
-}: {
-  clamps: FollowWindow['clamps'];
-  /** The hold and outro-start clip times, formatted by the calling panel's own formatter. */
-  seam?: { hold: string; outroStart: string };
-}): JSX.Element | null {
-  if (
-    !clamps.introShort &&
-    !clamps.holdPastEnd &&
-    !clamps.noOutSegment &&
-    !clamps.wholeClipOutro &&
-    !clamps.outroCutByRemoval &&
-    !clamps.lateSettle &&
-    !clamps.holdJump
-  ) {
-    return null;
-  }
-  return (
-    <div data-testid="follow-clamps">
-      {clamps.holdPastEnd ? (
-        <p className={lt.warn}>
-          the hold time sits past the clip end — clamped to the end (a stale value after an asset
-          swap?).
-        </p>
-      ) : null}
-      {clamps.introShort ? (
-        <p className={lt.warn}>
-          the clip is shorter than the entrance from its head to the hold — it will freeze early.
-        </p>
-      ) : null}
-      {clamps.noOutSegment ? (
-        <p className={lt.warn}>
-          the composition has no OUT segment — the out point sits at the end of the active range, so
-          this clip has NO outro and holds its look through the exit. Drag the out point earlier, or
-          extend the active range past it.
-        </p>
-      ) : null}
-      {clamps.wholeClipOutro ? (
-        <p className={lt.warn}>
-          the OUT segment is longer than the whole clip — the outro plays the clip from its start.
-        </p>
-      ) : null}
-      {clamps.outroCutByRemoval ? (
-        <p className={lt.warn}>
-          the clip's authored outro is longer than the OUT segment — the timeline removes the
-          element mid-outro (on air the exit waits for it instead). It is never rescaled.
-        </p>
-      ) : null}
-      {clamps.lateSettle ? (
-        <p className={lt.warn}>
-          the clip's authored intro is longer than the entrance — it starts at the composition's in
-          and settles late.
-        </p>
-      ) : null}
-      {clamps.holdJump && seam !== undefined ? (
-        <p className={lt.warn}>
-          on exit the clip jumps from its held look ({seam.hold}) to its outro start (
-          {seam.outroStart}) — invisible for a clip that is static in its middle; check it if this
-          clip is not.
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
 /**
- * media-phases-follow-composition — the Lottie follow panel: the derived window READ-ONLY
- * (clip seconds + comp frames — the numbers the runtime derives, through the SAME
- * `lottieFollowWindow`), ONE editable input (`hold at`, seeded from the shared
- * poster/midpoint helper), and Detach.
+ * media-phases-follow-composition — the Lottie follow panel. The only inline state is the
+ * composition-derived hold frame and whether the middle freezes or loops. The phase arithmetic
+ * is teaching, so it lives behind the information icon rather than filling the Inspector.
  *
- * Detach bakes the derived HOLD into the manual model: `introEnd = outroStart = H`. The
- * offset intro and bounded outro are FOLLOW-ONLY capabilities the manual model cannot
- * express — leaving follow returns to `[ip → introEnd]` / `[outroStart → op]` — so the
- * hold (the load-bearing look) is what lands. `holdAt` is kept: re-attaching restores the
- * same hold time.
+ * Detach bakes the composition-derived intro end and outro start into the manual model.
  */
 function LottieFollowPanel({
   element,
   timing,
   anchors,
+  holdBehavior,
 }: {
   element: LottieElement;
   timing: LottieTiming | null;
   anchors: FollowAnchors | null;
+  holdBehavior: ElementHoldBehavior;
 }): JSX.Element | null {
   const id = element.id;
   const phases = element.phases;
   if (phases === undefined) return null;
-  if (anchors === null) return <FollowNoAnchors />;
+  if (anchors === null) return <FollowNoAnchors elementId={id} phases={phases} />;
   if (timing === null) return null;
-  const fw = lottieFollowWindow(timing.meta, element.speed, anchors, phases);
+  const fw = lottieFollowWindow(timing.meta, element.speed, anchors);
   const rate = timing.meta.fr * (element.speed > 0 ? element.speed : 1);
   const sec = (f: number): string => secs(rate > 0 ? (f - timing.meta.ip) / rate : 0);
   const entranceFrames = Math.round(anchors.contentStart - anchors.activeIn);
   const outFrames = Math.round(anchors.activeOut - anchors.outPoint);
+  const loopsMiddle = fw.outroStartFrame > fw.holdFrame && holdBehavior === 'loop';
+  const holdLabel = loopsMiddle
+    ? 'loops middle'
+    : holdBehavior === 'continue'
+      ? 'plays once to end'
+      : 'freezes';
   return (
     <div className={lt.panel} data-testid="follow-window">
-      <p className={lt.muted}>
-        intro: clip [{sec(fw.introStartFrame)} → {sec(fw.holdFrame)}] over the entrance (
-        {entranceFrames} comp frames)
-      </p>
-      <p className={lt.muted}>
-        hold: clip {sec(fw.holdFrame)} (frame {fw.holdFrame})
-        {phases.idle !== undefined && element.holdBehavior === 'idle-loop'
-          ? ' · loops the idle range'
-          : ' · freezes'}
-      </p>
-      <p className={lt.muted}>
-        outro: clip [{sec(fw.outroStartFrame)} → {sec(fw.outroEndFrame)}] — the clip’s own ending,
-        through the OUT ({outFrames} comp frames)
-      </p>
-      {fw.window.authored ? (
-        <p className={dds.hint} data-testid="follow-hold-authored">
-          hold frame: the clip’s own intro end (frame {fw.holdFrame}) — authored phases govern the
-          window; `hold at` does not apply.
-        </p>
-      ) : phases.holdAt === undefined ? (
-        <>
-          <p className={dds.hint}>
-            hold at: the frame the entrance reaches (the clip plays from its head) — set one to hold
-            a specific look.
-          </p>
-          <Button
-            variant="secondary"
-            onClick={() =>
-              // The seed is the SHARED poster/midpoint helper — the project's definition of
-              // "the representative settled look" — never a second `(ip + op) / 2`.
-              designerStore.updateElement(id, {
-                phases: { ...phases, holdAt: lottieClipMidpoint(timing.meta) },
-              } as Partial<Element>)
-            }
-          >
-            Set hold frame
-          </Button>
-        </>
-      ) : (
-        <>
-          <NumberField
-            label="hold at"
-            value={phases.holdAt}
-            step={1}
-            min={0}
-            suffix="f"
-            onCommit={(v) =>
-              designerStore.updateElement(id, {
-                phases: { ...phases, holdAt: Math.max(0, v) },
-              } as Partial<Element>)
-            }
-          />
-          <Button
-            variant="secondary"
-            onClick={() => {
-              const { holdAt: _holdAt, ...rest } = phases;
-              designerStore.updateElement(id, { phases: rest } as Partial<Element>);
-            }}
-          >
-            Clear hold frame
-          </Button>
-        </>
-      )}
-      <FollowClampHints
-        clamps={fw.window.clamps}
-        seam={{ hold: sec(fw.holdFrame), outroStart: sec(fw.outroStartFrame) }}
-      />
+      <StateLine
+        testId="follow-hold-readout"
+        tone="text"
+        tip={
+          <InfoTip title="Follow composition timing">
+            <p>
+              Intro uses the first {entranceFrames} composition frames: clip [
+              {sec(fw.introStartFrame)} → {sec(fw.holdFrame)}].
+            </p>
+            <p>
+              The middle is clip [{sec(fw.holdFrame)} → {sec(fw.outroStartFrame)}] and can freeze or
+              loop until the content completes.
+            </p>
+            <p>
+              Outro uses the last {outFrames} composition frames: clip [{sec(fw.outroStartFrame)} →{' '}
+              {sec(fw.outroEndFrame)}]. Internal media markers are ignored while Follow composition
+              is active.
+            </p>
+          </InfoTip>
+        }
+      >
+        Hold {sec(fw.holdFrame)} · frame {Math.round(fw.holdFrame)} · {holdLabel}
+      </StateLine>
       <Button
         variant="secondary"
         onClick={() =>
@@ -1843,6 +1788,8 @@ function LottieSections({
   });
   const animation = useLottieAnimation(element.assetId);
   const anchors = useFollowAnchors();
+  const holdBehavior = useElementHoldBehavior(id);
+  const follows = followsComposition(phases);
   const timing =
     animation === undefined
       ? null
@@ -1852,7 +1799,7 @@ function LottieSections({
           // A FOLLOW-source element is fed the marker-less shape: its stored numbers are
           // IGNORED data, and `lottieTiming` reading them would show a settle/breakdown the
           // runtime does not derive (the follow panel shows the derived window instead).
-          phases: followsComposition(phases) ? undefined : phases,
+          phases: follows ? undefined : phases,
           compositionFps: frameRate,
         });
   return (
@@ -1868,56 +1815,11 @@ function LottieSections({
             if (speed > 0) designerStore.updateElement(id, { speed } as Partial<Element>);
           }}
         />
-        <SelectField
-          label="on hold"
-          value={element.holdBehavior}
-          options={['freeze', 'idle-loop'] as const}
-          labels={['Freeze', 'Loop idle segment']}
-          onCommit={(holdBehavior) =>
-            designerStore.updateElement(id, { holdBehavior } as Partial<Element>)
-          }
-        />
         {phases === undefined ? (
-          // §4.5 (A) — a marker-less clip freezes on `op`, which for a furniture clip is the
-          // frame it has animated OFF to: it plays once and goes blank, on the canvas AND on
-          // air, and until now the Inspector only EXPLAINED that. A hint that names a problem
-          // and offers no way out teaches nothing (the same rule the owner settled for §9.1),
-          // so the hint is now an affordance.
-          //
-          // The seed is deliberately the two values that claim the LEAST:
-          //  - `introEnd` = the clip MIDPOINT, the same frame the canvas poster already
-          //    picks for a marker-less clip, through the same `lottieClipMidpoint` — so
-          //    converting a clip never MOVES its picture;
-          //  - `outroStart` = `op`, i.e. DEGENERATE — "no outro claimed". We cannot detect
-          //    where a clip animates off, and a seeded outro would invent an authorial claim,
-          //    which is exactly what §4.5 rejects. A degenerate outro now holds the settled
-          //    frame correctly (§4.4), so this seed is well-defined rather than a placeholder.
-          //
-          // Both land in the editable inputs below, where the operator SEES and corrects
-          // them. That visibility is the whole justification for seeding over guessing in the
-          // runtime: a seed the operator cannot see would forfeit it.
+          // D-176 — a marker-less clip cannot prove where its visual phases begin/end. Follow
+          // stores the relationship the operator actually wants; no guessed midpoint is authored.
           <>
-            <p className={dds.hint}>No phase markers — plays once then freezes.</p>
-            <Button
-              variant="secondary"
-              disabled={timing === null}
-              onClick={() => {
-                if (timing === null) return;
-                designerStore.updateElement(id, {
-                  phases: {
-                    introEnd: lottieClipMidpoint(timing.meta),
-                    outroStart: timing.meta.op,
-                    source: 'manual',
-                  },
-                } as Partial<Element>);
-              }}
-            >
-              Add phase markers
-            </Button>
-            {/* media-phases-follow-composition — the third source. The slots carry the same
-                claim-least seed as Add (midpoint / op); under follow they are IGNORED, kept
-                only so a later Detach has somewhere to land. The seed is SHARED with the
-                add-time duration guard's backdrop commit (`follow-attach.ts`) — one rule. */}
+            <p className={dds.hint}>No phase markers — follow the composition to time this clip.</p>
             <Button
               variant="secondary"
               disabled={timing === null}
@@ -1932,7 +1834,12 @@ function LottieSections({
             </Button>
           </>
         ) : phases.source === 'composition' ? (
-          <LottieFollowPanel element={element} timing={timing} anchors={anchors} />
+          <LottieFollowPanel
+            element={element}
+            timing={timing}
+            anchors={anchors}
+            holdBehavior={holdBehavior}
+          />
         ) : phases.source === 'markers' ? (
           <>
             <div className={fieldCss.row}>
@@ -2005,11 +1912,7 @@ function LottieSections({
         {/* Under follow the FOLLOW panel carries the comp-space answers (derived values);
             the standard breakdown would read the IGNORED stored numbers. */}
         {timing === null || phases?.source === 'composition' ? null : (
-          <LottieTimingPanel
-            timing={timing}
-            holdBehavior={element.holdBehavior}
-            outPoint={outPoint}
-          />
+          <LottieTimingPanel timing={timing} holdBehavior={holdBehavior} outPoint={outPoint} />
         )}
       </CollapseSection>
       <FilterSection
@@ -2026,117 +1929,92 @@ function LottieSections({
 // ────────────────────────────────────────────────────────────────────────
 
 /**
- * media-phases-follow-composition — the VIDEO follow panel: the same affordances as the
- * Lottie's, in the clip's own MS (video is the ms-native kind, so it consumes the shared
- * `followWindowMs` core directly — the Lottie is the kind that needs a unit adapter).
- * Detach bakes the derived hold exactly as the Lottie panel does (`introEnd = outroStart
- * = H`, `holdAt` kept, `source: 'manual'`).
+ * media-phases-follow-composition — the compact VIDEO follow panel. Timing comes only from
+ * the composition; the derived hold is shown as source time plus its composition-rate frame.
+ * The original picked file's fps is irrelevant because import conforms playback to the project.
+ * Detailed phase mapping is teaching and stays behind the information icon.
  */
 function VideoFollowPanel({
   element,
   anchors,
+  compositionFps,
+  holdBehavior,
 }: {
   element: VideoElement;
   anchors: FollowAnchors | null;
+  compositionFps: number | null;
+  holdBehavior: ElementHoldBehavior;
 }): JSX.Element | null {
   const id = element.id;
   const phases = element.phases;
   if (phases === undefined) return null;
-  if (anchors === null) return <FollowNoAnchors />;
+  if (anchors === null) return <FollowNoAnchors elementId={id} phases={phases} />;
   const duration = element.durationMs;
-  const w = followWindowMs(anchors, {
-    durationMs: duration,
-    holdAtMs: phases.holdAt,
-    ...videoFollowClipFacts(phases, duration),
-  });
+  const w = followWindowMs(anchors, { durationMs: duration });
   const s = (ms: number): string => `${(ms / 1000).toFixed(2)} s`;
   const entranceFrames = Math.round(anchors.contentStart - anchors.activeIn);
   const outFrames = Math.round(anchors.activeOut - anchors.outPoint);
+  const derivedFrameCount =
+    compositionFps === null
+      ? undefined
+      : Math.max(1, Math.ceil((duration * compositionFps) / 1000));
+  const maxConformedFrame = Math.max(0, (derivedFrameCount ?? 1) - 1);
+  const effectiveHoldMs = holdBehavior === 'freeze' ? w.outroStartMs : w.holdMs;
+  const holdFrame =
+    compositionFps === null
+      ? null
+      : Math.min(
+          maxConformedFrame,
+          Math.max(0, Math.floor((effectiveHoldMs * compositionFps) / 1000)),
+        );
+  const loopsMiddle = w.outroStartMs > w.holdMs && holdBehavior === 'loop';
+  const holdLabel = loopsMiddle
+    ? 'loops middle'
+    : holdBehavior === 'continue'
+      ? 'plays once to end'
+      : 'freezes';
   return (
     <div className={lt.panel} data-testid="follow-window">
-      <p className={lt.muted}>
-        intro: clip [{s(w.introStartMs)} → {s(w.holdMs)}] over the entrance ({entranceFrames} comp
-        frames)
-      </p>
-      <p className={lt.muted}>
-        hold: clip {s(w.holdMs)}
-        {phases.idle !== undefined && element.holdBehavior === 'loop'
-          ? ' · loops the idle range'
-          : ' · freezes'}
-      </p>
-      <p className={lt.muted}>
-        outro: clip [{s(w.outroStartMs)} → {s(w.outroEndMs)}] — the clip’s own ending, through the
-        OUT ({outFrames} comp frames)
-      </p>
-      {w.authored ? (
-        <p className={dds.hint} data-testid="follow-hold-authored">
-          hold frame: the clip’s own intro end ({s(w.holdMs)}) — authored phases govern the window;
-          `hold at` does not apply.
-        </p>
-      ) : phases.holdAt === undefined ? (
-        <>
-          <p className={dds.hint}>
-            hold at: the time the entrance reaches (the clip plays from its head) — set one to hold
-            a specific look.
-          </p>
-          <Button
-            variant="secondary"
-            onClick={() =>
-              // The seed is the SHARED poster helper's midpoint — the same "representative
-              // settled look" the canvas poster and the import thumbnail already use.
-              designerStore.updateElement(id, {
-                phases: { ...phases, holdAt: posterTimeMs(duration) },
-              } as Partial<Element>)
-            }
-          >
-            Set hold time
-          </Button>
-        </>
-      ) : (
-        <>
-          <NumberField
-            label="hold at"
-            value={phases.holdAt}
-            step={100}
-            min={0}
-            max={duration}
-            suffix="ms"
-            onCommit={(v) =>
-              designerStore.updateElement(id, {
-                phases: { ...phases, holdAt: Math.min(Math.max(0, Math.round(v)), duration) },
-              } as Partial<Element>)
-            }
-          />
-          <Button
-            variant="secondary"
-            onClick={() => {
-              const { holdAt: _holdAt, ...rest } = phases;
-              designerStore.updateElement(id, { phases: rest } as Partial<Element>);
-            }}
-          >
-            Clear hold time
-          </Button>
-        </>
-      )}
-      <FollowClampHints
-        clamps={w.clamps}
-        seam={{ hold: s(w.holdMs), outroStart: s(w.outroStartMs) }}
-      />
+      <StateLine
+        testId="follow-hold-readout"
+        tone="text"
+        tip={
+          <InfoTip title="Follow composition timing">
+            <p>
+              Intro uses the first {entranceFrames} composition frames: clip [{s(w.introStartMs)} →{' '}
+              {s(w.holdMs)}].
+            </p>
+            <p>
+              {loopsMiddle
+                ? `The middle is clip [${s(w.holdMs)} → ${s(w.outroStartMs)}] and loops until the content completes.`
+                : holdBehavior === 'continue'
+                  ? `The clip continues once from ${s(w.holdMs)} to ${s(w.outroEndMs)} independently from the looping composition cursor.`
+                  : `Freeze holds at the derived Outro start, ${s(effectiveHoldMs)}, then exit continues forward from the same frame.`}
+            </p>
+            <p>
+              Outro uses the last {outFrames} composition frames: clip [{s(w.outroStartMs)} →{' '}
+              {s(w.outroEndMs)}]. Internal media markers are ignored while Follow composition is
+              active.
+            </p>
+          </InfoTip>
+        }
+      >
+        Hold {s(effectiveHoldMs)}
+        {holdFrame === null ? '' : ` · frame ${String(holdFrame)}`} · {holdLabel}
+      </StateLine>
       <Button
         variant="secondary"
-        onClick={() =>
-          designerStore.updateElement(id, {
-            // Session Y — Detach bakes the CURRENTLY-DERIVED window: the hold point and the
-            // clip's own outro start. Truthful by construction — manual then plays the same
-            // phases follow was playing.
-            phases: {
-              ...phases,
-              introEnd: Math.round(w.holdMs),
-              outroStart: Math.round(w.outroStartMs),
-              source: 'manual',
-            },
-          } as Partial<Element>)
-        }
+        onClick={() => {
+          // Detach bakes only the composition-owned phase boundaries. Freeze has no authored
+          // per-Video preference: composition playback derives its held picture from Outro start.
+          const nextPhases = {
+            ...phases,
+            introEnd: Math.round(w.holdMs),
+            outroStart: Math.round(w.outroStartMs),
+            source: 'manual' as const,
+          };
+          designerStore.updateElement(id, { phases: nextPhases } as Partial<Element>);
+        }}
       >
         Detach — edit as manual
       </Button>
@@ -2285,19 +2163,22 @@ function VideoSections({
   const phases = element.phases;
   const duration = element.durationMs;
   const anchors = useFollowAnchors();
+  const holdBehavior = useElementHoldBehavior(id);
   const follows = followsComposition(phases);
-  // `DESIGNER-FIX-0905` — `drives hold` is WITHHELD while the composition has no out point:
-  // with none it is `static`, every hold source is ignored, and the flag can change nothing
-  // until an out point exists. Disabled with the reason on the control, never hidden — the
-  // author must still see that the flag exists and what unlocks it.
-  const hasOutPoint = useDesignerSelector((s) => {
-    const scene = s.scene;
-    return scene !== null && activeDocOf(scene).lifecycle !== undefined;
-  });
-  // A follower's stored `introEnd` is IGNORED data — the poster anchor is `holdAt` (the
-  // held look), mirroring the scene-builder's `videoPosterMs` rule; the runtime refines
-  // the canvas dataset to the exact derived H.
-  const posterMs = posterTimeMs(duration, follows ? phases?.holdAt : phases?.introEnd);
+  const followTiming =
+    follows && anchors !== null ? followWindowMs(anchors, { durationMs: duration }) : null;
+  // Imported Video is conformed to the project channel rate, so the derived held source-time can
+  // be shown as a composition-rate frame without consulting the picked file's native rate.
+  const compositionFps = anchors?.fps ?? null;
+  // A follower's stored media phases are ignored. Freeze shows the same derived Outro-start frame
+  // from which exit continues; Loop/Continue show the derived Hold entry. The neutral midpoint
+  // remains the pre-anchor fallback.
+  const posterMs =
+    followTiming !== null
+      ? holdBehavior === 'freeze'
+        ? followTiming.outroStartMs
+        : followTiming.holdMs
+      : posterTimeMs(duration, follows ? undefined : phases?.introEnd);
 
   /** Commit a phase-mark edit, clamped to [0, duration] and keeping introEnd ≤ outroStart. */
   function commitPhase(next: { introEnd?: number; outroStart?: number }): void {
@@ -2339,34 +2220,6 @@ function VideoSections({
           <span className={fieldCss.label}>duration</span>
           <span>{(duration / 1000).toFixed(2)} s</span>
         </div>
-        <SelectField
-          label="on hold"
-          value={element.holdBehavior}
-          options={['loop', 'freeze'] as const}
-          labels={['Loop', 'Freeze']}
-          onCommit={(holdBehavior) =>
-            designerStore.updateElement(id, { holdBehavior } as Partial<Element>)
-          }
-        />
-        <SelectField
-          label="drives hold"
-          value={element.drivesHold === true ? 'on' : 'off'}
-          options={['off', 'on'] as const}
-          labels={['No', 'Yes']}
-          withheld={
-            hasOutPoint
-              ? undefined
-              : 'Inert: this composition has no out point, so it has no hold for a clip to ' +
-                'drive. Add an out point in the Playout section first.'
-          }
-          // Q — the flag has exactly ONE writer, and it is the deep-reaching one.
-          // `updateElement` is shallow (it goes through `locate`, which searches a layer's
-          // DIRECT children only), so this control could not write a grouped element's flag;
-          // `setElementDrivesHold` recurses containers and is the same action the Playout
-          // checklist's row calls. Two writers with different reach is how the two surfaces
-          // come to disagree about one flag.
-          onCommit={(v) => designerStore.setElementDrivesHold(id, v === 'on')}
-        />
         {phases === undefined ? (
           <>
             {/* `DESIGNER-FIX-0905` — the STATE inline (no marks: the whole clip is the intro);
@@ -2375,34 +2228,16 @@ function VideoSections({
               tip={
                 <InfoTip title="Phase marks">
                   <p>
-                    Without phase marks the whole clip is the intro: the hold loops the whole clip
-                    and there is no outro. The poster frame is the clip midpoint.
-                  </p>
-                  <p>
-                    <strong>Add phase marks</strong> splits the clip into intro, hold and outro at
-                    times you set in the clip’s own milliseconds.{' '}
-                    <strong>Follow composition</strong> derives them from the composition’s out
-                    point instead.
+                    Without phase marks the whole clip is the intro and there is no clip-owned
+                    outro. Freeze or Loop middle comes from the composition’s Playback section.
                   </p>
                 </InfoTip>
               }
             >
               No phase marks — the whole clip plays as the intro.
             </StateLine>
-            <Button
-              variant="secondary"
-              onClick={() =>
-                designerStore.updateElement(id, {
-                  phases: { introEnd: Math.round(duration / 2), outroStart: duration },
-                } as Partial<Element>)
-              }
-            >
-              Add phase marks
-            </Button>
-            {/* media-phases-follow-composition — the third source, presented exactly as the
-                Lottie's. The slots carry the claim-least seed (poster midpoint / duration);
-                IGNORED under follow, kept as the Detach landing. Shared with the add-time
-                duration guard's backdrop commit (`follow-attach.ts`) — one rule. */}
+            {/* D-176 — phase-less clips have one truthful authoring path. Existing manual marks
+                remain editable below for stored projects; the Inspector no longer invents them. */}
             <Button
               variant="secondary"
               onClick={() =>
@@ -2415,7 +2250,12 @@ function VideoSections({
             </Button>
           </>
         ) : follows ? (
-          <VideoFollowPanel element={element} anchors={anchors} />
+          <VideoFollowPanel
+            element={element}
+            anchors={anchors}
+            compositionFps={compositionFps}
+            holdBehavior={holdBehavior}
+          />
         ) : (
           <>
             <NumberField
@@ -3871,7 +3711,6 @@ function TextPaddingSection({
       designerStore.commitAnimatable(id, descriptor.property, Math.max(0, value)),
     point: KeyframeDot(element, descriptor.property, currentFrame, selectedKeyframe),
   });
-
   return (
     <CollapseSection title="Text Padding">
       <div className={radiusCss.row}>

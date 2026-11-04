@@ -1,5 +1,10 @@
 # designer-video-element — delta (media-phases-follow-composition, 2026-08-13)
 
+> **Superseded in part by D-176/D-186/D-187 (2026-11-03):** `source: 'composition'` and derived
+> window compatibility remain, but `holdAt`/`freezeAtMs` no longer author the Follow Freeze picture.
+> Composition Freeze maps the held Video from Out point; the element Inspector has no Hold or
+> Freeze-frame override. Later deltas take precedence over contrary `H` clauses below.
+
 Video phases gain a `source` field (they had none — manual was the only possibility) and the same
 third source as the Lottie: `'composition'`. Units are NOT unified: video stays in the clip's own
 milliseconds, and the shared comp-side derivation (`followWindowMs`) is consumed directly because

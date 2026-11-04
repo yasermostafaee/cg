@@ -12,7 +12,12 @@ import {
   type Element,
   type Scene,
 } from '@cg/shared-schema';
-import { TEMPLATE_MEDIA_MAX_BYTES, type ExportIssue, type ExportProgress } from '@cg/shared-ipc';
+import {
+  TEMPLATE_MEDIA_MAX_BYTES,
+  type AssetMeta,
+  type ExportIssue,
+  type ExportProgress,
+} from '@cg/shared-ipc';
 import type { AssetStore } from './AssetStore.js';
 import {
   collectImageElements,
@@ -47,6 +52,8 @@ export interface ExporterOptions {
    * tests without a library resolve from the project store only.
    */
   sharedImages?: ImageAssetLibrary;
+  /** D-126 — project-independent fonts, resolved after the project store. */
+  sharedFonts?: ImageAssetLibrary;
   /** Bundled @cg/template-runtime JS injected as cg.js. */
   cgJs: string;
   /**
@@ -102,6 +109,7 @@ export class Exporter {
   readonly progress = new Emitter<ExportProgress>();
   readonly #assets: AssetStore;
   readonly #sharedImages: ImageAssetLibrary | undefined;
+  readonly #sharedFonts: ImageAssetLibrary | undefined;
   readonly #cgJs: string;
   readonly #cgJsLottie: string | undefined;
   readonly #cgCss: string;
@@ -109,6 +117,7 @@ export class Exporter {
   constructor(options: ExporterOptions) {
     this.#assets = options.assets;
     this.#sharedImages = options.sharedImages;
+    this.#sharedFonts = options.sharedFonts;
     this.#cgJs = options.cgJs;
     this.#cgJsLottie = options.cgJsLottie;
     this.#cgCss = options.cgCss;
@@ -135,6 +144,12 @@ export class Exporter {
     const knownAssetIds = new Set(projectAssets.map((a) => a.assetId));
     if (this.#sharedImages !== undefined) {
       for (const a of await this.#sharedImages.list()) {
+        knownAssetIds.add(a.assetId);
+        if (!metaById.has(a.assetId)) metaById.set(a.assetId, a);
+      }
+    }
+    if (this.#sharedFonts !== undefined) {
+      for (const a of await this.#sharedFonts.list()) {
         knownAssetIds.add(a.assetId);
         if (!metaById.has(a.assetId)) metaById.set(a.assetId, a);
       }
@@ -244,6 +259,14 @@ export class Exporter {
           message: `Bundled font ${font.family} is missing its bundled-path resource.`,
         });
       }
+      const assetId = assetIdOfFamily(font.family);
+      if (assetId !== null && !knownAssetIds.has(assetId)) {
+        issues.push({
+          severity: 'warning',
+          code: 'missing-font',
+          message: `Font "${font.bundledPath ?? font.family}" is no longer available in Project Assets or Shared Library; preview and export will use a fallback font.`,
+        });
+      }
     }
 
     // D-121 — the .vcg now SHIPS the fonts it can (see `#gatherFonts`), so this
@@ -272,7 +295,7 @@ export class Exporter {
       issues.push({
         severity: 'warning',
         code: 'vcg-ticker-fonts-not-bundled',
-        message: `Ticker font "${family}" can't be bundled into the .vcg — a system/licensed face has no shippable bytes (and an imported font needs its asset still in the project). On a machine without it the crawl measures fallback glyphs, so its content-driven duration will be wrong. Import the font as a project asset so the package can ship it.`,
+        message: `Ticker font "${family}" can't be bundled into the .vcg — a system/licensed face has no shippable bytes (and an imported font needs its asset in the project or Shared Library). On a machine without it the crawl measures fallback glyphs, so its content-driven duration will be wrong. Import the font into Project Assets or Shared Library so the package can ship it.`,
         elementId,
       });
     }
@@ -723,10 +746,9 @@ export class Exporter {
       const assetId = assetIdOfFamily(font.family);
       if (assetId === null || seen.has(assetId)) continue;
       seen.add(assetId);
-      const meta = await this.#assets.get(assetId);
-      if (meta === null) continue;
-      const bytes = await this.#assets.bytes(assetId);
-      if (bytes === null) continue;
+      const resolved = await resolveAssetFromEither(this.#assets, this.#sharedFonts, assetId);
+      if (resolved === null) continue;
+      const { meta, bytes } = resolved;
       const ext = meta.filename.slice(meta.filename.lastIndexOf('.'));
       // Content-addressed, mirroring D-062's `assets/<kind>/<sha><ext>`: re-exporting
       // is deterministic, and a face shared by two families is stored once.
@@ -743,6 +765,23 @@ export class Exporter {
     }
     return { fontsMap, fontIndex };
   }
+}
+
+async function resolveAssetFromEither(
+  project: ImageAssetLibrary,
+  shared: ImageAssetLibrary | undefined,
+  assetId: string,
+): Promise<{ meta: AssetMeta; bytes: Uint8Array } | null> {
+  const projectMeta = await project.get(assetId);
+  if (projectMeta !== null) {
+    const bytes = await project.bytes(assetId);
+    if (bytes !== null) return { meta: projectMeta, bytes };
+  }
+  if (shared === undefined) return null;
+  const sharedMeta = await shared.get(assetId);
+  if (sharedMeta === null) return null;
+  const bytes = await shared.bytes(assetId);
+  return bytes === null ? null : { meta: sharedMeta, bytes };
 }
 
 /** The element of the scene, anywhere (compositions, containers), or `null`. */

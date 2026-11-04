@@ -449,3 +449,49 @@ describe('LottieDriver — the follow window: an intro at an OFFSET, an outro wi
     return done;
   });
 });
+
+describe('LottieDriver — D-187 unchecked Hold tail', () => {
+  it('continues once to the authored end and playOutro never replays the Outro start', async () => {
+    const { driver, handle, clock } = makeDriver({
+      holdBehavior: 'continue',
+      introEnd: 10,
+      outroStart: 60,
+      op: 100,
+    });
+    driver.start();
+    clock.advance(450);
+    const beforeExit = last(handle) ?? 0;
+    expect(beforeExit).toBeGreaterThan(40);
+    expect(beforeExit).toBeLessThan(60);
+
+    const done = driver.playOutro();
+    expect(last(handle)).toBe(beforeExit);
+    clock.advance(600);
+    await expect(done).resolves.toBeUndefined();
+    expect(last(handle)).toBe(100);
+
+    const afterExit = handle.frames.slice(handle.frames.indexOf(beforeExit));
+    expect(afterExit.every((frame, index) => index === 0 || frame >= afterExit[index - 1]!)).toBe(
+      true,
+    );
+  });
+
+  it('pause/resume continues from the exact unchecked-tail frame', () => {
+    const { driver, handle, clock } = makeDriver({
+      holdBehavior: 'continue',
+      introEnd: 10,
+      outroStart: 60,
+      op: 100,
+    });
+    driver.start();
+    clock.advance(300);
+    const pausedAt = last(handle);
+    driver.pause();
+    clock.advance(1_000);
+    expect(last(handle)).toBe(pausedAt);
+
+    driver.resume();
+    clock.advance(100);
+    expect(last(handle)).toBe((pausedAt ?? 0) + 10);
+  });
+});

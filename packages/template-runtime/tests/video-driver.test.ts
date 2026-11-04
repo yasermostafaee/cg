@@ -558,6 +558,50 @@ describe('VideoDriver — the follow window: an intro at an OFFSET, an outro wit
     await expect(driver.whenComplete()).resolves.toBeUndefined();
   });
 
+  it('uses the derived Outro-start Freeze target without retiming Intro or Outro', async () => {
+    const options = {
+      durationMs: 10_000,
+      introStartMs: 0,
+      introEndMs: 2000,
+      freezeTargetMs: 8000,
+      outroStartMs: 8000,
+      outroEndMs: 9000,
+      loopStartMs: 2000,
+      loopEndMs: 8000,
+      holdBehavior: 'freeze' as const,
+    };
+    const { driver, video, clock } = makeDriver(options);
+    driver.start();
+    expect(video.seeks).toEqual([0]);
+    run(clock, 1000);
+    expect(video.at()).toBeCloseTo(1, 1);
+    run(clock, 1100);
+    expect(video.at()).toBeCloseTo(8, 2);
+
+    driver.pause();
+    driver.resume();
+    run(clock, 500);
+    expect(video.at()).toBeCloseTo(8, 2); // settled Freeze is not reopened by Pause/Resume
+
+    const seeksBeforeOutro = video.seeks.length;
+    const outro = driver.playOutro();
+    expect(video.seeks.at(-1)).toBeCloseTo(8, 3);
+    expect(video.seeks.slice(seeksBeforeOutro).every((seconds) => seconds >= 8)).toBe(true);
+    run(clock, 1100);
+    await expect(outro).resolves.toBeUndefined();
+    expect(video.seeks.at(-1)).toBeCloseTo(9, 3);
+
+    const scrub = makeDriver(options);
+    scrub.driver.positionAt(1000, null);
+    expect(scrub.video.seeks.at(-1)).toBeCloseTo(1, 3);
+    scrub.driver.positionAt(2000, null);
+    expect(scrub.video.seeks.at(-1)).toBeCloseTo(2, 3);
+    scrub.driver.positionAt(5000, null);
+    expect(scrub.video.seeks.at(-1)).toBeCloseTo(5, 3);
+    scrub.driver.positionAt(0, 0);
+    expect(scrub.video.seeks.at(-1)).toBeCloseTo(8, 3);
+  });
+
   it('reset() parks at the window start, not clip time 0', () => {
     const { driver, video } = makeDriver(FOLLOW);
     driver.reset();
@@ -593,35 +637,39 @@ describe('VideoDriver — the follow window: an intro at an OFFSET, an outro wit
   });
 });
 
-describe('VideoDriver — positionAt (the Designer playhead) — D-135 §5, §9.5 (a)', () => {
-  it('the clock path and the playhead path resolve the clip time through ONE function', () => {
-    // §9.5 (a)'s singularity, asserted on the MECHANISM: `expectedClipMs` is the one
-    // mapping, and `positionAt` must call it — a second copy of the arithmetic defeats
-    // the requirement even while producing identical numbers.
-    const spy = vi.spyOn(
+describe('VideoDriver — positionAt (the Designer playhead) — D-135 / B-378', () => {
+  it('runtime lifecycle and manual scrub use their intentionally separate mappings', () => {
+    const lifecycleSpy = vi.spyOn(
       VideoDriver.prototype as unknown as { expectedClipMs: (...a: unknown[]) => number },
       'expectedClipMs',
+    );
+    const scrubSpy = vi.spyOn(
+      VideoDriver.prototype as unknown as { positionedClipMs: (...a: unknown[]) => number },
+      'positionedClipMs',
     );
     try {
       const a = makeDriver({ holdBehavior: 'freeze' });
       a.driver.start(); // the driver's OWN clock
       a.clock.advance(50);
-      const viaClock = spy.mock.calls.length;
+      const viaClock = lifecycleSpy.mock.calls.length;
       expect(viaClock).toBeGreaterThan(0);
 
       const b = makeDriver({ holdBehavior: 'freeze' });
       b.driver.positionAt(50, null); // the PLAYHEAD
-      expect(spy.mock.calls.length).toBeGreaterThan(viaClock);
-      // And the seek issued is EXACTLY the mapping's own output — no re-derivation.
-      expect(b.video.seeks.at(-1)).toBeCloseTo((spy.mock.results.at(-1)!.value as number) / 1000);
+      expect(scrubSpy).toHaveBeenCalled();
+      expect(lifecycleSpy.mock.calls.length).toBe(viaClock);
+      expect(b.video.seeks.at(-1)).toBeCloseTo(
+        (scrubSpy.mock.results.at(-1)!.value as number) / 1000,
+      );
     } finally {
-      spy.mockRestore();
+      lifecycleSpy.mockRestore();
+      scrubSpy.mockRestore();
     }
   });
 
-  it('positions across intro, freeze hold and outro — including elapsed 0 at each boundary', () => {
+  it('positions across Intro, the authored Middle and Outro without applying Freeze', () => {
     const { driver, video } = makeDriver({ holdBehavior: 'freeze' });
-    // Intro [0 → 2000], then freeze at introEnd.
+    // Manual scrub walks Intro [0 → 2000] and the authored Middle once; lifecycle Freeze is inert.
     driver.positionAt(0, null);
     expect(video.seeks.at(-1)).toBe(0);
     driver.positionAt(100, null);
@@ -631,7 +679,7 @@ describe('VideoDriver — positionAt (the Designer playhead) — D-135 §5, §9.
     driver.positionAt(2000, null);
     expect(video.seeks.at(-1)).toBeCloseTo(2);
     driver.positionAt(60_000, null);
-    expect(video.seeks.at(-1)).toBeCloseTo(2); // freeze holds the introEnd frame
+    expect(video.seeks.at(-1)).toBeCloseTo(8); // Middle clamps at the Outro boundary
     // Negative elapsed clamps to the window start — never extrapolated back.
     driver.positionAt(-500, null);
     expect(video.seeks.at(-1)).toBe(0);
@@ -644,12 +692,12 @@ describe('VideoDriver — positionAt (the Designer playhead) — D-135 §5, §9.
     expect(video.seeks.at(-1)).toBeCloseTo(10); // clamped to outroEnd, never past the clip
   });
 
-  it('a loop hold positions deterministically from elapsed — the wrap is in the mapping', () => {
+  it('a Loop-middle lifecycle still scrubs through its Middle once, without wrapping', () => {
     const { driver, video } = makeDriver(); // loop [2000 → 8000]
     driver.positionAt(5000, null);
-    expect(video.seeks.at(-1)).toBeCloseTo(5); // 2000 + (3000 % 6000)
+    expect(video.seeks.at(-1)).toBeCloseTo(5);
     driver.positionAt(9000, null);
-    expect(video.seeks.at(-1)).toBeCloseTo(3); // 2000 + (7000 % 6000) — wrapped, no history
+    expect(video.seeks.at(-1)).toBeCloseTo(8); // one-pass authoring view, never a Hold wrap
   });
 
   it('a DEGENERATE outro takes the INTRO mapping past the out-point (the Lottie rule)', () => {
@@ -659,7 +707,7 @@ describe('VideoDriver — positionAt (the Designer playhead) — D-135 §5, §9.
     // degenerate `playOutro()` leaves painted on air.
     const { driver, video } = makeDriver({ holdBehavior: 'freeze', outroStartMs: 10_000 });
     driver.positionAt(3000, 500);
-    expect(video.seeks.at(-1)).toBeCloseTo(2); // freeze-hold frame, NOT 10.0+
+    expect(video.seeks.at(-1)).toBeCloseTo(3); // continuous static timeline, not Freeze
   });
 
   it('a follow window flows through the SAME mapping — H anchors it (session S composes)', () => {
@@ -731,5 +779,40 @@ describe('VideoDriver — positionAt (the Designer playhead) — D-135 §5, §9.
     driver.positionAt(0, null);
     expect(video.seeks).toHaveLength(seeks);
     expect(video.at()).toBeCloseTo(2);
+  });
+});
+
+describe('VideoDriver — D-187 unchecked Hold tail', () => {
+  it('continues monotonically to the authored end and playOutro never seeks it backwards', async () => {
+    const { driver, video, clock } = makeDriver({ holdBehavior: 'continue' });
+    driver.start();
+    run(clock, 5_000);
+    const beforeExit = video.at();
+    expect(beforeExit).toBeGreaterThan(4.5);
+    expect(beforeExit).toBeLessThan(8);
+
+    const seeksBeforeExit = [...video.seeks];
+    const done = driver.playOutro();
+    expect(video.seeks).toEqual(seeksBeforeExit); // no jump to outroStart (8 s)
+
+    run(clock, 5_500);
+    await expect(done).resolves.toBeUndefined();
+    expect(video.at()).toBeCloseTo(10, 2);
+    expect(video.seeks.filter((seconds) => seconds === 8)).toHaveLength(0);
+  });
+
+  it('pause/resume preserves the unchecked tail position without counting the paused gap', () => {
+    const { driver, video, clock } = makeDriver({ holdBehavior: 'continue' });
+    driver.start();
+    run(clock, 3_000);
+    const pausedAt = video.at();
+    driver.pause();
+    run(clock, 2_000);
+    expect(video.at()).toBeCloseTo(pausedAt, 4);
+
+    driver.resume();
+    run(clock, 1_000);
+    expect(video.at()).toBeGreaterThan(pausedAt);
+    expect(video.at()).toBeLessThan(pausedAt + 1.2);
   });
 });

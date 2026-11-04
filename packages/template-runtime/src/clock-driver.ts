@@ -369,6 +369,23 @@ export class ClockDriver {
    */
   private forcedStep: StepToken | null | undefined = undefined;
 
+  /** Canvas editing is a display override, never a shifted target or a simulated future clock. */
+  private authoringEditing = false;
+
+  setAuthoringEditing(editing: boolean): void {
+    if (this.destroyed || this.o.mode !== 'countdown' || this.authoringEditing === editing) return;
+    this.authoringEditing = editing;
+    // A real Play immediately resets/repaints through its ordinary lifecycle. Do not publish
+    // live Step effects early, before that lifecycle has primed its nested composition cues.
+    if (!editing) return;
+    this.lastText = null;
+    this.paint();
+  }
+
+  private effectiveAfterZero(): AfterZero | undefined {
+    return this.authoringEditing && this.forcedStep === undefined ? 'hold' : this.o.afterZero;
+  }
+
   constructor(options: ClockDriverOptions) {
     // Copied, not aliased: `retarget()` rewrites `target`, and that must not reach
     // back into the object the caller passed in.
@@ -482,7 +499,7 @@ export class ClockDriver {
     // is the remaining time of the deadline this run will actually count down to.
     const now = this.clock.now();
     this.pinnedDeadlineMs = absoluteDeadlineMs(this.o.target, now);
-    const text = clockInitialText(this.o, now);
+    const text = clockInitialText({ ...this.o, afterZero: this.effectiveAfterZero() }, now);
     this.o.node.textContent = text;
     this.lastText = text;
     // Clear the published step: a fresh run must re-enter at the step its OWN remaining time
@@ -601,7 +618,7 @@ export class ClockDriver {
     }
     // Countdown displays ceil(remaining): it shows the full value at start and
     // hits 00:00 exactly when the remaining time does — then the author's after-zero choice.
-    return countdownText(this.remainingMs(), o.format, o.digits, o.afterZero);
+    return countdownText(this.remainingMs(), o.format, o.digits, this.effectiveAfterZero());
   }
 
   /**
@@ -680,7 +697,8 @@ export class ClockDriver {
   get currentStep(): StepToken | null {
     const steps = this.o.steps;
     if (steps === undefined || this.o.mode !== 'countdown') return null;
-    return this.forcedStep !== undefined ? this.forcedStep : pickStep(steps, this.remainingMs());
+    if (this.forcedStep !== undefined) return this.forcedStep;
+    return this.authoringEditing ? null : pickStep(steps, this.remainingMs());
   }
 
   /** Publish the current step now, outside a run (at Take — the clock itself starts later). */
@@ -714,7 +732,10 @@ export class ClockDriver {
   forceStep(step: StepToken | null | undefined): void {
     if (this.destroyed) return;
     this.forcedStep = step;
-    this.paintStep();
+    // The explicit Steps dialog rehearses the real zero behavior, including hidden digits.
+    // Closing it restores the editing placeholder and the authored conditional-element state.
+    if (this.authoringEditing) this.paint();
+    else this.paintStep();
   }
 
   private fireComplete(): void {

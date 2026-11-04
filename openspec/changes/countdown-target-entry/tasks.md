@@ -1,5 +1,26 @@
 # Tasks — countdown-target-entry (RUN-NEXT-VERSION-03 Part 2)
 
+## 2026-11-04 — Expired targets remain editable in stopped Canvas (FULL lane)
+
+- [x] Register the stopped-authoring/live-playback distinction in D-141 and this active change.
+- [x] Preserve authored-visible countdown parts and usable digits in idle direct/nested Canvas
+      scenes despite a past target, without force-showing authored hidden elements.
+- [x] Preserve explicit Step rehearsal and actual expiry semantics in Canvas Play, Preview and output.
+- [x] Verify Stop returns the editable base state without changing persisted targets or visibility.
+- [x] Add focused regression and real-browser coverage for idle edit, expired-target playback and Stop.
+      Six new runtime cases pass (three failed before the fix), 57 existing countdown regressions
+      and three Designer host cases pass; runtime typecheck/lint pass.
+- [x] Run both new countdown-authoring browser cases against the rebuilt integrated Designer.
+      Controlled `workers=1` verification on 2026-11-04 passes both direct and nested expired-target
+      cases, including editable stopped Canvas and actual expiry during Play. The same run passes
+      both Azan cases (five stage colors/loaded icon and target-to-zero persistent announcement,
+      manual Stop/replay). The combined three-file run ended 16 passed / 1 failed in 1.4 minutes;
+      its unrelated colored-row Loop fixture failure remains open in D-188, not counted as green.
+- [ ] Re-run affected checks and the final gate; record completed Linux E2E evidence for the carrying commit.
+
+D-186 Follow-media Freeze parity is not part of this fix and remains pending in its own change.
+Earlier checked work below belongs to its recorded snapshots and does not verify this follow-up.
+
 ## 2026-11-04 — Preview target parity and countdown starter exit (FULL lane)
 
 - [x] Reproduce second accelerated Play closing immediately: generated Preview host shows zero

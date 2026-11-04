@@ -264,12 +264,15 @@ afterEach(() => {
 describe('D-128 Phase 4 — the video composition lifecycle', () => {
   it('stop() plays the video outro BEFORE the background, then settles CLEARED', async () => {
     const clock = makeClock();
-    const r = createRuntime(scene([bgShape('bg'), video('v')]), {
-      skipFontLoad: true,
-      installGlobals: false,
-      clock,
-      tickerMeasure,
-    });
+    const r = createRuntime(
+      scene([bgShape('bg'), video('v')], { mode: 'manual', holdBehavior: 'loop' }),
+      {
+        skipFontLoad: true,
+        installGlobals: false,
+        clock,
+        tickerMeasure,
+      },
+    );
     const times = spyVideoTimes();
     await r.play({});
     await run(clock, 600); // intro (200ms) → loop hold
@@ -349,12 +352,15 @@ describe('D-128 Phase 4 — the video composition lifecycle', () => {
 
   it('pause() freezes the video in lockstep; resume() re-engages it on the injected clock', async () => {
     const clock = makeClock();
-    const r = createRuntime(scene([bgShape('bg'), video('v')]), {
-      skipFontLoad: true,
-      installGlobals: false,
-      clock,
-      tickerMeasure,
-    });
+    const r = createRuntime(
+      scene([bgShape('bg'), video('v')], { mode: 'manual', holdBehavior: 'loop' }),
+      {
+        skipFontLoad: true,
+        installGlobals: false,
+        clock,
+        tickerMeasure,
+      },
+    );
     const times = spyVideoTimes();
     await r.play({});
     await run(clock, 400); // into the loop hold — the head is tracking the clock

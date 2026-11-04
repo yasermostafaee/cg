@@ -2,35 +2,14 @@
  * media-phases-follow-composition — the ONE comp-side derivation for a media element whose
  * phase source is `'composition'`.
  *
- * ⭐ SESSION Y (2026-08-13) — THE CORRECTED RULE: **a follower's outro is the CLIP'S OWN
- * ENDING.** Follow decides WHEN phases happen, never WHICH frames the clip's ending consists
- * of:
+ * D-176 — Follow is owned by the COMPOSITION. It decides the media window from only the
+ * composition's entrance / OUT spans and the clip duration; media-internal markers, manual
+ * phase values and legacy `holdAt` values are intentionally outside this API:
  *
- * - clip with NO authored phases: intro `[max(0, H − entranceSpan) → H]` (unchanged), freeze at
- *   `H`, outro **`[clipEnd − outSpan → clipEnd]`** — landing on the clip's last frame exactly
- *   as the composition removes the element;
- * - clip WITH authored phases (`introEnd`/`outroStart` from markers or manual): **they WIN.**
- *   Intro = the clip's `[0 → introEnd]`, scheduled (via `introDelayMs`) so it FINISHES at the
- *   composition's effective content start; hold = freeze at `introEnd`; outro = the clip's own
- *   `[outroStart → clipEnd]`, started when the OUT phase begins. Authored content always beats
- *   derived — that precedence is stated once, here.
- * - `holdAt` keeps its meaning in the no-phases case only; with authored phases the hold frame
- *   IS `introEnd` (the Inspector says so instead of showing a dead input).
- *
- * DELIBERATELY ACCEPTED: with no authored phases the hold→outro seam MAY jump if the clip is
- * not static in its middle (`clamps.holdJump` names both clip times for the hint). That is
- * strictly better than never showing the ending.
- *
- * THE SUPERSEDED RULE, kept as the record of what was wrong (it shipped, and the owner
- * reported its consequence three times): the outro used to be `[H → min(H + outSpan,
- * clipEnd)]` — anchored at the HOLD — and end-anchoring was explicitly rejected because "the
- * held frame would CUT to a distant frame at the OUT boundary — the exact discontinuity follow
- * exists to remove". That premise fails for the clips this feature targets: a furniture
- * backdrop is built to be STATIC between its build-on and its build-off, so the held frame and
- * the end-anchored outro's first frame both sit inside that static region and cannot visibly
- * pop. The old rule optimised against an unreachable hazard and, in exchange, could never show
- * a clip's ending — the "outro" it played was the motionless middle, and the authored build-off
- * never played at all.
+ * - the first `entranceSpan` of the clip is the intro;
+ * - the last `outSpan` of the clip is the outro;
+ * - the remainder between them is the middle, which the element may freeze or loop while the
+ *   composition holds.
  *
  * It works in MILLISECONDS — video's native unit — so the video "adapter" is the identity and
  * the runtime / `VideoSections` consume it directly. The ONE real unit adapter is
@@ -60,16 +39,6 @@ export interface FollowAnchors {
 export interface FollowClip {
   /** Clip length in ms (video `durationMs`; Lottie `(op − ip) / (fr × speed) × 1000`). */
   durationMs: number;
-  /** Authored hold time `H` in clip ms; absent ⇒ `H` = entrance span. NO-PHASES case only. */
-  holdAtMs?: number | undefined;
-  /**
-   * The clip's AUTHORED intro end (ms), when the operator/markers genuinely set one — pass it
-   * only through {@link videoFollowClipFacts} (or the Lottie adapter's equivalent), which
-   * treats the attach SEED SIGNATURE as not-authored. Present ⇒ the authored intro governs.
-   */
-  authoredIntroEndMs?: number | undefined;
-  /** The clip's AUTHORED outro start (ms), same discipline. Present ⇒ the authored outro governs. */
-  authoredOutroStartMs?: number | undefined;
 }
 
 /** The derived window, clip ms. Every clamp is FLAGGED for the existing hint machinery. */
@@ -78,28 +47,26 @@ export interface FollowWindow {
   entranceSpanMs: number;
   /** `(activeOut − outPoint)` in ms — how long the OUT segment gives the outro. */
   outSpanMs: number;
-  /** The clip time the hold sits on: `H` (no-phases) or the authored `introEnd`. */
+  /** The clip time where the composition's intro ends. */
   holdMs: number;
-  /** Where the intro window begins (clip ms): `max(0, H − entranceSpan)`, or `0` when authored. */
+  /** Where the intro window begins (clip ms), normally the clip head. */
   introStartMs: number;
   /**
-   * Comp-side WAIT (ms after `active.in`) before the intro starts. Non-zero only for an
-   * AUTHORED intro shorter than the entrance — the clip parks on its first frame, then plays
-   * `[0 → introEnd]` so it FINISHES exactly at the content start.
+   * Compatibility field. Composition-owned Follow starts the intro at `active.in`, so this is 0.
    */
   introDelayMs: number;
-  /** Where the outro begins (clip ms): `max(0, clipEnd − outSpan)`, or the authored `outroStart`. */
+  /** Where the outro begins (clip ms): `max(0, clipEnd − outSpan)`. */
   outroStartMs: number;
   /** Where the outro ends: the CLIP END, always — the ending is the clip's own. */
   outroEndMs: number;
   /** Whether the derived outro has any length to play. */
   hasOutro: boolean;
-  /** Whether authored clip phases governed the window (the precedence rule, surfaced). */
+  /** Compatibility field; always false because media phases never govern Follow. */
   authored: boolean;
   clamps: {
-    /** No-phases: `H < entranceSpan` — the intro starts at the clip start, shorter than the entrance; freezes early. */
+    /** The clip is shorter than the composition entrance and freezes early. */
     introShort: boolean;
-    /** No-phases: `H` (authored or defaulted) sat past the clip end — stale `holdAt`, or a clip shorter than the entrance. */
+    /** The composition entrance extends past the clip end. */
     holdPastEnd: boolean;
     /**
      * Session V — the COMPOSITION's OUT segment has zero length (`outPoint` at — or, on a
@@ -108,15 +75,13 @@ export interface FollowWindow {
      * reachable by ordinary authoring; §9.1's rule: inert behaviour explains itself.
      */
     noOutSegment: boolean;
-    /** No-phases: `outSpan ≥ clip length` — the outro starts at the clip start; the WHOLE clip is the outro. */
+    /** `outSpan ≥ clip length` — the outro starts at the clip start; the whole clip is the outro. */
     wholeClipOutro: boolean;
     /**
-     * Authored outro longer than the OUT segment: the timeline removes the element mid-outro
-     * (on air the exit WAITS for the element outro — content-first ordering — so the exit runs
-     * longer than the OUT segment instead). Flagged, never rescaled or re-windowed.
+     * Compatibility flag; always false because Follow does not use authored media outro marks.
      */
     outroCutByRemoval: boolean;
-    /** Authored intro longer than the entrance: it starts at `active.in` and settles LATE. */
+    /** Compatibility flag; always false because Follow does not use authored media intro marks. */
     lateSettle: boolean;
     /**
      * The hold→outro seam jumps (`outroStartMs !== holdMs`, either direction): fine for a
@@ -134,27 +99,15 @@ export function followWindowMs(anchors: FollowAnchors, clip: FollowClip): Follow
   const entranceSpanMs = Math.max(0, (anchors.contentStart - anchors.activeIn) * frameMs);
   const outSpanMs = Math.max(0, (anchors.activeOut - anchors.outPoint) * frameMs);
   const durationMs = Math.max(0, clip.durationMs);
-  const authoredIntro = clip.authoredIntroEndMs !== undefined;
-  const authoredOutro = clip.authoredOutroStartMs !== undefined;
-
-  // THE HOLD — authored introEnd wins; else H = holdAt ?? entranceSpan ("play from the head").
-  const holdRaw = authoredIntro
-    ? (clip.authoredIntroEndMs as number)
-    : (clip.holdAtMs ?? entranceSpanMs);
+  const holdRaw = entranceSpanMs;
   const holdMs = Math.min(Math.max(0, holdRaw), durationMs);
 
-  // THE INTRO — authored: the clip's own [0 → introEnd], DELAYED to finish at the content
-  // start (or started at active.in and settling late when it cannot fit). No-phases:
-  // [max(0, H − entranceSpan) → H] from the composition's IN, unchanged from the shipped rule.
-  const introStartMs = authoredIntro ? 0 : Math.max(0, holdMs - entranceSpanMs);
-  const introDurationMs = holdMs - introStartMs;
-  const introDelayMs = authoredIntro ? Math.max(0, entranceSpanMs - introDurationMs) : 0;
+  // THE INTRO — the clip head through the composition entrance span.
+  const introStartMs = Math.max(0, holdMs - entranceSpanMs);
+  const introDelayMs = 0;
 
-  // THE OUTRO — the clip's own ending: authored [outroStart → clipEnd], else END-anchored
-  // [clipEnd − outSpan → clipEnd].
-  const outroStartMs = authoredOutro
-    ? Math.min(Math.max(0, clip.authoredOutroStartMs as number), durationMs)
-    : Math.max(0, durationMs - outSpanMs);
+  // THE OUTRO — the clip's own ending, end-anchored to the composition OUT span.
+  const outroStartMs = Math.max(0, durationMs - outSpanMs);
   const outroEndMs = durationMs;
   const hasOutro = outSpanMs > 0 && outroStartMs < outroEndMs;
 
@@ -167,43 +120,17 @@ export function followWindowMs(anchors: FollowAnchors, clip: FollowClip): Follow
     outroStartMs,
     outroEndMs,
     hasOutro,
-    authored: authoredIntro || authoredOutro,
+    authored: false,
     clamps: {
-      introShort: !authoredIntro && holdMs < entranceSpanMs,
-      holdPastEnd: !authoredIntro && holdRaw > durationMs,
+      introShort: holdMs < entranceSpanMs,
+      holdPastEnd: holdRaw > durationMs,
       noOutSegment: outSpanMs <= 0,
-      wholeClipOutro: !authoredOutro && durationMs > 0 && outSpanMs >= durationMs,
-      outroCutByRemoval: authoredOutro && outSpanMs > 0 && durationMs - outroStartMs > outSpanMs,
-      lateSettle: authoredIntro && introDurationMs > entranceSpanMs,
+      wholeClipOutro: durationMs > 0 && outSpanMs >= durationMs,
+      outroCutByRemoval: false,
+      lateSettle: false,
       holdJump: hasOutro && outroStartMs !== holdMs,
     },
   };
-}
-
-/**
- * Session Y — the ONE discrimination between AUTHORED video phases and the attach SEED
- * SIGNATURE. Attach used to write `{introEnd: round(durationMs / 2), outroStart: durationMs}`
- * into a clip that had no phases — values the old rule then ignored. Under the corrected rule
- * authored values GOVERN, so those stored seeds must not masquerade as intent: a field equal to
- * its seed value derives as if absent. (A hand-authored value that happens to equal the seed is
- * treated as derived — a corner accepted and recorded in the change's design.md; the derived
- * behaviour is closest to such a clip's intent anyway.) Going forward, attach writes
- * `{source: 'composition'}` alone; this shim is what keeps every already-saved follow scene —
- * the owner's included — deriving correctly.
- */
-export function videoFollowClipFacts(
-  phases: { introEnd?: number | undefined; outroStart?: number | undefined } | undefined,
-  durationMs: number,
-): { authoredIntroEndMs?: number; authoredOutroStartMs?: number } {
-  if (phases === undefined) return {};
-  const out: { authoredIntroEndMs?: number; authoredOutroStartMs?: number } = {};
-  if (phases.introEnd !== undefined && phases.introEnd !== Math.round(durationMs / 2)) {
-    out.authoredIntroEndMs = phases.introEnd;
-  }
-  if (phases.outroStart !== undefined && phases.outroStart !== durationMs) {
-    out.authoredOutroStartMs = phases.outroStart;
-  }
-  return out;
 }
 
 /**

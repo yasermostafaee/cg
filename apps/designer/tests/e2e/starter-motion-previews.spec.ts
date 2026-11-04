@@ -34,6 +34,7 @@ const starters = [
   ['iran-premier-league', 'جدول لیگ برتر ایران'],
   ['iran-weather-pages', 'آب‌وهوای مراکز استان‌ها'],
   ['iran-weather-forecast', 'پیش‌بینی چندروزهٔ هوا'],
+  ['iran-weather-cards', 'آب‌وهوای شهرها — کارت‌های تصویری'],
   ['image-folder-sequence', 'توالی تصاویر پوشه'],
   ['countdown-steps', 'شمارش معکوس اذان'],
   ['multibox', 'میزگرد چندقابه'],

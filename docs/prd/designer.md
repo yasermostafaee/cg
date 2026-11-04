@@ -3325,10 +3325,11 @@ then project) **everywhere fonts resolve** — the Designer font picker / previe
 (`@cg/vcg-format` packaging + `ExporterSingleFile` base64 inlining) — mirroring D-040's two-source
 IMAGE resolver. This MUST be covered by tests on **all three** paths (preview, `.vcg`, HTML); it is
 where the change most easily breaks. Font import already exists per-project (ProjectAssetsPanel font
-import → `AssetStore`) — reuse that ingestion, just targeting the shared namespace. **OPEN DESIGN
-DECISION (record, don't resolve now):** whether the shared FONT library is a SEPARATE library or lives
-under ONE unified "Shared Library" surface with image / font tabs — this ties into **D-066** (the
-Shared Library UI is relocating to the landing screen). Decide in `design.md`. **OUT OF SCOPE v1:**
+import → `AssetStore`) — reuse that ingestion, just targeting the shared namespace.
+**OWNER DECISION (2026-11-02):** fonts live under the existing, unified **Shared Library** surface
+alongside images; the add action offers Image and Font rather than creating a second library panel.
+The storage namespaces and byte resolvers remain kind-specific so an image can never be consumed as a
+font (or vice versa). **OUT OF SCOPE v1:**
 cross-machine / central sync (no backend); font subsetting; variable-font axis UI beyond what the font
 schema already supports; per-project overrides of a shared font. **RECON-FIRST, needs its own
 `design.md`** — touches storage + schema/resolver + BOTH exporters. Spec: new capability
@@ -3736,6 +3737,14 @@ countdown/countup ignore both.
 > is paid — the canvas `<video>` no longer rests on its mid-clip poster: the poster routine
 > stays as the load path + seek-fragile recovery, painting only a pre-tick transient, and
 > the canvas at rest shows the playhead's frame exactly as the Lottie does.
+>
+> ✅ **B-378 / D-187 clarification (2026-11-02; Freeze rule superseded 2026-11-03):** D-175 later
+> gave ordinary forward Play a real composition lifecycle. Consequently, manual timeline scrub and
+> lifecycle Hold are no longer one policy: dragging the index bar walks the authored media Middle
+> once, while the composition's Freeze/Loop choice applies only after the running lifecycle enters
+> Hold. Freeze has no selected per-media picture: D-186 now derives every held picture from
+> composition Out point. The separation still prevents lifecycle Hold from replacing post-Intro
+> frames during manual authoring.
 > ⚠ **One §5.3 claim remains UNMEASURED: two or more simultaneous video elements.** The
 > ~10 distinct fps figure was measured on ONE 1080p VP8+alpha element (1 s GOP, Chrome 151,
 > 25 fps); the multi-element clause in `design.md` §5.3 is qualitative — treat the number as
@@ -3920,7 +3929,7 @@ uniform (Singular.live scripting/logic, Vizrt conditions, BI-style rule lists).
 **Acceptance:**
 
 - WHEN rules are authored on an element THEN they form an ordered list evaluated first-match-wins
-  against the bound input, and the Inspector shows which rule currently applies in preview
+  per target property against the bound input, and the Inspector shows every rule currently applying
 - WHEN the bound value changes at playout (field update) THEN the effect re-evaluates and applies
   live, identically in preview, `.vcg`, and single-file HTML under CEF
 - WHEN the input is a countdown clock's remaining time THEN threshold rules (e.g. ≤ 60min,
@@ -4091,8 +4100,15 @@ Acceptance):**
 **2026-11-04 follow-up — `openspec/changes/countdown-target-entry/`:** Preview must use the same
 masked target date/time picker as CG Control; switching an older starter from time of day to a date
 must update its standard validation pattern without discarding custom author constraints. Advanced
-timing states a readable deadline. The direct full-screen countdown starter must animate every part
-through its normal outro when zero completes the content-driven hold.
+timing states a readable deadline. A countdown authored to close at zero must animate its normal
+outro; D-179's later Azan starter instead keeps its announcement until manual Stop.
+
+**Stopped-Canvas follow-up (2026-11-04) — `openspec/changes/countdown-target-entry/`:** a past
+wall-clock target must not hide countdown digits or Step-associated design elements while the
+authoring Canvas is stopped, preventing selection/editing. Idle authoring shows the authored base
+state without automatic expiry effects; explicitly authored hidden elements stay hidden. Starting
+real Canvas playback or Preview still applies the actual deadline and normal zero behavior, and
+stopping returns the editable authoring state without changing the stored target.
 
 ## [!] D-142 — Brand Pack Factory ⟨priority: unrated⟩
 
@@ -5817,6 +5833,11 @@ data the operator may supply.
 - WHEN Variables is viewed at the normal narrow Inspector width THEN Key, Title, Type / binding and
   Actions remain aligned as one table row per field; actions do not fall into a separate card footer,
   and the already-selected Variables tab is not repeated as another panel heading
+- WHEN a referenced composition is renamed THEN its Variables namespace heading follows the current
+  composition name while the stable operator-payload namespace remains unchanged
+- WHEN a Title or Type / binding value exceeds its compact column THEN the full value is available on
+  hover, and focusing Title expands its editing area across the adjacent Type / binding column while
+  keeping Actions fixed
 
 ## [x] D-167 — Live Source appearance controls remain editable in multi-select ⟨priority: high — the owner, 2026-11-01⟩ — `openspec/changes/multiselect-live-source-appearance/`
 
@@ -5902,14 +5923,15 @@ the canvas ratio.
 - WHEN export is running THEN the action visibly remains busy and cannot be started twice
 - WHEN export succeeds THEN its notice uses the success treatment; failures remain persistent error notices
 
-## [x] D-171 — New Live Source plates use clear `plate-N` names and readable canvas labels ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/live-source-plate-names/`
+## [~] D-171 — Plates use clear `plate-N` names, readable canvas labels and one broadcast-facing noun ⟨priority: high — the owner, 2026-11-02; vocabulary clarified 2026-11-03⟩ — `openspec/changes/live-source-plate-names/`
 
-**What:** Auto-generated source ids begin at `plate-1`, and the authoring label is large enough to identify a plate at normal canvas zoom.
+**What:** Auto-generated source ids begin at `plate-1`, the authoring label is large enough to identify a plate at normal canvas zoom, and every Designer-facing label/message calls the frame a **Plate** rather than a Live Source. Internal schema/type names stay unchanged for compatibility.
 **Why:** `live-N` describes an implementation concept rather than the frame the author is arranging, and the current label is too small.
 **Acceptance:**
 
-- WHEN a Live Source is drawn THEN its next free automatic id is `plate-N` within the same look
-- WHEN a Live Source is visible on the Designer canvas THEN its source label is clearly legible without selecting it
+- WHEN a Plate is drawn THEN its next free automatic id is `plate-N` within the same switchable state
+- WHEN a Plate is visible on the Designer canvas THEN its source label is clearly legible without selecting it
+- WHEN the author creates, selects, binds or receives an error about one THEN the visible noun is `Plate`, never `Live Source`
 - WHEN an existing project contains `live-N` or a custom id THEN that authored id is preserved unchanged
 
 ## [x] D-172 — Text padding switches between one value and four sides ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/text-padding-mode/`
@@ -5921,6 +5943,96 @@ the canvas ratio.
 - WHEN padding is uniform THEN one value controls all four sides
 - WHEN the author switches to per-side mode THEN the current value is copied to top, right, bottom and left
 - WHEN the author switches back to uniform mode THEN the top value becomes the single value and rendering stays consistent in canvas, preview and export
+
+## [~] D-173 — Preview is a large command-first workspace with compact Variables ⟨priority: high — the owner, 2026-11-02; readiness follow-up 2026-11-04⟩ — `openspec/changes/preview-command-data-workspace/`
+
+**What:** enlarge the composition Preview and make its right-hand workspace read top to bottom as
+status and playout commands, optional advanced timing, then a dense scrollable Variables table. Show
+the elapsed run time, remove the Preview-only **Out** command, and replace persistent explanatory
+paragraphs with concise labels or contextual info affordances. Variables stay in the same workspace
+rather than a second tab, so a large data set can be scanned and edited without switching views.
+**Readiness follow-up (Full lane):** transport commands must wait for the current dedicated Preview
+iframe to finish booting and signal readiness. A Play sent before its message listener exists can
+be lost while the host's elapsed clock advances. Keep transport disabled until the current iframe
+is ready, guard the command handlers too, and do not start elapsed time for an undispatched command.
+Reset readiness when Preview content is rebuilt or the dialog reopens; ignore readiness from other
+or obsolete frames. Preserve normal ready-state Play/Pause/Resume/Stop and natural-completion
+behavior. The early blank capture is consistent with this race, not proof of its cause; a successful
+retry does not verify the fix. Deterministic readiness and real-browser coverage remain required.
+**Reset follow-up (Full lane, 2026-11-04):** Reset must immediately end the dedicated Preview's actual
+rehearsal, including paused content or an in-progress outro, rather than only zeroing host counters.
+It restores the same seeded field data in form and runtime (including current connected-file rows)
+and the initial frame, remains blank until explicit Play, and cannot
+be restarted by an older pending Play. Preserve assets/session settings, normal animated Stop,
+Canvas and on-air contracts. Existing D-173/OpenSpec owns this correction.
+**Why:** the current modal is smaller than the available screen, puts data above the controls, uses
+one tall card per value and spends too much of the narrow column on prose. Real templates can expose
+dozens of values and the author must still reach Play/Stop immediately.
+**Acceptance:**
+
+- WHEN Preview opens on a normal desktop THEN the dialog uses nearly all available width and height
+  while remaining contained and scrollable on smaller screens
+- WHEN Preview is read from the top THEN the large, fixed-width frame/time status is directly above
+  the picture and names the active composition, while transport precedes advanced timing and
+  Variables in the right workspace
+- WHEN many scalar Variables exist THEN their key/label and high-contrast editable value remain
+  aligned in dense rows; one **Update all** commits pending values and list/repeater values retain
+  only the richer edit/reorder controls they require
+- WHEN Play, Pause, Resume, Stop or natural completion occurs THEN elapsed time starts, freezes,
+  resumes, resets or settles consistently with that preview run; Stop returns both counters to the
+  start while natural completion preserves its final values
+- WHEN either counter changes digits THEN tabular monospace figures and fixed value widths prevent
+  the status strip or surrounding controls from shifting
+- WHEN elapsed time is shown THEN minutes, seconds and hundredths use the unambiguous
+  `minutes:seconds:hundredths` form (for example `00:01:03`)
+- WHEN a Preview value starts with Persian/Arabic or Latin text THEN its editor follows the first
+  strong character automatically, matching CG Control without changing the stored value
+- WHEN the transport renders THEN it offers Play, Pause, Stop, Previous and Next as applicable, but
+  no **Out** button
+- WHEN a Preview command has a tooltip THEN it is a short action or disabled-state reason, not a
+  long instructional sentence
+- WHEN timing/help context is not essential to the current action THEN it is not persistent prose;
+  any necessary explanation is reachable from a compact contextual affordance
+
+## [~] D-174 — Single-file HTML export stays an internal tool, not a Designer action ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/hide-html-export-action/`
+
+**What:** hide **Export HTML** from the Designer's normal composition action bar while retaining the
+single-file exporter and its tests for internal diagnostics and development.
+**Why:** customer deliveries use `.vcg`; exposing a second output format makes the normal workflow
+ambiguous even though the HTML path is still valuable to the development team.
+**Acceptance:** WHEN an author uses the Designer THEN Preview and `.vcg` export remain available and
+no HTML export action is shown; WHEN internal exporter tests or code call the single-file exporter
+directly THEN its behaviour is unchanged.
+
+## [x] D-175 — Main canvas playback follows the same lifecycle as Preview ⟨priority: high — the owner, 2026-11-02⟩
+
+**What:** make the Designer canvas Play honour intro, content-driven hold and outro exactly as the
+dedicated Preview does, including ticker-driven completion. **Acceptance:** the same scene and data
+produce the same lifecycle boundaries on the canvas and in Preview without changing stored timing.
+— `openspec/changes/canvas-lifecycle-playback/`
+
+## [~] D-176 — Media timing authoring has one clear Follow composition path ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/simplify-media-timing-authoring/`
+
+**What:** remove the low-value **Add phase marks** path for Video/Lottie. Under **Follow
+composition**, treat media as opaque and derive Intro, middle and Outro only from the composition's
+Content start and Out point. Author Freeze or Loop middle only in composition Playback, show the
+effective media Hold as read-only time/conformed-frame state, and move timing teaching behind an
+information icon. Under Freeze, every Follow element derives its held picture from composition Out
+point; there is no media-specific Freeze-frame exception. Keep legacy manual phases editable outside
+Follow and keep **drives hold** only in the composition Playback checklist.
+
+## [!] D-177 — Audition Live Sources with picture and sound before air ⟨priority: high — blocked on a Playout preview contract, 2026-11-02⟩
+
+**What:** show and audition a selected Live Source in CG Control PVW and in the Source defaults dialog,
+including its audio, before Take/Update on air. **Blocker:** CG Control currently receives source
+catalogue/control metadata, not a bounded preview stream and per-source monitor-audio contract from
+Playout; the client must not invent a vendor-specific capture endpoint.
+
+## [ ] D-178 — Pan a live input inside a differently shaped plate ⟨priority: high — the owner, 2026-11-02⟩
+
+**What:** when a source is cropped by a plate's aspect, allow an authorised drag on its PVW/PGM plate
+to choose the visible source region. Persist a normalised focus/crop value per plate/look and apply it
+identically in preview, bridge routing and on-air mixer geometry.
 
 ## [~] D-179 — Rebuild and re-audit the Persian production starter gallery ⟨priority: high — owner re-review reopened 2026-11-04⟩ — `openspec/changes/rebuild-production-starter-gallery/`
 
@@ -5953,35 +6065,476 @@ keeps all 18 rows inside its panel, uses restrained navy/slate/ivory rather than
 and closes its background through visible opacity keyframes after the rows. City weather has no
 page-number graphic and shows every city exactly once before its overall animated close. Forecast
 daily high and low temperatures use equal font sizes, identified by their explicit Persian labels.
-Each temperature number and its label share the same centered column; degree marks keep consistent
-edge spacing. Legacy gallery titles are Persian-only, without English suffixes; stable template IDs stay.
+Forecast labels retain their centered columns; numeric text and degree marks form compact adjacent
+pairs through ordinary editable Text alignment. Legacy gallery titles are Persian-only, without
+English suffixes; stable template IDs stay.
 Rendered graphics contain no instructional footers such as the explanation of following city pages;
 capability descriptions remain outside the on-air composition in the gallery and documentation.
 The countdown sample is an Azan lower-third: it counts down to the operator's chosen target, then
 replaces the timer with an editable “اذان مغرب به افق تهران” announcement that remains until Stop.
 All switching uses visible Countdown Steps; no timetable or prayer-time calculation is implied.
 
+**Additional city-weather variant remains open (owner follow-up, Full lane):** retain both existing
+weather starters: `iran-weather-pages` keeps 31 capitals across four pages of up to eight rows, and
+`iran-weather-forecast` keeps its current design and equal 52 px temperatures. Keep the separate
+`iran-weather-cards`, «آب‌وهوای شهرها — کارت‌های تصویری». The owner's latest decision removes only
+the new `iran-weather-outlook`, «پیش‌بینی پنج‌روزه — نمای تلویزیونی», leaving twelve catalog entries
+and three weather templates. It does not remove either original weather starter.
+The supplied photographs/videos inspire large broadcast cards, a bright blue/white palette and
+prominent coherent animated icons, without dominant yellow/turquoise. The new city variant uses
+four large cards per page across eight pages for all 31 alphabetically ordered capitals, with three
+on the last page. Retain visible choices/rules, row effects and one-pass auto-close
+after the last full dwell. No page counter, explanatory footer or unexplained percentage returns.
+The new sky asset is separate from existing artwork. New content/pagination requires its own tests
+and posters/motion; original four-page/forecast behavior remains in scope and must not regress.
+**Degree adjacency across all three weather templates:** temperature degree signs must sit compactly
+beside their rendered numbers rather than at a distant fixed box edge. Keep the gap visually small
+and consistent for one- and two-digit values, including negatives and Persian digits, within each
+field's existing allowed range. Use LTR/end-aligned numeric text and an LTR/start-aligned separate
+degree element 2–3 px after its box. Preserve the centered forecast-label columns and equal 52 px
+high/low type; do not promise exact glyph-pair centering for every value or expand numeric ranges.
+Canonical data stays numeric. This targeted repair
+is the only newly requested change to the originals; affected geometry tests and refreshed media
+are locally verified, with final gate and Linux evidence tracked separately.
+
+**Deferred, low-priority hover-preview investigation:** only after the city-weather addition, degree repair and remaining template
+work is complete, investigate IDM's reported “Download this video” overlay on Landing motion previews.
+Establish the extension/application boundary and consider a scoped mitigation without breaking
+ordinary downloads or hover-preview behavior. Do not promise that application code can control
+extension-injected UI, disable downloads globally, or change the user's extension settings unasked.
+Read-only official-source evaluation is complete: [IDM's documented per-site panel exceptions](https://internetdownloadmanager.com/register/new_faq/video18.html)
+provide a user-controlled host mechanism applicable to `localhost` and `127.0.0.1` without a URL
+scheme. [Chrome's controlsList documentation](https://developer.chrome.com/blog/chrome-58-media-updates?hl=en)
+covers native media controls, not a verified extension-overlay opt-out. Local reproduction with the
+installed IDM remains pending; no setting changed, no reliable application-side fix is justified
+by current evidence, and no fix is claimed.
+
+**Azan readability follow-up:** brighten the too-dark lower third and make its ordinary Steps at
+60, 30, 10, 5 and 1 minute visibly distinct through vivid, readable colors. Replace the right-side
+«مغرب» badge with an appropriate editable Azan icon; keep the real «اذان مغرب به افق تهران» zero
+announcement and manual Stop contract. Current local source/browser checks, refreshed poster review
+and regenerated motion's browser playback checks are complete. Capture and encoding followed the
+revised source on 2026-11-04; exact evidence
+is in gallery tasks 6.14/6.25. Final gate and Linux evidence remain pending.
+
 **Saved-project and motion follow-up:** the owner's `جدول-لیگ-برتر-ایران.cgproj` is the
 league starter's new authored baseline; preserve its layout, keyframes and independent row timings,
 normalize packaged asset identifiers and leave the supplied file unchanged. Replace the sparse
 12 fps gallery recordings with genuinely denser capture and a modest 1.15× excerpt speed; do not
 mistake duplicated frames for smoother motion. Lazy loading, silence and reduced-motion support stay.
+The owner subsequently supplied a second revision under the same league-project filename. Read and
+compare that revision before adopting it; preserve its authored changes, verify bundled image bytes
+as well as names, and regenerate the affected gallery media. The second revision is adopted and
+locally verified, including current poster review and motion playback with source-before-capture-before-
+encode ordering. Earlier source comparisons and captures remain evidence for the first revision only;
+final gate and Linux evidence are still separate debts.
+
+**Owner-supplied network-logo refinement (Full lane):** adopt the authored changes from
+`ارم-شبکه.cgproj` without modifying that supplied file. The read-only comparison finds the gold
+separator and subtitle removed, the subtitle field/binding removed, the wordmark moved from Y 24
+to Y 50, and a linear X-position key at frame 44/value 28 inserted among its retained animation
+keys. The replaceable logo image and wordmark remain; the supplied image/font bytes match the
+bundled assets. Preserve this exact authored delta and normal lifecycle, then add focused tests
+and regenerate/review the logo poster and motion excerpt. The source delta is adopted; all three
+preservation regressions pass within the 68-test starter suite, and the replacement poster/motion
+were captured and visually reviewed. Current browser acceptance also passes. Final repository gate
+and carrying-commit Linux E2E remain separately owed; earlier logo media is not the evidence for this delta.
 
 **Nested ticker repair — `openspec/changes/fix-nested-ticker-measurement/`:** the live crawl must
 measure headline widths independently of a hidden or scaled parent composition. Verify moving item
 geometry in Preview, not only the static authoring row; no overlap may appear after the parent enters.
 
-## [~] D-180 — Structured Repeater data, files and value rules work without a mandatory Sequence ⟨priority: high — owner follow-up 2026-11-04⟩ — `openspec/changes/complete-weather-repeater-data/`
+**Current Designer integration (2026-11-04):** `openspec/changes/reconcile-current-designer-gallery/` reconciles the owner's latest browser Designer work with this gallery and its lifecycle fixes in an isolated preview worktree. Original owner files remain untouched. Native/installer and CG Control-only work are excluded. Current focused builds/browser acceptance are recorded in that change's tasks; prior checks retain their original snapshot scope. The final repository gate and completed carrying-commit Linux E2E remain separately owed.
 
-**What:** a Repeater derives row fields from its child composition, edits/imports them with correct
-types and aliases, connects to schema-generated Excel, reloads explicitly, and can be File only in
-CG Control. An outer Sequence remains optional pagination. Value rules may drive row image/color/
-visibility, and many-column tables retain visible field titles and usable input widths in Designer,
-Preview and CG Control.
+## [~] D-180 — Weather repeater accepts structured rows, dynamic icons and value rules ⟨priority: high — implementation complete; attached-project/manual CG Control acceptance and full gate remain, 2026-11-03⟩
 
-**Follow-up acceptance:** a directly selected Repeater exposes **Rows and data file…** and a prominent item
-entrance section; Excel Save/connect/Reload works in Designer and CG Control behind Update; no
-surface compresses a league row into unlabeled slivers.
+**What:** complete the weather-list authoring pattern: Repeater rows can supply city, temperature and
+an image/icon; rows can come from a structured shared file; icon codes can map to authored image
+choices; numeric temperature rules can change styling. The attached `repeater.cgproj` structure
+(one city card repeated inside a list, optionally paged by an outer Sequence) is the supported model.
+The selected Sequence's Inspector exposes a Page data modal that persists every composition page,
+and one JSON `pages` file may fill all page scopes; Variables remains focused on fields/bindings.
+The schema-derived file remains attached for the Designer session and Reload needs no reselection.
+Designer can save a matching, self-documenting sample for any Sequence from its actual scalar fields,
+nested groups, Repeater columns and page count; its `pageSchemas` guide sits beside an immediately
+loadable `pages` array. When all pages contain the same single flat Repeater, Designer instead offers
+one bulk table and a generated Excel workbook, splitting rows by the Repeater limit and creating pages
+automatically. CG Control exposes the same packaged pages as one operator table with a persistent
+generated-workbook connection/reload flow; edits remain drafts until Update, and excess rows are
+refused rather than dropped. The Sequence Page data modal exposes the nested Repeater's **File only
+in CG Control** policy directly. When enabled, CG Control removes the combined manual row editor and
+keeps only connected-file status, Reload and a read-only current-data dialog; it does not offer Save and connect in File-only mode.
+Number fields can be unrestricted, an exact numeric choice list, or custom-range; invalid
+manual/file values are refused and every choice list is a dropdown in both Designer and CG Control.
+Manual numeric inputs reject letters as they are typed (while keeping valid localized digits and
+incomplete number states), and mixed text/number/dropdown row controls share the available width so
+city and temperature values stay visible in the narrow Preview panel. Numeric row inputs use the
+same active field surface as text/select controls and never resemble a disabled field while editable.
+The weather sample uses 0/1 only as an example; values such as 0/2/5 are equally valid when authored.
+Each exact value can optionally have an operator-facing alias. The Inspector edits choices in a
+dedicated modal with separate Value and optional Alias inputs, neutral `alias1`/`alias2` placeholders,
+and explicit Add, Remove and Save actions. The modal uses the same input styling as the rest of the
+Designer, and Add continues a consistent numeric pattern (for example 10/20/30 becomes 40). Invalid numbers and duplicate values/aliases identify the
+affected row, without exposing mixed-direction comma/equals syntax. Designer, Preview, CG Control and
+generated Excel dropdowns show the alias, and CSV/JSON may contain it, but imported/staged/on-air
+values remain canonical numbers. A value rule bound to that field uses the same dropdown and aliases
+for its condition while storing the canonical number; a removed legacy value remains visible as
+unavailable until explicitly replaced.
+CSV itself cannot store an Excel dropdown, so `docs/weather-cities.sample.xlsx` is the validated
+office-entry companion. **Save and connect Excel** in both Designer and CG Control regenerates this
+kind of workbook from the active template's real row fields and values, including arbitrary choice
+lists and numeric range validation, then keeps that exact file connected. The normal workflow has
+no free-form import: another user edits the generated file and the author/operator presses Reload.
+Both Designer and CG Control show a labelled green-check status beside a connected file and a
+labelled unplugged status when no reloadable file is attached; status never depends on colour alone.
+The connection records the schema used to generate it. If fields, limits or exact choices later
+change, Reload remains available and validates against the current template, but the status becomes
+**Connected · update file** with an explicit warning that columns or Excel choices may be outdated;
+saving and connecting a current file clears that state.
+Legacy CSV reading remains supported with Excel's comma/semicolon/tab separators and UTF-8/UTF-16
+output. Reload failures name the connected file and distinguish a replaced/damaged file, incompatible data-sheet
+or header structure, missing required values and invalid cells. Structural errors show the expected
+columns; cell errors show the data/sheet row, column, offending value and allowed choice/range.
+Value-rule authoring opens in a dedicated modal; Inspector keeps only the rule count/status and the
+Edit rules action immediately after Dynamic / Data, so a long ordered rule list does not crowd the
+element controls. A defined rule set uses a distinct active tint and count badge in the section
+header, remaining obvious even when that section is collapsed.
+The filled references are `docs/weather-cities.sample.csv`, `docs/weather-cities.sample.xlsx` and
+`docs/weather-sequence-pages.sample.json` (the general nested-format fallback).
+
+**Standalone and current follow-up — `openspec/changes/complete-weather-repeater-data/`:** a Repeater does not require an outer Sequence. Its own Inspector exposes **Rows and data file…** with schema-generated Excel Save/connect/Reload and labelled columns. Sequence remains optional pagination. Value rules may drive image/color/visibility; File-only CG Control uses the read-only current-data contract in D-198, and changes remain staged until Update.
+
+## [x] D-181 — Inspector guidance is contextual, not persistent prose ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/inspector-contextual-help/`
+
+**What:** keep controls and current state visible in the Inspector, but move instructional or
+one-time explanatory copy behind a compact Info action that opens the shared readable help modal.
+Actual errors and blocking conditions remain visible; long explanations do not occupy the narrow
+Inspector continuously.
+**Why:** persistent paragraphs make common controls harder to scan and consume most of the available
+space, especially in the Playout section.
+**Acceptance:**
+
+- WHEN the Playout section renders THEN ownership, marker, delay and hold-loop teaching is available
+  from click-to-read Info actions rather than persistent paragraphs
+- WHEN a setting is active, empty or inert THEN its compact state remains visible beside the control
+- WHEN the author activates an Info action THEN the full explanation and any remedy are shown at
+  readable size in the shared modal
+- WHEN a genuine blocking error exists THEN it remains visible and is not hidden as ordinary help
+
+## [x] D-182 — Preview reports the runtime frame beside elapsed time ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/preview-runtime-frame-counter/`
+
+**What:** show `current frame / total frames` beside Preview's elapsed-time clock, driven by the
+root composition's authored lifecycle playhead rather than inferred wall time or paint optimisation.
+**Why:** elapsed time alone cannot show where a loop, content hold or outro currently sits in the
+authored timeline.
+**Acceptance:**
+
+- WHEN Preview is idle or a normal run advances THEN the counter mirrors the root composition frame
+  against the same total-frame value shown by the Designer timeline
+- WHEN a lifecycle hold parks the composition THEN the displayed frame remains fixed until the
+  outro starts, after which it advances through the outro
+- WHEN a content-driven hold has a non-empty Middle loop THEN the displayed root frame advances
+  through that range and wraps to Content start, including when time-driven media is the only moving
+  picture and composition paint itself remains collapsed
+- WHEN a runtime loop wraps THEN the displayed frame returns to that loop's start and advances again
+- WHEN a lifecycle leg is collapsed by the runtime because it has no frame-dependent pixels THEN
+  Preview reports the real start/end jump without adding time or changing content-start behaviour
+- WHEN nested compositions run their own timelines THEN they do not overwrite the root counter
+- WHEN any scope uses a loop or content-driven hold THEN elapsed time continues until the run
+  actually completes or the author presses Stop
+- WHEN a composition has no root frame-dependent paint THEN Preview counts its authored frames from
+  elapsed time instead of exposing Runtime's static-render collapse, and a fresh Play resets both
+  counters
+
+## [x] D-183 — New Project accepts duration in seconds as well as frames ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/new-project-duration-entry/`
+
+**What:** add an editable Duration-in-seconds field to the New Project dialog and keep it linked to
+Total frames through the selected frame rate. **Why:** authors think in seconds and should not have
+to calculate `seconds × fps` before creating a composition. **Acceptance:**
+
+- WHEN the frame rate is 50 fps and Duration is set to 10 seconds THEN Total frames becomes 500
+- WHEN Total frames is edited THEN Duration immediately reflects the corresponding time
+- WHEN frame rate changes THEN the displayed conversion remains internally consistent and project
+  creation stores the resulting integer frame count
+- WHEN a fractional frame rate cannot represent the requested duration exactly THEN the duration
+  readout snaps to the nearest whole-frame duration rather than promising an impossible time
+
+## [x] D-184 — Expanded property groups visibly contain their child controls ⟨priority: medium — the owner, 2026-11-02⟩ — `openspec/changes/polish-composition-inspector-hierarchy/`
+
+**What:** indent the body of expanded Inspector sections and the property rows below timeline group
+headers by one shared visual step. **Why:** headers and their children currently begin on nearly the
+same edge, so Transform, Path Style, Border Radius and Box Shadow read as unrelated rows instead of
+a hierarchy. **Acceptance:** expanded Inspector controls begin to the inside of their header; track
+labels begin to the inside of the matching timeline group title; nested groups may accumulate one
+additional step without clipping their editable values.
+
+## [~] D-185 — Video import keeps routine choices visible and diagnostics tucked away ⟨priority: medium — the owner, 2026-11-02⟩ — `openspec/changes/polish-video-import-and-timeline-feedback/`
+
+**What:** keep **Crop** visible in the Video import modal, but place the uncommon Premultiplied-alpha
+and Alpha-bleed corrections inside a closed **Advanced corrections** section. Their technical
+explanations are available from compact information actions instead of permanent paragraphs.
+**Why:** crop is part of the normal import flow; the two alpha repairs are troubleshooting tools and
+their long copy currently dominates the dialog.
+**Acceptance:** a ready Video import shows Crop and hides both alpha toggles initially; opening
+Advanced corrections reveals the toggles with their current defaults unchanged; each correction's
+purpose and performance cost remains available through contextual help.
+
+## [~] D-186 — Composition Freeze derives every held picture from Outro start ⟨priority: high — the owner, contract updated 2026-11-03⟩ — `openspec/changes/align-follow-media-cursor-and-freeze-frame/`
+
+**Owner's final decision:** remove the authored Follow-Video Freeze-frame input. **Freeze** is a
+composition policy: native, Lottie and Video elements all keep the picture derived from composition
+Out point (shown as **Outro start**), and the root cursor remains on that same frame. Content start
+(shown as **Hold start**) is only the beginning of the Loop-middle range and is never a second Freeze
+anchor. A legacy serialized `freezeAtMs` is inert and receives no migration UI.
+**Acceptance:** no Video Inspector or schema/runtime authoring path can choose a different held
+frame; a read-only effective clip time/conformed-frame readout may remain; Canvas, Preview and export
+park every element and the root cursor at Out point; completing a timed/content-driven Hold advances
+forward through Outro from Out point without wrapping to Content start or jumping to an
+element-specific frame; manual timeline scrub remains a continuous one-pass view through the media
+Middle.
+
+## [~] D-187 — Hold behaviour belongs to the composition while selected elements repeat independently ⟨priority: high — mixed Hold playback must not rewind unrelated elements, 2026-11-02; Freeze clarified 2026-11-03⟩ — `openspec/changes/move-hold-behavior-to-composition/`
+
+**What:** author **Freeze** or **Loop middle** once in the composition's Playback section. Under
+Loop middle, a checklist chooses the elements that repeat across `[Content start → Out point]`.
+Unchecked animated elements and media keep an independent local clock, play forward once to their
+end and never rewind when the composition cursor wraps. Content drivers such as ticker, sequence
+and countdown keep their existing independent clocks and are never restarted by a Middle wrap.
+**Why:** one global looping playhead cannot truthfully drive an element that repeats and another
+element that must continue to its end; repainting both from the wrapped frame causes visible jumps
+and may replay an Outro. **Acceptance:** the Preview cursor shows the active Middle loop; checked
+elements repeat; unchecked elements advance once and remain at their authored end; leaving Hold
+plays the selected elements' Outro once without replaying an already-completed unchecked Outro;
+Pause/Resume freezes and resumes both clocks together; Stop, timed Hold, manual Hold and
+content-driven Hold all preserve the same ownership rule. Video and Lottie no longer expose a
+separate On hold selector. Freeze shows no repeat checklist and parks every element plus the root
+cursor at Out point; a Follow Video exposes no authored Freeze-frame exception. When selected
+content completes during Loop middle, the pass currently on screen finishes forward to Out point
+and flows into Outro without another wrap or an abrupt jump. A frozen Hold is already at that
+boundary and exits forward from it; operator Stop remains immediate and Pause/Resume preserves a
+pending boundary exit.
+
+## [~] D-188 — Playback lifecycle markers use clear phase names and compact actions ⟨priority: high — the owner, 2026-11-03; visual follow-up 2026-11-04⟩ — `openspec/changes/clarify-playback-marker-actions/`
+
+**What:** rename the visible **Content start** boundary to **Hold start** and the visible **Out
+point** boundary to **Outro start**, without changing their stored schema fields. Each row uses a
+large, equal-width action with the same short visible verbs: **Set / Clear**; the accessible name
+remains complete. Timeline tooltips use only the phase name. When Outro start exists and the author
+first sets Hold start, its default is one frame earlier when no earlier entrance-settle frame exists.
+After that, dragging either marker through the other moves the partner marker too and MAY place both
+on the same frame.
+**Why:** official NLE terminology
+uses In/Out for clip or edit ranges, while motion-graphics tools describe semantic phase boundaries
+as intro/hold/outro. Add/Pin are also misleading for a singleton boundary. **Acceptance:** all four
+states remain operable in the narrow Inspector with at least a 28px hit area, do not disturb the
+fixed Info column, preserve the persisted project shape, seed a non-empty one-frame Middle when Hold
+start is first set, keep both marker drags symmetric at their crossing boundary, and still draw both
+full-height range lines when the authored boundaries coincide.
+
+**Owner's visual follow-up (2026-11-04, Fast lane):** Hold start's marker, line, associated action/icon
+and Loop range use the existing semantic green, so they are distinguishable from the blue playhead
+and current-frame indicator. Outro start remains orange. This changes presentation only: authored
+frames, drag targets, coincidence handling and all playback semantics stay unchanged. Focused checks
+are recorded in the existing change; current browser/final validation remains pending.
+The green Loop range must remain visibly identifiable across strongly colored element rows, not
+only over the neutral ruler. The owner's final visual correction rejects diagonal hatching and
+thick boundary halos: use a restrained plain fill, retain underlying layer colors, and leave the
+green Hold-start and orange Outro-start lines clearly visible without overlays masking their colors.
+Its visibility must be checked in the real browser.
+
+## [x] D-189 — Hold source stays reachable and concise ⟨priority: high — the owner, 2026-11-03⟩ — `openspec/changes/keep-hold-source-visible/`
+
+**What:** show the authored **Hold source** selector in every `Auto-out` and `Loop cycle`
+composition, even before a hold-driving element exists or after the last driver is disabled/deleted.
+Use the short values **Timed** and **Content-driven**; keep the authored Content-driven intent instead
+of silently rewriting it. When no effective driver exists, state compactly that playback is using
+Timed, keep `holdMs` authorable and put the driver/remedy explanation behind Info. Static and Manual
+continue to omit the selector because neither executes a selectable Hold source.
+**Why:** hiding the selector makes the author add content in a particular order and conceals why a
+stored Content-driven composition is currently using its duration. Long option text also makes the
+narrow Inspector hard to scan.
+**Acceptance:** a content-less Auto-out/Loop-cycle composition exposes the two short choices; choosing
+Content-driven persists that value and shows `No active hold driver · using Timed`; adding/enabling an
+effective driver clears the fallback and hides `holdMs`; removing/disabling the last driver restores
+both without changing the authored choice; eligible disabled drivers remain available in the closer
+checklist; Playback mode values are also concise and their explanations remain reachable from Info.
+
+## [~] D-190 — Video import explains compatibility and rejects unusable sources before conversion ⟨priority: high — the owner, 2026-11-03⟩ — `openspec/changes/validate-video-import-capability/`
+
+**What:** make the proven video-import presets visible before the operator waits: with transparency,
+MOV/QuickTime Animation (QTRLE), uncompressed AVI/BGRA, or a numbered PNG sequence; without
+transparency, H.264 MP4/MOV or VP8/VP9 WebM. Keep the full accepted-container list behind compact
+help and state that container extensions alone do not guarantee codec compatibility. Reject an
+unlisted extension immediately; after selection, use the bundled converter to decode a frame before
+enabling conversion. A source with no readable video track, an undecodable/damaged first frame, and
+an internal converter crash remain distinct outcomes with concise remedies; technical logs stay
+secondary. Audio remains excluded from the canonical video asset. **Why:** the existing picker
+accepts many container extensions but can discover a codec failure only after a long encode, while
+generic “unsupported” copy does not tell the operator which export preset to use. **Acceptance:**
+recommended formats are reachable before selection; an unlisted extension never opens the
+converter; a listed container whose frame cannot be decoded never reaches `convertToWebm`; a
+supported poster-less source may still proceed after a separate frame-decode check succeeds; every
+refusal names the next useful action without blaming the file for an app/worker failure. A
+non-square source exposes `From file` and `Pixel dimensions` without scene-scale workarounds, and
+QTRLE+ARGB alone exposes an opt-in `Match VLC 3 colors`; both choices update preview, are baked into
+conversion and remain distinct in provenance/dedupe. Standard file geometry/colour stays the safe
+default because metadata cannot prove that a legacy interpretation is intended.
+
+## [~] D-191 — Landing imports an existing project directly ⟨priority: high — the owner, 2026-11-03⟩ — `openspec/changes/import-project-from-landing/`
+
+**What:** place a clear **Import project** action beside **New project** on the Designer Landing
+screen. It uses the same disk-project opener as File → Open and enters the Studio with the selected
+project; it does not create a temporary project first. **Why:** File → Open is currently reachable
+only after opening a starter or creating a throwaway project, which turns the most direct return path
+into an unnecessary detour. **Acceptance:**
+
+- WHEN no project is open THEN Landing shows **New project** and **Import project** together as the
+  two direct project-entry actions
+- WHEN the author chooses **Import project** and selects a valid `.cgproj` THEN the same disk-open
+  operation used by File → Open loads it and Landing switches directly to Studio
+- WHEN the author cancels the picker THEN Landing remains unchanged and no temporary project or New
+  Project dialog is created
+
+## [~] D-192 — New Project exposes 30 fps and honest reference-safe presets ⟨priority: high — the owner, 2026-11-03⟩ — `openspec/changes/expand-new-project-formats/`
+
+**What:** add 30 fps to the shared project contract and New Project selector; offer clearly named
+square-pixel footprints that safely fit the current 1920×1080 authoring reference: Full HD
+reference, Small canvas and Square canvas, while retaining Custom. Use the shared in-field unit
+primitive so Duration's `s` suffix
+sits inside a control exactly as wide as Total frames. **Why:** 30 fps is a standard production rate
+that the generic runtime can already drive, while ambiguous preset names and an outside Duration
+suffix make the form harder to understand and scan.
+**Acceptance:**
+
+- WHEN New Project opens THEN frame rate offers `25, 29.97, 30, 50, 59.94, 60` and resolution
+  offers Full HD reference 1920×1080, Small canvas 1280×720, Square canvas 1080×1080 and Custom
+  with clear names that do not imply the smaller footprints fill their output channel
+- WHEN 30 fps and 10 seconds are selected THEN Total frames becomes exactly 300 and creating the
+  project stores `frameRate: 30` with `durationFrames: 300`
+- WHEN a reference-safe preset or Custom is selected THEN the scene and its first composition use that
+  exact pixel raster, and save/reopen/export preserve the raster and frame rate
+- WHEN Duration and Total frames render THEN their field boxes have the same width and the `s`
+  suffix is inside Duration's border
+- WHEN the output model still uses a fixed 1920×1080 reference and has no pixel-aspect-ratio field
+  THEN UHD, QHD, portrait-FHD and non-square-pixel SD are not advertised as safe output presets
+
+**Pending output-format migration:** `Scene.resolution` is currently an authored graphic footprint,
+placed inside the fixed `REFERENCE_FRAME` 1920×1080 and then scaled to the channel raster. True UHD,
+QHD or portrait projects require a separate persisted output/reference format carried through page
+placement, Live Source geometry, Runtime preview and Bridge routing. That migration is deliberately
+not approximated by adding misleading menu entries in this change.
+
+**Runtime contract:** 30 fps advances `CG_RUNTIME_VERSION` from `1.0.0` to `1.1.0`, because a 1.0
+Runtime's strict schema cannot read the new value. Exported packages declare that floor. [[B-384]]
+moves the manifest shortfall preflight ahead of strict scene parsing so current/future older
+contracts receive the actionable update message. A `1.0.0` binary already installed before this fix
+cannot be changed retroactively and may still show its technical parse error; updating the station
+is the supported remedy.
+
+## [x] D-193 — Bind-from-canvas has an unmistakable target state ⟨priority: high — the owner, 2026-11-03⟩ — `openspec/changes/designer-variables-tab/`
+
+**What:** use one fixed-position Bind/Unbind toggle per Variables row and make the temporary
+Bind-from-canvas mode visually different from ordinary selection: the toggle changes between link
+and unlink glyphs, its hover/active state is violet, the pointer gains an unmistakable link badge and
+a compatible hovered element receives a dashed violet target frame. **Why:** two actions in different
+columns move the operator's target, while a generic crosshair and selection-coloured outline do not
+explain whether a click will select, draw or bind. **Acceptance:**
+
+- WHEN the author activates Bind THEN the canvas and its pasteboard use a link-badged pointer rather
+  than the ordinary selection arrow or generic crosshair
+- WHEN Bind is active but no element is hovered yet THEN the dark editing area around the output has
+  a violet inset frame and soft shadow so the pending action area is already clear without changing
+  the output frame itself
+- WHEN Bind is active THEN a compact instruction above the work area says `Select an element` and
+  names the element families compatible with that Variable type
+- WHEN that pointer moves over a compatible unlocked visible element THEN a violet dashed target
+  frame follows that element's rendered, animated and rotated geometry without showing resize handles
+- WHEN the pointer leaves the element, Bind is cancelled or a binding is committed THEN the target
+  frame disappears
+- WHEN a field is unbound THEN its fixed binding toggle shows Bind with a link icon; WHEN it is bound
+  THEN the same control in the same location shows Unbind with an unlink icon
+- WHEN the Bind state is hovered or active THEN its icon is violet rather than the blue
+  selection/action colour; WHEN the Unbind state is hovered THEN it is red to identify the removal
+  action
+
+## [~] D-194 — Registered Looks have a distinct visual identity ⟨priority: high — the owner, 2026-11-03⟩ — `openspec/changes/designer-responsive-toolbar-look-visibility/`
+
+**What:** distinguish registered Looks from ordinary reusable compositions with one semantic visual
+identity across the Compositions panel and Timeline: a multi-panel Look icon, a restrained violet
+type token, and a slim row accent. Headings and names stay neutral, and no user-facing default badge
+is shown because the operator selects the active Look before Take. Keep the open/selected state blue
+and lock/error state red so type and state never compete. Resolve Look membership from the registered
+instance-to-composition relation, never from a `look-*` name. **Why:** Looks are stored as
+compositions but switch one-of-N and have
+different visibility behaviour; presenting both with the same component glyph and indigo colour
+hides that operational distinction. **Acceptance:**
+
+- WHEN an ordinary composition and a registered Look are listed together THEN the ordinary row uses
+  the neutral Component glyph while the Look uses the violet multi-panel glyph and a slim violet row
+  accent without recolouring every label
+- WHEN the Look's root instance appears in the Timeline THEN its glyph and lifespan bar use the Look
+  identity while its name remains neutral
+- WHEN the Looks list renders THEN neither Looks nor ordinary compositions receive a `default` badge
+  or Set-default action; the schema fallback stays internal for compatibility only
+- WHEN either row is active/selected or locked THEN blue still means active/selected and red still
+  means locked/error; Look violet remains a type cue rather than a state cue
+- WHEN a Look is renamed or its name never starts with `look-` THEN its identity remains unchanged
+  because registration, not naming, determines its type
+
+## [~] D-195 — Look lifecycle is managed once, below Compositions ⟨priority: high — the owner, 2026-11-03⟩ — `openspec/changes/designer-responsive-toolbar-look-visibility/`
+
+**What:** make the Compositions panel the single lifecycle surface for Looks. Ordinary compositions
+stay in the upper list; registered Looks always render in a distinct lower section whose own header
+contains an icon-only **Add Look** action and **Delete multi-frame group**. The Inspector keeps only
+actionable Live Source state/refusals and omits permanent empty/help copy. Renaming either
+representation keeps the Look/composition label synchronized. Deleting a
+Look from either its Look action or backing-composition action atomically deletes the registration,
+home instance and backing composition. Removing a non-empty multi-frame group warns with the Look
+count, then deletes every owned Look and composition in one undoable operation; an empty group can be
+removed directly. **Why:** two lifecycle surfaces drifted, and preserving a backing composition after
+deleting its Look left an object whose meaning differed between the Inspector and Compositions panel.
+**Acceptance:**
+
+- WHEN a Look exists and an ordinary composition is added later THEN every ordinary composition is
+  still listed above the Looks section and the new composition ends at the bottom of that upper list
+- WHEN the author chooses **Add Look** from the Looks header, including while a Look composition is
+  open, THEN the new Look is registered in the original group home without navigating away
+- WHEN **Show Look on composition** is chosen from a Look or unrelated composition THEN the group
+  home opens and that Look becomes active; when the home is already open only the Look changes
+- WHEN a Look or its registered backing composition is deleted THEN its registry row, home instance
+  and backing composition all disappear; any schema fallback moves internally to a survivor, and
+  the successful deletion toast is neutral rather than the red failure treatment
+- WHEN **Delete multi-frame group** is used on a non-empty group THEN a destructive confirmation
+  states how many Looks and compositions will be removed; confirming removes them as one undoable
+  operation, while an empty group needs no warning
+- WHEN the composition Inspector renders THEN it has no Look create/rename/delete controls; only
+  actionable/used Live Source state can appear there and the canvas Look picker remains the
+  visibility selector
+- WHEN the multi-frame toolbar action is hovered THEN its tooltip is the concise action name
+  **Add multi-frame group** (or the concise already-added state)
+
+## [x] D-196 — Preview switches Presets without leaving rehearsal ⟨priority: high — the owner, 2026-11-03⟩ — `openspec/changes/designer-responsive-toolbar-look-visibility/`
+
+**What:** add a compact, wrapping Preset button group below the fixed Preview transport, with its Preset
+heading on a separate line above the choices. Preset is the user-facing broadcast term; the legacy
+Look schema/API remains unchanged for project compatibility. Buttons share one base width; only a
+longer label may grow its own button, up to a bounded maximum. The active Preset uses the shared tint
+plus a clear inset frame as well as `aria-pressed`. The controls appear when the previewed composition
+has one or more registered Presets, including a visibly selected single-Preset state. The selection is
+local to the open Preview, is sent through the existing runtime Look cut, and never changes stored
+project data or the authoring Canvas selection. Keep Preview Variables focused by omitting every
+composition/Preset namespace whose complete subtree
+has no editable field. **Acceptance:**
+
+- WHEN Preview opens from a multi-Preset composition THEN it starts from the authoring Preset when valid
+- WHEN a composition has one Preset THEN Preview still shows that Preset as selected
+- WHEN new Presets are added THEN their default visible names are `preset-1`, `preset-2`, … while
+  existing legacy `look-*` projects still open unchanged
+- WHEN another Preset is selected during playback THEN Preview cuts immediately without reopening or
+  restarting the modal, and subsequent transport/data commands keep working
+- WHEN Preview closes THEN its Preset choice has not changed the project or Canvas selection
+- WHEN a composition or Preset and all its descendants have no editable fields THEN Variables shows no
+  heading or empty group for it
 
 ## [~] D-197 — Repeater rows can enter and exit in sequence ⟨priority: high — owner follow-up, 2026-11-04⟩ — `openspec/changes/stagger-repeater-item-entrances/`
 
@@ -6009,89 +6562,6 @@ Entrance and exit durations are separately editable; older Repeaters inherit the
 duration for exit. Hidden rows do not add dead time to the visible exit cascade.
 An immediate Stop never reveals fully clipped, not-yet-entered slide rows. The bounded outro
 watchdog allows the authored finite exit duration instead of truncating legal long cascades.
-
-## [~] D-173 — Preview is a large command-first workspace with compact Variables ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/preview-command-data-workspace/`
-
-**What:** enlarge the composition Preview and make its right-hand workspace read top to bottom as
-status and playout commands, optional advanced timing, then a dense scrollable Variables table. Show
-the elapsed run time, remove the Preview-only **Out** command, and replace persistent explanatory
-paragraphs with concise labels or contextual info affordances. Variables stay in the same workspace
-rather than a second tab, so a large data set can be scanned and edited without switching views.
-**Why:** the current modal is smaller than the available screen, puts data above the controls, uses
-one tall card per value and spends too much of the narrow column on prose. Real templates can expose
-dozens of values and the author must still reach Play/Stop immediately.
-**Acceptance:**
-
-- WHEN Preview opens on a normal desktop THEN the dialog uses nearly all available width and height
-  while remaining contained and scrollable on smaller screens
-- WHEN Preview is read from the top THEN the large, fixed-width frame/time status is directly above
-  the picture and names the active composition, while transport precedes advanced timing and
-  Variables in the right workspace
-- WHEN many scalar Variables exist THEN their key/label and high-contrast editable value remain
-  aligned in dense rows; one **Update all** commits pending values and list/repeater values retain
-  only the richer edit/reorder controls they require
-- WHEN Play, Pause, Resume, Stop or natural completion occurs THEN elapsed time starts, freezes,
-  resumes, resets or settles consistently with that preview run; Stop returns both counters to the
-  start while natural completion preserves its final values
-- WHEN either counter changes digits THEN tabular monospace figures and fixed value widths prevent
-  the status strip or surrounding controls from shifting
-- WHEN elapsed time is shown THEN minutes, seconds and hundredths use the unambiguous
-  `minutes:seconds:hundredths` form (for example `00:01:03`)
-- WHEN a Preview value starts with Persian/Arabic or Latin text THEN its editor follows the first
-  strong character automatically, matching CG Control without changing the stored value
-- WHEN the transport renders THEN it offers Play, Pause, Stop, Previous and Next as applicable, but
-  no **Out** button
-- WHEN a Preview command has a tooltip THEN it is a short action or disabled-state reason, not a
-  long instructional sentence
-- WHEN timing/help context is not essential to the current action THEN it is not persistent prose;
-  any necessary explanation is reachable from a compact contextual affordance
-
-## [~] D-175 — Main canvas playback follows the same lifecycle as Preview ⟨priority: high — the owner, 2026-11-02⟩
-
-**What:** make the Designer canvas Play honour intro, content-driven hold and outro exactly as the
-dedicated Preview does, including ticker-driven completion. **Acceptance:** the same scene and data
-produce the same lifecycle boundaries on the canvas and in Preview without changing stored timing.
-— `openspec/changes/canvas-lifecycle-playback/`
-
-## [~] D-182 — Preview reports the runtime frame beside elapsed time ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/preview-runtime-frame-counter/`
-
-**What:** show `current frame / total frames` beside Preview's elapsed-time clock, driven by the
-root composition's authored lifecycle playhead rather than inferred wall time or paint optimisation.
-**Why:** elapsed time alone cannot show where a loop, content hold or outro currently sits in the
-authored timeline.
-**Acceptance:**
-
-- WHEN Preview is idle or a normal run advances THEN the counter mirrors the root composition frame
-  against the same total-frame value shown by the Designer timeline
-- WHEN a lifecycle hold parks the composition THEN the displayed frame remains fixed until the
-  outro starts, after which it advances through the outro
-- WHEN a content-driven hold has a non-empty Middle loop THEN the displayed root frame advances
-  through that range and wraps to Content start, including when time-driven media is the only moving
-  picture and composition paint itself remains collapsed
-- WHEN a runtime loop wraps THEN the displayed frame returns to that loop's start and advances again
-- WHEN a lifecycle leg is collapsed by the runtime because it has no frame-dependent pixels THEN
-  Preview reports the real start/end jump without adding time or changing content-start behaviour
-- WHEN nested compositions run their own timelines THEN they do not overwrite the root counter
-- WHEN any scope uses a loop or content-driven hold THEN elapsed time continues until the run
-  actually completes or the author presses Stop
-- WHEN a composition has no root frame-dependent paint THEN Preview counts its authored frames from
-  elapsed time instead of exposing Runtime's static-render collapse, and a fresh Play resets both
-  counters
-
-## [~] D-191 — Landing imports an existing project directly ⟨priority: high — the owner, 2026-11-03⟩ — `openspec/changes/import-project-from-landing/`
-
-**What:** place a clear **Import project** action beside **New project** on the Designer Landing
-screen. It uses the same disk-project opener as File → Open and enters the Studio with the selected
-project; it does not create a temporary project first. **Why:** File → Open is currently reachable
-only after opening a starter or creating a throwaway project, which turns the most direct return path
-into an unnecessary detour. **Acceptance:**
-
-- WHEN no project is open THEN Landing shows **New project** and **Import project** together as the
-  two direct project-entry actions
-- WHEN the author chooses **Import project** and selects a valid `.cgproj` THEN the same disk-open
-  operation used by File → Open loads it and Landing switches directly to Studio
-- WHEN the author cancels the picker THEN Landing remains unchanged and no temporary project or New
-  Project dialog is created
 
 ## [x] D-198 — File-only Sequence data stays inspectable in CG Control ⟨priority: high — the owner, 2026-11-04⟩ — `openspec/changes/complete-weather-repeater-data/`
 

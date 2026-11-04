@@ -463,7 +463,10 @@ describe('D-135 — the playhead positions every Lottie on the canvas', () => {
             holdBehavior: 'idle-loop',
           }),
         ],
-        { lifecycle: { outPoint: 60 } },
+        {
+          lifecycle: { outPoint: 60 },
+          playout: { mode: 'manual', holdBehavior: 'loop' },
+        },
       ),
       { skipFontLoad: true, installGlobals: false, lottieAssets },
     );
@@ -626,9 +629,10 @@ describe('D-135 — the carve-out: ticker, sequence and clock do NOT follow the 
 /**
  * D-135 §5 — THE VIDEO HALF (§9.5 answered (a), 2026-08-13): the same playhead, the same
  * one message, now positioning every `<video>` by `currentTime` on a PAUSED element.
- * The mapping lives in `VideoDriver.expectedClipMs` — the SAME function the driver's own
- * clock reconciles against on air — and `positionAt` resolves through it; the node is
- * resolved through the handle's `live()` on every access (B-137's constraint, §1.8/§5.5).
+ * The static authoring mapping lives in `VideoDriver.positionAt`; D-175 gives ordinary Play
+ * to the real lifecycle, so B-378 deliberately keeps the lifecycle Freeze target out of manual
+ * timeline scrubbing. The node is resolved through the handle's `live()` on every access
+ * (B-137's constraint, §1.8/§5.5).
  */
 function videoElement(over: Record<string, unknown> = {}): Element {
   return {
@@ -668,14 +672,14 @@ describe('D-135 §5 — the playhead positions every <video> on the canvas', () 
     expect(v.currentTime).toBeCloseTo(0.4);
     runtime.tick(0); // the in-point is not a special case
     expect(v.currentTime).toBe(0);
-    runtime.tick(60); // 2400 ms — past introEnd 2000: the freeze hold's frame
-    expect(v.currentTime).toBeCloseTo(2);
+    runtime.tick(60); // 2400 ms — past Intro, still walking the authored Middle
+    expect(v.currentTime).toBeCloseTo(2.4);
     // What the element SHOWS is a paused frame: nothing ever played it.
     expect(plays).toBe(0);
     expect(v.paused).toBe(true);
   });
 
-  it('PLAY animates it through the SAME call — a stream of ticks, one mapping', () => {
+  it('a playhead-only tick stream walks the same authoring mapping as a direct scrub', () => {
     const runtime = createRuntime(scene([videoElement()]), {
       skipFontLoad: true,
       installGlobals: false,
@@ -690,8 +694,8 @@ describe('D-135 §5 — the playhead positions every <video> on the canvas', () 
     expect(seen.map((s) => Math.round(s * 1000))).toEqual([
       0, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400,
     ]);
-    // …and a FRESH runtime scrubbed straight to frame 10 lands on the same time: play
-    // and scrub cannot disagree, because they are the same call by construction.
+    // …and a FRESH runtime scrubbed straight to frame 10 lands on the same time. This
+    // test exercises the playhead-only stream, not the real D-175 lifecycle clock.
     document.body.innerHTML = '';
     const fresh = createRuntime(scene([videoElement()]), {
       skipFontLoad: true,

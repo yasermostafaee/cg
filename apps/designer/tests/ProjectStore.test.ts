@@ -49,6 +49,27 @@ describe('ProjectStore', () => {
     expect(reopened.path).toBe(path);
   });
 
+  it('persists a 30 fps small-canvas project and its linked duration', async () => {
+    const store = makeStore();
+    const { scene } = store.newScene('Thirty Small Canvas', 'custom', {
+      resolution: { width: 1280, height: 720 },
+      frameRate: 30,
+      durationFrames: 300,
+    });
+    const { path } = await store.save(scene, 'thirty-small-canvas');
+    const reopened = await store.open(path);
+
+    expect(reopened.scene).toMatchObject({
+      resolution: { width: 1280, height: 720 },
+      frameRate: 30,
+      frameRange: { in: 0, out: 300 },
+    });
+    expect(reopened.scene?.compositions?.[0]).toMatchObject({
+      resolution: { width: 1280, height: 720 },
+      frameRange: { in: 0, out: 300 },
+    });
+  });
+
   it('records recents on save, most-recent first, deduped', async () => {
     const store = makeStore();
     const a = store.newScene('A', 'ticker').scene;

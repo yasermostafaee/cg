@@ -124,7 +124,7 @@ test('the foot carries a build stamp that identifies the running build', async (
 
   // P-074 — the release identity is visible before the app opens. The SHA still changes per build.
   const stamp = (await splash(page).locator('#cg-splash-version').textContent())?.trim();
-  expect(stamp).toMatch(/^v0\.12\.6 · ([0-9a-f]{7,}|nogit) · \d{4}-\d{2}-\d{2}$/);
+  expect(stamp).toMatch(/^Version 0\.12\.6 · Built \d{4}-\d{2}-\d{2}$/);
 });
 
 test('the shared harness turns the splash OFF, so no other spec pays the floor', async ({

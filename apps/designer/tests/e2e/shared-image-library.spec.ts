@@ -22,7 +22,7 @@ test.describe('D-040 — shared image library', () => {
     await app.page.getByRole('dialog').getByRole('button', { name: 'Remove' }).click();
 
     await expect(thumb).toHaveCount(0);
-    await expect(app.sharedLibraryGrid.getByText('No library images yet.')).toBeVisible();
+    await expect(app.sharedLibraryGrid.getByText('No shared assets yet.')).toBeVisible();
   });
 
   test('the logo tool stamps the selected library image onto the canvas', async ({ app }) => {

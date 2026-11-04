@@ -237,6 +237,7 @@ function buildLayer(layer: Layer, ctx: BuildCtx): HTMLElement {
     // visibility binding (which writes `style.display`) keeps its established semantics.
     if (element.lifespan !== undefined) {
       ctx.scope.lifespanGates.push({
+        elementId: element.id,
         node: elementNode,
         lifespan: element.lifespan,
         naturalDisplay: elementNode.style.display,
@@ -1416,8 +1417,9 @@ function buildImage(element: ImageElement, doc: Document): HTMLElement {
  * to a blob URL (designer: preview.ts `applyAssetUrls`; exports: runtime.ts's
  * `img[data-cg-asset-id]` walk, widened to video in Phase 5) — and the host
  * seeks the paused element to `data-cg-poster-ms` so a transparent frame 0 is
- * never shown (decision (a): `phases.introEnd ?? clip midpoint`). Muted + inert;
- * the playback lifecycle (VideoDriver) is Phase 4.
+ * never shown (decision (a): `phases.introEnd ?? clip midpoint`). The runtime refines a Follow
+ * poster to the effective held source time (Outro start for Freeze, Hold entry otherwise).
+ * Muted + inert; the playback lifecycle (VideoDriver) is Phase 4.
  */
 function buildVideo(element: VideoElement, ctx: BuildCtx): HTMLElement {
   const el = ctx.doc.createElement('video');
@@ -1460,15 +1462,14 @@ function buildAudio(element: AudioElement, ctx: BuildCtx): HTMLElement {
  * has its own `posterTimeMs`) exactly as the D-125 Lottie poster rule is inlined
  * at `runtime.ts` — the runtime package cannot import from the designer app.
  *
- * media-phases-follow-composition — a FOLLOW-source clip's stored `introEnd` is IGNORED
- * data, so the poster falls back to `holdAt` (the authored held look) else the midpoint.
+ * media-phases-follow-composition — a FOLLOW-source clip's stored media phase values are
+ * all ignored. Before composition anchors are available, the neutral midpoint is the
+ * poster fallback; `createRuntime` refines it to the exact composition-derived hold.
  * This is only the NO-ANCHORS fallback: `createRuntime` REFINES the dataset to the exact
  * derived `H` at driver construction, where the comp anchors exist.
  */
 function videoPosterMs(element: VideoElement): number {
-  const posterAnchor = followsComposition(element.phases)
-    ? element.phases?.holdAt
-    : element.phases?.introEnd;
+  const posterAnchor = followsComposition(element.phases) ? undefined : element.phases?.introEnd;
   if (posterAnchor !== undefined && posterAnchor > 0 && posterAnchor < element.durationMs) {
     return posterAnchor;
   }
@@ -1775,6 +1776,9 @@ function buildLiveSource(element: VideoPlaceholderElement, ctx: BuildCtx): HTMLE
     el.style.outline = strokeShorthand(element.stroke);
   }
 
+  // The current playout layer contract composites Live Sources behind transparent
+  // holes. R-105's black fallback requires its coordinated graphics-bed bridge
+  // changes; a browser-only Designer update must not obscure existing live sources.
   if (ctx.mode === 'output') return el;
 
   el.style.overflow = 'hidden';
@@ -1808,26 +1812,28 @@ function buildLiveSource(element: VideoPlaceholderElement, ctx: BuildCtx): HTMLE
     named `plate-N` since D-171), that sentence is only honoured by saying nothing is set — an
     empty label would leave the bars looking finished.
 
-    ⚠ The plate paints NOTHING on air (the hole is transparent and the picture is composited
-    behind it), so this text is an authoring-preview affordance and never reaches broadcast
-    output. The export refuses an unassigned plate before it can.
+    ⚠ The plate paints nothing on air: its transparent hole exposes the live picture
+    composited behind it. The label remains author-only, and export refuses an unassigned plate.
   */
   label.textContent = element.routeKey ?? 'no source';
   label.style.position = 'absolute';
-  label.style.left = '0';
-  label.style.right = '0';
-  label.style.bottom = '0';
-  label.style.padding = '6px 10px';
-  label.style.background = 'rgba(0, 0, 0, 0.72)';
+  label.style.left = '50%';
+  label.style.top = '50%';
+  label.style.transform = 'translate(-50%, -50%)';
+  label.style.maxWidth = '90%';
+  label.style.padding = '10px 16px';
+  label.style.background = 'rgba(4, 12, 24, 0.86)';
+  label.style.border = '2px solid rgba(255, 255, 255, 0.82)';
+  label.style.borderRadius = '6px';
   label.style.color = '#ffffff';
-  label.style.font = '700 24px/1.3 system-ui, sans-serif';
-  // The id is ASCII by schema (`LiveSourceIdSchema`), so it is pinned LTR: a Persian
-  // scene must not flip `guest-1` to `1-guest` around the surrounding RTL context.
-  label.style.direction = 'ltr';
+  label.style.font = '800 32px/1.25 system-ui, sans-serif';
   label.style.textAlign = 'center';
   label.style.whiteSpace = 'nowrap';
   label.style.overflow = 'hidden';
   label.style.textOverflow = 'ellipsis';
+  // The id is ASCII by schema (`LiveSourceIdSchema`), so it is pinned LTR: a Persian
+  // scene must not flip `guest-1` to `1-guest` around the surrounding RTL context.
+  label.style.direction = 'ltr';
   el.appendChild(label);
   return el;
 }

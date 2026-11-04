@@ -82,7 +82,9 @@ const { behavior, constructed, FakeFFmpeg } = vi.hoisted(() => {
         setTimeout(() => {
           this.pendingRejects = this.pendingRejects.filter((f) => f !== reject);
           if (!args.includes('-frames:v')) for (const l of GOOD_BANNER) this.emitLog(l);
-          resolve(1);
+          // The mid-clip poster still fails cleanly, but the bounded frame-zero
+          // compatibility check proves that this fake source can decode.
+          resolve(args.includes('/decode-check.rgba') ? 0 : 1);
         }, 2);
       });
     }
@@ -150,7 +152,14 @@ describe('video-convert — reentrancy under concurrent callers (D-128 race)', (
     expect(r1.ok).toBe(true);
     expect(r2.ok).toBe(true);
     if (r1.ok && r2.ok) {
-      expect(r1.probe).toEqual({ fps: 25, width: 64, height: 64, durationMs: 1600 });
+      expect(r1.probe).toEqual({
+        fps: 25,
+        width: 64,
+        height: 64,
+        durationMs: 1600,
+        codec: 'rawvideo',
+        pixelFormat: 'bgra',
+      });
       expect(r2.probe).toEqual(r1.probe);
     }
     // Single-flight load: ONE worker ever constructed, still alive and cached.
@@ -172,7 +181,7 @@ describe('video-convert — reentrancy under concurrent callers (D-128 race)', (
             const lines = probeExecIndex++ === 0 ? BAD_LINES : GOOD_BANNER;
             for (const l of lines) (ff as InstanceType<typeof FakeFFmpeg>).emitLog(l);
           }
-          resolve(1);
+          resolve(args.includes('/decode-check.rgba') ? 0 : 1);
         }, 2);
       });
 
@@ -219,11 +228,12 @@ describe('video-convert — reentrancy under concurrent callers (D-128 race)', (
     const ctrl = new AbortController();
     const a = probeSource(FILE);
     const b = probeSource(FILE, { signal: ctrl.signal });
+    const bRejected = expect(b).rejects.toMatchObject({ name: 'AbortError' });
     ctrl.abort();
 
     const ra = await a;
     expect(ra.ok).toBe(true);
-    await expect(b).rejects.toMatchObject({ name: 'AbortError' });
+    await bRejected;
 
     expect(constructed).toHaveLength(1); // B never built (or killed) anything
     expect(constructed[0]?.terminated).toBe(false);
@@ -240,7 +250,7 @@ describe('video-convert — reentrancy under concurrent callers (D-128 race)', (
       }
       if (!args.includes('-frames:v'))
         for (const l of GOOD_BANNER) (ff as InstanceType<typeof FakeFFmpeg>).emitLog(l);
-      return Promise.resolve(1);
+      return Promise.resolve(args.includes('/decode-check.rgba') ? 0 : 1);
     };
 
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);

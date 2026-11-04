@@ -67,6 +67,9 @@ const { behavior, constructed, FakeFFmpeg } = vi.hoisted(() => {
     exec(args: string[]): Promise<number> {
       this.calls.push(`exec:${args.join(' ').slice(0, 40)}`);
       if (behavior.execImpl !== null) return behavior.execImpl(args);
+      // The optional poster is allowed to fail; the new bounded frame-zero decode proves the
+      // source is actually decodable before the modal becomes ready.
+      if (args.includes('/decode-check.rgba')) return Promise.resolve(0);
       // default probe behaviour: emit the configured banner lines, exit 1 (no output)
       for (const l of behavior.probeLines) this.emitLog(l);
       return Promise.resolve(1);
@@ -150,6 +153,7 @@ describe('video-convert — reset-on-failure contract (D-128)', () => {
     behavior.probeLines = GOOD_BANNER;
     // poster exec fails cleanly (code 1 → posterless probe, NOT a throw)
     behavior.execImpl = (args) => {
+      if (args.includes('/decode-check.rgba')) return Promise.resolve(0);
       if (args.includes('-frames:v')) return Promise.resolve(1);
       for (const l of GOOD_BANNER) constructed[0]?.emitLog(l);
       return Promise.resolve(1);
@@ -160,6 +164,29 @@ describe('video-convert — reset-on-failure contract (D-128)', () => {
     expect(hasCachedInstanceForTest()).toBe(true);
     expect(constructed).toHaveLength(1);
     expect(constructed[0]?.calls.at(-1)).toBe('unmount'); // FS hygiene on success
+  });
+
+  it('metadata without any decodable frame is refused before conversion and drops the worker (D-190)', async () => {
+    behavior.execImpl = (args) => {
+      if (args.includes('/decode-check.rgba')) {
+        constructed[0]?.emitLog('Error while decoding stream #0:0: Invalid data found');
+        return Promise.resolve(1);
+      }
+      if (args.includes('-frames:v')) {
+        constructed[0]?.emitLog('Could not decode poster frame');
+        return Promise.resolve(1);
+      }
+      for (const l of GOOD_BANNER) constructed[0]?.emitLog(l);
+      return Promise.resolve(1);
+    };
+    const result = await probeSource(FILE);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe('decode-failed');
+      expect(result.logTail.join('\n')).toContain('Invalid data found');
+    }
+    expect(hasCachedInstanceForTest()).toBe(false);
+    expect(constructed[0]?.terminated).toBe(true);
   });
 
   it('a convert exiting non-zero resets (a hard abort can hide behind a non-zero exit)', async () => {

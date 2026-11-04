@@ -40,7 +40,7 @@ describe('HexColorSchema', () => {
 });
 
 describe('FrameRateSchema', () => {
-  it.each([25, 29.97, 50, 59.94, 60])('accepts %s', (fps) => {
+  it.each([25, 29.97, 30, 50, 59.94, 60])('accepts %s', (fps) => {
     expect(FrameRateSchema.parse(fps)).toBe(fps);
   });
   it('rejects 24', () => {

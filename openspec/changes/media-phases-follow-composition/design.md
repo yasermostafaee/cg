@@ -1,5 +1,11 @@
 # Design — media phases follow the composition
 
+> **Superseded Hold decision (owner, 2026-11-03):** sections that author or freeze at per-media `H`
+> describe the original implementation record. D-176/D-186/D-187 now own the current behaviour:
+> media Follow remains composition-derived, but Freeze parks every element and the root cursor at
+> composition Out point; Content start belongs only to Loop middle; per-media Hold/Freeze overrides
+> are inert; exit continues forward from Out point.
+
 ## 1. The decision (owner, 2026-08-12)
 
 **A third phase source: `'composition'`.** The element stores the RELATIONSHIP, not the numbers:

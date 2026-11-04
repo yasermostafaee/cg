@@ -1,5 +1,10 @@
 # designer-lottie-element — delta (media-phases-follow-composition, 2026-08-13)
 
+> **Superseded in part by D-176/D-186/D-187 (2026-11-03):** `source: 'composition'` and derived
+> window compatibility remain, but composition Playback now owns Hold behaviour. Freeze maps the
+> held Lottie from composition Out point and a per-media `holdAt` cannot choose another held picture.
+> Later deltas take precedence over contrary `H` clauses below.
+
 The phase mapping gains a third source: `'composition'`. The element stores the RELATIONSHIP —
 "my intro settles at the composition's content start; my outro fits its OUT segment" — and the
 values are DERIVED wherever phases are resolved, so a marker drag moves them with no re-sync.

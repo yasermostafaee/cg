@@ -116,6 +116,10 @@ describe('pickFiles cancel-detection (B-020)', () => {
     void pickFiles('font');
     void pickFiles(); // no kind
     expect(inputs[0]!.multiple).toBe(false); // video — one clip at a time (the modal is per-clip)
+    expect(inputs[0]!.accept).toContain('.mp4');
+    expect(inputs[0]!.accept).toContain('.webm');
+    expect(inputs[0]!.accept).toContain('.mov');
+    expect(inputs[0]!.accept).not.toContain('video/*'); // explicit hint matches the real gate (D-190)
     expect(inputs[1]!.multiple).toBe(true); // image — batch
     expect(inputs[2]!.multiple).toBe(true); // font — batch
     expect(inputs[3]!.multiple).toBe(true); // default — batch

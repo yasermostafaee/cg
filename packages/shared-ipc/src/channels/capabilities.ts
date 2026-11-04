@@ -219,6 +219,7 @@ export const DESIGNER_ONLY_NAMESPACES = [
   'projects.',
   'assets.',
   'sharedImages.',
+  'sharedFonts.',
   'export.',
   'preview.',
 ] as const;

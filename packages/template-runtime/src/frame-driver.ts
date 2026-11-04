@@ -46,6 +46,13 @@ export class FrameDriver {
   private elapsedAtPause = 0;
   private running = false;
   private ended = false;
+  /**
+   * A graceful-exit request for a looping range. The target is expressed in elapsed
+   * frames (rather than a wall-clock timestamp) so Pause/Resume keeps the remaining
+   * part of the current pass intact.
+   */
+  private finishLoopAtElapsedFrame: number | null = null;
+  private finishLoopCb: (() => void) | null = null;
 
   constructor(opts: FrameDriverOptions) {
     this.opts = {
@@ -81,6 +88,26 @@ export class FrameDriver {
       this.opts.cancel(this.handle);
       this.handle = null;
     }
+  }
+
+  /**
+   * Finish the loop pass that is currently on screen, paint `range.out`, then stop.
+   *
+   * This is deliberately a request on the existing clock rather than a new `once`
+   * driver: the current pass keeps its elapsed position, dropped-frame correction and
+   * Pause/Resume bookkeeping. Returns `false` when this is not a non-empty loop.
+   */
+  finishCurrentLoop(onEnd: () => void): boolean {
+    const span = this.opts.range.out - this.opts.range.in;
+    if (this.opts.mode !== 'loop' || span <= 0 || this.ended) return false;
+    // Idempotent: the first request owns this pass boundary. Replacing the callback
+    // could make two independent exit paths race at the seam.
+    if (this.finishLoopAtElapsedFrame !== null) return true;
+    const elapsedMs = this.running ? this.opts.now() - this.startedAt : this.elapsedAtPause;
+    const elapsedFrames = Math.max(0, Math.floor((elapsedMs / 1000) * this.opts.frameRate));
+    this.finishLoopAtElapsedFrame = (Math.floor(elapsedFrames / span) + 1) * span;
+    this.finishLoopCb = onEnd;
+    return true;
   }
 
   /** Freeze the playhead at the current frame (no-op if not running). */
@@ -131,8 +158,28 @@ export class FrameDriver {
     // zero-or-negative span has no room to advance, so hold at `in` (also avoids
     // a modulo-by-zero).
     const span = rout - rin;
+    if (this.finishLoopAtElapsedFrame !== null && totalFrames >= this.finishLoopAtElapsedFrame) {
+      // Unlike an ordinary loop seam, a graceful exit exposes the authored end frame
+      // and leaves it painted for the Outro to continue from. Never emit `rin` first.
+      this.opts.onFrame(rout);
+      this.finishRequestedLoop();
+      return;
+    }
     const frame = span <= 0 ? rin : rin + (totalFrames % span);
     this.opts.onFrame(frame);
+  }
+
+  private finishRequestedLoop(): void {
+    this.ended = true;
+    this.running = false;
+    if (this.handle !== null) {
+      this.opts.cancel(this.handle);
+      this.handle = null;
+    }
+    const cb = this.finishLoopCb;
+    this.finishLoopCb = null;
+    this.finishLoopAtElapsedFrame = null;
+    cb?.();
   }
 
   private finishOnce(): void {

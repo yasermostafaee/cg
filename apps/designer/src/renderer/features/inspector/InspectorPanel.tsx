@@ -6,7 +6,7 @@ import { BackgroundControl } from '../canvas/BackgroundControl.js';
 import { describeBinding, elementNameResolver } from '../fields/bind-resolver.js';
 import { isFixedFileFieldId } from '../fields/fixedFileField.js';
 import { CollapseSection } from './CollapseSection.js';
-import { RealtimeNumberInput } from './controls.js';
+import { RealtimeNumberInput, VectorField } from './controls.js';
 import { DynamicDataSection, FixedFileSourceSection } from './DynamicDataSection.js';
 import { KeyframeInspector } from './KeyframeInspector.js';
 import { MultiSelectSection } from './MultiSelectSection.js';
@@ -320,39 +320,38 @@ function DurationRow({ scene }: { scene: Scene }): JSX.Element {
 /** Editable composition size (width × height). Routes to the active document. */
 function SizeRow({ scene }: { scene: Scene }): JSX.Element {
   return (
-    <div className={s.row}>
-      <span className={s.label}>size</span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-        <span style={{ color: colors.textMuted, fontSize: '0.66rem' }}>W</span>
-        <RealtimeNumberInput
-          className={s.docNum}
-          min={1}
-          step={1}
-          value={scene.resolution.width}
-          onCommit={(n) => {
+    <VectorField
+      label="size"
+      style={{ gridTemplateColumns: '90px 1fr' }}
+      axes={[
+        {
+          icon: 'W',
+          ariaLabel: 'Composition width',
+          min: 1,
+          step: 1,
+          value: scene.resolution.width,
+          onCommit: (n) => {
             if (n >= 1)
               designerStore.updateScene({
                 resolution: { width: Math.round(n), height: scene.resolution.height },
               });
-          }}
-          ariaLabel="Composition width"
-        />
-        <span style={{ color: colors.textMuted, fontSize: '0.66rem' }}>H</span>
-        <RealtimeNumberInput
-          className={s.docNum}
-          min={1}
-          step={1}
-          value={scene.resolution.height}
-          onCommit={(n) => {
+          },
+        },
+        {
+          icon: 'H',
+          ariaLabel: 'Composition height',
+          min: 1,
+          step: 1,
+          value: scene.resolution.height,
+          onCommit: (n) => {
             if (n >= 1)
               designerStore.updateScene({
                 resolution: { width: scene.resolution.width, height: Math.round(n) },
               });
-          }}
-          ariaLabel="Composition height"
-        />
-      </div>
-    </div>
+          },
+        },
+      ]}
+    />
   );
 }
 

@@ -301,6 +301,8 @@ interface VectorAxisProps {
 interface VectorFieldProps {
   label: string;
   axes: VectorAxisProps[];
+  /** Optional row-grid override for a host with a wider label gutter (for example Composition). */
+  style?: CSSProperties;
 }
 
 /**
@@ -311,7 +313,7 @@ interface VectorFieldProps {
  */
 export function VectorField(props: VectorFieldProps): JSX.Element {
   return (
-    <div className={s.row}>
+    <div className={s.row} style={props.style}>
       <span className={s.label}>{props.label}</span>
       <div className="cg-input-group">
         {props.axes.map((a) => (

@@ -34,19 +34,24 @@ Export preflight SHALL validate only the open composition and its nested closure
 - **WHEN** a sibling composition outside the root's closure has a validation error (for example a missing image asset) and the root composition is exported
 - **THEN** the export is not blocked by the sibling's error and produces the package for the root and its closure
 
-### Requirement: Per-composition Preview and Export live on a dedicated action bar
+### Requirement: Per-composition Preview and supported Export live on a dedicated action bar
 
-The Designer SHALL present Preview, Export `.vcg`, and Export HTML for the OPEN composition on a dedicated per-composition action bar (pinned at the foot of the left rail, off the canvas), and these SHALL be the only entry points for preview/export (the global top bar no longer carries them, and there is no project-level "export the whole scene" action). The Export actions block when the open composition has an error-severity validation issue.
+The Designer SHALL present Preview and Export `.vcg` for the OPEN composition on a dedicated per-composition action bar (pinned at the foot of the left rail, off the canvas), and these SHALL be the normal author entry points for preview/export (the global top bar no longer carries them, and there is no project-level "export the whole scene" action). The internal single-file HTML exporter SHALL remain callable by internal code and automated tests but SHALL NOT be exposed as a normal author action. The visible Export action blocks when the open composition has an error-severity validation issue.
 
 #### Scenario: The action bar previews and exports the open composition
 
 - **WHEN** a composition is open and the operator triggers Preview or Export from the per-composition action bar
 - **THEN** the action targets the open composition (its nested closure), with no global-bar or project-level export entry point present
 
+#### Scenario: Internal HTML export is hidden from authors
+
+- **WHEN** an author views the per-composition action bar
+- **THEN** Export HTML is absent while the internal exporter remains available to automated tests
+
 #### Scenario: Export is blocked while the open composition has errors
 
 - **WHEN** the open composition has an error-severity validation issue
-- **THEN** the bar's Export `.vcg` and Export HTML actions are disabled (Preview remains available)
+- **THEN** the bar's Export `.vcg` action is disabled (Preview remains available)
 
 ### Requirement: A composition carries a persisted playout target
 

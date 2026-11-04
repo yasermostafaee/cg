@@ -1,8 +1,9 @@
-import type { Composition, Element, Layer, Scene } from '@cg/shared-schema';
+import type { Composition, Element, Scene } from '@cg/shared-schema';
 import { compositionClosure, compositionInstancesOf, uniqueInstanceName } from '@cg/shared-schema';
 import { current, set } from '../store-core.js';
 import {
   activeLayersOf,
+  deleteCompositionAndLinkedLooks,
   freshCompositionId,
   freshElementId,
   reassignIdsDeep,
@@ -170,38 +171,23 @@ export const compositionSlice = {
   },
 
   /**
-   * Delete a composition and strip any `composition` elements that referenced
-   * it (across the main scene and every other composition). If the deleted
-   * composition was open, fall back to the main scene.
+   * Delete a composition and every reference to it. If it backs a registered Look, the Look
+   * registration and root instance are the same authored object and are deleted atomically too.
+   * If the deleted composition was open, fall back to the main scene.
    */
   deleteComposition(id: string): void {
     if (current.scene === null) return;
     const comps = current.scene.compositions ?? [];
-    if (!comps.some((c) => c.id === id)) return;
-    const stripRefs = (children: readonly Element[]): Element[] => {
-      const out: Element[] = [];
-      for (const el of children) {
-        if (el.type === 'composition' && el.compositionId === id) continue;
-        if (el.type === 'container') out.push({ ...el, children: stripRefs(el.children) });
-        else out.push(el);
-      }
-      return out;
-    };
-    const cleanLayers = (layers: readonly Layer[]): Layer[] =>
-      layers.map((l) => ({ ...l, children: stripRefs(l.children) }));
-    const nextComps = comps
-      .filter((c) => c.id !== id)
-      .map((c) => ({ ...c, layers: cleanLayers(c.layers) }));
+    const deletedComposition = comps.find((c) => c.id === id);
+    if (deletedComposition === undefined) return;
     const goMain = current.activeCompositionId === id;
-    const nextScene: Scene = {
-      ...current.scene,
-      layers: cleanLayers(current.scene.layers),
-      compositions: nextComps,
-    };
-    // D-115 — clear the main designation if the deleted comp was it (fall back to the default).
-    if (current.scene.entryCompositionId === id) delete nextScene.entryCompositionId;
+    const result = deleteCompositionAndLinkedLooks(current.scene, id);
+    const removedLookIds = new Set(result.removedLookIds);
     set({
-      scene: nextScene,
+      scene: result.scene,
+      ...(current.activeLookId !== null && removedLookIds.has(current.activeLookId)
+        ? { activeLookId: null }
+        : {}),
       ...(goMain
         ? {
             activeCompositionId: null,
@@ -209,9 +195,19 @@ export const compositionSlice = {
             selectedKeyframe: null,
             selectedKeyframes: [],
             keyframeInspectorOpen: false,
+            currentFrame: result.scene.frameRange.in,
+            timelinePlaying: false,
+            timelinePlaybackMode: null,
           }
         : {}),
     });
+    if (result.removedLookNames.length > 0) {
+      const lookLabel = result.removedLookNames.map((name) => `“${name}”`).join(', ');
+      designerStore.showNotice(
+        `Preset ${lookLabel} and its composition “${deletedComposition.name}” were deleted.`,
+        { tone: 'neutral' },
+      );
+    }
   },
 
   /** Whether an instance of `childId` may be placed in the active document. */

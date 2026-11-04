@@ -1,8 +1,8 @@
 import {
   activeRangeOf,
+  elementLoopsOnHold,
   followsComposition,
   followWindowMs,
-  videoFollowClipFacts,
   listBoundSequenceIds,
   migrateScene,
   playoutOf,
@@ -140,6 +140,7 @@ import type {
   ElementTimingOverrides,
   FieldScope,
   LifespanGateEntry,
+  NestedAnimatedEntry,
   PlayOptions,
   PlayoutOverride,
   RuntimeBootOptions,
@@ -507,6 +508,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // step compiler and the builder). Absent ⇒ `'output'`: a forgotten boot site
   // paints nothing, which is the safe direction on air. See `RenderMode`.
   const mode = options.mode ?? 'output';
+  let editCountdowns = mode === 'author' && options.editCountdowns === true;
   // B-134 — the editor backdrop paints on the editing CANVAS only. A second axis
   // rather than a third `RenderMode`, because the Preview modal wants `'author'` for
   // Live Sources and `false` here at the same time. Absent ⇒ true, which is a no-op
@@ -1017,6 +1019,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       hasContentDrivingAncestor: boolean,
     ): ScopeNode => {
       const scopeOverride = overrides[path];
+      // D-187 — resolve the composition's Hold picture once, before media drivers are built.
+      // Furniture, Video and Lottie all consume this same value; an element-local copy would
+      // let the background move while its bed freezes (or the reverse).
+      const effPlayout = effectivePlayoutFor(scope, path);
       // D-102 — this scope's PER-ELEMENT timing maps: its own scope override, layered over any
       // inherited (stamped-subtree) map. An element id is unique within the scene, so the merge is
       // unambiguous; the scope's own entry wins where both address the same element.
@@ -1170,6 +1176,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           afterZero: c.element.mode === 'countdown' ? c.element.afterZero : undefined,
           clock: options.clock,
         });
+        if (editCountdowns) driver.setAuthoringEditing(true);
         if (effects !== undefined) stepDrivers.push({ id: c.element.id, driver, effects });
         if (durationOverride !== undefined) rehearsalCountdowns.add(driver);
         scopeClockDrivers.set(c.element.id, driver);
@@ -1415,6 +1422,16 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // subset that gates the hold (mirrors scopeLotties / holdLotties).
       const scopeVideos: VideoDriver[] = [];
       const holdVideos: VideoDriver[] = [];
+      // B-377/B-379/D-187 — a visible Follow Lottie retains the observer-only Content-start
+      // Freeze exception, while a Follow Video now freezes at its derived Outro start and reports
+      // the same composition Out-point cursor as native elements. Either kind may still own the
+      // composition-timed asynchronous Outro gate, so keep the two facts separate.
+      let followObserverFreezesAtHoldEntry = false;
+      let followObserverHasOutro = false;
+      const noteFollowObserver = (hasOutro: boolean, freezesAtHoldEntry: boolean): void => {
+        if (freezesAtHoldEntry) followObserverFreezesAtHoldEntry = true;
+        if (hasOutro) followObserverHasOutro = true;
+      };
       // `D-165` — this scope's sound drivers. None of them ever joins a hold array.
       const scopeAudios: AudioDriver[] = [];
       /**
@@ -1494,29 +1511,25 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         //  - follow + NO lifecycle: nothing to follow — marker-less behaviour exactly
         //    (a follower's stored numbers are ignored either way; the Inspector says why).
         const follows = followsComposition(l.element.phases);
-        // Session Y — the adapter now takes the WHOLE phases block: authored
-        // `introEnd`/`outroStart` (real markers, or manual values) WIN, the attach seed
-        // signature derives as if absent, and the outro is the clip's own ending.
+        // D-176 — Follow is owned entirely by the composition. Stored media markers and
+        // manual phase values remain readable for old projects, but cannot influence a
+        // follower: the composition's entrance and OUT spans divide the clip here.
         const fw =
           follows && followAnchors !== null
-            ? lottieFollowWindow(meta, l.element.speed, followAnchors, l.element.phases)
+            ? lottieFollowWindow(meta, l.element.speed, followAnchors)
             : null;
         const phasesEff = follows ? undefined : l.element.phases;
         // Resolve the phase frames onto the animation's frame space: absent `phases`
         // ⇒ the whole clip is the intro, held (frozen) at `op`. The idle segment
-        // defaults to the hold window `[introEnd, outroStart]` (§D2.2) — except under
-        // follow, where an AUTHORED idle range composes with H and an ABSENT one means
-        // FREEZE (a zero span, the driver's own fallback): the derived hold is H's look,
-        // and the stored [introEnd, outroStart] must not smuggle a loop range back in.
+        // defaults to the hold window `[introEnd, outroStart]` (§D2.2). Under Follow that
+        // middle is derived from the composition: end of its intro through start of its
+        // outro. The clip's own stored idle markers are deliberately ignored.
         const introStart = fw?.introStartFrame;
         const introEnd = fw !== null ? fw.holdFrame : (phasesEff?.introEnd ?? meta.op);
-        const idleIn =
-          fw !== null
-            ? (l.element.phases?.idle?.[0] ?? fw.holdFrame)
-            : (phasesEff?.idle?.[0] ?? introEnd);
+        const idleIn = fw !== null ? fw.holdFrame : (phasesEff?.idle?.[0] ?? introEnd);
         const idleOut =
           fw !== null
-            ? (l.element.phases?.idle?.[1] ?? fw.holdFrame)
+            ? fw.outroStartFrame
             : (phasesEff?.idle?.[1] ?? phasesEff?.outroStart ?? meta.op);
         // §D1 — the OUT phase maps to `[outroStart → outroEnd]` in ANIMATION frames, BY
         // PHASE (never rescaled onto the composition's `outPoint`): the element owns its
@@ -1558,7 +1571,12 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           hasOutro,
           idleIn,
           idleOut,
-          holdBehavior: l.element.holdBehavior,
+          holdBehavior:
+            (effPlayout.holdBehavior ?? 'freeze') === 'freeze'
+              ? 'freeze'
+              : elementLoopsOnHold(effPlayout, l.element.id)
+                ? 'idle-loop'
+                : 'continue',
           posterFrame,
           clock: options.clock,
         });
@@ -1571,6 +1589,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         driver.poster();
         scopeLotties.push(driver);
         lotties.push(driver);
+        if (l.element.visible !== false && fw !== null) {
+          noteFollowObserver(fw.window.hasOutro, true);
+        }
         // `B-150` — a Lottie is a DRIVEN-FRAME renderer: hidden, it goes on computing a
         // frame per tick and pushing `goToAndStop` into a node nobody can see. No audio, so
         // no `audio` member — the silence half has nothing to act on here. `drivesHold` is
@@ -1623,54 +1644,40 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         // (`followWindowMs`) directly — no unit adapter. Follow without a lifecycle behaves
         // as absent phases (nothing to follow).
         const followsV = followsComposition(el.phases);
-        // Session Y — the corrected rule: a follower's outro is the CLIP'S OWN ENDING.
-        // AUTHORED introEnd/outroStart win (the seed-signature shim `videoFollowClipFacts`
-        // keeps attach-written seeds from masquerading as intent); absent, the outro is
-        // END-anchored `[clipEnd − outSpan → clipEnd]` and the intro is unchanged.
+        // D-176 — Follow is composition-owned. Internal/manual media marks (including old
+        // `holdAt` values) are intentionally absent from this call: entrance duration maps
+        // to the clip head, OUT duration maps backward from the clip end, and the remainder
+        // is the optional looping middle.
         const vw =
-          followsV && followAnchors !== null
-            ? followWindowMs(followAnchors, {
-                durationMs,
-                holdAtMs: el.phases?.holdAt,
-                ...videoFollowClipFacts(el.phases, durationMs),
-              })
-            : null;
+          followsV && followAnchors !== null ? followWindowMs(followAnchors, { durationMs }) : null;
         const phasesEffV = followsV ? undefined : el.phases;
         const hasPhases = phasesEffV !== undefined;
         // Absent phases (decision (b)): the whole clip is the intro, the hold loops
         // the whole clip, and there is NO outro (outroStart = duration ⇒ degenerate).
+        const introEndMs = vw !== null ? vw.holdMs : (phasesEffV?.introEnd ?? durationMs);
         const introStartMs = vw?.introStartMs;
         const introDelayMs = vw?.introDelayMs;
-        const introEndMs = vw !== null ? vw.holdMs : (phasesEffV?.introEnd ?? durationMs);
         const outroStartMs = vw !== null ? vw.outroStartMs : (phasesEffV?.outroStart ?? durationMs);
         const outroEndMs = vw?.outroEndMs;
-        // Under follow, an AUTHORED idle range composes with H; ABSENT idle means the hold
-        // FREEZES at H even for `holdBehavior: 'loop'` — looping the whole clip would
-        // abandon the held look, which is the one thing follow promises to keep (design
-        // §2). The STORED holdBehavior is untouched; only the resolved hold reads this
-        // way, and the Playout checklist's `infinite` mirror says the same.
-        const idle = vw !== null ? el.phases?.idle : phasesEffV?.idle;
+        // Follow's middle is `[end of composition intro → start of composition outro]`.
+        // The authored hold behaviour decides whether that derived range freezes at its
+        // first frame or loops; stored media idle markers apply only outside Follow.
+        const idle = phasesEffV?.idle;
         const loopStartMs =
-          vw !== null
-            ? idle
-              ? idle.start
-              : vw.holdMs
-            : idle
-              ? idle.start
-              : hasPhases
-                ? introEndMs
-                : 0;
+          vw !== null ? vw.holdMs : idle ? idle.start : hasPhases ? introEndMs : 0;
         const loopEndMs =
-          vw !== null
-            ? idle
-              ? idle.end
-              : vw.holdMs
-            : idle
-              ? idle.end
-              : hasPhases
-                ? outroStartMs
-                : durationMs;
-        const holdBehaviorEff = vw !== null && idle === undefined ? 'freeze' : el.holdBehavior;
+          vw !== null ? vw.outroStartMs : idle ? idle.end : hasPhases ? outroStartMs : durationMs;
+        const holdBehaviorEff =
+          (effPlayout.holdBehavior ?? 'freeze') === 'freeze'
+            ? 'freeze'
+            : elementLoopsOnHold(effPlayout, el.id)
+              ? 'loop'
+              : 'continue';
+        // Composition-owned Freeze parks a Follow Video on the same derived boundary from which
+        // its Outro will later continue. Manual/non-Follow Video keeps the driver's intro-end
+        // default, and Loop/Continue do not consume a Freeze target.
+        const freezeTargetMs =
+          vw !== null && holdBehaviorEff === 'freeze' ? vw.outroStartMs : undefined;
         const hasOutro = vw !== null ? vw.hasOutro : outroStartMs < durationMs;
         // MUTABLE: `recover()` rebuilds the element in place (a terminal decode
         // error kills the NODE, not the driver) and re-points every handle member,
@@ -1807,6 +1814,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           introStartMs,
           introDelayMs,
           introEndMs,
+          freezeTargetMs,
           outroStartMs,
           outroEndMs,
           loopStartMs,
@@ -1816,6 +1824,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         });
         scopeVideos.push(driver);
         videos.push(driver);
+        if (el.visible !== false && vw !== null) {
+          noteFollowObserver(vw.hasOutro, false);
+        }
         /*
           `B-150` — the video joins the look park. The ONE kind with sound, so it is the one
           that passes an `audio` element; `media` is both the node whose look membership is
@@ -1835,10 +1846,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           parkable: el.drivesHold !== true,
           audio: () => live(),
         });
-        // media-phases-follow-composition — the at-rest poster shows the derived H (the held
-        // look). The scene-builder wrote `holdAt ?? midpoint` (it has no comp anchors); the
-        // runtime REFINES it here, before the host's poster seek reads the dataset.
-        if (vw !== null) media.dataset['cgPosterMs'] = String(Math.round(vw.holdMs));
+        // media-phases-follow-composition — the at-rest poster shows the effective held picture.
+        // Freeze uses the derived Outro-start boundary; Loop/Continue use the derived Hold entry.
+        // This is presentation only: Play still starts Intro from the composition-derived start.
+        if (vw !== null) {
+          media.dataset['cgPosterMs'] = String(
+            Math.round(holdBehaviorEff === 'freeze' ? vw.outroStartMs : vw.holdMs),
+          );
+        }
         // D-105 — content root so the coordinated exit can select it (data-cg-content='video').
         media.dataset['cgContent'] = 'video';
         // §D6.2 — a video that OWNS an outro animates itself off; guard it from the
@@ -1985,7 +2000,6 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           resolveSettled = res;
         });
       };
-      const effPlayout = effectivePlayoutFor(scope, path);
       const isGlobalRoot = isSubtreeRoot && isRootSubtree;
       // D-104 — a "coordinator" is a content-driven (non-manual) scope: its hold lasts
       // until its OWN content PLUS its nested descendants' content completes. B-031 — a
@@ -2101,6 +2115,52 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           a.start();
         }
       };
+      const holdLoopAnimated = scope.animated.filter((entry) =>
+        elementLoopsOnHold(effPlayout, entry.id),
+      );
+      const holdLoopGates = scope.lifespanGates.filter((gate) =>
+        elementLoopsOnHold(effPlayout, gate.elementId),
+      );
+      const holdTailAnimated =
+        (effPlayout.holdBehavior ?? 'freeze') === 'loop'
+          ? scope.animated.filter((entry) => !elementLoopsOnHold(effPlayout, entry.id))
+          : [];
+      const holdTailGates =
+        (effPlayout.holdBehavior ?? 'freeze') === 'loop'
+          ? scope.lifespanGates.filter((gate) => !elementLoopsOnHold(effPlayout, gate.elementId))
+          : [];
+      const outroAnimated =
+        (effPlayout.holdBehavior ?? 'freeze') === 'loop' ? holdLoopAnimated : scope.animated;
+      const outroGates =
+        (effPlayout.holdBehavior ?? 'freeze') === 'loop' ? holdLoopGates : scope.lifespanGates;
+      const holdLoopHasMedia =
+        scope.lotties.some(
+          (entry) =>
+            entry.element.visible !== false &&
+            options.lottieAssets?.[entry.element.assetId] !== undefined &&
+            elementLoopsOnHold(effPlayout, entry.element.id),
+        ) ||
+        scope.videos.some(
+          (entry) =>
+            entry.element.visible !== false && elementLoopsOnHold(effPlayout, entry.element.id),
+        );
+      const holdLoopEnabled =
+        effPlayout.holdBehavior === 'loop' &&
+        (holdLoopAnimated.length > 0 || holdLoopGates.length > 0 || holdLoopHasMedia);
+      const applyAnimatedAtFrame = (
+        entries: readonly NestedAnimatedEntry[],
+        frame: number,
+      ): void => {
+        for (const entry of entries) applyAnimationAtFrame(entry, frame);
+        if (!isGlobalRoot || entries.length === 0 || options.onRootElementFrames === undefined) {
+          return;
+        }
+        try {
+          options.onRootElementFrames(entries.map((entry) => ({ elementId: entry.id, frame })));
+        } catch {
+          // Observation is non-authoritative and must stay inert on air.
+        }
+      };
       const controller = new PlayoutController({
         frameRate: scene.frameRate,
         active: activeRange,
@@ -2141,7 +2201,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           lottieSettles.length > 0 ? Math.min(Math.max(...lottieSettles), outPoint) : null,
         ),
         applyFrame: (frame: number): void => {
-          for (const entry of scope.animated) applyAnimationAtFrame(entry, frame);
+          applyAnimatedAtFrame(scope.animated, frame);
           // B-029 + B-089 — honor per-element lifespan during PLAYBACK, not only the
           // scrubber, so a start-trimmed (lifespan.in > 0) element appears at its in-point +
           // plays instead of staying hidden / being dropped. Each scope gates its OWN
@@ -2153,15 +2213,52 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           // during the intro. After the lifespan gate so it is the final word for content.
           applyContentGateAtFrame(frame);
         },
+        // D-187 — a Middle wrap updates only checked elements. Unchecked elements retain the
+        // Out-point picture already painted by Intro; content-driver clocks are never restarted.
+        holdLoopEnabled,
+        holdFrameDependent: holdLoopAnimated.length > 0 || holdLoopGates.length > 0,
+        applyHoldFrame: (frame: number): void => {
+          applyAnimatedAtFrame(holdLoopAnimated, frame);
+          for (const gate of holdLoopGates) {
+            const inside = frame >= gate.lifespan.in && frame <= gate.lifespan.out;
+            gate.node.style.display = inside ? gate.naturalDisplay : 'none';
+          }
+        },
+        // D-187 — unchecked native elements advance on a once-only local clock. They are never
+        // painted by the wrapping Middle cursor and therefore cannot jump backwards at a seam.
+        holdTailEnabled: holdTailAnimated.length > 0 || holdTailGates.length > 0,
+        applyHoldTailFrame: (frame: number): void => {
+          applyAnimatedAtFrame(holdTailAnimated, frame);
+          for (const gate of holdTailGates) {
+            const inside = frame >= gate.lifespan.in && frame <= gate.lifespan.out;
+            gate.node.style.display = inside ? gate.naturalDisplay : 'none';
+          }
+        },
+        // Once Hold ends, only the repeat participants follow the composition Outro. Unchecked
+        // elements have already entered their independent tail and must not replay it.
+        outroFrameDependent: outroAnimated.length > 0 || outroGates.length > 0,
+        applyOutroFrame: (frame: number): void => {
+          applyAnimatedAtFrame(outroAnimated, frame);
+          for (const gate of outroGates) {
+            const inside = frame >= gate.lifespan.in && frame <= gate.lifespan.out;
+            gate.node.style.display = inside ? gate.naturalDisplay : 'none';
+          }
+        },
+        // D-182/B-376 — root playhead telemetry is separate from `applyFrame`. An active
+        // content-driven hold loop reports its authored Middle cursor even when time-driven media
+        // is the only moving picture and composition paint stays collapsed. Only the global root
+        // reports; independently advancing nested controllers stay local.
         ...(isGlobalRoot && options.onRootFrame !== undefined
           ? {
               observeFrame: (frame: number): void => {
                 try {
                   options.onRootFrame?.(frame);
                 } catch {
-                  // An observer cannot alter broadcast playback.
+                  // Observation is non-authoritative and must stay inert on air.
                 }
               },
+              ...(followObserverFreezesAtHoldEntry ? { observeFreezeAtHoldEntry: true } : {}),
+              ...(followObserverHasOutro ? { observeOutroGate: true } : {}),
             }
           : {}),
         onExitStart: isGlobalRoot ? rootOnExitStart : noop,
@@ -2966,6 +3063,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         throw new Error('Runtime removed; play() unavailable');
       }
       await ready;
+      // The stopped Canvas may expose an expired clock for editing. A Take is always real:
+      // restore deadline/Step evaluation before applying fields or priming any nested cues.
+      editCountdowns = false;
+      for (const sub of subtrees) for (const clock of sub.clocks) clock.setAuthoringEditing(false);
       /*
         `tasks.md` 6.7 — THE CONTROL PAYLOAD IS LIFTED HERE TOO, and both halves of that
         were missing rather than merely tidy.

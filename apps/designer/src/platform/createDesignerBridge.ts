@@ -34,6 +34,7 @@ import { ProjectStore } from './ProjectStore.js';
 import { uuid } from './uuid.js';
 import { AssetStore } from './AssetStore.js';
 import { SharedImageStore } from './SharedImageStore.js';
+import { SharedFontStore } from './SharedFontStore.js';
 import { Exporter } from './Exporter.js';
 import { Preview } from './preview.js';
 import { pickFiles } from './pickFiles.js';
@@ -62,7 +63,8 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
   // here and never re-scoped on project change. Both exporters take it so a
   // `source: 'shared'` logo resolves + inlines exactly like a per-project asset.
   const sharedImages = new SharedImageStore(ws);
-  const exporter = new Exporter({ assets, sharedImages, cgJs, cgJsLottie, cgCss });
+  const sharedFonts = new SharedFontStore(ws);
+  const exporter = new Exporter({ assets, sharedImages, sharedFonts, cgJs, cgJsLottie, cgCss });
   const singleFile = new ExporterSingleFile({
     cgJsIife,
     cgJsLottieIife,
@@ -70,6 +72,7 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
     fontsCss: appFontsCss,
     assets,
     sharedImages,
+    sharedFonts,
   });
   const preview = new Preview({ cgJs, cgJsLottie, cgCss, fontsCss: appFontsCss });
   const assetUrlCache = new Map<string, string>();
@@ -77,6 +80,8 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
   // revoked on project change (the library outlives any one project); revoked
   // only when a library image is removed.
   const sharedImageUrlCache = new Map<string, string>();
+  // D-126 — like shared images, these URLs outlive project switches.
+  const sharedFontUrlCache = new Map<string, string>();
   // Per-scene cache of the native file handle picked the last time the
   // operator hit Save / Save As (for .cg.json) or Export (for .vcg).
   // Lets subsequent Save calls write to the same file silently, without
@@ -629,6 +634,34 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
         const blob = new Blob([ab], { type: mime });
         const url = URL.createObjectURL(blob);
         sharedImageUrlCache.set(assetId, url);
+        return url;
+      },
+    },
+
+    sharedFonts: {
+      pick: () => pickFiles('font'),
+      store: async (file) => ({ font: await sharedFonts.importFile(file) }),
+      list: () => sharedFonts.list(),
+      remove: async (req) => {
+        const cached = sharedFontUrlCache.get(req.assetId);
+        if (cached !== undefined) {
+          URL.revokeObjectURL(cached);
+          sharedFontUrlCache.delete(req.assetId);
+        }
+        return { ok: await sharedFonts.remove(req.assetId) };
+      },
+      onImported: (handler) => sharedFonts.imported.subscribe(handler),
+      url: async (assetId) => {
+        const cached = sharedFontUrlCache.get(assetId);
+        if (cached !== undefined) return cached;
+        const meta = await sharedFonts.get(assetId);
+        if (meta === null) return null;
+        const bytes = await sharedFonts.bytes(assetId);
+        if (bytes === null) return null;
+        const ab = new ArrayBuffer(bytes.byteLength);
+        new Uint8Array(ab).set(bytes);
+        const url = URL.createObjectURL(new Blob([ab], { type: mimeOf('font', meta.filename) }));
+        sharedFontUrlCache.set(assetId, url);
         return url;
       },
     },

@@ -21,6 +21,7 @@ test.describe('B-032 — content-less timed hold honors holdMs (preview)', () =>
     // preview opens; the preview shows it as a fact and offers no control for it.
     await app.setPlayoutTiming('loop-cycle');
     await app.openPreviewModal();
+    await app.previewDialog.getByText('Advanced', { exact: true }).click();
 
     // ADR 0009 — the preview STATES the authored mode rather than offering it.
     await expect(app.previewDialog.getByTestId('preview-playout-mode-fact')).toHaveText(
@@ -123,10 +124,21 @@ test.describe('B-032 ext — a content-LESS comp left content-driven resolves to
     await app.canvas.click({ position: { x: 150, y: 252 } });
     await app.page.keyboard.press('Delete');
 
-    // The content-driven hold with no drivers resolves to TIMED at the boundary, so the holdMs
-    // control appears (the operator is NOT trapped) and the runtime/export honor the duration.
+    // The authored choice stays visible and stored, while the compact state tells the author that
+    // the runtime/export safely use Timed until another driver is enabled.
+    const holdSource = app.page.getByRole('combobox', { name: 'Hold source' });
+    await expect(holdSource).toBeVisible();
+    await expect(holdSource).toHaveValue('content-driven');
+    await expect(app.page.getByTestId('hold-source-fallback-state')).toContainText(
+      'No active hold driver · using Timed',
+    );
     await expect(
       app.page.getByRole('spinbutton', { name: 'Hold duration in milliseconds' }),
     ).toBeVisible();
+
+    await app.page.getByRole('button', { name: 'About No active hold driver' }).click();
+    await expect(app.page.getByRole('dialog')).toContainText(
+      'Content-driven remains saved as the template choice',
+    );
   });
 });

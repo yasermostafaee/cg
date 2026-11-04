@@ -82,3 +82,16 @@ export async function readZip(buf: Uint8Array): Promise<Map<string, Uint8Array>>
   }
   return out;
 }
+
+/**
+ * Read one archive member without inflating every asset in the package.
+ *
+ * Runtime compatibility preflight only needs `manifest.json`. Reading the full
+ * archive there would add a third copy of every large image/book page before
+ * the existing integrity pass and unpack.
+ */
+export async function readZipEntry(buf: Uint8Array, path: string): Promise<Uint8Array | undefined> {
+  const zip = await JSZip.loadAsync(buf);
+  const entry = zip.file(path);
+  return entry === null ? undefined : entry.async('uint8array');
+}

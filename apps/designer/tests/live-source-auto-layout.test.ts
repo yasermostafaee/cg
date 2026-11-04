@@ -39,6 +39,24 @@ describe('Live Source auto layout (B-360)', () => {
     }
   });
 
+  it('uses one row for three portrait plates when that fills a 16:9 canvas better', () => {
+    const elements = ['a', 'b', 'c'].map((id) => ({
+      ...defaultLiveSource(id, 0, 0),
+      expectedAspect: 9 / 16,
+    }));
+    const result = calculateLiveSourceAutoLayout(
+      elements,
+      { width: 1920, height: 1080 },
+      'more-top',
+    );
+    expect(result).toHaveLength(3);
+    expect(result[1]!.y).toBeCloseTo(result[0]!.y);
+    expect(result[2]!.y).toBeCloseTo(result[0]!.y);
+    expect(result[1]!.x).toBeGreaterThan(result[0]!.x + result[0]!.width);
+    expect(result[2]!.x).toBeGreaterThan(result[1]!.x + result[1]!.width);
+    expect(result[0]!.height).toBeGreaterThan(900);
+  });
+
   it('keeps one common height and exact gaps when declared aspects differ', () => {
     const square = { ...defaultLiveSource('square', 0, 0), expectedAspect: 1 };
     const wide = { ...defaultLiveSource('wide', 0, 0), expectedAspect: 2 };

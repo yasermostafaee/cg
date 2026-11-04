@@ -22,7 +22,14 @@ test.describe('D-106/D-173 — preview list values use one Update all', () => {
     const updateAll = app.previewDialog.getByRole('button', { name: 'Update all', exact: true });
     await expect(updateAll).toBeDisabled();
 
-    await app.tickerItemInput('headlines', 1, app.previewDialog).fill('FIRST');
+    const firstItem = app.tickerItemInput('headlines', 1, app.previewDialog);
+    // The authored ticker uses Persian digits; leading digits/punctuation are not strong letters.
+    await firstItem.fill('۱۲۳ — خبر نخست');
+    await expect(firstItem).toHaveValue('۱۲۳ — خبر نخست');
+    await expect(firstItem).toHaveCSS('direction', 'rtl');
+    await firstItem.fill('۱۲۳ — FIRST');
+    await expect(firstItem).toHaveValue('۱۲۳ — FIRST');
+    await expect(firstItem).toHaveCSS('direction', 'ltr');
     await app.tickerItemInput('headlines', 2, app.previewDialog).fill('SECOND');
     await expect(updateAll).toBeEnabled();
     await updateAll.click();

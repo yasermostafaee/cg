@@ -67,22 +67,28 @@ afterEach(() => {
  * ACTIVE document (`activeDocOf`) — so the out-point is set on the composition, which is
  * also where a real element's governing out-point lives. `frameRate` stays project-level.
  */
-function sceneWith(outPoint: number): Scene {
+function sceneWith(outPoint: number, holdBehavior: 'freeze' | 'loop' = 'freeze'): Scene {
   const projects = new ProjectStore(new MemoryWorkspace(), new MemoryKv());
   const { scene } = projects.newScene('demo', 'custom');
   return {
     ...scene,
     frameRate: 50,
     lifecycle: { ...scene.lifecycle, outPoint },
+    playout: { ...scene.playout, holdBehavior },
     compositions: (scene.compositions ?? []).map((c) => ({
       ...c,
       lifecycle: { ...c.lifecycle, outPoint },
+      playout: { ...c.playout, holdBehavior },
     })),
   } as Scene;
 }
 
-async function render(el: LottieElement, outPoint: number): Promise<HTMLDivElement> {
-  designerStore.setScene(sceneWith(outPoint), null);
+async function render(
+  el: LottieElement,
+  outPoint: number,
+  holdBehavior: 'freeze' | 'loop' = 'freeze',
+): Promise<HTMLDivElement> {
+  designerStore.setScene(sceneWith(outPoint, holdBehavior), null);
   await lottieAssetCache.prime(el.assetId);
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -110,7 +116,7 @@ const disclosure = (c: HTMLDivElement): HTMLButtonElement | null => {
 };
 
 const lottie = (
-  over: { speed?: number; introEnd?: number; idleLoop?: boolean; markers?: boolean } = {},
+  over: { speed?: number; introEnd?: number; markers?: boolean } = {},
 ): LottieElement => ({
   ...defaultLottie('lot', 0, 0, 'asset-1', {
     speed: over.speed ?? 1,
@@ -120,7 +126,6 @@ const lottie = (
       source: over.markers === true ? 'markers' : 'manual',
     },
   }),
-  holdBehavior: over.idleLoop === true ? 'idle-loop' : 'freeze',
 });
 
 describe('D-125 Phase 3b-1 — the comp-space Lottie timing panel', () => {
@@ -153,7 +158,7 @@ describe('D-125 Phase 3b-1 — the comp-space Lottie timing panel', () => {
   });
 
   it('IDLE-LOOP shows one loop pass, where the duration IS meaningful', async () => {
-    const c = await render(lottie({ idleLoop: true }), 90);
+    const c = await render(lottie(), 90, 'loop');
     const text = mainText(c);
     expect(text).toContain('loops every 117 comp frames');
     expect(text).toContain('2.33s');

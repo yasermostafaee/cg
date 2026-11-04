@@ -214,16 +214,10 @@ const children: Element[] = [
   shape('az-bg-scrim', 'لایه خوانایی', tf(-80, -60, 1920, 1080), solid('#080F1B'), 1, {
     opacity: 0.64,
     animation: anim({
-      opacity: track(
-        kf(0, 0),
-        kf(16, 0.64),
-        kfLinear(84, 0),
-        kf(OUT_POINT, 0.64),
-        kf(END_FRAME, 0),
-      ),
+      opacity: track(kf(0, 0), kf(20, 0.64), kfLinear(OUT_POINT, 0), kf(END_FRAME, 0)),
     }),
   }),
-  shape('az-bg', 'پنل شیشه‌ای', tf(24, 20, 1712, 956), gradient(135, '#111B2CEB', '#172337E3'), 2, {
+  shape('az-bg', 'پنل شیشه‌ای', tf(24, 20, 1712, 956), gradient(135, '#111B2C37', '#172337E3'), 2, {
     radius: 28,
     stroke: { color: '#8D9BBF55', width: 2 },
     shadow: { offsetX: 0, offsetY: 20, blur: 54, color: '#00000099' },

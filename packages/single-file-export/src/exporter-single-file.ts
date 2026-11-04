@@ -60,6 +60,8 @@ export interface SingleFileExportOptions {
    * (`source: 'shared'`) base64-inlines from the library; absent ⇒ project-only.
    */
   sharedImages?: ImageAssetLibrary;
+  /** D-126 — device-level fonts, resolved after project assets. */
+  sharedFonts?: ImageAssetLibrary;
   /** Fetch a same-origin URL's bytes (the bundled font files). Defaults to `fetch`. */
   fetchUrl?: (url: string) => Promise<ArrayBuffer>;
 }
@@ -92,6 +94,7 @@ export class ExporterSingleFile {
   readonly #fontsCss: string;
   readonly #assets: ImageAssetSource;
   readonly #sharedImages: ImageAssetLibrary | undefined;
+  readonly #sharedFonts: ImageAssetLibrary | undefined;
   readonly #fetchUrl: (url: string) => Promise<ArrayBuffer>;
 
   constructor(options: SingleFileExportOptions) {
@@ -101,6 +104,7 @@ export class ExporterSingleFile {
     this.#fontsCss = options.fontsCss;
     this.#assets = options.assets;
     this.#sharedImages = options.sharedImages;
+    this.#sharedFonts = options.sharedFonts;
     this.#fetchUrl = options.fetchUrl ?? ((url) => fetch(url).then((r) => r.arrayBuffer()));
   }
 
@@ -109,7 +113,14 @@ export class ExporterSingleFile {
     const issues = preflight(scene);
     const gdd = buildGddSchema(scene);
     const playout = buildPlayoutMetadata(scene);
-    const fontCss = await this.#inlineFonts(scene);
+    const { css: fontCss, missing: missingFonts } = await this.#inlineFonts(scene);
+    for (const family of missingFonts) {
+      issues.push({
+        code: 'missing-font',
+        severity: 'warning',
+        message: `Font "${family}" could not be resolved from Project Assets or Shared Library; the exported HTML will use a fallback font.`,
+      });
+    }
     // D-062 — resolve + base64-inline each image element's bytes; an unresolved
     // one is reported (warning — HTML export never blocks), never silently broken.
     const { assetUrls, missing } = await this.#inlineImages(scene);
@@ -188,10 +199,10 @@ export class ExporterSingleFile {
   /** Produce + trigger a browser download of the `.html`. */
   async run(
     scene: Scene,
-    suggestedName = scene.name,
+    suggestedName?: string,
   ): Promise<{ filename: string; bytes: number; issues: ExportIssue[] }> {
-    const { html, issues } = await this.produce(scene);
-    const filename = downloadName(suggestedName);
+    const { html, filename: sceneFilename, issues } = await this.produce(scene);
+    const filename = suggestedName === undefined ? sceneFilename : downloadName(suggestedName);
     const bytes = new TextEncoder().encode(html);
     triggerDownload(bytes, filename);
     return { filename, bytes: bytes.byteLength, issues };
@@ -202,16 +213,22 @@ export class ExporterSingleFile {
    * fetching their `/fonts/…` files and rewriting `url(…)` to data URIs, plus a
    * `@font-face` per operator-imported (`asset-*`) font from the AssetStore.
    */
-  async #inlineFonts(scene: Scene): Promise<string> {
+  async #inlineFonts(scene: Scene): Promise<{ css: string; missing: string[] }> {
     let css = await inlineFontUrls(this.#fontsCss, this.#fetchUrl);
+    const missing: string[] = [];
     for (const font of scene.fonts) {
       if (!font.family.startsWith('asset-')) continue;
       const assetId = font.family.slice('asset-'.length);
-      const bytes = await this.#assets.bytes(assetId);
-      if (bytes === null) continue;
-      css += `\n@font-face{font-family:"${font.family}";font-display:swap;src:url(${toDataUri('font/woff2', bytes)}) format("woff2")}`;
+      const resolved = await resolveFontAsset(this.#assets, this.#sharedFonts, assetId);
+      if (resolved === null) {
+        missing.push(font.family);
+        continue;
+      }
+      const { bytes, filename } = resolved;
+      const { mime, format } = fontType(filename);
+      css += `\n@font-face{font-family:"${font.family}";font-display:swap;src:url(${toDataUri(mime, bytes)}) format("${format}")}`;
     }
-    return css;
+    return { css, missing };
   }
 
   /**
@@ -561,6 +578,31 @@ async function inlineFontUrls(
     const data = dataUris.get(url);
     return data !== undefined ? `url(${data})` : whole;
   });
+}
+
+async function resolveFontAsset(
+  project: ImageAssetSource,
+  shared: ImageAssetLibrary | undefined,
+  assetId: string,
+): Promise<{ filename: string; bytes: Uint8Array } | null> {
+  const projectMeta = await project.get(assetId);
+  if (projectMeta !== null) {
+    const bytes = await project.bytes(assetId);
+    if (bytes !== null) return { filename: projectMeta.filename, bytes };
+  }
+  if (shared === undefined) return null;
+  const sharedMeta = await shared.get(assetId);
+  if (sharedMeta === null) return null;
+  const bytes = await shared.bytes(assetId);
+  return bytes === null ? null : { filename: sharedMeta.filename, bytes };
+}
+
+function fontType(filename: string): { mime: string; format: string } {
+  const ext = filename.slice(filename.lastIndexOf('.') + 1).toLowerCase();
+  if (ext === 'ttf') return { mime: 'font/ttf', format: 'truetype' };
+  if (ext === 'otf') return { mime: 'font/otf', format: 'opentype' };
+  if (ext === 'woff') return { mime: 'font/woff', format: 'woff' };
+  return { mime: 'font/woff2', format: 'woff2' };
 }
 
 function toDataUri(mime: string, bytes: Uint8Array): string {

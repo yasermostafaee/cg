@@ -45,6 +45,47 @@ describe('designerStore — D-020 lifecycle / playout', () => {
     expect(() => SceneSchema.parse(designerStore.get().scene)).not.toThrow();
   });
 
+  it('dragging Outro start through Hold start pulls Hold start onto the same frame', () => {
+    freshScene();
+    const active = activeRangeOf(activeDoc());
+    const initialOut = Math.min(active.out - 5, active.in + 20);
+    designerStore.setLifecycle({ outPoint: initialOut });
+    designerStore.setContentStart(initialOut - 5);
+
+    designerStore.setLifecycle({ outPoint: initialOut - 8 });
+
+    expect(activeDoc().lifecycle).toEqual({
+      contentStart: initialOut - 8,
+      outPoint: initialOut - 8,
+    });
+  });
+
+  it('dragging Hold start through Outro start pushes both markers onto the same frame', () => {
+    freshScene();
+    const active = activeRangeOf(activeDoc());
+    const initialOut = Math.min(active.out - 10, active.in + 20);
+    designerStore.setLifecycle({ outPoint: initialOut });
+    designerStore.setContentStart(initialOut - 5);
+
+    designerStore.setContentStart(initialOut + 4);
+
+    expect(activeDoc().lifecycle).toEqual({
+      contentStart: initialOut + 4,
+      outPoint: initialOut + 4,
+    });
+  });
+
+  it('allows explicitly dragged markers to coincide at the active-range right edge', () => {
+    freshScene();
+    const active = activeRangeOf(activeDoc());
+    designerStore.setLifecycle({ outPoint: active.out - 5 });
+    designerStore.setContentStart(active.out + 50);
+    expect(activeDoc().lifecycle).toEqual({
+      contentStart: active.out,
+      outPoint: active.out,
+    });
+  });
+
   it('setLifecycle(null) clears the out-point', () => {
     freshScene();
     designerStore.setLifecycle({ outPoint: 2 });

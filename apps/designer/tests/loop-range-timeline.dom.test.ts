@@ -162,17 +162,20 @@ describe('the loop range is drawn on the timeline by default', () => {
     // derivation as an authored decision.
     mount(scene([shape('bg', 30)]));
     expect(el('loop-range-start')!.style.borderLeft).toMatch(/dashed/);
+    expect(el('loop-range-start')!.style.borderLeftColor).toBe('rgb(95, 174, 128)');
 
     mount(scene([shape('bg', 30)], { outPoint: 80, contentStart: 55 }));
     expect(leftPct('loop-range-start')).toBeCloseTo(55, 1);
     expect(el('loop-range-start')!.style.borderLeft).toMatch(/solid/);
+    expect(el('loop-range-start')!.style.borderLeftColor).toBe('rgb(95, 174, 128)');
+    expect(el('loop-range-end')!.style.borderLeftColor).toBe('rgb(255, 174, 87)');
   });
 
   it('the draggable scene-lane markers are UNCHANGED — the lines are an addition, not a move', () => {
     mount(scene([shape('bg', 30)], { outPoint: 80, contentStart: 55 }));
     const lane = host.querySelector('[data-testid="scene-row-lane"]')!;
-    expect(lane.querySelector('[aria-label="Out point marker"]')).not.toBeNull();
-    expect(lane.querySelector('[aria-label="Content start marker"]')).not.toBeNull();
+    expect(lane.querySelector('[aria-label="Outro start marker"]')).not.toBeNull();
+    expect(lane.querySelector('[aria-label="Hold start marker"]')).not.toBeNull();
   });
 
   it('no out-point ⇒ no range: a static composition has no hold to loop', () => {
@@ -182,10 +185,56 @@ describe('the loop range is drawn on the timeline by default', () => {
     expect(el('loop-range-end')).toBeNull();
   });
 
-  it('a DEGENERATE range draws nothing — two coincident lines read as one stray marker', () => {
-    // No keyframes ⇒ no entrance to settle ⇒ the effective content start IS the out-point.
+  it('a legacy coincident range keeps both boundary lines visible at the same frame', () => {
+    mount(scene([shape('bg')], { outPoint: 60, contentStart: 60 }));
+    const start = el('loop-range-start');
+    const end = el('loop-range-end');
+    expect(start).not.toBeNull();
+    expect(end).not.toBeNull();
+    expect(leftPct('loop-range-start')).toBeCloseTo(60, 1);
+    expect(leftPct('loop-range-end')).toBeCloseTo(60, 1);
+    expect(start!.style.transform).not.toBe(end!.style.transform);
+  });
+
+  it('marker-less runtime fallback stays coincident while both derived lines remain visible', () => {
+    // No entrance keyframes means runtime settles at Outro start. The one-frame default belongs
+    // only to the explicit Set action and must not leak into this unpinned effective range.
     mount(scene([shape('bg')]));
-    expect(el('loop-range-band')).toBeNull();
-    expect(el('loop-range-start')).toBeNull();
+    const start = el('loop-range-start');
+    const end = el('loop-range-end');
+    expect(start).not.toBeNull();
+    expect(end).not.toBeNull();
+    expect(leftPct('loop-range-start')).toBeCloseTo(80, 1);
+    expect(leftPct('loop-range-end')).toBeCloseTo(80, 1);
+    expect(start!.style.transform).not.toBe(end!.style.transform);
+  });
+
+  it('dragging Hold start through Outro start advances both markers to the same frame', () => {
+    mount(scene([shape('bg')], { outPoint: 60, contentStart: 50 }));
+    const lane = host.querySelector<HTMLElement>('[data-testid="scene-row-lane"]')!;
+    Object.defineProperty(lane, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({
+        x: 0,
+        y: 0,
+        left: 0,
+        top: 0,
+        right: 1_000,
+        bottom: 24,
+        width: 1_000,
+        height: 24,
+      }),
+    });
+    const holdStart = lane.querySelector<HTMLElement>('[aria-label="Hold start marker"]')!;
+    act(() => {
+      holdStart.dispatchEvent(
+        new MouseEvent('pointerdown', { bubbles: true, cancelable: true, clientX: 500 }),
+      );
+      window.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientX: 700 }));
+      window.dispatchEvent(new MouseEvent('pointerup', { bubbles: true, clientX: 700 }));
+    });
+    const state = designerStore.get();
+    const doc = editSceneOf(state.scene!, state.activeCompositionId)!;
+    expect(doc.lifecycle).toEqual({ contentStart: 70, outPoint: 70 });
   });
 });

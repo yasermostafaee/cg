@@ -297,6 +297,10 @@ export class Preview {
         // once before positioning its requested frame.
         let lifecycleActive = false;
         let lifecyclePaused = false;
+        // Dedicated Preview commands wait for a Reset rebuild, while the Canvas keeps its
+        // existing coalesced authoring path. A Reset invalidates older pending transport/data.
+        let previewCommandQueue = Promise.resolve();
+        let previewCommandGeneration = 0;
         let busy = false;
         let pendingScene = null;
         // B-091 — a 'lottie-assets' map that arrived DURING playback. Mounting a Lottie
@@ -649,6 +653,26 @@ export class Preview {
           }
         }
 
+        function postRootElementFrames(entries, reset) {
+          if (!window.parent || window.parent === window) return;
+          const frames = [];
+          if (Array.isArray(entries)) {
+            for (const entry of entries) {
+              if (
+                entry &&
+                typeof entry.elementId === 'string' &&
+                Number.isFinite(entry.frame)
+              ) {
+                frames.push({ elementId: entry.elementId, frame: Math.round(entry.frame) });
+              }
+            }
+          }
+          if (frames.length === 0 && reset !== true) return;
+          window.parent.postMessage(
+            { kind: 'cg-preview-element-frames', entries: frames, reset: reset === true },
+            '*',
+          );
+        }
         // play / update / stop / out / next are delivered through the CasparCG globals
         // installCasparGlobals(runtime) installs at the end of every applyScene. Those
         // branches used to be GATED on 'typeof window.<name> === "function"', a guard that
@@ -695,6 +719,10 @@ export class Preview {
             // D-128 Phase 3 — keep live <video> media across the teardown so a
             // transform-only change never reloads it (see reconcileVideos).
             harvestVideos();
+            // B-381 — clear only once the old runtime can be removed immediately. Font loading
+            // above may yield while the old lifecycle still paints; clearing before that await
+            // would let a late old-frame message repopulate the map for the replacement scene.
+            postRootElementFrames([], true);
             if (runtime) runtime.remove();
             // remove() leaves body.cg-removed / pending state; clear
             // both so the next createRuntime starts clean.
@@ -715,6 +743,9 @@ export class Preview {
               mode: 'author',
               // B-134 — canvas paints the editor backdrop; the Preview modal does not.
               paintEditorBackdrop: PAINT_EDITOR_BACKDROP,
+              // Only the idle main Canvas exposes expired countdowns for editing. Preview and
+              // a scene rebuilt during lifecycle playback keep the real target/Step behavior.
+              editCountdowns: PAINT_EDITOR_BACKDROP && !lifecycleActive,
               playoutOverride: playoutOverride,
               scopeOverrides: scopeOverrides,
               // D-039ext — give the runtime the current asset URLs so the ticker driver can
@@ -729,6 +760,9 @@ export class Preview {
               // D-182 — lifecycle frame truth (hold freeze, outro continuation and loop wrap)
               // comes from the root controller, not from the host's elapsed wall clock.
               onRootFrame: postRootFrame,
+              // B-381 — selection geometry needs each root element's painted frame when mixed
+              // Hold playback deliberately separates it from the composition cursor.
+              onRootElementFrames: postRootElementFrames,
             });
             installCasparGlobals(runtime);
             // Session Z — the runtime's OWN diagnostics reach the parent console on the
@@ -1049,8 +1083,29 @@ export class Preview {
         window.addEventListener('message', (evt) => {
           const msg = evt.data;
           if (!msg || typeof msg !== 'object' || msg.kind !== 'cg-preview') return;
-          (async () => {
+          if (!REVEAL_ON_LOAD && msg.action === 'reset') {
+            previewCommandGeneration += 1;
+            playing = false;
+            lifecycleActive = false;
+            lifecyclePaused = false;
+            currentFields = msg.fields ?? {};
+            currentFrame = currentScene ? currentScene.frameRange.in : 0;
+            lastReportedRootFrame = null;
+            pendingLottieRebuild = false;
+            // Reset is not graceful Stop: synchronously cancel every controller, media driver
+            // and pending outro before any font/asset await can leave the old rehearsal running.
+            if (runtime) runtime.remove();
+            runtime = null;
+            videoPool = {};
+            document.body.classList.add('cg-pending');
+          }
+          const commandGeneration = previewCommandGeneration;
+          const handleMessage = async () => {
             try {
+              if (
+                !REVEAL_ON_LOAD && commandGeneration !== previewCommandGeneration &&
+                ['play', 'pause', 'resume', 'stop', 'out', 'update', 'next', 'previous', 'reset'].includes(msg.action)
+              ) return;
               if (msg.action === 'scene-replace' && msg.scene) {
                 const restartCanvasLifecycle = REVEAL_ON_LOAD && lifecycleActive;
                 const restartCanvasPaused = lifecyclePaused;
@@ -1205,6 +1260,9 @@ export class Preview {
                 // await them so the first pass a user ever sees measures with
                 // final glyphs (no-op when already loaded).
                 await applyFontFaces().catch(() => {});
+                // A Reset may have arrived during either awaited operation. That old Play
+                // must not start the replacement runtime or revive removed content.
+                if (!REVEAL_ON_LOAD && commandGeneration !== previewCommandGeneration) return;
                 // Resolved AFTER the flush: that rebuild reinstalls the globals.
                 const playFn = controlFn('play');
                 if (playFn === null) reportDroppedControl('play');
@@ -1285,15 +1343,23 @@ export class Preview {
                   lifecyclePaused = false;
                 }
               } else if (msg.action === 'reset') {
-                // Re-seed every field to its declared default. update() merges, so
-                // a replace-mode update is what clears omitted keys back to default.
-                currentFields = {};
-                if (runtime) {
+                currentFields = msg.fields ?? {};
+                if (!REVEAL_ON_LOAD) {
+                  // Keep the same scene/assets/session settings, with the host's exact seeded
+                  // fields (including connected-file rows) rather than stale applied values and
+                  // drivers. Broadcast applyScene stays blank; only a subsequent Play starts it.
+                  if (currentScene) await applyScene(currentScene);
+                  postRootFrame(currentFrame);
+                } else if (runtime) {
+                  // The authoring Canvas retains its existing field-only reset semantics.
                   runtime.update({}, { mode: 'replace' });
                   runtime.tick(currentFrame);
                 }
               }
             } catch (e) {
+              // An in-flight build/control interrupted by Reset belongs to a removed runtime.
+              // Its replacement is prepared next; it must not report cancellation as a fault.
+              if (!REVEAL_ON_LOAD && commandGeneration !== previewCommandGeneration) return;
               // Session Z — never swallow. A throw in here (a scene rebuild that failed,
               // a runtime that errored under a control) is indistinguishable, from the
               // operator's chair, from a button that simply does nothing.
@@ -1304,7 +1370,9 @@ export class Preview {
                   (e && e.message ? e.message : String(e)),
               );
             }
-          })();
+          };
+          if (REVEAL_ON_LOAD) void handleMessage();
+          else previewCommandQueue = previewCommandQueue.then(handleMessage);
         });
         if (window.parent && window.parent !== window) {
           window.parent.postMessage(

@@ -15,6 +15,13 @@
 - [x] 2.4 Preserve relabel, bind/rebind, unbind and delete through the existing store actions.
 - [x] 2.5 Refine the first implementation into one aligned four-column table (Key, Title,
       Type / binding, Actions), keep every action in its row, and remove the duplicate panel title.
+- [x] 2.6 Derive a nested composition's visible namespace label from its current composition name
+      while retaining the insertion-time instance name as its stable payload namespace.
+- [x] 2.7 Expose complete clipped values on hover and let a focused Title span the adjacent
+      Type / binding column without moving Actions.
+- [x] 2.8 Use one fixed Bind/Unbind toggle with explicit link/unlink glyphs, violet Bind states and a
+      red Unbind hover, plus a violet shadowed editing-surround frame, clear link-badged cursor and
+      compatible-family instruction and target outline that follows effective element geometry.
 
 ## 3. Verification
 
@@ -22,3 +29,7 @@
 - [x] 3.2 Add Designer Playwright coverage for the visible tab flow and compact empty state.
 - [ ] 3.3 Run targeted tests, the local Designer E2E lane and the full repository gate.
 - [ ] 3.4 Record a successful Linux CI E2E job because this changes what renders in the Designer.
+- [x] 3.5 Cover composition rename, complete long-value disclosure and focused Title width.
+- [x] 3.6 Cover the fixed Bind/Unbind toggle and its violet states, Bind cursor state, compatible
+      hover outline, editing-surround Bind frame, field-type compatibility hint and cleanup after
+      commit.

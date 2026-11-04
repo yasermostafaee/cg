@@ -87,11 +87,11 @@ describe("D-137 — 'author' mode paints the bars", () => {
     expect(el.style.backgroundImage).not.toContain('url(');
     const label = el.querySelector<HTMLElement>('[data-cg-live-source-label]');
     expect(label?.textContent).toBe('guest-1');
-    // D-171 — readable at ordinary canvas zoom, not the old 14px status caption.
-    expect(label?.style.fontSize).toBe('24px');
-    expect(label?.style.fontWeight).toBe('700');
-    expect(label?.style.lineHeight).toBe('1.3');
-    expect(label?.style.padding).toBe('6px 10px');
+    expect(label?.style.left).toBe('50%');
+    expect(label?.style.top).toBe('50%');
+    expect(label?.style.transform).toBe('translate(-50%, -50%)');
+    expect(label?.style.textAlign).toBe('center');
+    expect(label?.style.font).toContain('32px');
   });
 
   it('the gradient uses PAIRED stops, never the Chromium-72 double-position form', () => {
@@ -145,8 +145,8 @@ describe("D-137 — 'author' mode paints the bars", () => {
   });
 });
 
-describe("D-137 — 'output' mode paints NOTHING", () => {
-  it('no background, no children, no label — the box is empty', () => {
+describe("D-137 — 'output' mode preserves transparent Live Source holes", () => {
+  it('has no opaque bed, preview bars or label', () => {
     const { root } = build(sceneWith([liveSource()]), 'output');
     const el = node(root);
     expect(el).not.toBeNull();
@@ -401,7 +401,7 @@ describe('§9a.1 — the frame paints OUTSIDE the hole, in BOTH modes', () => {
     expect(el.style.width).toBe('640px');
   });
 
-  it('the frame does not reopen the hole: output mode still paints nothing INSIDE it', () => {
+  it('the frame does not add content: output mode keeps a transparent hole', () => {
     const el = node(build(sceneWith([framed]), 'output').root);
     expect(el.childElementCount).toBe(0);
     expect(el.style.backgroundImage).toBe('');

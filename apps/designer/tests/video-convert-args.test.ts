@@ -2,13 +2,16 @@ import { describe, expect, it } from 'vitest';
 import type { AssetMeta } from '@cg/shared-ipc';
 import {
   buildConvertArgs,
+  buildDecodeCheckArgs,
   buildPosterArgs,
   buildProvenance,
   clampCrop,
   CONVERTER_REVISION,
   cropsEqual,
+  displayDimensions,
   findDuplicateVideoAsset,
   fpsConformNotice,
+  LEGACY_VLC_COLOR_FILTER,
   parseProbeLog,
   posterTimeMs,
 } from '../src/renderer/features/assets/video-convert-args.js';
@@ -24,6 +27,7 @@ describe('D-128 — buildConvertArgs (the DECIDED VP8+alpha recipe)', () => {
     expect(args).toContain('libvpx');
     expect(args).not.toContain('libvpx-vp9'); // VP9 is OUT (unproducible in-app — design.md)
     expect(args).toContain('yuva420p');
+    expect(args[args.indexOf('-map') + 1]).toBe('0:v:0');
     const altRef = args.indexOf('-auto-alt-ref');
     expect(args[altRef + 1]).toBe('0');
     const r = args.indexOf('-r');
@@ -226,6 +230,8 @@ describe('D-128 — the OPT-IN corrections: un-premultiply (fringe fix) + ALPHA 
       '-y',
       '-i',
       '/mnt/a.avi',
+      '-map',
+      '0:v:0',
       '-frames:v',
       '1',
       '-f',
@@ -241,6 +247,8 @@ describe('D-128 — the OPT-IN corrections: un-premultiply (fringe fix) + ALPHA 
       '20.000',
       '-i',
       '/mnt/a.avi',
+      '-map',
+      '0:v:0',
       '-frames:v',
       '1',
       '-f',
@@ -283,6 +291,9 @@ describe('D-128 — parseProbeLog', () => {
       width: 64,
       height: 64,
       durationMs: 1600,
+      container: 'avi',
+      codec: 'rawvideo',
+      pixelFormat: 'bgra',
     });
   });
 
@@ -314,7 +325,182 @@ describe('D-128 — parseProbeLog', () => {
       '  Duration: N/A, start: 0.000000, bitrate: N/A',
       '  Stream #0:0: Video: rawvideo (BGRA / 0x41524742), bgra, 720x576, 25 fps, 25 tbr, 25 tbn',
     ]);
-    expect(probe).toEqual({ fps: 25, width: 720, height: 576, durationMs: 0 });
+    expect(probe).toEqual({
+      fps: 25,
+      width: 720,
+      height: 576,
+      durationMs: 0,
+      codec: 'rawvideo',
+      pixelFormat: 'bgra',
+    });
+  });
+
+  it('retains MOV codec/pixel metadata and non-square sample aspect for display geometry (B-383)', () => {
+    const probe = parseProbeLog([
+      "Input #0, mov,mp4,m4a,3gp,3g2,mj2, from '/mnt/logo dena.mov':",
+      '  Duration: 00:00:14.30, start: 0.000000, bitrate: 65405 kb/s',
+      '  Stream #0:0: Video: qtrle (rle  / 0x20656C72), argb(progressive), 1445x2120, SAR 2107:1445 DAR 2107:2120, 30 fps, 30 tbr',
+    ]);
+    expect(probe).toMatchObject({
+      width: 1445,
+      height: 2120,
+      container: 'mov,mp4,m4a,3gp,3g2,mj2',
+      codec: 'qtrle',
+      pixelFormat: 'argb',
+      sampleAspectRatio: { numerator: 2107, denominator: 1445 },
+    });
+    expect(displayDimensions(probe!)).toEqual({ width: 2107, height: 2120 });
+    expect(displayDimensions(probe!, undefined, 'pixels')).toEqual({ width: 1445, height: 2120 });
+    expect(displayDimensions(probe!, { x: 0, y: 0, width: 1000, height: 800 })).toEqual({
+      width: 1458,
+      height: 800,
+    });
+  });
+
+  it('uses the same first video stream that conversion maps when a container has several tracks', () => {
+    const probe = parseProbeLog([
+      "Input #0, mov, from '/mnt/multi.mov':",
+      '  Stream #0:0: Video: qtrle, argb(progressive), 1445x2120, SAR 2107:1445, 30 fps',
+      '  Stream #0:1: Video: h264, yuv420p, 1920x1080, SAR 1:1, 25 fps',
+    ]);
+    expect(probe).toMatchObject({
+      codec: 'qtrle',
+      pixelFormat: 'argb',
+      width: 1445,
+      height: 2120,
+      fps: 30,
+      sampleAspectRatio: { numerator: 2107, denominator: 1445 },
+    });
+  });
+});
+
+describe('B-383 / D-190 — geometry normalization and fast decode proof', () => {
+  const sar = { numerator: 2107, denominator: 1445 };
+
+  it('crops in coded pixels, then bakes sample aspect into square pixels on the default path', () => {
+    const args = buildConvertArgs({
+      inputPath: '/mnt/logo.mov',
+      outputPath: '/out.webm',
+      targetFps: 50,
+      crop: { x: 10, y: 20, width: 1000, height: 800 },
+      sampleAspectRatio: sar,
+    });
+    expect(args[args.indexOf('-vf') + 1]).toBe(
+      'crop=1000:800:10:20,scale=max(1\\,round(iw*2107/1445)):ih,setsar=1',
+    );
+  });
+
+  it('keeps converter and verifier at a minimum one-pixel width for a very narrow SAR crop', () => {
+    const narrowSar = { numerator: 1, denominator: 8 };
+    const args = buildConvertArgs({
+      inputPath: '/mnt/narrow.mov',
+      outputPath: '/out.webm',
+      targetFps: 50,
+      crop: { x: 0, y: 0, width: 1, height: 8 },
+      sampleAspectRatio: narrowSar,
+    });
+    expect(args[args.indexOf('-vf') + 1]).toContain('scale=max(1\\,round(iw*1/8)):ih');
+    expect(
+      displayDimensions(
+        { width: 8, height: 8, sampleAspectRatio: narrowSar },
+        { x: 0, y: 0, width: 1, height: 8 },
+      ),
+    ).toEqual({ width: 1, height: 8 });
+  });
+
+  it('adds the same normalization before alpha corrections but leaves 1:1 fast imports filterless', () => {
+    const corrected = buildConvertArgs({
+      inputPath: '/mnt/logo.mov',
+      outputPath: '/out.webm',
+      targetFps: 50,
+      sampleAspectRatio: sar,
+      alphaBleed: true,
+    });
+    const graph = corrected[corrected.indexOf('-filter_complex') + 1] ?? '';
+    expect(graph).toContain('[0:v:0]scale=max(1\\,round(iw*2107/1445)):ih,setsar=1,format=rgba');
+
+    const square = buildConvertArgs({
+      inputPath: '/mnt/square.mov',
+      outputPath: '/out.webm',
+      targetFps: 50,
+    });
+    expect(square).not.toContain('-vf');
+    expect(square).not.toContain('-filter_complex');
+  });
+
+  it('can deliberately ignore bad display metadata while still clearing SAR from the output', () => {
+    const args = buildConvertArgs({
+      inputPath: '/mnt/logo.mov',
+      outputPath: '/out.webm',
+      targetFps: 50,
+      crop: { x: 10, y: 20, width: 1000, height: 800 },
+      sampleAspectRatio: sar,
+      pixelAspectMode: 'pixels',
+    });
+    expect(args[args.indexOf('-vf') + 1]).toBe('crop=1000:800:10:20,setsar=1');
+
+    const corrected = buildConvertArgs({
+      inputPath: '/mnt/logo.mov',
+      outputPath: '/out.webm',
+      targetFps: 50,
+      sampleAspectRatio: sar,
+      pixelAspectMode: 'pixels',
+      alphaBleed: true,
+    });
+    const graph = corrected[corrected.indexOf('-filter_complex') + 1] ?? '';
+    expect(graph).toContain('[0:v:0]setsar=1,format=rgba');
+    expect(graph).not.toContain('scale=max');
+  });
+
+  it('can opt into VLC 3 legacy QTRLE colors before alpha repair without changing alpha', () => {
+    const args = buildConvertArgs({
+      inputPath: '/mnt/logo.mov',
+      outputPath: '/out.webm',
+      targetFps: 50,
+      crop: { x: 10, y: 20, width: 1000, height: 800 },
+      sampleAspectRatio: sar,
+      colorInterpretation: 'legacy-vlc',
+      premultipliedAlpha: true,
+    });
+    const chain = args[args.indexOf('-vf') + 1] ?? '';
+    expect(chain).toContain(
+      `crop=1000:800:10:20,scale=max(1\\,round(iw*2107/1445)):ih,setsar=1,format=rgba,${LEGACY_VLC_COLOR_FILTER},`,
+    );
+    expect(chain.indexOf(LEGACY_VLC_COLOR_FILTER)).toBeLessThan(chain.indexOf('geq='));
+
+    const bleed = buildConvertArgs({
+      inputPath: '/mnt/logo.mov',
+      outputPath: '/out.webm',
+      targetFps: 50,
+      colorInterpretation: 'legacy-vlc',
+      alphaBleed: true,
+    });
+    const graph = bleed[bleed.indexOf('-filter_complex') + 1] ?? '';
+    expect(graph).toContain(`[0:v:0]format=rgba,${LEGACY_VLC_COLOR_FILTER},split=3`);
+
+    const poster = buildPosterArgs('/mnt/logo.mov', '/poster.png', 5, [], sar, 'legacy-vlc');
+    expect(poster[poster.indexOf('-vf') + 1]).toBe(
+      `scale=max(1\\,round(iw*2107/1445)):ih,setsar=1,format=rgba,${LEGACY_VLC_COLOR_FILTER}`,
+    );
+  });
+
+  it('builds a bounded one-frame decode check instead of a full conversion', () => {
+    expect(buildDecodeCheckArgs('/mnt/a.mov', '/decode-check.rgba')).toEqual([
+      '-y',
+      '-i',
+      '/mnt/a.mov',
+      '-map',
+      '0:v:0',
+      '-frames:v',
+      '1',
+      '-vf',
+      'scale=1:1',
+      '-pix_fmt',
+      'rgba',
+      '-f',
+      'rawvideo',
+      '/decode-check.rgba',
+    ]);
   });
 });
 
@@ -346,6 +532,8 @@ describe('D-128 — provenance assembly + crop clamping', () => {
         probe,
         targetFps: 50,
         crop: { x: 0, y: 0, width: 640, height: 480 },
+        pixelAspectMode: 'source',
+        colorInterpretation: 'standard',
         premultipliedAlpha: true,
         alphaBleed: false,
       }),
@@ -357,6 +545,8 @@ describe('D-128 — provenance assembly + crop clamping', () => {
       sourceHeight: 1080,
       converterRevision: CONVERTER_REVISION,
       crop: { x: 0, y: 0, width: 640, height: 480 },
+      pixelAspectMode: 'source',
+      colorInterpretation: 'standard',
       premultipliedAlpha: true,
       alphaBleed: false, // recorded even when false — the lineage names what ran
     });
@@ -437,6 +627,34 @@ describe('D-128 — pre-convert dedupe matching', () => {
   it('does NOT match a different crop (different output)', () => {
     expect(findDuplicateVideoAsset([asset({ crop })], key)).toBeNull();
     expect(findDuplicateVideoAsset([asset({})], { ...key, crop })).toBeNull();
+  });
+
+  it('treats picture shape as part of the output recipe (legacy missing field means source)', () => {
+    expect(
+      findDuplicateVideoAsset([asset({})], { ...key, pixelAspectMode: 'source' })?.assetId,
+    ).toBe('a');
+    expect(
+      findDuplicateVideoAsset([asset({ pixelAspectMode: 'pixels' })], {
+        ...key,
+        pixelAspectMode: 'source',
+      }),
+    ).toBeNull();
+    expect(findDuplicateVideoAsset([asset({})], { ...key, pixelAspectMode: 'pixels' })).toBeNull();
+  });
+
+  it('does not dedupe standard colors against the opt-in VLC 3 channel mapping', () => {
+    expect(
+      findDuplicateVideoAsset([asset({})], { ...key, colorInterpretation: 'standard' })?.assetId,
+    ).toBe('a');
+    expect(
+      findDuplicateVideoAsset([asset({ colorInterpretation: 'legacy-vlc' })], {
+        ...key,
+        colorInterpretation: 'standard',
+      }),
+    ).toBeNull();
+    expect(
+      findDuplicateVideoAsset([asset({})], { ...key, colorInterpretation: 'legacy-vlc' }),
+    ).toBeNull();
   });
 
   it('does NOT match across converter revisions (older bytes are a different output; pre-.4 assets ran the bleed implicitly)', () => {

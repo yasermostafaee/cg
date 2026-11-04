@@ -54,6 +54,15 @@ export const HoldSourceSchema = z.enum(['timed', 'content-driven']);
 export type HoldSource = z.infer<typeof HoldSourceSchema>;
 
 /**
+ * D-187 — what the whole composition paints while it is in Hold. `freeze` keeps the
+ * settled Out-point picture; `loop` replays the authored Middle range from Content start
+ * through Out point for the selected participants. Unchecked animated/media elements advance
+ * once to their end on an independent local clock.
+ */
+export const HoldBehaviorSchema = z.enum(['freeze', 'loop']);
+export type HoldBehavior = z.infer<typeof HoldBehaviorSchema>;
+
+/**
  * 🔴 `TIMING-BUILD-21` §3 — THE TWO TIMING DEFAULTS, STATED ONCE, HERE.
  *
  * Every consumer reads them through {@link repeatOf} / {@link delayMsOf} rather than
@@ -69,6 +78,17 @@ const PlayoutObjectSchema = z.object({
   mode: PlayoutModeSchema.default('manual'),
   /** Absent ⇒ 'timed' (resolved by `playoutOf` / the controller). */
   holdSource: HoldSourceSchema.optional(),
+  /** D-187 — composition-owned Hold picture; absent/new compositions resolve to Freeze. */
+  holdBehavior: HoldBehaviorSchema.optional(),
+  /**
+   * D-187 — elements that repeat when `holdBehavior` is `loop`. Absent means every eligible
+   * animated/media element in this composition; an explicit array is the author's checklist.
+   * Unchecked eligible elements advance once to their authored end instead of freezing or
+   * following the wrapping root cursor.
+   * Content drivers are excluded: their own clocks keep running and a Middle wrap never restarts
+   * them.
+   */
+  holdLoopElementIds: z.array(IdSchema).optional(),
   /**
    * The hold WITHIN a pass — how long the composition sits parked at `outPoint` before the
    * outro runs. ⚠ NOT the gap between passes; see {@link PlayoutObjectSchema.delayMs}.
@@ -675,10 +695,19 @@ export function playoutOf(scene: Pick<Scene, 'playout' | 'lifecycle'>): Playout 
   const p = scene.playout;
   const base: Playout =
     p === undefined
-      ? { mode: 'manual', holdSource: 'timed' }
+      ? { mode: 'manual', holdSource: 'timed', holdBehavior: 'freeze' }
       : (p.mode as string) === 'content-driven'
-        ? { ...p, mode: 'loop-cycle', holdSource: 'content-driven' }
-        : { ...p, holdSource: p.holdSource ?? 'timed' };
+        ? {
+            ...p,
+            mode: 'loop-cycle',
+            holdSource: 'content-driven',
+            holdBehavior: p.holdBehavior ?? 'freeze',
+          }
+        : {
+            ...p,
+            holdSource: p.holdSource ?? 'timed',
+            holdBehavior: p.holdBehavior ?? 'freeze',
+          };
   // D-114 — a composition with NO out-point and the DEFAULT (`manual`) mode is `static`: it plays in,
   // holds until `stop()`, and hard-cuts (no animated exit). Resolve-on-read (non-destructive, like the
   // legacy content-driven normalization above), so the runtime controller, exporter, and inspector
@@ -689,6 +718,15 @@ export function playoutOf(scene: Pick<Scene, 'playout' | 'lifecycle'>): Playout 
   // the auto-out-without-out-point case is legacy / programmatic only.
   if (scene.lifecycle === undefined && base.mode === 'manual') return { ...base, mode: 'static' };
   return base;
+}
+
+/** D-187 — the one membership rule shared by runtime and authoring mirrors. */
+export function elementLoopsOnHold(
+  playout: Pick<Playout, 'holdBehavior' | 'holdLoopElementIds'>,
+  elementId: string,
+): boolean {
+  if ((playout.holdBehavior ?? 'freeze') !== 'loop') return false;
+  return playout.holdLoopElementIds?.includes(elementId) ?? true;
 }
 
 /**

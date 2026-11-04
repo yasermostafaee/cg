@@ -132,7 +132,7 @@ describe('session X — the document shape reaches the runtime PROMOTED, and the
     expect(s.layers[0]!.children.map((c) => c.type)).toEqual(['video']);
   });
 
-  it('video: the hold sits at H; at the out point the clip’s ENDING begins (session Y re-pin)', () => {
+  it('video: Follow traverses the composition-derived middle; at the out point the clip’s ENDING begins', () => {
     const r = createRuntime(canvasSceneFor('video'), {
       skipFontLoad: true,
       installGlobals: false,
@@ -147,10 +147,11 @@ describe('session X — the document shape reaches the runtime PROMOTED, and the
       configurable: true,
     });
     r.tick(524);
-    expect(t).toBeCloseTo(5.02, 3); // frozen at H through the hold
-    // Session Y: the stored seeds (7160 = durationMs/2, 14320 = durationMs) are the attach
-    // SEED SIGNATURE and derive as absent, so the outro is END-anchored:
-    // [14320 − 3820 → 14320] — the clip's own build-off, not the static middle.
+    // D-176: Follow ignores the stored seed/manual marks and maps the composition's middle over
+    // the clip interval between its derived intro and end-anchored outro. One frame before OUT is
+    // therefore one source frame before the ending seam, not the old frozen-H look.
+    expect(t).toBeCloseTo(10.48, 3);
+    // The OUT remains end-anchored: [14320 − 3820 → 14320].
     r.tick(525); // the out point — the ending's first frame (the deliberate seam jump)
     expect(t).toBeCloseTo(10.5, 3);
     r.tick(526); // ONE frame past — the boundary that must not be late

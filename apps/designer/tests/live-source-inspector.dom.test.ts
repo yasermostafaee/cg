@@ -141,7 +141,7 @@ const shape = (): Element => defaultShape('sh-1', 100, 100);
 describe('D-137 — the Live Source Inspector offers no affordance it cannot honour', () => {
   it('D-169 — fits one Live Source to the active canvas from Quick layout', () => {
     const c = render(live());
-    const action = c.querySelector<HTMLButtonElement>('[aria-label="Fit Live Source to canvas"]');
+    const action = c.querySelector<HTMLButtonElement>('[aria-label="Fit Plate to canvas"]');
     expect(action).not.toBeNull();
 
     act(() => action?.click());
@@ -228,7 +228,7 @@ describe('D-137 — the Live Source Inspector offers no affordance it cannot hon
 
   it('offers NO key id control — fill+key is the MAPPING’s, not the scene’s', () => {
     const c = render(live());
-    expect(labels(c)).not.toContain('Live Source key source id');
+    expect(labels(c)).not.toContain('Plate key source id');
     expect(c.textContent ?? '').not.toMatch(/key id/i);
   });
 
@@ -243,7 +243,7 @@ describe('D-137 — the Live Source Inspector offers no affordance it cannot hon
 
   it('KEEPS the source id and the aspect picker', () => {
     const l = labels(render(live()));
-    expect(l).toContain('Live Source source id');
+    expect(l).toContain('Plate source id');
     expect(render(live()).textContent ?? '').toMatch(/aspect/i);
   });
 

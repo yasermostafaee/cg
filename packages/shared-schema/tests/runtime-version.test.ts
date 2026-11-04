@@ -100,6 +100,14 @@ describe('runtimeShortfallMessage', () => {
 });
 
 describe('CG_RUNTIME_VERSION', () => {
+  it('declares the 30 fps rendering contract floor', () => {
+    expect(CG_RUNTIME_VERSION).toBe('1.1.0');
+    expect(runtimeShortfall(CG_RUNTIME_VERSION, '1.0.0')).toEqual({
+      required: '1.1.0',
+      available: '1.0.0',
+    });
+  });
+
   it('is a readable semver — the constant the exporter writes into every package', () => {
     expect(parseSemver(CG_RUNTIME_VERSION)).not.toBeNull();
   });

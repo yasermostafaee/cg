@@ -34,7 +34,7 @@ describe('B-366 — internal element ids stay out of Issues copy', () => {
     const issue: ExportIssue = {
       severity: 'error',
       code: 'live-source-unset',
-      message: 'The unnamed Live Source at (459, 327) has no source.',
+      message: 'The unnamed Plate at (459, 327) has no source.',
       elementId,
     };
     container = document.createElement('div');
@@ -42,7 +42,7 @@ describe('B-366 — internal element ids stay out of Issues copy', () => {
     root = createRoot(container);
     act(() => root?.render(createElement(IssuesPanel, { issues: [issue], embedded: true })));
 
-    expect(container.textContent).toContain('The unnamed Live Source at (459, 327)');
+    expect(container.textContent).toContain('The unnamed Plate at (459, 327)');
     expect(container.textContent).not.toContain(elementId);
     const row = container.querySelector<HTMLElement>('[role="button"]');
     if (row === null) throw new Error('no issue row');

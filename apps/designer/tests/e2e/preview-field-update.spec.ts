@@ -68,11 +68,17 @@ test.describe('D-106/D-173 — preview field form: one Update all + apply-in-pla
     const long =
       'A long headline that wraps onto several lines and must stay fully visible in the preview form — not truncated or clipped by a single-line input.';
     await app.setPreviewField('headline', long);
+    await expect(field).toHaveValue(long);
+    await expect(field).toHaveCSS('direction', 'ltr');
     const box = await field.evaluate((el) => {
       const t = el as HTMLTextAreaElement;
       return { scroll: t.scrollHeight, client: t.clientHeight };
     });
     expect(box.scroll).toBeLessThanOrEqual(box.client + 2); // auto-grown: full text fits, no clipping
     expect(box.client).toBeGreaterThan(28); // multi-line (more than a single row)
+    const persian = '۱۲۳ — متن فارسی چندخطی برای بررسی جهت ورود و حفظ مقدار آماده‌شده';
+    await app.setPreviewField('headline', persian);
+    await expect(field).toHaveValue(persian);
+    await expect(field).toHaveCSS('direction', 'rtl');
   });
 });

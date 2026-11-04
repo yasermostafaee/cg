@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { SceneSchema } from '@cg/shared-schema';
+import { FrameRateSchema, SceneSchema } from '@cg/shared-schema';
 import { defineChannel } from '../channel.js';
 import { definePublishChannel } from '../publish.js';
 
@@ -50,9 +50,7 @@ export const ProjectsNewChannel = defineChannel(
         height: z.number().int().positive(),
       })
       .optional(),
-    frameRate: z
-      .union([z.literal(25), z.literal(29.97), z.literal(50), z.literal(59.94), z.literal(60)])
-      .optional(),
+    frameRate: FrameRateSchema.optional(),
     /**
      * Optional total scene duration in frames (New Project modal). When
      * omitted the platform falls back to the v1 default of 50.

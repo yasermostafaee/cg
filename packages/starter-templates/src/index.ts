@@ -5,6 +5,7 @@ import { countdownStepsScene } from './countdown-steps.js';
 import { imageFolderSequenceScene } from './image-folder-sequence.js';
 import { iranWeatherForecastScene } from './iran-weather-forecast.js';
 import { iranWeatherPagesScene } from './iran-weather-pages.js';
+import { iranWeatherCardsScene } from './iran-weather-cards.js';
 import { logoBugScene } from './logo-bug.js';
 import { multiboxScene } from './multibox.js';
 import { sequenceScene } from './sequence.js';
@@ -269,6 +270,29 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
     scene: iranWeatherForecastScene,
   },
   {
+    id: 'iran-weather-cards',
+    label: 'آب‌وهوای شهرها — کارت‌های تصویری',
+    description: 'چهار کارت بزرگ در هر صفحه، آیکون‌های متحرک و نمایش یک‌بارهٔ همهٔ مراکز استان‌ها.',
+    preview: '/starters/iran-weather-cards.png',
+    motionPreview: '/starters/motion/iran-weather-cards.webm',
+    assets: [
+      {
+        key: 'iran-weather-cards-vazir',
+        kind: 'font',
+        filename: 'Vazirmatn.woff2',
+        url: VAZIRMATN_URL,
+      },
+      {
+        key: 'weather-broadcast-sky',
+        kind: 'image',
+        filename: 'weather-sky-broadcast.png',
+        url: '/starters/assets/weather-sky-broadcast.png',
+      },
+      ...WEATHER_ASSETS,
+    ],
+    scene: iranWeatherCardsScene,
+  },
+  {
     id: 'image-folder-sequence',
     label: 'توالی تصاویر پوشه',
     description:
@@ -328,6 +352,12 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
         filename: 'Vazirmatn.woff2',
         url: VAZIRMATN_URL,
       },
+      {
+        key: 'countdown-azan-icon',
+        kind: 'image',
+        filename: 'azan-mosque.svg',
+        url: '/starters/assets/azan-mosque.svg',
+      },
     ],
     scene: countdownStepsScene,
   },
@@ -367,6 +397,7 @@ export {
   imageFolderSequenceScene,
   iranWeatherForecastScene,
   iranWeatherPagesScene,
+  iranWeatherCardsScene,
   iribNewsScene,
   logoBugScene,
   multiboxScene,

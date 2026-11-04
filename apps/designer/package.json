@@ -5,6 +5,7 @@
   "description": "Visual editor for broadcast HTML graphics (.vcg) — browser SPA.",
   "type": "module",
   "scripts": {
+    "predev": "pnpm --filter @cg/single-file-export build",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",

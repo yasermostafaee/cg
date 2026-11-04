@@ -92,8 +92,8 @@ export interface LottieDriverOptions {
   idleIn: number;
   /** Idle-loop range end. */
   idleOut: number;
-  /** HOLD behaviour after the intro: freeze at `introEnd`, or loop the idle segment. */
-  holdBehavior: 'freeze' | 'idle-loop';
+  /** HOLD behaviour after the intro: freeze, loop the idle segment, or continue once to end. */
+  holdBehavior: 'freeze' | 'idle-loop' | 'continue';
   /**
    * D-125 — the frame the STATIC editor canvas parks on (a design surface that never
    * plays). Defaults to {@link introEnd}. The runtime passes the clip MIDPOINT for a
@@ -116,6 +116,8 @@ export interface LottieDriverOptions {
 type ClipPosition =
   | { frame: number; phase: 'intro' }
   | { frame: number; phase: 'idle-loop' }
+  | { frame: number; phase: 'continue' }
+  | { frame: number; phase: 'continue-end' }
   | { frame: number; phase: 'freeze-hold' }
   | { frame: number; phase: 'outro' }
   | { frame: number; phase: 'outro-end' };
@@ -135,6 +137,8 @@ export class LottieDriver {
   private pausedElapsed = 0;
   /** True once a FREEZE hold is reached — resume() must NOT un-freeze it. */
   private settledHold = false;
+  /** D-187 — the unchecked once-only tail already reached its authored end. */
+  private continuedToEnd = false;
   private destroyed = false;
   /** Which segment `tick()` is driving: the intro/hold mapping or the outro mapping. */
   private mode: 'intro' | 'outro' = 'intro';
@@ -184,6 +188,7 @@ export class LottieDriver {
     this.settleOutro();
     this.running = false;
     this.settledHold = false;
+    this.continuedToEnd = false;
     this.pausedElapsed = 0;
     this.mode = 'intro';
     this.complete = this.armComplete();
@@ -296,8 +301,9 @@ export class LottieDriver {
    *
    * - A **freeze** Lottie resolves when the intro reaches `introEnd` (the hold frame)
    *   — the self-contained-sting case: hold ends at intro-end ⇒ auto-out ⇒ outro plays.
-   * - An **idle-loop** Lottie NEVER resolves: it holds until `stop()`, exactly like an
-   *   infinite ticker.
+   * - A **continue** Lottie resolves after advancing once to its authored end.
+   * - An **idle-loop** Lottie NEVER resolves: it holds until `stop()`, exactly like an infinite
+   *   ticker.
    *
    * Re-minted by `reset()` (B-033), so each run's hold waits on that run's completion.
    */
@@ -317,6 +323,24 @@ export class LottieDriver {
   playOutro(): Promise<void> {
     // Already torn down — nothing to play, and nothing may await a dead driver.
     if (this.destroyed) return Promise.resolve();
+    // D-187 — an unchecked Lottie has already entered a monotonic local tail. Await that tail;
+    // never seek it back to `outroStart` and replay frames it may already have painted.
+    if (this.o.holdBehavior === 'continue') {
+      if (this.continuedToEnd) return Promise.resolve();
+      this.settleOutro();
+      if (!this.running && !this.settledHold) this.resume();
+      const done = new Promise<void>((resolve) => {
+        this.outroResolve = resolve;
+      });
+      const framesPerMs = (this.o.fr * this.o.speed) / 1000;
+      const outroEnd = this.o.outroEnd ?? this.o.op;
+      const tailMs = framesPerMs > 0 ? Math.max(0, (outroEnd - this.o.introEnd) / framesPerMs) : 0;
+      this.outroBackstop = this.setTimer(
+        () => this.settleOutro(),
+        tailMs + OUTRO_BACKSTOP_MARGIN_MS,
+      );
+      return done;
+    }
     // DEGENERATE / absent outro (a marker-less clip, or an outro-start authored at the
     // last frame) — resolve at once so the exit proceeds straight to the background (never
     // a strand). `hasOutro` is the runtime's single derivation, not a second comparison here.
@@ -401,6 +425,12 @@ export class LottieDriver {
     const frame = introStart + advanced;
     if (frame < introEnd) return { frame, phase: 'intro' };
     // The intro has played out — HOLD.
+    if (holdBehavior === 'continue') {
+      const continueFrame = introEnd + (advanced - (introEnd - introStart));
+      return continueFrame < outroEnd
+        ? { frame: continueFrame, phase: 'continue' }
+        : { frame: outroEnd, phase: 'continue-end' };
+    }
     if (holdBehavior === 'idle-loop' && idleOut > idleIn) {
       // Loop the idle segment: keep advancing, wrapping within [idleIn, idleOut).
       const span = idleOut - idleIn;
@@ -419,6 +449,15 @@ export class LottieDriver {
       // here is what releases the awaiting exit.
       this.running = false;
       this.cancelFrame();
+      this.settleOutro();
+      return;
+    }
+    if (pos.phase === 'continue-end') {
+      this.continuedToEnd = true;
+      this.settledHold = true;
+      this.running = false;
+      this.cancelFrame();
+      this.completeResolve();
       this.settleOutro();
       return;
     }

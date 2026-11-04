@@ -71,6 +71,7 @@ export * from './channels/lock.js';
 export * from './channels/projects.js';
 export * from './channels/assets.js';
 export * from './channels/sharedImages.js';
+export * from './channels/sharedFonts.js';
 export * from './channels/export.js';
 export * from './channels/preview.js';
 export * from './channels/templates.js';

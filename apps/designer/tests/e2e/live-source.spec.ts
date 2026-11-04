@@ -88,7 +88,7 @@ test.describe('Live Source (D-137 phase 1)', () => {
       🔴 `B-187` (owner, 2026-10-14, Q2 (c)) — IT EXISTS ON THE CANVAS WITH AN AUTOMATIC NAME,
       AND SAYS THE NAME IS AUTOMATIC.
 
-      `B-183` made a drawn plate point at NOTHING, because its old `live-1` was a suggestion the
+      `B-183` made a drawn plate point at NOTHING, because its old automatic name was a suggestion the
       author had not accepted. The owner reopened the default on one condition — the surface
       says the tool chose it — so the plate is born `plate-1`, marked "auto" until the author
       keeps it or types another. "Nothing lands unconfirmed" holds: the name lands labelled.
@@ -110,9 +110,9 @@ test.describe('Live Source (D-137 phase 1)', () => {
     // ONE id. The key-source-id control is gone: whether an id resolves to a single
     // device or to a fill/key PAIR is a property of the installation's mapping in CG
     // Control, and the author cannot know it (design.md §1a).
-    await expect(
-      app.inspector.getByRole('textbox', { name: 'Live Source key source id' }),
-    ).toHaveCount(0);
+    await expect(app.inspector.getByRole('textbox', { name: 'Plate key source id' })).toHaveCount(
+      0,
+    );
 
     /*
       `B-183` survives for a CLEARED plate: emptying the field unassigns it, the bars say
@@ -162,7 +162,7 @@ test.describe('Live Source (D-137 phase 1)', () => {
     // The refusal explains where the mapping DOES belong. Matched on a phrase unique
     // to the NOTICE: D-147's key-id hint also mentions CG Control, and an unscoped
     // match would pass on the hint while the notice never appeared.
-    await expect(app.page.getByText(/is not a Live Source id/)).toBeVisible();
+    await expect(app.page.getByText(/is not a Plate id/)).toBeVisible();
   });
 
   test('bars on the canvas and in the Preview modal; NOTHING in the export', async ({ app }) => {
@@ -381,7 +381,7 @@ test.describe('Live Source (D-137 phase 1)', () => {
     // preflight's own `label()`. Lifting it from the message rather than re-deriving it is what
     // stops the tooltip naming a different box from the panel it points at.
     await expect(exportBtn).toHaveAttribute('title', /Export blocked — \d+ error/);
-    await expect(exportBtn).toHaveAttribute('title', /Live Source/);
+    await expect(exportBtn).toHaveAttribute('title', /Plate/);
     await expect(exportBtn).not.toHaveAttribute('title', 'Resolve validation errors first');
 
     // ONE action from the control the author pressed to the full message.

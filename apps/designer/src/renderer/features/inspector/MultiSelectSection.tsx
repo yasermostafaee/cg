@@ -26,7 +26,7 @@ import {
 import { clearOrphanColourTrack } from './fill-commit.js';
 import {
   calculateLiveSourceAutoLayout,
-  liveSourceRowCounts,
+  liveSourceAutoLayoutRowCounts,
   type LiveSourceLayoutBias,
   type LiveSourceLayoutOptions,
   type TwoPlateLayout,
@@ -106,6 +106,27 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
   const [twoPlateLayout, setTwoPlateLayout] = useState<TwoPlateLayout>('horizontal');
   const [layoutBias, setLayoutBias] = useState<LiveSourceLayoutBias>('more-top');
   const [reverseLayoutOrder, setReverseLayoutOrder] = useState(false);
+  const layoutOptions: LiveSourceLayoutOptions = {
+    horizontalGap,
+    verticalGap,
+    twoPlateLayout,
+    reverse: reverseLayoutOrder,
+  };
+  const currentRows =
+    liveSources !== null && resolution !== null
+      ? liveSourceAutoLayoutRowCounts(liveSources, resolution, layoutBias, layoutOptions)
+      : [];
+  const hasHorizontalNeighbours = currentRows.some((count) => count > 1);
+  const hasVerticalNeighbours = currentRows.length > 1;
+  const topRows =
+    liveSources !== null && resolution !== null
+      ? liveSourceAutoLayoutRowCounts(liveSources, resolution, 'more-top', layoutOptions)
+      : [];
+  const bottomRows =
+    liveSources !== null && resolution !== null
+      ? liveSourceAutoLayoutRowCounts(liveSources, resolution, 'more-bottom', layoutOptions)
+      : [];
+  const hasRemainderChoice = String(topRows) !== String(bottomRows);
   const hasLockedLiveSource = useDesignerSelector((state) =>
     elements.some(
       (element) =>
@@ -115,7 +136,7 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
     ),
   );
   const lockedScaleReason = hasLockedLiveSource
-    ? 'Scale is unavailable while a selected Live Source keeps its aspect locked. Resize with Width or Height.'
+    ? 'Scale is unavailable while a selected Plate keeps its aspect locked. Resize with Width or Height.'
     : undefined;
   const byKey = new Map(shared.map((sp) => [sp.descriptor.key, sp]));
 
@@ -308,7 +329,7 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
                   }}
                 />
               )}
-              {(liveSources.length !== 2 || twoPlateLayout === 'horizontal') && (
+              {hasHorizontalNeighbours && (
                 <NumberField
                   label="horizontal gap"
                   value={horizontalGap}
@@ -328,7 +349,7 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
                   onCommitBoundary={commitBoundary}
                 />
               )}
-              {(liveSources.length !== 2 || twoPlateLayout === 'vertical') && (
+              {hasVerticalNeighbours && (
                 <NumberField
                   label="vertical gap"
                   value={verticalGap}
@@ -344,9 +365,7 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
                 />
               )}
               <div className={ms.layoutActions}>
-                {liveSources.length === 2 ||
-                String(liveSourceRowCounts(liveSources.length, 'more-top')) ===
-                  String(liveSourceRowCounts(liveSources.length, 'more-bottom')) ? (
+                {!hasRemainderChoice ? (
                   <Button
                     className={ms.layoutButton}
                     size="sm"
@@ -537,7 +556,7 @@ function LiveSourceAppearanceSections({
 
   return (
     <>
-      <CollapseSection title="Live Source" defaultExpanded>
+      <CollapseSection title="Plate" defaultExpanded>
         <SelectField
           label="aspect"
           value={selectedAspect}

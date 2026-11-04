@@ -16,7 +16,9 @@ describe('defaultVideo (D-128)', () => {
     if (parsed.type === 'video') {
       expect(parsed.assetId).toBe('asset-clip');
       expect(parsed.durationMs).toBe(4000);
-      expect(parsed.holdBehavior).toBe('loop'); // the inverse-of-Lottie default
+      // D-187 — Hold behaviour belongs to the composition. New media must not
+      // silently carry the retired element-level default.
+      expect(parsed.holdBehavior).toBeUndefined();
       expect(parsed.drivesHold).toBeUndefined(); // absent ⇒ does NOT drive
       expect(parsed.transform.size).toEqual({ w: 640, h: 480 });
     }

@@ -11,9 +11,9 @@ import { defaultVideo } from '../src/renderer/state/element-defaults.js';
 import { StyleSection } from '../src/renderer/features/inspector/StyleSection.js';
 
 /**
- * D-128 Phase 3 — the video element Inspector (decision (d)): poster preview,
- * hold behaviour, drivesHold, the manual phase marks (ms), and the read-only
- * provenance note (decision (e)). It never exposes inner content.
+ * D-128 Phase 3 / D-187 — the video element Inspector: poster preview, the
+ * manual phase marks (ms), and the read-only provenance note. Hold behaviour
+ * and Hold participation are authored once in the composition Playback panel.
  */
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -86,15 +86,13 @@ const el = (over: Partial<VideoElement> = {}): VideoElement => ({
 });
 
 describe('VideoSections inspector (D-128 Phase 3)', () => {
-  it('shows the poster <video>, hold + drivesHold selects, and the read-only provenance note', async () => {
+  it('shows the poster and read-only provenance without duplicating composition Hold controls', async () => {
     const c = await render(el());
     // poster preview is a seeked <video>, not a placeholder
     expect(c.querySelector('video')?.getAttribute('src')).toBe('blob:vid');
-    // decision (d) controls
-    expect(c.querySelector('[aria-label="on hold"]')).not.toBeNull();
-    expect(c.querySelector('[aria-label="drives hold"]')).not.toBeNull();
-    // holdBehavior default is 'loop'
-    expect((c.querySelector('[aria-label="on hold"]') as HTMLSelectElement).value).toBe('loop');
+    // D-176 / D-187 — both controls have one authoring surface: composition Playback.
+    expect(c.querySelector('[aria-label="on hold"]')).toBeNull();
+    expect(c.querySelector('[aria-label="drives hold"]')).toBeNull();
     // decision (e) — provenance surfaced READ-ONLY, naming the source + the conform
     const prov = c.querySelector('[data-testid="video-provenance"]');
     expect(prov?.textContent).toContain('Lower_Default.avi');
@@ -102,13 +100,17 @@ describe('VideoSections inspector (D-128 Phase 3)', () => {
     expect(prov?.textContent).toContain('25→50 fps');
   });
 
-  it('with NO phase marks: offers "Add phase marks" and the whole-clip explanation', async () => {
+  it('with NO phase marks: offers Follow composition only and the whole-clip explanation', async () => {
     const c = await render(el());
     expect(c.textContent).toContain('No phase marks');
     const addBtn = [...c.querySelectorAll('button')].find((b) =>
       (b.textContent ?? '').includes('Add phase marks'),
     );
-    expect(addBtn).toBeTruthy();
+    const followBtn = [...c.querySelectorAll('button')].find((b) =>
+      (b.textContent ?? '').includes('Follow composition'),
+    );
+    expect(addBtn).toBeUndefined();
+    expect(followBtn).toBeTruthy();
     // no in/out inputs until phases exist
     expect(c.querySelector('[aria-label="in point"]')).toBeNull();
   });

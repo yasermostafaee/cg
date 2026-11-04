@@ -91,7 +91,11 @@ function instance(
 }
 
 /** A scene whose playout SHOWS the checklist: an out-point, `auto-out`, content-driven hold. */
-function scene(children: Element[], compositions?: Composition[]): Scene {
+function scene(
+  children: Element[],
+  compositions?: Composition[],
+  holdBehavior: 'freeze' | 'loop' = 'freeze',
+): Scene {
   return {
     schemaVersion: 1,
     id: 'scene-r',
@@ -103,7 +107,7 @@ function scene(children: Element[], compositions?: Composition[]): Scene {
     frameRange: { in: 0, out: 100 },
     editorBackdrop: 'transparent',
     lifecycle: { outPoint: 60 },
-    playout: { mode: 'auto-out', holdSource: 'content-driven' },
+    playout: { mode: 'auto-out', holdSource: 'content-driven', holdBehavior },
     layers: [{ id: 'L1', name: 'l', visible: true, locked: false, blendMode: 'normal', children }],
     fields: [],
     bindings: [],
@@ -145,18 +149,29 @@ function render(s: Scene): void {
   });
 }
 
-/** The banner, found by the property that has already regressed once: its ALERT role. */
-const alert = (): HTMLElement | null => host.querySelector('[role="alert"]');
-const alertText = (): string => alert()?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+const warningState = (): HTMLElement | null =>
+  host.querySelector('[data-testid="never-closes-state"]');
 
-describe('R — the never-closes alert tracks the consequence', () => {
-  it('ONE infinite driver beside a finite one still shows it — the mixed case', () => {
+function warningInfoText(): string {
+  const button = warningState()?.querySelector<HTMLButtonElement>(
+    'button[aria-label="About Why this graphic holds until stop"]',
+  );
+  expect(button).not.toBeNull();
+  act(() => button!.click());
+  return (
+    document.body.querySelector('[role="dialog"]')?.textContent?.replace(/\s+/g, ' ').trim() ?? ''
+  );
+}
+
+describe('R — the compact never-closes state tracks the consequence', () => {
+  it('ONE infinite driver beside a finite one keeps the state and names the culprit in Info', () => {
     render(scene([ticker('Crawl', 'infinite'), lottie('Sting', { drivesHold: true })]));
-    expect(alert()).not.toBeNull();
-    // …and it NAMES the culprit rather than claiming "every".
-    expect(alertText()).toContain('Crawl');
-    expect(alertText()).toContain('won’t auto-close');
-    expect(alertText()).not.toContain('every content driver');
+    expect(warningState()?.textContent).toContain('Holds until stop');
+    expect(host.textContent).not.toContain('cannot complete by itself');
+    const info = warningInfoText();
+    expect(info).toContain('Crawl');
+    expect(info).toContain('cannot complete by itself');
+    expect(info).not.toContain('every content driver');
   });
 
   it('THE OBSERVED TRANSITION: ticking a finite driver keeps the alert across the re-render', () => {
@@ -169,7 +184,7 @@ describe('R — the never-closes alert tracks the consequence', () => {
       return editSceneOf(st.scene, st.activeCompositionId)!;
     };
     render(live());
-    expect(alert()).not.toBeNull();
+    expect(warningState()).not.toBeNull();
 
     const box = host.querySelector<HTMLInputElement>('input[aria-label="Sting drives the hold"]');
     expect(box).not.toBeNull();
@@ -181,41 +196,42 @@ describe('R — the never-closes alert tracks the consequence', () => {
     expect(
       host.querySelector<HTMLInputElement>('input[aria-label="Sting drives the hold"]')!.checked,
     ).toBe(true);
-    expect(alert()).not.toBeNull();
-    expect(alertText()).toContain('Crawl');
+    expect(warningState()).not.toBeNull();
+    expect(warningInfoText()).toContain('Crawl');
   });
 
   it('EVERY driver infinite still shows it, and names them all', () => {
     render(scene([ticker('Crawl', 'infinite'), ticker('Strap', 'infinite')]));
-    expect(alert()).not.toBeNull();
-    expect(alertText()).toContain('Crawl');
-    expect(alertText()).toContain('Strap');
-    expect(alertText()).toContain('repeat forever');
+    expect(warningState()).not.toBeNull();
+    const info = warningInfoText();
+    expect(info).toContain('Crawl');
+    expect(info).toContain('Strap');
+    expect(info).toContain('repeat forever');
   });
 
   it('all drivers FINITE hides it', () => {
     render(scene([ticker('Crawl', 3), lottie('Sting', { drivesHold: true })]));
-    expect(alert()).toBeNull();
+    expect(warningState()).toBeNull();
   });
 
   it('NO effective drivers hides it — an unticked infinite driver cannot hold anything', () => {
     render(scene([ticker('Crawl', 'infinite'), lottie('Sting')]));
-    expect(alert()).not.toBeNull(); // the ticker participates by default…
+    expect(warningState()).not.toBeNull(); // the ticker participates by default…
     render(scene([{ ...(ticker('Crawl', 'infinite') as object), drivesHold: false } as Element]));
-    expect(alert()).toBeNull(); // …and excluded, nothing drives the hold
+    expect(warningState()).toBeNull(); // …and excluded, nothing drives the hold
   });
 
   it('an infinite driver reachable only THROUGH a nested instance shows it; the override hides it', () => {
     const compositions = [comp('inner', [ticker('InnerCrawl', 'infinite')])];
     render(scene([instance('Home', 'inner'), ticker('Strap', 3)], compositions));
-    expect(alert()).not.toBeNull();
-    expect(alertText()).toContain('Home'); // named by its INSTANCE — a deeper driver has no row
+    expect(warningState()).not.toBeNull();
+    expect(warningInfoText()).toContain('Home'); // named by its INSTANCE — a deeper driver has no row
 
     // D-112 — the per-instance override excludes it, and the consequence goes with it.
     render(
       scene([instance('Home', 'inner', { InnerCrawl: false }), ticker('Strap', 3)], compositions),
     );
-    expect(alert()).toBeNull();
+    expect(warningState()).toBeNull();
   });
 
   it('an IDLE-LOOP Lottie counts as infinite — the two media kinds spell it differently', () => {
@@ -231,19 +247,19 @@ describe('R — the never-closes alert tracks the consequence', () => {
       ...(lottie('Loop', { drivesHold: true, hold: 'idle-loop' }) as object),
       phases: { introEnd: 10, outroStart: 40, idle: [10, 30], source: 'manual' },
     } as Element;
-    render(scene([el]));
-    expect(alert()).not.toBeNull();
-    expect(alertText()).toContain('Loop');
+    render(scene([el], undefined, 'loop'));
+    expect(warningState()).not.toBeNull();
+    expect(warningInfoText()).toContain('Loop');
   });
 
-  it('keeps BOTH the caution variant and the assertive role in every showing case', () => {
-    // The property that already regressed once (#352's variant swap demoted the role to
-    // `status`). Asserted directly, in the mixed case, because that is the case that used to
-    // render nothing at all.
+  it('keeps the compact caution state and aligned Info action in every showing case', () => {
     render(scene([ticker('Crawl', 'infinite'), lottie('Sting', { drivesHold: true })]));
-    const el = alert();
+    const el = warningState();
     expect(el).not.toBeNull();
-    expect(el!.getAttribute('role')).toBe('alert');
-    expect(el!.className).toMatch(/caution/i);
+    expect(el!.textContent).toContain('Holds until stop');
+    expect(
+      el!.querySelector('button[aria-label="About Why this graphic holds until stop"]'),
+    ).not.toBeNull();
+    expect(host.textContent).toContain('loops forever');
   });
 });

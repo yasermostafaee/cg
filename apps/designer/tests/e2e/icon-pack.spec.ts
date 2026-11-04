@@ -26,6 +26,7 @@ test.describe('D-092 — shared vector Icon', () => {
   });
 
   test('a flipRtl icon mirrors under RTL while a default icon does not', async ({ app }) => {
+    await app.page.setViewportSize({ width: 1600, height: 900 });
     await app.newProject('Icons E2E');
     await app.addRectangle();
 
@@ -52,6 +53,7 @@ test.describe('D-092 — shared vector Icon', () => {
   });
 
   test('canvas tools are ordered drawing-first, then dynamic', async ({ app }) => {
+    await app.page.setViewportSize({ width: 1600, height: 900 });
     await app.newProject('Icons E2E');
     const toolbar = app.page.getByRole('toolbar', { name: 'Canvas tools' });
     const labels = await toolbar
@@ -68,7 +70,7 @@ test.describe('D-092 — shared vector Icon', () => {
       // D-137 — the Live Source is a DRAWING tool (its authoring bars are
       // procedural, so it carries no asset), which is why it sits with the drawing
       // group rather than with the dynamic/data-driven ones below.
-      'Live Source',
+      'Plate',
       'Ticker',
       'Sequence',
       'Clock',
@@ -77,6 +79,77 @@ test.describe('D-092 — shared vector Icon', () => {
       // multi-frame group. Deliberately last, after both tool groups.
       'Add multi-frame group',
     ]);
+  });
+
+  test('a narrow canvas header keeps core tools visible and moves the rest into More', async ({
+    app,
+  }) => {
+    await app.page.setViewportSize({ width: 1024, height: 700 });
+    await app.newProject('Compact canvas tools');
+
+    const header = app.page.getByLabel('Canvas header');
+    const toolbar = app.page.getByRole('toolbar', { name: 'Canvas tools' });
+    await expect(toolbar).toHaveAttribute('data-compact', 'true');
+    await expect(toolbar.getByRole('button', { name: 'Select', exact: true })).toBeVisible();
+    await expect(toolbar.getByRole('button', { name: 'Hand (pan)', exact: true })).toBeVisible();
+    await expect(toolbar.getByRole('button', { name: 'Text', exact: true })).toHaveCount(0);
+
+    const more = toolbar.getByRole('button', { name: 'More canvas tools' });
+    await more.click();
+    const menu = toolbar.getByRole('menu', { name: 'More canvas tools' });
+    await expect(menu).toBeVisible();
+    await menu.getByRole('menuitemradio', { name: 'Text' }).click();
+    await expect(more).toHaveAttribute('aria-pressed', 'true');
+
+    const headerBox = await header.boundingBox();
+    const zoomOutBox = await header.getByRole('button', { name: 'Zoom out' }).boundingBox();
+    if (headerBox === null || zoomOutBox === null)
+      throw new Error('canvas header was not laid out');
+    expect(zoomOutBox.x + zoomOutBox.width).toBeLessThanOrEqual(headerBox.x + headerBox.width + 1);
+  });
+
+  test('the Look header stays balanced across supported window widths', async ({ app }) => {
+    await app.page.setViewportSize({ width: 1600, height: 900 });
+    await app.newProject('Responsive Look header');
+    await app.addMultiFrameGroup();
+    await app.addLook();
+
+    const header = app.page.getByLabel('Canvas header');
+    const toolbar = app.page.getByRole('toolbar', { name: 'Canvas tools' });
+    const look = app.page.getByRole('combobox', { name: 'Active preset' });
+    const presetsHeading = app.page.getByText('Presets', { exact: true });
+    await expect(presetsHeading).toHaveCSS('text-transform', 'none');
+    const zoomOut = header.getByRole('button', { name: 'Zoom out' });
+    const compactStates = new Set<string>();
+    const lookRow = app.page
+      .locator('.cg-tl-row[data-element-id]', { hasText: 'preset-1' })
+      .first();
+    await expect(lookRow.getByRole('button', { name: /^(Hide|Show) element$/ })).toHaveCount(0);
+    await expect(lookRow.getByRole('button', { name: /^(Lock|Unlock) element$/ })).toHaveCount(1);
+
+    for (const width of [1600, 1366, 1180, 1024]) {
+      await app.page.setViewportSize({ width, height: width === 1024 ? 700 : 820 });
+      await expect(header).toBeVisible();
+      await expect(look).toBeVisible();
+
+      const [headerBox, lookBox, zoomOutBox] = await Promise.all([
+        header.boundingBox(),
+        look.boundingBox(),
+        zoomOut.boundingBox(),
+      ]);
+      if (headerBox === null || lookBox === null || zoomOutBox === null) {
+        throw new Error(`canvas header was not laid out at ${String(width)}px`);
+      }
+
+      compactStates.add((await toolbar.getAttribute('data-compact')) ?? 'missing');
+      expect(lookBox.width).toBeLessThanOrEqual(130);
+      expect(lookBox.height).toBeLessThanOrEqual(28);
+      expect(zoomOutBox.x + zoomOutBox.width).toBeLessThanOrEqual(
+        headerBox.x + headerBox.width + 1,
+      );
+    }
+
+    expect(compactStates).toEqual(new Set(['false', 'true']));
   });
 
   test('the canvas zoom group is icons with a plain-text 100% reset', async ({ app }) => {
@@ -105,6 +178,7 @@ test.describe('D-092 — shared vector Icon', () => {
   });
 
   test('a text layer-row icon matches the text tool icon (both lucide Type)', async ({ app }) => {
+    await app.page.setViewportSize({ width: 1600, height: 900 });
     await app.newProject('Icons E2E');
     await app.addTextElement();
     // The canvas Text tool renders lucide `Type` …

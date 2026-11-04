@@ -35,7 +35,7 @@ export type DesignerTool =
   | 'hand';
 
 export type DesignerView = 'landing' | 'studio';
-export type NoticeTone = 'error' | 'success';
+export type NoticeTone = 'error' | 'success' | 'neutral';
 
 /** A reference to one keyframe (by element, property, and frame). */
 export interface KeyframeRef {
@@ -117,12 +117,14 @@ export interface DesignerStoreState {
    * frameRange at write time.
    */
   currentFrame: number;
-  /**
-   * `DELTA-RUN-NEXT-VERSION-01-G` — the timeline transport is PLAYING (not a scrub, not a step): the
-   * canvas then plays each sound at its place. Session-only, never saved.
-   */
+  /** Whether the selected canvas transport path is actively playing (false while paused/settled). */
   timelinePlaying: boolean;
-  /** Session-only distinction between broadcast lifecycle and authoring scrub/reverse. */
+  /**
+   * D-175 — which canvas transport owns the current session. `lifecycle` delegates ordinary
+   * forward Play to the same runtime controller as Preview; `playhead` is the explicit editor-only
+   * reverse / Preview-loop / ping-pong path; `null` means no active or paused transport session.
+   * Session-only, never saved or included in undo history.
+   */
   timelinePlaybackMode: 'lifecycle' | 'playhead' | null;
   /**
    * `DELTA-RUN-NEXT-VERSION-01-G` — the ONE sound switch the timeline and the Preview share: off by

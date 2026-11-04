@@ -363,26 +363,31 @@ describe('D-125 §D1/§D6 — the Lottie IN / HOLD / OUT lifecycle', () => {
     r.remove();
   });
 
-  it('EYE-VERIFIABLE: freeze stays motionless on introEnd while idle-loop advances and WRAPS', async () => {
-    // The owner could not see a freeze-vs-idle-loop difference in Phase 1. This asserts the
-    // distinction the PREVIEW must now show: same clock, same ticks, two different holds.
+  it('D-187: a checked Lottie loops while an unchecked Lottie advances once without rewinding', async () => {
     const clock = makeClock();
     const r = createRuntime(
-      scene([bgShape('bg'), lottie('freeze'), lottie('idle', { holdBehavior: 'idle-loop' })]),
+      scene([bgShape('bg'), lottie('once'), lottie('idle')], {
+        mode: 'manual',
+        holdBehavior: 'loop',
+        holdLoopElementIds: ['idle'],
+      } as Playout),
       { skipFontLoad: true, installGlobals: false, lottieAssets, clock, tickerMeasure },
     );
     await r.play({});
     await run(clock, 100); // both intros complete (100 ms)
 
-    const frozenAtHold = lastFrame(0);
-    expect(frozenAtHold).toBe(INTRO_END);
-
-    // N ticks INTO the hold…
+    const onceBefore = frames(0).length;
     await run(clock, 250);
-    // …the FREEZE driver has not moved: still the hold frame, and it stopped painting.
-    expect(lastFrame(0)).toBe(INTRO_END);
-    // …while the IDLE-LOOP driver has advanced and wrapped WITHIN [idleIn, idleOut].
-    // idle span defaults to [introEnd, outroStart] = [10, 20].
+
+    // The unchecked item owns a monotonic local clock. A root Middle wrap cannot send it back.
+    const oncePaints = frames(0).slice(onceBefore);
+    expect(oncePaints.length).toBeGreaterThan(5);
+    expect(oncePaints.every((frame, index) => index === 0 || frame >= oncePaints[index - 1]!)).toBe(
+      true,
+    );
+    expect(lastFrame(0)).toBeGreaterThan(OUTRO_START);
+
+    // The checked item visibly wraps inside the composition-owned Middle.
     const idleNow = lastFrame(1) ?? -1;
     expect(idleNow).toBeGreaterThanOrEqual(INTRO_END);
     expect(idleNow).toBeLessThan(OUTRO_START);
@@ -482,6 +487,8 @@ describe('D-125 §D6.3 — drivesHold is OPT-IN (the inverse default)', () => {
       scene([bgShape('bg'), lottie('lot', { drivesHold: true, holdBehavior: 'idle-loop' })], {
         mode: 'auto-out',
         holdSource: 'content-driven',
+        holdBehavior: 'loop',
+        holdLoopElementIds: ['lot'],
       } as unknown as Playout),
       { skipFontLoad: true, installGlobals: false, lottieAssets, clock, tickerMeasure },
     );

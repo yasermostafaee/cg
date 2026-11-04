@@ -115,8 +115,23 @@ function mount(s: Scene): void {
   rerender();
 }
 
+const click = (button: HTMLButtonElement): void => act(() => button.click());
+
 const byLabel = (label: string): HTMLInputElement | null =>
   host.querySelector<HTMLInputElement>(`[aria-label="${label}"]`);
+
+const bySelect = (label: string): HTMLSelectElement | null =>
+  host.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`);
+
+function selectValue(label: string, value: string): void {
+  const el = bySelect(label);
+  if (el === null) throw new Error(`no select labelled "${label}"`);
+  act(() => {
+    el.value = value;
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  rerender();
+}
 
 /**
  * Type a number into a `RealtimeNumberInput` and commit it.
@@ -150,6 +165,13 @@ const storedPlayout = (): Playout | undefined => editScene().playout;
 const text = (): string => host.textContent ?? '';
 
 describe('TIMING-BUILD-21 §4 — repeat and delay have an authored home', () => {
+  it('B-373 — calls the author-facing lifecycle group Playback, not Playout', () => {
+    mount(scene({ mode: 'loop-cycle' } as Playout));
+    expect(host.querySelector('[data-section="Playback"]')).not.toBeNull();
+    expect(host.querySelector('[data-section="Playout"]')).toBeNull();
+    expect(host.querySelector('[aria-label="Playback mode"]')).not.toBeNull();
+  });
+
   it('both controls appear for loop-cycle, beside mode and hold ms', () => {
     mount(scene({ mode: 'loop-cycle' } as Playout));
     expect(byLabel('Repeat passes') ?? byLabel('Repeat forever')).not.toBeNull();
@@ -203,11 +225,49 @@ describe('TIMING-BUILD-21 §4 — repeat and delay have an authored home', () =>
   });
 });
 
+describe('D-189 — Hold source stays reachable and concise', () => {
+  it('offers short choices before content exists and preserves a safe content-driven intent', () => {
+    mount(scene({ mode: 'auto-out', holdSource: 'timed' } as Playout));
+
+    const holdSource = bySelect('Hold source');
+    expect(holdSource).not.toBeNull();
+    expect([...holdSource!.options].map((option) => option.textContent)).toEqual([
+      'Timed',
+      'Content-driven',
+    ]);
+    expect(host.querySelector('[data-testid="hold-source-fallback-state"]')).toBeNull();
+
+    selectValue('Hold source', 'content-driven');
+
+    expect(storedPlayout()?.holdSource).toBe('content-driven');
+    expect(bySelect('Hold source')?.value).toBe('content-driven');
+    expect(host.querySelector('[data-testid="hold-source-fallback-state"]')?.textContent).toMatch(
+      /No active hold driver · using Timed/,
+    );
+    expect(byLabel('Hold duration in milliseconds')).not.toBeNull();
+  });
+
+  it('keeps the Hold-source row out of Manual, where no hold source executes', () => {
+    mount(scene({ mode: 'manual', holdSource: 'content-driven' } as Playout));
+    expect(bySelect('Hold source')).toBeNull();
+  });
+
+  it('uses compact Playback mode labels', () => {
+    mount(scene({ mode: 'auto-out' } as Playout));
+    expect([...bySelect('Playback mode')!.options].map((option) => option.textContent)).toEqual([
+      'Static',
+      'Manual',
+      'Auto-out',
+      'Loop cycle',
+    ]);
+  });
+});
+
 describe('TIMING-BUILD-21 §4 — the panel marks its two ownerships', () => {
   it('says which fields are the template’s and which the operator may override', () => {
     mount(scene({ mode: 'loop-cycle' } as Playout));
-    expect(text()).toMatch(/Set by the template/i);
-    expect(text()).toMatch(/Operator can override per row/i);
+    expect(text()).toMatch(/Template settings/i);
+    expect(text()).toMatch(/Operator defaults/i);
   });
 
   it('the operator-override mark introduces the group, never trails the wrong one', () => {
@@ -215,8 +275,8 @@ describe('TIMING-BUILD-21 §4 — the panel marks its two ownerships', () => {
     // template mark sat directly above the overridable inputs and read as introducing them.
     mount(scene({ mode: 'loop-cycle' } as Playout));
     const body = text();
-    const templateMark = body.indexOf('Set by the template');
-    const operatorMark = body.indexOf('Operator can override per row');
+    const templateMark = body.indexOf('Template settings');
+    const operatorMark = body.indexOf('Operator defaults');
     expect(templateMark).toBeGreaterThanOrEqual(0);
     expect(operatorMark).toBeGreaterThan(templateMark);
     // `delay ms` is an overridable field, so it must come AFTER the operator mark.
@@ -227,12 +287,39 @@ describe('TIMING-BUILD-21 §4 — the panel marks its two ownerships', () => {
     // ADR 0009's operational reason: a press whose result is invisible gets repeated. The panel
     // says so where the field is authored, not only in a doc nobody reads at 22:58.
     mount(scene({ mode: 'loop-cycle' } as Playout));
-    expect(text()).toMatch(/never delays the first showing/i);
+    expect(text()).not.toMatch(/never delays the first showing/i);
+    const info = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="About Delay between passes"]',
+    );
+    expect(info).not.toBeNull();
+    click(info!);
+    expect(document.body.querySelector('[role="dialog"]')?.textContent ?? '').toMatch(
+      /never delays the first showing/i,
+    );
   });
 
   it('no longer claims repeat is tuned live in the preview', () => {
     // That sentence was false the moment the field got an authored home.
     mount(scene({ mode: 'loop-cycle' } as Playout));
     expect(text()).not.toMatch(/tuned live in the preview/i);
+  });
+
+  it('B-370 — every visible info button is the final item of its row', () => {
+    mount(scene({ mode: 'loop-cycle' } as Playout));
+    const names = [
+      'About Template settings',
+      'About Playback mode',
+      'About Hold source',
+      'About Operator defaults',
+      'About Delay between passes',
+      'About Outro start',
+      'About Automatic Hold start',
+      'About On hold',
+    ];
+    for (const name of names) {
+      const info = host.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`);
+      expect(info, name).not.toBeNull();
+      expect(info?.parentElement?.lastElementChild, name).toBe(info);
+    }
   });
 });

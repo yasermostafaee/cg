@@ -4,15 +4,10 @@ import type { LottiePhases, VideoPhases } from '@cg/shared-schema';
  * media-phases-follow-composition / add-time-duration-guard — the phases written when an
  * element ENTERS follow mode without any authored phases.
  *
- * ⭐ SESSION Y — the source ALONE, no seeded numbers. The pre-Y seeds
- * (`introEnd: midpoint, outroStart: clipEnd`) were a STORED LIE: fields that described no
- * behaviour (the old rule ignored them) and, under the corrected rule — where an authored
- * value GOVERNS the window — they would have masqueraded as intent. Absent fields mean
- * "derive everything from the composition and the clip's ending", which is exactly what
- * attaching follow asks for; Detach bakes the CURRENTLY-DERIVED window into manual values
- * (truthful by construction), so nothing needs a landing slot here. Existing scenes that
- * carry the old seeds derive identically through the seed-signature shims
- * (`videoFollowClipFacts` / `lottieFollowClipFacts`).
+ * D-176 — the source ALONE, no seeded numbers. Composition-owned Follow ignores every stored
+ * media phase and derives intro/middle/outro from composition anchors plus clip duration.
+ * Existing scenes may still carry old seeds; the runtime ignores them while source is
+ * `composition`, and Detach bakes the current derived boundaries back into manual values.
  *
  * EXTRACTED because the attach has TWO writers — the Inspector's "Follow composition" buttons
  * and the duration guard's "Add as backdrop" commit — and a second copy of one rule is how the

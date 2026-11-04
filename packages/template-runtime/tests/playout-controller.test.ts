@@ -309,6 +309,405 @@ describe('PlayoutController', () => {
     expect(h.events).toEqual(['exit', 'settle']);
   });
 
+  it('D-187 — content completion drains the current Middle pass before Outro', async () => {
+    const clock = makeClock();
+    const middle: number[] = [];
+    const outro: number[] = [];
+    const events: string[] = [];
+    let completeContent: () => void = () => undefined;
+    const controller = new PlayoutController({
+      frameRate: 10,
+      active: { in: 0, out: 50 },
+      lifecycle: { contentStart: 10, outPoint: 30 },
+      holdEntryFrame: 10,
+      playout: { mode: 'auto-out', holdSource: 'content-driven', holdBehavior: 'loop' },
+      hasAnimation: true,
+      applyFrame: () => undefined,
+      applyHoldFrame: (frame) => middle.push(frame),
+      holdLoopEnabled: true,
+      holdFrameDependent: true,
+      applyOutroFrame: (frame) => outro.push(frame),
+      outroFrameDependent: true,
+      waitForContent: () =>
+        new Promise<void>((resolve) => {
+          completeContent = resolve;
+        }),
+      onExitStart: () => events.push('exit'),
+      onSettle: () => events.push('settle'),
+      clock,
+    });
+
+    controller.play();
+    for (let index = 0; index < 37; index += 1) clock.advance(100);
+    expect(middle.at(-1)).toBe(17); // seven frames into the 10 → 30 pass
+
+    completeContent();
+    await flushMicrotasks();
+    expect(events).toEqual([]); // no jump to the Outro start at content completion
+    const completionIndex = middle.length - 1;
+
+    for (let index = 0; index < 12; index += 1) clock.advance(100);
+    expect(middle.at(-1)).toBe(29);
+    expect(events).toEqual([]);
+
+    clock.advance(100); // the current pass reaches 30, then Outro owns the clock
+    expect(middle.slice(completionIndex)).toEqual([
+      17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
+    ]);
+    expect(events).toEqual(['exit']);
+    expect(outro.at(0)).toBe(30);
+  });
+
+  it('D-187 — Pause/Resume preserves a pending graceful Middle exit', async () => {
+    const clock = makeClock();
+    const middle: number[] = [];
+    const events: string[] = [];
+    let completeContent: () => void = () => undefined;
+    const controller = new PlayoutController({
+      frameRate: 10,
+      active: { in: 0, out: 50 },
+      lifecycle: { contentStart: 10, outPoint: 30 },
+      holdEntryFrame: 10,
+      playout: { mode: 'auto-out', holdSource: 'content-driven', holdBehavior: 'loop' },
+      hasAnimation: true,
+      applyFrame: () => undefined,
+      applyHoldFrame: (frame) => middle.push(frame),
+      holdLoopEnabled: true,
+      holdFrameDependent: true,
+      outroFrameDependent: true,
+      waitForContent: () =>
+        new Promise<void>((resolve) => {
+          completeContent = resolve;
+        }),
+      onExitStart: () => events.push('exit'),
+      onSettle: () => events.push('settle'),
+      clock,
+    });
+
+    controller.play();
+    for (let index = 0; index < 37; index += 1) clock.advance(100);
+    completeContent();
+    await flushMicrotasks();
+    controller.pause();
+    const held = middle.at(-1);
+    clock.advance(5_000);
+    expect(middle.at(-1)).toBe(held);
+    expect(events).toEqual([]);
+
+    controller.resume();
+    for (let index = 0; index < 13; index += 1) clock.advance(100);
+    expect(middle.at(-1)).toBe(30);
+    expect(events).toEqual(['exit']);
+  });
+
+  it('D-187 — operator Stop overrides a pending graceful exit immediately', async () => {
+    const clock = makeClock();
+    const middle: number[] = [];
+    const events: string[] = [];
+    let completeContent: () => void = () => undefined;
+    const controller = new PlayoutController({
+      frameRate: 10,
+      active: { in: 0, out: 50 },
+      lifecycle: { contentStart: 10, outPoint: 30 },
+      holdEntryFrame: 10,
+      playout: { mode: 'auto-out', holdSource: 'content-driven', holdBehavior: 'loop' },
+      hasAnimation: true,
+      applyFrame: () => undefined,
+      applyHoldFrame: (frame) => middle.push(frame),
+      holdLoopEnabled: true,
+      holdFrameDependent: true,
+      outroFrameDependent: true,
+      waitForContent: () =>
+        new Promise<void>((resolve) => {
+          completeContent = resolve;
+        }),
+      onExitStart: () => events.push('exit'),
+      onSettle: () => events.push('settle'),
+      clock,
+    });
+
+    controller.play();
+    for (let index = 0; index < 37; index += 1) clock.advance(100);
+    completeContent();
+    await flushMicrotasks();
+    expect(events).toEqual([]); // automatic exit is draining the pass
+
+    controller.stop();
+    expect(events).toEqual(['exit']); // operator command does not wait for frame 30
+    const middleAtStop = [...middle];
+    clock.advance(2_000);
+    expect(middle).toEqual(middleAtStop);
+  });
+
+  it('D-187 — a degenerate Middle range exits immediately when content completes', async () => {
+    const clock = makeClock();
+    const events: string[] = [];
+    let completeContent: () => void = () => undefined;
+    const controller = new PlayoutController({
+      frameRate: 10,
+      active: { in: 0, out: 30 },
+      lifecycle: { contentStart: 20, outPoint: 20 },
+      holdEntryFrame: 20,
+      playout: { mode: 'auto-out', holdSource: 'content-driven', holdBehavior: 'loop' },
+      hasAnimation: false,
+      applyFrame: () => undefined,
+      holdLoopEnabled: true,
+      holdFrameDependent: false,
+      waitForContent: () =>
+        new Promise<void>((resolve) => {
+          completeContent = resolve;
+        }),
+      onExitStart: () => events.push('exit'),
+      onSettle: () => events.push('settle'),
+      clock,
+    });
+
+    controller.play();
+    for (let index = 0; index < 20; index += 1) clock.advance(100);
+    completeContent();
+    await flushMicrotasks();
+    expect(events).toEqual(['exit', 'settle']);
+  });
+
+  it('D-187 — selected time-driven media gets a clock-only graceful boundary on air', async () => {
+    const clock = makeClock();
+    const events: string[] = [];
+    let completeContent: () => void = () => undefined;
+    const controller = new PlayoutController({
+      frameRate: 10,
+      active: { in: 0, out: 50 },
+      lifecycle: { contentStart: 10, outPoint: 30 },
+      holdEntryFrame: 10,
+      playout: { mode: 'auto-out', holdSource: 'content-driven', holdBehavior: 'loop' },
+      hasAnimation: false,
+      applyFrame: () => undefined,
+      // Runtime sets this for a selected Video/Lottie even when no native frame needs paint.
+      holdLoopEnabled: true,
+      holdFrameDependent: false,
+      waitForContent: () =>
+        new Promise<void>((resolve) => {
+          completeContent = resolve;
+        }),
+      onExitStart: () => events.push('exit'),
+      onSettle: () => events.push('settle'),
+      clock,
+    });
+
+    controller.play();
+    for (let index = 0; index < 17; index += 1) clock.advance(100);
+    completeContent();
+    await flushMicrotasks();
+    expect(events).toEqual([]); // clock-only pass still drains; no immediate media jump
+
+    for (let index = 0; index < 12; index += 1) clock.advance(100);
+    expect(events).toEqual([]);
+    clock.advance(100);
+    expect(events).toEqual(['exit', 'settle']);
+  });
+
+  it.each<{ label: string; playout: Playout; waitForContent?: () => Promise<void> }>([
+    {
+      label: 'manual',
+      playout: { mode: 'manual', holdBehavior: 'freeze' },
+    },
+    {
+      label: 'timed',
+      playout: {
+        mode: 'auto-out',
+        holdSource: 'timed',
+        holdMs: 1_000,
+        holdBehavior: 'freeze',
+      },
+    },
+    {
+      label: 'content-driven',
+      playout: {
+        mode: 'auto-out',
+        holdSource: 'content-driven',
+        holdBehavior: 'freeze',
+      },
+      waitForContent: () => new Promise<void>(() => undefined),
+    },
+  ])('B-379 — $label native Freeze keeps telemetry on the Out-point picture', (scenario) => {
+    const clock = makeClock();
+    const painted: number[] = [];
+    const observed: number[] = [];
+    const controller = new PlayoutController({
+      frameRate: 50,
+      active,
+      lifecycle: { contentStart: 10, outPoint: 40 },
+      holdEntryFrame: 10,
+      playout: scenario.playout,
+      hasAnimation: true,
+      applyFrame: (frame) => painted.push(frame),
+      observeFrame: (frame) => observed.push(frame),
+      ...(scenario.waitForContent === undefined ? {} : { waitForContent: scenario.waitForContent }),
+      onExitStart: () => undefined,
+      onSettle: () => undefined,
+      clock,
+    });
+
+    controller.play();
+    // Intro reaches Out point after 800 ms. Keep every scenario inside its active Hold.
+    for (let index = 0; index < 45; index += 1) clock.advance(20);
+
+    expect(painted.at(-1)).toBe(40);
+    expect(observed.at(-1)).toBe(40);
+    expect(observed.slice(observed.lastIndexOf(40) + 1)).not.toContain(10);
+  });
+
+  it('B-377 — the explicit Follow-Lottie exception parks telemetry, then Outro advances it', async () => {
+    const clock = makeClock();
+    const observed: number[] = [];
+    const events: string[] = [];
+    let completeContent: () => void = () => undefined;
+    let completeMediaOutro: () => void = () => undefined;
+    const controller = new PlayoutController({
+      frameRate: 50,
+      active,
+      lifecycle: { contentStart: 10, outPoint: 40 },
+      holdEntryFrame: 10,
+      playout: { mode: 'auto-out', holdSource: 'content-driven', holdBehavior: 'freeze' },
+      hasAnimation: false,
+      applyFrame: () => undefined,
+      observeFrame: (frame) => observed.push(frame),
+      observeFreezeAtHoldEntry: true,
+      observeOutroGate: true,
+      waitForContent: () =>
+        new Promise<void>((resolve) => {
+          completeContent = resolve;
+        }),
+      beforeOutro: () =>
+        new Promise<void>((resolve) => {
+          completeMediaOutro = resolve;
+        }),
+      onExitStart: () => events.push('exit'),
+      onSettle: () => events.push('settle'),
+      clock,
+    });
+
+    controller.play();
+    // Authored Content start consumes 200 ms, then the static settle collapses to Out point.
+    for (let index = 0; index < 12; index += 1) clock.advance(20);
+    expect(observed.at(-1)).toBe(10);
+    const held = [...observed];
+    for (let index = 0; index < 60; index += 1) clock.advance(20);
+    expect(observed).toEqual(held); // no observer-only Middle loop under Freeze
+
+    completeContent();
+    await flushMicrotasks();
+    expect(events).toEqual(['exit']);
+    expect(observed.at(-1)).toBe(40); // visible media Outro starts at the composition Out point
+
+    for (let index = 0; index < 5; index += 1) clock.advance(20);
+    expect(observed.some((frame) => frame > 40 && frame < 50)).toBe(true);
+
+    completeMediaOutro();
+    await flushMicrotasks();
+    expect(observed.at(-1)).toBe(50);
+    // The visually-static background leg collapses without replaying 40 -> 50 telemetry.
+    expect(observed.slice(-2)).not.toEqual([40, 50]);
+    expect(events).toEqual(['exit', 'settle']);
+  });
+
+  it('D-187 — selected Middle wraps while the unchecked tail stays monotonic through pause and exit', async () => {
+    let ms = 0;
+    let nextId = 1;
+    const rafs = new Map<number, (timestamp: number) => void>();
+    const timers = new Map<number, { due: number; callback: () => void }>();
+    const clock = {
+      now: () => ms,
+      raf: (callback: (timestamp: number) => void) => {
+        const id = nextId++;
+        rafs.set(id, callback);
+        return id;
+      },
+      cancel: (id: number) => rafs.delete(id),
+      setTimeout: (callback: () => void, delay: number) => {
+        const id = nextId++;
+        timers.set(id, { due: ms + delay, callback });
+        return id;
+      },
+      clearTimeout: (handle: unknown) => {
+        if (typeof handle === 'number') timers.delete(handle);
+      },
+      advance: (delta: number) => {
+        ms += delta;
+        const due = [...timers.entries()]
+          .filter(([, timer]) => timer.due <= ms)
+          .sort((a, b) => a[1].due - b[1].due);
+        for (const [id, timer] of due) {
+          timers.delete(id);
+          timer.callback();
+        }
+        const round = [...rafs.entries()];
+        for (const [id] of round) rafs.delete(id);
+        for (const [, callback] of round) callback(ms);
+      },
+    };
+    const advance = async (duration: number): Promise<void> => {
+      for (let left = duration; left > 0; left -= 100) {
+        clock.advance(Math.min(100, left));
+        await flushMicrotasks();
+      }
+    };
+
+    const middle: number[] = [];
+    const tail: number[] = [];
+    const outro: number[] = [];
+    const events: string[] = [];
+    const controller = new PlayoutController({
+      frameRate: 10,
+      active: { in: 0, out: 80 },
+      lifecycle: { contentStart: 10, outPoint: 30 },
+      holdEntryFrame: 10,
+      playout: { mode: 'manual', holdBehavior: 'loop' },
+      hasAnimation: true,
+      applyFrame: () => undefined,
+      applyHoldFrame: (frame) => middle.push(frame),
+      holdLoopEnabled: true,
+      holdFrameDependent: true,
+      applyHoldTailFrame: (frame) => tail.push(frame),
+      holdTailEnabled: true,
+      applyOutroFrame: (frame) => outro.push(frame),
+      outroFrameDependent: true,
+      onExitStart: () => events.push('exit'),
+      onSettle: () => events.push('settle'),
+      clock,
+    });
+
+    controller.play();
+    await advance(5_500); // Intro 3 s, then more than one full 10→30 Middle pass.
+    expect(middle.some((frame, index) => index > 0 && frame < middle[index - 1]!)).toBe(true);
+    expect(tail.every((frame, index) => index === 0 || frame >= tail[index - 1]!)).toBe(true);
+
+    const middleAtPause = middle.length;
+    const tailAtPause = tail.length;
+    controller.pause();
+    await advance(1_000);
+    expect(middle).toHaveLength(middleAtPause);
+    expect(tail).toHaveLength(tailAtPause);
+
+    controller.resume();
+    await advance(500);
+    expect(middle.length).toBeGreaterThan(middleAtPause);
+    expect(tail.length).toBeGreaterThan(tailAtPause);
+
+    controller.stop();
+    expect(events).toEqual(['exit']);
+    const tailAtExit = tail.at(-1) ?? 0;
+    await advance(1_000);
+    // Selected Outro and unchecked tail move concurrently; neither waits for the other to start.
+    expect(outro.at(-1)).toBeGreaterThan(30);
+    expect(tail.at(-1)).toBeGreaterThan(tailAtExit);
+    expect(events).toEqual(['exit']);
+
+    await advance(5_000);
+    expect(tail.at(-1)).toBe(80);
+    expect(outro.at(-1)).toBe(80);
+    expect(events).toEqual(['exit', 'settle']);
+  });
+
   it('a null waitForContent (no content elements) is a zero-length hold', () => {
     const h = make(
       { mode: 'auto-out', holdSource: 'content-driven' },

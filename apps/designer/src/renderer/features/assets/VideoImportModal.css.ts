@@ -47,10 +47,64 @@ export const fieldsRow = style({
   flexWrap: 'wrap',
 });
 
+export const advancedCorrections = style({
+  border: `1px solid ${colors.border}`,
+  borderRadius: 5,
+  background: colors.panelMuted,
+  selectors: {
+    '&[open]': {
+      paddingBottom: '0.55rem',
+    },
+  },
+});
+
+export const advancedSummary = style({
+  padding: '0.55rem 0.7rem',
+  color: colors.text,
+  fontSize: '0.82rem',
+  fontWeight: 600,
+  cursor: 'pointer',
+  userSelect: 'none',
+});
+
+export const advancedBody = style({
+  display: 'grid',
+  gap: '0.35rem',
+  padding: '0 0.7rem',
+});
+
+export const correctionRow = style({
+  display: 'grid',
+  gridTemplateColumns: 'minmax(0, 1fr) auto',
+  alignItems: 'center',
+  minHeight: 28,
+  gap: '0.5rem',
+});
+
 export const fieldLabel = style({
   color: colors.textMuted,
   fontSize: '0.8rem',
   marginInlineEnd: 2,
+});
+
+/** Routine interpretation choices stay short: label | select | contextual help on one row. */
+export const compactSelectRow = style({
+  display: 'grid',
+  gridTemplateColumns: '7.25rem minmax(12rem, 20rem) 1.75rem',
+  alignItems: 'center',
+  justifyContent: 'start',
+  gap: '0.5rem',
+  minHeight: 30,
+  '@media': {
+    '(max-width: 620px)': {
+      gridTemplateColumns: '6.5rem minmax(0, 1fr) 1.75rem',
+    },
+  },
+});
+
+export const compactSelectControl = style({
+  width: '100%',
+  minWidth: 0,
 });
 
 export const numInput = style({
@@ -123,6 +177,16 @@ export const logTail = style({
   fontSize: '0.75rem',
   whiteSpace: 'pre-wrap',
   direction: 'ltr', // ffmpeg output is LTR regardless of app locale
+});
+
+export const technicalDetails = style({
+  color: colors.textMuted,
+  fontSize: '0.8rem',
+});
+
+export const technicalSummary = style({
+  cursor: 'pointer',
+  marginBottom: '0.4rem',
 });
 
 const spin = keyframes({ to: { transform: 'rotate(360deg)' } });

@@ -19,7 +19,7 @@ interface Props {
 
 /**
  * D-086 Phase B — per-composition action footer pinned at the bottom of the left
- * rail. Holds Preview / Export .vcg / Export HTML for the OPEN composition. Every
+ * rail. Holds Preview / Export .vcg for the OPEN composition. Every
  * action scopes to the active composition + its nested closure via Phase A's
  * `scopeSceneToComposition` (read live from the store). Living off the canvas keeps
  * the editing surface full-height. Preview just sets the store's `previewScene`; the
@@ -45,14 +45,11 @@ export function CompositionActionBar({ issues }: Props): JSX.Element {
   }, shallowEqual);
 
   const errors = issues.filter((i) => i.severity === 'error');
-  /*
-    `BOOK-EXPORT-01` (`B-351`) — a template too large for CG Control refuses `Export .vcg` only:
-    the single-file HTML never goes through CG Bridge, so that limit is not its own.
-  */
+  // D-174 — HTML is an internal test/export seam. It does not inherit CG Control's wire-size cap.
   const htmlErrors = errors.filter((i) => i.code !== CG_CONTROL_TOO_LARGE);
   /**
    * `B-349` — an export in flight: which one, and the share done (`null` until the pipeline
-   * reports, e.g. while the save dialog is open). Both buttons wait for it.
+   * reports, e.g. while the save dialog is open).
    */
   const [busy, setBusy] = useState<{ kind: 'vcg' | 'html'; share: number | null } | null>(null);
   /*
@@ -179,7 +176,8 @@ export function CompositionActionBar({ issues }: Props): JSX.Element {
     }
   }
 
-  async function exportHtml(): Promise<void> {
+  /** D-174 — retained only behind a hidden test hook; there is no author-facing HTML action. */
+  async function exportHtmlInternal(): Promise<void> {
     if (busy !== null) return;
     if (htmlBlocked) {
       refuse(htmlErrors);
@@ -210,7 +208,7 @@ export function CompositionActionBar({ issues }: Props): JSX.Element {
     }
   }
 
-  const exportLabel = (kind: 'vcg' | 'html', idle: string): string => {
+  const exportLabel = (kind: 'vcg', idle: string): string => {
     if (busy?.kind !== kind) return idle;
     return busy.share === null
       ? 'Exporting…'
@@ -226,7 +224,7 @@ export function CompositionActionBar({ issues }: Props): JSX.Element {
       )}
       <div className={s.actions}>
         <Button
-          size="sm"
+          size="md"
           className={s.action}
           aria-label="Preview"
           disabled={!hasComp}
@@ -239,7 +237,7 @@ export function CompositionActionBar({ issues }: Props): JSX.Element {
           Preview
         </Button>
         <Button
-          size="sm"
+          size="md"
           className={s.action}
           aria-label="Export .vcg"
           disabled={noComposition || busy !== null}
@@ -253,26 +251,14 @@ export function CompositionActionBar({ issues }: Props): JSX.Element {
           </span> */}
           {exportLabel('vcg', 'Export (.vcg)')}
         </Button>
-        <Button
-          size="sm"
-          className={s.action}
-          aria-label="Export HTML"
-          disabled={noComposition || busy !== null}
-          aria-busy={busy?.kind === 'html' ? true : undefined}
-          data-export-blocked={htmlBlocked ? 'errors' : undefined}
-          onClick={() => void exportHtml()}
-          title={
-            htmlBlocked
-              ? blockedTitleOf(htmlErrors)
-              : 'Download a single self-contained CasparCG .html for this composition'
-          }
-        >
-          {/* <span className={s.glyph} aria-hidden>
-            ⤓
-          </span> */}
-          {exportLabel('html', 'HTML')}
-        </Button>
       </div>
+      {/* D-174 — this seam exists only in the automated E2E realm. The extra hidden ancestor is
+          deliberate: Button's shared `display` must never override the browser's hidden state. */}
+      {(window as unknown as { CG_E2E?: boolean }).CG_E2E === true && (
+        <div hidden>
+          <Button data-testid="internal-export-html" onClick={() => void exportHtmlInternal()} />
+        </div>
+      )}
     </div>
   );
 }

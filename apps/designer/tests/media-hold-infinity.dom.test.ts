@@ -8,7 +8,7 @@ import { PlayoutSection } from '../src/renderer/features/inspector/PlayoutSectio
 
 /**
  * media-phases-follow-composition — `mediaHoldItem.infinite` must answer "does this
- * element's hold ever complete" the way the DRIVERS answer it, or the never-closes alert
+ * element's hold ever complete" the way the DRIVERS answer it, or the never-closes state
  * lies (the session-R class: a banner that keeps rendering something plausible).
  *
  * The driver facts it mirrors, per kind:
@@ -66,7 +66,7 @@ function video(id: string, over: Record<string, unknown> = {}): Element {
   } as unknown as Element;
 }
 
-function scene(children: Element[]): Scene {
+function scene(children: Element[], holdBehavior: 'freeze' | 'loop' = 'loop'): Scene {
   return {
     schemaVersion: 1,
     id: 'scene-inf',
@@ -77,8 +77,8 @@ function scene(children: Element[]): Scene {
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 100 },
     editorBackdrop: 'transparent',
-    lifecycle: { outPoint: 60 },
-    playout: { mode: 'auto-out', holdSource: 'content-driven' },
+    lifecycle: { outPoint: 60, contentStart: 20 },
+    playout: { mode: 'auto-out', holdSource: 'content-driven', holdBehavior },
     layers: [{ id: 'L1', name: 'l', visible: true, locked: false, blendMode: 'normal', children }],
     fields: [],
     bindings: [],
@@ -108,15 +108,16 @@ function render(s: Scene): void {
   });
 }
 
-const alertEl = (): HTMLElement | null => host.querySelector('[role="alert"]');
+const warningState = (): HTMLElement | null =>
+  host.querySelector('[data-testid="never-closes-state"]');
 
 describe('Lottie idle-loop — infinite ONLY with a non-empty effective idle span', () => {
   it('a MARKER-LESS idle-loop Lottie is FINITE — the driver freezes on a zero span and resolves', () => {
     // The found-beside fix: this exact shape was listed infinite (no phases at all), while
     // `clipPositionAt` falls back to freeze (`idleOut > idleIn` fails at op/op) and the
-    // graphic auto-closes. The alert must NOT claim it won't.
+    // graphic auto-closes. The state must NOT claim it won't.
     render(scene([lottie('Loop')]));
-    expect(alertEl()).toBeNull();
+    expect(warningState()).toBeNull();
   });
 
   it('an idle-loop Lottie with a REAL idle span is infinite', () => {
@@ -127,19 +128,18 @@ describe('Lottie idle-loop — infinite ONLY with a non-empty effective idle spa
         }),
       ]),
     );
-    expect(alertEl()).not.toBeNull();
-    expect(alertEl()!.textContent).toContain('Loop');
+    expect(warningState()).not.toBeNull();
+    expect(warningState()!.textContent).toContain('Holds until stop');
   });
 
   it('an idle-loop Lottie with phases but NO idle pair loops the hold window [introEnd, outroStart]', () => {
     // idleIn/idleOut default to introEnd/outroStart — a non-empty hold window DOES loop.
     render(scene([lottie('Loop', { phases: { introEnd: 10, outroStart: 40, source: 'manual' } })]));
-    expect(alertEl()).not.toBeNull();
+    expect(warningState()).not.toBeNull();
   });
 
-  it('a FOLLOW-source idle-loop Lottie is infinite only with an AUTHORED idle span', () => {
-    // Under follow the stored introEnd/outroStart are IGNORED — they must not smuggle a
-    // loop range in. Absent idle ⇒ freeze at H ⇒ completes.
+  it('a FOLLOW-source idle-loop Lottie loops the composition-derived middle', () => {
+    // Stored marks are ignored; Follow gets its effective middle from composition anchors.
     render(
       scene([
         lottie('Follow', {
@@ -147,33 +147,19 @@ describe('Lottie idle-loop — infinite ONLY with a non-empty effective idle spa
         }),
       ]),
     );
-    expect(alertEl()).toBeNull();
-    render(
-      scene([
-        lottie('Follow', {
-          phases: {
-            introEnd: 10,
-            outroStart: 40,
-            source: 'composition',
-            holdAt: 20,
-            idle: [15, 25],
-          },
-        }),
-      ]),
-    );
-    expect(alertEl()).not.toBeNull();
+    expect(warningState()).not.toBeNull();
   });
 });
 
-describe('video loop — infinite always, EXCEPT under follow with no authored idle', () => {
+describe('video loop — infinite for manual and composition-derived middle ranges', () => {
   it('a loop video (any phases shape) is infinite — its loop branch never resolves', () => {
     render(scene([video('Bed')]));
-    expect(alertEl()).not.toBeNull();
+    expect(warningState()).not.toBeNull();
     render(scene([video('Bed', { phases: { introEnd: 1000, outroStart: 4000 } })]));
-    expect(alertEl()).not.toBeNull();
+    expect(warningState()).not.toBeNull();
   });
 
-  it('a FOLLOW-source loop video with NO idle is FINITE — the runtime freezes it at H', () => {
+  it('a FOLLOW-source loop video loops the composition-derived middle', () => {
     render(
       scene([
         video('Bed', {
@@ -181,29 +167,12 @@ describe('video loop — infinite always, EXCEPT under follow with no authored i
         }),
       ]),
     );
-    expect(alertEl()).toBeNull();
+    expect(warningState()).not.toBeNull();
+    expect(warningState()!.textContent).toContain('Holds until stop');
   });
 
-  it('a FOLLOW-source loop video WITH an authored idle range loops it — infinite', () => {
-    render(
-      scene([
-        video('Bed', {
-          phases: {
-            introEnd: 1000,
-            outroStart: 4000,
-            source: 'composition',
-            holdAt: 3000,
-            idle: { start: 2500, end: 3500 },
-          },
-        }),
-      ]),
-    );
-    expect(alertEl()).not.toBeNull();
-    expect(alertEl()!.textContent).toContain('Bed');
-  });
-
-  it('a freeze video completes regardless of source', () => {
-    render(scene([video('Bed', { holdBehavior: 'freeze' })]));
-    expect(alertEl()).toBeNull();
+  it('a video completes when the composition freezes on Hold', () => {
+    render(scene([video('Bed')], 'freeze'));
+    expect(warningState()).toBeNull();
   });
 });

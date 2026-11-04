@@ -18,12 +18,20 @@ import { loudnessInfo, measureLoudness } from './loudness.js';
 import { ImageSequenceImportModal } from './ImageSequenceImportModal.js';
 import { findImageSequences, noSequenceSentence, SEQUENCE_ACCEPT } from './image-sequence.js';
 import type { VideoSource } from './video-convert-args.js';
+import {
+  unsupportedVideoSelectionMessage,
+  VIDEO_ACCEPTED_CONTAINERS,
+  VIDEO_FORMATS_OPAQUE,
+  VIDEO_FORMATS_SUMMARY,
+  VIDEO_FORMATS_WITH_ALPHA,
+} from './video-import-policy.js';
 import { fitVideoElement } from '../../state/element-defaults.js';
 import { guardedAddVideo } from '../addGuard/duration-guard.js';
 import { cx } from '../../cx.js';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
 import { Icon } from '../../ui/Icon.js';
+import { InfoTip } from '../inspector/InfoTip.js';
 import * as s from './ProjectAssetsPanel.css.js';
 
 /**
@@ -212,7 +220,7 @@ export function ProjectAssetsPanel(): JSX.Element {
     if (files.length === 0) return; // cancelled
     const { valid, rejected } = partitionSupported('video', files);
     if (rejected.length > 0) {
-      designerStore.showNotice(skippedFilesMessage(rejected.map((file) => file.name)));
+      designerStore.showNotice(unsupportedVideoSelectionMessage(rejected.map((file) => file.name)));
     }
     const first = valid[0];
     if (first === undefined) return;
@@ -473,14 +481,30 @@ export function ProjectAssetsPanel(): JSX.Element {
           >
             Lottie…
           </Button>
-          <Button
-            variant="bare"
-            role="menuitem"
-            className={s.menuItem}
-            onClick={() => void importVideo()}
-          >
-            Video…
-          </Button>
+          <div className={s.videoMenuRow}>
+            <Button
+              variant="bare"
+              role="menuitem"
+              className={cx(s.menuItem, s.videoMenuButton)}
+              onClick={() => void importVideo()}
+            >
+              <span>Video…</span>
+              <span className={s.menuHint}>{VIDEO_FORMATS_SUMMARY}</span>
+            </Button>
+            <InfoTip title="Supported video formats" ariaLabel="Supported video formats">
+              <p>
+                <strong>With transparency:</strong> {VIDEO_FORMATS_WITH_ALPHA}.
+              </p>
+              <p>
+                <strong>Without transparency:</strong> {VIDEO_FORMATS_OPAQUE}.
+              </p>
+              <p>
+                Accepted containers: {VIDEO_ACCEPTED_CONTAINERS}. A container extension does not
+                guarantee its codec can be decoded; compatibility is checked before conversion.
+                Audio tracks are not imported with video.
+              </p>
+            </InfoTip>
+          </div>
           <Button
             variant="bare"
             role="menuitem"

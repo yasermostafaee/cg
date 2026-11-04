@@ -14,15 +14,15 @@ test.describe('D-114 — clearing the out-point reverts an out-point-dependent m
     await app.newProject('OutPointRevert');
     await app.addRectangle({ x: 240, y: 130 });
     await app.setPlayoutTiming('auto-out'); // selecting auto-out seeds an out-point + sets the mode
-    const mode = app.page.getByRole('combobox', { name: 'Playout mode' });
+    const mode = app.page.getByRole('combobox', { name: 'Playback mode' });
     await expect(mode).toHaveValue('auto-out');
 
     // Clear the out-point → the mode reverts to static (atomic, in the same store action).
-    await app.page.getByRole('button', { name: 'Clear out point' }).click();
+    await app.page.getByRole('button', { name: 'Clear outro start' }).click();
     await expect(mode).toHaveValue('static');
 
     // Re-adding an out-point does NOT auto-restore auto-out (one-directional) — it lands on manual.
-    await app.page.getByRole('button', { name: 'Add out point' }).click();
+    await app.page.getByRole('button', { name: 'Set outro start' }).click();
     await expect(mode).toHaveValue('manual');
   });
 
@@ -30,10 +30,10 @@ test.describe('D-114 — clearing the out-point reverts an out-point-dependent m
     await app.newProject('OutPointRevertLoop');
     await app.addRectangle({ x: 240, y: 130 });
     await app.setPlayoutTiming('loop-cycle');
-    const mode = app.page.getByRole('combobox', { name: 'Playout mode' });
+    const mode = app.page.getByRole('combobox', { name: 'Playback mode' });
     await expect(mode).toHaveValue('loop-cycle');
 
-    await app.page.getByRole('button', { name: 'Clear out point' }).click();
+    await app.page.getByRole('button', { name: 'Clear outro start' }).click();
     await expect(mode).toHaveValue('static');
   });
 });

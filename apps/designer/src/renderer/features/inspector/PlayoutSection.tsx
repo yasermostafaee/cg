@@ -1,11 +1,13 @@
 import type { CSSProperties } from 'react';
 import {
   activeRangeOf,
+  elementLoopsOnHold,
   followsComposition,
   hasEffectiveHoldDrivers,
   playoutOf,
   type Composition,
   type Element,
+  type HoldBehavior,
   type HoldSource,
   type PlayoutMode,
   type Scene,
@@ -13,11 +15,10 @@ import {
 import { ChevronRight, TriangleAlert } from 'lucide-react';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
-import { Callout } from '../../ui/Callout.js';
 import { Icon } from '../../ui/Icon.js';
 import { Select } from '../../ui/Select.js';
 import { designerStore } from '../../state/store.js';
-import { contentStartDefaultFrom } from './content-start-default.js';
+import { contentStartDefaultFrom, holdStartSeedFrom } from './content-start-default.js';
 import { CollapseSection } from './CollapseSection.js';
 import { InfoTip, StateLine } from './InfoTip.js';
 import { RealtimeNumberInput } from './controls.js';
@@ -27,66 +28,21 @@ import * as prose from './prose.css.js';
 
 const MODE_LABELS: Record<PlayoutMode, string> = {
   // D-114 — the no-out-point mode: play in → hold → hard cut on stop, no animated exit.
-  static: 'Static — plays in, holds, cut on stop (no out-point)',
-  manual: 'Manual — hold until stop',
-  'auto-out': 'Auto-out — outro after hold',
-  'loop-cycle': 'Loop cycle — repeat in → hold → out',
+  static: 'Static',
+  manual: 'Manual',
+  'auto-out': 'Auto-out',
+  'loop-cycle': 'Loop cycle',
 };
 
 const HOLD_LABELS: Record<HoldSource, string> = {
-  timed: 'Timed — hold for a duration',
-  'content-driven':
-    'Content-driven — until the content completes (ticker passes / countdown / sequence passes)',
+  timed: 'Timed',
+  'content-driven': 'Content-driven',
 };
 
-/**
- * Does this composition contain a content source — a ticker, a countdown
- * clock (D-027), or a sequence (D-029)? Wall/countup clocks are NOT content
- * sources: they never complete, so they can't end a hold. Tickers and
- * sequences count regardless of their authored `repeat` (an infinite one
- * holds until stop — still a meaningful content-driven authoring choice).
- */
-export function hasContentElement(scene: Scene): boolean {
-  // D-104 — a nested composition instance participates in the parent's
-  // content-driven hold, so resolve the referenced composition's layers and
-  // check THEM too (cycle-guarded by a visited set), exactly as we recurse into
-  // a container. So the hold control is offered for a parent whose only finite
-  // content lives inside a nested composition.
-  const visited = new Set<string>();
-  const walk = (children: readonly Element[]): boolean =>
-    children.some((el) => {
-      if (
-        (el.type === 'ticker' ||
-          el.type === 'sequence' ||
-          (el.type === 'clock' && el.mode === 'countdown')) &&
-        // B-034 — a HIDDEN content element (`visible: false`) is fully inert: not a hold driver.
-        el.visible !== false
-      ) {
-        return true;
-      }
-      // D-128 — a media element (video/lottie) that is OPTED IN to drive the hold
-      // (`drivesHold === true`, the media opt-in) is a content source: the content-driven hold
-      // option must be reachable so the operator can see + tune it in the closer list below.
-      if (
-        (el.type === 'video' || el.type === 'lottie') &&
-        el.visible !== false &&
-        el.drivesHold === true
-      ) {
-        return true;
-      }
-      // B-034 — a HIDDEN container / instance makes its WHOLE subtree inert: don't descend (mirrors
-      // render + the runtime), so a comp whose only content lives in hidden ancestors offers no hold.
-      if (el.type === 'container') return el.visible !== false && walk(el.children);
-      if (el.type === 'composition') {
-        if (el.visible === false || visited.has(el.compositionId)) return false;
-        visited.add(el.compositionId);
-        const comp = scene.compositions?.find((c) => c.id === el.compositionId);
-        return comp !== undefined && comp.layers.some((l) => walk(l.children));
-      }
-      return false;
-    });
-  return scene.layers.some((l) => walk(l.children));
-}
+const HOLD_BEHAVIOR_LABELS: Record<HoldBehavior, string> = {
+  freeze: 'Freeze',
+  loop: 'Loop middle',
+};
 
 type ContentKind = 'ticker' | 'sequence' | 'clock' | 'video' | 'lottie';
 interface ContentHoldItem {
@@ -110,13 +66,18 @@ interface ContentHoldItem {
  * reads media `drivesHold` as `=== true`. A `loop` hold never completes (infinite); a `freeze`
  * hold completes at its intro end, so it CAN close the graphic.
  */
-function mediaHoldItem(el: Extract<Element, { type: 'video' | 'lottie' }>): ContentHoldItem {
+type HoldOwner = Pick<Scene, 'frameRange' | 'activeRange' | 'lifecycle' | 'playout' | 'layers'>;
+
+function mediaHoldItem(
+  el: Extract<Element, { type: 'video' | 'lottie' }>,
+  owner: HoldOwner,
+): ContentHoldItem {
   return {
     id: el.id,
     name: el.name,
     type: el.type,
     drivesHold: el.drivesHold === true,
-    infinite: mediaHoldIsInfinite(el),
+    infinite: mediaHoldIsInfinite(el, owner),
   };
 }
 
@@ -129,27 +90,40 @@ function mediaHoldItem(el: Extract<Element, { type: 'video' | 'lottie' }>): Cont
  *    `loop` and a Lottie's is `idle-loop` (schema enums `['loop','freeze']` /
  *    `['freeze','idle-loop']`). Testing only `'loop'` once marked every idle-loop Lottie
  *    a finite closer (session R's found-beside fix).
- *  - A video `loop` hold NEVER resolves — `VideoDriver`'s loop branch has no completion,
- *    even on a zero-length range — EXCEPT under follow with no authored idle, where the
- *    runtime resolves the hold to a FREEZE at `H` (looping the whole clip would abandon
- *    the held look follow promises to keep) and the freeze completes.
+ *  - A video `loop` hold NEVER resolves — `VideoDriver`'s loop branch has no completion.
+ *    Under Follow, it loops the composition-derived middle rather than stored media marks.
  *  - A Lottie `idle-loop` loops only a NON-EMPTY effective span (`clipPositionAt` requires
  *    `idleOut > idleIn`; a zero span falls back to freeze and RESOLVES `whenComplete`).
  *    A MARKER-LESS clip's span is zero (`idleIn = idleOut = op`) — it COMPLETES, which the
  *    coarse `holdBehavior === 'idle-loop'` check got wrong (found beside the follow work:
  *    the alert claimed a graphic would never close that the runtime auto-closes).
- *  - Under follow (`source: 'composition'`) the stored `introEnd`/`outroStart` are IGNORED
- *    and must not smuggle a loop range in: only an AUTHORED idle range loops.
+ *  - Under follow (`source: 'composition'`) every stored media phase is ignored; the
+ *    composition provides the middle range. The Inspector only offers looping when that
+ *    derived range is non-empty.
  */
-function mediaHoldIsInfinite(el: Extract<Element, { type: 'video' | 'lottie' }>): boolean {
+function mediaHoldIsInfinite(
+  el: Extract<Element, { type: 'video' | 'lottie' }>,
+  owner: HoldOwner,
+): boolean {
+  const playout = playoutOf(owner);
+  if (!elementLoopsOnHold(playout, el.id)) return false;
   const follows = followsComposition(el.phases);
-  if (el.type === 'video') {
-    if (el.holdBehavior !== 'loop') return false;
-    return follows ? el.phases?.idle !== undefined : true;
+  if (follows) {
+    if (owner.lifecycle === undefined) return false;
+    const active = activeRangeOf(owner);
+    const from =
+      owner.lifecycle.contentStart ??
+      contentStartDefaultFrom(owner.layers, active.in, owner.lifecycle.outPoint);
+    return owner.lifecycle.outPoint > from;
   }
-  if (el.holdBehavior !== 'idle-loop') return false;
+  if (el.type === 'video') {
+    const p = el.phases;
+    if (p === undefined) return el.durationMs > 0;
+    const from = p.idle?.start ?? p.introEnd ?? el.durationMs;
+    const to = p.idle?.end ?? p.outroStart ?? el.durationMs;
+    return to > from;
+  }
   const p = el.phases;
-  if (follows) return p?.idle !== undefined && p.idle[1] > p.idle[0];
   if (p === undefined) return false; // marker-less: zero span, freezes, completes
   return p.idle !== undefined ? p.idle[1] > p.idle[0] : (p.outroStart ?? 0) > (p.introEnd ?? 0);
 }
@@ -187,7 +161,7 @@ export function contentHoldElementsOf(scene: Scene): ContentHoldItem[] {
       } else if ((el.type === 'video' || el.type === 'lottie') && el.visible !== false) {
         // D-128 — a media element (opt-in drivesHold) is a hold driver too; without this it
         // was ABSENT from the closer list and the "repeats forever" warning (the owner's bug).
-        out.push(mediaHoldItem(el));
+        out.push(mediaHoldItem(el, scene));
       } else if (el.type === 'container' && el.visible !== false) {
         // B-034 — skip a HIDDEN container's whole subtree (inert, mirrors render).
         walk(el.children);
@@ -195,6 +169,35 @@ export function contentHoldElementsOf(scene: Scene): ContentHoldItem[] {
     }
   };
   for (const l of scene.layers) walk(l.children);
+  return out;
+}
+
+interface HoldLoopItem {
+  id: string;
+  name: string;
+  type: Element['type'];
+}
+
+/** D-187 — visible elements whose picture can change during the composition Middle. */
+export function holdLoopElementsOf(scene: Scene): HoldLoopItem[] {
+  const out: HoldLoopItem[] = [];
+  const walk = (children: readonly Element[]): void => {
+    for (const el of children) {
+      if (el.visible === false) continue;
+      const hasKeyframes =
+        el.animation !== undefined && Object.keys(el.animation.tracks).length > 0;
+      if (
+        hasKeyframes ||
+        el.lifespan !== undefined ||
+        el.type === 'video' ||
+        el.type === 'lottie'
+      ) {
+        out.push({ id: el.id, name: el.name, type: el.type });
+      }
+      if (el.type === 'container') walk(el.children);
+    }
+  };
+  for (const layer of scene.layers) walk(layer.children);
   return out;
 }
 
@@ -333,7 +336,7 @@ function nestedHoldGroupsOf(scene: Scene): NestedHoldGroup[] {
           const drivesHold = el.drivesHold === true;
           const override = overrides?.[el.id];
           const eff = override !== undefined ? override : drivesHold;
-          const infinite = el.holdBehavior === 'loop';
+          const infinite = mediaHoldIsInfinite(el, comp);
           drivers.push({
             id: el.id,
             name: el.name,
@@ -428,19 +431,6 @@ const selectStyle: CSSProperties = {
 };
 
 const mutedStyle: CSSProperties = { color: colors.textMuted, fontSize: '0.66rem' };
-const hintStyle: CSSProperties = { ...mutedStyle, lineHeight: 1.4, margin: '0.35rem 0 0' };
-/**
- * `TIMING-BUILD-21` §4 — an OWNERSHIP heading over a group of playout fields. Heavier than a
- * hint and separated from the rows above it, because it introduces what follows rather than
- * commenting on what precedes: the whole point of the mark is which fields it covers.
- */
-const groupHeadStyle: CSSProperties = {
-  color: colors.text,
-  fontSize: '0.66rem',
-  fontWeight: 600,
-  lineHeight: 1.4,
-  margin: '0.6rem 0 0.3rem',
-};
 const checklistStyle: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
@@ -519,8 +509,8 @@ function InfiniteWarn({ title }: { title: string }): JSX.Element {
  * (not the shared child) — so two instances of the same child differ. The drill-in stays (to edit the
  * child or a deeper instance level). Falls back to a drill-in hint only when neither surface has rows.
  * D-111 (folded into D-112) — any EFFECTIVELY-driving `repeat: 'infinite'` row is flagged
- * ("loops forever"); when EVERY effective driver is infinite a prominent alert says the graphic won't
- * auto-close (the hold runs until stop).
+ * ("loops forever"). D-181 keeps the consequence visible as one compact state; the named
+ * culprits and remedies live behind its aligned Info action instead of filling the Inspector.
  */
 function ContentHoldChecklist({ scene }: { scene: Scene }): JSX.Element {
   const items = contentHoldElementsOf(scene);
@@ -531,7 +521,7 @@ function ContentHoldChecklist({ scene }: { scene: Scene }): JSX.Element {
   const nestedLabels = disambiguate(nested.map((g) => g.name));
   // D-111/D-112 — a content-driven hold is `Promise.all` over its EFFECTIVE drivers, so ANY
   // infinite-repeat driver (still effectively participating) keeps the graphic on air until
-  // stop(). Flag each such row, AND escalate to the alert on ANY of them.
+  // stop(). Flag each such row, AND show the compact consequence on ANY of them.
   //
   // 🔴 It escalated on EVERY until 2026-08-13, and the gap was worse than a missed warning. With
   // an infinite ticker and a Lottie, ticking the Lottie added a FINITE driver (a `freeze` hold
@@ -561,25 +551,25 @@ function ContentHoldChecklist({ scene }: { scene: Scene }): JSX.Element {
   return (
     <>
       {anyInfinite && (
-        <div className={s.row} style={{ display: 'block' }}>
-          {/* `role="alert"` restored: #352 recoloured this banner danger→caution and the
-              variant-derived role silently demoted it to `status`. The COLOUR changed
-              because a never-closing hold is a legitimate state, not an error — but it is
-              still an assertive announcement ("this graphic will not auto-close"), so it
-              stays in the alert channel. Styling and semantics are independent.
-
-              🔴 This banner has now lost accuracy TWICE through a change that looked local:
-              once in styling (#352's variant swap silently demoting the role) and once in
-              logic (escalating on EVERY infinite driver instead of ANY). Both times the
-              banner kept rendering something, so nothing looked broken. Keep the variant
-              and the role BOTH explicit, and keep the condition tied to the consequence. */}
-          <Callout variant="caution" role="alert">
-            This graphic won’t auto-close — {listSentence(infiniteLabels)}{' '}
-            {infiniteLabels.length === 1 ? 'repeats' : 'repeat'} forever, so the content-driven hold
-            runs until stop. Give a driver a finite repeat, exclude one below, or switch to a timed
-            hold.
-          </Callout>
-        </div>
+        <StateLine
+          testId="never-closes-state"
+          tone="text"
+          tip={
+            <InfoTip title="Why this graphic holds until stop">
+              <p>
+                {listSentence(infiniteLabels)} {infiniteLabels.length === 1 ? 'repeats' : 'repeat'}{' '}
+                forever, so the content-driven hold cannot complete by itself.
+              </p>
+              <p>
+                Give the driver a finite repeat, exclude it below, or switch the composition to a
+                timed hold if it should close automatically.
+              </p>
+            </InfoTip>
+          }
+        >
+          <span className={prose.tagCaution}>hold</span>
+          Holds until stop
+        </StateLine>
       )}
       {items.length > 0 && (
         <div className={s.row} style={{ display: 'block' }}>
@@ -682,51 +672,58 @@ function ContentHoldChecklist({ scene }: { scene: Scene }): JSX.Element {
           </div>
         </div>
       )}
-
-      {items.length === 0 && nested.length === 0 && (
-        <p style={hintStyle}>
-          This composition’s content lives in nested compositions — open each to choose which of its
-          content closes the graphic.
-        </p>
-      )}
     </>
   );
 }
 
-/**
- * D-133 §9.1 — WHY an authored hold loop has no playback effect, or `null` when it has one.
- *
- * The loop range renders the HOLD, and only a CONTENT-DRIVEN hold; every other resolution
- * parks on `outPoint` exactly as it does today. The order below is the resolution order the
- * runtime itself uses, and it is not cosmetic:
- *
- *  - `manual` / `static` ignore `holdSource` ENTIRELY (`HoldSourceSchema`'s own comment), so
- *    the select's value is not the reason and must not be reported as one (§9.1 correction 4);
- *  - with NO effective hold driver, `content-driven` falls back to `timed` in the runtime,
- *    the exporter AND this panel (B-032) — so a select reading "Content-driven" is still a
- *    timed hold, and saying "switch the select" would be a lie;
- *  - only then is the select itself the missing condition.
- *
- * `hasDrivers` is the ALREADY-COMPUTED `hasEffectiveHoldDrivers` from the panel — passed in,
- * never re-derived here (§1.5's standing rule: one predicate, one call).
- */
-export type HoldLoopInertReason = 'static' | 'manual' | 'no-drivers' | 'timed-hold';
-
-export function holdLoopInertReason(
-  mode: PlayoutMode,
-  holdSource: HoldSource | undefined,
-  hasDrivers: boolean,
-): HoldLoopInertReason | null {
-  if (mode === 'static') return 'static';
-  if (mode === 'manual') return 'manual';
-  if (!hasDrivers) return 'no-drivers';
-  // Absent ⇒ 'timed' (`PlayoutObjectSchema`), which is the DEFAULT even with drivers present.
-  if ((holdSource ?? 'timed') !== 'content-driven') return 'timed-hold';
-  return null;
+/** D-187 — choose which frame/media elements follow the wrapping Middle cursor. */
+function HoldLoopChecklist({ scene }: { scene: Scene }): JSX.Element | null {
+  const items = holdLoopElementsOf(scene);
+  if (items.length === 0) return null;
+  const playout = playoutOf(scene);
+  const labels = disambiguate(items.map((item) => item.name));
+  const checkedIds = new Set(playout.holdLoopElementIds ?? items.map((item) => item.id));
+  const toggle = (id: string, checked: boolean): void => {
+    const next = new Set(playout.holdLoopElementIds ?? items.map((item) => item.id));
+    if (checked) next.add(id);
+    else next.delete(id);
+    designerStore.setPlayout({ holdLoopElementIds: [...next] });
+  };
+  return (
+    <div className={s.row} style={{ display: 'block' }}>
+      <StateLine
+        tip={
+          <InfoTip title="Repeat during Hold">
+            <p>Checked elements repeat with the Middle cursor.</p>
+            <p>Unchecked elements play forward once to their end and never rewind at a wrap.</p>
+          </InfoTip>
+        }
+      >
+        Repeat during Hold
+      </StateLine>
+      <div style={checklistStyle}>
+        {items.map((item, index) => {
+          const label = labels[index] ?? item.name;
+          return (
+            <label key={item.id} style={checkRowStyle}>
+              <input
+                type="checkbox"
+                checked={checkedIds.has(item.id)}
+                aria-label={`${label} repeats during Hold`}
+                onChange={(event) => toggle(item.id, event.target.checked)}
+              />
+              <span style={{ color: colors.text }}>{label}</span>
+              <span style={checkTypeStyle}>{item.type}</span>
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 /**
- * D-133 §3.4 — the loop range's own STATE ROW, and the surface that names it.
+ * D-133/D-187 — the composition-owned Hold picture and its effective range.
  *
  * THE THREE LOOPS, named apart (a spec requirement, not a preference):
  *
@@ -751,72 +748,61 @@ export function holdLoopInertReason(
  * `i`), and `38 → 38` reads as what it is — an EMPTY range with nothing to replay, whatever the
  * mode, which is exactly the runtime's own rule (`startHoldLoop`: `to <= from` parks).
  */
-function HoldLoopRow({
-  reason,
+function HoldBehaviorRow({
+  behavior,
   from,
   to,
 }: {
-  reason: HoldLoopInertReason | null;
+  behavior: HoldBehavior;
   from: number;
   to: number;
 }): JSX.Element {
   const range = `frames ${String(from)} → ${String(to)}`;
   const empty = to <= from;
-  const tip = <ThreeLoopsTip />;
+  const tip = (
+    <InfoTip title="On hold">
+      {behavior === 'freeze' ? (
+        <p>
+          The composition keeps its settled Out-point picture. Video and Lottie use the same Hold
+          choice.
+        </p>
+      ) : empty ? (
+        <p>
+          This range is empty, so there is nothing to replay. Drag the green Hold-start marker
+          earlier than the Outro start.
+        </p>
+      ) : (
+        <p>
+          Frames {String(from)} to {String(to)} replay during every kind of hold. Content drivers
+          keep running across repeats and do not restart.
+        </p>
+      )}
+      <p>
+        Loop middle is different from the whole-graphic Loop cycle and the editor-only Preview loop.
+      </p>
+    </InfoTip>
+  );
+  if (behavior === 'freeze') {
+    return (
+      <StateLine testId="hold-loop-state" tip={tip} tone="text">
+        <span className={prose.tagActive}>freeze</span>
+        Hold at frame {String(to)}
+      </StateLine>
+    );
+  }
   if (empty) {
     return (
       <StateLine testId="hold-loop-state" tip={tip} tone="text">
         <span className={prose.tagCaution}>empty</span>
-        Hold loop {range} — nothing to replay. Drag the cyan marker earlier than the out point to
-        give the hold a range.
-      </StateLine>
-    );
-  }
-  if (reason === null) {
-    return (
-      <StateLine testId="hold-loop-state" tip={tip} tone="text">
-        <span className={prose.tagActive}>active</span>
-        Hold loop {range} — replays during the hold; the content keeps running and never restarts.
+        Middle {range}
       </StateLine>
     );
   }
   return (
     <StateLine testId="hold-loop-state" tip={tip} tone="text">
-      <span className={prose.tagCaution}>inert</span>
-      Hold loop {range} — no playback effect:{' '}
-      {reason === 'static'
-        ? 'a static composition never runs a hold source. Pick auto-out or loop-cycle.'
-        : reason === 'manual'
-          ? 'a manual hold ignores the hold source. Pick auto-out or loop-cycle.'
-          : reason === 'no-drivers'
-            ? 'no effective hold driver — no ticker, sequence or countdown clock, and no video or Lottie driving the hold. Add one.'
-            : 'the hold is timed. Set hold to Content-driven.'}
+      <span className={prose.tagActive}>loop</span>
+      Middle {range}
     </StateLine>
-  );
-}
-
-/**
- * The three loops, said once. This is TEACHING — read once, ever — so it lives behind the
- * `i` at reading size rather than in parentheses at the end of every active caption.
- */
-function ThreeLoopsTip(): JSX.Element {
-  return (
-    <InfoTip title="The three loops">
-      <p>
-        <strong>Hold loop</strong> — during a <em>content-driven</em> hold the composition replays
-        the range from the content start to the out point until the content finishes. The content
-        itself keeps running across every repeat; it never restarts. It has no effect under a manual
-        or static hold, under a timed hold, or when nothing drives the hold.
-      </p>
-      <p>
-        <strong>Loop cycle</strong> — the playout mode that repeats the whole in → hold → out cycle
-        on air.
-      </p>
-      <p>
-        <strong>Preview loop</strong> — the transport bar’s toggle, which loops the editor’s
-        playhead over the ruler. It never reaches air.
-      </p>
-    </InfoTip>
   );
 }
 
@@ -841,10 +827,10 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
   const playout = playoutOf(scene);
   const mode = playout.mode;
   const lifecycle = scene.lifecycle;
-  // D-028/D-027 — the Hold-source select only exists when the composition
-  // actually contains a content source (a ticker or a countdown clock): a
-  // dead control teaches nothing (same principle as Next disabled at steps=1).
-  const hasContent = hasContentElement(scene);
+  // D-189 — Hold source is an authored choice, so keep it reachable before the
+  // author adds a driver and after the last driver is disabled/deleted. Static
+  // and Manual have no executable hold-source leg, so they still omit the row.
+  const holdCapable = mode === 'auto-out' || mode === 'loop-cycle';
   // B-032 — the TIMED hold duration (`holdMs`) is an AUTHORABLE default stored on the
   // composition's playout, so a content-less `auto-out` / `loop-cycle` EXPORTS and plays
   // back with the hold (the preview session override still layers on top via
@@ -852,10 +838,11 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
   // (a content-driven hold ignores `holdMs`).
   // B-032 — resolve exactly like the runtime/exporter: a content-driven hold with NO effective
   // content drivers (own + nested, drivesHold-aware) is really a TIMED hold, so the holdMs input
-  // shows AND applies (the runtime now honors it). For the zero-content case this equals `hasContent`.
+  // shows AND applies (the runtime now honors it).
   const hasDrivers = hasEffectiveHoldDrivers(scene, scene.compositions);
   const holdSourceEff: HoldSource = hasDrivers ? (playout.holdSource ?? 'timed') : 'timed';
-  const showHoldMs = (mode === 'auto-out' || mode === 'loop-cycle') && holdSourceEff === 'timed';
+  const usesTimedFallback = holdCapable && playout.holdSource === 'content-driven' && !hasDrivers;
+  const showHoldMs = holdCapable && holdSourceEff === 'timed';
   /*
     🔴 `TIMING-BUILD-21` §4 — `repeat` gets an AUTHORED home, which it never had: the field was
     declared on the schema but only ever written by the preview's session override, so a
@@ -880,17 +867,20 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
    * D-104 follow-up — the content-start marker's DEFAULT frame: the LATEST entrance
    * keyframe strictly inside `(active.in, outPoint)`. This matches the runtime's
    * `entranceSettleFrame()` heuristic for a normal (monotonic, possibly multi-track)
-   * entrance, so PINNING the marker makes the current behavior explicit without a jump;
-   * the operator then drags it.
-   *
-   * The walk itself lives in `content-start-default.ts` (media-phases-follow-composition
-   * extracted it: the follow hint derives its entrance span from the SAME default — one
-   * definition, two callers).
+   * entrance. This is the marker-less effective start used by status/hints; the explicit
+   * Set action uses `holdStartSeed()` below so its initial marker can stay visibly distinct.
    */
   function contentStartDefault(): number {
     const r = activeRangeOf(scene);
     const out = lifecycle?.outPoint ?? r.out;
     return contentStartDefaultFrom(scene.layers, r.in, out);
+  }
+
+  /** D-188 — only the Set action seeds an absent Hold start one frame before Outro start. */
+  function holdStartSeed(): number {
+    const r = activeRangeOf(scene);
+    const out = lifecycle?.outPoint ?? r.out;
+    return holdStartSeedFrom(scene.layers, r.in, out);
   }
 
   function changeMode(next: PlayoutMode): void {
@@ -904,7 +894,7 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
   }
 
   return (
-    <CollapseSection title="Playout" defaultExpanded>
+    <CollapseSection title="Playback" defaultExpanded>
       {/*
         🔴 `TIMING-BUILD-21` §4 — THE OWNERSHIP MARK, and why the panel needs one.
 
@@ -923,15 +913,24 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
         expressible anywhere. `mode` and `holdSource` were removed from the preview's override
         type outright; `holdMs`, `repeat` and `delayMs` all have one.
       */}
-      <p style={groupHeadStyle}>
-        Set by the template — the preview and CG Control only state these
-      </p>
-      <div className={s.row}>
+      <StateLine
+        tip={
+          <InfoTip title="Template settings">
+            <p>
+              Mode and hold source are authored here. Preview and CG Control show these values but
+              do not override them for an individual row.
+            </p>
+          </InfoTip>
+        }
+      >
+        Template settings
+      </StateLine>
+      <div className={cls.infoRow}>
         <span className={s.label}>mode</span>
         <Select
           style={selectStyle}
           value={mode}
-          aria-label="Playout mode"
+          aria-label="Playback mode"
           onChange={(e) => changeMode(e.target.value as PlayoutMode)}
         >
           {(Object.keys(MODE_LABELS) as PlayoutMode[]).map((m) => {
@@ -946,10 +945,44 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
             );
           })}
         </Select>
+        <InfoTip title="Playback mode">
+          <p>
+            <strong>Static</strong> holds its last frame and cuts on Stop. <strong>Manual</strong>{' '}
+            waits for Stop, then plays the Outro.
+          </p>
+          <p>
+            <strong>Auto-out</strong> plays the Outro after Hold. <strong>Loop cycle</strong>{' '}
+            repeats the complete Intro, Hold and Outro cycle.
+          </p>
+        </InfoTip>
       </div>
 
-      {hasContent && mode !== 'manual' && mode !== 'static' && (
+      {lifecycle !== undefined && (
         <div className={s.row}>
+          <span className={s.label}>on hold</span>
+          <Select
+            style={selectStyle}
+            value={playout.holdBehavior ?? 'freeze'}
+            aria-label="On hold"
+            onChange={(e) =>
+              designerStore.setPlayout({ holdBehavior: e.target.value as HoldBehavior })
+            }
+          >
+            {(Object.keys(HOLD_BEHAVIOR_LABELS) as HoldBehavior[]).map((behavior) => (
+              <option key={behavior} value={behavior}>
+                {HOLD_BEHAVIOR_LABELS[behavior]}
+              </option>
+            ))}
+          </Select>
+        </div>
+      )}
+
+      {lifecycle !== undefined && (playout.holdBehavior ?? 'freeze') === 'loop' && (
+        <HoldLoopChecklist scene={scene} />
+      )}
+
+      {holdCapable && (
+        <div className={cls.infoRow}>
           <span className={s.label}>hold</span>
           <Select
             style={selectStyle}
@@ -963,18 +996,53 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
               </option>
             ))}
           </Select>
+          <InfoTip title="Hold source">
+            <p>
+              <strong>Timed</strong> waits for the authored duration.{' '}
+              <strong>Content-driven</strong> waits for enabled, visible content to complete.
+            </p>
+            <p>If no hold driver is active, playback safely uses the Timed duration.</p>
+          </InfoTip>
         </div>
       )}
 
-      {hasContent &&
-        mode !== 'manual' &&
-        mode !== 'static' &&
-        playout.holdSource === 'content-driven' && <ContentHoldChecklist scene={scene} />}
+      {usesTimedFallback && (
+        <StateLine
+          testId="hold-source-fallback-state"
+          tone="text"
+          tip={
+            <InfoTip title="No active hold driver">
+              <p>
+                Content-driven remains saved as the template choice. Add or enable a visible ticker,
+                sequence, countdown, eligible nested content, or a Video/Lottie opted in as a hold
+                driver.
+              </p>
+              <p>Until then, playback uses the Timed duration shown below.</p>
+            </InfoTip>
+          }
+        >
+          <span className={prose.tagCaution}>fallback</span>
+          No active hold driver · using Timed
+        </StateLine>
+      )}
+
+      {holdCapable && playout.holdSource === 'content-driven' && (
+        <ContentHoldChecklist scene={scene} />
+      )}
 
       {(showHoldMs || mode === 'loop-cycle') && (
-        <p style={groupHeadStyle}>
-          Operator can override per row — these are the defaults a row starts from
-        </p>
+        <StateLine
+          tip={
+            <InfoTip title="Operator defaults">
+              <p>
+                These values are saved as the starting defaults. An operator may override them for
+                an individual row in Preview or CG Control.
+              </p>
+            </InfoTip>
+          }
+        >
+          Operator defaults
+        </StateLine>
       )}
 
       {showHoldMs && (
@@ -1029,7 +1097,7 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
             </div>
           </div>
 
-          <div className={s.row}>
+          <div className={cls.infoRow}>
             {/*
               `delay ms`, in MILLISECONDS — the same unit as `hold ms` directly above it. Two
               duration fields on one panel in two different units is how a 2 becomes 2 ms.
@@ -1047,61 +1115,70 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
               />
               <span style={mutedStyle}>ms</span>
             </div>
+            <InfoTip title="Delay between passes">
+              <p>
+                The graphic stays off screen for this gap between passes. It never delays the first
+                showing.
+              </p>
+            </InfoTip>
           </div>
-
-          <p style={hintStyle}>
-            The gap between passes — the graphic is off screen for it. It never delays the first
-            showing.
-          </p>
         </>
       )}
 
       {lifecycle !== undefined ? (
         <>
           <div className={cls.actionRow}>
-            <span className={cls.actionLabel}>Out point</span>
+            <span className={cls.actionLabel}>Outro start</span>
             <span className={cls.actionValue}>frame {String(lifecycle.outPoint)}</span>
-            <Button variant="danger" size="sm" onClick={() => designerStore.setLifecycle(null)}>
-              Clear out point
+            <Button
+              variant="danger"
+              size="md"
+              className={cls.actionButton}
+              aria-label="Clear outro start"
+              onClick={() => designerStore.setLifecycle(null)}
+            >
+              Clear
             </Button>
+            <InfoTip title="Outro start">
+              <p>Drag the Outro-start marker on the timeline.</p>
+            </InfoTip>
           </div>
-          <p className={cls.caption}>
-            Drag the marker on the timeline. Repeat and delay are authored above.
-          </p>
         </>
       ) : (
         <>
           <div className={cls.actionRow}>
-            <span className={cls.actionLabel}>Out point</span>
+            <span className={cls.actionLabel}>Outro start</span>
             <span className={cls.actionValue}>none — static</span>
             <Button
               variant="markerOut"
-              size="sm"
+              size="md"
+              className={cls.actionButton}
+              aria-label="Set outro start"
               onClick={() => designerStore.setLifecycle(defaultMarker())}
             >
-              Add out point
+              Set
             </Button>
           </div>
           {/* `DESIGNER-FIX-0905` — the STATE stays inline; what the other modes are is read
               once, behind the `i`. The remedy is the button beside it. */}
           <StateLine
             tip={
-              <InfoTip title="The out point and the modes">
+              <InfoTip title="Outro start and Playback modes">
                 <p>
-                  With no out point a composition is <strong>static</strong>: it plays in, holds its
-                  last frame, and cuts on stop — no animated exit.
+                  With no Outro start a composition is <strong>static</strong>: it plays in, holds
+                  its last frame, and cuts on stop — no animated exit.
                 </p>
                 <p>
-                  Adding an out point splits the timeline into an entrance, a hold and an exit, and
-                  enables the other modes: <strong>manual</strong> (hold until the operator stops
-                  it, then play the exit), <strong>auto-out</strong> (exit by itself after the hold)
-                  and <strong>loop cycle</strong> (repeat in → hold → out). Drag the marker on the
-                  timeline to move it.
+                  Setting an Outro start splits the timeline into an entrance, a hold and an exit,
+                  and enables the other modes: <strong>manual</strong> (hold until the operator
+                  stops it, then play the exit), <strong>auto-out</strong> (exit by itself after the
+                  hold) and <strong>loop cycle</strong> (repeat in → hold → out). Drag the marker on
+                  the timeline to move it.
                 </p>
               </InfoTip>
             }
           >
-            Static: plays in, holds, cuts on stop.
+            Static
           </StateLine>
         </>
       )}
@@ -1113,7 +1190,7 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
        * markers and needs no content element to exist. The `lifecycle !== undefined`
        * half is KEPT deliberately — `contentStart` is schema-constrained to
        * `[activeRange.in, outPoint]`, and creating an out-point changes what the
-       * composition does ON AIR at stop time, so it stays the explicit "Add out point"
+       * composition does ON AIR at stop time, so it stays the explicit "Set Outro start"
        * step above. NOTHING here calls `setLifecycle`.
        */}
       {lifecycle !== undefined && (
@@ -1121,43 +1198,50 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
           {lifecycle.contentStart !== undefined ? (
             <>
               <div className={cls.actionRow}>
-                <span className={cls.actionLabel}>Content start</span>
+                <span className={cls.actionLabel}>Hold start</span>
                 <span className={cls.actionValue}>frame {String(lifecycle.contentStart)}</span>
                 <Button
                   variant="danger"
-                  size="sm"
-                  // `title`, NOT `aria-label`: an aria-label would REPLACE the accessible
-                  // name, leaving the visible text absent from it (WCAG 2.5.3 Label in Name)
-                  // and breaking name-based locators. The tooltip supplements instead.
-                  title="Reset the content start to automatic (entrance completion)"
+                  size="md"
+                  className={cls.actionButton}
+                  aria-label="Clear hold start"
                   onClick={() => designerStore.setContentStart(null)}
                 >
-                  Reset to auto
+                  Clear
                 </Button>
+                <InfoTip title="Hold start">
+                  <p>
+                    This marker ends Intro and starts the Middle range. Drag it on the timeline, or
+                    return it to the automatic entrance completion.
+                  </p>
+                </InfoTip>
               </div>
-              <p className={cls.caption}>Drag the cyan marker on the timeline.</p>
             </>
           ) : (
             <>
               <div className={cls.actionRow}>
-                <span className={cls.actionLabel}>Content start</span>
+                <span className={cls.actionLabel}>Hold start</span>
                 <span className={cls.actionValue}>auto (entrance)</span>
                 <Button
                   variant="markerIn"
-                  size="sm"
-                  onClick={() => designerStore.setContentStart(contentStartDefault())}
+                  size="md"
+                  className={cls.actionButton}
+                  aria-label="Set hold start"
+                  onClick={() => designerStore.setContentStart(holdStartSeed())}
                 >
-                  Pin content start
+                  Set
                 </Button>
+                <InfoTip title="Automatic Hold start">
+                  <p>
+                    Auto uses the entrance completion. Set it to create an exact frame marker, then
+                    drag it on the timeline.
+                  </p>
+                </InfoTip>
               </div>
-              <p className={cls.caption}>
-                Auto is the entrance’s completion. Pin it for an exact frame, then drag it on the
-                timeline.
-              </p>
             </>
           )}
-          <HoldLoopRow
-            reason={holdLoopInertReason(mode, playout.holdSource, hasDrivers)}
+          <HoldBehaviorRow
+            behavior={playout.holdBehavior ?? 'freeze'}
             from={lifecycle.contentStart ?? contentStartDefault()}
             to={lifecycle.outPoint}
           />

@@ -2,7 +2,7 @@ import { test, expect } from './fixtures/designer.js';
 
 /**
  * D-086 Phase B — top-chrome relocation. The global bar keeps the project-wide
- * menus + a centered project name + Save; Preview / Export (.vcg + HTML) move to the
+ * menus + a centered project name + Save; Preview / Export (.vcg) move to the
  * per-composition action bar pinned at the foot of the left rail (off the canvas;
  * the export engine is already per-composition from Phase A).
  */
@@ -38,9 +38,9 @@ test.describe('D-086 Phase B — top-chrome relocation', () => {
     await expect(bar).toBeVisible();
     await expect(bar.getByRole('button', { name: 'Preview', exact: true })).toBeVisible();
     await expect(bar.getByRole('button', { name: 'Export .vcg', exact: true })).toBeVisible();
-    await expect(bar.getByRole('button', { name: 'Export HTML', exact: true })).toBeVisible();
+    await expect(bar.getByRole('button', { name: 'Export HTML', exact: true })).toHaveCount(0);
 
-    // Exporting from the per-composition bar produces the active composition's output.
+    // D-174 — the hidden development seam still produces the active composition's output.
     const { html } = await app.exportHtml();
     expect(html).toContain('createRuntime');
   });

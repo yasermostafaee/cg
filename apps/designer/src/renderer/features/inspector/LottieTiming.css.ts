@@ -81,6 +81,20 @@ export const warn = style({
 });
 
 /**
+ * D-176 — a valid but visible seam is guidance, not a timing error. Keep it readable without the
+ * danger colour/rule reserved for states that need corrective author action.
+ */
+export const info = style({
+  margin: '0.15rem 0 0',
+  padding: '0.35rem 0.45rem',
+  borderLeft: `2px solid ${colors.accentMuted}`,
+  background: colors.panelMuted,
+  color: colors.textMuted,
+  fontSize: '0.72rem',
+  lineHeight: 1.4,
+});
+
+/**
  * The "animation details" disclosure — a plain expandable ROW, not a button.
  *
  * It must read as "there is more section under here", so it mirrors the Inspector's own

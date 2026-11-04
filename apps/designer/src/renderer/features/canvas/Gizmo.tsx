@@ -36,8 +36,13 @@ import { sizeRatioForAspect } from '../inspector/aspect-presets.js';
 interface Props {
   element: Element;
   scale: number;
-  currentFrame: number;
+  /** Legacy/unit callers may still provide one shared frame; production passes the resolver. */
+  currentFrame?: number;
+  frameForElement?: ElementFrameResolver;
 }
+
+/** B-381 — resolves the frame actually painted for one root element. */
+export type ElementFrameResolver = (elementId: string) => number;
 
 // Handle / hit-area pixel sizes are baked into the shared Gizmo.css.js classes
 // (`s.handle` 8px, `s.cornerHit` 18px); the gizmo only positions them on the
@@ -145,7 +150,7 @@ export function lockCursor(cursor: string): () => void {
  *   - just outside a corner → rotate about the element's anchor
  * Resize works in the element's local (rotated) frame.
  */
-export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
+export function Gizmo({ element, scale, currentFrame = 0, frameForElement }: Props): JSX.Element {
   // D-060 §C — re-measure after the preview iframe re-lays-out (text/font edits stream
   // asynchronously; webfonts swap in later). Subscribing re-renders the gizmo so the
   // auto box stays glued without polling.
@@ -156,7 +161,9 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
   // 🔴 B-175 — through the ONE read side, so this DRAW and the gestures below cannot be
   // reading two different rects. They were, and that is the bug this call now shares a
   // function with rather than a convention.
-  let t = renderedTransformAt(element, currentFrame);
+  const resolveFrame: ElementFrameResolver = frameForElement ?? (() => currentFrame);
+  const elementFrame = resolveFrame(element.id);
+  let t = renderedTransformAt(element, elementFrame);
   // D-060 §C — an auto-sized text box is content-driven, so `transform.size` is not
   // authoritative. Trace the RENDERED box (the element's local content size measured
   // from the iframe — `offsetWidth/Height`, unaffected by zoom or scale/rotate), and
@@ -180,7 +187,7 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
   // (`effectivePathLocalRect`, an OFFSET local rect), projected through the same
   // pivot/rotation map so a rotated, morphing path's box stays glued to the shape.
   // Other element kinds keep the plain [0,size] box.
-  const liveRect = effectivePathLocalRect(element, currentFrame);
+  const liveRect = effectivePathLocalRect(element, elementFrame);
   // Project the element's RENDERED box (`Scale·Rotate` about the anchor — a parallelogram
   // under non-uniform scale) into overlay/screen space, so the frame + handles trace the
   // SAME geometry the renderer draws (matches `hit-test.inverseToLocal`). Fixes B-022,
@@ -211,8 +218,8 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
       if (e.button !== 0) return;
       e.stopPropagation();
       if (kind === 'rotate')
-        beginRotate(element, handle as Corner, scale, currentFrame, e.nativeEvent);
-      else beginResize(element, handle, scale, currentFrame, e.nativeEvent);
+        beginRotate(element, handle as Corner, scale, resolveFrame, e.nativeEvent);
+      else beginResize(element, handle, scale, resolveFrame, e.nativeEvent);
     };
 
   // Edges as corner→corner segments (single-axis resize); corners (two-axis resize).
@@ -372,7 +379,8 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
 interface MultiProps {
   elements: readonly Element[];
   scale: number;
-  currentFrame: number;
+  currentFrame?: number;
+  frameForElement?: ElementFrameResolver;
 }
 
 /**
@@ -383,16 +391,23 @@ interface MultiProps {
  * (a press in empty space hits nothing → clears, per the cursor-tool rule).
  * Boxes are the elements' effective axis-aligned boxes at the current frame.
  */
-export function MultiGizmo({ elements, scale, currentFrame }: MultiProps): JSX.Element | null {
+export function MultiGizmo({
+  elements,
+  scale,
+  currentFrame = 0,
+  frameForElement,
+}: MultiProps): JSX.Element | null {
   if (elements.length < 2) return null;
+  const resolveFrame: ElementFrameResolver = frameForElement ?? (() => currentFrame);
   const boxes = elements.map((el) => {
+    const elementFrame = resolveFrame(el.id);
     // B-042 — same LayoutUnit quantization as the single-selection gizmo (visual only).
     // B-175 — and the same ONE read side: a member box drawn at its authored rect while the
     // single-selection gizmo drew the cell made the two gizmos disagree about one element.
-    const t = quantizeBoxToLayout(renderedTransformAt(el, currentFrame));
+    const t = quantizeBoxToLayout(renderedTransformAt(el, elementFrame));
     // D-110 — a keyframed path's member box follows its live morph rect (same
     // axis-aligned fidelity as the other members — rotation is ignored here).
-    const r = effectivePathLocalRect(el, currentFrame) ?? boxRect(t);
+    const r = effectivePathLocalRect(el, elementFrame) ?? boxRect(t);
     return {
       id: el.id,
       x: (t.position.x + r.x * t.scale.x) * scale,
@@ -422,7 +437,10 @@ export function MultiGizmo({ elements, scale, currentFrame }: MultiProps): JSX.E
  * Snap targets in the active document: canvas edges + centre, every *other*
  * element's edges + centre, and the operator's ruler guides.
  */
-function buildSnapTargets(excludeId: string, currentFrame: number): { xs: number[]; ys: number[] } {
+function buildSnapTargets(
+  excludeId: string,
+  frameForElement: ElementFrameResolver,
+): { xs: number[]; ys: number[] } {
   const st = designerStore.get();
   const doc = editSceneOf(st.scene, st.activeCompositionId);
   const xs: number[] = [];
@@ -436,7 +454,7 @@ function buildSnapTargets(excludeId: string, currentFrame: number): { xs: number
         // B-175 — snap to where a box IS DRAWN, not to where it was authored. A target
         // read from the authored rect is a guide line the author cannot see, pulling the
         // dragged edge to an alignment that is not on screen.
-        const tr = renderedTransformAt(el, currentFrame);
+        const tr = renderedTransformAt(el, frameForElement(el.id));
         const ew = tr.size.w * tr.scale.x;
         const eh = tr.size.h * tr.scale.y;
         xs.push(tr.position.x, tr.position.x + ew / 2, tr.position.x + ew);
@@ -453,7 +471,7 @@ function beginResize(
   element: Element,
   handle: Handle,
   scale: number,
-  currentFrame: number,
+  frameForElement: ElementFrameResolver,
   ev: PointerEvent,
 ): void {
   // 🔴 B-175 — a box the active arrangement gives NO CELL renders nowhere, and starting a
@@ -463,12 +481,13 @@ function beginResize(
   // 🔴 B-175 — the ONE read side, the same call the gizmo DREW from. This read
   // `effectiveTransformAt` — the AUTHORED rect — so `grabScene`, the fixed corner and both
   // ratios were solved against a rect that was not where the handle was drawn.
-  const t0 = renderedTransformAt(element, currentFrame);
+  const elementFrame = frameForElement(element.id);
+  const t0 = renderedTransformAt(element, elementFrame);
   // D-110 — a keyframed path resizes from its LIVE morph rect (what the handles
   // sit on); everything else from the plain element box. `computeRectResize`'s
   // ratio-based commits make either box mean "scale the shape so THIS extent
   // matches the gesture" (bake / size-keyframe, both scale the live extent).
-  const rect0: LocalRect = effectivePathLocalRect(element, currentFrame) ?? boxRect(t0);
+  const rect0: LocalRect = effectivePathLocalRect(element, elementFrame) ?? boxRect(t0);
   const cfg = RESIZE_CFG[handle];
   // The grabbed handle's start position in scene coords — the pointer delta is
   // added to this each move, then `computeRectResize` does the rotated-frame math.
@@ -512,7 +531,7 @@ function beginResize(
     isAspectLocked(designerStore.get(), element.id)
       ? (sizeRatioForAspect(element.expectedAspect, t0.scale) ?? undefined)
       : undefined;
-  const targets = snapping ? buildSnapTargets(element.id, currentFrame) : { xs: [], ys: [] };
+  const targets = snapping ? buildSnapTargets(element.id, frameForElement) : { xs: [], ys: [] };
   const thr = SNAP_PX / scale;
 
   /*
@@ -669,7 +688,7 @@ function beginRotate(
   element: Element,
   corner: Corner,
   scale: number,
-  currentFrame: number,
+  frameForElement: ElementFrameResolver,
   ev: PointerEvent,
 ): void {
   // Keep the interaction invariant even if a future caller bypasses Gizmo's rendered handles.
@@ -679,11 +698,12 @@ function beginRotate(
   if (hasNoActiveCell(element.id)) return;
   // 🔴 B-175 — the ONE read side. Rotation pivots about `anchor ⊙ size`, so reading the
   // AUTHORED size here spun the box about a pivot that was not inside the drawn box.
-  const t0 = renderedTransformAt(element, currentFrame);
+  const elementFrame = frameForElement(element.id);
+  const t0 = renderedTransformAt(element, elementFrame);
   const startAngle = t0.rotation;
   // D-110 — the rotate zones sit just outside the LIVE rect corners for a
   // keyframed path; the pivot stays the element anchor (transform-origin).
-  const rect0: LocalRect = effectivePathLocalRect(element, currentFrame) ?? boxRect(t0);
+  const rect0: LocalRect = effectivePathLocalRect(element, elementFrame) ?? boxRect(t0);
   const cl = rectCorner(corner, rect0);
   // Recover the anchor's client position from the grabbed corner — the corner's offset is
   // rotated AND scaled (the renderer's `Scale·Rotate`) before the zoom, so the pivot lands

@@ -1,30 +1,27 @@
 import { useState } from 'react';
-import type { FrameRate, Resolution, TemplateType } from '@cg/shared-schema';
+import type { FrameRate, TemplateType } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
-import { RealtimeNumberInput } from '../inspector/controls.js';
+import { NumberField, RealtimeNumberInput } from '../inspector/controls.js';
 import { Select } from '../../ui/Select.js';
 import { Modal, ModalButton } from './Modal.js';
+import {
+  normalizeProjectFrames,
+  projectFramesFromSeconds,
+  projectSecondsFromFrames,
+} from './new-project-duration.js';
+import {
+  DEFAULT_PROJECT_RESOLUTION_PRESET,
+  PROJECT_FRAME_RATES,
+  PROJECT_RESOLUTION_PRESETS,
+  projectResolution,
+  type ProjectResolutionPresetKey,
+} from './new-project-options.js';
 import * as s from './NewProjectModal.css.js';
 
 interface Props {
   onClose: () => void;
 }
-
-interface ResolutionPreset {
-  label: string;
-  width: number;
-  height: number;
-}
-
-const PRESETS: readonly ResolutionPreset[] = [
-  { label: '1920 × 1080  (16:9 HD)', width: 1920, height: 1080 },
-  { label: '1280 × 720  (16:9 small)', width: 1280, height: 720 },
-  { label: '1080 × 1920  (9:16 vertical)', width: 1080, height: 1920 },
-  { label: 'Custom', width: 0, height: 0 },
-];
-
-const FRAME_RATES: readonly FrameRate[] = [25, 29.97, 50, 59.94, 60];
 
 // Template choice was removed from the modal — `projects.create` still
 // needs a TemplateType, so every new project ships as 'custom' and the
@@ -39,25 +36,23 @@ const DEFAULT_TEMPLATE_TYPE: TemplateType = 'custom';
  */
 export function NewProjectModal({ onClose }: Props): JSX.Element {
   const [name, setName] = useState('Untitled');
-  const [presetIdx, setPresetIdx] = useState(0);
+  const [presetKey, setPresetKey] = useState<ProjectResolutionPresetKey>(
+    DEFAULT_PROJECT_RESOLUTION_PRESET,
+  );
   const [customW, setCustomW] = useState(1920);
   const [customH, setCustomH] = useState(1080);
   const [frameRate, setFrameRate] = useState<FrameRate>(50);
   const [durationFrames, setDurationFrames] = useState(50);
-  const isCustom = PRESETS[presetIdx]?.label === 'Custom';
+  const isCustom = presetKey === 'custom';
 
   async function confirm(): Promise<void> {
-    const preset = PRESETS[presetIdx];
-    if (preset === undefined) return;
-    const resolution: Resolution = isCustom
-      ? { width: Math.max(1, Math.round(customW)), height: Math.max(1, Math.round(customH)) }
-      : { width: preset.width, height: preset.height };
+    const resolution = projectResolution(presetKey, customW, customH);
     const result = await window.cg.projects.create({
       name: name.trim().length > 0 ? name.trim() : 'Untitled',
       templateType: DEFAULT_TEMPLATE_TYPE,
       resolution,
       frameRate,
-      durationFrames: Math.max(1, Math.round(durationFrames)),
+      durationFrames: normalizeProjectFrames(durationFrames),
     });
     designerStore.setScene(result.scene, result.path);
     onClose();
@@ -91,12 +86,12 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
         <span className={s.label}>Resolution</span>
         <Select
           className={s.input}
-          value={presetIdx}
-          onChange={(e) => setPresetIdx(Number(e.target.value))}
+          value={presetKey}
+          onChange={(e) => setPresetKey(e.target.value as ProjectResolutionPresetKey)}
           aria-label="Resolution preset"
         >
-          {PRESETS.map((p, i) => (
-            <option key={p.label} value={i}>
+          {PROJECT_RESOLUTION_PRESETS.map((p) => (
+            <option key={p.key} value={p.key}>
               {p.label}
             </option>
           ))}
@@ -136,7 +131,7 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
           onChange={(e) => setFrameRate(Number(e.target.value) as FrameRate)}
           aria-label="Frame rate"
         >
-          {FRAME_RATES.map((f) => (
+          {PROJECT_FRAME_RATES.map((f) => (
             <option key={f} value={String(f)}>
               {f} fps
             </option>
@@ -146,20 +141,27 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
 
       <div className={s.row}>
         <span className={s.label}>Total frames</span>
-        <div className={s.inlinePair}>
-          <RealtimeNumberInput
-            className={s.input}
-            min={1}
-            step={1}
-            value={durationFrames}
-            onCommit={setDurationFrames}
-            ariaLabel="Total frames"
-          />
-          <span />
-          <span style={{ color: colors.textMuted, fontSize: '0.74rem' }}>
-            ≈ {(Math.max(1, Math.round(durationFrames)) / frameRate).toFixed(1)} s
-          </span>
-        </div>
+        <NumberField
+          bare
+          label="Total frames"
+          min={1}
+          step={1}
+          value={durationFrames}
+          onCommit={(frames) => setDurationFrames(normalizeProjectFrames(frames))}
+        />
+      </div>
+
+      <div className={s.row}>
+        <span className={s.label}>Duration</span>
+        <NumberField
+          bare
+          label="Duration in seconds"
+          min={1 / frameRate}
+          step={0.1}
+          value={projectSecondsFromFrames(durationFrames, frameRate)}
+          onCommit={(seconds) => setDurationFrames(projectFramesFromSeconds(seconds, frameRate))}
+          suffix="s"
+        />
       </div>
     </Modal>
   );

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { hasEffectiveHoldDrivers, PlayoutSchema, playoutOf, SceneSchema } from '../src/scene.js';
+import {
+  elementLoopsOnHold,
+  hasEffectiveHoldDrivers,
+  PlayoutSchema,
+  playoutOf,
+  SceneSchema,
+} from '../src/scene.js';
 
 const baseTransform = {
   position: { x: 0, y: 0 },
@@ -306,6 +312,24 @@ describe('Playout — D-028 holdSource axis + legacy normalization', () => {
   it('accepts the two-axis form (mode x holdSource)', () => {
     const parsed = PlayoutSchema.parse({ mode: 'auto-out', holdSource: 'content-driven' });
     expect(parsed).toMatchObject({ mode: 'auto-out', holdSource: 'content-driven' });
+  });
+
+  it('D-187 — stores composition Hold behaviour and an explicit repeat-participant list', () => {
+    const parsed = PlayoutSchema.parse({
+      mode: 'manual',
+      holdBehavior: 'loop',
+      holdLoopElementIds: ['bed', 'accent'],
+    });
+    expect(parsed.holdBehavior).toBe('loop');
+    expect(parsed.holdLoopElementIds).toEqual(['bed', 'accent']);
+    expect(elementLoopsOnHold(parsed, 'bed')).toBe(true);
+    expect(elementLoopsOnHold(parsed, 'other')).toBe(false);
+  });
+
+  it('D-187 — absent participant data means every eligible element; Freeze means none', () => {
+    expect(elementLoopsOnHold({ holdBehavior: 'loop' }, 'anything')).toBe(true);
+    expect(elementLoopsOnHold({ holdBehavior: 'freeze' }, 'anything')).toBe(false);
+    expect(playoutOf({ lifecycle: { outPoint: 20 } }).holdBehavior).toBe('freeze');
   });
 
   it('playoutOf defensively normalizes an UNPARSED legacy object (old template.json)', () => {

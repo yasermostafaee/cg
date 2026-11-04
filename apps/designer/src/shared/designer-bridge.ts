@@ -16,6 +16,9 @@ import type {
   SharedImagesImportChannel,
   SharedImagesListChannel,
   SharedImagesRemoveChannel,
+  SharedFontsImportChannel,
+  SharedFontsListChannel,
+  SharedFontsRemoveChannel,
   ExportIssue,
   ExportPreflightChannel,
   ExportProgress,
@@ -342,6 +345,18 @@ export interface DesignerBridge {
     ): Promise<ChannelResponse<typeof SharedImagesRemoveChannel>>;
     onImported(handler: (image: AssetMeta) => void): Unsubscribe;
     /** D-040 — resolve a shared-library imageId to a cached blob URL for previews. */
+    url(assetId: string): Promise<string | null>;
+  };
+
+  /** D-126 — project-independent shared fonts, surfaced inside Shared Library. */
+  sharedFonts: {
+    pick(): Promise<File[]>;
+    store(file: File): Promise<ChannelResponse<typeof SharedFontsImportChannel>>;
+    list(): Promise<ChannelResponse<typeof SharedFontsListChannel>>;
+    remove(
+      req: ChannelRequest<typeof SharedFontsRemoveChannel>,
+    ): Promise<ChannelResponse<typeof SharedFontsRemoveChannel>>;
+    onImported(handler: (font: AssetMeta) => void): Unsubscribe;
     url(assetId: string): Promise<string | null>;
   };
 

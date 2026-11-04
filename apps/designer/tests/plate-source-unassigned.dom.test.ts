@@ -205,7 +205,7 @@ function renderStyle(el: Element): HTMLDivElement {
  * no way to create a source at all. Typing a new key IS how one comes into existence.
  */
 function sourceInput(host: HTMLElement): HTMLInputElement | null {
-  return host.querySelector('input[aria-label="Live Source source id"]');
+  return host.querySelector('input[aria-label="Plate source id"]');
 }
 /** ⚠ There must be NO `<select>` here — asserted, so the picker cannot creep back. */
 function sourceSelect(host: HTMLElement): HTMLSelectElement | null {
@@ -424,7 +424,7 @@ describe('B-184 — an export refusal is drawn in danger, not caution', () => {
     seed(defaultLiveSource('p1', 0, 0) as unknown as Element);
     const host = renderLooks();
 
-    const block = host.querySelector('[aria-label="Look issues"]');
+    const block = host.querySelector('[aria-label="Preset issues"]');
     expect(block).not.toBeNull();
     const summary = block?.querySelector('p');
     expect(summary?.textContent).toContain('export will refuse');

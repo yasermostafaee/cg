@@ -22,11 +22,14 @@ import type { AssetMeta } from '@cg/shared-ipc';
 import type * as VideoConvertModule from './video-convert.js';
 import { Modal, ModalActions, ModalButton } from '../shell/Modal.js';
 import { Callout } from '../../ui/Callout.js';
+import { Select } from '../../ui/Select.js';
 import { RealtimeNumberInput } from '../inspector/controls.js';
+import { InfoTip } from '../inspector/InfoTip.js';
 import { useDesignerSelector } from '../../state/store.js';
 import {
   buildProvenance,
   clampCrop,
+  displayDimensions,
   findDuplicateVideoAsset,
   fpsConformNotice,
   isImageSequence,
@@ -39,11 +42,21 @@ import {
   sourceSequenceProvenance,
   sourceWebmName,
   type CropRect,
+  type PixelAspectMode,
   type SourceProbe,
+  type VideoColorInterpretation,
   type VideoSource,
 } from './video-convert-args.js';
 import { hashSourceFile } from './source-hash.js';
 import { probeStoredVideo, verifyStoredPoster } from './video-asset-probe.js';
+import {
+  decodeFailureMessage,
+  pixelFormatLabel,
+  videoCodecLabel,
+  videoContainerLabel,
+  VIDEO_FORMATS_OPAQUE,
+  VIDEO_FORMATS_WITH_ALPHA,
+} from './video-import-policy.js';
 import * as s from './VideoImportModal.css.js';
 
 type Converter = typeof VideoConvertModule;
@@ -70,7 +83,11 @@ export function loadConverter(): Promise<Converter> {
 
 type Phase =
   | { kind: 'probing' }
-  | { kind: 'probe-failed'; reason: 'no-stream' | 'converter-crashed'; logTail: string[] }
+  | {
+      kind: 'probe-failed';
+      reason: 'no-stream' | 'decode-failed' | 'converter-crashed';
+      logTail: string[];
+    }
   | { kind: 'ready' }
   // D-128 — hashing the source + looking up a prior import BEFORE any encode.
   | { kind: 'checking'; progress: number }
@@ -129,6 +146,11 @@ export function VideoImportModal(props: {
   const [posterUrl, setPosterUrl] = useState<string | null>(null);
   const [cropOn, setCropOn] = useState(false);
   const [crop, setCrop] = useState<CropRect>({ x: 0, y: 0, width: 1, height: 1 });
+  // Files with non-square pixels carry a display shape as metadata. Trust it by default; the
+  // explicit `pixels` escape hatch is for archive files whose metadata is visibly wrong.
+  const [pixelAspectMode, setPixelAspectMode] = useState<PixelAspectMode>('source');
+  const [colorInterpretation, setColorInterpretation] =
+    useState<VideoColorInterpretation>('standard');
   // D-128 — un-premultiply the source's alpha (fringe fix). Defaults OFF
   // (owner decision, 2026-07-25): the ON default assumed the whole archive is
   // premultiplied and needs the correction, but the field shows clips that are
@@ -221,13 +243,38 @@ export function VideoImportModal(props: {
   }, []);
 
   const notice = probe !== null ? fpsConformNotice(probe.fps, projectFps) : null;
-  const scale =
-    probe !== null ? Math.min(PREVIEW_MAX_W / probe.width, PREVIEW_MAX_H / probe.height, 1) : 1;
+  const sourceDisplaySize = probe !== null ? displayDimensions(probe, undefined, 'source') : null;
+  const pixelDisplaySize = probe !== null ? displayDimensions(probe, undefined, 'pixels') : null;
+  const displaySize = pixelAspectMode === 'source' ? sourceDisplaySize : pixelDisplaySize;
+  const displayScale =
+    displaySize !== null
+      ? Math.min(PREVIEW_MAX_W / displaySize.width, PREVIEW_MAX_H / displaySize.height, 1)
+      : 1;
+  // Crop values remain in CODED source pixels, while the poster is shown at DISPLAY aspect.
+  const sourceToPreviewX =
+    probe !== null && displaySize !== null
+      ? (displaySize.width / probe.width) * displayScale
+      : displayScale;
+  const sourceToPreviewY =
+    probe !== null && displaySize !== null
+      ? (displaySize.height / probe.height) * displayScale
+      : displayScale;
+  const containerLabel = videoContainerLabel(probe?.container);
+  const codecLabel = videoCodecLabel(probe?.codec);
+  const formatLabel = pixelFormatLabel(probe?.pixelFormat);
+  const hasNonSquarePixels =
+    probe?.sampleAspectRatio !== undefined &&
+    probe.sampleAspectRatio.numerator !== probe.sampleAspectRatio.denominator;
+  const canMatchLegacyVlc =
+    probe?.codec?.toLowerCase() === 'qtrle' && probe.pixelFormat?.toLowerCase() === 'argb';
 
   // The crop that WOULD be baked at these settings — used for the conversion AND
   // (Bug 4) to re-evaluate the duplicate match live as the operator edits it.
   const effectiveCrop =
     cropOn && probe !== null ? clampCrop(crop, probe.width, probe.height) : undefined;
+  const sourceOutputSize =
+    probe !== null ? displayDimensions(probe, effectiveCrop, 'source') : null;
+  const pixelOutputSize = probe !== null ? displayDimensions(probe, effectiveCrop, 'pixels') : null;
   // Bug 4 — in the duplicate step the match is recomputed from the CURRENT crop +
   // fps, so a crop change that no longer matches clears the banner (effect below)
   // and "Use existing" only ever offers the asset matching what's on screen.
@@ -237,6 +284,8 @@ export function VideoImportModal(props: {
           sourceSha256: phase.sourceSha256,
           targetFps: projectFps,
           crop: effectiveCrop,
+          pixelAspectMode,
+          colorInterpretation,
           premultipliedAlpha,
           alphaBleed,
           sequenceFps,
@@ -287,8 +336,8 @@ export function VideoImportModal(props: {
     const sx = e.clientX;
     const sy = e.clientY;
     const onMove = (ev: PointerEvent): void => {
-      const dx = (ev.clientX - sx) / scale;
-      const dy = (ev.clientY - sy) / scale;
+      const dx = (ev.clientX - sx) / sourceToPreviewX;
+      const dy = (ev.clientY - sy) / sourceToPreviewY;
       let next: CropRect;
       if (mode === 'move') {
         next = { ...start, x: start.x + dx, y: start.y + dy };
@@ -348,6 +397,8 @@ export function VideoImportModal(props: {
         matchesConversionParams(a.provenance, {
           targetFps: projectFps,
           crop: effectiveCrop,
+          pixelAspectMode,
+          colorInterpretation,
           premultipliedAlpha,
           alphaBleed,
           sequenceFps,
@@ -355,7 +406,7 @@ export function VideoImportModal(props: {
     );
     if (!duplicatePossible) {
       // No prior import could possibly match — no up-front hash; import straight.
-      await runConversion(effectiveCrop, undefined);
+      await runConversion(effectiveCrop, pixelAspectMode, colorInterpretation, undefined);
       return;
     }
     // A duplicate is possible — hash up front (cancellable) to confirm.
@@ -384,6 +435,8 @@ export function VideoImportModal(props: {
       sourceSha256,
       targetFps: projectFps,
       crop: effectiveCrop,
+      pixelAspectMode,
+      colorInterpretation,
       premultipliedAlpha,
       alphaBleed,
       sequenceFps,
@@ -394,11 +447,13 @@ export function VideoImportModal(props: {
       setPhase({ kind: 'duplicate', sourceSha256, candidates: sizeMatches });
       return;
     }
-    await runConversion(effectiveCrop, sourceSha256);
+    await runConversion(effectiveCrop, pixelAspectMode, colorInterpretation, sourceSha256);
   }
 
   async function runConversion(
     crop: CropRect | undefined,
+    aspectMode: PixelAspectMode,
+    colorMode: VideoColorInterpretation,
     precomputedHash: string | undefined,
   ): Promise<void> {
     const conv = converter.current;
@@ -436,6 +491,9 @@ export function VideoImportModal(props: {
         file: props.file,
         targetFps: projectFps,
         crop,
+        sampleAspectRatio: probe.sampleAspectRatio,
+        pixelAspectMode: aspectMode,
+        colorInterpretation: colorMode,
         premultipliedAlpha,
         alphaBleed,
         onProgress: (ratio) =>
@@ -471,8 +529,9 @@ export function VideoImportModal(props: {
       // silently). The produced bytes must decode IN THIS BROWSER, at the expected
       // post-crop dimensions, with a real duration — or the conversion FAILS LOUDLY
       // and nothing is stored. Also the duration measurement (`Duration: N/A` sources).
-      const expectedW = crop?.width ?? probe.width;
-      const expectedH = crop?.height ?? probe.height;
+      const expected = displayDimensions(probe, crop, aspectMode);
+      const expectedW = expected.width;
+      const expectedH = expected.height;
       const verdict = await timed('playability-verify', () =>
         conv.verifyConvertedClip(bytes, expectedW, expectedH),
       );
@@ -545,6 +604,8 @@ export function VideoImportModal(props: {
             probe,
             targetFps: projectFps,
             crop,
+            pixelAspectMode: aspectMode,
+            colorInterpretation: colorMode,
             sourceSha256,
             sourceBytes: sourceByteSize(props.file),
             premultipliedAlpha,
@@ -607,7 +668,7 @@ export function VideoImportModal(props: {
           .map(([k, v]) => `${k}: ${String(v)} ms`)
           .join(
             ', ',
-          )} (corrections: premultiplied=${String(premultipliedAlpha)}, bleed=${String(alphaBleed)})`,
+          )} (picture=${aspectMode}, color=${colorMode}, corrections: premultiplied=${String(premultipliedAlpha)}, bleed=${String(alphaBleed)})`,
       );
       setPhase({
         kind: 'result',
@@ -717,7 +778,14 @@ export function VideoImportModal(props: {
           <>
             <ModalButton
               variant="secondary"
-              onClick={() => void runConversion(effectiveCrop, phase.sourceSha256)}
+              onClick={() =>
+                void runConversion(
+                  effectiveCrop,
+                  pixelAspectMode,
+                  colorInterpretation,
+                  phase.sourceSha256,
+                )
+              }
             >
               Convert again
             </ModalButton>
@@ -761,7 +829,7 @@ export function VideoImportModal(props: {
         {phase.kind === 'probing' && (
           <div className={s.meta} role="status">
             <span className={s.spinner} aria-hidden />
-            Probing {sourceName}…
+            Checking {sourceName} format and first frame…
           </div>
         )}
 
@@ -770,9 +838,14 @@ export function VideoImportModal(props: {
             {phase.reason === 'no-stream' ? (
               <Callout variant="danger">
                 {sequence !== null
-                  ? `${sourceName} could not be read as an image sequence — ffmpeg found no decodable frame in it.`
-                  : `${sourceName} could not be read as a video — ffmpeg found no decodable video stream in it.`}{' '}
-                The log below names the reason (codec / container).
+                  ? `“${sourceName}” contains no readable image-sequence frame.`
+                  : `“${sourceName}” contains no readable video track. Re-export it as ${VIDEO_FORMATS_OPAQUE}; for transparency use ${VIDEO_FORMATS_WITH_ALPHA}.`}
+              </Callout>
+            ) : phase.reason === 'decode-failed' ? (
+              <Callout variant="danger">
+                {sequence !== null
+                  ? `“${sourceName}” was recognized as an image sequence, but its first frame could not be decoded. Re-export the frames as numbered PNG files.`
+                  : decodeFailureMessage(sourceName)}
               </Callout>
             ) : (
               // OUR worker crashed — the file may be fine; never blame it here.
@@ -782,9 +855,12 @@ export function VideoImportModal(props: {
               </Callout>
             )}
             {phase.logTail.length > 0 && (
-              <pre className={s.logTail} data-testid="video-probe-log">
-                {phase.logTail.join('\n')}
-              </pre>
+              <details className={s.technicalDetails}>
+                <summary className={s.technicalSummary}>Technical details</summary>
+                <pre className={s.logTail} data-testid="video-probe-log">
+                  {phase.logTail.join('\n')}
+                </pre>
+              </details>
             )}
           </>
         )}
@@ -792,7 +868,13 @@ export function VideoImportModal(props: {
         {probe !== null && phase.kind !== 'probing' && phase.kind !== 'probe-failed' && (
           <>
             <div className={s.meta} data-testid="video-probe-meta">
-              {sourceName} — {probe.width}×{probe.height}
+              {sourceName} — {[containerLabel, codecLabel, formatLabel].filter(Boolean).join(' · ')}
+              {[containerLabel, codecLabel, formatLabel].some(Boolean) ? ' · ' : ''}
+              {probe.width}×{probe.height}
+              {displaySize !== null &&
+              (displaySize.width !== probe.width || displaySize.height !== probe.height)
+                ? ` → ${String(displaySize.width)}×${String(displaySize.height)} square pixels`
+                : ''}
               {probe.fps > 0 ? `, ${String(probe.fps)} fps` : ''} ·{' '}
               {(probe.durationMs / 1000).toFixed(2)} s → VP8+alpha WebM at {String(projectFps)} fps
             </div>
@@ -821,12 +903,34 @@ export function VideoImportModal(props: {
 
             {posterUrl !== null && (
               <div ref={previewRef} className={s.previewBox}>
+                {canMatchLegacyVlc && (
+                  <svg
+                    aria-hidden="true"
+                    focusable="false"
+                    width="0"
+                    height="0"
+                    style={{ position: 'absolute', overflow: 'hidden' }}
+                  >
+                    <filter id="video-legacy-vlc-colors" colorInterpolationFilters="sRGB">
+                      <feColorMatrix
+                        type="matrix"
+                        values="0 1 0 0 0  1 0 0 0 0  0 0 0 1 0  0 0 0 1 0"
+                      />
+                    </filter>
+                  </svg>
+                )}
                 <img
                   className={s.previewImg}
                   src={posterUrl}
                   alt={`First frame of ${sourceName}`}
-                  width={Math.round(probe.width * scale)}
-                  height={Math.round(probe.height * scale)}
+                  width={Math.round((displaySize?.width ?? probe.width) * displayScale)}
+                  height={Math.round((displaySize?.height ?? probe.height) * displayScale)}
+                  style={{
+                    filter:
+                      colorInterpretation === 'legacy-vlc'
+                        ? 'url(#video-legacy-vlc-colors)'
+                        : undefined,
+                  }}
                   draggable={false}
                 />
                 {cropOn && (
@@ -834,10 +938,10 @@ export function VideoImportModal(props: {
                     data-testid="video-crop-rect"
                     className={s.cropRect}
                     style={{
-                      left: crop.x * scale,
-                      top: crop.y * scale,
-                      width: crop.width * scale,
-                      height: crop.height * scale,
+                      left: crop.x * sourceToPreviewX,
+                      top: crop.y * sourceToPreviewY,
+                      width: crop.width * sourceToPreviewX,
+                      height: crop.height * sourceToPreviewY,
                     }}
                     onPointerDown={(e) => beginCropDrag(e, 'move')}
                   >
@@ -901,47 +1005,118 @@ export function VideoImportModal(props: {
               )}
             </div>
 
-            <div className={s.fieldsRow}>
-              <label className={s.fieldLabel}>
-                <input
-                  type="checkbox"
-                  checked={premultipliedAlpha}
-                  disabled={busy}
-                  data-testid="video-premultiplied-toggle"
-                  onChange={(e) => {
-                    supersedeCompletedRun();
-                    setPremultipliedAlpha(e.target.checked);
-                  }}
-                />{' '}
-                Premultiplied alpha (legacy After Effects / archive)
-              </label>
-              <span className={s.meta}>
-                {premultipliedAlpha
-                  ? 'On — un-premultiplies a legacy premultiplied (matted-against-black) source to remove the black fringe on soft edges. Makes conversion SUBSTANTIALLY slower (~3× on measured clips). A source that is already correct will be visibly damaged by this — turn it back off unless you see the fringe.'
-                  : 'Off (default) — the source is used as-is. Turn on only for a legacy premultiplied/matted source (e.g. an After Effects / rawvideo-BGRA archive clip) showing a black fringe on soft edges. Opting in makes conversion substantially slower.'}
-              </span>
-            </div>
+            {hasNonSquarePixels && sourceOutputSize !== null && pixelOutputSize !== null && (
+              <div className={s.compactSelectRow} data-testid="video-picture-shape-row">
+                <span className={s.fieldLabel}>Picture shape</span>
+                <div className={s.compactSelectControl}>
+                  <Select
+                    aria-label="Picture shape"
+                    data-testid="video-picture-shape"
+                    value={pixelAspectMode}
+                    disabled={busy}
+                    onChange={(e) => {
+                      supersedeCompletedRun();
+                      setPixelAspectMode(e.target.value as PixelAspectMode);
+                    }}
+                  >
+                    <option value="source">
+                      From file · {String(sourceOutputSize.width)}×{String(sourceOutputSize.height)}
+                    </option>
+                    <option value="pixels">
+                      Pixel dimensions · {String(pixelOutputSize.width)}×
+                      {String(pixelOutputSize.height)}
+                    </option>
+                  </Select>
+                </div>
+                <InfoTip title="Picture shape">
+                  <p>
+                    From file is the standard choice. Use Pixel dimensions only when the file’s own
+                    setting makes the picture look stretched.
+                  </p>
+                </InfoTip>
+              </div>
+            )}
 
-            <div className={s.fieldsRow}>
-              <label className={s.fieldLabel}>
-                <input
-                  type="checkbox"
-                  checked={alphaBleed}
-                  disabled={busy}
-                  data-testid="video-alpha-bleed-toggle"
-                  onChange={(e) => {
-                    supersedeCompletedRun();
-                    setAlphaBleed(e.target.checked);
-                  }}
-                />{' '}
-                Alpha bleed (edge-colour fill)
-              </label>
-              <span className={s.meta}>
-                {alphaBleed
-                  ? 'On — fills transparent regions with colour extended from the nearest content, so any residual compression leak shows local colour instead of black smudges/halos around motion. Makes conversion SUBSTANTIALLY slower (~6× with both corrections on measured clips).'
-                  : 'Off (default) — no fill. Turn on if the placed clip shows dark smudges/halos around moving content on air. Opting in makes conversion substantially slower.'}
-              </span>
-            </div>
+            {canMatchLegacyVlc && (
+              <div className={s.compactSelectRow} data-testid="video-color-interpretation-row">
+                <span className={s.fieldLabel}>Color</span>
+                <div className={s.compactSelectControl}>
+                  <Select
+                    aria-label="Color interpretation"
+                    data-testid="video-color-interpretation"
+                    value={colorInterpretation}
+                    disabled={busy}
+                    onChange={(e) => {
+                      supersedeCompletedRun();
+                      setColorInterpretation(e.target.value as VideoColorInterpretation);
+                    }}
+                  >
+                    <option value="standard">Standard file colors</option>
+                    <option value="legacy-vlc">Match VLC 3 colors</option>
+                  </Select>
+                </div>
+                <InfoTip title="QuickTime Animation colors">
+                  <p>
+                    VLC 3 reads colors in some old ARGB QuickTime files differently. Choose Match
+                    VLC 3 only when VLC is your reference; the selected look is baked into the
+                    imported clip.
+                  </p>
+                </InfoTip>
+              </div>
+            )}
+
+            <details className={s.advancedCorrections} data-testid="video-advanced-corrections">
+              <summary className={s.advancedSummary}>Advanced corrections</summary>
+              <div className={s.advancedBody}>
+                <div className={s.correctionRow}>
+                  <label className={s.fieldLabel}>
+                    <input
+                      type="checkbox"
+                      checked={premultipliedAlpha}
+                      disabled={busy}
+                      data-testid="video-premultiplied-toggle"
+                      onChange={(e) => {
+                        supersedeCompletedRun();
+                        setPremultipliedAlpha(e.target.checked);
+                      }}
+                    />{' '}
+                    Premultiplied alpha
+                  </label>
+                  <InfoTip title="Premultiplied alpha correction">
+                    <p>
+                      Use this only for a legacy premultiplied or black-matted source that shows a
+                      black fringe on soft edges. A correct straight-alpha source can be damaged by
+                      this correction.
+                    </p>
+                    <p>Conversion is substantially slower—about 3× on measured clips.</p>
+                  </InfoTip>
+                </div>
+
+                <div className={s.correctionRow}>
+                  <label className={s.fieldLabel}>
+                    <input
+                      type="checkbox"
+                      checked={alphaBleed}
+                      disabled={busy}
+                      data-testid="video-alpha-bleed-toggle"
+                      onChange={(e) => {
+                        supersedeCompletedRun();
+                        setAlphaBleed(e.target.checked);
+                      }}
+                    />{' '}
+                    Alpha bleed
+                  </label>
+                  <InfoTip title="Alpha bleed correction">
+                    <p>
+                      Use this only when the placed clip shows dark smudges or halos around moving
+                      transparent edges. It extends nearby colour into transparent regions so
+                      compression leakage does not reveal black.
+                    </p>
+                    <p>Conversion is substantially slower—about 6× when both corrections are on.</p>
+                  </InfoTip>
+                </div>
+              </div>
+            </details>
 
             {supersededRun && phase.kind === 'ready' && (
               // D-128 stale-result coherence — the cleared verdict is NAMED, not

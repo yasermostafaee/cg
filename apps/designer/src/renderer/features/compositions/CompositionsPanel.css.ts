@@ -46,6 +46,28 @@ export const iconButton = style({
   padding: 0,
 });
 
+export const addLookButton = style({
+  width: '24px',
+  height: '24px',
+  padding: 0,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  color: colors.textMuted,
+  borderRadius: '0.2rem',
+});
+
+export const removeGroupButton = style({
+  width: '24px',
+  height: '24px',
+  padding: 0,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  color: colors.textMuted,
+  borderRadius: '0.2rem',
+});
+
 export const list = style({
   flex: 1,
   minHeight: 0,
@@ -54,6 +76,38 @@ export const list = style({
   display: 'flex',
   flexDirection: 'column',
   gap: '0.1rem',
+});
+
+export const lookSection = style({
+  marginTop: '0.75rem',
+  paddingTop: '0.55rem',
+  borderTop: `1px solid ${colors.border}`,
+});
+
+export const lookHeader = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.35rem',
+  minHeight: '28px',
+  padding: '0 0.25rem 0.3rem',
+});
+
+export const lookTitle = style({
+  flex: 1,
+  minWidth: 0,
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '0.3rem',
+  color: colors.text,
+  fontSize: '0.7rem',
+  fontWeight: 700,
+  letterSpacing: '0.035em',
+});
+
+export const lookEmpty = style({
+  color: colors.textMuted,
+  fontSize: '0.7rem',
+  margin: '0.15rem 0.5rem 0.35rem',
 });
 
 export const row = style({
@@ -71,6 +125,9 @@ export const row = style({
 // Active = a solid slate fill only, no border (matches the icon-rail).
 export const rowActive = style({ background: '#333642' });
 
+/** A registered Look is a behavioural subtype, not an ordinary reusable composition. */
+export const rowLook = style({ boxShadow: `inset 2px 0 0 ${colors.look}` });
+
 // `background` (active accent / transparent) is applied inline.
 export const dot = style({
   width: '9px',
@@ -80,12 +137,30 @@ export const dot = style({
   boxSizing: 'border-box',
 });
 
+export const kindIcon = style({
+  width: '16px',
+  height: '16px',
+  flexShrink: 0,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  color: colors.textMuted,
+  borderRadius: '3px',
+});
+
+export const kindIconLook = style({
+  color: colors.look,
+  background: colors.lookSurface,
+});
+
 export const name = style({
   flex: 1,
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
 });
+
+export const nameLook = style({ color: colors.text, fontWeight: 650 });
 
 /** D-115 — the "main" badge on the designated entry composition's row (accent, distinct from the
  * open-composition dot). */
@@ -153,4 +228,12 @@ export const empty = style({
   textAlign: 'center',
   padding: '0.6rem 0.5rem',
   lineHeight: 1.5,
+});
+
+export const confirmBody = style({
+  margin: 0,
+  maxWidth: '48ch',
+  color: colors.text,
+  fontSize: '0.8rem',
+  lineHeight: 1.55,
 });

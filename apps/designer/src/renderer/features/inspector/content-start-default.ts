@@ -4,7 +4,7 @@ import type { Element, Layer } from '@cg/shared-schema';
  * D-104 follow-up — the content-start marker's DEFAULT frame: the LATEST entrance keyframe
  * strictly inside `(activeIn, outPoint)` across the document's animated elements — i.e.
  * where the entrance has finished moving. Falls back to `outPoint` when there is no
- * entrance to settle (a continuous in→out animation, or none).
+ * earlier entrance settle, matching marker-less runtime behavior.
  *
  * EXTRACTED (media-phases-follow-composition) from `PlayoutSection`'s pin affordance so the
  * follow hint derives its entrance span from the SAME default — one definition, two callers
@@ -39,4 +39,21 @@ export function contentStartDefaultFrom(
   };
   for (const layer of layers) walk(layer.children);
   return settle < 0 ? outPoint : settle;
+}
+
+/**
+ * D-188 — the initial explicit Hold-start frame written by the **Set** action.
+ *
+ * Preserve a real entrance-settle frame. Only when the effective automatic start coincides
+ * with Outro start do we seed the newly-authored marker one frame earlier (when there is room).
+ * This is an authoring convenience, not a permanent range invariant: later drags may make the
+ * two explicit boundaries coincide again.
+ */
+export function holdStartSeedFrom(
+  layers: readonly Layer[],
+  activeIn: number,
+  outPoint: number,
+): number {
+  const effective = contentStartDefaultFrom(layers, activeIn, outPoint);
+  return effective < outPoint ? effective : Math.max(activeIn, outPoint - 1);
 }

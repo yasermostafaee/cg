@@ -1,5 +1,10 @@
 # Tasks — media-phases-follow-composition
 
+> The completed tasks below record the 2026-08 implementation. D-176/D-186/D-187 supersede its
+> per-media Hold/Freeze authoring; removal and regression work is tracked in
+> `align-follow-media-cursor-and-freeze-frame` and `move-hold-behavior-to-composition` rather than
+> reopening these historical implementation boxes.
+
 ## 1. Schema (additive)
 
 - [x] 1.1 `LottiePhasesSchema.source` grows `'composition'`; `holdAt` (animation frames,
