@@ -24,7 +24,7 @@
 
 - [x] 4.1 Extend the paired fake station with two programme pictures, sounds and meter streams suitable for independent stopping.
 - [x] 4.2 Add Runtime Playwright scenarios for A+B, one-feed stall, absent mapping, single selected sound/meter and stable labels after failover.
-- [ ] 4.3 Run targeted typecheck/lint/tests, strict OpenSpec validation, full local gate and local Runtime E2E.
+- [x] 4.3 Run targeted typecheck/lint/tests, strict OpenSpec validation, full local gate and local Runtime E2E.
 - [ ] 4.4 Push the exact commit to `dev`, record the completed green Linux `ci` and `e2e` run URL here, and complete the 0.12.6 installer candidate only afterward.
 - [x] 4.5 Re-run the focused Runtime DOM/E2E coverage for the always-visible reserve controls and no-signal placeholder.
 - [x] 4.6 Run focused DOM/E2E coverage for both A+B arrangements and persistence.
