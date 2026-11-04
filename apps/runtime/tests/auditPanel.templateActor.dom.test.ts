@@ -157,7 +157,7 @@ describe('REPLY 1 §R5 — a template stop reads as the template in the LOG', ()
 
     const slot = rows()[0]?.querySelector<HTMLElement>('[data-audit-slot]');
     expect(slot?.getAttribute('data-audit-slot')).toBe('1-10');
-    expect(slot?.textContent).toBe('on 1-10');
+    expect(slot?.textContent).toBe('CH 1 · layer 10');
   });
 
   it('an UNCONFIGURED console still names the layer, as "not a row"', async () => {
@@ -168,7 +168,7 @@ describe('REPLY 1 §R5 — a template stop reads as the template in the LOG', ()
 
     const line = (rows()[0]?.textContent ?? '').trim();
     expect(line).toContain('layer 1-10 (not a row)');
-    expect(line).toMatch(/^\d{2}:\d{2}:\d{2}templatestop/);
+    expect(line).toMatch(/^\d{2}:\d{2}:\d{2}\d{4}-\d{2}-\d{2}templatestop/);
   });
 
   it('🔴 the WHOLE LINE, measured — this is the string quoted in ADR 0009', async () => {
@@ -201,17 +201,16 @@ describe('REPLY 1 §R5 — a template stop reads as the template in the LOG', ()
       true on the plant (UTC+3:30) and false on CI.
     */
     expect(line, 'the three fixed columns changed order or wording').toMatch(
-      /^\d{2}:\d{2}:\d{2}templatestop/,
+      /^\d{2}:\d{2}:\d{2}\d{4}-\d{2}-\d{2}templatestop/,
     );
     expect(line, 'the row is not named the operator way').toContain('logo · station logo');
     // The display-name rule renders the source file's stem, spaced — `station logo`, not the id.
     expect(line, 'the template name is gone').toContain('station logo');
-    expect(line, 'the coordinate is gone').toContain('on 1-10');
-    // `B-211` — ids shortened for the eye, complete in the title and on the copy button.
-    expect(line, 'the item id is gone').toContain('e602d912');
-    expect(line, 'the template id is gone').toContain('f00a5363');
-    expect(line, 'the outcome is gone').toContain('ok');
-    // And the full ids are still one hover away, which is what makes the shortening safe.
-    expect(rows()[0]?.innerHTML).toContain(TEMPLATE_STOP.itemId as string);
+    expect(line, 'the coordinate is gone').toContain('CH 1 · layer 10');
+    expect(line, 'the outcome is gone').toContain('Succeeded');
+    // Technical ids stay complete in the details pane instead of crowding every row.
+    const details = dialog().querySelector('[data-audit-details]');
+    expect(details?.textContent).toContain(TEMPLATE_STOP.itemId as string);
+    expect(details?.textContent).toContain(TEMPLATE_STOP.templateId as string);
   });
 });

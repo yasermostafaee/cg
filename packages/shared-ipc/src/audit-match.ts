@@ -52,6 +52,9 @@ export function auditMatches(entry: AuditEntry, filter: AuditFilter, naming: Aud
   if (filter.actor !== undefined && entry.actor !== filter.actor) return false;
   if (filter.action !== undefined && entry.action !== filter.action) return false;
   if (filter.outcome !== undefined && entry.outcome !== filter.outcome) return false;
+  const timestamp = Date.parse(entry.ts);
+  if (filter.from !== undefined && timestamp < Date.parse(filter.from)) return false;
+  if (filter.to !== undefined && timestamp > Date.parse(filter.to)) return false;
   const q = filter.search?.trim().toLocaleLowerCase() ?? '';
   if (q === '') return true;
   return auditShownWords(entry, naming).join(' ').toLocaleLowerCase().includes(q);

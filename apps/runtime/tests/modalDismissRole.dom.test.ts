@@ -129,6 +129,7 @@ describe('a dismiss-only footer is `cancel` — the rule AuditPanel states, appl
         downloadLogs: () => Promise.resolve({ accepted: false }),
         // `R-083` — the Log reads pages.
         page: () => Promise.resolve({ entries: [], next: null }),
+        count: () => Promise.resolve({ total: 0 }),
         onAppended: () => () => undefined,
         health: () => Promise.resolve({ path: null, writable: false, lastError: null }),
         // `B-141` — the panel reads the acting console's self-declared name on open.
@@ -138,7 +139,12 @@ describe('a dismiss-only footer is `cancel` — the rule AuditPanel states, appl
       templates: { list: () => Promise.resolve([]) },
       fixedLayers: {
         config: () => Promise.resolve(null),
+        banks: () => Promise.resolve([]),
         onConfigChanged: () => () => undefined,
+      },
+      stationChannels: {
+        list: () => Promise.resolve({ channels: [] }),
+        onChanged: () => () => undefined,
       },
     };
     const onClose = vi.fn();

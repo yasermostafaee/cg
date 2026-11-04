@@ -4399,16 +4399,33 @@ left), in the splash's visual language. **Why:** the owner's run of `0.10.0`. **
 **Notes:** `@cg/splash-kit` holds the splash's timing only; its visual language — the mark, the ground,
 the type — lives in `apps/runtime/index.html` and the `--r-splash-*` tokens.
 
-## [~] R-083 — The audit log is paged from CG Bridge, filtered there, and rotated ⟨priority: medium⟩ — FILED 2026-10-03 by `CONSOLE-POLISH-01` (v3) §9 · `openspec/changes/console-polish/`
+## [~] R-083 — The audit log is paged from CG Bridge, filtered there, and browsable in detail ⟨priority: medium⟩ — FILED 2026-10-03 by `CONSOLE-POLISH-01` (v3) §9; expanded by the owner 2026-11-02 and 2026-11-04 · `openspec/changes/console-polish/`
 
-**What:** the LOG dialog reads the audit 100 rows a page, newest first, with a cursor; the list is
-virtualised; filters (channel, user, action, result) and the search run on CG Bridge; a new row appears at
-the top live. The audit file rotates by day and by size and keeps a set limit; `Download logs` carries
-every kept audit file. **Why:** the dialog read the whole file on every open. **Acceptance:**
+**What:** CG Bridge reads the audit newest first with an opaque cursor and never reads more than the
+requested page. CG Control presents explicit 25-row pages with Previous/Next controls; filters (channel,
+user, action, result), search, and an inclusive From/To date range run on CG Bridge before a page is cut.
+Selecting a row opens a persistent details pane with the complete event facts and copyable technical ids,
+while the table keeps the operator-facing summary. A new matching row appears live on page 1; while another
+page is open it is announced without shifting the page. The audit file rotates by day and by size and keeps
+a set limit; `Download logs` carries every kept audit file. The table has a dedicated Channel column using
+the Playout catalogue name (falling back to `CH N`), the full row is the details control with a visible hover,
+and the footer shows the exact total matching rows from CG Bridge without delaying the first page. **Why:** the dialog originally read the whole
+file on every open, and its later infinite-scroll table still made a specific incident difficult to inspect,
+bound by date, or revisit page by page. **Acceptance:**
 
-- WHEN the audit holds 50,000 rows THEN the dialog opens in under 1 s with no more than 100 rows rendered
-- WHEN the next page is asked, or a filter set THEN the right rows come back
-- WHEN a row is written while the dialog is open THEN it appears at the top
+- WHEN the audit holds 50,000 rows THEN the dialog opens in under 1 s with no more than 25 event rows in
+  the document
+- WHEN Next/Previous is pressed THEN one stable 25-row page replaces the other and the page number changes
+- WHEN a filter, search, From date or To date changes THEN page 1 is read again and every returned row
+  satisfies that filter; an impossible range is refused before a request
+- WHEN a row is selected THEN its operator-facing outcome and complete event facts appear in the details
+  pane, with full technical ids copyable there rather than filling the table row
+- WHEN rows are shown THEN each carries its channel name in a Channel column, the row hover makes its click
+  affordance clear, and no separate `View details` action is shown
+- WHEN the Log opens or its filter changes THEN the exact permitted matching total is shown independently of
+  the 25 rows on the current page
+- WHEN a matching row is written while page 1 is open THEN it appears at the top; on an older page the
+  operator is told a new event exists without that page shifting
 
 ## [~] R-084 — Show the Playout build in Versions once the Playout publishes it ⟨priority: low⟩ — FILED 2026-10-04 by `CONSOLE-POLISH-01-A` A3; BUILT 2026-10-04 by `RELEASE-0111-01-A` A1 (change `console-polish`, tasks §11)
 

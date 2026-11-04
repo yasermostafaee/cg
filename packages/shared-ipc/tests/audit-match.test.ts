@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { AuditEntry } from '@cg/shared-schema';
 import {
   AuditFilterSchema,
+  AuditCountChannel,
   AuditPageChannel,
   auditChannelOf,
   auditMatches,
@@ -83,6 +84,18 @@ describe('auditMatches', () => {
     expect(auditMatches(TAKE, { action: 'take', outcome: 'ok' }, NAMING)).toBe(false);
   });
 
+  it('keeps both inclusive time boundaries and refuses rows outside either one', () => {
+    expect(
+      auditMatches(
+        TAKE,
+        { from: '2026-10-03T09:00:00.000Z', to: '2026-10-03T09:00:00.000Z' },
+        NAMING,
+      ),
+    ).toBe(true);
+    expect(auditMatches(TAKE, { from: '2026-10-03T09:00:00.001Z' }, NAMING)).toBe(false);
+    expect(auditMatches(TAKE, { to: '2026-10-03T08:59:59.999Z' }, NAMING)).toBe(false);
+  });
+
   it('🔴 the search reads what the row SHOWS: its row’s and template’s names, the code, the shown line, the timing', () => {
     const hit = (search: string): boolean => auditMatches(TAKE, { search }, NAMING);
     expect(hit('زیرنویس'), 'the row’s alias').toBe(true);
@@ -102,11 +115,21 @@ describe('the wire', () => {
     expect(
       AuditPageChannel.request.safeParse({
         cursor: { file: '2026-10-03T09-00-00.000Z', before: 4096 },
-        filter: { channel: 1, search: 'x' },
+        filter: {
+          channel: 1,
+          search: 'x',
+          from: '2026-10-03T00:00:00.000Z',
+          to: '2026-10-03T23:59:59.999Z',
+        },
+        limit: 25,
       }).success,
     ).toBe(true);
     expect(AuditPageChannel.response.safeParse({ entries: [TAKE], next: null }).success).toBe(true);
+    expect(AuditCountChannel.request.safeParse({ filter: { channel: 1 } }).success).toBe(true);
+    expect(AuditCountChannel.response.safeParse({ total: 42 }).success).toBe(true);
+    expect(AuditCountChannel.response.safeParse({ total: -1 }).success).toBe(false);
     expect(AuditFilterSchema.safeParse({ search: '' }).success).toBe(false);
     expect(AuditFilterSchema.safeParse({ channel: 0 }).success).toBe(false);
+    expect(AuditPageChannel.request.safeParse({ limit: 101 }).success).toBe(false);
   });
 });

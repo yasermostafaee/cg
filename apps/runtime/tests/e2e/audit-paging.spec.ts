@@ -8,12 +8,12 @@ import type { ConnectionConfig, FixedLayerBank } from '@cg/shared-ipc';
 import { expect, test } from '@playwright/test';
 
 /**
- * 🔴 `CONSOLE-POLISH-01` §9 (`R-083`) — the prompt's test: _"50,000 rows open in under 1 s with 100
- * rendered; paging and a filter return the right rows; control: a new row appears at the top live."_
+ * 🔴 `CONSOLE-POLISH-01` §9 (`R-083`) — 50,000 rows open through explicit 25-row pages;
+ * paging and a filter return the right rows; control: a new row appears at the top live.
  *
  * A real CG Bridge (in process, auth off) whose record holds 50,000 rows, a real `@cg/amcp-mock`
  * behind it, and the real console in Chromium — the only place "how many rows are in the document"
- * and "scrolling to the end brings the next page" can be measured (golden rule 12c).
+ * and the operator-facing paging controls can be measured (golden rule 12c).
  *
  * 🔴 Isolation: the record, the stack and the templates are scratch files; the mock is on loopback.
  */
@@ -84,10 +84,18 @@ async function station(): Promise<string> {
   return bridge.url;
 }
 
-test('🔴 §9 — 50,000 rows: the newest within a second, at most 100 in the document; the end brings the next page; a filter brings only its rows; control: a new row arrives at the top', async ({
+test('🔴 §9 — 50,000 rows: explicit 25-row pages, server filters, and live page 1', async ({
   page,
 }) => {
   const url = await station();
+  const auditFrames: string[] = [];
+  page.on('websocket', (socket) => {
+    socket.on('framesent', (event) => {
+      if (typeof event.payload === 'string' && event.payload.includes('audit.page')) {
+        auditFrames.push(event.payload);
+      }
+    });
+  });
   await page.addInitScript(`window.__CG_BRIDGE_URL__ = ${JSON.stringify(url)};`);
   await page.goto('/');
   await expect(page.getByRole('region', { name: 'Layers' })).toBeVisible({ timeout: 20_000 });
@@ -104,11 +112,27 @@ test('🔴 §9 — 50,000 rows: the newest within a second, at most 100 in the d
   await door.click();
   const log = page.getByRole('dialog', { name: 'Audit log' });
   const rows = log.locator('[data-audit-row]');
-  const itemOf = (i: number) => rows.nth(i).locator('[data-audit-id="item"]');
-  await expect(itemOf(0)).toHaveAttribute('data-audit-full-id', 'item-49999', { timeout: 1000 });
+  const itemOf = (i: number) => rows.nth(i);
+  await expect(itemOf(0)).toHaveAttribute('data-audit-item-id', 'item-49999', { timeout: 1000 });
+  expect(auditFrames.at(-1)).toContain('"limit":25');
   expect(Date.now() - opened, 'the first rows within 1 s of opening').toBeLessThan(1000);
-  await expect(log.locator('[data-audit-count]')).toHaveText('100+ events');
-  await expect(log.locator('[data-audit-rows]')).toHaveAttribute('data-audit-held', '100');
+  await expect(log.locator('[data-audit-count]')).toHaveText('25 events');
+  await expect(log.locator('[data-audit-total]')).toHaveText('50000 events total', {
+    timeout: 20_000,
+  });
+  await expect(log.locator('[data-audit-rows]')).toHaveAttribute('data-audit-held', '25');
+  await expect(itemOf(0).locator('[data-audit-channel]')).toHaveText('CH 1');
+  await expect(itemOf(0)).not.toContainText('View details');
+  // Opening the dialog can leave the pointer over its first row, depending on the viewport.
+  // Measure the resting colour from a known pointer position before proving the hover state.
+  await page.mouse.move(0, 0);
+  const hoverTarget = itemOf(1); // Row 1 is selected automatically to populate Event details.
+  const restBackground = await hoverTarget.evaluate(
+    (element) => getComputedStyle(element).backgroundColor,
+  );
+  await hoverTarget.hover();
+  await expect(hoverTarget).toHaveCSS('background-color', 'rgb(40, 52, 67)');
+  expect(restBackground).not.toBe('rgb(40, 52, 67)');
   const firstWindow = await rows.count();
   test
     .info()
@@ -116,44 +140,37 @@ test('🔴 §9 — 50,000 rows: the newest within a second, at most 100 in the d
       { type: 'rows in the document', description: String(firstWindow) },
       { type: 'first rows after the press (ms)', description: String(Date.now() - opened) },
     );
-  expect(firstWindow, 'rows in the document').toBeGreaterThan(0);
-  expect(firstWindow, 'rows in the document').toBeLessThanOrEqual(100);
-  // Fewer than the page holds: the list renders the rows in view, not the page.
-  expect(firstWindow).toBeLessThan(100);
+  expect(firstWindow, 'rows in the document').toBe(25);
 
-  // ── the end of the list brings the next page ──
-  const table = log.locator('[data-audit-table]');
-  await table.evaluate((el) => {
-    el.scrollTop = el.scrollHeight;
-  });
-  await expect(log.locator('[data-audit-rows]')).toHaveAttribute('data-audit-held', '200');
-  await table.evaluate((el) => {
-    el.scrollTop = el.scrollHeight;
-  });
-  // Still a window, not the 200 held — and its last row is the 200th newest.
-  await expect(rows.last().locator('[data-audit-id="item"]')).toHaveAttribute(
-    'data-audit-full-id',
-    /^item-49[78]\d\d$/,
-  );
-  expect(await rows.count()).toBeLessThanOrEqual(100);
+  // ── explicit Next/Previous use the bridge cursor ──
+  await log.getByRole('button', { name: 'Next audit page' }).click();
+  await expect(log.locator('[data-audit-page]')).toHaveText('Page 2');
+  await expect(itemOf(0)).toHaveAttribute('data-audit-item-id', 'item-49974');
+  await log.getByRole('button', { name: 'Previous audit page' }).click();
+  await expect(log.locator('[data-audit-page]')).toHaveText('Page 1');
+  await expect(itemOf(0)).toHaveAttribute('data-audit-item-id', 'item-49999');
 
   // ── a filter brings only its rows, newest first ──
   await log.locator('#audit-actor').fill('سارا');
-  await expect(itemOf(0)).toHaveAttribute('data-audit-full-id', 'item-49995');
-  await expect(itemOf(1)).toHaveAttribute('data-audit-full-id', 'item-49990');
+  await expect(itemOf(0)).toHaveAttribute('data-audit-item-id', 'item-49995');
+  await expect(itemOf(1)).toHaveAttribute('data-audit-item-id', 'item-49990');
   const actors = await log
     .locator('[data-audit-actor]')
     .evaluateAll((els) => els.map((el) => el.getAttribute('data-audit-actor')));
   expect(actors.length).toBeGreaterThan(0);
   expect(new Set(actors)).toEqual(new Set(['سارا']));
+  await expect(log.locator('[data-audit-total]')).toHaveText('10000 events total', {
+    timeout: 20_000,
+  });
 
   // ── CONTROL: a row recorded now arrives at the top, live ──
   await log.locator('[data-audit-reset]').click();
-  await expect(itemOf(0)).toHaveAttribute('data-audit-full-id', 'item-49999');
+  await expect(itemOf(0)).toHaveAttribute('data-audit-item-id', 'item-49999');
   bridge?.runtime.recordAuthzRefusal({ actor: 'Nima', actorSub: 'u-9', channel: 'stack.take' });
   const top = rows.first();
   await expect(top.locator('[data-audit-actor]')).toHaveAttribute('data-audit-actor', 'Nima');
   await expect(top).toContainText('refused');
+  await expect(log.locator('[data-audit-total]')).toHaveText('50001 events total');
   // …and the rows held before it are still there beneath it.
-  await expect(itemOf(1)).toHaveAttribute('data-audit-full-id', 'item-49999');
+  await expect(itemOf(1)).toHaveAttribute('data-audit-item-id', 'item-49999');
 });

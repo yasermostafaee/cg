@@ -139,9 +139,14 @@ for channel 1 at `127.0.0.1`, so they dial `127.0.0.1:9250`. CI runs one worker;
    is caught by reading each file through one handle and checking the current file's first row through it
    (a stale list is read again). Rotation at local midnight and at 20 MB; retention 90 days and 200 MB in
    all, the row being written included, oldest first — an incident is often looked at weeks later, and
-   200 MB is about 600,000 rows. `audit.recent` stays for its callers. The dialog holds the pages it read,
-   renders the rows in view (`ui/useVirtualWindow.ts`, measured row heights), asks for the next page near
-   the end, and counts what it holds (`N events`, `N+ events`).
+   200 MB is about 600,000 rows. `audit.recent` stays for its callers. `audit.page` accepts a requested
+   limit capped at 100 plus inclusive ISO `from`/`to` bounds in the canonical filter. The dialog asks for
+   25 rows, keeps the opaque cursor for every visited page, and exposes explicit Previous/Next navigation;
+   changing any filter clears those cursors and returns to page 1. Twenty-five rows need no virtual window,
+   which also makes row focus and a persistent selected-event details pane deterministic. The date fields
+   are local calendar dates in the console and are converted to the local day's UTC start/end before being
+   sent. A live row updates page 1; an older page instead gets a pending-events fact, because inserting above
+   it would silently change which incidents that page contains.
 7. **`B-305`: an address, not a port.** `pgm-return.spec`'s subject IS the rule port, so it keeps 9250 and
    moves its station and its fake feed to `127.0.0.3` (a loopback address of its own, as `dev-station.spec`
    uses `127.0.0.2`). No CLI flag is added for a test.

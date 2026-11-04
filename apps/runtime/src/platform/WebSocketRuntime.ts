@@ -1,5 +1,6 @@
 import type { AuditEntry, RetainedAirState, StackItemState } from '@cg/shared-schema';
 import {
+  AuditCountChannel,
   AuditHealthChannel,
   AuditAppendedChannel,
   AuditPageChannel,
@@ -2426,6 +2427,7 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#invoke(AuditRecentChannel, req),
     // `CONSOLE-POLISH-01` (`R-083`) — the Log, a page at a time, and the rows recorded since.
     page: (req: ChannelRequest<typeof AuditPageChannel>) => this.#invoke(AuditPageChannel, req),
+    count: (req: ChannelRequest<typeof AuditCountChannel>) => this.#invoke(AuditCountChannel, req),
     onAppended: (handler: (entry: AuditEntry) => void): Unsubscribe =>
       this.#auditAppendedSubs.add(handler),
     // B-141 — the positive control the panel reads beside the tail, so an empty

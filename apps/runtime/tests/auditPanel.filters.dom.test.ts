@@ -173,7 +173,7 @@ describe('§8 — the reference’s filters, asked of CG Bridge (`R-083`)', () =
     // ASKED of the bridge — not a narrowing of rows already held.
     expect(requests.at(-1)?.filter).toEqual({ outcome: 'failed' });
     expect(rows()).toHaveLength(1);
-    expect(rows()[0]?.querySelector('[data-audit-outcome]')?.textContent).toBe('failed');
+    expect(rows()[0]?.querySelector('[data-audit-outcome]')?.textContent).toBe('Failed');
     expect(count()).toBe('1 event');
     const reset = dialog().querySelector<HTMLButtonElement>('[data-audit-reset]');
     expect(reset).not.toBeNull();
@@ -223,18 +223,34 @@ describe('§8 — the reference’s filters, asked of CG Bridge (`R-083`)', () =
     expect(count()).toBe('0 events');
   });
 
-  it('golden rule 11 — the coordinate stays in the entry, beside the name, and the code under the outcome', async () => {
+  it('asks the bridge for an inclusive date range and refuses an impossible range', async () => {
+    const requests = stubBridge([OK_ON_BED_1, REFUSED_ON_98]);
+    await render();
+    await type('#audit-from', '2026-09-08');
+    await type('#audit-to', '2026-09-08');
+    expect(requests.at(-1)?.filter).toEqual({
+      from: new Date('2026-09-08T00:00:00.000').toISOString(),
+      to: new Date('2026-09-08T23:59:59.999').toISOString(),
+    });
+
+    const beforeImpossible = requests.length;
+    await type('#audit-from', '2026-09-09');
+    expect(dialog().querySelector('[data-audit-range-error]')?.textContent).toContain(
+      'From must not be after To',
+    );
+    expect(requests).toHaveLength(beforeImpossible);
+    expect(rows()).toHaveLength(0);
+  });
+
+  it('golden rule 11 — the coordinate stays beside the name, while the refusal code is in details', async () => {
     stubBridge([REFUSED_ON_98]);
     await render();
     const row = rows()[0];
-    expect(row?.querySelector('[data-audit-slot]')?.textContent).toBe('on 1-98');
-    // The code is still on the row (`B-209`), now under the outcome it explains.
-    expect(row?.querySelector('[data-audit-outcome]')?.textContent).toBe('failed');
-    expect(row?.querySelector('[data-audit-error-code]')?.textContent).toBe('amcp-404');
-    expect(
-      row
-        ?.querySelector('[data-audit-outcome]')
-        ?.parentElement?.contains(row.querySelector('[data-audit-error-code]')),
-    ).toBe(true);
+    expect(row?.querySelector('[data-audit-slot]')?.textContent).toBe('CH 1 · layer 98');
+    expect(row?.querySelector('[data-audit-outcome]')?.textContent).toBe('Failed');
+    const details = dialog().querySelector('[data-audit-details]');
+    expect(details?.textContent).toContain('amcp-404');
+    expect(details?.textContent).toContain('CG 1-98 ADD 0');
+    expect(row?.textContent).not.toContain('amcp-404');
   });
 });

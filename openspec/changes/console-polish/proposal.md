@@ -45,9 +45,12 @@ worked; what follows is everything else he met.
 - **Sign-in (`R-082`).** One card for the Playout sign-in, CG Bridge's sign-in and first-run: the Apasai
   mark and the product name, the version at the foot, a show/hide control on every password (a new shared
   `PasswordInput`), Enter from any field, one error line.
-- **The audit (`R-083`).** `audit.page`: 100 rows a page, newest first, a cursor, the filters and the search
-  run on CG Bridge; `audit.appended` pushes new rows; the list is virtualised. The audit file rotates daily
-  and at 20 MB, and keeps 90 days and at most 200 MB; `Download logs` carries every kept audit file.
+- **The audit (`R-083`).** `audit.page`: at most 100 rows a request, newest first, an opaque cursor, and the
+  filters, search and inclusive date bounds run on CG Bridge. CG Control asks for explicit 25-row pages with
+  Previous/Next, and selecting a row opens its complete details and copyable technical ids in a side pane.
+  `audit.appended` puts a matching new row at the top of page 1 and announces it without shifting an older
+  page. The audit file rotates daily and at 20 MB, and keeps 90 days and at most 200 MB; `Download logs`
+  carries every kept audit file.
 - **e2e (`B-305`).** `pgm-return.spec` runs its station and fake feed on its own loopback address.
 
 ## Not changed

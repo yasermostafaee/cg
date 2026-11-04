@@ -172,23 +172,24 @@ describe('B-210 — the time column is the control room clock', () => {
     // "local, not UTC" wherever the suite runs, and the Tehran arithmetic is pinned in
     // `auditFormat.test.ts`.
     const expected = auditTimeParts(LOGO_ON_LAYER_90.ts);
-    expect(cell?.textContent).toBe(expected.time);
-    expect(cell?.textContent).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+    expect(cell?.querySelector('strong')?.textContent).toBe(expected.time);
+    expect(cell?.querySelector('small')?.textContent).toBe(expected.date);
+    expect(cell?.querySelector('strong')?.textContent).toMatch(/^\d{2}:\d{2}:\d{2}$/);
     expect(cell?.getAttribute('title')).toContain('2026-09-04T12:18:47.561Z');
     // The raw ISO string is NOT what the cell shows.
     expect(cell?.textContent).not.toContain('Z');
   });
 
-  it('prints the date ONCE per day, as a band, only where the local day changes', async () => {
+  it('prints the local date beneath each row time', async () => {
     stubBridge([LOGO_ON_LAYER_90, REFUSED_ON_BED_1, YESTERDAY], [LOGO, THREE_FRAMES], BANK);
     await render();
-    const bands = [...(openDialog()?.querySelectorAll('[data-audit-date]') ?? [])].map((b) =>
-      b.getAttribute('data-audit-date'),
-    );
     const today = auditTimeParts(LOGO_ON_LAYER_90.ts).date;
     const yesterday = auditTimeParts(YESTERDAY.ts).date;
-    // Two rows share the first day and get ONE band; the older row gets its own.
-    expect(bands).toEqual(today === yesterday ? [today] : [today, yesterday]);
+    expect(rows().map((row) => row.querySelector('[data-audit-time] small')?.textContent)).toEqual([
+      today,
+      today,
+      yesterday,
+    ]);
   });
 });
 
@@ -203,20 +204,17 @@ describe('B-211 — names first, ids beneath and never deleted', () => {
     expect(logo?.querySelector('[data-audit-names]')?.textContent).toBe('Layer 90 · ارم روی انتن');
   });
 
-  it('keeps BOTH ids: shortened in the text, complete in the title, and copyable', async () => {
+  it('keeps both complete ids in the selected event details and makes them copyable', async () => {
     stubBridge([REFUSED_ON_BED_1], [THREE_FRAMES], BANK);
     await render();
-    const row = rows()[0];
-    const item = row?.querySelector<HTMLElement>('[data-audit-id="item"]');
-    const template = row?.querySelector<HTMLElement>('[data-audit-id="template"]');
-    expect(item?.getAttribute('data-audit-full-id')).toBe(REFUSED_ON_BED_1.itemId);
-    expect(template?.getAttribute('data-audit-full-id')).toBe(REFUSED_ON_BED_1.templateId);
-    expect(item?.querySelector('code')?.textContent).toBe('item-9e064614…');
-    expect(item?.querySelector('code')?.getAttribute('title')).toBe(REFUSED_ON_BED_1.itemId);
-    expect(template?.querySelector('code')?.textContent).toBe('e506e319…');
-    // The copy control names what it copies.
-    expect(item?.querySelector('button[aria-label="Copy item id"]')).not.toBeNull();
-    expect(template?.querySelector('button[aria-label="Copy template id"]')).not.toBeNull();
+    const details = openDialog()?.querySelector('[data-audit-details]');
+    const item = details?.querySelector('[data-audit-technical="Item ID"]');
+    const template = details?.querySelector('[data-audit-technical="Template ID"]');
+    expect(item?.querySelector('code')?.textContent).toBe(REFUSED_ON_BED_1.itemId);
+    expect(template?.querySelector('code')?.textContent).toBe(REFUSED_ON_BED_1.templateId);
+    expect(item?.querySelector('button[aria-label="Copy Item ID"]')).not.toBeNull();
+    expect(template?.querySelector('button[aria-label="Copy Template ID"]')).not.toBeNull();
+    expect(rows()[0]?.textContent).not.toContain(REFUSED_ON_BED_1.itemId);
   });
 
   it('the copy button writes the FULL id to the clipboard', async () => {
@@ -224,7 +222,9 @@ describe('B-211 — names first, ids beneath and never deleted', () => {
     const writeText = vi.fn(() => Promise.resolve());
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     await render();
-    const button = rows()[0]?.querySelector<HTMLButtonElement>('button[aria-label="Copy item id"]');
+    const button = openDialog()?.querySelector<HTMLButtonElement>(
+      '[data-audit-details] button[aria-label="Copy Item ID"]',
+    );
     await act(async () => {
       button?.click();
       await Promise.resolve();
@@ -251,7 +251,9 @@ describe('B-211 — names first, ids beneath and never deleted', () => {
     await render();
     const row = rows()[0];
     expect(row?.querySelector('[data-audit-names]')?.textContent).toBe('Layer 90');
-    expect(row?.querySelector('[data-audit-id="template"] code')?.textContent).toBe('f00a5363…');
+    expect(
+      openDialog()?.querySelector('[data-audit-technical="Template ID"] code')?.textContent,
+    ).toBe(LOGO_ON_LAYER_90.templateId);
   });
 
   it('an import names only the template — it has no row', async () => {
@@ -260,7 +262,7 @@ describe('B-211 — names first, ids beneath and never deleted', () => {
     const row = rows()[0];
     // The FILE name outranks the manifest name — the same rule the row and the picker use.
     expect(row?.querySelector('[data-audit-names]')?.textContent).toBe('ارم روی انتن');
-    expect(row?.querySelector('[data-audit-id="item"]')).toBeNull();
+    expect(openDialog()?.querySelector('[data-audit-technical="Item ID"]')).toBeNull();
   });
 
   /*
@@ -278,16 +280,16 @@ describe('B-211 — names first, ids beneath and never deleted', () => {
   it('renders the recorded command beside the code', async () => {
     stubBridge([REFUSED_ON_BED_1], [THREE_FRAMES], BANK);
     await render();
-    const row = rows()[0];
-    expect(row?.querySelector('[data-audit-error-code]')?.textContent).toBe('amcp-404');
-    expect(row?.querySelector('[data-audit-command]')?.textContent).toContain('CG 1-58 ADD 0');
-    expect(row?.querySelector('[data-audit-command]')?.textContent).toContain(':64373/template/');
+    const details = openDialog()?.querySelector('[data-audit-details]');
+    expect(details?.textContent).toContain('amcp-404');
+    expect(details?.textContent).toContain('CG 1-58 ADD 0');
+    expect(details?.textContent).toContain(':64373/template/');
   });
 
   it('an entry recorded before the field existed shows no command line at all', async () => {
     stubBridge([LOGO_ON_LAYER_90], [LOGO], BANK);
     await render();
-    expect(rows()[0]?.querySelector('[data-audit-command]')).toBeNull();
+    expect(openDialog()?.querySelector('[data-audit-technical="Command"]')).toBeNull();
   });
 });
 

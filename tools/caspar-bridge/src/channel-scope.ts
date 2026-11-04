@@ -1,6 +1,7 @@
 import type { AuditEntry, StackItemState } from '@cg/shared-schema';
 import {
   AuditAppendedChannel,
+  AuditCountChannel,
   AuditPageChannel,
   AuditRecentChannel,
   EmptiedAirNoticeChangedChannel,
@@ -297,6 +298,8 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   [AuditRecentChannel.name]: AUDIT,
   // `R-083` — filtered by the grant before the page is cut; projected again, as every read is.
   [AuditPageChannel.name]: AUDIT_PAGE,
+  // The handler has already applied this socket's channel grant; the scalar is per socket.
+  [AuditCountChannel.name]: PER_SOCKET,
   // ── reads computed for this socket already ──
   'auth.state': PER_SOCKET,
   'channels.list': PER_SOCKET,

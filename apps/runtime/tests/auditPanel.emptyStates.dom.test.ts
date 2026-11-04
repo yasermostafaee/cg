@@ -123,7 +123,7 @@ describe('B-141 — the audit panel tells three empty states apart', () => {
     stubBridge({ configured: false, path: null, errorCount: 0, lastError: null });
     await render();
     expect(text()).toContain('No audit record is configured');
-    expect(text()).toContain('--audit-log-path');
+    expect(text()).toContain('Audit recording is unavailable');
     // The whole point: the reassuring sentence must be ABSENT here.
     expect(text()).not.toContain('No audit entries yet.');
   });
@@ -136,8 +136,8 @@ describe('B-141 — the audit panel tells three empty states apart', () => {
       lastError: 'ENOSPC: no space left on device',
     });
     await render();
-    expect(text()).toContain('MISSING');
-    expect(text()).toContain('3 failures');
+    expect(text()).toContain('may be missing');
+    expect(text()).toContain('3 write failures');
     // The operator needs both the cause and the place, or the report is unactionable.
     expect(text()).toContain('ENOSPC: no space left on device');
     expect(text()).toContain('/var/cg/audit.ndjson');
@@ -147,7 +147,7 @@ describe('B-141 — the audit panel tells three empty states apart', () => {
   it('a SINGLE failure reads "1 failure", not "1 failures"', async () => {
     stubBridge({ configured: true, path: null, errorCount: 1, lastError: 'EACCES' });
     await render();
-    expect(text()).toContain('1 failure)');
+    expect(text()).toContain('1 write failure)');
   });
 
   it('CONFIGURED, HEALTHY AND GENUINELY EMPTY — and ONLY here — the quiet sentence appears', async () => {
@@ -222,6 +222,6 @@ describe('B-141 — the audit panel tells three empty states apart', () => {
     stubBridge(HEALTHY, [row]);
     await render();
     expect(text()).toContain('live-source-unassigned');
-    expect(text()).toContain('failed');
+    expect(text()).toContain('Failed');
   });
 });

@@ -23,8 +23,11 @@ export function auditPageOf(
   page: (req: {
     cursor?: AuditCursor;
     filter?: AuditFilter;
+    limit?: number;
   }) => Promise<{ entries: AuditEntry[]; next: AuditCursor | null }>;
-  requests: { cursor?: AuditCursor; filter?: AuditFilter }[];
+  count: (req: { filter?: AuditFilter }) => Promise<{ total: number }>;
+  requests: { cursor?: AuditCursor; filter?: AuditFilter; limit?: number }[];
+  countRequests: { filter?: AuditFilter }[];
 } {
   const naming: AuditNaming = {
     bank: names.bank ?? null,
@@ -33,17 +36,25 @@ export function auditPageOf(
       return t === undefined ? null : templateDisplayName(t);
     },
   };
-  const requests: { cursor?: AuditCursor; filter?: AuditFilter }[] = [];
+  const requests: { cursor?: AuditCursor; filter?: AuditFilter; limit?: number }[] = [];
+  const countRequests: { filter?: AuditFilter }[] = [];
   return {
     requests,
+    countRequests,
     page: (req) => {
       requests.push(req);
       const matching = entries.filter((e) => auditMatches(e, req.filter ?? {}, naming));
       const start = req.cursor?.before ?? 0;
-      const end = start + AUDIT_PAGE_SIZE;
+      const end = start + (req.limit ?? AUDIT_PAGE_SIZE);
       return Promise.resolve({
         entries: matching.slice(start, end),
         next: end < matching.length ? { file: 'stub', before: end } : null,
+      });
+    },
+    count: (req) => {
+      countRequests.push(req);
+      return Promise.resolve({
+        total: entries.filter((entry) => auditMatches(entry, req.filter ?? {}, naming)).length,
       });
     },
   };

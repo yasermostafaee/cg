@@ -7644,6 +7644,10 @@ input[type='checkbox']:disabled:checked {
   width: var(--r-audit-field-w);
   flex: none;
 }
+.cg-audit-field--date {
+  width: max-content;
+  min-width: 146px;
+}
 .cg-audit-field > label {
   font-size: var(--r-audit-field-label-text);
   font-weight: var(--r-weight-medium);
@@ -7662,6 +7666,11 @@ input[type='checkbox']:disabled:checked {
 .cg-audit-tools .cg-btn {
   min-height: var(--r-audit-select-h);
 }
+.cg-audit-range-error {
+  margin: 0;
+  color: var(--r-danger);
+  font-size: var(--r-audit-small-text);
+}
 /*
  * THE CONSOLE STRIP IS GONE (`OPERATOR-NAME-SWEEP-01`).
  *
@@ -7672,20 +7681,30 @@ input[type='checkbox']:disabled:checked {
  * — left `theme.ts` in the same commit, because `tokenHome` only catches a token READ but not
  * declared, never one declared with nothing left to read it.
  */
-.cg-audit-table {
+.cg-audit-browser {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   border: 1px solid var(--r-border);
   border-radius: var(--r-radius-sm);
+  overflow: hidden;
+}
+.cg-audit-browser[data-audit-details-open='true'] {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 32%);
+}
+.cg-audit-table {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
   font-size: var(--r-audit-td-text);
 }
 .cg-audit-head,
 .cg-audit-row {
   display: grid;
   grid-template-columns:
-    var(--r-audit-col-time) var(--r-audit-col-actor) var(--r-audit-col-action) minmax(0, 1fr)
-    var(--r-audit-col-outcome);
+    var(--r-audit-col-time) var(--r-audit-col-actor) var(--r-audit-col-action)
+    var(--r-audit-col-actor) minmax(0, 1fr) var(--r-audit-col-outcome);
   align-items: start;
 }
 .cg-audit-head {
@@ -7703,11 +7722,28 @@ input[type='checkbox']:disabled:checked {
   white-space: nowrap;
 }
 .cg-audit-row {
+  width: 100%;
+  min-height: 0;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
   border-bottom: 1px solid var(--r-border);
+  background: transparent;
+  box-shadow: none;
+  text-align: start;
+  font: inherit;
   color: var(--r-text-secondary);
+  cursor: pointer;
 }
-.cg-audit-row:hover {
-  background: var(--r-table-row-hover);
+.cg-audit-row.cg-btn:hover:not(:disabled) {
+  background: var(--r-row-hover-bg);
+  border-color: var(--r-border);
+  filter: none;
+}
+.cg-audit-row[aria-pressed='true'] {
+  background: var(--r-row-selected-fill);
+  box-shadow: inset 3px 0 0 var(--r-accent);
 }
 .cg-audit-row > span {
   display: block;
@@ -7715,11 +7751,29 @@ input[type='checkbox']:disabled:checked {
   padding: var(--r-audit-td-pad);
 }
 .cg-audit-time {
+  display: flex !important;
+  flex-direction: column;
+  gap: var(--r-audit-line-gap);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+.cg-audit-time > small {
+  color: var(--r-text-muted);
+  font-size: var(--r-audit-small-text);
+}
 .cg-audit-actor {
   overflow-wrap: anywhere;
+}
+.cg-audit-channel {
+  display: flex !important;
+  flex-direction: column;
+  gap: var(--r-audit-line-gap);
+  overflow-wrap: anywhere;
+  color: var(--r-text);
+}
+.cg-audit-channel > small {
+  color: var(--r-text-muted);
+  font-size: var(--r-audit-small-text);
 }
 /* The item cell — full ink for the names, the small rank for the ids and the refused line. */
 .cg-audit-item {
@@ -7730,7 +7784,6 @@ input[type='checkbox']:disabled:checked {
   font-weight: var(--r-weight-medium);
 }
 .cg-audit-slot,
-.cg-audit-ids,
 /*
  * `TIMING-WIRE-22 · DELTA B · R3` — the VALUE a `set-pass-timing` row carried, named in the
  * existing selector rather than given a declaration of its own. It is the same rank as the
@@ -7750,13 +7803,6 @@ input[type='checkbox']:disabled:checked {
   margin-top: var(--r-audit-line-gap);
   font-size: var(--r-audit-small-text);
   color: var(--r-text-muted);
-}
-.cg-audit-ids code {
-  font-family: var(--r-font-mono);
-}
-.cg-audit-ids .cg-btn {
-  min-height: 0;
-  padding: 0 var(--r-space-1);
 }
 .cg-audit-command {
   display: block;
@@ -7807,6 +7853,96 @@ input[type='checkbox']:disabled:checked {
   color: var(--r-accent);
   text-decoration: underline;
   text-underline-offset: 4px;
+}
+.cg-audit-follow,
+.cg-audit-pagination {
+  display: flex;
+  align-items: center;
+  gap: var(--r-space-2);
+}
+.cg-audit-pagination {
+  flex: none;
+  color: var(--r-text-secondary);
+  font-size: var(--r-audit-count-text);
+}
+.cg-audit-details {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--r-space-4);
+  border-inline-start: 1px solid var(--r-border-strong);
+  background: var(--r-surface-raised);
+  color: var(--r-text-secondary);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--r-space-4);
+}
+.cg-audit-details__head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--r-text);
+}
+.cg-audit-details__title {
+  display: flex;
+  flex-direction: column;
+  gap: var(--r-space-1);
+  color: var(--r-text);
+}
+.cg-audit-details__facts {
+  width: 100%;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--r-space-2) var(--r-space-4);
+  margin: 0;
+}
+.cg-audit-details__facts dt {
+  color: var(--r-text-muted);
+}
+.cg-audit-details__facts dd {
+  margin: 0;
+  color: var(--r-text);
+  overflow-wrap: anywhere;
+}
+.cg-audit-details__technical {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--r-space-2);
+}
+.cg-audit-details__technical h3 {
+  margin: 0 0 var(--r-space-1);
+  font-size: var(--r-audit-th-text);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--r-text-muted);
+}
+.cg-audit-detail-value {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--r-space-1) var(--r-space-2);
+  padding: var(--r-space-2);
+  border: 1px solid var(--r-border);
+  border-radius: var(--r-radius-sm);
+  background: var(--r-surface);
+}
+.cg-audit-detail-value > span {
+  grid-column: 1 / -1;
+  color: var(--r-text-muted);
+  font-size: var(--r-audit-small-text);
+}
+.cg-audit-detail-value code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--r-text);
+  font-family: var(--r-font-mono);
+}
+.cg-audit-detail-value .cg-btn {
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0 var(--r-space-1);
 }
 
 /* ── THE ROW'S AUDIO BUTTON — the reference's `.row-audio-button` ──────────────

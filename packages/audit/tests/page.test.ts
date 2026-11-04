@@ -4,7 +4,12 @@ import * as path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AuditEntry } from '@cg/shared-schema';
 import { auditFiles, rotatedFiles, rotatedPath, stampOf } from '../src/files.js';
-import { AuditRecordMovedError, readAuditPage, type AuditPageCursor } from '../src/reader.js';
+import {
+  AuditRecordMovedError,
+  readAuditCount,
+  readAuditPage,
+  type AuditPageCursor,
+} from '../src/reader.js';
 import { AuditWriter, type AuditRotation } from '../src/writer.js';
 
 /**
@@ -83,6 +88,20 @@ describe('readAuditPage', () => {
     expect(page.entries.every((e) => e.actor === 'سارا')).toBe(true);
     expect(page.entries[0]?.itemId).toBe('item-2997');
     expect(page.entries[1]?.itemId).toBe('item-2994');
+  });
+
+  it('counts every accepted row independently of the visible page', async () => {
+    const filePath = path.join(await dir(), 'bridge-audit.ndjson');
+    await seed(filePath, 3_000);
+    const page = await readAuditPage({
+      filePath,
+      limit: 25,
+      accept: (entry) => entry.actor === 'سارا',
+    });
+    expect(page.entries).toHaveLength(25);
+    await expect(
+      readAuditCount({ filePath, accept: (entry) => entry.actor === 'سارا' }),
+    ).resolves.toBe(1_000);
   });
 
   it('the last page says there is nothing older', async () => {

@@ -108,6 +108,13 @@ export interface ReadAuditPageOptions {
   accept: (entry: AuditEntry) => boolean;
 }
 
+export interface ReadAuditCountOptions {
+  /** The CURRENT file's path; rotated files are found beside it. */
+  filePath: string;
+  /** Which rows belong to the asking console and its active filter. */
+  accept: (entry: AuditEntry) => boolean;
+}
+
 /** How far back one read reaches. The first page of a long record reads its last chunk only. */
 const CHUNK_BYTES = 64 * 1024;
 
@@ -153,6 +160,26 @@ export async function readAuditPage(
   }
   throw new AuditRecordMovedError(
     'The audit record kept rotating while it was read. Read it again.',
+  );
+}
+
+/**
+ * Count the exact retained rows accepted by the caller without holding them in memory.
+ *
+ * This is deliberately independent of {@link readAuditPage}: the first page keeps its bounded,
+ * one-chunk fast path while CG Control asks for the total in parallel. The same before/after file
+ * list check protects the number from a rotation crossing the read.
+ */
+export async function readAuditCount(options: ReadAuditCountOptions): Promise<number> {
+  for (let attempt = 0; attempt < PAGE_ATTEMPTS; attempt++) {
+    if (attempt > 0) await wait(RETRY_WAIT_MS * attempt);
+    const files = await auditFiles(options.filePath);
+    const total = await countOnce(options, files);
+    if (total === MOVED) continue;
+    if (sameFiles(files, await auditFiles(options.filePath))) return total;
+  }
+  throw new AuditRecordMovedError(
+    'The audit record kept rotating while it was counted. Count it again.',
   );
 }
 
@@ -234,6 +261,33 @@ async function readOnce(
     }
   }
   return { entries, next: null };
+}
+
+async function countOnce(
+  options: ReadAuditCountOptions,
+  files: readonly AuditFile[],
+): Promise<number | typeof MOVED> {
+  let total = 0;
+  for (const file of files) {
+    let fh: fs.promises.FileHandle;
+    try {
+      fh = await fs.promises.open(file.path, 'r');
+    } catch {
+      if (file.current) return MOVED;
+      continue;
+    }
+    try {
+      if (file.current && !(await isStill(fh, file))) return MOVED;
+      const size = (await fh.stat()).size;
+      for await (const line of linesBackward(fh, size)) {
+        const entry = parseRow(line.text);
+        if (entry !== null && options.accept(entry)) total += 1;
+      }
+    } finally {
+      await fh.close();
+    }
+  }
+  return total;
 }
 
 /** Is the file this handle reads still the one `file` lists (by its first row)? */

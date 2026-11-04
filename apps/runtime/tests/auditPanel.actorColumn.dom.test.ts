@@ -149,7 +149,7 @@ describe('guard item 27 — the actor COLUMN the reference does not draw', () =>
     const head = dialog().querySelector('[data-audit-head]');
     expect(head).not.toBeNull();
     const words = [...(head?.querySelectorAll('span') ?? [])].map((s) => s.textContent?.trim());
-    expect(words).toEqual(['Time', 'Actor', 'Action', 'Item / detail', 'Outcome']);
+    expect(words).toEqual(['Time', 'Actor', 'Action', 'Channel', 'Item', 'Result']);
     // The header cell is marked so nothing can rename or drop it unnoticed…
     const actorHead = head?.querySelector('[data-audit-actor-head]');
     expect(actorHead?.textContent).toBe('Actor');

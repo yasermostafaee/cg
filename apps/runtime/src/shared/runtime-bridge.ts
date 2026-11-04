@@ -28,6 +28,7 @@ import type {
   StationStray,
   StationStraysChannel,
   StationTakeOffAirChannel,
+  AuditCountChannel,
   AuditHealthChannel,
   AuditPageChannel,
   AuditRecentChannel,
@@ -1065,6 +1066,10 @@ export interface RuntimeBridge {
     page(
       req: ChannelRequest<typeof AuditPageChannel>,
     ): Promise<ChannelResponse<typeof AuditPageChannel>>;
+    /** Exact filtered total, loaded independently so it cannot delay the first visible page. */
+    count(
+      req: ChannelRequest<typeof AuditCountChannel>,
+    ): Promise<ChannelResponse<typeof AuditCountChannel>>;
     /** `R-083` — every row CG Bridge records from now on that this console may be told. */
     onAppended(handler: (entry: AuditEntry) => void): Unsubscribe;
     /**

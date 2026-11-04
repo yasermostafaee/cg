@@ -156,6 +156,11 @@ export function fillBridgeStub<T extends object>(stub: T): T {
     list: () => Promise.resolve({ channels: [] }),
     onChanged: () => () => undefined,
   };
+  // `R-083` owner follow-up — old focused Audit stubs predate the independent total read.
+  const audit = cg['audit'] as Record<string, unknown> | undefined;
+  if (audit !== undefined) {
+    audit['count'] ??= (): Promise<{ total: number }> => Promise.resolve({ total: 0 });
+  }
   cg['setup'] ??= setupStub();
   /*
     `FIELD-FIXES-01` K — the header's every-channel silence reads the live-layers ledger now. EMPTY

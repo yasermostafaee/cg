@@ -126,6 +126,21 @@ was stashed before each push so the gate judged only what was pushed.
 - [x] 7.6 `playout-auth-reload.spec.ts:170` polls the record, and reads every file of it (it read once;
       red once under four local workers, green alone 2/2)
 
+### 7A. Owner expansion — explicit pages, date range and event details (2026-11-02)
+
+- [x] 7A.1 Extend the canonical audit filter with inclusive ISO From/To bounds and let `audit.page` accept a
+      requested positive size capped at 100; keep channel authorization and every filter before the cut
+- [x] 7A.2 Replace infinite scroll with stable 25-row Previous/Next pages; reset to page 1 after a filter;
+      keep live page 1 current without shifting an older page
+- [x] 7A.3 Add the selected-event details pane, copyable full technical ids, local date range controls and
+      impossible-range refusal; keep actor and real layer coordinate visible in operator terms
+- [x] 7A.4 Unit/integration tests for time bounds, requested limit, cursor navigation and live rows; DOM and
+      Chromium coverage for selection/details, date range, page reset and no more than 25 event rows
+- [ ] 7A.5 Full uncached gate, local Runtime e2e, push to `dev`, and record the completed green Linux e2e URL
+- [x] 7A.6 Owner follow-up: remove the repeated `View details` text, make the row hover/click affordance
+      explicit, add the Playout channel-name column, and show the exact independently loaded filtered total;
+      cover the wire, bridge grant, DOM and Chromium paths
+
 ## 8. Close
 
 - [x] 8.1 `pnpm openspec validate --all --strict` (92 passed); the report

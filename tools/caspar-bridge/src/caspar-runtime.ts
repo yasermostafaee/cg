@@ -245,6 +245,7 @@ import {
   AuditWriter,
   DEFAULT_AUDIT_ROTATION,
   auditFiles,
+  readAuditCount,
   readAuditPage,
   readRecentEntries,
   type AuditFile,
@@ -15326,6 +15327,34 @@ export class CasparRuntime {
   }
 
   /**
+   * The exact retained total for one console and filter. It is a separate read from `auditPage`
+   * so a long count never delays the first visible rows in CG Control.
+   */
+  async auditCount(
+    filter: AuditFilter,
+    visible: (entry: AuditEntry) => boolean,
+  ): Promise<{ total: number }> {
+    const naming: AuditNaming = {
+      bank: this.fixedLayerBanks(),
+      templateLabel: (templateId) => {
+        const template = this.#templates.getAny(templateId);
+        return template === null ? null : templateDisplayName(template);
+      },
+    };
+    const accept = (entry: AuditEntry): boolean =>
+      visible(entry) && auditMatches(entry, filter, naming);
+    if (this.#auditLogPath !== null) {
+      try {
+        return { total: await readAuditCount({ filePath: this.#auditLogPath, accept }) };
+      } catch (err) {
+        if (err instanceof AuditRecordMovedError) throw err;
+        // As with the page read, an ordinary disk failure falls back to the in-memory tail.
+      }
+    }
+    return { total: this.#audit.filter(accept).length };
+  }
+
+  /**
    * 🔴 `CONSOLE-POLISH-01` (`R-083`) — **ONE PAGE OF THE RECORD**, newest first: up to
    * {@link AUDIT_PAGE_SIZE} rows before `cursor` that pass `filter` (`auditMatches`, worded as the
    * console words a row: this station's banks and its template list) AND `visible` (the asking
@@ -15339,6 +15368,7 @@ export class CasparRuntime {
     cursor: AuditCursor | undefined,
     filter: AuditFilter,
     visible: (entry: AuditEntry) => boolean,
+    limit = AUDIT_PAGE_SIZE,
   ): Promise<{ entries: AuditEntry[]; next: AuditCursor | null }> {
     const naming: AuditNaming = {
       bank: this.fixedLayerBanks(),
@@ -15354,7 +15384,7 @@ export class CasparRuntime {
         return await readAuditPage({
           filePath: this.#auditLogPath,
           ...(cursor !== undefined ? { cursor } : {}),
-          limit: AUDIT_PAGE_SIZE,
+          limit,
           accept,
         });
       } catch (err) {
@@ -15371,7 +15401,7 @@ export class CasparRuntime {
     const before = cursor?.file === MEMORY_AUDIT_CURSOR ? cursor.before : this.#auditSeq;
     const entries: AuditEntry[] = [];
     let i = Math.max(0, this.#auditSeq - before);
-    for (; i < this.#audit.length && entries.length < AUDIT_PAGE_SIZE; i++) {
+    for (; i < this.#audit.length && entries.length < limit; i++) {
       const entry = this.#audit[i];
       if (entry !== undefined && accept(entry)) entries.push(entry);
     }

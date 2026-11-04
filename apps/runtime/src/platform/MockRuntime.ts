@@ -2888,6 +2888,7 @@ export class MockRuntime {
   auditPage(
     cursor: AuditCursor | undefined,
     filter: AuditFilter,
+    limit = AUDIT_PAGE_SIZE,
   ): { entries: AuditEntry[]; next: AuditCursor | null } {
     const naming: AuditNaming = {
       bank: this.fixedLayerBanks(),
@@ -2899,7 +2900,7 @@ export class MockRuntime {
     const before = cursor?.file === MOCK_AUDIT_CURSOR ? cursor.before : this.#auditSeq;
     const entries: AuditEntry[] = [];
     let i = Math.max(0, this.#auditSeq - before);
-    for (; i < this.#audit.length && entries.length < AUDIT_PAGE_SIZE; i++) {
+    for (; i < this.#audit.length && entries.length < limit; i++) {
       const entry = this.#audit[i];
       if (entry !== undefined && auditMatches(entry, filter, naming)) entries.push(entry);
     }
@@ -2907,6 +2908,18 @@ export class MockRuntime {
       entries,
       next: i < this.#audit.length ? { file: MOCK_AUDIT_CURSOR, before: this.#auditSeq - i } : null,
     };
+  }
+
+  /** Exact mock parity for the independently loaded audit total. */
+  auditCount(filter: AuditFilter): { total: number } {
+    const naming: AuditNaming = {
+      bank: this.fixedLayerBanks(),
+      templateLabel: (templateId) => {
+        const template = this.templateGet(templateId);
+        return template === null ? null : templateDisplayName(template);
+      },
+    };
+    return { total: this.#audit.filter((entry) => auditMatches(entry, filter, naming)).length };
   }
 
   // ── settings ────────────────────────────────────────────────────────

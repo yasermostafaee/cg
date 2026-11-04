@@ -100,6 +100,9 @@ interface Page {
   entries: AuditEntry[];
   next: AuditCursor | null;
 }
+interface Count {
+  total: number;
+}
 
 describe('audit.page', () => {
   it('🔴 a console holding channel 1 gets a FULL page of channel-1 rows, newest first — control: a `*` grant gets both', async () => {
@@ -124,6 +127,8 @@ describe('audit.page', () => {
     expect(second.entries).toHaveLength(50);
     expect(second.entries.at(-1)?.itemId).toBe('item-0');
     expect(second.next).toBeNull();
+    const scopedTotal = (await operator.ask('c1', 'audit.count', takes)).payload as Count;
+    expect(scopedTotal.total).toBe(150);
 
     const admin = await openClient(handle);
     await admin.authenticate(
@@ -133,6 +138,8 @@ describe('audit.page', () => {
     const all = (await admin.ask('p3', 'audit.page', { filter: { action: 'take' } }))
       .payload as Page;
     expect(all.entries.map((e) => e.itemId).slice(0, 2)).toEqual(['item-299', 'item-298']);
+    const allTotal = (await admin.ask('c2', 'audit.count', takes)).payload as Count;
+    expect(allTotal.total).toBe(300);
   });
 
   it('the filters and the search run on CG Bridge — the search finds a row by the NAME it shows', async () => {
@@ -157,6 +164,38 @@ describe('audit.page', () => {
     const byChannel = (await admin.ask('a3', 'audit.page', { filter: { channel: 2 } }))
       .payload as Page;
     expect(byChannel.entries.every((e) => e.slot?.channel === 2)).toBe(true);
+  });
+
+  it('applies inclusive date bounds before a requested 25-row page is cut', async () => {
+    const { handle, playout } = await station(80);
+    const admin = await openClient(handle);
+    await admin.authenticate(
+      'a',
+      (await playout.issueToken({ user: 'admin', cgChannels: '*' })).token,
+    );
+    const from = new Date(ROWS_DAY + 20_000).toISOString();
+    const to = new Date(ROWS_DAY + 59_000).toISOString();
+    const first = (
+      await admin.ask('range-1', 'audit.page', {
+        limit: 25,
+        filter: { action: 'take', from, to },
+      })
+    ).payload as Page;
+    expect(first.entries).toHaveLength(25);
+    expect(first.entries[0]?.itemId).toBe('item-59');
+    expect(first.entries.at(-1)?.itemId).toBe('item-35');
+    expect(first.next).not.toBeNull();
+    const second = (
+      await admin.ask('range-2', 'audit.page', {
+        limit: 25,
+        cursor: first.next,
+        filter: { action: 'take', from, to },
+      })
+    ).payload as Page;
+    expect(second.entries.map((entry) => entry.itemId)).toEqual(
+      Array.from({ length: 15 }, (_, index) => `item-${String(34 - index)}`),
+    );
+    expect(second.next).toBeNull();
   });
 
   it('🔴 a row recorded while a console is connected is pushed to it — control: not to a console that may not see it', async () => {

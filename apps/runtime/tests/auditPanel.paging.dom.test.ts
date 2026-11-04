@@ -13,11 +13,9 @@ import { auditPageOf } from './support/auditPage.js';
 /**
  * 🔴 `CONSOLE-POLISH-01` (`R-083`) — **THE LOG, A PAGE AT A TIME, AND LIVE.**
  *
- * What jsdom can say: what the dialog ASKS CG Bridge for, that it holds one page and renders a
- * bounded slice of it, and that a row pushed while it is open joins the top only if a page would have
- * held it. What it cannot say — how many rows a real viewport renders, and that scrolling to the end
- * brings the next page — is measured in Chromium (`audit-paging.spec.ts`), because jsdom has no
- * layout (golden rule 12c).
+ * What jsdom can say: what the dialog ASKS CG Bridge for, that it holds one explicit 25-row page,
+ * that Previous/Next use the bridge cursor, and that a row pushed while page 1 is open refreshes the
+ * page. Chromium measures the same contract against a real bridge (`audit-paging.spec.ts`).
  */
 
 const BANKS: FixedLayerBank[] = [
@@ -59,14 +57,20 @@ afterEach(async () => {
 });
 
 function stubBridge(entries: AuditEntry[]): ReturnType<typeof auditPageOf>['requests'] {
-  const { page, requests } = auditPageOf(entries, { bank: BANKS });
+  const { page, count, requests } = auditPageOf(entries, { bank: BANKS });
   const stub = {
     audit: {
       canDownloadLogs: () => false,
       downloadLogs: () => Promise.resolve({ accepted: false }),
       page,
+      count,
       onAppended: (handler: (entry: AuditEntry) => void) => {
-        push = handler;
+        push = (entry) => {
+          if (!entries.some((held) => held.itemId === entry.itemId && held.ts === entry.ts)) {
+            entries.unshift(entry);
+          }
+          handler(entry);
+        };
         return () => {
           push = null;
         };
@@ -81,6 +85,21 @@ function stubBridge(entries: AuditEntry[]): ReturnType<typeof auditPageOf>['requ
     },
     templates: { list: () => Promise.resolve([]) },
     fixedLayers: { config: () => Promise.resolve(BANKS[0]), banks: () => Promise.resolve(BANKS) },
+    stationChannels: {
+      list: () =>
+        Promise.resolve({
+          channels: [
+            { channel: 1, named: { id: 'news', name: 'News' }, declared: true, sources: ['bank'] },
+            {
+              channel: 2,
+              named: { id: 'sports', name: 'Sports' },
+              declared: true,
+              sources: ['bank'],
+            },
+          ],
+        }),
+      onChanged: () => () => undefined,
+    },
   };
   (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
   return requests;
@@ -115,25 +134,36 @@ const dialog = (): HTMLElement => {
   return d;
 };
 const rows = (): HTMLElement[] => [...dialog().querySelectorAll<HTMLElement>('[data-audit-row]')];
-const items = (): string[] =>
-  rows().map(
-    (r) => r.querySelector('[data-audit-full-id]')?.getAttribute('data-audit-full-id') ?? '',
-  );
+const items = (): string[] => rows().map((r) => r.getAttribute('data-audit-item-id') ?? '');
 const count = (): string => dialog().querySelector('[data-audit-count]')?.textContent ?? '';
+const total = (): string => dialog().querySelector('[data-audit-total]')?.textContent ?? '';
 
 describe('`R-083` — a page from CG Bridge', () => {
-  it('🔴 opens on the first page — no cursor, no filter — holds 100, renders a bounded slice of it', async () => {
+  it('🔴 opens on the first 25-row page and Previous/Next use the bridge cursor', async () => {
     const requests = stubBridge(Array.from({ length: 250 }, (_, n) => row(n)));
     await render();
-    expect(requests[0]).toEqual({ filter: {} });
-    expect(dialog().querySelector('[data-audit-rows]')?.getAttribute('data-audit-held')).toBe(
-      '100',
+    expect(requests[0]).toEqual({ filter: {}, limit: 25 });
+    expect(dialog().querySelector('[data-audit-rows]')?.getAttribute('data-audit-held')).toBe('25');
+    expect(count()).toBe('25 events');
+    expect(total()).toBe('250 events total');
+    expect(rows()).toHaveLength(25);
+    expect(items()[0]).toBe('item-0');
+
+    const next = dialog().querySelector<HTMLButtonElement>('[aria-label="Next audit page"]');
+    await act(async () => next?.click());
+    await settle();
+    expect(requests.at(-1)).toMatchObject({ filter: {}, limit: 25 });
+    expect(requests.at(-1)?.cursor).toBeDefined();
+    expect(dialog().querySelector('[data-audit-page]')?.textContent).toBe('Page 2');
+    expect(items()[0]).toBe('item-25');
+
+    const previous = dialog().querySelector<HTMLButtonElement>(
+      '[aria-label="Previous audit page"]',
     );
-    expect(count()).toBe('100+ events');
-    // Not every row held is in the document (jsdom's no-layout first slice; the real window is
-    // measured in Chromium).
-    expect(rows().length).toBeGreaterThan(0);
-    expect(rows().length).toBeLessThan(100);
+    await act(async () => previous?.click());
+    await settle();
+    expect(requests.at(-1)).toEqual({ filter: {}, limit: 25 });
+    expect(dialog().querySelector('[data-audit-page]')?.textContent).toBe('Page 1');
     expect(items()[0]).toBe('item-0');
   });
 
@@ -143,8 +173,8 @@ describe('`R-083` — a page from CG Bridge', () => {
     const select = dialog().querySelector<HTMLSelectElement>('#audit-channel');
     expect([...(select?.options ?? [])].map((o) => o.textContent)).toEqual([
       'All channels',
-      'CH 1',
-      'CH 2',
+      'CH 1 · News',
+      'CH 2 · Sports',
     ]);
     await act(async () => {
       if (select === null) return;
@@ -154,9 +184,21 @@ describe('`R-083` — a page from CG Bridge', () => {
     await settle();
     expect(requests.at(-1)?.filter).toEqual({ channel: 2 });
     expect(
-      rows().every((r) => r.querySelector('[data-audit-slot]')?.textContent?.startsWith('on 2-')),
+      rows().every((r) =>
+        r.querySelector('[data-audit-slot]')?.getAttribute('data-audit-slot')?.startsWith('2-'),
+      ),
     ).toBe(true);
     expect(rows()).toHaveLength(5);
+    expect(total()).toBe('5 events total');
+  });
+
+  it('shows the channel name in its own column and the whole row opens details', async () => {
+    stubBridge([row(0)]);
+    await render();
+    expect(dialog().querySelector('[data-audit-head]')?.textContent).toContain('Channel');
+    expect(rows()[0]?.querySelector('[data-audit-channel]')?.textContent).toContain('News');
+    expect(rows()[0]?.textContent).not.toContain('View details');
+    expect(rows()[0]?.matches('button')).toBe(true);
   });
 });
 
@@ -170,6 +212,7 @@ describe('`R-083` — a row recorded while the Log is open', () => {
     await act(async () => {
       push?.(fresh);
     });
+    await settle();
     expect(items()).toEqual(['item-new', 'item-1', 'item-2']);
     expect(count()).toBe('3 events');
 
@@ -177,6 +220,7 @@ describe('`R-083` — a row recorded while the Log is open', () => {
     await act(async () => {
       push?.(row(1));
     });
+    await settle();
     expect(items()).toEqual(['item-new', 'item-1', 'item-2']);
 
     // Under a filter it does not pass: not added.
@@ -195,6 +239,7 @@ describe('`R-083` — a row recorded while the Log is open', () => {
     await act(async () => {
       push?.(row(9, { itemId: 'item-failed', outcome: 'failed', ts: '2026-10-03T09:00:10.000Z' }));
     });
+    await settle();
     expect(items()).toEqual(['item-failed']);
   });
 });

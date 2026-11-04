@@ -65,8 +65,25 @@ export const AuditFilterSchema = z.object({
   action: AuditEntrySchema.shape.action.optional(),
   outcome: AuditEntrySchema.shape.outcome.optional(),
   search: z.string().min(1).max(200).optional(),
+  /** Inclusive UTC instant at which the requested incident window starts. */
+  from: AuditEntrySchema.shape.ts.optional(),
+  /** Inclusive UTC instant at which the requested incident window ends. */
+  to: AuditEntrySchema.shape.ts.optional(),
 });
 export type AuditFilter = z.infer<typeof AuditFilterSchema>;
+
+/**
+ * The exact number of rows the asking console may browse under the active filter.
+ *
+ * Kept separate from `audit.page` so counting a long retained record never delays the first
+ * visible page. CG Control can render the newest rows immediately and fill the total when this
+ * independent read completes.
+ */
+export const AuditCountChannel = defineChannel(
+  'audit.count',
+  z.object({ filter: AuditFilterSchema.optional() }),
+  z.object({ total: z.number().int().nonnegative() }),
+);
 
 /**
  * Where the next page starts: the record FILE, named by the time of its first row (a rotated file
@@ -94,6 +111,8 @@ export const AuditPageChannel = defineChannel(
   z.object({
     cursor: AuditCursorSchema.optional(),
     filter: AuditFilterSchema.optional(),
+    /** The console's visible page size; the bridge never returns more than its 100-row ceiling. */
+    limit: z.number().int().positive().max(AUDIT_PAGE_SIZE).optional(),
   }),
   z.object({
     entries: z.array(AuditEntrySchema).max(AUDIT_PAGE_SIZE),

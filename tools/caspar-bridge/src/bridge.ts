@@ -9,6 +9,7 @@ import { entriesUnder, fileEntries, MAX_ZIP_INPUT, zipEntries, type ZipEntry } f
 import {
   AppInfoChannel,
   AuditAppendedChannel,
+  AuditCountChannel,
   AuditHealthChannel,
   AuditPageChannel,
   AuditRecentChannel,
@@ -5312,10 +5313,23 @@ export function buildRoutes(
       scoped console could be handed fewer rows than exist); the route's projection asks the same
       predicate again, as every read's does.
     */
-    route(AuditPageChannel, 'read', 'read', (r: { cursor?: AuditCursor; filter?: AuditFilter }) => {
+    route(
+      AuditPageChannel,
+      'read',
+      'read',
+      (r: { cursor?: AuditCursor; filter?: AuditFilter; limit?: number }) => {
+        const holds = actorScope();
+        return b.auditPage(
+          r.cursor,
+          r.filter ?? {},
+          holds === null ? (): boolean => true : (e): boolean => auditRowTold(e, holds),
+          r.limit,
+        );
+      },
+    ),
+    route(AuditCountChannel, 'read', 'read', (r: { filter?: AuditFilter }) => {
       const holds = actorScope();
-      return b.auditPage(
-        r.cursor,
+      return b.auditCount(
         r.filter ?? {},
         holds === null ? (): boolean => true : (e): boolean => auditRowTold(e, holds),
       );

@@ -112,6 +112,42 @@ server and the state is simulated.
 - **WHEN** the app is in test mode **THEN** no CasparCG server is reported or shown as
   healthy — the server surface states that there is no server and the state is simulated
 
+### Requirement: The audit log is read in the operator's terms
+
+The Audit log panel SHALL show each entry's time as the console's LOCAL wall-clock time to the second,
+with the record's own UTC stamp in its details, and SHALL show the local date with the time in the row.
+It SHALL name the layer an entry concerns as the Layers table names that row (the configured alias, else
+the default `Layer N` / `Bed N`), or — for a layer outside the declared bank — as CasparCG names it with
+the fact that it is not a row stated, and SHALL name the template as the picker names it. The table SHALL
+keep operator-facing names, coordinate and outcome; selecting the row SHALL move its item id, template id,
+actor id, hashes, command and other technical facts into the persistent details pane, complete and copyable.
+The record on disk SHALL be unchanged.
+
+#### Scenario: The incident stamp reads as the control room clock
+
+- **WHEN** an entry stamped `2026-09-04T12:18:47.561Z` is shown on a console in `Asia/Tehran` **THEN**
+  its row reads local date `2026-09-04` and time `15:48:47`, and its details carry the UTC stamp
+
+#### Scenario: The row and the template are named
+
+- **WHEN** an entry names layer 9 in a bank whose beds are 1–9 and the template whose file was
+  `3ghab.vcg` **THEN** the row reads `Bed 1 · 3ghab`
+
+#### Scenario: A layer no row shows is named as CasparCG names it
+
+- **WHEN** an entry names layer 60 outside every half of the bank **THEN** the row reads
+  `layer 60 (not a row)`
+
+#### Scenario: Technical facts stay complete and copyable
+
+- **WHEN** an entry is selected **THEN** the details pane shows every id it carries in full and a copy
+  control writes the full value, while the table row does not expose those internal ids as its sentence
+
+#### Scenario: A refused command is shown beside its code
+
+- **WHEN** an entry carries `errorCode: amcp-404` and a recorded `command` **THEN** its details show both
+  the code and the command line
+
 ## ADDED Requirements
 
 ### Requirement: The Layers badge SHALL count current row errors only, list them, and let each be dismissed
@@ -229,20 +265,56 @@ Control` and the version **AND** the password's show control reveals the passwor
 
 ### Requirement: The LOG dialog SHALL read the audit a page at a time from CG Bridge
 
-The LOG dialog SHALL ask CG Bridge for the audit 100 rows a page, newest first, following the page's cursor as
-the list is scrolled to its end, and SHALL render only the rows in view (a virtualised list). Its filters —
-channel, user, action, result — and its search SHALL be sent to CG Bridge and applied there. A row written
-while the dialog is open SHALL appear at the top when it matches the filters.
+The LOG dialog SHALL ask CG Bridge for the audit 25 rows a page, newest first, and SHALL expose Previous and
+Next controls with the current page number. Its filters — channel, user, action, result — its search and an
+inclusive local From/To date range SHALL be sent to CG Bridge and applied there; changing any of them SHALL
+return to page 1. Selecting a row SHALL open a side pane that keeps its operator-facing outcome and complete
+event facts visible, with full technical ids copyable there rather than filling the table row. A row written
+while page 1 is open SHALL appear at the top when it matches the filters. While an older page is open, the
+dialog SHALL announce that a new matching event exists without shifting that page. The table SHALL carry a
+dedicated Channel column: the Playout catalogue name with `CH N` secondary, or `CH N` alone when no name is
+published. The whole row SHALL be the details control and SHALL have a visible hover; it SHALL NOT repeat a
+`View details` action inside the row. The footer SHALL show the exact total rows permitted by the console's
+grant and matching the active filter, loaded independently so counting a long record does not delay page 1.
 
 #### Scenario: A long audit
 
 - **WHEN** the audit holds 50,000 rows **THEN** the dialog shows its first rows within 1 s of being opened,
-  with no more than 100 rows in the document **AND** scrolling to the end brings the next page, and a filter
-  brings only matching rows
+  with no more than 25 event rows in the document **AND** Next brings the next 25 rows, Previous returns to
+  the preceding 25, and a filter brings only matching rows on page 1
 
 #### Scenario: Live
 
-- **WHEN** a take is made while the dialog is open **THEN** its row appears at the top
+- **WHEN** a row is written while page 1 is open **THEN** it appears at the top without Refresh when it
+  passes the filters, and does not appear when it does not
+- **WHEN** a matching row is written while page 3 is open **THEN** page 3 does not move and the dialog offers
+  the pending new event back on page 1
+
+#### Scenario: Inspect one event
+
+- **WHEN** the operator selects an event row **THEN** that row is visibly selected and a details pane shows
+  its result, local and UTC time, actor, action, channel/layer when present, refusal or command facts when
+  present, and full copyable item/template/actor ids when present
+
+#### Scenario: Rows identify their channel and afford opening details
+
+- **WHEN** a row on CH 2 is shown and the Playout names that channel `Sports` **THEN** its Channel cell reads
+  `Sports` with `CH 2` secondary, hovering the row visibly highlights it, clicking anywhere on it opens the
+  details pane, and no `View details` text is present
+- **WHEN** the Playout publishes no name for CH 2 **THEN** the same cell reads `CH 2`
+
+#### Scenario: The total is not the page size
+
+- **WHEN** 250 permitted rows match while page 1 shows 25 **THEN** the footer shows 250 total events
+- **WHEN** a filter leaves five permitted rows **THEN** the footer shows five total events, while the page
+  remains independently usable if counting is still in progress
+
+#### Scenario: Date range
+
+- **WHEN** the operator chooses From `2026-11-01` and To `2026-11-02` **THEN** page 1 is requested with the
+  console-local start of November 1 and end of November 2 converted to ISO instants
+- **WHEN** From is later than To **THEN** the fields are marked invalid, the range is stated, and no audit
+  page request is sent until the range is possible
 
 ### Requirement: The on-air swap dialog SHALL name plates and sources in the operator's words, and carry no paragraph
 

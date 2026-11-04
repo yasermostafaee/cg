@@ -58,8 +58,9 @@ what it waits for. Every line SHALL be returned in the one order `CONNECTION_CHE
 
 ### Requirement: CG Bridge SHALL page its audit, rotate it, and push new rows
 
-CG Bridge SHALL answer `audit.page` with up to 100 rows, newest first, and a cursor for the next page, applying
-the request's filters (channel, user, action, result) and its search — and the console's channel grant —
+CG Bridge SHALL answer `audit.page` with the requested positive page size up to 100 rows, newest first, and a
+cursor for the next page, applying the request's filters (channel, user, action, result), inclusive ISO From/To
+bounds and its search — and the console's channel grant —
 BEFORE the page is cut. It SHALL read only as far back as the page needs. It SHALL push each new row to every
 console told that row's channel (`audit.appended`). The audit file SHALL rotate at local midnight and at 20 MB,
 each rotated file named by the time of its first row so a cursor survives a rotation, and SHALL keep 90 days
@@ -67,11 +68,24 @@ and at most 200 MB in all, deleting the oldest first. `Download logs` SHALL carr
 page read that a rotation crosses SHALL return the rows the record holds, its cursor walking on into the
 rotated file — never an empty page, a partial one, or the in-memory tail in its place; a record that does not
 hold still across a few reads SHALL make the read fail in words (`B-310`).
+CG Bridge SHALL answer `audit.count` with the exact number of retained rows that pass the same filter and the
+asking console's channel grant. Counting SHALL be a separate read so `audit.page` keeps its bounded fast path.
 
 #### Scenario: Pages and a filter
 
 - **WHEN** the audit holds 50,000 rows **THEN** the first page is the newest 100, the next page the 100 before
   them, and a filter by user returns only that user's rows, newest first
+
+#### Scenario: Exact permitted total
+
+- **WHEN** the record holds 300 matching rows across CH 1 and CH 2, and the asking console is granted only
+  CH 1 whose 150 rows match **THEN** `audit.count` answers 150 — control: an all-channel admin is answered 300
+
+#### Scenario: A bounded date page
+
+- **WHEN** a console asks for 25 rows from the inclusive interval `2026-11-01T00:00:00Z` through
+  `2026-11-01T23:59:59.999Z` **THEN** no more than 25 rows are returned, every row is inside that interval,
+  and the next cursor continues through older matching rows rather than through rows outside the interval
 
 #### Scenario: Rotation keeps the cursor and the limit
 
