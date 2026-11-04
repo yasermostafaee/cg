@@ -3,6 +3,7 @@ import { pack, unpack } from '@cg/vcg-format';
 import {
   compositionClosure,
   migrateGlobalFieldsToCompositions,
+  withoutEditorBackdrop,
   type AssetEntry,
   type FontReference,
   type Manifest,
@@ -38,7 +39,7 @@ function scopedExportOf(starterScene: Scene): Scene {
   const entry = comps.find((c) => c.id === entryId);
   if (entry === undefined) throw new Error('starter has no entry composition');
   const closure = compositionClosure(migrated, entry.id);
-  return {
+  return withoutEditorBackdrop({
     ...migrated,
     name: entry.name,
     resolution: entry.resolution,
@@ -50,7 +51,7 @@ function scopedExportOf(starterScene: Scene): Scene {
     fields: entry.fields ?? [],
     bindings: entry.bindings ?? [],
     compositions: comps.filter((c) => closure.has(c.id)),
-  };
+  });
 }
 
 /** A verifiable `.vcg` — the same `pack()` the Designer's Exporter uses. */
@@ -84,7 +85,7 @@ async function buildStarterVcg(id: string, scene: Scene): Promise<Uint8Array> {
 
 describe('runtime import — every D-119 starter .vcg crosses the boundary', () => {
   for (const starter of STARTER_TEMPLATES) {
-    it(`${starter.id}: verify → unpack → render, scene preserved verbatim`, async () => {
+    it(`${starter.id}: verify → unpack → render, playout scene preserved`, async () => {
       const scoped = scopedExportOf(starter.scene);
       const bytes = await buildStarterVcg(starter.id, scoped);
 
