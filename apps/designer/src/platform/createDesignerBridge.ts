@@ -1,4 +1,4 @@
-import { PROJECT_PACKAGE_EXT, type Element, type Scene } from '@cg/shared-schema';
+import { PROJECT_PACKAGE_EXT, type Scene } from '@cg/shared-schema';
 import { packProject, readProjectDocument, type ProjectDocument } from '@cg/vcg-format';
 import { getStarter } from '@cg/starter-templates';
 import { closeGuardDoor, type ShellInvoke } from '@cg/gesture';
@@ -37,6 +37,7 @@ import { SharedImageStore } from './SharedImageStore.js';
 import { Exporter } from './Exporter.js';
 import { Preview } from './preview.js';
 import { pickFiles } from './pickFiles.js';
+import { rewriteStarterAssetRefs } from './starter-asset-refs.js';
 import { BrowserTextSourceAccess, textSourceSampleMimeType } from './BrowserTextSourceAccess.js';
 import {
   exportFailureOf,
@@ -145,7 +146,8 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
   /**
    * Import a starter's bundled assets into the (now active) project and rewrite
    * the cloned scene's placeholder references to the real assetIds. Image
-   * elements reference an asset by its `key`; fonts by the family `asset-<key>`.
+   * elements and picture Sequence items reference an asset by its `key`; fonts
+   * by the family `asset-<key>`.
    * Each placeholder is rewritten to the imported `assetId` (`asset-<id>` for
    * fonts). Failures (a missing seed file) are skipped so the template still
    * loads — just without that asset.
@@ -171,38 +173,7 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
         /* seed file unreachable — load the template without this asset */
       }
     }
-    rewriteAssetRefs(scene, imageRemap, fontRemap);
-  }
-
-  function rewriteAssetRefs(
-    scene: Scene,
-    imageRemap: ReadonlyMap<string, string>,
-    fontRemap: ReadonlyMap<string, string>,
-  ): void {
-    const fixEl = (el: Element): void => {
-      if (el.type === 'image') {
-        const next = imageRemap.get(el.assetId);
-        if (next !== undefined) el.assetId = next;
-      } else if (
-        el.type === 'text' ||
-        el.type === 'ticker' ||
-        el.type === 'clock' ||
-        el.type === 'sequence'
-      ) {
-        const next = fontRemap.get(el.font.family);
-        if (next !== undefined) el.font.family = next;
-      } else if (el.type === 'container') {
-        el.children.forEach(fixEl);
-      }
-    };
-    for (const layer of scene.layers) layer.children.forEach(fixEl);
-    for (const comp of scene.compositions ?? []) {
-      for (const layer of comp.layers) layer.children.forEach(fixEl);
-    }
-    scene.fonts = scene.fonts.map((f) => {
-      const next = fontRemap.get(f.family);
-      return next === undefined ? f : { ...f, family: next };
-    });
+    rewriteStarterAssetRefs(scene, imageRemap, fontRemap);
   }
 
   return {

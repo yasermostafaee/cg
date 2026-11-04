@@ -1,8 +1,8 @@
 import { test, expect } from './fixtures/designer.js';
 
 /**
- * D-119 — the starter catalog is exactly the five professional Persian
- * broadcast demos, in landing order with the composite leading, none carries
+ * D-119 + D-179 — the starter catalog is the audited Persian starter set,
+ * in landing order with the composite leading, none carries
  * the "New" badge (owner decision), and picking one loads its scene into the
  * Studio (the designer-shell "Operator picks a starter" scenario).
  */
@@ -13,10 +13,16 @@ const EXPECTED_LABELS = [
   'آرم شبکه — Logo Sting',
   'زیرنویس معرفی — Guest Title',
   'توالی خبر — Headline Rotator',
+  'جدول لیگ آزادگان ایران',
+  'آب‌وهوای مراکز استان‌ها',
+  'پیش‌بینی چندروزهٔ هوا',
+  'توالی تصاویر پوشه',
+  'شمارش معکوس مرحله‌ای',
+  'میزگرد چندقابه',
 ];
 
-test.describe('D-119 — starter landing catalog', () => {
-  test('shows exactly the five D-119 starters, in order, with posters and no New badge', async ({
+test.describe('D-119 + D-179 — starter landing catalog', () => {
+  test('shows the audited Persian starters in order, with posters and no New badge', async ({
     app,
   }) => {
     await app.goto();

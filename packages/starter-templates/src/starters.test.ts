@@ -1,9 +1,32 @@
 import { describe, expect, it } from 'vitest';
 import { type Element, isPathKeyframeValue, SceneSchema } from '@cg/shared-schema';
-import { getStarter, logoBugScene, STARTER_TEMPLATES, tickerScene } from './index.js';
+import {
+  azadeganTableScene,
+  countdownStepsScene,
+  getStarter,
+  imageFolderSequenceScene,
+  iranWeatherForecastScene,
+  iranWeatherPagesScene,
+  logoBugScene,
+  multiboxScene,
+  STARTER_TEMPLATES,
+  tickerScene,
+} from './index.js';
 
-/** The five D-119 starters, in landing-page order (the composite leads). */
-const EXPECTED_IDS = ['irib-news', 'ticker', 'logo-bug', 'title', 'sequence'];
+/** D-119's five audited starters followed by D-179's six production examples. */
+const EXPECTED_IDS = [
+  'irib-news',
+  'ticker',
+  'logo-bug',
+  'title',
+  'sequence',
+  'azadegan-table',
+  'iran-weather-pages',
+  'iran-weather-forecast',
+  'image-folder-sequence',
+  'countdown-steps',
+  'multibox',
+];
 
 describe('starter templates', () => {
   it('every starter has a Zod-valid Scene', () => {
@@ -12,7 +35,7 @@ describe('starter templates', () => {
     }
   });
 
-  it('the catalog is exactly the D-119 set, in order', () => {
+  it('the catalog is exactly the audited D-119 + D-179 set, in order', () => {
     expect(STARTER_TEMPLATES.map((s) => s.id)).toEqual(EXPECTED_IDS);
   });
 
@@ -138,6 +161,86 @@ describe('starter templates', () => {
       expect(isPathKeyframeValue(pose)).toBe(true);
       expect(idsOf(pose)).toBe(staticIds);
     }
+  });
+
+  it('D-179: data-rich examples use real repeaters and sequence pages', () => {
+    const elements = (scene: typeof azadeganTableScene): Element[] =>
+      [...scene.layers, ...(scene.compositions ?? []).flatMap((composition) => composition.layers)]
+        .flatMap((entry) => entry.children)
+        .flatMap(function walk(element): Element[] {
+          return element.type === 'container'
+            ? [element, ...element.children.flatMap(walk)]
+            : [element];
+        });
+
+    expect(elements(azadeganTableScene).some((element) => element.type === 'repeater')).toBe(true);
+    expect(elements(iranWeatherForecastScene).some((element) => element.type === 'repeater')).toBe(
+      true,
+    );
+
+    const weatherPages = elements(iranWeatherPagesScene).find(
+      (element) => element.type === 'sequence',
+    );
+    expect(weatherPages?.type).toBe('sequence');
+    if (weatherPages?.type === 'sequence') {
+      expect(weatherPages.pageDataFile).toBe('starter-data/iran-weather-pages.json');
+      expect(weatherPages.items).toHaveLength(4);
+      expect(weatherPages.items.every((item) => item.kind === 'composition')).toBe(true);
+    }
+
+    const weatherTemperature = elements(iranWeatherPagesScene).find(
+      (element) => element.id === 'weather-temp',
+    );
+    expect(weatherTemperature?.valueRules?.input).toEqual({ kind: 'field', fieldId: 'temp' });
+    expect(weatherTemperature?.valueRules?.rules.map((rule) => rule.effect.property)).toEqual([
+      'fill',
+      'textColor',
+      'fill',
+      'textColor',
+    ]);
+  });
+
+  it('D-179: folder sequence ships picture pages and image assets', () => {
+    const pictureSequence = imageFolderSequenceScene.compositions
+      ?.flatMap((composition) => composition.layers)
+      .flatMap((entry) => entry.children)
+      .find((element) => element.type === 'sequence');
+    expect(pictureSequence?.type).toBe('sequence');
+    if (pictureSequence?.type === 'sequence') {
+      expect(pictureSequence.items).toHaveLength(3);
+      expect(pictureSequence.items.every((item) => item.kind === 'image')).toBe(true);
+    }
+    expect(
+      getStarter('image-folder-sequence')?.assets?.filter((asset) => asset.kind === 'image'),
+    ).toHaveLength(3);
+  });
+
+  it('D-179: countdown steps are ordered and drive visual state', () => {
+    const clock = countdownStepsScene.compositions
+      ?.flatMap((composition) => composition.layers)
+      .flatMap((entry) => entry.children)
+      .find((element) => element.type === 'clock');
+    expect(clock?.type).toBe('clock');
+    if (clock?.type === 'clock') {
+      expect(clock.target?.kind).toBe('timeofday');
+      expect(clock.steps?.steps.map((step) => step.atMs)).toEqual([
+        3_600_000, 1_800_000, 600_000, 0,
+      ]);
+      expect(
+        clock.steps?.steps.some((step) =>
+          step.changes.some((change) => change.property === 'blink'),
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it('D-179: multibox carries four independently routed live sources', () => {
+    const liveSources = multiboxScene.compositions
+      ?.flatMap((composition) => composition.layers)
+      .flatMap((entry) => entry.children)
+      .filter((element) => element.type === 'video-placeholder');
+    expect(liveSources).toHaveLength(4);
+    expect(new Set(liveSources?.map((element) => element.routeKey)).size).toBe(4);
   });
 
   it('Persian defaults are non-empty RTL copy', () => {
