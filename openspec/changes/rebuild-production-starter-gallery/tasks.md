@@ -22,4 +22,4 @@
 - [x] 4.1 Register the new Persian starters with clear landing-card copy and stable order.
 - [x] 4.2 Generate a real poster for every new starter and visually inspect desktop and card-sized output.
 - [x] 4.3 Add focused schema/feature/default/catalog tests and run package build/typecheck/tests.
-- [ ] 4.4 Run Designer smoke coverage, strict OpenSpec validation and the full repository gate before push.
+- [x] 4.4 Run Designer smoke coverage, strict OpenSpec validation and the full repository gate before push.
