@@ -131,6 +131,25 @@ export class DesignerApp {
     await toolbar.getByRole('menuitemradio', { name: label, exact: true }).click();
   }
 
+  /** Assert the selected tool through either responsive presentation without changing it. */
+  async expectToolSelected(label: string): Promise<void> {
+    const toolbar = this.page.getByRole('toolbar', { name: 'Canvas tools' });
+    const direct = toolbar.getByRole('button', { name: label, exact: true });
+    if ((await direct.count()) > 0 && (await direct.isVisible())) {
+      await expect(direct).toHaveAttribute('aria-pressed', 'true');
+      return;
+    }
+    const more = toolbar.getByRole('button', { name: 'More canvas tools' });
+    const wasOpen = (await more.getAttribute('aria-expanded')) === 'true';
+    if (!wasOpen) await more.click();
+    await expect(toolbar.getByRole('menuitemradio', { name: label, exact: true })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    // Escape belongs to the Pen gesture too; close only the menu, never the active tool.
+    if (!wasOpen) await more.click();
+  }
+
   /** Create the Looks multi-frame group from either the wide strip or compact menu. */
   async addMultiFrameGroup(): Promise<void> {
     const toolbar = this.page.getByRole('toolbar', { name: 'Canvas tools' });
@@ -827,6 +846,14 @@ export class DesignerApp {
   async openPreviewModal(): Promise<void> {
     await this.compositionActionBar.getByRole('button', { name: 'Preview', exact: true }).click();
     await expect(this.previewDialog).toBeVisible();
+  }
+
+  /** D-173 keeps session timing collapsed until the author explicitly opens Advanced. */
+  async openPreviewAdvanced(): Promise<void> {
+    const summary = this.previewDialog.locator('summary').filter({ hasText: /^Advanced$/ });
+    const details = summary.locator('..');
+    if ((await details.getAttribute('open')) === null) await summary.click();
+    await expect(details).toHaveAttribute('open', '');
   }
 
   get previewDialog(): Locator {

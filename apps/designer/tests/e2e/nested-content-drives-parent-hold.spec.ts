@@ -30,6 +30,7 @@ test.describe('B-031 — preview offers the content-driven hold for nested conte
     await app.page.keyboard.press('Escape'); // deselect the canvas-covering instance
 
     await app.openPreviewModal();
+    await app.openPreviewAdvanced();
     // The parent's preview STATES a hold source — the per-scope content check now recurses the
     // nested composition (shallow pre-B-031 hid it), and the hold row renders only when the
     // scope has a content source. ADR 0009 — the row is a FACT, not a select: the subject here

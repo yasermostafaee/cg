@@ -100,7 +100,16 @@ async function exportBookFromDesigner(tab: Page, folder: string): Promise<Uint8A
   await create.getByRole('button', { name: 'Create' }).click();
   const canvas = tab.getByTestId('canvas-surface');
   await expect(canvas).toBeVisible({ timeout: 30_000 });
-  await tab.getByRole('button', { name: 'Sequence', exact: true }).click();
+  // Keep this cross-app UI adapter local to Runtime's hashed test inputs. The Designer's
+  // responsive toolbar exposes Sequence directly or inside its labelled overflow menu.
+  const toolbar = tab.getByRole('toolbar', { name: 'Canvas tools' });
+  const sequence = toolbar.getByRole('button', { name: 'Sequence', exact: true });
+  if ((await sequence.count()) > 0 && (await sequence.isVisible())) {
+    await sequence.click();
+  } else {
+    await toolbar.getByRole('button', { name: 'More canvas tools' }).click();
+    await toolbar.getByRole('menuitemradio', { name: 'Sequence', exact: true }).click();
+  }
   await canvas.click({ position: { x: 200, y: 200 } });
 
   const chooser = tab.waitForEvent('filechooser');

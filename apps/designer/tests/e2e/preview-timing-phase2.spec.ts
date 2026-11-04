@@ -34,6 +34,7 @@ test.describe('Per-element preview timing — sequences, countdowns, repeater-st
     await expect(canvasCd).toHaveAttribute('data-cg-countdown-ms', '60000');
 
     await app.openPreviewModal();
+    await app.openPreviewAdvanced();
 
     // Each content element gets its OWN row in the timing panel, labelled by its element name.
     // B-080 — the durations are shown in SECONDS, the same unit the element properties use, even
@@ -83,6 +84,7 @@ test.describe('Per-element preview timing — sequences, countdowns, repeater-st
     await expect(canvasBands).toHaveCount(3);
 
     await app.openPreviewModal();
+    await app.openPreviewAdvanced();
 
     // The panel surfaces the repeater child's ticker — ONE row (it governs the authored template
     // ticker), not one per data row.

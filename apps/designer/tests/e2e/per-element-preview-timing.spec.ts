@@ -23,6 +23,7 @@ test.describe('Per-element ticker timing overrides (D-102 Phase 1)', () => {
     await expect(canvasBands).toHaveCount(2);
 
     await app.openPreviewModal();
+    await app.openPreviewAdvanced();
 
     // The preview timing panel shows ONE cycle-seam row per ticker (not one shared per-scope slot);
     // the two same-named tickers are disambiguated ("Ticker (1)" / "Ticker (2)").

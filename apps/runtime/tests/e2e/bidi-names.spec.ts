@@ -1,4 +1,4 @@
-import { expect, test, textRunX as runX } from './fixtures/runtime.js';
+import { buildValidVcg, expect, test, textRunX as runX } from './fixtures/runtime.js';
 
 /**
  * 🔴 `MODAL-CHROME-10` ADDENDUM B — **A NAME'S CHARACTERS ARE ISOLATED; ITS BOX IS NOT.**
@@ -83,6 +83,11 @@ test('§2 — a MIXED name still orders correctly: the isolation was kept, not t
 }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1400, height: 900 });
+  // The production gallery is Persian-only. Import a controlled mixed name through the real
+  // operator door so this geometry assertion does not depend on a starter's editorial title.
+  // R-004 displays the imported filename ahead of the manifest's internal composition name.
+  const mixedName = 'زیرنویس معرفی — Guest Title';
+  await app.importVcg(`${mixedName}.vcg`, await buildValidVcg('tpl-bidi-mixed'));
   await app.openTemplatePicker();
 
   /*
@@ -91,7 +96,7 @@ test('§2 — a MIXED name still orders correctly: the isolation was kept, not t
     run. If the isolation were deleted, or the name forced to `direction: ltr` to "fix" the
     alignment, the two runs swap and this fails while §1 still passes.
   */
-  const row = page.locator('.cg-tpl-name', { hasText: 'زیرنویس' });
+  const row = page.locator('.cg-tpl-name', { hasText: mixedName });
   await expect(row).toHaveCount(1);
   const latin = await runX(row, 'Guest Title');
   const persian = await runX(row, 'زیرنویس');

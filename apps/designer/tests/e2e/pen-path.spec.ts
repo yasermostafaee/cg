@@ -27,10 +27,7 @@ test('pen draws a path → renders, selects, is editable, and can be closed', as
   await expect(path).toHaveAttribute('fill', 'none');
 
   // B-037 — the pen is still the active tool after the finish.
-  await expect(app.page.getByRole('button', { name: 'Pen', exact: true })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
+  await app.expectToolSelected('Pen');
 
   // Selected: the Path inspector shows stroke + a 3-anchor count + the Open/Closed toggle.
   await expect(app.inspector.getByRole('spinbutton', { name: 'stroke width' })).toBeVisible();

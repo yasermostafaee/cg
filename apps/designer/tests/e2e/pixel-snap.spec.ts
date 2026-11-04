@@ -106,18 +106,29 @@ test.describe('D-122 pixel-snap drag', () => {
     expect(Number.isInteger(sx), `snapped X (${String(sx)}) is integer`).toBe(true);
     expect(Number.isInteger(sy), `snapped Y (${String(sy)}) is integer`).toBe(true);
 
-    // Alt-drag from the (now integer) position by a fractional-mapping delta → free placement:
-    // the result must be NOT integer (the snap is bypassed).
+    // Derive a genuinely fractional scene delta from the actual scale. The fitted starting
+    // zoom depends on shell geometry: at 825%, the old fixed 33 CSS px is EXACTLY four scene
+    // pixels, so an honest free drag looked indistinguishable from a snapped one.
+    const scale = await app.page.locator('iframe[title="cgpreview"]').evaluate((iframe) => {
+      const el = iframe as HTMLIFrameElement;
+      return el.getBoundingClientRect().width / el.offsetWidth;
+    });
+    const freeDeltaCss = Math.round(scale * 4.5);
+    const freeDeltaScene = freeDeltaCss / scale;
+    expect(Math.abs(freeDeltaScene - Math.round(freeDeltaScene))).toBeGreaterThan(0.4);
+    // Alt-drag from the integer position must follow that free delta, not quantise it.
     const p2 = await pressPointOnSelected(app);
     expect(p2).not.toBeNull();
     await app.page.keyboard.down('Alt');
     await app.page.mouse.move(p2!.x, p2!.y);
     await app.page.mouse.down();
-    await app.page.mouse.move(p2!.x + 33, p2!.y + 33, { steps: 8 });
+    await app.page.mouse.move(p2!.x + freeDeltaCss, p2!.y + freeDeltaCss, { steps: 8 });
     await app.page.mouse.up();
     await app.page.keyboard.up('Alt');
     const ax = await app.getInspectorNumber('X position');
     const ay = await app.getInspectorNumber('Y position');
+    expect(ax - sx, 'Alt X follows the unquantised pointer delta').toBeCloseTo(freeDeltaScene, 2);
+    expect(ay - sy, 'Alt Y follows the unquantised pointer delta').toBeCloseTo(freeDeltaScene, 2);
     expect(
       Number.isInteger(ax) && Number.isInteger(ay),
       `Alt-drag should be free — X ${String(ax)}, Y ${String(ay)} must not both be integer`,

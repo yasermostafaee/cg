@@ -5,7 +5,7 @@ import type { DesignerApp } from './fixtures/designer.js';
  * D-125 Phase 1 — the Lottie element driven through the real UI: import a bodymovin
  * JSON (validated through the allowlist), drag it onto the canvas, and confirm it
  * mounts a real player (an `<svg>`, not a placeholder) in the canvas AND the preview.
- * The Inspector is OPAQUE — it exposes speed / hold behaviour / the phase mapping but
+ * The Inspector is OPAQUE — it exposes speed / the phase mapping but
  * no internal keyframes. Render math + export inlining are covered by the package unit
  * tests; this guards the integrated Designer flow.
  */
@@ -296,10 +296,13 @@ test.describe('Lottie element (D-125 Phase 1)', () => {
     const lottieNode = app.canvasFrame.locator('[data-cg-element-id]:has(svg)');
     await expect(lottieNode.first()).toBeVisible();
 
-    // The Inspector is opaque: it shows the Lottie section (speed + hold behaviour +
-    // the marker-sourced phase mapping) but NO internal-keyframe editor.
+    // The Inspector is opaque: speed and marker-sourced phases are editable here, while
+    // D-187 owns Hold behavior at composition level, never in a second media selector.
     await expect(app.inspector.getByText('Lottie', { exact: false })).toBeVisible();
-    await expect(app.inspector.getByRole('combobox', { name: /hold/i })).toBeVisible();
+    await expect(
+      app.inspector.getByRole('spinbutton', { name: 'speed', exact: true }),
+    ).toBeVisible();
+    await expect(app.inspector.getByRole('combobox', { name: /hold/i })).toHaveCount(0);
     // Phase mapping was read from the bodymovin markers.
     await expect(app.inspector.getByText(/from markers/i)).toBeVisible();
 

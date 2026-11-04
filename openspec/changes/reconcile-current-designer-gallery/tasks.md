@@ -112,9 +112,10 @@ triage, not automatically explained away by the reboot. The remaining batch stat
       remote `dev` SHA is independently verified. Its pre-push gate
       `gate-20261104T192802Z-1232.log` finishes with exit 0, 103/103 uncached tasks and 141 strict
       OpenSpec items in 705.8 seconds. The live Designer landing displays this revision.
-      [Carrying-commit CI](https://github.com/yasermostafaee/cg/actions/runs/41899115160) is in progress;
-      its Docs and full Lint/Typecheck/Test/Build jobs have completed successfully, but the actual
-      Linux E2E step has not completed. Desktop is deliberately skipped, not released.
+      [Carrying-commit CI](https://github.com/yasermostafaee/cg/actions/runs/41899115160) subsequently
+      completed with successful Docs and full Lint/Typecheck/Test/Build jobs, but a failed actual
+      Linux E2E step. The follow-up below records its triage. Desktop is deliberately skipped,
+      not released.
 
 The isolated worktree and edits survived. Designer's local service was restored after reboot;
 service availability alone does not complete browser acceptance or final validation.
@@ -188,3 +189,45 @@ before preparing installers. No installer build has been requested for this inte
 D-186 Follow-media Freeze parity is a separate follow-up under
 `../align-follow-media-cursor-and-freeze-frame/tasks.md`, begun after the verified integration push.
 Commit `877da2c4` does not contain that correction or discharge its verification.
+
+## 4. Whole-suite Linux follow-up
+
+The completed run above is not green evidence: Designer reports 12 failed, 1 flaky, 262 passed,
+13 skipped and 142 unrun; CG Control reports 6 failed, 349 passed, 2 skipped and 31 unrun.
+Both suites also hit their existing global run/teardown budgets. These deadlines are not separate
+product crashes and do not authorize increasing timeouts or weakening assertions.
+
+- [x] 4.1 Reconcile proven stale browser expectations with the accepted compact toolbar,
+      composition-owned Hold, collapsed Preview Advanced controls and Persian-only starter names.
+      Preserve actual mixed-script glyph geometry with an explicitly mixed-script fixture.
+- [x] 4.2 Diagnose both pixel cases independently. The Alt-drag fixture assumes its fixed CSS delta
+      cannot produce a whole scene-pixel delta, but at the measured 825% zoom 33 CSS pixels equal
+      exactly four scene pixels. Its replacement uses measured scale and checks the actual free
+      delta as well as non-integer placement. Pixel-paint's second zoom pass overwrote the previous
+      margin while calculating its correction from the already-offset stage. It now adds the
+      correction and chooses the closest measured neighboring LayoutUnit at deep-scroll coordinates,
+      where DOMRect precision is coarser than the local margin lattice. Strict achieved-phase checks
+      are added; original paint, crispness and gizmo tolerances remain unchanged. No product change.
+- [x] 4.3 Complete P-076's canonical labelled Version/Revision/Build-date contract. The imported
+      shared formatter omitted Revision despite the still-active PRD/OpenSpec requirement; update
+      the formatter and both products' tests, not the requirement to match the incomplete source.
+- [ ] 4.4 Run focused real-browser regressions, final local gate and separate push, then record
+      a completed green carrying-commit Linux E2E result. Installers remain deferred.
+
+Follow-up local evidence (2026-11-05): all four build-identity unit cases and the fresh 18-task
+Designer/CG Control dependency build pass. The first 63-case Designer browser batch passes 59;
+three failures expose the new phase precondition's single-correction precision assumption, and
+the fourth finds a second video-rebuild case still addressing a collapsed Advanced control.
+After the bounded fixture corrections, all nine pixel-paint/video-rebuild cases pass in 42.0 seconds,
+including DPR 1, 1.25 and 2. The separate Alt-drag case and all eight pixel-snap cases pass.
+No timeout, image tolerance, rendered behavior or production refusal was weakened.
+B360 now polls the actual iframe's swapped frame order before retaining its exact geometry checks;
+the full Live Source suite passes. The mixed-name fixture uses the imported filename, respecting
+R-004's filename-before-manifest naming contract; its initial manifest-only spelling was rejected
+by the test itself. The corrected six-suite Runtime batch passes **20/20 in 52.7 seconds**, including
+the mixed glyph geometry, a real Designer-exported book round-trip, plate audio/ownership and the
+labelled startup identity. Both Designer TypeScript realms, Runtime and splash-kit typechecks pass;
+splash-kit lint also passes. A complete corrected-tree rerun of the twelve Designer suites passes
+**63/63 in 2.1 minutes**, without retries, including every pixel and video sibling. Both app lints
+pass with existing warnings only; both active follow-up changes pass strict OpenSpec validation.
+The final full gate and carrying-commit Linux run remain separate.

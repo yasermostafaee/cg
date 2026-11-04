@@ -366,7 +366,11 @@ test.describe('Live Source (D-137 phase 1)', () => {
   }) => {
     await app.newProject('ExportBlockRefusal');
     await app.addLiveSource({ x: 200, y: 160 });
+    await app.setElementName('Host frame');
+    await app.setLiveSourceId('host');
     await app.addLiveSource({ x: 230, y: 190 });
+    await app.setElementName('Guest frame');
+    await app.setLiveSourceId('guest');
 
     const exportBtn = app.page.getByRole('button', { name: 'Export .vcg' });
     // 🔴 NOT inert. A natively disabled button can show no tooltip at all — which is how the old
@@ -381,13 +385,15 @@ test.describe('Live Source (D-137 phase 1)', () => {
     // preflight's own `label()`. Lifting it from the message rather than re-deriving it is what
     // stops the tooltip naming a different box from the panel it points at.
     await expect(exportBtn).toHaveAttribute('title', /Export blocked — \d+ error/);
-    await expect(exportBtn).toHaveAttribute('title', /Plate/);
+    await expect(exportBtn).toHaveAttribute('title', /starting with “(?:Host frame|Guest frame)”/);
     await expect(exportBtn).not.toHaveAttribute('title', 'Resolve validation errors first');
+    const offender = /starting with “([^”]+)”/.exec((await exportBtn.getAttribute('title'))!)![1]!;
 
     // ONE action from the control the author pressed to the full message.
     await exportBtn.click();
-    await expect(app.page.getByRole('dialog', { name: 'Issues' })).toBeVisible();
-    await expect(app.page.getByText(/overlaps/).first()).toBeVisible();
+    const issues = app.page.getByRole('dialog', { name: 'Issues' });
+    await expect(issues).toBeVisible();
+    await expect(issues.getByText(`Plate "${offender}" overlaps`, { exact: false })).toBeVisible();
   });
 
   test('D-157 — the POSITIVE CONTROL: a clean composition marks nothing and Export is live', async ({
@@ -734,6 +740,16 @@ test.describe('Live Source (D-137 phase 1)', () => {
     expect(wideBefore.width / wideBefore.height).toBeCloseTo(16 / 9, 2);
 
     await app.multiInspector.getByRole('button', { name: 'Swap frame order' }).click();
+    // Store updates precede the rAF-throttled iframe repaint. Wait for the actual rendered
+    // order, not merely the click or parent message, before measuring the final geometry.
+    await expect
+      .poll(async () =>
+        (await readGeometry())
+          .filter((item) => ids.includes(item.id))
+          .sort((a, b) => a.y - b.y)
+          .map((item) => item.id),
+      )
+      .toEqual([bottomBefore.id, topBefore.id]);
     const after = await readGeometry();
     const firstAfter = after.find((item) => item.id === ids[0]);
     const secondAfter = after.find((item) => item.id === ids[1]);

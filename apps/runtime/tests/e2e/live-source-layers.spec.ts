@@ -77,11 +77,11 @@ test('the bridge-seated live layers appear on their own tab, distinguishable fro
   await expect(onScreen).toContainText('CLOCK');
   await expect(onScreen.locator('.cg-plate-owner-link svg'), 'the chevron').toHaveCount(1);
   await expect(onScreen, 'a composition name must not be in the sentence').not.toContainText(
-    'News Composite',
+    'میان‌برنامهٔ خبر',
   );
   await expect(onScreen.getByRole('button', { name: /^Open the row that owns/ })).toHaveAttribute(
     'title',
-    /News Composite/,
+    /میان‌برنامهٔ خبر/,
   );
   await onScreen.getByRole('button', { name: /^Open the row that owns/ }).click();
 

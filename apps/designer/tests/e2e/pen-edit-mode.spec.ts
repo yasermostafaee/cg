@@ -183,10 +183,7 @@ test('right-click while drawing cancels the draft like Esc (B-060)', async ({ ap
   await app.canvas.click({ position: { x: 320, y: 180 }, button: 'right' });
   await expect(paths(app)).toHaveCount(0); // canceled — element removed
   // The pen stays armed after the cancel.
-  await expect(app.page.getByRole('button', { name: 'Pen', exact: true })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
+  await app.expectToolSelected('Pen');
 
   // One undo restores the WHOLE canceled path as a single step (Esc-cancel parity).
   await app.undo();
@@ -200,9 +197,6 @@ test('right-click while drawing cancels the draft like Esc (B-060)', async ({ ap
 
   // Right-click with the pen armed but IDLE changes nothing.
   await app.canvas.click({ position: { x: 100, y: 100 }, button: 'right' });
-  await expect(app.page.getByRole('button', { name: 'Pen', exact: true })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
+  await app.expectToolSelected('Pen');
   await expect(paths(app)).toHaveCount(2);
 });

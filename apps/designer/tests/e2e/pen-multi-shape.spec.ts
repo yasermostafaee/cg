@@ -11,7 +11,6 @@ import type { DesignerApp } from './fixtures/designer.js';
  * past ~x 430 the frame box runs under the right inspector's field rows.
  */
 
-const penButton = (app: DesignerApp) => app.page.getByRole('button', { name: 'Pen', exact: true });
 const paths = (app: DesignerApp) => app.canvasFrame.locator('[data-cg-element-id] path');
 
 /** Draw shape 1 — the closed triangle used across these tests (anchors at
@@ -31,7 +30,7 @@ test('two sequential draws yield two independent elements; shape 1 untouched', a
 
   // Close-click worked: the shape is CLOSED (fill), selected, and the pen is STILL armed.
   await expect(paths(app).first()).not.toHaveAttribute('fill', 'none');
-  await expect(penButton(app)).toHaveAttribute('aria-pressed', 'true');
+  await app.expectToolSelected('Pen');
   const shape1D = await paths(app).first().getAttribute('d');
 
   // Draw shape 2 without re-picking the tool; finish open with Enter.
@@ -115,7 +114,7 @@ test('Esc cancels the in-progress draft; Esc while idle exits to the cursor', as
   await app.page.keyboard.press('Escape');
   await expect(paths(app)).toHaveCount(0);
   // The cancel does NOT exit the tool — the pen is still armed.
-  await expect(penButton(app)).toHaveAttribute('aria-pressed', 'true');
+  await app.expectToolSelected('Pen');
 
   // A 1-anchor draft cancels to nothing as well.
   await app.canvas.click({ position: { x: 200, y: 160 } });

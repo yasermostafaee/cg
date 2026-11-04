@@ -73,4 +73,10 @@ Pre-commit full gate: `gate-20261104T195708Z-15620.log` ends at
 `2026-11-04T20:09:41.508Z` with **exit 0, 753.5 seconds, 103/103 uncached tasks**.
 Template-runtime **1352**, Designer **1975**, CG Control **2532** and Bridge **1961** tests pass.
 Formatting, the 4609-text-file control-byte scan and all **141** strict OpenSpec items pass.
-This is local evidence for the correction, not a claim that its push or Linux E2E has completed.
+The correction is committed as `1b76faf0`, pushed to `dev`, and the remote full SHA is independently
+verified. Its separate pre-push gate `gate-20261104T201211Z-17132.log` also ends with exit 0 in
+758.8 seconds, with 103/103 uncached tasks and all 141 strict OpenSpec items passing. The live
+Designer landing displays this revision. [Carrying-commit CI](https://github.com/yasermostafaee/cg/actions/runs/41906376920)
+has started; its actual Linux E2E step has not completed. Desktop is deliberately skipped.
+The earlier integration run has real unrelated whole-suite failures being triaged under
+`../reconcile-current-designer-gallery/tasks.md`; no Linux discharge is claimed for either change.

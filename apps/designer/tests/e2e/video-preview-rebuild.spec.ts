@@ -117,6 +117,7 @@ test('a playing video SURVIVES a preview rebuild — the driver follows the node
   expect(before.advanced, 'currentTime advances BEFORE any rebuild').toBeGreaterThan(0);
 
   // ---- THE REBUILD: the owner's exact gesture, mid-playback ----
+  await app.openPreviewAdvanced();
   await app.previewDialog
     .getByRole('combobox', { name: /ticker cycle boundary/ })
     .first()
@@ -192,6 +193,7 @@ test('EXPERIMENT 2 — a video ALONE freezes on a rebuild too: the trigger is th
   // whole sample window, so an auto-out completing cannot masquerade as the freeze.
   // Writing the session override is what posts `scene-replace`, which is the experiment's
   // whole variable — the mode was authored before the modal opened (ADR 0009).
+  await app.openPreviewAdvanced();
   const hold = app.previewDialog
     .getByLabel('Preview hold duration in milliseconds', { exact: true })
     .first();

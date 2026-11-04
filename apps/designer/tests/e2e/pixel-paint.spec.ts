@@ -63,11 +63,66 @@ async function scrollAndForcePhases(app: DesignerApp): Promise<void> {
     const r = stage.getBoundingClientRect();
     const fracX = r.left * dpr - Math.floor(r.left * dpr);
     const fracY = r.top * dpr - Math.floor(r.top * dpr);
-    wrap.style.marginLeft = `${String(((0.9766 - fracX + 1) % 1) / dpr)}px`;
-    wrap.style.marginTop = `${String(((0.6875 - fracY + 1) % 1) / dpr)}px`;
+    // The measured stage already includes the previous zoom pass's margins. Overwriting
+    // them with only the new correction silently misses the requested device phase.
+    const style = getComputedStyle(wrap);
+    const marginLeft = Number.parseFloat(style.marginLeft) || 0;
+    const marginTop = Number.parseFloat(style.marginTop) || 0;
+    wrap.style.marginLeft = `${String(marginLeft + ((0.9766 - fracX + 1) % 1) / dpr)}px`;
+    wrap.style.marginTop = `${String(marginTop + ((0.6875 - fracY + 1) % 1) / dpr)}px`;
+    // At deep-scroll coordinates around -267,744 CSS px, the measured stage position
+    // advances in 1/32 px steps despite 1/64 px local margins. Choose the closest measured
+    // neighboring layout position instead of assuming the nominal correction survived
+    // that precision loss. The phase and painted-edge acceptance bounds stay unchanged.
+    const settlePhase = (
+      property: 'marginLeft' | 'marginTop',
+      coordinate: 'left' | 'top',
+      target: number,
+    ): void => {
+      const base = Number.parseFloat(getComputedStyle(wrap)[property]) || 0;
+      let best = base;
+      let bestDistance = Infinity;
+      for (let step = -4; step <= 4; step++) {
+        const candidate = base + step / 64;
+        wrap.style[property] = `${String(candidate)}px`;
+        const devicePosition = stage.getBoundingClientRect()[coordinate] * dpr;
+        const phase = devicePosition - Math.floor(devicePosition);
+        const delta = Math.abs(phase - target);
+        const distance = Math.min(delta, 1 - delta);
+        if (distance < bestDistance) {
+          best = candidate;
+          bestDistance = distance;
+        }
+      }
+      wrap.style[property] = `${String(best)}px`;
+    };
+    settlePhase('marginLeft', 'left', 0.9766);
+    settlePhase('marginTop', 'top', 0.6875);
     document.querySelector('[data-testid="canvas-viewport"]')!.dispatchEvent(new Event('scroll'));
   });
   await app.page.waitForTimeout(400);
+  const phase = await app.page.evaluate(() => {
+    const r = document.querySelector('[data-testid="canvas-stage"]')!.getBoundingClientRect();
+    const dpr = window.devicePixelRatio;
+    return {
+      x: r.left * dpr - Math.floor(r.left * dpr),
+      y: r.top * dpr - Math.floor(r.top * dpr),
+      // Blink positions the wrapper on its 1/64 CSS-pixel layout lattice.
+      tolerance: dpr / 64 + 0.0001,
+    };
+  });
+  const distance = (actual: number, target: number): number => {
+    const delta = Math.abs(actual - target);
+    return Math.min(delta, 1 - delta);
+  };
+  expect(
+    distance(phase.x, 0.9766),
+    'fixture reaches the requested X device phase',
+  ).toBeLessThanOrEqual(phase.tolerance);
+  expect(
+    distance(phase.y, 0.6875),
+    'fixture reaches the requested Y device phase',
+  ).toBeLessThanOrEqual(phase.tolerance);
 }
 
 /** Deselect and PROVE it (the selection gizmo's accent border sits on the measured edge —
