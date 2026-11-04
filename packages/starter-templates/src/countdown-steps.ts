@@ -192,6 +192,6 @@ export const countdownStepsScene = galleryScene({
     { fieldId: 'title', target: { kind: 'text', elementId: 'countdown-title' } },
     { fieldId: 'eventTime', target: { kind: 'clock-target', elementId: 'countdown-clock' } },
   ],
-  entryPlayout: { mode: 'auto-out', holdSource: 'content-driven', holdBehavior: 'freeze' },
-  onAirPlayout: { mode: 'auto-out', holdSource: 'content-driven', holdBehavior: 'freeze' },
+  entryPlayout: { mode: 'auto-out', holdSource: 'content-driven' },
+  onAirPlayout: { mode: 'auto-out', holdSource: 'content-driven' },
 });

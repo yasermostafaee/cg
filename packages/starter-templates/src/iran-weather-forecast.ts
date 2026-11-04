@@ -29,7 +29,7 @@ const card: NonNullable<Scene['compositions']>[number] = {
   resolution: { width: 296, height: 520 },
   frameRange: { in: 0, out: 140 },
   lifecycle: { outPoint: 100 },
-  playout: { mode: 'manual', holdSource: 'timed', holdBehavior: 'freeze' },
+  playout: { mode: 'manual', holdSource: 'timed' },
   editorBackdrop: 'transparent',
   layers: [
     layer('forecast-card-layer', 'روز', [

@@ -64,7 +64,7 @@ const cityCard: NonNullable<Scene['compositions']>[number] = {
   resolution: { width: 1600, height: 72 },
   frameRange: { in: 0, out: 140 },
   lifecycle: { outPoint: 100 },
-  playout: { mode: 'manual', holdSource: 'timed', holdBehavior: 'freeze' },
+  playout: { mode: 'manual', holdSource: 'timed' },
   editorBackdrop: 'transparent',
   layers: [
     layer('weather-city-row-layer', 'شهر', [
@@ -184,7 +184,7 @@ const pageComposition: NonNullable<Scene['compositions']>[number] = {
   resolution: { width: 1680, height: 730 },
   frameRange: { in: 0, out: 140 },
   lifecycle: { outPoint: 100 },
-  playout: { mode: 'manual', holdSource: 'timed', holdBehavior: 'freeze' },
+  playout: { mode: 'manual', holdSource: 'timed' },
   editorBackdrop: 'transparent',
   layers: [
     layer('weather-page-layer', 'صفحه', [

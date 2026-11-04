@@ -97,7 +97,7 @@ const rowComposition: NonNullable<Scene['compositions']>[number] = {
   resolution: { width: 1660, height: 42 },
   frameRange: { in: 0, out: 140 },
   lifecycle: { outPoint: 100 },
-  playout: { mode: 'manual', holdSource: 'timed', holdBehavior: 'freeze' },
+  playout: { mode: 'manual', holdSource: 'timed' },
   editorBackdrop: 'transparent',
   layers: [layer('az-row-layer', 'ردیف', rowChildren)],
   fields: [

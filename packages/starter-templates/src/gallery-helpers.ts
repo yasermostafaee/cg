@@ -184,7 +184,6 @@ export function galleryScene(options: GallerySceneOptions): Scene {
   const entryPlayout = options.entryPlayout ?? {
     mode: 'manual',
     holdSource: 'timed',
-    holdBehavior: 'freeze',
   };
   const onAirPlayout = options.onAirPlayout ?? entryPlayout;
 
