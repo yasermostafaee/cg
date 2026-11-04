@@ -11,34 +11,52 @@ const OUT = process.env.CG_STARTER_POSTERS;
 test.skip(OUT === undefined || OUT === '', 'only when regenerating starter posters');
 
 const starters = [
-  ['irib-news', 'میان‌برنامهٔ خبر — News Composite'],
-  ['ticker', 'نوار اخبار — News Ticker'],
-  ['logo-bug', 'آرم شبکه — Logo Sting'],
-  ['title', 'زیرنویس معرفی — Guest Title'],
-  ['sequence', 'توالی خبر — Headline Rotator'],
+  ['irib-news', 'میان‌برنامهٔ خبر'],
+  ['ticker', 'نوار اخبار'],
+  ['logo-bug', 'آرم شبکه'],
+  ['title', 'زیرنویس معرفی'],
+  ['sequence', 'توالی خبر'],
   ['iran-premier-league', 'جدول لیگ برتر ایران'],
   ['iran-weather-pages', 'آب‌وهوای مراکز استان‌ها'],
   ['iran-weather-forecast', 'پیش‌بینی چندروزهٔ هوا'],
   ['image-folder-sequence', 'توالی تصاویر پوشه'],
-  ['countdown-steps', 'شمارش معکوس مرحله‌ای'],
+  ['countdown-steps', 'شمارش معکوس اذان'],
   ['multibox', 'میزگرد چندقابه'],
 ] as const;
 
 test('renders the complete production poster set from authored scenes', async ({ app }) => {
   test.setTimeout(240_000);
   const out = OUT as string;
+  const requested = process.env.CG_STARTER_CAPTURE_IDS?.split(',').filter(Boolean);
+  if (requested !== undefined)
+    expect(requested.every((id) => starters.some(([candidate]) => candidate === id))).toBe(true);
   fs.mkdirSync(out, { recursive: true });
   await app.page.setViewportSize({ width: 1600, height: 1000 });
 
   for (const [id, label] of starters) {
+    if (requested !== undefined && !requested.includes(id)) continue;
     await app.goto();
     await app.page.getByTestId('starter-card').filter({ hasText: label }).click();
     await app.expectStudio();
+    if (id === 'ticker' || id === 'irib-news') {
+      // A poster represents the populated band, not the first few pixels entering
+      // from off screen. Static authoring uses the same fixed nested measurement.
+      await app.scrubToFrame(60);
+      const stage = app.canvasFrame.locator('.cg-stage').first();
+      await expect(stage).toBeVisible();
+      const file = path.join(out, `${id}.png`);
+      await stage.screenshot({ path: file, animations: 'disabled' });
+      expect(fs.statSync(file).size, id).toBeGreaterThan(5000);
+      continue;
+    }
     await app.openPreviewModal();
     await app.play();
-    // The league table intentionally staggers all 18 rows. Capture after that
+    // The league table intentionally staggers its rows. Capture after that
     // entrance has settled so the landing poster represents the complete design.
     await app.page.waitForTimeout(1800);
+    if (id === 'iran-premier-league') {
+      await expect(app.previewDialog.getByLabel('Preview frame')).toContainText('110 / 200');
+    }
 
     const stage = app.previewFrame.locator('.cg-stage').first();
     await expect(stage).toBeVisible();

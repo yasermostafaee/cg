@@ -15,6 +15,14 @@ export function rewriteStarterAssetRefs(
     value === undefined ? undefined : (imageRemap.get(value) ?? value);
 
   const fixEl = (el: Element): void => {
+    if (el.valueRules !== undefined) {
+      for (const rule of el.valueRules.rules) {
+        if (rule.effect.property === 'image' && rule.effect.value.source === 'project') {
+          rule.effect.value.assetId =
+            fixImageId(rule.effect.value.assetId) ?? rule.effect.value.assetId;
+        }
+      }
+    }
     if (el.type === 'image') {
       el.assetId = fixImageId(el.assetId) ?? el.assetId;
     } else if (el.type === 'video-placeholder') {
@@ -34,8 +42,12 @@ export function rewriteStarterAssetRefs(
       el.items = el.items.map((item) =>
         item.kind === 'image' && item.assetId !== undefined
           ? { ...item, assetId: fixImageId(item.assetId) ?? item.assetId }
-          : item,
+          : item.kind === 'composition' && item.fieldValues !== undefined
+            ? { ...item, fieldValues: fixOpenValue(item.fieldValues) as typeof item.fieldValues }
+            : item,
       );
+    } else if (el.type === 'repeater') {
+      el.items = fixOpenValue(el.items) as typeof el.items;
     } else if (el.type === 'container') {
       el.children.forEach(fixEl);
     }

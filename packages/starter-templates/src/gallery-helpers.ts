@@ -170,14 +170,15 @@ export function text(
   } as Element;
 }
 
-export function reveal(delay = 0): Element['animation'] {
+/** Position tracks contain absolute coordinates, not offsets from the authored transform. */
+export function reveal(delay = 0, restingY = 0): Element['animation'] {
   return anim({
     opacity: track(kf(delay, 0), kf(delay + 12, 1, EASE.outExpo), kf(116, 1), kf(138, 0)),
     'position.y': track(
-      kf(delay, 20, EASE.outExpo),
-      kf(delay + 16, 0, EASE.outExpo),
-      kf(116, 0),
-      kf(138, 16, EASE.inCubic),
+      kf(delay, restingY + 20, EASE.outExpo),
+      kf(delay + 16, restingY, EASE.outExpo),
+      kf(116, restingY),
+      kf(138, restingY + 16, EASE.inCubic),
     ),
   });
 }
@@ -207,8 +208,29 @@ interface GallerySceneOptions {
 }
 
 function offsetElement(element: Element, x: number, y: number): Element {
+  const animation = element.animation;
+  const tracks = animation === undefined ? undefined : { ...animation.tracks };
+  if (tracks !== undefined) {
+    for (const [property, offset] of [
+      ['position.x', x],
+      ['position.y', y],
+    ] as const) {
+      const source = tracks[property];
+      if (source === undefined) continue;
+      tracks[property] = {
+        ...source,
+        keyframes: source.keyframes.map((keyframe) => ({
+          ...keyframe,
+          value: typeof keyframe.value === 'number' ? keyframe.value + offset : keyframe.value,
+        })),
+      };
+    }
+  }
   return {
     ...element,
+    ...(animation !== undefined && tracks !== undefined
+      ? { animation: { ...animation, tracks } }
+      : {}),
     transform: {
       ...element.transform,
       position: {

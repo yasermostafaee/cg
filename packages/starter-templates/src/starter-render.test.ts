@@ -134,7 +134,9 @@ describe('starter render — bound text shows its Persian default, operator valu
     it(`${starter.id}: no operator value → the field default renders (never a raw token)`, async () => {
       const scoped = scopedExportOf(starter.scene);
       const bound = boundTexts(scoped);
-      expect(bound.length, `${starter.id} has bound text`).toBeGreaterThan(0);
+      if (starter.id === 'multibox' || starter.id === 'image-folder-sequence')
+        expect(bound).toEqual([]);
+      else expect(bound.length, `${starter.id} has bound text`).toBeGreaterThan(0);
 
       const root = document.createElement('div');
       document.body.appendChild(root);

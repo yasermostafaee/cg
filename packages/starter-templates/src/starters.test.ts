@@ -29,6 +29,29 @@ const EXPECTED_IDS = [
 ];
 
 describe('starter templates', () => {
+  it('D-179: weather and league header reveals settle at their authored positions', () => {
+    for (const scene of [iranPremierLeagueScene, iranWeatherPagesScene, iranWeatherForecastScene]) {
+      const entry = scene.compositions?.find(
+        (composition) => composition.id === scene.entryCompositionId,
+      );
+      const animated =
+        entry?.layers
+          .flatMap((layer) => layer.children)
+          .filter((element) => element.animation?.tracks['position.y'] !== undefined) ?? [];
+      expect(animated, scene.id).toHaveLength(scene === iranPremierLeagueScene ? 2 : 4);
+      for (const element of animated) {
+        const frames = element.animation?.tracks['position.y']?.keyframes;
+        expect(frames?.[1]?.value, `${scene.id}.${element.id} entrance rest`).toBe(
+          element.transform.position.y,
+        );
+        expect(
+          frames?.find((frame) => frame.frame === 116)?.value,
+          `${scene.id}.${element.id} hold rest`,
+        ).toBe(element.transform.position.y);
+      }
+    }
+  });
+
   it('every starter has a Zod-valid Scene', () => {
     for (const s of STARTER_TEMPLATES) {
       expect(() => SceneSchema.parse(s.scene), `${s.id} parses`).not.toThrow();
@@ -39,9 +62,65 @@ describe('starter templates', () => {
     expect(STARTER_TEMPLATES.map((s) => s.id)).toEqual(EXPECTED_IDS);
   });
 
+  it('all gallery display titles and root composition names stay Persian-only', () => {
+    for (const starter of STARTER_TEMPLATES) {
+      const root = starter.scene.compositions?.find(
+        (composition) => composition.id === starter.scene.entryCompositionId,
+      );
+      expect(starter.label).not.toMatch(/[A-Za-z]/);
+      expect(starter.scene.name).not.toMatch(/[A-Za-z]/);
+      expect(root?.name).not.toMatch(/[A-Za-z]/);
+    }
+  });
+
+  it('on-air starter text contains content, not authoring or training instructions', () => {
+    const visit = (elements: Element[]): string[] =>
+      elements.flatMap((element) => {
+        if (element.type === 'text') return [element.text];
+        if (element.type === 'group') return visit(element.children);
+        return [];
+      });
+    for (const starter of STARTER_TEMPLATES) {
+      const layers = [
+        ...starter.scene.layers,
+        ...(starter.scene.compositions?.flatMap((composition) => composition.layers) ?? []),
+      ];
+      const texts = visit(layers.flatMap((layer) => layer.children));
+      expect(texts).not.toContain(
+        'شهرها به‌ترتیب الفبای فارسی در صفحه‌های بعدی ادامه پیدا می‌کنند',
+      );
+      for (const text of texts) {
+        expect(text, starter.id).not.toMatch(
+          /Add folder|Inspector|Repeater|اپراتور|راهنمای استفاده/,
+        );
+      }
+    }
+  });
+
   it('getStarter returns the matching starter by id', () => {
     expect(getStarter('ticker')?.id).toBe('ticker');
     expect(getStarter('nope')).toBeNull();
+  });
+
+  it('guest title extends its existing animated name plate beneath the replaceable logo', () => {
+    const card = getStarter('title')?.scene.compositions?.find((c) => c.id === 'comp-title-card');
+    const children = card?.layers.flatMap((layer) => layer.children) ?? [];
+    const plate = children.find((element) => element.id === 'tt-name-plate');
+    const logo = children.find((element) => element.id === 'tt-star');
+    expect(plate?.transform).toMatchObject({ position: { x: 0, y: 20 }, size: { w: 1000, h: 76 } });
+    expect(logo).toMatchObject({ type: 'image', assetId: 'apasai-logo' });
+    expect(plate?.animation?.tracks['scale.x']).toBeDefined();
+    expect(logo?.animation?.tracks.rotation).toBeDefined();
+    if (!plate || !logo) return;
+    const { position: p, size: ps } = plate.transform;
+    const { position: l, size: ls } = logo.transform;
+    expect(l.x - p.x).toBeGreaterThanOrEqual(8);
+    expect(p.x + ps.w - l.x - ls.w).toBe(12);
+    expect(l.y - p.y).toBeGreaterThanOrEqual(8);
+    expect(p.y + ps.h - l.y - ls.h).toBeGreaterThanOrEqual(8);
+    expect(
+      children.filter((element) => element.type === 'shape').map((element) => element.id),
+    ).toEqual(['tt-name-plate', 'tt-role-plate']);
   });
 
   it('no starter carries the "New" badge (owner decision, D-119)', () => {
@@ -50,8 +129,13 @@ describe('starter templates', () => {
     }
   });
 
-  it('every starter has at least one bound field', () => {
+  it('editable-copy starters bind fields; pure picture/live-plate examples need no dummy fields', () => {
     for (const s of STARTER_TEMPLATES) {
+      if (s.id === 'multibox' || s.id === 'image-folder-sequence') {
+        expect(s.scene.fields).toEqual([]);
+        expect(s.scene.bindings).toEqual([]);
+        continue;
+      }
       expect(s.scene.bindings.length, `${s.id} has bindings`).toBeGreaterThan(0);
     }
   });
@@ -166,9 +250,12 @@ describe('starter templates', () => {
       (element) => element.type === 'repeater',
     );
     expect(leagueRepeater).toMatchObject({
-      itemEntrance: 'fade-right',
-      itemTransitionMs: 400,
-      itemStaggerMs: 70,
+      itemEntrance: 'fade-top',
+      itemExit: 'fade-top',
+      itemExitOrder: 'reverse',
+      itemTransitionMs: 200,
+      itemExitTransitionMs: 50,
+      itemStaggerMs: 30,
     });
     expect(elements(iranWeatherForecastScene).some((element) => element.type === 'repeater')).toBe(
       true,
@@ -179,7 +266,7 @@ describe('starter templates', () => {
     );
     expect(weatherPages?.type).toBe('sequence');
     if (weatherPages?.type === 'sequence') {
-      expect(weatherPages.pageDataFile).toBe('starter-data/iran-weather-pages.json');
+      expect(weatherPages.pageDataFile).toBeUndefined();
       expect(weatherPages.items).toHaveLength(4);
       expect(weatherPages.items.every((item) => item.kind === 'composition')).toBe(true);
       const cityNames = weatherPages.items.flatMap((item) => {
@@ -196,11 +283,16 @@ describe('starter templates', () => {
       expect([...cityNames].sort((left, right) => left.localeCompare(right, 'fa'))).toEqual(
         cityNames,
       );
+      expect(weatherPages).toMatchObject({ repeat: 1, drivesHold: true, advance: 'auto' });
+      expect(weatherPages.items.every((item) => item.dwellMs === 6500)).toBe(true);
       expect(
-        weatherPages.items.map((item) =>
-          item.kind === 'composition' ? item.fieldValues?.pageTitle : undefined,
+        weatherPages.items.every(
+          (item) => item.kind === 'composition' && item.fieldValues?.pageTitle === undefined,
         ),
-      ).toEqual(['شهرها ـ صفحه ۱', 'شهرها ـ صفحه ۲', 'شهرها ـ صفحه ۳', 'شهرها ـ صفحه ۴']);
+      ).toBe(true);
+      expect(elements(iranWeatherPagesScene).some((item) => item.id === 'weather-page-title')).toBe(
+        false,
+      );
     }
 
     const weatherTemperature = elements(iranWeatherPagesScene).find(
@@ -215,7 +307,7 @@ describe('starter templates', () => {
     ]);
   });
 
-  it('D-179: folder sequence ships picture pages and image assets', () => {
+  it('D-179: folder sequence ships single full-HD wide slides and manual page control', () => {
     const pictureSequence = imageFolderSequenceScene.compositions
       ?.flatMap((composition) => composition.layers)
       .flatMap((entry) => entry.children)
@@ -225,29 +317,61 @@ describe('starter templates', () => {
       expect(pictureSequence.items).toHaveLength(5);
       expect(pictureSequence.items.every((item) => item.kind === 'image')).toBe(true);
       expect(pictureSequence.advance).toBe('manual');
+      expect(pictureSequence.transform.size).toEqual({ w: 1920, h: 1080 });
+      expect(pictureSequence.name).toBe('تصاویر عریض قرآن با ترجمه');
     }
-    expect(
-      getStarter('image-folder-sequence')?.assets?.filter((asset) => asset.kind === 'image'),
-    ).toHaveLength(5);
+    const images = getStarter('image-folder-sequence')?.assets?.filter(
+      (asset) => asset.kind === 'image',
+    );
+    expect(images).toHaveLength(5);
+    expect(images?.map((asset) => asset.filename)).toEqual(
+      [1, 2, 3, 4, 5].map((page) => `quran-wide-${String(page).padStart(3, '0')}.png`),
+    );
   });
 
-  it('D-179: countdown steps are ordered and drive visual state', () => {
+  it('D-179: Azan countdown steps replace the timer with a persistent announcement at zero', () => {
     const clock = countdownStepsScene.compositions
       ?.flatMap((composition) => composition.layers)
       .flatMap((entry) => entry.children)
       .find((element) => element.type === 'clock');
     expect(clock?.type).toBe('clock');
     if (clock?.type === 'clock') {
-      expect(clock.target?.kind).toBe('timeofday');
-      expect(clock.steps?.steps.map((step) => step.atMs)).toEqual([
-        3_600_000, 1_800_000, 600_000, 0,
-      ]);
-      expect(
-        clock.steps?.steps.some((step) =>
-          step.changes.some((change) => change.property === 'blink'),
-        ),
-      ).toBe(true);
+      expect(clock.target?.kind).toBe('datetime');
+      expect(clock.afterZero).toBe('hide-digits');
+      expect(clock.drivesHold).toBe(false);
+      expect(clock.steps?.steps.map((step) => step.atMs)).toEqual([300_000, 60_000, 0]);
+      expect(clock.steps?.steps.at(-1)?.changes).toEqual(
+        expect.arrayContaining([
+          { elementId: 'countdown-clock', property: 'visible', value: false },
+          { elementId: 'countdown-zero', property: 'visible', value: true },
+        ]),
+      );
     }
+    const onair = countdownStepsScene.compositions?.find(
+      (composition) => composition.id === 'comp-countdown-steps-onair',
+    );
+    const entry = countdownStepsScene.compositions?.find(
+      (composition) => composition.id === countdownStepsScene.entryCompositionId,
+    );
+    expect(countdownStepsScene.templateType).toBe('lower-third');
+    expect(entry?.playout?.mode).toBe('manual');
+    expect(onair?.playout?.mode).toBe('manual');
+    expect(onair?.resolution).toEqual({ width: 1400, height: 164 });
+    expect(entry?.layers[0]?.children[0]?.transform).toMatchObject({
+      position: { x: 260, y: 820 },
+      size: { w: 1400, h: 164 },
+    });
+    expect(onair?.layers.flatMap((layer) => layer.children).some((el) => el.type === 'image')).toBe(
+      false,
+    );
+    expect(countdownStepsScene.fields.find((field) => field.id === 'eventTime')).toMatchObject({
+      type: 'text',
+      label: 'زمان اذان',
+    });
+    expect(countdownStepsScene.fields.find((field) => field.id === 'announcement')).toMatchObject({
+      type: 'text',
+      default: 'اذان مغرب به افق تهران',
+    });
   });
 
   it('D-179: multibox carries switchable 1–4 plate looks with equal boxes per look', () => {
@@ -268,11 +392,242 @@ describe('starter templates', () => {
       expect(new Set(liveSources?.map((element) => element.routeKey)).size).toBe(count);
       expect(new Set(liveSources?.map((element) => element.transform.size.w)).size).toBe(1);
       expect(new Set(liveSources?.map((element) => element.transform.size.h)).size).toBe(1);
+      expect(
+        composition?.layers
+          .flatMap((layer) => layer.children)
+          .every((element) => element.type === 'video-placeholder'),
+      ).toBe(true);
+      if (count === 1)
+        expect(liveSources?.[0]?.transform).toMatchObject({
+          position: { x: 0, y: 0 },
+          size: { w: 1920, h: 1080 },
+        });
+      if (count === 3) {
+        expect(liveSources?.[0]?.transform.position.y).toBe(liveSources?.[1]?.transform.position.y);
+        expect(liveSources?.[2]?.transform.position.y).toBeGreaterThan(
+          liveSources?.[0]?.transform.position.y ?? 0,
+        );
+      }
     }
+  });
+
+  it('D-179: weather choices are bound to visible text and ordinary image rules', () => {
+    for (const scene of [iranWeatherPagesScene, iranWeatherForecastScene]) {
+      const composition = scene.compositions?.find((comp) =>
+        comp.fields?.some((field) => field.id === 'weatherType'),
+      );
+      const field = composition?.fields?.find((candidate) => candidate.id === 'weatherType');
+      expect(field?.type).toBe('select');
+      if (field?.type !== 'select') continue;
+      expect(field.options.map((option) => option.value)).toEqual([
+        'آفتابی',
+        'ابری',
+        'بارانی',
+        'برفی',
+        'نیمه‌ابری',
+      ]);
+      const binding = composition?.bindings?.find((candidate) => candidate.fieldId === field.id);
+      expect(binding?.target.kind).toBe('text');
+      const elements = composition?.layers.flatMap((layer) => layer.children) ?? [];
+      const icon = elements.find((element) => element.type === 'image');
+      expect(icon?.valueRules?.input).toEqual({ kind: 'field', fieldId: 'weatherType' });
+      expect(icon?.valueRules?.rules.map((rule) => rule.condition)).toEqual(
+        field.options.map((option) => ({ comparator: '=', value: option.value })),
+      );
+      expect(elements.some((element) => element.id.includes('rain-unit'))).toBe(false);
+      expect(composition?.fields?.some((candidate) => candidate.id === 'rain')).toBe(false);
+    }
+  });
+
+  it('D-179: forecast daily maximum/minimum have equal typography and separate Persian labels', () => {
+    const card = iranWeatherForecastScene.compositions?.find(
+      (comp) => comp.id === 'comp-weather-forecast-card',
+    );
+    const elements = card?.layers.flatMap((layer) => layer.children) ?? [];
+    const high = elements.find((element) => element.id === 'forecast-high');
+    const low = elements.find((element) => element.id === 'forecast-low');
+    expect(high?.type).toBe('text');
+    expect(low?.type).toBe('text');
+    if (high?.type !== 'text' || low?.type !== 'text') return;
+    expect(high.font.size).toBe(52);
+    expect(low.font.size).toBe(high.font.size);
+    expect(low.font.weight).toBe(high.font.weight);
+    expect(low.transform.position.y).toBe(high.transform.position.y);
+    expect(low.transform.size).toEqual(high.transform.size);
+    expect(high.align).toBe('center');
+    expect(low.align).toBe('center');
+    expect(high.backgroundColor).toBeUndefined();
+    expect(low.backgroundColor).toBeUndefined();
+    expect(low.color).toBe('#7DD3FC');
+    for (const [kind, label] of [
+      ['high', 'بیشینه'],
+      ['low', 'کمینه'],
+    ] as const) {
+      expect(elements.find((element) => element.id === `forecast-${kind}-degree`)).toMatchObject({
+        type: 'text',
+        text: '°',
+      });
+      const value = kind === 'high' ? high : low;
+      expect(elements.find((element) => element.id === `forecast-${kind}-label`)).toMatchObject({
+        type: 'text',
+        text: label,
+        align: 'center',
+        transform: {
+          position: { x: value.transform.position.x },
+          size: { w: value.transform.size.w },
+        },
+      });
+    }
+    expect(elements.some((element) => element.id === 'forecast-labels')).toBe(false);
+    for (const element of elements) {
+      expect(
+        element.transform.position.y + element.transform.size.h,
+        element.id,
+      ).toBeLessThanOrEqual(card?.resolution.height ?? 0);
+    }
+  });
+
+  it('D-179: league ranks derive from row order and its points column has no special plate', () => {
+    const row = iranPremierLeagueScene.compositions?.find(
+      (comp) => comp.id === 'comp-iran-premier-league-row',
+    );
+    const rank = row?.layers
+      .flatMap((layer) => layer.children)
+      .find((element) => element.id === 'az-rank');
+    const points = row?.layers
+      .flatMap((layer) => layer.children)
+      .find((element) => element.id === 'az-points');
+    expect(rank).toMatchObject({ type: 'text', rowNumber: true, digits: 'persian' });
+    expect(row?.fields?.some((field) => field.id === 'rank')).toBe(false);
+    expect(row?.bindings?.some((binding) => binding.fieldId === 'rank')).toBe(false);
+    expect(points?.type === 'text' ? points.backgroundColor : undefined).toBeUndefined();
+    expect(
+      getStarter('iran-premier-league')?.assets?.filter((asset) => asset.key.startsWith('league-')),
+    ).toHaveLength(18);
+    expect(
+      getStarter('iran-premier-league')?.assets?.find((asset) => asset.key === 'league-zwlji1u1'),
+    ).toMatchObject({
+      filename: 'پرسپولیس.png',
+      url: '/starters/assets/league-zwlji1u1.png',
+    });
+    expect(
+      getStarter('iran-premier-league')?.assets?.find((asset) => asset.key === 'league-gzueny5i'),
+    ).toMatchObject({
+      filename: 'مس شهر بابک.png',
+      url: '/starters/assets/league-gzueny5i.png',
+    });
+  });
+
+  it('D-179: league fits all rows, has enough stagger time and fades its entire navy/slate backdrop', () => {
+    const entry = iranPremierLeagueScene.compositions?.find(
+      (composition) => composition.id === iranPremierLeagueScene.entryCompositionId,
+    );
+    const elements = entry?.layers.flatMap((layer) => layer.children) ?? [];
+    const panel = elements.find((element) => element.id === 'az-bg');
+    const repeater = elements.find((element) => element.id === 'az-table-repeater');
+    expect(panel).toBeDefined();
+    expect(repeater?.type).toBe('repeater');
+    if (panel === undefined || repeater?.type !== 'repeater' || entry === undefined) return;
+    expect(repeater.items).toHaveLength(18);
+    const row = iranPremierLeagueScene.compositions?.find(
+      (composition) => composition.id === repeater.compositionId,
+    );
+    const rowHeight = row?.resolution.height ?? 0;
+    expect(rowHeight).toBeGreaterThan(0);
+    const rowsHeight =
+      repeater.items.length * rowHeight + (repeater.items.length - 1) * repeater.gap;
+    const bottom = repeater.transform.position.y + rowsHeight;
+    expect(bottom).toBeLessThan(panel.transform.position.y + panel.transform.size.h - 20);
+    expect(bottom).toBeLessThan(entry.resolution.height);
+    expect(rowsHeight).toBeLessThanOrEqual(repeater.transform.size.h);
+    const cascadeFrames =
+      (((repeater.items.length - 1) * (repeater.itemStaggerMs ?? 0) +
+        (repeater.itemTransitionMs ?? 0)) *
+        iranPremierLeagueScene.frameRate) /
+      1000;
+    const outPoint = entry.lifecycle?.outPoint ?? 0;
+    expect(outPoint - (entry.lifecycle?.contentStart ?? 0)).toBeGreaterThanOrEqual(cascadeFrames);
+    expect(entry.frameRange.out - outPoint).toBeGreaterThanOrEqual(cascadeFrames);
+    expect(panel).toMatchObject({
+      fill: { kind: 'linear', stops: [{ color: '#111B2CEB' }, { color: '#172337E3' }] },
+    });
+    for (const id of ['az-stadium-bg', 'az-bg-scrim', 'az-bg', 'az-head-bg']) {
+      const element = elements.find((candidate) => candidate.id === id);
+      const frames = element?.animation?.tracks.opacity?.keyframes ?? [];
+      expect(
+        frames.find((frame) => frame.frame === outPoint)?.value,
+        `${id} holds before exit`,
+      ).toBe(element?.opacity);
+      expect(frames.at(-1), `${id} visible authored fade`).toMatchObject({
+        frame: entry.frameRange.out,
+        value: 0,
+      });
+    }
+  });
+
+  it('D-179: league preserves the owner-saved centered heading and frame-84 refinements', () => {
+    const entry = iranPremierLeagueScene.compositions?.find(
+      (composition) => composition.id === iranPremierLeagueScene.entryCompositionId,
+    );
+    const elements = entry?.layers.flatMap((layer) => layer.children) ?? [];
+    expect(
+      elements.some((element) => element.id === 'az-kicker' || element.id === 'az-kicker-label'),
+    ).toBe(false);
+    const title = elements.find((element) => element.id === 'az-title');
+    expect(title).toMatchObject({
+      type: 'text',
+      align: 'center',
+      font: { size: 27 },
+      transform: { position: { x: 664.75, y: 104 }, size: { w: 550.5, h: 56 } },
+    });
+    const bar = elements.find((element) => element.id === 'az-title-glow');
+    expect(bar?.transform).toMatchObject({
+      position: { x: 130, y: 102 },
+      size: { w: 1660, h: 56 },
+    });
+    for (const element of [title, bar]) {
+      expect(
+        element?.animation?.tracks['position.y']?.keyframes.find((frame) => frame.frame === 84),
+      ).toMatchObject({
+        value: 104,
+        easing: 'linear',
+      });
+    }
+    expect(
+      elements
+        .find((element) => element.id === 'az-bg-scrim')
+        ?.animation?.tracks.opacity?.keyframes.find((frame) => frame.frame === 84),
+    ).toMatchObject({
+      value: 0,
+      easing: 'linear',
+    });
+    expect(entry?.bindings).toHaveLength(2);
+  });
+
+  it('D-179: city weather waits for one complete page pass then fades every non-content element', () => {
+    const entry = iranWeatherPagesScene.compositions?.find(
+      (composition) => composition.id === iranWeatherPagesScene.entryCompositionId,
+    );
+    expect(entry?.playout).toMatchObject({ mode: 'auto-out', holdSource: 'content-driven' });
+    const elements = entry?.layers.flatMap((layer) => layer.children) ?? [];
+    for (const element of elements.filter((candidate) => candidate.type !== 'sequence')) {
+      const frames = element.animation?.tracks.opacity?.keyframes ?? [];
+      expect(frames.length, `${element.id} has an authored opacity exit`).toBeGreaterThanOrEqual(4);
+      expect(frames.at(-1)?.value, `${element.id} fades fully`).toBe(0);
+      expect(frames.at(-1)?.frame, `${element.id} fits outro`).toBeLessThanOrEqual(
+        entry?.frameRange.out ?? 0,
+      );
+    }
+    expect(
+      iranWeatherPagesScene.compositions?.some((composition) =>
+        composition.fields?.some((field) => field.id === 'pageTitle'),
+      ),
+    ).toBe(false);
   });
 
   it('Persian defaults are non-empty RTL copy', () => {
     for (const s of STARTER_TEMPLATES) {
+      if (s.id === 'multibox' || s.id === 'image-folder-sequence') continue;
       const textFields = s.scene.fields.filter((f) => f.type === 'text');
       expect(textFields.length, `${s.id} has text fields`).toBeGreaterThan(0);
       for (const f of textFields) {
@@ -303,7 +658,9 @@ describe('starter templates', () => {
       }
 
       const textBindings = s.scene.bindings.filter((b) => b.target.kind === 'text');
-      expect(textBindings.length, `${s.id} has text bindings`).toBeGreaterThan(0);
+      if (s.id !== 'multibox' && s.id !== 'image-folder-sequence') {
+        expect(textBindings.length, `${s.id} has text bindings`).toBeGreaterThan(0);
+      }
 
       for (const b of textBindings) {
         if (b.target.kind !== 'text') continue;

@@ -4,7 +4,7 @@ import { anim, EASE, kf, track } from './anim.js';
 /**
  * «زیرنویس معرفی» — a guest / expert name title (lower third) that SELF-CLOSES:
  * a two-tier plate flush against the right frame edge (the RTL reading edge),
- * a red brand square carrying a replaceable APASAI image, name + role on
+ * a transparent replaceable APASAI image, name + role on
  * bound data keys, and `auto-out` playout — enter, hold 6 s, play the authored
  * exit, settle. No operator stop needed.
  *
@@ -27,8 +27,6 @@ const NAVY_D = '#0A1733';
 const NAVY_M = '#16305F';
 const NAVY_DK = '#081226';
 const NAVY_MID = '#0E2148';
-const RED = '#D5192E';
-const RED_D = '#8F0E1F';
 const WHITE = '#FFFFFF';
 const MUTED = '#A9BBDD';
 
@@ -68,12 +66,12 @@ const lin = (angle: number, a: string, b: string): Fill => ({
 
 // ── comp-title-card children (LOCAL coords, 1000×190) ──────────────────────
 const cardChildren: Element[] = [
-  // Name plate — wipes open from the right (toward the reading edge).
+  // One shared name plate includes the transparent logo, wiping from the right edge.
   {
     id: 'tt-name-plate',
     name: 'name-plate',
     type: 'shape',
-    transform: tf(0, 20, 924, 76, { ax: 1, ay: 0 }),
+    transform: tf(0, 20, CARD_W, 76, { ax: 1, ay: 0 }),
     opacity: 1,
     visible: true,
     locked: false,
@@ -111,35 +109,6 @@ const cardChildren: Element[] = [
         kf(92, 0, EASE.inCubic),
       ),
       opacity: track(kf(18, 0), kf(30, 1), kf(82, 1), kf(94, 0)),
-    }),
-  },
-  // Red brand square — flush at the right frame edge.
-  {
-    id: 'tt-brand',
-    name: 'brand-square',
-    type: 'shape',
-    transform: tf(924, 20, 76, 76),
-    opacity: 1,
-    visible: true,
-    locked: false,
-    zIndex: 2,
-    shape: 'rect',
-    fill: lin(105, RED, RED_D),
-    shadow: { offsetX: 0, offsetY: 10, blur: 26, color: '#00000080' },
-    animation: anim({
-      'scale.x': track(
-        kf(0, 0.5, EASE.outBack),
-        kf(22, 1, EASE.outBack),
-        kf(90, 1, EASE.inCubic),
-        kf(112, 0.5, EASE.inCubic),
-      ),
-      'scale.y': track(
-        kf(0, 0.5, EASE.outBack),
-        kf(22, 1, EASE.outBack),
-        kf(90, 1, EASE.inCubic),
-        kf(112, 0.5, EASE.inCubic),
-      ),
-      opacity: track(kf(0, 0), kf(12, 1), kf(98, 1), kf(112, 0)),
     }),
   },
   // Replaceable logo image; its transform animation survives asset replacement.

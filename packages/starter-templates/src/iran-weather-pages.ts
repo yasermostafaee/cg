@@ -1,4 +1,5 @@
 import type { Element, Scene } from '@cg/shared-schema';
+import { anim, kf, track } from './anim.js';
 import {
   galleryScene,
   gradient,
@@ -11,12 +12,20 @@ import {
   text,
   tf,
 } from './gallery-helpers.js';
-import { WEATHER_TYPE_LABELS, weatherIconElements } from './weather-icons.js';
+import { weatherTypeField, weatherIconElements } from './weather-icons.js';
 
 const FAM = 'asset-iran-weather-pages-vazir';
 const TITLE = 'دمای مراکز استان‌های ایران';
 const CARD_COMP = 'comp-iran-weather-city-row';
 const PAGE_COMP = 'comp-iran-weather-page';
+const PAGE_DWELL_MS = 6500;
+const OUT_POINT = 100;
+const END_FRAME = 160;
+
+const backdropFade = (opacity = 1): NonNullable<Element['animation']> =>
+  anim({
+    opacity: track(kf(0, 0), kf(16, opacity), kf(OUT_POINT, opacity), kf(END_FRAME, 0)),
+  });
 
 const cities = [
   ['اراک', 14, 'کمی ابری', 1],
@@ -52,12 +61,11 @@ const cities = [
   ['یزد', 19, 'آفتابی', 0],
 ] as const;
 
-const cityRows = cities.map(([city, temp, condition, weatherType], index) => ({
+const cityRows = cities.map(([city, temp, condition], index) => ({
   id: `city-${index + 1}`,
   city,
   temp,
-  condition,
-  weatherType,
+  weatherType: condition === 'کمی ابری' ? 'نیمه‌ابری' : condition,
 }));
 
 const cityCard: NonNullable<Scene['compositions']>[number] = {
@@ -118,7 +126,7 @@ const cityCard: NonNullable<Scene['compositions']>[number] = {
       text(
         'weather-condition',
         'وضعیت',
-        'صاف',
+        'آفتابی',
         tf(292, 8, 410, 56),
         FAM,
         27,
@@ -148,29 +156,12 @@ const cityCard: NonNullable<Scene['compositions']>[number] = {
       unit: '°',
       digits: 'persian',
     },
-    {
-      id: 'condition',
-      label: 'وضعیت',
-      required: true,
-      type: 'text',
-      default: 'صاف',
-      direction: 'rtl',
-    },
-    {
-      id: 'weatherType',
-      label: 'نوع آب‌وهوا',
-      required: true,
-      type: 'number',
-      default: 0,
-      allowedValues: [0, 1, 2, 3],
-      allowedValueLabels: WEATHER_TYPE_LABELS,
-      digits: 'persian',
-    },
+    weatherTypeField(),
   ],
   bindings: [
     { fieldId: 'city', target: { kind: 'text', elementId: 'weather-city' } },
     { fieldId: 'temp', target: { kind: 'text', elementId: 'weather-temp' } },
-    { fieldId: 'condition', target: { kind: 'text', elementId: 'weather-condition' } },
+    { fieldId: 'weatherType', target: { kind: 'text', elementId: 'weather-condition' } },
   ],
 };
 
@@ -184,26 +175,12 @@ const pageComposition: NonNullable<Scene['compositions']>[number] = {
   editorBackdrop: 'transparent',
   layers: [
     layer('weather-page-layer', 'صفحه', [
-      text(
-        'weather-page-title',
-        'عنوان صفحه',
-        'شهرها ـ صفحه ۱',
-        tf(40, 0, 1600, 62),
-        FAM,
-        28,
-        800,
-        '#7DD3FC',
-        2,
-        {
-          align: 'start',
-        },
-      ),
       {
         id: 'weather-page-repeater',
         name: 'فهرست شهرها',
         type: 'repeater',
         compositionId: CARD_COMP,
-        transform: tf(40, 72, 1600, 648),
+        transform: tf(40, 36, 1600, 648),
         opacity: 1,
         visible: true,
         locked: false,
@@ -212,19 +189,15 @@ const pageComposition: NonNullable<Scene['compositions']>[number] = {
         flow: 'rtl',
         gap: 9,
         maxItems: 8,
+        itemEntrance: 'fade-right',
+        itemExit: 'fade-left',
+        itemTransitionMs: 400,
+        itemStaggerMs: 90,
         items: cityRows.slice(0, 8),
       } as Element,
     ]),
   ],
   fields: [
-    {
-      id: 'pageTitle',
-      label: 'عنوان صفحه',
-      required: true,
-      type: 'text',
-      default: 'شهرها ـ صفحه ۱',
-      direction: 'rtl',
-    },
     {
       id: 'cities',
       label: 'شهرها',
@@ -238,32 +211,32 @@ const pageComposition: NonNullable<Scene['compositions']>[number] = {
     },
   ],
   bindings: [
-    { fieldId: 'pageTitle', target: { kind: 'text', elementId: 'weather-page-title' } },
     { fieldId: 'cities', target: { kind: 'repeater-items', elementId: 'weather-page-repeater' } },
   ],
 };
 
-const pageNames = ['شهرها ـ صفحه ۱', 'شهرها ـ صفحه ۲', 'شهرها ـ صفحه ۳', 'شهرها ـ صفحه ۴'];
 const pages = Array.from({ length: 4 }, (_, index) => ({
   kind: 'composition' as const,
   id: `weather-page-${index + 1}`,
   compositionId: PAGE_COMP,
-  dwellMs: 6500,
+  dwellMs: PAGE_DWELL_MS,
   fieldValues: {
-    pageTitle: pageNames[index] ?? `صفحه ${index + 1}`,
     cities: cityRows.slice(index * 8, index * 8 + 8),
   },
 }));
 
 const children: Element[] = [
-  image(
-    'weather-pages-photo-bg',
-    'پس‌زمینهٔ جوی',
-    'weather-atmosphere',
-    tf(-70, -60, 1920, 1080),
-    0,
-    'cover',
-  ),
+  {
+    ...image(
+      'weather-pages-photo-bg',
+      'پس‌زمینهٔ جوی',
+      'weather-atmosphere',
+      tf(-70, -60, 1920, 1080),
+      0,
+      'cover',
+    ),
+    animation: backdropFade(),
+  },
   shape(
     'weather-pages-bg',
     'پنل شیشه‌ای',
@@ -273,6 +246,7 @@ const children: Element[] = [
     {
       radius: 34,
       opacity: 0.78,
+      animation: backdropFade(0.78),
       stroke: { color: '#67E8F955', width: 2 },
       shadow: { offsetX: 0, offsetY: 24, blur: 60, color: '#00000099' },
     },
@@ -286,7 +260,7 @@ const children: Element[] = [
     {
       radius: 26,
       stroke: { color: '#CFFAFE44', width: 1 },
-      animation: reveal(0),
+      animation: reveal(0, 34),
     },
   ),
   text(
@@ -301,7 +275,7 @@ const children: Element[] = [
     3,
     {
       align: 'start',
-      animation: reveal(4),
+      animation: reveal(4, 45),
     },
   ),
   shape(
@@ -313,7 +287,7 @@ const children: Element[] = [
     {
       radius: 26,
       shadow: { offsetX: 0, offsetY: 12, blur: 28, color: '#F59E0B30' },
-      animation: reveal(2),
+      animation: reveal(2, 34),
     },
   ),
   text(
@@ -328,7 +302,7 @@ const children: Element[] = [
     3,
     {
       align: 'center',
-      animation: reveal(6),
+      animation: reveal(6, 44),
     },
   ),
   {
@@ -353,32 +327,19 @@ const children: Element[] = [
     verticalAlign: 'middle',
     direction: 'rtl',
     items: pages,
-    pageDataFile: 'starter-data/iran-weather-pages.json',
-    defaultDwellMs: 6500,
+    defaultDwellMs: PAGE_DWELL_MS,
     advance: 'auto',
     operatorSteps: true,
     transitionIn: 'fade-right',
     transitionOut: 'fade-left',
     transitionTiming: 'simultaneous',
     transitionMs: 600,
-    repeat: 'infinite',
-    drivesHold: false,
+    repeat: 1,
+    drivesHold: true,
   } as Element,
-  shape('weather-pages-footer', 'نوار پایین', tf(50, 912, 1680, 2), solid('#38BDF8'), 2),
-  text(
-    'weather-pages-hint',
-    'راهنما',
-    'شهرها به‌ترتیب الفبای فارسی در صفحه‌های بعدی ادامه پیدا می‌کنند',
-    tf(60, 916, 1660, 32),
-    FAM,
-    18,
-    500,
-    PALETTE.muted,
-    3,
-    {
-      align: 'center',
-    },
-  ),
+  shape('weather-pages-footer', 'نوار پایین', tf(50, 912, 1680, 2), solid('#38BDF8'), 2, {
+    animation: backdropFade(),
+  }),
 ];
 
 export const iranWeatherPagesScene = galleryScene({
@@ -388,6 +349,9 @@ export const iranWeatherPagesScene = galleryScene({
     'نمایش چندصفحه‌ای همهٔ مراکز استان‌ها به‌ترتیب الفبای فارسی، با Sequence صفحه‌ای و Repeater داخلی.',
   templateType: 'fullscreen',
   direct: true,
+  entryOut: END_FRAME,
+  outPoint: OUT_POINT,
+  entryPlayout: { mode: 'auto-out', holdSource: 'content-driven' },
   fontFamily: FAM,
   onAirId: 'comp-iran-weather-pages-onair',
   onAirName: 'آب‌وهوای شهرها (روی آنتن)',

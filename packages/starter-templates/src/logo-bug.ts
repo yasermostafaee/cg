@@ -28,10 +28,7 @@ const H = 1080;
 const FAM = 'asset-logo-bug-vazir';
 
 // ── Palette (shared broadcast-news family) ─────────────────────────────────
-const NAVY_D = '#0A1733';
-const NAVY_M = '#1A3768';
 const GOLD = '#E3B04B';
-const GOLD_HAIR = '#E3B04B66';
 const WHITE = '#FFFFFF';
 
 // Bound-field copy. Each of these is BOTH the element's base text and the
@@ -62,44 +59,6 @@ function tf(x: number, y: number, w: number, h: number, o: TfOpts = {}): Transfo
 
 // ── comp-logo-mark children (LOCAL coords, 448×144) ────────────────────────
 const markChildren: Element[] = [
-  // Navy disc — the badge ground.
-  {
-    id: 'lb-disc',
-    name: 'disc',
-    type: 'shape',
-    transform: tf(336, 16, 96, 96),
-    opacity: 1,
-    visible: true,
-    locked: false,
-    zIndex: 0,
-    shape: 'ellipse',
-    fill: {
-      kind: 'radial',
-      center: { x: 0.5, y: 0.38 },
-      radius: 62,
-      stops: [
-        { at: 0, color: NAVY_M },
-        { at: 1, color: NAVY_D },
-      ],
-    },
-    stroke: { width: 1.5, color: GOLD_HAIR },
-    shadow: { offsetX: 0, offsetY: 8, blur: 24, color: '#00000080' },
-    animation: anim({
-      'scale.x': track(
-        kf(0, 0.5, EASE.outBack),
-        kf(22, 1, EASE.outBack),
-        kf(94, 1, EASE.inCubic),
-        kf(118, 0.55, EASE.inCubic),
-      ),
-      'scale.y': track(
-        kf(0, 0.5, EASE.outBack),
-        kf(22, 1, EASE.outBack),
-        kf(94, 1, EASE.inCubic),
-        kf(118, 0.55, EASE.inCubic),
-      ),
-      opacity: track(kf(0, 0), kf(12, 1), kf(100, 1), kf(118, 0)),
-    }),
-  },
   // Replaceable logo image. Replacing the asset keeps this entire sting.
   {
     id: 'lb-mark',
@@ -124,34 +83,6 @@ const markChildren: Element[] = [
       'scale.x': track(kf(8, 0.35, EASE.outBack), kf(34, 1, EASE.outBack)),
       'scale.y': track(kf(8, 0.35, EASE.outBack), kf(34, 1, EASE.outBack)),
       opacity: track(kf(8, 0), kf(20, 1), kf(100, 1), kf(114, 0)),
-    }),
-  },
-  // Gold centre dot — a small accent that pops once the logo settles.
-  {
-    id: 'lb-dot',
-    name: 'centre-dot',
-    type: 'shape',
-    transform: tf(379, 59, 10, 10),
-    opacity: 1,
-    visible: true,
-    locked: false,
-    zIndex: 2,
-    shape: 'ellipse',
-    fill: { kind: 'solid', color: GOLD },
-    animation: anim({
-      'scale.x': track(
-        kf(40, 0, EASE.outBack),
-        kf(58, 1, EASE.outBack),
-        kf(82, 1, EASE.inCubic),
-        kf(94, 0, EASE.inCubic),
-      ),
-      'scale.y': track(
-        kf(40, 0, EASE.outBack),
-        kf(58, 1, EASE.outBack),
-        kf(82, 1, EASE.inCubic),
-        kf(94, 0, EASE.inCubic),
-      ),
-      opacity: track(kf(40, 0), kf(52, 1), kf(84, 1), kf(94, 0)),
     }),
   },
   // Gold separator between mark and wordmark.

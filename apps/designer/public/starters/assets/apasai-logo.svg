@@ -1,10 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 132 132" role="img" aria-label="APASAI">
-<!-- FIELD-FIXES-01 G: the application icon and favicon, made from apasai-logo.svg beside it.
-     The 114x96 logo is centred, unchanged, on a white rounded square, so the icon is square
-     and its near-black bars stay legible on a dark title bar or taskbar. The path data and
-     the brand blue #00AEEF are the logo file's own; regenerate this file from it, never edit. -->
-  <rect width="132" height="132" rx="24" fill="#FFFFFF"/>
-  <svg x="9" y="18" width="114" height="96" viewBox="0 0 114 96" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 114 96" fill="none" role="img" aria-label="APASAI">
 <!-- APASAI mark.
      Brand blue #00AEEF is EXACT and must not be altered.
      Light ground : .apasai-bars #0E0E0E  .apasai-swoosh #8E8E8E
@@ -13,7 +7,7 @@
      PROVENANCE: auto-traced from companyLogo.png (114x96 raster).
      Replace with the original vector artwork before shipping to a customer. -->
 <g transform="translate(0,96) scale(0.01,-0.01)">
-  <g class="apasai-swoosh" fill="#8E8E8E">
+  <g class="apasai-swoosh" fill="#5c6a7c">
     <path d="M3690 7790 c-14 -4 -106 -9 -205 -9 -114 -1 -204 -7 -245 -16 -36 -8
 -118 -14 -182 -15 -64 0 -129 -5 -145 -11 -15 -7 -86 -16 -158 -20 -360 -22
 -570 -42 -672 -63 -125 -27 -333 -56 -397 -56 -34 0 -80 -5 -103 -10 -24 -6
@@ -97,7 +91,7 @@ l-52 -6 0 -147 0 -146 58 7 c31 4 100 23 152 42 53 19 135 40 185 46 119 16
 93 82 48 57 63 82 72 127 16 73 16 254 0 311 -15 53 -70 119 -188 225 -51 45
 -55 47 -150 61 -114 16 -106 16 -203 -2z"/>
   </g>
-  <g class="apasai-bars" fill="#0E0E0E">
+  <g class="apasai-bars" fill="#eef3f9">
     <path d="M0 4116 l0 -1874 36 -7 c26 -4 54 -23 94 -63 74 -72 156 -143 195
 -167 17 -10 50 -38 75 -62 39 -37 121 -110 325 -287 28 -23 61 -49 75 -56 14
 -7 46 -31 72 -54 26 -23 79 -68 119 -101 39 -33 109 -97 155 -143 87 -85 123
@@ -155,5 +149,4 @@ l-52 -6 0 -147 0 -146 58 7 c31 4 100 23 152 42 53 19 135 40 185 46 119 16
 -78 58 -25 22 -80 70 -123 105 -42 36 -93 84 -112 108 -39 47 -79 57 -108 27z"/>
   </g>
 </g>
-</svg>
 </svg>

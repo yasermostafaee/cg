@@ -1,11 +1,47 @@
 import { statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { imageFolderSequenceScene, STARTER_TEMPLATES } from '@cg/starter-templates';
+import {
+  imageFolderSequenceScene,
+  iranPremierLeagueScene,
+  iranWeatherForecastScene,
+  STARTER_TEMPLATES,
+} from '@cg/starter-templates';
 import { rewriteStarterAssetRefs } from '../src/platform/starter-asset-refs.js';
 
 describe('starter asset reference rewrite', () => {
-  it('ships one compact accelerated WebM for every gallery card', () => {
+  it('remaps image rules and repeated image values as well as authored defaults', () => {
+    const weather = structuredClone(iranWeatherForecastScene);
+    rewriteStarterAssetRefs(weather, new Map([['weather-rain', 'imported-rain']]), new Map());
+    const rule = weather.compositions
+      ?.flatMap((comp) => comp.layers)
+      .flatMap((layer) => layer.children)
+      .flatMap((element) => element.valueRules?.rules ?? [])
+      .find(
+        (candidate) =>
+          candidate.condition.comparator === '=' && candidate.condition.value === 'بارانی',
+      );
+    expect(rule?.effect).toMatchObject({ property: 'image', value: { assetId: 'imported-rain' } });
+    const league = structuredClone(iranPremierLeagueScene);
+    rewriteStarterAssetRefs(
+      league,
+      new Map([['league-zwlji1u1', 'imported-team-logo']]),
+      new Map(),
+    );
+    const repeater = league.compositions
+      ?.flatMap((comp) => comp.layers)
+      .flatMap((layer) => layer.children)
+      .find((element) => element.type === 'repeater');
+    expect(repeater?.type === 'repeater' ? repeater.items[0] : undefined).toMatchObject({
+      logo: { assetId: 'imported-team-logo' },
+    });
+    expect(league.fields.find((field) => field.id === 'teams')).toMatchObject({
+      default: expect.arrayContaining([
+        expect.objectContaining({ logo: { assetId: 'imported-team-logo' } }),
+      ]),
+    });
+  });
+  it('ships one compact smooth WebM excerpt for every gallery card', () => {
     for (const starter of STARTER_TEMPLATES) {
       expect(starter.motionPreview, `${starter.id} declares a motion preview`).toMatch(
         /^\/starters\/motion\/.+\.webm$/,
@@ -14,7 +50,7 @@ describe('starter asset reference rewrite', () => {
       if (relative === undefined) continue;
       const size = statSync(join(process.cwd(), 'public', relative)).size;
       expect(size, `${starter.id} motion preview is not empty`).toBeGreaterThan(5_000);
-      expect(size, `${starter.id} motion preview stays lightweight`).toBeLessThan(100_000);
+      expect(size, `${starter.id} smooth motion preview stays lightweight`).toBeLessThan(180_000);
     }
   });
 

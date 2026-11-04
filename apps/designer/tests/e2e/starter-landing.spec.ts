@@ -8,16 +8,16 @@ import { test, expect } from './fixtures/designer.js';
  */
 
 const EXPECTED_LABELS = [
-  'میان‌برنامهٔ خبر — News Composite',
-  'نوار اخبار — News Ticker',
-  'آرم شبکه — Logo Sting',
-  'زیرنویس معرفی — Guest Title',
-  'توالی خبر — Headline Rotator',
+  'میان‌برنامهٔ خبر',
+  'نوار اخبار',
+  'آرم شبکه',
+  'زیرنویس معرفی',
+  'توالی خبر',
   'جدول لیگ برتر ایران',
   'آب‌وهوای مراکز استان‌ها',
   'پیش‌بینی چندروزهٔ هوا',
   'توالی تصاویر پوشه',
-  'شمارش معکوس مرحله‌ای',
+  'شمارش معکوس اذان',
   'میزگرد چندقابه',
 ];
 
@@ -39,7 +39,7 @@ test.describe('D-119 + D-179 — starter landing catalog', () => {
 
   test('plays a short silent preview on hover and resets it when the pointer leaves', async ({
     app,
-  }) => {
+  }, testInfo) => {
     await app.goto();
     const card = app.page.getByTestId('starter-card').first();
     const video = card.getByTestId('starter-motion-preview');
@@ -48,6 +48,31 @@ test.describe('D-119 + D-179 — starter landing catalog', () => {
       .poll(() => video.evaluate((node) => !(node as HTMLVideoElement).paused))
       .toBe(true);
     await expect(video).toHaveCSS('opacity', '1');
+    const playback = await video.evaluate((node) => {
+      const media = node as HTMLVideoElement;
+      return { duration: media.duration, rate: media.playbackRate, muted: media.muted };
+    });
+    expect(playback.duration).toBeGreaterThanOrEqual(5);
+    expect(playback.duration).toBeLessThan(9);
+    expect(playback.rate).toBe(1);
+    expect(playback.muted).toBe(true);
+    await expect
+      .poll(() => video.evaluate((node) => (node as HTMLVideoElement).currentTime))
+      .toBeGreaterThan(1.5);
+    const quality = await video.evaluate((node) => {
+      const stats = (node as HTMLVideoElement).getVideoPlaybackQuality();
+      return {
+        decoded: stats.totalVideoFrames,
+        dropped: stats.droppedVideoFrames,
+        error: (node as HTMLVideoElement).error?.message ?? null,
+      };
+    });
+    expect(quality.decoded).toBeGreaterThan(30);
+    expect(quality.error).toBeNull();
+    await testInfo.attach('hover-playback-quality', {
+      body: JSON.stringify(quality),
+      contentType: 'application/json',
+    });
 
     await app.page.getByRole('button', { name: 'New project' }).hover();
     await expect
@@ -58,6 +83,42 @@ test.describe('D-119 + D-179 — starter landing catalog', () => {
         ),
       )
       .toBe(true);
+  });
+
+  test('every smooth gallery clip decodes real frames without a browser media error', async ({
+    app,
+  }, testInfo) => {
+    test.setTimeout(60_000);
+    const cards = app.page.getByTestId('starter-card');
+    const samples: { label: string; decoded: number; dropped: number }[] = [];
+    for (let index = 0; index < EXPECTED_LABELS.length; index += 1) {
+      const card = cards.nth(index);
+      const video = card.getByTestId('starter-motion-preview');
+      await card.hover();
+      await expect
+        .poll(() => video.evaluate((node) => (node as HTMLVideoElement).currentTime))
+        .toBeGreaterThan(1.5);
+      const sample = await video.evaluate((node) => {
+        const media = node as HTMLVideoElement;
+        const quality = media.getVideoPlaybackQuality();
+        return {
+          decoded: quality.totalVideoFrames,
+          dropped: quality.droppedVideoFrames,
+          error: media.error?.message ?? null,
+        };
+      });
+      expect(sample.error, EXPECTED_LABELS[index]).toBeNull();
+      expect(sample.decoded, EXPECTED_LABELS[index]).toBeGreaterThan(30);
+      samples.push({
+        label: EXPECTED_LABELS[index]!,
+        decoded: sample.decoded,
+        dropped: sample.dropped,
+      });
+    }
+    await testInfo.attach('all-gallery-playback-quality', {
+      body: JSON.stringify(samples),
+      contentType: 'application/json',
+    });
   });
 
   /**
@@ -107,7 +168,7 @@ test.describe('D-119 + D-179 — starter landing catalog', () => {
     app,
   }) => {
     await app.goto();
-    // «آرم شبکه — Logo Sting» — its wordmark + sub-tag are both bound fields.
+    // «آرم شبکه» — its wordmark + sub-tag are both bound fields.
     await app.page.getByTestId('starter-card').nth(2).click();
     await app.expectStudio();
 

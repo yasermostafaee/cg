@@ -1,6 +1,6 @@
 import type { Scene } from '@cg/shared-schema';
 import { iribNewsScene } from './irib-news.js';
-import { iranPremierLeagueScene } from './azadegan-table.js';
+import { iranPremierLeagueScene, LEAGUE_LOGOS } from './azadegan-table.js';
 import { countdownStepsScene } from './countdown-steps.js';
 import { imageFolderSequenceScene } from './image-folder-sequence.js';
 import { iranWeatherForecastScene } from './iran-weather-forecast.js';
@@ -10,6 +10,7 @@ import { multiboxScene } from './multibox.js';
 import { sequenceScene } from './sequence.js';
 import { tickerScene } from './ticker.js';
 import { titleScene } from './title.js';
+import { WEATHER_CHOICES } from './weather-icons.js';
 
 /**
  * A binary asset a starter ships (font or image). On load the Designer fetches
@@ -45,9 +46,9 @@ export interface StarterTemplate {
    */
   preview?: string;
   /**
-   * A short, accelerated, silent WebM used only by the template gallery. It is
-   * intentionally independent of the real playout duration so the operator
-   * can understand the motion in a two-to-three-second hover preview.
+   * A short, silent WebM excerpt at a modest 1.15×, used only by the template gallery.
+   * Its duration is independent from the full broadcast run, but authored motion
+   * is never compressed into a rapid time-lapse.
    */
   motionPreview?: string;
   /**
@@ -70,6 +71,13 @@ export interface StarterTemplate {
 /** The bundled Vazirmatn woff2 every Persian starter seeds as an asset font. */
 const VAZIRMATN_URL = '/fonts/vazirmatn/vazirmatn-arabic-500-normal.woff2';
 
+const WEATHER_ASSETS: StarterAsset[] = WEATHER_CHOICES.map(({ icon }) => ({
+  key: `weather-${icon}`,
+  kind: 'image',
+  filename: `weather-${icon}.svg`,
+  url: `/starters/assets/weather-${icon}.svg`,
+}));
+
 /**
  * All starter templates exposed to the Designer — D-119's audited core plus
  * D-179's production workflow examples. Every entry is a fully animated,
@@ -79,7 +87,7 @@ const VAZIRMATN_URL = '/fonts/vazirmatn/vazirmatn-arabic-500-normal.woff2';
 export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
   {
     id: 'irib-news',
-    label: 'میان‌برنامهٔ خبر — News Composite',
+    label: 'میان‌برنامهٔ خبر',
     // `DESIGNER-FIX-0905` — ONE line per card. What each starter does on air is the badge
     // (`describePlayout`), not a sentence at the end of the description.
     description:
@@ -104,7 +112,7 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
   },
   {
     id: 'ticker',
-    label: 'نوار اخبار — News Ticker',
+    label: 'نوار اخبار',
     description:
       'Persian news strap with a measured RTL crawl; the headlines are an editable list.',
     preview: '/starters/ticker.png',
@@ -121,7 +129,7 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
   },
   {
     id: 'logo-bug',
-    label: 'آرم شبکه — Logo Sting',
+    label: 'آرم شبکه',
     description:
       'Corner channel bug with a replaceable APASAI image asset and a ready-made animated sting.',
     preview: '/starters/logo-bug.png',
@@ -144,9 +152,9 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
   },
   {
     id: 'title',
-    label: 'زیرنویس معرفی — Guest Title',
+    label: 'زیرنویس معرفی',
     description:
-      'Two-tier guest / expert title flush right, with the brand square and bound name and role.',
+      'Two-tier guest / expert title flush right, with a transparent replaceable logo and bound name and role.',
     preview: '/starters/title.png',
     motionPreview: '/starters/motion/title.webm',
     assets: [
@@ -167,7 +175,7 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
   },
   {
     id: 'sequence',
-    label: 'توالی خبر — Headline Rotator',
+    label: 'توالی خبر',
     description:
       'Headlines rotate one at a time, then the strap closes itself; the items are an editable list.',
     preview: '/starters/sequence.png',
@@ -186,7 +194,7 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
     id: 'iran-premier-league',
     label: 'جدول لیگ برتر ایران',
     description:
-      'جدول تک‌صفحه‌ای ۱۸ تیم با Repeater، اعداد فارسی و دادهٔ ساختاریافتهٔ قابل اتصال به فایل.',
+      'جدول تک‌صفحه‌ای ۱۸ تیم با دادهٔ نمونهٔ ثابت از ورزش سه، اعداد فارسی و اتصال به فایل؛ داده‌ها زنده نیستند.',
     preview: '/starters/iran-premier-league.png',
     motionPreview: '/starters/motion/iran-premier-league.webm',
     assets: [
@@ -202,13 +210,22 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
         filename: 'iran-premier-league-stadium.png',
         url: '/starters/assets/iran-premier-league-stadium.png',
       },
+      ...LEAGUE_LOGOS.map(
+        ({ code, name }): StarterAsset => ({
+          key: `league-${code}`,
+          kind: 'image',
+          filename: `${name}.png`,
+          url: `/starters/assets/league-${code}.png`,
+        }),
+      ),
     ],
     scene: iranPremierLeagueScene,
   },
   {
     id: 'iran-weather-pages',
     label: 'آب‌وهوای مراکز استان‌ها',
-    description: 'همهٔ مراکز استان‌ها در چهار صفحهٔ Sequence، با Repeater و مسیر JSON قابل Reload.',
+    description:
+      'مراکز استان‌ها به ترتیب الفبا، چهار صفحهٔ Sequence و انتخاب نوع آب‌وهوا با آیکون متحرک و Value rules.',
     preview: '/starters/iran-weather-pages.png',
     motionPreview: '/starters/motion/iran-weather-pages.webm',
     assets: [
@@ -224,6 +241,7 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
         filename: 'weather-atmosphere.png',
         url: '/starters/assets/weather-atmosphere.png',
       },
+      ...WEATHER_ASSETS,
     ],
     scene: iranWeatherPagesScene,
   },
@@ -246,6 +264,7 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
         filename: 'weather-atmosphere.png',
         url: '/starters/assets/weather-atmosphere.png',
       },
+      ...WEATHER_ASSETS,
     ],
     scene: iranWeatherForecastScene,
   },
@@ -266,41 +285,40 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
       {
         key: 'gallery-slide-1',
         kind: 'image',
-        filename: 'quran-020.jpg',
-        url: '/starters/assets/quran-020.jpg',
+        filename: 'quran-wide-001.png',
+        url: '/starters/assets/quran-wide-001.png',
       },
       {
         key: 'gallery-slide-2',
         kind: 'image',
-        filename: 'quran-021.jpg',
-        url: '/starters/assets/quran-021.jpg',
+        filename: 'quran-wide-002.png',
+        url: '/starters/assets/quran-wide-002.png',
       },
       {
         key: 'gallery-slide-3',
         kind: 'image',
-        filename: 'quran-022.jpg',
-        url: '/starters/assets/quran-022.jpg',
+        filename: 'quran-wide-003.png',
+        url: '/starters/assets/quran-wide-003.png',
       },
       {
         key: 'gallery-slide-4',
         kind: 'image',
-        filename: 'quran-023.jpg',
-        url: '/starters/assets/quran-023.jpg',
+        filename: 'quran-wide-004.png',
+        url: '/starters/assets/quran-wide-004.png',
       },
       {
         key: 'gallery-slide-5',
         kind: 'image',
-        filename: 'quran-024.jpg',
-        url: '/starters/assets/quran-024.jpg',
+        filename: 'quran-wide-005.png',
+        url: '/starters/assets/quran-wide-005.png',
       },
     ],
     scene: imageFolderSequenceScene,
   },
   {
     id: 'countdown-steps',
-    label: 'شمارش معکوس مرحله‌ای',
-    description:
-      'Countdown تا ساعت هدف با Steps واقعی برای تغییر رنگ، وضعیت و چشمک در آستانه‌های زمانی.',
+    label: 'شمارش معکوس اذان',
+    description: 'زیرنویس اذان مغرب؛ زمان هدف قابل ویرایش و تبدیل شمارش به اعلان ماندگار با Steps.',
     preview: '/starters/countdown-steps.png',
     motionPreview: '/starters/motion/countdown-steps.webm',
     assets: [
@@ -310,12 +328,6 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
         filename: 'Vazirmatn.woff2',
         url: VAZIRMATN_URL,
       },
-      {
-        key: 'countdown-precision',
-        kind: 'image',
-        filename: 'countdown-precision.png',
-        url: '/starters/assets/countdown-precision.png',
-      },
     ],
     scene: countdownStepsScene,
   },
@@ -323,7 +335,7 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
     id: 'multibox',
     label: 'میزگرد چندقابه',
     description:
-      'چهار Live Source مستقل برای مجری، مهمان‌ها و خبرنگار با قاب‌های آمادهٔ نگاشت در CG Control.',
+      'پریست‌های واقعی یک تا چهار قاب؛ تک‌قاب تمام‌صفحه و سه‌قاب با دو قاب بالا و یکی پایین، بدون عنوان ثابت.',
     preview: '/starters/multibox.png',
     motionPreview: '/starters/motion/multibox.webm',
     assets: [
