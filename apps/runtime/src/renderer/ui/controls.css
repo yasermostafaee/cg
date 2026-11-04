@@ -7682,6 +7682,7 @@ input[type='checkbox']:disabled:checked {
  * declared, never one declared with nothing left to read it.
  */
 .cg-audit-browser {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: grid;
@@ -7696,12 +7697,13 @@ input[type='checkbox']:disabled:checked {
 .cg-audit-table {
   min-width: 0;
   min-height: 0;
-  overflow-y: auto;
+  overflow: auto;
   font-size: var(--r-audit-td-text);
 }
 .cg-audit-head,
 .cg-audit-row {
   display: grid;
+  min-width: 900px;
   grid-template-columns:
     var(--r-audit-col-actor) var(--r-audit-col-time) var(--r-audit-col-actor)
     var(--r-audit-col-action) minmax(0, 1fr) var(--r-audit-col-outcome);
@@ -7959,6 +7961,88 @@ input[type='checkbox']:disabled:checked {
   min-width: 28px;
   min-height: 28px;
   padding: 0 var(--r-space-1);
+}
+
+/*
+ * R-083 — a narrow console keeps the ledger readable instead of compressing six columns
+ * behind its details pane. The table owns horizontal scrolling; the dialog and page never do.
+ * Details become a right-side drawer over the ledger, so opening them does not resize either
+ * the table or the dialog.
+ */
+@media (max-width: 1100px) {
+  .cg-audit-browser[data-audit-details-open='true'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cg-audit-details {
+    position: absolute;
+    z-index: 2;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(360px, calc(100% - 48px));
+    border-inline-start: 1px solid var(--r-border-strong);
+    box-shadow: var(--r-shadow-2);
+  }
+}
+
+@media (max-width: 900px) {
+  .cg-audit-footer {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+  }
+
+  .cg-audit-foot-info {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .cg-audit-pagination {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .cg-audit-footer > [data-audit-close] {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .cg-audit-search {
+    flex-basis: 100%;
+  }
+
+  .cg-audit-field,
+  .cg-audit-field--date {
+    flex: 1 1 132px;
+    width: auto;
+    min-width: 132px;
+  }
+}
+
+@media (max-width: 560px) {
+  .cg-audit-footer {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
+  }
+
+  .cg-audit-foot-info,
+  .cg-audit-pagination,
+  .cg-audit-footer > [data-audit-close] {
+    grid-column: 1;
+  }
+
+  .cg-audit-foot-info {
+    grid-row: 1;
+  }
+
+  .cg-audit-pagination {
+    grid-row: 2;
+  }
+
+  .cg-audit-footer > [data-audit-close] {
+    grid-row: 3;
+    justify-self: stretch;
+  }
 }
 
 /* ── THE ROW'S AUDIO BUTTON — the reference's `.row-audio-button` ──────────────

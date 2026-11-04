@@ -168,6 +168,63 @@ test('🔴 §9 — 50,000 rows: explicit 25-row pages, server filters, and live 
   await itemOf(0).click();
   await expect(itemOf(0)).toHaveAttribute('aria-pressed', 'true');
   await expect(log.locator('[data-audit-details]')).toBeVisible();
+
+  // ── narrow layout: details overlay on the right, the ledger scrolls, and the page never spills ──
+  const initialViewport = page.viewportSize();
+  expect(initialViewport, 'the browser has a measurable viewport').not.toBeNull();
+  await page.setViewportSize({ width: 900, height: 900 });
+  const narrowTableBox = await log.locator('[data-audit-table]').boundingBox();
+  const narrowDetailsBox = await log.locator('[data-audit-details]').boundingBox();
+  expect(narrowTableBox, 'the narrow audit table has geometry').not.toBeNull();
+  expect(narrowDetailsBox, 'the narrow details pane has geometry').not.toBeNull();
+  expect(
+    Math.abs((narrowDetailsBox?.y ?? 0) - (narrowTableBox?.y ?? 0)),
+    'the details drawer overlays the table from its top edge',
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(
+      (narrowDetailsBox?.x ?? 0) +
+        (narrowDetailsBox?.width ?? 0) -
+        ((narrowTableBox?.x ?? 0) + (narrowTableBox?.width ?? 0)),
+    ),
+    'the details drawer is attached to the right edge',
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs((narrowDetailsBox?.height ?? 0) - (narrowTableBox?.height ?? 0)),
+    'the details drawer overlays the table height',
+  ).toBeLessThanOrEqual(1);
+  expect(narrowDetailsBox?.x ?? 0, 'the details drawer occupies the right side').toBeGreaterThan(
+    narrowTableBox?.x ?? 0,
+  );
+  const narrowScroll = await log.locator('[data-audit-table]').evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }));
+  expect(narrowScroll.scrollWidth, 'six columns scroll inside the table').toBeGreaterThan(
+    narrowScroll.clientWidth,
+  );
+  const narrowFooterBox = await log.locator('[data-audit-footer]').boundingBox();
+  const narrowPagerBox = await log.getByLabel('Audit pages').boundingBox();
+  expect(narrowFooterBox, 'the narrow footer has geometry').not.toBeNull();
+  expect(narrowPagerBox, 'the narrow pager has geometry').not.toBeNull();
+  expect(
+    Math.abs(
+      (narrowFooterBox?.x ?? 0) +
+        (narrowFooterBox?.width ?? 0) / 2 -
+        ((narrowPagerBox?.x ?? 0) + (narrowPagerBox?.width ?? 0) / 2),
+    ),
+    'the narrow pager remains centred on its own row',
+  ).toBeLessThanOrEqual(1);
+  const documentWidth = await page.evaluate(() => ({
+    client: document.documentElement.clientWidth,
+    scroll: document.documentElement.scrollWidth,
+  }));
+  expect(documentWidth.scroll, 'the audit dialog does not widen the page').toBe(
+    documentWidth.client,
+  );
+  await page.setViewportSize(initialViewport ?? { width: 1280, height: 720 });
+  await expect(log.locator('[data-audit-details]')).toBeVisible();
+
   // Opening the dialog can leave the pointer over its first row, depending on the viewport.
   // Measure the resting colour from a known pointer position before proving the hover state.
   await page.mouse.move(0, 0);

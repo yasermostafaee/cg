@@ -143,6 +143,11 @@ was stashed before each push so the gate judged only what was pushed.
 - [x] 7A.7 Owner visual follow-up: put Channel first; align every header with its row value; contain long
       Item content before Result while details is open; let a second click deselect a row; and centre
       Previous/Next independently of Close. Pin the order, toggle and real-browser geometry.
+- [x] 7A.8 Owner responsive follow-up: preserve a readable six-column ledger with internal horizontal
+      scrolling; show Event details as a right-side overlay drawer on narrow windows; and reflow
+      filters/footer controls without widening the page. Pinned at 900 px in real Chromium: the drawer
+      shares the ledger's top, height and right edge; the ledger scrolls internally; the footer remains
+      centred; the document does not widen (`audit-paging.spec.ts`, 1/1 passed).
 
 ## 8. Close
 
