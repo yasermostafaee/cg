@@ -328,6 +328,32 @@ describe('buildScene — element builders + style branches', () => {
     expect(node?.style.whiteSpace).toBe('nowrap');
     expect(node?.style.justifyContent).toBe('center');
     expect(node?.style.textShadow).toContain('1px 1px 2px');
+
+    const uniform = buildWith({
+      ...baseElProps,
+      id: 'tx-uniform',
+      name: 'tx-uniform',
+      type: 'text',
+      text: 'uniform',
+      font: {
+        family: 'Inter',
+        weight: 400,
+        style: 'normal',
+        size: 20,
+        lineHeight: 1.2,
+        letterSpacing: 0,
+      },
+      color: '#fff',
+      align: 'start',
+      direction: 'ltr',
+      fitMode: 'fixed',
+      overflow: 'clip',
+      padding: 7,
+    } as unknown as Element);
+    expect(uniform?.style.paddingTop).toBe('7px');
+    expect(uniform?.style.paddingRight).toBe('7px');
+    expect(uniform?.style.paddingBottom).toBe('7px');
+    expect(uniform?.style.paddingLeft).toBe('7px');
   });
 
   it('composes a CSS filter from a Filter object', () => {

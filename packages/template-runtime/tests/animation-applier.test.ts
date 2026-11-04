@@ -340,6 +340,45 @@ describe('applyAnimationAtFrame', () => {
     }
   });
 
+  it('D-172 — padding migration output renders as one value or four sides', () => {
+    {
+      const { source, node } = makeText();
+      const src: TextElement = {
+        ...source,
+        padding: { top: 1, right: 2, bottom: 3, left: 4 },
+      };
+      const entry: AnimatedElement = {
+        id: src.id,
+        node,
+        source: src,
+        animation: {
+          tracks: {
+            'padding.bottom': {
+              keyframes: [{ frame: 10, value: 33, easing: 'linear' }],
+            },
+          },
+        },
+      };
+      applyAnimationAtFrame(entry, 10);
+      expect(node.style.padding).toBe('1px 2px 33px 4px');
+    }
+
+    {
+      const { source, node } = makeText();
+      const src: TextElement = { ...source, padding: 8 };
+      const entry: AnimatedElement = {
+        id: src.id,
+        node,
+        source: src,
+        animation: {
+          tracks: { padding: { keyframes: [{ frame: 10, value: 18, easing: 'linear' }] } },
+        },
+      };
+      applyAnimationAtFrame(entry, 10);
+      expect(node.style.padding).toBe('18px');
+    }
+  });
+
   it('writes text.color to color only for text elements', () => {
     const { source, node } = makeText();
     const entry: AnimatedElement = {

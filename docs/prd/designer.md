@@ -5896,7 +5896,7 @@ the canvas ratio.
 - WHEN a Live Source is visible on the Designer canvas THEN its source label is clearly legible without selecting it
 - WHEN an existing project contains `live-N` or a custom id THEN that authored id is preserved unchanged
 
-## [~] D-172 — Text padding switches between one value and four sides ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/text-padding-mode/`
+## [x] D-172 — Text padding switches between one value and four sides ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/text-padding-mode/`
 
 **What:** Text Padding gains the same single/per-edge mode pattern as Border Radius.
 **Why:** Setting the same padding four times is slow and inconsistent with the existing Border Radius interaction.

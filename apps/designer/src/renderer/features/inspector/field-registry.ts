@@ -489,8 +489,39 @@ const SHADOW_DESCS: readonly PropertyDescriptor[] = [
   shadowDesc('shadow.color', 'color', 'Color', { color: true }, 'Text Shadow'),
 ];
 
-/** Box-padding sub-tracks — text + (D-052) clock/sequence; NOT ticker (deferred). */
+interface PaddingSides {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+const paddingSides = (el: Element): PaddingSides => {
+  const padding = el.type === 'text' ? el.padding : undefined;
+  return typeof padding === 'number'
+    ? { top: padding, right: padding, bottom: padding, left: padding }
+    : (padding ?? { top: 0, right: 0, bottom: 0, left: 0 });
+};
+const isPerSidePadding = (el: Element): boolean =>
+  el.type === 'text' && typeof el.padding === 'object';
+
+/** D-172 — one uniform padding track or four per-side tracks, never both. */
 const PADDING_DESCS: readonly PropertyDescriptor[] = [
+  {
+    property: 'padding',
+    section: 'Text Padding',
+    fieldKind: 'number',
+    label: 'padding',
+    timelineLabel: 'Padding',
+    read: (el) => paddingSides(el).top,
+    multiRead: (el) => {
+      if (el.type !== 'text') return 0;
+      return typeof el.padding === 'number' ? el.padding : el.padding === undefined ? 0 : null;
+    },
+    keyframeable: (el) => el.type === 'text' && !isPerSidePadding(el),
+    step: 1,
+    min: 0,
+  },
   paddingDesc('padding.top', 'top', 'Padding top'),
   paddingDesc('padding.right', 'right', 'Padding right'),
   paddingDesc('padding.bottom', 'bottom', 'Padding bottom'),
@@ -645,7 +676,8 @@ function paddingDesc(
     label,
     timelineLabel,
     // D-056 — box padding is text-only again (content-driven kinds carry no box).
-    read: (el) => (el.type === 'text' ? (el.padding?.[side] ?? 0) : 0),
+    read: (el) => paddingSides(el)[side],
+    keyframeable: (el) => isPerSidePadding(el),
     step: 1,
     min: 0,
   };

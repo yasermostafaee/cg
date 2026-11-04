@@ -532,6 +532,7 @@ describe('D-010 — new optional style fields round-trip', () => {
     };
     const parsed = TextElementSchema.parse(t);
     expect(parsed.padding).toEqual({ top: 4, right: 8, bottom: 4, left: 8 });
+    expect(TextElementSchema.parse({ ...t, padding: 6 }).padding).toBe(6);
     expect(parsed.backgroundColor).toBe('#000000');
     expect(parsed.cornerRadius).toBe(12);
     expect(parsed.textShadow?.blur).toBe(2);

@@ -193,6 +193,9 @@ export const AnimatablePropertySchema = z.enum([
   'font.size',
   'font.lineHeight',
   'font.letterSpacing',
+  // D-172 — uniform padding uses one track; per-side mode uses the four
+  // existing sub-tracks below. The Inspector migrates between the two shapes.
+  'padding',
   'padding.top',
   'padding.right',
   'padding.bottom',

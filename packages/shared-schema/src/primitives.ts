@@ -189,15 +189,19 @@ export const FilterSchema = z
 export type Filter = z.infer<typeof FilterSchema>;
 
 /**
- * Per-side padding in pixels. Used by text elements for inner padding
- * around the rendered glyphs (D-010).
+ * Text padding in pixels (D-010/D-172). The value shape is the authored mode:
+ * a number applies uniformly, while the object keeps four independent sides.
+ * Existing per-side objects remain valid without migration.
  */
-export const PaddingSchema = z
-  .object({
-    top: z.number().nonnegative(),
-    right: z.number().nonnegative(),
-    bottom: z.number().nonnegative(),
-    left: z.number().nonnegative(),
-  })
-  .strict();
+export const PaddingSchema = z.union([
+  z.number().nonnegative(),
+  z
+    .object({
+      top: z.number().nonnegative(),
+      right: z.number().nonnegative(),
+      bottom: z.number().nonnegative(),
+      left: z.number().nonnegative(),
+    })
+    .strict(),
+]);
 export type Padding = z.infer<typeof PaddingSchema>;

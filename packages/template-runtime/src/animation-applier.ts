@@ -128,22 +128,7 @@ export function applyAnimationAtFrame(entry: AnimatedElement, frame: number): vo
   applyNumeric(tracks, 'font.letterSpacing', frame, (v) => {
     entry.node.style.letterSpacing = `${v}em`;
   });
-  // Padding sub-properties — D-056: box padding is text/shape only (the content-driven
-  // kinds carry no box, so their padding is never applied).
-  if (!isTimeDriven(entry.source.type)) {
-    applyNumeric(tracks, 'padding.top', frame, (v) => {
-      entry.node.style.paddingTop = `${v}px`;
-    });
-    applyNumeric(tracks, 'padding.right', frame, (v) => {
-      entry.node.style.paddingRight = `${v}px`;
-    });
-    applyNumeric(tracks, 'padding.bottom', frame, (v) => {
-      entry.node.style.paddingBottom = `${v}px`;
-    });
-    applyNumeric(tracks, 'padding.left', frame, (v) => {
-      entry.node.style.paddingLeft = `${v}px`;
-    });
-  }
+  applyPadding(entry, tracks, frame);
 
   // Composite shadow + filter — recompose the whole CSS declaration
   // from static + animated components when any track is present.
@@ -281,6 +266,48 @@ function applyCornerRadius(
   }
   const v = readNumericTrack(tracks, 'cornerRadius', frame);
   if (v !== undefined) entry.node.style.borderRadius = `${v}px`;
+}
+
+const PADDING_SIDE_PROPS = [
+  'padding.top',
+  'padding.right',
+  'padding.bottom',
+  'padding.left',
+] as const satisfies readonly AnimatableProperty[];
+
+/**
+ * D-172 — uniform padding is one numeric track; per-side tracks win whenever one
+ * exists and fall back to the authored side values. This mirrors border-radius so
+ * a migrated track paints identically in Designer preview and exported playout.
+ */
+function applyPadding(
+  entry: AnimatedElement,
+  tracks: ElementAnimation['tracks'],
+  frame: number,
+): void {
+  // D-056 — content-driven kinds have no box padding.
+  if (isTimeDriven(entry.source.type)) return;
+  const authored = (
+    entry.source as {
+      padding?: number | { top: number; right: number; bottom: number; left: number };
+    }
+  ).padding;
+  const base =
+    typeof authored === 'number'
+      ? { top: authored, right: authored, bottom: authored, left: authored }
+      : (authored ?? { top: 0, right: 0, bottom: 0, left: 0 });
+
+  if (PADDING_SIDE_PROPS.some((property) => tracks[property] !== undefined)) {
+    const top = readNumericTrack(tracks, 'padding.top', frame) ?? base.top;
+    const right = readNumericTrack(tracks, 'padding.right', frame) ?? base.right;
+    const bottom = readNumericTrack(tracks, 'padding.bottom', frame) ?? base.bottom;
+    const left = readNumericTrack(tracks, 'padding.left', frame) ?? base.left;
+    entry.node.style.padding = `${top}px ${right}px ${bottom}px ${left}px`;
+    return;
+  }
+
+  const uniform = readNumericTrack(tracks, 'padding', frame);
+  if (uniform !== undefined) entry.node.style.padding = `${uniform}px`;
 }
 
 function applyStroke(

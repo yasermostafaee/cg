@@ -597,11 +597,20 @@ function buildText(element: TextElement, ctx: BuildCtx): HTMLElement {
     el.style.boxShadow = composeBoxShadow(element.shadow);
   }
   // D-010 — text-box padding, background, border-radius.
-  if (element.padding) {
-    el.style.paddingTop = `${element.padding.top}px`;
-    el.style.paddingRight = `${element.padding.right}px`;
-    el.style.paddingBottom = `${element.padding.bottom}px`;
-    el.style.paddingLeft = `${element.padding.left}px`;
+  if (element.padding !== undefined) {
+    const padding =
+      typeof element.padding === 'number'
+        ? {
+            top: element.padding,
+            right: element.padding,
+            bottom: element.padding,
+            left: element.padding,
+          }
+        : element.padding;
+    el.style.paddingTop = `${padding.top}px`;
+    el.style.paddingRight = `${padding.right}px`;
+    el.style.paddingBottom = `${padding.bottom}px`;
+    el.style.paddingLeft = `${padding.left}px`;
     el.style.boxSizing = 'border-box';
   }
   if (element.backgroundColor) {

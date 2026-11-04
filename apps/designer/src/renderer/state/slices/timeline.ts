@@ -836,6 +836,10 @@ export const timelineSlice = {
         designerStore.updateElement(elementId, { font } as unknown as Partial<Element>);
         return;
       }
+      case 'padding':
+        if (el.type !== 'text') return;
+        designerStore.updateElement(elementId, { padding: numeric } as Partial<Element>);
+        return;
       case 'padding.top':
       case 'padding.right':
       case 'padding.bottom':
@@ -843,7 +847,15 @@ export const timelineSlice = {
         // D-056 — box padding is text-only again (content-driven kinds carry no box).
         if (el.type !== 'text') return;
         const key = property.slice('padding.'.length);
-        const base = el.padding ?? { top: 0, right: 0, bottom: 0, left: 0 };
+        const base =
+          typeof el.padding === 'number'
+            ? {
+                top: el.padding,
+                right: el.padding,
+                bottom: el.padding,
+                left: el.padding,
+              }
+            : (el.padding ?? { top: 0, right: 0, bottom: 0, left: 0 });
         const padding = { ...base, [key]: numeric };
         designerStore.updateElement(elementId, { padding } as unknown as Partial<Element>);
         return;

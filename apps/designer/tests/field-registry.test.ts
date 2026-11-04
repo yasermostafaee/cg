@@ -74,10 +74,7 @@ const TEXT_STYLE = [
   'shadow.offsetY',
   'shadow.blur',
   'shadow.color',
-  'padding.top',
-  'padding.right',
-  'padding.bottom',
-  'padding.left',
+  'padding',
   'cornerRadius',
   // D-057 — the text element's independent box shadow (after BOX_DESCS, before Filter).
   'boxShadow.offsetX',
@@ -174,14 +171,24 @@ describe('field-registry — §2 diamond corrections', () => {
     expect(timelineProps(defaultText('t', 0, 0))).toContain('cornerRadius');
   });
 
-  it('drop-shadow sub-properties and box-padding are keyframe-able', () => {
+  it('drop-shadow sub-properties and the active box-padding mode are keyframe-able', () => {
     const shape = defaultShape('s', 0, 0);
     for (const p of ['shadow.offsetX', 'shadow.offsetY', 'shadow.blur', 'shadow.color'] as const) {
       expect(isKeyframeable(shape, p)).toBe(true);
     }
     const text = defaultText('t', 0, 0);
+    expect(isKeyframeable(text, 'padding')).toBe(true);
     for (const p of ['padding.top', 'padding.right', 'padding.bottom', 'padding.left'] as const) {
-      expect(isKeyframeable(text, p)).toBe(true);
+      expect(isKeyframeable(text, p)).toBe(false);
+    }
+
+    const perSide: Element = {
+      ...text,
+      padding: { top: 1, right: 2, bottom: 3, left: 4 },
+    };
+    expect(isKeyframeable(perSide, 'padding')).toBe(false);
+    for (const p of ['padding.top', 'padding.right', 'padding.bottom', 'padding.left'] as const) {
+      expect(isKeyframeable(perSide, p)).toBe(true);
     }
   });
 

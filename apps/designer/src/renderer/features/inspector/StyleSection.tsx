@@ -113,16 +113,7 @@ import { CollapseSection } from './CollapseSection.js';
 import { InfoTip, StateLine } from './InfoTip.js';
 import { withheldReason } from './field-registry.js';
 import * as prose from './prose.css.js';
-import {
-  ColorField,
-  NumberField,
-  RealtimeNumberInput,
-  SelectField,
-  TextField,
-  VectorField,
-} from './controls.js';
-import { cx } from '../../cx.js';
-import * as padCss from './TextPaddingSection.css.js';
+import { ColorField, NumberField, SelectField, TextField, VectorField } from './controls.js';
 import { FillField } from './FillPopover.js';
 import { FontFamilySelect } from './FontFamilySelect.js';
 import { TextStyleSection, TogglePair } from './TextStyleSection.js';
@@ -3776,33 +3767,82 @@ function TextPaddingSection({
   selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
 }): JSX.Element {
   const id = element.id;
-  const p: Padding = element.padding ?? { top: 0, right: 0, bottom: 0, left: 0 };
-  // D-048 — four inputs side-by-side in one row (top/right/bottom/left), each a
-  // compact cell with its keyframe diamond. Matches D-048-textpadding-0.png.
-  // Values + commit path (commitAnimatable) + diamonds unchanged from the old
-  // one-per-row layout — appearance only.
-  const cells = [
-    { name: 'top', property: 'padding.top' as const, value: p.top },
-    { name: 'right', property: 'padding.right' as const, value: p.right },
-    { name: 'bottom', property: 'padding.bottom' as const, value: p.bottom },
-    { name: 'left', property: 'padding.left' as const, value: p.left },
-  ];
+  const authored: Padding = element.padding ?? 0;
+  const perSide = typeof authored === 'object';
+  const sides =
+    typeof authored === 'number'
+      ? { top: authored, right: authored, bottom: authored, left: authored }
+      : authored;
+
+  const descriptors = [
+    { name: 'top', property: 'padding.top' as const, value: sides.top },
+    { name: 'right', property: 'padding.right' as const, value: sides.right },
+    { name: 'bottom', property: 'padding.bottom' as const, value: sides.bottom },
+    { name: 'left', property: 'padding.left' as const, value: sides.left },
+  ] as const;
+
+  const toPerSide = (): void =>
+    designerStore.runAsSingleHistoryEntry(() => {
+      designerStore.updateElement(id, { padding: sides } as Partial<Element>);
+      for (const descriptor of descriptors)
+        designerStore.copyKeyframeTrack(id, 'padding', descriptor.property);
+      designerStore.clearKeyframeTrack(id, 'padding');
+    });
+  const toUniform = (): void =>
+    designerStore.runAsSingleHistoryEntry(() => {
+      designerStore.updateElement(id, { padding: sides.top } as Partial<Element>);
+      designerStore.clearKeyframeTrack(id, 'padding');
+      designerStore.copyKeyframeTrack(id, 'padding.top', 'padding');
+      for (const descriptor of descriptors)
+        designerStore.clearKeyframeTrack(id, descriptor.property);
+    });
+
+  const paddingAxis = (descriptor: (typeof descriptors)[number]) => ({
+    ariaLabel: `${descriptor.name} padding`,
+    value: evNum(element, descriptor.property, currentFrame, descriptor.value),
+    step: 1,
+    min: 0,
+    onCommit: (value: number) =>
+      designerStore.commitAnimatable(id, descriptor.property, Math.max(0, value)),
+    point: KeyframeDot(element, descriptor.property, currentFrame, selectedKeyframe),
+  });
+
   return (
     <CollapseSection title="Text Padding">
-      <div className={padCss.row}>
-        {cells.map(({ name, property, value }) => (
-          <div key={property} className={cx('cg-field', padCss.cell)}>
-            <RealtimeNumberInput
-              className={padCss.input}
-              value={evNum(element, property, currentFrame, value)}
+      <div className={radiusCss.row}>
+        <div className={radiusCss.fields}>
+          {perSide ? (
+            <div className={radiusCss.corners}>
+              <VectorField
+                label="padding"
+                axes={[paddingAxis(descriptors[0]), paddingAxis(descriptors[1])]}
+              />
+              <VectorField
+                label=""
+                axes={[paddingAxis(descriptors[2]), paddingAxis(descriptors[3])]}
+              />
+            </div>
+          ) : (
+            <NumberField
+              label="padding"
+              value={evNum(element, 'padding', currentFrame, sides.top)}
               step={1}
               min={0}
-              onCommit={(v) => designerStore.commitAnimatable(id, property, v)}
-              ariaLabel={`Padding ${name}`}
+              onCommit={(value) =>
+                designerStore.commitAnimatable(id, 'padding', Math.max(0, value))
+              }
+              trailing={KeyframeDot(element, 'padding', currentFrame, selectedKeyframe)}
             />
-            {KeyframeDot(element, property, currentFrame, selectedKeyframe)}
-          </div>
-        ))}
+          )}
+        </div>
+        <Control
+          size="sm"
+          onClick={perSide ? toUniform : toPerSide}
+          aria-label={perSide ? 'Use a single padding value' : 'Use per-side padding'}
+          title={perSide ? 'Single padding' : 'Per-side padding'}
+        >
+          <Icon icon={perSide ? Maximize : Square} size={12} />
+        </Control>
       </div>
     </CollapseSection>
   );
