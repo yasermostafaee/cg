@@ -25,6 +25,8 @@ export const colors = {
   // pick); D-094's no-border base + secondary/danger/selected affordances are unchanged.
   accent: '#38BDF8',
   accentMuted: '#0EA5E9',
+  /** Quiet positive status for connected/valid structured data. */
+  checkPass: '#5FAE80',
   /** Label/glyph colour that sits ON an accent fill (the primary button). The light
    *  sky-blue accent takes a near-black on-accent (8.9:1, legible) — kept from D-094. */
   onAccent: '#06121F',

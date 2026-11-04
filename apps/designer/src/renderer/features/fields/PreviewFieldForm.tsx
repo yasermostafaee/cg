@@ -69,6 +69,7 @@ export function PreviewFieldForm({
   anyPending,
   dwellFieldIds,
   columnsByFieldId,
+  title = 'Data',
 }: {
   aggregate: AggregatedFields;
   values: NestedFieldValues;
@@ -89,6 +90,8 @@ export function PreviewFieldForm({
   dwellFieldIds?: ReadonlySet<string>;
   /** D-030 — `list` fields bound `repeater-items` get child-field columns. */
   columnsByFieldId?: ReadonlyMap<string, readonly ListItemColumn[]>;
+  /** Surface-specific heading; Preview keeps the legacy default. */
+  title?: string;
 }): JSX.Element {
   return (
     <AggregateSection
@@ -102,7 +105,7 @@ export function PreviewFieldForm({
       onUpdateItem={onUpdateItem}
       onUpdateAll={onUpdateAll}
       anyPending={anyPending ?? false}
-      title="Data"
+      title={title}
       depth={0}
       dwellFieldIds={dwellFieldIds}
       columnsByFieldId={columnsByFieldId}
@@ -390,6 +393,7 @@ function PreviewNumberInput({
   onChange,
   label,
   digits,
+  field,
 }: {
   className: string;
   value: number;

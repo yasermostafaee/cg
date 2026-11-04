@@ -16,14 +16,17 @@ import * as s from './Select.css.js';
  * edge (a `background-image` chevron kept getting wiped by per-site `background`
  * overrides). `pointer-events: none` on the chevron lets clicks reach the select.
  */
-export type SelectProps = SelectHTMLAttributes<HTMLSelectElement>;
+export type SelectProps = SelectHTMLAttributes<HTMLSelectElement> & {
+  /** Layout class for the outer shell; `className` still styles the native select. */
+  wrapperClassName?: string;
+};
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
-  { className, children, ...rest },
+  { className, wrapperClassName, children, ...rest },
   ref,
 ): JSX.Element {
   return (
-    <span className={s.wrap}>
+    <span className={cx(s.wrap, wrapperClassName)}>
       <select ref={ref} className={cx(s.select, className)} {...rest}>
         {children}
       </select>

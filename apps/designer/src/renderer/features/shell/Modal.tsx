@@ -35,6 +35,8 @@ interface ModalProps {
   closeOnBackdrop?: boolean;
   /** Minimum height of the scrolling body, so short dialogs aren't cramped. */
   minBodyHeight?: number | string;
+  /** Optional card maximum height. Most dialogs keep the shared 82vh default. */
+  maxHeight?: number | string;
 }
 
 export function Modal({
@@ -46,6 +48,7 @@ export function Modal({
   ariaLabel,
   closeOnBackdrop = true,
   minBodyHeight,
+  maxHeight,
 }: ModalProps): JSX.Element {
   const boxRef = useRef<HTMLDivElement>(null);
   const fitFooter = useActionRowFit<HTMLDivElement>();
@@ -116,7 +119,7 @@ export function Modal({
         ref={boxRef}
         tabIndex={-1}
         className={s.modal}
-        style={{ width, outline: 'none' }}
+        style={{ width, outline: 'none', ...(maxHeight !== undefined ? { maxHeight } : {}) }}
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel ?? title}

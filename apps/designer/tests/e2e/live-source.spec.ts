@@ -135,7 +135,12 @@ test.describe('Live Source (D-137 phase 1)', () => {
       'title',
       'Named automatically when the plate was drawn. Keep it, or type your own.',
     );
-    await app.inspector.getByRole('button', { name: 'Keep the automatic source id' }).click();
+    const autoPolicy = app.inspector.getByRole('checkbox', {
+      name: 'auto source id',
+      exact: true,
+    });
+    await expect(autoPolicy).toBeChecked();
+    await autoPolicy.click();
     await expect(auto).toHaveCount(0);
     await expect(app.liveSourceIdInput).toHaveValue('live-1');
     await expect(label(app)).toHaveText('live-1');

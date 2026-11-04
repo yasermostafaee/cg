@@ -235,6 +235,8 @@ export class DesignerApp {
    * (`live-source-multibox` design.md §1a).
    */
   async setLiveSourceId(value: string): Promise<void> {
+    const auto = this.inspector.getByRole('checkbox', { name: 'auto source id', exact: true });
+    if ((await auto.count()) > 0 && (await auto.isChecked())) await auto.click();
     await this.liveSourceIdInput.fill(value);
     await this.liveSourceIdInput.press('Enter');
   }

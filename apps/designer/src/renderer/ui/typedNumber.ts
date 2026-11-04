@@ -40,6 +40,8 @@ export interface TypedNumberOptions {
   read?: (text: string) => NumberReading;
   /** How a value from outside is written back, in the digits of `sample`. Default: as a number. */
   write?: (value: number, sample: string) => string;
+  /** Ignore impossible text instead of displaying it in a numeric template-value control. */
+  rejectInvalid?: boolean;
 }
 
 export function useTypedNumber(
@@ -65,8 +67,9 @@ export function useTypedNumber(
     text,
     refusal: read(text).kind === 'invalid' ? NOT_A_NUMBER : null,
     change: (raw) => {
-      setText(raw);
       const reading = read(raw);
+      if (opts.rejectInvalid === true && reading.kind === 'invalid') return reading;
+      setText(raw);
       if (reading.kind === 'number') setSeen(reading.value);
       return reading;
     },
