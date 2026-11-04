@@ -231,3 +231,39 @@ splash-kit lint also passes. A complete corrected-tree rerun of the twelve Desig
 **63/63 in 2.1 minutes**, without retries, including every pixel and video sibling. Both app lints
 pass with existing warnings only; both active follow-up changes pass strict OpenSpec validation.
 The final full gate and carrying-commit Linux run remain separate.
+
+## 5. Final-gate repair (full lane, test-only)
+
+The pre-push gate `gate-20261104T205050Z-9040.log` completed with exit 1 after 638.9 seconds:
+91/100 tasks passed. The two follow-up commits are local only; the push was rejected.
+Eight tasks could not start because the locked local Rollup 4.60.4 payload was missing
+`dist/rollup.js`; its package manifest and junction remained present. That local corruption's
+cause is not established. The ninth failure was B-141's fixed 200 ms audit-health snapshot.
+
+- [x] 5.1 Replace the fixed delay with observation of all five asynchronous audit failures,
+      retaining the existing four-second observation bound and every product guarantee.
+- [x] 5.2 Restore the locked dependency payload without changing versions or the lockfile;
+      verify resolution and run focused checks before another complete gate.
+- [ ] 5.3 Complete a fresh full gate and verified push. Do not discharge Linux E2E or build
+      installers on the strength of local checks.
+
+The D-186 carrying run also completed red:
+[actual Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/41906376920).
+Designer reports 10 failed, 263 passed and 146 unrun; Runtime reports 5 failed, 299 passed and
+82 unrun. The named failures are covered by the 83 corrected-tree local browser cases above,
+but global run/teardown deadlines left further cases unrun. The non-E2E validation job passed.
+The follow-up still needs its own completed green Linux E2E evidence; Desktop was skipped.
+
+Repair evidence: pinned pnpm 11.9.0's optimistic-repeat-install initially skipped even a forced
+frozen install. Disabling that optimization for this invocation restored the locked payload;
+Rollup 4.60.4 now imports successfully. The exact damaged package directory is retained in this
+isolated checkout's ignored recovery folder. No manifest, lockfile or workspace setting changed,
+and no shared store or owner checkout was removed. The 19-case audit append-site suite passes
+in 8.45 seconds; Bridge typecheck and lint and both changed OpenSpec validations pass. The
+repaired wait observes all five failures, with no product change or increased test timeout.
+
+The fresh pre-commit gate `gate-20261104T211111Z-7884.log` completes with **exit 0 after
+742.4 seconds**, all **103/103 uncached tasks** successful. Designer passes 1975 tests,
+CG Control 2532 and Bridge 1961 (including the corrected 19-case audit suite). Formatting,
+the control-byte scan and all 141 strict OpenSpec items pass. The dependency fault did not
+recur. This is current local evidence only; verified push and carrying-commit Linux remain owed.

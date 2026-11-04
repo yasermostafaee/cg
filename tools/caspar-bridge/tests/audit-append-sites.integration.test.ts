@@ -614,7 +614,11 @@ describe('B-141 — an audit write can never take the station off air', () => {
       // …and the failure is REPORTED rather than swallowed. This is the positive
       // control the panel reads: without it, "no entries" is indistinguishable from
       // "every entry was lost".
-      await delay(200);
+      // Appends are deliberately off the playout path. Observe every queued
+      // failure with the same bound as entriesOnDisk, not a fixed-speed disk.
+      await expect
+        .poll(() => r.auditHealth().errorCount, { interval: 20, timeout: 4000 })
+        .toBeGreaterThanOrEqual(5);
       const health = r.auditHealth();
       expect(health.configured).toBe(true);
       expect(health.path).toBe(file);

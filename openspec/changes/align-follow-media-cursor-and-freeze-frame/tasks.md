@@ -77,6 +77,7 @@ The correction is committed as `1b76faf0`, pushed to `dev`, and the remote full 
 verified. Its separate pre-push gate `gate-20261104T201211Z-17132.log` also ends with exit 0 in
 758.8 seconds, with 103/103 uncached tasks and all 141 strict OpenSpec items passing. The live
 Designer landing displays this revision. [Carrying-commit CI](https://github.com/yasermostafaee/cg/actions/runs/41906376920)
-has started; its actual Linux E2E step has not completed. Desktop is deliberately skipped.
-The earlier integration run has real unrelated whole-suite failures being triaged under
-`../reconcile-current-designer-gallery/tasks.md`; no Linux discharge is claimed for either change.
+has completed with a successful non-E2E validation job but failed actual Linux E2E. Desktop is
+deliberately skipped. Both carrying runs' whole-suite failures and corrected-tree local evidence
+are recorded under `../reconcile-current-designer-gallery/tasks.md` sections 4–5; no Linux
+discharge is claimed for either change.

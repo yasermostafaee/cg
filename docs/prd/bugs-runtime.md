@@ -3696,6 +3696,13 @@ update-deferred update-installed`. `ACTION_OPTIONS` in
 - **Cross-refs:** [[B-142]] (the panel's raw `<select>`, which this item must not touch),
   [[B-143]] (the same class — the system knows something and does not say it).
 
+**Verification follow-up, 2026-11-05:** the integration gate exposed a test reading
+`auditHealth` after a fixed 200 ms, before the asynchronous writer had reported its failures.
+Observe the existing five-failure condition within the suite's existing four-second disk
+observation bound; retain all accepted-operation, no-file and health assertions. This is a
+test-only repair, not a change to the non-blocking writer contract. Evidence is tracked under
+`openspec/changes/reconcile-current-designer-gallery/tasks.md` section 5.
+
 ## [ ] B-142 — four Runtime dialogs render raw `<select>`s that sit OUTSIDE `Modal`'s focus trap ⟨priority: medium⟩
 
 **What:** `Modal`'s focus trap enumerates focusable children with a selector that **omits `select`,
