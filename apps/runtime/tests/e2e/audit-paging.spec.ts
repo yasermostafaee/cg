@@ -210,6 +210,7 @@ test('🔴 §9 — 50,000 rows: explicit 25-row pages, server filters, and live 
   const compactSearchBox = await log
     .getByRole('searchbox', { name: 'Search events, names, ids and actors' })
     .boundingBox();
+  const compactCombo = log.locator('#audit-action');
   const compactRowBox = await itemOf(0).boundingBox();
   expect(compactHeadBox, 'the compact modal header has geometry').not.toBeNull();
   expect(compactSearchBox, 'the compact audit search has geometry').not.toBeNull();
@@ -220,14 +221,21 @@ test('🔴 §9 — 50,000 rows: explicit 25-row pages, server filters, and live 
   expect(compactSearchBox?.height ?? Infinity, 'the narrow input is compact').toBeLessThanOrEqual(
     32,
   );
+  await expect(compactCombo, 'compact combo text keeps usable vertical padding').toHaveCSS(
+    'padding-top',
+    '5px',
+  );
+  await expect(compactCombo).toHaveCSS('padding-bottom', '5px');
   expect(
     compactRowBox?.height ?? Infinity,
     'the narrow rows expose more events',
   ).toBeLessThanOrEqual(56);
   const narrowFooterBox = await log.locator('[data-audit-footer]').boundingBox();
   const narrowPagerBox = await log.getByLabel('Audit pages').boundingBox();
+  const narrowCloseBox = await log.locator('[data-audit-close]').boundingBox();
   expect(narrowFooterBox, 'the narrow footer has geometry').not.toBeNull();
   expect(narrowPagerBox, 'the narrow pager has geometry').not.toBeNull();
+  expect(narrowCloseBox, 'the narrow Close action has geometry').not.toBeNull();
   expect(
     Math.abs(
       (narrowFooterBox?.x ?? 0) +
@@ -235,6 +243,14 @@ test('🔴 §9 — 50,000 rows: explicit 25-row pages, server filters, and live 
         ((narrowPagerBox?.x ?? 0) + (narrowPagerBox?.width ?? 0) / 2),
     ),
     'the narrow pager remains centred on its own row',
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(
+      (narrowPagerBox?.y ?? 0) +
+        (narrowPagerBox?.height ?? 0) / 2 -
+        ((narrowCloseBox?.y ?? 0) + (narrowCloseBox?.height ?? 0) / 2),
+    ),
+    'the narrow footer actions share one aligned row',
   ).toBeLessThanOrEqual(1);
   const documentWidth = await page.evaluate(() => ({
     client: document.documentElement.clientWidth,
@@ -277,6 +293,8 @@ test('🔴 §9 — 50,000 rows: explicit 25-row pages, server filters, and live 
   await log.locator('#audit-actor').fill('سارا');
   await expect(itemOf(0)).toHaveAttribute('data-audit-item-id', 'item-49995');
   await expect(itemOf(1)).toHaveAttribute('data-audit-item-id', 'item-49990');
+  await expect(itemOf(0)).toHaveAttribute('aria-pressed', 'false');
+  await expect(log.locator('[data-audit-details]')).toHaveCount(0);
   const actors = await log
     .locator('[data-audit-actor]')
     .evaluateAll((els) => els.map((el) => el.getAttribute('data-audit-actor')));

@@ -120,6 +120,9 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
   const tableRef = useRef<HTMLDivElement | null>(null);
   const asked = useRef(0);
   const totalAsked = useRef(0);
+  const opened = useRef(false);
+  const openingFilterKey = useRef<string | null>(null);
+  const initialSelectionPending = useRef(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setSearch(query.trim()), SEARCH_SETTLE_MS);
@@ -164,6 +167,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
   const loadPage = async (
     cursor: AuditCursor | undefined,
     targetPage: number,
+    selectFirst = false,
   ): Promise<{ accepted: boolean; message?: string }> => {
     asked.current += 1;
     const ask = asked.current;
@@ -201,6 +205,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
         if (selected !== null && page.entries.some((entry) => rowIdentity(entry) === selected)) {
           return selected;
         }
+        if (!selectFirst) return null;
         const first = page.entries[0];
         return first === undefined ? null : rowIdentity(first);
       });
@@ -218,6 +223,14 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
 
   useEffect(() => {
     if (!open) return;
+    if (!opened.current) {
+      opened.current = true;
+      openingFilterKey.current = filterKey;
+      initialSelectionPending.current = true;
+    } else if (openingFilterKey.current !== filterKey) {
+      initialSelectionPending.current = false;
+    }
+    const selectFirst = initialSelectionPending.current;
     setCursors([undefined]);
     setPageIndex(0);
     setNext(null);
@@ -233,7 +246,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
       setBusy(false);
       return;
     }
-    void loadPage(undefined, 0);
+    void loadPage(undefined, 0, selectFirst);
     void loadTotal();
     // `filterKey` is the serialised request; `loadPage` is intentionally not a dependency.
   }, [open, filterKey, rangeError]);
@@ -286,6 +299,9 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
 
   useEffect(() => {
     if (open) return;
+    opened.current = false;
+    openingFilterKey.current = null;
+    initialSelectionPending.current = false;
     asked.current += 1;
     totalAsked.current += 1;
     setEntries([]);

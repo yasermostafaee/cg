@@ -4417,7 +4417,8 @@ bound by date, or revisit page by page. **Acceptance:**
   the document
 - WHEN Next/Previous is pressed THEN one stable 25-row page replaces the other and the page number changes
 - WHEN a filter, search, From date or To date changes THEN page 1 is read again and every returned row
-  satisfies that filter; an impossible range is refused before a request
+  satisfies that filter; details close and the first returned row is not selected automatically; an impossible
+  range is refused before a request
 - WHEN a row is selected THEN its operator-facing outcome and complete event facts appear in the details
   pane, with full technical ids copyable there rather than filling the table row
 - WHEN rows are shown THEN each carries its channel name in a Channel column, the row hover makes its click
@@ -4427,8 +4428,8 @@ bound by date, or revisit page by page. **Acceptance:**
   remain centred independently of Close
 - WHEN the window is narrow THEN the six-column table keeps a readable minimum width and scrolls inside its
   own frame, Event details open as a full-height drawer over the right side of the modal without resizing it,
-  header/footer/filter/row spacing becomes compact enough to show more events, controls reflow, and the page
-  does not widen
+  header/footer/filter/row spacing becomes compact enough to show more events, the centred pager and Close
+  share one aligned footer action row, controls reflow, and the page does not widen
 - WHEN the Log opens or its filter changes THEN the exact permitted matching total is shown independently of
   the 25 rows on the current page
 - WHEN a matching row is written while page 1 is open THEN it appears at the top; on an older page the

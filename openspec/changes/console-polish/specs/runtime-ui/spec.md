@@ -127,8 +127,9 @@ SHALL deselect it and close the details pane. Previous/Next SHALL remain centred
 independent of the Close action. On a narrow console, the six-column ledger SHALL retain a readable minimum
 width and scroll inside its own frame; Event details SHALL open as a right-side drawer over the table rather
 than compressing or moving it. On a narrow console that drawer SHALL cover the modal's full height, while the
-header, footer, filters and row spacing SHALL become compact enough to expose more events, and the controls
-SHALL reflow without widening the page.
+header, footer, filters and row spacing SHALL become compact enough to expose more events. Footer actions
+SHALL share one aligned row below its status information, and the controls SHALL reflow without widening the
+page.
 The record on disk SHALL be unchanged.
 
 #### Scenario: The incident stamp reads as the control room clock
@@ -161,8 +162,8 @@ The record on disk SHALL be unchanged.
 
 - **WHEN** the Audit log is open at a 900 px viewport with Event details visible **THEN** details span the
   modal's full height as a drawer attached to its right edge, the six columns scroll horizontally inside the table,
-  the header, inputs and rows use their compact metrics, Previous/Next remain centred, and the document itself
-  has no horizontal overflow
+  the header, inputs and rows use their compact metrics, Previous/Next remain centred on the same aligned row
+  as Close, and the document itself has no horizontal overflow
 
 #### Scenario: A refused command is shown beside its code
 
@@ -297,6 +298,7 @@ dedicated Channel column: the Playout catalogue name with `CH N` secondary, or `
 published. The whole row SHALL be the details control and SHALL have a visible hover; it SHALL NOT repeat a
 `View details` action inside the row. The footer SHALL show the exact total rows permitted by the console's
 grant and matching the active filter, loaded independently so counting a long record does not delay page 1.
+Changing a filter SHALL close Event details and SHALL NOT automatically select the first returned row.
 
 #### Scenario: A long audit
 
@@ -336,6 +338,11 @@ grant and matching the active filter, loaded independently so counting a long re
   console-local start of November 1 and end of November 2 converted to ISO instants
 - **WHEN** From is later than To **THEN** the fields are marked invalid, the range is stated, and no audit
   page request is sent until the range is possible
+
+#### Scenario: Filtering does not invent a selection
+
+- **WHEN** an operator changes any audit filter **THEN** page 1 is shown with every row unselected and Event
+  details closed until the operator explicitly selects a row
 
 ### Requirement: The on-air swap dialog SHALL name plates and sources in the operator's words, and carry no paragraph
 

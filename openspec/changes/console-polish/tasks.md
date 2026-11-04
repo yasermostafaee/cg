@@ -147,8 +147,9 @@ was stashed before each push so the gate judged only what was pushed.
       scrolling; show Event details as a full-height, right-side overlay drawer over the whole modal on
       narrow windows; and reflow filters/footer controls without widening the page. Pinned at 900 px in real
       Chromium: the drawer shares the modal's top, height and right edge; the ledger scrolls internally; the
-      modal chrome, filters and rows use their compact metrics; the footer remains centred; the document does
-      not widen (`audit-paging.spec.ts`, 1/1 passed).
+      modal chrome, filters and rows use their compact metrics; the centred pager and Close share one aligned
+      footer action row; the document does not widen. Filter refreshes clear details without selecting the
+      first returned row, and compact selects keep their text visible (`audit-paging.spec.ts`).
 
 ## 8. Close
 

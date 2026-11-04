@@ -190,6 +190,8 @@ describe('`R-083` — a page from CG Bridge', () => {
     ).toBe(true);
     expect(rows()).toHaveLength(5);
     expect(total()).toBe('5 events total');
+    expect(rows()[0]?.getAttribute('aria-pressed')).toBe('false');
+    expect(dialog().querySelector('[data-audit-details]')).toBeNull();
   });
 
   it('shows Channel first, and clicking the selected row again closes its details', async () => {
