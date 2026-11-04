@@ -233,6 +233,13 @@ export const timelineSlice = {
     set({ timelinePlaying: playing });
   },
 
+  /** The lifecycle owns ordinary Play; reverse and authoring loops own only the playhead. */
+  setTimelinePlayback(mode: 'lifecycle' | 'playhead' | null, playing: boolean): void {
+    const nextPlaying = mode === null ? false : playing;
+    if (current.timelinePlaybackMode === mode && current.timelinePlaying === nextPlaying) return;
+    set({ timelinePlaybackMode: mode, timelinePlaying: nextPlaying });
+  },
+
   /** `DELTA-RUN-NEXT-VERSION-01-G` — the one sound switch, shared by the timeline and the Preview. */
   setSoundMuted(muted: boolean): void {
     if (current.soundMuted === muted) return;

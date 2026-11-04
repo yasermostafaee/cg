@@ -2,6 +2,7 @@ import { useMemo, useState, useSyncExternalStore } from 'react';
 import { CircleCheck, TriangleAlert, Unplug } from 'lucide-react';
 import {
   aggregateCompositionFields,
+  countdownTargetFieldsOf,
   defaultNestedValues,
   fieldUsesFileOnly,
   sequenceItemInstanceId,
@@ -73,7 +74,11 @@ interface BulkLayout {
 type SequenceDoc = Scene | NonNullable<Scene['compositions']>[number];
 
 function pageSequences(scene: Scene, doc: SequenceDoc = scene): PageSequence[] {
-  const aggregate = withListLimits(scene, doc, aggregateCompositionFields(scene, doc));
+  const aggregate = countdownTargetFieldsOf(
+    scene,
+    doc,
+    withListLimits(scene, doc, aggregateCompositionFields(scene, doc)),
+  );
   const groups = new Map(aggregate.groups.map((group) => [group.instanceId, group]));
   return sequencesOf(doc)
     .map((sequence) => ({

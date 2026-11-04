@@ -2,6 +2,23 @@
 
 ## ADDED Requirements
 
+### Requirement: Structured rows share one modal table viewport
+
+Designer Inspector and Preview SHALL open Repeater rows from a compact action into a modal. Every
+row SHALL retain readable labelled cells and use one shared horizontal scrolling surface. Preview
+edits SHALL remain staged until Update all.
+
+#### Scenario: Author edits a wide league table
+
+- **WHEN** a Repeater child has many fields and the author opens its rows
+- **THEN** the table appears in a roomy modal and scrolling horizontally moves every row together
+- **AND** no row has an independent horizontal scrollbar
+
+#### Scenario: Preview row dialog closes
+
+- **WHEN** the operator edits rows and closes their modal
+- **THEN** the Preview remains open with the edits staged and no automatic on-air update
+
 ### Requirement: Repeater rows edit every supported child-field kind
 
 The shared Repeater items editor SHALL derive each row column from the referenced child composition's
@@ -111,8 +128,10 @@ same page values.
   Sequence Page data modal
 - **THEN** the nested list field stores the canonical File-only policy and CG Control renders no row
   inputs, add, remove or reorder controls for the combined pages
-- **AND THEN** generated-workbook connection, Reload and replace/detach actions remain available,
-  and loaded values still wait for Update
+- **AND THEN** connected-file status and Reload remain available, while Save/connect/replace/detach
+  actions are absent and loaded values still wait for Update
+- **AND WHEN** no workbook is connected
+- **THEN** the panel says Not connected and directs the operator to connect the workbook in Designer
 
 #### Scenario: File-only rows remain inspectable without becoming editable
 
@@ -125,7 +144,7 @@ same page values.
 
 #### Scenario: A deleted Excel template can be regenerated
 
-- **WHEN** an author or operator chooses **Save and connect Excel** for a homogeneous paged Repeater
+- **WHEN** an author, or an operator outside File-only mode, chooses **Save and connect Excel** for a homogeneous paged Repeater
 - **THEN** Designer or CG Control writes an `.xlsx` workbook from that template's current row schema
   and values
 - **AND THEN** every exact numeric/select/boolean choice is an Excel dropdown, numeric ranges carry

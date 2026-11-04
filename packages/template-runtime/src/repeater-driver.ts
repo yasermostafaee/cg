@@ -1,6 +1,7 @@
 import { repeaterRowLimit, type ListItem, type RepeaterElement } from '@cg/shared-schema';
-import { sampleTransition, type SequenceEdge } from './sequence-motion.js';
+import { sampleTransition, type MotionPose, type SequenceEdge } from './sequence-motion.js';
 import type { RuntimeClock } from './types.js';
+import { OUTRO_BACKSTOP_MARGIN_MS } from './video-driver.js';
 
 /**
  * D-030 — the repeater / data-driven-layout driver.
@@ -67,6 +68,13 @@ export class RepeaterDriver {
   /** Completed active time before the current running segment. */
   private elapsedMs = 0;
   private segmentStartedAt = 0;
+  private phase: 'in' | 'out' = 'in';
+  private exitPromise: Promise<void> | null = null;
+  private resolveExit: (() => void) | null = null;
+  private exitTimer: unknown = null;
+  private readonly rowPoses = new WeakMap<HTMLElement, MotionPose>();
+  private exitStarts = new Map<HTMLElement, MotionPose>();
+  private exitRowIndices = new Map<HTMLElement, number>();
   private readonly now: () => number;
   private readonly raf: (cb: (timestamp: number) => void) => number;
   private readonly cancel: (handle: number) => void;
@@ -96,6 +104,10 @@ export class RepeaterDriver {
    */
   reset(): void {
     if (this.destroyed) return;
+    this.finishExit();
+    this.exitStarts.clear();
+    this.exitRowIndices.clear();
+    this.phase = 'in';
     this.cancelEntranceFrame();
     this.running = false;
     this.paused = false;
@@ -106,6 +118,10 @@ export class RepeaterDriver {
 
   start(): void {
     if (this.destroyed) return;
+    this.finishExit();
+    this.exitStarts.clear();
+    this.exitRowIndices.clear();
+    this.phase = 'in';
     this.running = true;
     this.paused = false;
     this.beginEntrance();
@@ -116,6 +132,7 @@ export class RepeaterDriver {
     this.elapsedMs = Math.min(this.entranceTotalMs(), this.currentElapsedMs());
     this.paused = true;
     this.cancelEntranceFrame();
+    this.clearExitTimer();
     this.paintEntrance(this.elapsedMs);
   }
 
@@ -123,15 +140,20 @@ export class RepeaterDriver {
     if (!this.running || !this.paused || this.destroyed) return;
     this.paused = false;
     if (this.elapsedMs >= this.entranceTotalMs()) {
-      this.restoreRows();
+      this.paintEntrance(this.elapsedMs);
+      if (this.phase === 'out') this.finishExit();
       return;
     }
     this.segmentStartedAt = this.now();
+    this.armExitTimer();
     this.scheduleEntranceFrame();
   }
 
   stop(): void {
     this.cancelEntranceFrame();
+    this.finishExit();
+    this.exitStarts.clear();
+    this.exitRowIndices.clear();
     this.running = false;
     this.paused = false;
     this.elapsedMs = 0;
@@ -140,10 +162,93 @@ export class RepeaterDriver {
 
   destroy(): void {
     this.cancelEntranceFrame();
+    this.finishExit();
     this.teardown();
     this.running = false;
     this.paused = false;
     this.destroyed = true;
+  }
+
+  /** Existing element-outro seam: background exit waits for the visible row build-down. */
+  playOutro(): Promise<void> {
+    if (this.exitPromise !== null) return this.exitPromise;
+    if (this.destroyed || !this.running || (this.o.element.itemExit ?? 'none') === 'none') {
+      return Promise.resolve();
+    }
+    // Stop may interrupt the staggered build-in. Freeze each current pose so rows that have not
+    // entered never flash on, and partly entered rows leave from exactly where they are.
+    this.paintEntrance(this.currentElapsedMs());
+    this.exitStarts.clear();
+    this.exitRowIndices.clear();
+    for (const row of this.rows) {
+      const pose = this.rowPoses.get(row.motion) ?? restingPose();
+      if (row.cell.style.display !== 'none' && poseIntersectsCell(row, pose)) {
+        this.exitStarts.set(row.motion, pose);
+        this.exitRowIndices.set(row.motion, this.exitRowIndices.size);
+      } else {
+        // Hidden surplus / not-yet-entered rows contribute no dead delay and cannot flash on
+        // if their data regrows while the captured exit is running.
+        this.exitStarts.set(row.motion, { offset: { x: 0, y: 0 }, visible: false, opacity: 0 });
+      }
+    }
+    this.cancelEntranceFrame();
+    this.phase = 'out';
+    this.elapsedMs = 0;
+    this.segmentStartedAt = this.now();
+    this.exitPromise = new Promise<void>((resolve) => {
+      this.resolveExit = resolve;
+    });
+    this.paintEntrance(0);
+    if (this.entranceTotalMs() === 0) this.finishExit();
+    else {
+      this.armExitTimer();
+      this.scheduleEntranceFrame();
+    }
+    return this.exitPromise ?? Promise.resolve();
+  }
+
+  /** Finite active duration after playOutro snapshots only the rows that actually entered. */
+  outroDurationMs(): number {
+    return this.phase === 'out' ? this.entranceTotalMs() : 0;
+  }
+
+  /** Static timeline sample; live playback uses the pause-safe driver clock instead. */
+  sample(frame: number, fps: number, outPoint?: number): void {
+    if (this.running || this.destroyed) return;
+    const phase = outPoint !== undefined && frame >= outPoint ? 'out' : 'in';
+    const start = phase === 'out' ? (outPoint ?? 0) : 0;
+    const previous = this.phase;
+    this.phase = phase;
+    this.paintEntrance((Math.max(0, frame - start) * 1000) / fps);
+    this.phase = previous;
+  }
+
+  private finishExit(): void {
+    this.clearExitTimer();
+    this.resolveExit?.();
+    this.resolveExit = null;
+    this.exitPromise = null;
+  }
+
+  private clearExitTimer(): void {
+    if (this.exitTimer === null) return;
+    if (this.o.clock?.clearTimeout !== undefined) this.o.clock.clearTimeout(this.exitTimer);
+    else clearTimeout(this.exitTimer as ReturnType<typeof setTimeout>);
+    this.exitTimer = null;
+  }
+
+  private armExitTimer(): void {
+    this.clearExitTimer();
+    if (this.phase !== 'out' || this.paused || this.resolveExit === null) return;
+    const remaining = Math.max(0, this.entranceTotalMs() - this.elapsedMs);
+    const schedule =
+      this.o.clock?.setTimeout ?? ((cb: () => void, ms: number) => setTimeout(cb, ms));
+    this.exitTimer = schedule(() => {
+      this.cancelEntranceFrame();
+      this.elapsedMs = this.entranceTotalMs();
+      this.paintEntrance(this.elapsedMs);
+      this.finishExit();
+    }, remaining + OUTRO_BACKSTOP_MARGIN_MS);
   }
 
   /**
@@ -182,11 +287,14 @@ export class RepeaterDriver {
   // — internals ————————————————————————————————————————————————————————
 
   private entranceEdge(): SequenceEdge {
-    return this.o.element.itemEntrance ?? 'none';
+    return (this.phase === 'out' ? this.o.element.itemExit : this.o.element.itemEntrance) ?? 'none';
   }
 
   private transitionMs(): number {
-    const value = this.o.element.itemTransitionMs;
+    const value =
+      this.phase === 'out'
+        ? (this.o.element.itemExitTransitionMs ?? this.o.element.itemTransitionMs)
+        : this.o.element.itemTransitionMs;
     return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 400;
   }
 
@@ -196,8 +304,10 @@ export class RepeaterDriver {
   }
 
   private entranceTotalMs(): number {
-    if (this.entranceEdge() === 'none' || this.rows.length === 0) return 0;
-    return (this.rows.length - 1) * this.staggerMs() + this.transitionMs();
+    const count =
+      this.phase === 'out' && this.running ? this.exitRowIndices.size : this.rows.length;
+    if (this.entranceEdge() === 'none' || count === 0) return 0;
+    return (count - 1) * this.staggerMs() + this.transitionMs();
   }
 
   private beginEntrance(): void {
@@ -236,6 +346,7 @@ export class RepeaterDriver {
       this.segmentStartedAt = now;
       this.paintEntrance(this.elapsedMs);
       if (this.elapsedMs < this.entranceTotalMs()) this.scheduleEntranceFrame();
+      else if (this.phase === 'out') this.finishExit();
       else this.restoreRows();
     });
   }
@@ -257,21 +368,43 @@ export class RepeaterDriver {
     for (let i = 0; i < this.rows.length; i += 1) {
       const row = this.rows[i];
       if (row === undefined) continue;
-      const rowElapsed = elapsedMs - i * staggerMs;
+      const exitStart =
+        this.phase === 'out' && this.running ? this.exitStarts.get(row.motion) : undefined;
+      if (exitStart !== undefined && !exitStart.visible) {
+        this.paintRow(row, exitStart);
+        continue;
+      }
+      const rowIndex =
+        this.phase === 'out' && this.running ? (this.exitRowIndices.get(row.motion) ?? i) : i;
+      const rowCount =
+        this.phase === 'out' && this.running ? this.exitRowIndices.size : this.rows.length;
+      const orderIndex =
+        this.phase === 'out' && this.o.element.itemExitOrder !== 'forward'
+          ? rowCount - 1 - rowIndex
+          : rowIndex;
+      const rowElapsed = elapsedMs - orderIndex * staggerMs;
       if (rowElapsed < 0) {
-        row.motion.style.visibility = 'hidden';
-        row.motion.style.opacity = '0';
-        row.motion.style.transform = '';
+        if (this.phase === 'out') {
+          if (exitStart !== undefined) this.paintRow(row, exitStart);
+          else this.restoreRow(row);
+          continue;
+        }
+        this.paintRow(row, { offset: { x: 0, y: 0 }, visible: false, opacity: 0 });
         continue;
       }
       if (rowElapsed >= transitionMs) {
-        restoreRow(row);
+        if (this.phase === 'out') {
+          this.paintRow(row, { offset: { x: 0, y: 0 }, visible: false, opacity: 0 });
+          continue;
+        }
+        this.restoreRow(row);
         continue;
       }
       const frame = sampleTransition(
         {
-          inEdge: edge,
-          outEdge: 'none',
+          // The unused incoming fade provides the shared eased progress for interrupted exits.
+          inEdge: this.phase === 'in' ? edge : 'fade',
+          outEdge: this.phase === 'out' ? edge : 'none',
           timing: 'simultaneous',
           transitionMs,
           box: {
@@ -281,14 +414,39 @@ export class RepeaterDriver {
         },
         rowElapsed,
       );
-      row.motion.style.visibility = frame.in.visible ? 'visible' : 'hidden';
-      row.motion.style.opacity = String(frame.in.opacity);
-      row.motion.style.transform = `translate(${String(frame.in.offset.x)}px, ${String(frame.in.offset.y)}px)`;
+      const pose = this.phase === 'out' ? frame.out : frame.in;
+      this.paintRow(
+        row,
+        exitStart === undefined
+          ? pose
+          : {
+              visible: exitStart.visible && pose.visible,
+              opacity: exitStart.opacity * pose.opacity,
+              offset: {
+                x: exitStart.offset.x * (1 - frame.in.opacity) + pose.offset.x,
+                y: exitStart.offset.y * (1 - frame.in.opacity) + pose.offset.y,
+              },
+            },
+      );
     }
   }
 
   private restoreRows(): void {
-    for (const row of this.rows) restoreRow(row);
+    for (const row of this.rows) this.restoreRow(row);
+  }
+
+  private paintRow(row: RepeaterRowHandle, pose: MotionPose): void {
+    this.rowPoses.set(row.motion, pose);
+    row.motion.style.visibility = pose.visible ? 'visible' : 'hidden';
+    row.motion.style.opacity = String(pose.opacity);
+    row.motion.style.transform = `translate(${String(pose.offset.x)}px, ${String(pose.offset.y)}px)`;
+  }
+
+  private restoreRow(row: RepeaterRowHandle): void {
+    this.rowPoses.set(row.motion, restingPose());
+    row.motion.style.visibility = '';
+    row.motion.style.opacity = '';
+    row.motion.style.transform = '';
   }
 
   private teardown(): void {
@@ -297,6 +455,8 @@ export class RepeaterDriver {
     // cascade (they'd keep receiving play/stop with no owner).
     const rows = this.rows;
     this.rows = [];
+    this.exitStarts.clear();
+    this.exitRowIndices.clear();
     for (const row of rows) {
       try {
         row.destroy();
@@ -328,10 +488,19 @@ function cssPixels(value: string): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function restoreRow(row: RepeaterRowHandle): void {
-  row.motion.style.visibility = '';
-  row.motion.style.opacity = '';
-  row.motion.style.transform = '';
+function poseIntersectsCell(row: RepeaterRowHandle, pose: MotionPose): boolean {
+  // Pure slides start opaque but wholly outside the clipped cell. Treating opacity alone as
+  // visibility would pull such a never-entered row back into view when Stop changes to a fade.
+  return (
+    pose.visible &&
+    pose.opacity > 0 &&
+    Math.abs(pose.offset.x) < cssPixels(row.cell.style.width) &&
+    Math.abs(pose.offset.y) < cssPixels(row.cell.style.height)
+  );
+}
+
+function restingPose(): MotionPose {
+  return { offset: { x: 0, y: 0 }, visible: true, opacity: 1 };
 }
 
 /** Strip the reconcile `id` — the remaining keys are the child field values. */

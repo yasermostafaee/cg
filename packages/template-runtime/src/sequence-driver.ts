@@ -85,6 +85,10 @@ export interface RenderedSequenceItem {
   pause(): void;
   resume(): void;
   hide(): void;
+  /** Final owner exit only: finish inner content before the page's own transitionOut. */
+  playOutro?(): Promise<void>;
+  /** Upper bound of the currently held item's exit, including its own never-strand guard. */
+  outroDurationMs?(): number;
   /**
    * D-083 — re-apply the operator's namespaced field values to a COMPOSITION item's
    * content (e.g. the label next to a clock). Given the FULL nested value object; the
@@ -173,7 +177,7 @@ interface NormalizedDriverClock {
 // content has left (D-105 content-first / background-last).
 // `D-163` — `loading`: the incoming item is being made ready (a picture decoding); the current item
 // stays fully on screen and nothing moves until it is.
-type Phase = 'idle' | 'dwell' | 'transition' | 'entrance' | 'exit' | 'loading';
+type Phase = 'idle' | 'dwell' | 'transition' | 'entrance' | 'item-exit' | 'exit' | 'loading';
 
 export class SequenceDriver {
   private readonly o: SequenceDriverOptions;
@@ -227,6 +231,10 @@ export class SequenceDriver {
   private exitCompletesRun = false;
   private exitPromise: Promise<void> | null = null;
   private resolveExit: (() => void) | null = null;
+  private itemExitGeneration = 0;
+  private itemExitPromise: Promise<void> | null = null;
+  private resolveItemExit: (() => void) | null = null;
+  private itemExitReady = false;
 
   constructor(options: SequenceDriverOptions) {
     this.o = options;
@@ -391,9 +399,13 @@ export class SequenceDriver {
    * natural book completion.
    */
   playOutro(): Promise<void> {
-    if (this.destroyed || this.phase === 'idle' || this.currentNode === null) {
+    if (this.destroyed || this.stopped || this.phase === 'idle' || this.currentNode === null) {
       return Promise.resolve();
     }
+    // Natural final completion already left the page hidden. A parent's content-driven
+    // exit asks the registry again; it must not reveal and close that page a second time.
+    if (this.completed && !this.running) return Promise.resolve();
+    if (this.itemExitPromise !== null) return this.itemExitPromise;
     if (this.phase === 'exit') return this.exitPromise ?? Promise.resolve();
     this.pendingIdx = null;
     this.pendingTurns.length = 0;
@@ -403,7 +415,43 @@ export class SequenceDriver {
     this.loadingHooks?.hide();
     this.loadingHooks = null;
     if (this.phase === 'transition') this.finishTransition();
-    return this.beginExit(false);
+    return this.beginItemExit(false);
+  }
+
+  /** The inner content and the page boundary leave sequentially, so their bounds add. */
+  outroDurationMs(): number {
+    const inner = this.currentHooks?.outroDurationMs?.() ?? 0;
+    const page = this.o.transitionOut === 'none' ? 0 : this.o.transitionMs;
+    return (Number.isFinite(inner) && inner > 0 ? inner : 0) + page;
+  }
+
+  private beginItemExit(completesRun: boolean): Promise<void> {
+    if (this.itemExitPromise !== null) return this.itemExitPromise;
+    const innerOutro = this.currentHooks?.playOutro;
+    if (innerOutro === undefined) return this.beginExit(completesRun);
+    // Sequence items are held content, not controller-cascade children. A final exit
+    // (natural completion or OUT) waits for active content; ordinary page turns stay unchanged.
+    this.cancelFrame();
+    this.enterPhase('item-exit');
+    this.running = true;
+    this.exitCompletesRun = completesRun;
+    this.itemExitReady = false;
+    const generation = ++this.itemExitGeneration;
+    this.itemExitPromise = new Promise<void>((resolve) => {
+      this.resolveItemExit = resolve;
+    });
+    const ready = (): void => {
+      if (generation !== this.itemExitGeneration || this.destroyed || this.stopped) return;
+      this.itemExitReady = true;
+      this.finishItemExit();
+    };
+    try {
+      void innerOutro.call(this.currentHooks).then(ready, ready);
+    } catch {
+      // A failed child must not strand the owner's STOP/OUT.
+      ready();
+    }
+    return this.itemExitPromise;
   }
 
   /** Freeze the dwell timer AND any in-flight transition (lockstep pause). */
@@ -424,6 +472,7 @@ export class SequenceDriver {
     this.paused = false;
     this.currentHooks?.resume(); // D-083 — continue inner drivers in lockstep
     this.incomingHooks?.resume();
+    if (this.phase === 'item-exit') this.finishItemExit();
     if (this.phase === 'transition') this.paintTransition();
     else if (this.phase === 'entrance' || this.phase === 'exit') this.paintBoundary(this.phase);
     this.consumePending(); // D-163 — a goTo that arrived while frozen
@@ -436,6 +485,15 @@ export class SequenceDriver {
     this.stopped = true;
     this.paused = false;
     this.cancelFrame();
+    // Reset/replay or destroy can overtake either exit leg. Settle old callers now and
+    // fence off their asynchronous continuation so it cannot close the fresh run.
+    this.itemExitGeneration += 1;
+    this.resolveItemExit?.();
+    this.resolveItemExit = null;
+    this.itemExitPromise = null;
+    this.itemExitReady = false;
+    this.resolveExit?.();
+    this.resolveExit = null;
     // D-163 — a picture still decoding is abandoned with the run.
     this.loadGen += 1;
     this.loadingHooks?.hide();
@@ -591,7 +649,7 @@ export class SequenceDriver {
         // the content has left and its outro fires last (D-105 content-first / background-last). A
         // 'none' edge / zero duration hides it immediately. `phase === 'exit'` already in flight ⇒
         // don't restart it.
-        void this.beginExit(true);
+        void this.beginItemExit(true);
         return;
       }
       if (this.logical.length === 0) return; // nothing to show — keep the stage
@@ -705,6 +763,10 @@ export class SequenceDriver {
     if (this.destroyed || this.phase === 'idle') return false;
     if (this.running) return true;
     if (!this.completed || this.stopped) return false;
+    this.itemExitGeneration += 1;
+    this.resolveItemExit?.();
+    this.resolveItemExit = null;
+    this.itemExitPromise = null;
     this.running = true;
     return true;
   }
@@ -722,6 +784,16 @@ export class SequenceDriver {
     const turn = this.pendingTurns.shift();
     if (turn === 'next') this.advance();
     else if (turn === 'previous') this.previous();
+  }
+
+  private finishItemExit(): void {
+    if (this.phase !== 'item-exit' || !this.itemExitReady || this.paused) return;
+    const generation = this.itemExitGeneration;
+    void this.beginExit(this.exitCompletesRun).then(() => {
+      if (generation !== this.itemExitGeneration) return;
+      this.resolveItemExit?.();
+      this.resolveItemExit = null;
+    });
   }
 
   private beginExit(completesRun: boolean): Promise<void> {

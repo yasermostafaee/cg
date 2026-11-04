@@ -84,7 +84,8 @@ test.describe('Regressions', () => {
 
     await app.openPreviewModal();
     // Root group plus a per-child timing group, labelled by the instance name.
-    await expect(app.previewDialog.getByText('Timing (session)')).toBeVisible();
+    await app.previewDialog.locator('summary').filter({ hasText: 'Advanced' }).click();
+    await expect(app.previewDialog.getByText('Timing', { exact: true })).toBeVisible();
     await expect(app.previewDialog.getByText(/Timing — comp1/)).toBeVisible();
   });
 

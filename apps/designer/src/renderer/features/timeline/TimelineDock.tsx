@@ -593,7 +593,10 @@ export function TimelineDock({
                 frameIn={frameIn}
                 frameOut={frameOut}
                 stride={tickStride}
-                onScrub={(f) => designerStore.setCurrentFrame(f)}
+                onScrub={(f) => {
+                  designerStore.setTimelinePlayback(null, false);
+                  designerStore.setCurrentFrame(f);
+                }}
               />
             </div>
           </div>

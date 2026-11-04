@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { Element, Scene } from '@cg/shared-schema';
+import type { ClockElement, Element, Scene } from '@cg/shared-schema';
 import { createRuntime, installCasparGlobals } from '@cg/template-runtime';
 import { Preview } from '../src/platform/preview.js';
 
@@ -154,6 +154,50 @@ afterEach(() => {
 });
 
 describe('an undeliverable control reports instead of vanishing', () => {
+  it('starts a fresh accelerated rehearsal on each Play, without changing the actual deadline', async () => {
+    const deadline = new Date(Date.now() + 15_000).toISOString();
+    const s = scene({
+      ...T,
+      id: 'clock',
+      name: 'Clock',
+      type: 'clock',
+      mode: 'countdown',
+      target: { kind: 'datetime', iso: deadline },
+      afterZero: 'close',
+      font: {
+        family: 'Arial',
+        weight: 400,
+        style: 'normal',
+        size: 24,
+        lineHeight: 1.2,
+        letterSpacing: 0,
+      },
+      color: '#ffffff',
+      align: 'center',
+      verticalAlign: 'middle',
+      format: 'HH:mm:ss',
+      digits: 'latin',
+    } as ClockElement);
+    s.playout = { mode: 'auto-out', holdSource: 'content-driven' };
+    bootPreviewDoc(s);
+    await settle(50);
+    post({ action: 'clock-rate', rate: 60 });
+    await settle(40);
+    post({ action: 'play', fields: {} });
+    await settle(400);
+    expect(document.body.classList.contains('cg-pending')).toBe(true);
+    post({ action: 'play', fields: {} });
+    await settle(20);
+    const text = document.querySelector('[data-cg-clock-time]')?.textContent ?? '';
+    expect(
+      Number(text.split(':').at(-1)),
+      'second rehearsal still has most of the real 15 seconds left',
+    ).toBeGreaterThan(8);
+    expect(s.layers[0]?.children[0]).toMatchObject({ target: { kind: 'datetime', iso: deadline } });
+    post({ action: 'stop' });
+    await settle(40);
+  });
+
   it('a stale/absent global makes stop and out report on cg-preview-error', async () => {
     bootPreviewDoc(scene());
     await settle(150);

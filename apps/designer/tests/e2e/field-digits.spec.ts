@@ -54,7 +54,7 @@ test('a new field reads persian, a number keeps it, and the preview follows the 
     await app.openPreviewModal();
     await app.play();
     await app.setPreviewField('clock', '12:30');
-    await app.updatePreviewField('clock');
+    await app.updateAllPreviewFields();
   };
   await digits.selectOption('latin');
   await previewed();

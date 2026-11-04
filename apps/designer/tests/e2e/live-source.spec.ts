@@ -589,7 +589,7 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await expect(errorPill(app)).toHaveCount(0);
   });
 
-  test('B-359 — an all-locked Live Source multi-selection disables Scale until one lock is freed', async ({
+  test('B-359 — a Live Source multi-selection disables Scale until every lock is freed', async ({
     app,
   }) => {
     await app.newProject('LockedLiveSourceMultiScale');
@@ -618,6 +618,14 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await lock.click();
     await expect(lock).toHaveText('FREE');
 
+    await selectBoth();
+    // A shared scale must not deform the remaining locked plate.
+    await expect(scaleX).toBeDisabled();
+    await expect(scaleY).toBeDisabled();
+
+    await app.selectElementById(ids[0]!);
+    await lock.click();
+    await expect(lock).toHaveText('FREE');
     await selectBoth();
     await expect(scaleX).toBeEnabled();
     await expect(scaleY).toBeEnabled();

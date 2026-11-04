@@ -60,6 +60,7 @@ function make(
     lifecycle?: Lifecycle | undefined;
     hasAnimation?: boolean;
     waitForContent?: () => Promise<void> | null;
+    observeFrame?: (frame: number) => void;
   } = {},
 ): Harness {
   const clock = makeClock();
@@ -75,12 +76,51 @@ function make(
     onExitStart: () => events.push('exit'),
     onSettle: () => events.push('settle'),
     waitForContent: opts.waitForContent,
+    observeFrame: opts.observeFrame,
     clock,
   });
   return { controller, frames, events, clock };
 }
 
 describe('PlayoutController', () => {
+  it('reports collapsed root boundaries without adding paint or lifecycle duration', () => {
+    const observed: number[] = [];
+    const h = make({ mode: 'manual' }, { observeFrame: (frame) => observed.push(frame) });
+    h.controller.play();
+    expect(h.frames).toEqual([40]);
+    expect(observed).toEqual([0, 40]);
+    h.controller.stop();
+    expect(h.frames).toEqual([40, 50]);
+    expect(observed).toEqual([0, 40, 40, 50]);
+    expect(h.clock.now()).toBe(0);
+    expect(h.events).toEqual(['exit', 'settle']);
+  });
+
+  it('observes animated root frames, a parked hold and pause/resume without extra paints', () => {
+    const observed: number[] = [];
+    const h = make(
+      { mode: 'manual' },
+      { hasAnimation: true, observeFrame: (frame) => observed.push(frame) },
+    );
+    h.controller.play();
+    h.clock.advance(200);
+    expect(observed.at(-1)).toBe(10);
+    h.controller.pause();
+    const paused = observed.length;
+    h.clock.advance(500);
+    expect(observed).toHaveLength(paused);
+    h.controller.resume();
+    h.clock.advance(1000);
+    expect(observed.at(-1)).toBe(40);
+    const held = observed.length;
+    h.clock.advance(1000);
+    expect(observed).toHaveLength(held);
+    h.controller.stop();
+    h.clock.advance(500);
+    expect(observed.at(-1)).toBe(50);
+    expect(observed).toEqual(h.frames);
+  });
+
   it('manual: play runs the full intro and holds at the out-point (no loop, no auto-outro)', () => {
     const h = make({ mode: 'manual' });
     h.controller.play();

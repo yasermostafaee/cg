@@ -286,6 +286,8 @@ export interface StopOptions {
 export type RenderMode = 'author' | 'output';
 
 export interface RuntimeBootOptions {
+  /** Read-only root lifecycle playhead telemetry for authoring hosts. Never changes paint timing. */
+  onRootFrame?: (frame: number) => void;
   /**
    * Where the runtime renders. Defaults to `document.body`. In the
    * designer preview iframe this can be a sub-element instead.

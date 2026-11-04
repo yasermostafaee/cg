@@ -200,6 +200,8 @@ export const TEXT_FIT_MIN_SCALE = 0.5;
 export const TextElementSchema = ElementBaseSchema.extend({
   type: z.literal('text'),
   text: z.string(),
+  /** Repeater context: render the current one-based row position, never operator data. */
+  rowNumber: z.boolean().optional(),
   font: z.object({
     family: z.string().min(1),
     weight: FontWeightSchema,
@@ -1013,9 +1015,17 @@ export const RepeaterElementSchema = ElementBaseSchema.extend({
   maxItems: z.number().int().positive().optional(),
   /** D-197 — shared visual entrance for stamped rows; `none` preserves the legacy reveal. */
   itemEntrance: SequenceEdgeSchema.optional(),
-  /** Duration of one row's entrance motion (ms). */
+  /** Shared visual exit, awaited before the enclosing composition closes. */
+  itemExit: SequenceEdgeSchema.optional(),
+  /** Exit staggering order, separate from the movement edge; absent means last to first. */
+  itemExitOrder: z.enum(['forward', 'reverse']).optional(),
+  /** Fill behind every second stamped row; child artwork may remain transparent. */
+  alternatingRowFill: HexColorSchema.optional(),
+  /** Duration of one row's entrance or exit motion (ms). */
   itemTransitionMs: z.number().int().positive().optional(),
-  /** Delay from one row's entrance start to the next row's start (ms). */
+  /** Optional independent exit duration; absent reuses itemTransitionMs for compatibility. */
+  itemExitTransitionMs: z.number().int().positive().optional(),
+  /** Delay between consecutive row effects in the active entrance or exit order (ms). */
   itemStaggerMs: z.number().int().nonnegative().optional(),
   /**
    * Authored design-time rows — the open D-028 list-item shape (stable `id`

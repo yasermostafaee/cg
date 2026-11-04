@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { pack } from '@cg/vcg-format';
 import {
   aggregateCompositionFields,
+  PATTERN_PRESETS,
   type ClockElement,
   type Composition,
   type DynamicField,
@@ -106,6 +107,26 @@ const derive = (scene: Scene) =>
   countdownTargetFieldsOf(scene, scene, aggregateCompositionFields(scene, scene));
 
 describe('countdownTargetFieldsOf — the binding marks the field', () => {
+  it('repairs a saved date target carrying the old standard time pattern, but keeps custom restrictions', () => {
+    const scene = sceneOf({
+      layers: [layerOf('l', [clockEl('cd', { target: DATETIME })])],
+      fields: [
+        textField('targetTime', {
+          pattern: '^([01]\\d|2[0-3]):[0-5]\\d$',
+          maxLength: 8,
+          default: DATETIME.iso,
+        }),
+      ],
+      bindings: [aims('targetTime', 'cd')],
+    });
+    expect(derive(scene).fields[0]).toMatchObject({
+      pattern: PATTERN_PRESETS['datetime']?.pattern,
+      maxLength: 32,
+      default: DATETIME.iso,
+    });
+    scene.fields = [textField('targetTime', { pattern: '^2026-', maxLength: 99 })];
+    expect(derive(scene).fields[0]).toMatchObject({ pattern: '^2026-', maxLength: 99 });
+  });
   it('a field aiming a DATE & TIME countdown is marked datetime, with the clock’s After zero', () => {
     const scene = sceneOf({
       layers: [layerOf('l', [clockEl('cd', { target: DATETIME, afterZero: 'count-past' })])],

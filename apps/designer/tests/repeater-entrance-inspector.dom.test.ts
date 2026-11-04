@@ -124,7 +124,7 @@ describe('D-197 — Repeater entrance Inspector controls', () => {
     const host = render(seed());
     await settleEffects();
     const entrance = host.querySelector<HTMLSelectElement>('select[aria-label="item entrance"]');
-    const effectTime = host.querySelector<HTMLInputElement>('input[aria-label="effect time"]');
+    const effectTime = host.querySelector<HTMLInputElement>('input[aria-label="entrance time"]');
     const itemDelay = host.querySelector<HTMLInputElement>('input[aria-label="item delay"]');
     expect(entrance?.value).toBe('none');
     expect([...entrance!.options].map((option) => option.value)).toContain('fade-right');
@@ -141,7 +141,7 @@ describe('D-197 — Repeater entrance Inspector controls', () => {
     const updated = render(repeater());
     await settleEffects();
     expect(
-      updated.querySelector<HTMLInputElement>('input[aria-label="effect time"]')?.disabled,
+      updated.querySelector<HTMLInputElement>('input[aria-label="entrance time"]')?.disabled,
     ).toBe(false);
     expect(
       updated.querySelector<HTMLInputElement>('input[aria-label="item delay"]')?.disabled,
@@ -151,28 +151,54 @@ describe('D-197 — Repeater entrance Inspector controls', () => {
   it('keeps the entrance controls in their own prominent section', async () => {
     const host = render(seed());
     await settleEffects();
-    expect(host.textContent).toContain('Item entrance');
+    expect(host.textContent).toContain('Item effects');
     expect(host.querySelector('select[aria-label="item entrance"]')).not.toBeNull();
+    expect(host.querySelector('select[aria-label="item exit"]')).not.toBeNull();
   });
 
-  it('stores effect time and delay in milliseconds without animation tracks', async () => {
+  it('stores independent entrance/exit times and delay in milliseconds without animation tracks', async () => {
     seed();
     designerStore.updateElement('rep', {
       itemEntrance: 'fade',
       itemTransitionMs: 750,
+      itemExit: 'fade',
+      itemExitTransitionMs: 250,
       itemStaggerMs: 150,
     } as Partial<Element>);
     const host = render(repeater());
     await settleEffects();
-    expect(host.querySelector<HTMLInputElement>('input[aria-label="effect time"]')?.value).toBe(
+    expect(host.querySelector<HTMLInputElement>('input[aria-label="entrance time"]')?.value).toBe(
       '0.75',
+    );
+    expect(host.querySelector<HTMLInputElement>('input[aria-label="exit time"]')?.value).toBe(
+      '0.25',
     );
     expect(host.querySelector<HTMLInputElement>('input[aria-label="item delay"]')?.value).toBe(
       '0.15',
     );
     const tracks = Object.keys(repeater().animation?.tracks ?? {});
     expect(tracks).not.toContain('itemTransitionMs');
+    expect(tracks).not.toContain('itemExitTransitionMs');
     expect(tracks).not.toContain('itemStaggerMs');
+  });
+
+  it('offers exit order separately from the effect direction and defaults to last-to-first', async () => {
+    const host = render(seed());
+    await settleEffects();
+    const order = host.querySelector<HTMLSelectElement>('select[aria-label="exit order"]');
+    expect(order?.value).toBe('reverse');
+    expect([...order!.options].map((option) => option.textContent)).toEqual([
+      'Last to first',
+      'First to last',
+    ]);
+    act(() => {
+      if (order === null) return;
+      order.value = 'forward';
+      order.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(repeater().itemExitOrder).toBe('forward');
+    expect(repeater().itemEntrance).toBe('none');
+    expect(repeater().itemExit).toBeUndefined();
   });
 });
 
@@ -182,12 +208,12 @@ describe('D-180 — direct Repeater data file', () => {
     await settleEffects();
 
     const section = host.querySelector<HTMLElement>('section[aria-label="Repeater data file"]');
-    expect(section?.textContent).toContain('Data file');
+    expect(section?.textContent).toContain('Rows and data file');
     expect(section?.textContent).toContain('Not connected');
 
     act(() => {
       [...(section?.querySelectorAll('button') ?? [])]
-        .find((button) => button.textContent?.trim() === 'Data file…')
+        .find((button) => button.textContent?.trim() === 'Rows and data file…')
         ?.click();
     });
     const dialog = document.body.querySelector<HTMLElement>(

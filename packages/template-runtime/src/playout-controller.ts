@@ -40,6 +40,8 @@ export interface PlayoutControllerOptions {
   needsFrameSweep?: ((inF: number, outF: number) => boolean) | undefined;
   /** Paint every animated element at `frame`. */
   applyFrame: (frame: number) => void;
+  /** Optional authoring observation, separate from paint and lifecycle ownership. */
+  observeFrame?: ((frame: number) => void) | undefined;
   /** The final outro is starting — the graphic is going off air. */
   onExitStart: () => void;
   /** Fully settled hidden (outro finished). */
@@ -625,13 +627,17 @@ export class PlayoutController {
   private startHoldLoop(): void {
     const from = this.holdEntry();
     const to = this.outPoint();
-    if (to <= from || !this.frameDependent(from, to)) return;
+    const paintsFrames = this.frameDependent(from, to);
+    if (to <= from || (!paintsFrames && this.o.observeFrame === undefined)) return;
     this.stopDriver();
     this.driver = new FrameDriver({
       frameRate: this.o.frameRate,
       range: { in: from, out: to },
       mode: 'loop',
-      onFrame: this.o.applyFrame,
+      onFrame: (frame: number): void => {
+        if (paintsFrames) this.o.applyFrame(frame);
+        this.o.observeFrame?.(frame);
+      },
       raf: this.clock.raf,
       cancel: this.clock.cancel,
       now: this.clock.now,
@@ -807,8 +813,13 @@ export class PlayoutController {
   ): void {
     this.stopDriver();
     const frameDependent = this.frameDependent(inF, outF);
+    const applyLifecycleFrame = (frame: number): void => {
+      this.o.applyFrame(frame);
+      this.o.observeFrame?.(frame);
+    };
     if (outF <= inF || (!frameDependent && !mustConsumeDuration)) {
-      this.o.applyFrame(outF);
+      if (outF > inF) this.o.observeFrame?.(inF);
+      applyLifecycleFrame(outF);
       onEnd();
       return;
     }
@@ -816,7 +827,7 @@ export class PlayoutController {
       frameRate: this.o.frameRate,
       range: { in: inF, out: outF },
       mode: 'once',
-      onFrame: this.o.applyFrame,
+      onFrame: applyLifecycleFrame,
       onEnd,
       raf: this.clock.raf,
       cancel: this.clock.cancel,

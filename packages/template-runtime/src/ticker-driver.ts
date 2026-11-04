@@ -318,6 +318,8 @@ export class TickerDriver {
 
   destroy(): void {
     this.reset();
+    this.measureNode?.remove();
+    this.measureNode = null;
     this.destroyed = true;
   }
 
@@ -606,10 +608,42 @@ export class TickerDriver {
       this.measureNode = this.makeItemNode();
       this.measureNode.style.visibility = 'hidden';
       this.measureNode.style.left = '0';
-      this.o.track.appendChild(this.measureNode);
+      this.measureNode.style.width = 'max-content';
+      this.measureNode.style.height = 'auto';
     }
-    this.measureNode.textContent = text;
-    const w = this.measure(this.measureNode);
+    const node = this.measureNode;
+    // A child scope can start while its parent is still display:none (an entrance,
+    // another Look, or a sequence page). Measuring in that track returns zero and
+    // permanently collapses every item to the gap. Measure in document layout,
+    // with the band's computed typography but WITHOUT its ancestor transforms or
+    // visibility. Remove immediately so this probe never joins the fed stream.
+    const doc = this.o.band.ownerDocument;
+    const typography = doc.defaultView?.getComputedStyle(this.o.band);
+    if (typography !== undefined) {
+      for (const property of [
+        'font-family',
+        'font-size',
+        'font-weight',
+        'font-style',
+        'font-stretch',
+        'font-variant',
+        'font-kerning',
+        'font-feature-settings',
+        'font-variation-settings',
+        'letter-spacing',
+        'word-spacing',
+        'text-transform',
+      ])
+        node.style.setProperty(property, typography.getPropertyValue(property));
+    }
+    node.textContent = text;
+    doc.body.appendChild(node);
+    let w: number;
+    try {
+      w = this.measure(node);
+    } finally {
+      node.remove();
+    }
     this.widthCache.set(text, w);
     return w;
   }

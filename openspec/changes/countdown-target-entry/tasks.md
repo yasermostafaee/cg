@@ -1,5 +1,32 @@
 # Tasks — countdown-target-entry (RUN-NEXT-VERSION-03 Part 2)
 
+## 2026-11-04 — Preview target parity and countdown starter exit (FULL lane)
+
+- [x] Reproduce second accelerated Play closing immediately: generated Preview host shows zero
+      despite its absolute target remaining fourteen real seconds ahead. Rebase only the session
+      clock at fresh Play; preserve Resume, real-time behavior, output and stored deadlines.
+- [x] Verify ordinary three-second duration override replays twice in full without a field edit
+      (12 clock-target runtime tests and 5 generated-host tests pass; Designer typecheck passes).
+- [x] Run real-browser accelerated replay / actual-past-deadline negative control and nested Azan
+      target-to-zero transition after a fresh coordinated build. The two accelerated replay cases
+      and three existing Countdown Steps cases pass. The nested Azan test uses its ordinary bound
+      date/time field (the parent has no root-only duration override), verifies nonzero digits,
+      the actual Steps opacity transition, persistent announcement, manual animated Stop and
+      correct expired-deadline replay; its 13.1-second browser run passes.
+
+- [x] Share clock-target binding metadata derivation between Designer and CG Control.
+- [x] Use the masked date/time control in Preview and sequence-page forms.
+- [x] Recognize the old starter time-pattern spelling when switching to date/time; preserve custom patterns.
+- [x] Render a readable deadline in Advanced timing.
+- [x] Author entry/exit animation for every part of the direct countdown starter.
+- [x] Correct absolute reveal coordinates and translate position tracks when flattening the direct composition; actual runtime frame samples preserve each countdown component's authored position (18 focused starter tests and package typecheck pass).
+- [x] Focused unit tests: Preview 4, countdown Inspector 18, binding metadata 11 pass.
+- [x] Keep rehearsal duration authoritative over the clock-target default and live updates. Browser evidence showed the three-second override still displayed 59 minutes; focused regression failed with `01:32:00` instead of `00:00:03`, then passed after fixing per-driver override precedence (clock-target 11 and per-element timing 10 tests pass).
+- [x] Run the picker + zero-outro browser regression and existing countdown steps E2E.
+      Fresh integrated build on 2026-11-04 passed the shared calendar picker, validation,
+      authoritative three-second rehearsal, visible fade after zero, and all three countdown-step cases.
+- [ ] Full repository gate and completed green Linux E2E job URL for the pushed commit.
+
 ## 2.1 + 2.2 — one masked date input and one masked time input; every switch at once (FULL lane: a shared control on the countdown target's path, both apps)
 
 One commit: 2.2's fix IS a property of the shared hook 2.1 introduces, and the `HEAD` control that

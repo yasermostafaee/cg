@@ -14,6 +14,11 @@ method bodies moved unchanged; only the file they live in differs.
 
 ## Files
 
+`timelinePlaybackMode` is session-only (`lifecycle`, `playhead` or `null`), paired with
+`timelinePlaying` by `setTimelinePlayback`. Ordinary Canvas Play follows the runtime and its root
+frame reports; explicit authoring loops/reverse use the local frame clock. Document/composition
+switches reset this state. Neither transport state nor display counters enter scene persistence.
+
 | File                             | Role                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`store-core.ts`](store-core.ts) | **The engine.** Owns the single state object (`current`), the lone writer `set`, the undo/redo history (welded to `set`'s coalescing + the `dirty` flag), `subscribe`, the element **clipboard**, and the toast-notice timer. Exports `current` as a **live binding** + small mutators.                                                                                                                                                                                                                                                        |

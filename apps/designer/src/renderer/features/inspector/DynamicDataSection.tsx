@@ -27,6 +27,7 @@ import { compositionPackageId } from '@cg/vcg-format';
 import type { DesignerBridge, DesignerTextSourceFile } from '../../../shared/designer-bridge.js';
 import { designerStore, type ElementFieldMetaPatch } from '../../state/store.js';
 import { Button } from '../../ui/Button.js';
+import { Tag } from '../../ui/Tag.js';
 import {
   designerDelimitersVersion,
   listDesignerDelimiters,
@@ -61,6 +62,7 @@ import { FileSourcePreviewModal } from './FileSourcePreviewModal.js';
 import { InfoTip } from './InfoTip.js';
 import { DigitsField } from './DigitsField.js';
 import { NumberChoicesModal } from './NumberChoicesModal.js';
+import { SelectChoicesModal } from './SelectChoicesModal.js';
 import {
   CUSTOM_PATTERN,
   PATTERN_PRESET_ORDER,
@@ -320,6 +322,13 @@ export function DynamicDataSection({
   // A fixed file is an author-owned source, not an operator variable. Its dedicated Inspector
   // section renders outside Dynamic / Data; keep the internal runtime field entirely out of here.
   if (fixedMode) return <></>;
+  if (element.type === 'text' && element.rowNumber === true) {
+    return (
+      <CollapseSection title="Dynamic / Data" defaultExpanded>
+        <Tag>Automatic row number</Tag>
+      </CollapseSection>
+    );
+  }
 
   return (
     <CollapseSection title="Dynamic / Data" defaultExpanded={field !== undefined}>
@@ -422,9 +431,10 @@ function FieldMeta({
     field.id,
     'fileSource' in field ? field.fileSource?.bridgePath : undefined,
   );
-  const fieldType: 'text' | 'number' = field.type === 'number' ? 'number' : 'text';
+  const fieldType = field.type === 'number' || field.type === 'select' ? field.type : 'text';
   const multiline = field.type === 'multiline';
   const [numberChoicesOpen, setNumberChoicesOpen] = useState(false);
+  const [selectChoicesOpen, setSelectChoicesOpen] = useState(false);
   const patch = (p: ElementFieldMetaPatch): void =>
     designerStore.setElementFieldMeta(element.id, p);
   const allowedNumberValues = field.type === 'number' ? numberFieldAllowedValues(field) : undefined;
@@ -524,18 +534,45 @@ function FieldMeta({
       <SelectField
         label="Field type"
         value={fieldType}
-        options={['text', 'number'] as const}
+        options={['text', 'number', 'select'] as const}
+        labels={['text', 'number', 'Choice list']}
         onCommit={(v) => patch({ fieldType: v })}
       />
       {/* FIELD-DIGITS-01 / TEXT-DIGITS-01 — the one Digits control; Keyboard only for text, since
           a number reaches the page as a number. Absent reads Keyboard / Latin (`fieldDigitsOf`). */}
-      <DigitsField
-        value={fieldDigitsOf(field)}
-        options={
-          fieldType === 'number' ? NumberFieldDigitsSchema.options : FieldDigitsSchema.options
-        }
-        onCommit={(v) => patch({ digits: v })}
-      />
+      {fieldType !== 'select' && (
+        <DigitsField
+          value={fieldDigitsOf(field)}
+          options={
+            fieldType === 'number' ? NumberFieldDigitsSchema.options : FieldDigitsSchema.options
+          }
+          onCommit={(v) => patch({ digits: v })}
+        />
+      )}
+      {field.type === 'select' && (
+        <>
+          <div className={cs.row}>
+            <span className={cs.label}>Choices</span>
+            <div className={s.numberChoicesControl}>
+              <span className={cs.readout}>{field.options.length} choices</span>
+              <Button size="sm" onClick={() => setSelectChoicesOpen(true)}>
+                Edit…
+              </Button>
+            </div>
+          </div>
+          {selectChoicesOpen && (
+            <SelectChoicesModal
+              options={field.options}
+              connectedFileCount={sequencePageDataAttachmentCount(scene.id)}
+              onCancel={() => setSelectChoicesOpen(false)}
+              onSave={(options) => {
+                patch({ options });
+                setSelectChoicesOpen(false);
+              }}
+            />
+          )}
+        </>
+      )}
       {fieldType === 'number' && (
         <SelectField
           label="Allowed values"
@@ -675,7 +712,15 @@ function FieldMeta({
           />
         </>
       )}
-      {fieldType === 'number' && field.type === 'number' && allowedNumberValues !== undefined ? (
+      {field.type === 'select' ? (
+        <SelectField
+          label="Value"
+          value={field.default}
+          options={field.options.map((option) => option.value)}
+          labels={field.options.map((option) => option.label)}
+          onCommit={(value) => patch({ default: value })}
+        />
+      ) : fieldType === 'number' && field.type === 'number' && allowedNumberValues !== undefined ? (
         <SelectField
           label="Value"
           value={String(field.default)}

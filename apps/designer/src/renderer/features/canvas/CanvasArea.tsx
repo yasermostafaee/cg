@@ -3,6 +3,7 @@ import { ScanSearch, ZoomIn, ZoomOut } from 'lucide-react';
 import type { ExportIssue } from '@cg/shared-ipc';
 import type { Element, Scene } from '@cg/shared-schema';
 import { lookGroupOf } from '@cg/shared-schema';
+import { rootUsesAuthoredFrameClock } from '../fields/preview-elapsed.js';
 import { colors } from '../../theme.js';
 import {
   getAll as assetUrlGetAll,
@@ -249,6 +250,7 @@ export function CanvasArea({
     snapGuides,
     currentFrame,
     timelinePlaying,
+    timelinePlaybackMode,
     soundMuted,
     stepRehearsal,
   } = useDesignerSelector(
@@ -259,11 +261,17 @@ export function CanvasArea({
       currentFrame: s.currentFrame,
       // DELTA-RUN-NEXT-VERSION-01-G — the timeline's Play sounds the page; one shared switch.
       timelinePlaying: s.timelinePlaying,
+      timelinePlaybackMode: s.timelinePlaybackMode,
       soundMuted: s.soundMuted,
       stepRehearsal: s.stepRehearsal,
     }),
     shallowEqual,
   );
+  const previewReadyRef = useRef(false);
+  const playbackRef = useRef<{ mode: 'lifecycle' | 'playhead' | null; playing: boolean }>({
+    mode: null,
+    playing: false,
+  });
   // Screen offset (within the scroll viewport) of the scene's (0,0), so the
   // pinned rulers and the guide lines stay aligned with the canvas as it
   // zooms / scrolls / resizes.
@@ -332,6 +340,7 @@ export function CanvasArea({
   const clampZoom = (z: number): number => clampZoomPure(z, dynamicZoomMin, ZOOM_MAX, ZOOM_DEFAULT);
   useEffect(() => {
     const current = latestSceneRef.current;
+    previewReadyRef.current = false;
     if (current === null) {
       setHtml(null);
       return;
@@ -564,16 +573,39 @@ export function CanvasArea({
 
   useEffect(() => {
     function onMessage(evt: MessageEvent<unknown>): void {
+      if (evt.source !== iframeRef.current?.contentWindow) return;
       const msg = evt.data as
-        | { kind?: string; sceneId?: string; label?: string; payload?: string }
+        | {
+            kind?: string;
+            sceneId?: string;
+            label?: string;
+            payload?: string;
+            frame?: number;
+            state?: string;
+          }
         | undefined;
       if (msg?.kind === 'cg-preview-ready') {
         const cw = iframeRef.current?.contentWindow;
         if (cw === undefined || cw === null) return;
+        previewReadyRef.current = true;
+        const playback = designerStore.get();
         cw.postMessage(
-          { kind: 'cg-preview', action: 'scrub', frame: currentFrame, playing: timelinePlaying },
+          {
+            kind: 'cg-preview',
+            action: 'scrub',
+            frame: currentFrame,
+            playing: playback.timelinePlaybackMode === 'playhead' && playback.timelinePlaying,
+            runtimeOwned: playback.timelinePlaybackMode === 'lifecycle',
+          },
           '*',
         );
+        if (playback.timelinePlaybackMode === 'lifecycle' && playback.timelinePlaying) {
+          cw.postMessage({ kind: 'cg-preview', action: 'play', fields: {} }, '*');
+        }
+        playbackRef.current = {
+          mode: playback.timelinePlaybackMode,
+          playing: playback.timelinePlaying,
+        };
         // A rebuilt page starts unmuted: give it the shared sound switch again.
         cw.postMessage({ kind: 'cg-preview', action: 'sound-muted', muted: soundMuted }, '*');
         // DELTA-RUN-NEXT-VERSION-01-H — and the step the Steps dialog is showing, if any.
@@ -621,10 +653,53 @@ export function CanvasArea({
       if (msg?.kind === 'cg-preview-error') {
         console.error('[cg-preview]', msg.label, msg.payload);
       }
+      if (msg?.kind === 'cg-preview-frame' && typeof msg.frame === 'number') {
+        if (
+          designerStore.get().timelinePlaybackMode === 'lifecycle' &&
+          (scene === null || !rootUsesAuthoredFrameClock(scene))
+        )
+          designerStore.setCurrentFrame(msg.frame);
+      }
+      if (msg?.kind === 'cg-preview-state' && msg.state === 'stopped') {
+        if (
+          designerStore.get().timelinePlaybackMode === 'lifecycle' &&
+          (scene === null || !rootUsesAuthoredFrameClock(scene))
+        )
+          designerStore.setTimelinePlayback(null, false);
+      }
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [currentFrame, editingTextId, timelinePlaying, soundMuted, stepRehearsal, shownItemKey]);
+  }, [
+    currentFrame,
+    editingTextId,
+    scene,
+    timelinePlaying,
+    soundMuted,
+    stepRehearsal,
+    shownItemKey,
+  ]);
+
+  useEffect(() => {
+    const next = { mode: timelinePlaybackMode, playing: timelinePlaying };
+    const prev = playbackRef.current;
+    playbackRef.current = next;
+    if (!previewReadyRef.current || next.mode !== 'lifecycle') return;
+    const cw = iframeRef.current?.contentWindow;
+    if (cw === undefined || cw === null) return;
+    if (next.playing) {
+      cw.postMessage(
+        {
+          kind: 'cg-preview',
+          action: prev.mode === 'lifecycle' && !prev.playing ? 'resume' : 'play',
+          fields: {},
+        },
+        '*',
+      );
+    } else if (prev.mode === 'lifecycle' && prev.playing) {
+      cw.postMessage({ kind: 'cg-preview', action: 'pause' }, '*');
+    }
+  }, [timelinePlaybackMode, timelinePlaying]);
 
   // D-060 — expose the live preview document so the selection gizmo (and the
   // auto→fixed one-shot size commit) can measure an auto-sized text box's rendered
@@ -646,11 +721,12 @@ export function CanvasArea({
         frameOffset: frameOffsetRef.current,
         // DELTA-RUN-NEXT-VERSION-01-G — PLAYING sounds each sound at its place; a scrub, a step or
         // a stopped playhead is silent (`runtime.auditionSounds`).
-        playing: timelinePlaying,
+        playing: timelinePlaybackMode === 'playhead' && timelinePlaying,
+        runtimeOwned: timelinePlaybackMode === 'lifecycle',
       },
       '*',
     );
-  }, [currentFrame, timelinePlaying]);
+  }, [currentFrame, timelinePlaying, timelinePlaybackMode]);
 
   // DELTA-RUN-NEXT-VERSION-01-G — the ONE sound switch, shared with the Preview.
   useEffect(() => {

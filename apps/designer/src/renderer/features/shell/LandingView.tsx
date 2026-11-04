@@ -12,6 +12,7 @@ import { Tag } from '../../ui/Tag.js';
 import { APP_BUILD, APP_VERSION } from '../../appVersion.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { SaveBeforeSwitchModal } from './SaveBeforeSwitchModal.js';
+import { openProjectFromDisk } from './open-project.js';
 import { playoutBadge } from './playout-badge.js';
 import * as s from './LandingView.css.js';
 
@@ -142,15 +143,25 @@ export function LandingView(): JSX.Element {
         </Tag>
       </div>
 
-      <Button
-        variant="primary"
-        size="none"
-        className={s.newButton}
-        onClick={() => guardedSwitch('a new project', () => Promise.resolve(setModalOpen(true)))}
-        aria-label="New project"
-      >
-        + New project
-      </Button>
+      <div className={s.projectActions}>
+        <Button
+          variant="primary"
+          size="none"
+          className={s.newButton}
+          onClick={() => guardedSwitch('a new project', () => Promise.resolve(setModalOpen(true)))}
+          aria-label="New project"
+        >
+          + New project
+        </Button>
+        <Button
+          size="none"
+          className={s.newButton}
+          onClick={() => guardedSwitch('a saved project', openProjectFromDisk)}
+          aria-label="Import project"
+        >
+          Import project
+        </Button>
+      </div>
 
       <h2 className={s.sectionTitle}>START FROM A TEMPLATE</h2>
       {starters.length === 0 ? (

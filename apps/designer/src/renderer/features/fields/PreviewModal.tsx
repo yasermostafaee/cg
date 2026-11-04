@@ -1,31 +1,42 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import {
   hasSoundEffects,
   aggregateCompositionFields,
+  countdownTargetFieldsOf,
+  defaultLookOf,
+  lookGroupOf,
   withListLimits,
   defaultNestedValues,
   hasNextStep,
   type AggregatedFields,
   type FieldValue,
-  type ListItem,
   type NestedFieldValues,
   type Scene,
 } from '@cg/shared-schema';
 import { getAll as assetUrlGetAll } from '../assets/assetUrlCache.js';
+import { useAssets } from '../assets/useAssets.js';
 import {
   getForScene as lottieAssetsForScene,
   primeScene as primeSceneLottie,
 } from '../assets/lottieAssetCache.js';
 import { getAll as sharedUrlGetAll } from '../sharedLibrary/sharedImageUrlCache.js';
+import { useSharedImages } from '../sharedLibrary/useSharedImages.js';
 import { Modal } from '../shell/Modal.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { PreviewFieldForm, type PreviewDispatch } from './PreviewFieldForm.js';
-import { columnsForFields, type ListItemColumn } from './repeater-columns.js';
-import { PreviewTransport } from './PreviewTransport.js';
+import { imageChoicesForAssets, repeaterColumnsByFieldId } from './repeater-columns.js';
+import { PreviewStatus, PreviewTransport } from './PreviewTransport.js';
 import { parseRehearsalChoice, stepRehearsalChoices } from '../inspector/countdown-steps.js';
 import { PreviewScopeTiming } from './PreviewScopeTiming.js';
 import { type TimingOverride } from './PreviewTimingControls.js';
 import { applyDesignerFileSourcePreviews } from './fileSourcePreviewStore.js';
+import {
+  previewDisplayFrame,
+  previewElapsedLimitMs,
+  rootUsesAuthoredFrameClock,
+  shouldDeferPreviewNaturalStop,
+} from './preview-elapsed.js';
 import * as s from './PreviewModal.css.js';
 
 function previewSeed(sceneId: string, aggregate: AggregatedFields): NestedFieldValues {
@@ -54,13 +65,6 @@ function setIn(obj: NestedFieldValues, path: string[], value: FieldValue): Neste
       ? (child as NestedFieldValues)
       : {};
   return { ...obj, [key]: setIn(childObj, rest, value) };
-}
-
-/** Read a nested value at `path` (undefined when absent). */
-function getIn(obj: NestedFieldValues, path: string[]): FieldValue {
-  let cur: unknown = obj;
-  for (const k of path) cur = (cur as Record<string, unknown> | undefined)?.[k];
-  return cur as FieldValue;
 }
 
 function isNamespaceObj(v: unknown): v is NestedFieldValues {
@@ -128,40 +132,6 @@ function sequenceListFieldIds(scene: Scene): ReadonlySet<string> {
  * (display-only; values and runtime routing stay correct). Keying by
  * namespace path is the fix if that authoring pattern ever matters.
  */
-function repeaterColumnsByFieldId(scene: Scene): ReadonlyMap<string, readonly ListItemColumn[]> {
-  const out = new Map<string, readonly ListItemColumn[]>();
-  const docs: { layers: Scene['layers']; bindings?: Scene['bindings'] | undefined }[] = [
-    scene,
-    ...(scene.compositions ?? []),
-  ];
-  const findRepeater = (
-    children: readonly Scene['layers'][number]['children'][number][],
-    elementId: string,
-  ): { compositionId: string } | undefined => {
-    for (const el of children) {
-      if (el.type === 'repeater' && el.id === elementId) return el;
-      if (el.type === 'container') {
-        const found = findRepeater(el.children, elementId);
-        if (found !== undefined) return found;
-      }
-    }
-    return undefined;
-  };
-  for (const d of docs) {
-    for (const b of d.bindings ?? []) {
-      if (b.target.kind !== 'repeater-items' || !('elementId' in b.target)) continue;
-      for (const layer of d.layers) {
-        const el = findRepeater(layer.children, b.target.elementId);
-        if (el === undefined) continue;
-        const child = scene.compositions?.find((c) => c.id === el.compositionId);
-        if (child !== undefined) out.set(b.fieldId, columnsForFields(child.fields));
-        break;
-      }
-    }
-  }
-  return out;
-}
-
 /**
  * D-018 / D-020 — the preview as a large modal opened from the toolbar's "PREVIEW"
  * button. It owns a *dedicated* preview iframe (the same `platform/preview.ts`
@@ -181,6 +151,8 @@ export function PreviewModal({
   scene: Scene;
   onClose: () => void;
 }): JSX.Element {
+  const assets = useAssets();
+  const sharedImages = useSharedImages();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const [html, setHtml] = useState<string | null>(null);
@@ -193,12 +165,47 @@ export function PreviewModal({
   // nested field scopes use). Held here, never written back to the stored scene;
   // applied by rebuilding the preview runtime with these overrides.
   const [overrides, setOverrides] = useState<Record<string, TimingOverride>>({});
+  const imageChoices = useMemo(
+    () => imageChoicesForAssets(assets, sharedImages),
+    [assets, sharedImages],
+  );
+  const repeaterColumns = useMemo(
+    () => repeaterColumnsByFieldId(scene, imageChoices),
+    [imageChoices, scene],
+  );
+
+  // D-196 — Preview owns a Look choice for this rehearsal session. Seed from the
+  // authoring canvas when possible, but never write the Preview choice back to the project.
+  const lookGroup = useMemo(() => lookGroupOf(scene), [scene]);
+  const lookChoices = useMemo(
+    () => (lookGroup?.looks ?? []).map((look) => ({ value: look.id, label: look.name })),
+    [lookGroup],
+  );
+  const initialLookId = useCallback((): string => {
+    const authoringId = designerStore.get().activeLookId;
+    return (
+      lookGroup?.looks.find((look) => look.id === authoringId)?.id ??
+      (lookGroup === undefined ? undefined : defaultLookOf(lookGroup)?.id) ??
+      ''
+    );
+  }, [lookGroup]);
+  const [previewLookId, setPreviewLookId] = useState(initialLookId);
+  const previewLookIdRef = useRef(previewLookId);
+  previewLookIdRef.current = previewLookId;
+  useEffect(() => {
+    setPreviewLookId(initialLookId());
+  }, [initialLookId]);
 
   // D-025 — the aggregated fields: this composition's own fields plus each nested
   // child instance's fields under its namespace.
   // `RUN-NEXT-VERSION-02` Q3 — each list carries its repeater's row limit, so the form stops there.
   const aggregate = useMemo(
-    () => withListLimits(scene, scene, aggregateCompositionFields(scene, scene)),
+    () =>
+      countdownTargetFieldsOf(
+        scene,
+        scene,
+        withListLimits(scene, scene, aggregateCompositionFields(scene, scene)),
+      ),
     [scene],
   );
   // Nested field values live here (not in the form) so the fixed transport bar can
@@ -222,6 +229,78 @@ export function PreviewModal({
 
   // Tracks whether the operator paused, so Play becomes Resume and Pause disables.
   const [paused, setPaused] = useState(false);
+  // D-173 — a monotonic rehearsal clock. It is UI/session state only: a fresh Play starts at
+  // zero, Pause freezes it, Resume continues it, Stop resets it, and natural completion settles it.
+  const [elapsedMs, setElapsedMs] = useState(0);
+  // D-182 — unlike elapsed wall time, this is reported by the root runtime controller itself.
+  // It therefore parks during Hold, advances through Outro and wraps with a real loop.
+  const [runtimeFrame, setRuntimeFrame] = useState(scene.frameRange.in);
+  const [elapsedRunning, setElapsedRunning] = useState(false);
+  const elapsedBaseRef = useRef(0);
+  const elapsedStartedRef = useRef<number | null>(null);
+  // Stop/Reset close the run before Runtime's asynchronous outro/final-frame messages arrive.
+  // Those messages must not overwrite the counters' reset-to-start state.
+  const acceptRuntimeFramesRef = useRef(false);
+  const rootTimingOverride = overrides[''];
+  const authoredFrameClock = useMemo(() => rootUsesAuthoredFrameClock(scene), [scene]);
+  const elapsedLimitMs = useMemo(
+    () => previewElapsedLimitMs(scene, rootTimingOverride),
+    [rootTimingOverride, scene],
+  );
+  const displayedFrame = useMemo(
+    () => previewDisplayFrame(scene, runtimeFrame, elapsedMs, rootTimingOverride),
+    [elapsedMs, rootTimingOverride, runtimeFrame, scene],
+  );
+
+  const currentElapsed = useCallback((): number => {
+    const started = elapsedStartedRef.current;
+    const current = elapsedBaseRef.current + (started === null ? 0 : performance.now() - started);
+    return elapsedLimitMs === null ? current : Math.min(current, elapsedLimitMs);
+  }, [elapsedLimitMs]);
+  const startElapsed = useCallback((resume: boolean): void => {
+    elapsedBaseRef.current = resume ? elapsedBaseRef.current : 0;
+    elapsedStartedRef.current = performance.now();
+    if (!resume) setElapsedMs(0);
+    setElapsedRunning(true);
+  }, []);
+  const pauseElapsed = useCallback((): void => {
+    const next = currentElapsed();
+    elapsedBaseRef.current = next;
+    elapsedStartedRef.current = null;
+    setElapsedMs(next);
+    setElapsedRunning(false);
+  }, [currentElapsed]);
+  const resetElapsed = useCallback((): void => {
+    elapsedBaseRef.current = 0;
+    elapsedStartedRef.current = null;
+    setElapsedMs(0);
+    setElapsedRunning(false);
+  }, []);
+
+  useEffect(() => {
+    if (!elapsedRunning) return;
+    let frame = 0;
+    const tick = (): void => {
+      const next = currentElapsed();
+      setElapsedMs(next);
+      if (elapsedLimitMs !== null && next >= elapsedLimitMs) {
+        elapsedBaseRef.current = elapsedLimitMs;
+        elapsedStartedRef.current = null;
+        setElapsedRunning(false);
+        // A collapsed empty/static Runtime may already have stopped. Re-arm fresh Play only when
+        // its authored display tail has also settled; real animated/media roots retain their
+        // existing Runtime-owned frame acceptance.
+        if (authoredFrameClock) {
+          acceptRuntimeFramesRef.current = false;
+          setPaused(false);
+        }
+        return;
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [authoredFrameClock, currentElapsed, elapsedLimitMs, elapsedRunning]);
 
   // Build a fresh, dedicated preview document on open. Reset any session
   // override + paused flag when the composition itself changes (keeps controls in
@@ -230,6 +309,9 @@ export function PreviewModal({
     let alive = true;
     setOverrides({});
     setPaused(false);
+    acceptRuntimeFramesRef.current = false;
+    setRuntimeFrame(scene.frameRange.in);
+    resetElapsed();
     // D-125 — make sure this composition's Lottie animations are parsed + cached before
     // the ready handler posts the map (the canvas usually primed them already; this is a
     // safety net so a Lottie renders even if the modal is the first surface to need it).
@@ -243,7 +325,7 @@ export function PreviewModal({
     return () => {
       alive = false;
     };
-  }, [scene]);
+  }, [resetElapsed, scene]);
 
   useEffect(() => {
     const el = stageRef.current;
@@ -259,6 +341,15 @@ export function PreviewModal({
   const post = useCallback((message: Record<string, unknown>): void => {
     iframeRef.current?.contentWindow?.postMessage({ kind: 'cg-preview', ...message }, '*');
   }, []);
+
+  const onPreviewLookChange = useCallback(
+    (lookId: string): void => {
+      if (lookGroup?.looks.some((look) => look.id === lookId) !== true) return;
+      setPreviewLookId(lookId);
+      post({ action: 'look', lookId });
+    },
+    [lookGroup, post],
+  );
 
   const dispatch = useMemo<PreviewDispatch>(
     () => ({
@@ -285,76 +376,54 @@ export function PreviewModal({
   // current data. None of them is a toggle — each is a one-shot command.
   const onPlay = useCallback(() => {
     if (paused) {
+      acceptRuntimeFramesRef.current = true;
       dispatch.resume();
       setPaused(false);
+      startElapsed(true);
     } else {
-      // D-106 — Play commits the prepared (pending) values and plays them.
+      // D-106 — Play commits the prepared (pending) values and starts a fresh rehearsal.
+      // Commit the counters before the iframe can synchronously collapse a visually-static
+      // lifecycle from its first frame to its last. Without this boundary, React batches the
+      // reset with the iframe's terminal-frame message and a second Play appears to leave the
+      // frame counter stuck at the previous run's end even though elapsed time restarted.
+      acceptRuntimeFramesRef.current = true;
+      flushSync(() => {
+        setRuntimeFrame(scene.activeRange?.in ?? scene.frameRange.in);
+        startElapsed(false);
+      });
       dispatch.play(values);
       setApplied(values);
     }
-  }, [dispatch, paused, values]);
+  }, [dispatch, paused, scene.activeRange?.in, scene.frameRange.in, startElapsed, values]);
   const onPause = useCallback(() => {
     dispatch.pause();
     setPaused(true);
-  }, [dispatch]);
+    pauseElapsed();
+  }, [dispatch, pauseElapsed]);
   const onStop = useCallback(() => {
+    acceptRuntimeFramesRef.current = false;
     dispatch.stop();
     setPaused(false);
-  }, [dispatch]);
-  // D-105 — the coordinated animated exit (distinct from Stop's quick clear).
-  const onOut = useCallback(() => {
-    dispatch.out();
-    setPaused(false);
-  }, [dispatch]);
+    setRuntimeFrame(scene.activeRange?.in ?? scene.frameRange.in);
+    resetElapsed();
+  }, [dispatch, resetElapsed, scene.activeRange?.in, scene.frameRange.in]);
   const onNext = useCallback(() => dispatch.next(), [dispatch]);
   const onPrevious = useCallback(() => dispatch.previous(), [dispatch]);
   const onReset = useCallback(() => {
     const seeded = previewSeed(scene.id, aggregate);
     setValues(seeded);
     setApplied(seeded);
+    acceptRuntimeFramesRef.current = false;
     dispatch.reset();
     setPaused(false);
-  }, [dispatch, aggregate, scene.id]);
-  // D-106 — apply pending edits to the stage. "Update all" commits every pending
-  // field at once; a per-field Update commits just one path.
+    setRuntimeFrame(scene.frameRange.in);
+    resetElapsed();
+  }, [dispatch, aggregate, resetElapsed, scene.frameRange.in, scene.id]);
+  // D-106 / D-173 — one clear commit point: Update all applies every prepared value in place.
   const onUpdateAll = useCallback(() => {
     setApplied(values);
     dispatch.update(values);
   }, [dispatch, values]);
-  const onUpdateField = useCallback(
-    (path: string[]) => {
-      const next = setIn(applied, path, getIn(values, path));
-      setApplied(next);
-      dispatch.update(next);
-    },
-    [applied, values, dispatch],
-  );
-  // D-106 follow-up — apply ONE item of a `list` field (per-input granularity): merge
-  // just that item (matched by stable id) from pending into the applied list, leaving
-  // every other item's applied value untouched, so each item input commits on its own.
-  const onUpdateListItem = useCallback(
-    (path: string[], itemId: string) => {
-      const pendingList = getIn(values, path);
-      if (!Array.isArray(pendingList)) return;
-      const pArr = pendingList as ListItem[];
-      const appliedList = getIn(applied, path);
-      const aArr = Array.isArray(appliedList) ? (appliedList as ListItem[]) : [];
-      const pItem = pArr.find((it) => it.id === itemId);
-      if (pItem === undefined) return; // item was removed in pending — "Update all" handles that
-      let nextArr: ListItem[];
-      if (aArr.some((it) => it.id === itemId)) {
-        nextArr = aArr.map((it) => (it.id === itemId ? pItem : it));
-      } else {
-        // A brand-new item: insert it at its pending index (best effort) so order is sane.
-        const at = Math.min(Math.max(pArr.indexOf(pItem), 0), aArr.length);
-        nextArr = [...aArr.slice(0, at), pItem, ...aArr.slice(at)];
-      }
-      const next = setIn(applied, path, nextArr as unknown as FieldValue);
-      setApplied(next);
-      dispatch.update(next);
-    },
-    [applied, values, dispatch],
-  );
   /*
     `D-165` — the preview's SOUND switch, ON by default (the Designer is where an author listens to
     the sound they placed). Sent to the page's own runtime, and sent again whenever the page boots,
@@ -436,16 +505,37 @@ export function PreviewModal({
   // Seed our iframe (only ours) once it signals readiness.
   useEffect(() => {
     function onMessage(evt: MessageEvent<unknown>): void {
-      const msg = evt.data as { kind?: string } | undefined;
-      if (msg?.kind !== 'cg-preview-ready') return;
+      const msg = evt.data as { kind?: string; state?: string; frame?: number } | undefined;
       if (evt.source !== iframeRef.current?.contentWindow) return;
+      if (msg?.kind === 'cg-preview-frame' && typeof msg.frame === 'number') {
+        if (acceptRuntimeFramesRef.current) setRuntimeFrame(msg.frame);
+        return;
+      }
+      if (msg?.kind === 'cg-preview-state' && msg.state === 'stopped') {
+        // A Stop/Reset has already settled the host synchronously; ignore its asynchronous echo.
+        if (!acceptRuntimeFramesRef.current) return;
+        const stoppedAt = currentElapsed();
+        acceptRuntimeFramesRef.current = false;
+        if (shouldDeferPreviewNaturalStop(scene, stoppedAt, elapsedLimitMs)) return;
+        pauseElapsed();
+        setPaused(false);
+        return;
+      }
+      if (msg?.kind !== 'cg-preview-ready') return;
       // D-028 — the iframe boots with an empty assetUrls map; without this
       // push, operator-imported (asset-*) fonts could never load here and the
       // play-path font await would be a no-op on the only surface that plays.
-      post({ action: 'asset-urls', assetUrls: { ...assetUrlGetAll(), ...sharedUrlGetAll() } });
+      post({
+        action: 'asset-urls',
+        assetUrls: { ...assetUrlGetAll(), ...sharedUrlGetAll() },
+      });
       // D-125 — seed the parsed Lottie map too (the srcDoc boot has an empty one), so a
       // Lottie mounts its player on this dedicated preview iframe.
       post({ action: 'lottie-assets', lottieAssets: lottieAssetsForScene(scene) });
+      // D-196 — the iframe is new and has forgotten the Preview-local Look.
+      if (previewLookIdRef.current !== '') {
+        post({ action: 'look', lookId: previewLookIdRef.current });
+      }
       post({ action: 'scrub', frame: 0 });
       post({ action: 'update', fields: appliedRef.current });
       // `D-165` — a freshly booted page starts unmuted; carry the author's switch over.
@@ -461,7 +551,7 @@ export function PreviewModal({
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
     // `scene` joins the deps because the seeded Lottie map is now scoped to it.
-  }, [post, aggregate, scene]);
+  }, [post, aggregate, currentElapsed, elapsedLimitMs, pauseElapsed, scene]);
 
   // Tear down on close — stop the runtime; the iframe unmounts with the modal.
   useEffect(() => () => post({ action: 'stop' }), [post]);
@@ -474,49 +564,45 @@ export function PreviewModal({
     <Modal
       title={`Preview · ${String(resW)}×${String(resH)}`}
       onClose={onClose}
-      width="min(1500px, 96vw)"
-      minBodyHeight="74vh"
+      width="min(1800px, 98vw)"
+      minBodyHeight="84vh"
+      maxHeight="96vh"
       ariaLabel="Composition preview"
     >
       <div className={s.layout}>
-        <div ref={stageRef} className={s.stage}>
-          {html !== null && (
-            <iframe
-              ref={iframeRef}
-              title="cgpreview-modal"
-              srcDoc={html}
-              className={s.stageFrame}
-              style={{
-                width: resW,
-                height: resH,
-                transform: `translate(-50%, -50%) scale(${String(scale)})`,
-              }}
-            />
-          )}
+        <div className={s.stageColumn}>
+          <PreviewStatus
+            compositionName={scene.name}
+            elapsedMs={elapsedMs}
+            currentFrame={displayedFrame}
+            totalFrames={scene.frameRange.out}
+          />
+          <div ref={stageRef} className={s.stage}>
+            {html !== null && (
+              <iframe
+                ref={iframeRef}
+                title="cgpreview-modal"
+                srcDoc={html}
+                className={s.stageFrame}
+                style={{
+                  width: resW,
+                  height: resH,
+                  transform: `translate(-50%, -50%) scale(${String(scale)})`,
+                }}
+              />
+            )}
+          </div>
         </div>
         <div className={s.sidebar}>
-          <div className={s.fieldsScroll}>
-            <PreviewFieldForm
-              aggregate={aggregate}
-              values={values}
-              appliedValues={applied}
-              onChange={onFieldChange}
-              pendingPaths={pendingPaths}
-              onUpdateField={onUpdateField}
-              onUpdateItem={onUpdateListItem}
-              onUpdateAll={onUpdateAll}
-              anyPending={anyPending}
-              dwellFieldIds={sequenceListFieldIds(scene)}
-              columnsByFieldId={repeaterColumnsByFieldId(scene)}
-            />
-          </div>
           <div className={s.fixedBar}>
             <PreviewTransport
+              lookChoices={lookChoices}
+              activeLookId={previewLookId}
+              onLookChange={onPreviewLookChange}
               paused={paused}
               canStep={canStepScene(scene)}
               onPlay={onPlay}
               onPause={onPause}
-              onOut={onOut}
               onStop={onStop}
               onPrevious={onPrevious}
               onNext={onNext}
@@ -530,15 +616,30 @@ export function PreviewModal({
               forcedStep={forcedStep}
               onForceStep={onForceStep}
             />
-            <div className={s.timingScroll}>
-              <PreviewScopeTiming
-                scene={scene}
-                overrides={overrides}
-                onChange={(path, patch) =>
-                  setOverrides((prev) => ({ ...prev, [path]: { ...prev[path], ...patch } }))
-                }
-              />
-            </div>
+            <details className={s.advanced}>
+              <summary>Advanced</summary>
+              <div className={s.timingScroll}>
+                <PreviewScopeTiming
+                  scene={scene}
+                  overrides={overrides}
+                  onChange={(path, patch) =>
+                    setOverrides((prev) => ({ ...prev, [path]: { ...prev[path], ...patch } }))
+                  }
+                />
+              </div>
+            </details>
+          </div>
+          <div className={s.fieldsScroll}>
+            <PreviewFieldForm
+              aggregate={aggregate}
+              values={values}
+              onChange={onFieldChange}
+              pendingPaths={pendingPaths}
+              onUpdateAll={onUpdateAll}
+              anyPending={anyPending}
+              dwellFieldIds={sequenceListFieldIds(scene)}
+              columnsByFieldId={repeaterColumns}
+            />
           </div>
         </div>
       </div>

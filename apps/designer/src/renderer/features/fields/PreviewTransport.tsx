@@ -1,5 +1,4 @@
 import {
-  LogOut,
   Pause,
   Play,
   RotateCcw,
@@ -15,20 +14,18 @@ import { Select } from '../../ui/Select.js';
 import * as s from './PreviewTransport.css.js';
 
 /**
- * D-020 — the preview's transport bar. The four real **playout commands** are
+ * D-020 / D-173 — the preview's transport bar. The real **playout commands** are
  * SEPARATE, momentary buttons — each is a command the operator can issue, mirroring
  * the on-air CasparCG transport:
  *
  * - **Play** → `play()`, or `resume()` when the composition is paused. It is NOT a
  *   toggle and never stays visually "pressed" after a click.
  * - **Pause** → `pause()` (freezes intro / hold countdown / outro).
- * - **Out** → `out()` (D-105 — the coordinated animated exit: the content exits
- *   first, then the background closes, never closing over fully-visible content).
  * - **Stop** → `stop()` (D-105 — the quick clear: remove the content immediately,
  *   then close the background; settles cleared).
  * - **Previous** / **Next** → `previous()` / `next()` (step a paginated template or a
  *   book — `D-163`). Disabled when the composition has a single step. They share the
- *   row below the other four, half each, so all six stay inside the panel.
+ *   row below the three primary commands, half each, so all five stay inside the panel.
  *
  * **Reset** is a PREVIEW-ONLY utility (re-seeds the form to defaults), kept visually
  * distinct from the playout commands.
@@ -37,11 +34,13 @@ import * as s from './PreviewTransport.css.js';
  * ON by default, and it mutes the page's own runtime (the switch CG Control's PVW keeps OFF).
  */
 export function PreviewTransport({
+  lookChoices = [],
+  activeLookId = '',
+  onLookChange,
   paused,
   canStep,
   onPlay,
   onPause,
-  onOut,
   onStop,
   onPrevious,
   onNext,
@@ -55,11 +54,14 @@ export function PreviewTransport({
   forcedStep = '',
   onForceStep,
 }: {
+  /** D-196 — session-only Preset choices for a multi-frame Preview. */
+  lookChoices?: readonly { value: string; label: string }[];
+  activeLookId?: string;
+  onLookChange?: (lookId: string) => void;
   paused: boolean;
   canStep: boolean;
   onPlay: () => void;
   onPause: () => void;
-  onOut: () => void;
   onStop: () => void;
   onPrevious: () => void;
   onNext: () => void;
@@ -82,9 +84,8 @@ export function PreviewTransport({
 }): JSX.Element {
   return (
     <div className={s.bar}>
-      <span className={s.groupLabel}>Playout commands</span>
       <div className={s.commands} role="group" aria-label="Playout commands">
-        <Button variant="primary" className={s.command} onClick={onPlay}>
+        <Button className={s.command} onClick={onPlay}>
           <Icon icon={Play} size={16} />
           {paused ? 'Resume' : 'Play'}
         </Button>
@@ -92,19 +93,7 @@ export function PreviewTransport({
           <Icon icon={Pause} size={16} />
           Pause
         </Button>
-        <Button
-          className={s.command}
-          onClick={onOut}
-          title="Animate out — the content exits first, then the background closes"
-        >
-          <Icon icon={LogOut} size={16} />
-          Out
-        </Button>
-        <Button
-          className={s.command}
-          onClick={onStop}
-          title="Clear now — remove the content immediately, then close the background"
-        >
+        <Button className={s.command} onClick={onStop} title="Stop and clear">
           <Icon icon={Square} size={16} />
           Stop
         </Button>
@@ -112,7 +101,7 @@ export function PreviewTransport({
           className={`${s.command} ${s.step}`}
           onClick={onPrevious}
           disabled={!canStep}
-          title={canStep ? undefined : 'Single-step template — nothing to go back to'}
+          title={canStep ? undefined : 'No previous item'}
         >
           <Icon icon={SkipBack} size={16} />
           Previous
@@ -121,14 +110,14 @@ export function PreviewTransport({
           className={`${s.command} ${s.step}`}
           onClick={onNext}
           disabled={!canStep}
-          title={canStep ? undefined : 'Single-step template — nothing to advance to'}
+          title={canStep ? undefined : 'No next item'}
         >
           <Icon icon={SkipForward} size={16} />
           Next
         </Button>
       </div>
       <div className={s.utilities}>
-        <Button variant="ghost" size="sm" onClick={onReset} title="Re-seed the form to defaults">
+        <Button variant="ghost" size="sm" onClick={onReset} title="Reset preview values">
           <Icon icon={RotateCcw} size={14} />
           Reset
         </Button>
@@ -154,6 +143,7 @@ export function PreviewTransport({
             <Select
               aria-label="Rehearse steps"
               data-testid="preview-step-rate"
+              title="Each Play starts the accelerated rehearsal from the current real time. Past deadlines stay past."
               value={String(clockRate)}
               onChange={(e) => onClockRate?.(Number(e.target.value))}
             >
@@ -178,6 +168,87 @@ export function PreviewTransport({
           </>
         )}
       </div>
+      {lookChoices.length > 0 && (
+        <div className={s.lookControl} role="group" aria-label="Preview preset">
+          <span className={s.lookLabel}>Preset</span>
+          <div className={s.lookStrip}>
+            {lookChoices.map((look) => {
+              const selected = look.value === activeLookId;
+              return (
+                <Button
+                  key={look.value}
+                  className={s.lookButton}
+                  selected={selected}
+                  aria-pressed={selected}
+                  title={look.label}
+                  onClick={() => onLookChange?.(look.value)}
+                >
+                  {look.label}
+                </Button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+/** D-173/D-182 — large, stable status strip directly above the Preview picture. */
+export function PreviewStatus({
+  compositionName,
+  elapsedMs,
+  currentFrame,
+  totalFrames,
+}: {
+  compositionName: string;
+  elapsedMs: number;
+  currentFrame: number;
+  totalFrames: number;
+}): JSX.Element {
+  return (
+    <div className={s.statusRow}>
+      <div className={s.compositionIdentity}>
+        <span className={s.groupLabel}>Composition</span>
+        <strong aria-label="Active composition" title={compositionName}>
+          {compositionName || 'Untitled composition'}
+        </strong>
+      </div>
+      <div className={s.statusMetrics}>
+        <output className={s.frameStatus} aria-label="Preview frame">
+          <span>Frame</span>
+          <strong>{formatFrameCounter(currentFrame, totalFrames)}</strong>
+        </output>
+        <output
+          className={s.elapsed}
+          aria-label="Elapsed preview time"
+          title="Elapsed time (minutes:seconds:hundredths)"
+        >
+          <span>Elapsed</span>
+          <strong>{formatElapsed(elapsedMs)}</strong>
+        </output>
+      </div>
+    </div>
+  );
+}
+
+/** D-173 — compact, stable rehearsal time; hours appear only when they are needed. */
+export function formatElapsed(ms: number): string {
+  const safe = Math.max(0, Math.floor(ms));
+  const hundredths = Math.floor((safe % 1000) / 10);
+  const totalSeconds = Math.floor(safe / 1000);
+  const seconds = totalSeconds % 60;
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const minutes = totalMinutes % 60;
+  const hours = Math.floor(totalMinutes / 60);
+  const body = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}:${String(hundredths).padStart(2, '0')}`;
+  return hours > 0 ? `${String(hours).padStart(2, '0')}:${body}` : body;
+}
+
+/** Keep both frame columns fixed-width, including the 9 → 10 transition. */
+export function formatFrameCounter(currentFrame: number, totalFrames: number): string {
+  const current = Math.max(0, Math.round(currentFrame));
+  const total = Math.max(0, Math.round(totalFrames));
+  const width = Math.max(2, String(total).length);
+  return `${String(current).padStart(width, '0')} / ${String(total).padStart(width, '0')}`;
 }

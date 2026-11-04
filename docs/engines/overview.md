@@ -57,6 +57,10 @@ the editor UI and the runtime renderer (the "Where features go" map in
 
 ### 2. `Scene` → live DOM (the runtime)
 
+Ticker text measurements are isolated from composition visibility and ancestor transforms: a
+temporary document-level probe uses the ticker's typography, then leaves the DOM. The same layout
+coordinates therefore feed both a standalone ticker and one inside a hidden or scaled composition.
+
 [`@cg/template-runtime`](../../packages/template-runtime)'s `createRuntime(scene)`:
 
 - **builds** the DOM tree from the scene (scene-builder),
@@ -82,13 +86,14 @@ the editor UI and the runtime renderer (the "Where features go" map in
   content-driven holds; `runtime.next()` dispatches per scope to sequence
   drivers — the D-031 steps seam; the repeater's RepeaterDriver stamps one
   child-composition scope per data row through the `wireScopeSubtree`
-  factory — count at play, values live),
+  factory — count at play, values live; pause-safe item entrance/exit motion uses the shared
+  transition sampler and exits join the existing element-outro ledger),
 - **positions frame-mapped media at the Designer playhead** — D-135: `tick(frame)`
   reaches every `LottieDriver` AND every `VideoDriver` (`positionAt`), so scrubbing AND
-  timeline play animate a Lottie and a `<video>` on the canvas instead of leaving them on
-  a static poster frame. The canvas has no `play()` path of its own — its transport
-  advances the frame and posts one `scrub` per change — so scrub and play are literally
-  the same call, and the driver's own phase mapping (`clipPositionAt` / `expectedClipMs`)
+  explicit playhead-only modes animate a Lottie and a `<video>` on the canvas instead of
+  leaving them on a static poster. Ordinary forward Canvas Play uses the real lifecycle,
+  just like Preview; reverse, Preview loop and ping-pong advance the authoring frame and
+  post `scrub`. The driver's own phase mapping (`clipPositionAt` / `expectedClipMs`)
   is what resolves the clip frame/time (never a second copy). A driver that is running
   its own lifecycle owns the frame and is not fought. The video is positioned PAUSED by
   `currentTime` (§9.5 (a) — the forward-1× hybrid rejected): a tick that finds a seek in
@@ -96,7 +101,10 @@ the editor UI and the runtime renderer (the "Where features go" map in
   frame-true rendition; the node is resolved through the handle's `live()` on every
   access (B-137), and the at-rest canvas poster is now a pre-tick transient for video
   exactly as for the Lottie. The ticker, the clock and the sequence are DELIBERATELY
-  carved out: they are functions of real time, with no frame N of a crawl to show,
+  carved out of scrub: they are functions of real time, with no frame N of a crawl to show.
+  They run through real content drivers during ordinary Canvas Play. An optional read-only
+  root-frame observer updates the host timeline/Preview counters without feeding scrub ticks
+  back into the controller; static roots retain an authored display-only clock,
 - **derives FOLLOW-source media windows from the composition's lifecycle** —
   `media-phases-follow-composition`: a Lottie/video whose `phases.source` is
   `'composition'` stores the RELATIONSHIP (intro settles at the content start, outro fits
@@ -110,7 +118,9 @@ the editor UI and the runtime renderer (the "Where features go" map in
   background closes. That await is **bounded at the ledger entry** (session Z): a driver
   whose `playOutro()` never settles would otherwise strand the exit — and, because
   `stop()`/`out()` are guarded on the lifecycle state, take every later operator command
-  with it — so the bound fires an `error` event and lets the exit proceed,
+  with it — so the bound fires an `error` event and lets the exit proceed. The guard has a
+  thirty-second minimum, extends for a driver's reported finite exit plus grace, pauses with
+  playback and is cancelled by replay/removal; a held Sequence page includes its inner row exit,
 - **parks the content of a LOOK that is not on screen** — `B-150`: a look switch shows one
   composition instance and hides the rest with `display: none`, and hiding a node stops
   nothing inside it. `LookMediaPark` (`look-media.ts`) SILENCES hidden content
@@ -145,6 +155,10 @@ The runtime source is bundled once into two payloads
 | **Preview iframe**   | Designer, live while editing  | ESM bundle injected via `srcDoc`                                              |
 | **`.vcg` package**   | the Runtime app / a CG server | ESM bundle inside the package ([`@cg/vcg-format`](../../packages/vcg-format)) |
 | **Single-file HTML** | CasparCG (file://)            | IIFE bundle, exposes `window.CG`, targets old CEF                             |
+
+Accelerated Designer rehearsal injects a Preview-host clock. Each fresh Play rebases its epoch to
+the real present; Resume keeps the existing epoch. This affects neither stored deadlines nor the
+normal wall clock used by real-time Preview and exported output. An actually past deadline stays past.
 
 The exported `index.html` calls `createRuntime(scene)` then
 `installCasparGlobals(runtime)`, which wires CasparCG's bare global calls

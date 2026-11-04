@@ -63,6 +63,14 @@ export const brandProduct = style({
   letterSpacing: '0.18em',
 });
 
+export const projectActions = style({
+  display: 'flex',
+  alignItems: 'center',
+  flexWrap: 'wrap',
+  gap: '0.55rem',
+  alignSelf: 'flex-start',
+});
+
 /**
  * LAYOUT ONLY. The colour (accent fill, on-accent label, weight) now comes from the
  * shared `primary` Button variant. It used to re-declare the accent here on a `bare`

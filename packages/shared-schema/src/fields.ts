@@ -149,7 +149,7 @@ const TextFieldSchema = DynamicFieldBaseSchema.extend({
   /**
    * `DELTA-RUN-NEXT-VERSION-01-C` §2 — present when this field drives a countdown's target: CG
    * Control then offers the date and time control and states a passed target in the author's words.
-   * ⚠ DERIVED at import from the `clock-target` binding (`countdownTargetFieldsOf`), never authored
+   * ⚠ DERIVED for Preview or import from the `clock-target` binding (`countdownTargetFieldsOf`), never authored
    * by the Designer — one source of truth, the binding. A template imported before this shows the
    * field as plain text until it is imported again.
    */

@@ -1063,7 +1063,11 @@ describe('RepeaterElement (D-030)', () => {
     expect(parsed.gap).toBe(8);
     expect(parsed.maxItems).toBeUndefined();
     expect(parsed.itemEntrance).toBeUndefined();
+    expect(parsed.itemExit).toBeUndefined();
+    expect(parsed.itemExitOrder).toBeUndefined();
+    expect(parsed.alternatingRowFill).toBeUndefined();
     expect(parsed.itemTransitionMs).toBeUndefined();
+    expect(parsed.itemExitTransitionMs).toBeUndefined();
     expect(parsed.itemStaggerMs).toBeUndefined();
     expect(parsed.items).toEqual([]);
     expect(RepeaterElementSchema.parse(parsed)).toEqual(parsed);
@@ -1072,11 +1076,19 @@ describe('RepeaterElement (D-030)', () => {
     const parsed = RepeaterElementSchema.parse({
       ...repeater,
       itemEntrance: 'fade-right',
+      itemExit: 'fade-left',
+      itemExitOrder: 'forward',
+      alternatingRowFill: '#FFFFFF10',
       itemTransitionMs: 650,
+      itemExitTransitionMs: 250,
       itemStaggerMs: 120,
     });
     expect(parsed.itemEntrance).toBe('fade-right');
+    expect(parsed.itemExit).toBe('fade-left');
+    expect(parsed.itemExitOrder).toBe('forward');
+    expect(parsed.alternatingRowFill).toBe('#FFFFFF10');
     expect(parsed.itemTransitionMs).toBe(650);
+    expect(parsed.itemExitTransitionMs).toBe(250);
     expect(parsed.itemStaggerMs).toBe(120);
   });
   it('round-trips through the Element union with OPEN row items', () => {
@@ -1096,8 +1108,10 @@ describe('RepeaterElement (D-030)', () => {
     expect(() => RepeaterElementSchema.parse(withoutComp)).toThrow();
   });
   it('rejects an unknown entrance, non-positive effect time or negative delay', () => {
+    expect(() => RepeaterElementSchema.parse({ ...repeater, itemExitOrder: 'bottom' })).toThrow();
     expect(() => RepeaterElementSchema.parse({ ...repeater, itemEntrance: 'zoom' })).toThrow();
     expect(() => RepeaterElementSchema.parse({ ...repeater, itemTransitionMs: 0 })).toThrow();
+    expect(() => RepeaterElementSchema.parse({ ...repeater, itemExitTransitionMs: 0 })).toThrow();
     expect(() => RepeaterElementSchema.parse({ ...repeater, itemStaggerMs: -1 })).toThrow();
   });
   it('rejects a row item without a stable id', () => {

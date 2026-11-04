@@ -59,7 +59,7 @@ test('🔴 TEXT-FIT-01 — a long Persian name shrinks to fit, re-fits on a new 
 
   // The long name: smaller than the authored 48 px, and the laid-out run fits the box.
   await app.setPreviewField('guest', NAME);
-  await app.updatePreviewField('guest');
+  await app.updateAllPreviewFields();
   await expect.poll(async () => (await fitState(frame))?.text, { timeout: 10_000 }).toBe(NAME);
   await expect.poll(async () => (await fitState(frame))?.fits, { timeout: 10_000 }).toBe(true);
   const fitted = await fitState(frame);
@@ -73,7 +73,7 @@ test('🔴 TEXT-FIT-01 — a long Persian name shrinks to fit, re-fits on a new 
 
   // A short value re-fits back to the authored size.
   await app.setPreviewField('guest', SHORT);
-  await app.updatePreviewField('guest');
+  await app.updateAllPreviewFields();
   await expect.poll(async () => (await fitState(frame))?.px, { timeout: 10_000 }).toBe(48);
 
   // The exported page, booted on its own, fits the same name to the same size.

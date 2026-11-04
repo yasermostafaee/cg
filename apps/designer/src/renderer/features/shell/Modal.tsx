@@ -56,6 +56,8 @@ export function Modal({
   // Escape closes; Tab is trapped inside the dialog so focus never leaves it.
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
+      const dialogs = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
+      if (dialogs.length > 0 && dialogs[dialogs.length - 1] !== boxRef.current) return;
       if (e.key === 'Escape') {
         // `DELTA-RUN-NEXT-VERSION-01-H` — a menu open INSIDE the dialog, or a popover opened from one
         // of its controls (portaled to the body: the colour picker), owns this Escape: it closes

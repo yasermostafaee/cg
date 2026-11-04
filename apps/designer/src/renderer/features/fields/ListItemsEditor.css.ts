@@ -11,6 +11,14 @@ export const comfortableList = style({
   gap: '0.5rem',
 });
 
+/** One scrolling viewport for the entire table, not one scrollbar per row. */
+export const structuredList = style({
+  overflowX: 'auto',
+  maxWidth: '100%',
+  scrollbarWidth: 'thin',
+  paddingBottom: '0.4rem',
+});
+
 globalStyle(`${comfortableList} input, ${comfortableList} select, ${comfortableList} textarea`, {
   minHeight: '2.25rem',
   padding: '0.45rem 0.6rem',
@@ -35,18 +43,21 @@ export const structuredCells = style({
   minWidth: 0,
   display: 'grid',
   gridAutoFlow: 'column',
-  gridAutoColumns: 'minmax(8.5rem, 1fr)',
+  gridAutoColumns: '9.5rem',
   gap: '0.35rem',
-  overflowX: 'auto',
   padding: '0.35rem',
   border: `1px solid ${colors.border}`,
   borderRadius: '0.25rem',
   background: colors.panelMuted,
-  scrollbarWidth: 'thin',
+});
+
+globalStyle(`${structuredList} > ${itemRow}`, {
+  width: 'max-content',
+  minWidth: '100%',
 });
 
 globalStyle(`${comfortableList} ${structuredCells}`, {
-  gridAutoColumns: 'minmax(11rem, 1fr)',
+  gridAutoColumns: '11rem',
   gap: '0.55rem',
   padding: '0.55rem',
 });

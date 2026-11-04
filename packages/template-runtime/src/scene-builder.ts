@@ -62,6 +62,8 @@ import {
  * registry so `composition` elements resolve.
  */
 interface BuildCtx {
+  /** Current generated row position; deliberately not an editable field value. */
+  rowIndex?: number;
   doc: Document;
   scene: Scene;
   /** The current scope — elements land in `scope.elementMap`/`scope.animated`. */
@@ -664,7 +666,10 @@ function buildText(element: TextElement, ctx: BuildCtx): HTMLElement {
             : 'flex-start';
     }
   }
-  renderTextGlyphs(el, element, doc);
+  const displayed =
+    element.rowNumber === true ? { ...element, text: String((ctx.rowIndex ?? 0) + 1) } : element;
+  if (element.rowNumber === true) el.dataset['cgRowNumber'] = '1';
+  renderTextGlyphs(el, displayed, doc);
   // TEXT-FIT-01 — a shrink-to-fit text is stamped with what its fit needs and watched: it is
   // fitted when its box first has a size, again when the box or a font changes (text-fit.ts).
   markTextFit(el, element);
@@ -1260,6 +1265,7 @@ export function buildRepeaterRows(
     // content holds) by construction, but NEVER in `scope.children`.
     const rowScope = newScope(inner, comp);
     const rowCtx: BuildCtx = {
+      rowIndex: i,
       // Its OWN empty map — see the identical note on the sequence item context above.
       doc,
       scene,
@@ -1277,7 +1283,7 @@ export function buildRepeaterRows(
     // top/bottom entrance leak into its neighbour's slot. Preserve the historical DOM exactly for
     // `none`; only an authored effect pays for the wrapper.
     let motion = cell;
-    if (element.itemEntrance !== undefined && element.itemEntrance !== 'none') {
+    if ((element.itemEntrance ?? 'none') !== 'none' || (element.itemExit ?? 'none') !== 'none') {
       motion = doc.createElement('div');
       motion.dataset['cgRepeaterMotion'] = '';
       motion.style.position = 'absolute';
@@ -1286,10 +1292,16 @@ export function buildRepeaterRows(
       motion.style.width = '100%';
       motion.style.height = '100%';
       motion.style.willChange = 'transform, opacity';
+      if (i % 2 === 1 && element.alternatingRowFill !== undefined) {
+        motion.style.backgroundColor = element.alternatingRowFill;
+      }
       motion.appendChild(inner);
       cell.appendChild(motion);
     } else {
       cell.appendChild(inner);
+      if (i % 2 === 1 && element.alternatingRowFill !== undefined) {
+        cell.style.backgroundColor = element.alternatingRowFill;
+      }
     }
     host.appendChild(cell);
     rows.push({ cell, motion, scope: rowScope });

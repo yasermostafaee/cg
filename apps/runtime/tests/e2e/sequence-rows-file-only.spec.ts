@@ -1,7 +1,9 @@
 import { buildPagedRepeaterVcg, expect, test } from './fixtures/runtime.js';
 
 test.describe('D-180 — paged Repeater input authority', () => {
-  test('File only removes manual rows but keeps the generated workbook path', async ({ app }) => {
+  test('File only shows connection status and read-only data without workbook authoring', async ({
+    app,
+  }) => {
     const templateId = 'tpl-e2e-paged-file-only';
     await app.importVcg(
       'paged-file-only.vcg',
@@ -11,7 +13,9 @@ test.describe('D-180 — paged Repeater input authority', () => {
 
     const rows = app.inspector.getByRole('region', { name: 'Weather pages all rows' });
     await expect(rows).toContainText('File only');
-    await expect(rows.getByRole('button', { name: 'Save and connect Excel…' })).toBeVisible();
+    await expect(rows).toContainText('Not connected');
+    await expect(rows).toContainText('Connect this workbook in Designer.');
+    await expect(rows.getByRole('button', { name: /Save and connect|Detach/ })).toHaveCount(0);
     await expect(rows.getByRole('textbox', { name: /Cities item/ })).toHaveCount(0);
     await expect(rows.getByRole('combobox', { name: /Cities item/ })).toHaveCount(0);
     await expect(

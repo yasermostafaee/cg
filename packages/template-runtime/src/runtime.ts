@@ -30,6 +30,7 @@ import {
 } from '@cg/shared-schema';
 import { writeFieldDigits } from '@cg/text-shaping';
 import { itemsInDigits } from './typed-digits.js';
+import { sequenceHasRepeaterExit } from './sequence-item-outros.js';
 import {
   applyAnimationAtFrame,
   entranceSettleFrame,
@@ -113,7 +114,12 @@ import {
 import { registerLottiePlayer } from './lottie-registry.js';
 import { ClockDriver, parseClockTarget } from './clock-driver.js';
 import { LottieDriver } from './lottie-driver.js';
-import { VideoDriver, type VideoHandle, type ElementOutroDriver } from './video-driver.js';
+import {
+  VideoDriver,
+  elementOutroWatchdogMs,
+  type VideoHandle,
+  type ElementOutroDriver,
+} from './video-driver.js';
 import { AudioDriver, gainOfDb } from './audio-driver.js';
 import { createAudioHandle, setSoundMuted, type SoundAudition } from './audio-graph.js';
 import { hostPagePicture } from './page-pictures-host.js';
@@ -917,6 +923,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
    * it rather than accumulating.
    */
   const clockDriversByScope = new WeakMap<FieldScope, Map<string, ClockDriver>>();
+  // A rehearsal duration deliberately replaces even a bound wall-clock deadline for this run.
+  const rehearsalCountdowns = new WeakSet<ClockDriver>();
 
   /*
     `DELTA-RUN-NEXT-VERSION-01-F` — A COUNTDOWN STEP CUES A COMPOSITION INSTANCE'S OWN ENTRANCE AND
@@ -1163,6 +1171,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           clock: options.clock,
         });
         if (effects !== undefined) stepDrivers.push({ id: c.element.id, driver, effects });
+        if (durationOverride !== undefined) rehearsalCountdowns.add(driver);
         scopeClockDrivers.set(c.element.id, driver);
         // D-105 — mark the content root for the coordinated exit (out/stop).
         c.node.dataset['cgContent'] = 'clock';
@@ -1263,17 +1272,26 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
               for (const c of itemSub.clocks) c.start();
               for (const t of itemSub.tickers) t.start();
               for (const sq of itemSub.sequences) sq.start();
+              for (const rep of itemSub.repeaters) rep.start();
             },
             pause: (): void => {
               for (const c of itemSub.clocks) c.pause();
               for (const t of itemSub.tickers) t.pause();
               for (const sq of itemSub.sequences) sq.pause();
+              for (const rep of itemSub.repeaters) rep.pause();
             },
             resume: (): void => {
               for (const c of itemSub.clocks) c.resume();
               for (const t of itemSub.tickers) t.resume();
               for (const sq of itemSub.sequences) sq.resume();
+              for (const rep of itemSub.repeaters) rep.resume();
             },
+            // Keep held items outside the controller cascade. Their owner explicitly awaits
+            // the active content's element outros, then plays its own page transition.
+            playOutro: (): Promise<void> =>
+              playElementOutrosOnce(collectSubtreeOutros(itemSub.node)) ?? Promise.resolve(),
+            outroDurationMs: (): number =>
+              Math.max(0, ...collectSubtreeOutros(itemSub.node).map(elementOutroWatchdogMs)),
             hide: (): void => {
               if (torndown) return; // idempotent — stop() then reset() both hide
               torndown = true;
@@ -1347,7 +1365,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         if (!sequenceStepsByOperator(s.element)) operatorFixed.add(driver);
         // D-105 — mark the content root for the coordinated exit (out/stop).
         s.host.dataset['cgContent'] = 'sequence';
-        if (bookField !== undefined && s.element.visible !== false) {
+        if (
+          s.element.visible !== false &&
+          (bookField !== undefined || sequenceHasRepeaterExit(scene, s.element))
+        ) {
           s.host.dataset['cgOutro'] = 'sequence';
           scopeOutroLotties.push(driver);
         }
@@ -2132,6 +2153,17 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           // during the intro. After the lifespan gate so it is the final word for content.
           applyContentGateAtFrame(frame);
         },
+        ...(isGlobalRoot && options.onRootFrame !== undefined
+          ? {
+              observeFrame: (frame: number): void => {
+                try {
+                  options.onRootFrame?.(frame);
+                } catch {
+                  // An observer cannot alter broadcast playback.
+                }
+              },
+            }
+          : {}),
         onExitStart: isGlobalRoot ? rootOnExitStart : noop,
         /*
           🔴 `SELF-STOP-24` — THE GLOBAL ROOT ONLY.
@@ -2329,6 +2361,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         });
         registerRepeaterDriver(entry.host, driver);
         repeaters.push(driver);
+        if (entry.element.visible !== false && (entry.element.itemExit ?? 'none') !== 'none') {
+          scopeOutroLotties.push(driver);
+          entry.host.dataset['cgOutro'] = '1';
+        }
       }
       return node;
     };
@@ -2611,7 +2647,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         for (const binding of doc_.bindings ?? []) {
           if (binding.target.kind !== 'clock-target') continue;
           const driver = drivers.get(binding.target.elementId);
-          if (driver === undefined) continue;
+          if (driver === undefined || rehearsalCountdowns.has(driver)) continue;
           const raw =
             binding.fieldId in values ? values[binding.fieldId] : defaults.get(binding.fieldId);
           if (raw === undefined) continue;
@@ -2673,7 +2709,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
    * the authored outro; the driver owns that element's exit.
    */
   const fadeableContentRoots = (): HTMLElement[] =>
-    contentRoots().filter((n) => n.dataset['cgOutro'] === undefined);
+    contentRoots().filter((n) => n.closest('[data-cg-outro]') === null);
   /**
    * D-125 §D6.2 — THE ELEMENT-OUTRO REGISTRY. Every `LottieDriver` that owns an outro and
    * is reachable through VISIBLE scopes, walked over the wiring tree (root scope + nested
@@ -2742,6 +2778,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
    * entry can never strand an awaiting exit.
    */
   const outroLedger = new Map<ElementOutroDriver, { promise: Promise<void>; done: boolean }>();
+  const outroWatchdogs = new Set<{ pause(): void; resume(): void; cancel(): void }>();
   const playElementOutrosOnce = (drivers: readonly ElementOutroDriver[]): Promise<void> | null => {
     const waits: Promise<void>[] = [];
     for (const d of drivers) {
@@ -2751,7 +2788,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           promise: Promise.resolve(),
           done: false,
         };
-        rec.promise = boundedOutro(d.playOutro()).then(() => {
+        const outro = d.playOutro();
+        rec.promise = boundedOutro(outro, elementOutroWatchdogMs(d)).then(() => {
           rec.done = true;
         });
         outroLedger.set(d, rec);
@@ -2770,26 +2808,60 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
    * operator's stop/out appear to do nothing with nothing logged anywhere. Continuing the
    * exit without the stranded element is strictly better than a graphic stuck on air;
    * SAYING SO is what makes the next occurrence diagnosable instead of another "sometimes
-   * the button is dead". The bound is deliberately far longer than any real outro.
+   * the button is dead". The bound is at least thirty seconds and extends for a driver's
+   * known finite exit duration, including a held Sequence page's inner repeater exit.
    *
    * Armed ONCE, around the LEDGER ENTRY — not around each caller's await. Both awaiting
    * sites (this runtime's `stop()`/`out()`, and every controller's `beforeOutro` gate)
    * subscribe to that one promise, so one bound covers both and a strand cannot be paid
    * for twice; per-caller watchdogs would each wait the full window in turn.
    */
-  const EXIT_OUTRO_WATCHDOG_MS = 30_000;
-  const boundedOutro = async (outro: Promise<void>): Promise<void> => {
+  const boundedOutro = async (outro: Promise<void>, watchdogMs: number): Promise<void> => {
     let timer: unknown = null;
-    const expiry = new Promise<'timeout'>((res) => {
-      timer = exitSetTimeout(() => res('timeout'), EXIT_OUTRO_WATCHDOG_MS);
+    let remaining = watchdogMs;
+    let startedAt = 0;
+    let finished = false;
+    const now = options.clock?.now ?? (() => Date.now());
+    let expire = (_outcome: 'timeout' | 'cancelled'): void => undefined;
+    const expiry = new Promise<'timeout' | 'cancelled'>((res) => {
+      expire = res;
     });
-    const outcome = await Promise.race([outro.then(() => 'settled' as const), expiry]);
-    if (timer !== null) exitClearTimeout(timer);
-    if (outcome === 'timeout') {
-      bus.emit('error', {
-        code: 'exit.outro-timeout',
-        message: `an element outro did not settle within ${String(EXIT_OUTRO_WATCHDOG_MS)} ms; the exit continued without it`,
-      });
+    const watchdog = {
+      pause(): void {
+        if (timer === null) return;
+        exitClearTimeout(timer);
+        timer = null;
+        remaining = Math.max(0, remaining - Math.max(0, now() - startedAt));
+      },
+      resume(): void {
+        if (finished || timer !== null) return;
+        startedAt = now();
+        timer = exitSetTimeout(() => {
+          timer = null;
+          finished = true;
+          expire('timeout');
+        }, remaining);
+      },
+      cancel(): void {
+        watchdog.pause();
+        finished = true;
+        expire('cancelled');
+      },
+    };
+    outroWatchdogs.add(watchdog);
+    if (!paused) watchdog.resume();
+    try {
+      const outcome = await Promise.race([outro.then(() => 'settled' as const), expiry]);
+      if (outcome === 'timeout') {
+        bus.emit('error', {
+          code: 'exit.outro-timeout',
+          message: `an element outro did not settle within ${String(watchdogMs)} ms; the exit continued without it`,
+        });
+      }
+    } finally {
+      finished = true;
+      watchdog.pause();
+      outroWatchdogs.delete(watchdog);
     }
   };
   const saveExitStyles = (n: HTMLElement): void => {
@@ -2942,6 +3014,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       paused = false;
       // D-125 §D6.2b — the new run owns fresh element outros: forget every one-shot
       // mark, so this run's exit (auto or operator) plays them again — exactly once.
+      for (const watchdog of outroWatchdogs) watchdog.cancel();
       outroLedger.clear();
       restoreContent();
       machine.transition('on-air');
@@ -3294,6 +3367,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     pause(): void {
       if (machine.state === 'removed') return;
       paused = true;
+      for (const watchdog of outroWatchdogs) watchdog.pause();
       cascade(rootNode, (c) => c.pause());
       // D-028/D-027/D-029 — freeze the crawls, clocks, and sequences (dwell
       // AND in-flight transitions) in lockstep with the frozen hold timers.
@@ -3312,6 +3386,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     resume(): void {
       if (machine.state === 'removed') return;
       paused = false;
+      for (const watchdog of outroWatchdogs) watchdog.resume();
       cascade(rootNode, (c) => c.resume());
       for (const sub of subtrees) for (const t of sub.tickers) t.resume();
       for (const sub of subtrees) for (const c of sub.clocks) c.resume();
@@ -3363,6 +3438,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
 
     remove(): void {
       if (machine.state === 'removed') return;
+      for (const watchdog of outroWatchdogs) watchdog.cancel();
       // D-125 §D6.4.4 — remove() is the PANIC path and stays a SYNCHRONOUS hard kill: it
       // awaits NO element outro. `destroy()` tears the Lottie players down immediately
       // (settling any in-flight `playOutro()` so a concurrent out()/stop() can't strand).
@@ -3384,6 +3460,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // allAnimated list, so walk the live rows).
       for (const sub of subtrees) {
         for (const r of sub.repeaters) {
+          r.sample(frame, scene.frameRate, sub.scope.source.lifecycle?.outPoint);
           for (const row of r.stampedRows) row.applyFrame(frame);
         }
       }

@@ -124,6 +124,15 @@ export class DesignerApp {
     await this.page.getByRole('button', { name: label, exact: true }).click();
   }
 
+  /** Add the authored multi-frame group, then register Looks through its Inspector. */
+  async addMultiFrameGroup(): Promise<void> {
+    await this.page.getByRole('button', { name: 'Add multi-frame group', exact: true }).click();
+  }
+
+  async addLook(): Promise<void> {
+    await this.page.getByRole('button', { name: '+ Look', exact: true }).click();
+  }
+
   // ── shared image library (D-040) ───────────────────────────────────────────
 
   /** A 1×1 transparent PNG — a valid image the browser can decode + render. */
@@ -819,13 +828,6 @@ export class DesignerApp {
     await this.previewDialog.getByRole('button', { name: 'Update all', exact: true }).click();
   }
 
-  /** D-106 — apply just one field's pending edit via its per-field Update button. */
-  async updatePreviewField(key: string): Promise<void> {
-    await this.previewDialog
-      .getByRole('button', { name: `Update field ${key}`, exact: true })
-      .click();
-  }
-
   // preview transport
   async play(): Promise<void> {
     await this.previewDialog.getByRole('button', { name: /Play|Resume/ }).click();
@@ -836,17 +838,13 @@ export class DesignerApp {
   async stop(): Promise<void> {
     await this.previewDialog.getByRole('button', { name: /Stop/ }).click();
   }
-  /** D-105 — the coordinated animated exit (content first, background last). */
-  async out(): Promise<void> {
-    await this.previewDialog.getByRole('button', { name: 'Out', exact: true }).click();
-  }
   async next(): Promise<void> {
     await this.previewDialog.getByRole('button', { name: /Next/ }).click();
   }
 
   /**
    * Set a preview scope's session-only timing. `scope` is the group title shown in
-   * the modal ("Timing (session)" for the root, "Timing — <instance>" for a child).
+   * the modal ("Timing" for the root, "Timing — <instance>" for a child).
    *
    * ADR 0009 — there is no `mode` option and there cannot be one: the playout mode is
    * designer-owned and the preview shows it as a fact. Set it with `setPlayoutTiming`

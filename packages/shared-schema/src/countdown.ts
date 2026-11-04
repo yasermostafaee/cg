@@ -44,7 +44,7 @@ export function completesAtZero(afterZero: AfterZero | undefined): boolean {
 /**
  * `DELTA-RUN-NEXT-VERSION-01-C` §2 — what CG Control needs to know about a `text` field that drives
  * a countdown's target, so it offers the date and time control and states a passed target in the
- * author's chosen behaviour. DERIVED at import from the template's own `clock-target` binding and
+ * author's chosen behaviour. DERIVED for Preview or import from the template's own `clock-target` binding and
  * the clock it targets — never authored — so it cannot drift from what the page will do.
  */
 export const CountdownTargetFieldSchema = z.object({

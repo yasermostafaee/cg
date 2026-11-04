@@ -36,7 +36,7 @@ image path and keeps Preview/export/on-air behavior identical.
 
 ## Structured files
 
-A directly selected Repeater owns a compact **Data file…** action beside its row configuration.
+A directly selected Repeater owns a compact **Rows and data file…** action beside its configuration.
 The modal derives its workbook columns and validation from the referenced child composition, creates
 the list binding when needed, saves and connects that exact `.xlsx`, and keeps its full selected path
 only for the current Designer session. Reload validates and replaces the authored rows; Detach keeps
@@ -47,8 +47,10 @@ Update.
 
 Structured row editors never rely on placeholders as their only column identity. Each cell has a
 visible field title, and a many-column row may scroll horizontally or reflow into labelled cells
-instead of shrinking below a usable input width. Designer Inspector, Preview and CG Control share
-this rule.
+instead of shrinking below a usable input width. One horizontal scroll moves all rows together;
+there are no per-row scrolling regions. Designer Inspector and Preview open these rows in a modal,
+leaving only the action and count/status in the narrow panel. Preview modal edits stay staged until
+the normal Update all command. CG Control retains its normal Update safety.
 
 Structured file loading extends the existing list-field file source rather than adding a Repeater
 file property. JSON v1 accepts an array of objects. CSV v1 uses a header row whose names map to child
@@ -129,8 +131,9 @@ The author may set the homogeneous child Repeater field to **File only** directl
 Sequence's Page data modal; this writes the same canonical field policy as the child Repeater's
 Dynamic / Data section. CG Control asks the shared `fieldUsesFileOnly` predicate before rendering the
 combined editor. In File-only mode the row table, add/remove and reorder controls are absent, while
-the generated-workbook connection, Reload, replace/detach and staged Update semantics remain.
-Designer still owns the authored defaults used to generate a fresh workbook.
+the connected-file status, Reload and staged Update semantics remain. Save/connect/replace/detach
+actions are absent: Designer owns the file connection and authored defaults in this mode. When no
+workbook is connected, CG Control explicitly says Not connected and directs the operator to Designer.
 
 Structured numeric cells use the shared `.cg-field` surface just like their text and select siblings.
 The numeric parser/filter remains `NumericInput`; sharing the visual primitive prevents an editable

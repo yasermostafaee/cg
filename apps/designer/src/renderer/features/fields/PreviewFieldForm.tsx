@@ -15,16 +15,18 @@ import {
   type ListItem,
   type NestedFieldValues,
 } from '@cg/shared-schema';
-import { Check, TriangleAlert } from 'lucide-react';
+import { TriangleAlert } from 'lucide-react';
 import { valueMatchesPattern, writeFieldDigits, type DigitSet } from '@cg/text-shaping';
 import { cx } from '../../cx.js';
 import { keyboardLanguage } from '../../keyboardLanguage.js';
 import { Button } from '../../ui/Button.js';
 import { Callout } from '../../ui/Callout.js';
 import { Icon } from '../../ui/Icon.js';
+import { DateTimeInput } from '../../ui/DateTimeInput.js';
 import { Select } from '../../ui/Select.js';
 import { useTypedNumber } from '../../ui/typedNumber.js';
 import { ListItemsEditor } from './ListItemsEditor.js';
+import { ListItemsDialog } from './ListItemsDialog.js';
 import type { ListItemColumn } from './repeater-columns.js';
 import * as s from './PreviewFieldForm.css.js';
 
@@ -57,31 +59,30 @@ export interface PreviewDispatch {
  */
 const EMPTY_PENDING: ReadonlySet<string> = new Set<string>();
 
+/** D-196 — an empty composition/Look namespace is not a Preview variable. */
+export function aggregateHasEditableFields(aggregate: AggregatedFields): boolean {
+  return (
+    aggregate.fields.length > 0 ||
+    aggregate.groups.some((group) => aggregateHasEditableFields(group.aggregate))
+  );
+}
+
 export function PreviewFieldForm({
   aggregate,
   values,
-  appliedValues,
   onChange,
   pendingPaths,
-  onUpdateField,
-  onUpdateItem,
   onUpdateAll,
   anyPending,
   dwellFieldIds,
   columnsByFieldId,
-  title = 'Data',
+  title = 'Variables',
 }: {
   aggregate: AggregatedFields;
   values: NestedFieldValues;
-  /** D-106 — the on-stage (applied) values, so `list` fields can mark per-item dirtiness. */
-  appliedValues?: NestedFieldValues;
   onChange: (path: string[], value: FieldValue) => void;
   /** D-106 — dotted leaf paths edited but not yet applied (show a pending indicator). */
   pendingPaths?: ReadonlySet<string>;
-  /** D-106 — apply one field's pending value to the stage. */
-  onUpdateField?: (path: string[]) => void;
-  /** D-106 follow-up — apply ONE item of a `list` field (per-input granularity). */
-  onUpdateItem?: (path: string[], itemId: string) => void;
   /** D-106 — apply ALL pending field values at once. */
   onUpdateAll?: () => void;
   /** D-106 — whether any field is pending (gates the "Update all" control). */
@@ -97,12 +98,9 @@ export function PreviewFieldForm({
     <AggregateSection
       aggregate={aggregate}
       values={values}
-      appliedValues={appliedValues ?? {}}
       path={[]}
       onChange={onChange}
       pendingPaths={pendingPaths ?? EMPTY_PENDING}
-      onUpdateField={onUpdateField}
-      onUpdateItem={onUpdateItem}
       onUpdateAll={onUpdateAll}
       anyPending={anyPending ?? false}
       title={title}
@@ -117,12 +115,9 @@ export function PreviewFieldForm({
 function AggregateSection({
   aggregate,
   values,
-  appliedValues,
   path,
   onChange,
   pendingPaths,
-  onUpdateField,
-  onUpdateItem,
   onUpdateAll,
   anyPending,
   title,
@@ -133,12 +128,9 @@ function AggregateSection({
 }: {
   aggregate: AggregatedFields;
   values: NestedFieldValues;
-  appliedValues: NestedFieldValues;
   path: string[];
   onChange: (path: string[], value: FieldValue) => void;
   pendingPaths: ReadonlySet<string>;
-  onUpdateField?: ((path: string[]) => void) | undefined;
-  onUpdateItem?: ((path: string[], itemId: string) => void) | undefined;
   onUpdateAll?: (() => void) | undefined;
   anyPending?: boolean | undefined;
   title: string;
@@ -152,7 +144,10 @@ function AggregateSection({
   const invalidCount = aggregate.fields.filter(
     (f) => validateField(f, scalarAt(values, f.id)) !== null,
   ).length;
-  const empty = aggregate.fields.length === 0 && aggregate.groups.length === 0;
+  const visibleGroups = aggregate.groups.filter((group) =>
+    aggregateHasEditableFields(group.aggregate),
+  );
+  const empty = aggregate.fields.length === 0 && visibleGroups.length === 0;
 
   return (
     <div className={depth > 0 ? s.group : undefined}>
@@ -176,11 +171,6 @@ function AggregateSection({
             </>
           )}
         </span>
-        {aggregate.fields.length > 0 && (
-          <span className={s.count}>
-            {String(aggregate.fields.length)} field{aggregate.fields.length === 1 ? '' : 's'}
-          </span>
-        )}
         {depth === 0 && onUpdateAll !== undefined && (
           <Button
             size="sm"
@@ -197,6 +187,13 @@ function AggregateSection({
           </Button>
         )}
       </div>
+
+      {depth === 0 && !empty && (
+        <div className={s.columns} aria-hidden="true">
+          <span>Variable</span>
+          <span>Value</span>
+        </div>
+      )}
 
       {duplicateKeys.length > 0 && (
         <Callout variant="danger" className={s.banner}>
@@ -223,33 +220,20 @@ function AggregateSection({
           value={scalarAt(values, f.id)}
           onChange={(v) => onChange([...path, f.id], v)}
           pending={pendingPaths.has([...path, f.id].join('.'))}
-          onUpdate={onUpdateField !== undefined ? () => onUpdateField([...path, f.id]) : undefined}
-          updateName={[...path, f.label || f.id].join('.')}
           showDwell={dwellFieldIds?.has(f.id) ?? false}
           columns={columnsByFieldId?.get(f.id)}
-          appliedItems={
-            f.type === 'list' ? listItems(scalarAt(appliedValues, f.id), f.default) : undefined
-          }
-          onUpdateItem={
-            onUpdateItem !== undefined
-              ? (itemId) => onUpdateItem([...path, f.id], itemId)
-              : undefined
-          }
           readOnly={fieldTakesFileSource(f) && fileSourcePolicyOf(f)?.inputMode === 'file-only'}
         />
       ))}
 
-      {aggregate.groups.map((g) => (
+      {visibleGroups.map((g) => (
         <AggregateSection
           key={g.instanceId}
           aggregate={g.aggregate}
           values={namespaceAt(values, g.name)}
-          appliedValues={namespaceAt(appliedValues, g.name)}
           path={[...path, g.name]}
           onChange={onChange}
           pendingPaths={pendingPaths}
-          onUpdateField={onUpdateField}
-          onUpdateItem={onUpdateItem}
           title={g.label ?? g.name}
           titleParts={g.labelParts}
           depth={depth + 1}
@@ -282,71 +266,39 @@ function FieldRow({
   value,
   onChange,
   pending,
-  onUpdate,
-  updateName,
   showDwell,
   columns,
-  appliedItems,
-  onUpdateItem,
   readOnly = false,
 }: {
   field: DynamicField;
   value: FieldValue | undefined;
   onChange: (v: FieldValue) => void;
   pending?: boolean | undefined;
-  onUpdate?: (() => void) | undefined;
-  updateName?: string | undefined;
   showDwell?: boolean | undefined;
   columns?: readonly ListItemColumn[] | undefined;
-  appliedItems?: readonly ListItem[] | undefined;
-  onUpdateItem?: ((itemId: string) => void) | undefined;
   readOnly?: boolean | undefined;
 }): JSX.Element {
   const error = validateField(field, value);
-  // D-106 follow-up — a `list` field applies PER ITEM (each item input carries its
-  // own Update inside the editor), so it shows no single per-field Update button.
-  const isList = field.type === 'list';
   return (
     <div className={cx(s.row, pending === true && s.rowPending)}>
       <label className={s.label} title={field.description}>
-        {field.label || field.id}
-        {field.required && <span className={s.required}> *</span>}
-        {readOnly && <span className={s.readOnlyTag}>file only</span>}
-        {pending === true && (
-          <span className={s.pendingTag} title="Edited — not yet applied to the stage">
-            pending
-          </span>
+        <span className={s.keyLine}>
+          <code className={s.key}>{field.id}</code>
+          {field.required && <span className={s.required}>*</span>}
+        </span>
+        {field.label !== '' && field.label !== field.id && (
+          <span className={s.friendlyLabel}>{field.label}</span>
         )}
+        {readOnly && <span className={s.readOnlyTag}>file only</span>}
       </label>
       {readOnly
         ? renderReadOnlyValue(field, value)
-        : renderInput(
-            field,
-            value,
-            onChange,
-            error !== null,
-            showDwell === true,
-            columns,
-            appliedItems,
-            onUpdateItem,
-          )}
+        : renderInput(field, value, onChange, error !== null, showDwell === true, columns)}
       {error !== null && (
         <span className={s.error} role="alert">
           <Icon icon={TriangleAlert} size={14} />
           {error}
         </span>
-      )}
-      {!readOnly && pending === true && onUpdate !== undefined && !isList && (
-        <Button
-          size="sm"
-          className={s.updateField}
-          onClick={onUpdate}
-          aria-label={`Update field ${updateName ?? field.label ?? field.id}`}
-          title="Apply this field to the stage"
-        >
-          <Icon icon={Check} size={13} />
-          Update
-        </Button>
       )}
     </div>
   );
@@ -370,6 +322,7 @@ function renderReadOnlyValue(field: DynamicField, value: FieldValue | undefined)
   return (
     <textarea
       className={cx(s.input, s.readOnlyValue)}
+      dir="auto"
       readOnly
       rows={field.type === 'multiline' ? 3 : 1}
       value={asString(value)}
@@ -384,8 +337,8 @@ function renderReadOnlyValue(field: DynamicField, value: FieldValue | undefined)
  * It was a native `type="number"` box, which drops every digit that is not ASCII before script
  * sees it: measured in Chromium, `۱۲٫۵` typed here previewed as `0`. The box now keeps the text
  * as typed, the one reader (`useTypedNumber`) decides the number, and only a NUMBER is handed on
- * — so the template still receives a JSON number, exactly as it does on air. A text that can never
- * be a number is refused in this form's own error line and changes nothing.
+ * — so the template still receives a JSON number, exactly as it does on air. Impossible numeric
+ * characters are refused at entry time; numeric range/choice errors keep their own error line.
  */
 function PreviewNumberInput({
   className,
@@ -494,8 +447,6 @@ function renderInput(
   invalid: boolean,
   showDwell = false,
   columns?: readonly ListItemColumn[],
-  appliedItems?: readonly ListItem[],
-  onUpdateItem?: (itemId: string) => void,
 ): JSX.Element {
   const cls = cx(s.input, invalid && s.inputInvalid);
   // A stable accessible name per field (label, else the data key) so the preview
@@ -593,13 +544,14 @@ function renderInput(
           aria-label={label}
         />
       );
-    case 'list':
+    case 'list': {
       // D-028 — the same items editor the ticker/sequence/repeater
       // inspectors use; every edit live-updates the stage. D-029 —
       // sequence-bound lists get the per-item dwell column. D-030 —
       // repeater-bound lists get one column per child field.
+      const RowsEditor = columns === undefined ? ListItemsEditor : ListItemsDialog;
       return (
-        <ListItemsEditor
+        <RowsEditor
           items={listItems(value, field.default)}
           label={label}
           showDwell={showDwell}
@@ -613,11 +565,33 @@ function renderInput(
           // `RUN-NEXT-VERSION-02` Q3 — a repeater's list stops at its row limit, as the Rows section does.
           maxItems={field.maxItems}
           onChange={(items) => onChange(items)}
-          appliedItems={appliedItems}
-          onUpdateItem={onUpdateItem}
         />
       );
+    }
     case 'text':
+      if (field.countdown !== undefined) {
+        const digits = fieldDigitsOf(field);
+        return (
+          <DateTimeInput
+            mode={field.countdown.target}
+            value={asString(value)}
+            onCommit={onChange}
+            ariaLabel={label}
+            digits={digits === 'as-typed' ? 'latin' : digits}
+          />
+        );
+      }
+      return (
+        <GrowTextarea
+          className={cls}
+          rows={1}
+          multiline={false}
+          value={asString(value)}
+          onChange={onChange}
+          label={label}
+          digits={fieldDigitsOf(field)}
+        />
+      );
     default:
       // D-106 — an auto-grow textarea so long values are fully visible (compact when short).
       return (

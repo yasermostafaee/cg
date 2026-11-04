@@ -13,6 +13,31 @@ export interface ResolveBindingContext {
 }
 
 /**
+ * D-193 — concise canvas guidance derived from the same field-type matrix as
+ * {@link resolveBinding}. This deliberately names element families rather than
+ * every property, so the author can scan it before moving the pointer.
+ */
+export function bindingTargetHint(field: Pick<DynamicField, 'type'>): string {
+  switch (field.type) {
+    case 'text':
+    case 'multiline':
+      return 'Text · Plate · Lottie text';
+    case 'image':
+      return 'Image';
+    case 'color':
+      return 'Shape · Text · Lottie shape';
+    case 'boolean':
+      return 'Any visible element';
+    case 'number':
+      return 'Any visible element';
+    case 'list':
+      return 'Ticker · Sequence · Repeater';
+    case 'select':
+      return 'No automatic canvas target';
+  }
+}
+
+/**
  * Best-effort default binding for a (field, element) pair.
  *
  * The Designer's "bind from canvas" workflow picks the most natural
@@ -184,6 +209,6 @@ export function describeBinding(binding: FieldBinding, nameOf?: (id: string) => 
       // D-137 — name the ROLE, always. "live source id on Guest box" would read the
       // same for the fill and the key, and a key bound where a fill was meant is a
       // hole that stays empty on air with the binding row looking correct.
-      return `live source ${t.role} id ${on(t.elementId)}`;
+      return `plate ${t.role} id ${on(t.elementId)}`;
   }
 }

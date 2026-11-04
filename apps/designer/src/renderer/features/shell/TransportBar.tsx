@@ -12,6 +12,11 @@ import {
 } from 'lucide-react';
 import { activeRangeOf, hasSoundEffects, type Scene } from '@cg/shared-schema';
 import { resumeCanvasSound } from '../canvas/canvasSound.js';
+import {
+  canvasDisplayFrame,
+  canvasDisplayLimitMs,
+  rootUsesAuthoredFrameClock,
+} from '../fields/preview-elapsed.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { cx } from '../../cx.js';
 import { Button } from '../../ui/Button.js';
@@ -44,12 +49,13 @@ type LoopMode = 'off' | 'loop' | 'bounce';
  */
 export function TransportBar({ scene }: Props): JSX.Element {
   const currentFrame = useDesignerSelector((s) => s.currentFrame);
+  const playing = useDesignerSelector((s) => s.timelinePlaying);
+  const playbackMode = useDesignerSelector((s) => s.timelinePlaybackMode);
   // Playback is bounded by the active region (the resized scene bar), while
   // the readout keeps showing the scene's full total so the operator still
   // sees the kept frame count.
   const { in: frameIn, out: frameOut } = activeRangeOf(scene);
   const totalOut = scene.frameRange.out;
-  const [playing, setPlaying] = useState(false);
   /*
     DELTA-RUN-NEXT-VERSION-01-G — Play on the timeline plays the sounds at their places (the canvas
     page auditions them); scrubbing and stepping stay silent. The store carries "playing" to the
@@ -57,14 +63,13 @@ export function TransportBar({ scene }: Props): JSX.Element {
   */
   const soundMuted = useDesignerSelector((st) => st.soundMuted);
   const hasSound = useMemo(() => hasSoundEffects(scene, scene.compositions), [scene]);
-  useEffect(() => {
-    designerStore.setTimelinePlaying(playing);
-  }, [playing]);
-  useEffect(() => () => designerStore.setTimelinePlaying(false), []);
+  useEffect(() => () => designerStore.setTimelinePlayback(null, false), []);
   const [loopMode, setLoopMode] = useState<LoopMode>('off');
   const [hovered, setHovered] = useState<string | null>(null);
   const lastWallRef = useRef<number>(0);
   const accumRef = useRef<number>(0);
+  const lifecycleDisplayElapsedRef = useRef<number>(0);
+  const lifecycleDisplayWallRef = useRef<number>(0);
   const directionRef = useRef<1 | -1>(1);
   // Direction the current play was started in (L = forward, J = backward), so
   // the rAF loop doesn't always reset to forward.
@@ -77,12 +82,14 @@ export function TransportBar({ scene }: Props): JSX.Element {
   const loopModeRef = useRef<LoopMode>(loopMode);
   loopModeRef.current = loopMode;
 
-  // Advance currentFrame at scene.frameRate while playing. The tick
+  // Advance currentFrame at scene.frameRate only for the explicit PLAYHEAD path (reverse,
+  // Preview loop, ping-pong). D-175 ordinary forward Play is owned by the runtime lifecycle;
+  // CanvasArea reflects the runtime's root frame into this same store instead.
   // reads the latest currentFrame from the store rather than closing
   // over a stale prop, so React re-renders never reset the playhead
   // mid-loop.
   useEffect(() => {
-    if (!playing) return;
+    if (!playing || playbackMode !== 'playhead') return;
     directionRef.current = playDirRef.current;
     let raf = 0;
     const tick = (now: number): void => {
@@ -120,7 +127,7 @@ export function TransportBar({ scene }: Props): JSX.Element {
       }
       designerStore.setCurrentFrame(next);
       if (stop) {
-        setPlaying(false);
+        designerStore.setTimelinePlayback(null, false);
         return;
       }
       raf = requestAnimationFrame(tick);
@@ -131,17 +138,88 @@ export function TransportBar({ scene }: Props): JSX.Element {
       lastWallRef.current = 0;
       accumRef.current = 0;
     };
-  }, [playing, scene.frameRate, frameIn, frameOut]);
+  }, [playing, playbackMode, scene.frameRate, frameIn, frameOut]);
+
+  const authoredLifecycleClock = useMemo(() => rootUsesAuthoredFrameClock(scene), [scene]);
+  const authoredLifecycleLimitMs = useMemo(() => canvasDisplayLimitMs(scene), [scene]);
+
+  // B-380 — Runtime intentionally paints an empty/static leg only at its boundaries. Keep that
+  // optimisation, but do not expose it as an instantaneous jump in the authoring timeline. This
+  // display-only clock changes `currentFrame`; CanvasArea marks those updates runtime-owned, so no
+  // scrub/tick is fed back into the lifecycle controller.
+  useEffect(() => {
+    if (playbackMode !== 'lifecycle') {
+      lifecycleDisplayElapsedRef.current = 0;
+      lifecycleDisplayWallRef.current = 0;
+      return;
+    }
+    if (!playing || !authoredLifecycleClock) {
+      lifecycleDisplayWallRef.current = 0;
+      return;
+    }
+
+    let raf = 0;
+    const tick = (now: number): void => {
+      const previous = lifecycleDisplayWallRef.current;
+      lifecycleDisplayWallRef.current = now;
+      if (previous !== 0) lifecycleDisplayElapsedRef.current += now - previous;
+      designerStore.setCurrentFrame(
+        canvasDisplayFrame(
+          scene,
+          designerStore.get().currentFrame,
+          lifecycleDisplayElapsedRef.current,
+        ),
+      );
+      if (
+        authoredLifecycleLimitMs !== null &&
+        lifecycleDisplayElapsedRef.current >= authoredLifecycleLimitMs
+      ) {
+        designerStore.setCurrentFrame(frameOut);
+        designerStore.setTimelinePlayback(null, false);
+        return;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(raf);
+      lifecycleDisplayWallRef.current = 0;
+    };
+  }, [authoredLifecycleClock, authoredLifecycleLimitMs, frameOut, playbackMode, playing, scene]);
 
   function toggleLoop(mode: 'loop' | 'bounce'): void {
     setLoopMode((m) => (m === mode ? 'off' : mode));
+    // Preserve the shipped mid-play toggle: enabling either authoring mode immediately hands the
+    // visible playhead back to the rAF path. The iframe tears down the active lifecycle on the first
+    // ensuing non-runtime scrub, so content drivers are not reset by each wrap.
+    if (designerStore.get().timelinePlaying) {
+      designerStore.setTimelinePlayback('playhead', true);
+    }
   }
 
   function playDir(dir: 1 | -1): void {
     playDirRef.current = dir;
     // Inside the user's gesture: make the canvas page's sound output run before any sound plays.
     resumeCanvasSound();
-    setPlaying(true);
+    const mode: 'lifecycle' | 'playhead' =
+      dir === 1 && loopModeRef.current === 'off' ? 'lifecycle' : 'playhead';
+    const previousMode = designerStore.get().timelinePlaybackMode;
+    if (mode === 'lifecycle' && previousMode !== 'lifecycle' && authoredLifecycleClock) {
+      lifecycleDisplayElapsedRef.current = 0;
+      lifecycleDisplayWallRef.current = 0;
+      designerStore.setCurrentFrame(frameIn);
+    }
+    designerStore.setTimelinePlayback(mode, true);
+  }
+
+  function pausePlayback(): void {
+    const currentMode = designerStore.get().timelinePlaybackMode;
+    if (currentMode !== null) designerStore.setTimelinePlayback(currentMode, false);
+  }
+
+  function leavePlaybackAt(frame: number): void {
+    designerStore.setTimelinePlayback(null, false);
+    designerStore.setCurrentFrame(frame);
   }
 
   // J / K / L transport (video-editor convention): L = play forward, J = play
@@ -160,18 +238,16 @@ export function TransportBar({ scene }: Props): JSX.Element {
       const k = e.code;
       if (k === 'KeyK') {
         kHeldRef.current = true;
-        setPlaying(false);
+        pausePlayback();
       } else if (k === 'KeyL') {
         if (kHeldRef.current) {
-          setPlaying(false);
-          designerStore.setCurrentFrame(designerStore.get().currentFrame + 1);
+          leavePlaybackAt(designerStore.get().currentFrame + 1);
         } else {
           playDir(1);
         }
       } else if (k === 'KeyJ') {
         if (kHeldRef.current) {
-          setPlaying(false);
-          designerStore.setCurrentFrame(designerStore.get().currentFrame - 1);
+          leavePlaybackAt(designerStore.get().currentFrame - 1);
         } else {
           playDir(-1);
         }
@@ -211,7 +287,7 @@ export function TransportBar({ scene }: Props): JSX.Element {
           variant="bare"
           className={btnClass('start')}
           {...hoverProps('start')}
-          onClick={() => designerStore.setCurrentFrame(frameIn)}
+          onClick={() => leavePlaybackAt(frameIn)}
           aria-label="Go to start"
           title="Go to start"
         >
@@ -221,7 +297,7 @@ export function TransportBar({ scene }: Props): JSX.Element {
           variant="bare"
           className={btnClass('back')}
           {...hoverProps('back')}
-          onClick={() => designerStore.setCurrentFrame(currentFrame - 1)}
+          onClick={() => leavePlaybackAt(currentFrame - 1)}
           aria-label="Step back"
           title="Step back one frame"
         >
@@ -232,7 +308,7 @@ export function TransportBar({ scene }: Props): JSX.Element {
           className={btnClass('play')}
           {...hoverProps('play')}
           onClick={() => {
-            if (playing) setPlaying(false);
+            if (playing) pausePlayback();
             else playDir(1);
           }}
           aria-label={playing ? 'Pause' : 'Play'}
@@ -244,7 +320,7 @@ export function TransportBar({ scene }: Props): JSX.Element {
           variant="bare"
           className={btnClass('fwd')}
           {...hoverProps('fwd')}
-          onClick={() => designerStore.setCurrentFrame(currentFrame + 1)}
+          onClick={() => leavePlaybackAt(currentFrame + 1)}
           aria-label="Step forward"
           title="Step forward one frame"
         >

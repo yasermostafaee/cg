@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, Link2 } from 'lucide-react';
+import { Link2 } from 'lucide-react';
 import { writeDigitsInto } from '@cg/gesture';
 import {
   FieldDigitsSchema,
@@ -46,7 +46,7 @@ export interface CompositionChoice {
  * SECONDS, stored as `dwellMs`; blank = the element's default dwell), for
  * sequence contexts in both the inspector and the preview form.
  */
-interface Props {
+export interface ListItemsEditorProps {
   items: readonly ListItem[];
   onChange: (items: ListItem[]) => void;
   /** Accessible-name base, e.g. the field label ("Headlines item 2"). */
@@ -87,15 +87,6 @@ interface Props {
    */
   itemDataKey?: (itemId: string) => string;
   onItemDataKey?: (itemId: string, key: string) => boolean;
-  /**
-   * D-106 follow-up — PREVIEW form only: a PER-ITEM Update button (matching the
-   * per-field one), so each item input applies independently. `appliedItems` is
-   * the on-stage list (an item is "dirty" when its value differs from its
-   * same-id applied item); `onUpdateItem` applies ONLY that item to the stage.
-   * Absent (inspector / authoring contexts, which edit live) ⇒ no per-item Update.
-   */
-  appliedItems?: readonly ListItem[] | undefined;
-  onUpdateItem?: ((itemId: string) => void) | undefined;
   /**
    * `TEXT-DIGITS-01` — the Digits the items' TEXT is typed in (a bound list field's, or the ticker's
    * / sequence's own): each box shows its text in them and writes each digit as it is typed, the
@@ -516,24 +507,15 @@ export function ListItemsEditor({
   compositions,
   itemDataKey,
   onItemDataKey,
-  appliedItems,
-  onUpdateItem,
   digits,
   itemDigits,
   onItemDigits,
   maxItems,
   comfortable = false,
-}: Props): JSX.Element {
+}: ListItemsEditorProps): JSX.Element {
   const atLimit = maxItems !== undefined && items.length >= maxItems;
   /** The Digits an item's text box writes: its own bound field's, else the list's / element's. */
   const digitsFor = (item: ListItem): FieldDigits | undefined => itemDigits?.(item.id) ?? digits;
-  // D-106 follow-up — an item is edited-but-unapplied when its value differs from
-  // the same-id on-stage item (a brand-new item, with no applied twin, is dirty).
-  const itemDirty = (item: ListItem): boolean => {
-    if (onUpdateItem === undefined) return false;
-    const applied = appliedItems?.find((a) => a.id === item.id);
-    return JSON.stringify(item) !== JSON.stringify(applied ?? null);
-  };
   const move = (from: number, to: number): void => {
     if (to < 0 || to >= items.length) return;
     const next = [...items];
@@ -544,7 +526,14 @@ export function ListItemsEditor({
   };
 
   return (
-    <div className={cx(s.list, comfortable && s.comfortableList)}>
+    <div
+      className={cx(
+        s.list,
+        comfortable && s.comfortableList,
+        columns !== undefined && s.structuredList,
+      )}
+      data-structured-rows={columns === undefined ? undefined : ''}
+    >
       {items.length === 0 && <p className={s.empty}>No items yet — add the first one.</p>}
       {items.map((item, i) => {
         const dwellInput = showDwell ? (
@@ -561,22 +550,6 @@ export function ListItemsEditor({
         ) : null;
         const controls = (
           <>
-            {onUpdateItem !== undefined && (
-              <Control
-                variant="primary"
-                size="sm"
-                title={
-                  itemDirty(item)
-                    ? 'Apply this item to the stage'
-                    : 'No unsaved change for this item'
-                }
-                aria-label={`Update ${label} item ${String(i + 1)}`}
-                disabled={!itemDirty(item)}
-                onClick={() => onUpdateItem(item.id)}
-              >
-                <Icon icon={Check} size={12} />
-              </Control>
-            )}
             <Control
               size="sm"
               title="Move up"

@@ -21,6 +21,8 @@ authored or exported reliably.
   generated-workbook flow in CG Control behind the normal Update action.
 - Keep structured rows usable when the child has many fields: every surface shows the actual field
   title and preserves a practical cell width instead of squeezing columns into unreadable slivers.
+- Open Repeater rows from a compact Inspector/Preview action into a shared modal; use one horizontal
+  scroll for the entire table instead of separate scrollbars on individual rows.
 - Persist independent values for each composition page in an outer Sequence and manage all rows and
   its JSON/CSV source from a roomy modal in that Sequence's own Inspector, not the Variables table.
 - Generate a self-documenting, loadable JSON sample from the actual Sequence schema so another

@@ -205,6 +205,7 @@ function applyOne(
     case 'text': {
       const el = elementMap.get(target.elementId);
       if (!el) return;
+      if (el.dataset['cgRowNumber'] === '1') return;
       let stringValue = boundText(raw, rule?.field, binding.transform);
       // Cap to the field's maxLength by code point (so a surrogate pair or a
       // ZWNJ counts as one and isn't split); the element's own fit mode then

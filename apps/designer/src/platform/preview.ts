@@ -282,11 +282,21 @@ export class Preview {
         let runtime = null;
         let currentFields = {};
         let currentFrame = 0;
+        // D-182/D-175 — both Preview and lifecycle-playing canvas read the root controller's REAL
+        // frame. Deduplicate integer frames here (rAF may paint the same 50 fps frame more than
+        // once on a 60 Hz display) before crossing the iframe boundary.
+        let lastReportedRootFrame = null;
         // D-106 — true while the preview is on-air (play → stop/out). A field UPDATE must
         // not re-tick the controller-owned held frame during playback — that would slam
-        // the animated/background elements back to the scrubbed frame (0). The canvas
-        // never plays, so it keeps re-ticking after an update.
+        // the animated/background elements back to the scrubbed frame (0). A canvas in static or
+        // playhead-only authoring mode still re-ticks; D-175's lifecycle canvas does not.
         let playing = false;
+        // D-175 — the existing playing flag describes update/scrub ownership, not the whole
+        // lifecycle (it stays true while paused and becomes false before the outro completes).
+        // Keep lifecycle ownership separately: a manual scrub then rebuilds the authoring runtime
+        // once before positioning its requested frame.
+        let lifecycleActive = false;
+        let lifecyclePaused = false;
         let busy = false;
         let pendingScene = null;
         // B-091 — a 'lottie-assets' map that arrived DURING playback. Mounting a Lottie
@@ -342,14 +352,18 @@ export class Preview {
         // the REAL driver, thresholds and transitions. Never stored, never exported. It also
         // speeds the lifecycle timing of this preview run, which is honest: it is a rehearsal.
         let clockRate = 1;
+        let rehearsalTime = undefined;
         // DELTA-RUN-NEXT-VERSION-01-A — the steps SHOWN for rehearsal, by countdown id, through the
         // runtime's own rehearseStep (the same latch, stylesheet and effects the live steps use).
         // A countdown not in the map follows its own remaining time.
         const rehearsedSteps = new Map();
         function rehearsalClock(rate) {
           if (!(rate > 1)) return undefined;
-          const t0 = Date.now();
+          let t0 = Date.now();
           return {
+            // A fresh Play rehearses from the real present, not the previous run's
+            // accelerated future. Resume deliberately keeps its existing time base.
+            restart: () => { t0 = Date.now(); },
             now: () => t0 + (Date.now() - t0) * rate,
             setTimeout: (cb, ms) => window.setTimeout(cb, ms / rate),
             clearTimeout: (handle) => window.clearTimeout(handle),
@@ -624,6 +638,17 @@ export class Preview {
             /* a diagnostic must never throw over the thing it is reporting */
           }
         }
+
+        function postRootFrame(frame) {
+          if (!Number.isFinite(frame)) return;
+          const value = Math.round(frame);
+          if (value === lastReportedRootFrame) return;
+          lastReportedRootFrame = value;
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ kind: 'cg-preview-frame', frame: value }, '*');
+          }
+        }
+
         // play / update / stop / out / next are delivered through the CasparCG globals
         // installCasparGlobals(runtime) installs at the end of every applyScene. Those
         // branches used to be GATED on 'typeof window.<name> === "function"', a guard that
@@ -675,6 +700,7 @@ export class Preview {
             // both so the next createRuntime starts clean.
             document.body.classList.remove('cg-removed');
             document.body.classList.remove('cg-pending');
+            rehearsalTime = rehearsalClock(clockRate);
             runtime = createRuntime(scene, {
               // D-137 §9 — this ONE document serves BOTH authoring surfaces: the
               // editor canvas (authoring=true) and the Preview modal
@@ -699,18 +725,44 @@ export class Preview {
               // player per Lottie element from this map.
               lottieAssets: lottieAssets,
               // D-141 — the rehearsal clock, only while a rate above 1 is chosen.
-              ...(clockRate > 1 ? { clock: rehearsalClock(clockRate) } : {}),
+              ...(rehearsalTime ? { clock: rehearsalTime } : {}),
+              // D-182 — lifecycle frame truth (hold freeze, outro continuation and loop wrap)
+              // comes from the root controller, not from the host's elapsed wall clock.
+              onRootFrame: postRootFrame,
             });
             installCasparGlobals(runtime);
             // Session Z — the runtime's OWN diagnostics reach the parent console on the
             // same channel. An invariant break such as 'lifecycle.play-not-on-air' is the
             // whole difference between "the buttons are dead" and a named cause.
             if (typeof runtime.on === 'function') {
+              const observedRuntime = runtime;
               runtime.on('error', (e) => {
                 postPreviewError(
                   'runtime.error',
                   (e && e.code ? e.code : '?') + ': ' + (e && e.message ? e.message : ''),
                 );
+              });
+              // D-173 — the host owns the elapsed display. stop.end is emitted for both an
+              // operator Stop and a natural auto/content-driven completion, so the clock settles
+              // truthfully without polling or guessing a duration from authored frames.
+              runtime.on('stop.end', () => {
+                // A removed runtime can finish an abandoned async leg after a rebuild. It must not
+                // settle the current transport or rebuild the current canvas a second time.
+                if (runtime !== observedRuntime) return;
+                const restoreAuthoring = REVEAL_ON_LOAD && lifecycleActive;
+                playing = false;
+                lifecycleActive = false;
+                lifecyclePaused = false;
+                if (window.parent && window.parent !== window) {
+                  window.parent.postMessage(
+                    { kind: 'cg-preview-state', state: 'stopped' },
+                    '*',
+                  );
+                }
+                // Preview correctly stays blank after Stop. The main editing canvas restores its
+                // visible authoring frame after the outro, preserving the canvas-only exception in
+                // the living lifecycle spec while still showing the complete close animation.
+                if (restoreAuthoring && currentScene) void applyScene(currentScene);
               });
             }
             await runtime.ready;
@@ -1000,6 +1052,8 @@ export class Preview {
           (async () => {
             try {
               if (msg.action === 'scene-replace' && msg.scene) {
+                const restartCanvasLifecycle = REVEAL_ON_LOAD && lifecycleActive;
+                const restartCanvasPaused = lifecyclePaused;
                 // D-071 — the content-grown frame inset rides the scene-replace message
                 // (same rAF-throttled channel); update the CSS vars on :root so the
                 // recreated .cg-stage picks up the new offset with no reload.
@@ -1029,6 +1083,19 @@ export class Preview {
                     ? msg.scopeOverrides
                     : undefined;
                 await applyScene(msg.scene);
+                // D-175 — authoring edits rebuild the page. If the canvas was in its real
+                // lifecycle path, restart the fresh runtime so the host never claims Play while
+                // showing a static replacement. Dedicated Preview retains its existing path.
+                if (restartCanvasLifecycle && runtime) {
+                  lifecycleActive = true;
+                  lifecyclePaused = false;
+                  playing = true;
+                  await runtime.play(currentFields);
+                  if (restartCanvasPaused) {
+                    runtime.pause();
+                    lifecyclePaused = true;
+                  }
+                }
               } else if (msg.action === 'asset-urls' && msg.assetUrls) {
                 replaceAssetUrls(msg.assetUrls);
                 applyAssetUrls();
@@ -1108,10 +1175,25 @@ export class Preview {
                 // playhead moves an animated shape off-frame; re-inset .cg-stage live.
                 applyFrameOffset(msg.frameOffset);
                 currentFrame = msg.frame;
-                if (runtime) runtime.tick(currentFrame);
+                if (msg.runtimeOwned !== true) {
+                  // Leaving lifecycle playback for a scrub/reverse/Preview-loop frame must first
+                  // restore a static authoring runtime. Otherwise positioned media drivers reject
+                  // the tick because they still own an active/held lifecycle frame.
+                  if (REVEAL_ON_LOAD && lifecycleActive && currentScene) {
+                    lifecycleActive = false;
+                    lifecyclePaused = false;
+                    playing = false;
+                    await applyScene(currentScene);
+                  }
+                  if (runtime) runtime.tick(currentFrame);
+                }
                 // DELTA-RUN-NEXT-VERSION-01-G — the timeline's Play sounds each sound at its place;
                 // a scrub, a step or a stopped playhead (playing false) is silent.
-                if (runtime && typeof runtime.auditionSounds === 'function') {
+                if (
+                  msg.runtimeOwned !== true &&
+                  runtime &&
+                  typeof runtime.auditionSounds === 'function'
+                ) {
                   runtime.auditionSounds({ playing: msg.playing === true, frame: currentFrame });
                 }
               } else if (msg.action === 'play') {
@@ -1127,7 +1209,12 @@ export class Preview {
                 const playFn = controlFn('play');
                 if (playFn === null) reportDroppedControl('play');
                 else {
+                  // Preview-only: do not shift any target or alter real-time/on-air clocks.
+                  // An actually past absolute deadline remains past after this rebase.
+                  if (rehearsalTime) rehearsalTime.restart();
                   playing = true;
+                  lifecycleActive = true;
+                  lifecyclePaused = false;
                   playFn(JSON.stringify(currentFields));
                 }
                 // B-029 — do NOT re-tick currentFrame here. During playback the
@@ -1186,9 +1273,17 @@ export class Preview {
                 }
               } else if (msg.action === 'pause') {
                 // D-020 — freeze the lifecycle (intro / hold countdown / outro).
-                if (runtime && typeof runtime.pause === 'function') runtime.pause();
+                if (runtime && typeof runtime.pause === 'function') {
+                  runtime.pause();
+                  lifecyclePaused = true;
+                }
               } else if (msg.action === 'resume') {
-                if (runtime && typeof runtime.resume === 'function') runtime.resume();
+                if (runtime && typeof runtime.resume === 'function') {
+                  runtime.resume();
+                  playing = true;
+                  lifecycleActive = true;
+                  lifecyclePaused = false;
+                }
               } else if (msg.action === 'reset') {
                 // Re-seed every field to its declared default. update() merges, so
                 // a replace-mode update is what clears omitted keys back to default.

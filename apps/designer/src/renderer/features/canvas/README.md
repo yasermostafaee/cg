@@ -626,6 +626,14 @@ routine — one implementation, so "import verified it" ⇒ "the canvas renders 
 
 ## Testing
 
+Ordinary forward transport uses the iframe runtime lifecycle (`play` / `pause` / `resume`).
+`timelinePlaybackMode` distinguishes it from reverse, Preview loop and ping-pong, which remain
+playhead-only authoring operations. Root frame reports update the store without feeding another
+scrub tick back to the running controller. Empty/static roots use the shared authored display
+projection in `fields/preview-elapsed.ts`, preserving Runtime's collapsed-paint optimisation.
+Manual scrubbing leaves lifecycle mode before positioning media. Natural completion restores the
+static authoring scene and re-arms a fresh Play.
+
 - **Unit (pure logic):** `geometry.ts`, `hit-test.ts`, `drill.ts` are in the Vitest
   coverage scope (`apps/designer/vitest.config.ts`). See
   [`tests/canvas-geometry.test.ts`](../../../../tests/canvas-geometry.test.ts),

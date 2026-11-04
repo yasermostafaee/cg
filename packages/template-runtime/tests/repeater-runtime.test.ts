@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { Composition, Element, Playout, Scene } from '@cg/shared-schema';
 import { createRuntime } from '../src/runtime.js';
 import { buildScene, clampRowCount } from '../src/scene-builder.js';
+import { repeaterDriverFor } from '../src/repeater-driver.js';
 
 /**
  * D-030 — repeater: stamped rows are REAL nested scopes (D-025/D-026 by
@@ -31,6 +32,9 @@ function makeClock() {
     clearTimeout: (h: unknown) => {
       const i = timers.findIndex((t) => t.id === h);
       if (i >= 0) timers.splice(i, 1);
+    },
+    elapseWithoutFrames: (delta: number) => {
+      ms += delta;
     },
     advance: (delta: number) => {
       ms += delta;
@@ -559,6 +563,352 @@ describe('D-197 — ordered row entrances', () => {
 });
 
 describe('repeater — rows are real scopes (lifecycle by reuse)', () => {
+  it('settles a completed exit when paused before the final animation frame arrives', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      repeaterScene({
+        element: { itemExit: 'fade', itemTransitionMs: 400, itemStaggerMs: 100 },
+        playout: { mode: 'manual' },
+      }),
+      { skipFontLoad: true, clock },
+    );
+    await runtime.play({});
+    await run(clock, 1000);
+    let settled = false;
+    const closing = runtime.stop().then(() => {
+      settled = true;
+    });
+    for (let i = 0; i < 8; i += 1) await Promise.resolve();
+    clock.elapseWithoutFrames(650);
+    runtime.pause();
+    runtime.resume();
+    await run(clock, 1000);
+    expect(settled).toBe(true);
+    await closing;
+    runtime.remove();
+    expect(clock.pendingTimers()).toBe(0);
+  });
+
+  it('moves the alternating row fill with its row instead of leaving empty stripes behind', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      repeaterScene({
+        element: {
+          itemEntrance: 'fade',
+          itemExit: 'fade',
+          itemStaggerMs: 200,
+          alternatingRowFill: '#FFFFFF20',
+        },
+        playout: { mode: 'manual' },
+      }),
+      { skipFontLoad: true, clock },
+    );
+    await runtime.play({});
+    expect(cells()[1]?.style.backgroundColor).toBe('');
+    expect(motions()[1]?.style.backgroundColor).not.toBe('');
+    expect(motions()[1]?.style.visibility).toBe('hidden');
+    await run(clock, 1000);
+    const closing = runtime.stop();
+    await run(clock, 700);
+    expect(motions()[1]?.style.visibility).toBe('hidden');
+    expect(cells()[1]?.style.backgroundColor).toBe('');
+    await run(clock, 1000);
+    await closing;
+    runtime.remove();
+  });
+
+  it.each(['forward', 'reverse'] as const)(
+    'exits %s from an interrupted entrance without revealing rows that never entered',
+    async (itemExitOrder) => {
+      const clock = makeClock();
+      const runtime = createRuntime(
+        repeaterScene({
+          element: {
+            itemEntrance: 'fade-right',
+            itemExit: 'fade-left',
+            itemExitOrder,
+            itemTransitionMs: 400,
+            itemStaggerMs: 200,
+          },
+          playout: { mode: 'manual' },
+        }),
+        { skipFontLoad: true, clock },
+      );
+      await runtime.play({});
+      await run(clock, 100, 50);
+      const first = motions()[0];
+      const initialOpacity = Number(first?.style.opacity);
+      const initialTransform = first?.style.transform;
+      expect(initialOpacity).toBeGreaterThan(0);
+      expect(initialOpacity).toBeLessThan(1);
+      const closing = runtime.stop();
+      for (let i = 0; i < 6; i += 1) await Promise.resolve();
+      expect(first?.style.transform).toBe(initialTransform);
+      expect(Number(first?.style.opacity)).toBeCloseTo(initialOpacity);
+      await run(clock, 200, 50);
+      expect(Number(first?.style.opacity)).toBeLessThan(initialOpacity);
+      expect(
+        motions()
+          .slice(1)
+          .every((node) => node.style.visibility === 'hidden'),
+      ).toBe(true);
+      await run(clock, 1000);
+      await closing;
+      await runtime.play({});
+      await run(clock, 1000);
+      expect(motions().every((node) => node.style.visibility !== 'hidden')).toBe(true);
+      runtime.remove();
+      expect(clock.pendingRafs()).toBe(0);
+      expect(clock.pendingTimers()).toBe(0);
+    },
+  );
+
+  it.each(
+    (['left', 'right', 'top', 'bottom'] as const).flatMap((itemEntrance) =>
+      (['forward', 'reverse'] as const).map((itemExitOrder) => ({ itemEntrance, itemExitOrder })),
+    ),
+  )(
+    'does not reveal a fully clipped $itemEntrance row on immediate $itemExitOrder Stop',
+    async ({ itemEntrance, itemExitOrder }) => {
+      const clock = makeClock();
+      const runtime = createRuntime(
+        {
+          ...repeaterScene({
+            element: {
+              itemEntrance,
+              itemExit: 'fade',
+              itemExitOrder,
+              itemTransitionMs: 400,
+              itemStaggerMs: 200,
+            },
+            playout: { mode: 'manual' },
+          }),
+        },
+        { skipFontLoad: true, clock },
+      );
+      await runtime.play({});
+      // A pure slide starts with opacity 1, but its entire box is still outside the clipped cell.
+      expect(Number(motions()[0]?.style.opacity)).toBe(1);
+      const driver = repeaterDriverFor(host());
+      if (driver === undefined) throw new Error('Repeater driver missing');
+      // Exercise the element-outro seam without letting an immediate parent settle hide a flash.
+      const closing = driver.playOutro();
+      for (let i = 0; i < 8; i += 1) await Promise.resolve();
+      await run(clock, 200, 50);
+      expect(motions().every((node) => node.style.visibility === 'hidden')).toBe(true);
+      await run(clock, 1000);
+      await closing;
+      runtime.remove();
+      expect(clock.pendingTimers()).toBe(0);
+      expect(clock.pendingRafs()).toBe(0);
+    },
+  );
+
+  it('awaits last-to-first row exits before the background closes, preserving pause and replay', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      repeaterScene({
+        element: { itemExit: 'fade-left', itemTransitionMs: 400, itemStaggerMs: 100 },
+        playout: { mode: 'manual' },
+      }),
+      { skipFontLoad: true, clock },
+    );
+    await runtime.play({});
+    await run(clock, 1000);
+    let settled = false;
+    const stopping = runtime.stop().then(() => {
+      settled = true;
+    });
+    await run(clock, 150, 50);
+    expect(settled).toBe(false);
+    expect(Number(motions()[0]?.style.opacity)).toBe(1);
+    expect(Number(motions()[2]?.style.opacity)).toBeLessThan(1);
+    expect(Number(motions()[1]?.style.opacity)).toBeGreaterThan(
+      Number(motions()[2]?.style.opacity),
+    );
+    const pose = motions().map((node) => node.style.opacity);
+    runtime.pause();
+    await run(clock, 1000);
+    expect(motions().map((node) => node.style.opacity)).toEqual(pose);
+    runtime.resume();
+    await run(clock, 500);
+    await stopping;
+    expect(settled).toBe(true);
+    await runtime.play({});
+    expect(motions().every((node) => node.style.visibility !== 'hidden')).toBe(true);
+    runtime.remove();
+    expect(clock.pendingRafs()).toBe(0);
+    expect(clock.pendingTimers()).toBe(0);
+  });
+
+  it('settles an in-flight row exit when removed', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      repeaterScene({
+        element: { itemExit: 'fade', itemTransitionMs: 400, itemStaggerMs: 100 },
+        playout: { mode: 'manual' },
+      }),
+      { skipFontLoad: true, clock },
+    );
+    await runtime.play({});
+    const stopping = runtime.stop();
+    await run(clock, 100);
+    runtime.remove();
+    await stopping;
+    expect(clock.pendingRafs()).toBe(0);
+    expect(clock.pendingTimers()).toBe(0);
+  });
+
+  it('skips hidden surplus rows in the reverse exit and keeps regrowth hidden until replay', async () => {
+    const clock = makeClock();
+    const rows = Array.from({ length: 18 }, (_, index) => ({
+      id: `r${index}`,
+      name: `Row ${index}`,
+    }));
+    const runtime = createRuntime(
+      repeaterScene({
+        ...BOUND,
+        element: { itemExit: 'fade', itemTransitionMs: 400, itemStaggerMs: 70 },
+        playout: { mode: 'manual' },
+      }),
+      { skipFontLoad: true, clock },
+    );
+    await runtime.play({ rows });
+    await run(clock, 1000);
+    await runtime.update({ rows: rows.slice(0, 3) });
+    let settled = false;
+    const closing = runtime.stop().then(() => {
+      settled = true;
+    });
+    await run(clock, 50, 10);
+    expect(Number(motions()[2]?.style.opacity)).toBeLessThan(1);
+    expect(Number(motions()[0]?.style.opacity)).toBe(1);
+    await runtime.update({ rows });
+    expect(
+      motions()
+        .slice(3)
+        .every((node) => node.style.visibility === 'hidden'),
+    ).toBe(true);
+    await run(clock, 600, 50);
+    expect(settled).toBe(true);
+    await closing;
+    await runtime.play({ rows });
+    expect(visibleCells()).toHaveLength(18);
+    expect(motions().every((node) => node.style.visibility !== 'hidden')).toBe(true);
+    runtime.remove();
+  });
+
+  it('uses a separate exit duration in playback and scrubbing while preserving entrance duration', async () => {
+    const clock = makeClock();
+    const scene = repeaterScene({
+      element: {
+        itemEntrance: 'fade',
+        itemExit: 'fade',
+        itemTransitionMs: 800,
+        itemExitTransitionMs: 200,
+        itemStaggerMs: 100,
+      },
+      playout: { mode: 'manual' },
+    });
+    scene.lifecycle = { outPoint: 50 };
+    const runtime = createRuntime(scene, { skipFontLoad: true, clock });
+    runtime.tick(20);
+    expect(Number(motions()[0]?.style.opacity)).toBeCloseTo(0.5, 1);
+    runtime.tick(55);
+    expect(Number(motions()[2]?.style.opacity)).toBeCloseTo(0.5, 1);
+    expect(Number(motions()[0]?.style.opacity || '1')).toBe(1);
+    expect(motions()[0]?.style.visibility).not.toBe('hidden');
+    await runtime.play({});
+    await run(clock, 1200);
+    const closing = runtime.stop();
+    await run(clock, 250, 10);
+    expect(motions()[2]?.style.visibility).toBe('hidden');
+    expect(Number(motions()[0]?.style.opacity)).toBeGreaterThan(0);
+    await run(clock, 300, 10);
+    await closing;
+    runtime.remove();
+  });
+
+  it('samples row entrance and exit when the author scrubs', () => {
+    const scene = repeaterScene({
+      element: {
+        itemEntrance: 'fade',
+        itemExit: 'fade',
+        itemTransitionMs: 400,
+        itemStaggerMs: 100,
+      },
+    });
+    scene.lifecycle = { outPoint: 50 };
+    const runtime = createRuntime(scene, { skipFontLoad: true, clock: makeClock() });
+    runtime.tick(10);
+    expect(Number(motions()[0]?.style.opacity)).toBeCloseTo(0.5, 1);
+    expect(Number(motions()[2]?.style.opacity)).toBe(0);
+    runtime.tick(60);
+    expect(Number(motions()[0]?.style.opacity)).toBe(1);
+    expect(Number(motions()[2]?.style.opacity)).toBeCloseTo(0.5, 1);
+    runtime.remove();
+  });
+
+  it('honors an explicitly forward exit without changing top-to-bottom entrance order', async () => {
+    const clock = makeClock();
+    const scene = repeaterScene({
+      element: {
+        itemEntrance: 'fade-top',
+        itemExit: 'fade-top',
+        itemExitOrder: 'forward',
+        itemTransitionMs: 400,
+        itemStaggerMs: 100,
+      },
+      playout: { mode: 'manual' },
+    });
+    scene.lifecycle = { outPoint: 50 };
+    const runtime = createRuntime(scene, { skipFontLoad: true, clock });
+    runtime.tick(10);
+    expect(Number(motions()[0]?.style.opacity)).toBeCloseTo(0.5, 1);
+    expect(Number(motions()[2]?.style.opacity)).toBe(0);
+    runtime.tick(60);
+    expect(Number(motions()[0]?.style.opacity)).toBeCloseTo(0.5, 1);
+    expect(Number(motions()[2]?.style.opacity)).toBe(1);
+    await runtime.play({});
+    await run(clock, 1000);
+    const closing = runtime.stop();
+    await run(clock, 150, 50);
+    expect(Number(motions()[0]?.style.opacity)).toBeLessThan(Number(motions()[1]?.style.opacity));
+    expect(Number(motions()[2]?.style.opacity)).toBe(1);
+    await run(clock, 1000);
+    await closing;
+    runtime.remove();
+  });
+
+  it('generates Persian row numbers independent of stale field values and paints alternate rows', async () => {
+    const comp = rowComp();
+    const rank = comp.layers[0]?.children[0];
+    if (rank?.type !== 'text') throw new Error('Missing text fixture');
+    rank.rowNumber = true;
+    rank.digits = 'persian';
+    const runtime = createRuntime(
+      repeaterScene({
+        ...BOUND,
+        comp,
+        element: { alternatingRowFill: '#FFFFFF20' },
+        playout: { mode: 'manual' },
+      }),
+      { skipFontLoad: true, clock: makeClock() },
+    );
+    await runtime.play({});
+    expect(rowTexts()).toEqual(['۱', '۲', '۳']);
+    await runtime.update({
+      rows: [
+        { id: 'r3', name: '99' },
+        { id: 'r1', name: '20' },
+      ],
+    });
+    expect(rowTexts()).toEqual(['۱', '۲']);
+    expect(cells()[0]?.style.backgroundColor).toBe('');
+    expect(cells()[1]?.style.backgroundColor).not.toBe('');
+    runtime.remove();
+  });
+
   it('rows hold at the child out-point and play their own outro on stop()', async () => {
     const clock = makeClock();
     const runtime = createRuntime(repeaterScene({ playout: { mode: 'manual' } }), {
@@ -660,5 +1010,103 @@ describe('repeater — rows are real scopes (lifecycle by reuse)', () => {
     expect(clock.pendingRafs()).toBe(0);
     expect(clock.pendingTimers()).toBe(0);
     expect(document.querySelector('[data-cg-element-id="rep"]')).toBeNull();
+  });
+});
+
+describe('repeater held inside a Sequence composition page', () => {
+  function nested(exit: boolean): Scene {
+    const scene = repeaterScene({
+      element: {
+        itemEntrance: 'fade',
+        itemExit: exit ? 'fade-left' : 'none',
+        itemTransitionMs: 400,
+        itemStaggerMs: 100,
+      },
+      playout: { mode: 'manual' },
+    });
+    const page = { ...scene, id: 'page', name: 'Page' } as unknown as Composition;
+    scene.compositions = [...(scene.compositions ?? []), page];
+    scene.layers = [
+      {
+        id: 'sequence-layer',
+        name: 'Sequence',
+        visible: true,
+        locked: false,
+        blendMode: 'normal',
+        children: [
+          {
+            ...baseElProps,
+            id: 'pages',
+            name: 'Pages',
+            type: 'sequence',
+            direction: 'rtl',
+            font: {
+              family: 'Vazirmatn',
+              weight: 400,
+              style: 'normal',
+              size: 24,
+              lineHeight: 1.2,
+              letterSpacing: 0,
+            },
+            color: '#ffffff',
+            align: 'start',
+            items: [{ id: 'p1', kind: 'composition', compositionId: 'page' }],
+            advance: 'manual',
+            repeat: 'infinite',
+            defaultDwellMs: 1000,
+            transitionIn: 'none',
+            transitionOut: 'fade',
+            transitionTiming: 'simultaneous',
+            transitionMs: 200,
+          } as unknown as Element,
+        ],
+      },
+    ];
+    return scene;
+  }
+
+  it('starts row entrance, awaits row exit before page exit, and preserves pause/replay', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(nested(true), { skipFontLoad: true, clock });
+    await runtime.play({});
+    await run(clock, 150, 50);
+    expect(Number(motions()[0]?.style.opacity)).toBeGreaterThan(0);
+    expect(Number(motions()[0]?.style.opacity)).toBeLessThan(1);
+    await run(clock, 1000);
+    expect(
+      document.querySelector('[data-cg-element-id="pages"]')?.getAttribute('data-cg-outro'),
+    ).toBe('sequence');
+    let settled = false;
+    const closing = runtime.stop().then(() => {
+      settled = true;
+    });
+    await run(clock, 150, 50);
+    expect(settled).toBe(false);
+    expect(Number(motions()[2]?.style.opacity)).toBeLessThan(Number(motions()[1]?.style.opacity));
+    expect(Number(motions()[0]?.style.opacity)).toBe(1);
+    const pose = motions().map((node) => node.style.opacity);
+    runtime.pause();
+    await run(clock, 1000);
+    expect(motions().map((node) => node.style.opacity)).toEqual(pose);
+    runtime.resume();
+    await run(clock, 1000, 50);
+    await closing;
+    await runtime.play({});
+    await run(clock, 1000);
+    expect(motions().every((node) => node.style.visibility !== 'hidden')).toBe(true);
+    const closingAgain = runtime.stop();
+    await run(clock, 100);
+    runtime.remove();
+    await closingAgain;
+    expect(clock.pendingRafs()).toBe(0);
+    expect(clock.pendingTimers()).toBe(0);
+  });
+
+  it('keeps legacy sequences without row exits outside the explicit outro registry', () => {
+    const runtime = createRuntime(nested(false), { skipFontLoad: true, clock: makeClock() });
+    expect(
+      document.querySelector('[data-cg-element-id="pages"]')?.hasAttribute('data-cg-outro'),
+    ).toBe(false);
+    runtime.remove();
   });
 });

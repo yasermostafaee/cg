@@ -206,6 +206,52 @@ describe('clock-target binding — re-target through the driver seam (D-141)', (
     expect(timeText(document.body)).toBe('01:59:00');
   });
 
+  it('keeps a rehearsal duration authoritative over bound defaults and live target updates', async () => {
+    const clock = makeClock();
+    clock.advance(AT(19, 0));
+    const rt = createRuntime(boundScene(), {
+      clock,
+      scopeOverrides: { '': { countdowns: { clk: { durationMs: 3000 } } } },
+    });
+    await rt.ready;
+    await rt.play({});
+    await flush();
+    expect(timeText(document.body)).toBe('00:00:03');
+    clock.advance(1000);
+    await flush();
+    expect(timeText(document.body)).toBe('00:00:02');
+    await rt.update({ targetTime: '21:00' });
+    await flush();
+    expect(timeText(document.body)).toBe('00:00:02');
+    rt.remove();
+  });
+
+  it('replays a completed duration rehearsal in full without editing its bound deadline', async () => {
+    const clock = makeClock();
+    clock.advance(AT(19, 0));
+    const scene = boundScene();
+    scene.playout = { mode: 'auto-out', holdSource: 'content-driven' };
+    const rt = createRuntime(scene, {
+      clock,
+      scopeOverrides: { '': { countdowns: { clk: { durationMs: 3000 } } } },
+    });
+    await rt.ready;
+    for (let run = 0; run < 2; run += 1) {
+      await rt.play({});
+      await flush();
+      expect(timeText(document.body)).toBe('00:00:03');
+      clock.advance(1000);
+      await flush();
+      expect(timeText(document.body)).toBe('00:00:02');
+      expect(document.querySelector('.cg-pending')).toBeNull();
+      clock.advance(2000);
+      await flush();
+      expect(timeText(document.body)).toBe('00:00:00');
+      expect(document.querySelector('.cg-pending')).not.toBeNull();
+    }
+    rt.remove();
+  });
+
   /*
     `PERSIAN-DIGITS-01` §2 B — the operator's keyboard is Persian. `۲۱:۰۰` used to fail the ASCII
     `\d` of the old parse, so the template kept the OLD target and reported the operator's own

@@ -192,9 +192,11 @@ export interface VideoDriverOptions {
   clock?: RuntimeClock | undefined;
 }
 
-/** The one member the element-outro ledger keys on — shared with {@link LottieDriver}. */
+/** The element-outro ledger contract — shared with Lottie, sequences and repeaters. */
 export interface ElementOutroDriver {
   playOutro(): Promise<void>;
+  /** Finite active-time upper bound for the current exit, queried after playOutro starts it. */
+  outroDurationMs?(): number;
 }
 
 /**
@@ -205,6 +207,16 @@ export interface ElementOutroDriver {
  * intended of the other).
  */
 export const OUTRO_BACKSTOP_MARGIN_MS = 2000;
+
+/** Keep the independent never-strand guard, without truncating a legal long authored exit. */
+export function elementOutroWatchdogMs(driver: ElementOutroDriver): number {
+  const duration = driver.outroDurationMs?.();
+  const expected =
+    typeof duration === 'number' && Number.isFinite(duration) && duration > 0 ? duration : 0;
+  // Two margins let the driver's own duration + margin backstop settle first. Clamp to the
+  // platform timer range so a malformed enormous duration cannot overflow into a 1 ms timeout.
+  return Math.min(2_147_483_647, Math.max(30_000, expected + 2 * OUTRO_BACKSTOP_MARGIN_MS));
+}
 
 export class VideoDriver implements ElementOutroDriver {
   private readonly o: {

@@ -43,7 +43,7 @@
  */
 
 /** The rendering contract this build implements. See the header for when to bump it. */
-export const CG_RUNTIME_VERSION = '1.0.0';
+export const CG_RUNTIME_VERSION = '1.1.0';
 
 /** A parsed `major.minor.patch`. Pre-release and build metadata are not modelled. */
 export interface Semver {

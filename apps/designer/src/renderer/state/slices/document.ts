@@ -92,6 +92,8 @@ export const documentSlice = {
         selectedKeyframes: [],
         keyframeInspectorOpen: false,
         currentFrame: 0,
+        timelinePlaying: false,
+        timelinePlaybackMode: null,
         snapGuides: { x: [], y: [] },
         guides: { x: [], y: [] },
       });

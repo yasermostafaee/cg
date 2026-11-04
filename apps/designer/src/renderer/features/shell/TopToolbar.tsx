@@ -17,6 +17,7 @@ import { AboutModal } from './AboutModal.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { SaveBeforeSwitchModal } from './SaveBeforeSwitchModal.js';
 import { ShortcutsModal } from './ShortcutsModal.js';
+import { openProjectFromDisk } from './open-project.js';
 import * as s from './TopToolbar.css.js';
 
 interface Props {
@@ -199,12 +200,6 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
     setNewModalOpen(true);
   }
 
-  async function openProject(): Promise<void> {
-    // D-088 — open via the handle-carrying picker so a later Save writes back to the file.
-    const result = await window.cg.projects.openDisk();
-    if (result.scene !== null) designerStore.setScene(result.scene, null);
-  }
-
   function closeProject(): void {
     designerStore.closeProject();
   }
@@ -251,11 +246,18 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
     scene,
     save,
     saveAs,
-    openProject,
+    openProject: openProjectFromDisk,
     runFileAction,
     runFileSwitch,
   });
-  fileShortcutsRef.current = { scene, save, saveAs, openProject, runFileAction, runFileSwitch };
+  fileShortcutsRef.current = {
+    scene,
+    save,
+    saveAs,
+    openProject: openProjectFromDisk,
+    runFileAction,
+    runFileSwitch,
+  };
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
       if (e.altKey) return;
@@ -357,7 +359,7 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
               <FileMenuItem
                 label="Open"
                 shortcut={isMac() ? '⌘O' : 'Ctrl+O'}
-                onClick={() => runFileSwitch(openProject)}
+                onClick={() => runFileSwitch(openProjectFromDisk)}
               />
               <div className={s.dropdownDivider} aria-hidden />
               <FileMenuItem

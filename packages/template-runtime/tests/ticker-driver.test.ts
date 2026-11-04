@@ -95,7 +95,7 @@ beforeEach(() => {
 });
 
 describe('TickerDriver — vertical align of crawl item nodes (D-045)', () => {
-  /** First VISIBLE fed item node (the hidden measure node is filtered out). */
+  /** First visible fed item node. Measurement probes never join this track. */
   function fedItem(track: HTMLElement): HTMLElement | undefined {
     return [...track.querySelectorAll<HTMLElement>('[data-cg-ticker-item]')].find(
       (n) => n.style.visibility !== 'hidden',
@@ -134,7 +134,7 @@ describe('TickerDriver — image separator (D-039ext)', () => {
   /** Fed nodes in DOM (= feed) order, items as their text and image seps as 'SEP'. */
   function fedSequence(track: HTMLElement): string[] {
     return [...track.children]
-      .filter((n) => (n as HTMLElement).style.visibility !== 'hidden') // drop the hidden measure node
+      .filter((n) => (n as HTMLElement).style.visibility !== 'hidden')
       .map((n) => (n.tagName === 'IMG' ? 'SEP' : (n.textContent ?? '')));
   }
 
@@ -419,6 +419,24 @@ describe('TickerDriver — completion (the inner repeat loop, D-028)', () => {
 });
 
 describe('TickerDriver — treadmill behaviour', () => {
+  it('measures outside hidden composition ancestors using the band typography, then removes its probe', () => {
+    const h = make({
+      measure: (node) => {
+        expect(node.parentElement).toBe(document.body);
+        expect(node.style.fontFamily).toBe('Vazirmatn');
+        expect(node.style.fontSize).toBe('32px');
+        expect(node.style.width).toBe('max-content');
+        return measure(node);
+      },
+    });
+    h.band.style.display = 'none';
+    h.band.style.fontFamily = 'Vazirmatn';
+    h.band.style.fontSize = '32px';
+    h.driver.start();
+    expect(document.body.querySelector(':scope > [data-cg-ticker-item]')).toBeNull();
+    h.driver.destroy();
+    expect(document.body.querySelector(':scope > [data-cg-ticker-item]')).toBeNull();
+  });
   it('seamless wrap: the first item follows the last with the configured spacing', () => {
     const h = make();
     h.driver.start();
@@ -443,19 +461,19 @@ describe('TickerDriver — treadmill behaviour', () => {
   it('rtl item nodes are placed at left = −(o + w); ltr at left = o', () => {
     const rtl = make();
     rtl.driver.start();
-    const rtlFirst = rtl.track.querySelectorAll<HTMLElement>('[data-cg-ticker-item]')[1];
-    expect(rtlFirst?.style.left).toBe('-100px'); // o=0, w=100 (index 0 is the hidden measure node)
+    const rtlFirst = rtl.track.querySelector<HTMLElement>('[data-cg-ticker-item]');
+    expect(rtlFirst?.style.left).toBe('-100px'); // o=0, w=100; probes never join the track.
 
     const ltr = make({ direction: 'ltr' });
     ltr.driver.start();
-    const ltrFirst = ltr.track.querySelectorAll<HTMLElement>('[data-cg-ticker-item]')[1];
+    const ltrFirst = ltr.track.querySelector<HTMLElement>('[data-cg-ticker-item]');
     expect(ltrFirst?.style.left).toBe('0px');
   });
 
   it('items are bidi-isolated spans with the element direction', () => {
     const h = make();
     h.driver.start();
-    const node = h.track.querySelectorAll<HTMLElement>('[data-cg-ticker-item]')[1];
+    const node = h.track.querySelector<HTMLElement>('[data-cg-ticker-item]');
     expect(node?.style.unicodeBidi).toBe('isolate');
     expect(node?.style.direction).toBe('rtl');
     expect(node?.style.whiteSpace).toBe('pre');
@@ -516,7 +534,7 @@ describe('TickerDriver — reconcile by stable id (update())', () => {
     const h = make();
     h.driver.start();
     h.clock.advance(1000); // d = 100: a(o=0) has entered; b(o=110) has not
-    const visibleA = h.track.querySelectorAll<HTMLElement>('[data-cg-ticker-item]')[1];
+    const visibleA = h.track.querySelector<HTMLElement>('[data-cg-ticker-item]');
     expect(visibleA?.textContent).toBe(itemA.text);
     const leftBefore = visibleA?.style.left;
 
@@ -560,8 +578,8 @@ describe('TickerDriver — reconcile by stable id (update())', () => {
     h.driver.start();
     h.clock.advance(2000); // d = 200: a (o=0..100) and b (o=110..310) both entered
     const nodes = h.track.querySelectorAll<HTMLElement>('[data-cg-ticker-item]');
-    const nodeA = nodes[1];
-    const nodeB = nodes[2];
+    const nodeA = nodes[0];
+    const nodeB = nodes[1];
     expect(nodeA?.textContent).toBe(itemA.text);
     expect(nodeB?.style.left).toBe('-310px'); // rtl: -(110+200)
 

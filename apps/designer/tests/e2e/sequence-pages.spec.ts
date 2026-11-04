@@ -150,7 +150,7 @@ test.describe('D-163 — Add pictures / Add folder on a sequence', () => {
     ).toHaveAttribute('src', /^blob:/);
   });
 
-  test('🔴 the preview’s six playout commands all sit inside the panel — Next is not pushed off', async ({
+  test('🔴 the preview’s five playout commands all sit inside the panel — Next is not pushed off', async ({
     app,
   }) => {
     await app.newProject('BookPreview');
@@ -163,7 +163,8 @@ test.describe('D-163 — Add pictures / Add folder on a sequence', () => {
     expect(dialogBox).not.toBeNull();
     // Measured in the engine, not asserted from the stylesheet (golden rule 12 c).
     expect(groupBox!.x + groupBox!.width).toBeLessThanOrEqual(dialogBox!.x + dialogBox!.width);
-    for (const name of [/Play|Resume/, 'Pause', 'Out', 'Stop', 'Previous', 'Next']) {
+    await expect(group.getByRole('button', { name: 'Out', exact: true })).toHaveCount(0);
+    for (const name of [/Play|Resume/, 'Pause', 'Stop', 'Previous', 'Next']) {
       const button = group.getByRole('button', {
         name,
         ...(typeof name === 'string' && { exact: true }),

@@ -35,8 +35,7 @@ export interface TimingScopeNode {
   /**
    * B-031 — whether the scope has ANY content source (ticker / countdown clock /
    * sequence) — directly OR inside a nested composition instance (cycle-guarded) — so a
-   * parent whose closing content is entirely nested IS offered the content-driven hold,
-   * matching the inspector's recursive `hasContentElement`.
+   * parent whose closing content is entirely nested still exposes the Preview timing for it.
    */
   hasContent: boolean;
 }
@@ -161,9 +160,8 @@ function contentOf(doc: { layers: Scene['layers'] }, scene: Scene): ScopeContent
 /**
  * B-031 — does the scope have ANY content source (ticker / countdown clock / sequence)
  * — directly OR inside a nested composition instance (resolving `scene.compositions`,
- * cycle-guarded), matching the inspector's recursive `hasContentElement`? A parent
- * whose closing content lives entirely in a nested composition is therefore OFFERED the
- * content-driven hold in the preview (previously a shallow check hid it).
+ * cycle-guarded). A parent whose closing content lives entirely in a nested composition is
+ * therefore OFFERED the content-driven hold in Preview (previously a shallow check hid it).
  */
 function hasAnyContentIn(doc: { layers: Scene['layers'] }, scene: Scene): boolean {
   const visited = new Set<string>();
@@ -265,7 +263,7 @@ export function PreviewScopeTiming({
   );
   return (
     <>
-      {visible.map((node, i) => {
+      {visible.map((node) => {
         const scopeOverride = overrides[node.path] ?? {};
         // Display labels only — the override is always keyed by the element's id below. Names are
         // disambiguated WITHIN each kind (the row labels carry the axis, e.g. "— passes"/"— dwell").
@@ -303,9 +301,8 @@ export function PreviewScopeTiming({
           <div key={node.path} style={node.depth > 0 ? { marginLeft: node.depth * 12 } : undefined}>
             <PreviewTimingControls
               source={node.source}
-              title={node.path === '' ? 'Timing (session)' : `Timing — ${node.label}`}
+              title={node.path === '' ? 'Timing' : `Timing — ${node.label}`}
               defaultExpanded={node.path === ''}
-              showFooter={i === visible.length - 1}
               hasContent={node.hasContent}
               override={scopeOverride}
               onChange={(patch) => onChange(node.path, patch)}

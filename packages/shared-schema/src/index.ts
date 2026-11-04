@@ -9,6 +9,7 @@ export * from './elements.js';
 export * from './element-changes.js';
 export * from './value-rules.js';
 export * from './countdown.js';
+export * from './countdown-target-fields.js';
 export * from './follow-window.js';
 export * from './fields.js';
 export * from './file-source-content.js';

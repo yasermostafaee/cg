@@ -2842,6 +2842,10 @@ extend so a child scope's content waits for the PARENT's hold-start). Medium-lar
 
 ## [x] D-105 — Split exit: animated "Out" vs quick "Stop" (coordinated exit) ⟨priority: medium⟩ — merged (#194) & archived: `openspec/changes/archive/2026-06-29-preview-split-exit/`
 
+**Preview UI supersession (D-173):** the runtime's two exit contracts remain, but the Designer
+Preview exposes only Stop. Out is no longer a Preview button; the original behavior below records
+the runtime/on-air contract, not the current rehearsal controls.
+
 **What:** Two distinct exit operations in the preview. "Out" (animate off) plays the graphic's designed
 exit, COORDINATED so the content (ticker/clock/sequence) exits first/with and the background follows
 last — never the background closing over fully-visible content. "Stop"/"Clear" removes the content
@@ -3979,6 +3983,12 @@ own design.md.**
 
 — owner decision 2026-10-14 (DESIGNER-DECISIONS Q24): **needed for the next version.** Its Designer half (the 21 open tasks of `add-azan-countdown`) is in scope.
 
+**Preview replay correction (2026-11-04):** each fresh Play in accelerated rehearsal starts its
+clock from the current real time, rather than reusing the preceding run's accelerated future.
+Resume retains the current rehearsal clock. Duration replay needs no value edit, while real-time
+Preview and on-air absolute deadlines stay truthful: a genuinely past deadline remains past.
+Tracked in `openspec/changes/countdown-target-entry/`.
+
 **What:** Extend the clock element so a countdown can target a wall-clock time of day
 and drive named color zones that restyle the composition — including elements inside
 nested composition instances — as the deadline approaches. Three parts:
@@ -4077,6 +4087,12 @@ Acceptance):**
   stays an animation the author builds into a composition, shown or hidden by a step.
 - **H — the Steps dialog.** The Inspector keeps a summary; every editor lives in one dialog reached from the
   countdown and from any element a step changes.
+
+**2026-11-04 follow-up — `openspec/changes/countdown-target-entry/`:** Preview must use the same
+masked target date/time picker as CG Control; switching an older starter from time of day to a date
+must update its standard validation pattern without discarding custom author constraints. Advanced
+timing states a readable deadline. The direct full-screen countdown starter must animate every part
+through its normal outro when zero completes the content-driven hold.
 
 ## [!] D-142 — Brand Pack Factory ⟨priority: unrated⟩
 
@@ -5623,40 +5639,40 @@ attributes (`title`, `aria-label`, `placeholder`, `label`, `alt`), and sentence-
 (three or more words) in `.ts` files, comments stripped, tests and `.css.ts` excluded. Rough by
 design; the KIND column is the finding. Nothing was changed.
 
-| where user-visible strings live                                       | file / module                                                                                                                            | rough count                                        | kind                                                                                                                                                                                                    |
-| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Designer** — Inspector panels (Style, Playout, Looks, Dynamic Data) | `apps/designer/src/renderer/features/inspector/` (33 files; `StyleSection.tsx` ≈ 220 alone)                                              | ≈ 470 reachable + 61 in the unmounted Arrangements | prose blocks · labels · tooltips · badges · the `i` modal bodies                                                                                                                                        |
-| Designer — live-source preflight refusals                             | `apps/designer/src/renderer/state/live-source-preflight.ts`                                                                              | ≈ 34 sentences                                     | refusal / error messages (multi-line template literals with interpolated names)                                                                                                                         |
-| Designer — shell, toolbar, transport, status bar, shortcuts           | `features/shell/`, `features/status/`, `features/tools/`                                                                                 | ≈ 120                                              | labels · tooltips · one prose modal (`ShortcutsModal.tsx`, ≈ 24)                                                                                                                                        |
-| Designer — canvas, overlay, background control                        | `features/canvas/`                                                                                                                       | ≈ 85                                               | tooltips · labels · a few hints                                                                                                                                                                         |
-| Designer — fields, list editor, preview forms                         | `features/fields/`                                                                                                                       | ≈ 97                                               | labels · placeholders · tooltips                                                                                                                                                                        |
-| Designer — assets, video import, shared library                       | `features/assets/`, `features/sharedLibrary/`                                                                                            | ≈ 83                                               | labels · progress and error messages                                                                                                                                                                    |
-| Designer — compositions, timeline, add guard, issues, library         | `features/compositions/`, `features/timeline/`, `features/addGuard/`, `features/issues/`, `features/library/`                            | ≈ 84                                               | labels · tooltips · one dialog of prose                                                                                                                                                                 |
-| Designer — app shell: home cards, window-too-small overlay            | `apps/designer/src/renderer/App.tsx`                                                                                                     | ≈ 17                                               | prose · badges — the overlay (`:521-523`) is the ONLY Persian UI string in either app                                                                                                                   |
-| Designer — element defaults and preset EXAMPLES                       | `state/element-defaults.ts`, `inspector/pattern-presets.ts` (`'۱۴۰۳'`, `'مجری'`), `aspect-presets.ts`, `sequence-presets.ts`             | ≈ 15                                               | 🔴 default CONTENT and examples — data an author edits, not chrome                                                                                                                                      |
-| Designer — preview iframe, exporter                                   | `apps/designer/src/platform/preview.ts`, `Exporter.ts`                                                                                   | ≈ 25 (most literals are CSS / selectors)           | error messages surfaced to the author                                                                                                                                                                   |
-| **Runtime** — layers panel, rows, live plates, audio, look switch     | `apps/runtime/src/renderer/features/layers/` (18 files)                                                                                  | ≈ 240                                              | labels · badges · tooltips · refusal fallbacks (`lookSwitch.ts:27`)                                                                                                                                     |
-| Runtime — inspector (fields, position picker, delimiters, plates)     | `features/inspector/` (20 files)                                                                                                         | ≈ 110                                              | labels · tooltips · placeholders                                                                                                                                                                        |
-| Runtime — status bar, link indicator, banners                         | `features/status/` (8 files)                                                                                                             | ≈ 80                                               | badges · status lines · banners                                                                                                                                                                         |
-| Runtime — fixed layers, connections, sources, monitors, lock          | `features/fixedLayers/`, `features/connections/`, `features/sources/`, `features/monitors/`, `features/lock/`                            | ≈ 180                                              | labels · refusal rules · badges                                                                                                                                                                         |
-| Runtime — audit panel                                                 | `features/audit/`                                                                                                                        | ≈ 16                                               | column labels; DETAIL text is FORMATTED from ids and codes (`auditFormat.ts`), not authored                                                                                                             |
-| Runtime — the code→message seam                                       | `apps/runtime/src/renderer/ui/errorCodeMessage.ts`, `fixedLayersReasonMessage.ts`, `sourcesReasonMessage.ts`, `asyncButtonController.ts` | ≈ 41 sentences over ≈ 40 wire codes                | refusal and error messages — ONE table per code family                                                                                                                                                  |
-| Runtime — other UI primitives                                         | `apps/runtime/src/renderer/ui/` (the other 23 files)                                                                                     | ≈ 20                                               | labels · tooltips                                                                                                                                                                                       |
-| Runtime — mock runtime, seed, delimiters                              | `apps/runtime/src/platform/MockRuntime.ts`, `seed.ts`, `features/inspector/delimiterStore.ts`                                            | ≈ 10 + the delimiter list                          | mock-only refusals; delimiter LABELS (`Persian comma`) are UI, their VALUES (`،`) are data                                                                                                              |
-| **Upstream of the Runtime** — bridge-authored refusal sentences       | `tools/caspar-bridge/src/caspar-runtime.ts` (≈ 10), `delimiter-store.ts` (1)                                                             | ≈ 11 sentences                                     | refusal messages as FREE TEXT on the wire — `message: z.string()` beside `reason: z.enum` — and the Runtime prints `message` FIRST (`applyDraft.ts:165`)                                                |
-| Wire reason codes                                                     | `packages/shared-ipc/src/channels/*.ts`                                                                                                  | ≈ 40 enum codes; ≈ 14 sentences (Zod validation)   | codes, not text; the validation sentences reach nobody in normal use                                                                                                                                    |
-| Schema validation messages                                            | `packages/shared-schema/src/elements.ts` and siblings                                                                                    | ≈ 17                                               | Zod messages; reach an author only through an import / validation failure                                                                                                                               |
-| **Starter templates**                                                 | `packages/starter-templates/src/index.ts`, `irib-news.ts`, `title.ts`, `ticker.ts`, `sequence.ts`, `logo-bug.ts`                         | ≈ 37 sentences, Persian with English gloss         | 🔴 **OPERATOR-AUTHORED CONTENT** (headlines, names, roles, a wordmark) plus starter LABELS that are bilingual by construction (`میان‌برنامهٔ خبر — News Composite`). Translating these is a DATA change |
-| Template runtime                                                      | `packages/template-runtime/src/`                                                                                                         | ≈ 18 literals, ≈ 0 user-facing                     | CSS values and thrown errors — not UI                                                                                                                                                                   |
+| where user-visible strings live                                       | file / module                                                                                                                            | rough count                                                  | kind                                                                                                                                                                                               |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Designer** — Inspector panels (Style, Playout, Looks, Dynamic Data) | `apps/designer/src/renderer/features/inspector/` (33 files; `StyleSection.tsx` ≈ 220 alone)                                              | ≈ 470 reachable + 61 in the unmounted Arrangements           | prose blocks · labels · tooltips · badges · the `i` modal bodies                                                                                                                                   |
+| Designer — live-source preflight refusals                             | `apps/designer/src/renderer/state/live-source-preflight.ts`                                                                              | ≈ 34 sentences                                               | refusal / error messages (multi-line template literals with interpolated names)                                                                                                                    |
+| Designer — shell, toolbar, transport, status bar, shortcuts           | `features/shell/`, `features/status/`, `features/tools/`                                                                                 | ≈ 120                                                        | labels · tooltips · one prose modal (`ShortcutsModal.tsx`, ≈ 24)                                                                                                                                   |
+| Designer — canvas, overlay, background control                        | `features/canvas/`                                                                                                                       | ≈ 85                                                         | tooltips · labels · a few hints                                                                                                                                                                    |
+| Designer — fields, list editor, preview forms                         | `features/fields/`                                                                                                                       | ≈ 97                                                         | labels · placeholders · tooltips                                                                                                                                                                   |
+| Designer — assets, video import, shared library                       | `features/assets/`, `features/sharedLibrary/`                                                                                            | ≈ 83                                                         | labels · progress and error messages                                                                                                                                                               |
+| Designer — compositions, timeline, add guard, issues, library         | `features/compositions/`, `features/timeline/`, `features/addGuard/`, `features/issues/`, `features/library/`                            | ≈ 84                                                         | labels · tooltips · one dialog of prose                                                                                                                                                            |
+| Designer — app shell: home cards, window-too-small overlay            | `apps/designer/src/renderer/App.tsx`                                                                                                     | ≈ 17                                                         | prose · badges — the overlay (`:521-523`) is the ONLY Persian UI string in either app                                                                                                              |
+| Designer — element defaults and preset EXAMPLES                       | `state/element-defaults.ts`, `inspector/pattern-presets.ts` (`'۱۴۰۳'`, `'مجری'`), `aspect-presets.ts`, `sequence-presets.ts`             | ≈ 15                                                         | 🔴 default CONTENT and examples — data an author edits, not chrome                                                                                                                                 |
+| Designer — preview iframe, exporter                                   | `apps/designer/src/platform/preview.ts`, `Exporter.ts`                                                                                   | ≈ 25 (most literals are CSS / selectors)                     | error messages surfaced to the author                                                                                                                                                              |
+| **Runtime** — layers panel, rows, live plates, audio, look switch     | `apps/runtime/src/renderer/features/layers/` (18 files)                                                                                  | ≈ 240                                                        | labels · badges · tooltips · refusal fallbacks (`lookSwitch.ts:27`)                                                                                                                                |
+| Runtime — inspector (fields, position picker, delimiters, plates)     | `features/inspector/` (20 files)                                                                                                         | ≈ 110                                                        | labels · tooltips · placeholders                                                                                                                                                                   |
+| Runtime — status bar, link indicator, banners                         | `features/status/` (8 files)                                                                                                             | ≈ 80                                                         | badges · status lines · banners                                                                                                                                                                    |
+| Runtime — fixed layers, connections, sources, monitors, lock          | `features/fixedLayers/`, `features/connections/`, `features/sources/`, `features/monitors/`, `features/lock/`                            | ≈ 180                                                        | labels · refusal rules · badges                                                                                                                                                                    |
+| Runtime — audit panel                                                 | `features/audit/`                                                                                                                        | ≈ 16                                                         | column labels; DETAIL text is FORMATTED from ids and codes (`auditFormat.ts`), not authored                                                                                                        |
+| Runtime — the code→message seam                                       | `apps/runtime/src/renderer/ui/errorCodeMessage.ts`, `fixedLayersReasonMessage.ts`, `sourcesReasonMessage.ts`, `asyncButtonController.ts` | ≈ 41 sentences over ≈ 40 wire codes                          | refusal and error messages — ONE table per code family                                                                                                                                             |
+| Runtime — other UI primitives                                         | `apps/runtime/src/renderer/ui/` (the other 23 files)                                                                                     | ≈ 20                                                         | labels · tooltips                                                                                                                                                                                  |
+| Runtime — mock runtime, seed, delimiters                              | `apps/runtime/src/platform/MockRuntime.ts`, `seed.ts`, `features/inspector/delimiterStore.ts`                                            | ≈ 10 + the delimiter list                                    | mock-only refusals; delimiter LABELS (`Persian comma`) are UI, their VALUES (`،`) are data                                                                                                         |
+| **Upstream of the Runtime** — bridge-authored refusal sentences       | `tools/caspar-bridge/src/caspar-runtime.ts` (≈ 10), `delimiter-store.ts` (1)                                                             | ≈ 11 sentences                                               | refusal messages as FREE TEXT on the wire — `message: z.string()` beside `reason: z.enum` — and the Runtime prints `message` FIRST (`applyDraft.ts:165`)                                           |
+| Wire reason codes                                                     | `packages/shared-ipc/src/channels/*.ts`                                                                                                  | ≈ 40 enum codes; ≈ 14 sentences (Zod validation)             | codes, not text; the validation sentences reach nobody in normal use                                                                                                                               |
+| Schema validation messages                                            | `packages/shared-schema/src/elements.ts` and siblings                                                                                    | ≈ 17                                                         | Zod messages; reach an author only through an import / validation failure                                                                                                                          |
+| **Starter templates**                                                 | `packages/starter-templates/src/index.ts`, `irib-news.ts`, `title.ts`, `ticker.ts`, `sequence.ts`, `logo-bug.ts`                         | Persian content and labels; separate capability descriptions | 🔴 **OPERATOR-AUTHORED CONTENT** (headlines, names, roles, a wordmark) plus Persian-only starter labels, such as `میان‌برنامهٔ خبر` (D-179 owner correction). Translating content is a DATA change |
+| Template runtime                                                      | `packages/template-runtime/src/`                                                                                                         | ≈ 18 literals, ≈ 0 user-facing                               | CSS values and thrown errors — not UI                                                                                                                                                              |
 
 **Cheap:** every wire refusal already crosses as a CODE and the Runtime owns one table per code
 family, so the operator-facing half of the Runtime's error vocabulary is already keyed and could be
 swapped in one place; the only leak is the ≈ 11 bridge-authored `message` sentences, which win over
 the table whenever present. **Expensive:** the Designer's Inspector alone is close to half of the Designer's
 UI text and about a quarter of both apps' together — inline JSX prose, `title=` tooltips and template literals with interpolated numbers and
-hand-rolled plurals (`${n}-box`, `arrangement${n === 1 ? '' : 's'}`) — and the starter pack mixes
-Persian operator content with English UI glosses inside the same literal, so a pass has to split
-content from chrome before a single key can be assigned.
+hand-rolled plurals (`${n}-box`, `arrangement${n === 1 ? '' : 's'}`). The starter pack now keeps
+Persian operator content and titles separate from capability descriptions; an internationalization
+pass must still distinguish content from chrome before assigning keys.
 
 ### §6 — the predictions, as they came out
 
@@ -5918,8 +5934,42 @@ weather icons from a choice field and value rules using one consistent animated 
 placeholder SVG folder pages; use real one-to-four-frame Looks with equal plates; repair nested ticker
 text and inconsistent loop/hold markers; use the official replaceable APASAI image mark in branded
 starters and link APASAI from Designer/CG Control; regenerate and inspect every poster; and provide a
-lazy, silent, accelerated motion preview on every gallery card so motion is discoverable without
+lazy, silent, smoothly captured motion excerpt on every gallery card so motion is discoverable without
 waiting through the template's full broadcast duration.
+
+**Latest owner corrections (2026-11-04):** weather uses a normally editable Choice-list field on
+the condition text, explicit image-swap rules and continuously animated assets; remove its unexplained
+percentage. League ranks derive from row order, club crests come from the requested Varzesh3 page,
+and row stripes replace rank/points-specific color plates. Quran Sequence items each contain one
+wide full-screen ornamental title or verse/translation image matching the owner's latest examples;
+the two-page-spread requirement is superseded. Multibox has a full-screen single plate and larger two/four-plate presets,
+with three plates arranged two-above-one and no independent input captions/backgrounds. APASAI starter
+marks are transparent, without the app icon's tile or a separate disc.
+The Guest Title's existing blue nameplate extends beneath the logo as one continuous background;
+the logo remains a replaceable transparent image, without an independent backplate.
+
+**Final playback/readability corrections:** the league builds top-to-bottom, exits last-to-first,
+keeps all 18 rows inside its panel, uses restrained navy/slate/ivory rather than yellow/turquoise,
+and closes its background through visible opacity keyframes after the rows. City weather has no
+page-number graphic and shows every city exactly once before its overall animated close. Forecast
+daily high and low temperatures use equal font sizes, identified by their explicit Persian labels.
+Each temperature number and its label share the same centered column; degree marks keep consistent
+edge spacing. Legacy gallery titles are Persian-only, without English suffixes; stable template IDs stay.
+Rendered graphics contain no instructional footers such as the explanation of following city pages;
+capability descriptions remain outside the on-air composition in the gallery and documentation.
+The countdown sample is an Azan lower-third: it counts down to the operator's chosen target, then
+replaces the timer with an editable “اذان مغرب به افق تهران” announcement that remains until Stop.
+All switching uses visible Countdown Steps; no timetable or prayer-time calculation is implied.
+
+**Saved-project and motion follow-up:** the owner's `جدول-لیگ-برتر-ایران.cgproj` is the
+league starter's new authored baseline; preserve its layout, keyframes and independent row timings,
+normalize packaged asset identifiers and leave the supplied file unchanged. Replace the sparse
+12 fps gallery recordings with genuinely denser capture and a modest 1.15× excerpt speed; do not
+mistake duplicated frames for smoother motion. Lazy loading, silence and reduced-motion support stay.
+
+**Nested ticker repair — `openspec/changes/fix-nested-ticker-measurement/`:** the live crawl must
+measure headline widths independently of a hidden or scaled parent composition. Verify moving item
+geometry in Preview, not only the static authoring row; no overlap may appear after the parent enters.
 
 ## [~] D-180 — Structured Repeater data, files and value rules work without a mandatory Sequence ⟨priority: high — owner follow-up 2026-11-04⟩ — `openspec/changes/complete-weather-repeater-data/`
 
@@ -5929,11 +5979,11 @@ CG Control. An outer Sequence remains optional pagination. Value rules may drive
 visibility, and many-column tables retain visible field titles and usable input widths in Designer,
 Preview and CG Control.
 
-**Follow-up acceptance:** a directly selected Repeater exposes **Data file…** and a prominent item
+**Follow-up acceptance:** a directly selected Repeater exposes **Rows and data file…** and a prominent item
 entrance section; Excel Save/connect/Reload works in Designer and CG Control behind Update; no
 surface compresses a league row into unlabeled slivers.
 
-## [x] D-197 — Repeater rows can enter in sequence ⟨priority: high — the owner, 2026-11-04⟩ — `openspec/changes/stagger-repeater-item-entrances/`
+## [~] D-197 — Repeater rows can enter and exit in sequence ⟨priority: high — owner follow-up, 2026-11-04⟩ — `openspec/changes/stagger-repeater-item-entrances/`
 
 **What:** A Repeater can apply one shared entrance effect to its stamped rows and delay each row
 after the previous one by an authored stagger. The first row starts immediately; `none` preserves
@@ -5949,6 +5999,99 @@ every repeated item appearing at once.
 - WHEN playback pauses, resumes, stops or is removed THEN the entrance timeline freezes, continues,
   restores or tears down without leaving timers or hidden rows behind
 - WHEN an older Repeater has no entrance fields THEN all rows remain visible together as before
+
+**Follow-up:** add an optional ordered exit through the shared outro contract, show effects during
+canvas playback/scrubbing, expose automatic noneditable row-number text and alternating row fill.
+Entrance follows list order (top-to-bottom for teams). Exit order is an explicit author choice,
+defaulting to last-to-first, independent of the movement direction; the background waits for all
+rows before playing its authored closing keyframes.
+Entrance and exit durations are separately editable; older Repeaters inherit the former shared
+duration for exit. Hidden rows do not add dead time to the visible exit cascade.
+An immediate Stop never reveals fully clipped, not-yet-entered slide rows. The bounded outro
+watchdog allows the authored finite exit duration instead of truncating legal long cascades.
+
+## [~] D-173 — Preview is a large command-first workspace with compact Variables ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/preview-command-data-workspace/`
+
+**What:** enlarge the composition Preview and make its right-hand workspace read top to bottom as
+status and playout commands, optional advanced timing, then a dense scrollable Variables table. Show
+the elapsed run time, remove the Preview-only **Out** command, and replace persistent explanatory
+paragraphs with concise labels or contextual info affordances. Variables stay in the same workspace
+rather than a second tab, so a large data set can be scanned and edited without switching views.
+**Why:** the current modal is smaller than the available screen, puts data above the controls, uses
+one tall card per value and spends too much of the narrow column on prose. Real templates can expose
+dozens of values and the author must still reach Play/Stop immediately.
+**Acceptance:**
+
+- WHEN Preview opens on a normal desktop THEN the dialog uses nearly all available width and height
+  while remaining contained and scrollable on smaller screens
+- WHEN Preview is read from the top THEN the large, fixed-width frame/time status is directly above
+  the picture and names the active composition, while transport precedes advanced timing and
+  Variables in the right workspace
+- WHEN many scalar Variables exist THEN their key/label and high-contrast editable value remain
+  aligned in dense rows; one **Update all** commits pending values and list/repeater values retain
+  only the richer edit/reorder controls they require
+- WHEN Play, Pause, Resume, Stop or natural completion occurs THEN elapsed time starts, freezes,
+  resumes, resets or settles consistently with that preview run; Stop returns both counters to the
+  start while natural completion preserves its final values
+- WHEN either counter changes digits THEN tabular monospace figures and fixed value widths prevent
+  the status strip or surrounding controls from shifting
+- WHEN elapsed time is shown THEN minutes, seconds and hundredths use the unambiguous
+  `minutes:seconds:hundredths` form (for example `00:01:03`)
+- WHEN a Preview value starts with Persian/Arabic or Latin text THEN its editor follows the first
+  strong character automatically, matching CG Control without changing the stored value
+- WHEN the transport renders THEN it offers Play, Pause, Stop, Previous and Next as applicable, but
+  no **Out** button
+- WHEN a Preview command has a tooltip THEN it is a short action or disabled-state reason, not a
+  long instructional sentence
+- WHEN timing/help context is not essential to the current action THEN it is not persistent prose;
+  any necessary explanation is reachable from a compact contextual affordance
+
+## [~] D-175 — Main canvas playback follows the same lifecycle as Preview ⟨priority: high — the owner, 2026-11-02⟩
+
+**What:** make the Designer canvas Play honour intro, content-driven hold and outro exactly as the
+dedicated Preview does, including ticker-driven completion. **Acceptance:** the same scene and data
+produce the same lifecycle boundaries on the canvas and in Preview without changing stored timing.
+— `openspec/changes/canvas-lifecycle-playback/`
+
+## [~] D-182 — Preview reports the runtime frame beside elapsed time ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/preview-runtime-frame-counter/`
+
+**What:** show `current frame / total frames` beside Preview's elapsed-time clock, driven by the
+root composition's authored lifecycle playhead rather than inferred wall time or paint optimisation.
+**Why:** elapsed time alone cannot show where a loop, content hold or outro currently sits in the
+authored timeline.
+**Acceptance:**
+
+- WHEN Preview is idle or a normal run advances THEN the counter mirrors the root composition frame
+  against the same total-frame value shown by the Designer timeline
+- WHEN a lifecycle hold parks the composition THEN the displayed frame remains fixed until the
+  outro starts, after which it advances through the outro
+- WHEN a content-driven hold has a non-empty Middle loop THEN the displayed root frame advances
+  through that range and wraps to Content start, including when time-driven media is the only moving
+  picture and composition paint itself remains collapsed
+- WHEN a runtime loop wraps THEN the displayed frame returns to that loop's start and advances again
+- WHEN a lifecycle leg is collapsed by the runtime because it has no frame-dependent pixels THEN
+  Preview reports the real start/end jump without adding time or changing content-start behaviour
+- WHEN nested compositions run their own timelines THEN they do not overwrite the root counter
+- WHEN any scope uses a loop or content-driven hold THEN elapsed time continues until the run
+  actually completes or the author presses Stop
+- WHEN a composition has no root frame-dependent paint THEN Preview counts its authored frames from
+  elapsed time instead of exposing Runtime's static-render collapse, and a fresh Play resets both
+  counters
+
+## [~] D-191 — Landing imports an existing project directly ⟨priority: high — the owner, 2026-11-03⟩ — `openspec/changes/import-project-from-landing/`
+
+**What:** place a clear **Import project** action beside **New project** on the Designer Landing
+screen. It uses the same disk-project opener as File → Open and enters the Studio with the selected
+project; it does not create a temporary project first. **Why:** File → Open is currently reachable
+only after opening a starter or creating a throwaway project, which turns the most direct return path
+into an unnecessary detour. **Acceptance:**
+
+- WHEN no project is open THEN Landing shows **New project** and **Import project** together as the
+  two direct project-entry actions
+- WHEN the author chooses **Import project** and selects a valid `.cgproj` THEN the same disk-open
+  operation used by File → Open loads it and Landing switches directly to Studio
+- WHEN the author cancels the picker THEN Landing remains unchanged and no temporary project or New
+  Project dialog is created
 
 ## [x] D-198 — File-only Sequence data stays inspectable in CG Control ⟨priority: high — the owner, 2026-11-04⟩ — `openspec/changes/complete-weather-repeater-data/`
 

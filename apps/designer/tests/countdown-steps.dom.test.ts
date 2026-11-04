@@ -17,6 +17,7 @@ import {
 } from '../src/renderer/features/inspector/countdown-steps.js';
 import {
   clockTargetDataKey,
+  commitClockTarget,
   setClockTargetDataKey,
   TARGET_FIELD_LABEL,
 } from '../src/renderer/features/inspector/clock-data-key.js';
@@ -541,6 +542,20 @@ describe('-C §2 — the target is the operator’s by default, and the author�
     typeAt(q<HTMLInputElement>(host, TIME_OF_DAY), '21', 0);
     expect(fieldOf('targetTime')).toEqual(
       expect.objectContaining({ default: '21:32', pattern: '^2[0-3]:[0-5][0-9]$' }),
+    );
+  });
+
+  it('recognizes the legacy starter time pattern when switching to a date target', () => {
+    seedCountdown();
+    expect(setClockTargetDataKey('c1', 'eventTime', '20:32')).toBe(true);
+    designerStore.updateField('eventTime', { pattern: '^([01]\\d|2[0-3]):[0-5]\\d$' });
+    const iso = '2026-11-04T17:49:14+03:30';
+    commitClockTarget('c1', { kind: 'datetime', iso });
+    expect(fieldOf('eventTime')).toEqual(
+      expect.objectContaining({
+        default: iso,
+        pattern: PATTERN_PRESETS['datetime']?.pattern,
+      }),
     );
   });
 });

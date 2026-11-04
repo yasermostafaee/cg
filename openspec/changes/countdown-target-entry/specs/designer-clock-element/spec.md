@@ -1,5 +1,32 @@
 ## MODIFIED Requirements
 
+### Requirement: A fresh accelerated Preview rehearsal
+
+Each fresh Play in accelerated Designer Preview SHALL begin its virtual clock at the current real
+time. Resume SHALL retain the existing virtual clock. The host SHALL NOT shift the authored or bound
+deadline; a deadline already in the real past SHALL remain past. Real-time Preview and on-air
+runtime SHALL retain actual wall-clock semantics. A session duration override SHALL replay its full
+duration without requiring any field edit. The rate selector tooltip SHALL state the replay boundary.
+
+#### Scenario: Replaying after accelerated completion
+
+- **GIVEN** an absolute countdown still five real minutes ahead and Preview at sixty-times speed
+- **WHEN** it completes and the author presses Play again without editing anything
+- **THEN** the second rehearsal starts with the remaining real time, not at zero
+- **AND** the stored target remains unchanged
+
+#### Scenario: An actually past target stays past
+
+- **GIVEN** the absolute countdown target is already in the real past
+- **WHEN** the author presses Play twice in accelerated Preview
+- **THEN** both runs follow the authored zero behavior without inventing a future target
+
+#### Scenario: A duration override replays in full
+
+- **GIVEN** a three-second Preview duration override has completed
+- **WHEN** the author presses Play again without editing anything
+- **THEN** the fresh run displays three seconds and completes after its full duration
+
 ### Requirement: A date and time the author types
 
 The countdown's time-of-day and date-and-time targets SHALL be typed through ONE shared control used
@@ -55,3 +82,32 @@ page.
 - **WHEN** the page's text is at 200 %, and when the page is right to left
 - **THEN** neither input clips its digits, the control stays inside the Inspector, and the date reads
   year first, left to right
+
+### Requirement: Preview uses the countdown target's calendar control
+
+Designer Preview SHALL derive countdown-target metadata from the field's own composition bindings,
+through the same shared derivation as CG Control. Date targets SHALL use the masked date and time
+control, and time-of-day targets SHALL use its masked time control. The target SHALL remain valid
+when switching from a standard time pattern, including a legacy `\\d` spelling, to a date target.
+Custom authored patterns SHALL remain in force. The Advanced timing deadline SHALL be readable as
+a local date/time rather than a raw ISO literal.
+
+#### Scenario: The starter target changes from time of day to date and time
+
+- **WHEN** the author switches the countdown starter target to Date & time and opens Preview
+- **THEN** Variables shows the date and time inputs with the calendar picker
+- **AND** the generated ISO target raises no pattern validation error
+- **AND** changing the calendar does not change the stored instant
+
+### Requirement: The direct countdown starter closes through authored animation
+
+Every visual part of the direct full-screen countdown starter SHALL have an editable exit track.
+The content-driven zero completion SHALL run the normal composition outro before the stage clears.
+An explicit Preview duration override SHALL replace both the authored deadline and bound target
+values for that rehearsal, including subsequent field updates, without changing stored values.
+
+#### Scenario: Rehearsing zero exits the full graphic
+
+- **WHEN** the countdown starter is rehearsed with a three-second duration
+- **THEN** reaching zero fades the background and furniture through their exit tracks
+- **AND** the stage clears only after that outro completes

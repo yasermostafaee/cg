@@ -10,6 +10,18 @@ is **Jalali**.
 
 ## What Changes
 
+- **Preview replay follow-up.** Every fresh accelerated Play starts from the current real time,
+  rather than the last run's accelerated future. Resume retains its clock; past absolute deadlines
+  remain past. Runtime output and stored targets are unchanged. Duration rehearsals replay in full
+  without requiring a field edit.
+
+- **2026-11-04 follow-up — Preview parity and complete exit.** Designer Preview derives target
+  editors from the same bindings as CG Control and uses its existing masked date/time control.
+  Switching a legacy starter's `\\d` time pattern to a date target updates the standard pattern;
+  custom author constraints remain unchanged. Advanced timing shows a readable deadline. The direct
+  full-screen countdown starter gives every visual part an ordinary editable exit animation, so
+  zero closes the whole graphic rather than cutting the static background.
+
 - **2.1 — one masked date input and one masked time input, each with a picker.** `YYYY/MM/DD` in the
   calendar shown and `HH:MM:SS`, 24-hour: digits in any set, the separators the mask's, an impossible
   value refused with its reason (month 13, the 31st of a 30-day month, 25 o'clock), typing in the

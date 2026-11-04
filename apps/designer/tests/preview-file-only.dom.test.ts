@@ -49,8 +49,7 @@ describe('R-102 — File-only authority in Designer composition Preview', () => 
       },
     ];
     const onChange = vi.fn();
-    const onUpdateField = vi.fn();
-    const onUpdateItem = vi.fn();
+    const onUpdateAll = vi.fn();
 
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -62,8 +61,7 @@ describe('R-102 — File-only authority in Designer composition Preview', () => 
           values: { title: 'live title', headlines: items },
           pendingPaths: new Set(['title', 'headlines']),
           onChange,
-          onUpdateField,
-          onUpdateItem,
+          onUpdateAll,
         }),
       ),
     );
@@ -82,7 +80,6 @@ describe('R-102 — File-only authority in Designer composition Preview', () => 
     expect(container.querySelector('[aria-label^="Remove Locked headlines item"]')).toBeNull();
     expect(container.querySelector('[aria-label^="Update field Locked"]')).toBeNull();
     expect(onChange).not.toHaveBeenCalled();
-    expect(onUpdateField).not.toHaveBeenCalled();
-    expect(onUpdateItem).not.toHaveBeenCalled();
+    expect(onUpdateAll).not.toHaveBeenCalled();
   });
 });

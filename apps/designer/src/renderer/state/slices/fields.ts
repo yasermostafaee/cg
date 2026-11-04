@@ -38,7 +38,8 @@ export interface ElementFieldMetaPatch {
   title?: string;
   description?: string;
   required?: boolean;
-  fieldType?: 'text' | 'number';
+  fieldType?: 'text' | 'number' | 'select';
+  options?: readonly { value: string; label: string }[];
   multiline?: boolean;
   minLength?: number;
   maxLength?: number;
@@ -209,8 +210,32 @@ function rebuildField(field: DynamicField, patch: ElementFieldMetaPatch): Dynami
     };
   }
 
-  const fieldType = patch.fieldType ?? (field.type === 'number' ? 'number' : 'text');
+  const fieldType =
+    patch.fieldType ?? (field.type === 'number' || field.type === 'select' ? field.type : 'text');
   const multiline = patch.multiline ?? field.type === 'multiline';
+
+  if (fieldType === 'select') {
+    const fallback = defaultAsString(field).trim() || 'option1';
+    const rawOptions =
+      patch.options ??
+      (field.type === 'select' ? field.options : [{ value: fallback, label: fallback }]);
+    const options = rawOptions.map((option) => ({ ...option }));
+    if (
+      options.length === 0 ||
+      options.some((option) => option.value.trim() === '') ||
+      new Set(options.map((option) => option.value)).size !== options.length
+    )
+      return field;
+    const wanted = patch.default === undefined ? defaultAsString(field) : String(patch.default);
+    return {
+      ...base,
+      type: 'select',
+      options,
+      default: options.some((option) => option.value === wanted)
+        ? wanted
+        : (options[0]?.value ?? fallback),
+    };
+  }
 
   if (fieldType === 'number') {
     // 🔴 The grant is deliberately NOT carried here. A number cannot hold file

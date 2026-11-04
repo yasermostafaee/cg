@@ -41,9 +41,15 @@ test.describe('Repeater / data-driven layout (D-030)', () => {
 
     // The inspector items editor is COLUMNED by the child's fields; a cell
     // edit updates that row on the canvas.
+    await app.inspector.getByRole('button', { name: 'Rows and data file…', exact: true }).click();
+    const rowsDialog = app.page.getByRole('dialog', {
+      name: 'Repeater data · Repeater',
+      exact: true,
+    });
     const cell = app.page.getByRole('textbox', { name: 'Repeater item 1 name', exact: true });
     await expect(cell).toBeVisible();
     await cell.fill('تیم آلفا');
+    await rowsDialog.getByRole('button', { name: 'Apply rows', exact: true }).click();
     await expect(canvasFrame.getByText('تیم آلفا')).toBeVisible();
   });
 
@@ -58,12 +64,15 @@ test.describe('Repeater / data-driven layout (D-030)', () => {
 
     await app.openPreviewModal();
     // The bound list renders the columned editor (child fields as columns).
+    await app.previewDialog.getByRole('button', { name: /Edit rows/ }).click();
+    const rowsDialog = app.page.getByRole('dialog', { name: 'Rows · standings', exact: true });
     const nameCell = app.page.getByRole('textbox', {
       name: 'standings item 1 name',
       exact: true,
     });
     await expect(nameCell.first()).toBeVisible();
     await nameCell.first().fill('تیم نخست');
+    await rowsDialog.getByRole('button', { name: 'Done', exact: true }).click();
 
     // Rows run the child lifecycle: D-087 — the stage is blank until Play; play
     // stamps + reveals the rows (the edited cell among them) and holds at the
@@ -72,7 +81,10 @@ test.describe('Repeater / data-driven layout (D-030)', () => {
     await expect(app.previewFrame.locator('[data-cg-repeater-row]')).toHaveCount(3);
     await expect(app.previewFrame.getByText('تیم نخست').first()).toBeVisible();
     // Mid-run GROWTH defers: adding a 4th row leaves 3 stamped…
-    await app.previewDialog.getByRole('button', { name: 'Add item' }).first().click();
+    await app.previewDialog.getByRole('button', { name: /Edit rows/ }).click();
+    await rowsDialog.getByRole('button', { name: 'Add item' }).click();
+    await rowsDialog.getByRole('button', { name: 'Done', exact: true }).click();
+    await app.previewDialog.getByRole('button', { name: 'Update all', exact: true }).click();
     await expect(
       app.previewFrame.locator('[data-cg-repeater-row]:not([style*="display: none"])'),
     ).toHaveCount(3);

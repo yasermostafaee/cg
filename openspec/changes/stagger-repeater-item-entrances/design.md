@@ -2,10 +2,13 @@
 
 ## Authoring contract
 
-Each Repeater owns three additive values:
+Each Repeater owns additive motion values:
 
 - `itemEntrance`: one existing Sequence edge/fade value; `none` is the compatibility default;
+- `itemExit`: the same vocabulary for exit; `none` is the compatibility default;
+- `itemExitOrder`: `reverse` (last to first, default) or `forward` (first to last);
 - `itemTransitionMs`: duration of one row's entrance;
+- `itemExitTransitionMs`: independent exit duration; absence inherits `itemTransitionMs`;
 - `itemStaggerMs`: delay from one row's start to the next row's start.
 
 Rows always build in authored/list order. Row zero starts at play time and row N starts at
@@ -26,8 +29,9 @@ cancels/restores deterministically on stop, reset and destroy.
 
 ## Authoring and preview state
 
-Rows are stamped at rest before play so the Designer can edit the complete table. Preview and output
-start the stagger on Play. Live list shrink/regrowth keeps the current stamped-count contract; a
+Rows are stamped at rest before play so the Designer can edit the complete table. Canvas playback,
+Preview and output start the stagger on Play. Scrubbing samples the same effect at the current frame.
+Live list shrink/regrowth keeps the current stamped-count contract; a
 re-shown row adopts the current entrance pose rather than restarting the whole build.
 
 ## Compatibility
@@ -40,4 +44,21 @@ before. Newly drawn Repeaters author those values explicitly.
 
 - Delaying each child composition's lifecycle start (the broader D-032 model).
 - Per-row effects or per-row delay overrides.
-- Exit staggering or live row-count animation.
+- Live row-count animation.
+
+## Exit ownership
+
+The Repeater implements the existing element-outro contract. One exit timeline uses the authored
+effect time and stagger in the selected exit order, freezes on pause and always settles on
+stop/reset/destroy. Exit direction and order are separate: for reverse order row N begins at
+`(rowCount - 1 - N) × itemStaggerMs`; entrance order remains unchanged.
+The enclosing composition awaits it before its background outro. No second exit protocol is added.
+Live exit ordering snapshots only displayed, already-entered rows. Hidden surplus or not-yet-entered
+rows do not add empty stagger slots and stay hidden if values regrow during that exit.
+
+## Derived row presentation
+
+A text element can opt into `rowNumber` in its Inspector: inside a Repeater it renders the one-based
+row position using its authored digits. It is not a dynamic field, never an Excel/input column and
+ignores any obsolete field binding. Outside a Repeater its representative number is 1. Repeater
+`alternatingRowFill` paints every second row behind its child artwork, with an explicit color control.

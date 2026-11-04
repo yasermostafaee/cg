@@ -56,7 +56,7 @@ function visualOrder(page: Page, selector: string): Promise<string> {
   }, selector);
 }
 
-test('a number field keeps Persian digits in its default and in the preview; an impossible entry is refused in one line', async ({
+test('a number field keeps Persian digits in its default and preview, and refuses letters at entry time', async ({
   app,
 }) => {
   const { page } = app;
@@ -86,16 +86,19 @@ test('a number field keeps Persian digits in its default and in the preview; an 
   const field = app.previewDialog.getByLabel('score', { exact: true });
   await typeInto(page, field, '۱۲٫۵');
   await expect(field).toHaveValue('۱۲٫۵');
-  await app.updatePreviewField('score');
+  await app.updateAllPreviewFields();
   await expect(app.previewElement(textId)).toHaveText('۱۲٫۵');
 
-  // The control: an impossible entry is refused in ONE line and changes nothing on the stage.
+  // Current numeric-only contract: impossible characters never enter the buffer.
+  // Typing remains a draft until Update all, so even its valid prefix cannot change the stage.
   await typeInto(page, field, '۱۲a');
   await expect(
     app.previewDialog.getByRole('alert').filter({ hasText: 'Not a number' }),
-  ).toHaveCount(1);
-  await expect(field).toHaveValue('۱۲a');
+  ).toHaveCount(0);
+  await expect(field).toHaveValue('۱۲');
   await expect(app.previewElement(textId)).toHaveText('۱۲٫۵');
+  await app.updateAllPreviewFields();
+  await expect(app.previewElement(textId)).toHaveText('۱۲');
 });
 
 test('the Time (HH:MM) preset accepts a time typed in Persian or Arabic-Indic digits', async ({

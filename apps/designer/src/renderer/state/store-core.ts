@@ -122,6 +122,8 @@ export interface DesignerStoreState {
    * canvas then plays each sound at its place. Session-only, never saved.
    */
   timelinePlaying: boolean;
+  /** Session-only distinction between broadcast lifecycle and authoring scrub/reverse. */
+  timelinePlaybackMode: 'lifecycle' | 'playhead' | null;
   /**
    * `DELTA-RUN-NEXT-VERSION-01-G` — the ONE sound switch the timeline and the Preview share: off by
    * default (sound ON — the Designer is where an author listens to what they placed). Session-only.
@@ -270,6 +272,7 @@ export const initialState: DesignerStoreState = {
   bindModeFieldId: null,
   currentFrame: 0,
   timelinePlaying: false,
+  timelinePlaybackMode: null,
   soundMuted: false,
   stepRehearsal: null,
   stepsDialog: null,
@@ -659,6 +662,7 @@ export function _resetCore(): void {
     bindModeFieldId: null,
     currentFrame: 0,
     timelinePlaying: false,
+    timelinePlaybackMode: null,
     soundMuted: false,
     stepRehearsal: null,
     stepsDialog: null,

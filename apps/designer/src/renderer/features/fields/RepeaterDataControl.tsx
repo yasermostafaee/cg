@@ -300,7 +300,7 @@ export function RepeaterDataControl({
       <section className={s.section} aria-label={`${repeater.name} data file`}>
         <div className={s.sourceRow}>
           <Button variant="secondary" onClick={openManager}>
-            Data file…
+            Rows and data file…
           </Button>
           {attachment === null && authoredBridgePath === undefined ? (
             <span className={`${s.connectionStatus} ${s.disconnected}`}>

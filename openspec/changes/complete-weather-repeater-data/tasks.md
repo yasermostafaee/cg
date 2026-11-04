@@ -56,13 +56,13 @@
       available but show a labelled connected/update-file warning after fields, limits or choices
       change, and clear the warning only by saving and connecting a current file.
 - [x] 2.21 Let the Sequence Page data modal author the nested Repeater as File only; remove the
-      combined manual editor in CG Control while retaining generated-workbook connection/Reload, and
+      combined manual editor in CG Control while retaining connected-workbook status/Reload, and
       keep editable numeric cells on the same active field surface as text/select controls.
 - [x] 2.22 Publish File-only page rows to every Sequence namespace as one draft batch; include the
       batch helper in the tracked runtime source so clean Linux builds do not depend on a local file.
 - [x] 2.23 Add a read-only **View current data** dialog for File-only Sequence rows in CG Control;
       show real column labels/aliases and identify cells that violate the current template schema.
-- [x] 2.24 Give a directly selected Repeater its own **Data file** modal in the Inspector, with
+- [x] 2.24 Give a directly selected Repeater its own **Rows and data file** modal in the Inspector, with
       schema-generated Excel **Save and connect**, a persistent connected/update-needed state,
       Reload, Detach and File-only controls; do not require a wrapping Sequence.
 - [x] 2.25 Give the same direct Repeater field a schema-generated Excel Save/connect/Reload flow in
@@ -72,6 +72,9 @@
       visible and a practical minimum width at narrow panel sizes.
 - [x] 2.27 Make the already-shipped row entrance controls unmistakable in a dedicated Repeater
       section and verify the effect/stagger in the real Designer Preview, not only unit runtime.
+
+- [x] 2.28 Move direct Repeater and Preview structured rows into a roomy modal and use a single
+      horizontal scrolling surface for all rows; verify field headers remain aligned in a browser.
 
 ## 3. Conditional value rules
 

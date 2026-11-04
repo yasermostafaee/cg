@@ -586,6 +586,11 @@ re-awaits fonts), and moved by a single `transform: translateX` per frame. Items
 element's `direction` is the **reading** direction (`'rtl'`: RTL layout, track
 moves visually left→right — the Persian crawl).
 
+Width probes temporarily join the owning document's body, copy the band's computed typography,
+and are removed immediately after measurement. They never join the live track. This keeps width in
+local layout pixels and permits a nested composition to initialize behind a hidden parent without
+caching zero-width text. Nested scales do not affect the measured widths.
+
 The driver owns the **inner repeat loop**: `repeat: 'infinite' | N` (default
 `'infinite'`) crawl passes per run, with `cycleBoundary: 'seamless' | 'drain'`
 deciding the seam between passes. A finite run ends **cleanly** — feeding
@@ -959,6 +964,21 @@ tracked as task 7.6).
 
 ### wireScopeSubtree + RepeaterDriver — dynamic scope wiring (D-030)
 
+Repeater row motion uses one pause-safe wrapper timeline for both `itemEntrance` and `itemExit`.
+Entrance stagger follows list order; `itemExitOrder` independently selects `reverse` (default,
+last to first) or `forward`. Motion edge never changes the sequence of rows.
+Exit duration is `itemExitTransitionMs`, falling back to the entrance duration for older scenes.
+An active exit snapshots only visible/entered rows, so hidden surplus does not add empty delay slots.
+Exits join the shared element-outro ledger (`playOutro`) so background closing waits for the rows;
+the optional `outroDurationMs()` reports their captured visible-row duration to the ledger's
+watchdog. Its thirty-second minimum extends for finite long exits plus safety margin. A Sequence
+adds its held item's bounded wait to its own page-exit duration. Watchdog timers consume active
+time only and are cancelled on replay/removal; the independent never-strand diagnostic remains.
+Stop/reset/remove settle pending waits and release timers. Static `tick(frame)` samples that same
+motion mapper while canvas playback uses the ordinary runtime lifecycle. Row-number text is generated
+in the builder from the row context, excluded from bindings, and formatted using its authored digits.
+The Repeater cell optionally paints `alternatingRowFill` on every second row.
+
 `createRuntime` wires every scope subtree through ONE factory:
 `wireScopeSubtree(scope, path, isRootSubtree) → WiredSubtree { node,
 tickers, clocks, sequences, repeaters, lotties, destroy }` — driver instantiation +
@@ -1185,6 +1205,13 @@ payloads are dropped silently (a broadcast frame can't write logs).
    only records the wiring.
 
 ## Testing
+
+Authoring hosts may pass `RuntimeBootOptions.onRootFrame` to observe the root lifecycle playhead.
+The root scope alone forwards `PlayoutController.observeFrame`; nested scope frames remain local.
+Observation is independent from paint: a visually static leg still collapses immediately and reports
+its boundaries, while a content-driven hold may run an observer-only Middle clock. Observer failures
+are caught at the runtime seam and cannot affect output. The Designer Preview document deduplicates
+integer frame reports and forwards natural `stop.end` to settle its session counters.
 
 ```bash
 pnpm --filter @cg/template-runtime test                    # vitest (happy-dom)

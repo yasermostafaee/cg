@@ -31,6 +31,34 @@ function bindings() {
 }
 
 describe('designerStore — D-018 Data key convenience layer', () => {
+  it('authors text choice lists and preserves them while editing unrelated field metadata', () => {
+    freshScene();
+    designerScene_addText('choice-text');
+    designerStore.setElementDataKey('choice-text', 'weatherType');
+    const options = [
+      { value: 'آفتابی', label: 'آفتابی' },
+      { value: 'بارانی', label: 'بارانی' },
+    ];
+    designerStore.setElementFieldMeta('choice-text', { fieldType: 'select', options });
+    designerStore.setElementFieldMeta('choice-text', { title: 'Weather', default: 'بارانی' });
+    expect(fields().find((field) => field.id === 'weatherType')).toMatchObject({
+      type: 'select',
+      options,
+      default: 'بارانی',
+      label: 'Weather',
+    });
+    designerStore.setElementFieldMeta('choice-text', { options: [options[0]!] });
+    expect(fields().find((field) => field.id === 'weatherType')).toMatchObject({
+      type: 'select',
+      default: 'آفتابی',
+    });
+    designerStore.setElementFieldMeta('choice-text', { options: [] });
+    expect(fields().find((field) => field.id === 'weatherType')).toMatchObject({
+      type: 'select',
+      options: [options[0]],
+    });
+  });
+
   it('setElementDataKey creates a field (seeded from the element text) + binding', () => {
     freshScene();
     designerScene_addText('el-1');

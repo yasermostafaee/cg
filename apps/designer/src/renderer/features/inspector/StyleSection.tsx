@@ -12,7 +12,6 @@ import {
   followsComposition,
   ImageFitSchema,
   NumberFieldDigitsSchema,
-  repeaterRowLimit,
   SequenceEdgeSchema,
   sequenceItemsBinding,
   sequenceStepsByOperator,
@@ -68,7 +67,6 @@ import {
   presetKeyFor,
   presetValueFor,
 } from './aspect-presets.js';
-import { columnsForFields, imageChoicesForAssets } from '../fields/repeater-columns.js';
 import {
   SEQUENCE_PRESET_ORDER,
   SEQUENCE_TRANSITION_PRESETS,
@@ -489,6 +487,8 @@ function TextSections({
   currentFrame,
   selectedKeyframe,
 }: SectionProps<TextElement>): JSX.Element {
+  const scene = useDesignerSelector((state) => state.scene);
+  const bound = scene !== null && elementDataField(scene, element.id) !== undefined;
   return (
     <>
       {/* D-010-pic-5 — custom layout (toggles, swatches, font dropdown,
@@ -498,6 +498,22 @@ function TextSections({
         currentFrame={currentFrame}
         selectedKeyframe={selectedKeyframe}
       />
+
+      <CollapseSection title="Repeater context">
+        <CheckRow
+          label="Automatic row number"
+          title={
+            bound
+              ? 'Remove the Data key before enabling automatic row numbering.'
+              : 'Render the one-based row position instead of editable text when this composition is repeated.'
+          }
+          disabled={bound && element.rowNumber !== true}
+          checked={element.rowNumber === true}
+          onChange={(rowNumber) =>
+            designerStore.updateElement(element.id, { rowNumber } as Partial<Element>)
+          }
+        />
+      </CollapseSection>
 
       <DropShadowSection
         title="Text Shadow"
@@ -3396,8 +3412,6 @@ function RepeaterSections({
 }: SectionProps<RepeaterElement>): JSX.Element {
   const id = element.id;
   const scene = useDesignerSelector((s) => s.scene);
-  const assets = useAssets();
-  const sharedImages = useSharedImages();
   const comps = scene?.compositions ?? [];
   // Valid = the existing author-time cycle guard; keep the CURRENT choice
   // listed even if momentarily invalid so the select doesn't jump.
@@ -3405,8 +3419,6 @@ function RepeaterSections({
     (c) => c.id === element.compositionId || designerStore.canNestCompositionInActive(c.id),
   );
   const child = comps.find((c) => c.id === element.compositionId);
-  const columns = columnsForFields(child?.fields, imageChoicesForAssets(assets, sharedImages));
-  const fileItems = useFileSourceItems(id);
   return (
     <>
       <CollapseSection title="Repeater" pinned>
@@ -3467,6 +3479,24 @@ function RepeaterSections({
           }
         />
         {scene !== null && <RepeaterDataControl scene={scene} repeater={element} />}
+        <CheckRow
+          label="Alternating row background"
+          checked={element.alternatingRowFill !== undefined}
+          onChange={(enabled) =>
+            designerStore.updateElement(id, {
+              alternatingRowFill: enabled ? '#FFFFFF10' : undefined,
+            } as Partial<Element>)
+          }
+        />
+        {element.alternatingRowFill !== undefined && (
+          <ColorField
+            label="alternate color"
+            value={element.alternatingRowFill}
+            onCommit={(alternatingRowFill) =>
+              designerStore.updateElement(id, { alternatingRowFill } as Partial<Element>)
+            }
+          />
+        )}
         <StateLine
           tip={
             <InfoTip title="How a repeater stamps rows">
@@ -3487,13 +3517,13 @@ function RepeaterSections({
       </CollapseSection>
 
       <CollapseSection
-        title="Item entrance"
+        title="Item effects"
         defaultExpanded
         trailing={
           <span>
-            {(element.itemEntrance ?? 'none') === 'none'
+            {(element.itemEntrance ?? 'none') === 'none' && (element.itemExit ?? 'none') === 'none'
               ? 'Off'
-              : `${element.itemEntrance ?? 'none'} · ${String((element.itemStaggerMs ?? 0) / 1000)}s`}
+              : `${element.itemEntrance ?? 'none'} / ${element.itemExit ?? 'none'} · ${String((element.itemStaggerMs ?? 0) / 1000)}s`}
           </span>
         }
       >
@@ -3506,14 +3536,14 @@ function RepeaterSections({
           }
         />
         <NumberField
-          label="effect time"
+          label="entrance time"
           value={(element.itemTransitionMs ?? 400) / 1000}
           step={0.05}
           min={0.05}
           suffix="s"
           withheld={
             (element.itemEntrance ?? 'none') === 'none'
-              ? 'Choose an item entrance to set how long each row effect takes.'
+              ? 'Choose an item entrance to set its duration.'
               : undefined
           }
           onCommit={(secs) =>
@@ -3529,14 +3559,46 @@ function RepeaterSections({
           min={0}
           suffix="s"
           withheld={
-            (element.itemEntrance ?? 'none') === 'none'
-              ? 'Choose an item entrance to delay each row after the previous row.'
+            (element.itemEntrance ?? 'none') === 'none' && (element.itemExit ?? 'none') === 'none'
+              ? 'Choose an item effect to delay each row after the previous row.'
               : undefined
           }
           onCommit={(secs) =>
             designerStore.updateElement(id, {
               itemStaggerMs: Math.max(0, Math.round(secs * 1000)),
             } as Partial<Element>)
+          }
+        />
+        <SelectField
+          label="item exit"
+          value={element.itemExit ?? 'none'}
+          options={SequenceEdgeSchema.options}
+          onCommit={(itemExit) => designerStore.updateElement(id, { itemExit } as Partial<Element>)}
+        />
+        <NumberField
+          label="exit time"
+          value={(element.itemExitTransitionMs ?? element.itemTransitionMs ?? 400) / 1000}
+          step={0.05}
+          min={0.05}
+          suffix="s"
+          withheld={
+            (element.itemExit ?? 'none') === 'none'
+              ? 'Choose an item exit to set its duration.'
+              : undefined
+          }
+          onCommit={(secs) =>
+            designerStore.updateElement(id, {
+              itemExitTransitionMs: Math.max(50, Math.round(secs * 1000)),
+            } as Partial<Element>)
+          }
+        />
+        <SelectField
+          label="exit order"
+          value={element.itemExitOrder ?? 'reverse'}
+          options={['reverse', 'forward']}
+          labels={['Last to first', 'First to last']}
+          onCommit={(itemExitOrder) =>
+            designerStore.updateElement(id, { itemExitOrder } as Partial<Element>)
           }
         />
       </CollapseSection>
@@ -3546,18 +3608,6 @@ function RepeaterSections({
         currentFrame={currentFrame}
         selectedKeyframe={selectedKeyframe}
       />
-
-      {fileItems === null && (
-        <CollapseSection title="Rows" defaultExpanded>
-          <ListItemsEditor
-            items={element.items}
-            label={element.name || 'Repeater'}
-            columns={columns}
-            maxItems={repeaterRowLimit(element)}
-            onChange={(items) => designerStore.setRepeaterItems(id, items)}
-          />
-        </CollapseSection>
-      )}
     </>
   );
 }

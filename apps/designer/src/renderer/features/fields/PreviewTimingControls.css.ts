@@ -4,7 +4,12 @@ import { colors } from '../../theme.js';
 /** Full-width mode select. Border/hover/focus come from the global input chrome. */
 export const select = style({
   width: '100%',
-  fontSize: '0.72rem',
+  minHeight: '1.85rem',
+  background: colors.background,
+  color: colors.text,
+  borderColor: colors.keyframeBorder,
+  fontSize: '0.74rem',
+  fontWeight: 500,
 });
 
 /**
@@ -22,11 +27,33 @@ export const fact = style({
   lineHeight: 1.35,
 });
 
+export const factMissing = style([
+  fact,
+  {
+    color: colors.caution,
+  },
+]);
+
 /** Compact numeric input (hold ms / repeat count). */
 export const num = style({
   width: '76px',
-  fontSize: '0.72rem',
+  minHeight: '1.85rem',
+  boxSizing: 'border-box',
+  padding: '0.25rem 0.4rem',
+  background: colors.background,
+  color: colors.text,
+  border: `1px solid ${colors.keyframeBorder}`,
+  borderRadius: '0.25rem',
+  outline: 'none',
+  fontSize: '0.74rem',
+  fontWeight: 600,
   fontVariantNumeric: 'tabular-nums',
+  selectors: {
+    '&:focus-visible': {
+      borderColor: colors.accent,
+      boxShadow: `0 0 0 1px ${colors.accent}`,
+    },
+  },
 });
 
 export const inline = style({
@@ -52,16 +79,4 @@ export const checkLabel = style({
   gap: '0.25rem',
   color: colors.textMuted,
   fontSize: '0.66rem',
-});
-
-export const hint = style({
-  color: colors.textMuted,
-  fontSize: '0.66rem',
-  lineHeight: 1.4,
-  margin: '0.35rem 0 0',
-});
-
-/** Spacing around the out-point callout so it reads as a distinct notice. */
-export const notice = style({
-  margin: '0.1rem 0 0.4rem',
 });

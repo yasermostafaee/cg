@@ -263,8 +263,15 @@ test.describe('-A / -B / -F — a countdown’s steps in the Designer', () => {
     );
 
     // The field's label is "Target time" (-C §2); its key stays `targetTime`.
-    await app.setPreviewField('Target time', await timeIn(app.page, 5));
-    await app.updatePreviewField('Target time');
+    const targetInput = app.previewDialog.getByRole('textbox', {
+      name: 'Target time time',
+      exact: true,
+    });
+    await targetInput.focus();
+    await targetInput.press('Control+a');
+    await targetInput.pressSequentially(`${(await timeIn(app.page, 5)).replace(':', '')}00`);
+    await targetInput.blur();
+    await app.updateAllPreviewFields();
 
     // Re-targeted: under five minutes now…
     await expect

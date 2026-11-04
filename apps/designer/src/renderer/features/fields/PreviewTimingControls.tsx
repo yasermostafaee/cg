@@ -6,7 +6,6 @@ import {
   type Playout,
   type PlayoutMode,
 } from '@cg/shared-schema';
-import { Callout } from '../../ui/Callout.js';
 import { Select } from '../../ui/Select.js';
 import { Tag } from '../../ui/Tag.js';
 import { CollapseSection } from '../inspector/CollapseSection.js';
@@ -91,16 +90,15 @@ export interface TimingOverride {
 
 const MODE_LABELS: Record<PlayoutMode, string> = {
   // D-114 — the no-out-point mode (the preview reflects it; it's resolved by `playoutOf`).
-  static: 'Static — plays in, holds, cut on stop',
-  manual: 'Manual — hold until stop',
-  'auto-out': 'Auto-out — outro after hold',
-  'loop-cycle': 'Loop cycle — repeat in → hold → out',
+  static: 'Static',
+  manual: 'Manual',
+  'auto-out': 'Auto-out',
+  'loop-cycle': 'Loop cycle',
 };
 
 const HOLD_LABELS: Record<HoldSource, string> = {
-  timed: 'Timed — hold for a duration',
-  'content-driven':
-    'Content-driven — until the content completes (ticker passes / countdown / sequence passes)',
+  timed: 'Timed',
+  'content-driven': 'Content-driven',
 };
 
 /**
@@ -123,9 +121,8 @@ const HOLD_LABELS: Record<HoldSource, string> = {
  */
 export function PreviewTimingControls({
   source,
-  title = 'Timing (session)',
+  title = 'Timing',
   defaultExpanded = true,
-  showFooter = true,
   hasContent = false,
   override,
   onChange,
@@ -135,8 +132,6 @@ export function PreviewTimingControls({
   /** Section header — the scope's label (e.g. the composition or instance name). */
   title?: string;
   defaultExpanded?: boolean;
-  /** Show the "session only" footnote (once is enough when many scopes stack). */
-  showFooter?: boolean;
   /**
    * D-027/D-028 — whether this scope contains ANY content source (ticker / countdown clock /
    * sequence); gates the hold-source select.
@@ -165,16 +160,12 @@ export function PreviewTimingControls({
 
   return (
     <CollapseSection title={title} defaultExpanded={defaultExpanded}>
-      {hasOutPoint ? (
-        <p className={t.hint}>
-          Out point @ frame {String(source.lifecycle?.outPoint)} (set on the timeline).
-        </p>
-      ) : (
-        <Callout variant="info" className={t.notice}>
-          No out-point set — the whole timeline is the entrance and it holds the last frame. Add an
-          out-point on the timeline to enable auto-out / loop-cycle.
-        </Callout>
-      )}
+      <div className={s.row}>
+        <span className={s.label}>out point</span>
+        <Tag className={hasOutPoint ? t.fact : t.factMissing}>
+          {hasOutPoint ? `Frame ${String(source.lifecycle?.outPoint)}` : 'Not set'}
+        </Tag>
+      </div>
 
       {/* ADR 0009 — `mode` and `hold` are the template's own promise about itself, authored in
           the composition's playout settings. Here they are FACTS, not controls: plain text in
@@ -187,7 +178,7 @@ export function PreviewTimingControls({
         <Tag
           className={t.fact}
           data-testid="preview-playout-mode-fact"
-          aria-label={`Playout mode — ${MODE_LABELS[mode]}`}
+          aria-label={`Playback mode — ${MODE_LABELS[mode]}`}
         >
           {MODE_LABELS[mode]}
         </Tag>
@@ -208,10 +199,6 @@ export function PreviewTimingControls({
           </Tag>
         </div>
       )}
-
-      <p className={t.hint}>
-        Set by the template — change the mode and hold in the composition&apos;s playout settings.
-      </p>
 
       {showHold && (
         <div className={s.row}>
@@ -260,13 +247,6 @@ export function PreviewTimingControls({
 
       {/* D-102 Phase 1 — per-ticker timing rows nest here, below the scope's lifecycle controls. */}
       {children}
-
-      {showFooter && (
-        <p className={t.hint}>
-          Session only — these test the playout and do not change the template&apos;s stored
-          defaults. Authoritative live control belongs to the rundown.
-        </p>
-      )}
     </CollapseSection>
   );
 }
@@ -458,11 +438,29 @@ export function PreviewCountdownTimingRow({
         </div>
       </div>
       {defaults.deadline !== undefined && (
-        <p className={t.hint}>
-          {name} counts down to {defaults.deadline} — set a duration to rehearse it now (0 keeps the
-          deadline).
-        </p>
+        <div className={s.row}>
+          <span className={s.label}>{name} — target</span>
+          <time className={t.fact} dateTime={defaults.deadline} title={defaults.deadline}>
+            {previewDeadlineLabel(defaults.deadline)}
+          </time>
+        </div>
       )}
     </>
   );
+}
+
+/** Advanced timing states a readable local deadline; the editable calendar lives in Variables. */
+export function previewDeadlineLabel(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+    timeZoneName: 'shortOffset',
+  }).format(date);
 }

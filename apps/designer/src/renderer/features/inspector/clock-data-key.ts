@@ -128,7 +128,11 @@ function syncTargetField(elementId: string, value: string): void {
   const field = doc.fields.find((f) => f.id === key);
   if (field === undefined || field.type !== 'text') return;
   const own = field.pattern ?? '';
-  const ours = own === '' || TARGET_PATTERN_KEYS.some((k) => PATTERN_PRESETS[k]?.pattern === own);
+  // Earlier starter packages used \\d instead of [0-9] for the same standard time
+  // pattern. Normalize only that spelling; genuinely custom constraints stay authored.
+  const canonical = own.replaceAll('\\d', '[0-9]');
+  const ours =
+    own === '' || TARGET_PATTERN_KEYS.some((k) => PATTERN_PRESETS[k]?.pattern === canonical);
   designerStore.updateField(field.id, {
     default: value,
     ...(ours ? targetFieldShape(value) : {}),

@@ -57,6 +57,8 @@ export const compositionSlice = {
       selectedKeyframes: [],
       keyframeInspectorOpen: false,
       currentFrame: doc?.frameRange.in ?? 0,
+      timelinePlaying: false,
+      timelinePlaybackMode: null,
     });
   },
 
@@ -105,6 +107,8 @@ export const compositionSlice = {
       selectedKeyframes: [],
       keyframeInspectorOpen: false,
       currentFrame: child.frameRange.in,
+      timelinePlaying: false,
+      timelinePlaybackMode: null,
     });
   },
 
