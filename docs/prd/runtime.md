@@ -4426,8 +4426,9 @@ bound by date, or revisit page by page. **Acceptance:**
   details never lets Item overlap Result; pressing the selected row again closes details; and Previous/Next
   remain centred independently of Close
 - WHEN the window is narrow THEN the six-column table keeps a readable minimum width and scrolls inside its
-  own frame, Event details open over its right side without resizing it, filters and footer controls reflow,
-  and the page does not widen
+  own frame, Event details open as a full-height drawer over the right side of the modal without resizing it,
+  header/footer/filter/row spacing becomes compact enough to show more events, controls reflow, and the page
+  does not widen
 - WHEN the Log opens or its filter changes THEN the exact permitted matching total is shown independently of
   the 25 rows on the current page
 - WHEN a matching row is written while page 1 is open THEN it appears at the top; on an older page the

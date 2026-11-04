@@ -169,33 +169,36 @@ test('🔴 §9 — 50,000 rows: explicit 25-row pages, server filters, and live 
   await expect(itemOf(0)).toHaveAttribute('aria-pressed', 'true');
   await expect(log.locator('[data-audit-details]')).toBeVisible();
 
-  // ── narrow layout: details overlay on the right, the ledger scrolls, and the page never spills ──
+  // ── narrow layout: details overlay the whole modal, the ledger scrolls, and the page never spills ──
   const initialViewport = page.viewportSize();
   expect(initialViewport, 'the browser has a measurable viewport').not.toBeNull();
   await page.setViewportSize({ width: 900, height: 900 });
+  const narrowModalBox = await log.boundingBox();
   const narrowTableBox = await log.locator('[data-audit-table]').boundingBox();
   const narrowDetailsBox = await log.locator('[data-audit-details]').boundingBox();
+  expect(narrowModalBox, 'the narrow Audit modal has geometry').not.toBeNull();
   expect(narrowTableBox, 'the narrow audit table has geometry').not.toBeNull();
   expect(narrowDetailsBox, 'the narrow details pane has geometry').not.toBeNull();
   expect(
-    Math.abs((narrowDetailsBox?.y ?? 0) - (narrowTableBox?.y ?? 0)),
-    'the details drawer overlays the table from its top edge',
+    Math.abs((narrowDetailsBox?.y ?? 0) - (narrowModalBox?.y ?? 0)),
+    'the details drawer overlays the modal from its top edge',
   ).toBeLessThanOrEqual(1);
   expect(
     Math.abs(
       (narrowDetailsBox?.x ?? 0) +
         (narrowDetailsBox?.width ?? 0) -
-        ((narrowTableBox?.x ?? 0) + (narrowTableBox?.width ?? 0)),
+        ((narrowModalBox?.x ?? 0) + (narrowModalBox?.width ?? 0)),
     ),
-    'the details drawer is attached to the right edge',
+    'the details drawer is attached to the modal right edge',
   ).toBeLessThanOrEqual(1);
   expect(
-    Math.abs((narrowDetailsBox?.height ?? 0) - (narrowTableBox?.height ?? 0)),
-    'the details drawer overlays the table height',
+    Math.abs((narrowDetailsBox?.height ?? 0) - (narrowModalBox?.height ?? 0)),
+    'the details drawer overlays the full modal height',
   ).toBeLessThanOrEqual(1);
-  expect(narrowDetailsBox?.x ?? 0, 'the details drawer occupies the right side').toBeGreaterThan(
-    narrowTableBox?.x ?? 0,
-  );
+  expect(
+    narrowDetailsBox?.x ?? 0,
+    'the details drawer occupies the modal right side',
+  ).toBeGreaterThan(narrowModalBox?.x ?? 0);
   const narrowScroll = await log.locator('[data-audit-table]').evaluate((element) => ({
     clientWidth: element.clientWidth,
     scrollWidth: element.scrollWidth,
@@ -203,6 +206,24 @@ test('🔴 §9 — 50,000 rows: explicit 25-row pages, server filters, and live 
   expect(narrowScroll.scrollWidth, 'six columns scroll inside the table').toBeGreaterThan(
     narrowScroll.clientWidth,
   );
+  const compactHeadBox = await log.locator('[data-modal-head]').boundingBox();
+  const compactSearchBox = await log
+    .getByRole('searchbox', { name: 'Search events, names, ids and actors' })
+    .boundingBox();
+  const compactRowBox = await itemOf(0).boundingBox();
+  expect(compactHeadBox, 'the compact modal header has geometry').not.toBeNull();
+  expect(compactSearchBox, 'the compact audit search has geometry').not.toBeNull();
+  expect(compactRowBox, 'a compact audit row has geometry').not.toBeNull();
+  expect(compactHeadBox?.height ?? Infinity, 'the narrow header is compact').toBeLessThanOrEqual(
+    56,
+  );
+  expect(compactSearchBox?.height ?? Infinity, 'the narrow input is compact').toBeLessThanOrEqual(
+    32,
+  );
+  expect(
+    compactRowBox?.height ?? Infinity,
+    'the narrow rows expose more events',
+  ).toBeLessThanOrEqual(56);
   const narrowFooterBox = await log.locator('[data-audit-footer]').boundingBox();
   const narrowPagerBox = await log.getByLabel('Audit pages').boundingBox();
   expect(narrowFooterBox, 'the narrow footer has geometry').not.toBeNull();

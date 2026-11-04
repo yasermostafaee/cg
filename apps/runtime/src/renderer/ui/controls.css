@@ -7682,7 +7682,6 @@ input[type='checkbox']:disabled:checked {
  * declared, never one declared with nothing left to read it.
  */
 .cg-audit-browser {
-  position: relative;
   flex: 1;
   min-height: 0;
   display: grid;
@@ -7970,6 +7969,10 @@ input[type='checkbox']:disabled:checked {
  * the table or the dialog.
  */
 @media (max-width: 1100px) {
+  [data-modal-size='ledger'] {
+    position: relative;
+  }
+
   .cg-audit-browser[data-audit-details-open='true'] {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -7977,16 +7980,63 @@ input[type='checkbox']:disabled:checked {
   .cg-audit-details {
     position: absolute;
     z-index: 2;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: min(360px, calc(100% - 48px));
+    top: -1px;
+    right: -1px;
+    bottom: -1px;
+    width: min(420px, calc(100% - 48px));
     border-inline-start: 1px solid var(--r-border-strong);
     box-shadow: var(--r-shadow-2);
   }
 }
 
 @media (max-width: 900px) {
+  [data-modal-size='ledger'] {
+    --r-audit-search-h: 32px;
+    --r-audit-select-h: 32px;
+    --r-audit-tools-gap: 8px;
+    --r-audit-field-gap: 2px;
+    --r-audit-field-label-text: 11px;
+    --r-audit-th-pad: 8px 12px;
+    --r-audit-td-pad: 7px 12px;
+    --r-modal-btn-h: 34px;
+  }
+
+  /* These three boxes are inline-sized by Modal; the ledger-only important override is the
+     responsive contract, not a second modal theme. */
+  [data-modal-size='ledger'] .cg-modal-head {
+    min-height: 0 !important;
+    gap: 8px !important;
+    padding: 7px 12px !important;
+  }
+
+  [data-modal-size='ledger'] [data-modal-emblem] {
+    width: 34px !important;
+    height: 34px !important;
+    border-radius: 8px !important;
+  }
+
+  [data-modal-size='ledger'] .cg-modal-head h2 {
+    font-size: 16px !important;
+    line-height: 1.2 !important;
+  }
+
+  [data-modal-size='ledger'] .cg-modal-head [data-modal-subtitle] {
+    margin-top: 1px !important;
+    font-size: 12px !important;
+    line-height: 1.25 !important;
+  }
+
+  [data-modal-size='ledger'] .cg-modal-body {
+    gap: 8px !important;
+    padding: 12px 14px !important;
+  }
+
+  [data-modal-size='ledger'] .cg-modal-footer {
+    min-height: 0 !important;
+    gap: 8px !important;
+    padding: 8px 14px !important;
+  }
+
   .cg-audit-footer {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-rows: auto auto;

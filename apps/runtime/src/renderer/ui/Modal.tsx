@@ -955,7 +955,11 @@ export function Modal({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={fixed ? { ...styles.titleRow, ...styles.titleRowFixed } : styles.titleRow}>
+        <div
+          style={fixed ? { ...styles.titleRow, ...styles.titleRowFixed } : styles.titleRow}
+          className="cg-modal-head"
+          data-modal-head=""
+        >
           {/*
             🔴 `REPAIR-03` B — THE HEAD EMBLEM (audit rows 62, 72, 98, 113).
 

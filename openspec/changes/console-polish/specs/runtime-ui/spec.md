@@ -126,7 +126,9 @@ remain contained before Result even while the details pane narrows the table. Pr
 SHALL deselect it and close the details pane. Previous/Next SHALL remain centred in the dialog footer,
 independent of the Close action. On a narrow console, the six-column ledger SHALL retain a readable minimum
 width and scroll inside its own frame; Event details SHALL open as a right-side drawer over the table rather
-than compressing or moving it, and the filters and footer SHALL reflow without widening the page.
+than compressing or moving it. On a narrow console that drawer SHALL cover the modal's full height, while the
+header, footer, filters and row spacing SHALL become compact enough to expose more events, and the controls
+SHALL reflow without widening the page.
 The record on disk SHALL be unchanged.
 
 #### Scenario: The incident stamp reads as the control room clock
@@ -158,8 +160,9 @@ The record on disk SHALL be unchanged.
 #### Scenario: The ledger stays usable in a narrow window
 
 - **WHEN** the Audit log is open at a 900 px viewport with Event details visible **THEN** details span the
-  table height as a drawer attached to its right edge, the six columns scroll horizontally inside the table,
-  Previous/Next remain centred, and the document itself has no horizontal overflow
+  modal's full height as a drawer attached to its right edge, the six columns scroll horizontally inside the table,
+  the header, inputs and rows use their compact metrics, Previous/Next remain centred, and the document itself
+  has no horizontal overflow
 
 #### Scenario: A refused command is shown beside its code
 

@@ -144,10 +144,11 @@ was stashed before each push so the gate judged only what was pushed.
       Item content before Result while details is open; let a second click deselect a row; and centre
       Previous/Next independently of Close. Pin the order, toggle and real-browser geometry.
 - [x] 7A.8 Owner responsive follow-up: preserve a readable six-column ledger with internal horizontal
-      scrolling; show Event details as a right-side overlay drawer on narrow windows; and reflow
-      filters/footer controls without widening the page. Pinned at 900 px in real Chromium: the drawer
-      shares the ledger's top, height and right edge; the ledger scrolls internally; the footer remains
-      centred; the document does not widen (`audit-paging.spec.ts`, 1/1 passed).
+      scrolling; show Event details as a full-height, right-side overlay drawer over the whole modal on
+      narrow windows; and reflow filters/footer controls without widening the page. Pinned at 900 px in real
+      Chromium: the drawer shares the modal's top, height and right edge; the ledger scrolls internally; the
+      modal chrome, filters and rows use their compact metrics; the footer remains centred; the document does
+      not widen (`audit-paging.spec.ts`, 1/1 passed).
 
 ## 8. Close
 
