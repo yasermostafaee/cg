@@ -159,6 +159,34 @@ describe('D-180 — structured Repeater image rows', () => {
     });
   });
 
+  it('keeps every column title visible above its control', () => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() =>
+      root?.render(
+        createElement(ListItemsEditor, {
+          items: [{ id: 'r1', city: 'یزد', icon: { assetId: 'sunny' } }],
+          label: 'Weather',
+          columns,
+          onChange: vi.fn(),
+          comfortable: true,
+        }),
+      ),
+    );
+
+    expect(
+      container
+        .querySelector('input[aria-label="Weather item 1 City"]')
+        ?.parentElement?.closest('label')?.textContent,
+    ).toContain('City');
+    expect(
+      container
+        .querySelector('select[aria-label="Weather item 1 Weather icon"]')
+        ?.parentElement?.closest('label')?.textContent,
+    ).toContain('Weather icon');
+  });
+
   it('seeds a new row from every child-field default', () => {
     expect(newColumnItem(columns)).toMatchObject({
       city: 'تهران',

@@ -186,11 +186,16 @@ describe('MONITORS-01 — the shell boots with the monitors folded away', () => 
   });
 });
 
-describe('FIELD-FIXES-01 G — the header carries no in-app brand', () => {
-  it('🔴 no brand block and no app name in the header', () => {
+describe('the header carries the APASAI brand link', () => {
+  it('shows the official mark and opens the APASAI website', () => {
     const header = document.querySelector('[data-app-header]');
     expect(header, 'the app header is rendered').not.toBeNull();
-    expect(header?.querySelector('.cg-app-brand') ?? null).toBeNull();
+    const brand = header?.querySelector<HTMLAnchorElement>('[data-apasai-brand]') ?? null;
+    expect(brand).not.toBeNull();
+    expect(brand?.textContent ?? '').toContain('APASAI');
+    expect(brand?.href).toBe('https://apasai.com/');
+    expect(brand?.target).toBe('_blank');
+    expect(brand?.querySelector('[data-apasai-mark]')).not.toBeNull();
     expect(header?.textContent ?? '').not.toMatch(/CG\s*CONTROL/i);
   });
 

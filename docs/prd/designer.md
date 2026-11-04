@@ -5906,6 +5906,33 @@ the canvas ratio.
 - WHEN the author switches to per-side mode THEN the current value is copied to top, right, bottom and left
 - WHEN the author switches back to uniform mode THEN the top value becomes the single value and rendering stays consistent in canvas, preview and export
 
+## [~] D-179 — Rebuild and re-audit the Persian production starter gallery ⟨priority: high — owner re-review reopened 2026-11-04⟩ — `openspec/changes/rebuild-production-starter-gallery/`
+
+**What:** keep the gallery Persian-only and demonstrate the real production workflows: Iran Premier
+League standings, multi-page province-capital weather, one-page forecast, manually advanced
+folder-backed Quran pages, target countdown Steps, and a real four-Look multibox. Existing starters
+are re-imported and visually audited rather than assumed correct.
+
+**Owner re-review:** replace Azadegan with Iran Premier League; remove the update-date line; drive
+weather icons from a choice field and value rules using one consistent animated icon family; replace
+placeholder SVG folder pages; use real one-to-four-frame Looks with equal plates; repair nested ticker
+text and inconsistent loop/hold markers; use the official replaceable APASAI image mark in branded
+starters and link APASAI from Designer/CG Control; regenerate and inspect every poster; and provide a
+lazy, silent, accelerated motion preview on every gallery card so motion is discoverable without
+waiting through the template's full broadcast duration.
+
+## [~] D-180 — Structured Repeater data, files and value rules work without a mandatory Sequence ⟨priority: high — owner follow-up 2026-11-04⟩ — `openspec/changes/complete-weather-repeater-data/`
+
+**What:** a Repeater derives row fields from its child composition, edits/imports them with correct
+types and aliases, connects to schema-generated Excel, reloads explicitly, and can be File only in
+CG Control. An outer Sequence remains optional pagination. Value rules may drive row image/color/
+visibility, and many-column tables retain visible field titles and usable input widths in Designer,
+Preview and CG Control.
+
+**Follow-up acceptance:** a directly selected Repeater exposes **Data file…** and a prominent item
+entrance section; Excel Save/connect/Reload works in Designer and CG Control behind Update; no
+surface compresses a league row into unlabeled slivers.
+
 ## [x] D-197 — Repeater rows can enter in sequence ⟨priority: high — the owner, 2026-11-04⟩ — `openspec/changes/stagger-repeater-item-entrances/`
 
 **What:** A Repeater can apply one shared entrance effect to its stamped rows and delay each row

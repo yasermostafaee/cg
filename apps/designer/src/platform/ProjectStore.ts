@@ -56,6 +56,7 @@ export class ProjectStore {
       description: s.description,
       templateType: s.scene.templateType,
       ...(s.preview !== undefined ? { previewUrl: s.preview } : {}),
+      ...(s.motionPreview !== undefined ? { motionPreviewUrl: s.motionPreview } : {}),
       ...(s.isNew === true ? { isNew: true } : {}),
       // `DESIGNER-FIX-0905` — the landing badge, derived from the scene at catalog time.
       playout: describePlayout(s.scene),

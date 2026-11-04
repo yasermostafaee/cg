@@ -1,10 +1,10 @@
-import type { AnchorPoint, Element, Fill, Scene, Transform } from '@cg/shared-schema';
+import type { Element, Fill, Scene, Transform } from '@cg/shared-schema';
 import { anim, EASE, kf, track } from './anim.js';
 
 /**
  * «زیرنویس معرفی» — a guest / expert name title (lower third) that SELF-CLOSES:
  * a two-tier plate flush against the right frame edge (the RTL reading edge),
- * a red brand square carrying the family compass-star mark, name + role on
+ * a red brand square carrying a replaceable APASAI image, name + role on
  * bound data keys, and `auto-out` playout — enter, hold 6 s, play the authored
  * exit, settle. No operator stop needed.
  *
@@ -43,19 +43,6 @@ const CARD_W = 1000;
 const CARD_H = 190;
 const CARD_X = 920;
 const CARD_Y = 812;
-
-// The family compass-star mark (36×36 local box), same construction as the
-// logo starter's rest pose: both handles of every anchor point at the center.
-function starPoints(): AnchorPoint[] {
-  const c = 18;
-  const q = 10;
-  return [
-    { id: 'pt', x: c, y: 0, in: { x: 0, y: q }, out: { x: 0, y: q }, smooth: false },
-    { id: 'pr', x: 2 * c, y: c, in: { x: -q, y: 0 }, out: { x: -q, y: 0 }, smooth: false },
-    { id: 'pb', x: c, y: 2 * c, in: { x: 0, y: -q }, out: { x: 0, y: -q }, smooth: false },
-    { id: 'pl', x: 0, y: c, in: { x: q, y: 0 }, out: { x: q, y: 0 }, smooth: false },
-  ];
-}
 
 interface TfOpts {
   ax?: number;
@@ -155,19 +142,20 @@ const cardChildren: Element[] = [
       opacity: track(kf(0, 0), kf(12, 1), kf(98, 1), kf(112, 0)),
     }),
   },
-  // The compass-star mark inside the red square.
+  // Replaceable logo image; its transform animation survives asset replacement.
   {
     id: 'tt-star',
-    name: 'star-mark',
-    type: 'path',
-    transform: tf(944, 40, 36, 36),
+    name: 'لوگو (قابل جایگزینی)',
+    type: 'image',
+    assetId: 'apasai-logo',
+    source: 'project',
+    fit: 'contain',
+    preserveAspect: true,
+    transform: tf(936, 28, 52, 52),
     opacity: 1,
     visible: true,
     locked: false,
     zIndex: 3,
-    points: starPoints(),
-    closed: true,
-    fill: { kind: 'solid', color: WHITE },
     animation: anim({
       rotation: track(
         kf(10, -90, EASE.outExpo),
@@ -287,7 +275,7 @@ export const titleScene: Scene = {
       name: 'زیرنویس معرفی',
       resolution: { width: W, height: H },
       frameRange: { in: 0, out: 128 },
-      lifecycle: { outPoint: 65 },
+      lifecycle: { outPoint: 65, contentStart: 55 },
       playout: { mode: 'auto-out', holdSource: 'timed', holdMs: 6000 },
       editorBackdrop: 'transparent',
       layers: [
@@ -314,7 +302,7 @@ export const titleScene: Scene = {
       name: 'زیرنویس (روی آنتن)',
       resolution: { width: CARD_W, height: CARD_H },
       frameRange: { in: 0, out: 115 },
-      lifecycle: { outPoint: 65 },
+      lifecycle: { outPoint: 65, contentStart: 55 },
       playout: { mode: 'auto-out', holdSource: 'timed', holdMs: 6000 },
       editorBackdrop: 'transparent',
       layers: [layer('L-card', 'Card', cardChildren)],
@@ -356,7 +344,7 @@ export const titleScene: Scene = {
     createdAt: '2026-07-12T00:00:00.000Z',
     updatedAt: '2026-07-12T00:00:00.000Z',
     description:
-      'Self-closing Persian guest title: two-tier plate flush right, red brand square with the compass-star mark, bound name/role data keys, auto-out playout — enters, holds 6 s, exits by itself.',
+      'Self-closing Persian guest title: two-tier plate flush right, replaceable APASAI logo image, bound name/role data keys, auto-out playout — enters, holds 6 s, exits by itself.',
     tags: [
       'starter',
       'title',

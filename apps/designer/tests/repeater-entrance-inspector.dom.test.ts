@@ -6,6 +6,7 @@ import type { Element, RepeaterElement } from '@cg/shared-schema';
 import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
 import { StyleSection } from '../src/renderer/features/inspector/StyleSection.js';
+import { defaultField } from '../src/renderer/features/fields/field-defaults.js';
 import { defaultRepeater } from '../src/renderer/state/element-defaults.js';
 import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
 
@@ -46,10 +47,59 @@ function seed(): RepeaterElement {
   return repeater();
 }
 
+function seedWithFields(): RepeaterElement {
+  const { scene } = new ProjectStore(new MemoryWorkspace(), new MemoryKv()).newScene(
+    'direct repeater data',
+    'fullscreen',
+  );
+  designerStore.setScene(scene, null);
+  const mainId = designerStore.get().activeCompositionId;
+  if (mainId === null) throw new Error('main composition was not created');
+  const childId = designerStore.addComposition();
+  if (childId === null) throw new Error('child composition was not created');
+  designerStore.addField({ ...defaultField('city', 'text'), label: 'City' });
+  designerStore.addField({ ...defaultField('temperature', 'number'), label: 'Temperature' });
+  const current = designerStore.get().scene;
+  const child = current?.compositions?.find((composition) => composition.id === childId);
+  const main = current?.compositions?.find((composition) => composition.id === mainId);
+  if (current === null || child === undefined || main === undefined) {
+    throw new Error('test scene is incomplete');
+  }
+  const repeaterElement = defaultRepeater('rep', 0, 0, child);
+  const firstLayer = main.layers[0] ?? {
+    id: 'main-layer',
+    name: 'Main',
+    visible: true,
+    locked: false,
+    blendMode: 'normal' as const,
+    children: [],
+  };
+  designerStore.setScene(
+    {
+      ...current,
+      compositions: current.compositions?.map((composition) =>
+        composition.id === mainId
+          ? {
+              ...composition,
+              layers: [
+                { ...firstLayer, children: [repeaterElement] },
+                ...composition.layers.slice(1),
+              ],
+            }
+          : composition,
+      ),
+    },
+    null,
+  );
+  return repeater();
+}
+
 function repeater(): RepeaterElement {
   const state = designerStore.get();
   const scene = editSceneOf(state.scene, state.activeCompositionId);
-  const element = scene?.layers[0]?.children.find((candidate) => candidate.id === 'rep');
+  const element = scene?.layers
+    .flatMap((layer) => layer.children)
+    .find((candidate) => candidate.id === 'rep');
   if (element?.type !== 'repeater') throw new Error('no repeater');
   return element;
 }
@@ -98,6 +148,13 @@ describe('D-197 — Repeater entrance Inspector controls', () => {
     ).toBe(false);
   });
 
+  it('keeps the entrance controls in their own prominent section', async () => {
+    const host = render(seed());
+    await settleEffects();
+    expect(host.textContent).toContain('Item entrance');
+    expect(host.querySelector('select[aria-label="item entrance"]')).not.toBeNull();
+  });
+
   it('stores effect time and delay in milliseconds without animation tracks', async () => {
     seed();
     designerStore.updateElement('rep', {
@@ -116,5 +173,29 @@ describe('D-197 — Repeater entrance Inspector controls', () => {
     const tracks = Object.keys(repeater().animation?.tracks ?? {});
     expect(tracks).not.toContain('itemTransitionMs');
     expect(tracks).not.toContain('itemStaggerMs');
+  });
+});
+
+describe('D-180 — direct Repeater data file', () => {
+  it('offers file management without requiring an outer Sequence', async () => {
+    const host = render(seedWithFields());
+    await settleEffects();
+
+    const section = host.querySelector<HTMLElement>('section[aria-label="Repeater data file"]');
+    expect(section?.textContent).toContain('Data file');
+    expect(section?.textContent).toContain('Not connected');
+
+    act(() => {
+      [...(section?.querySelectorAll('button') ?? [])]
+        .find((button) => button.textContent?.trim() === 'Data file…')
+        ?.click();
+    });
+    const dialog = document.body.querySelector<HTMLElement>(
+      '[role="dialog"][aria-label="Repeater data · Repeater"]',
+    );
+    expect(dialog?.textContent).toContain('Save and connect Excel file');
+    expect(dialog?.textContent).toContain('File only in CG Control');
+    expect(dialog?.textContent).toContain('City');
+    expect(dialog?.textContent).toContain('Temperature');
   });
 });

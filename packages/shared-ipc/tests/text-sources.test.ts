@@ -21,6 +21,7 @@ describe('R-102 — textSources.read contract', () => {
       name: 'newsroom/crawl.txt',
       sourcePath: String.raw`\\newsroom\CG Text\newsroom\crawl.txt`,
       content: 'خبر',
+      base64: '2K7YqNix',
     };
     expect(TextSourcesReadChannel.response.parse(response)).toEqual(response);
     expect(

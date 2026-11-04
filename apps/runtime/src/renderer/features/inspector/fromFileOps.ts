@@ -1,4 +1,5 @@
 import type { FieldValue, ListItemField, StackItemState } from '@cg/shared-schema';
+import { structuredRowsXlsxToCsv } from '@cg/vcg-format';
 import { reportCommandError } from '../status/commandFeedback.js';
 import { stageField, type FieldPath } from './draftStore.js';
 import { contentToFieldValue, type FromFileFieldKind } from './fromFileContent.js';
@@ -30,7 +31,16 @@ async function readCurrentValue(
   if (state === undefined) return null;
   let content: string;
   try {
-    content = await state.source.read();
+    if (kind === 'list' && /\.xlsx$/iu.test(state.source.name)) {
+      if (state.source.readBytes === undefined) {
+        throw new Error(
+          'This Excel source cannot be read as binary data. Connect the workbook again.',
+        );
+      }
+      content = await structuredRowsXlsxToCsv(await state.source.readBytes());
+    } else {
+      content = await state.source.read();
+    }
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     const message = `Could not read “${state.source.name}” — the current value is kept. (${reason})`;

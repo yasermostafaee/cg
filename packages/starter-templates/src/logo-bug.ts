@@ -1,13 +1,10 @@
-import type { AnchorPoint, Element, Scene, Transform } from '@cg/shared-schema';
-import { anim, EASE, kf, kfPath, track } from './anim.js';
+import type { Element, Scene, Transform } from '@cg/shared-schema';
+import { anim, EASE, kf, track } from './anim.js';
 
 /**
- * «آرم شبکه» — a corner channel bug built around a D-110 pen-path mark.
- * A navy disc carries a white vector mark whose WHOLE SHAPE morphs on a
- * single `path` track: it enters as a spinning square (a 45°-rotated
- * diamond), rounds into a circle, then blooms into a four-point compass
- * star — the rest pose. A gold separator and the Persian wordmark slide in
- * beside it (wordmark to the LEFT of the mark, per RTL layout).
+ * «آرم شبکه» — a corner channel bug built around a replaceable APASAI logo
+ * image. The image owns the authored transform animation, so an operator can
+ * replace only the asset and keep the complete sting without rebuilding it.
  *
  * Structure (D-119 two-comp model):
  *   comp-logo-bug      1920×1080 — positioning context; EXPORTED for now
@@ -48,40 +45,6 @@ const MARK_W = 448;
 const MARK_H = 144;
 const MARK_X = 1392;
 const MARK_Y = 40;
-
-// ── The mark: one 4-anchor path, three poses on a single 'path' track ─────
-// Local space 48×48, anchors on the box edges (curve extremes stay at the
-// anchors in every pose, so the visual bbox is stable at (0,0)–(48,48)).
-const R = 24; // half-extent
-const K = 13.25; // circle handle length (0.5523 × R)
-
-type Pose = 'diamond' | 'circle' | 'star';
-function markPose(pose: Pose, q = 13): AnchorPoint[] {
-  const c = R; // center offset — anchors at (c,0) (2c,c) (c,2c) (0,c)
-  if (pose === 'diamond') {
-    return [
-      { id: 'pt', x: c, y: 0, smooth: false },
-      { id: 'pr', x: 2 * c, y: c, smooth: false },
-      { id: 'pb', x: c, y: 2 * c, smooth: false },
-      { id: 'pl', x: 0, y: c, smooth: false },
-    ];
-  }
-  if (pose === 'circle') {
-    return [
-      { id: 'pt', x: c, y: 0, in: { x: -K, y: 0 }, out: { x: K, y: 0 }, smooth: true },
-      { id: 'pr', x: 2 * c, y: c, in: { x: 0, y: -K }, out: { x: 0, y: K }, smooth: true },
-      { id: 'pb', x: c, y: 2 * c, in: { x: K, y: 0 }, out: { x: -K, y: 0 }, smooth: true },
-      { id: 'pl', x: 0, y: c, in: { x: 0, y: K }, out: { x: 0, y: -K }, smooth: true },
-    ];
-  }
-  // Four-point compass star: both handles of every anchor point at the center.
-  return [
-    { id: 'pt', x: c, y: 0, in: { x: 0, y: q }, out: { x: 0, y: q }, smooth: false },
-    { id: 'pr', x: 2 * c, y: c, in: { x: -q, y: 0 }, out: { x: -q, y: 0 }, smooth: false },
-    { id: 'pb', x: c, y: 2 * c, in: { x: 0, y: -q }, out: { x: 0, y: -q }, smooth: false },
-    { id: 'pl', x: 0, y: c, in: { x: q, y: 0 }, out: { x: q, y: 0 }, smooth: false },
-  ];
-}
 
 interface TfOpts {
   ax?: number;
@@ -137,42 +100,33 @@ const markChildren: Element[] = [
       opacity: track(kf(0, 0), kf(12, 1), kf(100, 1), kf(118, 0)),
     }),
   },
-  // The morphing pen-path mark: square (rotated diamond) → circle → star.
+  // Replaceable logo image. Replacing the asset keeps this entire sting.
   {
     id: 'lb-mark',
-    name: 'mark',
-    type: 'path',
-    transform: tf(360, 40, 48, 48),
+    name: 'لوگو (قابل جایگزینی)',
+    type: 'image',
+    assetId: 'apasai-logo',
+    source: 'project',
+    fit: 'contain',
+    preserveAspect: true,
+    transform: tf(346, 26, 76, 76),
     opacity: 1,
     visible: true,
     locked: false,
     zIndex: 1,
-    points: markPose('star'),
-    closed: true,
-    fill: { kind: 'solid', color: WHITE },
     animation: anim({
-      path: track(
-        kfPath(8, markPose('diamond'), EASE.outCubic),
-        kfPath(30, markPose('circle'), EASE.inOut),
-        kfPath(52, markPose('star', 16), EASE.outCubic),
-        kfPath(66, markPose('star'), EASE.outCubic),
-        // OUT: bloom back through the circle to the diamond.
-        kfPath(74, markPose('star'), EASE.inCubic),
-        kfPath(96, markPose('circle'), EASE.inCubic),
-        kfPath(112, markPose('diamond'), EASE.inCubic),
-      ),
       rotation: track(
-        kf(8, -135, EASE.outExpo),
+        kf(8, -18, EASE.outExpo),
         kf(58, 0, EASE.outExpo),
         kf(74, 0, EASE.inCubic),
-        kf(112, 135, EASE.inCubic),
+        kf(112, 18, EASE.inCubic),
       ),
-      'scale.x': track(kf(8, 0.6, EASE.outBack), kf(34, 1, EASE.outBack)),
-      'scale.y': track(kf(8, 0.6, EASE.outBack), kf(34, 1, EASE.outBack)),
+      'scale.x': track(kf(8, 0.35, EASE.outBack), kf(34, 1, EASE.outBack)),
+      'scale.y': track(kf(8, 0.35, EASE.outBack), kf(34, 1, EASE.outBack)),
       opacity: track(kf(8, 0), kf(20, 1), kf(100, 1), kf(114, 0)),
     }),
   },
-  // Gold centre dot — pops once the star settles.
+  // Gold centre dot — a small accent that pops once the logo settles.
   {
     id: 'lb-dot',
     name: 'centre-dot',
@@ -322,7 +276,7 @@ export const logoBugScene: Scene = {
       name: 'آرم شبکه',
       resolution: { width: W, height: H },
       frameRange: { in: 0, out: 132 },
-      lifecycle: { outPoint: 70 },
+      lifecycle: { outPoint: 70, contentStart: 5 },
       playout: { mode: 'manual' },
       editorBackdrop: 'transparent',
       layers: [
@@ -353,7 +307,7 @@ export const logoBugScene: Scene = {
       name: 'آرم (روی آنتن)',
       resolution: { width: MARK_W, height: MARK_H },
       frameRange: { in: 0, out: 120 },
-      lifecycle: { outPoint: 70 },
+      lifecycle: { outPoint: 70, contentStart: 5 },
       playout: { mode: 'loop-cycle', holdSource: 'timed', holdMs: 8000, repeat: 'infinite' },
       editorBackdrop: 'transparent',
       layers: [layer('L-mark', 'Mark', markChildren)],
@@ -395,13 +349,13 @@ export const logoBugScene: Scene = {
     createdAt: '2026-07-12T00:00:00.000Z',
     updatedAt: '2026-07-12T00:00:00.000Z',
     description:
-      'Corner channel bug: a pen-path mark that morphs square → circle → compass star beside a Persian wordmark, re-playing its sting every ~10 seconds via loop-cycle playout on the nested footprint comp, until stopped.',
+      'Corner channel bug with a replaceable APASAI image asset beside a Persian wordmark; the asset keeps the authored loop-cycle sting when replaced.',
     tags: [
       'starter',
       'logo-bug',
       'persian',
       'rtl',
-      'path-morph',
+      'replaceable-logo',
       'loop-cycle',
       'onair:comp-logo-mark',
     ],

@@ -13929,3 +13929,11 @@ the ticket without completing the save. **Fix / Acceptance:** CG Control fetches
 itself over the ticketed route, reports an actionable HTTP/network failure, and only then offers a
 local Blob download with the bridge filename. CG Bridge exposes that one ticketed response to the
 console's origin; the station-admin grant and one-use ticket remain unchanged.
+
+## [x] B-390 — Template version refusal calls CG Control “CG runtime” ⟨priority: low — operator-facing product naming is misleading⟩ — FILED and FIXED 2026-11-04 · `openspec/changes/name-cg-control-version-requirement/`
+
+**Repro:** import a `.vcg` whose declared rendering-contract version is newer than the installed CG
+Control. **Actual:** the refusal says the template “needs CG runtime”, even though the station
+operator installs and updates CG Control. **Expected / Fix:** the same actionable refusal names CG
+Control, keeps the required and installed versions, and retains both recovery actions. The internal
+rendering-contract constant remains unchanged; this is product-facing copy only.

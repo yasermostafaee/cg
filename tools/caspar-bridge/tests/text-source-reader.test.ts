@@ -25,6 +25,7 @@ describe('R-102 — the confined live text-source reader', () => {
       name: 'newsroom/crawl.txt',
       sourcePath: file,
       content: 'خبر اول',
+      base64: Buffer.from('خبر اول').toString('base64'),
     });
     fs.writeFileSync(file, 'خبر دوم', 'utf8');
     await expect(readTextSource(root, 'newsroom\\crawl.txt')).resolves.toMatchObject({

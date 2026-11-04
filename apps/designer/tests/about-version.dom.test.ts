@@ -68,6 +68,10 @@ describe('D-161 — Help → About', () => {
     const about = [...(container?.querySelectorAll('[role="menuitem"]') ?? [])].find(
       (b) => b.textContent?.trim() === 'About',
     );
+    const website = [...(container?.querySelectorAll('[role="menuitem"]') ?? [])].find(
+      (b) => b.textContent?.trim() === 'APASAI website',
+    );
+    expect((website as HTMLButtonElement | undefined)?.disabled).toBe(false);
     expect((about as HTMLButtonElement | undefined)?.disabled).toBe(false);
     click(about);
 
@@ -75,6 +79,10 @@ describe('D-161 — Help → About', () => {
     expect(d, 'the About dialog opened').not.toBeNull();
     if (d === null) return;
     expect(d.querySelector('[data-testid="about-name"]')?.textContent).toBe('CG Designer');
+    const brand = d.querySelector<HTMLAnchorElement>('[data-testid="about-apasai"]');
+    expect(brand?.textContent).toContain('APASAI');
+    expect(brand?.href).toBe('https://apasai.com/');
+    expect(brand?.target).toBe('_blank');
     namesTheRelease(d);
     expect(d.querySelector('[data-testid="about-build"]')?.textContent).toMatch(
       /^Build [0-9a-z]+ · \d{4}-\d{2}-\d{2}$/,

@@ -9,6 +9,28 @@ export const facts = style({
   padding: '0.35rem 0.1rem 0.2rem',
 });
 
+export const brand = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.65rem',
+  marginBottom: '0.35rem',
+  color: colors.text,
+  fontSize: '1.1rem',
+  fontWeight: 800,
+  letterSpacing: '0.08em',
+  textDecoration: 'none',
+  selectors: {
+    '&:hover': { color: colors.accent },
+    '&:focus-visible': { outline: `2px solid ${colors.accent}`, outlineOffset: 3 },
+  },
+});
+
+export const brandLogo = style({
+  width: '2.5rem',
+  height: '2.5rem',
+  borderRadius: '0.55rem',
+});
+
 export const name = style({
   color: colors.text,
   fontSize: '1rem',

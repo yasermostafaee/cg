@@ -36,6 +36,20 @@ image path and keeps Preview/export/on-air behavior identical.
 
 ## Structured files
 
+A directly selected Repeater owns a compact **Data file…** action beside its row configuration.
+The modal derives its workbook columns and validation from the referenced child composition, creates
+the list binding when needed, saves and connects that exact `.xlsx`, and keeps its full selected path
+only for the current Designer session. Reload validates and replaces the authored rows; Detach keeps
+the current rows. An authored File-only choice is stored on the normal list field, so CG Control can
+withhold manual rows without inventing a Repeater-specific transport contract. CG Control offers the
+same schema-generated Save/connect/Reload flow and stages reloaded values until the operator presses
+Update.
+
+Structured row editors never rely on placeholders as their only column identity. Each cell has a
+visible field title, and a many-column row may scroll horizontally or reflow into labelled cells
+instead of shrinking below a usable input width. Designer Inspector, Preview and CG Control share
+this rule.
+
 Structured file loading extends the existing list-field file source rather than adding a Repeater
 file property. JSON v1 accepts an array of objects. CSV v1 uses a header row whose names map to child
 field ids (with labels accepted only as a convenience when unambiguous). Image cells accept an asset

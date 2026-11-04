@@ -22,6 +22,47 @@ export const brandSub = style({
   margin: 0,
 });
 
+export const brandLockup = style({
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '0.85rem',
+  marginBottom: '0.8rem',
+  color: colors.text,
+  textDecoration: 'none',
+  borderRadius: '0.55rem',
+  padding: '0.35rem 0.55rem 0.35rem 0.35rem',
+  transition: 'background 140ms ease, transform 140ms ease',
+  selectors: {
+    '&:hover': { background: colors.panel, transform: 'translateY(-1px)' },
+    '&:focus-visible': { outline: `2px solid ${colors.accent}`, outlineOffset: 3 },
+  },
+});
+
+export const brandLogo = style({
+  width: '3.15rem',
+  height: '3.15rem',
+  display: 'block',
+  borderRadius: '0.7rem',
+  boxShadow: '0 12px 32px rgba(0, 174, 239, 0.18)',
+});
+
+export const brandName = style({
+  display: 'block',
+  fontSize: '1.5rem',
+  lineHeight: 1,
+  letterSpacing: '0.08em',
+  fontWeight: 800,
+});
+
+export const brandProduct = style({
+  display: 'block',
+  marginTop: '0.3rem',
+  color: colors.accent,
+  fontSize: '0.66rem',
+  fontWeight: 700,
+  letterSpacing: '0.18em',
+});
+
 /**
  * LAYOUT ONLY. The colour (accent fill, on-accent label, weight) now comes from the
  * shared `primary` Button variant. It used to re-declare the accent here on a `bare`
@@ -63,6 +104,19 @@ export const card = style({
   flexDirection: 'column',
   fontSize: '0.85rem',
   overflow: 'hidden',
+  transition: 'border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease',
+  selectors: {
+    '&:hover': {
+      borderColor: colors.accent,
+      boxShadow: '0 18px 42px rgba(0, 0, 0, 0.28)',
+      transform: 'translateY(-2px)',
+    },
+    '&:focus-visible': {
+      borderColor: colors.accent,
+      boxShadow: `0 0 0 2px ${colors.accent}`,
+      outline: 'none',
+    },
+  },
 });
 
 export const newBadge = style({
@@ -88,7 +142,55 @@ export const cardThumb = style({
   objectFit: 'cover',
   display: 'block',
   background: '#0b0e16',
+});
+
+export const cardThumbWrap = style({
+  position: 'relative',
+  width: '100%',
+  aspectRatio: '16 / 9',
+  display: 'block',
+  overflow: 'hidden',
+  background: '#0b0e16',
   borderBottom: `1px solid ${colors.border}`,
+});
+
+export const cardMotion = style({
+  position: 'absolute',
+  inset: 0,
+  width: '100%',
+  height: '100%',
+  display: 'block',
+  objectFit: 'cover',
+  opacity: 0,
+  transition: 'opacity 120ms ease',
+  pointerEvents: 'none',
+});
+
+export const cardMotionVisible = style({ opacity: 1 });
+
+export const motionHint = style({
+  position: 'absolute',
+  left: '0.65rem',
+  bottom: '0.6rem',
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '0.35rem',
+  padding: '0.3rem 0.55rem',
+  borderRadius: '999px',
+  background: 'rgba(5, 12, 24, 0.78)',
+  border: '1px solid rgba(255, 255, 255, 0.2)',
+  color: '#F8FAFC',
+  fontSize: '0.62rem',
+  fontWeight: 700,
+  letterSpacing: '0.02em',
+  backdropFilter: 'blur(8px)',
+  transition: 'opacity 120ms ease, transform 120ms ease',
+  pointerEvents: 'none',
+});
+
+export const motionHintHidden = style({
+  opacity: 0,
+  transform: 'translateY(3px)',
 });
 
 export const cardThumbFallback = style({

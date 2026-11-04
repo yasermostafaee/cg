@@ -3701,3 +3701,13 @@ Measured free before use: the working-tree allocation ledger already reserves `B
 the tracked plus working-tree heading audit found no existing allocation for `B-389`.
 
 ⇒ **Next free after this entry is `B-390`**, **`D-196`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-04 — template version refusal names CG Control takes `B-390`
+
+- `B-390` — the template import refusal called the installed application “CG runtime” instead of
+  its product name, CG Control — [bugs-runtime.md](bugs-runtime.md).
+
+Measured free before use: the registry named `B-390` as next free and the tracked plus working-tree
+heading audit found no existing allocation for `B-390`.
+
+⇒ **Next free after this entry is `B-391`**, **`D-196`**, **`P-075`**, **`R-105`** and **`C-049`**.

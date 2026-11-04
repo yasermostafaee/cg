@@ -62,6 +62,16 @@
       batch helper in the tracked runtime source so clean Linux builds do not depend on a local file.
 - [x] 2.23 Add a read-only **View current data** dialog for File-only Sequence rows in CG Control;
       show real column labels/aliases and identify cells that violate the current template schema.
+- [x] 2.24 Give a directly selected Repeater its own **Data file** modal in the Inspector, with
+      schema-generated Excel **Save and connect**, a persistent connected/update-needed state,
+      Reload, Detach and File-only controls; do not require a wrapping Sequence.
+- [x] 2.25 Give the same direct Repeater field a schema-generated Excel Save/connect/Reload flow in
+      CG Control, including `.xlsx` validation and the existing Update gate before data reaches air.
+- [x] 2.26 Replace squeezed many-column Repeater rows with labelled, horizontally safe structured
+      editors in Designer Inspector, Preview and CG Control; every cell must keep its field title
+      visible and a practical minimum width at narrow panel sizes.
+- [x] 2.27 Make the already-shipped row entrance controls unmistakable in a dedicated Repeater
+      section and verify the effect/stagger in the real Designer Preview, not only unit runtime.
 
 ## 3. Conditional value rules
 
@@ -89,3 +99,5 @@
       against the current exact choices `0/1`, which the read-only data dialog now diagnoses.
 - [x] 4.4 Pass focused schema, Designer, Runtime and exporter suites plus strict OpenSpec validation.
 - [x] 4.5 Run the full repository gate before commit/push; do not build installers until CG Control is manually accepted. Local `pnpm gate` passed all 103/103 tasks plus formatting, control-byte and strict OpenSpec checks on 2026-11-04; installers remain deferred until manual CG Control acceptance.
+- [x] 4.6 Re-run focused Designer/Preview/CG Control tests for the direct-Repeater file and table
+      surfaces, then run the full repository gate before the follow-up push.

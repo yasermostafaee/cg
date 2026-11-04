@@ -16,6 +16,11 @@ authored or exported reliably.
   Preview, `.vcg` and single-file HTML.
 - Let a Repeater list load structured rows from a shared JSON/CSV file without flattening the rows to
   one text column.
+- Give a directly selected Repeater the same schema-generated Excel **Save and connect** workflow,
+  connected state, Reload and File-only option without requiring an outer Sequence; expose the same
+  generated-workbook flow in CG Control behind the normal Update action.
+- Keep structured rows usable when the child has many fields: every surface shows the actual field
+  title and preserves a practical cell width instead of squeezing columns into unreadable slivers.
 - Persist independent values for each composition page in an outer Sequence and manage all rows and
   its JSON/CSV source from a roomy modal in that Sequence's own Inspector, not the Variables table.
 - Generate a self-documenting, loadable JSON sample from the actual Sequence schema so another

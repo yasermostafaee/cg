@@ -2,6 +2,7 @@ import type { Element, Scene } from '@cg/shared-schema';
 import {
   galleryScene,
   gradient,
+  image,
   layer,
   PALETTE,
   reveal,
@@ -11,29 +12,29 @@ import {
   tf,
 } from './gallery-helpers.js';
 
-const FAM = 'asset-azadegan-table-vazir';
-const TITLE = 'جدول لیگ آزادگان ایران';
-const ROW_COMP = 'comp-azadegan-row';
+const FAM = 'asset-iran-premier-league-vazir';
+const TITLE = 'جدول لیگ برتر ایران';
+const ROW_COMP = 'comp-iran-premier-league-row';
 
 const teams = [
-  ['فجر سپاسی شیراز', 18, 11, 5, 2, 15, 38],
-  ['سایپا تهران', 18, 10, 5, 3, 12, 35],
-  ['پیکان تهران', 18, 9, 6, 3, 10, 33],
-  ['مس کرمان', 18, 9, 4, 5, 8, 31],
-  ['نفت مسجدسلیمان', 18, 8, 6, 4, 7, 30],
-  ['آریو اسلامشهر', 18, 7, 7, 4, 6, 28],
-  ['صنعت نفت آبادان', 18, 7, 6, 5, 5, 27],
-  ['داماش گیلان', 18, 6, 7, 5, 3, 25],
-  ['شهرداری نوشهر', 18, 6, 6, 6, 1, 24],
-  ['مس شهر بابک', 18, 5, 8, 5, 1, 23],
-  ['پارس جنوبی جم', 18, 5, 7, 6, -1, 22],
-  ['نیروی زمینی تهران', 18, 5, 6, 7, -3, 21],
-  ['بعثت کرمانشاه', 18, 4, 7, 7, -5, 19],
-  ['شهر راز شیراز', 18, 4, 6, 8, -7, 18],
-  ['نفت و گاز گچساران', 18, 3, 7, 8, -8, 16],
-  ['مس سونگون', 18, 3, 6, 9, -10, 15],
-  ['پالایش نفت بندرعباس', 18, 2, 6, 10, -13, 12],
-  ['سپیدرود رشت', 18, 2, 4, 12, -20, 10],
+  ['پرسپولیس تهران', 10, 6, 2, 2, 13, 20],
+  ['سپاهان اصفهان', 10, 6, 2, 2, 11, 20],
+  ['استقلال تهران', 10, 5, 5, 0, 9, 20],
+  ['تراکتور تبریز', 10, 6, 2, 2, 7, 20],
+  ['فولاد خوزستان', 10, 5, 4, 1, 5, 19],
+  ['آلومینیوم اراک', 10, 3, 5, 2, 3, 14],
+  ['خیبر خرم‌آباد', 10, 3, 5, 2, 2, 14],
+  ['فجر سپاسی شیراز', 10, 3, 5, 2, -2, 14],
+  ['گل‌گهر سیرجان', 10, 4, 1, 5, 1, 13],
+  ['چادرملو اردکان', 10, 3, 4, 3, -4, 13],
+  ['نساجی مازندران', 10, 2, 5, 3, -2, 11],
+  ['ملوان بندر انزلی', 10, 3, 3, 4, -1, 10],
+  ['پیکان تهران', 10, 2, 4, 4, -3, 10],
+  ['استقلال خوزستان', 10, 2, 3, 5, -7, 9],
+  ['ذوب‌آهن اصفهان', 10, 1, 5, 4, -4, 8],
+  ['شمس‌آذر قزوین', 10, 1, 4, 5, -5, 7],
+  ['صنعت نفت آبادان', 10, 1, 4, 5, -10, 7],
+  ['مس شهر بابک', 10, 0, 5, 5, -13, 5],
 ] as const;
 
 const rows = teams.map(([team, played, wins, draws, losses, diff, points], index) => ({
@@ -56,12 +57,23 @@ function numberText(id: string, name: string, value: string, x: number, width: n
 }
 
 const rowChildren: Element[] = [
-  shape('az-row-bg', 'پس‌زمینه ردیف', tf(0, 0, 1660, 42), solid('#0F2B47E6'), 0, {
-    radius: 8,
-    stroke: { color: '#2A4A67', width: 1 },
+  shape(
+    'az-row-bg',
+    'پس‌زمینه ردیف',
+    tf(0, 0, 1660, 42),
+    gradient(90, '#071B30F2', '#103755E8'),
+    0,
+    {
+      radius: 9,
+      stroke: { color: '#3A668333', width: 1 },
+    },
+  ),
+  shape('az-row-accent-line', 'خط تأکید', tf(1589, 8, 3, 26), solid('#22D3EE'), 1, {
+    radius: 2,
   }),
-  shape('az-row-accent', 'نشان رتبه', tf(1602, 5, 46, 32), gradient(90, '#0EA5E9', '#2563EB'), 1, {
+  shape('az-row-accent', 'نشان رتبه', tf(1602, 5, 46, 32), gradient(90, '#0891B2', '#2563EB'), 1, {
     radius: 8,
+    shadow: { offsetX: 0, offsetY: 4, blur: 10, color: '#22D3EE30' },
   }),
   numberText('az-rank', 'رتبه', '۱', 1602, 46),
   text(
@@ -83,20 +95,20 @@ const rowChildren: Element[] = [
   numberText('az-draws', 'مساوی', '۵', 662, 115),
   numberText('az-losses', 'باخت', '۲', 514, 115),
   numberText('az-diff', 'تفاضل', '۱۵', 330, 150),
-  text('az-points', 'امتیاز', '۳۸', tf(38, 4, 242, 34), FAM, 25, 900, '#FDE68A', 2, {
+  text('az-points', 'امتیاز', '۳۸', tf(38, 4, 242, 34), FAM, 25, 900, '#FFF3C4', 2, {
     align: 'center',
     direction: 'ltr',
-    backgroundColor: '#8A4B0FCC',
+    backgroundColor: '#8A5A1299',
     padding: { top: 2, right: 8, bottom: 2, left: 8 },
   }),
 ];
 
 const rowComposition: NonNullable<Scene['compositions']>[number] = {
   id: ROW_COMP,
-  name: 'ردیف جدول آزادگان',
+  name: 'ردیف جدول لیگ برتر',
   resolution: { width: 1660, height: 42 },
   frameRange: { in: 0, out: 140 },
-  lifecycle: { outPoint: 100 },
+  lifecycle: { outPoint: 100, contentStart: 20 },
   playout: { mode: 'manual', holdSource: 'timed' },
   editorBackdrop: 'transparent',
   layers: [layer('az-row-layer', 'ردیف', rowChildren)],
@@ -115,7 +127,7 @@ const rowComposition: NonNullable<Scene['compositions']>[number] = {
       label: 'نام تیم',
       required: true,
       type: 'text',
-      default: 'فجر سپاسی شیراز',
+      default: 'پرسپولیس تهران',
       direction: 'rtl',
     },
     {
@@ -189,40 +201,78 @@ const headerLabels = [
 ] as const;
 
 const children: Element[] = [
-  shape('az-bg', 'پس‌زمینه', tf(0, 0, 1760, 960), gradient(135, '#071426', '#123A5D'), 0, {
-    radius: 28,
-    stroke: { color: '#2A5778', width: 2 },
-    shadow: { offsetX: 0, offsetY: 18, blur: 48, color: '#00000080' },
+  image(
+    'az-stadium-bg',
+    'پس‌زمینه ورزشگاه',
+    'iran-premier-league-stadium',
+    tf(-80, -60, 1920, 1080),
+    0,
+    'cover',
+  ),
+  shape('az-bg-scrim', 'لایه خوانایی', tf(-80, -60, 1920, 1080), solid('#020A16'), 1, {
+    opacity: 0.34,
   }),
+  shape('az-bg', 'پنل شیشه‌ای', tf(24, 20, 1712, 924), gradient(135, '#061322D9', '#0A2942C7'), 2, {
+    radius: 28,
+    stroke: { color: '#55C7E855', width: 2 },
+    shadow: { offsetX: 0, offsetY: 20, blur: 54, color: '#00000099' },
+  }),
+  shape('az-kicker', 'نشان مسابقات', tf(1390, 42, 284, 58), gradient(90, '#0E7490', '#1D4ED8'), 3, {
+    radius: 16,
+    animation: reveal(0),
+  }),
+  text(
+    'az-kicker-label',
+    'نشان لیگ',
+    'فوتبال ایران',
+    tf(1410, 46, 244, 50),
+    FAM,
+    22,
+    800,
+    '#CFFAFE',
+    4,
+    {
+      align: 'center',
+      animation: reveal(2),
+    },
+  ),
   shape(
     'az-title-glow',
     'نوار عنوان',
-    tf(38, 34, 1684, 82),
-    gradient(90, '#0E7490', '#1D4ED8'),
-    1,
+    tf(58, 42, 1298, 58),
+    gradient(90, '#B7791F', '#E2B24C'),
+    3,
     {
-      radius: 18,
+      radius: 16,
       animation: reveal(0),
     },
   ),
-  text('az-title', 'عنوان جدول', TITLE, tf(70, 38, 1620, 70), FAM, 39, 900, PALETTE.white, 2, {
-    align: 'center',
+  text('az-title', 'عنوان جدول', TITLE, tf(90, 44, 1230, 54), FAM, 35, 900, '#081526', 4, {
+    align: 'start',
     animation: reveal(4),
   }),
-  shape('az-head-bg', 'پس‌زمینه سرستون', tf(50, 128, 1660, 46), solid('#071A2DBF'), 1, {
-    radius: 10,
-  }),
+  shape(
+    'az-head-bg',
+    'پس‌زمینه سرستون',
+    tf(50, 120, 1660, 52),
+    gradient(90, '#071A2DF2', '#123E5BEA'),
+    3,
+    {
+      radius: 10,
+      stroke: { color: '#67E8F933', width: 1 },
+    },
+  ),
   ...headerLabels.map(([label, x, width], index) =>
     text(
       `az-head-${index}`,
       `سرستون ${label}`,
       label,
-      tf(x + 50, 128, width, 46),
+      tf(x + 50, 120, width, 52),
       FAM,
       20,
       700,
       PALETTE.mist,
-      2,
+      4,
       { align: 'center' },
     ),
   ),
@@ -231,11 +281,11 @@ const children: Element[] = [
     name: 'ردیف‌های جدول',
     type: 'repeater',
     compositionId: ROW_COMP,
-    transform: tf(50, 184, 1660, 774),
+    transform: tf(50, 180, 1660, 774),
     opacity: 1,
     visible: true,
     locked: false,
-    zIndex: 3,
+    zIndex: 5,
     direction: 'column',
     flow: 'rtl',
     gap: 1,
@@ -247,15 +297,16 @@ const children: Element[] = [
   } as Element,
 ];
 
-export const azadeganTableScene = galleryScene({
-  id: 'azadegan-table',
-  name: 'جدول لیگ آزادگان ایران',
+export const iranPremierLeagueScene = galleryScene({
+  id: 'iran-premier-league',
+  name: 'جدول لیگ برتر ایران',
   description:
-    'جدول تک‌صفحه‌ای لیگ آزادگان با ورود مرحله‌ای ردیف‌ها، اعداد فارسی و ورودی ساختاریافتهٔ قابل اتصال به CSV/XLSX در CG Control.',
+    'جدول تک‌صفحه‌ای ۱۸ تیم لیگ برتر با ورود مرحله‌ای ردیف‌ها، اعداد فارسی و ورودی ساختاریافتهٔ قابل اتصال به Excel در CG Control.',
   templateType: 'fullscreen',
+  direct: true,
   fontFamily: FAM,
-  onAirId: 'comp-azadegan-table-onair',
-  onAirName: 'جدول آزادگان (روی آنتن)',
+  onAirId: 'comp-iran-premier-league-onair',
+  onAirName: 'جدول لیگ برتر',
   onAirSize: { width: 1760, height: 960 },
   onAirPosition: { x: 80, y: 60 },
   children,

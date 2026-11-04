@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { type Element, isPathKeyframeValue, SceneSchema } from '@cg/shared-schema';
+import { type Element, SceneSchema } from '@cg/shared-schema';
 import {
-  azadeganTableScene,
+  iranPremierLeagueScene,
   countdownStepsScene,
   getStarter,
   imageFolderSequenceScene,
@@ -20,7 +20,7 @@ const EXPECTED_IDS = [
   'logo-bug',
   'title',
   'sequence',
-  'azadegan-table',
+  'iran-premier-league',
   'iran-weather-pages',
   'iran-weather-forecast',
   'image-folder-sequence',
@@ -68,7 +68,7 @@ describe('starter templates', () => {
     }
   });
 
-  it('every starter follows the two-comp structure with a real playout lifecycle', () => {
+  it('full-screen starters use one direct main comp; compact overlays keep an on-air comp', () => {
     for (const s of STARTER_TEMPLATES) {
       // Entry (exported-for-now) comp: full-frame, out-point + mode.
       const entry = s.scene.compositions?.find((c) => c.id === s.scene.entryCompositionId);
@@ -80,9 +80,14 @@ describe('starter templates', () => {
       expect(entry?.lifecycle?.outPoint, `${s.id} has an out-point`).toBeGreaterThan(0);
       expect(entry?.playout?.mode, `${s.id} has a playout mode`).toBeDefined();
 
-      // On-air footprint comp: recorded via the `onair:<compId>` scene tag,
-      // smaller than the frame, carrying its own lifecycle + playout.
+      const direct = s.scene.metadata.tags?.includes('fullscreen:direct') === true;
       const onairTag = s.scene.metadata.tags?.find((t) => t.startsWith('onair:'));
+      if (direct) {
+        expect(onairTag, `${s.id} does not wrap a full-screen graphic`).toBeUndefined();
+        continue;
+      }
+
+      // Compact overlays keep their reusable on-air footprint composition.
       expect(onairTag, `${s.id} records its on-air footprint comp`).toBeDefined();
       const onair = s.scene.compositions?.find((c) => c.id === onairTag?.slice('onair:'.length));
       expect(onair, `${s.id} on-air comp exists`).toBeDefined();
@@ -125,12 +130,10 @@ describe('starter templates', () => {
     expect(main?.lifecycle?.outPoint).toBeLessThan(main?.frameRange.out ?? 0);
   });
 
-  it('logo-bug: loop-cycle sting with a whole-shape path morph', () => {
+  it('logo-bug: loop-cycle sting keeps its animation on a replaceable image asset', () => {
     // The sting loop lives on the nested on-air comp (a parent loop-cycle
     // would NOT replay nested keyframes — child controllers loop themselves).
-    const main = logoBugScene.compositions?.find((c) =>
-      c.layers.some((l) => l.children.some((el) => el.type === 'path')),
-    );
+    const main = logoBugScene.compositions?.find((c) => c.id === 'comp-logo-mark');
     expect(main?.playout).toMatchObject({
       mode: 'loop-cycle',
       holdSource: 'timed',
@@ -138,33 +141,16 @@ describe('starter templates', () => {
     });
     expect(main?.playout?.holdMs).toBeGreaterThanOrEqual(5000);
 
-    const mark = main?.layers[0]?.children.find((el) => el.type === 'path');
+    const mark = main?.layers[0]?.children.find((el) => el.id === 'lb-mark');
     expect(mark).toBeDefined();
-    if (mark?.type !== 'path') return;
-    const pathTrack = mark.animation?.tracks.path;
-    expect(pathTrack).toBeDefined();
-    const poses = (pathTrack?.keyframes ?? []).map((k) => k.value);
-    expect(poses.length).toBeGreaterThanOrEqual(3);
-    // Every pose keeps the same anchor-id set so the morph reconciles.
-    const idsOf = (v: unknown): string =>
-      isPathKeyframeValue(v)
-        ? v.points
-            .map((p) => p.id)
-            .sort()
-            .join(',')
-        : '';
-    const staticIds = mark.points
-      .map((p) => p.id)
-      .sort()
-      .join(',');
-    for (const pose of poses) {
-      expect(isPathKeyframeValue(pose)).toBe(true);
-      expect(idsOf(pose)).toBe(staticIds);
-    }
+    if (mark?.type !== 'image') return;
+    expect(mark.assetId).toBe('apasai-logo');
+    expect(mark.animation?.tracks.opacity?.keyframes.length).toBeGreaterThanOrEqual(4);
+    expect(mark.animation?.tracks['scale.x']?.keyframes.length).toBeGreaterThanOrEqual(2);
   });
 
   it('D-179: data-rich examples use real repeaters and sequence pages', () => {
-    const elements = (scene: typeof azadeganTableScene): Element[] =>
+    const elements = (scene: typeof iranPremierLeagueScene): Element[] =>
       [...scene.layers, ...(scene.compositions ?? []).flatMap((composition) => composition.layers)]
         .flatMap((entry) => entry.children)
         .flatMap(function walk(element): Element[] {
@@ -173,11 +159,13 @@ describe('starter templates', () => {
             : [element];
         });
 
-    expect(elements(azadeganTableScene).some((element) => element.type === 'repeater')).toBe(true);
-    const azadeganRepeater = elements(azadeganTableScene).find(
+    expect(elements(iranPremierLeagueScene).some((element) => element.type === 'repeater')).toBe(
+      true,
+    );
+    const leagueRepeater = elements(iranPremierLeagueScene).find(
       (element) => element.type === 'repeater',
     );
-    expect(azadeganRepeater).toMatchObject({
+    expect(leagueRepeater).toMatchObject({
       itemEntrance: 'fade-right',
       itemTransitionMs: 400,
       itemStaggerMs: 70,
@@ -194,6 +182,25 @@ describe('starter templates', () => {
       expect(weatherPages.pageDataFile).toBe('starter-data/iran-weather-pages.json');
       expect(weatherPages.items).toHaveLength(4);
       expect(weatherPages.items.every((item) => item.kind === 'composition')).toBe(true);
+      const cityNames = weatherPages.items.flatMap((item) => {
+        if (item.kind !== 'composition') return [];
+        const rows = item.fieldValues?.cities;
+        if (!Array.isArray(rows)) return [];
+        return rows.flatMap((row) => {
+          if (typeof row !== 'object' || row === null || Array.isArray(row)) return [];
+          const city = (row as Record<string, unknown>).city;
+          return typeof city === 'string' ? [city] : [];
+        });
+      });
+      expect(cityNames).toHaveLength(31);
+      expect([...cityNames].sort((left, right) => left.localeCompare(right, 'fa'))).toEqual(
+        cityNames,
+      );
+      expect(
+        weatherPages.items.map((item) =>
+          item.kind === 'composition' ? item.fieldValues?.pageTitle : undefined,
+        ),
+      ).toEqual(['شهرها ـ صفحه ۱', 'شهرها ـ صفحه ۲', 'شهرها ـ صفحه ۳', 'شهرها ـ صفحه ۴']);
     }
 
     const weatherTemperature = elements(iranWeatherPagesScene).find(
@@ -215,12 +222,13 @@ describe('starter templates', () => {
       .find((element) => element.type === 'sequence');
     expect(pictureSequence?.type).toBe('sequence');
     if (pictureSequence?.type === 'sequence') {
-      expect(pictureSequence.items).toHaveLength(3);
+      expect(pictureSequence.items).toHaveLength(5);
       expect(pictureSequence.items.every((item) => item.kind === 'image')).toBe(true);
+      expect(pictureSequence.advance).toBe('manual');
     }
     expect(
       getStarter('image-folder-sequence')?.assets?.filter((asset) => asset.kind === 'image'),
-    ).toHaveLength(3);
+    ).toHaveLength(5);
   });
 
   it('D-179: countdown steps are ordered and drive visual state', () => {
@@ -242,13 +250,25 @@ describe('starter templates', () => {
     }
   });
 
-  it('D-179: multibox carries four independently routed live sources', () => {
-    const liveSources = multiboxScene.compositions
-      ?.flatMap((composition) => composition.layers)
-      .flatMap((entry) => entry.children)
-      .filter((element) => element.type === 'video-placeholder');
-    expect(liveSources).toHaveLength(4);
-    expect(new Set(liveSources?.map((element) => element.routeKey)).size).toBe(4);
+  it('D-179: multibox carries switchable 1–4 plate looks with equal boxes per look', () => {
+    const entry = multiboxScene.compositions?.find(
+      (composition) => composition.id === multiboxScene.entryCompositionId,
+    );
+    expect(entry?.lookGroups?.[0]?.looks).toHaveLength(4);
+    expect(entry?.lookGroups?.[0]?.defaultLookId).toBe('multibox-look-4');
+
+    for (const [index, count] of [1, 2, 3, 4].entries()) {
+      const composition = multiboxScene.compositions?.find(
+        (candidate) => candidate.id === `comp-multibox-look-${String(count)}`,
+      );
+      const liveSources = composition?.layers
+        .flatMap((layer) => layer.children)
+        .filter((element) => element.type === 'video-placeholder');
+      expect(liveSources, `look ${String(index + 1)} plate count`).toHaveLength(count);
+      expect(new Set(liveSources?.map((element) => element.routeKey)).size).toBe(count);
+      expect(new Set(liveSources?.map((element) => element.transform.size.w)).size).toBe(1);
+      expect(new Set(liveSources?.map((element) => element.transform.size.h)).size).toBe(1);
+    }
   });
 
   it('Persian defaults are non-empty RTL copy', () => {

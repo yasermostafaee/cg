@@ -129,16 +129,27 @@ export function fsaTextFileSource(handle: FileSystemFileHandle): TextFileSource 
 /** R-102 — a live source read on the Bridge host under its configured safe root. */
 export function bridgeTextFileSource(bridgePath: string): TextFileSource {
   let sourcePath: string | undefined;
+  const readAnswer = async (): Promise<Awaited<ReturnType<typeof window.cg.textSources.read>>> => {
+    const answer = await window.cg.textSources.read({ path: bridgePath });
+    sourcePath = answer.sourcePath ?? bridgePath;
+    return answer;
+  };
   return {
     name: bridgePath,
     bridgePath,
     get displayPath(): string {
       return sourcePath ?? bridgePath;
     },
-    read: async (): Promise<string> => {
-      const answer = await window.cg.textSources.read({ path: bridgePath });
-      sourcePath = answer.sourcePath ?? bridgePath;
-      return answer.content;
+    read: async (): Promise<string> => (await readAnswer()).content,
+    readBytes: async (): Promise<Uint8Array> => {
+      const answer = await readAnswer();
+      if (answer.base64 === undefined) {
+        // Older Bridge compatibility. This remains exact for UTF-8 CSV/JSON; an
+        // XLSX from an older Bridge fails workbook validation with a clear error.
+        return new TextEncoder().encode(answer.content);
+      }
+      const decoded = atob(answer.base64);
+      return Uint8Array.from(decoded, (character) => character.charCodeAt(0));
     },
   };
 }

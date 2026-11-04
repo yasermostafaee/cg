@@ -24,12 +24,52 @@ globalStyle(`${comfortableList} button`, {
 
 export const itemRow = style({
   display: 'flex',
-  alignItems: 'center',
+  alignItems: 'flex-end',
   gap: '0.2rem',
+  minWidth: 0,
+});
+
+/** D-180 follow-up — structured rows keep readable columns instead of squeezing every field. */
+export const structuredCells = style({
+  flex: '1 1 auto',
+  minWidth: 0,
+  display: 'grid',
+  gridAutoFlow: 'column',
+  gridAutoColumns: 'minmax(8.5rem, 1fr)',
+  gap: '0.35rem',
+  overflowX: 'auto',
+  padding: '0.35rem',
+  border: `1px solid ${colors.border}`,
+  borderRadius: '0.25rem',
+  background: colors.panelMuted,
+  scrollbarWidth: 'thin',
+});
+
+globalStyle(`${comfortableList} ${structuredCells}`, {
+  gridAutoColumns: 'minmax(11rem, 1fr)',
+  gap: '0.55rem',
+  padding: '0.55rem',
+});
+
+export const structuredCell = style({
+  display: 'grid',
+  gridTemplateRows: 'auto minmax(2rem, auto)',
+  alignContent: 'end',
+  gap: '0.2rem',
+  minWidth: 0,
+  color: colors.textMuted,
+  fontSize: '0.68rem',
+});
+
+export const structuredLabel = style({
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  lineHeight: 1.25,
 });
 
 export const itemInput = style({
-  flex: 1,
+  width: '100%',
   minWidth: 0,
   background: colors.panelMuted,
   color: colors.text,
@@ -43,7 +83,7 @@ export const itemInput = style({
 
 /** A design-system Select wraps its native control; the WRAPPER must own the flex column width. */
 export const itemControl = style({
-  flex: '1 1 0',
+  width: '100%',
   minWidth: 0,
 });
 

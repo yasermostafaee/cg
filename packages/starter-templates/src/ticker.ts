@@ -311,7 +311,7 @@ export const tickerScene: Scene = {
       name: 'چشمک',
       resolution: { width: 24, height: 24 },
       frameRange: { in: 0, out: 50 },
-      lifecycle: { outPoint: 50 },
+      lifecycle: { outPoint: 50, contentStart: 0 },
       playout: { mode: 'loop-cycle', holdSource: 'timed', holdMs: 0, repeat: 'infinite' },
       editorBackdrop: 'transparent',
       layers: [layer('L-pulse', 'Pulse', pulseChildren)],

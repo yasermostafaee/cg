@@ -26,6 +26,17 @@ export function AboutModal({
   return (
     <Modal title="About" onClose={onClose} width="min(360px, 92vw)">
       <div className={s.facts}>
+        <a
+          className={s.brand}
+          href="https://apasai.com/"
+          target="_blank"
+          rel="noreferrer"
+          aria-label="APASAI website"
+          data-testid="about-apasai"
+        >
+          <img className={s.brandLogo} src="/favicon.svg" alt="" />
+          <span>APASAI</span>
+        </a>
         <Tag className={s.name} data-testid="about-name">
           CG Designer
         </Tag>

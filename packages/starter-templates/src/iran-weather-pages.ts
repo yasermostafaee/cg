@@ -2,6 +2,7 @@ import type { Element, Scene } from '@cg/shared-schema';
 import {
   galleryScene,
   gradient,
+  image,
   layer,
   PALETTE,
   reveal,
@@ -10,6 +11,7 @@ import {
   text,
   tf,
 } from './gallery-helpers.js';
+import { WEATHER_TYPE_LABELS, weatherIconElements } from './weather-icons.js';
 
 const FAM = 'asset-iran-weather-pages-vazir';
 const TITLE = 'دمای مراکز استان‌های ایران';
@@ -17,45 +19,45 @@ const CARD_COMP = 'comp-iran-weather-city-row';
 const PAGE_COMP = 'comp-iran-weather-page';
 
 const cities = [
-  ['تهران', 18, 'صاف', '☀'],
-  ['اراک', 14, 'کمی ابری', '☁'],
-  ['اردبیل', 8, 'بارانی', '☂'],
-  ['ارومیه', 10, 'نیمه‌ابری', '☁'],
-  ['اصفهان', 17, 'صاف', '☀'],
-  ['اهواز', 28, 'صاف', '☀'],
-  ['ایلام', 16, 'بارانی', '☂'],
-  ['بجنورد', 11, 'ابری', '☁'],
-  ['بندرعباس', 30, 'شرجی', '≈'],
-  ['بوشهر', 27, 'کمی ابری', '☁'],
-  ['بیرجند', 15, 'صاف', '☀'],
-  ['تبریز', 9, 'نیمه‌ابری', '☁'],
-  ['خرم‌آباد', 16, 'بارانی', '☂'],
-  ['رشت', 13, 'بارانی', '☂'],
-  ['زاهدان', 20, 'صاف', '☀'],
-  ['زنجان', 7, 'ابری', '☁'],
-  ['ساری', 15, 'بارانی', '☂'],
-  ['سمنان', 16, 'صاف', '☀'],
-  ['سنندج', 10, 'ابری', '☁'],
-  ['شهرکرد', 5, 'برفی', '❄'],
-  ['شیراز', 19, 'صاف', '☀'],
-  ['قزوین', 13, 'نیمه‌ابری', '☁'],
-  ['قم', 18, 'صاف', '☀'],
-  ['کرج', 16, 'کمی ابری', '☁'],
-  ['کرمان', 18, 'صاف', '☀'],
-  ['کرمانشاه', 13, 'بارانی', '☂'],
-  ['گرگان', 14, 'بارانی', '☂'],
-  ['مشهد', 12, 'ابری', '☁'],
-  ['همدان', 7, 'برفی', '❄'],
-  ['یاسوج', 11, 'بارانی', '☂'],
-  ['یزد', 19, 'صاف', '☀'],
+  ['اراک', 14, 'کمی ابری', 1],
+  ['اردبیل', 8, 'بارانی', 2],
+  ['ارومیه', 10, 'نیمه‌ابری', 1],
+  ['اصفهان', 17, 'آفتابی', 0],
+  ['اهواز', 28, 'آفتابی', 0],
+  ['ایلام', 16, 'بارانی', 2],
+  ['بجنورد', 11, 'ابری', 1],
+  ['بندرعباس', 30, 'آفتابی', 0],
+  ['بوشهر', 27, 'کمی ابری', 1],
+  ['بیرجند', 15, 'آفتابی', 0],
+  ['تبریز', 9, 'نیمه‌ابری', 1],
+  ['تهران', 18, 'آفتابی', 0],
+  ['خرم‌آباد', 16, 'بارانی', 2],
+  ['رشت', 13, 'بارانی', 2],
+  ['زاهدان', 20, 'آفتابی', 0],
+  ['زنجان', 7, 'ابری', 1],
+  ['ساری', 15, 'بارانی', 2],
+  ['سمنان', 16, 'آفتابی', 0],
+  ['سنندج', 10, 'ابری', 1],
+  ['شهرکرد', 5, 'برفی', 3],
+  ['شیراز', 19, 'آفتابی', 0],
+  ['قزوین', 13, 'نیمه‌ابری', 1],
+  ['قم', 18, 'آفتابی', 0],
+  ['کرج', 16, 'کمی ابری', 1],
+  ['کرمان', 18, 'آفتابی', 0],
+  ['کرمانشاه', 13, 'بارانی', 2],
+  ['گرگان', 14, 'بارانی', 2],
+  ['مشهد', 12, 'ابری', 1],
+  ['همدان', 7, 'برفی', 3],
+  ['یاسوج', 11, 'بارانی', 2],
+  ['یزد', 19, 'آفتابی', 0],
 ] as const;
 
-const cityRows = cities.map(([city, temp, condition, icon], index) => ({
+const cityRows = cities.map(([city, temp, condition, weatherType], index) => ({
   id: `city-${index + 1}`,
   city,
   temp,
   condition,
-  icon,
+  weatherType,
 }));
 
 const cityCard: NonNullable<Scene['compositions']>[number] = {
@@ -63,7 +65,7 @@ const cityCard: NonNullable<Scene['compositions']>[number] = {
   name: 'ردیف آب‌وهوای شهر',
   resolution: { width: 1600, height: 72 },
   frameRange: { in: 0, out: 140 },
-  lifecycle: { outPoint: 100 },
+  lifecycle: { outPoint: 100, contentStart: 20 },
   playout: { mode: 'manual', holdSource: 'timed' },
   editorBackdrop: 'transparent',
   layers: [
@@ -130,21 +132,7 @@ const cityCard: NonNullable<Scene['compositions']>[number] = {
       text('weather-city', 'شهر', 'تهران', tf(735, 8, 680, 56), FAM, 31, 800, PALETTE.white, 2, {
         align: 'start',
       }),
-      text(
-        'weather-icon',
-        'نماد آب‌وهوا',
-        '☀',
-        tf(1450, 5, 100, 62),
-        'Segoe UI Symbol',
-        42,
-        400,
-        '#FDE68A',
-        2,
-        {
-          align: 'center',
-          direction: 'ltr',
-        },
-      ),
+      ...weatherIconElements('weather-icon', 'weatherType', 1452, 2, 68, 2),
     ]),
   ],
   fields: [
@@ -168,13 +156,21 @@ const cityCard: NonNullable<Scene['compositions']>[number] = {
       default: 'صاف',
       direction: 'rtl',
     },
-    { id: 'icon', label: 'نماد', required: true, type: 'text', default: '☀', direction: 'ltr' },
+    {
+      id: 'weatherType',
+      label: 'نوع آب‌وهوا',
+      required: true,
+      type: 'number',
+      default: 0,
+      allowedValues: [0, 1, 2, 3],
+      allowedValueLabels: WEATHER_TYPE_LABELS,
+      digits: 'persian',
+    },
   ],
   bindings: [
     { fieldId: 'city', target: { kind: 'text', elementId: 'weather-city' } },
     { fieldId: 'temp', target: { kind: 'text', elementId: 'weather-temp' } },
     { fieldId: 'condition', target: { kind: 'text', elementId: 'weather-condition' } },
-    { fieldId: 'icon', target: { kind: 'text', elementId: 'weather-icon' } },
   ],
 };
 
@@ -183,7 +179,7 @@ const pageComposition: NonNullable<Scene['compositions']>[number] = {
   name: 'صفحه شهرها',
   resolution: { width: 1680, height: 730 },
   frameRange: { in: 0, out: 140 },
-  lifecycle: { outPoint: 100 },
+  lifecycle: { outPoint: 100, contentStart: 20 },
   playout: { mode: 'manual', holdSource: 'timed' },
   editorBackdrop: 'transparent',
   layers: [
@@ -191,7 +187,7 @@ const pageComposition: NonNullable<Scene['compositions']>[number] = {
       text(
         'weather-page-title',
         'عنوان صفحه',
-        'شمال و شمال‌غرب',
+        'شهرها ـ صفحه ۱',
         tf(40, 0, 1600, 62),
         FAM,
         28,
@@ -226,7 +222,7 @@ const pageComposition: NonNullable<Scene['compositions']>[number] = {
       label: 'عنوان صفحه',
       required: true,
       type: 'text',
-      default: 'شمال و شمال‌غرب',
+      default: 'شهرها ـ صفحه ۱',
       direction: 'rtl',
     },
     {
@@ -247,7 +243,7 @@ const pageComposition: NonNullable<Scene['compositions']>[number] = {
   ],
 };
 
-const pageNames = ['شمال و شمال‌غرب', 'غرب و جنوب‌غرب', 'مرکز و جنوب', 'شرق و شمال‌شرق'];
+const pageNames = ['شهرها ـ صفحه ۱', 'شهرها ـ صفحه ۲', 'شهرها ـ صفحه ۳', 'شهرها ـ صفحه ۴'];
 const pages = Array.from({ length: 4 }, (_, index) => ({
   kind: 'composition' as const,
   id: `weather-page-${index + 1}`,
@@ -260,26 +256,36 @@ const pages = Array.from({ length: 4 }, (_, index) => ({
 }));
 
 const children: Element[] = [
+  image(
+    'weather-pages-photo-bg',
+    'پس‌زمینهٔ جوی',
+    'weather-atmosphere',
+    tf(-70, -60, 1920, 1080),
+    0,
+    'cover',
+  ),
   shape(
     'weather-pages-bg',
-    'پس‌زمینه',
-    tf(0, 0, 1780, 960),
-    gradient(140, '#061322', '#123A5D'),
-    0,
+    'پنل شیشه‌ای',
+    tf(18, 18, 1744, 924),
+    gradient(140, '#03101ED9', '#0B3150C7'),
+    1,
     {
-      radius: 30,
-      stroke: { color: '#2A5977', width: 2 },
-      shadow: { offsetX: 0, offsetY: 20, blur: 52, color: '#00000080' },
+      radius: 34,
+      opacity: 0.78,
+      stroke: { color: '#67E8F955', width: 2 },
+      shadow: { offsetX: 0, offsetY: 24, blur: 60, color: '#00000099' },
     },
   ),
   shape(
     'weather-pages-ribbon',
     'نوار عنوان',
-    tf(40, 34, 1700, 100),
-    gradient(90, '#0369A1', '#0E7490'),
-    1,
+    tf(385, 34, 1355, 100),
+    gradient(90, '#075985DD', '#0E7490DD'),
+    2,
     {
-      radius: 22,
+      radius: 26,
+      stroke: { color: '#CFFAFE44', width: 1 },
       animation: reveal(0),
     },
   ),
@@ -287,15 +293,42 @@ const children: Element[] = [
     'weather-pages-title',
     'عنوان',
     TITLE,
-    tf(80, 45, 1620, 76),
+    tf(430, 45, 1260, 76),
     FAM,
     43,
     900,
     PALETTE.white,
+    3,
+    {
+      align: 'start',
+      animation: reveal(4),
+    },
+  ),
+  shape(
+    'weather-pages-mark',
+    'نشان هواشناسی',
+    tf(40, 34, 315, 100),
+    gradient(135, '#D97706', '#FBBF24'),
     2,
     {
+      radius: 26,
+      shadow: { offsetX: 0, offsetY: 12, blur: 28, color: '#F59E0B30' },
+      animation: reveal(2),
+    },
+  ),
+  text(
+    'weather-pages-mark-text',
+    'عنوان کوتاه',
+    'هواشناسی',
+    tf(65, 44, 265, 78),
+    FAM,
+    30,
+    900,
+    '#172033',
+    3,
+    {
       align: 'center',
-      animation: reveal(4),
+      animation: reveal(6),
     },
   ),
   {
@@ -306,7 +339,7 @@ const children: Element[] = [
     opacity: 1,
     visible: true,
     locked: false,
-    zIndex: 3,
+    zIndex: 4,
     font: {
       family: FAM,
       weight: 600,
@@ -331,17 +364,17 @@ const children: Element[] = [
     repeat: 'infinite',
     drivesHold: false,
   } as Element,
-  shape('weather-pages-footer', 'نوار پایین', tf(50, 912, 1680, 2), solid('#38BDF8'), 1),
+  shape('weather-pages-footer', 'نوار پایین', tf(50, 912, 1680, 2), solid('#38BDF8'), 2),
   text(
     'weather-pages-hint',
     'راهنما',
-    'صفحه‌های بعدی به‌صورت خودکار نمایش داده می‌شوند',
+    'شهرها به‌ترتیب الفبای فارسی در صفحه‌های بعدی ادامه پیدا می‌کنند',
     tf(60, 916, 1660, 32),
     FAM,
     18,
     500,
     PALETTE.muted,
-    2,
+    3,
     {
       align: 'center',
     },
@@ -352,8 +385,9 @@ export const iranWeatherPagesScene = galleryScene({
   id: 'iran-weather-pages',
   name: 'آب‌وهوای مراکز استان‌ها',
   description:
-    'نمایش چندصفحه‌ای همهٔ مراکز استان‌ها با Sequence صفحه‌ای، Repeater داخلی و مسیر دادهٔ JSON قابل Reload.',
+    'نمایش چندصفحه‌ای همهٔ مراکز استان‌ها به‌ترتیب الفبای فارسی، با Sequence صفحه‌ای و Repeater داخلی.',
   templateType: 'fullscreen',
+  direct: true,
   fontFamily: FAM,
   onAirId: 'comp-iran-weather-pages-onair',
   onAirName: 'آب‌وهوای شهرها (روی آنتن)',

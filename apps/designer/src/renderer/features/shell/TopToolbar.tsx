@@ -483,6 +483,13 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
               />
               <FileMenuItem label="Documentation" disabled onClick={() => undefined} />
               <FileMenuItem
+                label="APASAI website"
+                onClick={() => {
+                  setOpenMenu(null);
+                  window.open('https://apasai.com/', '_blank', 'noopener,noreferrer');
+                }}
+              />
+              <FileMenuItem
                 label="About"
                 onClick={() => {
                   setOpenMenu(null);

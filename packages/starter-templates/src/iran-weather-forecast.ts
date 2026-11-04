@@ -2,6 +2,7 @@ import type { Element, Scene } from '@cg/shared-schema';
 import {
   galleryScene,
   gradient,
+  image,
   layer,
   PALETTE,
   reveal,
@@ -10,17 +11,26 @@ import {
   text,
   tf,
 } from './gallery-helpers.js';
+import { WEATHER_TYPE_LABELS, weatherIconElements } from './weather-icons.js';
 
 const FAM = 'asset-iran-weather-forecast-vazir';
 const TITLE = 'پیش‌بینی پنج‌روزهٔ تهران';
 const CARD_COMP = 'comp-weather-forecast-card';
 
 const forecast = [
-  { id: 'today', day: 'امروز', icon: '☀', condition: 'صاف', high: 22, low: 12, rain: 5 },
-  { id: 'tomorrow', day: 'فردا', icon: '☁', condition: 'کمی ابری', high: 20, low: 11, rain: 15 },
-  { id: 'day-3', day: 'جمعه', icon: '☂', condition: 'بارانی', high: 17, low: 9, rain: 70 },
-  { id: 'day-4', day: 'شنبه', icon: '☂', condition: 'رگبار', high: 16, low: 8, rain: 80 },
-  { id: 'day-5', day: 'یکشنبه', icon: '☁', condition: 'نیمه‌ابری', high: 19, low: 10, rain: 25 },
+  { id: 'today', day: 'امروز', weatherType: 0, condition: 'آفتابی', high: 22, low: 12, rain: 5 },
+  {
+    id: 'tomorrow',
+    day: 'فردا',
+    weatherType: 1,
+    condition: 'کمی ابری',
+    high: 20,
+    low: 11,
+    rain: 15,
+  },
+  { id: 'day-3', day: 'جمعه', weatherType: 2, condition: 'بارانی', high: 17, low: 9, rain: 70 },
+  { id: 'day-4', day: 'شنبه', weatherType: 2, condition: 'رگبار', high: 16, low: 8, rain: 80 },
+  { id: 'day-5', day: 'یکشنبه', weatherType: 3, condition: 'برفی', high: 10, low: 1, rain: 55 },
 ];
 
 const card: NonNullable<Scene['compositions']>[number] = {
@@ -28,7 +38,7 @@ const card: NonNullable<Scene['compositions']>[number] = {
   name: 'کارت پیش‌بینی روز',
   resolution: { width: 296, height: 520 },
   frameRange: { in: 0, out: 140 },
-  lifecycle: { outPoint: 100 },
+  lifecycle: { outPoint: 100, contentStart: 20 },
   playout: { mode: 'manual', holdSource: 'timed' },
   editorBackdrop: 'transparent',
   layers: [
@@ -37,42 +47,29 @@ const card: NonNullable<Scene['compositions']>[number] = {
         'forecast-card-bg',
         'کارت',
         tf(0, 0, 296, 520),
-        gradient(160, '#0B2B46E6', '#164768E6'),
+        gradient(160, '#071C30E8', '#164768D9'),
         0,
         {
-          radius: 24,
-          stroke: { color: '#3B6C8A', width: 2 },
-          shadow: { offsetX: 0, offsetY: 12, blur: 28, color: '#00000066' },
+          radius: 28,
+          stroke: { color: '#8BE7FF4D', width: 2 },
+          shadow: { offsetX: 0, offsetY: 16, blur: 34, color: '#00000080' },
         },
       ),
       shape(
         'forecast-card-top',
         'نوار روز',
         tf(14, 14, 268, 66),
-        gradient(90, '#0369A1', '#0E7490'),
+        gradient(90, '#075985E6', '#0F766EE6'),
         1,
         {
-          radius: 15,
+          radius: 17,
+          stroke: { color: '#CFFAFE3D', width: 1 },
         },
       ),
       text('forecast-day', 'روز', 'امروز', tf(24, 19, 248, 56), FAM, 30, 800, PALETTE.white, 2, {
         align: 'center',
       }),
-      text(
-        'forecast-icon',
-        'نماد',
-        '☀',
-        tf(48, 102, 200, 120),
-        'Segoe UI Symbol',
-        84,
-        400,
-        '#FDE68A',
-        2,
-        {
-          align: 'center',
-          direction: 'ltr',
-        },
-      ),
+      ...weatherIconElements('forecast-icon', 'weatherType', 88, 100, 120, 2),
       text(
         'forecast-condition',
         'وضعیت',
@@ -137,7 +134,16 @@ const card: NonNullable<Scene['compositions']>[number] = {
   ],
   fields: [
     { id: 'day', label: 'روز', required: true, type: 'text', default: 'امروز', direction: 'rtl' },
-    { id: 'icon', label: 'نماد', required: true, type: 'text', default: '☀', direction: 'ltr' },
+    {
+      id: 'weatherType',
+      label: 'نوع آب‌وهوا',
+      required: true,
+      type: 'number',
+      default: 0,
+      allowedValues: [0, 1, 2, 3],
+      allowedValueLabels: WEATHER_TYPE_LABELS,
+      digits: 'persian',
+    },
     {
       id: 'condition',
       label: 'وضعیت',
@@ -182,7 +188,6 @@ const card: NonNullable<Scene['compositions']>[number] = {
   ],
   bindings: [
     { fieldId: 'day', target: { kind: 'text', elementId: 'forecast-day' } },
-    { fieldId: 'icon', target: { kind: 'text', elementId: 'forecast-icon' } },
     { fieldId: 'condition', target: { kind: 'text', elementId: 'forecast-condition' } },
     { fieldId: 'high', target: { kind: 'text', elementId: 'forecast-high' } },
     { fieldId: 'low', target: { kind: 'text', elementId: 'forecast-low' } },
@@ -191,26 +196,70 @@ const card: NonNullable<Scene['compositions']>[number] = {
 };
 
 const children: Element[] = [
-  shape('forecast-bg', 'پس‌زمینه', tf(0, 0, 1760, 900), gradient(145, '#061322', '#123A5D'), 0, {
-    radius: 30,
-    stroke: { color: '#2A5977', width: 2 },
-    shadow: { offsetX: 0, offsetY: 20, blur: 50, color: '#00000080' },
-  }),
+  image(
+    'forecast-photo-bg',
+    'پس‌زمینهٔ جوی',
+    'weather-atmosphere',
+    tf(-80, -90, 1920, 1080),
+    0,
+    'cover',
+  ),
+  shape(
+    'forecast-bg',
+    'پنل شیشه‌ای',
+    tf(18, 18, 1724, 864),
+    gradient(145, '#04111ED6', '#0B3150C2'),
+    1,
+    {
+      radius: 34,
+      opacity: 0.8,
+      stroke: { color: '#67E8F955', width: 2 },
+      shadow: { offsetX: 0, offsetY: 24, blur: 58, color: '#00000099' },
+    },
+  ),
   shape(
     'forecast-title-ribbon',
     'نوار عنوان',
-    tf(55, 42, 1650, 102),
-    gradient(90, '#075985', '#0F766E'),
-    1,
+    tf(405, 42, 1300, 102),
+    gradient(90, '#075985E6', '#0F766EE6'),
+    2,
     {
-      radius: 22,
+      radius: 26,
+      stroke: { color: '#CFFAFE44', width: 1 },
       animation: reveal(0),
     },
   ),
-  text('forecast-title', 'عنوان', TITLE, tf(95, 52, 1570, 80), FAM, 44, 900, PALETTE.white, 2, {
-    align: 'center',
+  text('forecast-title', 'عنوان', TITLE, tf(450, 52, 1210, 80), FAM, 42, 900, PALETTE.white, 3, {
+    align: 'start',
     animation: reveal(4),
   }),
+  shape(
+    'forecast-mark',
+    'نشان پیش‌بینی',
+    tf(55, 42, 320, 102),
+    gradient(135, '#D97706', '#FBBF24'),
+    2,
+    {
+      radius: 26,
+      shadow: { offsetX: 0, offsetY: 12, blur: 28, color: '#F59E0B30' },
+      animation: reveal(2),
+    },
+  ),
+  text(
+    'forecast-mark-text',
+    'عنوان کوتاه',
+    '۵ روز آینده',
+    tf(80, 52, 270, 80),
+    FAM,
+    29,
+    900,
+    '#172033',
+    3,
+    {
+      align: 'center',
+      animation: reveal(6),
+    },
+  ),
   {
     id: 'forecast-repeater',
     name: 'روزهای پیش‌بینی',
@@ -220,16 +269,27 @@ const children: Element[] = [
     opacity: 1,
     visible: true,
     locked: false,
-    zIndex: 3,
+    zIndex: 4,
     direction: 'row',
     flow: 'rtl',
     gap: 25,
     maxItems: 5,
+    itemEntrance: 'fade-top',
+    itemTransitionMs: 480,
+    itemStaggerMs: 140,
     items: forecast,
   } as Element,
-  shape('forecast-footer-bg', 'نوار پایانی', tf(90, 772, 1580, 70), solid('#071A2DBF'), 1, {
-    radius: 15,
-  }),
+  shape(
+    'forecast-footer-bg',
+    'نوار پایانی',
+    tf(90, 772, 1580, 70),
+    gradient(90, '#071A2DE6', '#123E5BD9'),
+    2,
+    {
+      radius: 18,
+      stroke: { color: '#67E8F933', width: 1 },
+    },
+  ),
   text(
     'forecast-footer',
     'به‌روزرسانی',
@@ -239,7 +299,7 @@ const children: Element[] = [
     23,
     500,
     PALETTE.mist,
-    2,
+    3,
     {
       align: 'center',
     },
@@ -252,6 +312,7 @@ export const iranWeatherForecastScene = galleryScene({
   description:
     'پیش‌بینی امروز و چهار روز آینده در یک صفحه با Repeater افقی و ورودی‌های عددی محدودشده.',
   templateType: 'fullscreen',
+  direct: true,
   fontFamily: FAM,
   onAirId: 'comp-iran-weather-forecast-onair',
   onAirName: 'پیش‌بینی هوا (روی آنتن)',

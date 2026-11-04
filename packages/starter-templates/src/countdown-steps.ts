@@ -2,6 +2,7 @@ import type { Element } from '@cg/shared-schema';
 import {
   galleryScene,
   gradient,
+  image,
   PALETTE,
   reveal,
   shape,
@@ -21,56 +22,82 @@ const status = (id: string, value: string, color: string, visible: boolean): Ele
 });
 
 const children: Element[] = [
-  shape('countdown-bg', 'پس‌زمینه', tf(0, 0, 1100, 620), gradient(145, '#071426', '#123A5D'), 0, {
-    radius: 34,
-    stroke: { color: '#2A5977', width: 2 },
-    shadow: { offsetX: 0, offsetY: 20, blur: 52, color: '#00000080' },
-  }),
+  image(
+    'countdown-precision-bg',
+    'پس‌زمینهٔ زمان',
+    'countdown-precision',
+    tf(-410, -230, 1920, 1080),
+    0,
+    'cover',
+  ),
+  shape(
+    'countdown-bg',
+    'پنل مرکزی',
+    tf(0, 0, 1100, 620),
+    gradient(145, '#030A17D9', '#0B1730C7'),
+    1,
+    {
+      radius: 38,
+      stroke: { color: '#83D9FF4D', width: 2 },
+      shadow: { offsetX: 0, offsetY: 24, blur: 64, color: '#000000A6' },
+    },
+  ),
+  shape(
+    'countdown-top-accent',
+    'خط نور بالا',
+    tf(174, 24, 752, 3),
+    gradient(90, '#22D3EE00', '#A78BFA'),
+    2,
+    {
+      radius: 2,
+    },
+  ),
   shape(
     'countdown-title-bg',
     'نوار عنوان',
-    tf(52, 44, 996, 88),
-    gradient(90, '#0369A1', '#0F766E'),
-    1,
+    tf(120, 54, 860, 74),
+    gradient(90, '#0E7490CC', '#6D28D9CC'),
+    2,
     {
-      radius: 20,
+      radius: 22,
+      stroke: { color: '#A5F3FC55', width: 1 },
       animation: reveal(0),
     },
   ),
-  text('countdown-title', 'عنوان', TITLE, tf(80, 52, 940, 70), FAM, 36, 900, PALETTE.white, 3, {
+  text('countdown-title', 'عنوان', TITLE, tf(150, 60, 800, 62), FAM, 33, 900, PALETTE.white, 4, {
     align: 'center',
     animation: reveal(4),
   }),
   shape(
     'countdown-clock-bg',
     'قاب شمارش',
-    tf(126, 176, 848, 250),
-    gradient(140, '#0B2B46', '#164768'),
-    1,
+    tf(126, 170, 848, 246),
+    gradient(140, '#071528E6', '#102D4BE0'),
+    2,
     {
-      radius: 30,
-      stroke: { color: '#3B82F6', width: 4 },
-      shadow: { offsetX: 0, offsetY: 14, blur: 36, color: '#00000070' },
+      radius: 34,
+      stroke: { color: '#67E8F980', width: 3 },
+      shadow: { offsetX: 0, offsetY: 18, blur: 44, color: '#00000080' },
     },
   ),
   {
     id: 'countdown-clock',
     name: 'شمارش معکوس',
     type: 'clock',
-    transform: tf(156, 192, 788, 216),
+    transform: tf(156, 186, 788, 208),
     opacity: 1,
     visible: true,
     locked: false,
-    zIndex: 3,
+    zIndex: 5,
     font: {
       family: FAM,
       weight: 900,
       style: 'normal',
-      size: 116,
+      size: 120,
       lineHeight: 1.15,
       letterSpacing: 2,
     },
-    color: '#7DD3FC',
+    color: '#C4F1FF',
     align: 'center',
     verticalAlign: 'middle',
     mode: 'countdown',
@@ -160,7 +187,20 @@ const children: Element[] = [
   status('countdown-one', 'سی دقیقه تا آغاز پخش', '#FDBA74', false),
   status('countdown-ten', 'ده دقیقه تا آغاز پخش', '#FCA5A5', false),
   status('countdown-zero', 'برنامه آغاز شد', '#6EE7B7', false),
-  shape('countdown-bottom-rule', 'خط پایین', tf(80, 568, 940, 3), solid('#38BDF8'), 2),
+  shape('countdown-status-bg', 'پس‌زمینه وضعیت', tf(120, 458, 860, 94), solid('#06132299'), 2, {
+    radius: 24,
+    stroke: { color: '#A78BFA33', width: 1 },
+  }),
+  shape(
+    'countdown-bottom-rule',
+    'خط پایین',
+    tf(210, 568, 680, 3),
+    gradient(90, '#22D3EE00', '#A78BFA'),
+    3,
+    {
+      radius: 2,
+    },
+  ),
 ];
 
 export const countdownStepsScene = galleryScene({
@@ -169,9 +209,10 @@ export const countdownStepsScene = galleryScene({
   description:
     'شمارش معکوس تا ساعت هدف با Steps واقعی برای تغییر رنگ، وضعیت و چشمک در آستانه‌های شصت، سی و ده دقیقه.',
   templateType: 'fullscreen',
+  direct: true,
   fontFamily: FAM,
   onAirId: 'comp-countdown-steps-onair',
-  onAirName: 'شمارش معکوس (روی آنتن)',
+  onAirName: 'شمارش معکوس',
   onAirSize: { width: 1100, height: 620 },
   onAirPosition: { x: 410, y: 230 },
   children,

@@ -303,10 +303,77 @@ describe('the FROM FILE control renders only where the author granted a file sou
     expect(dialog?.querySelector('input[aria-label="Split items into items"]')).not.toBeNull();
     expect(dialog?.querySelector('select[aria-label="items split delimiter"]')).not.toBeNull();
   });
+
+  it('gives a direct structured Repeater Excel connect, reload, and labelled data view', async () => {
+    const itemFields = [
+      {
+        id: 'team',
+        type: 'text' as const,
+        label: 'Team',
+        required: true,
+        default: '',
+      },
+      {
+        id: 'points',
+        type: 'number' as const,
+        label: 'Points',
+        required: true,
+        default: 0,
+      },
+    ];
+    const template: TemplateInfo = {
+      ...TEMPLATE,
+      fields: TEMPLATE.fields?.map((field) =>
+        field.id === 'items' && field.type === 'list'
+          ? {
+              ...field,
+              label: 'League rows',
+              maxItems: 20,
+              itemFields,
+            }
+          : field,
+      ),
+    };
+    const el = await render(() => Promise.resolve(template));
+
+    expect(el.textContent).toContain('Not connected');
+    expect(el.textContent).toContain('Save and connect Excel');
+    expect(el.textContent).toContain('Connect existing');
+
+    attachFileSource('item-1', ['items'], source('league.xlsx'), {
+      split: false,
+      delimiter: '',
+      format: 'csv',
+      schemaSignature: JSON.stringify({
+        itemFields,
+        maxItems: 20,
+      }),
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(el.textContent).toContain('Connected · league.xlsx');
+    expect(el.querySelector('button[aria-label="Reload items from file"]')).not.toBeNull();
+    expect(el.textContent).toContain('View current data');
+    expect(el.textContent).toContain('Save and connect another Excel');
+
+    await act(async () => {
+      el.querySelector<HTMLButtonElement>(
+        'button[aria-label="View items file content and fields"]',
+      )?.click();
+      await Promise.resolve();
+    });
+    const dialog = document.body.querySelector<HTMLElement>(
+      '[role="dialog"][aria-label="Current file-only data · items"]',
+    );
+    expect(dialog?.textContent).toContain('Team');
+    expect(dialog?.textContent).toContain('Points');
+  });
 });
 
 describe('R-102 — authored file-only and locked Bridge sources', () => {
-  it('removes the manual editor but leaves file choice for file-only text and list fields', async () => {
+  it('removes manual editing and leaves file-only connection ownership in Designer', async () => {
     const headlinePolicy = withFieldPolicy('headline', { inputMode: 'file-only' });
     const template = {
       ...headlinePolicy,
@@ -319,10 +386,11 @@ describe('R-102 — authored file-only and locked Bridge sources', () => {
     const el = await render(() => Promise.resolve(template));
 
     expect(el.querySelector('input[aria-label="headline"]')).toBeNull();
-    expect(fromFileButton(el, 'headline')).not.toBeNull();
+    expect(fromFileButton(el, 'headline')).toBeNull();
     expect(el.querySelector('[aria-label="Add items item"]')).toBeNull();
     expect(el.querySelector('[aria-label^="Remove items item"]')).toBeNull();
-    expect(fromFileButton(el, 'items')).not.toBeNull();
+    expect(fromFileButton(el, 'items')).toBeNull();
+    expect(el.textContent).toContain('Connect this file in Designer');
   });
 
   it('keeps the manual editor for lock-only, but exposes no choose or detach route', async () => {

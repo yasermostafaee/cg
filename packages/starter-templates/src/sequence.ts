@@ -276,7 +276,7 @@ export const sequenceScene: Scene = {
       name: 'توالی خبر',
       resolution: { width: W, height: H },
       frameRange: { in: 0, out: 122 },
-      lifecycle: { outPoint: 60 },
+      lifecycle: { outPoint: 60, contentStart: 55 },
       playout: { mode: 'auto-out', holdSource: 'content-driven' },
       editorBackdrop: 'transparent',
       layers: [

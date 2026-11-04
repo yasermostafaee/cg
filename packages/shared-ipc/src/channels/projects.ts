@@ -130,6 +130,8 @@ const StarterEntrySchema = z.object({
   templateType: z.string().min(1),
   /** Root-relative poster image URL for the landing card (optional). */
   previewUrl: z.string().optional(),
+  /** Root-relative, silent short-form motion preview played on hover/focus (optional). */
+  motionPreviewUrl: z.string().optional(),
   /** When true, the landing card shows a "New" badge. */
   isNew: z.boolean().optional(),
   /** `DESIGNER-FIX-0905` — the derived playout badge (optional so an old catalog still parses). */

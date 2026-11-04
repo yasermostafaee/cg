@@ -1,6 +1,7 @@
 import { Monitor, MonitorOff, ScrollText, Settings } from 'lucide-react';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
+import { ApasaiMark } from '../../ui/ApasaiMark.js';
 import { ChannelStrip } from '../channels/ChannelStrip.js';
 import type { ChannelSignal } from '../channels/channelSignals.js';
 import { EveryChannelPanic } from '../layers/EveryChannelPanic.js';
@@ -36,10 +37,8 @@ import type { ShellLayout } from '../../hooks/useShellLayout.js';
  * this argument is untouched by the change: it is about WHICH ROW a load lands on, not about
  * how many presses land it. A header button would still have to invent a destination.
  *   - `PROTOTYPE` — the drawing labelling itself. There is nothing here to adopt.
- *   - 🔴 **The BRAND block** (`FIELD-FIXES-01` G, the owner's rule: the name appears ONCE, in
- *     the window's title bar — `APASAI CG CONTROL`, with the Apasai logo — and the browser tab
- *     carries the title and the favicon). It was taken from the reference, and in the installed
- *     app it made the third "CG Control" in one corner. It pressed nothing, so no function moved.
+ *   - The brand block now links to APASAI's website by owner request. It names APASAI once and
+ *     leaves the product name to the title bar, avoiding a repeated "CG Control" label.
  *   - The lock and the manual failover stay on the status bar. The reference draws NEITHER,
  *     so there is no reference decision to follow; the failover control is guard item 17 and
  *     belongs beside the fault states it answers.
@@ -69,6 +68,17 @@ export function AppHeader({
 
   return (
     <header className="cg-app-header" data-app-header="">
+      <a
+        className="cg-app-brand"
+        href="https://apasai.com/"
+        target="_blank"
+        rel="noreferrer"
+        aria-label="APASAI website"
+        data-apasai-brand=""
+      >
+        <ApasaiMark />
+        <span>APASAI</span>
+      </a>
       {/*
         THE CHANNEL AXIS, moved here from `ChannelScope`'s own strip — the same tablist, the
         same store, the same ids. Only its PLACE changed, which is why `ChannelScope` still

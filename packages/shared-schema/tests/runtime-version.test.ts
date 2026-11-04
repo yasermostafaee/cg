@@ -91,6 +91,8 @@ describe('runtimeShortfallMessage', () => {
     expect(message).toContain('lower third');
     expect(message).toContain('2.0.0');
     expect(message).toContain('1.0.0');
+    expect(message).toContain('needs CG Control');
+    expect(message).not.toContain('CG runtime');
     // The operator has two ways out and the message must not leave them guessing which.
     expect(message).toContain('Update this station');
     expect(message).toContain('re-export');

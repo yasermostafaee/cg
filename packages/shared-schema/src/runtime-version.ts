@@ -118,7 +118,7 @@ export function runtimeShortfall(
  */
 export function runtimeShortfallMessage(name: string, shortfall: RuntimeShortfall): string {
   return (
-    `"${name}" needs CG runtime ${shortfall.required} and this station has ` +
+    `"${name}" needs CG Control ${shortfall.required} and this station has ` +
     `${shortfall.available} — it was exported by a newer build. Update this station, or ` +
     `re-export the template from a Designer matching it.`
   );

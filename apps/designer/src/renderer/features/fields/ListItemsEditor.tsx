@@ -380,6 +380,131 @@ function ItemNumberInput({
   );
 }
 
+/** One labelled structured cell. The label is visible; placeholder/title are only secondary help. */
+function StructuredCellEditor({
+  column,
+  row,
+  rowNumber,
+  label,
+  dir,
+  onChange,
+}: {
+  column: ListItemColumn;
+  row: ListItem;
+  rowNumber: number;
+  label: string;
+  dir?: 'ltr' | 'rtl' | 'auto' | undefined;
+  onChange: (row: ListItem) => void;
+}): JSX.Element {
+  const ariaLabel = `${label} item ${String(rowNumber)} ${column.label}`;
+  let control: JSX.Element;
+
+  if (column.kind === 'number') {
+    const allowedValues = numberFieldAllowedValues(column);
+    control =
+      allowedValues !== undefined ? (
+        <Select
+          className={s.itemInput}
+          wrapperClassName={s.itemControl}
+          value={String(numberCellOf(row, column.key) ?? column.defaultValue ?? allowedValues[0])}
+          aria-label={ariaLabel}
+          onChange={(event) =>
+            onChange(withNumberCell(row, column.key, Number(event.target.value)))
+          }
+        >
+          {allowedValues.map((value) => (
+            <option key={value} value={value}>
+              {numberFieldValueLabel(column, value)}
+            </option>
+          ))}
+        </Select>
+      ) : (
+        <ItemNumberInput
+          className={s.itemInput}
+          invalidClassName={s.inputInvalid}
+          kind="number"
+          placeholder={column.label}
+          title={column.label}
+          value={numberCellOf(row, column.key)}
+          ariaLabel={ariaLabel}
+          {...(column.min === undefined ? {} : { min: column.min })}
+          {...(column.max === undefined ? {} : { max: column.max })}
+          {...(column.step === undefined ? {} : { step: column.step })}
+          {...(column.allowedValues === undefined ? {} : { allowedValues: column.allowedValues })}
+          onValue={(value) => onChange(withNumberCell(row, column.key, value))}
+        />
+      );
+  } else if (column.kind === 'image' || column.kind === 'select') {
+    const value = column.kind === 'image' ? imageCellOf(row, column.key) : cellOf(row, column.key);
+    const known = column.choices?.some((choice) => choice.value === value) === true;
+    control = (
+      <Select
+        className={s.itemInput}
+        wrapperClassName={s.itemControl}
+        value={value}
+        aria-label={ariaLabel}
+        onChange={(event) =>
+          onChange(
+            column.kind === 'image'
+              ? withImageCell(row, column.key, event.target.value)
+              : withCell(row, column, event.target.value),
+          )
+        }
+      >
+        {column.kind === 'image' && <option value="">— use default / no image —</option>}
+        {value !== '' && !known && <option value={value}>{value} (missing)</option>}
+        {(column.choices ?? []).map((choice) => (
+          <option key={choice.value} value={choice.value}>
+            {choice.label}
+          </option>
+        ))}
+      </Select>
+    );
+  } else if (column.kind === 'boolean') {
+    control = (
+      <input
+        type="checkbox"
+        checked={booleanCellOf(row, column.key)}
+        aria-label={ariaLabel}
+        onChange={(event) => onChange(withBooleanCell(row, column.key, event.target.checked))}
+      />
+    );
+  } else if (column.kind === 'color') {
+    const value = cellOf(row, column.key);
+    control = (
+      <input
+        className={s.itemInput}
+        type="color"
+        value={/^#[0-9a-f]{6}$/i.test(value) ? value : '#000000'}
+        aria-label={ariaLabel}
+        onChange={(event) => onChange(withCell(row, column, event.target.value))}
+      />
+    );
+  } else {
+    control = (
+      <input
+        className={s.itemInput}
+        type="text"
+        dir={dir}
+        placeholder={column.label}
+        value={shown(cellOf(row, column.key), column.digits)}
+        aria-label={ariaLabel}
+        onChange={(event) => {
+          const text = typedInto(event.currentTarget, event.nativeEvent, column.digits);
+          onChange(withCell(row, column, text));
+        }}
+      />
+    );
+  }
+
+  return (
+    <label className={s.structuredCell} title={column.key}>
+      <span className={s.structuredLabel}>{column.label}</span>
+      {control}
+    </label>
+  );
+}
+
 export function ListItemsEditor({
   items,
   onChange,
@@ -612,150 +737,21 @@ export function ListItemsEditor({
             data-over-limit={overLimit ? 'true' : undefined}
           >
             {columns !== undefined && columns.length > 0 ? (
-              // D-030 — one input per child-composition field (column).
-              columns.map((col) => {
-                const ariaLabel = `${label} item ${String(i + 1)} ${col.label}`;
-                if (col.kind === 'number') {
-                  const allowedValues = numberFieldAllowedValues(col);
-                  if (allowedValues !== undefined) {
-                    return (
-                      <Select
-                        key={col.key}
-                        className={s.itemInput}
-                        wrapperClassName={s.itemControl}
-                        value={String(
-                          numberCellOf(item, col.key) ?? col.defaultValue ?? allowedValues[0],
-                        )}
-                        title={col.label}
-                        aria-label={ariaLabel}
-                        onChange={(e) =>
-                          onChange(
-                            items.map((it, j) =>
-                              j === i ? withNumberCell(it, col.key, Number(e.target.value)) : it,
-                            ),
-                          )
-                        }
-                      >
-                        {allowedValues.map((value) => (
-                          <option key={value} value={value}>
-                            {numberFieldValueLabel(col, value)}
-                          </option>
-                        ))}
-                      </Select>
-                    );
-                  }
-                  return (
-                    <ItemNumberInput
-                      key={col.key}
-                      className={s.itemInput}
-                      invalidClassName={s.inputInvalid}
-                      kind="number"
-                      placeholder={col.label}
-                      title={col.label}
-                      value={numberCellOf(item, col.key)}
-                      ariaLabel={ariaLabel}
-                      {...(col.min === undefined ? {} : { min: col.min })}
-                      {...(col.max === undefined ? {} : { max: col.max })}
-                      {...(col.step === undefined ? {} : { step: col.step })}
-                      {...(col.allowedValues === undefined
-                        ? {}
-                        : { allowedValues: col.allowedValues })}
-                      onValue={(n) =>
-                        onChange(
-                          items.map((it, j) => (j === i ? withNumberCell(it, col.key, n) : it)),
-                        )
-                      }
-                    />
-                  );
-                }
-                if (col.kind === 'image' || col.kind === 'select') {
-                  const value =
-                    col.kind === 'image' ? imageCellOf(item, col.key) : cellOf(item, col.key);
-                  const known = col.choices?.some((choice) => choice.value === value) === true;
-                  return (
-                    <Select
-                      key={col.key}
-                      className={s.itemInput}
-                      wrapperClassName={s.itemControl}
-                      value={value}
-                      title={col.label}
-                      aria-label={ariaLabel}
-                      onChange={(e) =>
-                        onChange(
-                          items.map((it, j) =>
-                            j !== i
-                              ? it
-                              : col.kind === 'image'
-                                ? withImageCell(it, col.key, e.target.value)
-                                : withCell(it, col, e.target.value),
-                          ),
-                        )
-                      }
-                    >
-                      {col.kind === 'image' && <option value="">— use default / no image —</option>}
-                      {value !== '' && !known && <option value={value}>{value} (missing)</option>}
-                      {(col.choices ?? []).map((choice) => (
-                        <option key={choice.value} value={choice.value}>
-                          {choice.label}
-                        </option>
-                      ))}
-                    </Select>
-                  );
-                }
-                if (col.kind === 'boolean') {
-                  return (
-                    <label key={col.key} className={s.itemInput} title={col.label}>
-                      <input
-                        type="checkbox"
-                        checked={booleanCellOf(item, col.key)}
-                        aria-label={ariaLabel}
-                        onChange={(e) =>
-                          onChange(
-                            items.map((it, j) =>
-                              j === i ? withBooleanCell(it, col.key, e.target.checked) : it,
-                            ),
-                          )
-                        }
-                      />
-                      {col.label}
-                    </label>
-                  );
-                }
-                if (col.kind === 'color') {
-                  const value = cellOf(item, col.key);
-                  return (
-                    <input
-                      key={col.key}
-                      className={s.itemInput}
-                      type="color"
-                      title={col.label}
-                      value={/^#[0-9a-f]{6}$/i.test(value) ? value : '#000000'}
-                      aria-label={ariaLabel}
-                      onChange={(e) =>
-                        onChange(
-                          items.map((it, j) => (j === i ? withCell(it, col, e.target.value) : it)),
-                        )
-                      }
-                    />
-                  );
-                }
-                return (
-                  <input
-                    key={col.key}
-                    className={s.itemInput}
-                    type="text"
+              <div className={s.structuredCells}>
+                {columns.map((column) => (
+                  <StructuredCellEditor
+                    key={column.key}
+                    column={column}
+                    row={item}
+                    rowNumber={i + 1}
+                    label={label}
                     dir={dir}
-                    placeholder={col.label}
-                    title={col.label}
-                    value={shown(cellOf(item, col.key), col.digits)}
-                    aria-label={ariaLabel}
-                    onChange={(e) => {
-                      const text = typedInto(e.currentTarget, e.nativeEvent, col.digits);
-                      onChange(items.map((it, j) => (j === i ? withCell(it, col, text) : it)));
-                    }}
+                    onChange={(next) =>
+                      onChange(items.map((candidate, index) => (index === i ? next : candidate)))
+                    }
                   />
-                );
-              })
+                ))}
+              </div>
             ) : kindOf(item) === 'image' ? (
               <PictureItem item={item} ariaLabel={`${label} item ${String(i + 1)} picture`} />
             ) : multiline ? (

@@ -34,6 +34,8 @@ describe('ProjectStore', () => {
     const starters = makeStore().starters();
     expect(starters.length).toBeGreaterThan(0);
     expect(starters.every((s) => s.id && s.label && s.templateType)).toBe(true);
+    expect(starters.every((s) => s.previewUrl?.endsWith('.png'))).toBe(true);
+    expect(starters.every((s) => s.motionPreviewUrl?.endsWith('.webm'))).toBe(true);
   });
 
   it('saves and re-opens a scene round-trip', async () => {

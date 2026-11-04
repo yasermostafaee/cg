@@ -3,6 +3,7 @@ import type {
   Element,
   FieldBinding,
   Fill,
+  LookGroups,
   Playout,
   Scene,
   TemplateType,
@@ -99,6 +100,32 @@ export function shape(
   } as Element;
 }
 
+export function image(
+  id: string,
+  name: string,
+  assetId: string,
+  transform: Transform,
+  zIndex: number,
+  fit: 'contain' | 'cover' | 'fill' = 'cover',
+  options: { opacity?: number; animation?: Element['animation'] } = {},
+): Element {
+  return {
+    id,
+    name,
+    type: 'image',
+    assetId,
+    source: 'project',
+    fit,
+    preserveAspect: fit !== 'fill',
+    transform,
+    opacity: options.opacity ?? 1,
+    visible: true,
+    locked: false,
+    zIndex,
+    ...(options.animation === undefined ? {} : { animation: options.animation }),
+  } as Element;
+}
+
 export function text(
   id: string,
   name: string,
@@ -174,6 +201,22 @@ interface GallerySceneOptions {
   entryOut?: number;
   onAirOut?: number;
   outPoint?: number;
+  entryLookGroups?: LookGroups;
+  /** Full-screen graphics are authored directly in their exported composition. */
+  direct?: boolean;
+}
+
+function offsetElement(element: Element, x: number, y: number): Element {
+  return {
+    ...element,
+    transform: {
+      ...element.transform,
+      position: {
+        x: element.transform.position.x + x,
+        y: element.transform.position.y + y,
+      },
+    },
+  } as Element;
 }
 
 export function galleryScene(options: GallerySceneOptions): Scene {
@@ -186,6 +229,46 @@ export function galleryScene(options: GallerySceneOptions): Scene {
     holdSource: 'timed',
   };
   const onAirPlayout = options.onAirPlayout ?? entryPlayout;
+  const direct = options.direct === true;
+  const entryChildren = direct
+    ? options.children.map((element) =>
+        offsetElement(element, options.onAirPosition.x, options.onAirPosition.y),
+      )
+    : [
+        {
+          id: `${options.id}-onair-instance`,
+          name: options.onAirName,
+          type: 'composition',
+          compositionId: options.onAirId,
+          transform: tf(
+            options.onAirPosition.x,
+            options.onAirPosition.y,
+            options.onAirSize.width,
+            options.onAirSize.height,
+          ),
+          opacity: 1,
+          visible: true,
+          locked: false,
+          zIndex: 0,
+          animation: anim({
+            opacity: track(kf(0, 0), kf(12, 1), kf(entryOut - 24, 1), kf(entryOut, 0)),
+            'scale.x': track(kf(0, 0.985, EASE.outExpo), kf(18, 1, EASE.outExpo)),
+            'scale.y': track(kf(0, 0.985, EASE.outExpo), kf(18, 1, EASE.outExpo)),
+          }),
+        } as Element,
+      ];
+  const entryComposition: NonNullable<Scene['compositions']>[number] = {
+    id: entryId,
+    name: options.name,
+    resolution: { width: FRAME_WIDTH, height: FRAME_HEIGHT },
+    frameRange: { in: 0, out: entryOut },
+    lifecycle: { outPoint, contentStart: Math.min(20, outPoint) },
+    playout: entryPlayout,
+    editorBackdrop: '#071426',
+    layers: [layer(`layer-${options.id}-entry`, 'Frame', entryChildren)],
+    ...(direct ? { fields: options.fields, bindings: options.bindings } : {}),
+    ...(options.entryLookGroups === undefined ? {} : { lookGroups: options.entryLookGroups }),
+  };
 
   return {
     schemaVersion: 1,
@@ -199,50 +282,21 @@ export function galleryScene(options: GallerySceneOptions): Scene {
     editorBackdrop: '#071426',
     layers: [],
     compositions: [
-      {
-        id: entryId,
-        name: options.name,
-        resolution: { width: FRAME_WIDTH, height: FRAME_HEIGHT },
-        frameRange: { in: 0, out: entryOut },
-        lifecycle: { outPoint },
-        playout: entryPlayout,
-        editorBackdrop: '#071426',
-        layers: [
-          layer(`layer-${options.id}-entry`, 'Frame', [
+      entryComposition,
+      ...(!direct
+        ? [
             {
-              id: `${options.id}-onair-instance`,
+              id: options.onAirId,
               name: options.onAirName,
-              type: 'composition',
-              compositionId: options.onAirId,
-              transform: tf(
-                options.onAirPosition.x,
-                options.onAirPosition.y,
-                options.onAirSize.width,
-                options.onAirSize.height,
-              ),
-              opacity: 1,
-              visible: true,
-              locked: false,
-              zIndex: 0,
-              animation: anim({
-                opacity: track(kf(0, 0), kf(12, 1), kf(entryOut - 24, 1), kf(entryOut, 0)),
-                'scale.x': track(kf(0, 0.985, EASE.outExpo), kf(18, 1, EASE.outExpo)),
-                'scale.y': track(kf(0, 0.985, EASE.outExpo), kf(18, 1, EASE.outExpo)),
-              }),
-            } as Element,
-          ]),
-        ],
-      },
-      {
-        id: options.onAirId,
-        name: options.onAirName,
-        resolution: options.onAirSize,
-        frameRange: { in: 0, out: onAirOut },
-        lifecycle: { outPoint },
-        playout: onAirPlayout,
-        editorBackdrop: '#071426',
-        layers: [layer(`layer-${options.id}-onair`, 'On air', options.children)],
-      },
+              resolution: options.onAirSize,
+              frameRange: { in: 0, out: onAirOut },
+              lifecycle: { outPoint, contentStart: Math.min(20, outPoint) },
+              playout: onAirPlayout,
+              editorBackdrop: '#071426' as const,
+              layers: [layer(`layer-${options.id}-onair`, 'On air', options.children)],
+            },
+          ]
+        : []),
       ...(options.extraCompositions ?? []),
     ],
     entryCompositionId: entryId,
@@ -261,7 +315,13 @@ export function galleryScene(options: GallerySceneOptions): Scene {
       createdAt: '2026-11-04T00:00:00.000Z',
       updatedAt: '2026-11-04T00:00:00.000Z',
       description: options.description,
-      tags: ['starter', 'persian', 'rtl', 'production-gallery', `onair:${options.onAirId}`],
+      tags: [
+        'starter',
+        'persian',
+        'rtl',
+        'production-gallery',
+        ...(direct ? ['fullscreen:direct'] : [`onair:${options.onAirId}`]),
+      ],
     },
   };
 }

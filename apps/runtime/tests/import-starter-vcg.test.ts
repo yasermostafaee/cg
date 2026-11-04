@@ -19,8 +19,8 @@ import { produceTemplateDelivery } from '../src/renderer/features/library/templa
  * `scopeSceneToComposition`), must cross the runtime app's REAL import path
  * (`produceTemplateDelivery` = verify → unpack → single-file render). The
  * starters collectively exercise every element kind the set relies on —
- * ticker, clock (wall + timezone), sequence, path (+ whole-shape morph
- * track), composition instances — so ANY schema drift between the apps
+ * ticker, clock (wall + timezone), sequence, replaceable image animation,
+ * composition instances — so ANY schema drift between the apps
  * fails HERE, at the boundary the operator actually crosses.
  */
 
@@ -96,10 +96,20 @@ describe('runtime import — every D-119 starter .vcg crosses the boundary', () 
       const { scene } = await unpack(bytes);
       expect(scene).toEqual(scoped);
 
-      // The on-air footprint comp travels in the package (nested closure).
+      // Compact overlays keep their nested on-air footprint in the package.
+      // Full-screen graphics intentionally export their main composition
+      // directly, without a redundant wrapper composition.
       const onairTag = starter.scene.metadata.tags?.find((t) => t.startsWith('onair:'));
-      const onairId = onairTag?.slice('onair:'.length) ?? '';
-      expect((scene.compositions ?? []).map((c) => c.id)).toContain(onairId);
+      const compositionIds = (scene.compositions ?? []).map((c) => c.id);
+      if (onairTag !== undefined) {
+        expect(compositionIds).toContain(onairTag.slice('onair:'.length));
+      } else {
+        expect(starter.scene.metadata.tags).toContain('fullscreen:direct');
+        // Designer lifts the direct entry composition onto the exported
+        // scene root; only its nested dependency closure remains here.
+        expect(scene.layers.length).toBeGreaterThan(0);
+        expect(scene.layers).toEqual(scoped.layers);
+      }
     });
   }
 
@@ -119,12 +129,13 @@ describe('runtime import — every D-119 starter .vcg crosses the boundary', () 
     expect(delivery.html).toContain('"headlines"');
   });
 
-  it('logo-bug: the whole-shape path-morph track survives to the playout side', async () => {
+  it('logo-bug: the replaceable image sting survives to the playout side', async () => {
     const starter = STARTER_TEMPLATES.find((s) => s.id === 'logo-bug');
     if (starter === undefined) throw new Error('logo-bug starter missing');
     const scoped = scopedExportOf(starter.scene);
     const delivery = await produceTemplateDelivery(await buildStarterVcg('logo-bug', scoped));
-    expect(delivery.html).toContain('"kind":"path"');
+    expect(delivery.html).toContain('"assetId":"apasai-logo"');
+    expect(delivery.html).toContain('"scale.x"');
     expect(delivery.html).toContain('"loop-cycle"');
   });
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { RecentProject, StarterEntry } from '@cg/shared-ipc';
 import {
   designerStore,
@@ -115,11 +115,20 @@ export function LandingView(): JSX.Element {
   return (
     <div className={s.page} aria-label="Designer landing">
       <div>
-        {/*
-          `FIELD-FIXES-01` G — NO IN-APP BRAND: the name appears once, in the window's title bar
-          (`APASAI CG DESIGNER`, with the Apasai logo), and the browser tab carries the title and
-          the favicon. The line below says what the page is for.
-        */}
+        <a
+          className={s.brandLockup}
+          href="https://apasai.com/"
+          target="_blank"
+          rel="noreferrer"
+          data-testid="apasai-brand"
+          aria-label="APASAI website"
+        >
+          <img className={s.brandLogo} src="/favicon.svg" alt="" />
+          <span>
+            <strong className={s.brandName}>APASAI</strong>
+            <span className={s.brandProduct}>CG DESIGNER</span>
+          </span>
+        </a>
         <p className={s.brandSub}>
           Broadcast template builder — pick a demo, open a recent project, or start fresh.
         </p>
@@ -149,31 +158,11 @@ export function LandingView(): JSX.Element {
       ) : (
         <div className={s.grid}>
           {starters.map((st) => (
-            <Button
+            <StarterCard
               key={st.id}
-              variant="bare"
-              className={s.card}
-              data-testid="starter-card"
-              onClick={() => guardedSwitch(st.label, () => loadStarter(st.id))}
-            >
-              {st.isNew === true && <span className={s.newBadge}>New</span>}
-              {st.previewUrl !== undefined ? (
-                <img src={st.previewUrl} alt={`${st.label} preview`} className={s.cardThumb} />
-              ) : (
-                <span className={s.cardThumbFallback}>PREVIEW</span>
-              )}
-              <span className={s.cardBody}>
-                <span className={s.cardLabel}>{st.label}</span>
-                {/* `DESIGNER-FIX-0905` — the DIFFERENTIATOR as a comparable badge, derived
-                    from the starter's scene, above one line of description. */}
-                {st.playout !== undefined && (
-                  <span className={s.cardBadge} data-testid="starter-playout">
-                    {playoutBadge(st.playout)}
-                  </span>
-                )}
-                <span className={s.cardDesc}>{st.description}</span>
-              </span>
-            </Button>
+              starter={st}
+              onOpen={() => guardedSwitch(st.label, () => loadStarter(st.id))}
+            />
           ))}
         </div>
       )}
@@ -234,6 +223,100 @@ export function LandingView(): JSX.Element {
         />
       )}
     </div>
+  );
+}
+
+/**
+ * Gallery card with a deliberately short motion preview. The WebM is a fast,
+ * silent summary, not a recording at the template's real playout speed. It is
+ * lazy-loaded only when the operator points at or keyboard-focuses the card.
+ */
+export function StarterCard({
+  starter,
+  onOpen,
+}: {
+  starter: StarterEntry;
+  onOpen: () => void;
+}): JSX.Element {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [motionVisible, setMotionVisible] = useState(false);
+
+  function startMotion(): void {
+    const video = videoRef.current;
+    if (
+      video === null ||
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
+    ) {
+      return;
+    }
+    video.currentTime = 0;
+    const pending = video.play();
+    if (pending !== undefined) {
+      void pending.catch(() => setMotionVisible(false));
+    }
+  }
+
+  function stopMotion(): void {
+    const video = videoRef.current;
+    if (video !== null) {
+      video.pause();
+      video.currentTime = 0;
+    }
+    setMotionVisible(false);
+  }
+
+  return (
+    <Button
+      variant="bare"
+      className={s.card}
+      data-testid="starter-card"
+      onClick={onOpen}
+      onPointerEnter={startMotion}
+      onPointerLeave={stopMotion}
+      onFocus={startMotion}
+      onBlur={stopMotion}
+    >
+      {starter.isNew === true && <span className={s.newBadge}>New</span>}
+      {starter.previewUrl !== undefined ? (
+        <span className={s.cardThumbWrap}>
+          <img src={starter.previewUrl} alt={`${starter.label} preview`} className={s.cardThumb} />
+          {starter.motionPreviewUrl !== undefined && (
+            <>
+              <video
+                ref={videoRef}
+                src={starter.motionPreviewUrl}
+                poster={starter.previewUrl}
+                className={`${s.cardMotion} ${motionVisible ? s.cardMotionVisible : ''}`}
+                muted
+                loop
+                playsInline
+                preload="none"
+                aria-hidden="true"
+                data-testid="starter-motion-preview"
+                onPlaying={() => setMotionVisible(true)}
+                onError={() => setMotionVisible(false)}
+              />
+              <span className={`${s.motionHint} ${motionVisible ? s.motionHintHidden : ''}`}>
+                <span aria-hidden="true">▶</span> Hover preview
+              </span>
+            </>
+          )}
+        </span>
+      ) : (
+        <span className={s.cardThumbFallback}>PREVIEW</span>
+      )}
+      <span className={s.cardBody}>
+        <span className={s.cardLabel}>{starter.label}</span>
+        {/* `DESIGNER-FIX-0905` — the DIFFERENTIATOR as a comparable badge, derived
+            from the starter's scene, above one line of description. */}
+        {starter.playout !== undefined && (
+          <span className={s.cardBadge} data-testid="starter-playout">
+            {playoutBadge(starter.playout)}
+          </span>
+        )}
+        <span className={s.cardDesc}>{starter.description}</span>
+      </span>
+    </Button>
   );
 }
 

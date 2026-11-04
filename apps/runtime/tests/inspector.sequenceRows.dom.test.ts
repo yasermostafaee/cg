@@ -170,7 +170,7 @@ describe('D-180 — one operator table for all Sequence pages', () => {
     ).toBe(true);
   });
 
-  it('honours File only for the combined pages while keeping workbook controls', async () => {
+  it('honours File only and keeps connection ownership in Designer', async () => {
     const fileOnlyField = {
       ...FIELD,
       allowFileSource: true,
@@ -187,7 +187,7 @@ describe('D-180 — one operator table for all Sequence pages', () => {
     expect(combined?.textContent).toContain('File only');
     expect(combined?.textContent).toContain('View current data');
     expect(combined?.textContent).toContain('Not connected');
-    expect(combined?.textContent).toContain('Save and connect Excel');
+    expect(combined?.textContent).not.toContain('Save and connect Excel');
     expect(combined?.querySelector('input')).toBeNull();
     expect(combined?.querySelector('select')).toBeNull();
     expect(combined?.querySelector('button[aria-label^="Remove Cities item"]')).toBeNull();

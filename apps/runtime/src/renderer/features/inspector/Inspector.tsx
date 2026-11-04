@@ -1152,6 +1152,8 @@ function FieldEditor({
         {...(field?.type === 'list' && field.itemFields !== undefined
           ? { itemFields: field.itemFields }
           : {})}
+        {...(field?.type === 'list' ? { value, maxItems: field.maxItems } : {})}
+        fileOnly={fileOnly}
         lockFile={lockedPath !== undefined}
       />
     );

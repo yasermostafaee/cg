@@ -11,7 +11,12 @@ const OUT = process.env.CG_STARTER_POSTERS;
 test.skip(OUT === undefined || OUT === '', 'only when regenerating starter posters');
 
 const starters = [
-  ['azadegan-table', 'جدول لیگ آزادگان ایران'],
+  ['irib-news', 'میان‌برنامهٔ خبر — News Composite'],
+  ['ticker', 'نوار اخبار — News Ticker'],
+  ['logo-bug', 'آرم شبکه — Logo Sting'],
+  ['title', 'زیرنویس معرفی — Guest Title'],
+  ['sequence', 'توالی خبر — Headline Rotator'],
+  ['iran-premier-league', 'جدول لیگ برتر ایران'],
   ['iran-weather-pages', 'آب‌وهوای مراکز استان‌ها'],
   ['iran-weather-forecast', 'پیش‌بینی چندروزهٔ هوا'],
   ['image-folder-sequence', 'توالی تصاویر پوشه'],
@@ -19,8 +24,8 @@ const starters = [
   ['multibox', 'میزگرد چندقابه'],
 ] as const;
 
-test('renders the D-179 poster set from authored scenes', async ({ app }) => {
-  test.setTimeout(120_000);
+test('renders the complete production poster set from authored scenes', async ({ app }) => {
+  test.setTimeout(240_000);
   const out = OUT as string;
   fs.mkdirSync(out, { recursive: true });
   await app.page.setViewportSize({ width: 1600, height: 1000 });
@@ -31,7 +36,9 @@ test('renders the D-179 poster set from authored scenes', async ({ app }) => {
     await app.expectStudio();
     await app.openPreviewModal();
     await app.play();
-    await app.page.waitForTimeout(750);
+    // The league table intentionally staggers all 18 rows. Capture after that
+    // entrance has settled so the landing poster represents the complete design.
+    await app.page.waitForTimeout(1800);
 
     const stage = app.previewFrame.locator('.cg-stage').first();
     await expect(stage).toBeVisible();

@@ -50,6 +50,31 @@
   flex-shrink: 0;
 }
 
+.cg-app-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--r-space-2);
+  min-width: 0;
+  color: var(--r-text);
+  font-size: var(--r-text-xs);
+  font-weight: var(--r-weight-bold);
+  letter-spacing: 0.08em;
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.cg-app-brand .cg-apasai-mark svg {
+  height: var(--r-space-6);
+  width: auto;
+}
+.cg-app-brand:hover {
+  color: var(--r-accent);
+}
+.cg-app-brand:focus-visible {
+  outline: var(--r-focus-ring) solid var(--r-accent);
+  outline-offset: var(--r-focus-ring);
+}
+
 .cg-app-header__spacer {
   flex: 1;
   min-width: 0;

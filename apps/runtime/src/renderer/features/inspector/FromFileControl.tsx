@@ -1,6 +1,13 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import type { FileSourceListFormat, ListItemField, StackItemState } from '@cg/shared-schema';
-import { colors } from '../../theme.js';
+import { CircleCheck, TriangleAlert, Unplug } from 'lucide-react';
+import type {
+  FieldValue,
+  FileSourceListFormat,
+  ListItemField,
+  StackItemState,
+} from '@cg/shared-schema';
+import { buildStructuredRowsXlsx } from '@cg/vcg-format';
+import { colors, cssVars } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
 import { reportCommandError } from '../status/commandFeedback.js';
@@ -10,6 +17,7 @@ import { splitDefaultFor } from './fieldTargetStore.js';
 import { type FromFileFieldKind } from './fromFileContent.js';
 import { reloadFromFile, stageFromFile } from './fromFileOps.js';
 import { Tag } from '../../ui/Tag.js';
+import { Icon } from '../../ui/Icon.js';
 import {
   attachFileSource,
   claimAuthoredFileAutoLoad,
@@ -28,6 +36,9 @@ import {
   requestReadPermission,
 } from './textFileSource.js';
 import { FromFilePreviewDialog } from './FromFilePreviewDialog.js';
+import { toListItems } from './listField.js';
+import { StructuredRowsDialog } from './StructuredRowsDialog.js';
+import { saveStructuredWorkbook, structuredWorkbookFilename } from './structuredWorkbook.js';
 
 const styles = {
   // NO `marginTop`: the field's column (or, for a list, its footer ROW) owns the
@@ -78,6 +89,9 @@ export function FromFileControl({
   authoredDelimiter,
   authoredFormat = 'text',
   itemFields,
+  value,
+  maxItems,
+  fileOnly = false,
   lockFile = false,
 }: {
   item: StackItemState;
@@ -92,6 +106,12 @@ export function FromFileControl({
   authoredFormat?: FileSourceListFormat | undefined;
   /** Child-derived Repeater row schema for typed JSON/CSV cells. */
   itemFields?: readonly ListItemField[] | undefined;
+  /** Current draft-or-applied rows used to generate a matching workbook. */
+  value?: FieldValue | undefined;
+  /** Authored Repeater capacity, when any. */
+  maxItems?: number | undefined;
+  /** Designer owns the connection; CG Control may only inspect and reload it. */
+  fileOnly?: boolean;
   lockFile?: boolean;
 }): JSX.Element {
   useSyncExternalStore(subscribeFromFile, fromFileVersion);
@@ -100,6 +120,12 @@ export function FromFileControl({
   const lockedPath = lockFile ? authoredPath : undefined;
   const supported = fileSourceSupported();
   const pathKey = JSON.stringify(path);
+  const structured = kind === 'list' && itemFields !== undefined && itemFields.length > 0;
+  const currentSchemaSignature = structured ? JSON.stringify({ itemFields, maxItems }) : undefined;
+  const schemaNeedsUpdate =
+    structured &&
+    state?.schemaSignature !== undefined &&
+    state.schemaSignature !== currentSchemaSignature;
   const lockedSplit =
     kind === 'list' && authoredFormat === 'text' && authoredDelimiter !== undefined;
 
@@ -162,7 +188,7 @@ export function FromFileControl({
   const choose = async (): Promise<void> => {
     let source;
     try {
-      source = await pickTextFileSource();
+      source = await pickTextFileSource(window, { includeExcel: structured });
     } catch (err) {
       reportCommandError(err instanceof Error ? err.message : String(err));
       return;
@@ -176,10 +202,41 @@ export function FromFileControl({
         kind === 'list' &&
         (authoredDelimiter !== undefined || splitDefaultFor(item.templateId, path)),
       delimiter: authoredDelimiter ?? DEFAULT_DELIMITER,
-      format: authoredFormat,
+      format:
+        structured && /\.(?:xlsx|csv)$/iu.test(source.name)
+          ? 'csv'
+          : structured && /\.json$/iu.test(source.name)
+            ? 'json'
+            : authoredFormat,
+      ...(currentSchemaSignature === undefined ? {} : { schemaSignature: currentSchemaSignature }),
     });
     // Initial load STAGES like a hand edit; the operator applies with Update.
     await stageFromFile(item, path, kind, itemFields);
+  };
+
+  const saveExcel = async (): Promise<void> => {
+    if (!structured || itemFields === undefined || currentSchemaSignature === undefined) return;
+    try {
+      const rows = toListItems(value);
+      const bytes = await buildStructuredRowsXlsx({
+        fields: itemFields,
+        rows,
+        ...(maxItems === undefined ? {} : { editableRows: maxItems }),
+      });
+      const source = await saveStructuredWorkbook(
+        bytes,
+        structuredWorkbookFilename(fieldId, 'repeater'),
+      );
+      if (source === null) return;
+      attachFileSource(item.itemId, path, source, {
+        split: false,
+        delimiter: '',
+        format: 'csv',
+        schemaSignature: currentSchemaSignature,
+      });
+    } catch (cause) {
+      reportCommandError(cause instanceof Error ? cause.message : String(cause));
+    }
   };
 
   if (lockedPath !== undefined && state?.source.bridgePath !== lockedPath) {
@@ -200,6 +257,52 @@ export function FromFileControl({
   }
 
   if (state === undefined) {
+    if (structured) {
+      return (
+        <div className="cg-from-file" style={styles.wrap}>
+          <div style={styles.row}>
+            <Tag className="cg-sequence-file-status">
+              <Icon icon={Unplug} size={14} style={{ color: colors.textMuted }} />
+              Not connected
+            </Tag>
+            {!fileOnly && (
+              <>
+                <Button
+                  variant="neutral"
+                  disabled={!supported}
+                  title={supported ? undefined : FILE_SOURCE_UNSUPPORTED_MESSAGE}
+                  onClick={() => void saveExcel()}
+                >
+                  Save and connect Excel…
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={!supported}
+                  title={supported ? undefined : FILE_SOURCE_UNSUPPORTED_MESSAGE}
+                  onClick={() => void choose()}
+                >
+                  Connect existing…
+                </Button>
+              </>
+            )}
+          </div>
+          {fileOnly && <p style={styles.hint}>Connect this workbook in Designer.</p>}
+        </div>
+      );
+    }
+    if (fileOnly) {
+      return (
+        <div className="cg-from-file" style={styles.wrap}>
+          <div style={styles.row}>
+            <Tag className="cg-sequence-file-status">
+              <Icon icon={Unplug} size={14} style={{ color: colors.textMuted }} />
+              Not connected
+            </Tag>
+          </div>
+          <p style={styles.hint}>Connect this file in Designer.</p>
+        </div>
+      );
+    }
     return (
       <div className="cg-from-file" style={styles.wrap}>
         <div style={styles.row}>
@@ -252,10 +355,21 @@ export function FromFileControl({
             something else, and attaching it to the name is what stops the two
             being confusable. */}
         <Tag className="cg-file-chip">
+          {structured && (
+            <Icon
+              icon={schemaNeedsUpdate ? TriangleAlert : CircleCheck}
+              size={14}
+              style={{
+                color: schemaNeedsUpdate ? cssVars['--r-caution-text'] : colors.checkPass,
+              }}
+            />
+          )}
           <span className="cg-file-chip__name" title={state.source.name}>
-            {state.source.name}
+            {structured
+              ? `${schemaNeedsUpdate ? 'Connected · update file' : 'Connected'} · ${state.source.name}`
+              : state.source.name}
           </span>
-          {lockedPath === undefined && (
+          {lockedPath === undefined && !fileOnly && (
             <button
               type="button"
               className="cg-file-chip__detach"
@@ -302,7 +416,12 @@ export function FromFileControl({
             aria-label={`View ${fieldId} file content and fields`}
             onClick={() => setPreviewOpen(true)}
           >
-            View content…
+            {structured ? 'View current data…' : 'View content…'}
+          </Button>
+        )}
+        {structured && !fileOnly && (
+          <Button variant="secondary" onClick={() => void saveExcel()}>
+            Save and connect another Excel…
           </Button>
         )}
         {/* THE DETACH `✕` MOVED INTO THE FILE CHIP ABOVE — it is part of the file
@@ -316,16 +435,35 @@ export function FromFileControl({
           {state.error}
         </p>
       )}
-      <FromFilePreviewDialog
-        open={previewOpen}
-        onClose={() => setPreviewOpen(false)}
-        item={item}
-        path={path}
-        kind={kind}
-        fieldId={fieldId}
-        lockFile={lockedPath !== undefined}
-        itemFields={itemFields}
-      />
+      {schemaNeedsUpdate && (
+        <p style={{ ...styles.hint, color: cssVars['--r-caution-text'] }} role="status">
+          Template fields changed after this workbook was generated. Reload still validates its
+          data;{' '}
+          {fileOnly
+            ? 'save and reconnect an updated Excel file in Designer.'
+            : 'save and connect a new Excel file to refresh columns and choices.'}
+        </p>
+      )}
+      {structured && itemFields !== undefined ? (
+        <StructuredRowsDialog
+          open={previewOpen}
+          onClose={() => setPreviewOpen(false)}
+          rows={toListItems(value)}
+          fields={itemFields}
+          label={fieldId}
+        />
+      ) : (
+        <FromFilePreviewDialog
+          open={previewOpen}
+          onClose={() => setPreviewOpen(false)}
+          item={item}
+          path={path}
+          kind={kind}
+          fieldId={fieldId}
+          lockFile={lockedPath !== undefined}
+          itemFields={itemFields}
+        />
+      )}
     </div>
   );
 }

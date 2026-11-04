@@ -11,5 +11,8 @@ export const TextSourcesReadChannel = defineChannel(
     // Optional on the wire so a newer console can still read from an older 0.12.3 Bridge.
     sourcePath: z.string().min(1).optional(),
     content: z.string(),
+    // Optional for compatibility with older Bridges. New Bridges include the exact
+    // bytes so structured workbooks are not corrupted by UTF-8 decoding.
+    base64: z.string().optional(),
   }),
 );

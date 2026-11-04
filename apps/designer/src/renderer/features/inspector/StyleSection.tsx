@@ -77,6 +77,7 @@ import {
 import { ListItemsEditor } from '../fields/ListItemsEditor.js';
 import { SequencePagesControl } from './SequencePagesControl.js';
 import { SequencePageDataControl } from '../fields/SequencePageDataPanel.js';
+import { RepeaterDataControl } from '../fields/RepeaterDataControl.js';
 import {
   designerFileSourcePreviewsVersion,
   getDesignerFileSourcePreview,
@@ -3465,6 +3466,37 @@ function RepeaterSections({
             } as Partial<Element>)
           }
         />
+        {scene !== null && <RepeaterDataControl scene={scene} repeater={element} />}
+        <StateLine
+          tip={
+            <InfoTip title="How a repeater stamps rows">
+              <p>
+                A repeater stamps one instance of “{child?.name ?? element.compositionId}” per item
+                in its list, laid out by the direction and gap above.
+              </p>
+              <p>
+                Values inside the rows update live on air. The <em>number</em> of rows is stamped
+                once at each play — adding or removing items takes effect on the next take. A max
+                items of 0 means no limit.
+              </p>
+            </InfoTip>
+          }
+        >
+          One “{child?.name ?? element.compositionId}” per item.
+        </StateLine>
+      </CollapseSection>
+
+      <CollapseSection
+        title="Item entrance"
+        defaultExpanded
+        trailing={
+          <span>
+            {(element.itemEntrance ?? 'none') === 'none'
+              ? 'Off'
+              : `${element.itemEntrance ?? 'none'} · ${String((element.itemStaggerMs ?? 0) / 1000)}s`}
+          </span>
+        }
+      >
         <SelectField
           label="item entrance"
           value={element.itemEntrance ?? 'none'}
@@ -3507,23 +3539,6 @@ function RepeaterSections({
             } as Partial<Element>)
           }
         />
-        <StateLine
-          tip={
-            <InfoTip title="How a repeater stamps rows">
-              <p>
-                A repeater stamps one instance of “{child?.name ?? element.compositionId}” per item
-                in its list, laid out by the direction and gap above.
-              </p>
-              <p>
-                Values inside the rows update live on air. The <em>number</em> of rows is stamped
-                once at each play — adding or removing items takes effect on the next take. A max
-                items of 0 means no limit.
-              </p>
-            </InfoTip>
-          }
-        >
-          One “{child?.name ?? element.compositionId}” per item.
-        </StateLine>
       </CollapseSection>
 
       <FilterSection

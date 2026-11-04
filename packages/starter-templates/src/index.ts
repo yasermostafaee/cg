@@ -1,6 +1,6 @@
 import type { Scene } from '@cg/shared-schema';
 import { iribNewsScene } from './irib-news.js';
-import { azadeganTableScene } from './azadegan-table.js';
+import { iranPremierLeagueScene } from './azadegan-table.js';
 import { countdownStepsScene } from './countdown-steps.js';
 import { imageFolderSequenceScene } from './image-folder-sequence.js';
 import { iranWeatherForecastScene } from './iran-weather-forecast.js';
@@ -45,6 +45,12 @@ export interface StarterTemplate {
    */
   preview?: string;
   /**
+   * A short, accelerated, silent WebM used only by the template gallery. It is
+   * intentionally independent of the real playout duration so the operator
+   * can understand the motion in a two-to-three-second hover preview.
+   */
+  motionPreview?: string;
+  /**
    * Marks a freshly-added template so the landing page can flag it with a
    * "New" badge. Optional — absent means an established template. The D-119
    * starter set deliberately omits it everywhere (owner decision).
@@ -79,12 +85,19 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
     description:
       'Two-deck IRIB-style strap: live Tehran and Greenwich clocks, brand tag, bound title, RTL headline crawl.',
     preview: '/starters/irib-news.png',
+    motionPreview: '/starters/motion/irib-news.webm',
     assets: [
       {
         key: 'irib-vazir',
         kind: 'font',
         filename: 'Vazirmatn.woff2',
         url: VAZIRMATN_URL,
+      },
+      {
+        key: 'apasai-logo',
+        kind: 'image',
+        filename: 'apasai-logo.svg',
+        url: '/starters/assets/apasai-logo.svg',
       },
     ],
     scene: iribNewsScene,
@@ -95,6 +108,7 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
     description:
       'Persian news strap with a measured RTL crawl; the headlines are an editable list.',
     preview: '/starters/ticker.png',
+    motionPreview: '/starters/motion/ticker.webm',
     assets: [
       {
         key: 'ticker-vazir',
@@ -109,14 +123,21 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
     id: 'logo-bug',
     label: 'آرم شبکه — Logo Sting',
     description:
-      'Corner channel bug: a pen-path mark morphing square → circle → star beside a Persian wordmark.',
+      'Corner channel bug with a replaceable APASAI image asset and a ready-made animated sting.',
     preview: '/starters/logo-bug.png',
+    motionPreview: '/starters/motion/logo-bug.webm',
     assets: [
       {
         key: 'logo-bug-vazir',
         kind: 'font',
         filename: 'Vazirmatn.woff2',
         url: VAZIRMATN_URL,
+      },
+      {
+        key: 'apasai-logo',
+        kind: 'image',
+        filename: 'apasai-logo.svg',
+        url: '/starters/assets/apasai-logo.svg',
       },
     ],
     scene: logoBugScene,
@@ -127,12 +148,19 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
     description:
       'Two-tier guest / expert title flush right, with the brand square and bound name and role.',
     preview: '/starters/title.png',
+    motionPreview: '/starters/motion/title.webm',
     assets: [
       {
         key: 'title-vazir',
         kind: 'font',
         filename: 'Vazirmatn.woff2',
         url: VAZIRMATN_URL,
+      },
+      {
+        key: 'apasai-logo',
+        kind: 'image',
+        filename: 'apasai-logo.svg',
+        url: '/starters/assets/apasai-logo.svg',
       },
     ],
     scene: titleScene,
@@ -143,6 +171,7 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
     description:
       'Headlines rotate one at a time, then the strap closes itself; the items are an editable list.',
     preview: '/starters/sequence.png',
+    motionPreview: '/starters/motion/sequence.webm',
     assets: [
       {
         key: 'sequence-vazir',
@@ -154,32 +183,46 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
     scene: sequenceScene,
   },
   {
-    id: 'azadegan-table',
-    label: 'جدول لیگ آزادگان ایران',
+    id: 'iran-premier-league',
+    label: 'جدول لیگ برتر ایران',
     description:
       'جدول تک‌صفحه‌ای ۱۸ تیم با Repeater، اعداد فارسی و دادهٔ ساختاریافتهٔ قابل اتصال به فایل.',
-    preview: '/starters/azadegan-table.png',
+    preview: '/starters/iran-premier-league.png',
+    motionPreview: '/starters/motion/iran-premier-league.webm',
     assets: [
       {
-        key: 'azadegan-table-vazir',
+        key: 'iran-premier-league-vazir',
         kind: 'font',
         filename: 'Vazirmatn.woff2',
         url: VAZIRMATN_URL,
       },
+      {
+        key: 'iran-premier-league-stadium',
+        kind: 'image',
+        filename: 'iran-premier-league-stadium.png',
+        url: '/starters/assets/iran-premier-league-stadium.png',
+      },
     ],
-    scene: azadeganTableScene,
+    scene: iranPremierLeagueScene,
   },
   {
     id: 'iran-weather-pages',
     label: 'آب‌وهوای مراکز استان‌ها',
     description: 'همهٔ مراکز استان‌ها در چهار صفحهٔ Sequence، با Repeater و مسیر JSON قابل Reload.',
     preview: '/starters/iran-weather-pages.png',
+    motionPreview: '/starters/motion/iran-weather-pages.webm',
     assets: [
       {
         key: 'iran-weather-pages-vazir',
         kind: 'font',
         filename: 'Vazirmatn.woff2',
         url: VAZIRMATN_URL,
+      },
+      {
+        key: 'weather-atmosphere',
+        kind: 'image',
+        filename: 'weather-atmosphere.png',
+        url: '/starters/assets/weather-atmosphere.png',
       },
     ],
     scene: iranWeatherPagesScene,
@@ -189,12 +232,19 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
     label: 'پیش‌بینی چندروزهٔ هوا',
     description: 'امروز و چهار روز آینده در یک صفحه، با Repeater افقی و ورودی‌های عددی محدودشده.',
     preview: '/starters/iran-weather-forecast.png',
+    motionPreview: '/starters/motion/iran-weather-forecast.webm',
     assets: [
       {
         key: 'iran-weather-forecast-vazir',
         kind: 'font',
         filename: 'Vazirmatn.woff2',
         url: VAZIRMATN_URL,
+      },
+      {
+        key: 'weather-atmosphere',
+        kind: 'image',
+        filename: 'weather-atmosphere.png',
+        url: '/starters/assets/weather-atmosphere.png',
       },
     ],
     scene: iranWeatherForecastScene,
@@ -205,6 +255,7 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
     description:
       'Sequence تصویری آماده برای جایگزینی گروهی با Add folder و مرتب‌سازی طبیعی نام فایل‌ها.',
     preview: '/starters/image-folder-sequence.png',
+    motionPreview: '/starters/motion/image-folder-sequence.webm',
     assets: [
       {
         key: 'image-folder-sequence-vazir',
@@ -215,20 +266,32 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
       {
         key: 'gallery-slide-1',
         kind: 'image',
-        filename: '01-iran.svg',
-        url: '/starters/assets/01-iran.svg',
+        filename: 'quran-020.jpg',
+        url: '/starters/assets/quran-020.jpg',
       },
       {
         key: 'gallery-slide-2',
         kind: 'image',
-        filename: '02-city.svg',
-        url: '/starters/assets/02-city.svg',
+        filename: 'quran-021.jpg',
+        url: '/starters/assets/quran-021.jpg',
       },
       {
         key: 'gallery-slide-3',
         kind: 'image',
-        filename: '03-nature.svg',
-        url: '/starters/assets/03-nature.svg',
+        filename: 'quran-022.jpg',
+        url: '/starters/assets/quran-022.jpg',
+      },
+      {
+        key: 'gallery-slide-4',
+        kind: 'image',
+        filename: 'quran-023.jpg',
+        url: '/starters/assets/quran-023.jpg',
+      },
+      {
+        key: 'gallery-slide-5',
+        kind: 'image',
+        filename: 'quran-024.jpg',
+        url: '/starters/assets/quran-024.jpg',
       },
     ],
     scene: imageFolderSequenceScene,
@@ -239,12 +302,19 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
     description:
       'Countdown تا ساعت هدف با Steps واقعی برای تغییر رنگ، وضعیت و چشمک در آستانه‌های زمانی.',
     preview: '/starters/countdown-steps.png',
+    motionPreview: '/starters/motion/countdown-steps.webm',
     assets: [
       {
         key: 'countdown-steps-vazir',
         kind: 'font',
         filename: 'Vazirmatn.woff2',
         url: VAZIRMATN_URL,
+      },
+      {
+        key: 'countdown-precision',
+        kind: 'image',
+        filename: 'countdown-precision.png',
+        url: '/starters/assets/countdown-precision.png',
       },
     ],
     scene: countdownStepsScene,
@@ -255,12 +325,19 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
     description:
       'چهار Live Source مستقل برای مجری، مهمان‌ها و خبرنگار با قاب‌های آمادهٔ نگاشت در CG Control.',
     preview: '/starters/multibox.png',
+    motionPreview: '/starters/motion/multibox.webm',
     assets: [
       {
         key: 'multibox-vazir',
         kind: 'font',
         filename: 'Vazirmatn.woff2',
         url: VAZIRMATN_URL,
+      },
+      {
+        key: 'multibox-studio',
+        kind: 'image',
+        filename: 'multibox-studio.png',
+        url: '/starters/assets/multibox-studio.png',
       },
     ],
     scene: multiboxScene,
@@ -273,7 +350,7 @@ export function getStarter(id: string): StarterTemplate | null {
 }
 
 export {
-  azadeganTableScene,
+  iranPremierLeagueScene,
   countdownStepsScene,
   imageFolderSequenceScene,
   iranWeatherForecastScene,

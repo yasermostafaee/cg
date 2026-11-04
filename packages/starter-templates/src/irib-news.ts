@@ -1,4 +1,4 @@
-import type { AnchorPoint, Element, Fill, Scene, Transform } from '@cg/shared-schema';
+import type { Element, Fill, Scene, Transform } from '@cg/shared-schema';
 import { anim, EASE, kf, kfLinear, track } from './anim.js';
 
 /**
@@ -13,9 +13,9 @@ import { anim, EASE, kf, kfLinear, track } from './anim.js';
  * crawl. `mode: 'manual'` — the strap stays on air, clocks ticking, panel
  * rotating, crawl rolling, until the operator's stop/out.
  *
- * NOTE — brand placeholder: IRIB is a real broadcaster; per the PRD this
- * starter deliberately uses ONLY the plain text "@IRIBNEWS" as a swappable
- * placeholder (a bound data key), never IRIB's actual logo or marks.
+ * NOTE — IRIB is a real broadcaster, so this starter never uses its actual
+ * logo or marks. The rotating text remains a swappable placeholder and the
+ * small image mark uses APASAI's own replaceable asset.
  *
  * Structure (D-119 two-comp model):
  *   comp-irib        1920×1080 — positioning context; EXPORTED for now
@@ -39,7 +39,6 @@ const NAVY_UP = '#0B1B3F';
 const NAVY_UP2 = '#123067';
 const RED = '#D5192E';
 const RED_D = '#8F0E1F';
-const GOLD = '#E3B04B';
 const WHITE = '#FFFFFF';
 
 // ── Strap geometry — two decks left, one tall rotating panel right ────────
@@ -51,18 +50,6 @@ const BAND_H = DECK1_H + DECK2_H; // 134 — the panel spans both decks
 const RIGHT_W = 360;
 const LEFT_W = STRAP_W - RIGHT_W; // 1560
 const STRAP_Y = 886; // strap bottom lands at 1020, same line as the ticker
-
-// The family compass-star mark (26×26) beside the program title.
-function starPoints(): AnchorPoint[] {
-  const c = 13;
-  const q = 7;
-  return [
-    { id: 'pt', x: c, y: 0, in: { x: 0, y: q }, out: { x: 0, y: q }, smooth: false },
-    { id: 'pr', x: 2 * c, y: c, in: { x: -q, y: 0 }, out: { x: -q, y: 0 }, smooth: false },
-    { id: 'pb', x: c, y: 2 * c, in: { x: 0, y: -q }, out: { x: 0, y: -q }, smooth: false },
-    { id: 'pl', x: 0, y: c, in: { x: q, y: 0 }, out: { x: q, y: 0 }, smooth: false },
-  ];
-}
 
 interface TfOpts {
   ax?: number;
@@ -293,19 +280,21 @@ const strapChildren: Element[] = [
       'position.x': track(kf(36, 44, EASE.outExpo), kf(56, 24, EASE.outExpo)),
     }),
   },
-  // Gold star beside the program title (at the RTL reading edge of the slab).
+  // Replaceable APASAI logo beside the program title. Its authored transform
+  // animation remains intact when the operator replaces only the image asset.
   {
     id: 'ir-star',
-    name: 'star-mark',
-    type: 'path',
-    transform: tf(1520, 16, 26, 26),
+    name: 'لوگو (قابل جایگزینی)',
+    type: 'image',
+    assetId: 'apasai-logo',
+    source: 'project',
+    fit: 'contain',
+    preserveAspect: true,
+    transform: tf(1512, 8, 42, 42),
     opacity: 1,
     visible: true,
     locked: false,
     zIndex: 3,
-    points: starPoints(),
-    closed: true,
-    fill: { kind: 'solid', color: GOLD },
     animation: anim({
       rotation: track(kf(30, -90, EASE.outExpo), kf(52, 0, EASE.outExpo)),
       'scale.x': track(

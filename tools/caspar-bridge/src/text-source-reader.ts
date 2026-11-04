@@ -10,6 +10,8 @@ export interface TextSourceReadResult {
   /** Canonical Windows/UNC path for operator verification; never persisted in a template. */
   readonly sourcePath: string;
   readonly content: string;
+  /** Exact current bytes for binary structured sources such as XLSX. */
+  readonly base64: string;
 }
 
 /**
@@ -70,7 +72,12 @@ export async function readTextSource(
     // WHATWG UTF-8 decoding matches `File.text()` and removes a UTF-8 BOM,
     // preventing an invisible first character from reaching a crawl/headline.
     const content = new TextDecoder('utf-8').decode(bytes.subarray(0, used));
-    return { name: parsed.data, sourcePath: realTarget, content };
+    return {
+      name: parsed.data,
+      sourcePath: realTarget,
+      content,
+      base64: bytes.subarray(0, used).toString('base64'),
+    };
   } catch (err) {
     throw new Error(`Text source “${requested}” cannot be read. (${describe(err)})`);
   } finally {

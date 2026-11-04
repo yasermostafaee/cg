@@ -1,7 +1,8 @@
-import { useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { CircleCheck, TriangleAlert, Unplug } from 'lucide-react';
 import {
   fileSourceContentToFieldValue,
+  bridgeTextSourcePath,
   fieldUsesFileOnly,
   numberFieldAllowedValues,
   numberFieldValueError,
@@ -28,9 +29,11 @@ import { toListItems } from './listField.js';
 import { effectiveValue, stageFieldBatch, valueAt, type FieldPath } from './draftStore.js';
 import {
   attachFileSource,
+  claimAuthoredFileAutoLoad,
   detachFileSource,
   fromFileState,
   fromFileVersion,
+  reconcileAuthoredFileSource,
   setFromFileError,
   setFromFilePermission,
   subscribeFromFile,
@@ -39,10 +42,10 @@ import {
   FILE_SOURCE_NEEDS_PERMISSION_MESSAGE,
   FILE_SOURCE_UNSUPPORTED_MESSAGE,
   fileSourceSupported,
-  fsaTextFileSource,
   requestReadPermission,
   type TextFileSource,
 } from './textFileSource.js';
+import { saveStructuredWorkbook, structuredWorkbookFilename } from './structuredWorkbook.js';
 
 type ListField = Extract<DynamicField, { type: 'list' }>;
 
@@ -398,115 +401,101 @@ function CurrentSequenceRowsDialog({
   );
 }
 
-function workbookFilename(name: string): string {
-  const stem = name
-    .trim()
-    .toLocaleLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, '-')
-    .replace(/^-+|-+$/g, '');
-  return `${stem || 'sequence'}-rows.sample.xlsx`;
-}
-
-async function saveWorkbook(
-  bytes: Uint8Array,
-  suggestedName: string,
-): Promise<TextFileSource | null> {
-  const mime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-  const picker = (
-    window as typeof window & {
-      showSaveFilePicker?: (options: {
-        suggestedName: string;
-        types: { description: string; accept: Record<string, string[]> }[];
-      }) => Promise<FileSystemFileHandle>;
-    }
-  ).showSaveFilePicker;
-  if (picker !== undefined) {
-    let handle: FileSystemFileHandle;
-    try {
-      handle = await picker({
-        suggestedName,
-        types: [{ description: 'Excel workbook', accept: { [mime]: ['.xlsx'] } }],
-      });
-    } catch (cause) {
-      if (cause instanceof DOMException && cause.name === 'AbortError') return null;
-      throw cause;
-    }
-    const writable = await handle.createWritable();
-    await writable.write(new Blob([Uint8Array.from(bytes).buffer], { type: mime }));
-    await writable.close();
-    return fsaTextFileSource(handle);
-  }
-  const url = URL.createObjectURL(new Blob([Uint8Array.from(bytes).buffer], { type: mime }));
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = suggestedName;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
-  return null;
-}
-
 function SequenceRowsFileControl({
   item,
   set,
   rows,
   onRows,
+  fileOnly,
 }: {
   item: StackItemState;
   set: SequenceRowsPageSet;
   rows: readonly ListItem[];
   onRows: (rows: ListItem[]) => void;
+  fileOnly: boolean;
 }): JSX.Element {
   useSyncExternalStore(subscribeFromFile, fromFileVersion);
   const path = sourcePath(set);
   const state = fromFileState(item.itemId, path);
   const supported = fileSourceSupported();
   const currentSchemaSignature = schemaSignature(set.field);
-  const schemaNeedsUpdate = state !== undefined && state.schemaSignature !== currentSchemaSignature;
+  const schemaNeedsUpdate =
+    state?.schemaSignature !== undefined && state.schemaSignature !== currentSchemaSignature;
+  const authoredPath = bridgeTextSourcePath(set.field);
 
-  const load = async (source: TextFileSource): Promise<void> => {
-    try {
-      const lowerName = source.name.toLocaleLowerCase();
-      if (!/\.(?:csv|xlsx)$/u.test(lowerName)) {
-        throw new Error(
-          `Wrong file type: “${source.name}”. Choose a .xlsx workbook or .csv file generated for this template.`,
-        );
+  const load = useCallback(
+    async (source: TextFileSource): Promise<void> => {
+      try {
+        const lowerName = source.name.toLocaleLowerCase();
+        if (!/\.(?:csv|xlsx)$/u.test(lowerName)) {
+          throw new Error(
+            `Wrong file type: “${source.name}”. Choose a .xlsx workbook or .csv file generated for this template.`,
+          );
+        }
+        const content = lowerName.endsWith('.xlsx')
+          ? await structuredRowsXlsxToCsv(
+              source.readBytes === undefined ? new Uint8Array() : await source.readBytes(),
+            )
+          : source.readBytes === undefined
+            ? await source.read()
+            : decodeStructuredText(await source.readBytes());
+        const value = fileSourceContentToFieldValue(content, 'list', {
+          split: false,
+          delimiter: '',
+          format: 'csv',
+          itemFields: set.field.itemFields ?? [],
+        });
+        const rows = toListItems(value);
+        if (rows.length > set.capacity) {
+          throw new Error(
+            `The selected file has ${String(rows.length)} rows, but this template has room for ${String(set.capacity)}. Add pages in Designer first.`,
+          );
+        }
+        onRows(rows);
+        setFromFileError(item.itemId, path, null);
+      } catch (cause) {
+        const reason = cause instanceof Error ? cause.message : String(cause);
+        const message = `Could not reload “${source.name}”: ${reason}`;
+        setFromFileError(item.itemId, path, message);
+        reportCommandError(message);
       }
-      const content = lowerName.endsWith('.xlsx')
-        ? await structuredRowsXlsxToCsv(
-            source.readBytes === undefined ? new Uint8Array() : await source.readBytes(),
-          )
-        : source.readBytes === undefined
-          ? await source.read()
-          : decodeStructuredText(await source.readBytes());
-      const value = fileSourceContentToFieldValue(content, 'list', {
-        split: false,
-        delimiter: '',
-        format: 'csv',
-        itemFields: set.field.itemFields ?? [],
-      });
-      const rows = toListItems(value);
-      if (rows.length > set.capacity) {
-        throw new Error(
-          `The selected file has ${String(rows.length)} rows, but this template has room for ${String(set.capacity)}. Add pages in Designer first.`,
-        );
-      }
-      onRows(rows);
-      setFromFileError(item.itemId, path, null);
-    } catch (cause) {
-      const reason = cause instanceof Error ? cause.message : String(cause);
-      const message = `Could not reload “${source.name}”: ${reason}`;
-      setFromFileError(item.itemId, path, message);
-      reportCommandError(message);
+    },
+    [item.itemId, onRows, path, set.capacity, set.field.itemFields],
+  );
+
+  useEffect(() => {
+    reconcileAuthoredFileSource(item.itemId, path, authoredPath, fileOnly, {
+      split: false,
+      delimiter: '',
+      format: 'csv',
+    });
+  }, [authoredPath, fileOnly, item.itemId, path]);
+
+  useEffect(() => {
+    if (authoredPath === undefined) return;
+    const current = fromFileState(item.itemId, path);
+    if (
+      current?.source.bridgePath !== authoredPath ||
+      current.permission !== 'granted' ||
+      !claimAuthoredFileAutoLoad(
+        item.itemId,
+        path,
+        JSON.stringify([authoredPath, currentSchemaSignature]),
+      )
+    ) {
+      return;
     }
-  };
+    void load(current.source);
+  }, [authoredPath, currentSchemaSignature, item.itemId, load, path, state?.source.bridgePath]);
 
   const saveExcel = async (): Promise<void> => {
     try {
       const fields = set.field.itemFields ?? [];
       const bytes = await buildStructuredRowsXlsx({ fields, rows, editableRows: set.capacity });
-      const source = await saveWorkbook(bytes, workbookFilename(set.sequenceName));
+      const source = await saveStructuredWorkbook(
+        bytes,
+        structuredWorkbookFilename(set.sequenceName, 'sequence'),
+      );
       if (source === null) return;
       attachFileSource(item.itemId, path, source, {
         split: false,
@@ -526,14 +515,17 @@ function SequenceRowsFileControl({
           <Icon icon={Unplug} size={14} style={{ color: colors.textMuted }} />
           Not connected
         </Tag>
-        <Button
-          variant="neutral"
-          disabled={!supported}
-          title={supported ? undefined : FILE_SOURCE_UNSUPPORTED_MESSAGE}
-          onClick={() => void saveExcel()}
-        >
-          Save and connect Excel…
-        </Button>
+        {!fileOnly && (
+          <Button
+            variant="neutral"
+            disabled={!supported}
+            title={supported ? undefined : FILE_SOURCE_UNSUPPORTED_MESSAGE}
+            onClick={() => void saveExcel()}
+          >
+            Save and connect Excel…
+          </Button>
+        )}
+        {fileOnly && <span style={styles.hint}>Connect this workbook in Designer.</span>}
       </div>
     );
   }
@@ -569,16 +561,20 @@ function SequenceRowsFileControl({
             Grant access
           </Button>
         )}
-        <Button
-          variant="neutral"
-          onClick={() => detachFileSource(item.itemId, path)}
-          aria-label={`Detach ${state.source.name}`}
-        >
-          Detach
-        </Button>
-        <Button variant="secondary" onClick={() => void saveExcel()}>
-          Save and connect another Excel…
-        </Button>
+        {!fileOnly && (
+          <>
+            <Button
+              variant="neutral"
+              onClick={() => detachFileSource(item.itemId, path)}
+              aria-label={`Detach ${state.source.name}`}
+            >
+              Detach
+            </Button>
+            <Button variant="secondary" onClick={() => void saveExcel()}>
+              Save and connect another Excel…
+            </Button>
+          </>
+        )}
       </div>
       {state.permission !== 'granted' && (
         <p style={styles.error}>{FILE_SOURCE_NEEDS_PERMISSION_MESSAGE}</p>
@@ -586,7 +582,10 @@ function SequenceRowsFileControl({
       {schemaNeedsUpdate && (
         <p style={styles.warning} role="status">
           Template fields changed after this file was generated. Reload still checks its data, but
-          its Excel choices may be outdated. Save and connect a new Excel file.
+          its Excel choices may be outdated.{' '}
+          {fileOnly
+            ? 'Reconnect the updated workbook in Designer.'
+            : 'Save and connect a new Excel file.'}
         </p>
       )}
       {state.error !== null && <p style={styles.error}>{state.error}</p>}
@@ -633,7 +632,7 @@ export function SequenceRowsEditor({
               View current data
             </Button>
           </div>
-          <SequenceRowsFileControl item={item} set={set} rows={rows} onRows={onRows} />
+          <SequenceRowsFileControl item={item} set={set} rows={rows} onRows={onRows} fileOnly />
           <CurrentSequenceRowsDialog
             open={dataOpen}
             onClose={() => setDataOpen(false)}
@@ -648,7 +647,15 @@ export function SequenceRowsEditor({
           field={combinedField}
           value={rows}
           onStage={onRows}
-          footer={<SequenceRowsFileControl item={item} set={set} rows={rows} onRows={onRows} />}
+          footer={
+            <SequenceRowsFileControl
+              item={item}
+              set={set}
+              rows={rows}
+              onRows={onRows}
+              fileOnly={false}
+            />
+          }
         />
       )}
     </section>
