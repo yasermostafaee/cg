@@ -1,8 +1,8 @@
-# Tasks — stagger Repeater item entrances (D-181)
+# Tasks — stagger Repeater item entrances (D-197)
 
 ## 1. Contract
 
-- [x] 1.1 Register D-181 and define compatibility, ordering and lifecycle ownership.
+- [x] 1.1 Register D-197 and define compatibility, ordering and lifecycle ownership.
 - [x] 1.2 Add the strict `designer-repeater-element` spec delta.
 
 ## 2. Schema and authoring

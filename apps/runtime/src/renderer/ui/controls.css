@@ -9070,3 +9070,10 @@ input[type='checkbox']:disabled:checked {
   align-items: center;
   gap: var(--r-tpl-chip-gap);
 }
+.cg-sequence-data-status--valid {
+  color: var(--r-check-pass);
+}
+
+.cg-sequence-data-status--invalid {
+  color: var(--r-caution-text);
+}

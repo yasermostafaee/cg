@@ -32,7 +32,7 @@ import type { RuntimeClock } from './types.js';
 export interface RepeaterRowHandle {
   /** The flow-positioned cell (hidden/re-shown for shrink/regrow). */
   cell: HTMLElement;
-  /** The visual node inside the clipped cell; D-181 entrances move/fade this node. */
+  /** The visual node inside the clipped cell; D-197 entrances move/fade this node. */
   motion: HTMLElement;
   /** Apply this row's values through the per-scope apply path. */
   apply(values: Record<string, unknown>): void;

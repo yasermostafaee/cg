@@ -101,7 +101,10 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-async function render(template: TemplateInfo = TEMPLATE): Promise<HTMLDivElement> {
+async function render(
+  template: TemplateInfo = TEMPLATE,
+  item: StackItemState = stackItem(),
+): Promise<HTMLDivElement> {
   const stub = {
     link: {
       status: () => linkFor('both-up'),
@@ -134,7 +137,7 @@ async function render(template: TemplateInfo = TEMPLATE): Promise<HTMLDivElement
         StrictMode,
         null,
         createElement(Inspector, {
-          item: stackItem(),
+          item,
           onApply: () => Promise.resolve({ accepted: true }),
           onDiscard: () => undefined,
         }),
@@ -182,12 +185,66 @@ describe('D-180 — one operator table for all Sequence pages', () => {
 
     expect(combined).not.toBeNull();
     expect(combined?.textContent).toContain('File only');
+    expect(combined?.textContent).toContain('View current data');
     expect(combined?.textContent).toContain('Not connected');
     expect(combined?.textContent).toContain('Save and connect Excel');
     expect(combined?.querySelector('input')).toBeNull();
     expect(combined?.querySelector('select')).toBeNull();
     expect(combined?.querySelector('button[aria-label^="Remove Cities item"]')).toBeNull();
     expect(combined?.querySelector('button[aria-label="Add Cities item"]')).toBeNull();
+  });
+
+  it('shows current File-only rows read-only and identifies an invalid legacy cell', async () => {
+    const fileOnlyField = {
+      ...FIELD,
+      allowFileSource: true,
+      fileSource: { inputMode: 'file-only' as const },
+    };
+    const template: TemplateInfo = {
+      ...TEMPLATE,
+      groups: [page('page-1', 1, fileOnlyField), page('page-2', 2, fileOnlyField)],
+    };
+    const item = stackItem();
+    item.fields = {
+      ...item.fields,
+      'weather:page-1': {
+        cities: [
+          { id: 'tehran', city: 'Tehran', temperature: 20, weather: 9 },
+          { id: 'tabriz', city: 'Tabriz', temperature: 10, weather: 1 },
+        ],
+      },
+    };
+    const el = await render(template, item);
+    const view = [...el.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === 'View current data',
+    );
+    if (view === undefined) throw new Error('View current data button missing');
+
+    await act(async () => {
+      view.click();
+      await Promise.resolve();
+    });
+
+    const dialog = document.querySelector('[role="dialog"][aria-label^="Current file-only data"]');
+    expect(dialog?.textContent).toContain('3 rows');
+    expect(dialog?.textContent).toContain('1 invalid cell');
+    expect(dialog?.textContent).toContain('Sun (1)');
+    const invalid = dialog?.querySelector<HTMLElement>('[aria-label^="Row 1, Weather:"]');
+    expect(invalid?.textContent).toContain('9');
+    expect(invalid?.textContent).toContain('Must be one of');
+    expect(dialog?.querySelector('input')).toBeNull();
+    expect(dialog?.querySelector('select')).toBeNull();
+
+    const done = [...(dialog?.querySelectorAll('button') ?? [])].find(
+      (button) => button.textContent?.trim() === 'Done',
+    );
+    if (done === undefined) throw new Error('Done button missing');
+    await act(async () => {
+      done.click();
+      await Promise.resolve();
+    });
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(buildApplyPayload(item.itemId, item.fields)).toEqual(item.fields);
   });
 
   it('stages an edited flat row back into the correct page namespace', async () => {

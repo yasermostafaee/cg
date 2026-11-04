@@ -60,6 +60,8 @@
       keep editable numeric cells on the same active field surface as text/select controls.
 - [x] 2.22 Publish File-only page rows to every Sequence namespace as one draft batch; include the
       batch helper in the tracked runtime source so clean Linux builds do not depend on a local file.
+- [x] 2.23 Add a read-only **View current data** dialog for File-only Sequence rows in CG Control;
+      show real column labels/aliases and identify cells that violate the current template schema.
 
 ## 3. Conditional value rules
 
@@ -81,6 +83,9 @@
 
 - [x] 4.1 Collect and validate image ids from defaults, authored rows, structured values and rule branches.
 - [x] 4.2 Package the same dynamic asset closure in `.vcg` and single-file HTML exports.
-- [ ] 4.3 Verify the attached weather project model with direct Repeater use and optional Sequence paging.
+- [x] 4.3 Verify the attached weather project model with direct Repeater use and optional Sequence paging.
+      `weather.cgproj` resolves to 11 authored city rows across four Sequence pages (three rows per
+      Repeater); its first-page Tabriz row currently contains one stale `weather-type = 2` cell
+      against the current exact choices `0/1`, which the read-only data dialog now diagnoses.
 - [x] 4.4 Pass focused schema, Designer, Runtime and exporter suites plus strict OpenSpec validation.
 - [x] 4.5 Run the full repository gate before commit/push; do not build installers until CG Control is manually accepted. Local `pnpm gate` passed all 103/103 tasks plus formatting, control-byte and strict OpenSpec checks on 2026-11-04; installers remain deferred until manual CG Control acceptance.

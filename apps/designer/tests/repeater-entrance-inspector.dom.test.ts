@@ -69,7 +69,7 @@ async function settleEffects(): Promise<void> {
   });
 }
 
-describe('D-181 — Repeater entrance Inspector controls', () => {
+describe('D-197 — Repeater entrance Inspector controls', () => {
   it('shows the shared edge list and withholds timing until an effect is chosen', async () => {
     const host = render(seed());
     await settleEffects();

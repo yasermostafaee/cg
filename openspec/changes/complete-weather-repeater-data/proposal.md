@@ -25,7 +25,8 @@ authored or exported reliably.
   required pages; CG Control presents the packaged pages as one operator table, can regenerate the
   Excel template, and keeps file reload behind the normal Update action.
 - Let the author mark that paged table **File only** from the Sequence Page data modal. CG Control
-  then withholds manual rows while retaining generated-workbook connection and Reload.
+  then withholds manual rows while retaining generated-workbook connection and Reload, plus a
+  read-only dialog for inspecting the current rows and any cells that no longer match the schema.
 - Add ordered conditional rules for numeric/string field values. The first match per target property
   wins, so one temperature may change text and background together without making same-property
   conflicts ambiguous.

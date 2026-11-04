@@ -469,7 +469,7 @@ describe('repeater — live values mid-hold (model B)', () => {
   });
 });
 
-describe('D-181 — ordered row entrances', () => {
+describe('D-197 — ordered row entrances', () => {
   const entrance = {
     itemEntrance: 'fade-right',
     itemTransitionMs: 400,

@@ -16,6 +16,6 @@ delay.
 
 ## Impact
 
-- Affected PRD: D-181.
+- Affected PRD: D-197.
 - Affected capabilities: `designer-repeater-element`.
 - Affected packages: `@cg/shared-schema`, `@cg/template-runtime`, `@cg/designer`.

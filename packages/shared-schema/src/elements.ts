@@ -1011,7 +1011,7 @@ export const RepeaterElementSchema = ElementBaseSchema.extend({
   gap: z.number().min(0).default(8),
   /** Optional stamp clamp — at most this many rows per fresh play. Read through `repeaterRowLimit`. */
   maxItems: z.number().int().positive().optional(),
-  /** D-181 — shared visual entrance for stamped rows; `none` preserves the legacy reveal. */
+  /** D-197 — shared visual entrance for stamped rows; `none` preserves the legacy reveal. */
   itemEntrance: SequenceEdgeSchema.optional(),
   /** Duration of one row's entrance motion (ms). */
   itemTransitionMs: z.number().int().positive().optional(),

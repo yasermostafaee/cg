@@ -17,6 +17,25 @@ test.describe('D-180 — paged Repeater input authority', () => {
     await expect(
       rows.getByRole('button', { name: /Add Cities item|Remove Cities item/ }),
     ).toHaveCount(0);
+
+    await rows.getByRole('button', { name: 'View current data' }).click();
+    const currentData = app.page.getByRole('dialog', {
+      name: 'Current file-only data · Cities',
+    });
+    await expect(currentData).toContainText('3 rows');
+    await expect(currentData).toContainText('3 columns');
+    await expect(currentData).toContainText('All values match the template');
+    await expect(currentData.getByRole('columnheader')).toHaveText([
+      'Row',
+      'City',
+      'Temperature',
+      'Weather',
+    ]);
+    await expect(currentData).toContainText('Rain (0)');
+    await expect(currentData).toContainText('Sun (1)');
+    await expect(currentData.locator('input, select, textarea')).toHaveCount(0);
+    await currentData.getByRole('button', { name: 'Done' }).click();
+    await expect(currentData).toHaveCount(0);
   });
 
   test('numeric cells use the same active field surface as text cells', async ({ app }) => {

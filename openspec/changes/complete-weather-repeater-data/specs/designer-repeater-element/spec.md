@@ -114,6 +114,15 @@ same page values.
 - **AND THEN** generated-workbook connection, Reload and replace/detach actions remain available,
   and loaded values still wait for Update
 
+#### Scenario: File-only rows remain inspectable without becoming editable
+
+- **WHEN** an operator chooses **View current data** for a File-only paged Repeater
+- **THEN** CG Control shows every current staged-or-applied row in one read-only, scrollable table
+  using the authored column labels and numeric aliases
+- **AND WHEN** a row contains a value outside the current type, range or exact choices
+- **THEN** the dialog counts invalid cells, marks the exact row and column and exposes the expected
+  constraint without rewriting the value or creating a draft
+
 #### Scenario: A deleted Excel template can be regenerated
 
 - **WHEN** an author or operator chooses **Save and connect Excel** for a homogeneous paged Repeater

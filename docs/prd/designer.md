@@ -5906,7 +5906,7 @@ the canvas ratio.
 - WHEN the author switches to per-side mode THEN the current value is copied to top, right, bottom and left
 - WHEN the author switches back to uniform mode THEN the top value becomes the single value and rendering stays consistent in canvas, preview and export
 
-## [x] D-181 — Repeater rows can enter in sequence ⟨priority: high — the owner, 2026-11-04⟩ — `openspec/changes/stagger-repeater-item-entrances/`
+## [x] D-197 — Repeater rows can enter in sequence ⟨priority: high — the owner, 2026-11-04⟩ — `openspec/changes/stagger-repeater-item-entrances/`
 
 **What:** A Repeater can apply one shared entrance effect to its stamped rows and delay each row
 after the previous one by an authored stagger. The first row starts immediately; `none` preserves
@@ -5922,3 +5922,20 @@ every repeated item appearing at once.
 - WHEN playback pauses, resumes, stops or is removed THEN the entrance timeline freezes, continues,
   restores or tears down without leaving timers or hidden rows behind
 - WHEN an older Repeater has no entrance fields THEN all rows remain visible together as before
+
+## [x] D-198 — File-only Sequence data stays inspectable in CG Control ⟨priority: high — the owner, 2026-11-04⟩ — `openspec/changes/complete-weather-repeater-data/`
+
+**What:** keep File-only rows out of the narrow Inspector editor, but add a read-only data dialog
+that shows the currently staged or applied rows using the template's real column labels and numeric
+aliases. Validate the displayed cells against the current template schema and identify invalid cells
+without changing them. **Why:** File only correctly makes the workbook the editing source, but hiding
+the packaged values leaves the operator unable to confirm what will be sent or diagnose an older
+project whose rows no longer match its allowed choices. **Acceptance:**
+
+- WHEN a paged Repeater is File only THEN CG Control offers **View current data** beside its file
+  connection controls without restoring inline row inputs
+- WHEN the dialog opens THEN it shows every current row in one scrollable table, using column labels
+  and operator aliases while retaining the canonical value in context
+- WHEN a cell violates the current field type, range or exact choices THEN the dialog shows the
+  invalid-cell count, marks the exact row and column and exposes the expected constraint
+- WHEN the operator closes the dialog THEN no draft, attachment or on-air value has changed
