@@ -3665,6 +3665,19 @@ export const cssVars = {
   '--r-audit-reason-text': `${String(AUDIT_LOG_PX.reasonText)}px`,
   '--r-audit-count-text': `${String(AUDIT_LOG_PX.countText)}px`,
   '--r-audit-reset-text': `${String(AUDIT_LOG_PX.resetText)}px`,
+  // R-083 — compact Audit geometry stays in the one token home even though it is consumed
+  // only below the ledger's 900 px breakpoint.
+  '--r-audit-compact-control-h': '32px',
+  '--r-audit-compact-select-pad': '5px 9px',
+  '--r-audit-compact-tools-gap': '8px',
+  '--r-audit-compact-field-gap': '2px',
+  '--r-audit-compact-field-label-text': '11px',
+  '--r-audit-compact-th-pad': '8px 12px',
+  '--r-audit-compact-td-pad': '7px 12px',
+  '--r-audit-compact-button-h': '34px',
+  '--r-audit-compact-head-pad': '7px 12px',
+  '--r-audit-compact-body-pad': '12px 14px',
+  '--r-audit-compact-footer-pad': '8px 14px',
   // Motion
   '--r-dur-fast': '120ms',
   '--r-dur-med': '200ms',

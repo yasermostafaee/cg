@@ -7990,24 +7990,12 @@ input[type='checkbox']:disabled:checked {
 }
 
 @media (max-width: 900px) {
-  [data-modal-size='ledger'] {
-    --r-audit-search-h: 32px;
-    --r-audit-select-h: 32px;
-    --r-audit-select-pad: 5px 9px;
-    --r-audit-tools-gap: 8px;
-    --r-audit-field-gap: 2px;
-    --r-audit-field-label-text: 11px;
-    --r-audit-th-pad: 8px 12px;
-    --r-audit-td-pad: 7px 12px;
-    --r-modal-btn-h: 34px;
-  }
-
   /* These three boxes are inline-sized by Modal; the ledger-only important override is the
      responsive contract, not a second modal theme. */
   [data-modal-size='ledger'] .cg-modal-head {
     min-height: 0 !important;
-    gap: 8px !important;
-    padding: 7px 12px !important;
+    gap: var(--r-audit-compact-tools-gap) !important;
+    padding: var(--r-audit-compact-head-pad) !important;
   }
 
   [data-modal-size='ledger'] [data-modal-emblem] {
@@ -8028,14 +8016,48 @@ input[type='checkbox']:disabled:checked {
   }
 
   [data-modal-size='ledger'] .cg-modal-body {
-    gap: 8px !important;
-    padding: 12px 14px !important;
+    gap: var(--r-audit-compact-tools-gap) !important;
+    padding: var(--r-audit-compact-body-pad) !important;
   }
 
   [data-modal-size='ledger'] .cg-modal-footer {
     min-height: 0 !important;
-    gap: 8px !important;
-    padding: 8px 14px !important;
+    gap: var(--r-audit-compact-tools-gap) !important;
+    padding: var(--r-audit-compact-footer-pad) !important;
+  }
+
+  [data-modal-size='ledger'] .cg-audit-tools {
+    gap: var(--r-audit-compact-tools-gap);
+  }
+
+  [data-modal-size='ledger'] .cg-audit-search .cg-field,
+  [data-modal-size='ledger'] .cg-audit-field .cg-field {
+    height: var(--r-audit-compact-control-h);
+    min-height: var(--r-audit-compact-control-h);
+  }
+
+  [data-modal-size='ledger'] .cg-audit-field .cg-field {
+    padding: var(--r-audit-compact-select-pad);
+  }
+
+  [data-modal-size='ledger'] .cg-audit-field {
+    gap: var(--r-audit-compact-field-gap);
+  }
+
+  [data-modal-size='ledger'] .cg-audit-field > label {
+    font-size: var(--r-audit-compact-field-label-text);
+  }
+
+  [data-modal-size='ledger'] .cg-audit-head > span {
+    padding: var(--r-audit-compact-th-pad);
+  }
+
+  [data-modal-size='ledger'] .cg-audit-row > span {
+    padding: var(--r-audit-compact-td-pad);
+  }
+
+  [data-modal-size='ledger'] .cg-modal-footer .cg-btn {
+    min-height: var(--r-audit-compact-button-h);
   }
 
   .cg-audit-footer {
