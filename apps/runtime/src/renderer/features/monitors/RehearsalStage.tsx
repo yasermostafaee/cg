@@ -171,45 +171,6 @@ const styles = {
    * `aria-hidden`: the same fact is already in the panel's own accessible name and in the
    * caveats, and a screen reader meeting it three times is noise.
    */
-  /**
-   * 🔴 THE SAFE-AREA GUIDES LAND ON THE CANVAS, and the owner had to say so once.
-   *
-   * The first cut used `inset: 0` on the FIT BOX, which is the panel's whole picture area —
-   * raster plus the black letterbox left over from fitting 16:9 into a panel of another
-   * aspect. So the guides were drawn around the surround and title-safe was reported wider
-   * than the frame: a ruler measuring the wrong thing, which is worse than no ruler.
-   *
-   * They are now positioned exactly like the CHECKER — centred and sized by the caller to
-   * `raster × fit` — for the same reason its own comment gives about the surround: what
-   * belongs to the frame is drawn on the frame and nowhere else. Both now derive from one
-   * pair of numbers, so they cannot drift apart at a new panel width.
-   */
-  guides: {
-    position: 'absolute' as const,
-    left: '50%',
-    top: '50%',
-    transform: 'translate(-50%, -50%)',
-    zIndex: 55,
-    pointerEvents: 'none' as const,
-    display: 'grid',
-    placeItems: 'center',
-  },
-  /** ACTION-safe: 93 % of the raster, the wider of the two broadcast boxes. */
-  guideAction: {
-    position: 'absolute' as const,
-    inlineSize: '93%',
-    blockSize: '93%',
-    border: `1px dashed ${colors.textMuted}`,
-    opacity: 0.55,
-  },
-  /** TITLE-safe: 90 %, the one a lower third's text must sit inside. */
-  guideTitle: {
-    position: 'absolute' as const,
-    inlineSize: '90%',
-    blockSize: '90%',
-    border: `1px dashed ${colors.textMuted}`,
-    opacity: 0.8,
-  },
   illustrationNote: {
     position: 'absolute' as const,
     insetInlineStart: cssVars['--r-stage-note-inset'],
@@ -339,15 +300,6 @@ interface Props {
   /** The channel's real raster (R-030). Every iframe is sized to it. */
   raster: ChannelRaster;
   /**
-   * 🔴 `CONSOLE-LOOK-06` §2 — the SAFE-AREA GUIDES, drawn over every frame.
-   *
-   * The reference's `.pvw-guides`, and it is the one control in its `.zoom` group we adopt
-   * (the zoom select itself is excluded by the owner). It is a JUDGEMENT aid: title-safe and
-   * action-safe are the two boxes an operator checks a lower third against, and checking them
-   * by eye against a 626 px preview is exactly the guess this removes.
-   */
-  showGuides?: boolean;
-  /**
    * Publishes the local transport upward so a persistent controls row can drive it, and
    * `null` on unmount so that row can disable itself rather than hold a stale handle.
    */
@@ -419,7 +371,6 @@ export function RehearsalStage({
   pageByItem,
   templateNames,
   raster,
-  showGuides = false,
   onTransport,
 }: Props): JSX.Element {
   const fitRef = useRef<HTMLDivElement | null>(null);
@@ -446,6 +397,20 @@ export function RehearsalStage({
       }),
     [subjects, pageByItem],
   );
+  /*
+   * R-106 — one local lifecycle fact for the whole composite. The key makes a changed
+   * subject/page hidden immediately, in the same render, rather than waiting for an effect
+   * (and briefly flashing the previous subject's markers). Field edits deliberately do not
+   * enter the key: they update the graphic being rehearsed, not which rehearsal is playing.
+   */
+  const lifecycleKey = renderable
+    .map(
+      ({ subject, html }) =>
+        `${subject.itemId}\u0000${String(subject.channel)}\u0000${String(subject.layer)}\u0000${html}`,
+    )
+    .join('\u0001');
+  const [playingFor, setPlayingFor] = useState<string | null>(null);
+  const playing = playingFor === lifecycleKey;
   /** `RELEASE-091-01` §1 — the rows that have NO page, each with its reason (loading is neither). */
   const missing = useMemo(
     () =>
@@ -560,9 +525,14 @@ export function RehearsalStage({
    * Judging whether two graphics collide also requires running them together.
    * An operator who wants one lifecycle in isolation rehearses one row.
    */
-  const driveAll = useCallback((verb: 'play' | 'next' | 'stop'): void => {
-    for (const handle of handles.current.values()) handle[verb]();
-  }, []);
+  const driveAll = useCallback(
+    (verb: 'play' | 'next' | 'stop'): void => {
+      for (const handle of handles.current.values()) handle[verb]();
+      if (verb === 'play') setPlayingFor(lifecycleKey);
+      else if (verb === 'stop') setPlayingFor(null);
+    },
+    [lifecycleKey],
+  );
 
   /*
     🔴 PUBLISHED UPWARD, so the bar that drives this stage can outlive it.
@@ -643,25 +613,6 @@ export function RehearsalStage({
             }}
           />
         ))}
-        {showGuides && (
-          /*
-            Sized to the SCALED RASTER by this caller, exactly as the checker above is — see
-            `styles.guides`. `aria-hidden` and `pointer-events: none`: it is a ruler laid on the
-            picture, not a thing to reach for, and a screen reader has no use for a rectangle.
-          */
-          <span
-            aria-hidden
-            data-pvw-guides=""
-            style={{
-              ...styles.guides,
-              width: `${String(raster.width * fit)}px`,
-              height: `${String(raster.height * fit)}px`,
-            }}
-          >
-            <span style={styles.guideAction} />
-            <span style={styles.guideTitle} />
-          </span>
-        )}
         {/*
           🔴 THE STAMP CARRIES THE TWO CAVEATS NOW, in its `title`.
 
@@ -692,12 +643,14 @@ export function RehearsalStage({
           that none of this reopens design.md §12.2: the pages below still paint
           nothing where a Live Source is.
         */}
-        <LivePlateOverlay
-          placements={placements}
-          raster={raster}
-          fit={fit}
-          zIndex={overlayZIndex(renderable.length)}
-        />
+        {playing && (
+          <LivePlateOverlay
+            placements={placements}
+            raster={raster}
+            fit={fit}
+            zIndex={overlayZIndex(renderable.length)}
+          />
+        )}
       </div>
     </>
   );

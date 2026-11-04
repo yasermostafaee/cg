@@ -1,11 +1,5 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import {
-  ArrowRightFromLine,
-  CircleArrowOutDownRight,
-  Frame,
-  Play,
-  SquareDashed,
-} from 'lucide-react';
+import { ArrowRightFromLine, CircleArrowOutDownRight, Play, SquareDashed } from 'lucide-react';
 import { REFERENCE_RASTER } from '@cg/shared-ipc';
 import { Panel } from '../../ui/Panel.js';
 import { effectiveTimingFor } from '../inspector/timingToSend.js';
@@ -391,17 +385,13 @@ export function PreviewPanel(): JSX.Element {
     🔴 THE CONTROLS ROW'S STATE, held here because the row outlives the stage.
 
     `transport` is `null` whenever no stage is mounted — nothing rehearsing, or no local page
-    for what is — and the three buttons read that as "disabled" rather than as an error. The
-    guides and the caveats are per-session and deliberately NOT persisted: both are things the
-    operator is doing right now, and a remembered "on" would put a ruler over the picture for
-    whoever sits down next.
+    for what is — and the three buttons read that as "disabled" rather than as an error.
   */
   const [transport, setTransport] = useState<{
     drive: (v: 'play' | 'next' | 'stop') => void;
     ready: boolean;
     count: number;
   } | null>(null);
-  const [showGuides, setShowGuides] = useState(false);
 
   /*
     How many rehearsing rows this browser can actually DRAW. The same arithmetic the stage
@@ -456,7 +446,7 @@ export function PreviewPanel(): JSX.Element {
         🔴 `CONSOLE-LOOK-06` §2 — THE CONTROLS ROW, and it is here rather than inside the stage.
 
         The reference draws `.monitor-controls` as a 31 px strip between the head and the
-        picture, holding the transport, the scope it acts on, and the guides toggle — each
+        picture, holding the transport and the scope it acts on — each
         control PRESENT in every state and disabled by its own condition.
         `CONSOLE-MATCH-03` argued this one away because our transport lived inside
         `RehearsalStage`, which only exists once there is something to render; that argument
@@ -464,9 +454,9 @@ export function PreviewPanel(): JSX.Element {
         `LayersPanel` — _"controls that come and go move the target under the operator's hand
         mid-reach"_. So the bar moved up and the stage publishes its transport to it.
 
-        ⚠ IT REPLACED THE LIFECYCLE BAR rather than joining it. The caption and the caveats
-        toggle came up with the transport, so PVW has the same number of strips it had before
-        and 21 px more picture from the head (§2).
+        ⚠ IT REPLACED THE LIFECYCLE BAR rather than joining it. The caption came up with the
+        transport, so PVW has the same number of strips it had before and 21 px more picture
+        from the head (§2).
       */}
       <div className="cg-monitor-strip" data-pvw-controls="">
         <span className="cg-pvw-transport">
@@ -500,26 +490,6 @@ export function PreviewPanel(): JSX.Element {
           {rehearsalCaption(renderableCount, subjects.length)}
         </span>
         <span className="cg-monitor-strip__spacer" />
-        {/*
-          🔴 A TOGGLE, AND IT LOOKS LIKE ONE (owner, 2026-09-12).
-
-          It was a `ghost` button carrying `aria-pressed` — correct for a screen reader and
-          invisible to everyone else, so the only way to learn whether the guides were on was
-          to look at the picture. `data-toggle-on` drives a pressed appearance in
-          `controls.css`; the state is still `aria-pressed`, so the two cannot disagree.
-        */}
-        <Button
-          variant="ghost"
-          aria-pressed={showGuides}
-          data-toggle-on={showGuides ? '' : undefined}
-          aria-label="Toggle safe-area guides"
-          title="Toggle safe-area guides — title-safe and action-safe, drawn on the canvas"
-          onClick={() => {
-            setShowGuides((on) => !on);
-          }}
-        >
-          <Icon icon={Frame} size={13} />
-        </Button>
       </div>
       {subjects.length === 0 ? (
         <div
@@ -548,7 +518,6 @@ export function PreviewPanel(): JSX.Element {
           pageByItem={pageByItem}
           templateNames={templateNames}
           raster={raster}
-          showGuides={showGuides}
           onTransport={setTransport}
         />
       )}

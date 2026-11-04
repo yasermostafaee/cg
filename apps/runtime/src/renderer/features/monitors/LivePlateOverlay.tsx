@@ -73,37 +73,12 @@ import type { PlatePlacement } from './livePlateGeometry.js';
  * second, muted one. The CEF-71 baseline does not apply here and must not be
  * mis-cited: this renders in the OPERATOR CONSOLE's browser, not in CasparCG.
  *
- * ── 🔴 VISIBLE BEFORE PLAY, AND UNCHANGED THROUGH IT. A DECISION, NOT A SIDE
- *      EFFECT — AND IT DOES NOT REOPEN D-087 ───────────────────────────────
+ * ── R-106 — THE STAGE OWNS VISIBILITY ──────────────────────────────────────
  *
- * The template's own elements stay blank until Play: that is D-087's
- * blank-until-play contract, which the rehearse frame inherits by rendering the
- * exported page verbatim (`body.cg-pending` hides the stage; `play()` clears it,
- * settle re-adds it). These markers appear as soon as PVW opens, which LOOKS like
- * an inconsistency beside it. It is not. It is required, for three reasons, and
- * it is recorded here because otherwise the next reader "fixes" it:
- *
- *   1. **Before Play is exactly when it is needed.** An unassigned plate REFUSES
- *      the take (C-015's empty-mapping acceptance), and PVW is the operator's
- *      LAST CHANCE to see that before air. A marker that appeared only after Play
- *      would be absent at precisely the moment it was filed to serve.
- *   2. **D-087 is untouched, for the same reason §12.2 is.** `cg-pending` is a
- *      class on the PAGE's own `body`, and this overlay is not page content — it
- *      is a Runtime layer composited OVER the frame. The page still paints
- *      nothing before Play. Nothing here reaches into the document, so the
- *      blank-until-play contract cannot be weakened by it.
- *   3. **It persists UNCHANGED during play, and that is where the "never
- *      mistakable for a picture" requirement bites hardest.** The hole is still a
- *      hole while the graphic runs; the live feed still is not there. Removing or
- *      fading the marker at play would restore the original defect at the one
- *      moment the frame most resembles air.
- *
- * So this component takes NO lifecycle input at all — not readiness, not playing,
- * not the transport. Verified end to end in
- * `tests/e2e/pvw-live-plate-placeholder.spec.ts`: before Play the page is blank
- * and the marker is up; during Play the page paints and the marker is byte-for-
- * byte the same box, state and words; after Stop the page blanks and the marker
- * remains. If that is ever changed, change it there first.
+ * This component still has no private lifecycle input. `RehearsalStage` mounts it
+ * only while the local composite is playing, from the same Play/Stop fact that
+ * drives every retained page. That keeps the marker and template hidden together
+ * before Play and after Stop; Next preserves the current visibility.
  *
  * ── GEOMETRY: ONE FIT SCALE, AND THE LABEL COUNTER-SCALES OUT OF IT ─────────
  *

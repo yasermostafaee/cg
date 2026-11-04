@@ -389,6 +389,10 @@ test('🔴 §4 — RED-FIRST: switch away and back, and the same source is on th
   const layer = await app.loadTemplate(SIX);
   const row = app.layerRow(layer);
   await row.getByRole('button', { name: 'ON PVW', exact: true }).click();
+  await page
+    .locator('[data-pvw-controls]')
+    .getByRole('button', { name: 'PLAY', exact: true })
+    .click();
   await app.selectLayerRow(layer);
 
   // TRIO is the default: frames 1, 3 and 5 on the template default.

@@ -137,7 +137,7 @@ async function rehearseRow(page: Page, layer: number): Promise<void> {
 const marker = (page: Page, plateId: string) => page.locator(`[data-live-plate="${plateId}"]`);
 
 /** The REHEARSAL's transport, not a stack row's — see the call site. */
-const pvwTransport = (page: Page, verb: 'PLAY' | 'STOP') =>
+const pvwTransport = (page: Page, verb: 'PLAY' | 'NEXT' | 'STOP') =>
   page
     .getByRole('region', { name: 'PREVIEW (PVW)' })
     .getByRole('button', { name: verb, exact: true });
@@ -166,6 +166,7 @@ test('PVW marks every live plate, and the marker lands ON the hole', async ({ ap
   await stubRetainedPage(page);
   const layer = await app.loadTemplate(TWO_BOX);
   await rehearseRow(page, layer);
+  await pvwTransport(page, 'PLAY').click();
 
   // THE DEFECT: nothing at all used to be visible here.
   await expect(page.locator('[data-live-plate]')).toHaveCount(2);
@@ -219,6 +220,7 @@ test('the two plate states are told apart WITHOUT reading the label', async ({ a
   await stubRetainedPage(page);
   const layer = await app.loadTemplate(TWO_BOX);
   await rehearseRow(page, layer);
+  await pvwTransport(page, 'PLAY').click();
 
   // With nothing bound, BOTH plates are the unassigned state — and they say so.
   await expect(page.locator('[data-live-plate-state="unassigned"]')).toHaveCount(2);
@@ -281,33 +283,8 @@ test('the two plate states are told apart WITHOUT reading the label', async ({ a
   expect(filters[1]).toContain('grayscale');
 });
 
-/**
- * R-049 — THE MARKER IS VISIBLE BEFORE PLAY, AND IT DOES NOT REOPEN D-087.
- *
- * Observed by the owner: the placeholders paint as soon as PVW opens, while the
- * template's own elements stay blank until Play. That is D-087's blank-until-play
- * contract, which the rehearse frame inherits by rendering the exported page
- * verbatim — `body.cg-pending` hides the stage until `play()` clears it.
- *
- * 🔴 THE OVERLAY IS DELIBERATELY OUTSIDE THAT CONTRACT, and this test is what
- * makes it a decision instead of a side effect.
- *
- *   - IT MUST BE VISIBLE BEFORE PLAY. The item's own acceptance is the argument:
- *     an unassigned plate REFUSES the take, and PVW is the operator's LAST CHANCE
- *     to see that before air. A marker that appeared only after Play would be
- *     absent at exactly the moment it was filed to serve.
- *   - IT DOES NOT REOPEN D-087, for the same reason it does not reopen §12.2: the
- *     PAGE still paints nothing before Play. `cg-pending` is a class on the page's
- *     own `body`, and the overlay is not page content — it is a Runtime layer
- *     composited over the frame. The blank-until-play contract is untouched, and
- *     this spec asserts that directly by checking the page's own stage is hidden
- *     in the same breath as the marker being visible.
- *   - IT PERSISTS UNCHANGED DURING PLAY, which is where requirement 4 (never
- *     mistakable for a real incoming picture) is most load-bearing: the hole is
- *     still a hole while the graphic plays, so removing the marker would restore
- *     the original defect at the one moment the frame looks most like air.
- */
-test('the marker is visible BEFORE Play and unchanged through Play and Stop', async ({ app }) => {
+/** R-106 — the template and its Runtime-owned marker share one local lifecycle. */
+test('the marker is hidden before Play, survives Next, and hides with Stop', async ({ app }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1600, height: 900 });
 
@@ -320,12 +297,8 @@ test('the marker is visible BEFORE Play and unchanged through Play and Stop', as
   const painted = page.frameLocator('iframe[data-rehearsal-frame]').locator('[data-painted]');
 
   // ── BEFORE PLAY ──────────────────────────────────────────────────────────
-  // The PAGE is blank — D-087, inherited verbatim and untouched…
   await expect(painted).toBeHidden();
-  // …and the MARKER is already there, which is the decision.
-  await expect(marker(page, 'guest-1')).toBeVisible();
-  await expect(marker(page, 'guest-1')).toContainText('no source assigned');
-  const before = await marker(page, 'guest-1').boundingBox();
+  await expect(marker(page, 'guest-1')).toHaveCount(0);
 
   // ── DURING PLAY ──────────────────────────────────────────────────────────
   // Scoped to the PVW REGION: every stack row carries a PLAY of its own, and
@@ -333,25 +306,19 @@ test('the marker is visible BEFORE Play and unchanged through Play and Stop', as
   // lifecycle locally and sends nothing to CasparCG.
   await pvwTransport(page, 'PLAY').click();
   await expect(painted).toBeVisible();
-  // The graphic is now painting and the marker is UNCHANGED — same box, same
-  // state, same words. It carries no lifecycle input at all, and that is the
-  // recorded behaviour rather than an accident of when it happens to render.
   await expect(marker(page, 'guest-1')).toBeVisible();
   await expect(marker(page, 'guest-1')).toContainText('no source assigned');
   await expect(marker(page, 'guest-1')).toHaveAttribute('data-live-plate-state', 'unassigned');
-  const during = await marker(page, 'guest-1').boundingBox();
-  expect(before).not.toBeNull();
-  expect(during).not.toBeNull();
-  if (before === null || during === null) throw new Error('unreachable');
-  expect(Math.abs(during.x - before.x)).toBeLessThan(1.5);
-  expect(Math.abs(during.y - before.y)).toBeLessThan(1.5);
-  expect(Math.abs(during.width - before.width)).toBeLessThan(1.5);
+
+  // NEXT advances the page but is not a visibility transition.
+  await pvwTransport(page, 'NEXT').click();
+  await expect(painted).toBeVisible();
+  await expect(marker(page, 'guest-1')).toBeVisible();
 
   // ── AFTER STOP ───────────────────────────────────────────────────────────
-  // The page settles blank again; the marker still says a live region is there.
   await pvwTransport(page, 'STOP').click();
   await expect(painted).toBeHidden();
-  await expect(marker(page, 'guest-1')).toBeVisible();
+  await expect(marker(page, 'guest-1')).toHaveCount(0);
   // The stage element itself is never removed by any of this — the frame is the
   // page's, and nothing here reaches into it.
   await expect(stage).toHaveCount(1);
@@ -387,6 +354,7 @@ test('D6 — each live-source region states the caveat permanently, on canvas AN
   await stubRetainedPage(page);
   const layer = await app.loadTemplate(TWO_BOX);
   await rehearseRow(page, layer);
+  await pvwTransport(page, 'PLAY').click();
 
   const regions = page.locator('[data-live-plate]');
   await expect(regions.first()).toBeVisible();
@@ -440,26 +408,6 @@ test('D6 — each live-source region states the caveat permanently, on canvas AN
   }
   // …and it is never a hover in either branch: there is no disclosure control to press.
   await expect(page.getByRole('button', { name: /rehearsal does not prove/i })).toHaveCount(0);
-
-  /*
-    …and the region's mark sits BELOW the safe-area guides, so a guide line never reads as
-    part of a placeholder. Asserted on the stacking the browser actually resolves.
-  */
-  await page.getByRole('button', { name: 'Toggle safe-area guides' }).click();
-  await expect(page.locator('[data-pvw-guides]')).toHaveCount(1);
-  const order = await page.evaluate(() => {
-    const g = document.querySelector('[data-pvw-guides]');
-    const o = document.querySelector('[data-live-plate-overlay]');
-    if (!g || !o) return null;
-    return {
-      guides: Number(getComputedStyle(g).zIndex),
-      overlay: Number(getComputedStyle(o).zIndex),
-    };
-  });
-  expect(order).not.toBeNull();
-  expect(order!.guides, 'the ruler must lie ON TOP of the placeholders').toBeGreaterThan(
-    order!.overlay,
-  );
 
   /*
     🔴 AND CAVEAT 1 IS ON THE STAMP, on canvas, in its first three words: ILLUSTRATIVE is

@@ -269,65 +269,15 @@ test('the stage stamps what it is, and no graphic can cover the stamp', async ({
   expect(await count.getAttribute('title'), 'the rows are named in the title').not.toBeNull();
 });
 
-/**
- * 🔴 `CONSOLE-LOOK-06` §2 + the owner's mid-session correction (2026-09-12):
- * «safe-aria باید روی canvas بیافته و ظاهر دکمه اش هم بصورت توگل باشه. همچنین آیکون اینفو و
- * نمایش توضیحات روی canvas نیاز نیست»
- *
- * Three claims, all of them geometry or paint, so all of them belong in a real engine —
- * jsdom has no layout and would pass this against a surface of any shape (golden rule 12c).
- */
-test('the safe-area guides land ON THE CANVAS, and the toggle looks pressed', async ({ app }) => {
+/** R-106 — Safe Area is removed from both the controls row and the canvas. */
+test('PVW offers no safe-area control or guides', async ({ app }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1600, height: 900 });
-  const layer = await app.importVcg('a.vcg', await buildValidVcg('tpl-guides'));
+  const layer = await app.importVcg('a.vcg', await buildValidVcg('tpl-no-guides'));
   await stubRetainedPage(page);
   await rehearseRow(page, layer);
   await expect(frames(page)).toHaveCount(1);
-
-  const toggle = page.getByRole('button', { name: 'Toggle safe-area guides' });
-  await expect(toggle).toBeVisible();
-  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
-  await expect(page.locator('[data-pvw-guides]')).toHaveCount(0);
-
-  /*
-    THE PRESSED LOOK, read with the pointer OFF the control — the first version of this check
-    read it straight after the click and measured `:hover`, which is a different rule and was
-    green for the wrong reason.
-  */
-  const paint = async (): Promise<string> => {
-    await page.mouse.move(10, 890);
-    return toggle.evaluate((el) => {
-      const cs = getComputedStyle(el);
-      return `${cs.backgroundColor}|${cs.color}`;
-    });
-  };
-  const off = await paint();
-  await toggle.click();
-  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
-  const on = await paint();
-  expect(on, 'a toggle that is ON must LOOK on, not only announce it').not.toBe(off);
-
-  /*
-    🔴 ON THE CANVAS. The guides must cover the scaled RASTER, not the fit box — the fit box
-    includes the black letterbox left over from fitting 16:9 into a panel of another aspect,
-    and guides drawn around that report title-safe wider than the frame. The CHECKER is
-    already sized to exactly the raster, so it is the reference box: same origin, same size.
-  */
-  const guides = page.locator('[data-pvw-guides]');
-  await expect(guides).toHaveCount(1);
-  const g = await guides.boundingBox();
-  const canvas = await page.locator('[data-rehearsal-checker]').boundingBox();
-  expect(g).not.toBeNull();
-  expect(canvas).not.toBeNull();
-  expect(g!.width, 'guides are not collapsed').toBeGreaterThan(0);
-  expect(Math.abs(g!.x - canvas!.x)).toBeLessThan(1.5);
-  expect(Math.abs(g!.y - canvas!.y)).toBeLessThan(1.5);
-  expect(Math.abs(g!.width - canvas!.width)).toBeLessThan(1.5);
-  expect(Math.abs(g!.height - canvas!.height)).toBeLessThan(1.5);
-
-  // …and off again, so it is never a one-way door.
-  await toggle.click();
+  await expect(page.getByRole('button', { name: 'Toggle safe-area guides' })).toHaveCount(0);
   await expect(page.locator('[data-pvw-guides]')).toHaveCount(0);
 });
 

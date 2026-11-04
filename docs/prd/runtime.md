@@ -4860,7 +4860,7 @@ operator had to fail over before seeing whether its programme picture and sound 
 - WHEN picture resumes THEN it replaces the black fallback without re-taking the template
 - WHEN the source is invalid or unavailable THEN the existing refusal still prevents the take or update
 
-## [~] R-106 — PVW Live Source markers follow Play and the Safe Area control is removed ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/pvw-plate-lifecycle/`
+## [x] R-106 — PVW Live Source markers follow Play and the Safe Area control is removed ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/pvw-plate-lifecycle/`
 
 **What:** PVW starts with the graphic and its Live Source markers hidden; Play reveals both and Stop hides both. Remove the Safe Area toggle.
 **Why:** Markers appearing before the template make PVW look partly on before Play, and the Safe Area control is not used.

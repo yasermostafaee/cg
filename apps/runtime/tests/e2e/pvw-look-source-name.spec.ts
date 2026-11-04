@@ -119,6 +119,10 @@ async function rehearseRow(page: Page, layer: number): Promise<void> {
     .locator(`[data-layer="${String(layer)}"]`)
     .getByRole('button', { name: 'ON PVW', exact: true })
     .click();
+  await page
+    .locator('[data-pvw-controls]')
+    .getByRole('button', { name: 'PLAY', exact: true })
+    .click();
 }
 
 /*

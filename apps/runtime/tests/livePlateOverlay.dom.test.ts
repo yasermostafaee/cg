@@ -182,7 +182,23 @@ function stubBridge(f: Fixture): void {
   (window as unknown as { cg: unknown }).cg = fillBridgeStub(stub);
 }
 
-async function render(f: Fixture): Promise<HTMLDivElement> {
+async function press(el: HTMLElement, verb: 'PLAY' | 'NEXT' | 'STOP'): Promise<void> {
+  const frame = el.querySelector<HTMLIFrameElement>('iframe[data-rehearsal-frame]');
+  if (frame !== null) {
+    await act(async () => {
+      frame.dispatchEvent(new Event('load'));
+      await Promise.resolve();
+    });
+  }
+  const button = el.querySelector<HTMLButtonElement>(`button[aria-label="${verb}"]`);
+  if (button === null) throw new Error(`no ${verb} transport`);
+  await act(async () => {
+    button.click();
+    await Promise.resolve();
+  });
+}
+
+async function render(f: Fixture, play = true): Promise<HTMLDivElement> {
   stubBridge(f);
   // The app shell owns this call in production; the panel only READS the store.
   initSources(window.cg as unknown as Parameters<typeof initSources>[0]);
@@ -195,6 +211,7 @@ async function render(f: Fixture): Promise<HTMLDivElement> {
   await act(async () => {
     for (let i = 0; i < 6; i += 1) await Promise.resolve();
   });
+  if (play) await press(container, 'PLAY');
   return container;
 }
 
@@ -209,9 +226,7 @@ const REHEARSING: Rehearsal[] = [{ itemId: 'a', channel: 1, layer: 99 }];
 describe('R-049 — a live plate is VISIBLE in PVW', () => {
   it('every declared plate gets a placeholder, even with nothing assigned', async () => {
     const el = await render({ rehearsals: REHEARSING });
-    // The premise of the whole item: "there is a frame here" must be answerable
-    // BEFORE anything is bound, because an unbound plate is the state an
-    // operator most needs to catch.
+    // Once the local composite is playing, every authored region must be answerable.
     expect(el.querySelectorAll('[data-live-plate]')).toHaveLength(2);
   });
 
@@ -232,35 +247,20 @@ describe('R-049 — a live plate is VISIBLE in PVW', () => {
     expect(box.style.backgroundImage).toContain('repeating-linear-gradient');
   });
 
-  it('is drawn WITHOUT a Play, and a Play does not change it', async () => {
-    const el = await render({ rehearsals: REHEARSING });
+  it('R-106 — follows Play/Stop while Next preserves visibility', async () => {
+    const el = await render({ rehearsals: REHEARSING }, false);
+    expect(el.querySelectorAll('[data-live-plate]')).toHaveLength(0);
+    expect(el.querySelector('button[aria-label="Toggle safe-area guides"]')).toBeNull();
+    expect(el.querySelector('[data-pvw-guides]')).toBeNull();
 
-    // BEFORE any Play. Required, not incidental: an unassigned plate REFUSES the
-    // take, and PVW is the operator's last chance to see that before air, so a
-    // marker that waited for Play would be absent exactly when it is needed.
-    // D-087's blank-until-play contract is untouched by this — that contract is a
-    // property of the PAGE's own `body.cg-pending`, and the overlay is not page
-    // content.
+    await press(el, 'PLAY');
     expect(el.querySelectorAll('[data-live-plate]')).toHaveLength(2);
-    const before = plate(el, 'guest-1').outerHTML;
 
-    // …and pressing Play changes nothing about it: this component takes no
-    // lifecycle input at all. The hole is still a hole while the graphic runs, so
-    // a marker that faded at Play would restore the original defect at the moment
-    // the frame most resembles air.
-    //
-    // What THIS level can show is the overlay's invariance under the transport.
-    // What it cannot show is the page changing underneath (jsdom runs no scripts
-    // in the frame), so the full before/during/after sequence — page blank, page
-    // painting, page blank again, marker identical throughout — is pinned against
-    // a real lifecycle in `tests/e2e/pvw-live-plate-placeholder.spec.ts`.
-    const play = el.querySelector<HTMLButtonElement>('button[aria-label="PLAY"]');
-    expect(play).not.toBeNull();
-    act(() => {
-      play?.click();
-    });
+    await press(el, 'NEXT');
     expect(el.querySelectorAll('[data-live-plate]')).toHaveLength(2);
-    expect(plate(el, 'guest-1').outerHTML).toBe(before);
+
+    await press(el, 'STOP');
+    expect(el.querySelectorAll('[data-live-plate]')).toHaveLength(0);
   });
 
   it('the overlay never takes a click from the transport beneath it', async () => {
