@@ -5876,7 +5876,7 @@ the canvas ratio.
 - WHEN either action runs THEN position, size, scale and rotation change together in one undo step;
   the source id, live fit and poster are untouched
 
-## [~] D-170 — Composition export uses the project name and reports progress honestly ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/export-project-name-and-feedback/`
+## [x] D-170 — Composition export uses the project name and reports progress honestly ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/export-project-name-and-feedback/`
 
 **What:** `.vcg` and HTML export suggest the project name, show an in-progress state, and finish with a success-coloured notice when the write succeeds.
 **Why:** A composition name is not the delivery file name, and the current red success toast reads as a failure.

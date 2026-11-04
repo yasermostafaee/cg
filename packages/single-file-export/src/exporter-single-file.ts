@@ -186,8 +186,12 @@ export class ExporterSingleFile {
   }
 
   /** Produce + trigger a browser download of the `.html`. */
-  async run(scene: Scene): Promise<{ filename: string; bytes: number; issues: ExportIssue[] }> {
-    const { html, filename, issues } = await this.produce(scene);
+  async run(
+    scene: Scene,
+    suggestedName = scene.name,
+  ): Promise<{ filename: string; bytes: number; issues: ExportIssue[] }> {
+    const { html, issues } = await this.produce(scene);
+    const filename = downloadName(suggestedName);
     const bytes = new TextEncoder().encode(html);
     triggerDownload(bytes, filename);
     return { filename, bytes: bytes.byteLength, issues };
@@ -583,8 +587,11 @@ function escapeHtml(s: string): string {
 function downloadName(sceneName: string): string {
   const slug = (sceneName || 'template')
     .trim()
-    .replace(/[^\w.-]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+    .replace(/\.(?:vcg|html)$/i, '')
+    .normalize('NFKC')
+    .replace(/[^\p{Letter}\p{Number}._-]+/gu, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^[.-]+|[.-]+$/g, '');
   return `${slug || 'template'}.html`;
 }
 

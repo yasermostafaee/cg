@@ -83,7 +83,6 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
   // re-prompting via the file dialog. Handles do not persist across
   // page reloads.
   const sceneSaveHandles = new Map<string, FileSystemFileHandle>();
-  const exportHandles = new Map<string, FileSystemFileHandle>();
   const browserTextSources = new BrowserTextSourceAccess();
 
   // Keep the asset store pointed at the active project at all times.
@@ -649,24 +648,24 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
           file: removed only when it is empty and the browser can, checked by reading it back.
       */
       runDisk: async (req) => {
-        const { scene } = req;
+        const { scene, suggestedName } = req;
+        const filename = `${deliveryFilenameStem(suggestedName)}.vcg`;
         const blocking = (await exporter.preflight(scene)).filter((i) => i.severity === 'error');
         if (blocking.length > 0) return { outcome: 'blocked', issues: blocking };
         const sfp = window.showSaveFilePicker;
         if (sfp === undefined) {
           // No save dialog: a download, which makes no file until the bytes are complete.
           try {
-            const filename = `${slugifyName(scene.name) || 'template'}.vcg`;
             const result = await exporter.run(scene, filename);
             return { outcome: 'written', filename: result.path, bytes: result.bytes };
           } catch (err) {
             return { outcome: 'failed', filename: null, ...exportFailureOf(err), file: 'none' };
           }
         }
-        let handle = exportHandles.get(scene.id) ?? null;
+        let handle: FileSystemFileHandle;
         try {
           handle = await sfp({
-            suggestedName: handle?.name ?? `${slugifyName(scene.name) || 'template'}.vcg`,
+            suggestedName: filename,
             types: [
               {
                 description: 'cg Template package',
@@ -680,7 +679,6 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
           }
           return { outcome: 'failed', filename: null, ...exportFailureOf(err), file: 'none' };
         }
-        exportHandles.set(scene.id, handle);
         const chosen = handle;
         try {
           const { vcg } = await exporter.produce(scene);
@@ -702,7 +700,7 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
       // `B-349` — the HTML export answers too: a download makes no file until it is complete.
       runSingleFileHtml: async (req) => {
         try {
-          const result = await singleFile.run(req.scene);
+          const result = await singleFile.run(req.scene, req.suggestedName);
           return {
             outcome: 'written',
             filename: result.filename,
@@ -833,4 +831,16 @@ function slugifyName(s: string): string {
     .replace(/\.cg\.json$/i, '')
     .replace(/\.json$/i, '')
     .replace(/^-+|-+$/g, '');
+}
+
+/** Case-preserving, Unicode-safe delivery name; package identity still comes from the scene. */
+function deliveryFilenameStem(name: string): string {
+  const stem = (name || 'template')
+    .trim()
+    .replace(/\.(?:vcg|html)$/i, '')
+    .normalize('NFKC')
+    .replace(/[^\p{Letter}\p{Number}._-]+/gu, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^[.-]+|[.-]+$/g, '');
+  return stem || 'template';
 }

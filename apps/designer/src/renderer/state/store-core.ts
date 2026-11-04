@@ -35,6 +35,7 @@ export type DesignerTool =
   | 'hand';
 
 export type DesignerView = 'landing' | 'studio';
+export type NoticeTone = 'error' | 'success';
 
 /** A reference to one keyframe (by element, property, and frame). */
 export interface KeyframeRef {
@@ -59,6 +60,8 @@ export interface DesignerStoreState {
    * a small toast and auto-cleared; `null` when nothing to show.
    */
   notice: string | null;
+  /** Visual meaning of the current notice; never inferred from translated copy. */
+  noticeTone: NoticeTone;
   /**
    * D-086 Phase B — the composition snapshot the Preview modal is open on (`null` =
    * closed). Session-only UI state (NOT saved / undone). It lives in the store — not
@@ -255,6 +258,7 @@ export const initialState: DesignerStoreState = {
   projectPath: null,
   activeCompositionId: null,
   notice: null,
+  noticeTone: 'error',
   previewScene: null,
   activeArrangementId: null,
   activeLookId: null,

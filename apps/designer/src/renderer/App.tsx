@@ -26,6 +26,7 @@ import { primeAll as primeAllSharedImages } from './features/sharedLibrary/share
 import { useIssues } from './hooks/useIssues.js';
 import { useSeparatorRepairOnOpen } from './hooks/useSeparatorRepairOnOpen.js';
 import { designerStore, editSceneOf, shallowEqual, useDesignerSelector } from './state/store.js';
+import type { NoticeTone } from './state/store-core.js';
 import { colors } from './theme.js';
 import { comboKey } from './keyboard.js';
 import { cx } from './cx.js';
@@ -52,16 +53,20 @@ const MIN_APP_WIDTH = 1024;
 const MIN_APP_HEIGHT = 640;
 
 /** Transient bottom-centre toast for user-facing notices (auto-dismiss + close). */
-function Toast({ message }: { message: string }): JSX.Element {
+function Toast({ message, tone }: { message: string; tone: NoticeTone }): JSX.Element {
   return (
-    <div role="status" className={s.toast}>
+    <div
+      role="status"
+      data-tone={tone}
+      className={cx(s.toast, tone === 'success' && s.toastSuccess)}
+    >
       <span>{message}</span>
       <Control
         variant="bare"
         aria-label="Dismiss"
         title="Dismiss"
         onClick={() => designerStore.dismissNotice()}
-        className={s.toastClose}
+        className={cx(s.toastClose, tone === 'success' && s.toastCloseSuccess)}
       >
         <Icon icon={X} size={16} />
       </Control>
@@ -196,6 +201,7 @@ export function App(): JSX.Element {
     scene,
     activeCompositionId,
     notice,
+    noticeTone,
     projectPath,
     tool,
     selection,
@@ -211,6 +217,7 @@ export function App(): JSX.Element {
       scene: s.scene,
       activeCompositionId: s.activeCompositionId,
       notice: s.notice,
+      noticeTone: s.noticeTone,
       projectPath: s.projectPath,
       tool: s.tool,
       selection: s.selection,
@@ -628,7 +635,7 @@ export function App(): JSX.Element {
           while a guarded add is pending. */}
       <DurationGuardDialog />
       <ElementDeleteGuardDialog />
-      {notice !== null && <Toast message={notice} />}
+      {notice !== null && <Toast message={notice} tone={noticeTone} />}
       {/* DELTA-RUN-NEXT-VERSION-01-H — the one Steps dialog; outlives the Inspector's swaps. */}
       <StepsDialogHost />
       <InputTooltip />

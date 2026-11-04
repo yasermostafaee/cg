@@ -1,8 +1,11 @@
-import { describe, expect, it } from 'vitest';
+/** @vitest-environment jsdom */
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Scene } from '@cg/shared-schema';
 import type { AssetMeta } from '@cg/shared-ipc';
 import { ExporterSingleFile } from '../src/exporter-single-file.js';
 import type { ImageAssetSource } from '../src/image-export.js';
+
+afterEach(() => vi.restoreAllMocks());
 
 function makeScene(): Scene {
   return {
@@ -38,6 +41,27 @@ function makeExporter(): ExporterSingleFile {
 }
 
 describe('ExporterSingleFile', () => {
+  it('uses the delivery name without changing the composition embedded in the HTML', async () => {
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: vi.fn(() => 'blob:test'),
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: vi.fn(),
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    const scene = { ...makeScene(), name: 'comp1' };
+
+    const result = await makeExporter().run(scene, 'پروژه خبر');
+
+    expect(result.filename).toBe('پروژه-خبر.html');
+    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledOnce();
+    const { html } = await makeExporter().produce(scene);
+    expect(html).toContain('"name":"comp1"');
+    expect(html).not.toContain('"name":"پروژه خبر"');
+  });
+
   it('produces one self-contained HTML with no external resource references', async () => {
     const { html, filename } = await makeExporter().produce(makeScene());
 

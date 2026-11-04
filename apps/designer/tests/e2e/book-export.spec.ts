@@ -26,12 +26,15 @@ async function boot(page: Page): Promise<DesignerApp> {
     (window as unknown as { __CG_SPLASH_DISABLED__: boolean }).__CG_SPLASH_DISABLED__ = true;
     const w = window as unknown as {
       __picks: number;
-      showSaveFilePicker: () => Promise<FileSystemFileHandle>;
+      __suggestedNames: string[];
+      showSaveFilePicker: (options?: SaveFilePickerOptions) => Promise<FileSystemFileHandle>;
     };
     w.__picks = 0;
+    w.__suggestedNames = [];
     // The author types the owner's name in the dialog, as he did: `telavat.vcg`.
-    w.showSaveFilePicker = async () => {
+    w.showSaveFilePicker = async (options) => {
       w.__picks += 1;
+      w.__suggestedNames.push(options?.suggestedName ?? '');
       const root = await navigator.storage.getDirectory();
       const dir = await root.getDirectoryHandle('saved-by-dialog', { create: true });
       const handle = await dir.getFileHandle('telavat.vcg', { create: true });
@@ -115,6 +118,12 @@ test.describe('BOOK-EXPORT-01 — a book exports, and every export is answered',
 
     const notice = page.getByRole('status');
     await expect(notice).toHaveText(/^Exported telavat\.vcg · \d+ KB$/);
+    await expect(notice).toHaveAttribute('data-tone', 'success');
+    expect(
+      await page.evaluate(
+        () => (window as unknown as { __suggestedNames: string[] }).__suggestedNames,
+      ),
+    ).toEqual(['telavat.vcg']);
     expect(await labels()).toContain('Exporting…');
     await expect(exportVcg(page)).toHaveText('Export (.vcg)');
     await expect(exportVcg(page)).toBeEnabled();
@@ -166,6 +175,7 @@ test.describe('BOOK-EXPORT-01 — a book exports, and every export is answered',
     await expect(notice).toHaveText(
       /^Export failed: p2\.png in ".+" could not be read from the project\. telavat\.vcg was removed; nothing was saved\.$/,
     );
+    await expect(notice).toHaveAttribute('data-tone', 'error');
     await page.waitForTimeout(6000);
     await expect(notice).toContainText('Export failed');
     // The save dialog DID make the file (the instrument is live)…

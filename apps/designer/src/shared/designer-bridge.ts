@@ -357,7 +357,7 @@ export interface DesignerBridge {
      * in the save dialog (a download where the browser has none). `B-349` — never throws: every
      * outcome, a failure included, is an {@link ExportResult}.
      */
-    runDisk(req: { scene: Scene }): Promise<ExportResult>;
+    runDisk(req: { scene: Scene; suggestedName: string }): Promise<ExportResult>;
     /**
      * D-019 — produce a single self-contained, `file://`-safe CasparCG `.html`
      * (scene/CSS/fonts/runtime inlined + an embedded GDD) and download it.
@@ -366,6 +366,7 @@ export interface DesignerBridge {
      */
     runSingleFileHtml(req: {
       scene: Scene;
+      suggestedName: string;
     }): Promise<
       | { outcome: 'written'; filename: string; bytes: number; warnings: string[] }
       | { outcome: 'failed'; cause: string; elementId?: string }

@@ -162,6 +162,10 @@ export const toast = style({
   zIndex: 5000,
 });
 
+export const toastSuccess = style({
+  borderColor: '#34d399',
+});
+
 export const toastClose = style({
   flexShrink: 0,
   width: '18px',
@@ -175,4 +179,8 @@ export const toastClose = style({
   fontSize: '0.95rem',
   cursor: 'pointer',
   padding: 0,
+});
+
+export const toastCloseSuccess = style({
+  color: '#6ee7b7',
 });

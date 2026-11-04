@@ -32,12 +32,16 @@ interface Props {
  * accessible name stays stable while the visible label is a short icon + word.
  */
 export function CompositionActionBar({ issues }: Props): JSX.Element {
-  const { compName, hasComp } = useDesignerSelector((st) => {
+  const { compName, hasComp, projectName } = useDesignerSelector((st) => {
     const comp =
       st.activeCompositionId === null
         ? undefined
         : st.scene?.compositions?.find((c) => c.id === st.activeCompositionId);
-    return { compName: comp?.name ?? null, hasComp: comp !== undefined };
+    return {
+      compName: comp?.name ?? null,
+      hasComp: comp !== undefined,
+      projectName: st.scene?.name ?? null,
+    };
   }, shallowEqual);
 
   const errors = issues.filter((i) => i.severity === 'error');
@@ -138,7 +142,9 @@ export function CompositionActionBar({ issues }: Props): JSX.Element {
   function answer(result: ExportResult): void {
     switch (result.outcome) {
       case 'written':
-        designerStore.showNotice(exportWrittenLine(result.filename, result.bytes));
+        designerStore.showNotice(exportWrittenLine(result.filename, result.bytes), {
+          tone: 'success',
+        });
         return;
       case 'cancelled':
         return;
@@ -159,10 +165,11 @@ export function CompositionActionBar({ issues }: Props): JSX.Element {
     }
     const target = scoped();
     if (target === null) return;
+    const suggestedName = projectName ?? target.name;
     setBusy({ kind: 'vcg', share: null });
     const off = window.cg.export.onProgress((p) => setBusy({ kind: 'vcg', share: p.progress }));
     try {
-      answer(await window.cg.export.runDisk({ scene: target }));
+      answer(await window.cg.export.runDisk({ scene: target, suggestedName }));
     } catch (err) {
       // The bridge answers every outcome; this is a fault in answering, and still not a silence.
       answerFault(err);
@@ -180,9 +187,10 @@ export function CompositionActionBar({ issues }: Props): JSX.Element {
     }
     const target = scoped();
     if (target === null) return;
+    const suggestedName = projectName ?? target.name;
     setBusy({ kind: 'html', share: null });
     try {
-      const result = await window.cg.export.runSingleFileHtml({ scene: target });
+      const result = await window.cg.export.runSingleFileHtml({ scene: target, suggestedName });
       if (result.outcome === 'failed') {
         if (result.elementId !== undefined) designerStore.setSelection([result.elementId]);
         designerStore.showNotice(
@@ -193,6 +201,7 @@ export function CompositionActionBar({ issues }: Props): JSX.Element {
       }
       designerStore.showNotice(
         [exportWrittenLine(result.filename, result.bytes), ...result.warnings].join('\n'),
+        { tone: 'success' },
       );
     } catch (err) {
       answerFault(err);

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { ExportIssue, ExportProgress } from '@cg/shared-ipc';
+import type { Scene } from '@cg/shared-schema';
 import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
 import { designerStore } from '../src/renderer/state/store.js';
@@ -32,14 +33,38 @@ afterEach(() => {
 /** The bridge's export namespace, with the answer held until the test releases it. */
 function stubExport(): {
   answer: (r: ExportResult) => Promise<void>;
+  answerHtml: (r: {
+    outcome: 'written';
+    filename: string;
+    bytes: number;
+    warnings: string[];
+  }) => Promise<void>;
   progress: (p: ExportProgress) => void;
+  requests: () => {
+    disk: { scene: Scene; suggestedName: string } | null;
+    html: { scene: Scene; suggestedName: string } | null;
+  };
 } {
   let release: (r: ExportResult) => void = () => undefined;
+  let releaseHtml: (r: {
+    outcome: 'written';
+    filename: string;
+    bytes: number;
+    warnings: string[];
+  }) => void = () => undefined;
   let progressHandler: (p: ExportProgress) => void = () => undefined;
+  let diskRequest: { scene: Scene; suggestedName: string } | null = null;
+  let htmlRequest: { scene: Scene; suggestedName: string } | null = null;
   (window as unknown as { cg: unknown }).cg = {
     export: {
-      runDisk: () => new Promise<ExportResult>((resolve) => (release = resolve)),
-      runSingleFileHtml: vi.fn(),
+      runDisk: (req: { scene: Scene; suggestedName: string }) => {
+        diskRequest = req;
+        return new Promise<ExportResult>((resolve) => (release = resolve));
+      },
+      runSingleFileHtml: (req: { scene: Scene; suggestedName: string }) => {
+        htmlRequest = req;
+        return new Promise((resolve) => (releaseHtml = resolve));
+      },
       onProgress: (h: (p: ExportProgress) => void) => {
         progressHandler = h;
         return () => (progressHandler = () => undefined);
@@ -53,7 +78,14 @@ function stubExport(): {
         await Promise.resolve();
       });
     },
+    answerHtml: async (r) => {
+      await act(async () => {
+        releaseHtml(r);
+        await Promise.resolve();
+      });
+    },
     progress: (p) => act(() => progressHandler(p)),
+    requests: () => ({ disk: diskRequest, html: htmlRequest }),
   };
 }
 
@@ -95,6 +127,28 @@ describe('B-349 — the Export button answers', () => {
     act(() => button(c, 'Export .vcg').click());
     await bridge.answer({ outcome: 'written', filename: 'telavat.vcg', bytes: 29_225_439 });
     expect(designerStore.get().notice).toBe('Exported telavat.vcg · 27.9 MB');
+    expect(designerStore.get().noticeTone).toBe('success');
+  });
+
+  it('D-170 — both export paths suggest the project name while the payload stays composition-scoped', async () => {
+    const bridge = stubExport();
+    const c = render();
+
+    act(() => button(c, 'Export .vcg').click());
+    expect(bridge.requests().disk?.suggestedName).toBe('telavat');
+    expect(bridge.requests().disk?.scene.name).toBe('comp1');
+    await bridge.answer({ outcome: 'cancelled' });
+
+    act(() => button(c, 'Export HTML').click());
+    expect(bridge.requests().html?.suggestedName).toBe('telavat');
+    expect(bridge.requests().html?.scene.name).toBe('comp1');
+    await bridge.answerHtml({
+      outcome: 'written',
+      filename: 'telavat.html',
+      bytes: 100,
+      warnings: [],
+    });
+    expect(designerStore.get().noticeTone).toBe('success');
   });
 
   it('🔴 a failure is a sentence that STAYS, with the element at fault selected', async () => {
@@ -114,6 +168,7 @@ describe('B-349 — the Export button answers', () => {
         'Export failed: page2.png in "Book pages" could not be read from the project. ' +
         'telavat.vcg was removed; nothing was saved.';
       expect(designerStore.get().notice).toBe(said);
+      expect(designerStore.get().noticeTone).toBe('error');
       expect(new Set(designerStore.get().selection)).toEqual(new Set(['sq']));
       // A transient notice clears at 5 s; this one is still there long after.
       act(() => vi.advanceTimersByTime(60_000));

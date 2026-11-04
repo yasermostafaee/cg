@@ -12,6 +12,7 @@ import {
   setSavedBaseline,
   setSuppressHistory,
   type DesignerView,
+  type NoticeTone,
 } from '../store-core.js';
 import {
   activeCompId,
@@ -157,10 +158,10 @@ export const documentSlice = {
    * `BOOK-EXPORT-01` — a failure the author must act on (an export that did not happen) stays until
    * it is dismissed, because a sentence that vanishes while it is being read is one more silence.
    */
-  showNotice(message: string, opts: { hold?: boolean } = {}): void {
+  showNotice(message: string, opts: { hold?: boolean; tone?: NoticeTone } = {}): void {
     const t = getNoticeTimer();
     if (t !== null) clearTimeout(t);
-    set({ notice: message });
+    set({ notice: message, noticeTone: opts.tone ?? 'error' });
     if (opts.hold === true) {
       setNoticeTimer(null);
       return;
