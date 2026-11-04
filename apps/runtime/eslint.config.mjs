@@ -98,7 +98,7 @@ export default [
             'src/renderer/features/fixedLayers/CandidateLayersSection.tsx': 4,
             'src/renderer/features/fixedLayers/useTemplatePicker.tsx': 2,
             'src/renderer/features/inspector/DelimitersSection.tsx': 2,
-            'src/renderer/features/inspector/Inspector.tsx': 4,
+            'src/renderer/features/inspector/Inspector.tsx': 3,
             'src/renderer/features/inspector/PositionPicker.tsx': 2,
             'src/renderer/features/layers/LayersPanel.tsx': 2,
             'src/renderer/features/layers/LivePlateAudioDialog.tsx': 1,

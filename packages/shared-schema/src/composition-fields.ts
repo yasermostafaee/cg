@@ -400,6 +400,11 @@ function aggregateCompositionFieldsImpl(
       groups.push({
         instanceId: inst.id,
         name: inst.name,
+        // B-385 — `name` remains the stable payload namespace, while the author-facing
+        // heading follows the referenced composition. Renaming a composition must not
+        // silently rename its data key, but Variables/CG Control must not keep showing
+        // the stale insertion-time instance name either.
+        label: child.name.trim() === '' ? child.id : child.name.trim(),
         compositionId: child.id,
         aggregate: aggregateCompositionFieldsImpl(scene, child, depth + 1, boundOnly),
       });
