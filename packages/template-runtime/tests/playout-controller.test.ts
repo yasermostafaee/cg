@@ -556,7 +556,7 @@ describe('PlayoutController', () => {
     expect(observed.slice(observed.lastIndexOf(40) + 1)).not.toContain(10);
   });
 
-  it('B-377 — the explicit Follow-Lottie exception parks telemetry, then Outro advances it', async () => {
+  it('D-186 — Follow Lottie parks telemetry at Out point, then Outro advances it once', async () => {
     const clock = makeClock();
     const observed: number[] = [];
     const events: string[] = [];
@@ -571,7 +571,6 @@ describe('PlayoutController', () => {
       hasAnimation: false,
       applyFrame: () => undefined,
       observeFrame: (frame) => observed.push(frame),
-      observeFreezeAtHoldEntry: true,
       observeOutroGate: true,
       waitForContent: () =>
         new Promise<void>((resolve) => {
@@ -589,7 +588,7 @@ describe('PlayoutController', () => {
     controller.play();
     // Authored Content start consumes 200 ms, then the static settle collapses to Out point.
     for (let index = 0; index < 12; index += 1) clock.advance(20);
-    expect(observed.at(-1)).toBe(10);
+    expect(observed.at(-1)).toBe(40);
     const held = [...observed];
     for (let index = 0; index < 60; index += 1) clock.advance(20);
     expect(observed).toEqual(held); // no observer-only Middle loop under Freeze

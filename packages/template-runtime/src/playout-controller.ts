@@ -64,13 +64,6 @@ export interface PlayoutControllerOptions {
    */
   observeFrame?: ((frame: number) => void) | undefined;
   /**
-   * B-377/B-379 — a visible Follow Lottie may own a different held look: its root telemetry parks
-   * at Content start while native elements and Follow Video remain on the Out-point picture Intro
-   * actually painted. Kept explicit so a general Freeze can never inherit the Lottie exception
-   * merely by sharing `holdBehavior: freeze`.
-   */
-  observeFreezeAtHoldEntry?: boolean | undefined;
-  /**
    * B-377 — report the composition Outro while a Follow media driver owns the asynchronous
    * element-outro gate. The observer-only sweep is suppressed for ordinary/manual media whose
    * outro duration is not composition-owned.
@@ -609,15 +602,7 @@ export class PlayoutController {
     // start the hold TIMING. (A looping idle while holding is D-021's opt-in, not this.)
     this.stopDriver();
     const holdBehavior = this.o.playout.holdBehavior ?? 'freeze';
-    if (holdBehavior === 'freeze') {
-      if (this.o.observeFreezeAtHoldEntry === true) {
-        // B-377/B-379 — only a visible Follow Lottie uses the composition's Content-start look.
-        // Native elements and Follow Video keep telemetry on Out point, which is already the last
-        // frame reported by Intro. This is observation only: it neither repaints the scene nor
-        // seeks a media element.
-        this.o.observeFrame?.(this.holdEntry());
-      }
-    } else {
+    if (holdBehavior !== 'freeze') {
       this.startHoldTail();
     }
     // D-114 — `manual` holds until `stop()`; `static` has no authored Middle/Outro and cuts.

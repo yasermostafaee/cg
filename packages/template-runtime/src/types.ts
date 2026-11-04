@@ -376,9 +376,9 @@ export interface RuntimeBootOptions {
    * D-182 — optional host-side observation of the GLOBAL ROOT composition frame.
    *
    * Called from the root controller's authored lifecycle playhead: intro/outro report every frame;
-   * an ordinary parked hold stays fixed; an active Middle loop reports its advance and wrap; and a
-   * visible Follow Lottie may park at Content start. Follow Video and native Freeze stay at Out
-   * point. A Follow media-owned exit gate reports the root Outro while that media visibly exits.
+   * an ordinary parked hold stays fixed; an active Middle loop reports its advance and wrap.
+   * Follow media and native Freeze stay at Out point. A Follow media-owned exit gate reports
+   * the root Outro while that media visibly exits.
    * Installing the observer reports collapsed-leg boundaries without making them consume time, so
    * Preview cannot change runtime/on-air timing. Throwing observers are isolated from playback.
    */
@@ -389,9 +389,8 @@ export interface RuntimeBootOptions {
    * element in the GLOBAL ROOT composition.
    *
    * The root cursor is not an element clock during mixed Hold playback: checked participants may
-   * wrap through Middle while unchecked elements advance once on a local tail, and a visible Follow
-   * Lottie may park root telemetry at Content start after native furniture settled at Out point.
-   * Follow Video shares the native Out-point cursor. This callback reports only those painted
+   * wrap through Middle while unchecked elements advance once on a local tail. Follow media and
+   * native Freeze share the Out-point cursor. This callback reports only those painted
    * element frames, in one batch per paint. It is
    * observation-only, excludes nested scopes, and is never installed by broadcast output.
    */

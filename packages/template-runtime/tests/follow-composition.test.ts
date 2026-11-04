@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as LottieBridge from '@cg/lottie-bridge';
 import type { Element, Scene } from '@cg/shared-schema';
 
@@ -147,10 +147,182 @@ function mount(s: Scene): ReturnType<typeof createRuntime> {
 
 const lastFrame = (): number | undefined => handles[0]?.frames.at(-1);
 
+function makeClock() {
+  let ms = 0;
+  let next = 0;
+  const rafs = new Map<number, (ts: number) => void>();
+  const timers = new Map<number, { due: number; run: () => void }>();
+  return {
+    now: () => ms,
+    raf: (run: (ts: number) => void) => {
+      rafs.set(++next, run);
+      return next;
+    },
+    cancel: (id: number) => {
+      rafs.delete(id);
+    },
+    setTimeout: (run: () => void, delay: number) => {
+      timers.set(++next, { due: ms + delay, run });
+      return next;
+    },
+    clearTimeout: (id: unknown) => {
+      if (typeof id === 'number') timers.delete(id);
+    },
+    async advance(delta: number) {
+      for (let left = delta; left > 0; ) {
+        const step = Math.min(left, 20);
+        left -= step;
+        ms += step;
+        for (const [id, timer] of [...timers])
+          if (timer.due <= ms) {
+            timers.delete(id);
+            timer.run();
+          }
+        const pending = [...rafs];
+        rafs.clear();
+        for (const [, run] of pending) run(ms);
+        for (let i = 0; i < 8; i += 1) await Promise.resolve();
+      }
+    },
+  };
+}
+
 beforeEach(() => {
   document.body.innerHTML = '';
   document.body.className = '';
   handles.length = 0;
+});
+
+afterEach(() => vi.restoreAllMocks());
+
+describe('D-186 — Follow Freeze uses one picture and root cursor', () => {
+  it('holds Lottie, Video and native furniture at Outro start through pause, Stop and replay', async () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+    const clock = makeClock();
+    const frames: number[] = [];
+    const shape: Element = {
+      ...followLottie(),
+      id: 'shape',
+      type: 'shape',
+      shape: 'rect',
+      fill: { kind: 'solid', color: '#ffffff' },
+      animation: {
+        tracks: {
+          opacity: {
+            keyframes: [
+              { frame: 0, value: 0.2, easing: 'linear' },
+              { frame: 75, value: 0.8, easing: 'linear' },
+              { frame: 100, value: 0, easing: 'linear' },
+            ],
+          },
+        },
+      },
+    } as Element;
+    const r = createRuntime(
+      scene([shape, followLottie(), followVideo()], {
+        playout: { mode: 'manual', holdBehavior: 'freeze' },
+      }),
+      {
+        skipFontLoad: true,
+        installGlobals: false,
+        clock,
+        lottieAssets,
+        onRootFrame: (f) => frames.push(f),
+      },
+    );
+    const video = document.querySelector<HTMLVideoElement>('video')!;
+    // jsdom has no decoder. Model only its native advancing media clock; all Follow
+    // mapping, seeks, hold transitions and pause/resume still run through the real driver.
+    let videoPlaying = false;
+    let videoPos = 0;
+    let videoAnchor = 0;
+    const videoTime = () => videoPos + (videoPlaying ? (clock.now() - videoAnchor) / 1000 : 0);
+    Object.defineProperty(video, 'currentTime', {
+      configurable: true,
+      get: videoTime,
+      set: (value: number) => {
+        videoPos = value;
+        videoAnchor = clock.now();
+      },
+    });
+    vi.spyOn(video, 'play').mockImplementation(() => {
+      videoPos = videoTime();
+      videoAnchor = clock.now();
+      videoPlaying = true;
+      return Promise.resolve();
+    });
+    vi.spyOn(video, 'pause').mockImplementation(() => {
+      videoPos = videoTime();
+      videoPlaying = false;
+    });
+    await r.play({});
+    await clock.advance(1_600);
+    const native = document.querySelector<HTMLElement>('[data-cg-element-id="shape"]')!;
+    expect(lastFrame()).toBe(225);
+    expect(video.currentTime).toBeCloseTo(4.5);
+    expect(native.style.opacity).toBe('0.8');
+    expect(frames.at(-1)).toBe(75);
+    const heldFrames = [...frames];
+    r.pause();
+    await clock.advance(500);
+    r.resume();
+    await clock.advance(200);
+    expect(lastFrame()).toBe(225);
+    expect(video.currentTime).toBeCloseTo(4.5);
+    expect(native.style.opacity).toBe('0.8');
+    expect(frames).toEqual(heldFrames);
+    const exitSamples = handles[0]!.frames.length;
+    const stopped = r.stop();
+    expect(lastFrame()).toBe(225);
+    await clock.advance(1_200);
+    await stopped;
+    const exit = handles[0]!.frames.slice(exitSamples);
+    expect(exit.some((f) => f > 225 && f < 250)).toBe(true);
+    expect(exit.every((f, i) => i === 0 || f >= exit[i - 1]!)).toBe(true);
+    expect(lastFrame()).toBe(250);
+    expect(frames.slice(heldFrames.length)).not.toContain(50);
+    await r.play({});
+    expect(lastFrame()).toBe(0);
+    await clock.advance(1_600);
+    expect(lastFrame()).toBe(225);
+    expect(frames.at(-1)).toBe(75);
+    r.remove();
+  });
+
+  it.each(['timed', 'content-driven'] as const)(
+    'exits forward naturally with a %s hold',
+    async (holdSource) => {
+      const clock = makeClock();
+      const frames: number[] = [];
+      const r = createRuntime(
+        scene([followLottie({ drivesHold: true })], {
+          playout: { mode: 'auto-out', holdBehavior: 'freeze', holdSource, holdMs: 400 },
+        }),
+        {
+          skipFontLoad: true,
+          installGlobals: false,
+          clock,
+          lottieAssets,
+          onRootFrame: (f) => frames.push(f),
+        },
+      );
+      await r.play({});
+      await clock.advance(1_000);
+      expect(lastFrame()).toBe(225);
+      const heldIndex = handles[0]!.frames.lastIndexOf(225);
+      await clock.advance(1_000);
+      expect(lastFrame()).toBe(250);
+      expect(document.body.classList.contains('cg-pending')).toBe(true);
+      const exit = handles[0]!.frames.slice(heldIndex);
+      expect(exit.every((f, i) => i === 0 || f >= exit[i - 1]!)).toBe(true);
+      const outIndex = frames.indexOf(75);
+      expect(outIndex).toBeGreaterThanOrEqual(0);
+      expect(frames.slice(outIndex).every((f) => f >= 75)).toBe(true);
+      expect(frames.some((f) => f > 75 && f < 100)).toBe(true);
+      r.remove();
+    },
+  );
 });
 
 describe("the owner's case through the scrub path — intro [0 → 50], middle [50 → 225], outro [225 → 250]", () => {
@@ -162,8 +334,8 @@ describe("the owner's case through the scrub path — intro [0 → 50], middle [
     expect(lastFrame()).toBe(25);
     r.tick(50); // the content start — the hold look lands EXACTLY here
     expect(lastFrame()).toBe(50);
-    r.tick(65); // deep in the hold — still the held look
-    expect(lastFrame()).toBe(50);
+    r.tick(65); // manual scrub walks the middle once; it is not a lifecycle Freeze
+    expect(lastFrame()).toBe(65);
     r.tick(87); // 12 comp frames past the out-point = 240 ms into the OUT segment
     expect(lastFrame()).toBe(237); // session Y: END-anchored outro [225 → 250] — the ending
     r.tick(100); // the active out — the clip's LAST frame, exactly at removal
@@ -173,9 +345,9 @@ describe("the owner's case through the scrub path — intro [0 → 50], middle [
     r.remove();
   });
 
-  it('the poster is the derived H — the held look, painted at build', () => {
+  it('the Freeze poster is the derived Outro start, not Hold entry', () => {
     mount(scene([followLottie()]));
-    expect(handles[0]!.frames[0]).toBe(50);
+    expect(handles[0]!.frames[0]).toBe(225);
   });
 
   it('legacy media markers and holdAt cannot change the derived window', () => {
@@ -251,20 +423,25 @@ describe('no lifecycle — nothing to follow, marker-less behaviour exactly', ()
 });
 
 describe('the composition-derived middle can loop', () => {
-  it('ignores the authored idle range and loops the full derived middle', () => {
-    const r = mount(
+  it('ignores authored idle markers in actual playback while manual scrub never wraps', async () => {
+    const clock = makeClock();
+    const r = createRuntime(
       scene([followLottie({ holdBehavior: 'idle-loop' })], {
         frameRange: { in: 0, out: 300 },
         activeRange: { in: 0, out: 300 },
         lifecycle: { outPoint: 275, contentStart: 50 },
         playout: { mode: 'manual', holdBehavior: 'loop' },
       }),
+      { skipFontLoad: true, installGlobals: false, clock, lottieAssets },
     );
     r.tick(0);
     expect(lastFrame()).toBe(0);
     r.tick(60);
     expect(lastFrame()).toBe(60);
-    r.tick(240); // 190 frames into a 175-frame middle ⇒ wraps to 65
+    r.tick(240); // a manual scrub traverses Middle once and clamps; it cannot start a loop
+    expect(lastFrame()).toBe(225);
+    await r.play({});
+    await clock.advance(4_800); // actual playback: 190 frames into a 175-frame middle wraps to 65
     expect(lastFrame()).toBe(65);
     r.remove();
   });

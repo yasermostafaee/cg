@@ -101,8 +101,9 @@ coordinates therefore feed both a standalone ticker and one inside a hidden or s
   explicit playhead-only modes animate a Lottie and a `<video>` on the canvas instead of
   leaving them on a static poster. Ordinary forward Canvas Play uses the real lifecycle,
   just like Preview; reverse, Preview loop and ping-pong advance the authoring frame and
-  post `scrub`. The driver's own phase mapping (`clipPositionAt` / `expectedClipMs`)
-  is what resolves the clip frame/time (never a second copy). A driver that is running
+  post `scrub`. Lottie's `clipPositionAt` shares elapsed/rate/window arithmetic, with an explicit
+  Follow-only continuous-scrub policy; Video's `positionedClipMs` resolves its continuous
+  authoring view separately from the on-air `expectedClipMs` Hold policy. A driver that is running
   its own lifecycle owns the frame and is not fought. The video is positioned PAUSED by
   `currentTime` (§9.5 (a) — the forward-1× hybrid rejected): a tick that finds a seek in
   flight skips, so play shows the nearest decodable frame while the Preview stays the
@@ -116,11 +117,13 @@ coordinates therefore feed both a standalone ticker and one inside a hidden or s
 - **derives FOLLOW-source media windows from the composition's lifecycle** —
   `media-phases-follow-composition`: a Lottie/video whose `phases.source` is
   `'composition'` stores the RELATIONSHIP (intro settles at the content start, outro fits
-  the OUT segment, hold at `holdAt`), and `createRuntime` derives the concrete window at
+  the OUT segment), and `createRuntime` derives the concrete window at
   driver construction through `followWindowMs` (`@cg/shared-schema`) + the
   `lottieFollowWindow` unit adapter (`@cg/lottie-bridge`) — one derivation, re-run on
   every scene replace, never baked. A follower contributes nothing to the entrance
-  settle (it derives FROM it),
+  settle (it derives FROM it). Legacy media markers/`holdAt` do not govern Follow. Freeze
+  parks both Follow Lottie and Video at the derived source Outro start, independently of
+  entrance duration; native furniture and root telemetry share the composition Out point,
 - lets an **element own its own exit** — the D-125 element-outro seam: `out()` /
   `stop()` route every owning driver through a ONE-SHOT ledger and await it before the
   background closes. That await is **bounded at the ledger entry** (session Z): a driver

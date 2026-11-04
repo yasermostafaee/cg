@@ -1705,6 +1705,7 @@ function LottieFollowPanel({
   const entranceFrames = Math.round(anchors.contentStart - anchors.activeIn);
   const outFrames = Math.round(anchors.activeOut - anchors.outPoint);
   const loopsMiddle = fw.outroStartFrame > fw.holdFrame && holdBehavior === 'loop';
+  const effectiveHoldFrame = holdBehavior === 'freeze' ? fw.outroStartFrame : fw.holdFrame;
   const holdLabel = loopsMiddle
     ? 'loops middle'
     : holdBehavior === 'continue'
@@ -1722,8 +1723,13 @@ function LottieFollowPanel({
               {sec(fw.introStartFrame)} → {sec(fw.holdFrame)}].
             </p>
             <p>
-              The middle is clip [{sec(fw.holdFrame)} → {sec(fw.outroStartFrame)}] and can freeze or
-              loop until the content completes.
+              {loopsMiddle
+                ? `The middle is clip [${sec(fw.holdFrame)} → ${sec(fw.outroStartFrame)}] and loops until the content completes.`
+                : holdBehavior === 'continue'
+                  ? `The clip continues once from ${sec(fw.holdFrame)} to ${sec(fw.outroEndFrame)} independently from the looping composition cursor.`
+                  : holdBehavior === 'freeze'
+                    ? `Freeze holds at the derived Outro start, ${sec(effectiveHoldFrame)}, then exit continues forward from the same frame.`
+                    : `There is no Middle span to loop. The clip holds at the entrance end, ${sec(fw.holdFrame)}, until exit starts at ${sec(fw.outroStartFrame)}.`}
             </p>
             <p>
               Outro uses the last {outFrames} composition frames: clip [{sec(fw.outroStartFrame)} →{' '}
@@ -1733,7 +1739,7 @@ function LottieFollowPanel({
           </InfoTip>
         }
       >
-        Hold {sec(fw.holdFrame)} · frame {Math.round(fw.holdFrame)} · {holdLabel}
+        Hold {sec(effectiveHoldFrame)} · frame {Math.round(effectiveHoldFrame)} · {holdLabel}
       </StateLine>
       <Button
         variant="secondary"

@@ -447,9 +447,10 @@ Two conditions keep it narrow, and both reuse existing answers rather than addin
 
 - **Composition Loop middle only.** Manual, timed and content-driven Holds all use the authored
   composition choice; Freeze keeps the native picture and root-frame observer parked at
-  `outPoint`. A visible Follow Lottie retains the explicit Content-start observer exception. A
-  Follow Video instead parks its source at the derived Outro start while its composition cursor
-  remains at `outPoint`, so exit continues forward without a seam jump. A selected Video/Lottie keeps
+  `outPoint`. Follow Lottie and Video park their source at the derived Outro start, so their
+  held picture, composition cursor and forward exit share that boundary (D-186). Lottie's
+  `freezeTargetFrame` is separate from `introEnd`: choosing the held picture must not lengthen
+  its entrance or delay its completion signal. A selected Video/Lottie keeps
   a clock-only Middle on air under Loop middle even when no native frame needs repainting, so
   automatic exit shares its boundary. `static` has no authored Middle/Outro lifecycle and remains
   a cut.
@@ -466,9 +467,8 @@ The runtime also has a narrower authoring observation seam for geometry:
 batch of `{ elementId, frame }` entries for the animated elements just painted. The callback is
 **observation only** (its errors are swallowed), is never consulted by a controller or driver,
 and excludes nested composition scopes. This distinction matters in a Hold: the root cursor can
-wrap through Middle while an unchecked element finishes a local tail, or Follow Lottie Freeze can
-park root telemetry at Content start after native furniture settled at Out point. Follow Video
-shares that native Out-point cursor. The Designer uses
+wrap through Middle while an unchecked element finishes a local tail. Follow media and native
+Freeze share the Out-point cursor. The Designer uses
 the element batch to draw authoring affordances at the same frames; broadcast output installs no
 observer and therefore has no extra state or timing path.
 
@@ -517,23 +517,25 @@ override) on its **own** timeline.
   - **The composition→clip ANCHOR lives here; the phase MAPPING lives in the driver.**
     `tick` converts the playhead to elapsed TIME — from the composition's `activeRange.in`
     for the IN/HOLD phases, and from `lifecycle.outPoint` for the OUT phase — and the driver
-    resolves that to a clip frame through the same `clipPositionAt` its own clock uses. The
+    resolves that to a clip frame through the same `clipPositionAt` arithmetic its own clock uses. The
     clip is never RESCALED onto the composition's markers (§D1.1): it plays at its authored
     `fr × speed` and the anchor only says where it starts.
-  - **Scrub and PLAY are the same call.** The Designer canvas has no `play()` path at all —
-    its transport advances the store's frame and the canvas posts one `scrub` per change —
-    so both halves of D-135's acceptance are this one function. A second path for play would
-    be a fork, and the tests assert the singularity (`tests/lottie-driver.test.ts`), not just
-    matching frames.
+  - **Manual scrub is not a running Hold.** Since D-175, Canvas Play runs the same lifecycle
+    as Preview/output; only a manual cursor move calls `tick`. D-186 adds a Follow-only
+    `continuousMiddleScrub` policy to the shared mapping: a scrub walks Middle once instead
+    of applying Freeze or Loop, while actual playback keeps those authored Hold choices.
+    Non-Follow/manual Lottie keeps its existing lifecycle-equivalent scrub mapping. The
+    elapsed-time, rate and derived-window arithmetic remain shared; no second clock is added.
   - **A driver running its own lifecycle OWNS the frame.** `positionAt` is a no-op while the
     driver is running or holding a frame it drove to, so a tick reaching a PLAYING host (the
     same page serves the Preview) can never yank a clip out from under its own driver.
   - 🔴 **A DEGENERATE outro takes the INTRO mapping past the out-point.** `outroStart` falls back to
     `op` for a clip with no outro marker, so asking for the OUT phase there clamps to `op` — the
     frame a furniture clip has animated OFF to — and the element vanishes from the out-point onward.
-    A clip with no outro of its own holds its settled frame instead, which is what the runtime does
-    on air (a degenerate `playOutro()` resolves immediately; the composition's exit animates the
-    element off). The guard is in `positionAt`, never in `clipPositionAt`: it selects WHICH mapping
+    A manual clip with no outro of its own retains its settled frame instead; Follow's continuous
+    scrub can reach its derived source end. A degenerate `playOutro()` resolves immediately and
+    the composition's exit animates the element off. The guard is in `positionAt`, never in
+    `clipPositionAt`: it selects WHICH mapping
     applies, exactly like the intro/outro selection itself. `hasOutro` is a driver option, computed
     once by the runtime — not re-derived from `outroStart >= op` at each site that needs it.
   - 🔴 **The composition's IN-POINT is not a special case**
@@ -543,9 +545,9 @@ override) on its **own** timeline.
   - **A `<video>` follows the playhead the same way** (§9.5 answered (a), 2026-08-13:
     position everywhere; the forward-1× hybrid was REJECTED — ONE mechanism for scrub,
     forward, backward and bounce). `tick` hands the SAME elapsed pair to
-    `VideoDriver.positionAt`, which resolves the clip time through `expectedClipMs` — the
-    same function the driver's own clock reconciles against on air — and seeks a PAUSED
-    element (never `play()`). Three video-specific points:
+    `VideoDriver.positionAt`, which resolves the continuous authoring view through
+    `positionedClipMs` and seeks a PAUSED element (never `play()`). The separate on-air
+    `expectedClipMs` applies lifecycle Hold policy. Three video-specific points:
     - **Skip, never queue.** A tick that finds `seeking()` true issues nothing — the
       canvas shows the NEAREST DECODABLE frame. That is the measured, specified contract
       (~10 distinct fps on a 1080p VP8+alpha element; the Preview stays the frame-true
@@ -557,9 +559,9 @@ override) on its **own** timeline.
       poster routine is kept as the LOAD path + seek-fragile recovery, but it chains a
       re-tick on settle, so the tick's seek always lands last and the canvas rests at the
       playhead's frame — including a build-on clip's transparent frame 0.
-    - A FOLLOW-source clip (`media-phases-follow-composition`) composes for free: the
-      derived window (`introStartMs`/`holdMs`/`outroEndMs`) is already inside
-      `expectedClipMs`, so the playhead shows the parked-at-`H` look the driver plays.
+    - A FOLLOW-source clip (`media-phases-follow-composition`) uses the same derived window
+      in both mappings. Actual Freeze parks at the derived Outro start; manual scrub walks
+      the source continuously, independently of the runtime Hold policy (D-186).
 - **Per-element lifespan visibility** (a `lifespan {in,out}` from a timeline start/end
   trim) is gated **per scope**. Each `FieldScope` owns a `lifespanGates` list, registered at
   BUILD time in `buildLayer` beside `scope.animated`, and that scope's controller evaluates
@@ -930,16 +932,18 @@ the whole lifecycle is deterministic under a fake clock.
 The composition lifecycle maps onto the animation's own frame space **by phase**
 (never rescaled onto `outPoint`): `play()` → `reset()`+`start()` drives
 `[introStart → introEnd]` once (`introStart` defaults to `ip`); the composition-owned HOLD
-**freezes** at `introEnd`, **loops** `[idleIn, idleOut]` when the element is checked, or advances
+**freezes** at `freezeTargetFrame ?? introEnd`, **loops** `[idleIn, idleOut]` when the element is checked, or advances
 once to its authored end when it is unchecked; `out()`/`stop()` → `playOutro()` drives
 `[outroStart → outroEnd]` once
 (`outroEnd` defaults to `op`).
 
 **The window bounds (`introStart` / `outroEnd`) exist for the FOLLOW phase source**
 (`media-phases-follow-composition`): a `phases.source: 'composition'` element derives
-its window from the composition's lifecycle anchors — intro `[H − entranceSpan → H]`,
-hold at `H` (`holdAt`, else the entrance span), outro `[H → min(H + outSpan, clipEnd)]`
-— through ONE derivation: `followWindowMs` (`@cg/shared-schema`, ms — video's native
+its window from the composition's lifecycle anchors — the clip head for the entrance span,
+the clip tail for the Outro span, and Middle between them. Legacy media `holdAt` and internal
+phase markers are ignored. Follow Freeze holds at the derived source Outro start; Loop uses
+the derived Middle when non-degenerate. The window has ONE derivation: `followWindowMs`
+(`@cg/shared-schema`, ms — video's native
 unit) + the `lottieFollowWindow` frames↔ms adapter (`@cg/lottie-bridge`). `runtime.ts`
 resolves it at driver construction (the settle aggregation is a PRE-PASS so the
 effective content start exists there), a follower contributes `settleOffset: null`
@@ -960,8 +964,9 @@ Two signals are kept deliberately separate:
 - **`whenComplete()`** — the content-driven HOLD contribution, and only when the
   element opts in with **`drivesHold === true`**. This is read as `=== true`, never
   `!== false`: the **inverse** default of ticker / clock / sequence (where absent ⇒
-  participates). A freeze Lottie completes at `introEnd`; an idle-loop Lottie never
-  completes (it holds until `stop()`, like an infinite ticker).
+  participates). A freeze Lottie completes when its entrance duration reaches `introEnd`,
+  independently of the frame painted for Hold. A valid idle-loop never completes; a
+  degenerate loop falls back to Freeze at `introEnd` (it cannot loop an empty span).
 - **`playOutro()`** — the exit seam, on every `out()`/`stop()` regardless of
   `drivesHold`.
 
@@ -978,11 +983,11 @@ are BUILT (no parent `holdOverrides` can resurrect it), and `collectElementOutro
 skips a hidden instance's whole subtree — so a Lottie under a hidden ANCESTOR is
 inert too, never stalling an exit for something nobody can see.
 
-**Boundary.** The seam lives in `out()` / `stop()`. A composition that ends its OWN
-content-driven / `auto-out` hold exits through `PlayoutController.startOutro()`,
-which does not route through the seam — the Lottie stays parked on its hold frame
-while the background closes (pinned by a characterization test; owner decision
-tracked as task 7.6).
+**Every exit shares the seam.** Operator `out()` / `stop()` and natural timed/content-driven
+exit converge on the same one-shot ledger. `PlayoutController.beforeOutro` awaits the visible
+scope subtree's element outros before its background leg; a non-final loop-cycle boundary
+visits only its own scope. `observeOutroGate` reports the forward composition cursor while
+Follow media owns that asynchronous exit, without restarting or repainting the media.
 
 ### wireScopeSubtree + RepeaterDriver — dynamic scope wiring (D-030)
 

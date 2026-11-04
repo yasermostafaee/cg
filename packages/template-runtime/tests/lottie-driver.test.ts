@@ -165,6 +165,78 @@ describe('LottieDriver — driven-frame render', () => {
     expect(handle.frames).toHaveLength(count);
   });
 
+  it('a derived Freeze target changes the held picture, not intro duration or completion', async () => {
+    const { driver, handle, clock } = makeDriver({
+      introEnd: 10,
+      freezeTargetFrame: 80,
+      outroStart: 80,
+      speed: 2,
+    });
+    driver.reset();
+    let complete = false;
+    void driver.whenComplete().then(() => {
+      complete = true;
+    });
+    driver.start();
+    clock.advance(40);
+    expect(last(handle)).toBe(8);
+    expect(complete).toBe(false);
+    clock.advance(10);
+    await Promise.resolve();
+    expect(last(handle)).toBe(80);
+    expect(complete).toBe(true);
+    driver.pause();
+    clock.advance(500);
+    driver.resume();
+    clock.advance(500);
+    expect(last(handle)).toBe(80);
+    const done = driver.playOutro();
+    expect(last(handle)).toBe(80);
+    clock.advance(50);
+    expect(last(handle)).toBe(90);
+    clock.advance(50);
+    await done;
+    expect(last(handle)).toBe(100);
+    driver.destroy();
+  });
+
+  it.each([0, 100])(
+    'honors the derived Freeze edge %s without inventing a different anchor',
+    (target) => {
+      const { driver, handle, clock } = makeDriver({ freezeTargetFrame: target });
+      driver.reset();
+      driver.start();
+      clock.advance(60);
+      expect(last(handle)).toBe(target);
+      driver.destroy();
+    },
+  );
+
+  it.each(['freeze', 'idle-loop', 'continue'] as const)(
+    'Follow scrub walks Middle once under %s policy',
+    (holdBehavior) => {
+      const { driver, handle } = makeDriver({
+        introStart: 10,
+        introEnd: 20,
+        outroStart: 80,
+        idleIn: 20,
+        idleOut: 80,
+        freezeTargetFrame: 80,
+        continuousMiddleScrub: true,
+        holdBehavior,
+      });
+      driver.positionAt(0, null);
+      expect(last(handle)).toBe(10);
+      driver.positionAt(200, null);
+      expect(last(handle)).toBe(30);
+      driver.positionAt(1_000, null);
+      expect(last(handle)).toBe(80);
+      driver.positionAt(0, 100);
+      expect(last(handle)).toBe(90);
+      driver.destroy();
+    },
+  );
+
   it('pause freezes the playhead; resume continues from that exact frame (no drift)', () => {
     const { driver, handle, clock } = makeDriver({ introEnd: 100 });
     driver.reset();

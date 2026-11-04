@@ -1422,14 +1422,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // subset that gates the hold (mirrors scopeLotties / holdLotties).
       const scopeVideos: VideoDriver[] = [];
       const holdVideos: VideoDriver[] = [];
-      // B-377/B-379/D-187 — a visible Follow Lottie retains the observer-only Content-start
-      // Freeze exception, while a Follow Video now freezes at its derived Outro start and reports
-      // the same composition Out-point cursor as native elements. Either kind may still own the
-      // composition-timed asynchronous Outro gate, so keep the two facts separate.
-      let followObserverFreezesAtHoldEntry = false;
+      // D-186 — every Freeze reports the composition Out point. A visible Follow media
+      // element can still own an asynchronous composition-timed Outro gate: observe that
+      // forward exit without changing paint or restarting any content driver.
       let followObserverHasOutro = false;
-      const noteFollowObserver = (hasOutro: boolean, freezesAtHoldEntry: boolean): void => {
-        if (freezesAtHoldEntry) followObserverFreezesAtHoldEntry = true;
+      const noteFollowObserver = (hasOutro: boolean): void => {
         if (hasOutro) followObserverHasOutro = true;
       };
       // `D-165` — this scope's sound drivers. None of them ever joins a hold array.
@@ -1541,6 +1538,16 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         const outroStart = fw !== null ? fw.outroStartFrame : (phasesEff?.outroStart ?? meta.op);
         const outroEnd = fw?.outroEndFrame;
         const hasOutro = fw !== null ? fw.window.hasOutro : outroStart < meta.op;
+        const holdBehaviorEff =
+          (effPlayout.holdBehavior ?? 'freeze') === 'freeze'
+            ? 'freeze'
+            : elementLoopsOnHold(effPlayout, l.element.id)
+              ? 'idle-loop'
+              : 'continue';
+        // Separate the held picture from introEnd so Follow Freeze agrees with Video
+        // without stretching the entrance or delaying its content-completion signal.
+        const freezeTargetFrame =
+          fw !== null && holdBehaviorEff === 'freeze' ? fw.outroStartFrame : undefined;
         // D-125 — the STATIC canvas poster frame. When phase markers define the hold
         // start (`introEnd`, fully ON) park there. ABSENT markers `introEnd` fell back to
         // `op` (the LAST frame): for a real AE furniture clip that animates OFF in its
@@ -1551,9 +1558,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         // D-135 — the midpoint comes from `@cg/lottie-bridge`, which is also where the
         // Designer's manual-phase SEED reads it. One definition: if the two drifted,
         // converting a marker-less clip to manual phases would move its picture.
-        // Under follow the poster IS the derived H — the held look, by definition.
+        // Follow Freeze uses the derived Outro-start picture; Loop/Continue keep Hold entry.
         const posterFrame =
-          fw !== null ? fw.holdFrame : (phasesEff?.introEnd ?? lottieClipMidpoint(meta));
+          fw !== null
+            ? (freezeTargetFrame ?? fw.holdFrame)
+            : (phasesEff?.introEnd ?? lottieClipMidpoint(meta));
         const driver = new LottieDriver({
           handle,
           fr: meta.fr,
@@ -1563,6 +1572,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           introStart,
           introDelayMs: fw?.introDelayMs,
           introEnd,
+          freezeTargetFrame,
+          continuousMiddleScrub: fw !== null,
           outroStart,
           outroEnd,
           // D-135 — the SAME `hasOutro` the `cgOutro` guard and the scope's outro ledger
@@ -1571,12 +1582,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           hasOutro,
           idleIn,
           idleOut,
-          holdBehavior:
-            (effPlayout.holdBehavior ?? 'freeze') === 'freeze'
-              ? 'freeze'
-              : elementLoopsOnHold(effPlayout, l.element.id)
-                ? 'idle-loop'
-                : 'continue',
+          holdBehavior: holdBehaviorEff,
           posterFrame,
           clock: options.clock,
         });
@@ -1590,7 +1596,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         scopeLotties.push(driver);
         lotties.push(driver);
         if (l.element.visible !== false && fw !== null) {
-          noteFollowObserver(fw.window.hasOutro, true);
+          noteFollowObserver(fw.window.hasOutro);
         }
         // `B-150` — a Lottie is a DRIVEN-FRAME renderer: hidden, it goes on computing a
         // frame per tick and pushing `goToAndStop` into a node nobody can see. No audio, so
@@ -1825,7 +1831,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         scopeVideos.push(driver);
         videos.push(driver);
         if (el.visible !== false && vw !== null) {
-          noteFollowObserver(vw.hasOutro, false);
+          noteFollowObserver(vw.hasOutro);
         }
         /*
           `B-150` — the video joins the look park. The ONE kind with sound, so it is the one
@@ -2257,7 +2263,6 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
                   // Observation is non-authoritative and must stay inert on air.
                 }
               },
-              ...(followObserverFreezesAtHoldEntry ? { observeFreezeAtHoldEntry: true } : {}),
               ...(followObserverHasOutro ? { observeOutroGate: true } : {}),
             }
           : {}),

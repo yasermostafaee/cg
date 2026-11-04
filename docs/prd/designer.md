@@ -6293,6 +6293,12 @@ forward through Outro from Out point without wrapping to Content start or jumpin
 element-specific frame; manual timeline scrub remains a continuous one-pass view through the media
 Middle.
 
+**2026-11-04 parity follow-up:** Follow Lottie now uses the same composition-derived Freeze anchor
+as Video/native elements without extending entrance completion. Manual Follow scrub traverses Middle
+once; actual Loop playback and detached/manual-media mapping remain distinct. Focused runtime,
+Inspector and real-browser evidence is recorded in the change's tasks; final gate and carrying-commit
+Linux verification must be recorded there before this item is considered ready to close.
+
 ## [~] D-187 — Hold behaviour belongs to the composition while selected elements repeat independently ⟨priority: high — mixed Hold playback must not rewind unrelated elements, 2026-11-02; Freeze clarified 2026-11-03⟩ — `openspec/changes/move-hold-behavior-to-composition/`
 
 **What:** author **Freeze** or **Loop middle** once in the composition's Playback section. Under

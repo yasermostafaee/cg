@@ -187,6 +187,41 @@ describe('composition-owned media timing', () => {
     });
   });
 
+  it('reports Lottie Freeze at derived Outro start without changing its entrance or Detach', () => {
+    mount(
+      lottieEl({ phases: { source: 'composition', introEnd: 12, outroStart: 20, holdAt: 18 } }),
+    );
+    expect(host.querySelector('[data-testid="follow-hold-readout"]')?.textContent).toContain(
+      'Hold 1.4s · frame 42 · freezes',
+    );
+    expect(button(/set hold|clear hold/i)).toBeNull();
+    click(button(/detach/i)!);
+    expect((stored('lot') as LottieElement).phases).toMatchObject({
+      introEnd: 30,
+      outroStart: 42,
+      source: 'manual',
+    });
+  });
+
+  it('describes the degenerate Loop fallback without claiming the true Freeze target', () => {
+    mount(
+      lottieEl({ phases: { source: 'composition' } }),
+      { contentStart: 25, outPoint: 40 },
+      25,
+      100,
+      'loop',
+    );
+    expect(host.querySelector('[data-testid="follow-hold-readout"]')?.textContent).toContain(
+      'Hold 1s · frame 30 · freezes',
+    );
+    click(host.querySelector<HTMLButtonElement>('[aria-label="About Follow composition timing"]')!);
+    const help = document.querySelector('[data-testid="info-tip-body"]')?.textContent;
+    expect(help).toContain('There is no Middle span to loop.');
+    expect(help).toContain('holds at the entrance end, 1s, until exit starts at 0s');
+    expect(help).not.toContain('Freeze holds at the derived Outro start');
+    expect(help).not.toContain('exit continues forward from the same frame');
+  });
+
   it('attaches a phase-less Video and shows derived time plus source frame', () => {
     mount(videoEl(), undefined, 25, 100, 'loop');
     click(button(/follow composition/i)!);

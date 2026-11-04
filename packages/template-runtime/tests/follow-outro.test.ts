@@ -391,7 +391,7 @@ describe('session V — the LOTTIE mirror: the same wiring plays the follow outr
     await r.play({});
     await run(clock, 900);
     const held = handles[0]!.frames.at(-1);
-    expect(held).toBe(50);
+    expect(held).toBe(0); // D-186: the whole-clip Outro starts at 0, and Freeze uses that boundary
 
     const outP = r.out();
     // Session Y: outSpan 1.56 s ≥ the 1 s clip ⇒ the WHOLE clip is the outro [0 → 100]
@@ -465,7 +465,7 @@ describe('session V — the FOUND SEAM, pinned: outPoint at the active end ⇒ N
       lottieAssets,
     });
     r.tick(100); // past the out point on the ruler
-    expect(handles[0]!.frames.at(-1)).toBe(50); // held at the composition-derived boundary
+    expect(handles[0]!.frames.at(-1)).toBe(100); // Follow scrub walks once to the derived clip end
     r.remove();
   });
 });

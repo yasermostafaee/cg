@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { Locator } from '@playwright/test';
 import { expect, test, type DesignerApp } from './fixtures/designer.js';
 
 /**
@@ -49,6 +50,76 @@ function lottie(markers: { tm: number; cm: string; dr: number }[] = []): string 
     ],
     markers,
   });
+}
+
+/** A moving solid makes the held picture observable, not just the controller's telemetry. */
+function movingLottie(): string {
+  return JSON.stringify({
+    v: '5.7.0',
+    fr: 50,
+    ip: 0,
+    op: 120,
+    w: 200,
+    h: 100,
+    nm: 'freeze-parity',
+    ddd: 0,
+    assets: [],
+    layers: [
+      {
+        ddd: 0,
+        ind: 1,
+        ty: 1,
+        nm: 'moving-solid',
+        sr: 1,
+        ks: {
+          o: { a: 0, k: 100 },
+          r: { a: 0, k: 0 },
+          p: {
+            a: 1,
+            k: [
+              {
+                t: 0,
+                s: [10, 50, 0],
+                e: [190, 50, 0],
+                o: { x: 0.33, y: 0.33 },
+                i: { x: 0.67, y: 0.67 },
+              },
+              { t: 120, s: [190, 50, 0] },
+            ],
+          },
+          a: { a: 0, k: [10, 50, 0] },
+          s: { a: 0, k: [100, 100, 100] },
+        },
+        ao: 0,
+        sw: 20,
+        sh: 100,
+        sc: '#33aadd',
+        ip: 0,
+        op: 120,
+        st: 0,
+        bm: 0,
+      },
+    ],
+  });
+}
+
+const paintedX = (svg: Locator): Promise<number> =>
+  svg.evaluate((node) => (node as SVGGraphicsElement).getBBox().x);
+
+async function createMovingFollowProject(app: DesignerApp, name: string): Promise<number> {
+  await createFollowProject(app, name);
+  await app.dragContentStartMarkerToFraction(0.2);
+  await importAndPlace(app, 'freeze-parity.json', movingLottie());
+  await app.inspector.getByRole('button', { name: 'Follow composition' }).click();
+  await app.deselect();
+  const outText = await app.inspector
+    .getByText('Outro start', { exact: true })
+    .locator('..')
+    .textContent();
+  const outPoint = Number(/frame\s+(\d+)/i.exec(outText ?? '')?.[1]);
+  expect(outPoint).toBeGreaterThan(60);
+  expect(outPoint).toBeLessThan(150);
+  return outPoint;
 }
 
 async function importAndPlace(app: DesignerApp, filename: string, body: string): Promise<void> {
@@ -108,6 +179,98 @@ async function createFollowProject(app: DesignerApp, name: string): Promise<void
 }
 
 test.describe('D-176 — one clear Follow composition path', () => {
+  test('D-186 — Follow Lottie scrubs continuously and freezes the real Canvas and Preview picture at Out', async ({
+    app,
+  }) => {
+    const outPoint = await createMovingFollowProject(app, 'LottieFreezePicture');
+    await app.setPlayoutTiming('manual');
+    const canvasSvg = app.canvasFrame.locator('[data-cg-element-id] svg').first();
+    await app.scrubToFrame(30);
+    await expect.poll(() => paintedX(canvasSvg)).toBeGreaterThan(30);
+    const atThirty = await paintedX(canvasSvg);
+    await app.scrubToFrame(45);
+    // The old Follow mapping parked every post-Intro scrub on the same source frame.
+    await expect.poll(() => paintedX(canvasSvg)).toBeGreaterThan(atThirty + 10);
+    const atFortyFive = await paintedX(canvasSvg);
+    await app.scrubToFrame(outPoint);
+    await expect.poll(() => paintedX(canvasSvg)).toBeGreaterThan(atFortyFive + 10);
+    const heldPicture = await paintedX(canvasSvg);
+    await app.scrubToFrame(0);
+
+    const ruler = app.page.getByRole('slider', { name: 'Frame ruler' });
+    const transport = app.page.getByLabel('Playback transport');
+    await transport.getByRole('button', { name: 'Play', exact: true }).click();
+    await expect(ruler).toHaveAttribute('aria-valuenow', String(outPoint));
+    await expect.poll(() => paintedX(canvasSvg)).toBeCloseTo(heldPicture, 1);
+    await transport.getByRole('button', { name: 'Pause', exact: true }).click();
+    await app.page.waitForTimeout(150);
+    await expect(ruler).toHaveAttribute('aria-valuenow', String(outPoint));
+    await expect.poll(() => paintedX(canvasSvg)).toBeCloseTo(heldPicture, 1);
+    await transport.getByRole('button', { name: 'Play', exact: true }).click();
+    await expect(ruler).toHaveAttribute('aria-valuenow', String(outPoint));
+    await expect.poll(() => paintedX(canvasSvg)).toBeCloseTo(heldPicture, 1);
+    // Canvas offers Pause/scrub, not a broadcast Stop. Releasing its lifecycle restores
+    // authoring position; the dedicated Preview below exercises the operator's Stop/Outro.
+    await transport.getByRole('button', { name: 'Pause', exact: true }).click();
+    await app.scrubToFrame(0);
+    await expect.poll(() => paintedX(canvasSvg)).toBeCloseTo(0, 1);
+    await expect(transport.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
+
+    await app.openPreviewModal();
+    const previewSvg = app.previewFrame.locator('[data-cg-element-id] svg').first();
+    const counter = app.previewDialog.getByLabel('Preview frame');
+    await app.play();
+    await expect(counter).toContainText(`${String(outPoint)} / 150`);
+    await expect.poll(() => paintedX(previewSvg)).toBeCloseTo(heldPicture, 1);
+    await app.pause();
+    await app.page.waitForTimeout(150);
+    await expect(counter).toContainText(`${String(outPoint)} / 150`);
+    await expect.poll(() => paintedX(previewSvg)).toBeCloseTo(heldPicture, 1);
+    await app.play();
+    await app.stop();
+    await expect.poll(() => paintedX(previewSvg)).toBeGreaterThan(heldPicture + 1);
+    await expect(app.previewFrame.locator('body')).toHaveClass(/cg-pending/);
+  });
+
+  test('D-186 — a timed Follow Lottie exit advances forward from the frozen picture', async ({
+    app,
+  }) => {
+    const outPoint = await createMovingFollowProject(app, 'LottieTimedFreeze');
+    await app.setPlayoutTiming('auto-out');
+    await app.setHoldSource('timed');
+    const hold = app.inspector.getByRole('spinbutton', { name: 'Hold duration in milliseconds' });
+    await hold.fill('1000');
+    await hold.press('Enter');
+    const svg = app.canvasFrame.locator('[data-cg-element-id] svg').first();
+    await app.scrubToFrame(outPoint);
+    await expect.poll(() => paintedX(svg)).toBeGreaterThan(100);
+    const heldPicture = await paintedX(svg);
+    await app.scrubToFrame(0);
+    const ruler = app.page.getByRole('slider', { name: 'Frame ruler' });
+    await ruler.evaluate((node) => {
+      const samples: number[] = [];
+      Object.assign(window, { __cgLottieFreezeSamples: samples });
+      new MutationObserver(() => samples.push(Number(node.getAttribute('aria-valuenow')))).observe(
+        node,
+        { attributes: true, attributeFilter: ['aria-valuenow'] },
+      );
+    });
+    const transport = app.page.getByLabel('Playback transport');
+    await transport.getByRole('button', { name: 'Play', exact: true }).click();
+    await expect(ruler).toHaveAttribute('aria-valuenow', String(outPoint));
+    await expect.poll(() => paintedX(svg)).toBeCloseTo(heldPicture, 1);
+    await expect.poll(() => paintedX(svg)).toBeGreaterThan(heldPicture + 1);
+    await expect(transport.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
+    const samples = await app.page.evaluate(
+      () =>
+        (window as typeof window & { __cgLottieFreezeSamples?: number[] })
+          .__cgLottieFreezeSamples ?? [],
+    );
+    const afterHold = samples.slice(samples.indexOf(outPoint));
+    expect(afterHold.some((frame) => frame > outPoint && frame < 150)).toBe(true);
+    expect(afterHold.every((frame) => frame >= outPoint)).toBe(true);
+  });
+
   test('marker-less media offers Follow only; compact timing and Detach stay clear', async ({
     app,
   }) => {

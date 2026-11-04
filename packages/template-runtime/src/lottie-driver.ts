@@ -12,14 +12,15 @@ import { OUTRO_BACKSTOP_MARGIN_MS } from './video-driver.js';
  * whole thing is deterministic under a fake clock.
  *
  * On `start()` the intro plays `[ip, introEnd]` ONCE; then the element HOLDS —
- * FREEZING at `introEnd` (default) or LOOPING the idle segment `[idleIn, idleOut]`.
+ * FREEZING at `freezeTargetFrame ?? introEnd` or LOOPING the idle segment `[idleIn, idleOut]`.
+ * Follow Freeze derives that picture from the source Outro start without changing intro timing.
  *
  * D-125 PHASE 2 — the composition IN/HOLD/OUT mapping is complete (§D1):
  *
  * | Composition phase | Trigger  | This driver                                 |
  * | ----------------- | -------- | ------------------------------------------- |
  * | IN                | `play()` | `reset()` + `start()` — `[ip → introEnd]`   |
- * | HOLD              | intro end | freeze at `introEnd`, or loop the idle span |
+ * | HOLD              | intro end | freeze at the target, or loop the idle span |
  * | OUT               | `out()` / `stop()` | `playOutro()` — `[outroStart → op]` |
  *
  * The OUT segment is mapped BY PHASE, never rescaled onto the composition's
@@ -45,22 +46,25 @@ export interface LottieDriverOptions {
   speed: number;
   /**
    * media-phases-follow-composition — where the INTRO WINDOW begins. Defaults to `ip` (the
-   * shipped behaviour for every markers/manual clip). A FOLLOW-source clip's window is anchored
-   * at the hold time `H`: the intro is `[H − entranceSpan → H]`, skipping as much of the clip's
-   * head as the composition's entrance cannot fit — so the clip reaches its hold look EXACTLY
-   * at the effective content start. Honoured inside {@link clipPositionAt} (and `reset()`'s
+   * shipped behaviour for every markers/manual clip). A FOLLOW-source clip's entrance window
+   * starts at the clip in-point and ends after the composition entrance span. Its Freeze target
+   * is a separate derived boundary, never an extension of that entrance. Honoured inside
+   * {@link clipPositionAt} (and `reset()`'s
    * park frame) ONLY — the one mapping, never a branch beside it.
    */
   introStart?: number | undefined;
   /**
-   * Session Y — comp-side WAIT (ms of active time) before the intro starts: a follow clip
-   * whose AUTHORED intro is shorter than the entrance parks on the intro start frame, then
-   * plays so the intro FINISHES at the content start. Honoured inside {@link clipPositionAt}
-   * only — the one mapping, never beside it. Default 0.
+   * Optional comp-side WAIT (ms of active time) before the intro starts. A delayed entrance
+   * parks on its start frame before playing. Honoured inside {@link clipPositionAt} only;
+   * current composition-derived Follow windows use zero.
    */
   introDelayMs?: number | undefined;
   /** Frame where the intro ends and the hold begins (`ip ≤ introEnd ≤ op`). */
   introEnd: number;
+  /** Runtime-derived Follow Freeze picture; independent of the intro's duration/completion. */
+  freezeTargetFrame?: number | undefined;
+  /** Follow's manual authoring scrub walks Middle once, independently of lifecycle Hold policy. */
+  continuousMiddleScrub?: boolean | undefined;
   /**
    * D-125 §D1 — frame where the OUTRO begins; `playOutro()` drives `[outroStart → op]`
    * once. `outroStart >= op` means the element has NO outro (a marker-less clip, or an
@@ -70,10 +74,10 @@ export interface LottieDriverOptions {
   outroStart: number;
   /**
    * media-phases-follow-composition — where the OUTRO WINDOW ends. Defaults to `op` (the
-   * shipped behaviour). A FOLLOW-source clip's outro is `[H → min(H + outSpan, clipEnd)]` —
-   * CONTINUOUS from the held frame (no hold→outro pop by construction) and sized to the
+   * shipped behaviour). A FOLLOW-source clip's outro is the source tail sized to the
    * composition's OUT segment, so `playOutro()` resolves at `outroEnd`, never driving on to a
-   * clip tail the OUT segment has no time for. Honoured inside {@link clipPositionAt} only.
+   * clip tail the OUT segment has no time for. Follow Freeze holds at that tail's start.
+   * Honoured inside {@link clipPositionAt} only.
    */
   outroEnd?: number | undefined;
   /**
@@ -84,8 +88,8 @@ export interface LottieDriverOptions {
    *
    * FALSE is the DEGENERATE outro: a marker-less clip, or an outro-start authored at the
    * last frame. The element then has no exit of its own — `playOutro()` resolves
-   * immediately (§D6.4.1) and the composition's own exit animates it off — so the frame
-   * it holds is the HOLD frame, never `op`.
+   * immediately (§D6.4.1) and the composition's own exit animates it off. Manual clips retain
+   * their existing Hold picture; Follow Freeze can hold `op` when that is its derived target.
    */
   hasOutro: boolean;
   /** Idle-loop range start (only used for `holdBehavior: 'idle-loop'`). */
@@ -95,8 +99,8 @@ export interface LottieDriverOptions {
   /** HOLD behaviour after the intro: freeze, loop the idle segment, or continue once to end. */
   holdBehavior: 'freeze' | 'idle-loop' | 'continue';
   /**
-   * D-125 — the frame the STATIC editor canvas parks on (a design surface that never
-   * plays). Defaults to {@link introEnd}. The runtime passes the clip MIDPOINT for a
+   * D-125 — the pre-tick poster frame. Defaults to {@link introEnd}. The runtime passes
+   * the derived Freeze target for Follow Freeze and the clip MIDPOINT for a
    * MARKER-LESS clip, whose {@link introEnd} falls back to `op` (the LAST frame) — often
    * the outro-END, where a real AE "furniture" clip has animated the graphic OFF
    * (invisible). Parking there shows an empty box; the midpoint sits in the visible held
@@ -299,8 +303,9 @@ export class LottieDriver {
    * {@link playOutro} (the exit seam). The runtime contributes this to the hold
    * aggregation ONLY when the element opts in with `drivesHold === true`.
    *
-   * - A **freeze** Lottie resolves when the intro reaches `introEnd` (the hold frame)
-   *   — the self-contained-sting case: hold ends at intro-end ⇒ auto-out ⇒ outro plays.
+   * - A **freeze** Lottie resolves when the entrance duration reaches `introEnd`, painting
+   *   `freezeTargetFrame ?? introEnd`. Follow's held picture never delays that completion.
+   *   The self-contained-sting case then auto-outs and plays its outro.
    * - A **continue** Lottie resolves after advancing once to its authored end.
    * - An **idle-loop** Lottie NEVER resolves: it holds until `stop()`, exactly like an infinite
    *   ticker.
@@ -385,14 +390,13 @@ export class LottieDriver {
   /**
    * D-135 — THE frame mapping, and the reason it is a function of its own: the
    * driver's clock (`tick`) and the Designer's PLAYHEAD ({@link positionAt}) resolve
-   * the clip frame through THIS call and no other. D-135's acceptance is that scrub
-   * and play agree; the cheapest way to guarantee that is for there to be nothing to
-   * reconcile — so a second copy of this arithmetic, however faithful, defeats the
-   * requirement even while producing identical numbers today.
+   * the clip frame through THIS arithmetic and no other. D-186 deliberately separates
+   * Follow's manual-scrub policy (walk Middle once) from actual Hold (Freeze/Loop/Continue).
+   * Rate, elapsed time and window bounds stay shared; manual/non-Follow policy stays unchanged.
    *
    * PURE: it reads `this.o` and its arguments, and touches no driver state.
    */
-  private clipPositionAt(elapsedMs: number, mode: 'intro' | 'outro'): ClipPosition {
+  private clipPositionAt(elapsedMs: number, mode: 'intro' | 'outro', scrub = false): ClipPosition {
     const { ip, fr, speed, introEnd, holdBehavior, idleIn, idleOut, outroStart, op } = this.o;
     // media-phases-follow-composition — the WINDOW bounds. Both default to the clip's own
     // (`ip` / `op`), so every markers/manual clip maps exactly as it always has; a FOLLOW
@@ -423,6 +427,12 @@ export class LottieDriver {
         : { frame: outroEnd, phase: 'outro-end' };
     }
     const frame = introStart + advanced;
+    // D-186 — Follow scrub is an authoring view, not a running Hold. Reuse the same
+    // elapsed/rate/window arithmetic, but walk Middle once rather than freezing or wrapping.
+    // Manual/non-Follow clips keep their established lifecycle-equivalent scrub mapping.
+    if (scrub && this.o.continuousMiddleScrub === true) {
+      return { frame: Math.min(frame, Math.max(introEnd, outroStart)), phase: 'intro' };
+    }
     if (frame < introEnd) return { frame, phase: 'intro' };
     // The intro has played out — HOLD.
     if (holdBehavior === 'continue') {
@@ -437,8 +447,9 @@ export class LottieDriver {
       const idleFrames = advanced - (introEnd - introStart);
       return { frame: idleIn + (idleFrames % span), phase: 'idle-loop' };
     }
-    // FREEZE — clamp to the hold frame.
-    return { frame: introEnd, phase: 'freeze-hold' };
+    // FREEZE — Follow parks at its derived Outro start; manual clips retain introEnd.
+    // Keep the entrance timing above intact: changing introEnd would delay completion.
+    return { frame: this.o.freezeTargetFrame ?? introEnd, phase: 'freeze-hold' };
   }
 
   private tick(): void {
@@ -474,11 +485,10 @@ export class LottieDriver {
   }
 
   /**
-   * D-135 — POSITION the clip at the Designer playhead, through the same mapping the
-   * driver's own clock uses ({@link clipPositionAt}). The Designer canvas has no
-   * `play()` path at all — its transport advances the store's frame and the canvas
-   * posts one `scrub` per change — so SCRUB and PLAY on that surface are the same
-   * stream of calls into here, which is precisely why they cannot disagree.
+   * D-135 / D-186 — POSITION the clip at the manually moved Designer playhead, through
+   * shared elapsed/rate/window arithmetic ({@link clipPositionAt}). Follow scrub walks Middle
+   * once without applying lifecycle Hold policy. Canvas Play instead runs the real lifecycle,
+   * like Preview/output; manual/non-Follow scrub preserves its established phase policy.
    *
    * `introElapsedMs` is time since the composition's IN (the frame `play()` would have
    * reset+started this clip at). `outroElapsedMs`, when non-null, is time since the
@@ -519,13 +529,12 @@ export class LottieDriver {
     // `playOutro()` resolves immediately (§D6.4.1), leaving the HOLD frame painted while
     // the composition's own exit animates the element off.
     //
-    // With the intro mapping, elapsed keeps growing past the out-point and
-    // `clipPositionAt` returns `freeze-hold` (or keeps cycling an idle-loop) — the
-    // correct picture, falling out of the shipped mapping rather than special-cased into
-    // it.
+    // With the intro mapping, manual clips retain their Hold policy past the out-point.
+    // Follow's continuous scrub instead walks to the derived source boundary, even if
+    // that boundary is the clip end. No completion or lifecycle is driven by this paint.
     const pos =
       outroElapsedMs === null || !this.o.hasOutro
-        ? this.clipPositionAt(introElapsedMs, 'intro')
+        ? this.clipPositionAt(introElapsedMs, 'intro', true)
         : this.clipPositionAt(outroElapsedMs, 'outro');
     this.paint(pos.frame);
   }

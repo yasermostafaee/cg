@@ -33,3 +33,19 @@ driver.
 - **THEN** the root cursor advances from Out point through the composition Outro
 - **AND** it does not first wrap or jump back to Content start
 - **AND** a collapsed background leg does not replay that telemetry range
+
+#### Scenario: Follow Lottie holds the rendered Out-point picture
+
+- **GIVEN** a Follow Lottie visibly changes between Content start and its derived Outro start
+- **WHEN** Canvas or Preview reaches a Freeze Hold
+- **THEN** the actual rendered Lottie picture matches its composition Out-point mapping
+- **AND** the root cursor stays at Out point through Pause and Resume
+- **AND** operator Stop or timed completion continues its Outro forward from that picture
+
+#### Scenario: Manual Follow Lottie scrub remains a one-pass authoring view
+
+- **WHEN** the author scrubs a Follow Lottie through the composition Middle
+- **THEN** the clip advances continuously once, bounded by its derived Outro start
+- **AND** lifecycle Freeze or Loop middle does not park or wrap the manual scrub
+- **AND** actual Loop-middle playback still advances and wraps its authored derived window
+- **AND** detached/manual-media playback and scrub retain their existing phase mapping

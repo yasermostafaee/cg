@@ -107,8 +107,14 @@ triage, not automatically explained away by the reboot. The remaining batch stat
       was needed. Both corrected cases subsequently pass in the controlled run recorded below.
 - [x] 3.2 Re-run controlled, single-worker acceptance after the loop-contrast and second league-revision
       follow-ups, then collect current final-gate evidence.
-- [ ] 3.3 Complete final review and push only after the required local checks; Linux E2E remains owed
-      until a completed green carrying-commit run is recorded. No push is claimed for this WIP snapshot.
+- [x] 3.3 Complete final review and push only after the required local checks; Linux E2E remains owed
+      until a completed green carrying-commit run is recorded. Commit `877da2c4` is pushed and the
+      remote `dev` SHA is independently verified. Its pre-push gate
+      `gate-20261104T192802Z-1232.log` finishes with exit 0, 103/103 uncached tasks and 141 strict
+      OpenSpec items in 705.8 seconds. The live Designer landing displays this revision.
+      [Carrying-commit CI](https://github.com/yasermostafaee/cg/actions/runs/41899115160) is in progress;
+      its Docs and full Lint/Typecheck/Test/Build jobs have completed successfully, but the actual
+      Linux E2E step has not completed. Desktop is deliberately skipped, not released.
 
 The isolated worktree and edits survived. Designer's local service was restored after reboot;
 service availability alone does not complete browser acceptance or final validation.
@@ -179,6 +185,6 @@ scan and all 141 strict OpenSpec items pass. This is local validation, not a pus
 Owner sequencing: continue the remaining verification, then address the forthcoming Repeater reports
 before preparing installers. No installer build has been requested for this intermediate snapshot.
 
-D-186 Follow-media Freeze parity remains an existing, separate debt in
-`../align-follow-media-cursor-and-freeze-frame/tasks.md`; this integration/follow-up does not mark
-its pending verification complete or imply that it was repaired.
+D-186 Follow-media Freeze parity is a separate follow-up under
+`../align-follow-media-cursor-and-freeze-frame/tasks.md`, begun after the verified integration push.
+Commit `877da2c4` does not contain that correction or discharge its verification.
