@@ -123,10 +123,55 @@ test('🔴 §9 — 50,000 rows: explicit 25-row pages, server filters, and live 
   await expect(log.locator('[data-audit-rows]')).toHaveAttribute('data-audit-held', '25');
   await expect(itemOf(0).locator('[data-audit-channel]')).toHaveText('CH 1');
   await expect(itemOf(0)).not.toContainText('View details');
+  const columnNames = ['channel', 'time', 'actor', 'action', 'item', 'result'] as const;
+  await expect
+    .poll(async () =>
+      log
+        .locator('[data-audit-head] [data-audit-column]')
+        .evaluateAll((cells) => cells.map((cell) => cell.getAttribute('data-audit-column'))),
+    )
+    .toEqual(columnNames);
+  for (const column of columnNames) {
+    const heading = await log.locator(`[data-audit-column="${column}"]`).boundingBox();
+    const value = await itemOf(0).locator(`[data-audit-cell="${column}"]`).boundingBox();
+    expect(heading, `${column} heading has geometry`).not.toBeNull();
+    expect(value, `${column} value has geometry`).not.toBeNull();
+    expect(
+      Math.abs((heading?.x ?? 0) - (value?.x ?? 0)),
+      `${column} heading aligns with its value`,
+    ).toBeLessThanOrEqual(1);
+  }
+  const itemBox = await itemOf(0).locator('[data-audit-cell="item"]').boundingBox();
+  const resultBox = await itemOf(0).locator('[data-audit-cell="result"]').boundingBox();
+  expect(itemBox, 'Item has geometry with details open').not.toBeNull();
+  expect(resultBox, 'Result has geometry with details open').not.toBeNull();
+  expect((itemBox?.x ?? 0) + (itemBox?.width ?? 0)).toBeLessThanOrEqual((resultBox?.x ?? 0) + 1);
+  await expect(itemOf(0).locator('[data-audit-cell="item"]')).toHaveCSS('overflow', 'hidden');
+
+  const footerBox = await log.locator('[data-audit-footer]').boundingBox();
+  const pagerBox = await log.getByLabel('Audit pages').boundingBox();
+  const closeBox = await log.locator('[data-audit-close]').boundingBox();
+  expect(footerBox, 'the Audit footer has geometry').not.toBeNull();
+  expect(pagerBox, 'Previous/Next have geometry').not.toBeNull();
+  expect(closeBox, 'Close has geometry').not.toBeNull();
+  const footerCentre = (footerBox?.x ?? 0) + (footerBox?.width ?? 0) / 2;
+  const pagerCentre = (pagerBox?.x ?? 0) + (pagerBox?.width ?? 0) / 2;
+  expect(Math.abs(footerCentre - pagerCentre), 'Previous/Next stay centred').toBeLessThanOrEqual(1);
+  expect(
+    (closeBox?.x ?? 0) - ((pagerBox?.x ?? 0) + (pagerBox?.width ?? 0)),
+    'Previous/Next are separated from Close',
+  ).toBeGreaterThan(24);
+
+  await itemOf(0).click();
+  await expect(itemOf(0)).toHaveAttribute('aria-pressed', 'false');
+  await expect(log.locator('[data-audit-details]')).toHaveCount(0);
+  await itemOf(0).click();
+  await expect(itemOf(0)).toHaveAttribute('aria-pressed', 'true');
+  await expect(log.locator('[data-audit-details]')).toBeVisible();
   // Opening the dialog can leave the pointer over its first row, depending on the viewport.
   // Measure the resting colour from a known pointer position before proving the hover state.
   await page.mouse.move(0, 0);
-  const hoverTarget = itemOf(1); // Row 1 is selected automatically to populate Event details.
+  const hoverTarget = itemOf(1); // Row 0 is selected automatically; row 1 remains a hover control.
   const restBackground = await hoverTarget.evaluate(
     (element) => getComputedStyle(element).backgroundColor,
   );

@@ -219,6 +219,8 @@ describe('C-038 — the census: every route, classified', () => {
     expect(read).toEqual([
       'air.emptied',
       'app.info',
+      // `R-083` — the independently filtered total is a read, scoped by the same grant as its page.
+      'audit.count',
       'audit.health',
       // `CONSOLE-POLISH-01` (`R-083`) — the Log a page at a time: a read, scoped by the grant.
       'audit.page',

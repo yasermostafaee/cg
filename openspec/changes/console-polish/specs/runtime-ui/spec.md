@@ -121,6 +121,10 @@ the default `Layer N` / `Bed N`), or â€” for a layer outside the declared bank â
 the fact that it is not a row stated, and SHALL name the template as the picker names it. The table SHALL
 keep operator-facing names, coordinate and outcome; selecting the row SHALL move its item id, template id,
 actor id, hashes, command and other technical facts into the persistent details pane, complete and copyable.
+Channel SHALL be the first column. Every heading SHALL align with its own row values, and Item content SHALL
+remain contained before Result even while the details pane narrows the table. Pressing the selected row again
+SHALL deselect it and close the details pane. Previous/Next SHALL remain centred in the dialog footer,
+independent of the Close action.
 The record on disk SHALL be unchanged.
 
 #### Scenario: The incident stamp reads as the control room clock
@@ -142,6 +146,12 @@ The record on disk SHALL be unchanged.
 
 - **WHEN** an entry is selected **THEN** the details pane shows every id it carries in full and a copy
   control writes the full value, while the table row does not expose those internal ids as its sentence
+
+#### Scenario: The table stays readable with details open
+
+- **WHEN** a row with a long item name is selected **THEN** Channel is the first column, every heading aligns
+  with its value, Item does not overlap Result, and Previous/Next remain centred away from Close
+- **WHEN** that selected row is pressed again **THEN** it is deselected and the details pane closes
 
 #### Scenario: A refused command is shown beside its code
 

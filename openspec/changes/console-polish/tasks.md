@@ -140,6 +140,9 @@ was stashed before each push so the gate judged only what was pushed.
 - [x] 7A.6 Owner follow-up: remove the repeated `View details` text, make the row hover/click affordance
       explicit, add the Playout channel-name column, and show the exact independently loaded filtered total;
       cover the wire, bridge grant, DOM and Chromium paths
+- [x] 7A.7 Owner visual follow-up: put Channel first; align every header with its row value; contain long
+      Item content before Result while details is open; let a second click deselect a row; and centre
+      Previous/Next independently of Close. Pin the order, toggle and real-browser geometry.
 
 ## 8. Close
 

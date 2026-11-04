@@ -326,7 +326,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
       frame="fixed"
       onClose={onClose}
       footer={
-        <>
+        <div className="cg-audit-footer" data-audit-footer="">
           <span className="cg-audit-foot-info">
             {read.kind === 'ready' ? (
               <span data-audit-count={String(entries.length)}>{eventCount(entries.length)}</span>
@@ -376,10 +376,10 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
               Next <Icon icon={ChevronRight} flipRtl />
             </Button>
           </div>
-          <ModalAction actionRole="cancel" onClick={onClose}>
+          <ModalAction actionRole="cancel" onClick={onClose} data-audit-close="">
             Close
           </ModalAction>
-        </>
+        </div>
       }
     >
       <div className="cg-audit-tools">
@@ -488,17 +488,18 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
       <div className="cg-audit-browser" data-audit-details-open={String(selected !== null)}>
         <div className="cg-audit-table" data-audit-table="" ref={tableRef}>
           <div className="cg-audit-head" data-audit-head="">
-            <span>Time</span>
+            <span data-audit-column="channel">Channel</span>
+            <span data-audit-column="time">Time</span>
             <span
+              data-audit-column="actor"
               data-audit-actor-head=""
               title="The signed-in operator, as the bridge verified them. 'console': a console did it and nobody was signed in. 'unattributed': no console caused it."
             >
               Actor
             </span>
-            <span>Action</span>
-            <span>Channel</span>
-            <span>Item</span>
-            <span>Result</span>
+            <span data-audit-column="action">Action</span>
+            <span data-audit-column="item">Item</span>
+            <span data-audit-column="result">Result</span>
           </div>
           {entries.length === 0 ? (
             <EmptyState health={health} filtered={filtered} read={read} rangeError={rangeError} />
@@ -514,7 +515,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
                     templates={templates}
                     bank={bank}
                     channelNames={channelNames}
-                    onSelect={() => setSelectedKey(key)}
+                    onSelect={() => setSelectedKey((selected) => (selected === key ? null : key))}
                   />
                 );
               })}
@@ -649,25 +650,9 @@ function AuditRow({
       aria-pressed={selected}
       onClick={onSelect}
     >
-      <span className="cg-audit-time" data-audit-time={time.utc} title={time.utc}>
-        <strong>{time.time}</strong>
-        <small>{time.date}</small>
-      </span>
-      <span
-        className="cg-audit-actor"
-        data-audit-actor={entry.actor}
-        {...(entry.consoleAddress === undefined
-          ? {}
-          : {
-              title: `From ${entry.consoleAddress}`,
-              'data-audit-console': entry.consoleAddress,
-            })}
-      >
-        <bdi>{entry.actor}</bdi>
-      </span>
-      <span>{entry.action}</span>
       <span
         className="cg-audit-channel"
+        data-audit-cell="channel"
         data-audit-channel={channel === undefined ? '' : String(channel)}
       >
         {channel === undefined ? (
@@ -679,7 +664,30 @@ function AuditRow({
           </>
         )}
       </span>
-      <span className="cg-audit-item">
+      <span
+        className="cg-audit-time"
+        data-audit-cell="time"
+        data-audit-time={time.utc}
+        title={time.utc}
+      >
+        <strong>{time.time}</strong>
+        <small>{time.date}</small>
+      </span>
+      <span
+        className="cg-audit-actor"
+        data-audit-cell="actor"
+        data-audit-actor={entry.actor}
+        {...(entry.consoleAddress === undefined
+          ? {}
+          : {
+              title: `From ${entry.consoleAddress}`,
+              'data-audit-console': entry.consoleAddress,
+            })}
+      >
+        <bdi>{entry.actor}</bdi>
+      </span>
+      <span data-audit-cell="action">{entry.action}</span>
+      <span className="cg-audit-item" data-audit-cell="item">
         {names.length > 0 ? (
           <span className="cg-audit-names" data-audit-names="">
             <OperatorNames name={{ names, layer: null, title: '' }} />
@@ -696,7 +704,7 @@ function AuditRow({
           </span>
         )}
       </span>
-      <span className="cg-audit-outcome">
+      <span className="cg-audit-outcome" data-audit-cell="result">
         <span className={outcomeTag(entry.outcome)} data-audit-outcome={entry.outcome}>
           {outcomeLabel(entry.outcome)}
         </span>

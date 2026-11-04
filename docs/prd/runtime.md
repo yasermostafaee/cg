@@ -4422,6 +4422,9 @@ bound by date, or revisit page by page. **Acceptance:**
   pane, with full technical ids copyable there rather than filling the table row
 - WHEN rows are shown THEN each carries its channel name in a Channel column, the row hover makes its click
   affordance clear, and no separate `View details` action is shown
+- WHEN rows are shown THEN Channel is the first column and every heading aligns with its values; opening
+  details never lets Item overlap Result; pressing the selected row again closes details; and Previous/Next
+  remain centred independently of Close
 - WHEN the Log opens or its filter changes THEN the exact permitted matching total is shown independently of
   the 25 rows on the current page
 - WHEN a matching row is written while page 1 is open THEN it appears at the top; on an older page the

@@ -143,13 +143,13 @@ async function type(el: HTMLInputElement, value: string): Promise<void> {
 }
 
 describe('guard item 27 — the actor COLUMN the reference does not draw', () => {
-  it('heads the table with Actor, second, between Time and Action', async () => {
+  it('heads the table with Channel first and Actor between Time and Action', async () => {
     stubBridge([DESK_2, NOBODY]);
     await render();
     const head = dialog().querySelector('[data-audit-head]');
     expect(head).not.toBeNull();
     const words = [...(head?.querySelectorAll('span') ?? [])].map((s) => s.textContent?.trim());
-    expect(words).toEqual(['Time', 'Actor', 'Action', 'Channel', 'Item', 'Result']);
+    expect(words).toEqual(['Channel', 'Time', 'Actor', 'Action', 'Item', 'Result']);
     // The header cell is marked so nothing can rename or drop it unnoticed…
     const actorHead = head?.querySelector('[data-audit-actor-head]');
     expect(actorHead?.textContent).toBe('Actor');

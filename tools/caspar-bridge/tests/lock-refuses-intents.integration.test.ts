@@ -271,6 +271,8 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         // the constant's identifier.
         'air.emptied',
         'app.info',
+        // `R-083` — counting permitted matching rows is a read and stays available behind the lock.
+        'audit.count',
         'audit.health',
         // `CONSOLE-POLISH-01` (`R-083`) — the Log a page at a time: a read, open behind the lock.
         'audit.page',

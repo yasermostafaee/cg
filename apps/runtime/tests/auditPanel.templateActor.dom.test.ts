@@ -168,7 +168,9 @@ describe('REPLY 1 §R5 — a template stop reads as the template in the LOG', ()
 
     const line = (rows()[0]?.textContent ?? '').trim();
     expect(line).toContain('layer 1-10 (not a row)');
-    expect(line).toMatch(/^\d{2}:\d{2}:\d{2}\d{4}-\d{2}-\d{2}templatestop/);
+    expect(rows()[0]?.querySelector('[data-audit-cell="channel"]')?.textContent).toContain('CH 1');
+    expect(rows()[0]?.querySelector('[data-audit-cell="actor"]')?.textContent).toBe('template');
+    expect(rows()[0]?.querySelector('[data-audit-cell="action"]')?.textContent).toBe('stop');
   });
 
   it('🔴 the WHOLE LINE, measured — this is the string quoted in ADR 0009', async () => {
@@ -194,15 +196,21 @@ describe('REPLY 1 §R5 — a template stop reads as the template in the LOG', ()
     */
     const line = (rows()[0]?.textContent ?? '').trim();
 
-    expect(line, 'the line lost its clock').toMatch(/^\d{2}:\d{2}:\d{2}/);
+    expect(
+      rows()[0]?.querySelector('[data-audit-cell="time"]')?.textContent,
+      'the line lost its clock',
+    ).toMatch(/^\d{2}:\d{2}:\d{2}\d{4}-\d{2}-\d{2}$/);
     /*
       ⚠ The TIME is a SHAPE, not a literal. `auditTimeParts` reads the record's UTC stamp in the
       CONSOLE'S OWN ZONE, so pinning `15:48:47` would assert the test machine's timezone —
       true on the plant (UTC+3:30) and false on CI.
     */
-    expect(line, 'the three fixed columns changed order or wording').toMatch(
-      /^\d{2}:\d{2}:\d{2}\d{4}-\d{2}-\d{2}templatestop/,
-    );
+    expect(
+      [...(rows()[0]?.querySelectorAll('[data-audit-cell]') ?? [])].map((cell) =>
+        cell.getAttribute('data-audit-cell'),
+      ),
+      'the columns changed order',
+    ).toEqual(['channel', 'time', 'actor', 'action', 'item', 'result']);
     expect(line, 'the row is not named the operator way').toContain('logo · station logo');
     // The display-name rule renders the source file's stem, spaced — `station logo`, not the id.
     expect(line, 'the template name is gone').toContain('station logo');

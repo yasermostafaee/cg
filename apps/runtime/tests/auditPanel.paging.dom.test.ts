@@ -192,13 +192,27 @@ describe('`R-083` — a page from CG Bridge', () => {
     expect(total()).toBe('5 events total');
   });
 
-  it('shows the channel name in its own column and the whole row opens details', async () => {
+  it('shows Channel first, and clicking the selected row again closes its details', async () => {
     stubBridge([row(0)]);
     await render();
-    expect(dialog().querySelector('[data-audit-head]')?.textContent).toContain('Channel');
-    expect(rows()[0]?.querySelector('[data-audit-channel]')?.textContent).toContain('News');
-    expect(rows()[0]?.textContent).not.toContain('View details');
-    expect(rows()[0]?.matches('button')).toBe(true);
+    const head = dialog().querySelector('[data-audit-head]');
+    expect(
+      [...(head?.querySelectorAll('[data-audit-column]') ?? [])].map((cell) => cell.textContent),
+    ).toEqual(['Channel', 'Time', 'Actor', 'Action', 'Item', 'Result']);
+    const first = rows()[0];
+    expect(first?.querySelector('[data-audit-channel]')?.textContent).toContain('News');
+    expect(first?.textContent).not.toContain('View details');
+    expect(first?.matches('button')).toBe(true);
+    expect(first?.getAttribute('aria-pressed')).toBe('true');
+    expect(dialog().querySelector('[data-audit-details]')).not.toBeNull();
+
+    await act(async () => first?.click());
+    expect(first?.getAttribute('aria-pressed')).toBe('false');
+    expect(dialog().querySelector('[data-audit-details]')).toBeNull();
+
+    await act(async () => first?.click());
+    expect(first?.getAttribute('aria-pressed')).toBe('true');
+    expect(dialog().querySelector('[data-audit-details]')).not.toBeNull();
   });
 });
 

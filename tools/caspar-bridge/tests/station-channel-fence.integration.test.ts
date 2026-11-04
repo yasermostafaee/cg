@@ -609,7 +609,7 @@ describe('the census: every route that names a channel, classified', () => {
       { fixedBank: BANK },
     );
 
-  it('twenty-three routes carry a channel key; nineteen carry it at the top level, where the fence reads', () => {
+  it('twenty-four routes carry a channel key; nineteen carry it at the top level, where the fence reads', () => {
     const table = buildRoutes(runtime());
     expect(table.size, 'the census is looking at the real table').toBeGreaterThan(50);
     const found = Object.fromEntries(
@@ -623,6 +623,7 @@ describe('the census: every route that names a channel, classified', () => {
         door onto a channel. Nested, so the fence does not stand in its way: a channel this station
         no longer declares still has its old rows in the record, and they can still be read.
       */
+      'audit.count': ['req.filter.channel'],
       'audit.page': ['req.filter.channel'],
       /*
         `RELEASE-0113-01` (`R-089`) — a station admin's backup channel entries name the station's channels
