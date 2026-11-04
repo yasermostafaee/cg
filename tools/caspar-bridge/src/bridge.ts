@@ -3136,6 +3136,11 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     }
     // `CENTRAL-BRIDGE-01` §1 A — CG Bridge's logs, one zip, behind a station admin's one-use ticket.
     if (req.method === 'GET' && pathname === BRIDGE_LOGS_PATH) {
+      // `B-389` — CG Control fetches the ticketed bytes before offering its local Blob download, so
+      // a browser download-manager hook cannot consume the one-use ticket. Only this ticketed route
+      // is exposed; the grant below remains the authorization door.
+      res.setHeader('access-control-allow-origin', '*');
+      res.setHeader('access-control-expose-headers', 'content-disposition');
       const logsDir = options.logsDir;
       const grant = tickets.redeem(url.searchParams.get('ticket'), (g) => g.kind === 'logs');
       if (grant === null || logsDir === undefined) {

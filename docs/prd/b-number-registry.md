@@ -3690,3 +3690,14 @@ Measured free before use: the registry named `B-361` as next free and the tracke
 found no existing `B-361` heading before filing.
 
 ⇒ **Next free after this entry is `B-362`**, **`D-169`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-04 — reliable in-app log archive download takes `B-389`
+
+- `B-389` — CG Control reads CG Bridge's one-use log archive before offering a local Blob download,
+  so browser download-manager interception cannot consume the ticket without saving the file —
+  [bugs-runtime.md](bugs-runtime.md).
+
+Measured free before use: the working-tree allocation ledger already reserves `B-362` through `B-388`;
+the tracked plus working-tree heading audit found no existing allocation for `B-389`.
+
+⇒ **Next free after this entry is `B-390`**, **`D-196`**, **`P-075`**, **`R-105`** and **`C-049`**.

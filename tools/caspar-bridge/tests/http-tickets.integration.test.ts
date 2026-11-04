@@ -121,6 +121,8 @@ describe('CG Bridge’s logs, downloaded', () => {
     const zip = await fetch(at(handle.port, ticketed));
     expect(zip.status).toBe(200);
     expect(zip.headers.get('content-type')).toBe('application/zip');
+    expect(zip.headers.get('access-control-allow-origin')).toBe('*');
+    expect(zip.headers.get('access-control-expose-headers')).toBe('content-disposition');
     expect(zip.headers.get('content-disposition')).toMatch(
       /^attachment; filename="cg-bridge-logs-/,
     );

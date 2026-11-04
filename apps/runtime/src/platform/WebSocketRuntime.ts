@@ -164,6 +164,7 @@ import type {
 } from '../shared/runtime-bridge.js';
 import * as ipcChannels from '@cg/shared-ipc';
 import { bridgeErrorFrom, BridgeSkewError } from '../shared/bridgeSkew.js';
+import { downloadBridgeArchive } from './bridgeDownload.js';
 import { pvwPageSource, type BridgePageAnswer, type PvwPage } from '../shared/pvwPage.js';
 import { LibraryStore } from './library/LibraryStore.js';
 import {
@@ -1722,16 +1723,6 @@ export class WebSocketRuntime implements RuntimeBridge {
     return `${socket.protocol === 'wss:' ? 'https:' : 'http:'}//${socket.host}${path}`;
   }
 
-  /** Open a download from CG Bridge (the logs zip): the page follows a link the bridge answers. */
-  #openFromBridge(path: string): void {
-    const link = document.createElement('a');
-    link.href = this.#bridgeHttpUrl(path);
-    link.rel = 'noopener';
-    document.body.append(link);
-    link.click();
-    link.remove();
-  }
-
   /**
    * 🔴 `R-066` — the Playout sign-in. See the contract note on `runtime-bridge.ts`.
    */
@@ -2444,7 +2435,7 @@ export class WebSocketRuntime implements RuntimeBridge {
     downloadLogs: async (): Promise<{ accepted: boolean; message?: string }> => {
       try {
         const { path } = await this.#invoke(ipcChannels.BridgeLogsTicketChannel, undefined);
-        this.#openFromBridge(path);
+        await downloadBridgeArchive(this.#bridgeHttpUrl(path));
         return { accepted: true };
       } catch (err) {
         return { accepted: false, message: err instanceof Error ? err.message : String(err) };

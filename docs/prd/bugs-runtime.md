@@ -13912,3 +13912,14 @@ native-title suppression and viewport clamping remain unchanged.
 **Expected:** The first staged value comes from the current shared file automatically.
 **Actual:** The authored test/default value remains until Reload is pressed.
 **Regression test:** Inspector/store test proving one automatic read per newly reconciled authored source and no repeated overwrite of operator edits.
+
+## [x] B-389 — Download logs is intercepted by IDM and the archive is not saved ⟨priority: high — the owner cannot retrieve diagnostics⟩ — FILED and FIXED 2026-11-04 · `openspec/changes/download-logs-without-navigation/`
+
+**Repro:** In CG Control → Audit log, press **Download logs** on a Windows machine whose browser
+downloads are captured by IDM. **Actual:** IDM opens, but the archive is not downloaded and CG
+Control reports no error. **Cause:** CG Control navigates an ordinary anchor to CG Bridge's one-use
+`/logs.zip?ticket=…` URL; the download-manager hook intercepts that network navigation and can consume
+the ticket without completing the save. **Fix / Acceptance:** CG Control fetches the archive bytes
+itself over the ticketed route, reports an actionable HTTP/network failure, and only then offers a
+local Blob download with the bridge filename. CG Bridge exposes that one ticketed response to the
+console's origin; the station-admin grant and one-use ticket remain unchanged.
