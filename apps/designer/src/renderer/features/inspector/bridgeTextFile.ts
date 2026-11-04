@@ -3,7 +3,7 @@ import { isSafeBridgeTextSourcePath } from '@cg/shared-schema';
 /** Keep Designer preview and CG Bridge's bounded UTF-8 reader on the same ceiling. */
 export const MAX_BRIDGE_TEXT_SOURCE_BYTES = 1024 * 1024;
 
-const TEXT_EXTENSIONS = new Set(['txt', 'text', 'csv', 'tsv', 'log']);
+const TEXT_EXTENSIONS = new Set(['txt', 'text', 'csv', 'tsv', 'json', 'log']);
 const NATURAL = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
 export interface BridgeTextSourceFile {

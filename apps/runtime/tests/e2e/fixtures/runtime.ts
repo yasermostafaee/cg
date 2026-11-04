@@ -1078,6 +1078,7 @@ export async function buildSoundVcg(templateId = 'tpl-e2e-sound'): Promise<Uint8
 export async function buildRepeaterVcg(
   templateId = 'tpl-e2e-repeater',
   maxItems = 2,
+  withPictures = false,
 ): Promise<Uint8Array> {
   const scene = fixtureScene();
   const layer = scene.layers[0];
@@ -1116,8 +1117,8 @@ export async function buildRepeaterVcg(
       required: false,
       type: 'list',
       default: [
-        { id: 'r1', name: 'یک' },
-        { id: 'r2', name: 'دو' },
+        { id: 'r1', name: 'یک', ...(withPictures ? { icon: { assetId: 'img-sun' } } : {}) },
+        { id: 'r2', name: 'دو', ...(withPictures ? { icon: { assetId: 'img-rain' } } : {}) },
       ],
     },
   ];
@@ -1142,10 +1143,28 @@ export async function buildRepeaterVcg(
           children: [],
         },
       ],
-      fields: [{ id: 'name', label: 'Name', required: false, type: 'text', default: '' }],
+      fields: [
+        { id: 'name', label: 'Name', required: false, type: 'text', default: '' },
+        ...(withPictures
+          ? [
+              {
+                id: 'icon',
+                label: 'Icon',
+                required: false,
+                type: 'image' as const,
+                accept: ['png' as const],
+                defaultAssetId: 'img-sun',
+              },
+            ]
+          : []),
+      ],
       bindings: [],
     },
   ] as Scene['compositions'];
+  const sun = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+  const rain = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 4, 5, 6]);
+  const sunPath = `assets/image/${sha256Hex(sun)}.png`;
+  const rainPath = `assets/image/${sha256Hex(rain)}.png`;
   return pack({
     scene,
     manifestExtras: {
@@ -1158,11 +1177,40 @@ export async function buildRepeaterVcg(
       },
       compatibility: { minRuntimeVersion: '0.0.0', minCasparCGVersion: '2.3.0' },
       fontDeps: scene.fonts,
-      assetIndex: [],
+      assetIndex: withPictures
+        ? [
+            {
+              id: 'img-sun',
+              path: sunPath,
+              filename: 'sunny.png',
+              kind: 'image',
+              bytes: sun.byteLength,
+              sha256: sha256Hex(sun),
+              mime: 'image/png',
+            },
+            {
+              id: 'img-rain',
+              path: rainPath,
+              filename: 'rain.png',
+              kind: 'image',
+              bytes: rain.byteLength,
+              sha256: sha256Hex(rain),
+              mime: 'image/png',
+            },
+          ]
+        : [],
     },
     indexHtml: '<!doctype html><html><body>placeholder</body></html>',
     cgJs: '/* placeholder template runtime */',
     cgCss: '/* placeholder template styles */',
+    ...(withPictures
+      ? {
+          assets: new Map([
+            [sunPath, sun],
+            [rainPath, rain],
+          ]),
+        }
+      : {}),
   });
 }
 

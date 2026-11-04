@@ -519,16 +519,22 @@ export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Elemen
                 keyboardLanguage,
                 'number',
               );
-        setBuf(text);
         if (asTyped) {
-          // The one reader; only a NUMBER commits — a half-typed or impossible text commits nothing.
+          // A numeric template value can be incomplete while typing, but an impossible character
+          // never enters the box (the user should not have to type past an error state).
           const reading = readLocalizedNumber(text);
+          if (reading.kind === 'invalid') {
+            e.currentTarget.value = buf;
+            return;
+          }
+          setBuf(text);
           report(text);
           if (reading.kind === 'number' && reading.value !== props.value) {
             props.onCommit(reading.value);
           }
           return;
         }
+        setBuf(text);
         const n = Number(e.target.value);
         if (Number.isFinite(n) && n !== props.value) props.onCommit(n);
       }}

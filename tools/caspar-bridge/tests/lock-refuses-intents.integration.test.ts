@@ -352,6 +352,7 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         'setup.channel-occupancy',
         'setup.check',
         'setup.route-address',
+        'sharedFiles.get',
         'sources.assignments',
         'sources.config',
         // `PLAYOUT-SOURCES-01` — the picker's reads: a media search and a D10 refresh change nothing.

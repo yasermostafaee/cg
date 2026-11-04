@@ -103,7 +103,7 @@ const styles = {
     zIndex: 2,
     borderRadius: '0.25rem',
     padding: '0.18rem 0.35rem',
-    background: 'rgb(4 10 18 / 78%)',
+    background: cssVars['--r-monitor-label-bg'],
     color: colors.text,
     fontSize: '0.68rem',
     fontWeight: 800,

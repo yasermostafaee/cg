@@ -146,6 +146,12 @@ const BEFORE_AND_AFTER = {
       asks for, and an unreadable value reads as absent.
     */
     'cg.runtime.pgm-audio.v1',
+    /*
+      `STANDBY-BRIDGE-PAIR-01` — per-console programme-monitor presentation:
+      primary/standby split and the chosen audio side. It carries no station authority and no
+      server address. ABSENT keeps the primary-only view, so no migration is required.
+    */
+    'cg.runtime.pgm-monitor.v1',
     'cg.runtime.playoutSession',
     'cg.runtime.shell-layout.v1',
     /*

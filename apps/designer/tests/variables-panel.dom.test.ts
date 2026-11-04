@@ -162,7 +162,8 @@ describe('D-166 — composition Variables tab', () => {
     );
     expect(container?.querySelector('[data-testid="field-card-headline"]')).not.toBeNull();
     expect(container?.querySelector('[data-testid="field-row-nested"]')).not.toBeNull();
-    expect(container?.textContent).toContain('Child instance');
+    expect(container?.textContent).toContain('Child');
+    expect(container?.textContent).not.toContain('Child instance');
     expect(container?.textContent).not.toContain('Empty instance');
     expect(container?.textContent?.toLowerCase()).not.toContain('no fields');
 

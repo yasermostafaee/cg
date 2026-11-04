@@ -75,7 +75,7 @@ export function CollapseSection({
     </Button>
   );
   return (
-    <div className={s.section}>
+    <div className={s.section} data-section={title}>
       {pinned ? (
         <div className={s.header} style={{ cursor: 'default' }}>
           <span>{titleNode ?? title}</span>
@@ -92,7 +92,11 @@ export function CollapseSection({
           <span className={s.trailing}>{trailing}</span>
         </div>
       )}
-      {expanded && <div className={s.body}>{children}</div>}
+      {expanded && (
+        <div className={s.body} data-section-body={title}>
+          {children}
+        </div>
+      )}
     </div>
   );
 }

@@ -2583,6 +2583,8 @@ export const cssVars = {
    * another card. `--r-video-ground` below is still the SCREEN itself and still black.
    */
   '--r-monitor-bg': '#101722',
+  /** Dark translucent backing for labels painted directly over the programme picture. */
+  '--r-monitor-label-bg': '#040a12c7',
   '--r-video-ground': '#000',
   '--r-checker-a': '#3D4253',
   '--r-checker-b': '#5B6075',
