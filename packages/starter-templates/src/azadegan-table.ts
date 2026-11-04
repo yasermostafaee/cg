@@ -240,6 +240,9 @@ const children: Element[] = [
     flow: 'rtl',
     gap: 1,
     maxItems: 18,
+    itemEntrance: 'fade-right',
+    itemTransitionMs: 400,
+    itemStaggerMs: 70,
     items: rows,
   } as Element,
 ];
@@ -248,7 +251,7 @@ export const azadeganTableScene = galleryScene({
   id: 'azadegan-table',
   name: 'جدول لیگ آزادگان ایران',
   description:
-    'جدول تک‌صفحه‌ای لیگ آزادگان با Repeater واقعی، اعداد فارسی و ورودی ساختاریافتهٔ قابل اتصال به CSV/XLSX در CG Control.',
+    'جدول تک‌صفحه‌ای لیگ آزادگان با ورود مرحله‌ای ردیف‌ها، اعداد فارسی و ورودی ساختاریافتهٔ قابل اتصال به CSV/XLSX در CG Control.',
   templateType: 'fullscreen',
   fontFamily: FAM,
   onAirId: 'comp-azadegan-table-onair',

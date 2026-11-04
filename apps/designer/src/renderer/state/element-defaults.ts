@@ -241,6 +241,9 @@ export function defaultRepeater(
     direction: 'column',
     flow: 'rtl',
     gap: 8,
+    itemEntrance: 'none',
+    itemTransitionMs: 400,
+    itemStaggerMs: 0,
     items: [seedRow(1), seedRow(2), seedRow(3)],
   };
 }

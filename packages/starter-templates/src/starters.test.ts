@@ -174,6 +174,14 @@ describe('starter templates', () => {
         });
 
     expect(elements(azadeganTableScene).some((element) => element.type === 'repeater')).toBe(true);
+    const azadeganRepeater = elements(azadeganTableScene).find(
+      (element) => element.type === 'repeater',
+    );
+    expect(azadeganRepeater).toMatchObject({
+      itemEntrance: 'fade-right',
+      itemTransitionMs: 400,
+      itemStaggerMs: 70,
+    });
     expect(elements(iranWeatherForecastScene).some((element) => element.type === 'repeater')).toBe(
       true,
     );

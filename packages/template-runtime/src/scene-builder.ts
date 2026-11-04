@@ -1162,6 +1162,8 @@ export function clampRowCount(element: Pick<RepeaterElement, 'maxItems'>, count:
 /** One stamped repeater row: the flow-positioned cell + its fresh scope. */
 export interface RepeaterRowBuild {
   cell: HTMLElement;
+  /** Fixed-cell-clipped visual node animated by the D-181 entrance driver. */
+  motion: HTMLElement;
   scope: FieldScope;
 }
 
@@ -1262,9 +1264,26 @@ export function buildRepeaterRows(
     for (const layer of comp.layers) {
       inner.appendChild(buildLayer(layer, rowCtx));
     }
-    cell.appendChild(inner);
+    // D-181 — motion belongs INSIDE the fixed, clipped cell. Moving the cell itself would let a
+    // top/bottom entrance leak into its neighbour's slot. Preserve the historical DOM exactly for
+    // `none`; only an authored effect pays for the wrapper.
+    let motion = cell;
+    if (element.itemEntrance !== undefined && element.itemEntrance !== 'none') {
+      motion = doc.createElement('div');
+      motion.dataset['cgRepeaterMotion'] = '';
+      motion.style.position = 'absolute';
+      motion.style.left = '0';
+      motion.style.top = '0';
+      motion.style.width = '100%';
+      motion.style.height = '100%';
+      motion.style.willChange = 'transform, opacity';
+      motion.appendChild(inner);
+      cell.appendChild(motion);
+    } else {
+      cell.appendChild(inner);
+    }
     host.appendChild(cell);
-    rows.push({ cell, scope: rowScope });
+    rows.push({ cell, motion, scope: rowScope });
   }
   return rows;
 }

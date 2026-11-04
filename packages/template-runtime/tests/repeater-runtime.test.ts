@@ -238,6 +238,12 @@ function visibleCells(): HTMLElement[] {
   return cells().filter((c) => c.style.display !== 'none');
 }
 
+function motions(): HTMLElement[] {
+  return cells().map(
+    (cell) => cell.querySelector<HTMLElement>('[data-cg-repeater-motion]') ?? cell,
+  );
+}
+
 function rowTexts(): string[] {
   return visibleCells().map(
     (c) => c.querySelector<HTMLElement>('[data-cg-element-id="tn"]')?.textContent ?? '',
@@ -460,6 +466,95 @@ describe('repeater — live values mid-hold (model B)', () => {
     await runtime.stop();
     await runtime.play({});
     expect(visibleCells()).toHaveLength(5); // …and stamps at the next fresh play
+  });
+});
+
+describe('D-181 — ordered row entrances', () => {
+  const entrance = {
+    itemEntrance: 'fade-right',
+    itemTransitionMs: 400,
+    itemStaggerMs: 100,
+  };
+
+  it('keeps every authored row visible at rest until Play', () => {
+    createRuntime(repeaterScene({ element: entrance }), {
+      skipFontLoad: true,
+      clock: makeClock(),
+    });
+    expect(cells().every((cell) => cell.style.overflow === 'hidden')).toBe(true);
+    expect(motions().every((motion) => motion.dataset['cgRepeaterMotion'] === '')).toBe(true);
+    expect(motions().map((motion) => motion.style.opacity)).toEqual(['', '', '']);
+    expect(motions().map((motion) => motion.style.visibility)).toEqual(['', '', '']);
+  });
+
+  it('starts row zero immediately and offsets later rows by the authored item delay', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      repeaterScene({ element: entrance, playout: { mode: 'manual' } }),
+      { skipFontLoad: true, clock },
+    );
+    await runtime.play({});
+    let visual = motions();
+    expect(visual[0]?.style.visibility).toBe('visible');
+    expect(Number(visual[0]?.style.opacity)).toBe(0);
+    expect(visual[1]?.style.visibility).toBe('hidden');
+    expect(visual[2]?.style.visibility).toBe('hidden');
+
+    await run(clock, 200, 100);
+    visual = motions();
+    const opacity = visual.map((motion) => Number(motion.style.opacity));
+    expect(opacity[0]).toBeGreaterThan(opacity[1] ?? 1);
+    expect(opacity[1]).toBeGreaterThan(opacity[2] ?? 1);
+
+    await run(clock, 500, 100);
+    expect(motions().map((motion) => motion.style.opacity)).toEqual(['', '', '']);
+    expect(motions().map((motion) => motion.style.transform)).toEqual(['', '', '']);
+  });
+
+  it('freezes on pause, adopts the current pose on regrowth, and restores on stop', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      repeaterScene({ ...BOUND, element: entrance, playout: { mode: 'manual' } }),
+      { skipFontLoad: true, clock },
+    );
+    await runtime.play({});
+    await run(clock, 150, 50);
+    const beforePause = motions().map((motion) => motion.style.opacity);
+    runtime.pause();
+    await run(clock, 1000, 100);
+    expect(motions().map((motion) => motion.style.opacity)).toEqual(beforePause);
+
+    await runtime.update({ rows: [{ id: 'r1', name: 'تنها' }] });
+    expect(visibleCells()).toHaveLength(1);
+    await runtime.update({
+      rows: [
+        { id: 'r1', name: 'یک' },
+        { id: 'r2', name: 'دو' },
+      ],
+    });
+    expect(visibleCells()).toHaveLength(2);
+    expect(Number(motions()[1]?.style.opacity)).toBeGreaterThan(0);
+
+    runtime.resume();
+    await run(clock, 100, 50);
+    expect(motions()[0]?.style.opacity).not.toBe(beforePause[0]);
+    await runtime.stop();
+    expect(motions().map((motion) => motion.style.opacity)).toEqual(['', '', '']);
+    expect(motions().map((motion) => motion.style.visibility)).toEqual(['', '', '']);
+    runtime.remove();
+    clock.advance(1000);
+    expect(clock.pendingRafs()).toBe(0);
+  });
+
+  it('does not add a wrapper or schedule an entrance for the compatible none default', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(repeaterScene({ playout: { mode: 'manual' } }), {
+      skipFontLoad: true,
+      clock,
+    });
+    await runtime.play({});
+    expect(host().querySelector('[data-cg-repeater-motion]')).toBeNull();
+    expect(motions().map((motion) => motion.style.opacity)).toEqual(['', '', '']);
   });
 });
 

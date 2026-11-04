@@ -3474,6 +3474,48 @@ function RepeaterSections({
             } as Partial<Element>)
           }
         />
+        <SelectField
+          label="item entrance"
+          value={element.itemEntrance ?? 'none'}
+          options={SequenceEdgeSchema.options}
+          onCommit={(itemEntrance) =>
+            designerStore.updateElement(id, { itemEntrance } as Partial<Element>)
+          }
+        />
+        <NumberField
+          label="effect time"
+          value={(element.itemTransitionMs ?? 400) / 1000}
+          step={0.05}
+          min={0.05}
+          suffix="s"
+          withheld={
+            (element.itemEntrance ?? 'none') === 'none'
+              ? 'Choose an item entrance to set how long each row effect takes.'
+              : undefined
+          }
+          onCommit={(secs) =>
+            designerStore.updateElement(id, {
+              itemTransitionMs: Math.max(50, Math.round(secs * 1000)),
+            } as Partial<Element>)
+          }
+        />
+        <NumberField
+          label="item delay"
+          value={(element.itemStaggerMs ?? 0) / 1000}
+          step={0.05}
+          min={0}
+          suffix="s"
+          withheld={
+            (element.itemEntrance ?? 'none') === 'none'
+              ? 'Choose an item entrance to delay each row after the previous row.'
+              : undefined
+          }
+          onCommit={(secs) =>
+            designerStore.updateElement(id, {
+              itemStaggerMs: Math.max(0, Math.round(secs * 1000)),
+            } as Partial<Element>)
+          }
+        />
         <StateLine
           tip={
             <InfoTip title="How a repeater stamps rows">

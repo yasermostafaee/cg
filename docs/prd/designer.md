@@ -5905,3 +5905,20 @@ the canvas ratio.
 - WHEN padding is uniform THEN one value controls all four sides
 - WHEN the author switches to per-side mode THEN the current value is copied to top, right, bottom and left
 - WHEN the author switches back to uniform mode THEN the top value becomes the single value and rendering stays consistent in canvas, preview and export
+
+## [x] D-181 — Repeater rows can enter in sequence ⟨priority: high — the owner, 2026-11-04⟩ — `openspec/changes/stagger-repeater-item-entrances/`
+
+**What:** A Repeater can apply one shared entrance effect to its stamped rows and delay each row
+after the previous one by an authored stagger. The first row starts immediately; `none` preserves
+the historical simultaneous presentation.
+
+**Why:** Score tables, team lists and weather cards need an ordered broadcast build instead of
+every repeated item appearing at once.
+
+**Acceptance:**
+
+- WHEN an author chooses an entrance and item delay THEN the Inspector also offers the effect time
+- WHEN the Repeater plays THEN row N starts after `(N - 1) × item delay`
+- WHEN playback pauses, resumes, stops or is removed THEN the entrance timeline freezes, continues,
+  restores or tears down without leaving timers or hidden rows behind
+- WHEN an older Repeater has no entrance fields THEN all rows remain visible together as before

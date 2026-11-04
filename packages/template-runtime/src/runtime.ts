@@ -2307,6 +2307,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
             if (item !== undefined) apply(repeaterItemValues(item));
             return {
               cell: row.cell,
+              motion: row.motion,
               apply,
               applyFrame: (frame: number): void => {
                 for (const e of rowAnimated) applyAnimationAtFrame(e, frame);
@@ -2320,7 +2321,12 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
             };
           });
         };
-        const driver = new RepeaterDriver({ element: entry.element, host: entry.host, stampRows });
+        const driver = new RepeaterDriver({
+          element: entry.element,
+          host: entry.host,
+          stampRows,
+          clock: options.clock,
+        });
         registerRepeaterDriver(entry.host, driver);
         repeaters.push(driver);
       }
@@ -3294,6 +3300,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       for (const sub of subtrees) for (const t of sub.tickers) t.pause();
       for (const sub of subtrees) for (const c of sub.clocks) c.pause();
       for (const sub of subtrees) for (const s of sub.sequences) s.pause();
+      for (const sub of subtrees) for (const r of sub.repeaters) r.pause();
       // D-125 §D3 — freeze the Lottie playhead in lockstep (no wall-clock drift).
       for (const sub of subtrees) for (const l of sub.lotties) l.pause();
       // D-128 §D3 — pause the <video> AND capture its clock elapsed, so resume re-seeks.
@@ -3309,6 +3316,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       for (const sub of subtrees) for (const t of sub.tickers) t.resume();
       for (const sub of subtrees) for (const c of sub.clocks) c.resume();
       for (const sub of subtrees) for (const s of sub.sequences) s.resume();
+      for (const sub of subtrees) for (const r of sub.repeaters) r.resume();
       // D-125 §D3 — continue the Lottie playhead from the frozen frame (a settled
       // freeze-hold stays frozen; a still-running intro / idle-loop continues).
       for (const sub of subtrees) for (const l of sub.lotties) l.resume();

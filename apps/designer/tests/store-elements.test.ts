@@ -165,6 +165,9 @@ describe('element-defaults', () => {
     expect(r.direction).toBe('column');
     expect(r.flow).toBe('rtl');
     expect(r.gap).toBe(8);
+    expect(r.itemEntrance).toBe('none');
+    expect(r.itemTransitionMs).toBe(400);
+    expect(r.itemStaggerMs).toBe(0);
     expect(r.items).toEqual([
       { id: 'row-1', name: 'تیم', score: 0 },
       { id: 'row-2', name: 'تیم', score: 0 },

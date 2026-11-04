@@ -1055,14 +1055,28 @@ describe('RepeaterElement (D-030)', () => {
     type: 'repeater' as const,
     compositionId: 'rowc',
   };
-  it('applies the defaults (column / rtl flow / gap 8 / no items) and round-trips', () => {
+  it('applies layout defaults and keeps additive entrance fields absent, then round-trips', () => {
     const parsed = RepeaterElementSchema.parse(repeater);
     expect(parsed.direction).toBe('column');
     expect(parsed.flow).toBe('rtl');
     expect(parsed.gap).toBe(8);
     expect(parsed.maxItems).toBeUndefined();
+    expect(parsed.itemEntrance).toBeUndefined();
+    expect(parsed.itemTransitionMs).toBeUndefined();
+    expect(parsed.itemStaggerMs).toBeUndefined();
     expect(parsed.items).toEqual([]);
     expect(RepeaterElementSchema.parse(parsed)).toEqual(parsed);
+  });
+  it('accepts the shared edge vocabulary and independent effect/stagger times', () => {
+    const parsed = RepeaterElementSchema.parse({
+      ...repeater,
+      itemEntrance: 'fade-right',
+      itemTransitionMs: 650,
+      itemStaggerMs: 120,
+    });
+    expect(parsed.itemEntrance).toBe('fade-right');
+    expect(parsed.itemTransitionMs).toBe(650);
+    expect(parsed.itemStaggerMs).toBe(120);
   });
   it('round-trips through the Element union with OPEN row items', () => {
     const parsed = ElementSchema.parse({
@@ -1079,6 +1093,11 @@ describe('RepeaterElement (D-030)', () => {
     expect(() => RepeaterElementSchema.parse({ ...repeater, maxItems: 0 })).toThrow();
     const { compositionId: _c, ...withoutComp } = repeater;
     expect(() => RepeaterElementSchema.parse(withoutComp)).toThrow();
+  });
+  it('rejects an unknown entrance, non-positive effect time or negative delay', () => {
+    expect(() => RepeaterElementSchema.parse({ ...repeater, itemEntrance: 'zoom' })).toThrow();
+    expect(() => RepeaterElementSchema.parse({ ...repeater, itemTransitionMs: 0 })).toThrow();
+    expect(() => RepeaterElementSchema.parse({ ...repeater, itemStaggerMs: -1 })).toThrow();
   });
   it('rejects a row item without a stable id', () => {
     expect(() => RepeaterElementSchema.parse({ ...repeater, items: [{ name: 'x' }] })).toThrow();
