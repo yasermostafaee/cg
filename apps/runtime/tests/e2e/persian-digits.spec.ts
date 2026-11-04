@@ -160,7 +160,7 @@ test('§2 A — `۱۲۳`, `١٢٣` and `123` typed into a text field reach Caspa
   }
 });
 
-test('§2 B — a number field keeps `۱۲٫۵` on screen and sends 12.5; `۱۲a` is refused in one line and sends nothing new', async ({
+test('§2 B — a number field keeps `۱۲٫۵` on screen and sends 12.5; `۱۲a` keeps only the number', async ({
   page,
 }) => {
   const inspector = await bootOnAir(page);
@@ -188,17 +188,15 @@ test('§2 B — a number field keeps `۱۲٫۵` on screen and sends 12.5; `۱۲a
   await apply.click();
   await expect.poll(() => wireFields()?.['score']).toBe(1234);
 
-  // Impossible: refused, in ONE line, and NOTHING new is sent. Measured before this change, `۱۲a`
-  // reached air as 12 — the last prefix that parsed — and no sentence said so.
+  // A letter is not a possible part of this field, so it never enters the controlled value.
+  // Before the numeric-input constraint, `۱۲a` stayed visible and reached air as the
+  // silently parsed prefix 12. The field now keeps the valid numeric part and stages it explicitly.
   await typeInto(page, score, '۱۲a');
-  await expect(refusal).toHaveCount(1);
-  await expect(refusal).toHaveText('Not a number — Update will not change it.');
-  await expect(score).toHaveAttribute('aria-invalid', 'true');
-  await expect(score).toHaveValue('۱۲a');
+  await expect(refusal).toHaveCount(0);
+  await expect(score).not.toHaveAttribute('aria-invalid', 'true');
+  await expect(score).toHaveValue('۱۲');
   await apply.click();
-  // Update still sends (the B-048 re-send) — and it carries the value that was ON AIR.
-  await page.waitForTimeout(300);
-  expect(wireFields()?.['score']).toBe(1234);
+  await expect.poll(() => wireFields()?.['score']).toBe(12);
 });
 
 /**

@@ -258,7 +258,13 @@ export function FromFilePreviewDialog({
                 ? `${fieldId} locked delimiter`
                 : `${fieldId} locked file format`
             }
-            title={state.format}
+            title={
+              state.format === 'text'
+                ? state.split
+                  ? state.delimiter
+                  : 'Whole file'
+                : state.format
+            }
           >
             {state.format === 'text'
               ? state.split

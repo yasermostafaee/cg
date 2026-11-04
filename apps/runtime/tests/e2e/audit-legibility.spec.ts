@@ -11,7 +11,7 @@ import { buildValidVcg, expect, test } from './fixtures/runtime.js';
  * bridge's do (`B-211` parity) and whose take settles the row `on-air`.
  */
 
-test('the audit log names the row and the template, shows local time to the second, and keeps the ids', async ({
+test('the audit log names the row and template, shows local time, and exposes full ids in details', async ({
   app,
 }) => {
   const page = app.page;
@@ -29,23 +29,20 @@ test('the audit log names the row and the template, shows local time to the seco
   // (the file name, `news.vcg` → `news`).
   await expect(take.locator('[data-audit-names]')).toHaveText(/^Layer \d+ · news$/);
   // `B-210` — the clock, not the ISO stamp; the UTC stamp is one hover away.
-  await expect(take.locator('[data-audit-time]')).toHaveText(/^\d{2}:\d{2}:\d{2}$/);
-  await expect(take.locator('[data-audit-time]')).toHaveAttribute(
-    'title',
-    /\d{4}-\d{2}-\d{2}T.*Z \(UTC\)/,
-  );
-  // …and the date, once, as a band above the day's rows.
-  await expect(log.locator('[data-audit-date]').first()).toHaveText(/^\d{4}-\d{2}-\d{2}$/);
-  // `B-211` — the ids are NOT gone: full in the attribute, shortened in the text, copyable.
-  await expect(take.locator('[data-audit-id="item"]')).toHaveAttribute(
-    'data-audit-full-id',
-    /^item-/,
-  );
-  await expect(take.locator('[data-audit-id="template"]')).toHaveAttribute(
-    'data-audit-full-id',
+  await expect(take.locator('[data-audit-time] strong')).toHaveText(/^\d{2}:\d{2}:\d{2}$/);
+  await expect(take.locator('[data-audit-time] small')).toHaveText(/^\d{4}-\d{2}-\d{2}$/);
+  await expect(take.locator('[data-audit-time]')).toHaveAttribute('title', /\d{4}-\d{2}-\d{2}T.*Z/);
+  // Technical identifiers stay out of the scanning row and are complete in its details overlay.
+  const itemId = await take.getAttribute('data-audit-item-id');
+  expect(itemId).toMatch(/^item-/);
+  const details = log.getByRole('complementary', { name: 'Event details' });
+  await expect(take).toHaveAttribute('aria-pressed', 'true');
+  await expect(details).toBeVisible();
+  await expect(details.locator('[data-audit-technical="Item ID"] code')).toHaveText(itemId ?? '');
+  await expect(details.locator('[data-audit-technical="Template ID"] code')).toHaveText(
     'tpl-e2e-audit',
   );
-  await expect(take.getByRole('button', { name: 'Copy item id' })).toBeVisible();
+  await expect(details.getByRole('button', { name: 'Copy Item ID' })).toBeVisible();
   /*
     🔴 `OPERATOR-NAME-SWEEP-01` — **THE CAVEAT IS GONE, AND THIS ASSERTS ITS ABSENCE.**
 
@@ -62,6 +59,9 @@ test('the audit log names the row and the template, shows local time to the seco
   await expect(log).not.toContainText('not a verified sign-in');
   // …and the ACTOR column is still there, carrying a value — the control for the two above.
   await expect(log.locator('[data-audit-actor]').first()).not.toBeEmpty();
+  // Pressing the selected row again closes its details.
+  await take.click();
+  await expect(details).toHaveCount(0);
   // The footer's Close — the primitive's ✕ is also named Close, and sits first in the DOM.
   await log.getByRole('button', { name: 'Close' }).last().click();
   await expect(log).toHaveCount(0);
@@ -92,7 +92,7 @@ test('the layer table’s tally is the number in the air colour, says "on air" i
 });
 
 /**
- * 🔴 `INSPECTOR-AUDIT-05` §5(a) — **THE AUDIT LOG'S PROTOTYPE FURNITURE, ASSERTED ABSENT.**
+ * `INSPECTOR-AUDIT-05` §5(a) — prototype copy stays absent while production tools remain.
  *
  * `CONSOLE-MATCH-03` §25.5 asserted three of the drawing's own scaffolding strings as
  * absences, in `shell-chrome.spec.ts` — but all three live on the SHELL, and the audit
@@ -100,16 +100,9 @@ test('the layer table’s tally is the number in the air colour, says "on air" i
  * sample data.") was written down as not-copied and never guarded. It has been an intention,
  * not a guard, since. An absence that is asserted is a guard; an intended one is a wish.
  *
- * The same test also pins the three surfaces §25.6 records as DELIBERATELY not adopted, for
- * the same reason: each is drawn in `03-audit-log.html`, so a later parity pass reading the
- * reference would add them back believing they were simply missed —
- *
- *   - the `View event` detail aside — `B-211` put the names, the ids and the refused line ON
- *     the row on purpose, and a drawer would make the row the summary of itself;
- *   - `Follow new events` — there is no live tail by design (the panel is opened for forensic
- *     review, and a toggle promising one would be a control that lies);
- *   - the `Date` filter — `B-210`'s date BAND already answers "which day", from the same
- *     parts the row renders.
+ * The production panel now has a live-tail checkbox, date range, and row details. This guard
+ * distinguishes those real controls from the prototype's sample labels and fake `View event`
+ * action, so a parity pass cannot restore scaffolding while removing useful operator tools.
  *
  * ⚠ THE POSITIVE CONTROL IS NOT OPTIONAL. Every assertion below is a NEGATIVE observation,
  * and a negative observation is void until the instrument is shown able to report the
@@ -117,7 +110,7 @@ test('the layer table’s tally is the number in the air colour, says "on air" i
  * nothing would pass all of them against a blank screen. So the same locator is asked for
  * something that IS there, in the same run.
  */
-test('the audit log carries none of the prototype’s furniture, and none of the three surfaces we declined', async ({
+test('the audit log keeps production controls and none of the prototype scaffolding', async ({
   app,
 }) => {
   const page = app.page;
@@ -137,13 +130,12 @@ test('the audit log carries none of the prototype’s furniture, and none of the
   await expect(log.getByText(/·\s*UTC/i)).toHaveCount(0);
 
   // ── THE THREE WE DECLINED ────────────────────────────────────────────────────────────
-  await expect(log.getByRole('button', { name: /Follow new events/i })).toHaveCount(0);
-  await expect(log.getByText(/Follow new events/i)).toHaveCount(0);
+  await expect(log.getByRole('checkbox', { name: 'Follow new events' })).toBeVisible();
   await expect(log.getByRole('button', { name: /^View event/i })).toHaveCount(0);
-  await expect(log.locator('.audit-detail, [data-audit-detail]')).toHaveCount(0);
-  // The `Date` filter: ours has Action, Result and Actor, and no fourth.
-  await expect(log.getByLabel('Date', { exact: true })).toHaveCount(0);
-  for (const name of ['Action', 'Result', 'Actor']) {
+  await expect(log.locator('[data-audit-details]')).toHaveCount(0);
+  await expect(log.getByLabel('Audit from date')).toBeVisible();
+  await expect(log.getByLabel('Audit to date')).toBeVisible();
+  for (const name of ['Action', 'Result', 'Channel', 'Actor']) {
     await expect(log.getByLabel(name, { exact: true })).toHaveCount(1);
   }
 });
@@ -151,16 +143,10 @@ test('the audit log carries none of the prototype’s furniture, and none of the
 /**
  * 🔴 `INSPECTOR-AUDIT-05` §5(b) — **THE LOG IS WHERE THE IDS LIVE IN FULL.**
  *
- * Golden rule 11's settled division has two halves and only one of them is ever tested: the
- * operator reads a SENTENCE, and the record keeps the IDS. `audit-legibility` above pins the
- * names and pins that the ids are not gone; what nothing pinned is that the FULL id is
- * actually REACHABLE from the surface — shortening for the eye is only safe because the
- * whole value is one hover and one click away, and a `shortId` that had quietly become the
- * only spelling would pass every assertion this file had.
+ * Golden rule 11's division has two halves: the scanning row carries operator-facing names,
+ * while selecting it opens the complete technical identifiers and their copy actions.
  */
-test('every id the audit row shortens is complete in its tooltip and on its copy button', async ({
-  app,
-}) => {
+test('every technical id is complete in the selected row details and copyable', async ({ app }) => {
   const page = app.page;
   const templateId = 'tpl-e2e-audit-ids';
   const layer = await app.importVcg('ids.vcg', await buildValidVcg(templateId));
@@ -171,38 +157,24 @@ test('every id the audit row shortens is complete in its tooltip and on its copy
   const take = log.locator('[data-audit-row]').first();
   await expect(take).toContainText('take');
 
-  for (const kind of ['item', 'template'] as const) {
-    const chip = take.locator(`[data-audit-id="${kind}"]`);
-    const full = await chip.getAttribute('data-audit-full-id');
-    expect(full, `the ${kind} id is on the row`).toBeTruthy();
-    /*
-      SHORTENED IN THE TEXT — but only where there is something to shorten. `shortId` cuts a
-      UUID to its first eight characters and returns anything else unchanged, which is
-      deliberate: a station template id may be a short human string, and eliding one would
-      cost legibility to buy nothing. So the claim is asked of the id that HAS a long form
-      (the item id is always `item-<uuid>`), and the completeness claim below is asked of
-      both — it is the one that makes shortening safe at all.
-    */
-    const shown = ((await chip.locator('code').textContent()) ?? '').trim();
-    if ((full ?? '').length > 20) {
-      expect(shown.length, `the ${kind} id is shortened for the eye`).toBeLessThan(
-        (full ?? '').length,
-      );
-      expect(shown, `the ${kind} id says it was shortened`).toContain('…');
-    }
-    // …COMPLETE IN THE TOOLTIP, which is the half that makes the shortening safe.
-    await expect(chip.locator('code')).toHaveAttribute('title', full ?? '');
-    // …AND COMPLETE ON THE COPY BUTTON.
-    await expect(chip.getByRole('button', { name: `Copy ${kind} id` })).toHaveAttribute(
-      'title',
-      `Copy ${full ?? ''}`,
-    );
+  const itemId = await take.getAttribute('data-audit-item-id');
+  expect(itemId, 'the row retains the item identity used to open its details').toMatch(/^item-/);
+  const details = log.getByRole('complementary', { name: 'Event details' });
+  await expect(details).toBeVisible();
+  for (const [label, full] of [
+    ['Item ID', itemId ?? ''],
+    ['Template ID', templateId],
+  ] as const) {
+    const fact = details.locator(`[data-audit-technical="${label}"]`);
+    await expect(fact.locator('code')).toHaveText(full);
+    await expect(fact.locator('code')).toHaveAttribute('title', full);
+    await expect(fact.getByRole('button', { name: `Copy ${label}` })).toBeVisible();
   }
 
   /*
     …and the SENTENCE half, which is the other side of the same rule: the names the operator
     reads carry no id at all. Asserted on the names element rather than on the row, because
-    the row legitimately carries both.
+    the selected row's details legitimately carry both.
   */
   await expect(take.locator('[data-audit-names]')).not.toContainText(templateId);
   await expect(take.locator('[data-audit-names]')).not.toContainText(/item-[0-9a-f]{8}/);

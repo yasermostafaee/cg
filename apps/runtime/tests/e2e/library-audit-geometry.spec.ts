@@ -223,18 +223,19 @@ test('§8 — the audit log measures to `AUDIT_LOG_PX`, with the actor column an
   expect(Math.round(actionBox.w)).toBe(px(tokens.fieldW));
   await expect(log.locator('#audit-result')).toBeVisible();
 
-  // THE HEAD — five words, `12px 16px` at 12 px; ACTOR second (guard item 27).
+  // THE HEAD — six words, `12px 16px` at 12 px; CHANNEL first and ACTOR third.
   const head = log.locator('[data-audit-head]');
   await expect(head.locator('span')).toHaveText([
+    'Channel',
     'Time',
     'Actor',
     'Action',
-    'Item / detail',
-    'Outcome',
+    'Item',
+    'Result',
   ]);
   const th = await head
     .locator('span')
-    .nth(1)
+    .nth(2)
     .evaluate((el) => {
       const cs = getComputedStyle(el);
       return {
@@ -253,10 +254,18 @@ test('§8 — the audit log measures to `AUDIT_LOG_PX`, with the actor column an
     Math.round(
       await head
         .locator('span')
-        .first()
+        .nth(1)
         .evaluate((el) => el.getBoundingClientRect().width),
     ),
   ).toBe(px(tokens.colTime));
+  expect(
+    Math.round(
+      await head
+        .locator('span')
+        .first()
+        .evaluate((el) => el.getBoundingClientRect().width),
+    ),
+  ).toBe(px(tokens.colActor));
 
   // A ROW — `15px 16px` at 13 px; its actor cell carries the mock's actor; the outcome is a tag.
   const take = log.locator('[data-audit-row]').first();
@@ -282,10 +291,16 @@ test('§8 — the audit log measures to `AUDIT_LOG_PX`, with the actor column an
   */
   expect(cell.actor).toBe('console');
   const tag = take.locator('[data-audit-outcome]');
-  await expect(tag).toHaveText('ok');
+  await expect(tag).toHaveText('Succeeded');
   expect(px(await tag.evaluate((el) => getComputedStyle(el).fontSize))).toBe(px(tokens.badgeText));
   // Golden rule 11 — the coordinate stays in the entry.
-  await expect(take.locator('[data-audit-slot]')).toHaveText(new RegExp(`^on 1-${String(layer)}$`));
+  await expect(take.locator('[data-audit-slot]')).toHaveText(
+    new RegExp(`^CH 1 · layer ${String(layer)}$`),
+  );
+  await expect(take.locator('[data-audit-slot]')).toHaveAttribute(
+    'data-audit-slot',
+    `1-${String(layer)}`,
+  );
 
   /*
     🔴 `OPERATOR-NAME-SWEEP-01` — **THE CONSOLE STRIP IS GONE, and its geometry block with it.**
