@@ -5886,7 +5886,7 @@ the canvas ratio.
 - WHEN export is running THEN the action visibly remains busy and cannot be started twice
 - WHEN export succeeds THEN its notice uses the success treatment; failures remain persistent error notices
 
-## [~] D-171 — New Live Source plates use clear `plate-N` names and readable canvas labels ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/live-source-plate-names/`
+## [x] D-171 — New Live Source plates use clear `plate-N` names and readable canvas labels ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/live-source-plate-names/`
 
 **What:** Auto-generated source ids begin at `plate-1`, and the authoring label is large enough to identify a plate at normal canvas zoom.
 **Why:** `live-N` describes an implementation concept rather than the frame the author is arranging, and the current label is too small.

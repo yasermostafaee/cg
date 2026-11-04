@@ -73,7 +73,7 @@ export const fieldRefusal = style({
 });
 
 /**
- * `B-187` — the "auto" mark beside a value the TOOL chose (a new plate's `live-N`): a fact, text
+ * `B-187` / D-171 — the "auto" mark beside a value the TOOL chose (a new plate's `plate-N`): a fact, text
  * only, no control chrome (golden rule 13), muted and italic so it reads as "not yet yours"
  * rather than as an error.
  */

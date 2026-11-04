@@ -85,8 +85,13 @@ describe("D-137 — 'author' mode paints the bars", () => {
     // the element has acquired a shipped asset, which is exactly what D-137 refuses.
     expect(el.style.backgroundImage).toContain('linear-gradient');
     expect(el.style.backgroundImage).not.toContain('url(');
-    const label = el.querySelector('[data-cg-live-source-label]');
+    const label = el.querySelector<HTMLElement>('[data-cg-live-source-label]');
     expect(label?.textContent).toBe('guest-1');
+    // D-171 — readable at ordinary canvas zoom, not the old 14px status caption.
+    expect(label?.style.fontSize).toBe('24px');
+    expect(label?.style.fontWeight).toBe('700');
+    expect(label?.style.lineHeight).toBe('1.3');
+    expect(label?.style.padding).toBe('6px 10px');
   });
 
   it('the gradient uses PAIRED stops, never the Chromium-72 double-position form', () => {

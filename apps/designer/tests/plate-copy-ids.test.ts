@@ -7,7 +7,7 @@ import { defaultLiveSource } from '../src/renderer/state/element-defaults.js';
 import { liveSourceIssues } from '../src/renderer/state/live-source-preflight.js';
 
 /**
- * 🔴 `RUN-NEXT-VERSION-02` Q5 (the owner) — **A DUPLICATED OR PASTED PLATE GETS THE NEXT FREE `live-N`,
+ * 🔴 `RUN-NEXT-VERSION-02` Q5 / D-171 — **A DUPLICATED OR PASTED PLATE GETS THE NEXT FREE `plate-N`,
  * MARKED AUTO.** It used to keep its original's id: two plates naming one source in one look, which
  * the export refuses (`live-source-repeated`).
  */
@@ -43,8 +43,8 @@ function addPlate(id: string, routeKey: string | undefined, x = 0): void {
   designerStore.addElement({ ...p, ...(routeKey !== undefined ? { routeKey } : {}) } as Element);
 }
 
-describe('🔴 Q5 — a copied plate takes the next free live-N, marked auto', () => {
-  it('duplicate: the copy is live-2, auto; the original keeps live-1, confirmed', () => {
+describe('🔴 Q5 / D-171 — a copied plate takes the next free plate-N, marked auto', () => {
+  it('duplicate: the copy is plate-1, auto; the legacy original keeps live-1, confirmed', () => {
     freshProject();
     addPlate('p1', 'live-1');
     designerStore.setSelection(['p1']);
@@ -52,17 +52,17 @@ describe('🔴 Q5 — a copied plate takes the next free live-N, marked auto', (
     const [original, copy] = plates();
     expect(original).toMatchObject({ id: 'p1', routeKey: 'live-1' });
     expect(original).not.toHaveProperty('routeKeyAuto');
-    expect(copy).toMatchObject({ routeKey: 'live-2', routeKeyAuto: true });
+    expect(copy).toMatchObject({ routeKey: 'plate-1', routeKeyAuto: true });
   });
 
-  it('paste twice: live-2 and live-3, and the export refuses no repeated source', () => {
+  it('paste twice: plate-2 and plate-3, and the export finds no repeated source', () => {
     freshProject();
-    addPlate('p1', 'live-1');
+    addPlate('p1', 'plate-1');
     designerStore.setSelection(['p1']);
     designerStore.copySelection();
     designerStore.pasteElements();
     designerStore.pasteElements();
-    expect(plates().map((p) => p.routeKey)).toEqual(['live-1', 'live-2', 'live-3']);
+    expect(plates().map((p) => p.routeKey)).toEqual(['plate-1', 'plate-2', 'plate-3']);
     const st = designerStore.get();
     const issues = liveSourceIssues(editSceneOf(st.scene, st.activeCompositionId)!);
     expect(issues.filter((i) => i.code === 'live-source-repeated')).toEqual([]);
@@ -70,8 +70,8 @@ describe('🔴 Q5 — a copied plate takes the next free live-N, marked auto', (
 
   it('two plates selected and duplicated get two different ids', () => {
     freshProject();
-    addPlate('p1', 'live-1');
-    addPlate('p2', 'live-2', 700);
+    addPlate('p1', 'plate-1');
+    addPlate('p2', 'plate-2', 700);
     designerStore.setSelection(['p1', 'p2']);
     designerStore.duplicateSelection();
     expect(new Set(plates().map((p) => p.routeKey)).size).toBe(4);

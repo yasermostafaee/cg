@@ -90,15 +90,15 @@ test.describe('Live Source (D-137 phase 1)', () => {
 
       `B-183` made a drawn plate point at NOTHING, because its old `live-1` was a suggestion the
       author had not accepted. The owner reopened the default on one condition — the surface
-      says the tool chose it — so the plate is born `live-1`, marked "auto" until the author
+      says the tool chose it — so the plate is born `plate-1`, marked "auto" until the author
       keeps it or types another. "Nothing lands unconfirmed" holds: the name lands labelled.
     */
     await expect(holes(app)).toHaveCount(1);
-    await expect(app.liveSourceIdInput).toHaveValue('live-1');
-    await expect(label(app)).toHaveText('live-1');
+    await expect(app.liveSourceIdInput).toHaveValue('plate-1');
+    await expect(label(app)).toHaveText('plate-1');
     const auto = app.inspector.getByTestId('live-source-auto');
     await expect(auto).toHaveText('auto');
-    // …and it is exportable: the operator maps `live-1` in CG Control, as any id.
+    // …and it is exportable: the operator maps `plate-1` in CG Control, as any id.
     await expect(errorPill(app)).toHaveCount(0);
 
     // Choose one — the bars' label follows, which is what makes several holes on one
@@ -142,8 +142,8 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await expect(autoPolicy).toBeChecked();
     await autoPolicy.click();
     await expect(auto).toHaveCount(0);
-    await expect(app.liveSourceIdInput).toHaveValue('live-1');
-    await expect(label(app)).toHaveText('live-1');
+    await expect(app.liveSourceIdInput).toHaveValue('plate-1');
+    await expect(label(app)).toHaveText('plate-1');
   });
 
   test('a device reference is REFUSED as a source id, and the value reverts', async ({ app }) => {
@@ -338,7 +338,7 @@ test.describe('Live Source (D-137 phase 1)', () => {
 
       Written when a drawn plate pointed at nothing: with both unassigned the marks could never
       reach zero (the surviving plate's own `live-source-unset`). `B-187` now names a drawn plate
-      `live-N` (marked "auto"), so that hazard is gone, and the reason that remains is the undo:
+      `plate-N` (marked "auto"), so that hazard is gone, and the reason that remains is the undo:
       setting a source on the second would add a history entry between the two the test relies
       on, so the single `undo()` below would revert that id instead of removing the plate.
     */
@@ -559,7 +559,7 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await app.setInspectorNumber('Y position', 0);
 
     /*
-      🔴 `B-187` — THE TOOL HANDS OUT `live-1`, `live-2` AGAIN, AND SAYS IT DID.
+      🔴 D-171 — THE TOOL HANDS OUT `plate-1`, `plate-2`, AND SAYS IT DID.
 
       `B-183` had stopped the tool naming plates (its names were suggestions nobody accepted);
       the owner reopened it marked "auto" (Q2 (c)). Two plates drawn in one template get two
@@ -569,7 +569,7 @@ test.describe('Live Source (D-137 phase 1)', () => {
     */
     await expect
       .poll(async () => await holes(app).locator('[data-cg-live-source-label]').allTextContents())
-      .toEqual(['live-1', 'live-2']);
+      .toEqual(['plate-1', 'plate-2']);
     await expect(errorPill(app)).toHaveCount(0);
 
     await app.selectElementById(ids[0]!);

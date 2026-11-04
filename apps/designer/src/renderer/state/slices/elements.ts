@@ -45,7 +45,7 @@ function cloneElementWithNewIds(el: Element): Element {
 }
 
 /**
- * 🔴 `RUN-NEXT-VERSION-02` Q5 (the owner) — **A COPIED PLATE GETS THE NEXT FREE `live-N`, MARKED AUTO.**
+ * 🔴 `RUN-NEXT-VERSION-02` Q5 / D-171 — **A COPIED PLATE GETS THE NEXT FREE `plate-N`, MARKED AUTO.**
  * A duplicate or a paste kept the original's id, so two plates named one source in the same look —
  * the export's `live-source-repeated` refusal, or two holes fed one input. Each plate in the copy
  * (a container's too) takes the next id free where it lands (`nextAutoSourceId`: the active

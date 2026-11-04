@@ -44,7 +44,7 @@ const plate = (id: string, routeKey: string, x = 0, y = 0, w = 640, h = 360): El
 
 /**
  * `B-183` — a plate pointed at NOTHING: the factory's state, and a cleared plate's. (A plate drawn
- * with the canvas tool is named `live-N` since `B-187`.)
+ * with the canvas tool is named `plate-N` since D-171.)
  */
 const unsetPlate = (id: string, x = 0, y = 0, w = 640, h = 360): Element =>
   ({

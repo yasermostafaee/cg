@@ -1793,7 +1793,7 @@ function buildLiveSource(element: VideoPlaceholderElement, ctx: BuildCtx): HTMLE
     old `live-1` default was justified in `element-defaults.ts` precisely because it was
     "visible on the canvas … which is what tells the author there is something to set". Now
     that a plate can point at NOTHING (the factory's plate, a cleared one — a DRAWN plate is
-    named `live-N` since `B-187`), that sentence is only honoured by saying nothing is set — an
+    named `plate-N` since D-171), that sentence is only honoured by saying nothing is set — an
     empty label would leave the bars looking finished.
 
     ⚠ The plate paints NOTHING on air (the hole is transparent and the picture is composited
@@ -1805,10 +1805,10 @@ function buildLiveSource(element: VideoPlaceholderElement, ctx: BuildCtx): HTMLE
   label.style.left = '0';
   label.style.right = '0';
   label.style.bottom = '0';
-  label.style.padding = '2px 6px';
+  label.style.padding = '6px 10px';
   label.style.background = 'rgba(0, 0, 0, 0.72)';
   label.style.color = '#ffffff';
-  label.style.font = '600 14px/1.4 system-ui, sans-serif';
+  label.style.font = '700 24px/1.3 system-ui, sans-serif';
   // The id is ASCII by schema (`LiveSourceIdSchema`), so it is pinned LTR: a Persian
   // scene must not flip `guest-1` to `1-guest` around the surrounding RTL context.
   label.style.direction = 'ltr';

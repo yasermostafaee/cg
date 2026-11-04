@@ -202,7 +202,7 @@ export class DesignerApp {
 
   /**
    * D-137 — add a Live Source by placing the Live Source tool (auto-selected).
-   * `B-187` — the tool names it the next free `live-N` in its look, marked "auto" in the
+   * `B-187` / D-171 — the tool names it the next free `plate-N` in its look, marked "auto" in the
    * Inspector until kept or renamed.
    */
   async addLiveSource(pos: { x: number; y: number } = { x: 200, y: 160 }): Promise<void> {

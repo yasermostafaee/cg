@@ -631,7 +631,7 @@ export function CanvasOverlay({
         chose, and `look-source-duplicate` is the rule that states it. An unassigned plate
         cannot collide with anything.
 
-        🔴 `B-187` (owner, 2026-10-14, Q2 (c)) — the plate gets the next free `live-N` IN ITS
+        🔴 `B-187` / D-171 — the plate gets the next free `plate-N` IN ITS
         LOOK, MARKED `routeKeyAuto` until the author confirms or renames it. The tool still
         chooses, but now it SAYS it chose: the Inspector shows "auto", which is the condition
         on which the owner reopened this. The name never collides where one source is one seat

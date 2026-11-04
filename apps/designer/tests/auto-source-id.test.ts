@@ -6,7 +6,7 @@ import { editSceneOf } from '../src/renderer/state/scene-doc.js';
 
 /**
  * 🔴 `B-187` (owner, 2026-10-14, Q2 (c)) — the automatic name a drawn plate gets: the next free
- * `live-N` IN ITS LOOK. "Free" is judged where one source is one seat, so the name can never trip
+ * `plate-N` IN ITS LOOK. "Free" is judged where one source is one seat, so the name can never trip
  * `look-source-duplicate` or `live-source-repeated` — pinned below by running the real preflight.
  */
 
@@ -72,27 +72,31 @@ function project(compositions: unknown[]): Scene {
   } as unknown as Scene;
 }
 
-describe('B-187 — no look in scope: the next free live-N in the whole project', () => {
-  it('an empty template starts at live-1', () => {
-    expect(nextAutoSourceId(project([comp('main', [])]), 'main')).toBe('live-1');
+describe('D-171 — no look in scope: the next free plate-N in the whole project', () => {
+  it('an empty template starts at plate-1', () => {
+    expect(nextAutoSourceId(project([comp('main', [])]), 'main')).toBe('plate-1');
   });
 
-  it('takes the first GAP — live-1 and live-3 in use ⇒ live-2', () => {
-    const s = project([comp('main', [plate('a', 'live-1'), plate('b', 'live-3', 700)])]);
-    expect(nextAutoSourceId(s, 'main')).toBe('live-2');
+  it('takes the first GAP — plate-1 and plate-3 in use ⇒ plate-2', () => {
+    const s = project([comp('main', [plate('a', 'plate-1'), plate('b', 'plate-3', 700)])]);
+    expect(nextAutoSourceId(s, 'main')).toBe('plate-2');
   });
 
   it('a plate in ANOTHER composition counts — every plate may be on air with this one', () => {
     const s = project([
       comp('main', [instance('box', 'boxc')]),
-      comp('boxc', [plate('a', 'live-1')]),
+      comp('boxc', [plate('a', 'plate-1')]),
     ]);
-    expect(nextAutoSourceId(s, 'main')).toBe('live-2');
+    expect(nextAutoSourceId(s, 'main')).toBe('plate-2');
   });
 
-  it('author ids and unassigned plates take nothing from the sequence', () => {
-    const s = project([comp('main', [plate('a', 'guest-1'), plate('b', undefined, 700)])]);
-    expect(nextAutoSourceId(s, 'main')).toBe('live-1');
+  it('authored, legacy live-N and unassigned plates take nothing from the new sequence', () => {
+    const legacy = plate('legacy', 'live-1');
+    const s = project([
+      comp('main', [legacy, plate('a', 'guest-1', 700), plate('b', undefined, 1400)]),
+    ]);
+    expect(nextAutoSourceId(s, 'main')).toBe('plate-1');
+    expect(legacy).toMatchObject({ routeKey: 'live-1' });
   });
 });
 
@@ -132,23 +136,27 @@ describe('B-187 — inside a LOOK: free in THAT look (the owner’s l1 / l1,l2 /
     ]);
 
   it('🔴 a plate drawn in look B reuses a name look A holds — different looks never share a seat', () => {
-    expect(nextAutoSourceId(looks(['live-1', 'live-2'], ['live-1']), 'look-b-c')).toBe('live-2');
+    expect(nextAutoSourceId(looks(['plate-1', 'plate-2'], ['plate-1']), 'look-b-c')).toBe(
+      'plate-2',
+    );
   });
 
   it('a plate drawn in look A takes the next after ITS OWN', () => {
-    expect(nextAutoSourceId(looks(['live-1', 'live-2'], ['live-1']), 'look-a-c')).toBe('live-3');
+    expect(nextAutoSourceId(looks(['plate-1', 'plate-2'], ['plate-1']), 'look-a-c')).toBe(
+      'plate-3',
+    );
   });
 
   it('a ROOT plate is in every look, so its key is never handed out inside one', () => {
-    expect(nextAutoSourceId(looks([], [], 'live-1'), 'look-b-c')).toBe('live-2');
+    expect(nextAutoSourceId(looks([], [], 'plate-1'), 'look-b-c')).toBe('plate-2');
   });
 
   it('drawing in the group’s own root counts every look — that plate shows with all of them', () => {
-    expect(nextAutoSourceId(looks(['live-1', 'live-2'], ['live-1']), 'main')).toBe('live-3');
+    expect(nextAutoSourceId(looks(['plate-1', 'plate-2'], ['plate-1']), 'main')).toBe('plate-3');
   });
 
   it('🔴 the generated name trips no one-seat refusal — the real preflight agrees', () => {
-    const s = looks(['live-1', 'live-2'], ['live-1']);
+    const s = looks(['plate-1', 'plate-2'], ['plate-1']);
     const key = nextAutoSourceId(s, 'look-b-c');
     const lookB = s.compositions?.find((c) => c.id === 'look-b-c');
     lookB?.layers[0]?.children.push(plate('b-new', key, 0, 400));

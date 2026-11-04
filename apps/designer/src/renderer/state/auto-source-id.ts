@@ -4,7 +4,7 @@ import { editSceneOf } from './scene-doc.js';
 
 /**
  * 🔴 `B-187` (owner, 2026-10-14, Q2 (c)) — **the automatic name a newly drawn Live Source plate
- * gets: the next free `live-N` IN ITS LOOK.** The plate is marked `routeKeyAuto` until the author
+ * gets: the next free `plate-N` IN ITS LOOK.** The plate is marked `routeKeyAuto` until the author
  * confirms or replaces it (the Inspector says "auto"), so the name lands labelled as the tool's,
  * not the author's. Nothing reaches air differently — the operator maps the id in CG Control.
  *
@@ -29,7 +29,7 @@ export function nextAutoSourceId(
 ): string {
   const used = usedKeysFor(scene, activeCompositionId);
   for (let n = 1; ; n += 1) {
-    const key = `live-${String(n)}`;
+    const key = `plate-${String(n)}`;
     if (!used.has(key) && !alsoTaken.has(key)) return key;
   }
 }

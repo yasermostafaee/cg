@@ -296,7 +296,7 @@ export function defaultEllipse(id: string, x: number, y: number): ShapeElement {
  * ⭐ **`B-183` — `routeKey` is OMITTED: a new plate points at NOTHING.**
  *
  * `B-187` — the factory still names nothing. The CANVAS TOOL names what it draws, the next
- * free `live-N` in its look, marked `routeKeyAuto` so the Inspector says the tool chose it
+ * free `plate-N` in its look, marked `routeKeyAuto` so the Inspector says the tool chose it
  * (`state/auto-source-id.ts`). That is the one place a name is generated, and it is labelled.
  *
  * This used to default to `live-1`, argued for here on the grounds that "the id is required
@@ -313,7 +313,7 @@ export function defaultEllipse(id: string, x: number, y: number): ShapeElement {
  * ⭐ The owner's principle, stated on 2026-08-26: **nothing lands unconfirmed.**
  *
  * `routeKey` is deliberately NOT a parameter any more. The one caller that passed one was the
- * canvas tool, handing over a generated `live-N`; keeping the parameter would leave that door
+ * canvas tool, handing over a generated source id; keeping the parameter would leave that door
  * open for the next caller.
  */
 /**

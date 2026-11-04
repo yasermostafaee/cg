@@ -94,9 +94,9 @@ function commit(input: HTMLInputElement, value: string): void {
 
 describe('B-187 — the "auto" mark on a tool-named plate', () => {
   it('🔴 an automatic id reads "auto" and has a checked reversible control', () => {
-    seedPlate({ routeKey: 'live-1', routeKeyAuto: true });
+    seedPlate({ routeKey: 'plate-1', routeKeyAuto: true });
     const c = render();
-    expect(idInput(c)?.value).toBe('live-1');
+    expect(idInput(c)?.value).toBe('plate-1');
     const mark = c.querySelector('[data-testid="live-source-auto"]');
     expect(mark?.textContent).toBe('auto');
     expect(mark?.getAttribute('title')).toBe(AUTO_SOURCE_ID_TITLE);
@@ -113,13 +113,13 @@ describe('B-187 — the "auto" mark on a tool-named plate', () => {
   });
 
   it('B-365 — Auto can be turned off and then back on without changing the id', () => {
-    seedPlate({ routeKey: 'live-1', routeKeyAuto: true });
+    seedPlate({ routeKey: 'plate-1', routeKeyAuto: true });
     const c = render();
     const auto = c.querySelector<HTMLInputElement>('input[aria-label="auto source id"]');
     if (auto === null) throw new Error('no auto checkbox');
     act(() => auto.click());
     expect(plateNow().routeKeyAuto).toBe(false);
-    expect(plateNow().routeKey).toBe('live-1');
+    expect(plateNow().routeKey).toBe('plate-1');
     rerender();
     expect(c.querySelector('[data-testid="live-source-auto"]')).toBeNull();
     const sourceId = idInput(c);
@@ -133,13 +133,13 @@ describe('B-187 — the "auto" mark on a tool-named plate', () => {
     expect(restore.checked).toBe(false);
     act(() => restore.click());
     expect(plateNow().routeKeyAuto).toBe(true);
-    expect(plateNow().routeKey).toBe('live-1');
+    expect(plateNow().routeKey).toBe('plate-1');
     rerender();
     expect(c.querySelector('[data-testid="live-source-auto"]')).not.toBeNull();
   });
 
   it('TYPING another id makes it the author’s', () => {
-    seedPlate({ routeKey: 'live-1', routeKeyAuto: true });
+    seedPlate({ routeKey: 'plate-1', routeKeyAuto: true });
     const c = render();
     const auto = c.querySelector<HTMLInputElement>('input[aria-label="auto source id"]');
     if (auto === null) throw new Error('no auto checkbox');
@@ -155,7 +155,7 @@ describe('B-187 — the "auto" mark on a tool-named plate', () => {
     expect(c.querySelector('input[aria-label="auto"]')).toBeNull();
   });
 
-  it('an unchanged manual commit does not turn Auto back on', () => {
+  it('an unchanged legacy manual id remains untouched and does not turn Auto back on', () => {
     seedPlate({ routeKey: 'live-1', routeKeyAuto: false });
     const c = render();
     const input = idInput(c);
@@ -165,7 +165,7 @@ describe('B-187 — the "auto" mark on a tool-named plate', () => {
   });
 
   it('clearing an automatic id unassigns the plate but keeps Auto available', () => {
-    seedPlate({ routeKey: 'live-1', routeKeyAuto: true });
+    seedPlate({ routeKey: 'plate-1', routeKeyAuto: true });
     const c = render();
     const auto = c.querySelector<HTMLInputElement>('input[aria-label="auto source id"]');
     if (auto === null) throw new Error('no auto checkbox');
