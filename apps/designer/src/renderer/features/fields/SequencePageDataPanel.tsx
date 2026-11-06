@@ -240,6 +240,12 @@ function SequencePageSection({
   // The connection itself is the authority switch. A second File-only checkbox on the child
   // Repeater created two independent states for one table and was easy to miss.
   const fileOnly = attachment !== null || sequence.pageDataFile !== undefined;
+  // `pageDataFile` is authored scene state and therefore survives a `.cgproj` round trip. The
+  // native source handle is intentionally session-only, but losing that handle must not make an
+  // imported project claim the Sequence is disconnected: CG Control still owns and reads this
+  // Bridge-relative source. A live attachment merely adds Designer-side Reload capability.
+  const connected = fileOnly;
+  const connectedPath = attachment?.sourcePath ?? sequence.pageDataFile;
   const currentSchemaSignature = pageDataSchemaSignature(entry, layout);
   const attachmentNeedsUpdate =
     attachment !== null &&
@@ -419,7 +425,7 @@ function SequencePageSection({
           <Button variant="secondary" onClick={openManager} data-testid="sequence-page-data-open">
             Page data…
           </Button>
-          {attachment !== null && (
+          {connected && (
             <>
               <span
                 className={`${s.connectionStatus} ${attachmentNeedsUpdate ? s.updateNeeded : s.connected}`}
@@ -430,19 +436,26 @@ function SequencePageSection({
                 <Icon icon={attachmentNeedsUpdate ? TriangleAlert : CircleCheck} size={14} />
                 {attachmentNeedsUpdate ? 'Connected · update file' : 'Connected'}
               </span>
-              <Button variant="secondary" onClick={() => void reload()}>
-                Reload
-              </Button>
+              {attachment !== null && (
+                <Button variant="secondary" onClick={() => void reload()}>
+                  Reload
+                </Button>
+              )}
             </>
           )}
-          {attachment === null && (
+          {!connected && (
             <span className={`${s.connectionStatus} ${s.disconnected}`}>
               <Icon icon={Unplug} size={14} /> Not connected
             </span>
           )}
           {fileOnly && <span className={s.connectionStatus}>CG Control · file managed</span>}
         </div>
-        {attachment !== null && <code className={s.path}>{attachment.sourcePath}</code>}
+        {connectedPath !== undefined && (
+          <div className={s.path} title={connectedPath}>
+            <span>Share path</span>
+            <code>{connectedPath}</code>
+          </div>
+        )}
       </section>
       {managerOpen && (
         <Modal
@@ -465,15 +478,13 @@ function SequencePageSection({
         >
           <div className={s.modalSourceRow}>
             <span
-              className={`${s.connectionStatus} ${attachment === null ? s.disconnected : attachmentNeedsUpdate ? s.updateNeeded : s.connected}`}
+              className={`${s.connectionStatus} ${!connected ? s.disconnected : attachmentNeedsUpdate ? s.updateNeeded : s.connected}`}
             >
               <Icon
-                icon={
-                  attachment === null ? Unplug : attachmentNeedsUpdate ? TriangleAlert : CircleCheck
-                }
+                icon={!connected ? Unplug : attachmentNeedsUpdate ? TriangleAlert : CircleCheck}
                 size={14}
               />
-              {attachment === null
+              {!connected
                 ? 'Not connected'
                 : attachmentNeedsUpdate
                   ? 'Connected · update file'
@@ -482,14 +493,16 @@ function SequencePageSection({
             <Button
               onClick={() => void (layout === null ? saveAndConnectJson() : saveAndConnectExcel())}
             >
-              Save and connect {attachment === null ? '' : 'another '}
+              Save and connect {!connected ? '' : 'another '}
               {layout === null ? 'JSON' : 'Excel'} file…
             </Button>
-            {attachment !== null && (
+            {connected && (
               <>
-                <Button variant="secondary" onClick={() => void reload()}>
-                  Reload connected file
-                </Button>
+                {attachment !== null && (
+                  <Button variant="secondary" onClick={() => void reload()}>
+                    Reload connected file
+                  </Button>
+                )}
                 <Button
                   variant="secondary"
                   onClick={() => {
@@ -502,18 +515,17 @@ function SequencePageSection({
               </>
             )}
           </div>
-          {attachment !== null && <code className={s.path}>{attachment.sourcePath}</code>}
+          {connectedPath !== undefined && (
+            <div className={s.path} title={connectedPath}>
+              <span>Share path</span>
+              <code>{connectedPath}</code>
+            </div>
+          )}
           {fileOnly && <span className={s.connectionStatus}>CG Control · file managed</span>}
           {attachmentNeedsUpdate && (
             <p className={s.warning} role="status">
               Template fields changed after this file was generated. Reload still validates its
               data, but its columns or Excel choices may be outdated. Save and connect a new file.
-            </p>
-          )}
-          {attachment === null && sequence.pageDataFile !== undefined && (
-            <p className={s.bulkHint}>
-              The previous file “{sequence.pageDataFile}” is not connected in this session. Save and
-              connect a new file to enable Reload.
             </p>
           )}
           <p className={s.bulkHint}>

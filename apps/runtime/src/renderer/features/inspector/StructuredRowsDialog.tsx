@@ -160,7 +160,7 @@ export function StructuredRowsDialog({
       onClose={onClose}
       footer={
         <ModalAction actionRole="cancel" onClick={onClose}>
-          Done
+          Close
         </ModalAction>
       }
     >

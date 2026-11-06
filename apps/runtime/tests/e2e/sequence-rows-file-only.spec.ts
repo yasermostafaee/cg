@@ -38,7 +38,7 @@ test.describe('D-180 — paged Repeater input authority', () => {
     await expect(currentData).toContainText('Rain (0)');
     await expect(currentData).toContainText('Sun (1)');
     await expect(currentData.locator('input, select, textarea')).toHaveCount(0);
-    await currentData.getByRole('button', { name: 'Done' }).click();
+    await currentData.locator('button[data-modal-role="cancel"]', { hasText: 'Close' }).click();
     await expect(currentData).toHaveCount(0);
   });
 
@@ -84,6 +84,50 @@ test.describe('D-180 — paged Repeater input authority', () => {
     await expect(rows.getByRole('combobox', { name: /Cities item/ })).toHaveCount(0);
     await expect(rows.getByRole('button', { name: /Save and connect|Detach/ })).toHaveCount(0);
     await expect(rows.getByRole('button', { name: 'View current data' })).toBeVisible();
+  });
+
+  test('an unchanged authored Sequence file is clean on the first Inspector open', async ({
+    app,
+  }) => {
+    const templateId = 'tpl-e2e-sequence-owned-clean-file';
+    await app.importVcg(
+      'sequence-owned-clean-file.vcg',
+      await buildPagedRepeaterVcg(templateId, { pageDataFile: 'weather/cities.csv' }),
+    );
+    await app.page.evaluate(() => {
+      const target = window as unknown as {
+        __sequenceFileReads: number;
+        cg: {
+          textSources: {
+            read: (request: { path: string }) => Promise<{ name: string; content: string }>;
+          };
+        };
+      };
+      target.__sequenceFileReads = 0;
+      target.cg.textSources.read = (request) => {
+        target.__sequenceFileReads += 1;
+        return Promise.resolve({
+          name: request.path,
+          content: 'City,Temperature,Weather\nTehran,25,0\nTabriz,-12,1\nShiraz,22,1',
+        });
+      };
+    });
+
+    await app.selectStackRow(templateId);
+    const rows = app.inspector.getByRole('region', { name: 'Weather pages all rows' });
+    await expect(rows).toContainText('File managed');
+    await expect(rows).toContainText('Connected');
+    await expect
+      .poll(() =>
+        app.page.evaluate(
+          () => (window as unknown as { __sequenceFileReads: number }).__sequenceFileReads,
+        ),
+      )
+      .toBe(1);
+    await expect(app.inspector.getByLabel('unapplied edits')).toHaveCount(0);
+    await expect(
+      app.inspector.getByRole('button', { name: 'Discard staged edits' }),
+    ).toBeDisabled();
   });
 
   test('an open Inspector adopts Sequence file ownership after updating the same template', async ({

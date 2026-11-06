@@ -124,7 +124,7 @@ test.describe('D-119 + D-179 — starter landing catalog', () => {
 
   /**
    * `DESIGNER-FIX-0905` — the one thing the five starters differ in, playout behaviour, is a
-   * comparable BADGE on each card, derived from the scene, above one line of description.
+   * comparable BADGE on each card, derived from the scene; prose descriptions stay off Landing.
    */
   test('every card carries a playout badge, and the badges differ where the templates do', async ({
     app,
@@ -136,6 +136,7 @@ test.describe('D-119 + D-179 — starter landing catalog', () => {
     await expect(badges.nth(2)).toContainText(/loops every ~10 s/);
     await expect(badges.nth(3)).toHaveText('auto-out after 6 s');
     await expect(badges.nth(4)).toHaveText('content-driven hold');
+    await expect(app.page.getByText(/Two-deck IRIB-style strap|Persian news strap/)).toHaveCount(0);
   });
 
   test('the landing carries the APASAI brand and website link', async ({ app }) => {

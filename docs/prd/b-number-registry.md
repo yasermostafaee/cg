@@ -3992,3 +3992,23 @@ Measured free before use: the registry named `B-391` as next free and the tracke
 found no existing allocation for `B-391`.
 
 ⇒ **Next free after this entry is `B-392`**, **`D-196`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-06 — clean first open for unchanged Sequence files takes `B-392`
+
+- `B-392` — an unchanged Sequence workbook showed `draft` on the Inspector's first open because
+  file parsing replaced invisible internal row ids — [bugs-runtime.md](bugs-runtime.md).
+
+Measured free before use: the registry named `B-392` as next free and the tracked heading audit
+found no existing allocation for `B-392`.
+
+⇒ **Next free after this entry is `B-393`**, **`D-196`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-06 — durable Sequence connection truth takes `B-393`
+
+- `B-393` — importing a saved project showed its persisted Sequence workbook as disconnected and
+  Preview still offered per-page row editing — [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the registry named `B-393` as next free and the tracked heading audit
+found no existing allocation for `B-393`.
+
+⇒ **Next free after this entry is `B-394`**, **`D-196`**, **`P-075`**, **`R-105`** and **`C-049`**.

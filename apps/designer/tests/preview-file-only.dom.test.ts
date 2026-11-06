@@ -82,4 +82,54 @@ describe('R-102 — File-only authority in Designer composition Preview', () => 
     expect(onChange).not.toHaveBeenCalled();
     expect(onUpdateAll).not.toHaveBeenCalled();
   });
+
+  it('shows a Sequence-owned workbook instead of an Edit rows action on every page', () => {
+    const onChange = vi.fn();
+    const list: DynamicField = {
+      id: 'cities',
+      label: 'Cities',
+      required: false,
+      type: 'list',
+      default: [],
+      itemFields: [{ id: 'city', label: 'City', required: true, type: 'text', default: '' }],
+    };
+    const groups = [1, 2].map((item) => ({
+      instanceId: `weather:page-${String(item)}`,
+      name: `weather:page-${String(item)}`,
+      label: `Weather page — item ${String(item)}`,
+      compositionId: 'weather-page',
+      sequence: {
+        id: 'weather',
+        name: 'Weather pages',
+        itemId: `page-${String(item)}`,
+        pageDataFile: 'weather/cities.xlsx',
+      },
+      aggregate: { fields: [list], groups: [] },
+    }));
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() =>
+      root?.render(
+        createElement(PreviewFieldForm, {
+          aggregate: { fields: [], groups },
+          values: {
+            'weather:page-1': { cities: [{ id: 'tehran', city: 'Tehran' }] },
+            'weather:page-2': { cities: [{ id: 'shiraz', city: 'Shiraz' }] },
+          },
+          onChange,
+          columnsByFieldId: new Map([
+            ['cities', [{ key: 'city', label: 'City', kind: 'text' as const }]],
+          ]),
+        }),
+      ),
+    );
+
+    expect(container.textContent).not.toContain('Edit rows');
+    expect(container.querySelectorAll('[aria-label="Cities connected file"]')).toHaveLength(2);
+    expect(container.textContent).toContain('weather/cities.xlsx');
+    expect(container.textContent).toContain('file managed');
+    expect(onChange).not.toHaveBeenCalled();
+  });
 });

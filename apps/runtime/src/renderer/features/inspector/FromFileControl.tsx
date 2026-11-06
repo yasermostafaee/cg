@@ -60,6 +60,13 @@ const styles = {
   // its detach control. It was a bare muted span that wrapped and pushed the
   // buttons around as the path grew.
   hint: { fontSize: '0.72rem', color: colors.textMuted, margin: 0 },
+  sourcePath: {
+    display: 'block',
+    maxWidth: '100%',
+    color: colors.textMuted,
+    fontSize: '0.72rem',
+    overflowWrap: 'anywhere' as const,
+  },
   error: { fontSize: '0.75rem', color: colors.errorText, margin: 0 },
 } as const;
 
@@ -429,6 +436,9 @@ export function FromFileControl({
             an `icon`: the same shape and the same glyph as the item-delete buttons
             one row up, doing something else entirely. Do not put it back. */}
       </div>
+      <code style={styles.sourcePath} title={state.source.displayPath ?? state.source.name}>
+        Share path · {state.source.displayPath ?? state.source.name}
+      </code>
       {needsGrant && <p style={styles.hint}>{FILE_SOURCE_NEEDS_PERMISSION_MESSAGE}</p>}
       {state.error !== null && (
         <p style={styles.error} role="alert">

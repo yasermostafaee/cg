@@ -4698,3 +4698,15 @@ their sole visibility owner and deliberately has no all-off state. Their lock re
 ordinary elements inside each Look keep their Hide/Show control. **Acceptance:** the Looks browser
 walk proves both managed root rows have no Hide/Show button, keep Lock/Unlock, and the picker still
 switches the rendered visible set.
+
+## [x] B-393 — A saved Sequence workbook looks disconnected after project import and Preview still offers page row editors ⟨priority: high — one persisted authority is presented as two conflicting data routes⟩ — FIXED 2026-11-06 · `openspec/changes/complete-weather-repeater-data/`
+
+**Repro:** connect a Sequence page workbook, save the `.cgproj`, import it again and inspect the
+Sequence and Designer Preview. **Actual:** `pageDataFile` survives in the scene, but the Inspector
+derives **Connected** only from the session-only native file attachment, so it says **Not connected**;
+Preview independently renders **Edit rows…** for every page Repeater. **Expected / Fix:** the
+persisted Bridge-relative `pageDataFile` is the connection truth after import. The Inspector and
+Page data modal show **Connected**, **CG Control · file managed** and the Share path; Reload remains
+available only while the Designer still holds its local handle. Preview inherits the outer
+Sequence's file ownership into every page namespace and replaces row editors with a read-only
+connected-file fact. CG Control also displays the resolved Share path beside connected file status.

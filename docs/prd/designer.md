@@ -5490,7 +5490,7 @@ they stay inline by the rule. Reported as measured, not fitted.
 | Open a look to author it — … Double-clicking a look on the canvas opens it too       | teaching         | the `i`                                           |
 | N issues — export will refuse + rows                                                 | refusal          | inline, LOUDER (0.8rem heading, 0.76rem rows)     |
 | From "…webm" (480×270, conformed 30→50 fps)                                          | facts            | four labelled rows                                |
-| the five home-card descriptions                                                      | differentiator   | a derived badge + one line each                   |
+| the five home-card descriptions                                                      | differentiator   | removed; the derived badge remains                |
 
 ### Hiding vs disabling — the choice per control
 
@@ -5512,9 +5512,9 @@ reads well in the owner's window is the owner's read.
 
 ### Not in scope, and seen
 
-- ⚠ **Localisation:** the five starter labels are Persian with an English gloss, and every
-  description, badge and Inspector string is English — the mixed-language surface is wider than
-  the cards (every panel). Reported, nothing changed.
+- ⚠ **Localisation:** the starter labels are Persian and card descriptions are absent; playout
+  badges and Inspector strings remain English. The mixed-language surface is wider than the cards
+  (every panel). Reported, nothing else changed.
 - The clock's format-token legend stays inline (consulted every time a format is typed).
 - [[B-197]] (rounded corners on a plate) is named in the Live Source `i` as having no home yet;
   nothing about it changes.
@@ -6069,7 +6069,8 @@ Forecast labels retain their centered columns; numeric text and degree marks for
 pairs through ordinary editable Text alignment. Legacy gallery titles are Persian-only, without
 English suffixes; stable template IDs stay.
 Rendered graphics contain no instructional footers such as the explanation of following city pages;
-capability descriptions remain outside the on-air composition in the gallery and documentation.
+Capability descriptions remain in documentation; Landing cards show only the title, playout badge
+and motion preview, without the prose description below them.
 The countdown sample is an Azan lower-third: it counts down to the operator's chosen target, then
 replaces the timer with an editable “اذان مغرب به افق تهران” announcement that remains until Stop.
 All switching uses visible Countdown Steps; no timetable or prayer-time calculation is implied.

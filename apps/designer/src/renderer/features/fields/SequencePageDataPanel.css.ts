@@ -1,4 +1,4 @@
-import { style } from '@vanilla-extract/css';
+import { globalStyle, style } from '@vanilla-extract/css';
 import { colors } from '../../theme.js';
 
 export const section = style({
@@ -42,12 +42,29 @@ export const updateNeeded = style({
 });
 
 export const path = style({
-  display: 'block',
+  display: 'flex',
+  alignItems: 'baseline',
+  gap: '0.45rem',
+  flexWrap: 'wrap',
   minWidth: 0,
   overflowWrap: 'anywhere',
   color: colors.text,
   fontSize: '0.76rem',
   marginBottom: '0.3rem',
+});
+
+globalStyle(`${path} > span`, {
+  color: colors.textMuted,
+  fontSize: '0.68rem',
+  fontWeight: 700,
+  textTransform: 'uppercase',
+});
+
+globalStyle(`${path} > code`, {
+  minWidth: 0,
+  overflowWrap: 'anywhere',
+  color: colors.text,
+  fontFamily: 'inherit',
 });
 
 export const bulkHint = style({

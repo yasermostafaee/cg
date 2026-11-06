@@ -239,8 +239,6 @@ export const cardBadge = style({
   whiteSpace: 'nowrap',
 });
 
-export const cardDesc = style({ color: colors.textMuted, fontSize: '0.78rem', lineHeight: 1.4 });
-
 // D-093 — a Recent row is the open button (the card) plus a sibling remove (×) control.
 export const recentRowWrap = style({
   display: 'flex',

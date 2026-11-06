@@ -94,6 +94,16 @@
       Save/connect actions; cover the exact re-import path in DOM and real Runtime browser tests.
       Focused DOM and Runtime Playwright tests passed on 2026-11-06; local `pnpm gate` then passed
       all 103/103 tasks plus formatting, control-byte and strict validation of all 141 OpenSpec items.
+- [x] 2.35 Preserve existing Repeater row identities when an authored Sequence file is read, so an
+      unchanged workbook is clean on the first Inspector open while real data changes still stage;
+      cover the first-open contract in real CG Control browser automation.
+- [x] 2.36 Treat persisted Sequence `pageDataFile` as the connection truth after `.cgproj` import,
+      show its Share path in Designer and CG Control, and make Designer Preview replace every
+      Sequence-page row editor with the one connected-file fact; cover project import and Preview
+      in a real Designer browser.
+- [x] 2.37 Label the read-only current file-only data modal's dismiss action `Close`, not `Done`.
+- [x] 2.38 Remove prose descriptions from Landing starter cards while retaining the Persian title,
+      playout badge and motion preview.
 
 ## 3. Conditional value rules
 

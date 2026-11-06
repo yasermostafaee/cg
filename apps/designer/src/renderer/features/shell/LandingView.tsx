@@ -319,13 +319,12 @@ export function StarterCard({
       <span className={s.cardBody}>
         <span className={s.cardLabel}>{starter.label}</span>
         {/* `DESIGNER-FIX-0905` — the DIFFERENTIATOR as a comparable badge, derived
-            from the starter's scene, above one line of description. */}
+            from the starter's scene. */}
         {starter.playout !== undefined && (
           <span className={s.cardBadge} data-testid="starter-playout">
             {playoutBadge(starter.playout)}
           </span>
         )}
-        <span className={s.cardDesc}>{starter.description}</span>
       </span>
     </Button>
   );

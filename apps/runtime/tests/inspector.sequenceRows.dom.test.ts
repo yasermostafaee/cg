@@ -301,12 +301,12 @@ describe('D-180 — one operator table for all Sequence pages', () => {
     expect(dialog?.querySelector('input')).toBeNull();
     expect(dialog?.querySelector('select')).toBeNull();
 
-    const done = [...(dialog?.querySelectorAll('button') ?? [])].find(
-      (button) => button.textContent?.trim() === 'Done',
+    const close = [...(dialog?.querySelectorAll('button') ?? [])].find(
+      (button) => button.textContent?.trim() === 'Close',
     );
-    if (done === undefined) throw new Error('Done button missing');
+    if (close === undefined) throw new Error('Close button missing');
     await act(async () => {
-      done.click();
+      close.click();
       await Promise.resolve();
     });
     expect(document.querySelector('[role="dialog"]')).toBeNull();

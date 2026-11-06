@@ -124,6 +124,30 @@ export const readOnlyValue = style({
   cursor: 'text',
 });
 
+export const fileManagedValue = style({
+  display: 'grid',
+  gap: '0.2rem',
+  minWidth: 0,
+  padding: '0.45rem 0.55rem',
+  border: `1px solid ${colors.border}`,
+  borderRadius: '4px',
+  background: colors.panelMuted,
+  color: colors.text,
+  fontSize: '0.7rem',
+});
+
+globalStyle(`${fileManagedValue} > span`, {
+  color: colors.checkPass,
+  fontWeight: 700,
+});
+
+globalStyle(`${fileManagedValue} > code`, {
+  minWidth: 0,
+  overflowWrap: 'anywhere',
+  color: colors.textMuted,
+  fontFamily: 'inherit',
+});
+
 export const readOnlyItems = style({
   display: 'grid',
   gap: '0.25rem',
@@ -203,6 +227,10 @@ globalStyle(`${row} > :nth-child(2)`, {
 });
 
 globalStyle(`${row} > ${readOnlyItems}`, {
+  gridColumn: 2,
+});
+
+globalStyle(`${row} > ${fileManagedValue}`, {
   gridColumn: 2,
 });
 

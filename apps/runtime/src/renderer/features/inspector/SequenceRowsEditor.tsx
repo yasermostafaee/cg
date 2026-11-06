@@ -158,6 +158,35 @@ function rowsFromPages(item: StackItemState, set: SequenceRowsPageSet): ListItem
   });
 }
 
+/**
+ * A structured file does not carry the Repeater's editor-only row identities, so parsing CSV/XLSX
+ * assigns deterministic `file-N` ids.  Those ids are not operator data: replacing an already
+ * applied row's id during the authored source's first automatic read made an otherwise identical
+ * workbook look like an unapplied edit and lit the Inspector's `draft` chip before the operator
+ * had touched anything.
+ *
+ * Keep the current row identity by position wherever a row already exists. New file rows retain
+ * their parsed id, with a collision-safe suffix for the unusual case where an authored id already
+ * uses that spelling. Visible cell changes still differ structurally and therefore still stage.
+ */
+function withStableRowIds(current: readonly ListItem[], loaded: readonly ListItem[]): ListItem[] {
+  const used = new Set<string>();
+  return loaded.map((row, index) => {
+    const existingId = current[index]?.id;
+    let id = existingId !== undefined && !used.has(existingId) ? existingId : row.id;
+    if (used.has(id)) {
+      const stem = row.id;
+      let suffix = index + 1;
+      do {
+        id = `${stem}-${String(suffix)}`;
+        suffix += 1;
+      } while (used.has(id));
+    }
+    used.add(id);
+    return id === row.id ? row : { ...row, id };
+  });
+}
+
 const styles = {
   section: {
     border: `1px solid ${colors.border}`,
@@ -173,6 +202,13 @@ const styles = {
     lineHeight: 1.4,
   },
   source: { display: 'flex', gap: 'var(--r-space-2)', flexWrap: 'wrap' as const },
+  sourcePath: {
+    display: 'block',
+    margin: 'var(--r-space-2) 0 0',
+    color: colors.textMuted,
+    fontSize: 'var(--r-text-xs)',
+    overflowWrap: 'anywhere' as const,
+  },
   error: { margin: 'var(--r-space-1) 0 0', color: colors.errorText, fontSize: 'var(--r-text-sm)' },
   warning: {
     margin: 'var(--r-space-1) 0 0',
@@ -330,7 +366,7 @@ function CurrentSequenceRowsDialog({
       onClose={onClose}
       footer={
         <ModalAction actionRole="cancel" onClick={onClose}>
-          Done
+          Close
         </ModalAction>
       }
     >
@@ -453,13 +489,13 @@ function SequenceRowsFileControl({
           format: 'csv',
           itemFields: set.field.itemFields ?? [],
         });
-        const rows = toListItems(value);
-        if (rows.length > set.capacity) {
+        const loadedRows = toListItems(value);
+        if (loadedRows.length > set.capacity) {
           throw new Error(
-            `The selected file has ${String(rows.length)} rows, but this template has room for ${String(set.capacity)}. Add pages in Designer first.`,
+            `The selected file has ${String(loadedRows.length)} rows, but this template has room for ${String(set.capacity)}. Add pages in Designer first.`,
           );
         }
-        onRows(rows);
+        onRows(withStableRowIds(rows, loadedRows));
         setFromFileError(item.itemId, path, null);
       } catch (cause) {
         const reason = cause instanceof Error ? cause.message : String(cause);
@@ -468,7 +504,7 @@ function SequenceRowsFileControl({
         reportCommandError(message);
       }
     },
-    [item.itemId, onRows, path, set.capacity, set.field.itemFields],
+    [item.itemId, onRows, path, rows, set.capacity, set.field.itemFields],
   );
 
   useEffect(() => {
@@ -584,6 +620,9 @@ function SequenceRowsFileControl({
           </>
         )}
       </div>
+      <code style={styles.sourcePath} title={state.source.displayPath ?? state.source.name}>
+        Share path · {state.source.displayPath ?? state.source.name}
+      </code>
       {state.permission !== 'granted' && (
         <p style={styles.error}>{FILE_SOURCE_NEEDS_PERMISSION_MESSAGE}</p>
       )}

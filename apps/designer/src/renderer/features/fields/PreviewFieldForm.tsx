@@ -107,6 +107,7 @@ export function PreviewFieldForm({
       depth={0}
       dwellFieldIds={dwellFieldIds}
       columnsByFieldId={columnsByFieldId}
+      fileManagedSource={undefined}
     />
   );
 }
@@ -125,6 +126,7 @@ function AggregateSection({
   depth,
   dwellFieldIds,
   columnsByFieldId,
+  fileManagedSource,
 }: {
   aggregate: AggregatedFields;
   values: NestedFieldValues;
@@ -139,6 +141,8 @@ function AggregateSection({
   depth: number;
   dwellFieldIds?: ReadonlySet<string> | undefined;
   columnsByFieldId?: ReadonlyMap<string, readonly ListItemColumn[]> | undefined;
+  /** Outer Sequence workbook that owns every Repeater row in this namespace. */
+  fileManagedSource?: string | undefined;
 }): JSX.Element {
   const duplicateKeys = findDuplicateKeys(aggregate.fields);
   const invalidCount = aggregate.fields.filter(
@@ -222,7 +226,11 @@ function AggregateSection({
           pending={pendingPaths.has([...path, f.id].join('.'))}
           showDwell={dwellFieldIds?.has(f.id) ?? false}
           columns={columnsByFieldId?.get(f.id)}
-          readOnly={fieldTakesFileSource(f) && fileSourcePolicyOf(f)?.inputMode === 'file-only'}
+          readOnly={
+            fileManagedSource !== undefined ||
+            (fieldTakesFileSource(f) && fileSourcePolicyOf(f)?.inputMode === 'file-only')
+          }
+          fileManagedSource={fileManagedSource}
         />
       ))}
 
@@ -239,6 +247,7 @@ function AggregateSection({
           depth={depth + 1}
           dwellFieldIds={dwellFieldIds}
           columnsByFieldId={columnsByFieldId}
+          fileManagedSource={g.sequence?.pageDataFile ?? fileManagedSource}
         />
       ))}
     </div>
@@ -269,6 +278,7 @@ function FieldRow({
   showDwell,
   columns,
   readOnly = false,
+  fileManagedSource,
 }: {
   field: DynamicField;
   value: FieldValue | undefined;
@@ -277,6 +287,7 @@ function FieldRow({
   showDwell?: boolean | undefined;
   columns?: readonly ListItemColumn[] | undefined;
   readOnly?: boolean | undefined;
+  fileManagedSource?: string | undefined;
 }): JSX.Element {
   const error = validateField(field, value);
   return (
@@ -289,10 +300,14 @@ function FieldRow({
         {field.label !== '' && field.label !== field.id && (
           <span className={s.friendlyLabel}>{field.label}</span>
         )}
-        {readOnly && <span className={s.readOnlyTag}>file only</span>}
+        {readOnly && (
+          <span className={s.readOnlyTag}>
+            {fileManagedSource === undefined ? 'file only' : 'file managed'}
+          </span>
+        )}
       </label>
       {readOnly
-        ? renderReadOnlyValue(field, value)
+        ? renderReadOnlyValue(field, value, fileManagedSource)
         : renderInput(field, value, onChange, error !== null, showDwell === true, columns)}
       {error !== null && (
         <span className={s.error} role="alert">
@@ -304,8 +319,20 @@ function FieldRow({
   );
 }
 
-function renderReadOnlyValue(field: DynamicField, value: FieldValue | undefined): JSX.Element {
+function renderReadOnlyValue(
+  field: DynamicField,
+  value: FieldValue | undefined,
+  fileManagedSource?: string,
+): JSX.Element {
   const label = field.label || field.id;
+  if (field.type === 'list' && fileManagedSource !== undefined) {
+    return (
+      <div className={s.fileManagedValue} aria-label={`${label} connected file`}>
+        <span>Connected file</span>
+        <code title={fileManagedSource}>{fileManagedSource}</code>
+      </div>
+    );
+  }
   if (field.type === 'list') {
     const items = listItems(value, field.default);
     return (

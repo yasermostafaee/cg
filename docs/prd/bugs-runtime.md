@@ -13955,3 +13955,13 @@ connected**. **Expected / Fix:** the catalogue change refreshes the selected tem
 requiring a row re-selection; the Inspector immediately shows **File managed**, the authored
 workbook connection and **View current data**, with no manual rows and no second Save/connect route.
 The package itself already carries `pageDataFile`; only the stale Inspector read is replaced.
+
+## [x] B-392 — An unchanged Sequence workbook shows `draft` when the Inspector first opens ⟨priority: medium — the commit bar reports an edit the operator never made⟩ — FIXED 2026-11-06 · `openspec/changes/complete-weather-repeater-data/`
+
+**Repro:** load a paged Repeater whose outer Sequence owns a workbook containing the same visible
+rows already applied to the stack, then open its Inspector. **Actual:** the automatic file read
+assigns fresh internal `file-N` row ids and the structural draft comparison treats those invisible
+ids as edited data, so `● draft` appears immediately. **Expected / Fix:** file loading preserves the
+current row ids by position; identical cells remain clean, while any real cell/row change still
+stages behind Update. Real CG Control browser coverage proves the authored file is read exactly once,
+the first-open draft chip is absent and Discard remains disabled.

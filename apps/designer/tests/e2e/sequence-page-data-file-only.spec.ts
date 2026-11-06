@@ -1,4 +1,22 @@
+import type { Element, Scene } from '@cg/shared-schema';
+import { getStarter } from '@cg/starter-templates';
+import { packProject } from '@cg/vcg-format';
 import { expect, test } from './fixtures/designer.js';
+
+function connectedWeatherProject(): Scene {
+  const starter = getStarter('iran-weather-pages');
+  if (starter === null) throw new Error('weather pages starter missing');
+  const scene = structuredClone(starter.scene);
+  scene.id = 'sequence-file-roundtrip';
+  scene.name = 'Sequence file roundtrip';
+  const sequence = [scene, ...(scene.compositions ?? [])]
+    .flatMap((document) => document.layers)
+    .flatMap((layer) => layer.children)
+    .find((element) => element.id === 'weather-pages-sequence') as Element | undefined;
+  if (sequence?.type !== 'sequence') throw new Error('weather pages sequence missing');
+  sequence.pageDataFile = 'weather/صفحات-شهرها-rows.sample.xlsx';
+  return scene;
+}
 
 test('a paged Repeater has one Sequence-owned file source', async ({ app }) => {
   await app.newProject('PagedFileOnly');
@@ -44,4 +62,45 @@ test('a paged Repeater has one Sequence-owned file source', async ({ app }) => {
   await expect(dialog).toContainText('Not connected');
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(app.inspector).not.toContainText('CG Control · file managed');
+});
+
+test('a saved Sequence connection survives project import and owns Preview rows', async ({
+  app,
+  page,
+}) => {
+  const bytes = await packProject({
+    scene: connectedWeatherProject(),
+    index: [],
+    files: new Map(),
+    savedAt: '2026-11-06T00:00:00.000Z',
+  });
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Import project', exact: true }).click();
+  await (
+    await chooser
+  ).setFiles({
+    name: 'Sequence file roundtrip.cgproj',
+    mimeType: 'application/zip',
+    buffer: Buffer.from(bytes),
+  });
+
+  await app.expectStudio();
+  await app.selectElementById('weather-pages-sequence');
+  await expect(app.inspector).toContainText('Connected');
+  await expect(app.inspector).toContainText('CG Control · file managed');
+  await expect(app.inspector).toContainText('weather/صفحات-شهرها-rows.sample.xlsx');
+  await expect(app.inspector).not.toContainText('Not connected');
+
+  await app.inspector.getByRole('button', { name: 'Page data…', exact: true }).click();
+  const data = page.getByRole('dialog', { name: 'Page data · صفحات شهرها' });
+  await expect(data).toContainText('Connected');
+  await expect(data).toContainText('Share path');
+  await expect(data).toContainText('weather/صفحات-شهرها-rows.sample.xlsx');
+  await expect(data).not.toContainText('not connected in this session');
+  await data.getByRole('button', { name: 'Cancel', exact: true }).click();
+
+  await app.openPreviewModal();
+  await expect(app.previewDialog.getByRole('button', { name: /Edit rows/ })).toHaveCount(0);
+  await expect(app.previewDialog.getByLabel('شهرها connected file').first()).toBeVisible();
+  await expect(app.previewDialog).toContainText('weather/صفحات-شهرها-rows.sample.xlsx');
 });
