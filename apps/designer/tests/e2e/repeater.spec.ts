@@ -61,6 +61,10 @@ test.describe('Repeater / data-driven layout (D-030)', () => {
     await app.addRepeater();
     await app.setDataKey('standings');
     await expect(app.dataKeyInput).toHaveValue('standings');
+    await app.expandDynamicData();
+    await expect(
+      app.inspector.getByRole('button', { name: 'Browse shared file…', exact: true }),
+    ).toHaveCount(0);
 
     await app.openPreviewModal();
     // The bound list renders the columned editor (child fields as columns).

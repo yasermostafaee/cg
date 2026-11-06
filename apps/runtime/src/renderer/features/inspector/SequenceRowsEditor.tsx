@@ -56,6 +56,8 @@ export interface SequenceRowsPageSet {
   readonly field: ListField;
   readonly maxItems: number;
   readonly capacity: number;
+  /** The outer Sequence owns the one effective source for all paged rows. */
+  readonly pageDataFile?: string | undefined;
 }
 
 function schemaSignature(field: ListField): string {
@@ -119,6 +121,9 @@ export function sequenceRowsPageSets(
       field,
       maxItems: field.maxItems,
       capacity: pages.length * field.maxItems,
+      ...(first.sequence?.pageDataFile === undefined
+        ? {}
+        : { pageDataFile: first.sequence.pageDataFile }),
     });
   }
   return sets;
@@ -421,7 +426,10 @@ function SequenceRowsFileControl({
   const currentSchemaSignature = schemaSignature(set.field);
   const schemaNeedsUpdate =
     state?.schemaSignature !== undefined && state.schemaSignature !== currentSchemaSignature;
-  const authoredPath = bridgeTextSourcePath(set.field);
+  // A paged table has exactly one source owner: the outer Sequence. The nested Repeater field is
+  // retained only as a backwards-compatible fallback for packages authored before pageDataFile
+  // crossed the TemplateInfo boundary.
+  const authoredPath = set.pageDataFile ?? bridgeTextSourcePath(set.field);
 
   const load = useCallback(
     async (source: TextFileSource): Promise<void> => {
@@ -602,7 +610,9 @@ export function SequenceRowsEditor({
   set: SequenceRowsPageSet;
 }): JSX.Element {
   const rows = rowsFromPages(item, set);
-  const fileOnly = fieldUsesFileOnly(set.field);
+  // Connecting a Sequence workbook makes that workbook the editing authority. No second checkbox
+  // on the child Repeater is required, and CG Control never renders a competing manual table.
+  const fileOnly = set.pageDataFile !== undefined || fieldUsesFileOnly(set.field);
   const [dataOpen, setDataOpen] = useState(false);
   const combinedField: ListField = {
     ...set.field,
@@ -627,7 +637,7 @@ export function SequenceRowsEditor({
       {fileOnly ? (
         <>
           <div style={styles.source}>
-            <Tag>File only</Tag>
+            <Tag>File managed</Tag>
             <Button variant="secondary" onClick={() => setDataOpen(true)}>
               View current data
             </Button>

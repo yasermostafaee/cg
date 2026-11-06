@@ -254,6 +254,34 @@ describe('aggregateCompositionFields (D-025)', () => {
     });
   });
 
+  it('D-180 carries the outer Sequence file source with every paged namespace', () => {
+    const card = comp({ id: 'card', fields: [textField('label')] });
+    const seq = sequenceEl('seq', 'Cities', [
+      { id: 'first', kind: 'composition', compositionId: 'card' },
+      { id: 'second', kind: 'composition', compositionId: 'card' },
+    ]) as Extract<Element, { type: 'sequence' }>;
+    seq.pageDataFile = 'weather/cities.xlsx';
+    const parent = comp({ id: 'parent', layers: [layer([seq])] });
+    const scene = { compositions: [card, parent] } as Pick<Scene, 'compositions'>;
+
+    expect(aggregateCompositionFields(scene, parent).groups.map((group) => group.sequence)).toEqual(
+      [
+        {
+          id: 'seq',
+          name: 'Cities',
+          itemId: 'first',
+          pageDataFile: 'weather/cities.xlsx',
+        },
+        {
+          id: 'seq',
+          name: 'Cities',
+          itemId: 'second',
+          pageDataFile: 'weather/cities.xlsx',
+        },
+      ],
+    );
+  });
+
   it('(D-083 follow-up) a non-bound text-only sequence exposes NOTHING (text is static unless explicitly bound)', () => {
     const seq = sequenceEl('seq', 'Rundown', [
       { id: 'a', text: 'one' },

@@ -17,8 +17,11 @@ authored or exported reliably.
 - Let a Repeater list load structured rows from a shared JSON/CSV file without flattening the rows to
   one text column.
 - Give a directly selected Repeater the same schema-generated Excel **Save and connect** workflow,
-  connected state, Reload and File-only option without requiring an outer Sequence; expose the same
-  generated-workbook flow in CG Control behind the normal Update action.
+  connected state and Reload without requiring an outer Sequence; expose the same generated-workbook
+  flow in CG Control behind the normal Update action.
+- Give each structured row set one effective file owner: the standalone Repeater or its outer
+  Sequence, never both. Connecting the generated workbook makes that file authoritative in CG
+  Control without a second child File-only/Lock-file decision or generic shared-file picker.
 - Keep structured rows usable when the child has many fields: every surface shows the actual field
   title and preserves a practical cell width instead of squeezing columns into unreadable slivers.
 - Open Repeater rows from a compact Inspector/Preview action into a shared modal; use one horizontal
@@ -31,8 +34,8 @@ authored or exported reliably.
   plus Excel-compatible CSV and a generated `.xlsx` template. Designer automatically makes the
   required pages; CG Control presents the packaged pages as one operator table, can regenerate the
   Excel template, and keeps file reload behind the normal Update action.
-- Let the author mark that paged table **File only** from the Sequence Page data modal. CG Control
-  then withholds manual rows while retaining generated-workbook connection and Reload, plus a
+- Treat a connected Sequence workbook as the paged table's editing authority. CG Control then
+  withholds manual rows and competing source actions while retaining connection status, Reload and a
   read-only dialog for inspecting the current rows and any cells that no longer match the schema.
 - Add ordered conditional rules for numeric/string field values. The first match per target property
   wins, so one temperature may change text and background together without making same-property

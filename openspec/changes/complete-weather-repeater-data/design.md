@@ -127,13 +127,19 @@ structure to an already packaged template: if the workbook exceeds its authored 
 the Designer/regenerate remedy instead of truncating. Arbitrary scalar/nested/mixed page structures
 continue to use the generated self-documenting JSON format.
 
-The author may set the homogeneous child Repeater field to **File only** directly from the outer
-Sequence's Page data modal; this writes the same canonical field policy as the child Repeater's
-Dynamic / Data section. CG Control asks the shared `fieldUsesFileOnly` predicate before rendering the
-combined editor. In File-only mode the row table, add/remove and reorder controls are absent, while
-the connected-file status, Reload and staged Update semantics remain. Save/connect/replace/detach
-actions are absent: Designer owns the file connection and authored defaults in this mode. When no
-workbook is connected, CG Control explicitly says Not connected and directs the operator to Designer.
+A structured row set has one effective source owner. A standalone Repeater owns its workbook through
+**Rows and data file…**; its generic Dynamic / Data section keeps the Data key and field schema but
+does not offer a second shared-file picker. When an outer Sequence pages that Repeater, the Sequence
+owns the one workbook through **Page data…** and the child Repeater exposes rows only. The authored
+`pageDataFile` crosses `TemplateInfo` with the Sequence page identity, so CG Control never has to infer
+ownership from the child field.
+
+Connecting either structured workbook makes the file the editing authority without a second
+File-only checkbox. CG Control removes the manual row table, add/remove/reorder and every second
+save/replace/detach route; it keeps only labelled connection state, Reload, View current data and the
+normal staged Update. Detaching in Designer restores manual entry. Older packages that encoded
+File-only on the nested field remain supported as a fallback, but Sequence ownership wins whenever
+`pageDataFile` exists.
 
 Structured numeric cells use the shared `.cg-field` surface just like their text and select siblings.
 The numeric parser/filter remains `NumericInput`; sharing the visual primitive prevents an editable

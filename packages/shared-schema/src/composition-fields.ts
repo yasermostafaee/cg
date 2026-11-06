@@ -71,6 +71,12 @@ export interface CompositionFieldGroup {
         id: string;
         name: string;
         itemId: string;
+        /**
+         * D-180 — the outer Sequence is the sole structured-file owner for its paged rows.
+         * Carrying the authored Bridge-relative path with every page lets CG Control collapse the
+         * pages and resolve one effective source without consulting the nested Repeater field.
+         */
+        pageDataFile?: string | undefined;
       }
     | undefined;
 }
@@ -137,7 +143,12 @@ export const CompositionFieldGroupSchema: z.ZodType<CompositionFieldGroup, z.Zod
       aggregate: AggregatedFieldsSchema,
       defaultValues: FieldValuesSchema.optional(),
       sequence: z
-        .object({ id: z.string().min(1), name: z.string(), itemId: z.string().min(1) })
+        .object({
+          id: z.string().min(1),
+          name: z.string(),
+          itemId: z.string().min(1),
+          pageDataFile: z.string().min(1).optional(),
+        })
         .optional(),
     }),
   );
@@ -436,7 +447,12 @@ function aggregateCompositionFieldsImpl(
           compositionId: child.id,
           aggregate: aggregateCompositionFieldsImpl(scene, child, depth + 1, boundOnly),
           ...(item.fieldValues === undefined ? {} : { defaultValues: item.fieldValues }),
-          sequence: { id: seq.id, name: seq.name, itemId: item.id },
+          sequence: {
+            id: seq.id,
+            name: seq.name,
+            itemId: item.id,
+            ...(seq.pageDataFile === undefined ? {} : { pageDataFile: seq.pageDataFile }),
+          },
         };
         groups.push(group);
         itemGroups.push({ group, seq });

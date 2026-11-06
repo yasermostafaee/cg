@@ -75,6 +75,17 @@
 
 - [x] 2.28 Move direct Repeater and Preview structured rows into a roomy modal and use a single
       horizontal scrolling surface for all rows; verify field headers remain aligned in a browser.
+- [x] 2.29 Make the outer Sequence the sole file-source owner for paged Repeater rows and carry its
+      authored `pageDataFile` through the aggregate/TemplateInfo boundary.
+- [x] 2.30 Make a structured workbook connection itself select file-managed rows in CG Control;
+      remove the independent Sequence File-only checkbox and every competing manual/source control.
+- [x] 2.31 Keep standalone Repeater workbook management only in **Rows and data file…** and suppress
+      the duplicate generic Dynamic / Data file picker; when a Sequence owns the composition, expose
+      rows but route file management to that Sequence.
+- [x] 2.32 Cover standalone and Sequence-owned source precedence in schema, Designer DOM and real
+      CG Control browser tests, then run the affected gates and full repository gate. Focused
+      Designer and CG Control Playwright suites passed on 2026-11-06; local `pnpm gate` then passed
+      all 103/103 tasks plus formatting, control-byte and strict validation of all 141 OpenSpec items.
 
 ## 3. Conditional value rules
 

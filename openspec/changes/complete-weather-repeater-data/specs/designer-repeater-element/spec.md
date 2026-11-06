@@ -122,16 +122,32 @@ same page values.
   per page, retains the normal draft/Update safety, and redistributes rows into the authored page
   namespaces
 
-#### Scenario: Paged rows are authored as File only
+#### Scenario: A paged row table has one file owner
 
-- **WHEN** an author enables **File only in CG Control** for a homogeneous paged Repeater from the
-  Sequence Page data modal
-- **THEN** the nested list field stores the canonical File-only policy and CG Control renders no row
-  inputs, add, remove or reorder controls for the combined pages
-- **AND THEN** connected-file status and Reload remain available, while Save/connect/replace/detach
-  actions are absent and loaded values still wait for Update
-- **AND WHEN** no workbook is connected
-- **THEN** the panel says Not connected and directs the operator to connect the workbook in Designer
+- **WHEN** an author saves and connects a workbook from the outer Sequence's Page data modal
+- **THEN** the Sequence stores that source and becomes the sole file owner for every nested Repeater
+  page without a second File-only checkbox on the child field
+- **AND THEN** CG Control renders no manual row editor, add/remove/reorder, Save/connect, replace or
+  detach control for that combined table
+- **AND THEN** labelled connection status, Reload, View current data and the normal staged Update
+  remain available
+- **AND WHEN** the author detaches the Sequence workbook
+- **THEN** CG Control restores the combined manual row editor and no stale child source takes over
+
+#### Scenario: A standalone Repeater has one file owner
+
+- **WHEN** a Repeater is not paged by a Sequence
+- **THEN** Designer manages its structured workbook only through **Rows and data file…** and does not
+  show the generic Dynamic / Data shared-file picker for the same list field
+- **AND WHEN** the workbook is connected
+- **THEN** CG Control shows connection state, Reload and View current data without manual rows or a
+  second Save/connect route
+
+#### Scenario: A nested Repeater routes file management to its Sequence
+
+- **WHEN** the selected Repeater's composition is used as a page by one or more Sequences
+- **THEN** its row modal remains available for inspecting defaults but file connection actions name
+  the owning Sequence and are not duplicated on the Repeater
 
 #### Scenario: File-only rows remain inspectable without becoming editable
 

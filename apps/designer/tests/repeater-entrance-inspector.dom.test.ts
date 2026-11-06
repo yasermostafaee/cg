@@ -7,7 +7,7 @@ import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
 import { StyleSection } from '../src/renderer/features/inspector/StyleSection.js';
 import { defaultField } from '../src/renderer/features/fields/field-defaults.js';
-import { defaultRepeater } from '../src/renderer/state/element-defaults.js';
+import { defaultRepeater, defaultSequence } from '../src/renderer/state/element-defaults.js';
 import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -47,7 +47,7 @@ function seed(): RepeaterElement {
   return repeater();
 }
 
-function seedWithFields(): RepeaterElement {
+function seedWithFields(options: { sequenceOwned?: boolean } = {}): RepeaterElement {
   const { scene } = new ProjectStore(new MemoryWorkspace(), new MemoryKv()).newScene(
     'direct repeater data',
     'fullscreen',
@@ -66,6 +66,30 @@ function seedWithFields(): RepeaterElement {
     throw new Error('test scene is incomplete');
   }
   const repeaterElement = defaultRepeater('rep', 0, 0, child);
+  const owner = {
+    ...defaultSequence('weather-pages', 0, 0),
+    name: 'Weather pages',
+    items: [{ id: 'page-1', kind: 'composition' as const, compositionId: mainId }],
+  };
+  const ownerComposition = {
+    id: 'owner-composition',
+    name: 'Owner',
+    resolution: current.resolution,
+    frameRange: current.frameRange,
+    editorBackdrop: 'transparent' as const,
+    layers: [
+      {
+        id: 'owner-layer',
+        name: 'Owner',
+        visible: true,
+        locked: false,
+        blendMode: 'normal' as const,
+        children: [owner],
+      },
+    ],
+    fields: [],
+    bindings: [],
+  };
   const firstLayer = main.layers[0] ?? {
     id: 'main-layer',
     name: 'Main',
@@ -77,17 +101,20 @@ function seedWithFields(): RepeaterElement {
   designerStore.setScene(
     {
       ...current,
-      compositions: current.compositions?.map((composition) =>
-        composition.id === mainId
-          ? {
-              ...composition,
-              layers: [
-                { ...firstLayer, children: [repeaterElement] },
-                ...composition.layers.slice(1),
-              ],
-            }
-          : composition,
-      ),
+      compositions: [
+        ...(current.compositions?.map((composition) =>
+          composition.id === mainId
+            ? {
+                ...composition,
+                layers: [
+                  { ...firstLayer, children: [repeaterElement] },
+                  ...composition.layers.slice(1),
+                ],
+              }
+            : composition,
+        ) ?? []),
+        ...(options.sequenceOwned ? [ownerComposition] : []),
+      ],
     },
     null,
   );
@@ -220,8 +247,52 @@ describe('D-180 — direct Repeater data file', () => {
       '[role="dialog"][aria-label="Repeater data · Repeater"]',
     );
     expect(dialog?.textContent).toContain('Save and connect Excel file');
-    expect(dialog?.textContent).toContain('File only in CG Control');
+    expect(dialog?.textContent).not.toContain('File only in CG Control');
     expect(dialog?.textContent).toContain('City');
     expect(dialog?.textContent).toContain('Temperature');
+  });
+
+  it('routes a nested Repeater file source to the owning Sequence', async () => {
+    const nested = seedWithFields({ sequenceOwned: true });
+    const state = designerStore.get();
+    const parentId = state.scene?.compositions?.find((composition) =>
+      composition.layers.some((layer) =>
+        layer.children.some((element) => element.id === nested.id && element.type === 'repeater'),
+      ),
+    )?.id;
+    expect(parentId).toBe(state.activeCompositionId);
+    expect(
+      state.scene?.compositions
+        ?.flatMap((composition) => composition.layers)
+        .flatMap((layer) => layer.children)
+        .some(
+          (element) =>
+            element.type === 'sequence' &&
+            element.items.some(
+              (item) => item.kind === 'composition' && item.compositionId === parentId,
+            ),
+        ),
+    ).toBe(true);
+
+    const host = render(nested);
+    await settleEffects();
+
+    const section = host.querySelector<HTMLElement>('section[aria-label="Repeater data file"]');
+    expect(section?.textContent).toContain('Rows…');
+    expect(section?.textContent).toContain('File source · Weather pages');
+    expect(section?.textContent).not.toContain('Not connected');
+
+    act(() => {
+      [...(section?.querySelectorAll('button') ?? [])]
+        .find((button) => button.textContent?.trim() === 'Rows…')
+        ?.click();
+    });
+    const dialog = document.body.querySelector<HTMLElement>(
+      '[role="dialog"][aria-label="Repeater data · Repeater"]',
+    );
+    expect(dialog?.textContent).toContain('File source · Weather pages');
+    expect(dialog?.textContent).not.toContain('Save and connect');
+    expect(dialog?.textContent).not.toContain('File only in CG Control');
+    expect(dialog?.textContent).toContain('City');
   });
 });

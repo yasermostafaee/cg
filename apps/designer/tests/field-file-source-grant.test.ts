@@ -2,11 +2,21 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import type { DynamicField, Scene, TextElement, TickerElement } from '@cg/shared-schema';
+import type {
+  DynamicField,
+  RepeaterElement,
+  Scene,
+  TextElement,
+  TickerElement,
+} from '@cg/shared-schema';
 import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
 import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
-import { defaultText, defaultTicker } from '../src/renderer/state/element-defaults.js';
+import {
+  defaultRepeater,
+  defaultText,
+  defaultTicker,
+} from '../src/renderer/state/element-defaults.js';
 import { defaultField } from '../src/renderer/features/fields/field-defaults.js';
 import {
   DynamicDataSection,
@@ -53,10 +63,10 @@ function projected(): Scene {
   return scene;
 }
 
-function elementById(id: string): TextElement | TickerElement {
+function elementById(id: string): TextElement | TickerElement | RepeaterElement {
   const el = projected().layers[0]?.children.find((c) => c.id === id);
-  if (el === undefined || (el.type !== 'text' && el.type !== 'ticker')) {
-    throw new Error(`no text/ticker element ${id}`);
+  if (el === undefined || (el.type !== 'text' && el.type !== 'ticker' && el.type !== 'repeater')) {
+    throw new Error(`no text/ticker/repeater element ${id}`);
   }
   return el;
 }
@@ -127,6 +137,26 @@ describe('the grant is authored per field, and defaults OFF', () => {
     designerStore.addElement(defaultText('t1', 0, 0));
     designerStore.setElementDataKey('t1', 'headline');
     expect(grantOf('headline')).toBeUndefined();
+  });
+
+  it('keeps a Repeater structured source out of the generic Dynamic / Data picker', () => {
+    freshScene();
+    designerStore.addElement(defaultRepeater('rep', 0, 0, { id: 'row', fields: [] }));
+    designerStore.setElementDataKey('rep', 'rows');
+    designerStore.setElementFieldMeta('rep', {
+      allowFileSource: true,
+      fileSource: { bridgePath: 'rows.xlsx', inputMode: 'file-only', lockFile: true },
+    });
+    mount();
+    render('rep');
+
+    expect(container?.querySelector(`input[aria-label="${GRANT_LABEL}"]`)).toBeNull();
+    expect(
+      [...(container?.querySelectorAll('button') ?? [])].some((button) =>
+        button.textContent?.includes('Browse shared file'),
+      ),
+    ).toBe(false);
+    expect(container?.textContent).toContain('Row files are managed in Rows and data file');
   });
 
   it('setElementFieldMeta sets the grant, and clears it again', () => {

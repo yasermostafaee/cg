@@ -1,7 +1,6 @@
 import { useMemo, useState, useSyncExternalStore } from 'react';
 import { CircleCheck, TriangleAlert, Unplug } from 'lucide-react';
 import {
-  fieldUsesFileOnly,
   fileSourceContentToFieldValue,
   repeaterRowLimit,
   type Composition,
@@ -10,6 +9,7 @@ import {
   type ListItemField,
   type RepeaterElement,
   type Scene,
+  type SequenceElement,
 } from '@cg/shared-schema';
 import {
   buildStructuredRowsXlsx,
@@ -19,7 +19,6 @@ import {
 import { designerStore } from '../../state/store.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
-import { CheckRow } from '../inspector/DynamicDataSection.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
 import { useAssets } from '../assets/useAssets.js';
 import { useSharedImages } from '../sharedLibrary/useSharedImages.js';
@@ -108,6 +107,37 @@ function itemFieldsFor(
     );
 }
 
+function owningSequences(scene: Scene, compositionId: string | null): SequenceElement[] {
+  if (compositionId === null) return [];
+  const docs: FieldDoc[] = [scene, ...(scene.compositions ?? [])];
+  const owners: SequenceElement[] = [];
+  for (const doc of docs) {
+    for (const layer of doc.layers) {
+      for (const element of layer.children) {
+        if (
+          element.type === 'sequence' &&
+          element.items.some(
+            (item) => item.kind === 'composition' && item.compositionId === compositionId,
+          )
+        ) {
+          owners.push(element);
+        }
+      }
+    }
+  }
+  return owners;
+}
+
+function compositionContainingRepeater(scene: Scene, repeaterId: string): string | null {
+  return (
+    scene.compositions?.find((composition) =>
+      composition.layers.some((layer) =>
+        layer.children.some((element) => element.id === repeaterId && element.type === 'repeater'),
+      ),
+    )?.id ?? null
+  );
+}
+
 /** Direct Repeater workbook management; an outer Sequence is deliberately optional. */
 export function RepeaterDataControl({
   scene,
@@ -132,8 +162,13 @@ export function RepeaterDataControl({
   );
   const itemFields = useMemo(() => itemFieldsFor(child, imageChoices), [child, imageChoices]);
   const doc = activeDoc(scene);
+  const activeCompositionId = designerStore.get().activeCompositionId;
+  const sequenceOwners = owningSequences(
+    scene,
+    compositionContainingRepeater(scene, repeater.id) ?? activeCompositionId,
+  );
+  const sequenceManaged = sequenceOwners.length > 0;
   const field = listFieldFor(doc, repeater.id);
-  const fileOnly = fieldUsesFileOnly(field);
   const authoredBridgePath = field?.fileSource?.bridgePath;
   const currentSignature = schemaSignature(repeater, itemFields);
   const storeId = attachmentId(repeater.id);
@@ -162,31 +197,6 @@ export function RepeaterDataControl({
     });
   };
 
-  const setFileOnly = (enabled: boolean): void => {
-    try {
-      ensureField();
-      const latest = designerStore.get().scene;
-      if (latest === null) return;
-      const latestField = listFieldFor(activeDoc(latest), repeater.id);
-      const previous = latestField?.fileSource;
-      const remaining = {
-        ...(previous?.bridgePath === undefined ? {} : { bridgePath: previous.bridgePath }),
-        ...(previous?.lockFile === true ? { lockFile: true as const } : {}),
-        ...(previous?.delimiter === undefined ? {} : { delimiter: previous.delimiter }),
-        ...(previous?.format === undefined
-          ? { format: 'csv' as const }
-          : { format: previous.format }),
-      };
-      designerStore.setElementFieldMeta(repeater.id, {
-        allowFileSource: true,
-        fileSource: enabled ? { ...remaining, inputMode: 'file-only' } : remaining,
-      });
-      setError(null);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    }
-  };
-
   const openManager = (): void => {
     setDraft(repeater.items.map((item) => ({ ...item })));
     setNotice(null);
@@ -205,6 +215,8 @@ export function RepeaterDataControl({
         ...latestField?.fileSource,
         bridgePath: name,
         format: 'csv',
+        inputMode: 'file-only',
+        lockFile: true,
       },
     });
     setSequencePageDataAttachment(scene.id, storeId, {
@@ -223,7 +235,12 @@ export function RepeaterDataControl({
     const latestField = latest === null ? null : listFieldFor(activeDoc(latest), repeater.id);
     const previous = latestField?.fileSource;
     if (previous !== undefined) {
-      const { bridgePath: _bridgePath, lockFile: _lockFile, ...remaining } = previous;
+      const {
+        bridgePath: _bridgePath,
+        lockFile: _lockFile,
+        inputMode: _inputMode,
+        ...remaining
+      } = previous;
       designerStore.setElementFieldMeta(repeater.id, {
         allowFileSource: true,
         fileSource: remaining,
@@ -300,13 +317,18 @@ export function RepeaterDataControl({
       <section className={s.section} aria-label={`${repeater.name} data file`}>
         <div className={s.sourceRow}>
           <Button variant="secondary" onClick={openManager}>
-            Rows and data file…
+            {sequenceManaged ? 'Rows…' : 'Rows and data file…'}
           </Button>
-          {attachment === null && authoredBridgePath === undefined ? (
+          {sequenceManaged && (
+            <span className={s.connectionStatus}>
+              File source · {sequenceOwners.map((owner) => owner.name).join(', ')}
+            </span>
+          )}
+          {!sequenceManaged && attachment === null && authoredBridgePath === undefined ? (
             <span className={`${s.connectionStatus} ${s.disconnected}`}>
               <Icon icon={Unplug} size={14} /> Not connected
             </span>
-          ) : (
+          ) : !sequenceManaged ? (
             <>
               <span
                 className={`${s.connectionStatus} ${needsUpdate ? s.updateNeeded : s.connected}`}
@@ -320,10 +342,12 @@ export function RepeaterDataControl({
                 </Button>
               )}
             </>
+          ) : null}
+          {!sequenceManaged && (attachment !== null || authoredBridgePath !== undefined) && (
+            <span className={s.connectionStatus}>CG Control · file managed</span>
           )}
-          {fileOnly && <span className={s.connectionStatus}>CG Control · File only</span>}
         </div>
-        {(attachment !== null || authoredBridgePath !== undefined) && (
+        {!sequenceManaged && (attachment !== null || authoredBridgePath !== undefined) && (
           <code className={s.path}>{attachment?.sourcePath ?? authoredBridgePath}</code>
         )}
       </section>
@@ -342,50 +366,54 @@ export function RepeaterDataControl({
             </>
           }
         >
-          <div className={s.modalSourceRow}>
-            <span
-              className={`${s.connectionStatus} ${attachment === null && authoredBridgePath === undefined ? s.disconnected : needsUpdate ? s.updateNeeded : s.connected}`}
-            >
-              <Icon
-                icon={
-                  attachment === null && authoredBridgePath === undefined
-                    ? Unplug
-                    : needsUpdate
-                      ? TriangleAlert
-                      : CircleCheck
-                }
-                size={14}
-              />
-              {attachment === null && authoredBridgePath === undefined
-                ? 'Not connected'
-                : needsUpdate
-                  ? 'Connected · update file'
-                  : 'Connected'}
-            </span>
-            <Button onClick={() => void saveAndConnect()}>
-              Save and connect{' '}
-              {attachment === null && authoredBridgePath === undefined ? '' : 'another '}Excel file…
-            </Button>
-            {attachment !== null && (
-              <Button variant="secondary" onClick={() => void reload()}>
-                Reload connected file
+          {!sequenceManaged && (
+            <div className={s.modalSourceRow}>
+              <span
+                className={`${s.connectionStatus} ${attachment === null && authoredBridgePath === undefined ? s.disconnected : needsUpdate ? s.updateNeeded : s.connected}`}
+              >
+                <Icon
+                  icon={
+                    attachment === null && authoredBridgePath === undefined
+                      ? Unplug
+                      : needsUpdate
+                        ? TriangleAlert
+                        : CircleCheck
+                  }
+                  size={14}
+                />
+                {attachment === null && authoredBridgePath === undefined
+                  ? 'Not connected'
+                  : needsUpdate
+                    ? 'Connected · update file'
+                    : 'Connected'}
+              </span>
+              <Button onClick={() => void saveAndConnect()}>
+                Save and connect{' '}
+                {attachment === null && authoredBridgePath === undefined ? '' : 'another '}Excel
+                file…
               </Button>
-            )}
-            {(attachment !== null || authoredBridgePath !== undefined) && (
-              <Button variant="secondary" onClick={detach}>
-                Detach file
-              </Button>
-            )}
-          </div>
-          {(attachment !== null || authoredBridgePath !== undefined) && (
+              {attachment !== null && (
+                <Button variant="secondary" onClick={() => void reload()}>
+                  Reload connected file
+                </Button>
+              )}
+              {(attachment !== null || authoredBridgePath !== undefined) && (
+                <Button variant="secondary" onClick={detach}>
+                  Detach file
+                </Button>
+              )}
+            </div>
+          )}
+          {sequenceManaged && (
+            <div className={s.modalSourceRow}>
+              <span className={s.connectionStatus}>
+                File source · {sequenceOwners.map((owner) => owner.name).join(', ')}
+              </span>
+            </div>
+          )}
+          {!sequenceManaged && (attachment !== null || authoredBridgePath !== undefined) && (
             <code className={s.path}>{attachment?.sourcePath ?? authoredBridgePath}</code>
           )}
-          <CheckRow
-            label="File only in CG Control"
-            checked={fileOnly}
-            onChange={setFileOnly}
-            title="Remove manual row editing in CG Control; connection and reload remain read-only there."
-          />
           {needsUpdate && (
             <p className={s.warning} role="status">
               Template fields changed after this file was generated. Reload still validates its

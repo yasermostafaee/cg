@@ -6161,9 +6161,12 @@ loadable `pages` array. When all pages contain the same single flat Repeater, De
 one bulk table and a generated Excel workbook, splitting rows by the Repeater limit and creating pages
 automatically. CG Control exposes the same packaged pages as one operator table with a persistent
 generated-workbook connection/reload flow; edits remain drafts until Update, and excess rows are
-refused rather than dropped. The Sequence Page data modal exposes the nested Repeater's **File only
-in CG Control** policy directly. When enabled, CG Control removes the combined manual row editor and
-keeps only connected-file status, Reload and a read-only current-data dialog; it does not offer Save and connect in File-only mode.
+refused rather than dropped. A structured row set has one file owner: a standalone Repeater uses
+**Rows and data file…**, while a paged Repeater uses the outer Sequence's **Page data…**. The generic
+Dynamic / Data picker is not repeated for Repeater rows. Connecting a workbook itself makes it the
+editing authority; CG Control removes the manual row editor and every second Save/connect route and
+keeps only labelled connection state, Reload, View current data and the normal staged Update. No
+separate child File-only/Lock-file tick is required, and detaching in Designer restores manual rows.
 Number fields can be unrestricted, an exact numeric choice list, or custom-range; invalid
 manual/file values are refused and every choice list is a dropdown in both Designer and CG Control.
 Manual numeric inputs reject letters as they are typed (while keeping valid localized digits and
@@ -6202,7 +6205,7 @@ header, remaining obvious even when that section is collapsed.
 The filled references are `docs/weather-cities.sample.csv`, `docs/weather-cities.sample.xlsx` and
 `docs/weather-sequence-pages.sample.json` (the general nested-format fallback).
 
-**Standalone and current follow-up — `openspec/changes/complete-weather-repeater-data/`:** a Repeater does not require an outer Sequence. Its own Inspector exposes **Rows and data file…** with schema-generated Excel Save/connect/Reload and labelled columns. Sequence remains optional pagination. Value rules may drive image/color/visibility; File-only CG Control uses the read-only current-data contract in D-198, and changes remain staged until Update.
+**Standalone and current follow-up — `openspec/changes/complete-weather-repeater-data/`:** a Repeater does not require an outer Sequence. Its own Inspector exposes **Rows and data file…** with schema-generated Excel Save/connect/Reload and labelled columns. Sequence remains optional pagination and, when present, becomes the sole workbook owner. Value rules may drive image/color/visibility; a connected workbook uses the read-only current-data contract in D-198, and changes remain staged until Update.
 
 ## [x] D-181 — Inspector guidance is contextual, not persistent prose ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/inspector-contextual-help/`
 

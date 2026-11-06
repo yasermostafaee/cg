@@ -34,6 +34,16 @@ export function grantedFileSourcePaths(
     if (fieldAllowsFileSource(field)) out.add(fieldPathKey([...prefix, field.id]));
   }
   for (const group of aggregate.groups) {
+    // D-180 — homogeneous Sequence pages collapse into one synthetic operator table whose
+    // attachment lives at this path, not under each page namespace. The outer Sequence source is
+    // itself an author grant; older packages fall back to the nested list-field grant.
+    if (
+      group.sequence !== undefined &&
+      (group.sequence.pageDataFile !== undefined ||
+        group.aggregate.fields.some((field) => fieldAllowsFileSource(field)))
+    ) {
+      out.add(fieldPathKey(['$sequence-rows', group.sequence.id]));
+    }
     grantedFileSourcePaths(group.aggregate, [...prefix, group.name], out);
   }
   return out;

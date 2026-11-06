@@ -1,6 +1,6 @@
 import { expect, test } from './fixtures/designer.js';
 
-test('a paged Repeater exposes and retains File only from Sequence Page data', async ({ app }) => {
+test('a paged Repeater has one Sequence-owned file source', async ({ app }) => {
   await app.newProject('PagedFileOnly');
 
   await app.newComposition('WeatherCard');
@@ -38,14 +38,10 @@ test('a paged Repeater exposes and retains File only from Sequence Page data', a
 
   const open = app.inspector.getByRole('button', { name: 'Page data…', exact: true });
   await open.click();
-  let dialog = app.page.getByRole('dialog', { name: 'Page data · Sequence' });
-  const fileOnly = dialog.getByRole('checkbox', { name: 'File only in CG Control' });
-  await expect(fileOnly).not.toBeChecked();
-  await fileOnly.check();
+  const dialog = app.page.getByRole('dialog', { name: 'Page data · Sequence' });
+  await expect(dialog.getByRole('checkbox', { name: 'File only in CG Control' })).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: 'Save and connect Excel file…' })).toBeVisible();
+  await expect(dialog).toContainText('Not connected');
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
-
-  await expect(app.inspector).toContainText('CG Control · File only');
-  await open.click();
-  dialog = app.page.getByRole('dialog', { name: 'Page data · Sequence' });
-  await expect(dialog.getByRole('checkbox', { name: 'File only in CG Control' })).toBeChecked();
+  await expect(app.inspector).not.toContainText('CG Control · file managed');
 });

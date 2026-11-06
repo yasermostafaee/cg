@@ -1217,7 +1217,7 @@ export async function buildRepeaterVcg(
 /** D-180 — a two-page Sequence whose one structured Repeater may be authored File only. */
 export async function buildPagedRepeaterVcg(
   templateId = 'tpl-e2e-paged-repeater',
-  options: { fileOnly?: boolean } = {},
+  options: { fileOnly?: boolean; pageDataFile?: string } = {},
 ): Promise<Uint8Array> {
   const scene = fixtureScene();
   const layer = scene.layers[0];
@@ -1273,6 +1273,7 @@ export async function buildPagedRepeaterVcg(
           },
         },
       ],
+      ...(options.pageDataFile === undefined ? {} : { pageDataFile: options.pageDataFile }),
       defaultDwellMs: 5000,
       advance: 'manual',
       transitionIn: 'none',

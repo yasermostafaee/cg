@@ -12,7 +12,7 @@ test.describe('D-180 — paged Repeater input authority', () => {
     await app.selectStackRow(templateId);
 
     const rows = app.inspector.getByRole('region', { name: 'Weather pages all rows' });
-    await expect(rows).toContainText('File only');
+    await expect(rows).toContainText('File managed');
     await expect(rows).toContainText('Not connected');
     await expect(rows).toContainText('Connect this workbook in Designer.');
     await expect(rows.getByRole('button', { name: /Save and connect|Detach/ })).toHaveCount(0);
@@ -65,5 +65,24 @@ test.describe('D-180 — paged Repeater input authority', () => {
       ),
     );
     expect(appearance[1]).toEqual(appearance[0]);
+  });
+
+  test('a connected Sequence workbook is the only source without child File-only flags', async ({
+    app,
+  }) => {
+    const templateId = 'tpl-e2e-sequence-owned-file';
+    await app.importVcg(
+      'sequence-owned-file.vcg',
+      await buildPagedRepeaterVcg(templateId, { pageDataFile: 'weather/cities.xlsx' }),
+    );
+    await app.selectStackRow(templateId);
+
+    const rows = app.inspector.getByRole('region', { name: 'Weather pages all rows' });
+    await expect(rows).toContainText('File managed');
+    await expect(rows).toContainText('cities.xlsx');
+    await expect(rows.getByRole('textbox', { name: /Cities item/ })).toHaveCount(0);
+    await expect(rows.getByRole('combobox', { name: /Cities item/ })).toHaveCount(0);
+    await expect(rows.getByRole('button', { name: /Save and connect|Detach/ })).toHaveCount(0);
+    await expect(rows.getByRole('button', { name: 'View current data' })).toBeVisible();
   });
 });

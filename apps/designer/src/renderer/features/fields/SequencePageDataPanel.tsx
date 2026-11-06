@@ -4,7 +4,6 @@ import {
   aggregateCompositionFields,
   countdownTargetFieldsOf,
   defaultNestedValues,
-  fieldUsesFileOnly,
   sequenceItemInstanceId,
   sequencesOf,
   withListLimits,
@@ -31,7 +30,6 @@ import { useSharedImages } from '../sharedLibrary/useSharedImages.js';
 import { PreviewFieldForm } from './PreviewFieldForm.js';
 import { ListItemsEditor, newItemId } from './ListItemsEditor.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
-import { CheckRow } from '../inspector/DynamicDataSection.js';
 import {
   imageChoicesForAssets,
   repeaterColumnsByFieldId,
@@ -236,10 +234,12 @@ function SequencePageSection({
   );
   const values = useMemo(() => defaultNestedValues(aggregate), [aggregate]);
   const layout = useMemo(() => bulkLayout(entry, columns), [columns, entry]);
-  const fileOnly = layout !== null && fieldUsesFileOnly(layout.field);
   useSyncExternalStore(subscribeSequencePageDataAttachments, sequencePageDataAttachmentsVersion);
   const sceneId = designerStore.get().scene?.id ?? 'scene';
   const attachment = getSequencePageDataAttachment(sceneId, sequence.id);
+  // The connection itself is the authority switch. A second File-only checkbox on the child
+  // Repeater created two independent states for one table and was easy to miss.
+  const fileOnly = attachment !== null || sequence.pageDataFile !== undefined;
   const currentSchemaSignature = pageDataSchemaSignature(entry, layout);
   const attachmentNeedsUpdate =
     attachment !== null &&
@@ -440,7 +440,7 @@ function SequencePageSection({
               <Icon icon={Unplug} size={14} /> Not connected
             </span>
           )}
-          {fileOnly && <span className={s.connectionStatus}>CG Control · File only</span>}
+          {fileOnly && <span className={s.connectionStatus}>CG Control · file managed</span>}
         </div>
         {attachment !== null && <code className={s.path}>{attachment.sourcePath}</code>}
       </section>
@@ -503,20 +503,7 @@ function SequencePageSection({
             )}
           </div>
           {attachment !== null && <code className={s.path}>{attachment.sourcePath}</code>}
-          {layout !== null && (
-            <CheckRow
-              label="File only in CG Control"
-              checked={fileOnly}
-              onChange={(enabled) =>
-                designerStore.setCompositionFieldFileOnly(
-                  layout.compositionId,
-                  layout.field.id,
-                  enabled,
-                )
-              }
-              title="Remove manual row editing in CG Control; connected-file controls remain."
-            />
-          )}
+          {fileOnly && <span className={s.connectionStatus}>CG Control · file managed</span>}
           {attachmentNeedsUpdate && (
             <p className={s.warning} role="status">
               Template fields changed after this file was generated. Reload still validates its

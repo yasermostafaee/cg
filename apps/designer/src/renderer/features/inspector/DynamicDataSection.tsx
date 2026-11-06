@@ -493,7 +493,10 @@ function FieldMeta({
               options={FieldDigitsSchema.options}
               onCommit={(v) => patch({ digits: v })}
             />
-            {fieldTakesFileSource(field) && (
+            {/* A Repeater's structured workbook belongs to Rows and data file (or to its outer
+                Sequence). Rendering the generic shared-file picker here creates a second source
+                for the same rows, so only non-Repeater list fields retain this control. */}
+            {element.type !== 'repeater' && fieldTakesFileSource(field) && (
               <FileSourceRow
                 key={`file-source-${field.id}`}
                 sceneId={sceneId}
@@ -503,8 +506,9 @@ function FieldMeta({
               />
             )}
             <p className={s.hint}>
-              The field’s items are the {element.type}’s Items section; operators edit them live in
-              the preview’s data form.
+              {element.type === 'repeater'
+                ? 'Row files are managed in Rows and data file, or by the outer Sequence when it supplies pages.'
+                : `The field’s items are the ${element.type}’s Items section; operators edit them live in the preview’s data form.`}
             </p>
           </>
         )}

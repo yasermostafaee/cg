@@ -47,14 +47,24 @@ const FIELD = {
   ],
 };
 
-function page(itemId: string, item: number, field: typeof FIELD = FIELD): CompositionFieldGroup {
+function page(
+  itemId: string,
+  item: number,
+  field: typeof FIELD = FIELD,
+  pageDataFile?: string,
+): CompositionFieldGroup {
   return {
     instanceId: `weather:${itemId}`,
     name: `weather:${itemId}`,
     label: `Weather card — item ${String(item)}`,
     labelParts: { name: 'Weather card', item },
     compositionId: 'weather-card',
-    sequence: { id: 'weather', name: 'Weather pages', itemId },
+    sequence: {
+      id: 'weather',
+      name: 'Weather pages',
+      itemId,
+      ...(pageDataFile === undefined ? {} : { pageDataFile }),
+    },
     aggregate: { fields: [field], groups: [] },
   };
 }
@@ -184,7 +194,7 @@ describe('D-180 — one operator table for all Sequence pages', () => {
     const combined = el.querySelector('section[aria-label="Weather pages all rows"]');
 
     expect(combined).not.toBeNull();
-    expect(combined?.textContent).toContain('File only');
+    expect(combined?.textContent).toContain('File managed');
     expect(combined?.textContent).toContain('View current data');
     expect(combined?.textContent).toContain('Not connected');
     expect(combined?.textContent).not.toContain('Save and connect Excel');
@@ -192,6 +202,26 @@ describe('D-180 — one operator table for all Sequence pages', () => {
     expect(combined?.querySelector('select')).toBeNull();
     expect(combined?.querySelector('button[aria-label^="Remove Cities item"]')).toBeNull();
     expect(combined?.querySelector('button[aria-label="Add Cities item"]')).toBeNull();
+  });
+
+  it('treats the outer Sequence workbook as the sole source without child flags', async () => {
+    const template: TemplateInfo = {
+      ...TEMPLATE,
+      groups: [
+        page('page-1', 1, FIELD, 'weather/cities.xlsx'),
+        page('page-2', 2, FIELD, 'weather/cities.xlsx'),
+      ],
+    };
+    const el = await render(template);
+    const combined = el.querySelector('section[aria-label="Weather pages all rows"]');
+
+    expect(combined?.textContent).toContain('File managed');
+    expect(combined?.textContent).toContain('Not connected');
+    expect(combined?.textContent).toContain('Connect this workbook in Designer');
+    expect(combined?.textContent).toContain('View current data');
+    expect(combined?.textContent).not.toContain('Save and connect Excel');
+    expect(combined?.querySelector('input')).toBeNull();
+    expect(combined?.querySelector('select')).toBeNull();
   });
 
   it('shows current File-only rows read-only and identifies an invalid legacy cell', async () => {
