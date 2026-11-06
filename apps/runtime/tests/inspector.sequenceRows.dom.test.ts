@@ -98,6 +98,8 @@ function stackItem(): StackItemState {
 
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
+let servedTemplate: TemplateInfo = TEMPLATE;
+let publishTemplatesChanged: (() => void) | null = null;
 
 beforeEach(() => {
   __resetDraftsForTest();
@@ -108,6 +110,8 @@ afterEach(() => {
   root = null;
   container?.remove();
   container = null;
+  servedTemplate = TEMPLATE;
+  publishTemplatesChanged = null;
   vi.restoreAllMocks();
 });
 
@@ -115,6 +119,7 @@ async function render(
   template: TemplateInfo = TEMPLATE,
   item: StackItemState = stackItem(),
 ): Promise<HTMLDivElement> {
+  servedTemplate = template;
   const stub = {
     link: {
       status: () => linkFor('both-up'),
@@ -124,9 +129,14 @@ async function render(
     },
     connections: connectionsStub('both-up'),
     templates: {
-      get: vi.fn(() => Promise.resolve(template)),
-      list: vi.fn(() => Promise.resolve([template])),
-      onChanged: () => () => undefined,
+      get: vi.fn(() => Promise.resolve(servedTemplate)),
+      list: vi.fn(() => Promise.resolve([servedTemplate])),
+      onChanged: (handler: () => void) => {
+        publishTemplatesChanged = handler;
+        return () => {
+          if (publishTemplatesChanged === handler) publishTemplatesChanged = null;
+        };
+      },
     },
     fixedLayers: {
       config: () => Promise.resolve(null),
@@ -218,6 +228,32 @@ describe('D-180 — one operator table for all Sequence pages', () => {
     expect(combined?.textContent).toContain('File managed');
     expect(combined?.textContent).toContain('Not connected');
     expect(combined?.textContent).toContain('Connect this workbook in Designer');
+    expect(combined?.textContent).toContain('View current data');
+    expect(combined?.textContent).not.toContain('Save and connect Excel');
+    expect(combined?.querySelector('input')).toBeNull();
+    expect(combined?.querySelector('select')).toBeNull();
+  });
+
+  it('refreshes an open Inspector when re-import adds the Sequence workbook owner', async () => {
+    const el = await render();
+    const combined = el.querySelector('section[aria-label="Weather pages all rows"]');
+    expect(combined?.querySelector('input')).not.toBeNull();
+    expect(combined?.textContent).toContain('Save and connect Excel');
+
+    servedTemplate = {
+      ...TEMPLATE,
+      groups: [
+        page('page-1', 1, FIELD, 'weather/cities.xlsx'),
+        page('page-2', 2, FIELD, 'weather/cities.xlsx'),
+      ],
+    };
+    await act(async () => {
+      publishTemplatesChanged?.();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(combined?.textContent).toContain('File managed');
     expect(combined?.textContent).toContain('View current data');
     expect(combined?.textContent).not.toContain('Save and connect Excel');
     expect(combined?.querySelector('input')).toBeNull();

@@ -86,6 +86,14 @@
       CG Control browser tests, then run the affected gates and full repository gate. Focused
       Designer and CG Control Playwright suites passed on 2026-11-06; local `pnpm gate` then passed
       all 103/103 tasks plus formatting, control-byte and strict validation of all 141 OpenSpec items.
+- [x] 2.33 Remove the legacy **Use fixed file** entry from new Repeater authoring, retain existing
+      fixed sources only for detaching, and verify the single structured-workbook route in DOM and
+      real Designer browser tests. Focused DOM and Designer Playwright tests passed on 2026-11-06.
+- [x] 2.34 Refresh an open CG Control Inspector when the same template id is updated, so newly
+      authored Sequence workbook ownership immediately removes manual rows and duplicate
+      Save/connect actions; cover the exact re-import path in DOM and real Runtime browser tests.
+      Focused DOM and Runtime Playwright tests passed on 2026-11-06; local `pnpm gate` then passed
+      all 103/103 tasks plus formatting, control-byte and strict validation of all 141 OpenSpec items.
 
 ## 3. Conditional value rules
 

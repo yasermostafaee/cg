@@ -159,6 +159,16 @@ describe('the grant is authored per field, and defaults OFF', () => {
     expect(container?.textContent).toContain('Row files are managed in Rows and data file');
   });
 
+  it('does not offer the legacy fixed text-file workflow for a Repeater', () => {
+    freshScene();
+    designerStore.addElement(defaultRepeater('rep', 0, 0, { id: 'row', fields: [] }));
+    mount();
+    render('rep');
+
+    expect(container?.querySelector('input[aria-label="Use fixed file"]')).toBeNull();
+    expect(container?.textContent).not.toContain('Fixed file source');
+  });
+
   it('setElementFieldMeta sets the grant, and clears it again', () => {
     freshScene();
     designerStore.addElement(defaultText('t1', 0, 0));

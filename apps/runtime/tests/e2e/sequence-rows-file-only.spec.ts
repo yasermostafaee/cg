@@ -85,4 +85,43 @@ test.describe('D-180 — paged Repeater input authority', () => {
     await expect(rows.getByRole('button', { name: /Save and connect|Detach/ })).toHaveCount(0);
     await expect(rows.getByRole('button', { name: 'View current data' })).toBeVisible();
   });
+
+  test('an open Inspector adopts Sequence file ownership after updating the same template', async ({
+    app,
+  }) => {
+    const templateId = 'tpl-e2e-sequence-owner-reimport';
+    await app.importVcg('sequence-owner.vcg', await buildPagedRepeaterVcg(templateId));
+    await app.selectStackRow(templateId);
+
+    const rows = app.inspector.getByRole('region', { name: 'Weather pages all rows' });
+    await expect(rows.getByRole('textbox', { name: /Cities item/ }).first()).toBeVisible();
+    await expect(rows).toContainText('Save and connect Excel');
+
+    await app.openTemplatePicker();
+    const chooser = app.page.waitForEvent('filechooser');
+    await app.templatePicker.getByRole('button', { name: 'Import a .vcg' }).first().click();
+    await (
+      await chooser
+    ).setFiles({
+      name: 'sequence-owner.vcg',
+      mimeType: 'application/octet-stream',
+      buffer: Buffer.from(
+        await buildPagedRepeaterVcg(templateId, {
+          pageDataFile: 'weather/cities.xlsx',
+        }),
+      ),
+    });
+    await app.page
+      .locator('[data-modal-message]')
+      .getByRole('button', { name: /^Update/ })
+      .click();
+    await app.closeTemplatePicker();
+
+    await expect(rows).toContainText('File managed');
+    await expect(rows).toContainText('cities.xlsx');
+    await expect(rows.getByRole('textbox', { name: /Cities item/ })).toHaveCount(0);
+    await expect(rows.getByRole('combobox', { name: /Cities item/ })).toHaveCount(0);
+    await expect(rows.getByRole('button', { name: /Save and connect|Detach/ })).toHaveCount(0);
+    await expect(rows.getByRole('button', { name: 'View current data' })).toBeVisible();
+  });
 });

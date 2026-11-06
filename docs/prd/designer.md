@@ -6163,10 +6163,14 @@ automatically. CG Control exposes the same packaged pages as one operator table 
 generated-workbook connection/reload flow; edits remain drafts until Update, and excess rows are
 refused rather than dropped. A structured row set has one file owner: a standalone Repeater uses
 **Rows and data file…**, while a paged Repeater uses the outer Sequence's **Page data…**. The generic
-Dynamic / Data picker is not repeated for Repeater rows. Connecting a workbook itself makes it the
-editing authority; CG Control removes the manual row editor and every second Save/connect route and
-keeps only labelled connection state, Reload, View current data and the normal staged Update. No
-separate child File-only/Lock-file tick is required, and detaching in Designer restores manual rows.
+Dynamic / Data picker and the legacy **Use fixed file** text-file workflow are not offered for
+Repeater rows. A legacy Repeater that already carries that old fixed source remains visible only so
+the author can detach it. Connecting a workbook itself makes it the editing authority; CG Control
+removes the manual row editor and every second Save/connect route and keeps only labelled connection
+state, Reload, View current data and the normal staged Update. No separate child
+File-only/Lock-file tick is required, and detaching in Designer restores manual rows. Re-importing
+an updated package under the same template id refreshes an already-open CG Control Inspector, so a
+new Sequence workbook owner cannot leave the stale manual table on screen.
 Number fields can be unrestricted, an exact numeric choice list, or custom-range; invalid
 manual/file values are refused and every choice list is a dropdown in both Designer and CG Control.
 Manual numeric inputs reject letters as they are typed (while keeping valid localized digits and

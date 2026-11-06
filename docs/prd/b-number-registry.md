@@ -3982,3 +3982,13 @@ Measured free before use: the registry named `B-390` as next free and the tracke
 heading audit found no existing allocation for `B-390`.
 
 ⇒ **Next free after this entry is `B-391`**, **`D-196`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-06 — open Inspector refresh after template update takes `B-391`
+
+- `B-391` — an open CG Control Inspector kept the old manual Repeater rows after the same template
+  id was updated with a Sequence-owned workbook — [bugs-runtime.md](bugs-runtime.md).
+
+Measured free before use: the registry named `B-391` as next free and the tracked heading audit
+found no existing allocation for `B-391`.
+
+⇒ **Next free after this entry is `B-392`**, **`D-196`**, **`P-075`**, **`R-105`** and **`C-049`**.

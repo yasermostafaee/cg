@@ -31,7 +31,10 @@ escapes. A field SHALL store the delimiter value rather than a catalogue id.
 
 When **File only** and **Lock file** are both intended, Designer SHALL also offer a direct fixed-file
 workflow without requiring the author to invent a Data key. The workflow SHALL be available to a
-keyless element and to an element that already has an ordinary Data key. Designer MAY synthesize the
+keyless text, ticker or text-backed Sequence and to one that already has an ordinary Data key.
+Repeater SHALL NOT offer this text-file workflow because its structured rows have one workbook route;
+an already-authored legacy Repeater fixed source MAY remain visible only so it can be removed.
+Designer MAY synthesize the
 field and binding required by the runtime, but that implementation id SHALL NOT appear in the Data
 key input or Variables table. Converting an existing Data-key element SHALL reuse and rename that
 field/binding in place and SHALL NOT leave its former field as a second operator input. A fixed
@@ -41,8 +44,8 @@ SHALL remove its synthesized field and binding. This workflow SHALL appear as it
 Inspector section, not as a child of Dynamic/Data. Once chosen, that section SHALL remain visible and
 show the selected fixed source and its preview/settings entry point; Dynamic/Data SHALL stay absent
 for the reserved internal field. Its entry control SHALL be a **Use fixed file** checkbox: enabling it
-SHALL reveal Browse and immediately hide the authored Items/Rows editor; disabling it SHALL remove an
-existing fixed source and restore Items/Rows.
+SHALL reveal Browse and immediately hide the authored Items editor; disabling it SHALL remove an
+existing fixed source and restore Items.
 
 The selected file's current session value SHALL be shared by the canvas, Dynamic/Data file preview
 and the composition Preview. Moving selection away and back SHALL NOT discard those bytes. While that
@@ -125,10 +128,18 @@ SHALL describe the portable saved name in operator language as destined for CG C
 
 #### Scenario: Fixed-file checkbox changes the authoring mode before Browse
 
-- **WHEN** the author enables Use fixed file on a keyless ticker, sequence or repeater
-- **THEN** Browse becomes available and Items/Rows is hidden immediately
+- **WHEN** the author enables Use fixed file on a keyless ticker or text-backed Sequence
+- **THEN** Browse becomes available and Items is hidden immediately
 - **WHEN** the author disables it
-- **THEN** any fixed source is removed and Items/Rows returns
+- **THEN** any fixed source is removed and Items returns
+
+#### Scenario: Repeater uses only its structured workbook route
+
+- **WHEN** the author selects a Repeater without a legacy fixed source
+- **THEN** Designer does not offer Use fixed file and routes files through **Rows and data file…** or
+  the owning Sequence's **Page data…**
+- **AND WHEN** an older project already carries a Repeater fixed source
+- **THEN** that legacy source remains visible only for detaching
 
 #### Scenario: File preview survives selection and replaces fallback items everywhere
 

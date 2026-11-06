@@ -4744,8 +4744,10 @@ Text-list fields may also author their initial delimiter from a persistent custo
 under Designer's Edit menu.
 For the fully constrained **File only + Lock file** case, a keyless eligible element also offers
 **Use fixed file** in its own always-visible Inspector section rather than under Dynamic/Data. Checking
-it immediately hides Items/Rows and reveals Browse; unchecking removes the fixed source and restores
-Items/Rows. After selection, that same section continues to show the checked mode, fixed source and
+it immediately hides Items and reveals Browse; unchecking removes the fixed source and restores
+Items. Repeater is excluded because its structured rows use **Rows and data file…** or the outer
+Sequence's **Page data…** instead. A legacy Repeater fixed source remains visible only for detaching.
+After selection, that same section continues to show the checked mode, fixed source and
 preview/settings action.
 Designer creates the required runtime field/binding internally and hides its reserved id from the
 Data key input, Variables table and Dynamic/Data. The selected file's session value is
@@ -4782,6 +4784,8 @@ snapshot embedded in `.vcg`.
 - WHEN a keyless eligible element chooses a fixed file THEN Designer authors File only + Lock file
   without asking for or displaying a Data key, while CG Control receives the same runtime contract;
   a text-list stores new line explicitly and has no **CG Control default** delimiter option
+- WHEN a Repeater has no legacy fixed source THEN Designer does not offer **Use fixed file** and
+  routes structured row files only through **Rows and data file…** or its outer Sequence
 - WHEN the author adds or edits a custom delimiter under **Edit → Manage delimiters** THEN list-file
   fields offer it, store its literal value, and remain unchanged if that catalogue entry is later
   renamed or removed

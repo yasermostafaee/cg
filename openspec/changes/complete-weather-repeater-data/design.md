@@ -129,10 +129,18 @@ continue to use the generated self-documenting JSON format.
 
 A structured row set has one effective source owner. A standalone Repeater owns its workbook through
 **Rows and data file…**; its generic Dynamic / Data section keeps the Data key and field schema but
-does not offer a second shared-file picker. When an outer Sequence pages that Repeater, the Sequence
-owns the one workbook through **Page data…** and the child Repeater exposes rows only. The authored
+does not offer a second shared-file picker or the legacy **Use fixed file** text-source workflow.
+When an outer Sequence pages that Repeater, the Sequence owns the one workbook through **Page
+data…** and the child Repeater exposes rows only. A legacy fixed text source remains visible only so
+it can be detached; no new Repeater can enter that mode. The authored
 `pageDataFile` crosses `TemplateInfo` with the Sequence page identity, so CG Control never has to infer
 ownership from the child field.
+
+CG Control's selected Inspector subscribes to template-catalogue changes as well as selection
+changes. Updating an existing template id does not replace the selected stack item, so a
+selection-only schema fetch can keep the previous manual table even though the catalogue already
+contains `pageDataFile`. The catalogue push re-runs the same channel-scoped `get`/`list` reads; it
+does not create a second ingestion path.
 
 Connecting either structured workbook makes the file the editing authority without a second
 File-only checkbox. CG Control removes the manual row table, add/remove/reorder and every second

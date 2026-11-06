@@ -124,6 +124,7 @@ export function FixedFileSourceSection({
   const compositionLocked =
     element.type === 'sequence' && sequenceItemsBinding(element.items) === null;
   const canChoose =
+    element.type !== 'repeater' &&
     !compositionLocked &&
     (field === undefined || fieldTakesFileSource(field)) &&
     (element.type !== 'sequence' || sequenceItemsBinding(element.items) === 'text');

@@ -450,37 +450,45 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
       return;
     }
     let cancelled = false;
-    // B-085 — `templates.get` is browser-local now, so this resolves offline. The
-    // rejection handler is kept as a guard so a failed lookup can NEVER become an
-    // unhandled promise rejection: on failure we keep `info` null and the
-    // Inspector falls back to type-inferred fields rather than throwing.
-    window.cg.templates
-      .get({
-        templateId: item.templateId,
-        ...(templateChannel !== undefined && { channel: templateChannel }),
-      })
-      .then(
-        (resolved) => {
-          if (!cancelled) setInfo(resolved);
-        },
-        () => {
-          if (!cancelled) setInfo(null);
-        },
-      );
-    // Same guard, same reason: a failed lookup leaves the heading without its
-    // disambiguator rather than throwing.
-    void window.cg.templates
-      .list(templateChannel === undefined ? undefined : { channel: templateChannel })
-      .then(
-        (list) => {
-          if (!cancelled) setSiblings(list);
-        },
-        () => {
-          if (!cancelled) setSiblings([]);
-        },
-      );
+    const pull = (): void => {
+      // B-085 — `templates.get` is browser-local now, so this resolves offline. The
+      // rejection handler is kept as a guard so a failed lookup can NEVER become an
+      // unhandled promise rejection: on failure we keep `info` null and the
+      // Inspector falls back to type-inferred fields rather than throwing.
+      window.cg.templates
+        .get({
+          templateId: item.templateId,
+          ...(templateChannel !== undefined && { channel: templateChannel }),
+        })
+        .then(
+          (resolved) => {
+            if (!cancelled) setInfo(resolved);
+          },
+          () => {
+            if (!cancelled) setInfo(null);
+          },
+        );
+      // Same guard, same reason: a failed lookup leaves the heading without its
+      // disambiguator rather than throwing.
+      void window.cg.templates
+        .list(templateChannel === undefined ? undefined : { channel: templateChannel })
+        .then(
+          (list) => {
+            if (!cancelled) setSiblings(list);
+          },
+          () => {
+            if (!cancelled) setSiblings([]);
+          },
+        );
+    };
+    pull();
+    // B-391 — re-importing the same template id updates the catalogue without replacing the
+    // selected stack item. The Inspector therefore cannot wait for selection to change: refresh
+    // its schema on the catalogue push so newly-authored Sequence file ownership takes effect now.
+    const offChanged = window.cg.templates.onChanged(pull);
     return () => {
       cancelled = true;
+      offChanged();
     };
   }, [item, templateChannel]);
 

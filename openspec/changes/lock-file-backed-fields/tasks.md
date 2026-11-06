@@ -24,11 +24,12 @@
       Windows/UNC source path, hide the duplicate Inspector Items/Rows section, and keep authored
       fallback items out of preview surfaces while a current file is selected.
 - [x] 2.7 Add a direct **Use fixed file** checkbox workflow for the file-only + locked case: hide
-      Items/Rows and reveal Browse immediately when checked, synthesize the
+      Items and reveal Browse immediately when checked for text, ticker and text-backed Sequence;
+      exclude Repeater because its rows use their structured workbook route; synthesize the
       runtime field/binding under a reserved internal id, require no authored Data key, hide that
       implementation field from Variables, seed a list with an explicit new-line delimiter instead
       of a CG Control default, keep its action/status in a visible independent Inspector section
-      outside Dynamic/Data, and restore Items/Rows when unchecked.
+      outside Dynamic/Data, and restore Items when unchecked.
 - [x] 2.8 Redesign Manage delimiters as a legible table with aligned icon actions, a separated
       add/edit form, explicit confirmation and a quiet reset area.
 - [x] 2.9 Move file content, delimiter selection and interpreted values into a large dedicated modal;

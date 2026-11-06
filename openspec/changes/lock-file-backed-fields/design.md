@@ -80,9 +80,11 @@ again rather than exposing the browser's raw permission exception.
 
 ### 2.1 Fixed locked sources use one internal field, not a second authored Data key
 
-For the fully constrained case, an eligible element offers a **Use fixed file** checkbox in a pinned
-section whether it is currently keyless or has an ordinary Data key. Its session intent hides
-Items/Rows and reveals Browse before any incomplete policy is persisted; selecting a file then
+For the fully constrained case, an eligible text, ticker or text-backed Sequence offers a **Use fixed
+file** checkbox in a pinned section whether it is currently keyless or has an ordinary Data key.
+Repeater is excluded because its structured rows use **Rows and data file…** or an outer Sequence's
+**Page data…**; an already-authored legacy Repeater source remains visible only for detaching. The
+session intent hides Items and reveals Browse before any incomplete policy is persisted; selecting a file then
 creates the same field/binding required by Runtime under a reserved id derived from the element id,
 and authors `file-only + bridgePath + lockFile`. That id is an implementation detail: Dynamic/Data
 does not render it as a Data key, Variables filters it out, and the authoring action/status lives in

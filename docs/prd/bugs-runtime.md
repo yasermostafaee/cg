@@ -13944,3 +13944,14 @@ Control. **Actual:** the refusal says the template “needs CG runtime”, even 
 operator installs and updates CG Control. **Expected / Fix:** the same actionable refusal names CG
 Control, keeps the required and installed versions, and retains both recovery actions. The internal
 rendering-contract constant remains unchanged; this is product-facing copy only.
+
+## [x] B-391 — An open Inspector keeps the old manual Repeater rows after the same template is updated with a Sequence workbook ⟨priority: high — the operator sees two competing data routes⟩ — FIXED 2026-11-06 · `openspec/changes/complete-weather-repeater-data/`
+
+**Repro:** load and select a paged Repeater template, keep its Inspector open, then update the same
+template id with a Designer export whose outer Sequence has a connected workbook. **Actual:** the
+template catalogue updates, but the Inspector continues rendering its selection-time `TemplateInfo`:
+all manual row inputs and **Save and connect Excel…** remain visible, and the source reads **Not
+connected**. **Expected / Fix:** the catalogue change refreshes the selected template schema without
+requiring a row re-selection; the Inspector immediately shows **File managed**, the authored
+workbook connection and **View current data**, with no manual rows and no second Save/connect route.
+The package itself already carries `pageDataFile`; only the stale Inspector read is replaced.

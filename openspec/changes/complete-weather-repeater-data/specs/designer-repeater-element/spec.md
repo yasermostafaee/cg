@@ -138,7 +138,10 @@ same page values.
 
 - **WHEN** a Repeater is not paged by a Sequence
 - **THEN** Designer manages its structured workbook only through **Rows and data file…** and does not
-  show the generic Dynamic / Data shared-file picker for the same list field
+  show the generic Dynamic / Data shared-file picker or offer **Use fixed file** for the same list
+  field
+- **AND WHEN** an older project already carries a Repeater fixed text source
+- **THEN** Designer keeps that legacy source visible only so the author can detach it
 - **AND WHEN** the workbook is connected
 - **THEN** CG Control shows connection state, Reload and View current data without manual rows or a
   second Save/connect route
@@ -148,6 +151,16 @@ same page values.
 - **WHEN** the selected Repeater's composition is used as a page by one or more Sequences
 - **THEN** its row modal remains available for inspecting defaults but file connection actions name
   the owning Sequence and are not duplicated on the Repeater
+
+#### Scenario: Updating the selected template refreshes file ownership
+
+- **GIVEN** CG Control has a paged Repeater row selected and its Inspector is open
+- **WHEN** the same template id is updated with a package whose outer Sequence carries
+  `pageDataFile`
+- **THEN** the open Inspector refreshes from that channel's current catalogue without requiring the
+  operator to reselect the row
+- **AND THEN** it shows File managed, the authored workbook and View current data, while manual rows
+  and every Save/connect action are absent
 
 #### Scenario: File-only rows remain inspectable without becoming editable
 

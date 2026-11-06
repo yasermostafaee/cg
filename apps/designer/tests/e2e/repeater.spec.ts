@@ -38,6 +38,10 @@ test.describe('Repeater / data-driven layout (D-030)', () => {
     await buildRowChild(app);
     await app.addRepeater();
     await expect(canvasFrame.locator('[data-cg-repeater-row]')).toHaveCount(3);
+    await expect(app.inspector.getByRole('checkbox', { name: 'Use fixed file' })).toHaveCount(0);
+    await expect(
+      app.inspector.getByRole('button', { name: 'Rows and data file…', exact: true }),
+    ).toBeVisible();
 
     // The inspector items editor is COLUMNED by the child's fields; a cell
     // edit updates that row on the canvas.
