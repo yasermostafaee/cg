@@ -12,7 +12,7 @@ Lane: **FULL**
 ## 2. Current guide evidence
 
 - [x] 2.1 Update the Persian guide for local service access and direct-UNC administration.
-- [ ] 2.2 Build and visually verify the `1.0.0` PDF guide.
+- [x] 2.2 Build and visually verify the `1.0.0` PDF guide.
 - [ ] 2.3 Replace version-bearing setup images with fresh captures from this build.
 - [x] 2.4 Increase guide line/paragraph spacing and visually inspect every rendered page.
 
@@ -49,7 +49,7 @@ Lane: **FULL**
 
 ## 4. Verification
 
-- [ ] 4.1 Run the full local gate and complete local E2E lane.
+- [x] 4.1 Run the full local gate and complete local E2E lane.
 - [ ] 4.2 Push the exact candidate to `dev` and record green Linux workspace/E2E jobs.
 - [ ] 4.3 Record a green Desktop installer run, including least-privilege text-root access and
       upgrade repair.

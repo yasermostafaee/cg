@@ -2065,27 +2065,45 @@ const exactly = (text: string): RegExp =>
  * which is what a pick does.
  */
 export async function chooseSource(page: Page, field: Locator, pick: SourcePick): Promise<void> {
-  await field.click();
   const panel = page.getByRole('dialog', { name: 'Choose a source' });
-  await expect(panel).toBeVisible();
-  if ('choice' in pick) {
-    await panel
-      .locator('[data-picker-choices]')
-      .getByRole('button', { name: pick.choice, exact: true })
-      .click();
-  } else if ('input' in pick) {
-    await panel.getByRole('tab', { name: /^Inputs/ }).click();
-    await panel.getByRole('option', { name: pick.input, exact: true }).click();
-  } else {
-    await panel.getByRole('tab', { name: /^Media/ }).click();
-    if (pick.search !== undefined) await panel.locator('[data-picker-search]').fill(pick.search);
-    await panel
-      .locator('[data-picker-media]')
-      .filter({ has: page.locator('.cg-picker-row__name', { hasText: exactly(pick.media) }) })
-      .first()
-      .click();
+  const expected = 'choice' in pick ? pick.choice : 'input' in pick ? pick.input : pick.media;
+  // Test-mode source discovery may publish a fresh catalog while the picker is open. That
+  // intentionally remounts the anchored panel; retry the user gesture instead of letting a stale
+  // tab locator consume the whole test timeout.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await field.click({ timeout: 2_000 });
+      await expect(panel).toBeVisible({ timeout: 2_000 });
+      if ('choice' in pick) {
+        await panel
+          .locator('[data-picker-choices]')
+          .getByRole('button', { name: pick.choice, exact: true })
+          .click({ timeout: 2_000 });
+      } else if ('input' in pick) {
+        await panel.getByRole('tab', { name: /^Inputs/ }).click({ timeout: 2_000 });
+        await panel
+          .getByRole('option', { name: pick.input, exact: true })
+          .click({ timeout: 2_000 });
+      } else {
+        await panel.getByRole('tab', { name: /^Media/ }).click({ timeout: 2_000 });
+        if (pick.search !== undefined) {
+          await panel.locator('[data-picker-search]').fill(pick.search, { timeout: 2_000 });
+        }
+        await panel
+          .locator('[data-picker-media]')
+          .filter({ has: page.locator('.cg-picker-row__name', { hasText: exactly(pick.media) }) })
+          .first()
+          .click({ timeout: 2_000 });
+      }
+      await expect(panel).toHaveCount(0);
+      await expect(field).toContainText(expected);
+      return;
+    } catch (cause) {
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(100);
+      if (attempt === 2) throw cause;
+    }
   }
-  await expect(panel).toHaveCount(0);
 }
 
 /**

@@ -262,10 +262,9 @@ test.describe('D-133 — the loop range is authorable and on the timeline', () =
         samples.push(Number(node.getAttribute('aria-valuenow') ?? '0'));
       }).observe(node, { attributes: true, attributeFilter: ['aria-valuenow'] });
     });
-    await app.page
-      .getByLabel('Playback transport')
-      .getByRole('button', { name: 'Play', exact: true })
-      .click();
+    const transport = app.page.getByLabel('Playback transport');
+    await transport.getByRole('button', { name: 'Rehearse preview' }).click();
+    await transport.getByRole('button', { name: 'Play', exact: true }).click();
 
     await app.page.waitForTimeout(2_000);
 
@@ -307,16 +306,16 @@ test.describe('D-133 — the loop range is authorable and on the timeline', () =
 
     // Main Canvas: actual Play must park both the painted Shape and reported root frame at Out.
     await app.page.waitForTimeout(100);
-    await app.page
-      .getByLabel('Playback transport')
-      .getByRole('button', { name: 'Play', exact: true })
-      .click();
+    const transport = app.page.getByLabel('Playback transport');
+    await transport.getByRole('button', { name: 'Rehearse preview' }).click();
+    await transport.getByRole('button', { name: 'Play', exact: true }).click();
     const canvasShape = app.canvasFrame.locator(`[data-cg-element-id="${rectId}"]`);
     await expect(canvasShape).toHaveCSS('opacity', '0.8', { timeout: 5_000 });
     await expect(app.page.getByRole('slider', { name: 'Frame ruler' })).toHaveAttribute(
       'aria-valuenow',
       '75',
     );
+    await transport.getByRole('button', { name: 'Rehearse preview' }).click();
 
     // Preview owns a separate runtime, but the same Freeze contract: the status counter and
     // rendered Shape must agree on the Out-point picture rather than splitting 25 / 75.
@@ -386,6 +385,7 @@ test.describe('D-133 — the loop range is authorable and on the timeline', () =
       }).observe(node, { attributes: true, attributeFilter: ['aria-valuenow'] });
     });
     const transport = app.page.getByLabel('Playback transport');
+    await transport.getByRole('button', { name: 'Rehearse preview' }).click();
     await transport.getByRole('button', { name: 'Play', exact: true }).click();
 
     // Wait for a real Middle wrap, not a guessed timeout. By then the unchecked rectangle has
@@ -418,7 +418,10 @@ test.describe('D-133 — the loop range is authorable and on the timeline', () =
         return (rendered.x - frame.x) / fittedScale;
       })
       .toBeGreaterThan(1_295);
-    await transport.getByRole('button', { name: 'Pause', exact: true }).click();
+    // Rehearse intentionally has no Pause. Return to authoring and inspect the same once-only
+    // terminal picture at frame 100, after the lifecycle assertion above proved the real wrap.
+    await transport.getByRole('button', { name: 'Rehearse preview' }).click();
+    await app.scrubToFrame(100);
 
     // Hit-test at the box the iframe really paints. The old root-only clock looked hundreds of
     // pixels earlier and could not select this unchecked member at its visible centre.

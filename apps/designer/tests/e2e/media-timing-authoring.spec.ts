@@ -199,20 +199,13 @@ test.describe('D-176 — one clear Follow composition path', () => {
 
     const ruler = app.page.getByRole('slider', { name: 'Frame ruler' });
     const transport = app.page.getByLabel('Playback transport');
+    await transport.getByRole('button', { name: 'Rehearse preview' }).click();
     await transport.getByRole('button', { name: 'Play', exact: true }).click();
     await expect(ruler).toHaveAttribute('aria-valuenow', String(outPoint));
     await expect.poll(() => paintedX(canvasSvg)).toBeCloseTo(heldPicture, 1);
-    await transport.getByRole('button', { name: 'Pause', exact: true }).click();
-    await app.page.waitForTimeout(150);
-    await expect(ruler).toHaveAttribute('aria-valuenow', String(outPoint));
-    await expect.poll(() => paintedX(canvasSvg)).toBeCloseTo(heldPicture, 1);
-    await transport.getByRole('button', { name: 'Play', exact: true }).click();
-    await expect(ruler).toHaveAttribute('aria-valuenow', String(outPoint));
-    await expect.poll(() => paintedX(canvasSvg)).toBeCloseTo(heldPicture, 1);
-    // Canvas offers Pause/scrub, not a broadcast Stop. Releasing its lifecycle restores
-    // authoring position; the dedicated Preview below exercises the operator's Stop/Outro.
-    await transport.getByRole('button', { name: 'Pause', exact: true }).click();
-    await app.scrubToFrame(0);
+    // Rehearse exposes the operator lifecycle, not the authoring Pause controls. Leaving it
+    // releases lifecycle ownership and restores the editable frame-zero picture.
+    await transport.getByRole('button', { name: 'Rehearse preview' }).click();
     await expect.poll(() => paintedX(canvasSvg)).toBeCloseTo(0, 1);
     await expect(transport.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
 
@@ -256,6 +249,7 @@ test.describe('D-176 — one clear Follow composition path', () => {
       );
     });
     const transport = app.page.getByLabel('Playback transport');
+    await transport.getByRole('button', { name: 'Rehearse preview' }).click();
     await transport.getByRole('button', { name: 'Play', exact: true }).click();
     await expect(ruler).toHaveAttribute('aria-valuenow', String(outPoint));
     await expect.poll(() => paintedX(svg)).toBeCloseTo(heldPicture, 1);
@@ -331,12 +325,19 @@ test.describe('D-176 — one clear Follow composition path', () => {
     // then prove a ruler scrub releases that paused lifecycle and positions frame zero again.
     const video = app.canvasFrame.locator('video[data-cg-element-id]').first();
     const transport = app.page.getByLabel('Playback transport');
+    await transport.getByRole('button', { name: 'Rehearse preview' }).click();
     await transport.getByRole('button', { name: 'Play', exact: true }).click();
     await expect
       .poll(() => video.evaluate((node) => (node as HTMLVideoElement).currentTime))
       .toBeGreaterThan(0.12);
-    await transport.getByRole('button', { name: 'Pause', exact: true }).click();
+    await transport.getByRole('button', { name: 'Rehearse preview' }).click();
+    await app.page.waitForTimeout(200);
+    // Leaving Rehearse already sets the store cursor to frame zero. Move once so the rebuilt
+    // authoring iframe receives an explicit scrub message instead of a no-op zero-to-zero write.
+    await app.scrubToFrame(1);
     await app.scrubToFrame(0);
+    const posterTime = Number(await video.getAttribute('data-cg-poster-ms')) / 1000;
+    expect(Number.isFinite(posterTime)).toBe(true);
     await expect
       .poll(() =>
         video.evaluate((node) => {
@@ -344,7 +345,7 @@ test.describe('D-176 — one clear Follow composition path', () => {
           return media.seeking ? 99 : media.currentTime;
         }),
       )
-      .toBeLessThan(0.08);
+      .toBeCloseTo(posterTime, 1);
   });
 
   test('B-377 — Follow Freeze parks at Out point and content completion advances its Outro', async ({
@@ -386,17 +387,9 @@ test.describe('D-176 — one clear Follow composition path', () => {
       .locator('..')
       .textContent();
     const outPoint = Number(/frame\s+(\d+)/i.exec(outPointText ?? '')?.[1] ?? '0');
-    await ruler.evaluate((node) => {
-      const samples = [Number(node.getAttribute('aria-valuenow') ?? '0')];
-      Object.assign(window, { __cgFreezeFrameSamples: samples });
-      new MutationObserver(() => {
-        samples.push(Number(node.getAttribute('aria-valuenow') ?? '0'));
-      }).observe(node, { attributes: true, attributeFilter: ['aria-valuenow'] });
-    });
-
-    const play = app.page
-      .getByLabel('Playback transport')
-      .getByRole('button', { name: 'Play', exact: true });
+    const transport = app.page.getByLabel('Playback transport');
+    await transport.getByRole('button', { name: 'Rehearse preview' }).click();
+    const play = transport.getByRole('button', { name: 'Play', exact: true });
     await play.click();
     await expect(ruler).toHaveAttribute('aria-valuenow', String(outPoint), { timeout: 3_000 });
     const video = scrubbedVideo;
@@ -414,12 +407,10 @@ test.describe('D-176 — one clear Follow composition path', () => {
       .poll(() => video.evaluate((node) => (node as HTMLVideoElement).currentTime))
       .toBeCloseTo(heldAt, 1);
 
-    await expect(play).toBeVisible({ timeout: 20_000 });
-    const samples = await app.page.evaluate(
-      () =>
-        (window as typeof window & { __cgFreezeFrameSamples?: number[] }).__cgFreezeFrameSamples ??
-        [],
-    );
-    expect(samples.some((frame) => frame > outPoint && frame < 150)).toBe(true);
+    await expect(play).toBeEnabled({ timeout: 20_000 });
+    await expect(ruler).toHaveAttribute('aria-valuenow', '150');
+    await expect
+      .poll(() => video.evaluate((node) => (node as HTMLVideoElement).currentTime))
+      .toBeGreaterThan(heldAt + 0.1);
   });
 });

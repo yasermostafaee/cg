@@ -79,11 +79,12 @@ for (const nested of [false, true]) {
     await expect.poll(labelOpacity).toBe('1');
     await expect(hidden).toHaveCSS('display', 'none');
     const transport = app.page.getByLabel('Playback transport');
+    await transport.getByRole('button', { name: 'Rehearse preview' }).click();
     await transport.getByRole('button', { name: 'Play', exact: true }).click();
     await expect(digits).toHaveText('');
     await expect.poll(labelOpacity).toBe('0');
-    // Returning to an authoring frame releases runtime ownership and restores edit visibility.
-    await transport.getByRole('button', { name: 'Go to start', exact: true }).click();
+    // Leaving Rehearse releases runtime ownership and restores edit visibility.
+    await transport.getByRole('button', { name: 'Rehearse preview' }).click();
     await expect(digits).not.toHaveText('');
     await expect.poll(labelOpacity).toBe('1');
     await expect(hidden).toHaveCSS('display', 'none');

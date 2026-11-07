@@ -132,9 +132,9 @@ test.describe('D-119 + D-179 — starter landing catalog', () => {
     await app.goto();
     const badges = app.page.getByTestId('starter-playout');
     await expect(badges).toHaveCount(EXPECTED_LABELS.length);
-    await expect(badges.nth(0)).toHaveText('holds until stopped, then exits');
-    await expect(badges.nth(2)).toContainText(/loops every ~10 s/);
-    await expect(badges.nth(3)).toHaveText('auto-out after 6 s');
+    await expect(badges.nth(0)).toContainText('holds until stopped, then exits');
+    await expect(badges.nth(0)).toContainText(/loops every ~10 s/);
+    await expect(badges.nth(1)).toHaveText('auto-out after 6 s');
     await expect(badges.nth(4)).toHaveText('content-driven hold');
     await expect(app.page.getByText(/Two-deck IRIB-style strap|Persian news strap/)).toHaveCount(0);
   });

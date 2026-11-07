@@ -11,6 +11,7 @@ import {
   type AggregatedFields,
   type CompositionFieldGroup,
   type DynamicField,
+  type Element,
   type FieldValue,
   type FieldValues,
   type ListItem,
@@ -68,6 +69,7 @@ type ListField = Extract<DynamicField, { type: 'list' }>;
 
 interface BulkLayout {
   readonly compositionId: string;
+  readonly itemCompositionId: string;
   readonly field: ListField;
   readonly columns: readonly ListItemColumn[];
   readonly maxItems: number;
@@ -119,7 +121,7 @@ export function SequencePageDataControl({
     [assets, imageUrls, scene, sharedImages],
   );
   return entry === undefined ? null : (
-    <SequencePageSection entry={entry} columns={columns} imageUrls={imageUrls} />
+    <SequencePageSection scene={scene} entry={entry} columns={columns} imageUrls={imageUrls} />
   );
 }
 
@@ -150,7 +152,38 @@ function sampleFilename(name: string, format: 'json' | 'csv' | 'xlsx'): string {
 }
 
 /** The safe spreadsheet case: one repeated composition, with one flat structured Repeater. */
+function repeaterCompositionIdForField(
+  scene: Scene,
+  compositionId: string,
+  fieldId: string,
+): string | undefined {
+  const composition = scene.compositions?.find((candidate) => candidate.id === compositionId);
+  if (composition === undefined) return undefined;
+  const target = composition.bindings?.find(
+    (binding) => binding.fieldId === fieldId && binding.target.kind === 'repeater-items',
+  )?.target;
+  if (target === undefined || !('elementId' in target)) return undefined;
+  const find = (elements: readonly Element[]): string | undefined => {
+    for (const element of elements) {
+      if (element.id === target.elementId && element.type === 'repeater') {
+        return element.compositionId;
+      }
+      if (element.type === 'container') {
+        const nested = find(element.children);
+        if (nested !== undefined) return nested;
+      }
+    }
+    return undefined;
+  };
+  for (const layer of composition.layers) {
+    const found = find(layer.children);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
 function bulkLayout(
+  scene: Scene,
   entry: PageSequence,
   columnsByFieldId: ReadonlyMap<string, readonly ListItemColumn[]>,
 ): BulkLayout | null {
@@ -195,8 +228,12 @@ function bulkLayout(
   });
   const fieldColumns = columnsByFieldId.get(firstField.id);
   if (!compatible || fieldColumns === undefined || fieldColumns.length === 0) return null;
+  const compositionId = compositionItems[0]?.compositionId ?? '';
+  const itemCompositionId = repeaterCompositionIdForField(scene, compositionId, firstField.id);
+  if (itemCompositionId === undefined) return null;
   return {
-    compositionId: compositionItems[0]?.compositionId ?? '',
+    compositionId,
+    itemCompositionId,
     field: firstField,
     columns: fieldColumns,
     maxItems: firstField.maxItems,
@@ -228,10 +265,12 @@ function pageDataSchemaSignature(entry: PageSequence, layout: BulkLayout | null)
 }
 
 function SequencePageSection({
+  scene,
   entry,
   columns,
   imageUrls,
 }: {
+  scene: Scene;
   entry: PageSequence;
   columns: ReadonlyMap<string, readonly ListItemColumn[]>;
   imageUrls: Readonly<Record<string, string>>;
@@ -242,9 +281,9 @@ function SequencePageSection({
     [pages],
   );
   const values = useMemo(() => defaultNestedValues(aggregate), [aggregate]);
-  const layout = useMemo(() => bulkLayout(entry, columns), [columns, entry]);
+  const layout = useMemo(() => bulkLayout(scene, entry, columns), [columns, entry, scene]);
   useSyncExternalStore(subscribeSequencePageDataAttachments, sequencePageDataAttachmentsVersion);
-  const sceneId = designerStore.get().scene?.id ?? 'scene';
+  const sceneId = scene.id;
   const attachment = getSequencePageDataAttachment(sceneId, sequence.id);
   // `pageDataFile` is authored scene state and therefore survives a `.cgproj` round trip. The
   // native source handle is intentionally session-only, but losing that handle must not make an
@@ -619,7 +658,7 @@ function SequencePageSection({
           </p>
           {layout !== null && (
             <OperatorColumnLocks
-              compositionId={layout.compositionId}
+              compositionId={layout.itemCompositionId}
               fields={layout.field.itemFields ?? []}
             />
           )}

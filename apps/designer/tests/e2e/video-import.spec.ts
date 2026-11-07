@@ -310,6 +310,7 @@ test('a premultiplied-alpha source imports WITHOUT the black fringe (D-128 un-pr
   // The premultiplied-alpha toggle defaults OFF (owner decision 2026-07-25 — a
   // default must never degrade an already-correct straight-alpha source); this
   // fixture IS a legacy premultiplied source, so the operator opts IN.
+  await page.getByTestId('video-advanced-corrections').locator('summary').click();
   await expect(page.getByTestId('video-premultiplied-toggle')).not.toBeChecked();
   await page.getByTestId('video-premultiplied-toggle').check();
 
@@ -541,6 +542,7 @@ test('STALE-RESULT COHERENCE: ticking a correction after a completed conversion 
   await expect(page.getByTestId('video-conversion-result')).toBeVisible({ timeout: 25_000 });
 
   // Tick a correction: the verdict must stop presenting itself as current.
+  await page.getByTestId('video-advanced-corrections').locator('summary').click();
   await page.getByTestId('video-alpha-bleed-toggle').check();
   await expect(page.getByTestId('video-conversion-result')).not.toBeAttached();
   await expect(page.getByRole('button', { name: 'Place element' })).not.toBeAttached();

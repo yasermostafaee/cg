@@ -179,10 +179,7 @@ test('the Inspector and the Layers row read a mixed TEMPLATE name right to left'
   await readsRightToLeft(inInspector, 'HD', 'LIVE');
 
   // 6 · the row's TEMPLATE cell, in the Layers list.
-  const inRow = page
-    .getByRole('region', { name: 'Layers' })
-    .locator('bdi', { hasText: 'زیرنویس' })
-    .first();
+  const inRow = app.layerRow(layer).getByText(TPL_NAME, { exact: true });
   await expect(inRow).toBeVisible();
   await readsRightToLeft(inRow, 'HD', 'LIVE');
 });

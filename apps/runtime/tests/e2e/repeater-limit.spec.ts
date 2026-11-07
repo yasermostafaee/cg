@@ -11,12 +11,14 @@ test('🔴 a repeater of at most 2 rows: Add item is withheld at 2 / 2, and come
   await app.importVcg('rows.vcg', await buildRepeaterVcg(templateId, 2));
   await app.selectStackRow(templateId);
 
-  const count = app.inspector.locator('[data-list-count="rows"]');
-  const add = app.inspector.getByRole('button', { name: 'Add rows item' });
+  await app.inspector.getByRole('button', { name: 'Edit rows…' }).click();
+  const editor = app.page.getByRole('dialog', { name: 'Edit rows rows' });
+  const count = editor.locator('[data-list-count="rows"]');
+  const add = editor.getByRole('button', { name: 'Add rows item' });
   await expect(count).toHaveText('2 / 2');
   await expect(add).toBeDisabled();
 
-  await app.inspector.getByRole('button', { name: 'Remove rows item 2' }).click();
+  await editor.getByRole('button', { name: 'Remove rows item 2' }).click();
   await expect(count).toHaveText('1 / 2');
   await expect(add).toBeEnabled();
   await add.click();
