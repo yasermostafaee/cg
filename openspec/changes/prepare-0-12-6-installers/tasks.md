@@ -50,6 +50,8 @@ Lane: **FULL**
 ## 4. Verification
 
 - [x] 4.1 Run the full local gate and complete local E2E lane.
+- [x] 4.4 Measure the rehearsal fit before first paint so a slow CI/browser never exposes the
+      unscaled 1920-pixel frame.
 - [ ] 4.2 Push the exact candidate to `dev` and record green Linux workspace/E2E jobs.
 - [ ] 4.3 Record a green Desktop installer run, including least-privilege text-root access and
       upgrade repair.

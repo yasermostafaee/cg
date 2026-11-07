@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 // The raster type comes from `@cg/shared-ipc` (`ChannelRaster`), not from
 // `@cg/template-runtime`'s structurally-identical `Raster` — a `{width, height}`
@@ -494,7 +494,10 @@ export function RehearsalStage({
   // occurrences of this shape produced: an effect that attaches an observer must
   // not silently no-op when its target is absent — it either takes what gates
   // the target's existence into its DEPS, or it reports that it did not attach.
-  useEffect(() => {
+  // Measure before paint. A passive effect leaves one real frame at the initial
+  // `fit = 1`, so a slower browser can expose a full-width 1920px rehearsal
+  // before the following render shrinks it into the panel.
+  useLayoutEffect(() => {
     const box = fitRef.current;
     if (box === null) return;
     const measure = (): void => {
