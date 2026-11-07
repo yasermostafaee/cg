@@ -423,8 +423,10 @@ jobs:
     # (`MULTI-CHANNEL-01`): the Runtime suite measured 7.9 of its 8.0. 24 → 30 on 2026-09-30
     # (`CENTRAL-BRIDGE-01`): the Runtime suite ran out of its 10.0 (run 36661037161). 30 → 35 on
     # 2026-10-22 (`RUN-NEXT-VERSION-03`): the Runtime suite ran out of its 14.0 (run 39629476965); the
-    # budgets are now 11 + 17.
-    timeout-minutes: 35
+    # Designer suite then exhausted both its 11-minute CI budget (run 42364749060) and a 14-minute
+    # one-worker slow-runner control without a failed assertion. 35 → 40 on 2026-11-07 keeps the
+    # now 17 + 17 suite budgets below the outer cap with setup/build room.
+    timeout-minutes: 40
 
     steps:
       - name: Checkout

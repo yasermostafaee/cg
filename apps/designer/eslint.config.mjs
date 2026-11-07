@@ -73,6 +73,11 @@ export default [
     ignores: [
       'dist/**',
       '.vite/**',
+      // Playwright writes executable JavaScript into its HTML report. These are
+      // test artifacts, not app source, and may exist after a local/CI-style E2E run.
+      'playwright-report/**',
+      'test-results/**',
+      'blob-report/**',
       'src/generated/**',
       '*.tsbuildinfo',
       // B-071: Vite writes+deletes this transient during build; keep ESLint from globbing it (turbo lint/build race → ENOENT).

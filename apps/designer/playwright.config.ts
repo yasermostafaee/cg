@@ -89,8 +89,16 @@ function resolveWorkers(): number | undefined {
  * 🔴 **RAISED 2026-10-22 (`RUN-NEXT-VERSION-03`), 10 → 11, with the cap (`30 → 35`) — flagged as shared
  * CI config.** Run 39629476965: this suite used 9.3 of its 10.0 (`343 passed`), under 7 % headroom,
  * while the Runtime suite ran out of its 14.0. 11 + 17 = 28 against ~32.4 usable (the runtime config).
+ *
+ * 🔴 **RAISED 2026-11-07 (`prepare-0-12-6-installers`), 11 → 17, with the cap (`35 → 40`).** Run
+ * 42364749060 reached the 11-minute deadline without a failed assertion: `363 passed`, `60 did not
+ * run`, and Playwright named the deadline itself. A one-worker Windows control run then reached a
+ * 14-minute trial budget with `385 passed`, `32 did not run` after four timing retries, proving that
+ * 14 minutes was not enough slow-runner headroom. The Runtime half completed all 399 tests in 14.4
+ * minutes in the CI run, so 17 + 17 = 34 remains below the ~37.4 minutes available inside the
+ * 40-minute job cap. Playwright, not the outer job, still owns any future overrun.
  */
-const CI_GLOBAL_TIMEOUT_MS = 11 * 60_000;
+const CI_GLOBAL_TIMEOUT_MS = 17 * 60_000;
 
 const workers = resolveWorkers();
 

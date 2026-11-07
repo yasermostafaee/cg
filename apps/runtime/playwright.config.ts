@@ -135,6 +135,13 @@ function resolveWorkers(): number | undefined {
  * `14 → 17` (~16 % over the measured need), the Designer's `10 → 11`, the job cap `30 → 35`.
  * 11 + 17 = 28 against 35 − ~1.6 setup − ~1 build = ~32.4 usable — 4.4 min of margin. The next growth
  * redoes this arithmetic again, here.
+ *
+ * 🔴 **THE DESIGNER'S HALF RAISED 2026-11-07 (`prepare-0-12-6-installers`), 11 → 17, with
+ * the cap (`35 → 40`).** Run 42364749060: Designer exhausted 11 minutes with no failed assertion
+ * (`363 passed`, `60 did not run`), while this Runtime suite completed all 399 tests in 14.4 minutes.
+ * A one-worker Windows control then exhausted a 14-minute trial after four timing retries (`385
+ * passed`, `32 did not run`). The budgets are now 17 + 17 = 34 against ~37.4 usable inside the
+ * 40-minute cap; the cap still cannot hide a suite overrun and retains setup/build room.
  */
 const CI_GLOBAL_TIMEOUT_MS = 17 * 60_000;
 

@@ -30,6 +30,13 @@ describe('B-071 — ESLint ignores Vite’s transient vite.config timestamp file
     ).toBe(true);
   });
 
+  it('does not lint Playwright output left by an E2E run', async () => {
+    const eslint = new ESLint({ cwd });
+    expect(await eslint.isPathIgnored('playwright-report/trace/assets/generated.js')).toBe(true);
+    expect(await eslint.isPathIgnored('test-results/rehearsal-fit/trace.zip')).toBe(true);
+    expect(await eslint.isPathIgnored('blob-report/report-1.zip')).toBe(true);
+  });
+
   it('still lints real source files (the ignore is narrow, not a blanket)', async () => {
     const eslint = new ESLint({ cwd });
     expect(await eslint.isPathIgnored('src/renderer/main.tsx')).toBe(false);
