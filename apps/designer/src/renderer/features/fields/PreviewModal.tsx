@@ -26,7 +26,11 @@ import { useSharedImages } from '../sharedLibrary/useSharedImages.js';
 import { Modal } from '../shell/Modal.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { PreviewFieldForm, type PreviewDispatch } from './PreviewFieldForm.js';
-import { imageChoicesForAssets, repeaterColumnsByFieldId } from './repeater-columns.js';
+import {
+  imageChoicesForAssets,
+  imageFieldOptionsForAssets,
+  repeaterColumnsByFieldId,
+} from './repeater-columns.js';
 import { PreviewStatus, PreviewTransport } from './PreviewTransport.js';
 import { parseRehearsalChoice, stepRehearsalChoices } from '../inspector/countdown-steps.js';
 import { PreviewScopeTiming } from './PreviewScopeTiming.js';
@@ -39,6 +43,7 @@ import {
   shouldDeferPreviewNaturalStop,
 } from './preview-elapsed.js';
 import * as s from './PreviewModal.css.js';
+import { useImageAssetUrls } from './useImageAssetUrls.js';
 
 function previewSeed(sceneId: string, aggregate: AggregatedFields): NestedFieldValues {
   return applyDesignerFileSourcePreviews(sceneId, aggregate.fields, defaultNestedValues(aggregate));
@@ -154,6 +159,7 @@ export function PreviewModal({
 }): JSX.Element {
   const assets = useAssets();
   const sharedImages = useSharedImages();
+  const imageUrls = useImageAssetUrls();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const documentGenerationRef = useRef(0);
@@ -177,7 +183,11 @@ export function PreviewModal({
   // applied by rebuilding the preview runtime with these overrides.
   const [overrides, setOverrides] = useState<Record<string, TimingOverride>>({});
   const imageChoices = useMemo(
-    () => imageChoicesForAssets(assets, sharedImages),
+    () => imageChoicesForAssets(assets, sharedImages, imageUrls),
+    [assets, imageUrls, sharedImages],
+  );
+  const imageFieldOptions = useMemo(
+    () => imageFieldOptionsForAssets(assets, sharedImages),
     [assets, sharedImages],
   );
   const repeaterColumns = useMemo(
@@ -215,9 +225,9 @@ export function PreviewModal({
       countdownTargetFieldsOf(
         scene,
         scene,
-        withListLimits(scene, scene, aggregateCompositionFields(scene, scene)),
+        withListLimits(scene, scene, aggregateCompositionFields(scene, scene), imageFieldOptions),
       ),
-    [scene],
+    [imageFieldOptions, scene],
   );
   // Nested field values live here (not in the form) so the fixed transport bar can
   // play() with the current data. Re-seed when the form *shape* changes (fields or
@@ -678,6 +688,7 @@ export function PreviewModal({
               anyPending={anyPending}
               dwellFieldIds={sequenceListFieldIds(scene)}
               columnsByFieldId={repeaterColumns}
+              imageUrls={imageUrls}
             />
           </div>
         </div>

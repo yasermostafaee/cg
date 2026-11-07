@@ -1183,6 +1183,48 @@ export interface RepeaterRowBuild {
 }
 
 /**
+ * Match an alternating fill to the authored full-row plate instead of painting a square behind it.
+ * Repeater rows have no independent corner control: the visible silhouette belongs to the child
+ * composition. A full-size rectangular shape at the child origin is therefore the only safe shape
+ * whose radius can clip the generated row cell without guessing from partial decorations.
+ */
+function repeaterRowClipRadius(
+  comp: NonNullable<Scene['compositions']>[number],
+  scale: number,
+): string | undefined {
+  const close = (left: number, right: number): boolean => Math.abs(left - right) < 0.001;
+  const plate = comp.layers
+    .flatMap((layer) => layer.children)
+    .find((child): child is ShapeElement => {
+      if (
+        child.type !== 'shape' ||
+        (child.shape !== 'rect' && child.shape !== 'rounded-rect') ||
+        child.cornerRadius === undefined ||
+        !child.visible
+      ) {
+        return false;
+      }
+      const transform = child.transform;
+      return (
+        close(transform.position.x, 0) &&
+        close(transform.position.y, 0) &&
+        close(transform.size.w, comp.resolution.width) &&
+        close(transform.size.h, comp.resolution.height) &&
+        close(transform.scale.x, 1) &&
+        close(transform.scale.y, 1) &&
+        close(transform.rotation, 0) &&
+        close(transform.anchor.x, 0) &&
+        close(transform.anchor.y, 0)
+      );
+    });
+  if (plate?.cornerRadius === undefined) return undefined;
+  const radius = plate.cornerRadius;
+  return typeof radius === 'number'
+    ? `${String(radius * scale)}px`
+    : radius.map((value) => `${String(value * scale)}px`).join(' ');
+}
+
+/**
  * D-030 — stamp `count` rows of `element`'s child composition into `host`,
  * mirroring {@link buildComposition}'s inner stage per row: a cell positioned
  * in the flow (`'column'` ⇒ cells fill the box width and stack top-to-bottom;
@@ -1227,6 +1269,8 @@ export function buildRepeaterRows(
         : boxH / comp.resolution.height;
   const cellW = comp.resolution.width * scale;
   const cellH = comp.resolution.height * scale;
+  const alternateClipRadius =
+    element.alternatingRowFill === undefined ? undefined : repeaterRowClipRadius(comp, scale);
 
   const rows: RepeaterRowBuild[] = [];
   for (let i = 0; i < count; i += 1) {
@@ -1236,6 +1280,9 @@ export function buildRepeaterRows(
     cell.style.overflow = 'hidden';
     cell.style.width = `${cellW}px`;
     cell.style.height = `${cellH}px`;
+    if (i % 2 === 1 && alternateClipRadius !== undefined) {
+      cell.style.borderRadius = alternateClipRadius;
+    }
     if (element.direction === 'column') {
       cell.style.left = '0';
       cell.style.top = `${i * (cellH + element.gap)}px`;

@@ -5,6 +5,7 @@ import {
   dropTargetIndex,
   itemText,
   moveItem,
+  preserveLockedListItemFields,
   removeItem,
   setItemText,
   toListItems,
@@ -77,6 +78,57 @@ describe('edits preserve structure (id + unknown fields) and return arrays', () 
     expect(JSON.parse(json)).toHaveLength(3);
     // Persian survives intact in the structured payload.
     expect(JSON.parse(json)[2]).toEqual({ id: 'c', text: 'تازه' });
+  });
+});
+
+describe('CG Control locked Repeater columns', () => {
+  it('keeps locked authored values while accepting editable workbook columns', () => {
+    const next = preserveLockedListItemFields(
+      [{ id: 'team-1', name: 'Persepolis', logo: { assetId: 'red' }, wins: 6 }],
+      [{ id: 'file-1', name: 'Changed', logo: { assetId: 'other' }, wins: 7 }],
+      [
+        {
+          id: 'name',
+          label: 'Team',
+          required: true,
+          type: 'text',
+          default: '',
+          operatorEditable: false,
+        },
+        {
+          id: 'logo',
+          label: 'Logo',
+          required: true,
+          type: 'image',
+          accept: ['png'],
+          operatorEditable: false,
+        },
+        { id: 'wins', label: 'Wins', required: true, type: 'number', default: 0 },
+      ],
+    );
+    expect(next).toEqual([{ id: 'file-1', name: 'Persepolis', logo: { assetId: 'red' }, wins: 7 }]);
+  });
+
+  it('refuses a different row count when authored columns are locked', () => {
+    expect(() =>
+      preserveLockedListItemFields(
+        [{ id: 'team-1', name: 'Persepolis' }],
+        [
+          { id: 'file-1', name: 'Persepolis' },
+          { id: 'file-2', name: 'Esteghlal' },
+        ],
+        [
+          {
+            id: 'name',
+            label: 'Team',
+            required: true,
+            type: 'text',
+            default: '',
+            operatorEditable: false,
+          },
+        ],
+      ),
+    ).toThrow(/must keep exactly 1 rows; found 2/iu);
   });
 });
 

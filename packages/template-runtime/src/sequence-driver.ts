@@ -146,6 +146,12 @@ export interface SequenceDriverOptions {
    */
   renderComposition?: SequenceCompositionRenderer | undefined;
   /**
+   * Build and start hidden composition pages before their first turn. Their DOM (including an
+   * external animated SVG document) then survives page changes instead of restarting at frame 0.
+   * Opt-in because arbitrary composition books may contain costly clocks, tickers or media.
+   */
+  prewarmCompositionItems?: boolean | undefined;
+  /**
    * D-083 — the operator's per-item TEXT override for a non-list-bound sequence: returns
    * the field value for a TEXT item's id (else undefined ⇒ the authored item text). Lets
    * the operator edit each text item in the preview form, parallel to composition items.
@@ -195,6 +201,14 @@ export class SequenceDriver {
   private incoming: SequenceDriverItem | null = null;
   private incomingNode: HTMLElement | null = null;
   private incomingHooks: RenderedSequenceItem | null = null;
+  /** Opt-in mounted composition pages, keyed by stable sequence-item id. */
+  private readonly prepared = new Map<
+    string,
+    { item: SequenceDriverItem; rendered: RenderedSequenceItem }
+  >();
+  /** Prepared hooks are started once while hidden; later turns only resume the same subtree. */
+  private readonly preparedHooks = new WeakSet<RenderedSequenceItem>();
+  private readonly activatedHooks = new WeakSet<RenderedSequenceItem>();
   /** Passes STARTED this run (1-based once the run starts). */
   private passesStarted = 1;
   /**
@@ -270,7 +284,7 @@ export class SequenceDriver {
     // The run owns the stage: render item 1 (or adopt what reset() drew).
     if (this.currentNode === null) this.renderCurrentStatic();
     // D-083 — start the on-screen item's inner drivers (a composition item's clock ticks).
-    this.currentHooks?.show();
+    this.activate(this.currentHooks);
     this.reportCurrent();
     if (this.logical.length === 0) {
       // Nothing to advance through — complete by definition (zero-length
@@ -373,8 +387,15 @@ export class SequenceDriver {
    * for text items.
    */
   applyFieldsToCurrent(values: Record<string, unknown>): void {
-    this.currentHooks?.applyFields?.(values);
-    this.incomingHooks?.applyFields?.(values);
+    const applied = new Set<RenderedSequenceItem>();
+    const apply = (rendered: RenderedSequenceItem | null): void => {
+      if (rendered === null || applied.has(rendered)) return;
+      applied.add(rendered);
+      rendered.applyFields?.(values);
+    };
+    apply(this.currentHooks);
+    apply(this.incomingHooks);
+    for (const { rendered } of this.prepared.values()) apply(rendered);
   }
 
   /** `B-217` — rotating right now (started, and not frozen). The look park asks before it pauses. */
@@ -501,8 +522,7 @@ export class SequenceDriver {
     this.pendingIdx = null;
     this.pendingTurns.length = 0;
     // D-083 — tear down the on-screen item's inner drivers (a composition item's clock stops).
-    this.currentHooks?.hide();
-    this.incomingHooks?.hide();
+    this.teardownPrepared();
   }
 
   /**
@@ -559,11 +579,19 @@ export class SequenceDriver {
       if (shown === null) return;
       const replacement = this.logical.find((i) => i.id === shown.id);
       if (replacement !== undefined) {
-        // D-083 — text edit in place only for TEXT items (the bindable kind). A composition item's
-        // content is static (its id is stable), so there's nothing to reconcile beyond `dwellMs`.
+        // D-083 — text edits reconcile in place. A composition page normally keeps its authored
+        // shell, but D-180's operator-sized paged Repeater also replaces that page's `fieldValues`
+        // under the same stable id. Mutating the rendered snapshot lets the runtime's immediately
+        // following `applyFieldsToCurrent()` refresh the visible rows without replaying the page.
         if (isTextItem(shown) && isTextItem(replacement)) {
           if (replacement.text !== shown.text && node !== null) node.textContent = replacement.text;
           shown.text = replacement.text;
+        } else if (
+          shown.kind === 'composition' &&
+          replacement.kind === 'composition' &&
+          shown.compositionId === replacement.compositionId
+        ) {
+          shown.fieldValues = replacement.fieldValues;
         }
         shown.dwellMs = replacement.dwellMs;
         return;
@@ -591,6 +619,28 @@ export class SequenceDriver {
     // removed by this same reconcile.
     fixUp(this.current, this.currentNode);
     fixUp(this.incoming, this.incomingNode);
+    if (this.o.prewarmCompositionItems === true) {
+      for (const [id, prepared] of [...this.prepared]) {
+        const replacement = this.logical.find((item) => item.id === id);
+        if (
+          replacement?.kind === 'composition' &&
+          prepared.item.kind === 'composition' &&
+          replacement.compositionId === prepared.item.compositionId
+        ) {
+          prepared.item.fieldValues = replacement.fieldValues;
+          prepared.item.dwellMs = replacement.dwellMs;
+          continue;
+        }
+        // A future page changed identity or disappeared. Active snapshots retain the old page by
+        // the normal reconcile rule; an inactive prepared page can be retired immediately.
+        if (prepared.rendered !== this.currentHooks && prepared.rendered !== this.incomingHooks) {
+          prepared.rendered.hide();
+          prepared.rendered.node.remove();
+          this.prepared.delete(id);
+        }
+      }
+      this.prewarmItems(this.current?.id, this.incoming?.id);
+    }
   }
 
   // — internals ————————————————————————————————————————————————————————
@@ -663,8 +713,9 @@ export class SequenceDriver {
   private beginTransition(toIdx: number): void {
     const target = this.logical[toIdx];
     if (target === undefined) return;
-    const incoming = { ...target };
-    const r = this.renderItem(incoming);
+    const prepared = this.prepareItem(target);
+    const incoming = prepared.item;
+    const r = prepared.rendered;
     if (r.ready === undefined) {
       this.startTransition(incoming, r);
       return;
@@ -699,7 +750,7 @@ export class SequenceDriver {
     this.incomingHooks = r;
     this.incomingNode = r.node;
     this.o.host.appendChild(r.node);
-    r.show(); // D-083 — the incoming item's inner drivers run as it enters
+    this.activate(r); // D-083 — the incoming item's inner drivers run as it enters
     const shownIndex = this.logical.findIndex((item) => item.id === incoming.id);
     if (shownIndex >= 0) this.o.onItemShown?.(shownIndex);
     this.enterPhase('transition');
@@ -731,8 +782,19 @@ export class SequenceDriver {
 
   private finishTransition(): void {
     this.applyMix(false);
-    this.currentHooks?.hide(); // D-083 — teardown the outgoing item's inner drivers
-    this.currentNode?.remove();
+    if (this.currentHooks !== null && this.preparedHooks.has(this.currentHooks)) {
+      // Keep the outgoing page's exact DOM and animated-image document alive for later turns. Its
+      // nested runtime pauses while parked; the SVG document itself keeps the shared visual phase.
+      this.currentHooks.pause();
+      if (this.currentNode !== null) {
+        this.currentNode.style.transform = '';
+        this.currentNode.style.opacity = '';
+        this.currentNode.style.visibility = 'hidden';
+      }
+    } else {
+      this.currentHooks?.hide(); // D-083 — teardown the outgoing item's inner drivers
+      this.currentNode?.remove();
+    }
     this.currentNode = this.incomingNode;
     this.current = this.incoming;
     this.currentHooks = this.incomingHooks;
@@ -929,8 +991,7 @@ export class SequenceDriver {
     // and a fresh composition itemSub built here could never be torn down (see destroy()).
     if (this.destroyed) return;
     // Tear down any prior item's inner drivers (a composition item's clock) before wiping.
-    this.currentHooks?.hide();
-    this.incomingHooks?.hide();
+    this.teardownPrepared();
     while (this.o.host.firstChild !== null) this.o.host.removeChild(this.o.host.firstChild);
     this.incoming = null;
     this.incomingNode = null;
@@ -943,10 +1004,81 @@ export class SequenceDriver {
       this.currentHooks = null;
       return;
     }
-    const r = this.renderItem(this.current);
-    this.currentHooks = r;
-    this.currentNode = r.node;
-    this.o.host.appendChild(r.node);
+    const prepared = this.prepareItem(this.current);
+    this.current = prepared.item;
+    this.currentHooks = prepared.rendered;
+    this.currentNode = prepared.rendered.node;
+    this.currentNode.style.visibility = '';
+    this.o.host.appendChild(this.currentNode);
+    this.prewarmItems(this.current.id);
+  }
+
+  /** Render one logical item, reusing an opt-in composition page by stable id. */
+  private prepareItem(item: SequenceDriverItem): {
+    item: SequenceDriverItem;
+    rendered: RenderedSequenceItem;
+  } {
+    if (this.o.prewarmCompositionItems === true && item.kind === 'composition') {
+      const existing = this.prepared.get(item.id);
+      if (
+        existing !== undefined &&
+        existing.item.kind === 'composition' &&
+        existing.item.compositionId === item.compositionId
+      ) {
+        return existing;
+      }
+      const snapshot: SequenceDriverItem = { ...item };
+      const rendered = this.renderItem(snapshot);
+      rendered.node.style.visibility = 'hidden';
+      this.prepared.set(item.id, { item: snapshot, rendered });
+      this.preparedHooks.add(rendered);
+      this.o.host.appendChild(rendered.node);
+      return { item: snapshot, rendered };
+    }
+    return { item, rendered: this.renderItem(item) };
+  }
+
+  /**
+   * Mount and run every future composition page while hidden. Repeater entrances settle and each
+   * external animated SVG starts once, before the operator can turn to page 2/3/4.
+   */
+  private prewarmItems(...excludedIds: (string | undefined)[]): void {
+    if (this.o.prewarmCompositionItems !== true) return;
+    const excluded = new Set(excludedIds.filter((id): id is string => id !== undefined));
+    for (const item of this.logical) {
+      if (item.kind !== 'composition' || excluded.has(item.id)) continue;
+      const { rendered } = this.prepareItem(item);
+      rendered.node.style.visibility = 'hidden';
+      if (!this.activatedHooks.has(rendered)) {
+        this.activatedHooks.add(rendered);
+        rendered.show();
+      }
+    }
+  }
+
+  /** Start a new subtree once; a prepared subtree is subsequently resumed without replaying it. */
+  private activate(rendered: RenderedSequenceItem | null): void {
+    if (rendered === null) return;
+    if (this.preparedHooks.has(rendered) && this.activatedHooks.has(rendered)) {
+      rendered.resume();
+      return;
+    }
+    this.activatedHooks.add(rendered);
+    rendered.show();
+  }
+
+  /** Tear down every mounted subtree exactly once, including hidden prepared pages. */
+  private teardownPrepared(): void {
+    const tornDown = new Set<RenderedSequenceItem>();
+    const hide = (rendered: RenderedSequenceItem | null): void => {
+      if (rendered === null || tornDown.has(rendered)) return;
+      tornDown.add(rendered);
+      rendered.hide();
+    };
+    hide(this.currentHooks);
+    hide(this.incomingHooks);
+    for (const { rendered } of this.prepared.values()) hide(rendered);
+    this.prepared.clear();
   }
 
   /**
@@ -955,11 +1087,10 @@ export class SequenceDriver {
    */
   private renderItem(item: SequenceDriverItem): RenderedSequenceItem {
     if (item.kind === 'composition' && this.o.renderComposition !== undefined) {
-      return this.o.renderComposition({
-        id: item.id,
-        compositionId: item.compositionId,
-        ...(item.fieldValues === undefined ? {} : { fieldValues: item.fieldValues }),
-      });
+      // Pass the live rendered snapshot itself. `setItems()` reconciles a generated page's
+      // `fieldValues` into this same object, so the composition renderer's `applyFields` closure
+      // sees fresh rows without tearing down/replaying the current page.
+      return this.o.renderComposition(item);
     }
     if (item.kind === 'image' && this.o.renderImage !== undefined) {
       return this.o.renderImage(item);

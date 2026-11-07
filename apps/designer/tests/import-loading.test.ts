@@ -222,6 +222,18 @@ describe('SharedLibraryPanel import (D-067 multiselect + prepend)', () => {
     expect(thumbTitles('shared')).toEqual(['a.png', 'b.png', 'c.png']); // top, selection order
   });
 
+  it('imports an SVG image into the shared library', async () => {
+    installBridge();
+    sharedPick = () => Promise.resolve([fileNamed('channel-logo.svg')]);
+    render(SharedLibraryPanel);
+    await settle();
+    pickShared();
+    await settle();
+
+    expect(storedNames).toEqual(['channel-logo.svg']);
+    expect(thumbTitles('shared')).toEqual(['channel-logo.svg']);
+  });
+
   it('multi-select: one failing import clears its tile; the others still import', async () => {
     installBridge();
     failNames = new Set(['b.png']);
@@ -301,6 +313,18 @@ describe('ProjectAssetsPanel import (D-067)', () => {
     await settle();
     expect(tiles()).toBe(0);
     expect(thumbTitles('assets')[0]).toBe('pic.png'); // freshly imported on top
+  });
+
+  it('imports an SVG image into project assets', async () => {
+    installBridge();
+    assetsPick = () => Promise.resolve([fileNamed('weather-icon.svg')]);
+    render(ProjectAssetsPanel);
+    await settle();
+    pickKind('Image…');
+    await settle();
+
+    expect(storedNames).toEqual(['weather-icon.svg']);
+    expect(thumbTitles('assets')[0]).toBe('weather-icon.svg');
   });
 
   it('cancelling shows no tile', async () => {

@@ -1,9 +1,9 @@
-# Design — 0.12.6 installer candidate
+# Design — 1.0.0 installer candidate
 
 ## One matching set
 
 The authoritative version sources, installer filenames, Installed apps, application surfaces and
-CG Bridge health all derive from `0.12.6`; packaging refuses drift.
+CG Bridge health all derive from `1.0.0`; packaging refuses drift.
 
 `B-357` changes CG Bridge's Windows folder permissions and adds the station-admin Shared files path
 to CG Control. Designer changes only its release identity and splash presentation. The station still
@@ -45,11 +45,11 @@ the normal keyframe-aware transform commit path.
 
 ## Evidence sequence
 
-1. Set the shared version and Persian guide to `0.12.6`.
+1. Set the shared version and Persian guide to `1.0.0`.
 2. Run the full local gate and E2E lane.
 3. Push one installer-marked candidate to `dev`; require Linux workspace/E2E and every applicable
    Windows job, including Bridge install/upgrade ACL smoke.
-4. Download and checksum the exact artifacts into `installers-ci-0.12.6/` and `dist/`.
+4. Download and checksum the exact artifacts into `installers-ci-1.0.0/` and `dist/`.
 
 No tag, draft release or published release is created.
 

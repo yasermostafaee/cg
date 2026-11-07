@@ -18,6 +18,8 @@ import { Control } from '../../ui/Control.js';
 import { Icon } from '../../ui/Icon.js';
 import { Tag } from '../../ui/Tag.js';
 import { useAssets } from '../assets/useAssets.js';
+import { ImageChoicePicker, type ImageChoice } from '../fields/ImageChoicePicker.js';
+import { useImageAssetUrls } from '../fields/useImageAssetUrls.js';
 import { useSharedImages } from '../sharedLibrary/useSharedImages.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
 import { ColorField, NumberField, SelectField, TextField } from './controls.js';
@@ -86,21 +88,24 @@ const tokenKey = (token: StepToken): string => (token === 'before' ? 'b' : Strin
 const elementLabel = (g: GovernedElement): string => [...g.path, g.element.name].join(' › ');
 
 /** The picture choices, project and shared, encoded `source:assetId`. */
-function useImageChoices(): { options: string[]; labels: string[] } {
+function useImageChoices(): ImageChoice[] {
   const project = useAssets().filter((a) => a.kind === 'image');
   const shared = useSharedImages();
+  const imageUrls = useImageAssetUrls();
   const strip = (f: string): string =>
     f.lastIndexOf('.') === -1 ? f : f.slice(0, f.lastIndexOf('.'));
-  return {
-    options: [
-      ...project.map((a) => `project:${a.assetId}`),
-      ...shared.map((a) => `shared:${a.assetId}`),
-    ],
-    labels: [
-      ...project.map((a) => `${strip(a.filename)} (project)`),
-      ...shared.map((a) => `${strip(a.filename)} (shared)`),
-    ],
-  };
+  return [
+    ...project.map((asset) => ({
+      value: `project:${asset.assetId}`,
+      label: `${strip(asset.filename)} (project)`,
+      ...(imageUrls[asset.assetId] === undefined ? {} : { thumbnailUrl: imageUrls[asset.assetId] }),
+    })),
+    ...shared.map((asset) => ({
+      value: `shared:${asset.assetId}`,
+      label: `${strip(asset.filename)} (shared)`,
+      ...(imageUrls[asset.assetId] === undefined ? {} : { thumbnailUrl: imageUrls[asset.assetId] }),
+    })),
+  ];
 }
 
 export function StepsDialog({
@@ -707,7 +712,7 @@ function ChangeRow({
   const owned: ElementChangeProperty[] =
     target === undefined
       ? [change.property]
-      : changePropertiesOf(target).filter((p) => p !== 'image' || images.options.length > 0);
+      : changePropertiesOf(target).filter((p) => p !== 'image' || images.length > 0);
   const missing = target === undefined;
   const name = governed === undefined ? '(missing element)' : elementLabel(governed);
   const label = `${name} · ${PROPERTY_LABELS[change.property]}`;
@@ -754,7 +759,7 @@ function ChangeRow({
           labels={owned.map((p) => PROPERTY_LABELS[p])}
           onCommit={(property) => {
             if (property === 'image') {
-              const first = images.options[0];
+              const first = images[0]?.value;
               if (first === undefined) return;
               const i = first.indexOf(':');
               onChange({
@@ -817,13 +822,17 @@ function ChangeRow({
           />
         )}
         {change.property === 'image' && (
-          <SelectField
-            bare
+          <ImageChoicePicker
             label="value"
             value={`${change.value.source}:${change.value.assetId}`}
-            options={images.options}
-            labels={images.labels}
-            onCommit={(encoded) => {
+            allowEmpty={false}
+            choices={images}
+            currentThumbnailUrl={
+              images.find(
+                (image) => image.value === `${change.value.source}:${change.value.assetId}`,
+              )?.thumbnailUrl
+            }
+            onChange={(encoded) => {
               const i = encoded.indexOf(':');
               onChange({
                 ...change,

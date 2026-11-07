@@ -12,7 +12,7 @@ export interface BuildStampResult {
   readonly plugin: Plugin;
   /** Feed the app's `define` as `__CG_BUILD__: JSON.stringify(stamp)`. */
   readonly stamp: BuildStamp;
-  /** Operator-facing Version / Revision / Build date; unavailable version/revision omitted. */
+  /** Operator-facing Version / Build date; the diagnostic revision remains structured only. */
   readonly stampText: string;
 }
 

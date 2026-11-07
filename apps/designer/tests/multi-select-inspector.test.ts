@@ -167,7 +167,7 @@ describe('MultiSelectSection — single-inspector parity (D-049)', () => {
       c.querySelector('button[aria-label="Keep aspect while resizing selected plates"]'),
     ).not.toBeNull();
     expect(select(c, 'fit')).not.toBeNull();
-    expect(select(c, 'poster')).not.toBeNull();
+    expect(c.querySelector('button[aria-label="poster"]')).not.toBeNull();
     expect(input(c, 'stroke width')).not.toBeNull();
     expect(c.querySelector('input[aria-label="stroke hex value"]')).not.toBeNull();
 
@@ -178,7 +178,7 @@ describe('MultiSelectSection — single-inspector parity (D-049)', () => {
     );
     expect(select(c, 'aspect')).toBeNull();
     expect(select(c, 'fit')).toBeNull();
-    expect(select(c, 'poster')).toBeNull();
+    expect(c.querySelector('button[aria-label="poster"]')).toBeNull();
   });
 
   it('D-167 — a mixed fit is inert until chosen, then updates all plates in one undo entry', () => {

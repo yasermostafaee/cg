@@ -11,6 +11,9 @@ import { SharedImageStore } from '../src/platform/SharedImageStore.js';
 
 const PNG_A = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4]);
 const PNG_B = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 9, 8, 7, 6]);
+const SVG = new TextEncoder().encode(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0h10v10H0z"/></svg>',
+);
 
 function fakeFile(name: string, bytes: Uint8Array): File {
   return { name, arrayBuffer: () => Promise.resolve(bytes.buffer) } as unknown as File;
@@ -29,6 +32,17 @@ describe('SharedImageStore (D-040)', () => {
     expect(await store.list()).toHaveLength(1);
     expect(await store.bytes(meta.assetId)).toEqual(PNG_A);
     expect(await store.get(meta.assetId)).toEqual(meta);
+  });
+
+  it('stores SVG bytes with their .svg extension intact', async () => {
+    const ws = new MemoryWorkspace();
+    const store = new SharedImageStore(ws);
+    const meta = await store.importFile(fakeFile('channel-logo.svg', SVG));
+
+    expect(meta.kind).toBe('image');
+    expect(meta.filename).toBe('channel-logo.svg');
+    expect(meta.workingPath).toMatch(/shared\/images\/[a-f0-9]+\.svg$/);
+    expect(await store.bytes(meta.assetId)).toEqual(SVG);
   });
 
   it('dedupes identical bytes by sha256 (one entry, same id)', async () => {

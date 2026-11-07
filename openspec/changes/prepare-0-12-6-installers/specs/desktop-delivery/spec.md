@@ -4,14 +4,14 @@
 
 ### Requirement: A candidate uses one fresh release identity
 
-CG Control, CG Designer and CG Bridge SHALL carry `0.12.6` in every release-version and installer
+CG Control, CG Designer and CG Bridge SHALL carry `1.0.0` in every release-version and installer
 surface. Because `0.12.5` already identifies built candidate bytes, current artifacts SHALL NOT
 reuse it. All three installers SHALL be built from one commit and delivered as one matching set.
 
 #### Scenario: Matching candidate is built
 
 - **WHEN** the on-demand Desktop workflow builds the candidate
-- **THEN** all three filenames and installed version records say `0.12.6`
+- **THEN** all three filenames and installed version records say `1.0.0`
 
 ### Requirement: The candidate proves installed service access to fixed files
 
@@ -50,17 +50,17 @@ UI is ready. The `0.0.0` development placeholder SHALL NOT be presented as a rel
 #### Scenario: Support identifies the installed app during startup
 
 - **WHEN** an installed app is still on its startup splash
-- **THEN** the operator can read `0.12.6` without waiting for the main UI or opening Windows settings
+- **THEN** the operator can read `1.0.0` without waiting for the main UI or opening Windows settings
 
 ### Requirement: The Persian guide SHALL be readable and current
 
-The `0.12.6` Persian guide SHALL use visibly relaxed line and paragraph spacing and SHALL contain
+The `1.0.0` Persian guide SHALL use visibly relaxed line and paragraph spacing and SHALL contain
 fresh version-bearing Setup captures from the candidate. Every rendered page SHALL be visually
 checked for clipping, overlap and stale release identity.
 
 #### Scenario: The current guide is ready for handoff
 
-- **WHEN** the `0.12.6` guide is rebuilt from fresh Setup captures
+- **WHEN** the `1.0.0` guide is rebuilt from fresh Setup captures
 - **THEN** every rendered page has readable spacing, no clipping or overlap, and no earlier release
   identity
 

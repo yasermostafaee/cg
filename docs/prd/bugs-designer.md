@@ -4710,3 +4710,145 @@ Page data modal show **Connected**, **CG Control · file managed** and the Share
 available only while the Designer still holds its local handle. Preview inherits the outer
 Sequence's file ownership into every page namespace and replaces row editors with a read-only
 connected-file fact. CG Control also displays the resolved Share path beside connected file status.
+
+## [x] B-394 — A standalone Repeater workbook still rendered an incomplete editable-looking Preview table ⟨priority: high — the same file authority was described differently depending on its owner⟩ — FIXED 2026-11-07 · `openspec/changes/complete-weather-repeater-data/`
+
+**Repro / Actual:** connect an `.xlsx` file through a standalone Repeater's **Rows and data file…**
+surface, then open Designer Preview. Unlike a Sequence-owned workbook, Preview rendered the child
+row schema as numbered cells. This is neither the complete data table nor an editable route, so it
+looks broken and hides the file connection.
+
+**Fix / Acceptance:** a structured Repeater whose list field owns a file source renders the same
+read-only **Connected file** fact as a Sequence-owned Repeater, including the file name; neither
+surface exposes partial numbered rows or **Edit rows…**. CG Control presents both workbook owners
+through the same compact file-managed connection treatment: authority, connected filename, actions
+and Share path.
+
+## [x] B-395 — SVG was accepted by storage but omitted from the visible image-import filter ⟨priority: medium — authors could not import the same animated/weather icon format supplied by a project⟩ — FIXED 2026-11-07 · `openspec/changes/complete-weather-repeater-data/`
+
+**Repro / Actual:** choose **Add image…** from Project Assets or Shared Library. The underlying
+stores, URL resolver and exporters already handled `image/svg+xml`, but the broad native `image/*`
+picker hint did not reliably list `.svg`; a new image field also defaulted to raster-only accepts.
+
+**Fix / Acceptance:** both image import surfaces explicitly offer `.svg` and `image/svg+xml`, retain
+post-selection extension/MIME validation, and new image fields allow SVG alongside the existing
+raster formats. Imported SVG remains a Blob-backed `<img>` asset, never injected markup.
+
+## [x] B-397 — The forecast Repeater shows the same data binding twice ⟨priority: high — duplicate wiring looks editable and can execute twice⟩ — FIXED 2026-11-07 · `openspec/changes/complete-weather-repeater-data/`
+
+**Cause:** direct full-frame starters carried their fields and bindings both at the legacy scene root
+and on the entry composition. The legacy-to-composition migration appended the root binding without
+checking whether the composition already owned the identical field/target wire. A saved project could
+then retain both copies permanently. **Fix / Acceptance:** project-open migration deduplicates exact
+field/target wires both while moving legacy root data and in already-migrated compositions. Different
+targets remain legal. The five-day forecast therefore shows one `forecast → repeater rows` binding,
+and older saved projects repair on open.
+
+## [x] B-398 — A connected Repeater conflates file ownership with CG Control edit authority and direct/Sequence file facts disagree visually ⟨priority: high — authors cannot express the required operator policy and operators see two meanings for one state⟩ — FIXED 2026-11-07 · `openspec/changes/complete-weather-repeater-data/`
+
+**Repro / Actual:** connect a generated workbook directly to a Repeater or through an outer
+Sequence. The connection automatically suppresses CG Control row editing with no author choice.
+The direct Inspector also uses a light filename chip and different status/action wording, while the
+Sequence Inspector uses a green icon, dark tag and labels such as **Reload file**.
+
+**Expected / Fix:** connection and row-edit permission are independent. Both Designer data managers
+show **Allow row editing in CG Control** only while a workbook is connected. Off keeps the one
+file-managed read-only route; on restores one compact **Edit rows…** modal behind Update without
+allowing CG Control to replace the authored workbook. Both Runtime owners use a green check plus
+ordinary Connected text, dark filename/status tags, and the same **Reload**, **View current data…**,
+**Save and connect another Excel…** and **Detach** labels where those actions are permitted. Legacy
+connected projects with no explicit mode remain file-managed until the author opts in.
+
+## [x] B-400 — Workbook paths conflate the author's selected path with CG Bridge's effective Shared-files path ⟨priority: high — two legitimate locations were presented as one ambiguous path⟩ — FIXED 2026-11-07 · `openspec/changes/complete-weather-repeater-data/`
+
+**Repro / Actual:** connect a direct Repeater or outer Sequence workbook from a shared/UNC location,
+then inspect it in Designer and CG Control. Designer reduced the connection to a filename, while CG
+Control showed only the Bridge response's resolved path, with no distinction between the portable
+file key and the actual folder configured under Shared files. The resolved `C:\...` path is correct
+when that setting is local; it becomes UNC when the setting is UNC. **Expected / Fix:** Designer
+shows both the selected full Windows/UNC path and the portable **CG Control file** key beside the
+filename. CG Control shows the portable **Share file** key and, after resolution, a separate **Read
+from** local/UNC path. Direct Repeaters and Sequence-owned Repeaters use the same rule and coverage.
+
+## [x] B-405 — Dynamic Repeater logos existed in starters but had no normal Image authoring route ⟨priority: high — a visible example depended on an otherwise hidden feature⟩ — FIXED 2026-11-07 · `openspec/changes/complete-weather-repeater-data/`
+
+**Repro / Actual:** inspect the league starter: every team row can select a different logo through an
+image field and binding. Select a normal Image element in Designer, however, and Dynamic / Data is
+absent, so an author cannot build the same structure without source code or hand-edited project JSON.
+
+**Fix / Acceptance:** Image elements expose the normal **Data key** control. Assigning a key creates
+an image field and an `image` binding while preserving image-specific metadata and SVG acceptance.
+When the composition is used by a Repeater, that field appears as a row image picker populated from
+Project Assets and Shared Library. DOM and store tests exercise the public route rather than relying
+on the built-in league project.
+
+## [x] B-406 — The province temperature strip changed colour while showing no rule of its own ⟨priority: high — the educational starter appeared to use hidden behavior⟩ — FIXED 2026-11-07 · `openspec/changes/complete-weather-repeater-data/`
+
+**Repro / Actual:** open the province-weather starter, change a temperature past its hot/cold
+threshold and select the coloured strip. Its fill changes, but the strip shows no Value rule because
+the fill effects were stored on the neighbouring number element alongside that number's text rules.
+
+**Fix / Acceptance:** the strip itself owns the two fill rules and is explicitly named as a
+Value-rules example; the number owns only its two text-colour rules. Both use the same `temp` field,
+so output is unchanged while each selected element openly explains the behavior that affects it.
+
+## [x] B-407 — Dynamic image fields exposed an editable asset id instead of an authored operator control ⟨priority: high — raw internal filenames/ids are not an operator workflow⟩ — FIXED 2026-11-07 · `openspec/changes/complete-weather-repeater-data/`
+
+**Repro / Actual:** create an Image Data key and open Designer Preview. The value is an unrestricted
+text box labelled only by the field, so the author/operator can type an internal asset id or filename.
+CG Control offers a package-derived dropdown but the author cannot restrict its contents or permit a
+local replacement. **Fix / Acceptance:** Image Dynamic/Data lets the author choose **Allowed images**,
+**Browse Windows** or both, and explicitly select the project/shared assets in the dropdown. Preview,
+direct fields and Repeater rows obey that one policy; no surface edits the raw id. Browse accepts the
+same PNG/JPG/WebP/SVG contract, selected choice assets join the export closure with their project or
+shared ownership, and legacy fields remain choice-only. Every authored/operator image selector uses
+the same compact thumbnail trigger and visual Project Assets + Shared Library picker rather than a
+filename-only combo; thumbnails use contain sizing so portrait, square and wide artwork is not
+cropped. Picker/table previews are small WebP derivatives cached for the session and generated at
+most two at a time, so a grid of heavy originals does not decode every full-size picture at once;
+canvas, export and playout still use the untouched original. A genuinely empty image value hides and
+clears the bound `<img>` instead of painting the browser's broken-image glyph or alt/file text.
+
+## [x] B-408 — Alternating Repeater fill protruded behind rounded row corners ⟨priority: medium — a standard table treatment rendered visibly broken⟩ — FIXED 2026-11-07 · `openspec/changes/complete-weather-repeater-data/`
+
+**Repro / Actual:** give the Repeater child composition a full-row rounded background plate, then
+enable **Alternating row background**. The generated alternate fill covered the rectangular cell,
+so its square corners remained visible outside the plate; an entrance/exit wrapper made the same
+artifact move with the row. **Fix / Acceptance:** when the child has a visible, full-size rectangular
+plate at its origin, the generated alternate cell inherits that plate's scaled uniform or per-corner
+radius as its clipping mask. The fill still travels with independent row motion, but no square corner
+can protrude. Rows without such a full-size plate retain the compatible rectangular behavior.
+
+## [x] B-409 — Repeater row edit authority could not be set per column ⟨priority: high — identity fields had to be editable just to update statistics⟩ — FIXED 2026-11-07 · `openspec/changes/complete-weather-repeater-data/`
+
+**Repro / Actual:** allow CG Control row editing for a direct Repeater or a Repeater inside a
+Sequence. Every child field becomes editable, so the operator can replace stable identity values
+such as a football team's name and logo while updating wins, losses or points. Reloading a workbook
+also overwrites those identity columns. **Fix / Acceptance:** the Repeater data modal lists every
+child column as independently editable in CG Control. Cleared columns remain visible but disabled in
+manual entry and retain their authored values when CG Control loads/reloads a workbook; editable
+siblings still stage normally behind Update. The same schema and behavior apply to direct and
+Sequence-owned Repeaters. Because a new/reordered row has no authored locked identity, any locked
+column also makes row count/order author-owned: Add, Remove and Reorder are disabled, and a workbook
+with a different row count is refused without staging. The bundled Iran league starter locks team
+name/logo and leaves statistics editable.
+
+## [x] B-410 — The obsolete Image loader remained visible beside normal canvas tools ⟨priority: medium — two image-placement routes suggested different object types⟩ — FIXED 2026-11-07 · `openspec/changes/complete-weather-repeater-data/`
+
+**Repro / Actual:** Designer already imports and places images through **Project Assets**, while
+Shared Library images are available through the same visual source picker used by dynamic image
+fields. The canvas toolbar and legacy rail nevertheless still showed a separate **Image loader**
+stamp tool. **Fix / Acceptance:** remove Image loader from both tool presentations without removing
+image elements or breaking old projects. Project images continue to enter by dragging them from
+Project Assets; project/shared source replacement remains available in the visual picker.
+
+## [x] B-411 — Animated weather icons restarted or replayed row entrance after page 1 ⟨priority: high — later province pages visibly snapped as they appeared⟩ — FIXED 2026-11-07 · `openspec/changes/complete-weather-repeater-data/`
+
+**Repro / Actual:** play the paged province-weather starter through page 2 and continue to pages 3
+and 4. Each composition page was built only when its turn began, so its nested Repeater entrance and
+each external animated SVG document started again from frame zero; a fade-through could hide part of
+the first reset but later pages still showed a fast return/jump. **Fix / Acceptance:** the two paged
+weather starters opt into composition-page prewarming. Future pages are mounted and their nested
+content settles while hidden; the exact prepared DOM and SVG document is revealed on every turn.
+Browser coverage walks pages 1→2→3→4 and proves that source, node identity and icon geometry do not
+restart after page 1. Other Sequence books keep lazy rendering unless explicitly opted in.

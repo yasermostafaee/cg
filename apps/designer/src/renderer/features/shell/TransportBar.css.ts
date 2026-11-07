@@ -41,6 +41,7 @@ export const button = style({
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
+  gap: '0.32rem',
 });
 
 // Hover and selected use a brighter background instead of a border accent.
@@ -49,8 +50,8 @@ export const buttonHover = style({
 });
 
 export const buttonActive = style({
-  background: 'rgba(255, 255, 255, 0.18)',
-  color: colors.accent,
+  background: 'rgb(223 157 78 / 18%)',
+  color: '#ff9f5d',
 });
 
 export const frameReadout = style({

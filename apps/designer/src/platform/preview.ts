@@ -211,6 +211,10 @@ export class Preview {
     -->
     <style>
       ${pendingOverrideCss}
+      /* D-199 — the editing canvas normally lifts cg-pending so authored content stays visible.
+         Rehearse Stop deliberately opts back into Preview's cleared picture until Play or an
+         explicit return to authoring. */
+      .cg-rehearse-cleared .cg-stage { visibility: hidden !important; }
       /* The 'scene-replace' path calls runtime.remove() then
          createRuntime(newScene). remove() leaves body marked
          cg-removed, which the baseline CSS turns into
@@ -282,6 +286,7 @@ export class Preview {
         let runtime = null;
         let currentFields = {};
         let currentFrame = 0;
+        let restoreAuthoringAfterLifecycle = true;
         // D-182/D-175 — both Preview and lifecycle-playing canvas read the root controller's REAL
         // frame. Deduplicate integer frames here (rAF may paint the same 50 fps frame more than
         // once on a 60 Hz display) before crossing the iframe boundary.
@@ -783,10 +788,15 @@ export class Preview {
                 // A removed runtime can finish an abandoned async leg after a rebuild. It must not
                 // settle the current transport or rebuild the current canvas a second time.
                 if (runtime !== observedRuntime) return;
-                const restoreAuthoring = REVEAL_ON_LOAD && lifecycleActive;
+                const restoreAuthoring =
+                  REVEAL_ON_LOAD && lifecycleActive && restoreAuthoringAfterLifecycle;
+                if (REVEAL_ON_LOAD && lifecycleActive && !restoreAuthoringAfterLifecycle) {
+                  document.body.classList.add('cg-rehearse-cleared');
+                }
                 playing = false;
                 lifecycleActive = false;
                 lifecyclePaused = false;
+                restoreAuthoringAfterLifecycle = true;
                 if (window.parent && window.parent !== window) {
                   window.parent.postMessage(
                     { kind: 'cg-preview-state', state: 'stopped' },
@@ -1252,6 +1262,12 @@ export class Preview {
                   runtime.auditionSounds({ playing: msg.playing === true, frame: currentFrame });
                 }
               } else if (msg.action === 'play') {
+                if (msg.rehearse === true) {
+                  restoreAuthoringAfterLifecycle = false;
+                  document.body.classList.remove('cg-rehearse-cleared');
+                } else {
+                  restoreAuthoringAfterLifecycle = true;
+                }
                 currentFields = msg.fields ?? {};
                 // B-091 — mount any Lottie map deferred during the LAST run before this one
                 // starts (rebuilds while nothing is on air; no-op when nothing is pending).
@@ -1281,12 +1297,23 @@ export class Preview {
                 // re-hide a start-trimmed (lifespan.in > 0) element at frame 0 just
                 // before play restores it. The prior scrub already painted currentFrame.
               } else if (msg.action === 'stop') {
+                if (msg.rehearse === true) {
+                  restoreAuthoringAfterLifecycle = false;
+                }
                 const stopFn = controlFn('stop');
                 if (stopFn === null) reportDroppedControl('stop');
                 else {
                   playing = false;
                   stopFn();
                 }
+              } else if (msg.action === 'authoring-restore') {
+                if (!REVEAL_ON_LOAD || !currentScene) return;
+                playing = false;
+                lifecycleActive = false;
+                lifecyclePaused = false;
+                restoreAuthoringAfterLifecycle = true;
+                document.body.classList.remove('cg-rehearse-cleared');
+                await applyScene(currentScene);
               } else if (msg.action === 'out') {
                 // D-105 — the coordinated animated exit (content first, background last).
                 const outFn = controlFn('out');

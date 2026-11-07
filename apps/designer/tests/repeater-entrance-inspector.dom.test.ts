@@ -9,6 +9,10 @@ import { StyleSection } from '../src/renderer/features/inspector/StyleSection.js
 import { defaultField } from '../src/renderer/features/fields/field-defaults.js';
 import { defaultRepeater, defaultSequence } from '../src/renderer/state/element-defaults.js';
 import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
+import {
+  resetSequencePageDataAttachments,
+  setSequencePageDataAttachment,
+} from '../src/renderer/features/fields/sequencePageDataAttachmentStore.js';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const noUnsub = (): void => undefined;
@@ -34,6 +38,7 @@ afterEach(() => {
   root = null;
   container?.remove();
   container = null;
+  resetSequencePageDataAttachments();
   designerStore._reset();
 });
 
@@ -294,5 +299,71 @@ describe('D-180 — direct Repeater data file', () => {
     expect(dialog?.textContent).not.toContain('Save and connect');
     expect(dialog?.textContent).not.toContain('File only in CG Control');
     expect(dialog?.textContent).toContain('City');
+  });
+
+  it('separates a connected workbook from CG Control row-edit authority', async () => {
+    seedWithFields();
+    expect(designerStore.setElementDataKey('rep', 'rows')).toBe(true);
+    designerStore.setElementFieldMeta('rep', {
+      allowFileSource: true,
+      fileSource: {
+        bridgePath: 'rows.xlsx',
+        format: 'csv',
+        inputMode: 'file-only',
+        lockFile: true,
+      },
+    });
+    const host = render(repeater());
+    await settleEffects();
+
+    const allow = host.querySelector<HTMLInputElement>(
+      'input[aria-label="Allow row editing in CG Control"]',
+    );
+    expect(allow).not.toBeNull();
+    expect(allow?.checked).toBe(false);
+    expect(host.textContent).toContain('CG Control · file managed');
+
+    act(() => allow?.click());
+
+    const scene = editSceneOf(designerStore.get().scene, designerStore.get().activeCompositionId);
+    const field = scene?.fields.find((candidate) => candidate.id === 'rows');
+    expect(field?.type).toBe('list');
+    if (field?.type === 'list') {
+      expect(field.fileSource).toMatchObject({
+        bridgePath: 'rows.xlsx',
+        lockFile: true,
+        inputMode: 'operator-choice',
+      });
+    }
+  });
+
+  it('shows both the selected Windows path and portable CG Control path', async () => {
+    seedWithFields();
+    expect(designerStore.setElementDataKey('rep', 'rows')).toBe(true);
+    designerStore.setElementFieldMeta('rep', {
+      allowFileSource: true,
+      fileSource: {
+        bridgePath: 'weather/rows.xlsx',
+        format: 'csv',
+        inputMode: 'file-only',
+        lockFile: true,
+      },
+    });
+    const sceneId = designerStore.get().scene?.id;
+    if (sceneId === undefined) throw new Error('scene missing');
+    setSequencePageDataAttachment(sceneId, 'repeater:rep', {
+      bridgePath: 'weather/rows.xlsx',
+      sourcePath: String.raw`\\newsroom\CG Share\weather\rows.xlsx`,
+      name: 'rows.xlsx',
+      format: 'xlsx',
+    });
+
+    const host = render(repeater());
+    await settleEffects();
+    const section = host.querySelector<HTMLElement>('section[aria-label="Repeater data file"]');
+
+    expect(section?.textContent).toContain('Connected · update file · rows.xlsx');
+    expect(section?.textContent).toContain(String.raw`\\newsroom\CG Share\weather\rows.xlsx`);
+    expect(section?.textContent).toContain('CG Control file: weather/rows.xlsx');
   });
 });

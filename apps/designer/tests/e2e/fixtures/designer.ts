@@ -117,7 +117,6 @@ export class DesignerApp {
       | 'Rectangle'
       | 'Ellipse'
       | 'Pen'
-      | 'Image loader'
       | 'Plate'
       | 'Hand (pan)',
   ): Promise<void> {
@@ -223,10 +222,24 @@ export class DesignerApp {
     await this.sharedLibraryGrid.getByRole('button', { name: new RegExp(displayName) }).click();
   }
 
-  /** Place the logo tool on the canvas (stamps the active/first library image). */
-  async placeLogo(pos: { x: number; y: number } = { x: 240, y: 200 }): Promise<void> {
-    await this.selectTool('Image loader');
-    await this.canvas.click({ position: pos });
+  /** Import a project image and place it through the supported Project Assets drag route. */
+  async placeProjectImage(
+    filename = 'image.png',
+    pos: { x: number; y: number } = { x: 240, y: 200 },
+  ): Promise<void> {
+    await this.page.getByRole('button', { name: 'Project assets', exact: true }).click();
+    await this.page.getByRole('button', { name: 'Add asset', exact: true }).click();
+    const chooser = this.page.waitForEvent('filechooser');
+    await this.page.getByRole('menuitem', { name: 'Image…', exact: true }).click();
+    await (
+      await chooser
+    ).setFiles({ name: filename, mimeType: 'image/png', buffer: DesignerApp.PNG_1X1 });
+    const tile = this.page
+      .locator('aside[aria-label="Project assets"] [draggable="true"]')
+      .filter({ hasText: filename.replace(/\.[^.]+$/, '') })
+      .first();
+    await expect(tile).toBeVisible();
+    await tile.dragTo(this.canvas, { targetPosition: pos });
   }
 
   /** Count image elements rendered in the canvas preview iframe. */

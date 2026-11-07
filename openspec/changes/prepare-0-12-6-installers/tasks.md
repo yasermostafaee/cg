@@ -1,17 +1,18 @@
-# Tasks — 0.12.6 installer candidate
+# Tasks — 1.0.0 installer candidate
 
 Lane: **FULL**
 
 ## 1. Candidate identity
 
 - [x] 1.1 File `P-074` and this OpenSpec change.
-- [x] 1.2 Move all release-version sources to `0.12.6`.
+- [x] 1.2 Move all release-version sources to `1.0.0`.
+- [x] 1.4 Remove the operator-facing Revision segment while retaining diagnostic build metadata.
 - [x] 1.3 Strict-validate the change.
 
 ## 2. Current guide evidence
 
 - [x] 2.1 Update the Persian guide for local service access and direct-UNC administration.
-- [ ] 2.2 Build and visually verify the `0.12.6` PDF guide.
+- [ ] 2.2 Build and visually verify the `1.0.0` PDF guide.
 - [ ] 2.3 Replace version-bearing setup images with fresh captures from this build.
 - [x] 2.4 Increase guide line/paragraph spacing and visually inspect every rendered page.
 
@@ -56,5 +57,5 @@ Lane: **FULL**
 ## 5. Handoff
 
 - [ ] 5.1 Download and assemble the three exact installers and `SHA256SUMS.txt` in
-      `installers-ci-0.12.6/` and place the latest installers in `dist/`.
+      `installers-ci-1.0.0/` and place the latest installers in `dist/`.
 - [ ] 5.2 Record exact filenames, sizes, hashes and the Desktop run URL; keep the candidate unpublished.

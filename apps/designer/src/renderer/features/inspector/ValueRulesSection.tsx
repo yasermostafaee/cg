@@ -20,6 +20,8 @@ import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
 import { Icon } from '../../ui/Icon.js';
 import { useAssets } from '../assets/useAssets.js';
+import { ImageChoicePicker } from '../fields/ImageChoicePicker.js';
+import { useImageAssetUrls } from '../fields/useImageAssetUrls.js';
 import { useSharedImages } from '../sharedLibrary/useSharedImages.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
 import { CollapseSection } from './CollapseSection.js';
@@ -56,6 +58,7 @@ interface ImageChoice {
   label: string;
   source: 'project' | 'shared';
   assetId: string;
+  thumbnailUrl?: string;
 }
 
 function scalarFields(fields: readonly DynamicField[]): ScalarField[] {
@@ -171,18 +174,21 @@ function ImageValueRulesSection({
 }): JSX.Element {
   const project = useAssets().filter((asset) => asset.kind === 'image');
   const shared = useSharedImages();
+  const imageUrls = useImageAssetUrls();
   const images: ImageChoice[] = [
     ...project.map((asset) => ({
       key: `project:${asset.assetId}`,
       label: `${asset.filename} (project)`,
       source: 'project' as const,
       assetId: asset.assetId,
+      ...(imageUrls[asset.assetId] === undefined ? {} : { thumbnailUrl: imageUrls[asset.assetId] }),
     })),
     ...shared.map((asset) => ({
       key: `shared:${asset.assetId}`,
       label: `${asset.filename} (shared)`,
       source: 'shared' as const,
       assetId: asset.assetId,
+      ...(imageUrls[asset.assetId] === undefined ? {} : { thumbnailUrl: imageUrls[asset.assetId] }),
     })),
   ];
   return <ValueRulesEditor element={element} fields={fields} images={images} />;
@@ -586,22 +592,18 @@ function EffectValue({
   }
   if (effect.property === 'image') {
     const current = `${effect.value.source}:${effect.value.assetId}`;
-    const missing = !images.some((image) => image.key === current);
     return (
-      <SelectField
+      <ImageChoicePicker
         label="picture"
         value={current}
-        options={
-          missing
-            ? [current, ...images.map((image) => image.key)]
-            : images.map((image) => image.key)
-        }
-        labels={
-          missing
-            ? ['(missing picture)', ...images.map((image) => image.label)]
-            : images.map((image) => image.label)
-        }
-        onCommit={(key) => {
+        allowEmpty={false}
+        choices={images.map((image) => ({
+          value: image.key,
+          label: image.label,
+          ...(image.thumbnailUrl === undefined ? {} : { thumbnailUrl: image.thumbnailUrl }),
+        }))}
+        currentThumbnailUrl={images.find((image) => image.key === current)?.thumbnailUrl}
+        onChange={(key) => {
           const image = splitImageKey(key);
           if (image !== undefined) onChange({ ...effect, value: image });
         }}

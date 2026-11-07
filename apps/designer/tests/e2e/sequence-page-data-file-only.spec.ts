@@ -15,6 +15,15 @@ function connectedWeatherProject(): Scene {
     .find((element) => element.id === 'weather-pages-sequence') as Element | undefined;
   if (sequence?.type !== 'sequence') throw new Error('weather pages sequence missing');
   sequence.pageDataFile = 'weather/صفحات-شهرها-rows.sample.xlsx';
+  for (const document of [scene, ...(scene.compositions ?? [])]) {
+    const cities = document.fields?.find((field) => field.id === 'cities');
+    if (cities?.type === 'list') {
+      Object.assign(cities, {
+        allowFileSource: true,
+        fileSource: { ...cities.fileSource, inputMode: 'file-only', format: 'csv' },
+      });
+    }
+  }
   return scene;
 }
 
@@ -58,6 +67,13 @@ test('a paged Repeater has one Sequence-owned file source', async ({ app }) => {
   await open.click();
   const dialog = app.page.getByRole('dialog', { name: 'Page data · Sequence' });
   await expect(dialog.getByRole('checkbox', { name: 'File only in CG Control' })).toHaveCount(0);
+  const cityAuthority = dialog.getByRole('checkbox', {
+    name: 'city editable in CG Control',
+    exact: true,
+  });
+  await expect(cityAuthority).toBeChecked();
+  await cityAuthority.uncheck();
+  await expect(cityAuthority).not.toBeChecked();
   await expect(dialog.getByRole('button', { name: 'Save and connect Excel file…' })).toBeVisible();
   await expect(dialog).toContainText('Not connected');
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
@@ -94,13 +110,27 @@ test('a saved Sequence connection survives project import and owns Preview rows'
   await app.inspector.getByRole('button', { name: 'Page data…', exact: true }).click();
   const data = page.getByRole('dialog', { name: 'Page data · صفحات شهرها' });
   await expect(data).toContainText('Connected');
-  await expect(data).toContainText('Share path');
+  await expect(data).toContainText('CG Control file');
   await expect(data).toContainText('weather/صفحات-شهرها-rows.sample.xlsx');
   await expect(data).not.toContainText('not connected in this session');
+  const allowEditing = data.getByRole('checkbox', {
+    name: 'Allow row editing in CG Control',
+  });
+  await expect(allowEditing).not.toBeChecked();
   await data.getByRole('button', { name: 'Cancel', exact: true }).click();
 
   await app.openPreviewModal();
   await expect(app.previewDialog.getByRole('button', { name: /Edit rows/ })).toHaveCount(0);
   await expect(app.previewDialog.getByLabel('شهرها connected file').first()).toBeVisible();
   await expect(app.previewDialog).toContainText('weather/صفحات-شهرها-rows.sample.xlsx');
+  await app.previewDialog.getByRole('button', { name: 'Close', exact: true }).click();
+
+  await app.inspector.getByRole('button', { name: 'Page data…', exact: true }).click();
+  await data.getByRole('checkbox', { name: 'Allow row editing in CG Control' }).check();
+  await expect(data).toContainText('CG Control · row editing allowed');
+  await data.getByRole('button', { name: 'Cancel', exact: true }).click();
+
+  await app.openPreviewModal();
+  await expect(app.previewDialog.getByRole('button', { name: /Edit rows/ }).first()).toBeVisible();
+  await expect(app.previewDialog.getByLabel('شهرها connected file')).toHaveCount(0);
 });

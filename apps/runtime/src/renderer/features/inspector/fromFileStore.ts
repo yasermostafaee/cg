@@ -154,16 +154,23 @@ export function reconcileAuthoredFileSource(
   bridgePath: string | undefined,
   locked: boolean,
   defaults: { split: boolean; delimiter: string; format?: FileSourceListFormat },
-): void {
+): boolean {
   const key = keyOf(itemId, path);
   if (bridgePath === undefined) {
+    const current = entries.get(key);
+    const removedAutoLoadedDraft =
+      current?.source.bridgePath !== undefined && autoLoadedAuthoredSources.has(key);
+    // A Bridge path can only have come from the template. Runtime-picked files use
+    // an FSA handle instead. When the author detaches that path, keeping this entry
+    // would show a stale Connected fact beside the newly-restored manual rows.
+    if (current?.source.bridgePath !== undefined) detachFileSource(itemId, path);
     authoredDefaultPaths.delete(key);
     autoLoadedAuthoredSources.delete(key);
-    return;
+    return removedAutoLoadedDraft;
   }
   // Do not let an authored default race the IndexedDB restore and erase an
   // operator override before it has had a chance to reappear.
-  if (!restoredItemIds.has(itemId)) return;
+  if (!restoredItemIds.has(itemId)) return false;
 
   const previousDefault = authoredDefaultPaths.get(key);
   authoredDefaultPaths.set(key, bridgePath);
@@ -177,7 +184,7 @@ export function reconcileAuthoredFileSource(
     (current === undefined || current.source.bridgePath === previousDefault);
   if (needsLockedSource || needsFirstDefault || authoredDefaultChanged) {
     attachFileSource(itemId, path, bridgeTextFileSource(bridgePath), defaults);
-    return;
+    return false;
   }
   // A lock owns the whole source definition, including how list bytes become
   // items. An operator choice persisted before the template was locked must not
@@ -198,6 +205,7 @@ export function reconcileAuthoredFileSource(
     });
     bump();
   }
+  return false;
 }
 
 /**

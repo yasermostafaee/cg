@@ -2,7 +2,7 @@ import type { Element, Fill, Scene, Transform } from '@cg/shared-schema';
 import { anim, EASE, kf, kfLinear, track } from './anim.js';
 
 /**
- * «میان‌برنامهٔ خبر» — the marquee composite, modeled on a real Persian news
+ * «زیرنویس با ساعت» — the marquee composite, modeled on a real Persian news
  * lower-strap: a two-deck full-bleed band. The RIGHT block (the RTL reading
  * edge) is a tall red ROTATING PANEL — a `sequence` element whose items are
  * three nested compositions, showing ONE at a time on a loop: the live
@@ -396,7 +396,7 @@ const layer = (id: string, name: string, children: Element[]): Scene['layers'][n
 export const iribNewsScene: Scene = {
   schemaVersion: 1,
   id: 'starter-irib-news',
-  name: 'میان‌برنامهٔ خبر',
+  name: 'زیرنویس با ساعت',
   templateType: 'custom',
   resolution: { width: W, height: H },
   frameRate: FPS,
@@ -407,7 +407,7 @@ export const iribNewsScene: Scene = {
   compositions: [
     {
       id: 'comp-irib',
-      name: 'میان‌برنامهٔ خبر',
+      name: 'زیرنویس با ساعت',
       resolution: { width: W, height: H },
       frameRange: { in: 0, out: 124 },
       lifecycle: { outPoint: 60, contentStart: 55 },

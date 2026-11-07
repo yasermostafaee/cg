@@ -171,6 +171,31 @@ export function shouldDeferPreviewNaturalStop(
 }
 
 /**
+ * D-199 — whether Stop has an authored, frame-based picture change to show after Out point.
+ *
+ * A content driver such as a picture Sequence can keep the composition open without owning any
+ * visual Outro of its own. Treating that hold as an Outro made the Canvas cursor race the Runtime's
+ * immediate clear and land a few frames differently on every Stop. Only a root keyframe strictly
+ * after Out point gives the Rehearse transport a real interval to display.
+ */
+export function hasAuthoredOutroMotion(scene: Scene): boolean {
+  const outPoint = scene.lifecycle?.outPoint;
+  const active = activeRangeOf(scene);
+  if (outPoint === undefined || outPoint >= active.out) return false;
+
+  const walk = (elements: readonly Element[]): boolean =>
+    elements.some((element) => {
+      const hasLaterKeyframe = Object.values(element.animation?.tracks ?? {}).some((track) =>
+        track?.keyframes.some((keyframe) => keyframe.frame > outPoint),
+      );
+      if (hasLaterKeyframe) return true;
+      return element.type === 'container' && walk(element.children);
+    });
+
+  return scene.layers.some((layer) => walk(layer.children));
+}
+
+/**
  * B-371/B-380 — both Preview and the main Canvas may hide Runtime's intentional collapsed-paint
  * boundary behind an authored display clock, but only when no root behaviour owns a real frame.
  */

@@ -141,4 +141,44 @@ describe('withListLimits', () => {
     });
     expect(out.fields[1]).toMatchObject({ assetOptions: pictures });
   });
+
+  it('preserves an authored image subset and does not invent choices for upload-only fields', () => {
+    const authored = [{ assetId: 'sun', label: 'Sunny', source: 'shared' as const }];
+    const packaged = [
+      { assetId: 'sun', label: 'sun.svg' },
+      { assetId: 'rain', label: 'rain.svg' },
+    ];
+    const d = doc([], [], []);
+    const out = withListLimits(
+      d,
+      d,
+      {
+        fields: [
+          {
+            id: 'icon',
+            label: 'Icon',
+            required: false,
+            type: 'image',
+            accept: ['svg'],
+            inputMode: 'choices',
+            assetOptions: authored,
+          },
+          {
+            id: 'upload',
+            label: 'Upload',
+            required: false,
+            type: 'image',
+            accept: ['svg'],
+            inputMode: 'upload',
+          },
+        ],
+        groups: [],
+      },
+      packaged,
+    );
+    expect(out.fields[0]).toMatchObject({
+      assetOptions: [{ assetId: 'sun', label: 'sun.svg', source: 'shared' }],
+    });
+    expect(out.fields[1]).not.toHaveProperty('assetOptions');
+  });
 });

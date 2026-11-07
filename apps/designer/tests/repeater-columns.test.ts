@@ -61,6 +61,7 @@ describe('repeater editor columns (D-030)', () => {
         kind: 'image',
         defaultValue: { assetId: 'sunny' },
         choices: [{ value: 'sunny', label: 'Sunny' }],
+        accept: '.png',
       },
       { key: 'visible', label: 'Visible', kind: 'boolean', defaultValue: true },
     ]);

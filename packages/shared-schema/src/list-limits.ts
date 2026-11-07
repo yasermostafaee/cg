@@ -1,6 +1,11 @@
 import type { AggregatedFields, FieldDoc } from './composition-fields.js';
 import { repeaterRowLimit, type Element, type RepeaterElement } from './elements.js';
-import type { DynamicField, ImageFieldAssetOption, ListItemField } from './fields.js';
+import {
+  imageFieldAllowsChoices,
+  type DynamicField,
+  type ImageFieldAssetOption,
+  type ListItemField,
+} from './fields.js';
 import type { Scene } from './scene.js';
 
 /**
@@ -31,8 +36,23 @@ function withImageAssets(
   imageAssets: readonly ImageFieldAssetOption[] | undefined,
 ): Extract<DynamicField, { type: 'image' }> {
   const next = { ...field };
-  if (imageAssets === undefined) delete next.assetOptions;
-  else next.assetOptions = [...imageAssets];
+  if (!imageFieldAllowsChoices(field)) return next;
+  // Designer Preview has no package manifest at this stage: retain the author's allowlist.
+  if (imageAssets === undefined) return next;
+  const packaged = new Map(imageAssets.map((option) => [option.assetId, option] as const));
+  if (field.assetOptions !== undefined) {
+    // Keep the authored subset/order, but prefer the packaged filename when available.
+    next.assetOptions = field.assetOptions.map((option) => {
+      const packagedOption = packaged.get(option.assetId);
+      return {
+        ...option,
+        ...(packagedOption?.label === undefined ? {} : { label: packagedOption.label }),
+      };
+    });
+  } else {
+    // Backward compatibility: old templates implicitly offered every packaged image.
+    next.assetOptions = [...imageAssets];
+  }
   return next;
 }
 

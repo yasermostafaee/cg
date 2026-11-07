@@ -1,4 +1,4 @@
-# Prepare the 0.12.6 installers
+# Prepare the 1.0.0 installers
 
 ## Why
 
@@ -8,7 +8,7 @@ service narrow read/execute access, so the corrected bytes need a fresh identity
 
 ## What changes
 
-- Move every release-version source to `0.12.6` and provide the matching Persian guide.
+- Move every release-version source to `1.0.0` and provide the matching Persian guide.
 - Build CG Bridge, CG Control and CG Designer from one verified commit.
 - Prove first-install and upgrade repair of least-privilege local text-root access.
 - Expose the effective shared-files path in CG Control Station setup, with Bridge-side validation.

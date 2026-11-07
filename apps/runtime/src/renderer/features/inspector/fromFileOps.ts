@@ -1,9 +1,10 @@
 import type { FieldValue, ListItemField, StackItemState } from '@cg/shared-schema';
 import { structuredRowsXlsxToCsv } from '@cg/vcg-format';
 import { reportCommandError } from '../status/commandFeedback.js';
-import { stageField, type FieldPath } from './draftStore.js';
+import { effectiveValue, stageField, valueAt, type FieldPath } from './draftStore.js';
 import { contentToFieldValue, type FromFileFieldKind } from './fromFileContent.js';
 import { fromFileState, setFromFileError } from './fromFileStore.js';
+import { preserveLockedListItemFields, toListItems, withStableListItemIds } from './listField.js';
 
 /**
  * R-018 — the read → transform → stage/apply orchestration for a field's
@@ -22,12 +23,12 @@ import { fromFileState, setFromFileError } from './fromFileStore.js';
  * source is attached.
  */
 async function readCurrentValue(
-  item: StackItemState,
+  itemId: string,
   path: FieldPath,
   kind: FromFileFieldKind,
   itemFields?: readonly ListItemField[],
 ): Promise<FieldValue | null> {
-  const state = fromFileState(item.itemId, path);
+  const state = fromFileState(itemId, path);
   if (state === undefined) return null;
   let content: string;
   try {
@@ -44,7 +45,7 @@ async function readCurrentValue(
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     const message = `Could not read “${state.source.name}” — the current value is kept. (${reason})`;
-    setFromFileError(item.itemId, path, message);
+    setFromFileError(itemId, path, message);
     reportCommandError(message);
     return null;
   }
@@ -55,12 +56,12 @@ async function readCurrentValue(
       format: state.format,
       ...(kind === 'list' && itemFields !== undefined ? { itemFields } : {}),
     });
-    setFromFileError(item.itemId, path, null);
+    setFromFileError(itemId, path, null);
     return value;
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     const message = `Could not use “${state.source.name}” — the current value is kept. (${reason})`;
-    setFromFileError(item.itemId, path, message);
+    setFromFileError(itemId, path, message);
     reportCommandError(message);
     return null;
   }
@@ -72,14 +73,52 @@ async function readCurrentValue(
  * false when the read failed (value untouched).
  */
 export async function stageFromFile(
-  item: StackItemState,
+  item: Pick<StackItemState, 'itemId' | 'fields'>,
   path: FieldPath,
   kind: FromFileFieldKind,
   itemFields?: readonly ListItemField[],
 ): Promise<boolean> {
-  const value = await readCurrentValue(item, path, kind, itemFields);
+  /*
+   * Snapshot the TARGET before the asynchronous file read.
+   *
+   * The runtime bridge keeps stack-row objects live. While an XLSX is being
+   * read, selecting another row can repoint that object at the newly-selected
+   * item. Reading `item.itemId` after the await therefore used to stage the old
+   * field path (for example `forecast`) on the next item (for example the league
+   * table). The result looked random: the first template opened clean, the next
+   * one showed draft, and returning to the first could make it dirty too.
+   *
+   * A file read belongs to the row and path that STARTED it. Capture every part
+   * of that address — and the applied list whose private ids we preserve — before
+   * yielding to the bridge. A later selection may rerender or unmount the control,
+   * but it cannot redirect this operation to another stack item.
+   */
+  const itemId = item.itemId;
+  const targetPath = [...path];
+  const appliedValue = valueAt(item.fields, targetPath);
+  const currentList =
+    kind === 'list' ? toListItems(effectiveValue(itemId, targetPath, appliedValue)) : undefined;
+  const value = await readCurrentValue(itemId, targetPath, kind, itemFields);
   if (value === null) return false;
-  stageField(item.itemId, path, value);
+  let stagedValue: FieldValue;
+  try {
+    stagedValue =
+      kind === 'list'
+        ? preserveLockedListItemFields(
+            currentList ?? [],
+            withStableListItemIds(currentList ?? [], toListItems(value)),
+            itemFields,
+          )
+        : value;
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    const source = fromFileState(itemId, targetPath)?.source.name ?? 'file';
+    const message = `Could not use “${source}” — the current value is kept. (${reason})`;
+    setFromFileError(itemId, targetPath, message);
+    reportCommandError(message);
+    return false;
+  }
+  stageField(itemId, targetPath, stagedValue);
   return true;
 }
 
@@ -111,7 +150,7 @@ export async function stageFromFile(
  * the whole of what this operation claims to do.
  */
 export async function reloadFromFile(
-  item: StackItemState,
+  item: Pick<StackItemState, 'itemId' | 'fields'>,
   path: FieldPath,
   kind: FromFileFieldKind,
   itemFields?: readonly ListItemField[],

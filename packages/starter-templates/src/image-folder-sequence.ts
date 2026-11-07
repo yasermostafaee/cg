@@ -1,4 +1,5 @@
 import type { Element } from '@cg/shared-schema';
+import { anim, EASE, kf, track } from './anim.js';
 import { galleryScene, PALETTE, tf } from './gallery-helpers.js';
 
 const FAM = 'asset-image-folder-sequence-vazir';
@@ -9,6 +10,12 @@ const children: Element[] = [
     type: 'sequence',
     transform: tf(0, 0, 1920, 1080),
     opacity: 1,
+    // The folder-backed book is a direct full-screen Sequence, so it needs its own authored Outro.
+    // Stop now fades the current page over the composition's 100→160 exit span instead of clearing
+    // the Sequence immediately.
+    animation: anim({
+      opacity: track(kf(0, 1), kf(100, 1), kf(160, 0, EASE.inCubic)),
+    }),
     visible: true,
     locked: false,
     zIndex: 1,
@@ -48,7 +55,7 @@ const children: Element[] = [
 
 export const imageFolderSequenceScene = galleryScene({
   id: 'image-folder-sequence',
-  name: 'توالی تصاویر پوشه',
+  name: 'نمایش تلاوت قرآن',
   description:
     'پنج تصویر عریض و تمام‌صفحهٔ قرآن با تذهیب و ترجمهٔ فارسی؛ اپراتور با Next و Previous ورق می‌زند. تعویض مجموعه از Add folder در Inspector.',
   templateType: 'fullscreen',

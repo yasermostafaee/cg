@@ -51,6 +51,7 @@ import {
 } from './geometry.js';
 import { needsFit, markFitted, frameCenterScroll, type FitGate } from './fit-on-open.js';
 import { registerPreviewDocument, bumpMeasureVersion } from './measure-element.js';
+import { registerCanvasPlayoutCommandReceiver } from './canvasPlayoutCommands.js';
 import { Control } from '../../ui/Control.js';
 import { Icon } from '../../ui/Icon.js';
 import * as s from './CanvasArea.css.js';
@@ -233,6 +234,12 @@ export function CanvasArea({
     mode: 'lifecycle' | 'playhead' | null;
     playing: boolean;
   }>({ mode: null, playing: false });
+  // D-199 — Stop in Rehearse has the dedicated Preview's clear semantics. While this is true,
+  // store updates must not feed a static authoring scrub back into the cleared page.
+  const rehearseClearedRef = useRef(false);
+  // Stop begins an asynchronous coordinated Outro. Keep the lifecycle alive until its stop.end
+  // echo arrives; otherwise the transport snaps to frameIn before the exit can be seen.
+  const rehearseStopRequestedRef = useRef(false);
   const acceptLifecycleElementFramesRef = useRef(false);
   const outerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -356,6 +363,8 @@ export function CanvasArea({
   useEffect(() => {
     const current = latestSceneRef.current;
     previewReadyRef.current = false;
+    rehearseClearedRef.current = false;
+    rehearseStopRequestedRef.current = false;
     acceptLifecycleElementFramesRef.current = false;
     setLifecycleElementFrames(new Map());
     if (current === null) {
@@ -694,6 +703,7 @@ export function CanvasArea({
         const playback = designerStore.get();
         if (
           playback.timelinePlaybackMode === 'lifecycle' &&
+          !rehearseStopRequestedRef.current &&
           (scene === null || !rootUsesAuthoredFrameClock(scene))
         ) {
           designerStore.setCurrentFrame(msg.frame);
@@ -736,10 +746,13 @@ export function CanvasArea({
         acceptLifecycleElementFramesRef.current = false;
         setLifecycleElementFrames(new Map());
         const playback = designerStore.get();
+        const explicitlyStopped = rehearseStopRequestedRef.current;
+        rehearseStopRequestedRef.current = false;
         if (
           playback.timelinePlaybackMode === 'lifecycle' &&
-          (scene === null || !rootUsesAuthoredFrameClock(scene))
+          (explicitlyStopped || scene === null || !rootUsesAuthoredFrameClock(scene))
         ) {
+          rehearseClearedRef.current = true;
           designerStore.setTimelinePlayback(null, false);
         }
       }
@@ -756,8 +769,9 @@ export function CanvasArea({
     shownItemKey,
   ]);
 
-  // D-175 — ordinary forward Play uses the page's REAL runtime lifecycle. The explicit
-  // playhead-only modes never enter this branch; their currentFrame stream remains a scrub below.
+  // D-199 — explicit Rehearse preview uses the page's REAL runtime lifecycle. Ordinary timeline
+  // Play and the other playhead-only modes never enter this branch; their currentFrame stream
+  // remains a scrub below.
   useEffect(() => {
     const next = { mode: timelinePlaybackMode, playing: timelinePlaying };
     const prev = playbackRef.current;
@@ -766,13 +780,25 @@ export function CanvasArea({
     const cw = iframeRef.current?.contentWindow;
     if (cw === undefined || cw === null || next.mode !== 'lifecycle') return;
     if (next.playing) {
+      rehearseStopRequestedRef.current = false;
+      rehearseClearedRef.current = false;
       const action = prev.mode === 'lifecycle' && !prev.playing ? 'resume' : 'play';
       if (action === 'play') {
         acceptLifecycleElementFramesRef.current = true;
         setLifecycleElementFrames(new Map());
       }
-      cw.postMessage({ kind: 'cg-preview', action, fields: {} }, '*');
-    } else if (prev.mode === 'lifecycle' && prev.playing) {
+      cw.postMessage(
+        {
+          kind: 'cg-preview',
+          action,
+          fields: {},
+          // Match the dedicated Preview: a natural finish or Stop settles cleared instead of
+          // silently rebuilding the editing frame.
+          rehearse: true,
+        },
+        '*',
+      );
+    } else if (prev.mode === 'lifecycle' && prev.playing && !rehearseStopRequestedRef.current) {
       cw.postMessage({ kind: 'cg-preview', action: 'pause' }, '*');
     }
   }, [timelinePlaybackMode, timelinePlaying]);
@@ -792,7 +818,36 @@ export function CanvasArea({
     return () => registerPreviewDocument(null);
   }, []);
 
+  // D-199 — Next/Stop are lifecycle commands, not frame edits. Keep this receiver local to the
+  // mounted Canvas document so the bottom transport can rehearse the exported command meanings
+  // without adding anything to the persisted Designer store.
+  useEffect(
+    () =>
+      registerCanvasPlayoutCommandReceiver((command) => {
+        if (!previewReadyRef.current) return false;
+        const contentWindow = iframeRef.current?.contentWindow;
+        if (contentWindow === undefined || contentWindow === null) return false;
+        if (command === 'stop') {
+          rehearseStopRequestedRef.current = true;
+          contentWindow.postMessage({ kind: 'cg-preview', action: 'stop', rehearse: true }, '*');
+          return true;
+        }
+        if (command === 'restore-authoring') {
+          rehearseStopRequestedRef.current = false;
+          rehearseClearedRef.current = false;
+          contentWindow.postMessage({ kind: 'cg-preview', action: 'authoring-restore' }, '*');
+          return true;
+        }
+        contentWindow.postMessage({ kind: 'cg-preview', action: command }, '*');
+        return true;
+      }),
+    [],
+  );
+
   useEffect(() => {
+    // Once the Rehearse Outro finishes, the stage intentionally stays cleared, exactly like the
+    // dedicated Preview. Only a fresh lifecycle Play or an explicit return to authoring repaints it.
+    if (rehearseClearedRef.current && timelinePlaybackMode !== 'playhead') return;
     iframeRef.current?.contentWindow?.postMessage(
       // D-071 — the offset is CURRENT-FRAME derived (Q2), so an animated shape that flies
       // off-frame shifts it as the playhead moves; carry it on the scrub message too so the

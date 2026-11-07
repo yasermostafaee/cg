@@ -1,7 +1,7 @@
 import { expect, test } from './fixtures/designer.js';
 
 test('guest-title shared plate extends behind the replaceable logo', async ({ app }) => {
-  await app.page.getByTestId('starter-card').filter({ hasText: 'زیرنویس معرفی' }).click();
+  await app.page.getByTestId('starter-card').filter({ hasText: 'عنوان معرفی' }).click();
   await app.expectStudio();
   await app.openPreviewModal();
   await app.play();

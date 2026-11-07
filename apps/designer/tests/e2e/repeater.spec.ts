@@ -50,6 +50,13 @@ test.describe('Repeater / data-driven layout (D-030)', () => {
       name: 'Repeater data · Repeater',
       exact: true,
     });
+    const nameAuthority = rowsDialog.getByRole('checkbox', {
+      name: 'name editable in CG Control',
+      exact: true,
+    });
+    await expect(nameAuthority).toBeChecked();
+    await nameAuthority.uncheck();
+    await expect(nameAuthority).not.toBeChecked();
     const cell = app.page.getByRole('textbox', { name: 'Repeater item 1 name', exact: true });
     await expect(cell).toBeVisible();
     await cell.fill('تیم آلفا');

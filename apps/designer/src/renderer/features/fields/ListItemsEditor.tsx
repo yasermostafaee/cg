@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { Link2 } from 'lucide-react';
 import { writeDigitsInto } from '@cg/gesture';
 import {
@@ -21,6 +21,7 @@ import { Icon } from '../../ui/Icon.js';
 import { Select } from '../../ui/Select.js';
 import { Tag } from '../../ui/Tag.js';
 import { Textarea } from '../../ui/Textarea.js';
+import { ImageChoicePicker } from './ImageChoicePicker.js';
 import type { ListItemColumn } from './repeater-columns.js';
 import * as s from './ListItemsEditor.css.js';
 
@@ -106,6 +107,8 @@ export interface ListItemsEditorProps {
    * flagged "not shown", because the page stamps only the first `maxItems`. Absent ⇒ no limit.
    */
   maxItems?: number | undefined;
+  /** Sequence page capacity. Unlike maxItems this does not limit rows; it draws live page breaks. */
+  pageSize?: number | undefined;
   /** Roomier controls for modal/table editing; compact Inspector lists keep their existing density. */
   comfortable?: boolean | undefined;
 }
@@ -240,6 +243,18 @@ function imageCellOf(item: ListItem, key: string): string {
   return '';
 }
 
+function imageDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error('Could not read image.'));
+    reader.onload = () =>
+      typeof reader.result === 'string'
+        ? resolve(reader.result)
+        : reject(new Error('Could not read image.'));
+    reader.readAsDataURL(file);
+  });
+}
+
 function booleanCellOf(item: ListItem, key: string): boolean {
   return (item as Record<string, unknown>)[key] === true;
 }
@@ -259,10 +274,7 @@ function withNumberCell(item: ListItem, key: string, n: number | undefined): Lis
 
 /** Set/clear one IMAGE column cell using the canonical FieldValue shape. */
 function withImageCell(item: ListItem, key: string, assetId: string): ListItem {
-  const next: Record<string, unknown> = { ...item };
-  if (assetId === '') delete next[key];
-  else next[key] = { assetId };
-  return next as ListItem;
+  return { ...item, [key]: { assetId } } as ListItem;
 }
 
 function withBooleanCell(item: ListItem, key: string, checked: boolean): ListItem {
@@ -425,8 +437,46 @@ function StructuredCellEditor({
           onValue={(value) => onChange(withNumberCell(row, column.key, value))}
         />
       );
-  } else if (column.kind === 'image' || column.kind === 'select') {
-    const value = column.kind === 'image' ? imageCellOf(row, column.key) : cellOf(row, column.key);
+  } else if (column.kind === 'image') {
+    const value = imageCellOf(row, column.key);
+    const thumbnailUrl = value.startsWith('data:image/')
+      ? value
+      : column.choices?.find((choice) => choice.value === value)?.thumbnailUrl;
+    control = (
+      <div className={s.imageCellControls}>
+        {column.choices !== undefined && (
+          <ImageChoicePicker
+            value={value}
+            choices={column.choices}
+            label={ariaLabel}
+            emptyLabel="No image"
+            currentThumbnailUrl={thumbnailUrl}
+            onChange={(next) => onChange(withImageCell(row, column.key, next))}
+          />
+        )}
+        {column.choices === undefined && thumbnailUrl !== undefined && (
+          <img className={s.imageCellThumb} src={thumbnailUrl} alt="" aria-hidden="true" />
+        )}
+        {column.allowUpload === true && (
+          <input
+            className={s.itemInput}
+            type="file"
+            accept={column.accept}
+            aria-label={`${ariaLabel} browse image`}
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0];
+              if (file === undefined) return;
+              void imageDataUrl(file).then((assetId) =>
+                onChange(withImageCell(row, column.key, assetId)),
+              );
+              event.currentTarget.value = '';
+            }}
+          />
+        )}
+      </div>
+    );
+  } else if (column.kind === 'select') {
+    const value = cellOf(row, column.key);
     const known = column.choices?.some((choice) => choice.value === value) === true;
     control = (
       <Select
@@ -434,15 +484,8 @@ function StructuredCellEditor({
         wrapperClassName={s.itemControl}
         value={value}
         aria-label={ariaLabel}
-        onChange={(event) =>
-          onChange(
-            column.kind === 'image'
-              ? withImageCell(row, column.key, event.target.value)
-              : withCell(row, column, event.target.value),
-          )
-        }
+        onChange={(event) => onChange(withCell(row, column, event.target.value))}
       >
-        {column.kind === 'image' && <option value="">— use default / no image —</option>}
         {value !== '' && !known && <option value={value}>{value} (missing)</option>}
         {(column.choices ?? []).map((choice) => (
           <option key={choice.value} value={choice.value}>
@@ -511,6 +554,7 @@ export function ListItemsEditor({
   itemDigits,
   onItemDigits,
   maxItems,
+  pageSize,
   comfortable = false,
 }: ListItemsEditorProps): JSX.Element {
   const atLimit = maxItems !== undefined && items.length >= maxItems;
@@ -703,64 +747,78 @@ export function ListItemsEditor({
         }
 
         const overLimit = maxItems !== undefined && i >= maxItems;
+        const pageNumber =
+          pageSize !== undefined && pageSize > 0 && i % pageSize === 0
+            ? Math.floor(i / pageSize) + 1
+            : undefined;
         return (
-          <div
-            key={item.id}
-            className={cx(s.itemRow, overLimit && s.itemOverLimit)}
-            data-over-limit={overLimit ? 'true' : undefined}
-          >
-            {columns !== undefined && columns.length > 0 ? (
-              <div className={s.structuredCells}>
-                {columns.map((column) => (
-                  <StructuredCellEditor
-                    key={column.key}
-                    column={column}
-                    row={item}
-                    rowNumber={i + 1}
-                    label={label}
-                    dir={dir}
-                    onChange={(next) =>
-                      onChange(items.map((candidate, index) => (index === i ? next : candidate)))
-                    }
-                  />
-                ))}
+          <Fragment key={item.id}>
+            {pageNumber !== undefined && (
+              <div
+                className={s.pageBoundary}
+                role="separator"
+                aria-label={`Page ${String(pageNumber)}`}
+              >
+                <span>Page {String(pageNumber)}</span>
               </div>
-            ) : kindOf(item) === 'image' ? (
-              <PictureItem item={item} ariaLabel={`${label} item ${String(i + 1)} picture`} />
-            ) : multiline ? (
-              // D-118 — sequence contexts (inspector + preview form): a multi-line textarea (Enter
-              // inserts `\n`, does not commit), same per-change item-update path. RTL via `dir`.
-              <Textarea
-                className={s.itemTextArea}
-                value={shown(textOf(item), digitsFor(item))}
-                dir={dir}
-                aria-label={`${label} item ${String(i + 1)}`}
-                onChange={(e) => {
-                  const text = typedInto(e.currentTarget, e.nativeEvent, digitsFor(item));
-                  onChange(items.map((it, j) => (j === i ? { ...it, text } : it)));
-                }}
-              />
-            ) : (
-              <input
-                className={s.itemInput}
-                type="text"
-                dir={dir}
-                value={shown(textOf(item), digitsFor(item))}
-                aria-label={`${label} item ${String(i + 1)}`}
-                onChange={(e) => {
-                  const text = typedInto(e.currentTarget, e.nativeEvent, digitsFor(item));
-                  onChange(items.map((it, j) => (j === i ? { ...it, text } : it)));
-                }}
-              />
             )}
-            {overLimit && maxItems !== undefined && (
-              <Tag className={s.overLimitTag} title={rowOverLimitReason(maxItems)}>
-                not shown
-              </Tag>
-            )}
-            {dwellInput}
-            {controls}
-          </div>
+            <div
+              className={cx(s.itemRow, overLimit && s.itemOverLimit)}
+              data-over-limit={overLimit ? 'true' : undefined}
+            >
+              {columns !== undefined && columns.length > 0 ? (
+                <div className={s.structuredCells}>
+                  {columns.map((column) => (
+                    <StructuredCellEditor
+                      key={column.key}
+                      column={column}
+                      row={item}
+                      rowNumber={i + 1}
+                      label={label}
+                      dir={dir}
+                      onChange={(next) =>
+                        onChange(items.map((candidate, index) => (index === i ? next : candidate)))
+                      }
+                    />
+                  ))}
+                </div>
+              ) : kindOf(item) === 'image' ? (
+                <PictureItem item={item} ariaLabel={`${label} item ${String(i + 1)} picture`} />
+              ) : multiline ? (
+                // D-118 — sequence contexts (inspector + preview form): a multi-line textarea (Enter
+                // inserts `\n`, does not commit), same per-change item-update path. RTL via `dir`.
+                <Textarea
+                  className={s.itemTextArea}
+                  value={shown(textOf(item), digitsFor(item))}
+                  dir={dir}
+                  aria-label={`${label} item ${String(i + 1)}`}
+                  onChange={(e) => {
+                    const text = typedInto(e.currentTarget, e.nativeEvent, digitsFor(item));
+                    onChange(items.map((it, j) => (j === i ? { ...it, text } : it)));
+                  }}
+                />
+              ) : (
+                <input
+                  className={s.itemInput}
+                  type="text"
+                  dir={dir}
+                  value={shown(textOf(item), digitsFor(item))}
+                  aria-label={`${label} item ${String(i + 1)}`}
+                  onChange={(e) => {
+                    const text = typedInto(e.currentTarget, e.nativeEvent, digitsFor(item));
+                    onChange(items.map((it, j) => (j === i ? { ...it, text } : it)));
+                  }}
+                />
+              )}
+              {overLimit && maxItems !== undefined && (
+                <Tag className={s.overLimitTag} title={rowOverLimitReason(maxItems)}>
+                  not shown
+                </Tag>
+              )}
+              {dwellInput}
+              {controls}
+            </div>
+          </Fragment>
         );
       })}
       {/* `B-106` — withheld at the limit, its reason on the row: a natively disabled button shows

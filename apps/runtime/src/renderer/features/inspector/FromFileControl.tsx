@@ -1,5 +1,15 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { CircleCheck, TriangleAlert, Unplug } from 'lucide-react';
+import {
+  CircleCheck,
+  Eye,
+  FilePlus2,
+  FolderOpen,
+  KeyRound,
+  RefreshCw,
+  TriangleAlert,
+  Unlink,
+  Unplug,
+} from 'lucide-react';
 import type {
   FieldValue,
   FileSourceListFormat,
@@ -38,6 +48,7 @@ import {
 import { FromFilePreviewDialog } from './FromFilePreviewDialog.js';
 import { toListItems } from './listField.js';
 import { StructuredRowsDialog } from './StructuredRowsDialog.js';
+import { unstageField } from './draftStore.js';
 import { saveStructuredWorkbook, structuredWorkbookFilename } from './structuredWorkbook.js';
 
 const styles = {
@@ -55,10 +66,14 @@ const styles = {
    * lines rather than two stacked clusters.
    */
   wrap: { display: 'flex', flexDirection: 'column' as const, gap: 'var(--r-space-2)' },
-  row: { display: 'flex', gap: '0.3rem', alignItems: 'center', flexWrap: 'wrap' as const },
-  // `fileName` is GONE — the name lives in `.cg-file-chip__name` now, welded to
-  // its detach control. It was a bare muted span that wrapped and pushed the
-  // buttons around as the path grew.
+  row: {
+    display: 'flex',
+    gap: 'var(--r-space-2)',
+    alignItems: 'center',
+    flexWrap: 'wrap' as const,
+  },
+  // Scalar sources keep the compact welded filename/detach chip. Structured
+  // Repeater sources use the shared dark status tags and explicit actions below.
   hint: { fontSize: '0.72rem', color: colors.textMuted, margin: 0 },
   sourcePath: {
     display: 'block',
@@ -121,9 +136,19 @@ export function FromFileControl({
   fileOnly?: boolean;
   lockFile?: boolean;
 }): JSX.Element {
-  useSyncExternalStore(subscribeFromFile, fromFileVersion);
+  const sourceVersion = useSyncExternalStore(subscribeFromFile, fromFileVersion);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const state = fromFileState(item.itemId, path);
+  /*
+   * The bridge can reuse a live StackItemState object as selection changes. React
+   * effects run after render, and workbook reads resolve later still, so retaining
+   * the object itself lets an old field follow that mutation into the next row.
+   * Capture the address/value references as render-time facts; every effect and
+   * callback below is then tied to the item that rendered this control.
+   */
+  const itemId = item.itemId;
+  const templateId = item.templateId;
+  const appliedFields = item.fields;
+  const state = fromFileState(itemId, path);
   const lockedPath = lockFile ? authoredPath : undefined;
   const supported = fileSourceSupported();
   const pathKey = JSON.stringify(path);
@@ -137,23 +162,30 @@ export function FromFileControl({
     kind === 'list' && authoredFormat === 'text' && authoredDelimiter !== undefined;
 
   useEffect(() => {
-    reconcileAuthoredFileSource(item.itemId, path, authoredPath, lockFile, {
-      split: lockFile
-        ? lockedSplit
-        : (state?.split ??
-          (kind === 'list' &&
-            (authoredDelimiter !== undefined || splitDefaultFor(item.templateId, path)))),
-      delimiter: lockFile
-        ? (authoredDelimiter ?? DEFAULT_DELIMITER)
-        : (state?.delimiter ?? authoredDelimiter ?? DEFAULT_DELIMITER),
-      format: lockFile ? authoredFormat : (state?.format ?? authoredFormat),
-    });
+    const removedAutoLoadedDraft = reconcileAuthoredFileSource(
+      itemId,
+      path,
+      authoredPath,
+      lockFile,
+      {
+        split: lockFile
+          ? lockedSplit
+          : (state?.split ??
+            (kind === 'list' &&
+              (authoredDelimiter !== undefined || splitDefaultFor(templateId, path)))),
+        delimiter: lockFile
+          ? (authoredDelimiter ?? DEFAULT_DELIMITER)
+          : (state?.delimiter ?? authoredDelimiter ?? DEFAULT_DELIMITER),
+        format: lockFile ? authoredFormat : (state?.format ?? authoredFormat),
+      },
+    );
+    if (removedAutoLoadedDraft) unstageField(itemId, path);
   }, [
     authoredDelimiter,
     authoredFormat,
     authoredPath,
-    item.itemId,
-    item.templateId,
+    itemId,
+    templateId,
     kind,
     lockFile,
     lockedSplit,
@@ -163,6 +195,7 @@ export function FromFileControl({
     state?.format,
     state?.source.bridgePath,
     state?.split,
+    sourceVersion,
   ]);
 
   const authoredAutoLoadSignature =
@@ -178,19 +211,28 @@ export function FromFileControl({
 
   useEffect(() => {
     if (authoredAutoLoadSignature === undefined) return;
-    const current = fromFileState(item.itemId, path);
+    const current = fromFileState(itemId, path);
     if (
       current?.source.bridgePath !== authoredPath ||
       current?.permission !== 'granted' ||
-      !claimAuthoredFileAutoLoad(item.itemId, path, authoredAutoLoadSignature)
+      !claimAuthoredFileAutoLoad(itemId, path, authoredAutoLoadSignature)
     ) {
       return;
     }
     // The authored file is the field's starting input, so its current bytes must
     // become the starting draft without making the operator press Reload first.
     // This stages only; Update remains the single write that can reach on air.
-    void stageFromFile(item, path, kind, itemFields);
-  }, [authoredAutoLoadSignature, authoredPath, item, itemFields, kind, path, pathKey]);
+    void stageFromFile({ itemId, fields: appliedFields }, path, kind, itemFields);
+  }, [
+    appliedFields,
+    authoredAutoLoadSignature,
+    authoredPath,
+    itemFields,
+    itemId,
+    kind,
+    path,
+    pathKey,
+  ]);
 
   const choose = async (): Promise<void> => {
     let source;
@@ -204,10 +246,9 @@ export function FromFileControl({
     // The split default is per-TARGET (resolved from the scene's bindings at
     // import): a sequence's list splits into discrete items; a ticker — and any
     // unknown/ambiguous target — stays whole-text verbatim (Cinegy parity).
-    attachFileSource(item.itemId, path, source, {
+    attachFileSource(itemId, path, source, {
       split:
-        kind === 'list' &&
-        (authoredDelimiter !== undefined || splitDefaultFor(item.templateId, path)),
+        kind === 'list' && (authoredDelimiter !== undefined || splitDefaultFor(templateId, path)),
       delimiter: authoredDelimiter ?? DEFAULT_DELIMITER,
       format:
         structured && /\.(?:xlsx|csv)$/iu.test(source.name)
@@ -218,7 +259,7 @@ export function FromFileControl({
       ...(currentSchemaSignature === undefined ? {} : { schemaSignature: currentSchemaSignature }),
     });
     // Initial load STAGES like a hand edit; the operator applies with Update.
-    await stageFromFile(item, path, kind, itemFields);
+    await stageFromFile({ itemId, fields: appliedFields }, path, kind, itemFields);
   };
 
   const saveExcel = async (): Promise<void> => {
@@ -235,7 +276,7 @@ export function FromFileControl({
         structuredWorkbookFilename(fieldId, 'repeater'),
       );
       if (source === null) return;
-      attachFileSource(item.itemId, path, source, {
+      attachFileSource(itemId, path, source, {
         split: false,
         delimiter: '',
         format: 'csv',
@@ -256,6 +297,7 @@ export function FromFileControl({
             </span>
           </Tag>
           <Button variant="secondary" disabled aria-label={`Reload ${fieldId} from file`}>
+            <Icon icon={RefreshCw} />
             Reload
           </Button>
         </div>
@@ -280,6 +322,7 @@ export function FromFileControl({
                   title={supported ? undefined : FILE_SOURCE_UNSUPPORTED_MESSAGE}
                   onClick={() => void saveExcel()}
                 >
+                  <Icon icon={FilePlus2} />
                   Save and connect Excel…
                 </Button>
                 <Button
@@ -288,6 +331,7 @@ export function FromFileControl({
                   title={supported ? undefined : FILE_SOURCE_UNSUPPORTED_MESSAGE}
                   onClick={() => void choose()}
                 >
+                  <Icon icon={FolderOpen} />
                   Connect existing…
                 </Button>
               </>
@@ -328,6 +372,7 @@ export function FromFileControl({
             title={supported ? undefined : FILE_SOURCE_UNSUPPORTED_MESSAGE}
             onClick={() => void choose()}
           >
+            <Icon icon={FolderOpen} />
             From file…
           </Button>
           {!supported && <p style={styles.hint}>{FILE_SOURCE_UNSUPPORTED_MESSAGE}</p>}
@@ -342,52 +387,66 @@ export function FromFileControl({
   // re-grant, so Reload is replaced by the gesture that makes reading possible
   // rather than sitting there failing.
   const needsGrant = state.permission !== 'granted';
+  // `bridgePath` is the portable file key packaged by Designer. `displayPath` is the
+  // effective location CG Bridge actually resolved under its CURRENT Shared files setting.
+  // If that setting is local, a local Windows path is correct; if it is UNC, the UNC is
+  // correct. Show both facts rather than replacing one with the other (B-400).
+  const sharedFilePath = lockedPath ?? state.source.bridgePath ?? state.source.name;
+  const resolvedSourcePath = state.source.displayPath ?? sharedFilePath;
 
   const grant = async (): Promise<void> => {
     const handle = state.source.handle;
     if (handle === undefined) return;
     const result = await requestReadPermission(handle);
-    setFromFilePermission(item.itemId, path, result);
+    setFromFilePermission(itemId, path, result);
     if (result === 'denied') {
       reportCommandError(`Access to “${state.source.name}” was refused.`);
     }
   };
 
   return (
-    <div className="cg-from-file" style={styles.wrap}>
+    <div
+      className={`cg-from-file${structured ? ' cg-file-managed-connection' : ''}`}
+      style={styles.wrap}
+    >
       <div style={styles.row}>
+        {structured && <Tag>{fileOnly ? 'File managed' : 'File connected'}</Tag>}
         {/* THE FILE, as ONE control: its name and the way to detach it, welded
             together. See `.cg-file-chip` — the short version is that a bare `✕`
             here is the same glyph as the item-delete buttons one row up, doing
             something else, and attaching it to the name is what stops the two
             being confusable. */}
-        <Tag className="cg-file-chip">
-          {structured && (
-            <Icon
-              icon={schemaNeedsUpdate ? TriangleAlert : CircleCheck}
-              size={14}
-              style={{
-                color: schemaNeedsUpdate ? cssVars['--r-caution-text'] : colors.checkPass,
-              }}
-            />
-          )}
-          <span className="cg-file-chip__name" title={state.source.name}>
-            {structured
-              ? `${schemaNeedsUpdate ? 'Connected · update file' : 'Connected'} · ${state.source.name}`
-              : state.source.name}
-          </span>
-          {lockedPath === undefined && !fileOnly && (
-            <button
-              type="button"
-              className="cg-file-chip__detach"
-              aria-label={`Detach ${fieldId} file source`}
-              title={`Detach ${state.source.name}`}
-              onClick={() => detachFileSource(item.itemId, path)}
-            >
-              ×
-            </button>
-          )}
-        </Tag>
+        {structured ? (
+          <Tag title={resolvedSourcePath}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--r-space-1)' }}>
+              <Icon
+                icon={schemaNeedsUpdate ? TriangleAlert : CircleCheck}
+                size={14}
+                style={{
+                  color: schemaNeedsUpdate ? cssVars['--r-caution-text'] : colors.checkPass,
+                }}
+              />
+              {schemaNeedsUpdate ? 'Connected · update file' : 'Connected'} · {state.source.name}
+            </span>
+          </Tag>
+        ) : (
+          <Tag className="cg-file-chip">
+            <span className="cg-file-chip__name" title={state.source.name}>
+              {state.source.name}
+            </span>
+            {lockedPath === undefined && !fileOnly && (
+              <button
+                type="button"
+                className="cg-file-chip__detach"
+                aria-label={`Detach ${fieldId} file source`}
+                title={`Detach ${state.source.name}`}
+                onClick={() => detachFileSource(itemId, path)}
+              >
+                ×
+              </button>
+            )}
+          </Tag>
+        )}
         {needsGrant ? (
           <AsyncButton
             variant="secondary"
@@ -398,6 +457,7 @@ export function FromFileControl({
             }}
             onError={() => undefined}
           >
+            <Icon icon={KeyRound} />
             Grant access
           </AsyncButton>
         ) : (
@@ -411,9 +471,10 @@ export function FromFileControl({
           <AsyncButton
             variant="secondary"
             aria-label={`Reload ${fieldId} from file`}
-            run={() => reloadFromFile(item, path, kind, itemFields)}
+            run={() => reloadFromFile({ itemId, fields: appliedFields }, path, kind, itemFields)}
             onError={() => undefined}
           >
+            <Icon icon={RefreshCw} />
             Reload
           </AsyncButton>
         )}
@@ -423,22 +484,39 @@ export function FromFileControl({
             aria-label={`View ${fieldId} file content and fields`}
             onClick={() => setPreviewOpen(true)}
           >
+            <Icon icon={Eye} />
             {structured ? 'View current data…' : 'View content…'}
           </Button>
         )}
-        {structured && !fileOnly && (
-          <Button variant="secondary" onClick={() => void saveExcel()}>
-            Save and connect another Excel…
-          </Button>
+        {structured && !fileOnly && lockedPath === undefined && (
+          <>
+            <Button variant="secondary" onClick={() => void saveExcel()}>
+              <Icon icon={FilePlus2} />
+              Save and connect another Excel…
+            </Button>
+            <Button
+              variant="neutral"
+              onClick={() => detachFileSource(itemId, path)}
+              aria-label={`Detach ${fieldId} file source`}
+            >
+              <Icon icon={Unlink} />
+              Detach
+            </Button>
+          </>
         )}
         {/* THE DETACH `✕` MOVED INTO THE FILE CHIP ABOVE — it is part of the file
             now, not a free-standing button at the end of the row. It stood here as
             an `icon`: the same shape and the same glyph as the item-delete buttons
             one row up, doing something else entirely. Do not put it back. */}
       </div>
-      <code style={styles.sourcePath} title={state.source.displayPath ?? state.source.name}>
-        Share path · {state.source.displayPath ?? state.source.name}
+      <code style={styles.sourcePath} title={sharedFilePath}>
+        Share file · {sharedFilePath}
       </code>
+      {resolvedSourcePath !== sharedFilePath && (
+        <code style={styles.sourcePath} title={resolvedSourcePath}>
+          Read from · {resolvedSourcePath}
+        </code>
+      )}
       {needsGrant && <p style={styles.hint}>{FILE_SOURCE_NEEDS_PERMISSION_MESSAGE}</p>}
       {state.error !== null && (
         <p style={styles.error} role="alert">
@@ -461,6 +539,8 @@ export function FromFileControl({
           rows={toListItems(value)}
           fields={itemFields}
           label={fieldId}
+          templateId={templateId}
+          channel={item.slot?.channel}
         />
       ) : (
         <FromFilePreviewDialog

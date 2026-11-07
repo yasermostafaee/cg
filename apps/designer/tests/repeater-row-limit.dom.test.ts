@@ -143,14 +143,18 @@ describe('D-180 — structured Repeater image rows', () => {
         }),
       ),
     );
-    const select = container.querySelector<HTMLSelectElement>(
-      'select[aria-label="Weather item 1 Weather icon"]',
+    const picker = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Weather item 1 Weather icon"]',
     );
-    expect(select?.value).toBe('sunny');
+    expect(picker?.title).toBe('Sunny');
     act(() => {
-      if (select === null) return;
-      select.value = 'rain';
-      select.dispatchEvent(new Event('change', { bubbles: true }));
+      picker?.click();
+    });
+    const rain = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.title === 'Rain',
+    );
+    act(() => {
+      rain?.click();
     });
     expect((onChange.mock.calls[0]?.[0] as ListItem[])[0]).toEqual({
       id: 'r1',
@@ -182,7 +186,7 @@ describe('D-180 — structured Repeater image rows', () => {
     ).toContain('City');
     expect(
       container
-        .querySelector('select[aria-label="Weather item 1 Weather icon"]')
+        .querySelector('button[aria-label="Weather item 1 Weather icon"]')
         ?.parentElement?.closest('label')?.textContent,
     ).toContain('Weather icon');
   });

@@ -1,7 +1,9 @@
 import type { Element, ImageElement } from '@cg/shared-schema';
 import { designerStore } from '../../state/store.js';
-import { SelectField } from '../inspector/controls.js';
-import { useSharedImages, useSharedImageUrl } from './useSharedImages.js';
+import { useAssets } from '../assets/useAssets.js';
+import { ImageChoicePicker } from '../fields/ImageChoicePicker.js';
+import { useImageAssetUrls } from '../fields/useImageAssetUrls.js';
+import { useSharedImages } from './useSharedImages.js';
 
 /**
  * D-040 — inspector combo that lists the shared image library (names in the
@@ -10,36 +12,43 @@ import { useSharedImages, useSharedImageUrl } from './useSharedImages.js';
  * becomes a logo. Uses the shared `Select` primitive via `SelectField`.
  */
 export function SharedImagePicker({ element }: { element: ImageElement }): JSX.Element {
-  const images = useSharedImages();
-  const currentId = element.source === 'shared' ? element.assetId : '';
-  const url = useSharedImageUrl(element.source === 'shared' ? element.assetId : null);
-
-  const options = ['', ...images.map((i) => i.assetId)];
-  const labels = ['— choose a library image —', ...images.map((i) => stripExt(i.filename))];
+  const projectImages = useAssets().filter((asset) => asset.kind === 'image');
+  const sharedImages = useSharedImages();
+  const imageUrls = useImageAssetUrls();
+  const currentSource = element.source === 'shared' ? 'shared' : 'project';
+  const currentValue = `${currentSource}:${element.assetId}`;
 
   return (
-    <SelectField
-      label="library image"
-      value={currentId}
-      options={options}
-      labels={labels}
-      onCommit={(assetId) => {
-        if (assetId === '') return; // the placeholder — leave the element unchanged
+    <ImageChoicePicker
+      label="picture source"
+      value={currentValue}
+      allowEmpty={false}
+      choices={[
+        ...projectImages.map((image) => ({
+          value: `project:${image.assetId}`,
+          label: `${stripExt(image.filename)} (project)`,
+          ...(imageUrls[image.assetId] === undefined
+            ? {}
+            : { thumbnailUrl: imageUrls[image.assetId] }),
+        })),
+        ...sharedImages.map((image) => ({
+          value: `shared:${image.assetId}`,
+          label: `${stripExt(image.filename)} (shared)`,
+          ...(imageUrls[image.assetId] === undefined
+            ? {}
+            : { thumbnailUrl: imageUrls[image.assetId] }),
+        })),
+      ]}
+      currentLabel={`${element.assetId} (missing)`}
+      currentThumbnailUrl={imageUrls[element.assetId]}
+      onChange={(encoded) => {
+        const separator = encoded.indexOf(':');
+        if (separator < 1) return;
         designerStore.updateElement(element.id, {
-          assetId,
-          source: 'shared',
+          assetId: encoded.slice(separator + 1),
+          source: encoded.slice(0, separator) as 'project' | 'shared',
         } as Partial<Element>);
       }}
-      trailing={
-        url !== null ? (
-          <img
-            src={url}
-            alt=""
-            aria-hidden
-            style={{ width: 22, height: 22, objectFit: 'contain', borderRadius: 3 }}
-          />
-        ) : undefined
-      }
     />
   );
 }

@@ -2,6 +2,7 @@ import { useMemo, useState, useSyncExternalStore } from 'react';
 import { CircleCheck, TriangleAlert, Unplug } from 'lucide-react';
 import {
   fileSourceContentToFieldValue,
+  fileSourcePolicyOf,
   repeaterRowLimit,
   type Composition,
   type DynamicField,
@@ -20,6 +21,7 @@ import { designerStore } from '../../state/store.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
+import { isVisibleWindowsSourcePath } from '../inspector/bridgeTextFile.js';
 import { useAssets } from '../assets/useAssets.js';
 import { useSharedImages } from '../sharedLibrary/useSharedImages.js';
 import { ListItemsEditor } from './ListItemsEditor.js';
@@ -32,6 +34,8 @@ import {
   subscribeSequencePageDataAttachments,
 } from './sequencePageDataAttachmentStore.js';
 import * as s from './SequencePageDataPanel.css.js';
+import { useImageAssetUrls } from './useImageAssetUrls.js';
+import { OperatorColumnLocks } from './OperatorColumnLocks.js';
 
 type FieldDoc = Scene | Composition;
 
@@ -149,9 +153,10 @@ export function RepeaterDataControl({
   useSyncExternalStore(subscribeSequencePageDataAttachments, sequencePageDataAttachmentsVersion);
   const assets = useAssets();
   const sharedImages = useSharedImages();
+  const imageUrls = useImageAssetUrls();
   const imageChoices = useMemo(
-    () => imageChoicesForAssets(assets, sharedImages),
-    [assets, sharedImages],
+    () => imageChoicesForAssets(assets, sharedImages, imageUrls),
+    [assets, imageUrls, sharedImages],
   );
   const child = scene.compositions?.find(
     (composition) => composition.id === repeater.compositionId,
@@ -173,6 +178,11 @@ export function RepeaterDataControl({
   const currentSignature = schemaSignature(repeater, itemFields);
   const storeId = attachmentId(repeater.id);
   const attachment = getSequencePageDataAttachment(scene.id, storeId);
+  const connected = attachment !== null || authoredBridgePath !== undefined;
+  const connectedName =
+    attachment?.name ?? authoredBridgePath?.split(/[\\/]/u).at(-1) ?? authoredBridgePath;
+  const operatorEditingAllowed =
+    connected && fileSourcePolicyOf(field)?.inputMode === 'operator-choice';
   const needsUpdate =
     attachment !== null && sequencePageDataAttachmentNeedsUpdate(attachment, currentSignature);
   const [open, setOpen] = useState(false);
@@ -249,6 +259,19 @@ export function RepeaterDataControl({
     setSequencePageDataAttachment(scene.id, storeId, null);
     setNotice('File detached.');
     setError(null);
+  };
+
+  const setOperatorEditingAllowed = (allowed: boolean): void => {
+    const latest = designerStore.get().scene;
+    const latestField = latest === null ? null : listFieldFor(activeDoc(latest), repeater.id);
+    if (latestField === null) return;
+    designerStore.setElementFieldMeta(repeater.id, {
+      allowFileSource: true,
+      fileSource: {
+        ...latestField.fileSource,
+        inputMode: allowed ? 'operator-choice' : 'file-only',
+      },
+    });
   };
 
   const saveAndConnect = async (): Promise<void> => {
@@ -335,6 +358,7 @@ export function RepeaterDataControl({
               >
                 <Icon icon={needsUpdate ? TriangleAlert : CircleCheck} size={14} />
                 {needsUpdate ? 'Connected · update file' : 'Connected'}
+                {connectedName === undefined ? '' : ` · ${connectedName}`}
               </span>
               {attachment !== null && (
                 <Button variant="secondary" onClick={() => void reload()}>
@@ -344,11 +368,42 @@ export function RepeaterDataControl({
             </>
           ) : null}
           {!sequenceManaged && (attachment !== null || authoredBridgePath !== undefined) && (
-            <span className={s.connectionStatus}>CG Control · file managed</span>
+            <span className={s.connectionStatus}>
+              {operatorEditingAllowed
+                ? 'CG Control · row editing allowed'
+                : 'CG Control · file managed'}
+            </span>
           )}
         </div>
-        {!sequenceManaged && (attachment !== null || authoredBridgePath !== undefined) && (
-          <code className={s.path}>{attachment?.sourcePath ?? authoredBridgePath}</code>
+        {!sequenceManaged && connected && (
+          <label className={s.operatorChoice}>
+            <input
+              type="checkbox"
+              aria-label="Allow row editing in CG Control"
+              checked={operatorEditingAllowed}
+              onChange={(event) => setOperatorEditingAllowed(event.target.checked)}
+            />
+            Allow row editing in CG Control
+          </label>
+        )}
+        {!sequenceManaged && attachment !== null ? (
+          <div className={s.path} title={attachment.sourcePath}>
+            <span>
+              {isVisibleWindowsSourcePath(attachment.sourcePath)
+                ? 'Selected file · full Windows/UNC path'
+                : 'Selected file'}
+            </span>
+            <code>{attachment.sourcePath}</code>
+            <small>CG Control file: {attachment.bridgePath}</small>
+          </div>
+        ) : (
+          !sequenceManaged &&
+          authoredBridgePath !== undefined && (
+            <div className={s.path} title={authoredBridgePath}>
+              <span>CG Control file</span>
+              <code>{authoredBridgePath}</code>
+            </div>
+          )
         )}
       </section>
       {open && (
@@ -386,6 +441,7 @@ export function RepeaterDataControl({
                   : needsUpdate
                     ? 'Connected · update file'
                     : 'Connected'}
+                {connectedName === undefined ? '' : ` · ${connectedName}`}
               </span>
               <Button onClick={() => void saveAndConnect()}>
                 Save and connect{' '}
@@ -411,8 +467,35 @@ export function RepeaterDataControl({
               </span>
             </div>
           )}
-          {!sequenceManaged && (attachment !== null || authoredBridgePath !== undefined) && (
-            <code className={s.path}>{attachment?.sourcePath ?? authoredBridgePath}</code>
+          {!sequenceManaged && attachment !== null ? (
+            <div className={s.path} title={attachment.sourcePath}>
+              <span>
+                {isVisibleWindowsSourcePath(attachment.sourcePath)
+                  ? 'Selected file · full Windows/UNC path'
+                  : 'Selected file'}
+              </span>
+              <code>{attachment.sourcePath}</code>
+              <small>CG Control file: {attachment.bridgePath}</small>
+            </div>
+          ) : (
+            !sequenceManaged &&
+            authoredBridgePath !== undefined && (
+              <div className={s.path} title={authoredBridgePath}>
+                <span>CG Control file</span>
+                <code>{authoredBridgePath}</code>
+              </div>
+            )
+          )}
+          {!sequenceManaged && connected && (
+            <label className={s.operatorChoice}>
+              <input
+                type="checkbox"
+                aria-label="Allow row editing in CG Control"
+                checked={operatorEditingAllowed}
+                onChange={(event) => setOperatorEditingAllowed(event.target.checked)}
+              />
+              Allow row editing in CG Control
+            </label>
           )}
           {needsUpdate && (
             <p className={s.warning} role="status">
@@ -431,6 +514,7 @@ export function RepeaterDataControl({
             This workbook is generated from “{child?.name ?? repeater.compositionId}”. One row is
             one repeated item; Excel choices and number limits follow the template fields.
           </p>
+          <OperatorColumnLocks compositionId={repeater.compositionId} fields={itemFields} />
           {notice !== null && <p className={s.notice}>{notice}</p>}
           {error !== null && <p className={s.error}>{error}</p>}
           <ListItemsEditor

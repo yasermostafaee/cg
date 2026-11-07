@@ -61,7 +61,7 @@ test('the PLATE door — right-click on a seated plate opens the owner’s audio
   const dialog = audioDialog(page);
   await expect(dialog).toBeVisible();
   // The OWNER is named, in the operator's words — the template the row carries is one of them.
-  await expect(dialog.locator('[data-audio-subtitle]')).toContainText('میان‌برنامهٔ خبر');
+  await expect(dialog.locator('[data-audio-subtitle]')).toContainText('زیرنویس با ساعت');
   // Focus lands on the plate the operator pointed at — the HIDDEN frame, `guest-2`.
   await expect(page.locator(':focus')).toHaveAttribute('aria-label', 'Volume for guest-2');
   // 🔴 `PLATES-AUDIO-11` §3 — sentence case, superseding `design.md` §31.4's second half.

@@ -4,6 +4,7 @@ import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
 import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
 import {
+  defaultImage,
   defaultRepeater,
   defaultSequence,
   defaultText,
@@ -31,6 +32,32 @@ function bindings() {
 }
 
 describe('designerStore — D-018 Data key convenience layer', () => {
+  it('authors a public image field and image binding from an image element Data key', () => {
+    freshScene();
+    designerStore.addElement(defaultImage('team-logo', 0, 0, 'persepolis-logo'));
+
+    expect(designerStore.setElementDataKey('team-logo', 'logo')).toBe(true);
+    expect(fields().find((field) => field.id === 'logo')).toMatchObject({
+      type: 'image',
+      label: 'logo',
+      required: false,
+      defaultAssetId: 'persepolis-logo',
+      accept: ['png', 'jpg', 'webp', 'svg'],
+    });
+    expect(bindings()).toContainEqual({
+      fieldId: 'logo',
+      target: { kind: 'image', elementId: 'team-logo' },
+    });
+
+    designerStore.setElementFieldMeta('team-logo', { title: 'Team logo', required: true });
+    expect(fields().find((field) => field.id === 'logo')).toMatchObject({
+      type: 'image',
+      label: 'Team logo',
+      required: true,
+      defaultAssetId: 'persepolis-logo',
+    });
+  });
+
   it('authors text choice lists and preserves them while editing unrelated field metadata', () => {
     freshScene();
     designerScene_addText('choice-text');
@@ -583,10 +610,49 @@ describe('designerStore — D-029 sequence Data key + items', () => {
       ?.fields?.find((candidate) => candidate.id === 'cities');
     expect(field).toMatchObject({
       allowFileSource: true,
-      fileSource: { bridgePath: 'weather.xlsx', format: 'csv' },
+      fileSource: {
+        inputMode: 'operator-choice',
+        bridgePath: 'weather.xlsx',
+        format: 'csv',
+      },
     });
     expect(field?.type).toBe('list');
-    if (field?.type === 'list') expect(field.fileSource?.inputMode).toBeUndefined();
+    if (field?.type === 'list') expect(field.fileSource?.inputMode).toBe('operator-choice');
+  });
+
+  it('authors a CG Control lock on one Repeater child field without locking its siblings', () => {
+    freshScene();
+    const compositionId = designerStore.addComposition();
+    if (compositionId === null) throw new Error('composition was not created');
+    designerStore.addField({
+      id: 'team',
+      label: 'Team',
+      required: true,
+      type: 'text',
+      default: 'Persepolis',
+    });
+    designerStore.addField({
+      id: 'wins',
+      label: 'Wins',
+      required: true,
+      type: 'number',
+      default: 0,
+    });
+
+    designerStore.setCompositionFieldOperatorEditable(compositionId, 'team', false);
+    let fields = designerStore
+      .get()
+      .scene?.compositions?.find((composition) => composition.id === compositionId)?.fields;
+    expect(fields?.find((field) => field.id === 'team')).toMatchObject({
+      operatorEditable: false,
+    });
+    expect(fields?.find((field) => field.id === 'wins')).not.toHaveProperty('operatorEditable');
+
+    designerStore.setCompositionFieldOperatorEditable(compositionId, 'team', true);
+    fields = designerStore
+      .get()
+      .scene?.compositions?.find((composition) => composition.id === compositionId)?.fields;
+    expect(fields?.find((field) => field.id === 'team')).not.toHaveProperty('operatorEditable');
   });
 });
 

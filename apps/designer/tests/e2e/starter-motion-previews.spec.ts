@@ -26,18 +26,18 @@ const OUT = process.env.CG_STARTER_MOTION_FRAMES;
 test.skip(OUT === undefined || OUT === '', 'only when regenerating starter motion previews');
 
 const starters = [
-  ['irib-news', 'میان‌برنامهٔ خبر'],
-  ['ticker', 'نوار اخبار'],
-  ['logo-bug', 'آرم شبکه'],
-  ['title', 'زیرنویس معرفی'],
-  ['sequence', 'توالی خبر'],
-  ['iran-premier-league', 'جدول لیگ برتر ایران'],
+  ['logo-bug', 'لوگو شبکه'],
+  ['title', 'عنوان معرفی'],
+  ['ticker', 'زیرنویس حرکت افقی'],
+  ['irib-news', 'زیرنویس با ساعت'],
+  ['sequence', 'زیرنویس حرکت عمودی'],
+  ['image-folder-sequence', 'نمایش تلاوت قرآن'],
+  ['multibox', 'چهارقاب'],
+  ['countdown-steps', 'شمارش معکوس اذان'],
   ['iran-weather-pages', 'آب‌وهوای مراکز استان‌ها'],
   ['iran-weather-forecast', 'پیش‌بینی چندروزهٔ هوا'],
   ['iran-weather-cards', 'آب‌وهوای شهرها — کارت‌های تصویری'],
-  ['image-folder-sequence', 'توالی تصاویر پوشه'],
-  ['countdown-steps', 'شمارش معکوس اذان'],
-  ['multibox', 'میزگرد چندقابه'],
+  ['iran-premier-league', 'جدول لیگ برتر ایران'],
 ] as const;
 
 test('records every starter into a smooth short excerpt', async ({ app }) => {

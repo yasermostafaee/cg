@@ -2486,9 +2486,9 @@ affordance.
   version, a SHA or a date — 🔴 two derivations are two answers, and the whole point of the
   stamp is that what the operator reads on the first frame and what they read in the app are
   the SAME STRING
-- WHEN the identity is formatted THEN it follows P-076's explicit Version / Revision / Build date
-  labels, superseding the original compact `v${version}` / `sha · builtAt` spelling; the values
-  still come from the one shared build identity, never a second derivation
+- WHEN the identity is formatted THEN it follows P-076's explicit Version / Build date labels and
+  omits Revision from operator-facing copy; the diagnostic revision still comes from the one shared
+  build identity, never a second derivation
 - WHEN a release version or Git revision is unavailable THEN that value is omitted truthfully,
   as on the splash — `0.0.0` and `nogit` are placeholders, not available release identities
 
@@ -4873,3 +4873,13 @@ operator had to fail over before seeing whether its programme picture and sound 
 - WHEN Play is pressed THEN the template and its Live Source markers appear together
 - WHEN Stop is pressed THEN both disappear together
 - WHEN PVW is shown THEN no Safe Area control or guide state is offered
+
+## [x] R-107 — Calendar setting names its actual Lunar Hijri correction ⟨priority: medium — clarified with the owner, 2026-11-02⟩ — `openspec/changes/clarify-lunar-hijri-correction/`
+
+**What:** Rename the broad **Calendar** station setting to **Lunar Hijri correction** and explain
+that it shifts only Lunar Hijri display/entry when the officially announced day differs from the
+calculation. Gregorian and Solar Hijri selection remains per field in Designer.
+**Why:** A section named Calendar that contains only one Lunar Hijri control looks like an incomplete
+calendar selector rather than a station-wide correction.
+**Acceptance:** WHEN an operator opens station settings THEN the rail and card identify a Lunar Hijri
+correction, explain when it is needed, and say that zero/**As calculated** needs no change.

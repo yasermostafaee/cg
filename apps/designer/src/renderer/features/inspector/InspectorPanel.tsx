@@ -110,6 +110,7 @@ function ElementInspector({
     .filter(({ b }) => bindingTargetsElement(b, element.id) && !isFixedFileFieldId(b.fieldId));
   const hasDynamicData =
     element.type === 'text' ||
+    element.type === 'image' ||
     element.type === 'ticker' ||
     element.type === 'sequence' ||
     element.type === 'repeater';
@@ -125,11 +126,13 @@ function ElementInspector({
       <StyleSection element={element} selectedKeyframe={selectedKeyframe} />
       {hasDynamicData ? (
         <>
-          <FixedFileSourceSection
-            key={`fixed-file-${element.id}`}
-            element={element}
-            scene={scene}
-          />
+          {element.type !== 'image' && (
+            <FixedFileSourceSection
+              key={`fixed-file-${element.id}`}
+              element={element}
+              scene={scene}
+            />
+          )}
           <DynamicDataSection element={element} scene={scene} />
           <ValueRulesSection element={element} scene={scene} />
         </>

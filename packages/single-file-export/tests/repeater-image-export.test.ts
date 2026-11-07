@@ -73,6 +73,10 @@ describe('D-180 — dynamic Repeater image export closure', () => {
               type: 'image',
               accept: ['png'],
               defaultAssetId: 'cloudy',
+              assetOptions: [
+                { assetId: 'project-choice', label: 'Project choice', source: 'project' },
+                { assetId: 'shared-choice', label: 'Shared choice', source: 'shared' },
+              ],
             },
           ],
           bindings: [],
@@ -85,7 +89,10 @@ describe('D-180 — dynamic Repeater image export closure', () => {
     } as unknown as Scene;
 
     expect(new Set(collectImageElements(scene).map((ref) => ref.assetId))).toEqual(
-      new Set(['sunny', 'rain', 'cloudy']),
+      new Set(['sunny', 'rain', 'cloudy', 'project-choice', 'shared-choice']),
+    );
+    expect(collectImageElements(scene)).toContainEqual(
+      expect.objectContaining({ assetId: 'shared-choice', source: 'shared' }),
     );
   });
 });

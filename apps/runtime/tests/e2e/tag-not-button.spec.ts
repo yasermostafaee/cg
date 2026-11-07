@@ -74,7 +74,7 @@ test('every visible tag on every Station setup tab is inert', async ({ app, page
     'Connection',
     'Live sources',
     'Text file delimiters',
-    'Calendar',
+    'Lunar Hijri correction',
     'Layers',
   ];
   let seen = 0;

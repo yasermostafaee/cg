@@ -3,7 +3,7 @@ import { expect, test } from './fixtures/designer.js';
 for (const width of [1920, 960]) {
   test(`ticker text keeps its spacing in a nested ${width}px composition`, async ({ app }) => {
     await app.goto();
-    await app.page.getByTestId('starter-card').filter({ hasText: 'نوار اخبار' }).click();
+    await app.page.getByTestId('starter-card').filter({ hasText: 'زیرنویس حرکت افقی' }).click();
     await app.expectStudio();
     if (width !== 1920) {
       await app.selectElementById('tk-strap');

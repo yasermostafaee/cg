@@ -4012,3 +4012,168 @@ Measured free before use: the registry named `B-393` as next free and the tracke
 found no existing allocation for `B-393`.
 
 ⇒ **Next free after this entry is `B-394`**, **`D-196`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-07 — unified Repeater file facts and visible SVG imports take `B-394` and `B-395`
+
+- `B-394` — a standalone Repeater workbook rendered Preview's incomplete numbered rows while a
+  Sequence workbook showed its connected-file fact; both owners now share the same file-managed
+  contract — [bugs-designer.md](bugs-designer.md).
+- `B-395` — SVG was stored/exported but absent from the reliable visible picker filter and new-image
+  default accept list — [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the registry named `B-394` as next free and the tracked heading audit
+found no existing allocation for `B-394` or `B-395`.
+
+⇒ **Next free after this entry is `B-396`**, **`D-196`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-07 — detached workbook truth and unique migrated bindings take `B-396` and `B-397`
+
+- `B-396` — removing an authored Repeater/Sequence workbook left CG Control's old Connected state
+  and its automatic draft — [bugs-runtime.md](bugs-runtime.md).
+- `B-397` — a legacy root binding already owned by the entry composition was appended again, so the
+  forecast Repeater displayed the same wire twice — [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the registry named `B-396` as next free and the tracked heading audit found
+no existing allocation for `B-396` or `B-397`.
+
+⇒ **Next free after this entry is `B-398`**, **`D-196`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-07 — independent row authority and unified connected-file presentation take `B-398`
+
+- `B-398` — a structured workbook connection automatically suppressed CG Control row editing, and
+  direct/Sequence owners used inconsistent filename, status-icon and action-label treatments —
+  [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the registry named `B-398` as next free and the tracked heading audit found
+no existing allocation for `B-398`.
+
+⇒ **Next free after this entry is `B-399`**, **`D-196`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-07 — transactional structured-row editing takes `B-399`
+
+- `B-399` — the structured **Edit rows…** modal could leak edits when dismissed without an
+  explicit apply — [bugs-runtime.md](bugs-runtime.md).
+
+Measured free before use: the registry named `B-399` as next free and the tracked heading audit
+found no existing allocation for `B-399`.
+
+⇒ **Next free after this entry is `B-400`**, **`D-196`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-07 — distinct workbook locations across Designer and CG Control take `B-400`
+
+- `B-400` — Designer's selected path, the portable shared-file key and CG Bridge's effective
+  local/UNC path were not distinguished consistently —
+  [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the registry named `B-400` as next free and the tracked heading audit
+found no existing allocation for `B-400`.
+
+⇒ **Next free after this entry is `B-401`**, **`D-199`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-07 — Preview playout rehearsal takes `D-199`
+
+- `D-199` — Preview can switch between plain linear timeline playback and explicit lifecycle
+  rehearsal with Play / Next / Stop — [designer.md](designer.md).
+
+Measured free before use: the heading audit found `D-198` as the highest allocated Designer item
+and no existing allocation for `D-199`.
+
+⇒ **Next free after this entry is `B-401`**, **`D-200`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-07 — stable multi-frame Look preset geometry takes `B-401`
+
+- `B-401` — selecting or airing one Look preset resized and reflowed the entire preset row —
+  [bugs-runtime.md](bugs-runtime.md).
+
+Measured free before use: the registry named `B-401` as next free and the tracked heading audit
+found no existing allocation for `B-401`.
+
+⇒ **Next free after this entry is `B-402`**, **`D-200`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-07 — selection-safe drafts, derived Repeater pages and local row landmarks take `B-402`–`B-404`
+
+- `B-402` — delayed schema/file resolution could stage the previous template's rows on the newly
+  selected stack item — [bugs-runtime.md](bugs-runtime.md).
+- `B-403` — combined Sequence Repeater rows were capped by the authored page shell instead of
+  growing and shrinking from operator/file data — [bugs-runtime.md](bugs-runtime.md).
+- `B-404` — a combined Sequence row edit exposed only the footer draft, without a local dirty marker
+  or page landmarks in its data modals — [bugs-runtime.md](bugs-runtime.md).
+
+Measured free before use: the registry named `B-402` as next free and the tracked heading audit found
+no existing allocation for `B-402`, `B-403` or `B-404`.
+
+⇒ **Next free after this entry is `B-405`**, **`D-200`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-07 — public dynamic-image authoring takes `B-405`
+
+- `B-405` — built-in Repeater rows could use per-row image fields, but a normal author could not
+  create the same image Data key/binding from the Image Inspector —
+  [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the registry named `B-405` as next free and the tracked heading audit
+found no existing allocation for `B-405`.
+
+⇒ **Next free after this entry is `B-406`**, **`D-200`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-07 — visible ownership for the temperature-strip rule takes `B-406`
+
+- `B-406` — the province-weather temperature strip changed fill through rules stored on its
+  neighbouring number, so selecting the strip looked like hidden behavior —
+  [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the registry named `B-406` as next free and the tracked heading audit
+found no existing allocation for `B-406`.
+
+⇒ **Next free after this entry is `B-407`**, **`D-200`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-07 — authored image controls take `B-407`
+
+- `B-407` — dynamic image fields exposed an editable raw asset id and offered no authored choice
+  between a safe allowlist, Windows Browse or both — [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the registry named `B-407` as next free and the tracked heading audit found
+no existing allocation for `B-407`.
+
+⇒ **Next free after this entry is `B-408`**, **`D-200`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-07 — rounded alternating Repeater rows take `B-408`
+
+- `B-408` — an alternating Repeater fill painted a square generated cell behind a rounded child-row
+  plate, so the fill protruded from its corners — [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the registry named `B-408` as next free and the tracked heading audit found
+no existing allocation for `B-408`.
+
+⇒ **Next free after this entry is `B-409`**, **`D-200`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-07 — authored Repeater column authority takes `B-409`
+
+- `B-409` — Repeater row editing was all-or-nothing, so an author could not keep identity columns
+  such as team name/logo fixed while allowing CG Control to update statistics —
+  [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the registry named `B-409` as next free and the tracked heading audit found
+no existing allocation for `B-409`.
+
+⇒ **Next free after this entry is `B-410`**, **`D-200`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-07 — redundant Image loader tool takes `B-410`
+
+- `B-410` — Designer still exposed the obsolete Image loader placement tool even though images now
+  enter through Project Assets and shared images are selected through the visual source picker —
+  [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the registry named `B-410` as next free and the tracked heading audit
+found no existing allocation for `B-410`.
+
+⇒ **Next free after this entry is `B-411`**, **`D-200`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-07 — prewarmed animated weather pages take `B-411`
+
+- `B-411` — composition pages created only at their turn restarted nested Repeater motion and
+  external animated SVGs after page 1 — [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the registry named `B-411` as next free and the tracked heading audit
+found no existing allocation for `B-411`.
+
+⇒ **Next free after this entry is `B-412`**, **`D-200`**, **`P-075`**, **`R-105`** and **`C-049`**.

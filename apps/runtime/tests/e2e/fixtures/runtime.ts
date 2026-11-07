@@ -797,6 +797,92 @@ export async function buildValidVcg(templateId = 'tpl-e2e-1'): Promise<Uint8Arra
   });
 }
 
+/** A top-level image field exposing both authored choices and a Windows upload. */
+export async function buildImageFieldVcg(
+  templateId = 'tpl-e2e-image-field',
+  choiceCount = 1,
+): Promise<Uint8Array> {
+  const scene = fixtureScene();
+  const layer = scene.layers[0];
+  if (layer === undefined) throw new Error('fixture scene has no layer');
+  const picture = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+  const picturePath = `assets/image/${sha256Hex(picture)}.png`;
+  const choices = Array.from({ length: choiceCount }, (_, index) => ({
+    assetId: index === 0 ? 'img-default' : `img-choice-${String(index + 1)}`,
+    label: index === 0 ? 'default.png' : `choice-${String(index + 1)}.png`,
+    source: 'project' as const,
+  }));
+  layer.children = [
+    {
+      id: 'el-image',
+      name: 'Image',
+      type: 'image',
+      transform: {
+        position: { x: 200, y: 200 },
+        size: { w: 320, h: 320 },
+        scale: { x: 1, y: 1 },
+        rotation: 0,
+        anchor: { x: 0.5, y: 0.5 },
+      },
+      opacity: 1,
+      visible: true,
+      locked: false,
+      zIndex: 1,
+      assetId: 'img-default',
+      source: 'project',
+      fit: 'contain',
+      preserveAspect: true,
+    },
+  ];
+  scene.fields = [
+    {
+      id: 'img',
+      label: 'img',
+      required: false,
+      type: 'image',
+      accept: ['png', 'svg'],
+      inputMode: 'choices-and-upload',
+      defaultAssetId: 'img-default',
+      assetOptions: choices,
+    },
+  ];
+  scene.bindings = [{ fieldId: 'img', target: { kind: 'image', elementId: 'el-image' } }];
+  return pack({
+    scene,
+    manifestExtras: {
+      id: templateId,
+      name: 'e2e-image-field',
+      authoring: {
+        designerVersion: '0.0.0',
+        createdAt: '2026-11-07T00:00:00.000Z',
+        exportedAt: '2026-11-07T00:01:00.000Z',
+      },
+      compatibility: { minRuntimeVersion: '0.0.0', minCasparCGVersion: '2.3.0' },
+      fontDeps: scene.fonts,
+      assetIndex: choices.map((choice) => ({
+        id: choice.assetId,
+        path: picturePath,
+        filename: choice.label,
+        kind: 'image',
+        bytes: picture.byteLength,
+        sha256: sha256Hex(picture),
+        mime: 'image/png',
+      })),
+    },
+    indexHtml: `<!doctype html><html><body><script>CG.createRuntime(scene, { assetUrls: ${JSON.stringify(
+      Object.fromEntries(
+        choices.map((choice) => [
+          choice.assetId,
+          `data:image/png;base64,${Buffer.from(picture).toString('base64')}`,
+        ]),
+      ),
+    )} });</script></body></html>`,
+    cgJs: '/* placeholder template runtime */',
+    cgCss: '/* placeholder template styles */',
+    assets: new Map([[picturePath, picture]]),
+  });
+}
+
 /**
  * B-040 — a verifiable `.vcg` that also carries a ticker-style `list` Data key
  * (`_tickerTexts`) with structured Persian items, so the operator Inspector must
@@ -1079,6 +1165,12 @@ export async function buildRepeaterVcg(
   templateId = 'tpl-e2e-repeater',
   maxItems = 2,
   withPictures = false,
+  options: {
+    authoredFile?: string;
+    rowNames?: readonly [string, string];
+    lockedName?: boolean;
+    lockedIcon?: boolean;
+  } = {},
 ): Promise<Uint8Array> {
   const scene = fixtureScene();
   const layer = scene.layers[0];
@@ -1117,9 +1209,27 @@ export async function buildRepeaterVcg(
       required: false,
       type: 'list',
       default: [
-        { id: 'r1', name: 'یک', ...(withPictures ? { icon: { assetId: 'img-sun' } } : {}) },
-        { id: 'r2', name: 'دو', ...(withPictures ? { icon: { assetId: 'img-rain' } } : {}) },
+        {
+          id: 'r1',
+          name: options.rowNames?.[0] ?? 'یک',
+          ...(withPictures ? { icon: { assetId: 'img-sun' } } : {}),
+        },
+        {
+          id: 'r2',
+          name: options.rowNames?.[1] ?? 'دو',
+          ...(withPictures ? { icon: { assetId: 'img-rain' } } : {}),
+        },
       ],
+      ...(options.authoredFile === undefined
+        ? {}
+        : {
+            allowFileSource: true,
+            fileSource: {
+              bridgePath: options.authoredFile,
+              inputMode: 'operator-choice' as const,
+              format: 'csv' as const,
+            },
+          }),
     },
   ];
   scene.bindings = [
@@ -1144,7 +1254,14 @@ export async function buildRepeaterVcg(
         },
       ],
       fields: [
-        { id: 'name', label: 'Name', required: false, type: 'text', default: '' },
+        {
+          id: 'name',
+          label: 'Name',
+          required: false,
+          type: 'text',
+          default: '',
+          ...(options.lockedName === true ? { operatorEditable: false as const } : {}),
+        },
         ...(withPictures
           ? [
               {
@@ -1154,6 +1271,7 @@ export async function buildRepeaterVcg(
                 type: 'image' as const,
                 accept: ['png' as const],
                 defaultAssetId: 'img-sun',
+                ...(options.lockedIcon === true ? { operatorEditable: false as const } : {}),
               },
             ]
           : []),
@@ -1200,7 +1318,12 @@ export async function buildRepeaterVcg(
           ]
         : [],
     },
-    indexHtml: '<!doctype html><html><body>placeholder</body></html>',
+    indexHtml: withPictures
+      ? `<!doctype html><html><body><script>CG.createRuntime(scene, { assetUrls: ${JSON.stringify({
+          'img-sun': `data:image/png;base64,${Buffer.from(sun).toString('base64')}`,
+          'img-rain': `data:image/png;base64,${Buffer.from(rain).toString('base64')}`,
+        })} });</script></body></html>`
+      : '<!doctype html><html><body>placeholder</body></html>',
     cgJs: '/* placeholder template runtime */',
     cgCss: '/* placeholder template styles */',
     ...(withPictures
@@ -1217,7 +1340,12 @@ export async function buildRepeaterVcg(
 /** D-180 — a two-page Sequence whose one structured Repeater may be authored File only. */
 export async function buildPagedRepeaterVcg(
   templateId = 'tpl-e2e-paged-repeater',
-  options: { fileOnly?: boolean; pageDataFile?: string } = {},
+  options: {
+    fileOnly?: boolean;
+    pageDataFile?: string;
+    allowOperatorRows?: boolean;
+    lockedCity?: boolean;
+  } = {},
 ): Promise<Uint8Array> {
   const scene = fixtureScene();
   const layer = scene.layers[0];
@@ -1327,7 +1455,11 @@ export async function buildPagedRepeaterVcg(
           allowFileSource: true,
           ...(options.fileOnly === true
             ? { fileSource: { inputMode: 'file-only' as const, format: 'csv' as const } }
-            : {}),
+            : options.allowOperatorRows === true
+              ? {
+                  fileSource: { inputMode: 'operator-choice' as const, format: 'csv' as const },
+                }
+              : {}),
         },
       ],
       bindings: [
@@ -1354,7 +1486,14 @@ export async function buildPagedRepeaterVcg(
         },
       ],
       fields: [
-        { id: 'city', label: 'City', required: true, type: 'text', default: '' },
+        {
+          id: 'city',
+          label: 'City',
+          required: true,
+          type: 'text',
+          default: '',
+          ...(options.lockedCity === true ? { operatorEditable: false as const } : {}),
+        },
         { id: 'temperature', label: 'Temperature', required: true, type: 'number', default: 0 },
         {
           id: 'weather',

@@ -6,7 +6,7 @@ test.describe('D-173 — large command-first Preview workspace', () => {
   }, testInfo) => {
     const viewport = { width: 1024, height: 768 };
     await app.page.setViewportSize(viewport);
-    await app.page.getByTestId('starter-card').filter({ hasText: 'زیرنویس معرفی' }).click();
+    await app.page.getByTestId('starter-card').filter({ hasText: 'عنوان معرفی' }).click();
     await app.expectStudio();
     await app.openPreviewModal();
 

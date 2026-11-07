@@ -55,9 +55,15 @@ import {
   rehearseOwnsStateWord,
 } from '../layers/rowState.js';
 import { grantedFileSourcePaths } from './fileSourceGrants.js';
-import { detachUngrantedSources } from './fromFileStore.js';
+import {
+  detachUngrantedSources,
+  fromFileState,
+  fromFileVersion,
+  subscribeFromFile,
+} from './fromFileStore.js';
 import { FromFileControl } from './FromFileControl.js';
 import { ListFieldEditor } from './ListFieldEditor.js';
+import { ImageFieldControl } from './ImageFieldControl.js';
 import { CountdownTargetField } from './CountdownTargetField.js';
 import { SequenceRowsEditor, sequenceRowsPageSets } from './SequenceRowsEditor.js';
 import { BookBlock } from '../book/BookBlock.js';
@@ -493,6 +499,18 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
   }, [item, templateChannel]);
 
   /*
+   * `templates.get` resolves after selection.  During that gap React still owns
+   * the previous response in `info`; it is valid data, but for a DIFFERENT row.
+   * Never let that stale schema reach rendering.  In particular, a stale
+   * `fileSource.bridgePath` would mount `FromFileControl` for the newly-selected
+   * item and attach/read the previous template's workbook under the new item id.
+   * That is how merely visiting weather, then football, produced a football
+   * draft containing weather rows.
+   */
+  const resolvedInfo =
+    item !== null && info !== null && info.templateId === item.templateId ? info : null;
+
+  /*
    * TEXT-FILE-OPT-01 — reconcile this item's file attachments against what its
    * template actually GRANTS. An attachment on a field whose grant the author turned
    * off is detached, durably, rather than left live behind a hidden control.
@@ -516,18 +534,18 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
    */
   useEffect(() => {
     detachUngrantedSources(
-      item !== null && info !== null && info.templateId === item.templateId
+      item !== null && resolvedInfo !== null
         ? {
             known: true,
             itemId: item.itemId,
             grantedPaths: grantedFileSourcePaths({
-              fields: info.fields,
-              groups: info.groups ?? [],
+              fields: resolvedInfo.fields,
+              groups: resolvedInfo.groups ?? [],
             }),
           }
         : { known: false },
     );
-  }, [item, info]);
+  }, [item, resolvedInfo]);
 
   if (item === null) {
     return (
@@ -546,7 +564,7 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
   }
 
   const itemId = item.itemId;
-  const schema = info?.fields ?? null;
+  const schema = resolvedInfo?.fields ?? null;
   /*
    * Only groups that CARRY a field, at any depth.
    *
@@ -562,7 +580,7 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
    *    instance is which. Those got a readable label instead — see
    *    `sequenceItemHeading` (`R-037`: `<composition> — item N`; `R-040`: a stub on a collision).
    */
-  const visibleGroups = (info?.groups ?? []).filter((g) => aggregateHasFields(g.aggregate));
+  const visibleGroups = (resolvedInfo?.groups ?? []).filter((g) => aggregateHasFields(g.aggregate));
   const sequenceRowSets = sequenceRowsPageSets(visibleGroups);
   const combinedGroupNames = new Set(
     sequenceRowSets.flatMap((set) => set.pages.map((page) => page.name)),
@@ -586,7 +604,7 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
   const dirty = isItemDirty(
     itemId,
     item.fields,
-    appliedPlateSources(item.templateId, info?.liveSources?.sources ?? [], itemChannel),
+    appliedPlateSources(item.templateId, resolvedInfo?.liveSources?.sources ?? [], itemChannel),
     // BM-2 — and the per-look composition, which stages here too and is the SAME fact.
     item.lookSourceOverride,
     /*
@@ -605,18 +623,18 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
   );
   const isEmpty = rootFields.length === 0 && groups.length === 0 && sequenceRowSets.length === 0;
   // `R-100` — the row's book (its first page list), turned beside that field.
-  const rowBook = bookOf(info, item);
+  const rowBook = bookOf(resolvedInfo, item);
 
   // R-004 — the header names the template. The `TemplateInfo` was already in hand here and
   // its label was dropped on the floor in favour of the raw `templateId`. The id is a
   // correlation key, not a label: tooltip only, never text.
   const rawTitle = item.fields['title'];
   const contentTitle = typeof rawTitle === 'string' ? rawTitle.trim() : '';
-  const label = info !== null ? templateDisplayName(info) : 'Unnamed template';
+  const label = resolvedInfo !== null ? templateDisplayName(resolvedInfo) : 'Unnamed template';
   // See `templateIdStub`: shown only when another template answers to the same
   // name, so the ordinary heading stays a name and nothing else.
   const ambiguous =
-    info !== null && siblings.filter((t) => templateDisplayName(t) === label).length > 1;
+    resolvedInfo !== null && siblings.filter((t) => templateDisplayName(t) === label).length > 1;
   /**
    * The ROW's name for the heading — its alias or default (`Layer N` / `Bed N`) when it has a
    * slot in the bank; `operatorRowName`'s own fallback order otherwise (the template, then a
@@ -756,7 +774,7 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
             <TakeRefusalText
               line={takeRefusalLine(heading, item.takeRefusal, {
                 // `PLAYOUT-SOURCES-01` §1.C — `Plate N`, and the entry as it stands now.
-                plateLabel: plateLabelOf(info, item.takeRefusal.plateId),
+                plateLabel: plateLabelOf(resolvedInfo, item.takeRefusal.plateId),
                 entry: currentSourceCatalog().sources.find(
                   (s) => s.id === item.takeRefusal?.sourceId,
                 ),
@@ -784,19 +802,19 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
         <PositionPicker key={`pos-${itemId}`} item={item} />
         {/* D-137 / C-015 — bind this template's live plates. Renders nothing at
             all for a template that declares none, which is most of them. */}
-        <LivePlatesSection item={item} info={info} channel={itemChannel} />
+        <LivePlatesSection item={item} info={resolvedInfo} channel={itemChannel} />
         {/* BM-2 — the per-look inputs sit BELOW the default they fall back to, so the two
             levels read top-down in the order they resolve. */}
         <LooksBindingsSection
           item={item}
-          info={info}
+          info={resolvedInfo}
           rehearsing={rehearsing}
           channel={itemChannel}
         />
         {/* `TIMING-WIRE-22` §4 — the template's timing: `mode`/`hold` as FACTS, and the
             operator's passes/gap as controls. Renders nothing for a template imported before
             `TemplateInfo.playout` existed, rather than guessing what it does. */}
-        <TimingSection item={item} info={info} />
+        <TimingSection item={item} info={resolvedInfo} />
         {/* `cg-inspector-section` carries the shared rhythm — the heading's rule,
             its tracking, and the largest gap in the gradient beneath it. Same
             class as POSITION, so the two sections cannot drift apart. */}
@@ -826,8 +844,8 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
                   item={item}
                   applied={valueAt(item.fields, [row.key])}
                   book={rowBook?.fieldId === row.key ? rowBook : null}
-                  bookName={info?.pageLists?.find((l) => l.fieldId === row.key)?.name}
-                  bookFit={info?.pageLists?.find((l) => l.fieldId === row.key)?.fit}
+                  bookName={resolvedInfo?.pageLists?.find((l) => l.fieldId === row.key)?.name}
+                  bookFit={resolvedInfo?.pageLists?.find((l) => l.fieldId === row.key)?.fit}
                 />
               ))}
               {sequenceRowSets.map((set) => (
@@ -1110,6 +1128,7 @@ function FieldEditor({
   /** `RUN-NEXT-VERSION-03` delta A — the sequence's picture fit (`TemplateInfo.pageLists[].fit`). */
   bookFit?: ImageFit | undefined;
 }): JSX.Element {
+  useSyncExternalStore(subscribeFromFile, fromFileVersion);
   const itemId = item.itemId;
   // The control's accessible name stays the FIELD id (not the full path): the operator
   // sees it inside its group, and the group's own label carries the namespace.
@@ -1145,6 +1164,8 @@ function FieldEditor({
   const authoredDelimiter = authoredFileDelimiter(field);
   const authoredFormat = authoredFileFormat(field) ?? 'text';
   const lockedPath = lockedBridgeTextSourcePath(field);
+  const listFileManaged =
+    fromFileKind === 'list' && fileOnly && fromFileState(item.itemId, path) !== undefined;
   // Built ONCE and placed in one of two spots (see below), so the two placements
   // cannot drift into two differently-configured controls.
   const fromFile =
@@ -1221,7 +1242,10 @@ function FieldEditor({
               dirty={dirty}
               onStage={stage}
               onUnstage={unstage}
+              templateId={item.templateId}
+              channel={item.slot?.channel}
               {...(fromFileKind !== undefined ? { fromFile } : {})}
+              listFileManaged={listFileManaged}
             />
           )
         )}
@@ -1254,6 +1278,9 @@ function FieldControl({
   onStage,
   onUnstage,
   fromFile,
+  listFileManaged = false,
+  templateId,
+  channel,
 }: {
   kind: DynamicField['type'] | 'unknown';
   field: DynamicField | null;
@@ -1267,6 +1294,9 @@ function FieldControl({
   onUnstage: () => void;
   /** Only a LIST consumes this — it shares its footer row with "Add item". */
   fromFile?: ReactNode;
+  listFileManaged?: boolean;
+  templateId: string;
+  channel: number | undefined;
 }): JSX.Element {
   if (kind === 'boolean') {
     const v = typeof value === 'boolean' ? value : false;
@@ -1325,31 +1355,19 @@ function FieldControl({
     );
   }
   if (kind === 'image' && field?.type === 'image') {
-    const v =
-      typeof value === 'object' && value !== null && 'assetId' in value
-        ? String((value as { assetId: string }).assetId)
-        : '';
     return (
-      <select
-        className={fieldClass(dirty)}
-        value={v}
-        aria-label={fieldId}
-        onChange={(event) => {
-          const assetId = event.currentTarget.value;
-          if (assetId === '') onUnstage();
+      <ImageFieldControl
+        field={field}
+        value={value}
+        ariaLabel={fieldId}
+        dirty={dirty}
+        templateId={templateId}
+        channel={channel}
+        onChange={(assetId) => {
+          if (assetId === undefined) onUnstage();
           else onStage({ assetId });
         }}
-      >
-        {v === '' && <option value="">No picture selected</option>}
-        {v !== '' && !(field.assetOptions ?? []).some((option) => option.assetId === v) && (
-          <option value={v}>Missing picture</option>
-        )}
-        {(field.assetOptions ?? []).map((option) => (
-          <option key={option.assetId} value={option.assetId}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+      />
     );
   }
   // `FIELD-DIGITS-01` — a text or multiline field shows and stages its value in the field's
@@ -1379,6 +1397,9 @@ function FieldControl({
         value={value}
         onStage={onStage}
         footer={fromFile}
+        fileManaged={listFileManaged}
+        templateId={templateId}
+        channel={channel}
       />
     );
   }

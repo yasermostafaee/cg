@@ -12,7 +12,7 @@ test.describe('Preview blank until Play (D-087)', () => {
   test('Reset immediately ends playing, paused and closing rehearsals and restores default data', async ({
     app,
   }) => {
-    await app.page.getByTestId('starter-card').filter({ hasText: 'زیرنویس معرفی' }).click();
+    await app.page.getByTestId('starter-card').filter({ hasText: 'عنوان معرفی' }).click();
     await app.expectStudio();
     await app.openPreviewModal();
     const dialog = app.previewDialog;

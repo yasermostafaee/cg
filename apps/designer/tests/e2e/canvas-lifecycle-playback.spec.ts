@@ -12,10 +12,8 @@ async function finiteFastTicker(app: DesignerApp): Promise<void> {
   await app.setHoldSource('content-driven');
 }
 
-test.describe('D-175 — main canvas playback uses the Preview lifecycle', () => {
-  test('B-380 — an empty composition replays its real frame clock from the start', async ({
-    app,
-  }) => {
+test.describe('D-199 — main Canvas separates timeline playback from Rehearse preview', () => {
+  test('ordinary Play runs an empty composition linearly from the start', async ({ app }) => {
     await app.newProject('EmptyCanvasLifecycle');
     await app.setSceneDuration(50);
 
@@ -106,7 +104,7 @@ test.describe('D-175 — main canvas playback uses the Preview lifecycle', () =>
     if (secondEnd >= 0) expect(secondMiddle).toBeLessThan(secondEnd);
   });
 
-  test('ordinary Play runs and re-arms a finite ticker-driven lifecycle', async ({ app }) => {
+  test('ordinary Play does not start a ticker lifecycle', async ({ app }) => {
     await app.newProject('CanvasLifecycleTicker');
     await finiteFastTicker(app);
 
@@ -117,20 +115,13 @@ test.describe('D-175 — main canvas playback uses the Preview lifecycle', () =>
     await play.click();
     await expect(transport.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
 
-    // The authoring ticker row is replaced by the driver's live treadmill: this proves the
-    // canvas sent runtime.play(), not another stream of scrub ticks.
-    await expect(canvas.locator('[data-cg-ticker-static]')).toHaveCount(0);
-    await expect(canvas.locator('[data-cg-ticker-item]').first()).toBeAttached();
-
-    // Finite content completes the hold, the runtime runs its outro and settles the transport
-    // without an operator Stop. The authoring frame is restored after that visible close.
-    await expect(play).toBeVisible({ timeout: 20_000 });
+    // The playhead moves, but lifecycle-owned real-time content remains in its authoring state.
     await expect(canvas.locator('[data-cg-ticker-static]').first()).toBeAttached();
-
-    // A fresh Play must re-arm the content source rather than resume the completed run.
-    await play.click();
-    await expect(canvas.locator('[data-cg-ticker-static]')).toHaveCount(0);
-    await expect(canvas.locator('[data-cg-ticker-item]').first()).toBeAttached();
+    await expect(canvas.locator('[data-cg-ticker-item]')).toHaveCount(0);
+    const ruler = app.page.getByRole('slider', { name: 'Frame ruler' });
+    await expect
+      .poll(async () => Number(await ruler.getAttribute('aria-valuenow')))
+      .toBeGreaterThan(0);
   });
 
   test('Preview loop remains an explicit playhead-only authoring mode', async ({ app }) => {
@@ -149,27 +140,117 @@ test.describe('D-175 — main canvas playback uses the Preview lifecycle', () =>
     await expect(app.canvasFrame.locator('[data-cg-ticker-item]')).toHaveCount(0);
   });
 
-  test('Pause freezes the canvas lifecycle and Play resumes it', async ({ app }) => {
+  test('Rehearse preview replaces authoring controls and Play / Stop drive the lifecycle', async ({
+    app,
+  }) => {
     await app.newProject('CanvasLifecyclePause');
-    await app.addTicker({ x: 120, y: 260 });
-    await app.setPlayoutTiming('auto-out');
-    await app.setHoldSource('content-driven'); // default ticker is infinite: it holds until stopped
+    await app.setSceneDuration(50);
+    await app.addRectangle({ x: 240, y: 130 });
+    await app.setInspectorNumber('Opacity', 0);
+    await app.toggleInspectorKeyframe('opacity');
+    await app.scrubToFrame(8);
+    await app.setInspectorNumber('Opacity', 100);
+    await app.scrubToFrame(38);
+    await app.toggleInspectorKeyframe('opacity');
+    await app.scrubToFrame(50);
+    await app.setInspectorNumber('Opacity', 0);
+    await app.scrubToFrame(0);
+    await app.deselect();
+    await app.addOutPoint();
+    await app.setPlayoutTiming('manual');
 
     const transport = app.page.getByLabel('Playback transport');
+    await expect(transport.getByRole('button', { name: 'Preview loop' })).toHaveAttribute(
+      'title',
+      'Preview loop',
+    );
+    await expect(transport.getByRole('button', { name: 'Ping-pong' })).toHaveAttribute(
+      'title',
+      'Ping-pong',
+    );
+    await transport.getByRole('button', { name: 'Rehearse preview' }).click();
+    for (const name of ['Go to start', 'Step back', 'Step forward', 'Preview loop', 'Ping-pong']) {
+      await expect(transport.getByRole('button', { name })).toHaveCount(0);
+    }
+    await expect(transport.getByRole('button', { name: 'Next' })).toBeDisabled();
+
     await transport.getByRole('button', { name: 'Play', exact: true }).click();
-    const item = app.canvasFrame.locator('[data-cg-ticker-item]').first();
-    await expect(item).toBeAttached();
-    await app.page.waitForTimeout(200);
+    const graphic = app.canvasFrame.locator('[data-cg-element-id]').first();
+    await expect(graphic).toBeVisible();
+    await expect(transport.getByRole('button', { name: 'Play', exact: true })).toBeDisabled();
+    const ruler = app.page.getByRole('slider', { name: 'Frame ruler' });
+    await expect(ruler).toHaveAttribute('aria-valuenow', '38');
+    const frameBeforeStop = 38;
 
-    const trackTransform = (): Promise<string> =>
-      item.evaluate((node) => (node.parentElement as HTMLElement | null)?.style.transform ?? '');
+    await transport.getByRole('button', { name: 'Stop', exact: true }).click();
+    // Stop starts the real coordinated Outro. It must neither reset the host playhead nor hide
+    // the stage synchronously; clear happens only after runtime emits stop.end.
+    await expect(app.canvasFrame.locator('body')).not.toHaveClass(/cg-rehearse-cleared/);
+    await expect(transport.getByRole('button', { name: 'Play', exact: true })).toBeDisabled();
+    await expect
+      .poll(async () => {
+        const cleared = await app.canvasFrame
+          .locator('body')
+          .evaluate((body) => body.classList.contains('cg-rehearse-cleared'));
+        return cleared ? frameBeforeStop : Number(await ruler.getAttribute('aria-valuenow'));
+      })
+      .toBeGreaterThan(frameBeforeStop);
+    await expect(app.canvasFrame.locator('body')).toHaveClass(/cg-rehearse-cleared/);
+    await expect(transport.getByRole('button', { name: 'Play', exact: true })).toBeEnabled();
 
-    await transport.getByRole('button', { name: 'Pause', exact: true }).click();
-    const frozen = await trackTransform();
-    await app.page.waitForTimeout(350);
-    await expect.poll(trackTransform).toBe(frozen);
+    await transport.getByRole('button', { name: 'Rehearse preview' }).click();
+    await expect(app.canvasFrame.locator('body')).not.toHaveClass(/cg-rehearse-cleared/);
+    await expect(graphic).toBeVisible();
+  });
 
+  test('Rehearse preview Next advances an operator-stepped Sequence', async ({ app }) => {
+    await app.newProject('CanvasPlayoutNext');
+    await app.addSequence({ x: 160, y: 200 });
+    await app.setSequenceDwell(30);
+
+    const transport = app.page.getByLabel('Playback transport');
+    await transport.getByRole('button', { name: 'Rehearse preview' }).click();
+    const next = transport.getByRole('button', { name: 'Next', exact: true });
+    await expect(next).toBeEnabled();
     await transport.getByRole('button', { name: 'Play', exact: true }).click();
-    await expect.poll(trackTransform).not.toBe(frozen);
+    await expect(app.canvasFrame.getByText('Now: first item')).toBeVisible();
+
+    await next.click();
+    await expect(app.canvasFrame.getByText('Then: second item')).toBeVisible({ timeout: 3000 });
+  });
+
+  test('folder-backed Quran Sequence runs the same deterministic Outro on repeated Stop', async ({
+    app,
+  }) => {
+    test.setTimeout(25_000);
+    await app.goto();
+    await app.page.getByTestId('starter-card').filter({ hasText: 'نمایش تلاوت قرآن' }).click();
+    await app.expectStudio();
+
+    const transport = app.page.getByLabel('Playback transport');
+    const ruler = app.page.getByRole('slider', { name: 'Frame ruler' });
+    const pictureSequence = app.canvasFrame.locator('[data-cg-element-id="folder-image-sequence"]');
+    await transport.getByRole('button', { name: 'Rehearse preview' }).click();
+
+    for (let run = 0; run < 2; run += 1) {
+      await transport.getByRole('button', { name: 'Play', exact: true }).click();
+      await expect(ruler).toHaveAttribute('aria-valuenow', '100', { timeout: 5_000 });
+      await transport.getByRole('button', { name: 'Stop', exact: true }).click();
+
+      await expect(app.canvasFrame.locator('body')).not.toHaveClass(/cg-rehearse-cleared/);
+      await expect(pictureSequence).toHaveAttribute('data-cg-outro', 'sequence-frame');
+      await expect(pictureSequence).not.toHaveCSS('visibility', 'hidden');
+      await expect
+        .poll(async () => Number(await ruler.getAttribute('aria-valuenow')))
+        .toBeGreaterThan(100);
+      await expect
+        .poll(async () =>
+          pictureSequence.evaluate((node) => Number(getComputedStyle(node).opacity)),
+        )
+        .toBeLessThan(0.95);
+      await expect(ruler).toHaveAttribute('aria-valuenow', '160');
+      await expect(app.canvasFrame.locator('body')).toHaveClass(/cg-rehearse-cleared/);
+      await expect(transport.getByRole('button', { name: 'Play', exact: true })).toBeEnabled();
+    }
   });
 });

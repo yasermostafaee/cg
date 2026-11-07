@@ -31,29 +31,29 @@ function app(version: string): string {
 }
 
 describe('the startup build stamp', () => {
-  it('labels the exact release, known revision and build date on the first frame', () => {
-    const result = createBuildStamp(app('0.12.6'));
+  it('labels the exact release and build date without exposing the source revision', () => {
+    const result = createBuildStamp(app('1.0.0'));
     expect(result.stamp).toEqual({
-      version: '0.12.6',
+      version: '1.0.0',
       sha: '1a2b3c4d',
       builtAt: '2026-11-05',
     });
-    expect(result.stampText).toBe('Version 0.12.6 · Revision 1a2b3c4d · Build date 2026-11-05');
+    expect(result.stampText).toBe('Version 1.0.0 · Build date 2026-11-05');
   });
 
-  it('retains a known revision when the release version is unavailable', () => {
+  it('does not expose a known revision when the release version is unavailable', () => {
     const result = createBuildStamp(app('0.0.0'));
     expect(result.stamp.version).toBe('0.0.0');
-    expect(result.stampText).toBe('Revision 1a2b3c4d · Build date 2026-11-05');
+    expect(result.stampText).toBe('Build date 2026-11-05');
   });
 
   it('retains the release version when Git is unavailable', () => {
     gitRevision.mockImplementation(() => {
       throw new Error('Git unavailable');
     });
-    const result = createBuildStamp(app('0.12.6'));
+    const result = createBuildStamp(app('1.0.0'));
     expect(result.stamp.sha).toBe('nogit');
-    expect(result.stampText).toBe('Version 0.12.6 · Build date 2026-11-05');
+    expect(result.stampText).toBe('Version 1.0.0 · Build date 2026-11-05');
   });
 
   it('does not advertise unavailable development identities', () => {

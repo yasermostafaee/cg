@@ -2,7 +2,7 @@ import type { Element, Fill, Scene, Transform } from '@cg/shared-schema';
 import { anim, EASE, kf, track } from './anim.js';
 
 /**
- * «زیرنویس معرفی» — a guest / expert name title (lower third) that SELF-CLOSES:
+ * «عنوان معرفی» — a guest / expert name title (lower third) that SELF-CLOSES:
  * a two-tier plate flush against the right frame edge (the RTL reading edge),
  * a transparent replaceable APASAI image, name + role on
  * bound data keys, and `auto-out` playout — enter, hold 6 s, play the authored
@@ -230,7 +230,7 @@ const layer = (id: string, name: string, children: Element[]): Scene['layers'][n
 export const titleScene: Scene = {
   schemaVersion: 1,
   id: 'starter-title',
-  name: 'زیرنویس معرفی',
+  name: 'عنوان معرفی',
   templateType: 'lower-third',
   resolution: { width: W, height: H },
   frameRate: FPS,
@@ -241,7 +241,7 @@ export const titleScene: Scene = {
   compositions: [
     {
       id: 'comp-title',
-      name: 'زیرنویس معرفی',
+      name: 'عنوان معرفی',
       resolution: { width: W, height: H },
       frameRange: { in: 0, out: 128 },
       lifecycle: { outPoint: 65, contentStart: 55 },

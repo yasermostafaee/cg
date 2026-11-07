@@ -132,4 +132,126 @@ describe('R-102 — File-only authority in Designer composition Preview', () => 
     expect(container.textContent).toContain('file managed');
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it('keeps the Sequence workbook visible but restores row editors when CG Control editing is allowed', () => {
+    const onChange = vi.fn();
+    const list: DynamicField = {
+      id: 'cities',
+      label: 'Cities',
+      required: false,
+      type: 'list',
+      default: [],
+      allowFileSource: true,
+      fileSource: { inputMode: 'operator-choice' },
+      itemFields: [{ id: 'city', label: 'City', required: true, type: 'text', default: '' }],
+    };
+    const groups = [1, 2].map((item) => ({
+      instanceId: `weather:page-${String(item)}`,
+      name: `weather:page-${String(item)}`,
+      label: `Weather page — item ${String(item)}`,
+      compositionId: 'weather-page',
+      sequence: {
+        id: 'weather',
+        name: 'Weather pages',
+        itemId: `page-${String(item)}`,
+        pageDataFile: 'weather/cities.xlsx',
+      },
+      aggregate: { fields: [list], groups: [] },
+    }));
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() =>
+      root?.render(
+        createElement(PreviewFieldForm, {
+          aggregate: { fields: [], groups },
+          values: {
+            'weather:page-1': { cities: [{ id: 'tehran', city: 'Tehran' }] },
+            'weather:page-2': { cities: [{ id: 'shiraz', city: 'Shiraz' }] },
+          },
+          onChange,
+          columnsByFieldId: new Map([
+            ['cities', [{ key: 'city', label: 'City', kind: 'text' as const }]],
+          ]),
+        }),
+      ),
+    );
+
+    expect(container.textContent).toContain('Edit rows');
+    expect(container.querySelector('[aria-label="Cities connected file"]')).toBeNull();
+  });
+
+  it('shows a standalone Repeater workbook as a connected file instead of numbered rows', () => {
+    const list: DynamicField = {
+      id: 'forecast',
+      label: 'Forecast',
+      required: false,
+      type: 'list',
+      default: [],
+      allowFileSource: true,
+      fileSource: {
+        bridgePath: 'forecast.xlsx',
+        format: 'csv',
+        inputMode: 'file-only',
+        lockFile: true,
+      },
+      itemFields: [{ id: 'city', label: 'City', required: true, type: 'text', default: '' }],
+    };
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() =>
+      root?.render(
+        createElement(PreviewFieldForm, {
+          aggregate: { fields: [list], groups: [] },
+          values: { forecast: [{ id: 'tehran', city: 'Tehran' }] },
+          onChange: vi.fn(),
+          columnsByFieldId: new Map([
+            ['forecast', [{ key: 'city', label: 'City', kind: 'text' as const }]],
+          ]),
+        }),
+      ),
+    );
+
+    expect(container.querySelector('[aria-label="Forecast connected file"]')).not.toBeNull();
+    expect(container.textContent).toContain('forecast.xlsx');
+    expect(container.textContent).not.toContain('Edit rows');
+  });
+
+  it('lets a standalone connected Repeater expose row editing when explicitly allowed', () => {
+    const list: DynamicField = {
+      id: 'forecast',
+      label: 'Forecast',
+      required: false,
+      type: 'list',
+      default: [],
+      allowFileSource: true,
+      fileSource: {
+        bridgePath: 'forecast.xlsx',
+        format: 'csv',
+        inputMode: 'operator-choice',
+        lockFile: true,
+      },
+      itemFields: [{ id: 'city', label: 'City', required: true, type: 'text', default: '' }],
+    };
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() =>
+      root?.render(
+        createElement(PreviewFieldForm, {
+          aggregate: { fields: [list], groups: [] },
+          values: { forecast: [{ id: 'tehran', city: 'Tehran' }] },
+          onChange: vi.fn(),
+          columnsByFieldId: new Map([
+            ['forecast', [{ key: 'city', label: 'City', kind: 'text' as const }]],
+          ]),
+        }),
+      ),
+    );
+
+    expect(container.textContent).toContain('Edit rows');
+    expect(container.querySelector('[aria-label="Forecast connected file"]')).toBeNull();
+  });
 });

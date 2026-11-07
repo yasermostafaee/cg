@@ -2,7 +2,7 @@ import type { Element, Scene, Transform } from '@cg/shared-schema';
 import { anim, EASE, kf, kfLinear, track } from './anim.js';
 
 /**
- * «آرم شبکه» — a corner channel bug built around a replaceable APASAI logo
+ * «لوگو شبکه» — a corner channel bug built around a replaceable APASAI logo
  * image. The image owns the authored transform animation, so an operator can
  * replace only the asset and keep the complete sting without rebuilding it.
  *
@@ -141,7 +141,7 @@ const layer = (id: string, name: string, children: Element[]): Scene['layers'][n
 export const logoBugScene: Scene = {
   schemaVersion: 1,
   id: 'starter-logo-bug',
-  name: 'آرم شبکه',
+  name: 'لوگو شبکه',
   templateType: 'logo-bug',
   resolution: { width: W, height: H },
   frameRate: FPS,
@@ -152,7 +152,7 @@ export const logoBugScene: Scene = {
   compositions: [
     {
       id: 'comp-logo-bug',
-      name: 'آرم شبکه',
+      name: 'لوگو شبکه',
       resolution: { width: W, height: H },
       frameRange: { in: 0, out: 132 },
       lifecycle: { outPoint: 70, contentStart: 5 },

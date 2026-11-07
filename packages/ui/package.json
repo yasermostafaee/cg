@@ -24,7 +24,9 @@
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@cg/shared-ipc": "workspace:*"
+  },
   "devDependencies": {
     "@cg/eslint-config": "workspace:*",
     "eslint": "^9.17.0",

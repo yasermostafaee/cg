@@ -1,6 +1,7 @@
-import { useRef, useState, type ReactNode } from 'react';
-import { GripVertical, Plus, X } from 'lucide-react';
+import { Fragment, useRef, useState, type ReactNode } from 'react';
+import { GripVertical, Plus, TableProperties, X } from 'lucide-react';
 import {
+  fieldOperatorEditable,
   fieldDigitsOf,
   numberFieldAllowedValues,
   numberFieldValueLabel,
@@ -21,6 +22,8 @@ import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { TextInput } from '../../ui/TextInput.js';
+import { Modal, ModalAction } from '../../ui/Modal.js';
+import { ImageFieldControl } from './ImageFieldControl.js';
 import {
   addItem,
   dropTargetIndex,
@@ -34,13 +37,11 @@ import {
 
 /**
  * R-003 — the operator Inspector's editor for a `list` (array) dynamic field.
- * Edits STAGE: every item op (text, add, remove, reorder) is written back
- * through `onStage` as the whole structured `ListItem[]`, which the draft store
- * holds until the operator applies the item. There is NO local `useState` for the
- * VALUE and NO remount key — the editor renders the draft-or-applied value the
- * parent passes, so an incoming push updates un-staged siblings live while this
- * field keeps its draft, and the first click on ↑/↓/×/Add always lands (the
- * recorded R-003 hazard, removed).
+ * Ordinary list edits STAGE immediately through `onStage` as the whole
+ * `ListItem[]`. Structured Repeater rows are the deliberate exception: their
+ * roomy modal owns a temporary copy and transfers it to the Inspector draft only
+ * on Apply. Close, ×, Escape and backdrop dismissal therefore discard that modal
+ * copy without changing the Inspector or the on-air value.
  *
  * Item text is an auto-growing `<textarea>` so multi-line item text (newlines)
  * survives display AND apply (B-040); Enter inserts a newline — it never
@@ -121,6 +122,22 @@ const styles = {
    */
   addWrap: { marginTop: 'var(--r-space-1)' },
   pictures: { margin: 0, paddingInlineStart: 'var(--r-space-4)', fontSize: 'var(--r-text-sm)' },
+  summary: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 'var(--r-space-2)',
+    border: `1px solid ${colors.border}`,
+    borderRadius: 'var(--r-radius-md)',
+    padding: 'var(--r-space-3)',
+  },
+  summaryRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 'var(--r-space-2)',
+    flexWrap: 'wrap' as const,
+  },
+  summaryText: { margin: 0, color: colors.textMuted, fontSize: 'var(--r-text-sm)' },
 } as const;
 
 function newStructuredItem(id: string, fields: readonly ListItemField[]): ListItem {
@@ -135,24 +152,21 @@ function newStructuredItem(id: string, fields: readonly ListItemField[]): ListIt
   return item as ListItem;
 }
 
-function imageAssetId(value: unknown): string {
-  if (typeof value === 'string') return value;
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return '';
-  const assetId = (value as Record<string, unknown>)['assetId'];
-  return typeof assetId === 'string' ? assetId : '';
-}
-
 function StructuredRowEditor({
   fieldId,
   row,
   rowNumber,
   fields,
+  templateId,
+  channel,
   onChange,
 }: {
   fieldId: string;
   row: ListItem;
   rowNumber: string;
   fields: readonly ListItemField[];
+  templateId?: string | undefined;
+  channel?: number | undefined;
   onChange: (key: string, value: unknown) => void;
 }): JSX.Element {
   return (
@@ -160,16 +174,21 @@ function StructuredRowEditor({
       {fields.map((field) => {
         const value = row[field.id];
         const label = field.label.trim() === '' ? field.id : field.label;
+        const editable = fieldOperatorEditable(field);
         const ariaLabel = `${fieldId} item ${rowNumber} ${label}`;
         const allowedNumberValues =
           field.type === 'number' ? numberFieldAllowedValues(field) : undefined;
         return (
           <label key={field.id} className="cg-list-cell">
-            <span title={field.id}>{label}</span>
+            <span title={field.id}>
+              {label}
+              {!editable && <small className="cg-list-cell__lock"> · locked</small>}
+            </span>
             {field.type === 'boolean' ? (
               <Checkbox
                 checked={value === true}
                 aria-label={ariaLabel}
+                disabled={!editable}
                 onChange={(next) => onChange(field.id, next)}
               />
             ) : field.type === 'select' ? (
@@ -177,6 +196,7 @@ function StructuredRowEditor({
                 className="cg-field"
                 value={typeof value === 'string' ? value : field.default}
                 aria-label={ariaLabel}
+                disabled={!editable}
                 onChange={(event) => onChange(field.id, event.currentTarget.value)}
               >
                 {field.options.map((option) => (
@@ -190,6 +210,7 @@ function StructuredRowEditor({
                 dir="auto"
                 value={typeof value === 'string' ? value : ''}
                 aria-label={ariaLabel}
+                disabled={!editable}
                 onChange={(event) => onChange(field.id, event.currentTarget.value)}
               />
             ) : field.type === 'number' && allowedNumberValues !== undefined ? (
@@ -201,6 +222,7 @@ function StructuredRowEditor({
                     : (allowedNumberValues[0] ?? field.default),
                 )}
                 aria-label={ariaLabel}
+                disabled={!editable}
                 onChange={(event) => onChange(field.id, Number(event.currentTarget.value))}
               >
                 {allowedNumberValues.map((choice) => (
@@ -219,6 +241,7 @@ function StructuredRowEditor({
                 decimal
                 allow="number"
                 aria-label={ariaLabel}
+                disabled={!editable}
                 onValueChange={(raw) => {
                   const next = Number(raw);
                   if (numberFieldValueError(field, next) === undefined) onChange(field.id, next);
@@ -229,38 +252,27 @@ function StructuredRowEditor({
                 className="cg-list-cell__color"
                 value={typeof value === 'string' ? value : field.default}
                 aria-label={ariaLabel}
+                disabled={!editable}
                 onChange={(next) => onChange(field.id, next)}
               />
             ) : field.type === 'image' ? (
-              <select
-                className="cg-field"
-                value={imageAssetId(value)}
-                aria-label={ariaLabel}
-                onChange={(event) =>
-                  onChange(
-                    field.id,
-                    event.currentTarget.value === ''
-                      ? undefined
-                      : { assetId: event.currentTarget.value },
-                  )
+              <ImageFieldControl
+                field={field}
+                value={value}
+                ariaLabel={ariaLabel}
+                disabled={!editable}
+                templateId={templateId}
+                channel={channel}
+                onChange={(assetId) =>
+                  onChange(field.id, assetId === undefined ? undefined : { assetId })
                 }
-              >
-                <option value="">No picture</option>
-                {imageAssetId(value) !== '' &&
-                  !(field.assetOptions ?? []).some(
-                    (option) => option.assetId === imageAssetId(value),
-                  ) && <option value={imageAssetId(value)}>Missing picture</option>}
-                {(field.assetOptions ?? []).map((option) => (
-                  <option key={option.assetId} value={option.assetId}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              />
             ) : (
               <TextInput
                 dir="auto"
                 value={typeof value === 'string' ? value : ''}
                 aria-label={ariaLabel}
+                disabled={!editable}
                 onChange={(next) => onChange(field.id, next)}
               />
             )}
@@ -289,6 +301,11 @@ export function ListFieldEditor({
   value,
   onStage,
   footer,
+  expanded = false,
+  fileManaged = false,
+  pageSize,
+  templateId,
+  channel,
 }: {
   fieldId: string;
   /**
@@ -307,16 +324,31 @@ export function ListFieldEditor({
    * to whoever owns the row.
    */
   footer?: ReactNode;
+  /** Internal: the full editor is mounted only inside the structured-row modal. */
+  expanded?: boolean;
+  /** A connected workbook owns these rows; the Inspector shows its fact, not a second editor. */
+  fileManaged?: boolean;
+  /** Paged Repeater rows per Sequence page; draws live page boundaries in the modal. */
+  pageSize?: number | undefined;
+  /** Template page that owns packaged image choices, used to show their thumbnails. */
+  templateId?: string | undefined;
+  channel?: number | undefined;
 }): JSX.Element {
   const items = toListItems(value);
   // `RUN-NEXT-VERSION-02` Q4 — the most items the list takes (a repeater's row limit, from import).
   const maxItems = field?.type === 'list' ? field.maxItems : undefined;
   const itemFields = field?.type === 'list' ? field.itemFields : undefined;
+  const rowStructureLocked =
+    itemFields?.some((itemField) => !fieldOperatorEditable(itemField)) === true;
   const atLimit = maxItems !== undefined && items.length >= maxItems;
   // Drag state is PURELY presentational (which row is lifted, where it would land).
   // The value still changes only through `onStage`, on drop.
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [drop, setDrop] = useState<{ index: number; edge: DropEdge } | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorDraft, setEditorDraft] = useState<ListItem[]>([]);
+  const [editorBaseline, setEditorBaseline] = useState<ListItem[]>([]);
+  const editorChanged = JSON.stringify(editorDraft) !== JSON.stringify(editorBaseline);
   // The row elements, so the handle can arm the row it belongs to. A ref rather
   // than state: `draggable` has to be true on the element BEFORE the browser
   // decides a drag is starting, and a state update would not have re-rendered yet.
@@ -361,6 +393,75 @@ export function ListFieldEditor({
     );
   }
 
+  // Structured Repeater/Sequence rows are too tall and too wide for the Inspector.
+  // Keep one concise fact there and move the complete typed editor into one roomy modal.
+  if (itemFields !== undefined && itemFields.length > 0 && !expanded) {
+    if (fileManaged) return <div style={styles.summary}>{footer}</div>;
+    const title = field?.label?.trim() || fieldId;
+    return (
+      <div style={styles.summary} aria-label={`${fieldId} rows summary`}>
+        <div style={styles.summaryRow}>
+          <p style={styles.summaryText}>
+            {String(items.length)} {items.length === 1 ? 'row' : 'rows'}
+            {maxItems === undefined ? '' : ` · ${String(maxItems)} maximum`}
+            {rowStructureLocked ? ' · row structure locked' : ''}
+          </p>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              const snapshot = items.map((item) => ({ ...item }));
+              setEditorDraft(snapshot);
+              setEditorBaseline(snapshot.map((item) => ({ ...item })));
+              setEditorOpen(true);
+            }}
+          >
+            <Icon icon={TableProperties} />
+            Edit rows…
+          </Button>
+        </div>
+        {footer}
+        {editorOpen && (
+          <Modal
+            title={`Edit ${title}`}
+            subtitle={`${String(items.length)} ${items.length === 1 ? 'row' : 'rows'}`}
+            ariaLabel={`Edit ${fieldId} rows`}
+            size="wide"
+            frame="fixed"
+            onClose={() => setEditorOpen(false)}
+            footer={
+              <>
+                <ModalAction actionRole="cancel" onClick={() => setEditorOpen(false)}>
+                  Close
+                </ModalAction>
+                <ModalAction
+                  actionRole="primary"
+                  disabled={!editorChanged}
+                  onClick={() => {
+                    onStage(editorDraft.map((item) => ({ ...item })));
+                    setEditorOpen(false);
+                  }}
+                >
+                  Apply
+                </ModalAction>
+              </>
+            }
+          >
+            <ListFieldEditor
+              fieldId={fieldId}
+              field={field}
+              value={editorDraft}
+              onStage={setEditorDraft}
+              expanded
+              pageSize={pageSize}
+              templateId={templateId}
+              channel={channel}
+            />
+          </Modal>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div style={styles.list} aria-label={`${fieldId} items`}>
       {items.length === 0 && <p style={styles.empty}>No items.</p>}
@@ -375,129 +476,149 @@ export function ListFieldEditor({
         ]
           .filter(Boolean)
           .join(' ');
+        const pageNumber =
+          pageSize !== undefined && pageSize > 0 && i % pageSize === 0
+            ? Math.floor(i / pageSize) + 1
+            : undefined;
         return (
-          <div
-            key={item.id}
-            className={className}
-            ref={(el) => {
-              if (el === null) rows.current.delete(i);
-              else rows.current.set(i, el);
-            }}
-            onDragStart={(e) => {
-              setDragIndex(i);
-              e.dataTransfer.effectAllowed = 'move';
-              // Firefox ignores a drag with no payload; the index travels in our
-              // own state, so the data is only there to make the drag valid.
-              e.dataTransfer.setData('text/plain', n);
-            }}
-            onDragEnd={endDrag}
-            onDragOver={(e) => {
-              if (dragIndex === null) return;
-              e.preventDefault(); // required, or the drop event never fires
-              e.dataTransfer.dropEffect = 'move';
-              const box = e.currentTarget.getBoundingClientRect();
-              const edge: DropEdge = e.clientY < box.top + box.height / 2 ? 'before' : 'after';
-              setDrop((prev) =>
-                prev !== null && prev.index === i && prev.edge === edge ? prev : { index: i, edge },
-              );
-            }}
-            onDrop={(e) => {
-              e.preventDefault();
-              const box = e.currentTarget.getBoundingClientRect();
-              commitDrop(i, e.clientY < box.top + box.height / 2 ? 'before' : 'after');
-            }}
-          >
-            {/* FIRST IN THE DOM, SECOND ON SCREEN — see the header and
+          <Fragment key={item.id}>
+            {pageNumber !== undefined && (
+              <div
+                className="cg-list-page-boundary"
+                role="separator"
+                aria-label={`Page ${String(pageNumber)}`}
+              >
+                Page {String(pageNumber)}
+              </div>
+            )}
+            <div
+              className={className}
+              ref={(el) => {
+                if (el === null) rows.current.delete(i);
+                else rows.current.set(i, el);
+              }}
+              onDragStart={(e) => {
+                setDragIndex(i);
+                e.dataTransfer.effectAllowed = 'move';
+                // Firefox ignores a drag with no payload; the index travels in our
+                // own state, so the data is only there to make the drag valid.
+                e.dataTransfer.setData('text/plain', n);
+              }}
+              onDragEnd={endDrag}
+              onDragOver={(e) => {
+                if (dragIndex === null) return;
+                e.preventDefault(); // required, or the drop event never fires
+                e.dataTransfer.dropEffect = 'move';
+                const box = e.currentTarget.getBoundingClientRect();
+                const edge: DropEdge = e.clientY < box.top + box.height / 2 ? 'before' : 'after';
+                setDrop((prev) =>
+                  prev !== null && prev.index === i && prev.edge === edge
+                    ? prev
+                    : { index: i, edge },
+                );
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const box = e.currentTarget.getBoundingClientRect();
+                commitDrop(i, e.clientY < box.top + box.height / 2 ? 'before' : 'after');
+              }}
+            >
+              {/* FIRST IN THE DOM, SECOND ON SCREEN — see the header and
                 `.cg-list-item__tools`'s `order: -1`. Tab order reaches an item's
                 text before its controls; the picture puts the cluster first. */}
-            {itemFields !== undefined && itemFields.length > 0 ? (
-              <StructuredRowEditor
-                fieldId={fieldId}
-                row={item}
-                rowNumber={n}
-                fields={itemFields}
-                onChange={(key, next) =>
-                  onStage(
-                    items.map((candidate, index) =>
-                      index === i
-                        ? next === undefined
-                          ? (Object.fromEntries(
-                              Object.entries(candidate).filter(
-                                ([candidateKey]) => candidateKey !== key,
-                              ),
-                            ) as ListItem)
-                          : { ...candidate, [key]: next }
-                        : candidate,
-                    ),
-                  )
-                }
-              />
-            ) : (
-              <AutoGrowTextarea
-                className="cg-list-item__text"
-                value={writeFieldDigits(itemText(item), fieldDigitsOf(field))}
-                aria-label={`${fieldId} item ${n}`}
-                onChange={(e) =>
-                  onStage(
-                    setItemText(items, i, writeFieldText(e.currentTarget, field, e.nativeEvent)),
-                  )
-                }
-              />
-            )}
-            <div className="cg-list-item__tools">
-              {/*
+              {itemFields !== undefined && itemFields.length > 0 ? (
+                <StructuredRowEditor
+                  fieldId={fieldId}
+                  row={item}
+                  rowNumber={n}
+                  fields={itemFields}
+                  templateId={templateId}
+                  channel={channel}
+                  onChange={(key, next) =>
+                    onStage(
+                      items.map((candidate, index) =>
+                        index === i
+                          ? next === undefined
+                            ? (Object.fromEntries(
+                                Object.entries(candidate).filter(
+                                  ([candidateKey]) => candidateKey !== key,
+                                ),
+                              ) as ListItem)
+                            : { ...candidate, [key]: next }
+                          : candidate,
+                      ),
+                    )
+                  }
+                />
+              ) : (
+                <AutoGrowTextarea
+                  className="cg-list-item__text"
+                  value={writeFieldDigits(itemText(item), fieldDigitsOf(field))}
+                  aria-label={`${fieldId} item ${n}`}
+                  onChange={(e) =>
+                    onStage(
+                      setItemText(items, i, writeFieldText(e.currentTarget, field, e.nativeEvent)),
+                    )
+                  }
+                />
+              )}
+              <div className="cg-list-item__tools">
+                {/*
                 The handle ARMS its row for dragging on pointer-down and is otherwise
                 inert. `aria-hidden` + `tabIndex={-1}` are deliberate: it cannot be
                 operated by keyboard, and announcing a control a screen-reader user
                 cannot use would be worse than silence — the ↑/↓ buttons beside it are
                 the labelled, complete, keyboard-reachable path to the same result.
               */}
-              <button
-                type="button"
-                className="cg-list-handle"
-                aria-label={`Reorder ${fieldId} item ${n}`}
-                title="Drag to reorder, or focus this and press ↑ / ↓"
-                onPointerDown={() => {
-                  const el = rows.current.get(i);
-                  if (el !== undefined) el.draggable = true;
-                }}
-                onPointerUp={() => {
-                  const el = rows.current.get(i);
-                  if (el !== undefined) el.draggable = false;
-                }}
-                onKeyDown={(e) => {
-                  // `e.key`, not `e.code`: Arrow keys are layout-STABLE, which is
-                  // the documented exception to the physical-key rule.
-                  if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
-                  const to = e.key === 'ArrowUp' ? i - 1 : i + 1;
-                  if (to < 0 || to >= items.length) return;
-                  // Or the browser scrolls the panel out from under the operator.
-                  e.preventDefault();
-                  onStage(moveItem(items, i, to));
-                }}
-              >
-                <Icon icon={GripVertical} />
-              </button>
-              {/* THE ITEM'S IDENTITY is this number, and it is the whole reason no
+                <button
+                  type="button"
+                  className="cg-list-handle"
+                  disabled={rowStructureLocked}
+                  aria-label={`Reorder ${fieldId} item ${n}`}
+                  title="Drag to reorder, or focus this and press ↑ / ↓"
+                  onPointerDown={() => {
+                    const el = rows.current.get(i);
+                    if (el !== undefined) el.draggable = true;
+                  }}
+                  onPointerUp={() => {
+                    const el = rows.current.get(i);
+                    if (el !== undefined) el.draggable = false;
+                  }}
+                  onKeyDown={(e) => {
+                    // `e.key`, not `e.code`: Arrow keys are layout-STABLE, which is
+                    // the documented exception to the physical-key rule.
+                    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+                    const to = e.key === 'ArrowUp' ? i - 1 : i + 1;
+                    if (to < 0 || to >= items.length) return;
+                    // Or the browser scrolls the panel out from under the operator.
+                    e.preventDefault();
+                    onStage(moveItem(items, i, to));
+                  }}
+                >
+                  <Icon icon={GripVertical} />
+                </button>
+                {/* THE ITEM'S IDENTITY is this number, and it is the whole reason no
                   bracketed key is printed per row: the FIELD is named once in its
                   header, the ITEMS are numbered. `ROTATOR[0]` on every row named
                   the field three times and the item never. */}
-              <span className="cg-list-item__index" aria-hidden="true">
-                {n}
-              </span>
-              {/* NEUTRAL AT REST, RED ON HOVER. The strip of glyphs still has to say
+                <span className="cg-list-item__index" aria-hidden="true">
+                  {n}
+                </span>
+                {/* NEUTRAL AT REST, RED ON HOVER. The strip of glyphs still has to say
                   "this one is different in kind", but it says it under the pointer
                   now rather than by standing at the opposite end of the panel. */}
-              <Button
-                variant="icon"
-                className="cg-list-remove"
-                aria-label={`Remove ${fieldId} item ${n}`}
-                onClick={() => onStage(removeItem(items, i))}
-              >
-                <Icon icon={X} />
-              </Button>
+                <Button
+                  variant="icon"
+                  className="cg-list-remove"
+                  aria-label={`Remove ${fieldId} item ${n}`}
+                  disabled={rowStructureLocked}
+                  onClick={() => onStage(removeItem(items, i))}
+                >
+                  <Icon icon={X} />
+                </Button>
+              </div>
             </div>
-          </div>
+          </Fragment>
         );
       })}
       {/* `cg-field-foot` owns the row's layout AND its controls' height, so
@@ -513,8 +634,12 @@ export function ListFieldEditor({
           variant="accent"
           aria-label={`Add ${fieldId} item`}
           // `RUN-NEXT-VERSION-02` Q4 — a repeater's list stops at its row limit: the page shows no more.
-          disabled={atLimit}
-          {...(atLimit && maxItems !== undefined ? { title: `At most ${String(maxItems)}` } : {})}
+          disabled={atLimit || rowStructureLocked}
+          {...(rowStructureLocked
+            ? { title: 'Row structure is locked by authored columns' }
+            : atLimit && maxItems !== undefined
+              ? { title: `At most ${String(maxItems)}` }
+              : {})}
           onClick={() => {
             const id = `item-${uuid()}`;
             onStage(

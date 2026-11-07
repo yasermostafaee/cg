@@ -47,7 +47,7 @@ const TABS = [
   'Live sources',
   'Shared files',
   'Text file delimiters',
-  'Calendar',
+  'Lunar Hijri correction',
   'Layers',
 ];
 

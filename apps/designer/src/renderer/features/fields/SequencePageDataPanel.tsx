@@ -4,6 +4,7 @@ import {
   aggregateCompositionFields,
   countdownTargetFieldsOf,
   defaultNestedValues,
+  fileSourcePolicyOf,
   sequenceItemInstanceId,
   sequencesOf,
   withListLimits,
@@ -28,6 +29,7 @@ import { Icon } from '../../ui/Icon.js';
 import { useAssets } from '../assets/useAssets.js';
 import { useSharedImages } from '../sharedLibrary/useSharedImages.js';
 import { PreviewFieldForm } from './PreviewFieldForm.js';
+import { isVisibleWindowsSourcePath } from '../inspector/bridgeTextFile.js';
 import { ListItemsEditor, newItemId } from './ListItemsEditor.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
 import {
@@ -42,6 +44,7 @@ import {
   parseSequenceRowsCsv,
 } from './sequence-page-data.js';
 import * as s from './SequencePageDataPanel.css.js';
+import { useImageAssetUrls } from './useImageAssetUrls.js';
 import {
   getSequencePageDataAttachment,
   sequencePageDataAttachmentNeedsUpdate,
@@ -49,6 +52,7 @@ import {
   setSequencePageDataAttachment,
   subscribeSequencePageDataAttachments,
 } from './sequencePageDataAttachmentStore.js';
+import { OperatorColumnLocks } from './OperatorColumnLocks.js';
 
 interface PageRef {
   readonly itemId: string;
@@ -109,11 +113,14 @@ export function SequencePageDataControl({
   }, [scene, sequence.id]);
   const assets = useAssets();
   const sharedImages = useSharedImages();
+  const imageUrls = useImageAssetUrls();
   const columns = useMemo(
-    () => repeaterColumnsByFieldId(scene, imageChoicesForAssets(assets, sharedImages)),
-    [assets, scene, sharedImages],
+    () => repeaterColumnsByFieldId(scene, imageChoicesForAssets(assets, sharedImages, imageUrls)),
+    [assets, imageUrls, scene, sharedImages],
   );
-  return entry === undefined ? null : <SequencePageSection entry={entry} columns={columns} />;
+  return entry === undefined ? null : (
+    <SequencePageSection entry={entry} columns={columns} imageUrls={imageUrls} />
+  );
 }
 
 function setNested(source: FieldValues, path: readonly string[], value: FieldValue): FieldValues {
@@ -223,9 +230,11 @@ function pageDataSchemaSignature(entry: PageSequence, layout: BulkLayout | null)
 function SequencePageSection({
   entry,
   columns,
+  imageUrls,
 }: {
   entry: PageSequence;
   columns: ReadonlyMap<string, readonly ListItemColumn[]>;
+  imageUrls: Readonly<Record<string, string>>;
 }): JSX.Element {
   const { sequence, pages } = entry;
   const aggregate: AggregatedFields = useMemo(
@@ -237,15 +246,21 @@ function SequencePageSection({
   useSyncExternalStore(subscribeSequencePageDataAttachments, sequencePageDataAttachmentsVersion);
   const sceneId = designerStore.get().scene?.id ?? 'scene';
   const attachment = getSequencePageDataAttachment(sceneId, sequence.id);
-  // The connection itself is the authority switch. A second File-only checkbox on the child
-  // Repeater created two independent states for one table and was easy to miss.
-  const fileOnly = attachment !== null || sequence.pageDataFile !== undefined;
   // `pageDataFile` is authored scene state and therefore survives a `.cgproj` round trip. The
   // native source handle is intentionally session-only, but losing that handle must not make an
   // imported project claim the Sequence is disconnected: CG Control still owns and reads this
   // Bridge-relative source. A live attachment merely adds Designer-side Reload capability.
-  const connected = fileOnly;
+  const connected = attachment !== null || sequence.pageDataFile !== undefined;
+  // Connection and operator authority are independent. Old connected projects did not carry an
+  // explicit mode, so they keep the previous file-managed behaviour until the author opts in.
+  const operatorEditingAllowed =
+    connected &&
+    layout !== null &&
+    fileSourcePolicyOf(layout.field)?.inputMode === 'operator-choice';
+  const fileOnly = connected && !operatorEditingAllowed;
   const connectedPath = attachment?.sourcePath ?? sequence.pageDataFile;
+  const connectedName =
+    attachment?.name ?? sequence.pageDataFile?.split(/[\\/]/u).at(-1) ?? sequence.pageDataFile;
   const currentSchemaSignature = pageDataSchemaSignature(entry, layout);
   const attachmentNeedsUpdate =
     attachment !== null &&
@@ -347,8 +362,16 @@ function SequencePageSection({
       format,
       schemaSignature: currentSchemaSignature,
     });
+    if (layout !== null) {
+      designerStore.setCompositionFieldFileOnly(layout.compositionId, layout.field.id, true);
+    }
     setNotice(`File connected: ${savedPath}`);
     setError(null);
+  };
+
+  const setOperatorEditingAllowed = (allowed: boolean): void => {
+    if (layout === null) return;
+    designerStore.setCompositionFieldFileOnly(layout.compositionId, layout.field.id, !allowed);
   };
 
   const saveAndConnectJson = async (): Promise<void> => {
@@ -435,6 +458,7 @@ function SequencePageSection({
               >
                 <Icon icon={attachmentNeedsUpdate ? TriangleAlert : CircleCheck} size={14} />
                 {attachmentNeedsUpdate ? 'Connected · update file' : 'Connected'}
+                {connectedName === undefined ? '' : ` · ${connectedName}`}
               </span>
               {attachment !== null && (
                 <Button variant="secondary" onClick={() => void reload()}>
@@ -449,12 +473,38 @@ function SequencePageSection({
             </span>
           )}
           {fileOnly && <span className={s.connectionStatus}>CG Control · file managed</span>}
+          {connected && operatorEditingAllowed && (
+            <span className={s.connectionStatus}>CG Control · row editing allowed</span>
+          )}
         </div>
-        {connectedPath !== undefined && (
-          <div className={s.path} title={connectedPath}>
-            <span>Share path</span>
-            <code>{connectedPath}</code>
+        {connected && layout !== null && (
+          <label className={s.operatorChoice}>
+            <input
+              type="checkbox"
+              aria-label="Allow row editing in CG Control"
+              checked={operatorEditingAllowed}
+              onChange={(event) => setOperatorEditingAllowed(event.target.checked)}
+            />
+            Allow row editing in CG Control
+          </label>
+        )}
+        {attachment !== null ? (
+          <div className={s.path} title={attachment.sourcePath}>
+            <span>
+              {isVisibleWindowsSourcePath(attachment.sourcePath)
+                ? 'Selected file · full Windows/UNC path'
+                : 'Selected file'}
+            </span>
+            <code>{attachment.sourcePath}</code>
+            <small>CG Control file: {attachment.bridgePath}</small>
           </div>
+        ) : (
+          connectedPath !== undefined && (
+            <div className={s.path} title={connectedPath}>
+              <span>CG Control file</span>
+              <code>{connectedPath}</code>
+            </div>
+          )
         )}
       </section>
       {managerOpen && (
@@ -489,6 +539,7 @@ function SequencePageSection({
                 : attachmentNeedsUpdate
                   ? 'Connected · update file'
                   : 'Connected'}
+              {connectedName === undefined ? '' : ` · ${connectedName}`}
             </span>
             <Button
               onClick={() => void (layout === null ? saveAndConnectJson() : saveAndConnectExcel())}
@@ -508,6 +559,13 @@ function SequencePageSection({
                   onClick={() => {
                     designerStore.setSequencePageDataFile(sequence.id, undefined);
                     setSequencePageDataAttachment(sceneId, sequence.id, null);
+                    if (layout !== null) {
+                      designerStore.setCompositionFieldFileOnly(
+                        layout.compositionId,
+                        layout.field.id,
+                        false,
+                      );
+                    }
                   }}
                 >
                   Detach file
@@ -515,13 +573,39 @@ function SequencePageSection({
               </>
             )}
           </div>
-          {connectedPath !== undefined && (
-            <div className={s.path} title={connectedPath}>
-              <span>Share path</span>
-              <code>{connectedPath}</code>
+          {attachment !== null ? (
+            <div className={s.path} title={attachment.sourcePath}>
+              <span>
+                {isVisibleWindowsSourcePath(attachment.sourcePath)
+                  ? 'Selected file · full Windows/UNC path'
+                  : 'Selected file'}
+              </span>
+              <code>{attachment.sourcePath}</code>
+              <small>CG Control file: {attachment.bridgePath}</small>
             </div>
+          ) : (
+            connectedPath !== undefined && (
+              <div className={s.path} title={connectedPath}>
+                <span>CG Control file</span>
+                <code>{connectedPath}</code>
+              </div>
+            )
           )}
           {fileOnly && <span className={s.connectionStatus}>CG Control · file managed</span>}
+          {connected && operatorEditingAllowed && (
+            <span className={s.connectionStatus}>CG Control · row editing allowed</span>
+          )}
+          {connected && layout !== null && (
+            <label className={s.operatorChoice}>
+              <input
+                type="checkbox"
+                aria-label="Allow row editing in CG Control"
+                checked={operatorEditingAllowed}
+                onChange={(event) => setOperatorEditingAllowed(event.target.checked)}
+              />
+              Allow row editing in CG Control
+            </label>
+          )}
           {attachmentNeedsUpdate && (
             <p className={s.warning} role="status">
               Template fields changed after this file was generated. Reload still validates its
@@ -533,6 +617,12 @@ function SequencePageSection({
               ? "The connected JSON file is generated from this Sequence's exact fields and nested groups."
               : `The connected Excel file is generated from this template. One row is one city/item; page breaks are automatic every ${String(layout.maxItems)} rows.`}
           </p>
+          {layout !== null && (
+            <OperatorColumnLocks
+              compositionId={layout.compositionId}
+              fields={layout.field.itemFields ?? []}
+            />
+          )}
           {notice !== null && <p className={s.notice}>{notice}</p>}
           {error !== null && <p className={s.error}>{error}</p>}
           {layout === null ? (
@@ -541,6 +631,7 @@ function SequencePageSection({
               values={values as NestedFieldValues}
               onChange={change}
               columnsByFieldId={columns}
+              imageUrls={imageUrls}
               title={`Page data · ${sequence.name}`}
             />
           ) : (
@@ -549,6 +640,7 @@ function SequencePageSection({
               onChange={setBulkDraft}
               label={`${sequence.name} row`}
               columns={layout.columns}
+              pageSize={layout.maxItems}
               comfortable
             />
           )}

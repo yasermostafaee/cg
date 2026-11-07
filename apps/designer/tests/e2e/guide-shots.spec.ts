@@ -22,7 +22,7 @@ test('B3 — CG Designer: a template open, Export (.vcg) in its action bar', asy
   const page = app.page;
   await page.setViewportSize({ width: 1280, height: 800 });
 
-  await page.getByRole('button', { name: /زیرنویس معرفی/ }).click();
+  await page.getByRole('button', { name: /عنوان معرفی/ }).click();
   await app.expectStudio();
   const bar = app.compositionActionBar;
   // Its accessible name is `Export .vcg`; what it SHOWS is `Export (.vcg)` — the guide quotes that.

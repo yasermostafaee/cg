@@ -89,9 +89,11 @@ test.describe('Ticker / crawler (D-028)', () => {
 
     // Switch the separator to Image, then pick the shared-library logo.
     await app.inspector.getByRole('combobox', { name: 'separator' }).selectOption('image');
-    await app.inspector
-      .getByRole('combobox', { name: 'image' })
-      .selectOption({ label: 'bug (shared)' });
+    await app.inspector.getByRole('button', { name: 'image' }).click();
+    await app.page
+      .getByRole('dialog', { name: 'Choose picture for image' })
+      .getByRole('button', { name: /bug \(shared\)/ })
+      .click();
 
     // The size box appears once an image separator is committed.
     await expect(app.inspector.getByLabel('width', { exact: true })).toBeVisible();

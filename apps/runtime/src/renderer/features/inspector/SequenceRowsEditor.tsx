@@ -1,12 +1,22 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
-import { CircleCheck, TriangleAlert, Unplug } from 'lucide-react';
+import { Fragment, useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import {
+  CircleCheck,
+  Eye,
+  FilePlus2,
+  KeyRound,
+  RefreshCw,
+  TriangleAlert,
+  Unlink,
+  Unplug,
+} from 'lucide-react';
 import {
   fileSourceContentToFieldValue,
   bridgeTextSourcePath,
   fieldUsesFileOnly,
-  numberFieldAllowedValues,
+  fileSourcePolicyOf,
+  imageFieldAllowsUpload,
   numberFieldValueError,
-  numberFieldValueLabel,
+  SEQUENCE_ROWS_FIELD_NAMESPACE,
   type CompositionFieldGroup,
   type DynamicField,
   type ListItem,
@@ -25,8 +35,15 @@ import { Modal, ModalAction } from '../../ui/Modal.js';
 import { Tag } from '../../ui/Tag.js';
 import { reportCommandError } from '../status/commandFeedback.js';
 import { ListFieldEditor } from './ListFieldEditor.js';
-import { toListItems } from './listField.js';
-import { effectiveValue, stageFieldBatch, valueAt, type FieldPath } from './draftStore.js';
+import { preserveLockedListItemFields, toListItems, withStableListItemIds } from './listField.js';
+import {
+  effectiveValue,
+  isFieldDirty,
+  stageFieldBatch,
+  unstageField,
+  valueAt,
+  type FieldPath,
+} from './draftStore.js';
 import {
   attachFileSource,
   claimAuthoredFileAutoLoad,
@@ -46,6 +63,8 @@ import {
   type TextFileSource,
 } from './textFileSource.js';
 import { saveStructuredWorkbook, structuredWorkbookFilename } from './structuredWorkbook.js';
+import { StructuredCellValue } from './StructuredRowsDialog.js';
+import { useAuthoredPictureThumbnails } from '../book/authoredPictures.js';
 
 type ListField = Extract<DynamicField, { type: 'list' }>;
 
@@ -130,25 +149,46 @@ export function sequenceRowsPageSets(
 }
 
 function sourcePath(set: SequenceRowsPageSet): FieldPath {
-  return ['$sequence-rows', set.sequenceId];
+  return [SEQUENCE_ROWS_FIELD_NAMESPACE, set.sequenceId];
 }
 
-function stageRows(itemId: string, set: SequenceRowsPageSet, rows: readonly ListItem[]): void {
-  if (rows.length > set.capacity) {
-    throw new Error(
-      `This template has room for ${String(set.capacity)} rows. Add more pages in Designer, then save and connect a new workbook.`,
-    );
-  }
-  stageFieldBatch(
-    itemId,
-    set.pages.map((page, index) => ({
-      path: [page.name, set.field.id],
-      value: rows.slice(index * set.maxItems, (index + 1) * set.maxItems),
-    })),
-  );
+function sourceName(path: string): string {
+  return path.split(/[\\/]/u).at(-1) ?? path;
+}
+
+function stageRows(
+  item: StackItemState,
+  set: SequenceRowsPageSet,
+  rows: readonly ListItem[],
+): void {
+  const dynamicPath = sourcePath(set);
+  const appliedDynamic = valueAt(item.fields, dynamicPath);
+  const currentDynamic = effectiveValue(item.itemId, dynamicPath, appliedDynamic);
+  const rowsChanged = JSON.stringify(rows) !== JSON.stringify(rowsFromPages(item, set));
+  const pageEntries = set.pages.map((page, index) => ({
+    path: [page.name, set.field.id],
+    value: rows.slice(index * set.maxItems, (index + 1) * set.maxItems),
+  }));
+  /*
+   * Keep writing the authored page namespaces so an older packaged runtime still
+   * receives every row it has room for. Add the reserved flat list whenever a
+   * real edit changes the authored rows (including SHRINKING below the authored
+   * shell), when data outgrows that shell, or when the flat list is already the
+   * authority. An unchanged first file read stays clean; a later 32 → 5 reload
+   * becomes exactly one generated page instead of retaining four stale pages.
+   */
+  stageFieldBatch(item.itemId, [
+    ...pageEntries,
+    ...(rowsChanged || rows.length > set.capacity || Array.isArray(currentDynamic)
+      ? [{ path: dynamicPath, value: [...rows] }]
+      : []),
+  ]);
 }
 
 function rowsFromPages(item: StackItemState, set: SequenceRowsPageSet): ListItem[] {
+  const dynamicPath = sourcePath(set);
+  const dynamic = effectiveValue(item.itemId, dynamicPath, valueAt(item.fields, dynamicPath));
+  if (Array.isArray(dynamic)) return toListItems(dynamic);
   return set.pages.flatMap((page) => {
     const path = [page.name, set.field.id];
     const applied = valueAt(item.fields, path);
@@ -158,32 +198,17 @@ function rowsFromPages(item: StackItemState, set: SequenceRowsPageSet): ListItem
   });
 }
 
-/**
- * A structured file does not carry the Repeater's editor-only row identities, so parsing CSV/XLSX
- * assigns deterministic `file-N` ids.  Those ids are not operator data: replacing an already
- * applied row's id during the authored source's first automatic read made an otherwise identical
- * workbook look like an unapplied edit and lit the Inspector's `draft` chip before the operator
- * had touched anything.
- *
- * Keep the current row identity by position wherever a row already exists. New file rows retain
- * their parsed id, with a collision-safe suffix for the unusual case where an authored id already
- * uses that spelling. Visible cell changes still differ structurally and therefore still stage.
- */
-function withStableRowIds(current: readonly ListItem[], loaded: readonly ListItem[]): ListItem[] {
-  const used = new Set<string>();
-  return loaded.map((row, index) => {
-    const existingId = current[index]?.id;
-    let id = existingId !== undefined && !used.has(existingId) ? existingId : row.id;
-    if (used.has(id)) {
-      const stem = row.id;
-      let suffix = index + 1;
-      do {
-        id = `${stem}-${String(suffix)}`;
-        suffix += 1;
-      } while (used.has(id));
-    }
-    used.add(id);
-    return id === row.id ? row : { ...row, id };
+/** Whether this combined, multi-page editor owns any unapplied row edit. */
+function sequenceRowsDirty(item: StackItemState, set: SequenceRowsPageSet): boolean {
+  const dynamicPath = sourcePath(set);
+  if (isFieldDirty(item.itemId, dynamicPath, valueAt(item.fields, dynamicPath))) return true;
+
+  return set.pages.some((page) => {
+    const path = [page.name, set.field.id];
+    const applied = valueAt(item.fields, path);
+    const authored = page.defaultValues?.[set.field.id];
+    const fallback = Array.isArray(authored) ? authored : set.field.default;
+    return isFieldDirty(item.itemId, path, applied ?? fallback);
   });
 }
 
@@ -194,7 +219,13 @@ const styles = {
     padding: 'var(--r-space-3)',
     marginBottom: 'var(--r-space-3)',
   },
-  heading: { margin: '0 0 var(--r-space-1)', fontSize: 'var(--r-text-md)' },
+  heading: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--r-space-1)',
+    margin: '0 0 var(--r-space-1)',
+    fontSize: 'var(--r-text-md)',
+  },
   hint: {
     margin: '0 0 var(--r-space-3)',
     color: colors.textMuted,
@@ -202,6 +233,7 @@ const styles = {
     lineHeight: 1.4,
   },
   source: { display: 'flex', gap: 'var(--r-space-2)', flexWrap: 'wrap' as const },
+  wrap: { display: 'flex', flexDirection: 'column' as const, gap: 'var(--r-space-2)' },
   sourcePath: {
     display: 'block',
     margin: 'var(--r-space-2) 0 0',
@@ -265,6 +297,17 @@ const styles = {
     color: cssVars['--r-caution-text'],
     boxShadow: `inset 3px 0 0 ${cssVars['--r-caution-text']}`,
   },
+  previewPageBoundary: {
+    padding: 'var(--r-space-2) var(--r-space-3)',
+    color: colors.textMuted,
+    background: colors.panelMuted,
+    borderTop: `1px solid ${cssVars['--r-border-strong']}`,
+    borderBottom: `1px solid ${colors.border}`,
+    fontSize: 'var(--r-text-xs)',
+    fontWeight: 700,
+    letterSpacing: '0.04em',
+    textAlign: 'start' as const,
+  },
   previewError: {
     display: 'block',
     marginTop: 'var(--r-space-1)',
@@ -297,6 +340,7 @@ function cellError(field: ListItemField, value: unknown): string | undefined {
     case 'image': {
       const assetId = imageAssetId(value);
       if (assetId === undefined) return 'Must be a picture.';
+      if (imageFieldAllowsUpload(field)) return undefined;
       return field.assetOptions !== undefined &&
         !field.assetOptions.some((option) => option.assetId === assetId)
         ? 'This picture is not packaged with the template.'
@@ -312,43 +356,26 @@ function cellError(field: ListItemField, value: unknown): string | undefined {
   }
 }
 
-function cellText(field: ListItemField, value: unknown): string {
-  if (field.type === 'number' && typeof value === 'number') {
-    const allowed = numberFieldAllowedValues(field);
-    if (allowed?.includes(value) === true) {
-      const label = numberFieldValueLabel(field, value);
-      return label === String(value) ? label : `${label} (${String(value)})`;
-    }
-  }
-  if (field.type === 'select' && typeof value === 'string') {
-    const option = field.options.find((candidate) => candidate.value === value);
-    if (option !== undefined) {
-      return option.label === value ? value : `${option.label} (${value})`;
-    }
-  }
-  if (field.type === 'boolean' && typeof value === 'boolean') return value ? 'Yes' : 'No';
-  if (field.type === 'image') {
-    const assetId = imageAssetId(value);
-    const option = field.assetOptions?.find((candidate) => candidate.assetId === assetId);
-    return option?.label ?? assetId ?? '—';
-  }
-  if (value === undefined || value === null || value === '') return '—';
-  return typeof value === 'object' ? JSON.stringify(value) : String(value);
-}
-
 function CurrentSequenceRowsDialog({
   open,
   onClose,
   rows,
   fields,
   label,
+  pageSize,
+  templateId,
+  channel,
 }: {
   open: boolean;
   onClose: () => void;
   rows: readonly ListItem[];
   fields: readonly ListItemField[];
   label: string;
+  pageSize: number;
+  templateId?: string | undefined;
+  channel?: number | undefined;
 }): JSX.Element | null {
+  const pictureUrls = useAuthoredPictureThumbnails(templateId, channel);
   if (!open) return null;
   const invalidCount = rows.reduce(
     (total, row) =>
@@ -401,39 +428,56 @@ function CurrentSequenceRowsDialog({
           </thead>
           <tbody>
             {rows.map((row, rowIndex) => (
-              <tr key={row.id}>
-                <th
-                  scope="row"
-                  style={{
-                    ...styles.previewCell,
-                    ...styles.previewRowNumber,
-                    textAlign: 'start',
-                  }}
-                >
-                  {String(rowIndex + 1)}
-                </th>
-                {fields.map((field) => {
-                  const error = cellError(field, row[field.id]);
-                  return (
-                    <td
-                      key={field.id}
-                      style={{
-                        ...styles.previewCell,
-                        ...(error === undefined ? {} : styles.previewInvalid),
-                      }}
-                      title={error}
-                      aria-label={
-                        error === undefined
-                          ? undefined
-                          : `Row ${String(rowIndex + 1)}, ${field.label || field.id}: ${error}`
-                      }
+              <Fragment key={row.id}>
+                {rowIndex % pageSize === 0 && (
+                  <tr>
+                    <th
+                      colSpan={fields.length + 1}
+                      scope="rowgroup"
+                      style={styles.previewPageBoundary}
                     >
-                      {cellText(field, row[field.id])}
-                      {error !== undefined && <span style={styles.previewError}>{error}</span>}
-                    </td>
-                  );
-                })}
-              </tr>
+                      Page {String(Math.floor(rowIndex / pageSize) + 1)}
+                    </th>
+                  </tr>
+                )}
+                <tr>
+                  <th
+                    scope="row"
+                    style={{
+                      ...styles.previewCell,
+                      ...styles.previewRowNumber,
+                      textAlign: 'start',
+                    }}
+                  >
+                    {String(rowIndex + 1)}
+                  </th>
+                  {fields.map((field) => {
+                    const error = cellError(field, row[field.id]);
+                    return (
+                      <td
+                        key={field.id}
+                        style={{
+                          ...styles.previewCell,
+                          ...(error === undefined ? {} : styles.previewInvalid),
+                        }}
+                        title={error}
+                        aria-label={
+                          error === undefined
+                            ? undefined
+                            : `Row ${String(rowIndex + 1)}, ${field.label || field.id}: ${error}`
+                        }
+                      >
+                        <StructuredCellValue
+                          field={field}
+                          value={row[field.id]}
+                          pictureUrls={pictureUrls}
+                        />
+                        {error !== undefined && <span style={styles.previewError}>{error}</span>}
+                      </td>
+                    );
+                  })}
+                </tr>
+              </Fragment>
             ))}
           </tbody>
         </table>
@@ -448,14 +492,16 @@ function SequenceRowsFileControl({
   rows,
   onRows,
   fileOnly,
+  onViewCurrentData,
 }: {
   item: StackItemState;
   set: SequenceRowsPageSet;
   rows: readonly ListItem[];
   onRows: (rows: ListItem[]) => void;
   fileOnly: boolean;
+  onViewCurrentData?: (() => void) | undefined;
 }): JSX.Element {
-  useSyncExternalStore(subscribeFromFile, fromFileVersion);
+  const sourceVersion = useSyncExternalStore(subscribeFromFile, fromFileVersion);
   const path = sourcePath(set);
   const state = fromFileState(item.itemId, path);
   const supported = fileSourceSupported();
@@ -466,6 +512,9 @@ function SequenceRowsFileControl({
   // retained only as a backwards-compatible fallback for packages authored before pageDataFile
   // crossed the TemplateInfo boundary.
   const authoredPath = set.pageDataFile ?? bridgeTextSourcePath(set.field);
+  const sourceLocked = authoredPath !== undefined;
+  const sharedFilePath = authoredPath ?? state?.source.bridgePath ?? state?.source.name;
+  const resolvedSourcePath = state?.source.displayPath ?? sharedFilePath;
 
   const load = useCallback(
     async (source: TextFileSource): Promise<void> => {
@@ -490,12 +539,13 @@ function SequenceRowsFileControl({
           itemFields: set.field.itemFields ?? [],
         });
         const loadedRows = toListItems(value);
-        if (loadedRows.length > set.capacity) {
-          throw new Error(
-            `The selected file has ${String(loadedRows.length)} rows, but this template has room for ${String(set.capacity)}. Add pages in Designer first.`,
-          );
-        }
-        onRows(withStableRowIds(rows, loadedRows));
+        onRows(
+          preserveLockedListItemFields(
+            rows,
+            withStableListItemIds(rows, loadedRows),
+            set.field.itemFields,
+          ),
+        );
         setFromFileError(item.itemId, path, null);
       } catch (cause) {
         const reason = cause instanceof Error ? cause.message : String(cause);
@@ -504,16 +554,25 @@ function SequenceRowsFileControl({
         reportCommandError(message);
       }
     },
-    [item.itemId, onRows, path, rows, set.capacity, set.field.itemFields],
+    [item.itemId, onRows, path, rows, set.field.itemFields],
   );
 
   useEffect(() => {
-    reconcileAuthoredFileSource(item.itemId, path, authoredPath, fileOnly, {
-      split: false,
-      delimiter: '',
-      format: 'csv',
-    });
-  }, [authoredPath, fileOnly, item.itemId, path]);
+    const removedAutoLoadedDraft = reconcileAuthoredFileSource(
+      item.itemId,
+      path,
+      authoredPath,
+      sourceLocked,
+      {
+        split: false,
+        delimiter: '',
+        format: 'csv',
+      },
+    );
+    if (removedAutoLoadedDraft) {
+      for (const page of set.pages) unstageField(item.itemId, [page.name, set.field.id]);
+    }
+  }, [authoredPath, item.itemId, path, set.field.id, set.pages, sourceLocked, sourceVersion]);
 
   useEffect(() => {
     if (authoredPath === undefined) return;
@@ -535,7 +594,11 @@ function SequenceRowsFileControl({
   const saveExcel = async (): Promise<void> => {
     try {
       const fields = set.field.itemFields ?? [];
-      const bytes = await buildStructuredRowsXlsx({ fields, rows, editableRows: set.capacity });
+      const bytes = await buildStructuredRowsXlsx({
+        fields,
+        rows,
+        editableRows: Math.max(set.capacity, rows.length),
+      });
       const source = await saveStructuredWorkbook(
         bytes,
         structuredWorkbookFilename(set.sequenceName, 'sequence'),
@@ -554,22 +617,47 @@ function SequenceRowsFileControl({
 
   if (state === undefined) {
     return (
-      <div style={styles.source}>
-        <Tag className="cg-sequence-file-status">
-          <Icon icon={Unplug} size={14} style={{ color: colors.textMuted }} />
-          Not connected
-        </Tag>
-        {!fileOnly && (
-          <Button
-            variant="neutral"
-            disabled={!supported}
-            title={supported ? undefined : FILE_SOURCE_UNSUPPORTED_MESSAGE}
-            onClick={() => void saveExcel()}
-          >
-            Save and connect Excel…
-          </Button>
+      <div className={fileOnly ? 'cg-file-managed-connection' : undefined} style={styles.wrap}>
+        <div style={styles.source}>
+          {fileOnly && <Tag>File managed</Tag>}
+          <Tag className="cg-sequence-file-status">
+            <Icon
+              icon={fileOnly && authoredPath !== undefined ? CircleCheck : Unplug}
+              size={14}
+              style={{
+                color: fileOnly && authoredPath !== undefined ? colors.checkPass : colors.textMuted,
+              }}
+            />
+            {fileOnly && authoredPath !== undefined
+              ? `Connected · ${sourceName(authoredPath)}`
+              : 'Not connected'}
+          </Tag>
+          {fileOnly && onViewCurrentData !== undefined && (
+            <Button variant="secondary" onClick={onViewCurrentData}>
+              <Icon icon={Eye} />
+              View current data…
+            </Button>
+          )}
+          {!fileOnly && (
+            <Button
+              variant="neutral"
+              disabled={!supported}
+              title={supported ? undefined : FILE_SOURCE_UNSUPPORTED_MESSAGE}
+              onClick={() => void saveExcel()}
+            >
+              <Icon icon={FilePlus2} />
+              Save and connect Excel…
+            </Button>
+          )}
+        </div>
+        {fileOnly && authoredPath !== undefined && (
+          <code style={styles.sourcePath} title={authoredPath}>
+            Share file · {authoredPath}
+          </code>
         )}
-        {fileOnly && <span style={styles.hint}>Connect this workbook in Designer.</span>}
+        {fileOnly && authoredPath === undefined && (
+          <span style={styles.hint}>Connect this workbook in Designer.</span>
+        )}
       </div>
     );
   }
@@ -582,9 +670,10 @@ function SequenceRowsFileControl({
   };
 
   return (
-    <div>
+    <div className="cg-file-managed-connection">
       <div style={styles.source}>
-        <Tag title={state.source.displayPath ?? state.source.name}>
+        <Tag>{fileOnly ? 'File managed' : 'File connected'}</Tag>
+        <Tag title={resolvedSourcePath}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--r-space-1)' }}>
             <Icon
               icon={schemaNeedsUpdate ? TriangleAlert : CircleCheck}
@@ -598,31 +687,46 @@ function SequenceRowsFileControl({
         </Tag>
         {state.permission === 'granted' ? (
           <Button variant="secondary" onClick={() => void load(state.source)}>
-            Reload file
+            <Icon icon={RefreshCw} />
+            Reload
           </Button>
         ) : (
           <Button variant="secondary" onClick={() => void grant()}>
+            <Icon icon={KeyRound} />
             Grant access
           </Button>
         )}
-        {!fileOnly && (
+        {onViewCurrentData !== undefined && (
+          <Button variant="secondary" onClick={onViewCurrentData}>
+            <Icon icon={Eye} />
+            View current data…
+          </Button>
+        )}
+        {!fileOnly && !sourceLocked && (
           <>
             <Button
               variant="neutral"
               onClick={() => detachFileSource(item.itemId, path)}
               aria-label={`Detach ${state.source.name}`}
             >
+              <Icon icon={Unlink} />
               Detach
             </Button>
             <Button variant="secondary" onClick={() => void saveExcel()}>
+              <Icon icon={FilePlus2} />
               Save and connect another Excel…
             </Button>
           </>
         )}
       </div>
-      <code style={styles.sourcePath} title={state.source.displayPath ?? state.source.name}>
-        Share path · {state.source.displayPath ?? state.source.name}
+      <code style={styles.sourcePath} title={sharedFilePath}>
+        Share file · {sharedFilePath}
       </code>
+      {resolvedSourcePath !== sharedFilePath && (
+        <code style={styles.sourcePath} title={resolvedSourcePath}>
+          Read from · {resolvedSourcePath}
+        </code>
+      )}
       {state.permission !== 'granted' && (
         <p style={styles.error}>{FILE_SOURCE_NEEDS_PERMISSION_MESSAGE}</p>
       )}
@@ -648,19 +752,30 @@ export function SequenceRowsEditor({
   item: StackItemState;
   set: SequenceRowsPageSet;
 }): JSX.Element {
+  useSyncExternalStore(subscribeFromFile, fromFileVersion);
   const rows = rowsFromPages(item, set);
   // Connecting a Sequence workbook makes that workbook the editing authority. No second checkbox
   // on the child Repeater is required, and CG Control never renders a competing manual table.
-  const fileOnly = set.pageDataFile !== undefined || fieldUsesFileOnly(set.field);
+  // A connected Sequence workbook and row-edit authority are separate choices. Packages authored
+  // before that choice existed had no explicit mode and keep their safe legacy (file-managed)
+  // behaviour; `operator-choice` is the author's explicit opt-in to CG Control row editing.
+  const operatorEditingAllowed =
+    set.pageDataFile !== undefined &&
+    fileSourcePolicyOf(set.field)?.inputMode === 'operator-choice';
+  const fileOnly =
+    fieldUsesFileOnly(set.field) || (set.pageDataFile !== undefined && !operatorEditingAllowed);
   const [dataOpen, setDataOpen] = useState(false);
+  const connected = fromFileState(item.itemId, sourcePath(set)) !== undefined;
+  const dirty = sequenceRowsDirty(item, set);
+  const pageCount = Math.ceil(rows.length / set.maxItems);
   const combinedField: ListField = {
     ...set.field,
     label: `${set.field.label} · all pages`,
-    maxItems: set.capacity,
   };
+  delete combinedField.maxItems;
   const onRows = (next: ListItem[]): void => {
     try {
-      stageRows(item.itemId, set, next);
+      stageRows(item, set, next);
     } catch (cause) {
       reportCommandError(cause instanceof Error ? cause.message : String(cause));
     }
@@ -668,44 +783,73 @@ export function SequenceRowsEditor({
 
   return (
     <section style={styles.section} aria-label={`${set.sequenceName} all rows`}>
-      <h3 style={styles.heading}>{set.field.label} · all pages</h3>
+      <h3 style={styles.heading}>
+        <span>{set.field.label} · all pages</span>
+        {dirty && (
+          <span className="cg-dirty-dot" aria-label={`${set.field.id} has unapplied edits`}>
+            ●
+          </span>
+        )}
+      </h3>
       <p style={styles.hint}>
-        {String(rows.length)} / {String(set.capacity)} · {String(set.pages.length)} pages ·{' '}
-        {String(set.maxItems)} per page
+        {String(rows.length)} {rows.length === 1 ? 'row' : 'rows'} · {String(pageCount)}{' '}
+        {pageCount === 1 ? 'page' : 'pages'} · {String(set.maxItems)} per page
       </p>
       {fileOnly ? (
         <>
-          <div style={styles.source}>
-            <Tag>File managed</Tag>
-            <Button variant="secondary" onClick={() => setDataOpen(true)}>
-              View current data
-            </Button>
-          </div>
-          <SequenceRowsFileControl item={item} set={set} rows={rows} onRows={onRows} fileOnly />
+          <SequenceRowsFileControl
+            item={item}
+            set={set}
+            rows={rows}
+            onRows={onRows}
+            fileOnly={fileOnly}
+            onViewCurrentData={() => setDataOpen(true)}
+          />
           <CurrentSequenceRowsDialog
             open={dataOpen}
             onClose={() => setDataOpen(false)}
             rows={rows}
             fields={set.field.itemFields ?? []}
             label={set.field.label}
+            pageSize={set.maxItems}
+            templateId={item.templateId}
+            channel={item.slot?.channel}
           />
         </>
       ) : (
-        <ListFieldEditor
-          fieldId={set.field.label || set.field.id}
-          field={combinedField}
-          value={rows}
-          onStage={onRows}
-          footer={
-            <SequenceRowsFileControl
-              item={item}
-              set={set}
+        <>
+          <ListFieldEditor
+            fieldId={set.field.label || set.field.id}
+            field={combinedField}
+            value={rows}
+            onStage={onRows}
+            pageSize={set.maxItems}
+            templateId={item.templateId}
+            channel={item.slot?.channel}
+            footer={
+              <SequenceRowsFileControl
+                item={item}
+                set={set}
+                rows={rows}
+                onRows={onRows}
+                fileOnly={false}
+                {...(connected ? { onViewCurrentData: () => setDataOpen(true) } : {})}
+              />
+            }
+          />
+          {connected && (
+            <CurrentSequenceRowsDialog
+              open={dataOpen}
+              onClose={() => setDataOpen(false)}
               rows={rows}
-              onRows={onRows}
-              fileOnly={false}
+              fields={set.field.itemFields ?? []}
+              label={set.field.label}
+              pageSize={set.maxItems}
+              templateId={item.templateId}
+              channel={item.slot?.channel}
             />
-          }
-        />
+          )}
+        </>
       )}
     </section>
   );

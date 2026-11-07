@@ -121,6 +121,8 @@ describe('pickFiles cancel-detection (B-020)', () => {
     expect(inputs[0]!.accept).toContain('.mov');
     expect(inputs[0]!.accept).not.toContain('video/*'); // explicit hint matches the real gate (D-190)
     expect(inputs[1]!.multiple).toBe(true); // image — batch
+    expect(inputs[1]!.accept).toContain('.svg');
+    expect(inputs[1]!.accept).toContain('image/svg+xml');
     expect(inputs[2]!.multiple).toBe(true); // font — batch
     expect(inputs[3]!.multiple).toBe(true); // default — batch
     restore();

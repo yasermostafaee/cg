@@ -15,22 +15,27 @@ import {
 
 /** The audited core and production examples, with both original weather styles retained. */
 const EXPECTED_IDS = [
-  'irib-news',
-  'ticker',
   'logo-bug',
   'title',
+  'ticker',
+  'irib-news',
   'sequence',
-  'iran-premier-league',
+  'image-folder-sequence',
+  'multibox',
+  'countdown-steps',
   'iran-weather-pages',
   'iran-weather-forecast',
   'iran-weather-cards',
-  'image-folder-sequence',
-  'countdown-steps',
-  'multibox',
+  'iran-premier-league',
 ];
 
 describe('starter templates', () => {
-  it('D-179: weather and league header reveals settle at their authored positions', () => {
+  it('D-179: weather and league headers keep their reviewed entrance/hold choreography', () => {
+    const expectedHeaders = new Map([
+      [iranPremierLeagueScene.id, ['az-title-glow', 'az-title']],
+      [iranWeatherPagesScene.id, ['weather-pages-ribbon', 'weather-pages-title']],
+      [iranWeatherForecastScene.id, ['forecast-title-ribbon', 'forecast-title']],
+    ]);
     for (const scene of [iranPremierLeagueScene, iranWeatherPagesScene, iranWeatherForecastScene]) {
       const entry = scene.compositions?.find(
         (composition) => composition.id === scene.entryCompositionId,
@@ -39,18 +44,25 @@ describe('starter templates', () => {
         entry?.layers
           .flatMap((layer) => layer.children)
           .filter((element) => element.animation?.tracks['position.y'] !== undefined) ?? [];
-      expect(animated, scene.id).toHaveLength(scene === iranPremierLeagueScene ? 2 : 4);
-      for (const element of animated) {
-        const frames = element.animation?.tracks['position.y']?.keyframes;
-        expect(frames?.[1]?.value, `${scene.id}.${element.id} entrance rest`).toBe(
-          element.transform.position.y,
-        );
-        expect(
-          frames?.find((frame) => frame.frame === 116)?.value,
-          `${scene.id}.${element.id} hold rest`,
-        ).toBe(element.transform.position.y);
-      }
+      expect(
+        animated.map((element) => element.id),
+        scene.id,
+      ).toEqual(expectedHeaders.get(scene.id));
     }
+    const pagesEntry = iranWeatherPagesScene.compositions?.find(
+      (composition) => composition.id === iranWeatherPagesScene.entryCompositionId,
+    );
+    const pageHeaders = pagesEntry?.layers.flatMap((layer) => layer.children) ?? [];
+    expect(
+      pageHeaders
+        .find((element) => element.id === 'weather-pages-ribbon')
+        ?.animation?.tracks['position.y']?.keyframes.map(({ frame, value }) => ({ frame, value })),
+    ).toEqual([
+      { frame: 0, value: 114 },
+      { frame: 16, value: 94 },
+      { frame: 116, value: 94 },
+      { frame: 138, value: 110 },
+    ]);
   });
 
   it('every starter has a Zod-valid Scene', () => {
@@ -299,13 +311,27 @@ describe('starter templates', () => {
     const weatherTemperature = elements(iranWeatherPagesScene).find(
       (element) => element.id === 'weather-temp',
     );
+    const weatherTemperaturePill = elements(iranWeatherPagesScene).find(
+      (element) => element.id === 'weather-temp-pill',
+    );
     expect(weatherTemperature?.valueRules?.input).toEqual({ kind: 'field', fieldId: 'temp' });
+    expect(weatherTemperaturePill?.valueRules?.input).toEqual({
+      kind: 'field',
+      fieldId: 'temp',
+    });
     expect(weatherTemperature?.valueRules?.rules.map((rule) => rule.effect.property)).toEqual([
-      'fill',
       'textColor',
-      'fill',
       'textColor',
     ]);
+    expect(weatherTemperaturePill?.valueRules?.rules.map((rule) => rule.effect.property)).toEqual([
+      'fill',
+      'fill',
+    ]);
+    expect(
+      weatherTemperaturePill?.valueRules?.rules.every(
+        (rule) => rule.effect.elementId === 'weather-temp-pill',
+      ),
+    ).toBe(true);
   });
 
   it('D-179: folder sequence ships single full-HD wide slides and manual page control', () => {
@@ -320,6 +346,12 @@ describe('starter templates', () => {
       expect(pictureSequence.advance).toBe('manual');
       expect(pictureSequence.transform.size).toEqual({ w: 1920, h: 1080 });
       expect(pictureSequence.name).toBe('تصاویر عریض قرآن با ترجمه');
+      expect(pictureSequence.animation?.tracks.opacity?.keyframes).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ frame: 100, value: 1 }),
+          expect.objectContaining({ frame: 160, value: 0 }),
+        ]),
+      );
     }
     const images = getStarter('image-folder-sequence')?.assets?.filter(
       (asset) => asset.kind === 'image',
@@ -525,7 +557,8 @@ describe('starter templates', () => {
     expect(low.align).toBe('end');
     expect(high.backgroundColor).toBeUndefined();
     expect(low.backgroundColor).toBeUndefined();
-    expect(low.color).toBe('#7DD3FC');
+    expect(high.color).toBe('#F43358');
+    expect(low.color).toBe('#3C8DEA');
     for (const [kind, label] of [
       ['high', 'بیشینه'],
       ['low', 'کمینه'],
@@ -567,6 +600,15 @@ describe('starter templates', () => {
     expect(rank).toMatchObject({ type: 'text', rowNumber: true, digits: 'persian' });
     expect(row?.fields?.some((field) => field.id === 'rank')).toBe(false);
     expect(row?.bindings?.some((binding) => binding.fieldId === 'rank')).toBe(false);
+    expect(row?.fields?.find((field) => field.id === 'team')).toMatchObject({
+      operatorEditable: false,
+    });
+    expect(row?.fields?.find((field) => field.id === 'logo')).toMatchObject({
+      operatorEditable: false,
+    });
+    expect(row?.fields?.find((field) => field.id === 'wins')).not.toHaveProperty(
+      'operatorEditable',
+    );
     expect(points?.type === 'text' ? points.backgroundColor : undefined).toBeUndefined();
     expect(
       getStarter('iran-premier-league')?.assets?.filter((asset) => asset.key.startsWith('league-')),

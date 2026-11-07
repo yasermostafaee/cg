@@ -244,6 +244,16 @@ function applyOne(
       if (!(el instanceof HTMLImageElement)) return;
       const assetId = stringifyValue(raw);
       el.dataset['cgAssetId'] = assetId;
+      // An optional image with no selection is an empty graphic slot, not a browser request for
+      // `src=""` (which paints the broken-image glyph and the authored alt text). `hidden` leaves
+      // the element's authored opacity/animation styles untouched and is reversed on the next
+      // non-empty update.
+      if (assetId === '') {
+        el.hidden = true;
+        el.removeAttribute('src');
+        return;
+      }
+      el.hidden = false;
       // D-180 — an image field carries an asset id, never a browser URL. Resolve
       // through the same host map used for static images; the fallback keeps
       // legacy/custom hosts that already send URLs working.

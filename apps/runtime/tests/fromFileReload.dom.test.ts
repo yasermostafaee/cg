@@ -4,6 +4,7 @@ import type { FieldValues, ListItem, ListItemField, StackItemState } from '@cg/s
 import {
   __resetDraftsForTest,
   hasStaged,
+  isItemDirty,
   stagedValue,
   stageField,
 } from '../src/renderer/features/inspector/draftStore.js';
@@ -111,6 +112,91 @@ describe('initial load (choose file) — stages like a hand edit', () => {
     expect(await reloadFromFile(item(), PATH, 'list', itemFields)).toEqual({ accepted: false });
     expect(stagedValue('item-1', PATH)).toEqual(goodDraft);
     expect(fromFileState('item-1', PATH)?.error).toMatch(/row 1.*temperature/i);
+  });
+
+  it('keeps direct Repeater row identities stable so unchanged file data is not a draft', async () => {
+    const applied: ListItem[] = [
+      { id: 'authored-tehran', city: 'Tehran', temperature: 18 },
+      { id: 'authored-shiraz', city: 'Shiraz', temperature: 22 },
+    ];
+    const source = fakeSource([
+      '[{"city":"Tehran","temperature":18},{"city":"Shiraz","temperature":22}]',
+    ]);
+    attachFileSource('item-1', PATH, source, {
+      split: false,
+      delimiter: '\\n',
+      format: 'json',
+    });
+    const itemFields: readonly ListItemField[] = [
+      { id: 'city', label: 'City', required: true, type: 'text', default: '' },
+      { id: 'temperature', label: 'Temperature', required: true, type: 'number', default: 0 },
+    ];
+    const current = item({ crawl: applied });
+
+    expect(await stageFromFile(current, PATH, 'list', itemFields)).toBe(true);
+    expect(stagedValue('item-1', PATH)).toEqual(applied);
+    expect(isItemDirty('item-1', current.fields, new Map())).toBe(false);
+  });
+
+  it('keeps the authored row structure when any Repeater column is locked', async () => {
+    const source = fakeSource([
+      '[{"city":"Tehran","temperature":31},{"city":"Shiraz","temperature":22}]',
+    ]);
+    attachFileSource('item-1', PATH, source, {
+      split: false,
+      delimiter: '\n',
+      format: 'json',
+    });
+    const itemFields: readonly ListItemField[] = [
+      {
+        id: 'city',
+        label: 'City',
+        required: true,
+        type: 'text',
+        default: '',
+        operatorEditable: false,
+      },
+      { id: 'temperature', label: 'Temperature', required: true, type: 'number', default: 0 },
+    ];
+    const current = item({ crawl: [{ id: 'tehran', city: 'Tehran', temperature: 25 }] });
+
+    expect(await stageFromFile(current, PATH, 'list', itemFields)).toBe(false);
+    expect(hasStaged('item-1', PATH)).toBe(false);
+    expect(fromFileState('item-1', PATH)?.error).toMatch(/must keep exactly 1 rows; found 2/iu);
+  });
+
+  it('keeps an async file read on the item that started it when selection changes', async () => {
+    let finishRead: ((value: string) => void) | undefined;
+    const source: TextFileSource = {
+      name: 'weather.json',
+      read: () =>
+        new Promise<string>((resolve) => {
+          finishRead = resolve;
+        }),
+    };
+    const originalRows: ListItem[] = [{ id: 'weather-1', city: 'Tehran' }];
+    const liveItem = item({ crawl: originalRows });
+    attachFileSource('item-1', PATH, source, {
+      split: false,
+      delimiter: '\n',
+      format: 'json',
+    });
+
+    const pending = stageFromFile(liveItem, PATH, 'list', [
+      { id: 'city', label: 'City', required: true, type: 'text', default: '' },
+    ]);
+    // The bridge's live row object can be repointed while the workbook is still
+    // being read. The completed read must not follow it into the newly-selected row.
+    Object.assign(liveItem, {
+      itemId: 'item-2',
+      templateId: 'tpl-league',
+      fields: { teams: [{ id: 'team-1', team: 'Persepolis' }] },
+    });
+    finishRead?.('[{"city":"Tehran"}]');
+
+    await expect(pending).resolves.toBe(true);
+    expect(stagedValue('item-1', PATH)).toEqual(originalRows);
+    expect(hasStaged('item-2', PATH)).toBe(false);
   });
 });
 

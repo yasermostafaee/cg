@@ -78,25 +78,19 @@ const cityCard: NonNullable<Scene['compositions']>[number] = {
   editorBackdrop: 'transparent',
   layers: [
     layer('weather-city-row-layer', 'شهر', [
-      shape(
-        'weather-row-bg',
-        'کارت شهر',
-        tf(0, 0, 1600, 72),
-        gradient(90, '#0A2741E6', '#123D5CE6'),
-        0,
-        {
-          radius: 14,
-          stroke: { color: '#2C5B78', width: 1 },
-        },
-      ),
-      shape('weather-temp-pill', 'پس‌زمینه دما', tf(42, 10, 205, 52), solid('#D97706'), 1, {
-        radius: 12,
+      shape('weather-row-bg', 'کارت شهر', tf(0, 0, 1600, 72), solid('#4189DF36'), 0, {
+        radius: 14,
+        stroke: { color: '#2C5B78', width: 0 },
       }),
       {
-        ...text('weather-temp', 'دما', '۱۸', tf(62, 8, 100, 56), FAM, 30, 900, PALETTE.white, 2, {
-          align: 'end',
-          direction: 'ltr',
-        }),
+        ...shape(
+          'weather-temp-pill',
+          'پس‌زمینه دما — Value rules',
+          tf(57, 10, 105, 52),
+          solid('#D97706'),
+          1,
+          { radius: 12 },
+        ),
         valueRules: {
           input: { kind: 'field', fieldId: 'temp' },
           rules: [
@@ -105,12 +99,23 @@ const cityCard: NonNullable<Scene['compositions']>[number] = {
               effect: { elementId: 'weather-temp-pill', property: 'fill', value: '#DC2626' },
             },
             {
-              condition: { comparator: '>=', value: 25 },
-              effect: { elementId: 'weather-temp', property: 'textColor', value: '#FFFFFF' },
-            },
-            {
               condition: { comparator: '<=', value: 5 },
               effect: { elementId: 'weather-temp-pill', property: 'fill', value: '#0369A1' },
+            },
+          ],
+        },
+      } as Element,
+      {
+        ...text('weather-temp', 'دما', '۱۸', tf(22, 8, 100, 56), FAM, 30, 900, PALETTE.white, 2, {
+          align: 'end',
+          direction: 'ltr',
+        }),
+        valueRules: {
+          input: { kind: 'field', fieldId: 'temp' },
+          rules: [
+            {
+              condition: { comparator: '>=', value: 25 },
+              effect: { elementId: 'weather-temp', property: 'textColor', value: '#FFFFFF' },
             },
             {
               condition: { comparator: '<=', value: 5 },
@@ -119,7 +124,7 @@ const cityCard: NonNullable<Scene['compositions']>[number] = {
           ],
         },
       } as Element,
-      text('weather-degree', 'درجه', '°', tf(164, 7, 24, 56), FAM, 27, 700, PALETTE.white, 3, {
+      text('weather-degree', 'درجه', '°', tf(124, 7, 24, 56), FAM, 27, 700, PALETTE.white, 3, {
         align: 'start',
         direction: 'ltr',
       }),
@@ -189,11 +194,13 @@ const pageComposition: NonNullable<Scene['compositions']>[number] = {
         flow: 'rtl',
         gap: 9,
         maxItems: 8,
-        itemEntrance: 'fade-right',
-        itemExit: 'fade-left',
+        itemEntrance: 'fade-bottom',
+        itemExit: 'fade-bottom',
         itemTransitionMs: 400,
         itemStaggerMs: 90,
         items: cityRows.slice(0, 8),
+        alternatingRowFill: '#0000002E',
+        itemExitOrder: 'reverse',
       } as Element,
     ]),
   ],
@@ -254,12 +261,20 @@ const children: Element[] = [
   shape(
     'weather-pages-ribbon',
     'نوار عنوان',
-    tf(385, 34, 1355, 100),
-    gradient(90, '#075985DD', '#0E7490DD'),
+    tf(50, 34, 1680, 92),
+    {
+      kind: 'radial',
+      center: { x: 0.5, y: 0.5 },
+      radius: 507,
+      stops: [
+        { at: 0, color: '#075985DD' },
+        { at: 1, color: '#0E749000' },
+      ],
+    },
     2,
     {
       radius: 26,
-      stroke: { color: '#CFFAFE44', width: 1 },
+      stroke: { color: '#CFFAFE44', width: 0 },
       animation: reveal(0, 34),
     },
   ),
@@ -267,42 +282,15 @@ const children: Element[] = [
     'weather-pages-title',
     'عنوان',
     TITLE,
-    tf(430, 45, 1260, 76),
+    tf(260, 45, 1260, 76),
     FAM,
     43,
     900,
     PALETTE.white,
     3,
     {
-      align: 'start',
-      animation: reveal(4, 45),
-    },
-  ),
-  shape(
-    'weather-pages-mark',
-    'نشان هواشناسی',
-    tf(40, 34, 315, 100),
-    gradient(135, '#D97706', '#FBBF24'),
-    2,
-    {
-      radius: 26,
-      shadow: { offsetX: 0, offsetY: 12, blur: 28, color: '#F59E0B30' },
-      animation: reveal(2, 34),
-    },
-  ),
-  text(
-    'weather-pages-mark-text',
-    'عنوان کوتاه',
-    'هواشناسی',
-    tf(65, 44, 265, 78),
-    FAM,
-    30,
-    900,
-    '#172033',
-    3,
-    {
       align: 'center',
-      animation: reveal(6, 44),
+      animation: reveal(4, 45),
     },
   ),
   {
@@ -330,9 +318,10 @@ const children: Element[] = [
     defaultDwellMs: PAGE_DWELL_MS,
     advance: 'auto',
     operatorSteps: true,
-    transitionIn: 'fade-right',
-    transitionOut: 'fade-left',
-    transitionTiming: 'simultaneous',
+    prewarmCompositionItems: true,
+    transitionIn: 'fade',
+    transitionOut: 'fade',
+    transitionTiming: 'sequential',
     transitionMs: 600,
     repeat: 1,
     drivesHold: true,

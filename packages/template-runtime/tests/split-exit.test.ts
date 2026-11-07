@@ -127,6 +127,50 @@ function ticker(id: string): Element {
   } as unknown as Element;
 }
 
+/** A text Sequence whose whole host fades during the composition Outro. */
+function animatedSequence(id: string): Element {
+  return {
+    id,
+    name: id,
+    type: 'sequence',
+    transform: baseTransform,
+    opacity: 1,
+    visible: true,
+    locked: false,
+    zIndex: 1,
+    font: {
+      family: 'Vazirmatn',
+      weight: 500,
+      style: 'normal',
+      size: 36,
+      lineHeight: 1.4,
+      letterSpacing: 0,
+    },
+    color: '#FFFFFF',
+    align: 'center',
+    verticalAlign: 'middle',
+    direction: 'rtl',
+    items: [{ id: 'a', text: 'متن توالی' }],
+    defaultDwellMs: 1000,
+    advance: 'manual',
+    transitionIn: 'none',
+    transitionOut: 'fade',
+    transitionTiming: 'simultaneous',
+    transitionMs: 400,
+    repeat: 'infinite',
+    animation: {
+      tracks: {
+        opacity: {
+          keyframes: [
+            { frame: 20, value: 1, easing: 'linear' },
+            { frame: 40, value: 0, easing: 'linear' },
+          ],
+        },
+      },
+    },
+  } as unknown as Element;
+}
+
 /** Root scene: a keyframed background (`bg`) with an outro + a content ticker (`crawl`). */
 function scene(): Scene {
   return {
@@ -155,6 +199,12 @@ function scene(): Scene {
     fonts: [],
     metadata: { createdAt: '2026-06-27T00:00:00.000Z', updatedAt: '2026-06-27T00:00:00.000Z' },
   } as unknown as Scene;
+}
+
+function sequenceScene(): Scene {
+  const next = structuredClone(scene());
+  next.layers[0]!.children = [bgShape('bg'), animatedSequence('sequence')];
+  return next;
 }
 
 const onAir = (): boolean => !document.body.classList.contains('cg-pending');
@@ -216,6 +266,29 @@ describe('D-105 — split exit (out vs stop)', () => {
     await run(clock, 2000); // the background then closes → cleared
     expect(onAir()).toBe(false);
     expect(bgOpacity()).toBeCloseTo(1, 1);
+    r.remove();
+  });
+
+  it('Stop preserves a Sequence with authored Outro keyframes until its frame animation closes', async () => {
+    const clock = makeClock();
+    const r = createRuntime(sequenceScene(), { skipFontLoad: true, clock, tickerMeasure });
+    await r.play({});
+    await run(clock, 1000);
+    const sequence = document.querySelector<HTMLElement>('[data-cg-element-id="sequence"]');
+    expect(sequence).not.toBeNull();
+    expect(sequence?.dataset['cgOutro']).toBe('sequence-frame');
+
+    await r.stop();
+    // Unlike plain content, the current Sequence item survives the Stop edge and closes on the
+    // composition's real 20→40 frame pass.
+    expect(sequence?.style.visibility).not.toBe('hidden');
+    expect(Number(sequence?.style.opacity)).toBeCloseTo(1, 1);
+    await run(clock, 200);
+    expect(Number(sequence?.style.opacity)).toBeCloseTo(0.5, 1);
+    expect(sequence?.textContent).toContain('متن توالی');
+
+    await run(clock, 1000);
+    expect(onAir()).toBe(false);
     r.remove();
   });
 

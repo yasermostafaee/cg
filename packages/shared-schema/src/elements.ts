@@ -915,6 +915,12 @@ export const SequenceElementSchema = ElementBaseSchema.extend({
    * sets `false`, and no console verb moves it. Read it through {@link sequenceStepsByOperator}.
    */
   operatorSteps: z.boolean().optional(),
+  /**
+   * Keep composition pages mounted and warm before their first turn. This is opt-in because a
+   * long book may contain expensive live subtrees; animated-image pages use it so an SVG's own
+   * timeline and the nested Repeater entrance do not restart visibly on every page change.
+   */
+  prewarmCompositionItems: z.boolean().optional(),
   /** Where the incoming item enters from. */
   transitionIn: SequenceEdgeSchema.default('bottom'),
   /** Where the outgoing item exits to. */

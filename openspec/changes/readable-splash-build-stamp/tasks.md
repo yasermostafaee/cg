@@ -2,7 +2,7 @@
 
 ## 1. Shared splash identity
 
-- [x] 1.1 Label release version, Git revision and build date in the shared formatter.
+- [x] 1.1 Label release version and build date in the shared formatter; keep Git revision diagnostic-only.
 - [x] 1.2 Keep development and `nogit` fallbacks truthful.
 - [x] 1.3 Update shared and app splash tests.
 
@@ -19,3 +19,7 @@ release identity. All four unit cases pass; the fresh 18-task app dependency bui
 both complete splash browser suites within the integration batches. Both Designer TypeScript realms,
 Runtime and splash-kit typechecks pass; splash-kit lint passes. The full repository gate and
 carrying-commit Linux result are still owed and are not inferred from these focused checks.
+
+Owner supersession, 2026-11-07: installed `1.0.0` splashes deliberately omit the visible Revision
+segment. The shared structured build identity still retains the revision for diagnostics; only the
+operator-facing text is `Version … · Build date …`.

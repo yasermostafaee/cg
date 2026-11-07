@@ -58,6 +58,18 @@ async function registerLooksTemplate(app: { page: Page }): Promise<void> {
               entered: { mode: 'cut' },
               rects: { 'l-1': { x: 0, y: 0, width: 1920, height: 1080 } },
             },
+            {
+              id: 'three',
+              name: '3-box',
+              entered: { mode: 'cut' },
+              rects: { 'l-1': left, 'l-2': right },
+            },
+            {
+              id: 'four',
+              name: '4-box',
+              entered: { mode: 'cut' },
+              rects: { 'l-1': left, 'l-2': right },
+            },
           ],
           defaultLookId: 'two',
         },
@@ -123,6 +135,24 @@ test('LOOK INPUTS lists every look with its own frames, and the flat template ke
   */
   await expect(looks.locator('[data-look-tab="two"]')).toBeVisible();
   await expect(looks.locator('[data-look-tab="solo"]')).toBeVisible();
+  await expect(looks.locator('[data-look-tab="three"]')).toBeVisible();
+  await expect(looks.locator('[data-look-tab="four"]')).toBeVisible();
+
+  // B-401 — the selected/live wording stays inside an equal preset cell. Selecting another
+  // look must not stretch that button or push it onto a different row.
+  const presetGeometry = async (): Promise<{ x: number; y: number; width: number }[]> =>
+    looks.locator('[data-look-tab]').evaluateAll((tabs) =>
+      tabs.map((tab) => {
+        const rect = tab.getBoundingClientRect();
+        return { x: rect.x, y: rect.y, width: rect.width };
+      }),
+    );
+  const beforeSelection = await presetGeometry();
+  expect(beforeSelection).toHaveLength(4);
+  expect(new Set(beforeSelection.map(({ y }) => Math.round(y))).size).toBe(1);
+  expect(Math.max(...beforeSelection.map(({ width }) => width))).toBeLessThanOrEqual(
+    Math.min(...beforeSelection.map(({ width }) => width)) + 1,
+  );
 
   // The LIVE look is the one open on arrival, and it offers only its own frames.
   await expect(looks.locator('[data-look-row="two"]')).toBeVisible();
@@ -139,6 +169,7 @@ test('LOOK INPUTS lists every look with its own frames, and the flat template ke
   */
   await expect(looks.locator('[data-look-row="solo"]')).toBeVisible();
   await expect(looks.locator('[data-look-row="two"]')).toHaveCount(0);
+  expect(await presetGeometry()).toEqual(beforeSelection);
 
   // …and back, so the section is not a one-way trip. The rest of this test reads `two`'s
   // own control, so it is also the state the assertions below need.
@@ -180,7 +211,7 @@ test('LOOK INPUTS lists every look with its own frames, and the flat template ke
   await expect(app.inspector.locator('[aria-label="Live plates"]')).toBeVisible();
 });
 
-test('🔴 B-156 — a LOADED row does not claim air; the badge names what is actually true', async ({
+test('🔴 B-156 — a LOADED row does not claim air or repeat selection as a sentence', async ({
   app,
 }) => {
   /*
@@ -193,12 +224,11 @@ test('🔴 B-156 — a LOADED row does not claim air; the badge names what is ac
   await app.selectLayerRow(row);
 
   const badge = app.inspector.locator('[data-look-live="two"]');
-  await expect(badge).toBeVisible();
-  // 🔴 THE ASSERTION. Loaded is not on air, and the words must not say it is.
-  await expect(badge).not.toContainText('ON AIR');
-  await expect(badge).toHaveAttribute('data-look-badge', 'not-on-air');
-  // …and it still marks the look, so the operator can tell which one a take would show.
-  await expect(badge).toContainText('TAKE');
+  await expect(badge).toHaveCount(0);
+  await expect(app.inspector.locator('[data-look-tab="two"]')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
 });
 
 test('🔴 FIELD-FIXES-01 C — a REFUSED take does not claim air for its look; control: a take that lands does', async ({
@@ -222,14 +252,12 @@ test('🔴 FIELD-FIXES-01 C — a REFUSED take does not claim air for its look; 
   await expect(app.layerRow(row)).toContainText('ERROR');
 
   const badge = app.inspector.locator('[data-look-live="two"]');
-  await expect(badge).toBeVisible();
-  // 🔴 THE ASSERTION — the look the refused take was for is not on air, and the words say so.
-  await expect(badge).not.toContainText('ON AIR');
-  await expect(badge).toHaveAttribute('data-look-badge', 'not-on-air');
+  await expect(badge).toHaveCount(0);
 
   // CONTROL — the take that lands: the same badge now makes the claim.
   await app.layerRow(row).getByRole('button', { name: 'PLAY' }).click();
   await expect(app.layerRow(row)).toContainText('ON AIR');
-  await expect(badge).toContainText('ON AIR NOW');
-  await expect(badge).toHaveAttribute('data-look-badge', 'on-air');
+  const onAirBadge = app.inspector.locator('[data-look-live="two"]');
+  await expect(onAirBadge).toContainText('ON AIR NOW');
+  await expect(onAirBadge).toHaveAttribute('data-look-badge', 'on-air');
 });

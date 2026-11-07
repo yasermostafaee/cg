@@ -53,11 +53,15 @@ export function CalendarSection({
   };
 
   return (
-    <section className="cg-card" aria-label="Lunar Hijri day" data-calendar-section="">
+    <section className="cg-card" aria-label="Lunar Hijri correction" data-calendar-section="">
       <div className="cg-card__head">
-        <span className="cg-card__title">Lunar Hijri day</span>
+        <span className="cg-card__title">Lunar Hijri date correction</span>
       </div>
       <div className="cg-card__body cg-calendar-body">
+        <p className="cg-calendar-explainer">
+          Adjusts Lunar Hijri dates only when the officially announced day differs from the
+          calculated date. Leave it at As calculated when no correction is needed.
+        </p>
         {admin ? (
           <div className="cg-lunar-adjust" role="group" aria-label="Lunar Hijri day adjustment">
             {CHOICES.map((choice) => (

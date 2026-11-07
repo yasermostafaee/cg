@@ -241,7 +241,7 @@ export const STATION_SETUP_SECTIONS: readonly StationSetupSectionSpec[] = [
       contract exactly: a `station-admin` setting that commits as it is pressed (`calendar.set`).
     */
     id: 'calendar',
-    title: 'Calendar',
+    title: 'Lunar Hijri correction',
     commit: 'immediate',
     group: 'Content',
     legend: 'Saves as you go.',

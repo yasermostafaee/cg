@@ -119,9 +119,14 @@ describe('B-128 — the separator picker', () => {
     });
     const host = mount(createElement(TickerSeparatorControl, { element: t, digits: 'latin' }));
     await settle();
-    const select = host.querySelector('select[aria-label="image"]');
-    const values = [...(select?.querySelectorAll('option') ?? [])].map((o) => o.value);
-    expect(values).toEqual(['', 'project:img-1', 'shared:logo-shared']);
+    const picker = host.querySelector<HTMLButtonElement>('button[aria-label="image"]');
+    expect(picker).not.toBeNull();
+    act(() => picker?.click());
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog?.textContent).toContain('logo (project)');
+    expect(dialog?.textContent).toContain('brand (shared)');
+    expect(dialog?.textContent).not.toContain('font-1');
+    expect(dialog?.textContent).not.toContain('video-1');
   });
 });
 

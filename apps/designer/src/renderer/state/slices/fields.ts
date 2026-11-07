@@ -10,6 +10,8 @@ import {
   type FieldDigits,
   type FieldValues,
   type FileSourcePolicy,
+  type ImageFieldAssetOption,
+  type ImageFieldInputMode,
   type ListItem,
   type Scene,
   type SequenceElement,
@@ -67,6 +69,10 @@ export interface ElementFieldMetaPatch {
    * none (absent: Latin, what a number always drew).
    */
   digits?: FieldDigits;
+  /** Operator image-control mode authored for Preview and CG Control. */
+  imageInputMode?: ImageFieldInputMode;
+  /** Explicit images available when the image field exposes a picker. */
+  imageAssetOptions?: readonly ImageFieldAssetOption[];
 }
 
 /**
@@ -174,6 +180,7 @@ function rebuildField(field: DynamicField, patch: ElementFieldMetaPatch): Dynami
     required,
     ...(field.group !== undefined ? { group: field.group } : {}),
     ...(description !== undefined && description !== '' ? { description } : {}),
+    ...(field.operatorEditable === false ? { operatorEditable: false as const } : {}),
   };
 
   // TEXT-FILE-OPT-01 — the grant, resolved once for every branch that can hold it.
@@ -207,6 +214,27 @@ function rebuildField(field: DynamicField, patch: ElementFieldMetaPatch): Dynami
       ...grant,
       ...policy,
       ...(field.pages === true ? { pages: true as const } : {}),
+    };
+  }
+
+  // An image element's Data key is a fixed image-field variant. Its asset choice is edited per
+  // operator value (and per Repeater row), not converted into a text/number field by metadata edits.
+  if (field.type === 'image') {
+    return {
+      ...base,
+      type: 'image',
+      accept: [...field.accept],
+      ...((patch.imageInputMode ?? field.inputMode) === undefined
+        ? {}
+        : { inputMode: patch.imageInputMode ?? field.inputMode }),
+      ...(field.defaultAssetId === undefined ? {} : { defaultAssetId: field.defaultAssetId }),
+      ...((patch.imageAssetOptions ?? field.assetOptions) === undefined
+        ? {}
+        : {
+            assetOptions: (patch.imageAssetOptions ?? field.assetOptions ?? []).map((option) => ({
+              ...option,
+            })),
+          }),
     };
   }
 
@@ -357,6 +385,7 @@ function sameBindingTarget(a: FieldBinding['target'], b: FieldBinding['target'])
 function isConvBinding(b: FieldBinding): boolean {
   return (
     (b.target.kind === 'text' && b.target.placeholder === undefined) ||
+    b.target.kind === 'image' ||
     b.target.kind === 'ticker-items' ||
     b.target.kind === 'sequence-items' ||
     b.target.kind === 'repeater-items'
@@ -502,18 +531,42 @@ export const fieldsSlice = {
         }
         const previous = field.fileSource;
         const remainingPolicy: FileSourcePolicy = {
+          inputMode: 'operator-choice',
           ...(previous?.bridgePath !== undefined ? { bridgePath: previous.bridgePath } : {}),
           ...(previous?.lockFile === true ? { lockFile: true as const } : {}),
           ...(previous?.delimiter !== undefined ? { delimiter: previous.delimiter } : {}),
           ...(previous?.format !== undefined ? { format: previous.format } : {}),
         };
-        const { fileSource: _removedPolicy, ...withoutPolicy } = field;
-        void _removedPolicy;
-        return Object.keys(remainingPolicy).length === 0
-          ? { ...withoutPolicy, allowFileSource: true }
-          : { ...withoutPolicy, allowFileSource: true, fileSource: remainingPolicy };
+        return { ...field, allowFileSource: true, fileSource: remainingPolicy };
       });
       return compositionChanged ? { ...composition, fields } : composition;
+    });
+    if (changed) set({ scene: { ...current.scene, compositions } });
+  },
+
+  /** Author whether one child-composition field may be changed in CG Control Repeater rows. */
+  setCompositionFieldOperatorEditable(
+    compositionId: string,
+    fieldId: string,
+    editable: boolean,
+  ): void {
+    if (current.scene === null) return;
+    let changed = false;
+    const compositions = (current.scene.compositions ?? []).map((composition) => {
+      if (composition.id !== compositionId) return composition;
+      const fields = (composition.fields ?? []).map((field) => {
+        if (field.id !== fieldId || field.type === 'list') return field;
+        if (editable) {
+          if (field.operatorEditable !== false) return field;
+          const { operatorEditable: _operatorEditable, ...rest } = field;
+          changed = true;
+          return rest as DynamicField;
+        }
+        if (field.operatorEditable === false) return field;
+        changed = true;
+        return { ...field, operatorEditable: false as const };
+      });
+      return changed ? { ...composition, fields } : composition;
     });
     if (changed) set({ scene: { ...current.scene, compositions } });
   },
@@ -601,6 +654,7 @@ export const fieldsSlice = {
             ? ('repeater-items' as const)
             : null;
     const isListElement = itemsKind !== null;
+    const isImageElement = el?.type === 'image';
     const convIdx = bindings.findIndex((b) => isConvBinding(b) && convElementId(b) === elementId);
     const currentKey = convIdx === -1 ? null : (bindings[convIdx]?.fieldId ?? null);
 
@@ -628,7 +682,15 @@ export const fieldsSlice = {
     // A ticker/sequence can only adopt a `list` field (and a text element
     // only a text-shaped one) — a kind mismatch would wire an uneditable
     // value.
-    if (existing !== undefined && (existing.type === 'list') !== isListElement) return false;
+    if (
+      existing !== undefined &&
+      (isListElement
+        ? existing.type !== 'list'
+        : isImageElement
+          ? existing.type !== 'image'
+          : existing.type === 'list' || existing.type === 'image')
+    )
+      return false;
     // D-083 / D-163 — a sequence binds an all-text list or a BOOK's page list (pictures, with or
     // without text pages — `RUN-NEXT-VERSION-03` 1.6); never one with a composition item.
     const seqBinding =
@@ -639,7 +701,9 @@ export const fieldsSlice = {
       const binding: FieldBinding =
         itemsKind !== null
           ? { fieldId: trimmed, target: { kind: itemsKind, elementId } }
-          : { fieldId: trimmed, target: { kind: 'text', elementId } };
+          : isImageElement
+            ? { fieldId: trimmed, target: { kind: 'image', elementId } }
+            : { fieldId: trimmed, target: { kind: 'text', elementId } };
       // Re-adopt an orphaned field (keep its config); otherwise create a fresh
       // one seeded from the element's current content.
       if (existing !== undefined) {
@@ -683,15 +747,36 @@ export const fieldsSlice = {
             // D-163 — an all-picture sequence seeds a PAGE LIST, loaded as pictures in CG Control.
             ...(seqBinding === 'pages' ? { pages: true as const } : {}),
           }
-        : {
-            id: trimmed,
-            type: 'text',
-            label: trimmed,
-            required: false,
-            default: el !== undefined && el.type === 'text' ? el.text : '',
-            maxLength: DEFAULT_DATA_FIELD_MAX_LENGTH,
-            digits: NEW_FIELD_DIGITS,
-          };
+        : isImageElement
+          ? {
+              id: trimmed,
+              type: 'image',
+              label: trimmed,
+              required: false,
+              ...(el?.type === 'image' ? { defaultAssetId: el.assetId } : {}),
+              accept: ['png', 'jpg', 'webp', 'svg'],
+              inputMode: 'choices',
+              ...(el?.type === 'image'
+                ? {
+                    assetOptions: [
+                      {
+                        assetId: el.assetId,
+                        label: el.name.trim() || 'Current image',
+                        source: el.source,
+                      },
+                    ],
+                  }
+                : {}),
+            }
+          : {
+              id: trimmed,
+              type: 'text',
+              label: trimmed,
+              required: false,
+              default: el !== undefined && el.type === 'text' ? el.text : '',
+              maxLength: DEFAULT_DATA_FIELD_MAX_LENGTH,
+              digits: NEW_FIELD_DIGITS,
+            };
       set({
         scene: withActiveFieldData(current.scene, {
           fields: [...doc.fields, field],

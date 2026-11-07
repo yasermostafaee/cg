@@ -2,7 +2,7 @@ import type { Element, Fill, Scene, Transform } from '@cg/shared-schema';
 import { anim, EASE, kf, track } from './anim.js';
 
 /**
- * «نوار اخبار» — a professional Persian news ticker done the content-driven
+ * «زیرنویس حرکت افقی» — a professional Persian news ticker done the content-driven
  * way, styled to the owner's notes: FULL-BLEED strap (no side margins), the
  * red «خبر فوری» plate flush against the navy bar (no gap), no gold
  * hairlines, no crawl side-padding, taller bar, and a live dot that keeps
@@ -257,7 +257,7 @@ const layer = (id: string, name: string, children: Element[]): Scene['layers'][n
 export const tickerScene: Scene = {
   schemaVersion: 1,
   id: 'starter-ticker',
-  name: 'نوار اخبار',
+  name: 'زیرنویس حرکت افقی',
   templateType: 'ticker',
   resolution: { width: W, height: H },
   frameRate: FPS,
@@ -268,7 +268,7 @@ export const tickerScene: Scene = {
   compositions: [
     {
       id: 'comp-ticker',
-      name: 'نوار اخبار',
+      name: 'زیرنویس حرکت افقی',
       resolution: { width: W, height: H },
       frameRange: { in: 0, out: 122 },
       lifecycle: { outPoint: 60, contentStart: 55 },

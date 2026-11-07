@@ -56,6 +56,33 @@ globalStyle(`${structuredList} > ${itemRow}`, {
   minWidth: '100%',
 });
 
+/** A light live boundary between the rows that belong to consecutive Sequence pages. */
+export const pageBoundary = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.55rem',
+  width: 'max-content',
+  minWidth: '100%',
+  margin: '0.2rem 0',
+  color: colors.textMuted,
+  fontSize: '0.68rem',
+  fontWeight: 600,
+  selectors: {
+    '&::before': {
+      content: '',
+      height: '1px',
+      flex: '1 1 auto',
+      background: colors.border,
+    },
+    '&::after': {
+      content: '',
+      height: '1px',
+      flex: '1 1 auto',
+      background: colors.border,
+    },
+  },
+});
+
 globalStyle(`${comfortableList} ${structuredCells}`, {
   gridAutoColumns: '11rem',
   gap: '0.55rem',
@@ -96,6 +123,23 @@ export const itemInput = style({
 export const itemControl = style({
   width: '100%',
   minWidth: 0,
+});
+
+export const imageCellControls = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.3rem',
+  minWidth: 0,
+});
+
+export const imageCellThumb = style({
+  width: '2rem',
+  height: '2rem',
+  flex: '0 0 auto',
+  objectFit: 'contain',
+  border: `1px solid ${colors.border}`,
+  borderRadius: '4px',
+  background: colors.background,
 });
 
 /** D-118 — the multi-line item-text textarea filling the item row (the look lives in the shared

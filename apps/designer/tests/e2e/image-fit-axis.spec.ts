@@ -27,9 +27,7 @@ const imageEl = (app: DesignerApp) => app.canvasFrame.locator('[data-cg-element-
 
 async function placeAnImage(app: DesignerApp): Promise<void> {
   await app.newProject('Fit');
-  await app.addSharedImage('emblem.png');
-  await app.selectSharedImage('emblem');
-  await app.placeLogo({ x: 240, y: 200 });
+  await app.placeProjectImage('emblem.png', { x: 240, y: 200 });
   await expect.poll(() => app.canvasImageCount()).toBe(1);
 }
 

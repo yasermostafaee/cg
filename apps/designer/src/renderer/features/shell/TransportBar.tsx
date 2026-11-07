@@ -1,20 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeftRight,
+  MonitorPlay,
   Pause,
   Play,
   Repeat,
   SkipBack,
+  SkipForward,
+  Square,
   StepBack,
   StepForward,
   Volume2,
   VolumeX,
 } from 'lucide-react';
-import { activeRangeOf, hasSoundEffects, type Scene } from '@cg/shared-schema';
+import { activeRangeOf, hasNextStep, hasSoundEffects, type Scene } from '@cg/shared-schema';
 import { resumeCanvasSound } from '../canvas/canvasSound.js';
+import { sendCanvasPlayoutCommand } from '../canvas/canvasPlayoutCommands.js';
 import {
   canvasDisplayFrame,
   canvasDisplayLimitMs,
+  hasAuthoredOutroMotion,
   rootUsesAuthoredFrameClock,
 } from '../fields/preview-elapsed.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
@@ -30,11 +35,9 @@ interface Props {
 type LoopMode = 'off' | 'loop' | 'bounce';
 
 /**
- * Bottom-of-canvas-column transport bar — go-to-start / step back /
- * play-pause / step forward, then a loop toggle and a bounce
- * (ping-pong) toggle. Frame readout sits on the right. The loop
- * modes are mutually exclusive; whichever the operator activates,
- * the other turns off so the playback behaviour is unambiguous.
+ * Bottom-of-canvas-column transport bar. D-199 gives it two explicit, mutually-exclusive
+ * meanings: timeline authoring (start / step / Play-Pause / Preview loop / Ping-pong) and
+ * lifecycle rehearsal (Play / Next / Stop). Frame readout sits on the right.
  *
  *   off    → play to frameOut, then stop
  *   loop   → wrap to frameIn at frameOut
@@ -63,8 +66,20 @@ export function TransportBar({ scene }: Props): JSX.Element {
   */
   const soundMuted = useDesignerSelector((st) => st.soundMuted);
   const hasSound = useMemo(() => hasSoundEffects(scene, scene.compositions), [scene]);
-  useEffect(() => () => designerStore.setTimelinePlayback(null, false), []);
+  const canNext = useMemo(() => hasNextStep(scene, scene.compositions), [scene]);
+  useEffect(
+    () => () => {
+      sendCanvasPlayoutCommand('stop');
+      designerStore.setTimelinePlayback(null, false);
+    },
+    [],
+  );
   const [loopMode, setLoopMode] = useState<LoopMode>('off');
+  const [playoutPreview, setPlayoutPreview] = useState(false);
+  const [playoutStopping, setPlayoutStopping] = useState(false);
+  const playoutPreviewRef = useRef(false);
+  playoutPreviewRef.current = playoutPreview;
+  const previousSceneIdRef = useRef(scene.id);
   const [hovered, setHovered] = useState<string | null>(null);
   const lastWallRef = useRef<number>(0);
   const accumRef = useRef<number>(0);
@@ -82,9 +97,24 @@ export function TransportBar({ scene }: Props): JSX.Element {
   const loopModeRef = useRef<LoopMode>(loopMode);
   loopModeRef.current = loopMode;
 
-  // Advance currentFrame at scene.frameRate only for the explicit PLAYHEAD path (reverse,
-  // Preview loop, ping-pong). D-175 ordinary forward Play is owned by the runtime lifecycle;
-  // CanvasArea reflects the runtime's root frame into this same store instead.
+  // The switch is Preview-only. A composition change cannot inherit a running rehearsal or a
+  // hidden authoring-loop selection from the document that was previously open.
+  useEffect(() => {
+    if (previousSceneIdRef.current === scene.id) return;
+    previousSceneIdRef.current = scene.id;
+    sendCanvasPlayoutCommand('stop');
+    designerStore.setTimelinePlayback(null, false);
+    designerStore.setCurrentFrame(frameIn);
+    setLoopMode('off');
+    setPlayoutStopping(false);
+    setPlayoutPreview(false);
+    playoutPreviewRef.current = false;
+  }, [frameIn, scene.id]);
+
+  // Advance currentFrame at scene.frameRate for the explicit authoring PLAYHEAD path (ordinary
+  // forward Play, reverse, Preview loop and ping-pong). D-199 reserves the runtime lifecycle for
+  // the explicit Rehearse control group; CanvasArea reflects that runtime's root frame into
+  // this same store instead.
   // reads the latest currentFrame from the store rather than closing
   // over a stale prop, so React re-renders never reset the playhead
   // mid-loop.
@@ -142,6 +172,7 @@ export function TransportBar({ scene }: Props): JSX.Element {
 
   const authoredLifecycleClock = useMemo(() => rootUsesAuthoredFrameClock(scene), [scene]);
   const authoredLifecycleLimitMs = useMemo(() => canvasDisplayLimitMs(scene), [scene]);
+  const authoredStopOutro = useMemo(() => hasAuthoredOutroMotion(scene), [scene]);
 
   // B-380 — Runtime intentionally paints an empty/static leg only at its boundaries. Keep that
   // optimisation, but do not expose it as an instantaneous jump in the authoring timeline. This
@@ -187,6 +218,37 @@ export function TransportBar({ scene }: Props): JSX.Element {
     };
   }, [authoredLifecycleClock, authoredLifecycleLimitMs, frameOut, playbackMode, playing, scene]);
 
+  // A content-driven root can hold its reported frame at Out point while its coordinated Outro
+  // is visibly running, then publish only the final frame. Drive the authoring cursor across the
+  // same authored Outro span so the timeline does not wait until the picture is already closed.
+  useEffect(() => {
+    if (!playoutStopping || playbackMode !== 'lifecycle' || !authoredStopOutro) return;
+    const outPoint = scene.lifecycle?.outPoint ?? frameOut;
+    const startFrame = Math.max(
+      frameIn,
+      Math.min(frameOut, Math.max(outPoint, designerStore.get().currentFrame)),
+    );
+    const startedAt = performance.now();
+    let raf = 0;
+    designerStore.setCurrentFrame(startFrame);
+    const tick = (now: number): void => {
+      const elapsedFrames = Math.floor(((now - startedAt) / 1000) * scene.frameRate);
+      const next = Math.min(frameOut, startFrame + elapsedFrames);
+      designerStore.setCurrentFrame(next);
+      if (next < frameOut) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [
+    authoredStopOutro,
+    frameIn,
+    frameOut,
+    playbackMode,
+    playoutStopping,
+    scene.frameRate,
+    scene.lifecycle?.outPoint,
+  ]);
+
   function toggleLoop(mode: 'loop' | 'bounce'): void {
     setLoopMode((m) => (m === mode ? 'off' : mode));
     // Preserve the shipped mid-play toggle: enabling either authoring mode immediately hands the
@@ -201,15 +263,51 @@ export function TransportBar({ scene }: Props): JSX.Element {
     playDirRef.current = dir;
     // Inside the user's gesture: make the canvas page's sound output run before any sound plays.
     resumeCanvasSound();
-    const mode: 'lifecycle' | 'playhead' =
-      dir === 1 && loopModeRef.current === 'off' ? 'lifecycle' : 'playhead';
-    const previousMode = designerStore.get().timelinePlaybackMode;
-    if (mode === 'lifecycle' && previousMode !== 'lifecycle' && authoredLifecycleClock) {
+    const state = designerStore.get();
+    // D-199 — ordinary forward Play is a fresh, linear authoring pass. Paused playhead playback
+    // resumes in place; a settled/new pass starts at the active range boundary.
+    if (dir === 1 && state.timelinePlaybackMode !== 'playhead') {
+      designerStore.setCurrentFrame(frameIn);
+    }
+    designerStore.setTimelinePlayback('playhead', true);
+  }
+
+  function playPlayout(): void {
+    const state = designerStore.get();
+    if (state.timelinePlaybackMode === 'lifecycle' && state.timelinePlaying) return;
+    resumeCanvasSound();
+    setPlayoutStopping(false);
+    if (state.timelinePlaybackMode !== 'lifecycle') {
       lifecycleDisplayElapsedRef.current = 0;
       lifecycleDisplayWallRef.current = 0;
       designerStore.setCurrentFrame(frameIn);
     }
-    designerStore.setTimelinePlayback(mode, true);
+    designerStore.setTimelinePlayback('lifecycle', true);
+  }
+
+  function stopPlayout(): void {
+    // Pause the normal lifecycle display without sending Pause to the iframe. A real authored
+    // Outro gets the dedicated stop clock above; an immediate-clear scene settles deterministically
+    // at frameOut instead of racing Runtime completion by a handful of frames.
+    if (sendCanvasPlayoutCommand('stop')) {
+      setPlayoutStopping(true);
+      if (!authoredStopOutro) designerStore.setCurrentFrame(frameOut);
+      designerStore.setTimelinePlayback('lifecycle', false);
+    }
+  }
+
+  function togglePlayoutPreview(): void {
+    const leavingRehearse = playoutPreviewRef.current;
+    if (leavingRehearse) sendCanvasPlayoutCommand('restore-authoring');
+    lifecycleDisplayElapsedRef.current = 0;
+    lifecycleDisplayWallRef.current = 0;
+    designerStore.setTimelinePlayback(null, false);
+    designerStore.setCurrentFrame(frameIn);
+    setLoopMode('off');
+    setPlayoutStopping(false);
+    const next = !playoutPreviewRef.current;
+    playoutPreviewRef.current = next;
+    setPlayoutPreview(next);
   }
 
   function pausePlayback(): void {
@@ -234,6 +332,8 @@ export function TransportBar({ scene }: Props): JSX.Element {
     function onKeyDown(e: KeyboardEvent): void {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (isEditable(e.target)) return;
+      // D-199 — hidden authoring controls have no secret keyboard route in Rehearse preview.
+      if (playoutPreviewRef.current) return;
       // Match the physical key (e.code) so J/K/L work on non-English layouts.
       const k = e.code;
       if (k === 'KeyK') {
@@ -283,76 +383,129 @@ export function TransportBar({ scene }: Props): JSX.Element {
   return (
     <div className={s.bar} aria-label="Playback transport">
       <div className={s.group}>
-        <Button
-          variant="bare"
-          className={btnClass('start')}
-          {...hoverProps('start')}
-          onClick={() => leavePlaybackAt(frameIn)}
-          aria-label="Go to start"
-          title="Go to start"
-        >
-          <Icon icon={SkipBack} size={17} className={s.icon} />
-        </Button>
-        <Button
-          variant="bare"
-          className={btnClass('back')}
-          {...hoverProps('back')}
-          onClick={() => leavePlaybackAt(currentFrame - 1)}
-          aria-label="Step back"
-          title="Step back one frame"
-        >
-          <Icon icon={StepBack} size={17} className={s.icon} />
-        </Button>
-        <Button
-          variant="bare"
-          className={btnClass('play')}
-          {...hoverProps('play')}
-          onClick={() => {
-            if (playing) pausePlayback();
-            else playDir(1);
-          }}
-          aria-label={playing ? 'Pause' : 'Play'}
-          title={playing ? 'Pause' : 'Play'}
-        >
-          <Icon icon={playing ? Pause : Play} size={22} className={s.icon} />
-        </Button>
-        <Button
-          variant="bare"
-          className={btnClass('fwd')}
-          {...hoverProps('fwd')}
-          onClick={() => leavePlaybackAt(currentFrame + 1)}
-          aria-label="Step forward"
-          title="Step forward one frame"
-        >
-          <Icon icon={StepForward} size={17} className={s.icon} />
-        </Button>
+        {playoutPreview ? (
+          <>
+            <Button
+              variant="bare"
+              className={btnClass('playout-play')}
+              {...hoverProps('playout-play')}
+              onClick={playPlayout}
+              disabled={playbackMode === 'lifecycle'}
+              aria-label="Play"
+              title="Play"
+            >
+              <Icon icon={Play} size={19} className={s.icon} />
+              Play
+            </Button>
+            <Button
+              variant="bare"
+              className={btnClass('playout-next')}
+              {...hoverProps('playout-next')}
+              onClick={() => {
+                if (canNext) sendCanvasPlayoutCommand('next');
+              }}
+              disabled={!canNext}
+              aria-label="Next"
+              title="Next"
+            >
+              <Icon icon={SkipForward} size={17} className={s.icon} />
+              Next
+            </Button>
+            <Button
+              variant="bare"
+              className={btnClass('playout-stop')}
+              {...hoverProps('playout-stop')}
+              onClick={stopPlayout}
+              disabled={playbackMode !== 'lifecycle' || playoutStopping}
+              aria-label="Stop"
+              title="Stop and clear"
+            >
+              <Icon icon={Square} size={17} className={s.icon} />
+              Stop
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button
+              variant="bare"
+              className={btnClass('start')}
+              {...hoverProps('start')}
+              onClick={() => leavePlaybackAt(frameIn)}
+              aria-label="Go to start"
+              title="Go to start"
+            >
+              <Icon icon={SkipBack} size={17} className={s.icon} />
+            </Button>
+            <Button
+              variant="bare"
+              className={btnClass('back')}
+              {...hoverProps('back')}
+              onClick={() => leavePlaybackAt(currentFrame - 1)}
+              aria-label="Step back"
+              title="Step back one frame"
+            >
+              <Icon icon={StepBack} size={17} className={s.icon} />
+            </Button>
+            <Button
+              variant="bare"
+              className={btnClass('play')}
+              {...hoverProps('play')}
+              onClick={() => {
+                if (playing) pausePlayback();
+                else playDir(1);
+              }}
+              aria-label={playing ? 'Pause' : 'Play'}
+              title={playing ? 'Pause' : 'Play'}
+            >
+              <Icon icon={playing ? Pause : Play} size={22} className={s.icon} />
+            </Button>
+            <Button
+              variant="bare"
+              className={btnClass('fwd')}
+              {...hoverProps('fwd')}
+              onClick={() => leavePlaybackAt(currentFrame + 1)}
+              aria-label="Step forward"
+              title="Step forward one frame"
+            >
+              <Icon icon={StepForward} size={17} className={s.icon} />
+            </Button>
+            <span className={s.groupDivider} aria-hidden />
+            <Button
+              variant="bare"
+              className={btnClass('loop', loopMode === 'loop')}
+              {...hoverProps('loop')}
+              onClick={() => toggleLoop('loop')}
+              aria-pressed={loopMode === 'loop'}
+              aria-label="Preview loop"
+              title="Preview loop"
+            >
+              <Icon icon={Repeat} size={17} className={s.icon} />
+            </Button>
+            <Button
+              variant="bare"
+              className={btnClass('bounce', loopMode === 'bounce')}
+              {...hoverProps('bounce')}
+              onClick={() => toggleLoop('bounce')}
+              aria-pressed={loopMode === 'bounce'}
+              aria-label="Ping-pong"
+              title="Ping-pong"
+            >
+              <Icon icon={ArrowLeftRight} size={17} className={s.icon} />
+            </Button>
+          </>
+        )}
         <span className={s.groupDivider} aria-hidden />
         <Button
           variant="bare"
-          className={btnClass('loop', loopMode === 'loop')}
-          {...hoverProps('loop')}
-          onClick={() => toggleLoop('loop')}
-          aria-pressed={loopMode === 'loop'}
-          // D-133 §3.4 — NOT plain "Loop": three different loops can be true of one
-          // composition at once (this EDITOR-only playhead wrap, the `loop-cycle` playout
-          // mode, and the Playout panel's hold loop `[content start → out point]`), and the
-          // spec requires them to be distinguishable on the surface. This one is the
-          // preview's, and it never leaves the editor.
-          aria-label="Preview loop"
-          title="Preview loop — wrap the editor playhead to the start at the end (preview only; not the composition's playout)"
+          className={btnClass('playout', playoutPreview)}
+          {...hoverProps('playout')}
+          onClick={togglePlayoutPreview}
+          aria-pressed={playoutPreview}
+          aria-label="Rehearse preview"
+          title="Rehearse preview"
         >
-          <Icon icon={Repeat} size={17} className={s.icon} />
-        </Button>
-        <Button
-          variant="bare"
-          className={btnClass('bounce', loopMode === 'bounce')}
-          {...hoverProps('bounce')}
-          onClick={() => toggleLoop('bounce')}
-          aria-pressed={loopMode === 'bounce'}
-          aria-label="Ping-pong"
-          title="Ping-pong — reverse direction at each boundary"
-        >
-          <Icon icon={ArrowLeftRight} size={17} className={s.icon} />
+          <Icon icon={MonitorPlay} size={17} className={s.icon} />
+          Rehearse
         </Button>
         {hasSound && (
           <>

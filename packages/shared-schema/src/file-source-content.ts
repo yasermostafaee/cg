@@ -94,7 +94,14 @@ function typedCell(value: unknown, field: ListItemField | undefined): unknown {
         const assetId = (value as Record<string, unknown>)['assetId'];
         if (typeof assetId === 'string' && assetId !== '') return { assetId };
       }
-      if (typeof value === 'string' && value !== '') return { assetId: value };
+      if (typeof value === 'string' && value !== '') {
+        // Generated workbooks expose the human filename/label, never an opaque package id. Accept
+        // either spelling on import and store the canonical asset id used by Preview/playout.
+        const option = field.assetOptions?.find(
+          (candidate) => candidate.assetId === value || candidate.label === value,
+        );
+        return { assetId: option?.assetId ?? value };
+      }
       return value;
     case 'text':
     case 'multiline':

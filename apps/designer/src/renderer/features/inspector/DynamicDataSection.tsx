@@ -6,6 +6,8 @@ import {
   fileSourcePolicyOf,
   listFieldItemFields,
   fieldDigitsOf,
+  imageFieldAllowsChoices,
+  imageFieldInputMode,
   FieldDigitsSchema,
   NumberFieldDigitsSchema,
   numberFieldAllowedValues,
@@ -15,13 +17,14 @@ import {
   type FileSourceListFormat,
   type FieldBinding,
   type ListItemField,
+  type ImageElement,
   type RepeaterElement,
   type Scene,
   type SequenceElement,
   type TextElement,
   type TickerElement,
 } from '@cg/shared-schema';
-import { SHIPPED_DEFAULT_DELIMITER } from '@cg/shared-ipc';
+import { SHIPPED_DEFAULT_DELIMITER, type AssetMeta } from '@cg/shared-ipc';
 import type { DigitSet } from '@cg/text-shaping';
 import { compositionPackageId } from '@cg/vcg-format';
 import type { DesignerBridge, DesignerTextSourceFile } from '../../../shared/designer-bridge.js';
@@ -63,6 +66,8 @@ import { InfoTip } from './InfoTip.js';
 import { DigitsField } from './DigitsField.js';
 import { NumberChoicesModal } from './NumberChoicesModal.js';
 import { SelectChoicesModal } from './SelectChoicesModal.js';
+import { ImageChoicesModal } from './ImageChoicesModal.js';
+import { useImageAssetUrls } from '../fields/useImageAssetUrls.js';
 import {
   CUSTOM_PATTERN,
   PATTERN_PRESET_ORDER,
@@ -72,6 +77,33 @@ import {
 } from './pattern-presets.js';
 import * as cs from './controls.css.js';
 import * as s from './DynamicDataSection.css.js';
+
+function useDesignerImageAssets(source: 'project' | 'shared'): readonly AssetMeta[] {
+  const [assets, setAssets] = useState<readonly AssetMeta[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    const bridge = (window as unknown as { cg?: Partial<DesignerBridge> }).cg;
+    const api = source === 'project' ? bridge?.assets : bridge?.sharedImages;
+    if (api?.list === undefined || api.onImported === undefined) return;
+    void api
+      .list()
+      .then((items) => {
+        if (!cancelled) setAssets(items.filter((item) => item.kind === 'image'));
+      })
+      .catch(() => {
+        if (!cancelled) setAssets([]);
+      });
+    const off = api.onImported((item) => {
+      if (item.kind !== 'image') return;
+      setAssets((current) => [item, ...current.filter((asset) => asset.assetId !== item.assetId)]);
+    });
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, [source]);
+  return assets;
+}
 
 /**
  * D-018 / D-028 / D-029 — "Dynamic / Data" section, shown for text, ticker,
@@ -245,7 +277,7 @@ export function DynamicDataSection({
   element,
   scene,
 }: {
-  element: TextElement | TickerElement | SequenceElement | RepeaterElement;
+  element: TextElement | ImageElement | TickerElement | SequenceElement | RepeaterElement;
   scene: Scene;
 }): JSX.Element {
   const activeCompositionId = designerStore.get().activeCompositionId;
@@ -254,21 +286,26 @@ export function DynamicDataSection({
   // The element kinds whose Data key backs a LIST field (items binding).
   const isListElement =
     element.type === 'ticker' || element.type === 'sequence' || element.type === 'repeater';
+  const isImageElement = element.type === 'image';
   const itemsKind =
     element.type === 'repeater'
       ? 'repeater-items'
       : element.type === 'sequence'
         ? 'sequence-items'
-        : 'ticker-items';
+        : element.type === 'ticker'
+          ? 'ticker-items'
+          : null;
   // The convenience binding for this element: the full-text one for text (no
   // placeholder), the items one for a ticker/sequence; its field is what the
   // meta edits.
   const isConv = (b: FieldBinding, elementId: string): boolean =>
-    isListElement
-      ? b.target.kind === itemsKind && 'elementId' in b.target && b.target.elementId === elementId
-      : b.target.kind === 'text' &&
-        b.target.elementId === elementId &&
-        b.target.placeholder === undefined;
+    isImageElement
+      ? b.target.kind === 'image' && b.target.elementId === elementId
+      : isListElement
+        ? b.target.kind === itemsKind && 'elementId' in b.target && b.target.elementId === elementId
+        : b.target.kind === 'text' &&
+          b.target.elementId === elementId &&
+          b.target.placeholder === undefined;
   const conv = scene.bindings.find((b) => isConv(b, element.id));
   const field = conv === undefined ? undefined : scene.fields.find((f) => f.id === conv.fieldId);
   const currentKey = field?.id ?? '';
@@ -291,7 +328,8 @@ export function DynamicDataSection({
       ((b.target.kind === 'text' && b.target.placeholder === undefined) ||
         b.target.kind === 'ticker-items' ||
         b.target.kind === 'sequence-items' ||
-        b.target.kind === 'repeater-items') &&
+        b.target.kind === 'repeater-items' ||
+        b.target.kind === 'image') &&
       'elementId' in b.target &&
       b.target.elementId !== element.id
     );
@@ -314,7 +352,11 @@ export function DynamicDataSection({
   const adoptable = scene.fields
     .filter(
       (f) =>
-        (isListElement ? f.type === 'list' : f.type === 'text' || f.type === 'multiline') &&
+        (isListElement
+          ? f.type === 'list'
+          : isImageElement
+            ? f.type === 'image'
+            : f.type === 'text' || f.type === 'multiline') &&
         f.id !== currentKey &&
         !scene.bindings.some((b) => b.fieldId === f.id && ownedByOther(b)),
     )
@@ -420,7 +462,7 @@ function FieldMeta({
   scene,
   sceneId,
 }: {
-  element: TextElement | TickerElement | SequenceElement | RepeaterElement;
+  element: TextElement | ImageElement | TickerElement | SequenceElement | RepeaterElement;
   field: DynamicField;
   scene: Scene;
   sceneId: string;
@@ -436,6 +478,10 @@ function FieldMeta({
   const multiline = field.type === 'multiline';
   const [numberChoicesOpen, setNumberChoicesOpen] = useState(false);
   const [selectChoicesOpen, setSelectChoicesOpen] = useState(false);
+  const [imageChoicesOpen, setImageChoicesOpen] = useState(false);
+  const projectAssets = useDesignerImageAssets('project');
+  const sharedImages = useDesignerImageAssets('shared');
+  const imageUrls = useImageAssetUrls();
   const patch = (p: ElementFieldMetaPatch): void =>
     designerStore.setElementFieldMeta(element.id, p);
   const allowedNumberValues = field.type === 'number' ? numberFieldAllowedValues(field) : undefined;
@@ -453,6 +499,71 @@ function FieldMeta({
       ? allowedNumberValues.filter((value) => numberFieldValueAlias(field, value) !== undefined)
           .length
       : 0;
+
+  if (field.type === 'image') {
+    return (
+      <>
+        <TextField
+          label="Title"
+          value={field.label}
+          onCommit={(v) => patch({ title: v })}
+          resetKey={element.id}
+        />
+        <TextField
+          label="Description"
+          value={field.description ?? ''}
+          onCommit={(v) => patch({ description: v })}
+          resetKey={element.id}
+        />
+        <CheckRow
+          label="Required"
+          checked={field.required}
+          onChange={(v) => patch({ required: v })}
+        />
+        <SelectField
+          label="Operator control"
+          value={imageFieldInputMode(field)}
+          options={['choices', 'upload', 'choices-and-upload']}
+          labels={['Allowed images', 'Browse Windows', 'Allowed images + Browse']}
+          onCommit={(value) =>
+            patch({
+              imageInputMode:
+                value === 'upload'
+                  ? 'upload'
+                  : value === 'choices-and-upload'
+                    ? 'choices-and-upload'
+                    : 'choices',
+            })
+          }
+        />
+        {imageFieldAllowsChoices(field) && (
+          <div className={s.numberChoicesControl}>
+            <span className={s.hint}>{field.assetOptions?.length ?? 0} allowed images</span>
+            <Button variant="secondary" size="sm" onClick={() => setImageChoicesOpen(true)}>
+              Choose images…
+            </Button>
+          </div>
+        )}
+        <p className={s.hint}>
+          The operator sees only the control selected here. SVG is supported in Project Assets and
+          Shared Library as well as Windows Browse.
+        </p>
+        {imageChoicesOpen && (
+          <ImageChoicesModal
+            projectAssets={projectAssets}
+            sharedAssets={sharedImages}
+            imageUrls={imageUrls}
+            selected={field.assetOptions ?? []}
+            onCancel={() => setImageChoicesOpen(false)}
+            onSave={(options) => {
+              patch({ imageAssetOptions: options });
+              setImageChoicesOpen(false);
+            }}
+          />
+        )}
+      </>
+    );
+  }
 
   // D-028/D-029 — a ticker's/sequence's list field: only the base meta
   // applies; the items themselves are edited in the Items section (and live

@@ -34,7 +34,7 @@ import {
 } from './loadPictures.js';
 import type { Raster } from './fitPicture.js';
 import { ContextMenu } from '../../ui/ContextMenu.js';
-import { useAuthoredPictures } from './authoredPictures.js';
+import { useAuthoredPictureThumbnails } from './authoredPictures.js';
 import { ManagePagesModal } from './ManagePagesModal.js';
 import { useRehearse } from '../../hooks/useRehearse.js';
 import {
@@ -112,7 +112,7 @@ export function BookBlock({
   const pages = bookPagesOf(loaded ? value : defaults);
   const appliedPages = bookPagesOf(Array.isArray(applied) ? applied : defaults);
   const inPvw = useRehearse().some((r) => r.itemId === itemId);
-  const authored = useAuthoredPictures(templateId, channel);
+  const authored = useAuthoredPictureThumbnails(templateId, channel);
   const [managing, setManaging] = useState(false);
   const source = bookSource(pages, loaded);
   const words = bookSourceWords(source);

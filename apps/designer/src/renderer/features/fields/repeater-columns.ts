@@ -1,4 +1,12 @@
-import { fieldDigitsOf, type DynamicField, type FieldDigits, type Scene } from '@cg/shared-schema';
+import {
+  fieldDigitsOf,
+  imageFieldAllowsChoices,
+  imageFieldAllowsUpload,
+  type DynamicField,
+  type FieldDigits,
+  type ImageFieldAssetOption,
+  type Scene,
+} from '@cg/shared-schema';
 
 /**
  * D-030 — the columned items-editor surface for a repeater: one column per
@@ -28,11 +36,17 @@ export interface ListItemColumn {
   allowedValueLabels?: Readonly<Record<string, string>>;
   /** Human-readable values for image/select cells. */
   choices?: readonly ListItemChoice[];
+  /** An image cell may offer Windows Browse in addition to or instead of choices. */
+  allowUpload?: boolean;
+  /** Native image-picker filter derived from the authored accepted formats. */
+  accept?: string;
 }
 
 export interface ListItemChoice {
   value: string;
   label: string;
+  /** Designer-only Blob/data URL used to identify the choice visually. */
+  thumbnailUrl?: string;
 }
 
 export interface ImageChoiceAsset {
@@ -41,26 +55,40 @@ export interface ImageChoiceAsset {
   kind: string;
 }
 
-/** Merge project + shared image libraries into one readable, id-stable picker list. */
-export function imageChoicesForAssets(
+/** Image field options with explicit project/shared ownership for Preview and export. */
+export function imageFieldOptionsForAssets(
   projectAssets: readonly ImageChoiceAsset[],
   sharedAssets: readonly ImageChoiceAsset[] = [],
-): ListItemChoice[] {
+): ImageFieldAssetOption[] {
   const seen = new Set<string>();
-  const choices: ListItemChoice[] = [];
-  const add = (asset: ImageChoiceAsset, shared: boolean): void => {
+  const options: ImageFieldAssetOption[] = [];
+  const add = (asset: ImageChoiceAsset, source: 'project' | 'shared'): void => {
     if (asset.kind !== 'image' || seen.has(asset.assetId)) return;
     seen.add(asset.assetId);
     const dot = asset.filename.lastIndexOf('.');
     const name = dot > 0 ? asset.filename.slice(0, dot) : asset.filename;
-    choices.push({
-      value: asset.assetId,
-      label: shared ? `${name} (shared)` : name,
+    options.push({
+      assetId: asset.assetId,
+      label: source === 'shared' ? `${name} (shared)` : name,
+      source,
     });
   };
-  for (const asset of projectAssets) add(asset, false);
-  for (const asset of sharedAssets) add(asset, true);
-  return choices;
+  projectAssets.forEach((asset) => add(asset, 'project'));
+  sharedAssets.forEach((asset) => add(asset, 'shared'));
+  return options;
+}
+
+/** Merge project + shared image libraries into one readable, id-stable picker list. */
+export function imageChoicesForAssets(
+  projectAssets: readonly ImageChoiceAsset[],
+  sharedAssets: readonly ImageChoiceAsset[] = [],
+  imageUrls: Readonly<Record<string, string>> = {},
+): ListItemChoice[] {
+  return imageFieldOptionsForAssets(projectAssets, sharedAssets).map((option) => ({
+    value: option.assetId,
+    label: option.label,
+    ...(imageUrls[option.assetId] === undefined ? {} : { thumbnailUrl: imageUrls[option.assetId] }),
+  }));
 }
 
 /** Derive the editor columns from a child composition's fields. */
@@ -91,7 +119,23 @@ export function columnsForFields(
           ...(f.defaultAssetId === undefined
             ? {}
             : { defaultValue: { assetId: f.defaultAssetId } }),
-          choices: imageChoices,
+          ...(imageFieldAllowsChoices(f)
+            ? {
+                choices:
+                  f.assetOptions?.map((option) => {
+                    const thumbnailUrl = imageChoices.find(
+                      (choice) => choice.value === option.assetId,
+                    )?.thumbnailUrl;
+                    return {
+                      value: option.assetId,
+                      label: option.label,
+                      ...(thumbnailUrl === undefined ? {} : { thumbnailUrl }),
+                    };
+                  }) ?? imageChoices,
+              }
+            : {}),
+          ...(imageFieldAllowsUpload(f) ? { allowUpload: true } : {}),
+          accept: f.accept.map((extension) => `.${extension}`).join(','),
         };
       case 'color':
         return { ...base, kind: 'color' as const, defaultValue: f.default };

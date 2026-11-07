@@ -4254,9 +4254,9 @@ commit; windowed and silent Bridge installation prove `textSourceRoot` is writte
 all three installer files are downloaded with hashes and placed in `installers-ci-0.12.5/` and
 `dist/`; no tag or release is created.
 
-## [~] P-074 — Release candidate `0.12.6`: installed shared-text service access ⟨priority: high⟩ — FILED 2026-11-01 by `RELEASE-0126-01` · `openspec/changes/prepare-0-12-6-installers/`
+## [~] P-074 — Release candidate `1.0.0`: installed shared-text service access ⟨priority: high⟩ — FILED 2026-11-01 by `RELEASE-0126-01` · `openspec/changes/prepare-0-12-6-installers/`
 
-**What:** build and retain one matching `0.12.6` set of CG Bridge, CG Control and CG Designer
+**What:** build and retain one matching `1.0.0` set of CG Bridge, CG Control and CG Designer
 installers. The product changes complete `B-357`: a selected local shared-files root is readable by
 the installed CG Bridge service, can be inspected or changed from CG Control Station setup, and an
 upgrade repairs a removed local grant. The same candidate distinguishes the three Setup surfaces,
@@ -4269,12 +4269,12 @@ with `EPERM` because Setup runs as an administrator while Bridge runs as `NT SER
 The Bridge installer now changes permissions, so its new bytes need a fresh identity; the installed
 suite remains one matching set.
 
-**Acceptance:** all version surfaces say `0.12.6`; the full local gate and E2E lane pass; Linux
+**Acceptance:** all version surfaces say `1.0.0`; the full local gate and E2E lane pass; Linux
 workspace/E2E and all applicable Windows installer/smoke/upgrade jobs pass on the exact candidate
 commit; the Bridge smoke proves inherited read/execute-only access on a local root and upgrade
 repair; visual evidence proves the three Setup identities and clear splash versions; the rebuilt
 guide is visually inspected at readable line spacing; all three installer files are downloaded with hashes and placed in
-`installers-ci-0.12.6/` and `dist/`; no tag or release is created.
+`installers-ci-1.0.0/` and `dist/`; no tag or release is created.
 
 ## [~] P-075 — Deliver a concise styled HTML installation guide ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/html-install-guide/`
 
@@ -4288,10 +4288,13 @@ guide is visually inspected at readable line spacing; all three installer files 
 
 ## [~] P-076 — Label the startup build identity in operator language ⟨priority: medium — the owner, 2026-11-02⟩ — `openspec/changes/readable-splash-build-stamp/`
 
-**What:** Replace the unexplained compact splash stamp (`v0.12.6 · b2305252 · 2026-11-01`) with explicit Version, Revision and Build date labels on both products.
-**Why:** The revision after the version is useful for support, but an operator cannot know what the bare number means.
-**Acceptance:** both startup splashes retain the exact release/revision/date identity while each value is visibly labelled; development builds remain truthful when no release version or Git revision exists.
+**What:** Replace the unexplained compact splash stamp with explicit Version and Build date labels on both products; keep Revision only in diagnostic metadata.
+**Why:** Operators need the release and build date on startup; the source revision is implementation detail and should not occupy the installed splash.
+**Acceptance:** both startup splashes retain the exact release/date identity without a visible Revision segment; development builds remain truthful when no release version exists.
 
 **2026-11-05 integration correction:** retain the still-required Revision label; the imported
 Version/Built-only formatter was incomplete, not a superseding owner decision. The shared formatter
 and both app assertions now follow this contract; verification evidence belongs in the active tasks.
+
+**2026-11-07 owner supersession:** for the `1.0.0` installers, the visible Revision segment is removed.
+The revision remains in the shared structured build identity for diagnostics only.

@@ -8,6 +8,7 @@ import {
   playoutOf,
   sequenceItemInstanceId,
   sequenceItemTextFieldIds,
+  SEQUENCE_ROWS_FIELD_NAMESPACE,
   type ClockTarget,
   type DynamicField,
   type FollowAnchors,
@@ -44,6 +45,11 @@ import {
 } from './bindings.js';
 import { applyArrangementToNodes } from './arrangement-view.js';
 import { LookMediaPark } from './look-media.js';
+import {
+  pagedRepeaterItems,
+  pagedRepeaterSequenceOf,
+  type PagedRepeaterSequence,
+} from './paged-repeater-sequence.js';
 
 /**
  * Deep-merge a nested field-value patch into the current values. Plain objects
@@ -140,6 +146,7 @@ import type {
   ElementTimingOverrides,
   FieldScope,
   LifespanGateEntry,
+  LifecycleSource,
   NestedAnimatedEntry,
   PlayOptions,
   PlayoutOverride,
@@ -159,6 +166,21 @@ interface ContentDriver {
   id: string;
   drivesHold: boolean;
   whenComplete: () => Promise<void>;
+}
+
+/**
+ * D-199 — a Sequence can author its whole-element closing state with the normal timeline
+ * keyframes. Such a Sequence must survive Stop's blanket content hide so the composition frame
+ * driver can actually paint those Outro keyframes. Its page-turn `transitionOut` remains a
+ * separate, Sequence-owned operation.
+ */
+function sequenceHasAuthoredFrameOutro(source: LifecycleSource, element: SequenceElement): boolean {
+  const active = activeRangeOf(source);
+  const outPoint = source.lifecycle?.outPoint;
+  if (outPoint === undefined || outPoint >= active.out) return false;
+  return Object.values(element.animation?.tracks ?? {}).some((track) =>
+    track?.keyframes.some((keyframe) => keyframe.frame > outPoint && keyframe.frame <= active.out),
+  );
 }
 
 /** D-026 — a node in the controller tree paralleling the field-scope tree. */
@@ -737,6 +759,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     return hostPagePicture(sha, doc) ?? named;
   };
   const sequenceElementOf = new WeakMap<SequenceDriver, string>();
+  /** Scope address + page recipe for the operator-resizable paged Repeaters. */
+  const sequenceValuePathOf = new WeakMap<SequenceDriver, string>();
+  const pagedRepeaterOf = new WeakMap<SequenceDriver, PagedRepeaterSequence>();
   // `D-163` — the sequences the operator does NOT step (`sequenceStepsByOperator`): `CG NEXT`,
   // Previous and Go to pass them by; they run by themselves. A take still sets a book's first page.
   const operatorFixed = new WeakSet<SequenceDriver>();
@@ -1320,6 +1345,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           transitionOut: s.element.transitionOut,
           transitionTiming: s.element.transitionTiming,
           transitionMs: s.element.transitionMs,
+          prewarmCompositionItems: s.element.prewarmCompositionItems,
           repeat: effSeqRepeat,
           glyphGradientCss: s.glyphGradientCss,
           renderComposition,
@@ -1369,10 +1395,18 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         });
         registerSequenceDriver(s.host, driver);
         sequenceElementOf.set(driver, s.element.id);
+        sequenceValuePathOf.set(driver, path);
+        const pagedRepeater = pagedRepeaterSequenceOf(scene, s.element);
+        if (pagedRepeater !== undefined) pagedRepeaterOf.set(driver, pagedRepeater);
         if (!sequenceStepsByOperator(s.element)) operatorFixed.add(driver);
         // D-105 — mark the content root for the coordinated exit (out/stop).
         s.host.dataset['cgContent'] = 'sequence';
-        if (
+        const frameOutro = sequenceHasAuthoredFrameOutro(scope.source, s.element);
+        if (s.element.visible !== false && frameOutro) {
+          // D-199 — this host closes on the composition frame clock. Excluding it from Stop's
+          // blanket hide is what lets ordinary opacity/position/scale keyframes remain visible.
+          s.host.dataset['cgOutro'] = 'sequence-frame';
+        } else if (
           s.element.visible !== false &&
           (bookField !== undefined || sequenceHasRepeaterExit(scene, s.element))
         ) {
@@ -2724,6 +2758,28 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   };
 
   /**
+   * A paged Repeater's authored Sequence items are its design shell, not its
+   * operator capacity. When CG Control supplies the reserved flat row list,
+   * derive the exact number of composition pages and reconcile the driver.
+   * Absence preserves the authored pages for old payloads and old projects.
+   */
+  const applyDynamicSequenceRows = (): void => {
+    for (const sub of subtrees) {
+      for (const driver of sub.sequences) {
+        const definition = pagedRepeaterOf.get(driver);
+        const path = sequenceValuePathOf.get(driver);
+        if (definition === undefined || path === undefined) continue;
+        const scopeValues = resolveScopeValues(currentValues, path);
+        const namespace = scopeValues[SEQUENCE_ROWS_FIELD_NAMESPACE];
+        if (!isNamespace(namespace)) continue;
+        const rows = (namespace as NestedFieldValues)[definition.sequenceId];
+        if (!Array.isArray(rows)) continue;
+        driver.setItems(pagedRepeaterItems(definition, rows as ListItem[]));
+      }
+    }
+  };
+
+  /**
    * D-141 — route every `clock-target` binding to its clock DRIVER, on play() and
    * on every update(), so a `CG UPDATE` re-aims a LIVE countdown without replaying
    * it. The sibling of {@link reapplySequenceItemFields}: both exist because their
@@ -2805,10 +2861,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const contentRoots = (): HTMLElement[] =>
     Array.from(built.container.querySelectorAll<HTMLElement>('[data-cg-content]'));
   /**
-   * D-125 §D6.2 — content roots the blanket fade/hide may touch: every `data-cg-content`
-   * EXCEPT the ones that animate themselves off (`data-cg-outro`, a Lottie owning an outro
-   * segment). Fading a Lottie's opacity while its driver drives `goToAndStop` would fight
-   * the authored outro; the driver owns that element's exit.
+   * D-125 §D6.2 / D-199 — content roots the blanket fade/hide may touch: every
+   * `data-cg-content` EXCEPT the ones that animate themselves off (`data-cg-outro`: a Lottie
+   * owning an outro segment, a held page with an element-owned exit, or a Sequence carrying
+   * ordinary frame keyframes after Out point). Hiding those roots would erase their authored exit.
    */
   const fadeableContentRoots = (): HTMLElement[] =>
     contentRoots().filter((n) => n.closest('[data-cg-outro]') === null);
@@ -3102,6 +3158,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         stripCgControl(data as Record<string, unknown>) as NestedFieldValues,
       );
       applyScopedFieldValues(scene, scene, currentValues, built.scopeTree, options.assetUrls);
+      applyDynamicSequenceRows();
       reapplySequenceItemFields();
       reapplyClockTargets();
       // D-163 — the take's page: AFTER the fields (a new book is in place first), BEFORE the run
@@ -3347,6 +3404,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         currentValues = mergeNestedValues(currentValues, values as NestedFieldValues);
       }
       applyScopedFieldValues(scene, scene, currentValues, built.scopeTree, options.assetUrls);
+      applyDynamicSequenceRows();
       reapplySequenceItemFields();
       reapplyClockTargets();
       /*

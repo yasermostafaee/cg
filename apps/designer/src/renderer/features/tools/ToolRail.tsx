@@ -6,7 +6,6 @@ import {
   MoveHorizontal,
   Rows3,
   Square,
-  Stamp,
   Type,
   Video,
   type LucideIcon,
@@ -28,9 +27,6 @@ const tools: { id: DesignerTool; label: string; icon: LucideIcon }[] = [
   { id: 'text', label: 'Text', icon: Type },
   { id: 'shape', label: 'Rectangle', icon: Square },
   { id: 'ellipse', label: 'Ellipse', icon: Circle },
-  // D-040 — the IMAGE LOADER: stamps from the SHARED LIBRARY, so it wears `Stamp`,
-  // the same glyph its timeline row wears. A project-asset image keeps `Image`.
-  { id: 'image', label: 'Image loader', icon: Stamp },
   // D-137 — a Live Source: the transparent hole CasparCG composites a live input
   // behind. A drawing tool (not asset-backed like Lottie), so it belongs here.
   { id: 'live-source', label: 'Plate', icon: Video },

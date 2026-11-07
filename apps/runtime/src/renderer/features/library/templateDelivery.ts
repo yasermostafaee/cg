@@ -12,6 +12,7 @@ import {
 } from '@cg/shared-ipc';
 import {
   aggregateBoundCompositionFields,
+  CG_RUNTIME_VERSION,
   hasNextStep,
   hasSoundEffects,
   pageListsOf,
@@ -24,7 +25,13 @@ import {
   type Manifest,
   type Position,
 } from '@cg/shared-schema';
-import { buildTemplateLiveSources, sha256Hex, unpack, verify } from '@cg/vcg-format';
+import {
+  buildTemplateLiveSources,
+  readManifestCompatibility,
+  sha256Hex,
+  unpack,
+  verify,
+} from '@cg/vcg-format';
 import {
   ExporterSingleFile,
   cgCss,
@@ -231,6 +238,32 @@ function vcgImageAssetSource(
 }
 
 /**
+ * `B-384` — read the forward-compatible manifest header before strict scene
+ * validation so an older CG Control can report the actual version shortfall.
+ *
+ * A missing or malformed header is deliberately left to the existing
+ * `verify → unpack` path, which owns damaged-package classification.
+ */
+export async function assertTemplateRuntimeCompatibility(
+  bytes: Uint8Array,
+  availableRuntimeVersion: string = CG_RUNTIME_VERSION,
+): Promise<void> {
+  let header;
+  try {
+    header = await readManifestCompatibility(bytes);
+  } catch {
+    return;
+  }
+
+  const shortfall = runtimeShortfall(header.minRuntimeVersion, availableRuntimeVersion);
+  if (shortfall === null) return;
+
+  throw new Error(
+    runtimeShortfallMessage(pickTemplateName(header.name, undefined) ?? 'This template', shortfall),
+  );
+}
+
+/**
  * Verify + unpack a `.vcg` and render its scene to the self-contained standalone
  * HTML. Returns the `TemplateInfo`, the produced HTML, and any non-blocking export
  * warnings. **Throws** a clear message — registering nothing — when the package
@@ -248,6 +281,7 @@ export async function produceTemplateDelivery(
 ): Promise<TemplateDelivery> {
   // `B-350` — an export that never finished leaves a file of 0 bytes: say that, and the remedy.
   if (bytes.byteLength === 0) throw new Error(TEMPLATE_EMPTY);
+  await assertTemplateRuntimeCompatibility(bytes);
   const result = await verify(bytes);
   if (!result.ok) {
     /*
@@ -280,30 +314,6 @@ export async function produceTemplateDelivery(
     page lists the bridge turns, and the page itself — so every one of them agrees.
   */
   const scene = withPageLists(unpacked);
-
-  /*
-    🔴 `B-196` — THE ONE PLACE A PACKAGE FROM A NEWER BUILD IS REFUSED, WITH A SENTENCE.
-
-    ⚠ It is not the only thing that refuses one, and that is the point. `SceneSchema`'s
-    `schemaVersion: z.literal(1)` already rejects a bumped document, and `ElementSchema` is a
-    `z.union`, so an element kind this build does not know already fails to parse — but what
-    the operator gets from those is a zod error with a path into an element array, at import,
-    with nothing saying that the STATION is the thing that is behind. This runs BEFORE the
-    render for exactly that reason: the message is the feature, not the refusal.
-
-    Placed after `unpack` because the manifest is what declares the requirement, and before
-    the render because there is no value in rendering a package that must be refused. Fails
-    OPEN on an unreadable version — see `runtimeShortfall`, which states why.
-  */
-  const shortfall = runtimeShortfall(manifest.compatibility.minRuntimeVersion);
-  if (shortfall !== null) {
-    throw new Error(
-      runtimeShortfallMessage(
-        pickTemplateName(manifest.name, scene.name) ?? 'This template',
-        shortfall,
-      ),
-    );
-  }
 
   // B-067 — the operator's field form must be the template's FULL field closure, not the
   // entry composition's flat fields. A D-119 starter is a graphic composition nested in a

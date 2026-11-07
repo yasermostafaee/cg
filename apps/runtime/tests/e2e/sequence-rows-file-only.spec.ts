@@ -47,8 +47,11 @@ test.describe('D-180 — paged Repeater input authority', () => {
     await app.importVcg('paged-manual.vcg', await buildPagedRepeaterVcg(templateId));
     await app.selectStackRow(templateId);
 
-    const city = app.inspector.getByRole('textbox', { name: 'Cities item 1 City' });
-    const temperature = app.inspector.getByRole('textbox', {
+    const rows = app.inspector.getByRole('region', { name: 'Weather pages all rows' });
+    await rows.getByRole('button', { name: 'Edit rows…' }).click();
+    const editor = app.page.getByRole('dialog', { name: 'Edit Cities rows' });
+    const city = editor.getByRole('textbox', { name: 'Cities item 1 City' });
+    const temperature = editor.getByRole('textbox', {
       name: 'Cities item 1 Temperature',
     });
     await expect(temperature).toBeEnabled();
@@ -65,6 +68,7 @@ test.describe('D-180 — paged Repeater input authority', () => {
       ),
     );
     expect(appearance[1]).toEqual(appearance[0]);
+    await editor.locator('button[data-modal-role="cancel"]', { hasText: 'Close' }).click();
   });
 
   test('a connected Sequence workbook is the only source without child File-only flags', async ({
@@ -92,7 +96,10 @@ test.describe('D-180 — paged Repeater input authority', () => {
     const templateId = 'tpl-e2e-sequence-owned-clean-file';
     await app.importVcg(
       'sequence-owned-clean-file.vcg',
-      await buildPagedRepeaterVcg(templateId, { pageDataFile: 'weather/cities.csv' }),
+      await buildPagedRepeaterVcg(templateId, {
+        pageDataFile: 'weather/cities.csv',
+        allowOperatorRows: true,
+      }),
     );
     await app.page.evaluate(() => {
       const target = window as unknown as {
@@ -115,8 +122,9 @@ test.describe('D-180 — paged Repeater input authority', () => {
 
     await app.selectStackRow(templateId);
     const rows = app.inspector.getByRole('region', { name: 'Weather pages all rows' });
-    await expect(rows).toContainText('File managed');
+    await expect(rows).toContainText('File connected');
     await expect(rows).toContainText('Connected');
+    await expect(rows.getByRole('button', { name: 'Edit rows…' })).toBeVisible();
     await expect
       .poll(() =>
         app.page.evaluate(
@@ -130,6 +138,93 @@ test.describe('D-180 — paged Repeater input authority', () => {
     ).toBeDisabled();
   });
 
+  test('Reload grows the page count when the connected workbook gains rows', async ({ app }) => {
+    const templateId = 'tpl-e2e-sequence-growing-file';
+    await app.importVcg(
+      'sequence-growing-file.vcg',
+      await buildPagedRepeaterVcg(templateId, {
+        pageDataFile: 'weather/cities.csv',
+        allowOperatorRows: true,
+      }),
+    );
+    await app.page.evaluate(() => {
+      const target = window as unknown as {
+        __sequenceRowsCsv: string;
+        cg: {
+          textSources: {
+            read: (request: { path: string }) => Promise<{ name: string; content: string }>;
+          };
+        };
+      };
+      target.__sequenceRowsCsv = 'City,Temperature,Weather\nTehran,25,0\nTabriz,-12,1\nShiraz,22,1';
+      target.cg.textSources.read = (request) =>
+        Promise.resolve({ name: request.path, content: target.__sequenceRowsCsv });
+    });
+    await app.selectStackRow(templateId);
+
+    const rows = app.inspector.getByRole('region', { name: 'Weather pages all rows' });
+    await expect(rows).toContainText('3 rows · 2 pages · 2 per page');
+    await app.page.evaluate(() => {
+      (window as unknown as { __sequenceRowsCsv: string }).__sequenceRowsCsv =
+        'City,Temperature,Weather\nTehran,25,0\nTabriz,-12,1\nShiraz,22,1\nYazd,30,0\nAhvaz,35,1';
+    });
+    await rows.getByRole('button', { name: 'Reload' }).click();
+    await expect(rows).toContainText('5 rows · 3 pages · 2 per page');
+    await expect(rows).not.toContainText('Add pages in Designer');
+
+    await rows.getByRole('button', { name: 'Edit rows…' }).click();
+    const editor = app.page.getByRole('dialog', { name: 'Edit Cities rows' });
+    await expect(editor.getByRole('separator', { name: /Page/u })).toHaveCount(3);
+    await editor.locator('button[data-modal-role="cancel"]', { hasText: 'Close' }).click();
+  });
+
+  test('Reload preserves author-locked Sequence columns and updates editable siblings', async ({
+    app,
+  }) => {
+    const templateId = 'tpl-e2e-sequence-locked-columns';
+    await app.importVcg(
+      'sequence-locked-columns.vcg',
+      await buildPagedRepeaterVcg(templateId, {
+        pageDataFile: 'weather/cities.csv',
+        allowOperatorRows: true,
+        lockedCity: true,
+      }),
+    );
+    await app.page.evaluate(() => {
+      const target = window as unknown as {
+        __sequenceRowsCsv: string;
+        cg: {
+          textSources: {
+            read: (request: { path: string }) => Promise<{ name: string; content: string }>;
+          };
+        };
+      };
+      target.__sequenceRowsCsv = 'City,Temperature,Weather\nTehran,25,0\nTabriz,-12,1\nShiraz,22,1';
+      target.cg.textSources.read = (request) =>
+        Promise.resolve({ name: request.path, content: target.__sequenceRowsCsv });
+    });
+    await app.selectStackRow(templateId);
+
+    const rows = app.inspector.getByRole('region', { name: 'Weather pages all rows' });
+    await expect(rows).toContainText('File connected');
+    await app.page.evaluate(() => {
+      (window as unknown as { __sequenceRowsCsv: string }).__sequenceRowsCsv =
+        'City,Temperature,Weather\nChanged,31,0\nChanged,-8,1\nChanged,27,1';
+    });
+    await rows.getByRole('button', { name: 'Reload' }).click();
+    await rows.getByRole('button', { name: 'Edit rows…' }).click();
+    const editor = app.page.getByRole('dialog', { name: 'Edit Cities rows' });
+    const city = editor.getByRole('textbox', { name: 'Cities item 1 City' });
+    const temperature = editor.getByRole('textbox', {
+      name: 'Cities item 1 Temperature',
+    });
+    await expect(city).toBeDisabled();
+    await expect(city).toHaveValue('Tehran');
+    await expect(temperature).toBeEnabled();
+    await expect(temperature).toHaveValue('31');
+    await editor.locator('button[data-modal-role="cancel"]', { hasText: 'Close' }).click();
+  });
+
   test('an open Inspector adopts Sequence file ownership after updating the same template', async ({
     app,
   }) => {
@@ -138,7 +233,7 @@ test.describe('D-180 — paged Repeater input authority', () => {
     await app.selectStackRow(templateId);
 
     const rows = app.inspector.getByRole('region', { name: 'Weather pages all rows' });
-    await expect(rows.getByRole('textbox', { name: /Cities item/ }).first()).toBeVisible();
+    await expect(rows.getByRole('button', { name: 'Edit rows…' })).toBeVisible();
     await expect(rows).toContainText('Save and connect Excel');
 
     await app.openTemplatePicker();

@@ -120,6 +120,7 @@ const rowComposition: NonNullable<Scene['compositions']>[number] = {
       type: 'text',
       default: 'پرسپولیس',
       direction: 'rtl',
+      operatorEditable: false,
     },
     {
       id: 'logo',
@@ -128,6 +129,7 @@ const rowComposition: NonNullable<Scene['compositions']>[number] = {
       type: 'image',
       defaultAssetId: 'league-zwlji1u1',
       accept: ['png', 'svg', 'webp'],
+      operatorEditable: false,
     },
     {
       id: 'played',
@@ -227,7 +229,15 @@ const children: Element[] = [
     'az-title-glow',
     'نوار عنوان',
     tf(50, 42, 1660, 56),
-    gradient(90, '#263247', '#344157'),
+    {
+      kind: 'radial',
+      center: { x: 0.5, y: 0.5 },
+      radius: 446,
+      stops: [
+        { at: 0, color: '#202EA0A1' },
+        { at: 1, color: '#FFFFFF00' },
+      ],
+    },
     3,
     {
       radius: 16,
@@ -284,7 +294,7 @@ const children: Element[] = [
     itemTransitionMs: 200,
     itemExitTransitionMs: 50,
     itemStaggerMs: 30,
-    alternatingRowFill: '#FFFFFF0D',
+    alternatingRowFill: '#FFFFFF10',
     items: rows,
   } as Element,
 ];

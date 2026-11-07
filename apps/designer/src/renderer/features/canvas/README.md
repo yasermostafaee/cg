@@ -636,13 +636,15 @@ routine — one implementation, so "import verified it" ⇒ "the canvas renders 
 
 ## Testing
 
-Ordinary forward transport uses the iframe runtime lifecycle (`play` / `pause` / `resume`).
-`timelinePlaybackMode` distinguishes it from reverse, Preview loop and ping-pong, which remain
-playhead-only authoring operations. Root frame reports update the store without feeding another
-scrub tick back to the running controller. Empty/static roots use the shared authored display
-projection in `fields/preview-elapsed.ts`, preserving Runtime's collapsed-paint optimisation.
-Manual scrubbing leaves lifecycle mode before positioning media. Natural completion restores the
-static authoring scene and re-arms a fresh Play.
+D-199 separates the two Canvas meanings explicitly. Ordinary forward Play, reverse, Preview loop
+and ping-pong are `playhead` authoring operations; forward Play starts at the active range entrance
+and streams static `scrub` frames without entering hold/outro. The opt-in **Rehearse** group uses
+the iframe runtime lifecycle (`play` / `next` / `stop`), including Preview's Stop-and-clear state.
+Root frame reports update the store
+without feeding another scrub tick back to the running controller. Empty/static lifecycle roots use
+the shared authored display projection in `fields/preview-elapsed.ts`, preserving Runtime's
+collapsed-paint optimisation. Leaving Rehearse restores the static authoring scene and resets
+the session transport without changing the project.
 
 The stopped main Canvas boots the runtime with `editCountdowns: true`. This display-only context
 keeps an expired countdown's zero digits and ordinary authored element visibility editable, instead

@@ -3,6 +3,10 @@ import {
   DynamicFieldSchema,
   FieldValuesSchema,
   fieldDigitsOf,
+  fieldOperatorEditable,
+  imageFieldAllowsChoices,
+  imageFieldAllowsUpload,
+  imageFieldInputMode,
   numberFieldAllowedValues,
   numberFieldValueAlias,
   numberFieldValueError,
@@ -22,6 +26,16 @@ describe('DynamicField variants', () => {
     };
     expect(DynamicFieldSchema.parse(f)).toEqual(f);
   });
+  it('Repeater child fields may be authored read-only for CG Control', () => {
+    const field = DynamicFieldSchema.parse({
+      ...baseField,
+      type: 'text',
+      default: 'Persepolis',
+      operatorEditable: false,
+    });
+    expect(fieldOperatorEditable(field)).toBe(false);
+    expect(fieldOperatorEditable({})).toBe(true);
+  });
   it('multiline', () => {
     const f = { ...baseField, type: 'multiline' as const, default: 'one\ntwo', maxLines: 3 };
     expect(DynamicFieldSchema.parse(f)).toEqual(f);
@@ -33,6 +47,30 @@ describe('DynamicField variants', () => {
       accept: ['png', 'webp'] as ('png' | 'webp')[],
     };
     expect(DynamicFieldSchema.parse(f)).toEqual(f);
+  });
+  it('image stores an authored operator mode and project/shared allowlist', () => {
+    const field = DynamicFieldSchema.parse({
+      ...baseField,
+      type: 'image',
+      accept: ['png', 'svg'],
+      inputMode: 'choices-and-upload',
+      assetOptions: [
+        { assetId: 'project-logo', label: 'Project logo', source: 'project' },
+        { assetId: 'shared-logo', label: 'Shared logo', source: 'shared' },
+      ],
+    });
+    if (field.type !== 'image') throw new Error('expected image field');
+    expect(imageFieldInputMode(field)).toBe('choices-and-upload');
+    expect(imageFieldAllowsChoices(field)).toBe(true);
+    expect(imageFieldAllowsUpload(field)).toBe(true);
+    expect(field.assetOptions?.[1]).toMatchObject({ source: 'shared' });
+  });
+  it('legacy image fields remain choice-only', () => {
+    const field = DynamicFieldSchema.parse({ ...baseField, type: 'image', accept: ['svg'] });
+    if (field.type !== 'image') throw new Error('expected image field');
+    expect(imageFieldInputMode(field)).toBe('choices');
+    expect(imageFieldAllowsChoices(field)).toBe(true);
+    expect(imageFieldAllowsUpload(field)).toBe(false);
   });
   it('color', () => {
     const f = { ...baseField, type: 'color' as const, default: '#E11D48' };

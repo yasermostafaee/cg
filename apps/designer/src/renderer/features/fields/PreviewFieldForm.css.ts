@@ -111,6 +111,23 @@ export const inputInvalid = style({
   borderColor: colors.danger,
 });
 
+export const imageControl = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.4rem',
+  minWidth: 0,
+});
+
+export const imageThumbnail = style({
+  width: '2rem',
+  height: '2rem',
+  flex: '0 0 auto',
+  objectFit: 'contain',
+  border: `1px solid ${colors.border}`,
+  borderRadius: '4px',
+  background: colors.background,
+});
+
 /** D-106 — auto-grow textarea for long text/multiline values (height set inline to scrollHeight). */
 export const grow = style({
   resize: 'none',

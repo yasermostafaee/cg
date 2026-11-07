@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { Element, FieldDigits, TickerElement } from '@cg/shared-schema';
 import { designerStore } from '../../state/store.js';
-import { useAssets, useAssetUrl } from '../assets/useAssets.js';
-import { useSharedImages, useSharedImageUrl } from '../sharedLibrary/useSharedImages.js';
+import { useAssets } from '../assets/useAssets.js';
+import { ImageChoicePicker } from '../fields/ImageChoicePicker.js';
+import { useImageAssetUrls } from '../fields/useImageAssetUrls.js';
+import { useSharedImages } from '../sharedLibrary/useSharedImages.js';
 import { NumberField, SelectField, TextField } from './controls.js';
 import * as dds from './DynamicDataSection.css.js';
 
@@ -41,10 +43,7 @@ export function TickerSeparatorControl({
   // (`state/separator-repair.ts`).
   const project = useAssets().filter((a) => a.kind === 'image');
   const shared = useSharedImages();
-  const projectUrl = useAssetUrl(imageSep?.source === 'project' ? imageSep.assetId : null);
-  const sharedUrl = useSharedImageUrl(imageSep?.source === 'shared' ? imageSep.assetId : null);
-  const currentUrl =
-    imageSep === null ? null : imageSep.source === 'project' ? projectUrl : sharedUrl;
+  const imageUrls = useImageAssetUrls();
 
   const [mode, setMode] = useState<'text' | 'image'>(hasImage ? 'image' : 'text');
   // Follow the element if its separator kind changes elsewhere (undo, multi-select).
@@ -52,25 +51,19 @@ export function TickerSeparatorControl({
     setMode(hasImage ? 'image' : 'text');
   }, [hasImage]);
 
-  const baseOptions = [
-    '',
-    ...project.map((a) => `project:${a.assetId}`),
-    ...shared.map((a) => `shared:${a.assetId}`),
-  ];
-  const baseLabels = [
-    '— choose an image —',
-    ...project.map((a) => `${stripExt(a.filename)} (project)`),
-    ...shared.map((a) => `${stripExt(a.filename)} (shared)`),
-  ];
   const currentValue = imageSep === null ? '' : `${imageSep.source}:${imageSep.assetId}`;
-  // A stored image whose asset is gone from both lists (deleted, or an externally-authored
-  // scene) is surfaced as an extra leading option so the Select shows it (not a blank,
-  // which would mismatch the committed value) and stays editable — mirrors the time-zone picker.
-  const missing = currentValue !== '' && !baseOptions.includes(currentValue);
-  const options = missing ? [currentValue, ...baseOptions] : baseOptions;
-  const labels = missing
-    ? [imageSep === null ? currentValue : `${imageSep.assetId} (missing)`, ...baseLabels]
-    : baseLabels;
+  const imageChoices = [
+    ...project.map((asset) => ({
+      value: `project:${asset.assetId}`,
+      label: `${stripExt(asset.filename)} (project)`,
+      ...(imageUrls[asset.assetId] === undefined ? {} : { thumbnailUrl: imageUrls[asset.assetId] }),
+    })),
+    ...shared.map((asset) => ({
+      value: `shared:${asset.assetId}`,
+      label: `${stripExt(asset.filename)} (shared)`,
+      ...(imageUrls[asset.assetId] === undefined ? {} : { thumbnailUrl: imageUrls[asset.assetId] }),
+    })),
+  ];
   const noAssets = project.length === 0 && shared.length === 0;
 
   const pickImage = (encoded: string): void => {
@@ -124,22 +117,13 @@ export function TickerSeparatorControl({
         />
       ) : (
         <>
-          <SelectField
+          <ImageChoicePicker
             label="image"
             value={currentValue}
-            options={options}
-            labels={labels}
-            onCommit={pickImage}
-            trailing={
-              currentUrl !== null ? (
-                <img
-                  src={currentUrl}
-                  alt=""
-                  aria-hidden
-                  style={{ width: 22, height: 22, objectFit: 'contain', borderRadius: 3 }}
-                />
-              ) : undefined
-            }
+            allowEmpty={false}
+            choices={imageChoices}
+            currentThumbnailUrl={imageSep === null ? undefined : imageUrls[imageSep.assetId]}
+            onChange={pickImage}
           />
           {noAssets && imageSep === null && (
             <p className={dds.hint}>

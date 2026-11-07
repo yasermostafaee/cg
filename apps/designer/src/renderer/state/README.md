@@ -15,9 +15,10 @@ method bodies moved unchanged; only the file they live in differs.
 ## Files
 
 `timelinePlaybackMode` is session-only (`lifecycle`, `playhead` or `null`), paired with
-`timelinePlaying` by `setTimelinePlayback`. Ordinary Canvas Play follows the runtime and its root
-frame reports; explicit authoring loops/reverse use the local frame clock. Document/composition
-switches reset this state. Neither transport state nor display counters enter scene persistence.
+`timelinePlaying` by `setTimelinePlayback`. Ordinary Canvas Play and explicit authoring
+loops/reverse use the local frame clock; D-199's opt-in Rehearse controls use the runtime and
+its root frame reports. Document/composition switches reset this state. Neither transport state nor
+display counters enter scene persistence.
 
 | File                             | Role                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

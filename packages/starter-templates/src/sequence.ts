@@ -2,7 +2,7 @@ import type { AnchorPoint, Element, Fill, Scene, Transform } from '@cg/shared-sc
 import { anim, EASE, kf, kfLinear, track } from './anim.js';
 
 /**
- * «توالی خبر» — the sequence-style counterpart of the news ticker: the same
+ * «زیرنویس حرکت عمودی» — the sequence-style counterpart of the news ticker: the same
  * full-bleed strap silhouette (navy bar + flush red label plate), but the
  * headlines ROTATE one at a time through a real `sequence` element instead
  * of crawling. Items are a `list` data key; the sequence is FINITE
@@ -262,7 +262,7 @@ const layer = (id: string, name: string, children: Element[]): Scene['layers'][n
 export const sequenceScene: Scene = {
   schemaVersion: 1,
   id: 'starter-sequence',
-  name: 'توالی خبر',
+  name: 'زیرنویس حرکت عمودی',
   templateType: 'custom',
   resolution: { width: W, height: H },
   frameRate: FPS,
@@ -273,7 +273,7 @@ export const sequenceScene: Scene = {
   compositions: [
     {
       id: 'comp-sequence',
-      name: 'توالی خبر',
+      name: 'زیرنویس حرکت عمودی',
       resolution: { width: W, height: H },
       frameRange: { in: 0, out: 122 },
       lifecycle: { outPoint: 60, contentStart: 55 },
@@ -300,7 +300,7 @@ export const sequenceScene: Scene = {
     },
     {
       id: 'comp-seq-strap',
-      name: 'توالی خبر (روی آنتن)',
+      name: 'زیرنویس حرکت عمودی (روی آنتن)',
       resolution: { width: STRAP_W, height: STRAP_H },
       frameRange: { in: 0, out: 110 },
       lifecycle: { outPoint: 60, contentStart: 55 },

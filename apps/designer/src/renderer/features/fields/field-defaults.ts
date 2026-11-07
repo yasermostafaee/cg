@@ -31,7 +31,7 @@ export function defaultField(id: string, kind: FieldKind): DynamicField {
     case 'boolean':
       return { ...base, type: 'boolean', default: false };
     case 'image':
-      return { ...base, type: 'image', accept: ['png', 'jpg', 'webp'] };
+      return { ...base, type: 'image', accept: ['png', 'jpg', 'webp', 'svg'] };
     case 'select':
       return {
         ...base,

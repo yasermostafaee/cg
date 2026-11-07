@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { imageThumbnailUrl } from '@cg/ui';
 
 /**
  * `RUN-NEXT-VERSION-03` 1.4 — **THE TEMPLATE'S OWN PAGES, as pictures the console can show.**
@@ -68,11 +69,15 @@ export function useAuthoredPictures(
   const [urls, setUrls] = useState<Record<string, string>>({});
   useEffect(() => {
     if (templateId === undefined) return;
+    const readPage = window.cg.templates.page;
+    // Older test/host bridges may not expose page HTML. The data table still
+    // renders every non-picture value and simply leaves picture cells empty.
+    if (typeof readPage !== 'function') return;
     const key = `${templateId}|${String(channel ?? '')}`;
     let read = byTemplate.get(key);
     if (read === undefined) {
-      read = window.cg.templates
-        .page(templateId, channel)
+      read = readPage
+        .call(window.cg.templates, templateId, channel)
         .then((page) => (page.kind === 'page' ? authoredPictureUrls(page.html) : {}))
         .catch(() => ({}));
       byTemplate.set(key, read);
@@ -88,4 +93,48 @@ export function useAuthoredPictures(
     };
   }, [templateId, channel]);
   return urls;
+}
+
+/** UI-sized derivatives of the template pictures; playout continues to use the original data URLs. */
+export function useAuthoredPictureThumbnails(
+  templateId: string | undefined,
+  channel: number | undefined,
+): Record<string, string> {
+  const originals = useAuthoredPictures(templateId, channel);
+  const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let cancelled = false;
+    setThumbnails({});
+    for (const [assetId, sourceUrl] of Object.entries(originals)) {
+      void imageThumbnailUrl(sourceUrl).then((thumbnailUrl) => {
+        if (cancelled) return;
+        setThumbnails((known) => ({ ...known, [assetId]: thumbnailUrl }));
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [originals]);
+  return thumbnails;
+}
+
+/** A single uploaded data URL receives the same small preview treatment as authored choices. */
+export function usePictureThumbnail(sourceUrl: string | undefined): string | undefined {
+  // Do not briefly decode the full upload inside a picker tile while its UI derivative is pending.
+  const [thumbnail, setThumbnail] = useState<string | undefined>();
+  useEffect(() => {
+    if (sourceUrl === undefined) {
+      setThumbnail(undefined);
+      return;
+    }
+    let cancelled = false;
+    setThumbnail(undefined);
+    void imageThumbnailUrl(sourceUrl).then((url) => {
+      if (!cancelled) setThumbnail(url);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [sourceUrl]);
+  return thumbnail;
 }

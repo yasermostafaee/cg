@@ -4703,11 +4703,11 @@ predicate rather than re-derive it locally. Nothing tested it at all.
 
 **Fixed as three states, both predicates IMPORTED:**
 
-| row state     | badge                            |
-| ------------- | -------------------------------- |
-| on air        | `ON AIR NOW` — true before, kept |
-| rehearsing    | `SHOWING IN PVW`                 |
-| loaded / idle | `SELECTED — A TAKE SHOWS THIS`   |
+| row state     | badge                                                |
+| ------------- | ---------------------------------------------------- |
+| on air        | `ON AIR NOW` — true before, kept                     |
+| rehearsing    | `SHOWING IN PVW`                                     |
+| loaded / idle | no badge; the pressed preset already shows selection |
 
 - `isOnAir` is the layer table's own predicate (the LIVE PLATES section above already called it).
 - `isRehearsing` is `@cg/shared-ipc`'s — the one `LayersPanel` reads for the row picker's
@@ -4727,6 +4727,10 @@ looks existed while air did.
 makes the pair unreachable (a rehearse is refused for an on-air row, a take for a rehearsing one),
 and that interlock is asserted on the WIRE in `live-look-reconcile.integration.test.ts` rather than
 assumed here.
+
+**2026-11-07 owner clarification:** the idle sentence `SELECTED — A TAKE SHOWS THIS` is redundant
+and is removed. The pressed button remains the selection indicator; text appears only for the real
+PVW and on-air states.
 
 **Acceptance**
 
@@ -13965,3 +13969,59 @@ ids as edited data, so `● draft` appears immediately. **Expected / Fix:** file
 current row ids by position; identical cells remain clean, while any real cell/row change still
 stages behind Update. Real CG Control browser coverage proves the authored file is read exactly once,
 the first-open draft chip is absent and Discard remains disabled.
+
+## [x] B-396 — Detaching an authored Repeater workbook leaves CG Control connected and dirty ⟨priority: high — the Inspector presents two conflicting data authorities⟩ — FIXED 2026-11-07 · `openspec/changes/complete-weather-repeater-data/`
+
+**Repro:** import a direct or Sequence-owned Repeater workbook, let CG Control load it, then detach
+the workbook in Designer and update the same template id. **Actual:** manual rows return, but the old
+workbook still says **Connected** and its automatic load leaves `draft` active. **Expected / Fix:** a
+Bridge-path source is author-owned and is removed when that authored path disappears; any draft
+created by its automatic read is withdrawn. Runtime-selected files remain attached because they use
+their own durable handle. CG Control then shows only **Not connected** plus the manual-data action.
+
+## [x] B-399 — Closing Edit rows can retain changes that were never explicitly accepted ⟨priority: high — dismissing a modal must not create an Inspector draft⟩ — FIXED 2026-11-07 · `openspec/changes/complete-weather-repeater-data/`
+
+**Repro / Actual:** open a structured Repeater/Sequence **Edit rows…** modal, change a cell, then
+dismiss the modal without an explicit apply. The row editor previously wrote through to the
+Inspector draft while the operator was still editing, so closing could retain a change the modal
+never accepted. **Expected / Fix:** the modal owns a private row snapshot. **Apply** is disabled
+until that snapshot differs, then transfers it once to the normal Inspector draft; **Close**, the
+header ×, Escape and backdrop dismissal discard the private snapshot. The separate Inspector
+**Update** remains the only action that sends accepted row edits onward. The compact **Edit rows…**
+action and all file actions use a recognisable icon plus text rather than ambiguous icon-only verbs.
+
+## [x] B-401 — Selecting a multi-frame Look preset changes the preset buttons' size and wrapping ⟨priority: medium — the same controls jump when their state changes⟩ — FIXED 2026-11-07 · `openspec/changes/complete-weather-repeater-data/`
+
+**Repro / Actual:** open a multi-frame template with four Look presets in CG Control. The selected
+or on-air preset appends state text, grows to the whole Inspector width and moves to another line
+while the three idle presets remain small. **Expected / Fix:** all presets occupy equal grid cells
+with fixed minimum geometry; the pressed treatment is sufficient for selection, and only real PVW
+or on-air wording wraps inside its own cell. State changes never resize or reflow the preset row.
+DOM and real-browser coverage exercise four presets and compare geometry before/after selection.
+
+## [x] B-402 — Switching templates while schema/file resolution is in flight can move a false draft onto the newly selected row ⟨priority: high — an operator can be told the wrong graphic was edited⟩ — FIXED 2026-11-07 · `openspec/changes/complete-weather-repeater-data/`
+
+**Repro / Actual:** open the multi-day weather template, then select the football template before
+the weather schema or authored file read settles. The Inspector could render the newly selected
+stack item with the previous template's schema, stage weather rows on football, and later report
+`draft` on both rows. **Expected / Fix:** resolved template information is renderable only when its
+template id still matches the selected item, and asynchronous file work keeps the item/field target
+it started with. A delayed-read browser regression switches weather → football and proves no draft
+moves to either row.
+
+## [x] B-403 — Paged Repeater data is capped by the number of Sequence pages authored in Designer ⟨priority: high — valid cities can be refused or left out of the cycle⟩ — FIXED 2026-11-07 · `openspec/changes/complete-weather-repeater-data/`
+
+**Repro / Actual:** author four pages at eight rows each, then reload a workbook with more than 32
+rows or shrink it to five. CG Control previously refused growth and could keep the old page shell
+when shrinking. **Expected / Fix:** the combined editor stages one flat authoritative row list and
+the packaged runtime derives the exact page count, reusing authored page ids before stable generated
+ones. Reload and manual edits therefore grow beyond 32 and collapse five rows to one page; focused
+runtime, DOM and browser tests cover both directions.
+
+## [x] B-404 — A paged Sequence row edit reports only the item-level draft and not which data section changed ⟨priority: medium — the operator cannot locate the unapplied edit⟩ — FIXED 2026-11-07 · `openspec/changes/complete-weather-repeater-data/`
+
+**Repro / Actual:** Apply a change in the Sequence's combined **Edit rows** modal. The footer shows
+`draft`, while unlike a direct Repeater no dot identifies the responsible field section. The modal
+also gave no page landmarks while editing a long row list. **Expected / Fix:** the combined heading
+shows its own dirty dot whenever any authored/generated page row differs, and both editing and
+read-only data modals render live labelled page separators derived from the current row count.

@@ -106,6 +106,29 @@ describe('file-source content shared by Designer and Runtime', () => {
     ).toThrow(/array of row objects/i);
   });
 
+  it('maps an operator-facing image filename back to its packaged asset id', () => {
+    expect(
+      fileSourceContentToFieldValue('Icon\nsunny.png', 'list', {
+        split: false,
+        delimiter: '',
+        format: 'csv',
+        itemFields: [
+          {
+            id: 'icon',
+            label: 'Icon',
+            required: true,
+            type: 'image',
+            accept: ['png'],
+            assetOptions: [
+              { assetId: 'img-sun', label: 'sunny.png', source: 'project' },
+              { assetId: 'img-rain', label: 'rain.png', source: 'project' },
+            ],
+          },
+        ],
+      }),
+    ).toEqual([{ id: 'file-1', icon: { assetId: 'img-sun' } }]);
+  });
+
   it('maps unique labels, fills optional defaults and rejects schema mistakes with row context', () => {
     const fields = [
       { id: 'city', label: 'City name', required: true, type: 'text', default: '' },

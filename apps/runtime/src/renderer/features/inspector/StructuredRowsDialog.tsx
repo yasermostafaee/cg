@@ -1,4 +1,5 @@
 import {
+  imageFieldAllowsUpload,
   numberFieldAllowedValues,
   numberFieldValueError,
   numberFieldValueLabel,
@@ -8,6 +9,7 @@ import {
 import { colors, cssVars } from '../../theme.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
 import { Tag } from '../../ui/Tag.js';
+import { useAuthoredPictureThumbnails } from '../book/authoredPictures.js';
 
 const styles = {
   summary: {
@@ -66,6 +68,13 @@ const styles = {
     fontSize: 'var(--r-text-xs)',
     lineHeight: 1.35,
   },
+  image: {
+    display: 'block',
+    width: '2.5rem',
+    height: '2.5rem',
+    objectFit: 'contain' as const,
+    objectPosition: 'center',
+  },
 } as const;
 
 function imageAssetId(value: unknown): string | undefined {
@@ -91,6 +100,7 @@ export function structuredCellError(field: ListItemField, value: unknown): strin
     case 'image': {
       const assetId = imageAssetId(value);
       if (assetId === undefined) return 'Must be a picture.';
+      if (imageFieldAllowsUpload(field)) return undefined;
       return field.assetOptions !== undefined &&
         !field.assetOptions.some((option) => option.assetId === assetId)
         ? 'This picture is not packaged with the template.'
@@ -128,6 +138,26 @@ function cellText(field: ListItemField, value: unknown): string {
   return typeof value === 'object' ? JSON.stringify(value) : String(value);
 }
 
+/** Compact, uncropped picture cell shared by direct Repeater and paged Sequence data tables. */
+export function StructuredCellValue({
+  field,
+  value,
+  pictureUrls,
+}: {
+  field: ListItemField;
+  value: unknown;
+  pictureUrls: Readonly<Record<string, string>>;
+}): JSX.Element {
+  if (field.type !== 'image') return <>{cellText(field, value)}</>;
+  const assetId = imageAssetId(value);
+  if (assetId === undefined) return <>—</>;
+  const src = assetId.startsWith('data:image/') ? assetId : pictureUrls[assetId];
+  if (src === undefined) return <>—</>;
+  const label =
+    field.assetOptions?.find((option) => option.assetId === assetId)?.label ?? 'Picture';
+  return <img src={src} alt="" title={label} style={styles.image} loading="lazy" />;
+}
+
 /** Read-only, schema-aware rows shared by direct Repeater and paged Sequence file flows. */
 export function StructuredRowsDialog({
   open,
@@ -135,13 +165,18 @@ export function StructuredRowsDialog({
   rows,
   fields,
   label,
+  templateId,
+  channel,
 }: {
   open: boolean;
   onClose: () => void;
   rows: readonly ListItem[];
   fields: readonly ListItemField[];
   label: string;
+  templateId?: string | undefined;
+  channel?: number | undefined;
 }): JSX.Element | null {
+  const pictureUrls = useAuthoredPictureThumbnails(templateId, channel);
   if (!open) return null;
   const invalidCount = rows.reduce(
     (total, row) =>
@@ -212,7 +247,11 @@ export function StructuredRowsDialog({
                           : `Row ${String(rowIndex + 1)}, ${field.label || field.id}: ${error}`
                       }
                     >
-                      {cellText(field, row[field.id])}
+                      <StructuredCellValue
+                        field={field}
+                        value={row[field.id]}
+                        pictureUrls={pictureUrls}
+                      />
                       {error !== undefined && <span style={styles.error}>{error}</span>}
                     </td>
                   );

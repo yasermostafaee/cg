@@ -76,7 +76,7 @@ export function shape(
     radius?: number;
     opacity?: number;
     stroke?: { color: string; width: number };
-    shadow?: { offsetX: number; offsetY: number; blur: number; color: string };
+    shadow?: { offsetX: number; offsetY: number; blur: number; color: string; inset?: boolean };
     animation?: Element['animation'];
   } = {},
 ): Element {

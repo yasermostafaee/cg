@@ -1,4 +1,9 @@
-import type { FieldValue, ListItem } from '@cg/shared-schema';
+import {
+  fieldOperatorEditable,
+  type FieldValue,
+  type ListItem,
+  type ListItemField,
+} from '@cg/shared-schema';
 
 /**
  * B-040 — pure transforms for the operator Inspector's `list`-field editor. Kept
@@ -22,6 +27,66 @@ export function itemText(item: ListItem): string {
  */
 export function toListItems(value: FieldValue | undefined): ListItem[] {
   return Array.isArray(value) ? (value as ListItem[]) : [];
+}
+
+/**
+ * A structured workbook/CSV does not carry the Repeater editor's private row identities.
+ * Parsing therefore assigns deterministic `file-N` ids, but those ids are not operator data:
+ * replacing an otherwise identical applied row's id would make the Inspector report a draft
+ * before the operator changed anything.
+ *
+ * Preserve the current identity by position wherever one exists. New file rows keep their
+ * parsed id, with a collision-safe suffix for the unusual case where an authored id already
+ * uses that spelling. This is shared by direct Repeaters and Repeaters paged by a Sequence so
+ * the two file-input paths cannot disagree about whether unchanged data is dirty.
+ */
+export function withStableListItemIds(
+  current: readonly ListItem[],
+  loaded: readonly ListItem[],
+): ListItem[] {
+  const used = new Set<string>();
+  return loaded.map((row, index) => {
+    const existingId = current[index]?.id;
+    let id = existingId !== undefined && !used.has(existingId) ? existingId : row.id;
+    if (used.has(id)) {
+      const stem = row.id;
+      let suffix = index + 1;
+      do {
+        id = `${stem}-${String(suffix)}`;
+        suffix += 1;
+      } while (used.has(id));
+    }
+    used.add(id);
+    return id === row.id ? row : { ...row, id };
+  });
+}
+
+/** Keep author-locked Repeater columns unchanged when CG Control loads/reloads a workbook. */
+export function preserveLockedListItemFields(
+  current: readonly ListItem[],
+  loaded: readonly ListItem[],
+  fields: readonly ListItemField[] | undefined,
+): ListItem[] {
+  const locked = (fields ?? []).filter((field) => !fieldOperatorEditable(field));
+  if (locked.length === 0) return [...loaded];
+  if (current.length !== loaded.length) {
+    throw new Error(
+      `This template has locked columns, so the workbook must keep exactly ${String(current.length)} rows; found ${String(loaded.length)}.`,
+    );
+  }
+  return loaded.map((row, index) => {
+    const previous = current[index];
+    const next: Record<string, unknown> = { ...row };
+    for (const field of locked) {
+      const authored = previous?.[field.id];
+      if (authored !== undefined) {
+        next[field.id] = authored;
+      } else {
+        throw new Error(`Locked column “${field.label || field.id}” has no authored row value.`);
+      }
+    }
+    return next as ListItem;
+  });
 }
 
 /** Set the item at `index`'s `text`, preserving its `id` + every other field. */

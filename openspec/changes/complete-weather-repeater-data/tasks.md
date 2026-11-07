@@ -104,6 +104,81 @@
 - [x] 2.37 Label the read-only current file-only data modal's dismiss action `Close`, not `Done`.
 - [x] 2.38 Remove prose descriptions from Landing starter cards while retaining the Persian title,
       playout badge and motion preview.
+- [x] 2.39 Present direct-Repeater and Sequence-owned workbooks with one compact CG Control
+      file-managed connection treatment, and make Preview replace a directly connected structured
+      Repeater table with its connected-file fact.
+- [x] 2.40 Make SVG an explicit accepted image import in both Project Assets and Shared Library, and
+      include it in new image-field defaults; retain image validation and Blob-backed rendering.
+- [x] 2.41 Replace inline structured Repeater/Sequence inputs in CG Control with a compact row count
+      and one **Edit rows…** modal while keeping file actions and Update staging in the Inspector.
+- [x] 2.42 When Designer removes an authored direct-Repeater or Sequence workbook, remove only that
+      Bridge-owned CG Control connection and withdraw the draft created by its automatic read.
+- [x] 2.43 Deduplicate identical field/target wires while migrating legacy root bindings and while
+      opening already-migrated projects, so the forecast Repeater exposes one binding.
+- [x] 2.44 Separate structured-workbook connection from CG Control row-edit authority for both
+      standalone and Sequence-owned Repeaters; align status icons, filename treatment and action
+      labels across both owners.
+- [x] 2.45 Make **Edit rows…** transactional: hold edits inside the modal, enable **Apply** only
+      after a real change, and discard them on Close, ×, Escape or backdrop dismissal; add concise
+      icons beside row/file action labels.
+- [x] 2.46 Show the author's full selected Windows/UNC workbook path plus the portable CG Control
+      file key in Designer; in CG Control distinguish that key from the effective path resolved by
+      the current Shared files setting, for both direct and outer-Sequence-owned Repeaters.
+- [x] 2.47 Keep every multi-frame Look preset in an equal, stable grid cell while selected, on air
+      or idle; remove the redundant selected/take sentence, and let real PVW/on-air wording wrap
+      inside its own button without resizing or reflowing the row.
+- [x] 2.48 Prevent an asynchronous template/file resolution from rendering the previous template's
+      schema against a newly selected stack item, so switching rows cannot create or move a false
+      draft; cover the delayed-read selection race in real CG Control browser automation.
+- [x] 2.49 Let a homogeneous Sequence-of-Repeater grow and shrink from manual or reloaded file data:
+      derive exact runtime pages beyond the authored shell, retain stable generated identities and
+      update the visible current page without replaying it.
+- [x] 2.50 Add live page separators to Edit rows and View current data, update them with every row
+      change, and show a local dirty dot on the combined Sequence row heading after Apply.
+- [x] 2.51 Expose the normal **Data key** authoring route on selected Image elements, creating an
+      image field and image binding that automatically becomes an asset-picker column when that
+      composition is used by a Repeater; cover the public Inspector route and field-store contract.
+- [x] 2.52 Reconcile the owner-edited visual revisions into the Landing starters: the latest
+      province-weather `.vcg` supersedes its earlier `.cgproj`, while the five-day-weather and Iran
+      league `.cgproj` files remain their references. Retain stable bundled asset ids and newer
+      dynamic-data behavior, then regenerate each PNG and WebM preview.
+- [x] 2.53 Make the province-weather temperature strip own its fill rules directly and the number
+      own only its text-colour rules, so selecting either element reveals the behavior that changes
+      it instead of making the strip appear to change without a rule.
+- [x] 2.54 Replace raw image-id editing with one authored operator policy: allowed asset choices,
+      Windows Browse or both. Apply it to Preview, scalar CG Control fields and Repeater rows; keep
+      SVG available and package every selected project/shared choice.
+- [x] 2.55 Rename and reorder the Landing starters so the owner's eight core workflows appear first
+      in the requested order, with matching Persian project/composition names after import.
+- [x] 2.56 Clip an alternating Repeater row fill to the full-row child plate's authored corner radius,
+      including scaled and independently animated rows, so square fill corners cannot protrude.
+- [x] 2.57 Replace filename-only image combos with one compact visual picker across Designer,
+      Preview, direct/Repeater CG Control fields, source replacement, rules, steps, posters and
+      ticker separators. Show uncropped project/shared thumbnails, use the actual thumbnail in
+      read-only structured-data tables, and render an empty image value as an actually empty graphic
+      slot rather than a broken-image glyph. Generate small session-cached WebP UI derivatives with
+      bounded concurrency instead of decoding every heavy original in each picker. Keep newly
+      uploaded portrait, square and wide pictures inside the same fixed picker tile while their
+      derivative is pending; intrinsic image size must never expand the modal grid.
+- [x] 2.58 Let the author lock individual Repeater child columns against CG Control edits for both
+      direct and Sequence-owned Repeaters; keep locked controls visible/read-only, preserve authored
+      values on workbook reload, make row count/order author-owned while any column is locked and
+      lock team name/logo in the bundled Iran league starter.
+- [x] 2.59 Remove the obsolete Image loader from the canvas toolbar and legacy tool rail while
+      retaining Project Assets drag placement, shared/project source picking and compatibility with
+      existing image elements.
+- [x] 2.60 Refresh the landing-page `آب‌وهوای مراکز استان‌ها` starter from the owner's
+      2026-11-07 `.cgproj`: use the full-width radial title ribbon, compact temperature pill,
+      translucent alternating row fill, bottom row transitions and reverse row exit order, then
+      regenerate the matching poster and motion preview from the real Designer renderer.
+- [x] 2.61 Keep animated weather icons spatially anchored during page changes by dissolving the
+      outgoing and incoming weather pages without horizontal page drift.
+- [x] 2.62 Use a sequential fade-through for both paged weather starters so a newly mounted
+      animated SVG starts while hidden and never cross-fades its reset frame over the outgoing
+      icon; retain the stationary page geometry and cover both halves of the transition in Preview.
+- [x] 2.63 Prewarm the composition pages of both paged weather starters so pages 2 onward reuse the
+      same mounted SVG documents and already-settled nested Repeater rows instead of restarting at
+      each turn; keep the behavior opt-in for other Sequence books and walk pages 1→2→3→4 in Preview.
 
 ## 3. Conditional value rules
 

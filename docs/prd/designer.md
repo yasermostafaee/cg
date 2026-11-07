@@ -3738,8 +3738,10 @@ countdown/countup ignore both.
 > stays as the load path + seek-fragile recovery, painting only a pre-tick transient, and
 > the canvas at rest shows the playhead's frame exactly as the Lottie does.
 >
-> ✅ **B-378 / D-187 clarification (2026-11-02; Freeze rule superseded 2026-11-03):** D-175 later
-> gave ordinary forward Play a real composition lifecycle. Consequently, manual timeline scrub and
+> ✅ **B-378 / D-187 clarification (2026-11-02; Freeze rule superseded 2026-11-03; transport
+> ownership superseded by D-199 on 2026-11-07):** D-175 gave the Canvas a real composition
+> lifecycle; D-199 later placed that lifecycle behind the explicit **Rehearse** switch and
+> restored ordinary forward Play to the linear authoring playhead. Consequently, manual timeline scrub and
 > lifecycle Hold are no longer one policy: dragging the index bar walks the authored media Middle
 > once, while the composition's Freeze/Loop choice applies only after the running lifecycle enters
 > Hold. Freeze has no selected per-media picture: D-186 now derives every held picture from
@@ -6004,12 +6006,15 @@ ambiguous even though the HTML path is still valuable to the development team.
 no HTML export action is shown; WHEN internal exporter tests or code call the single-file exporter
 directly THEN its behaviour is unchanged.
 
-## [x] D-175 — Main canvas playback follows the same lifecycle as Preview ⟨priority: high — the owner, 2026-11-02⟩
+## [x] D-175 — Main canvas can run the same lifecycle as Preview ⟨priority: high — the owner, 2026-11-02; entry point superseded by D-199, 2026-11-07⟩
 
 **What:** make the Designer canvas Play honour intro, content-driven hold and outro exactly as the
 dedicated Preview does, including ticker-driven completion. **Acceptance:** the same scene and data
 produce the same lifecycle boundaries on the canvas and in Preview without changing stored timing.
 — `openspec/changes/canvas-lifecycle-playback/`
+
+**D-199 refinement:** that lifecycle remains available on the Canvas, but only through the explicit
+**Rehearse** transport mode. Ordinary Play is again the linear authoring timeline.
 
 ## [~] D-176 — Media timing authoring has one clear Follow composition path ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/simplify-media-timing-authoring/`
 
@@ -6162,7 +6167,8 @@ loadable `pages` array. When all pages contain the same single flat Repeater, De
 one bulk table and a generated Excel workbook, splitting rows by the Repeater limit and creating pages
 automatically. CG Control exposes the same packaged pages as one operator table with a persistent
 generated-workbook connection/reload flow; edits remain drafts until Update, and excess rows are
-refused rather than dropped. A structured row set has one file owner: a standalone Repeater uses
+expanded into the exact required page count (and shrinking rows removes empty pages). A structured
+row set has one file owner: a standalone Repeater uses
 **Rows and data file…**, while a paged Repeater uses the outer Sequence's **Page data…**. The generic
 Dynamic / Data picker and the legacy **Use fixed file** text-file workflow are not offered for
 Repeater rows. A legacy Repeater that already carries that old fixed source remains visible only so
@@ -6209,6 +6215,12 @@ element controls. A defined rule set uses a distinct active tint and count badge
 header, remaining obvious even when that section is collapsed.
 The filled references are `docs/weather-cities.sample.csv`, `docs/weather-cities.sample.xlsx` and
 `docs/weather-sequence-pages.sample.json` (the general nested-format fallback).
+
+Any selected Image element also exposes a normal **Data key**. Assigning it creates the image field
+and binding that the league starter demonstrates; if the composition is later used as a Repeater
+row, the same field becomes a per-row image picker backed by Project Assets and Shared Library.
+The province-weather example keeps its teaching surface explicit too: its temperature strip owns
+the fill rules that recolour it, while the number owns only its text-colour rules.
 
 **Standalone and current follow-up — `openspec/changes/complete-weather-repeater-data/`:** a Repeater does not require an outer Sequence. Its own Inspector exposes **Rows and data file…** with schema-generated Excel Save/connect/Reload and labelled columns. Sequence remains optional pagination and, when present, becomes the sole workbook owner. Value rules may drive image/color/visibility; a connected workbook uses the read-only current-data contract in D-198, and changes remain staged until Update.
 
@@ -6593,3 +6605,25 @@ project whose rows no longer match its allowed choices. **Acceptance:**
 - WHEN a cell violates the current field type, range or exact choices THEN the dialog shows the
   invalid-cell count, marks the exact row and column and exposes the expected constraint
 - WHEN the operator closes the dialog THEN no draft, attachment or on-air value has changed
+
+## [x] D-199 — Preview can rehearse the authored playout lifecycle ⟨priority: high — owner follow-up, 2026-11-07⟩ — `openspec/changes/add-preview-playout-transport-mode/`
+
+**What:** add one explicit **Rehearse** toggle beside Preview loop / Ping-pong. While it is
+active, hide the ordinary timeline loop and step controls and show **Play**, **Next** and **Stop** so
+the author can rehearse intro, hold/content progression and outro with the authored lifecycle.
+While it is inactive, the existing Play remains a plain linear timeline pass from first to last
+frame and ignores hold loops, outro triggers and other playout state. **Acceptance:**
+
+- WHEN Rehearse is off THEN Preview loop, Ping-pong and timeline stepping keep their current
+  authoring behaviour, and Play always runs linearly from frame zero to the timeline end
+- WHEN Rehearse is on THEN those authoring controls are hidden and Play / Next / Stop use the
+  same lifecycle meanings the exported template exposes to CG Control
+- WHEN Stop is pressed in Rehearse THEN the picture clears exactly like Stop in the dedicated
+  Preview; a Sequence with authored keyframes after Out point keeps its current content mounted,
+  plays that Outro and moves the timeline cursor with it, while an immediate-clear composition
+  settles the cursor directly at the timeline end without a race or partial-frame jump; leaving
+  Rehearse restores the normal authoring picture
+- WHEN the mode is switched or Preview is closed THEN no project, keyframe, playhead marker or
+  playout setting is changed
+- WHEN the selected composition cannot use Next THEN Next is visibly disabled rather than silently
+  acting like timeline step-forward

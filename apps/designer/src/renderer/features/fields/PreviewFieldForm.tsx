@@ -4,6 +4,8 @@ import {
   fieldDigitsOf,
   fieldTakesFileSource,
   fileSourcePolicyOf,
+  imageFieldAllowsChoices,
+  imageFieldAllowsUpload,
   numberFieldAllowedValues,
   numberFieldValueLabel,
   numberFieldValueError,
@@ -25,12 +27,29 @@ import { Icon } from '../../ui/Icon.js';
 import { DateTimeInput } from '../../ui/DateTimeInput.js';
 import { Select } from '../../ui/Select.js';
 import { useTypedNumber } from '../../ui/typedNumber.js';
+import { ImageChoicePicker } from './ImageChoicePicker.js';
 import { ListItemsEditor } from './ListItemsEditor.js';
 import { ListItemsDialog } from './ListItemsDialog.js';
 import type { ListItemColumn } from './repeater-columns.js';
 import * as s from './PreviewFieldForm.css.js';
 
 type Values = Record<string, FieldValue>;
+
+function imageAccept(accept: readonly string[]): string {
+  return accept.map((extension) => `.${extension}`).join(',');
+}
+
+function fileDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error('Could not read image.'));
+    reader.onload = () =>
+      typeof reader.result === 'string'
+        ? resolve(reader.result)
+        : reject(new Error('Could not read image.'));
+    reader.readAsDataURL(file);
+  });
+}
 
 /** Transport the preview drives — the modal posts these (nested) to its iframe. */
 export interface PreviewDispatch {
@@ -58,6 +77,7 @@ export interface PreviewDispatch {
  * form reports edits by `path` (e.g. `['home','teamName']`).
  */
 const EMPTY_PENDING: ReadonlySet<string> = new Set<string>();
+const EMPTY_IMAGE_URLS: Readonly<Record<string, string>> = {};
 
 /** D-196 — an empty composition/Look namespace is not a Preview variable. */
 export function aggregateHasEditableFields(aggregate: AggregatedFields): boolean {
@@ -76,6 +96,7 @@ export function PreviewFieldForm({
   anyPending,
   dwellFieldIds,
   columnsByFieldId,
+  imageUrls = EMPTY_IMAGE_URLS,
   title = 'Variables',
 }: {
   aggregate: AggregatedFields;
@@ -91,6 +112,8 @@ export function PreviewFieldForm({
   dwellFieldIds?: ReadonlySet<string>;
   /** D-030 — `list` fields bound `repeater-items` get child-field columns. */
   columnsByFieldId?: ReadonlyMap<string, readonly ListItemColumn[]>;
+  /** Project/shared Blob URLs used only for visible image thumbnails. */
+  imageUrls?: Readonly<Record<string, string>>;
   /** Surface-specific heading; Preview keeps the legacy default. */
   title?: string;
 }): JSX.Element {
@@ -107,6 +130,7 @@ export function PreviewFieldForm({
       depth={0}
       dwellFieldIds={dwellFieldIds}
       columnsByFieldId={columnsByFieldId}
+      imageUrls={imageUrls}
       fileManagedSource={undefined}
     />
   );
@@ -126,6 +150,7 @@ function AggregateSection({
   depth,
   dwellFieldIds,
   columnsByFieldId,
+  imageUrls,
   fileManagedSource,
 }: {
   aggregate: AggregatedFields;
@@ -141,6 +166,7 @@ function AggregateSection({
   depth: number;
   dwellFieldIds?: ReadonlySet<string> | undefined;
   columnsByFieldId?: ReadonlyMap<string, readonly ListItemColumn[]> | undefined;
+  imageUrls: Readonly<Record<string, string>>;
   /** Outer Sequence workbook that owns every Repeater row in this namespace. */
   fileManagedSource?: string | undefined;
 }): JSX.Element {
@@ -217,22 +243,37 @@ function AggregateSection({
         <p className={s.hint}>No data fields yet — give a text element a Data key to add one.</p>
       )}
 
-      {aggregate.fields.map((f) => (
-        <FieldRow
-          key={f.id}
-          field={f}
-          value={scalarAt(values, f.id)}
-          onChange={(v) => onChange([...path, f.id], v)}
-          pending={pendingPaths.has([...path, f.id].join('.'))}
-          showDwell={dwellFieldIds?.has(f.id) ?? false}
-          columns={columnsByFieldId?.get(f.id)}
-          readOnly={
-            fileManagedSource !== undefined ||
-            (fieldTakesFileSource(f) && fileSourcePolicyOf(f)?.inputMode === 'file-only')
-          }
-          fileManagedSource={fileManagedSource}
-        />
-      ))}
+      {aggregate.fields.map((f) =>
+        (() => {
+          // A standalone Repeater owns its workbook on its list field.  It is the
+          // same editing authority as a Sequence-owned workbook, so Preview must
+          // show the same connected-file fact rather than a partial numbered table.
+          const directFileSource =
+            f.type === 'list' &&
+            f.itemFields !== undefined &&
+            fileSourcePolicyOf(f)?.inputMode !== 'operator-choice'
+              ? fileSourcePolicyOf(f)?.bridgePath
+              : undefined;
+          const managedSource = fileManagedSource ?? directFileSource;
+          return (
+            <FieldRow
+              key={f.id}
+              field={f}
+              value={scalarAt(values, f.id)}
+              onChange={(v) => onChange([...path, f.id], v)}
+              pending={pendingPaths.has([...path, f.id].join('.'))}
+              showDwell={dwellFieldIds?.has(f.id) ?? false}
+              columns={columnsByFieldId?.get(f.id)}
+              imageUrls={imageUrls}
+              readOnly={
+                managedSource !== undefined ||
+                (fieldTakesFileSource(f) && fileSourcePolicyOf(f)?.inputMode === 'file-only')
+              }
+              fileManagedSource={managedSource}
+            />
+          );
+        })(),
+      )}
 
       {visibleGroups.map((g) => (
         <AggregateSection
@@ -247,7 +288,16 @@ function AggregateSection({
           depth={depth + 1}
           dwellFieldIds={dwellFieldIds}
           columnsByFieldId={columnsByFieldId}
-          fileManagedSource={g.sequence?.pageDataFile ?? fileManagedSource}
+          imageUrls={imageUrls}
+          fileManagedSource={
+            g.sequence?.pageDataFile !== undefined &&
+            g.aggregate.fields.some(
+              (field) =>
+                field.type === 'list' && fileSourcePolicyOf(field)?.inputMode === 'operator-choice',
+            )
+              ? fileManagedSource
+              : (g.sequence?.pageDataFile ?? fileManagedSource)
+          }
         />
       ))}
     </div>
@@ -277,6 +327,7 @@ function FieldRow({
   pending,
   showDwell,
   columns,
+  imageUrls,
   readOnly = false,
   fileManagedSource,
 }: {
@@ -286,6 +337,7 @@ function FieldRow({
   pending?: boolean | undefined;
   showDwell?: boolean | undefined;
   columns?: readonly ListItemColumn[] | undefined;
+  imageUrls: Readonly<Record<string, string>>;
   readOnly?: boolean | undefined;
   fileManagedSource?: string | undefined;
 }): JSX.Element {
@@ -308,7 +360,15 @@ function FieldRow({
       </label>
       {readOnly
         ? renderReadOnlyValue(field, value, fileManagedSource)
-        : renderInput(field, value, onChange, error !== null, showDwell === true, columns)}
+        : renderInput(
+            field,
+            value,
+            onChange,
+            error !== null,
+            showDwell === true,
+            columns,
+            imageUrls,
+          )}
       {error !== null && (
         <span className={s.error} role="alert">
           <Icon icon={TriangleAlert} size={14} />
@@ -474,6 +534,7 @@ function renderInput(
   invalid: boolean,
   showDwell = false,
   columns?: readonly ListItemColumn[],
+  imageUrls: Readonly<Record<string, string>> = EMPTY_IMAGE_URLS,
 ): JSX.Element {
   const cls = cx(s.input, invalid && s.inputInvalid);
   // A stable accessible name per field (label, else the data key) so the preview
@@ -560,17 +621,48 @@ function renderInput(
           ))}
         </Select>
       );
-    case 'image':
+    case 'image': {
+      const currentImageId = imageId(value);
+      const currentThumbnail = currentImageId.startsWith('data:image/')
+        ? currentImageId
+        : imageUrls[currentImageId];
       return (
-        <input
-          className={cls}
-          type="text"
-          placeholder="asset id"
-          value={imageId(value)}
-          onChange={(e) => onChange({ assetId: e.target.value })}
-          aria-label={label}
-        />
+        <div className={s.imageControl}>
+          {imageFieldAllowsChoices(field) && (
+            <ImageChoicePicker
+              value={currentImageId}
+              choices={(field.assetOptions ?? []).map((option) => ({
+                value: option.assetId,
+                label: option.label,
+                ...(imageUrls[option.assetId] === undefined
+                  ? {}
+                  : { thumbnailUrl: imageUrls[option.assetId] }),
+              }))}
+              label={label}
+              currentThumbnailUrl={currentThumbnail}
+              onChange={(assetId) => onChange({ assetId })}
+            />
+          )}
+          {!imageFieldAllowsChoices(field) && currentThumbnail !== undefined && (
+            <img className={s.imageThumbnail} src={currentThumbnail} alt="" aria-hidden="true" />
+          )}
+          {imageFieldAllowsUpload(field) && (
+            <input
+              className={cls}
+              type="file"
+              accept={imageAccept(field.accept)}
+              aria-label={`${label} browse image`}
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0];
+                if (file === undefined) return;
+                void fileDataUrl(file).then((assetId) => onChange({ assetId }));
+                event.currentTarget.value = '';
+              }}
+            />
+          )}
+        </div>
       );
+    }
     case 'list': {
       // D-028 — the same items editor the ticker/sequence/repeater
       // inspectors use; every edit live-updates the stage. D-029 —

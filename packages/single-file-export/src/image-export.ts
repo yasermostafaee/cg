@@ -141,8 +141,18 @@ export function collectImageElements(scene: Scene): ImageRef[] {
   }
   for (const doc of [scene, ...(scene.compositions ?? [])]) {
     for (const field of doc.fields ?? []) {
-      if (field.type === 'image' && field.defaultAssetId !== undefined) {
-        addDynamic(`${doc.id}:field:${field.id}:default`, field.id, field.defaultAssetId);
+      if (field.type === 'image') {
+        if (field.defaultAssetId !== undefined) {
+          addDynamic(`${doc.id}:field:${field.id}:default`, field.id, field.defaultAssetId);
+        }
+        for (const [index, option] of (field.assetOptions ?? []).entries()) {
+          addDynamic(
+            `${doc.id}:field:${field.id}:option:${String(index)}`,
+            field.id,
+            option.assetId,
+            option.source ?? 'project',
+          );
+        }
       } else if (field.type === 'list') {
         collectDynamicValue(field.default, field.id, 'default');
       }

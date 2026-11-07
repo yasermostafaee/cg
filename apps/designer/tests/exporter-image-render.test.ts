@@ -40,6 +40,17 @@ const branchMeta: AssetMeta = {
   byteSize: BRANCH_PNG.byteLength,
   workingPath: `projects/p/assets/image/${BRANCH_SHA}.png`,
 };
+const SHARED_CHOICE_ID = 'shared-choice';
+const SHARED_CHOICE_SHA = 'c'.repeat(64);
+const SHARED_CHOICE_BYTES = new TextEncoder().encode('<svg viewBox="0 0 10 10"></svg>');
+const sharedChoiceMeta: AssetMeta = {
+  assetId: SHARED_CHOICE_ID,
+  kind: 'image',
+  filename: 'shared-choice.svg',
+  sha256: SHARED_CHOICE_SHA,
+  byteSize: SHARED_CHOICE_BYTES.byteLength,
+  workingPath: `shared/assets/image/${SHARED_CHOICE_SHA}.svg`,
+};
 
 /** AssetStore stub exposing only what the exporters call (list/get/bytes). */
 function stubAssets(present: boolean): AssetStore {
@@ -96,6 +107,14 @@ function ruleAssets(): AssetStore {
     list: async () => [...byId.values()].map((entry) => entry.meta),
     get: async (id: string) => byId.get(id)?.meta ?? null,
     bytes: async (id: string) => byId.get(id)?.bytes ?? null,
+  } as unknown as AssetStore;
+}
+
+function sharedChoiceAssets(): AssetStore {
+  return {
+    list: async () => [sharedChoiceMeta],
+    get: async (id: string) => (id === SHARED_CHOICE_ID ? sharedChoiceMeta : null),
+    bytes: async (id: string) => (id === SHARED_CHOICE_ID ? SHARED_CHOICE_BYTES : null),
   } as unknown as AssetStore;
 }
 
@@ -173,6 +192,39 @@ describe('D-062 — .vcg image rendering', () => {
       path: `assets/image/${BRANCH_SHA}.png`,
     });
     expect(files.get(`assets/image/${BRANCH_SHA}.png`)).toEqual(BRANCH_PNG);
+  });
+
+  it('packages every authored project/shared operator choice, not only the current picture', async () => {
+    const scene = sceneWithImage();
+    scene.fields = [
+      {
+        id: 'img',
+        label: 'Picture',
+        required: false,
+        type: 'image',
+        accept: ['png', 'svg'],
+        inputMode: 'choices-and-upload',
+        defaultAssetId: ASSET_ID,
+        assetOptions: [
+          { assetId: ASSET_ID, label: 'Current', source: 'project' },
+          { assetId: BRANCH_ID, label: 'Other project picture', source: 'project' },
+          { assetId: SHARED_CHOICE_ID, label: 'Shared picture', source: 'shared' },
+        ],
+      },
+    ];
+    const exporter = new Exporter({
+      assets: ruleAssets(),
+      sharedImages: sharedChoiceAssets(),
+      cgJs: 'export const createRuntime = () => {}; export const installCasparGlobals = () => {};',
+      cgCss: 'html{background:transparent}',
+    });
+
+    const { manifest, files } = await unpack((await exporter.produce(scene)).vcg);
+    expect(new Set(manifest.assetIndex.map((entry) => entry.id))).toEqual(
+      new Set([ASSET_ID, BRANCH_ID, SHARED_CHOICE_ID]),
+    );
+    expect(files.get(`assets/image/${BRANCH_SHA}.png`)).toEqual(BRANCH_PNG);
+    expect(files.get(`assets/image/${SHARED_CHOICE_SHA}.svg`)).toEqual(SHARED_CHOICE_BYTES);
   });
 });
 

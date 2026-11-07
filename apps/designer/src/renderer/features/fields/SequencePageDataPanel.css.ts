@@ -53,6 +53,41 @@ export const path = style({
   marginBottom: '0.3rem',
 });
 
+export const operatorChoice = style({
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '0.45rem',
+  minHeight: '2rem',
+  color: colors.text,
+  fontSize: '0.76rem',
+  cursor: 'pointer',
+});
+
+export const operatorColumns = style({
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: '0.35rem 0.85rem',
+  padding: '0.55rem 0.65rem',
+  margin: '0 0 0.7rem',
+  border: `1px solid ${colors.border}`,
+  borderRadius: '6px',
+  background: colors.panelMuted,
+});
+
+export const operatorColumnsTitle = style({
+  flexBasis: '100%',
+  color: colors.textMuted,
+  fontSize: '0.7rem',
+  fontWeight: 700,
+});
+
+globalStyle(`${operatorChoice} > input`, {
+  inlineSize: '1rem',
+  blockSize: '1rem',
+  accentColor: colors.accent,
+});
+
 globalStyle(`${path} > span`, {
   color: colors.textMuted,
   fontSize: '0.68rem',
@@ -65,6 +100,12 @@ globalStyle(`${path} > code`, {
   overflowWrap: 'anywhere',
   color: colors.text,
   fontFamily: 'inherit',
+});
+
+globalStyle(`${path} > small`, {
+  flexBasis: '100%',
+  color: colors.textMuted,
+  fontSize: '0.68rem',
 });
 
 export const bulkHint = style({

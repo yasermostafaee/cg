@@ -100,6 +100,8 @@ import { deriveLookSources } from '@cg/shared-schema';
 import { contentStartDefaultFrom } from './content-start-default.js';
 import * as lottieAssetCache from '../assets/lottieAssetCache.js';
 import { useAssetUrl, useAssets } from '../assets/useAssets.js';
+import { ImageChoicePicker } from '../fields/ImageChoicePicker.js';
+import { useImageAssetUrls } from '../fields/useImageAssetUrls.js';
 import { useSharedImages } from '../sharedLibrary/useSharedImages.js';
 import { VideoPoster } from '../assets/VideoPoster.js';
 import { posterTimeMs } from '../assets/video-convert-args.js';
@@ -1196,27 +1198,34 @@ function FitModeRow({ element }: { element: VideoPlaceholderElement }): JSX.Elem
 function LivePosterRow({ element }: { element: VideoPlaceholderElement }): JSX.Element {
   const project = useAssets().filter((a) => a.kind === 'image');
   const shared = useSharedImages();
-  const ids = [...project.map((a) => a.assetId), ...shared.map((a) => a.assetId)];
-  const names = [
-    ...project.map((a) => `${stripExtension(a.filename)} (project)`),
-    ...shared.map((a) => `${stripExtension(a.filename)} (shared)`),
+  const imageUrls = useImageAssetUrls();
+  const choices = [
+    ...project.map((asset) => ({
+      value: asset.assetId,
+      label: `${stripExtension(asset.filename)} (project)`,
+      ...(imageUrls[asset.assetId] === undefined ? {} : { thumbnailUrl: imageUrls[asset.assetId] }),
+    })),
+    ...shared.map((asset) => ({
+      value: asset.assetId,
+      label: `${stripExtension(asset.filename)} (shared)`,
+      ...(imageUrls[asset.assetId] === undefined ? {} : { thumbnailUrl: imageUrls[asset.assetId] }),
+    })),
   ];
   const current = element.posterAssetId ?? '';
-  const missing = current !== '' && !ids.includes(current);
   return (
-    <>
-      <SelectField
-        label="poster"
-        value={current}
-        options={['', ...(missing ? [current] : []), ...ids]}
-        labels={['bars', ...(missing ? [`${current} (missing)`] : []), ...names]}
-        onCommit={(v) =>
-          designerStore.updateElement(element.id, {
-            posterAssetId: v === '' ? undefined : v,
-          } as Partial<Element>)
-        }
-      />
-    </>
+    <ImageChoicePicker
+      label="poster"
+      value={current}
+      choices={choices}
+      emptyLabel="Bars"
+      currentLabel={`${current} (missing)`}
+      currentThumbnailUrl={imageUrls[current]}
+      onChange={(value) =>
+        designerStore.updateElement(element.id, {
+          posterAssetId: value === '' ? undefined : value,
+        } as Partial<Element>)
+      }
+    />
   );
 }
 

@@ -90,14 +90,14 @@ const lookGroups: LookGroups = [
 
 export const multiboxScene = galleryScene({
   id: 'multibox',
-  name: 'میزگرد چندقابه',
+  name: 'چهارقاب',
   description:
     'چهار پریست واقعی: تک‌قاب تمام‌صفحه، دوقاب، سه‌قاب دو بالا و یکی پایین، و چهار قاب؛ بدون عنوان یا پلیت ثابتِ وابسته به ورودی.',
   templateType: 'fullscreen',
   direct: true,
   fontFamily: FAM,
   onAirId: 'comp-multibox-onair',
-  onAirName: 'میزگرد چندقابه',
+  onAirName: 'چهارقاب',
   onAirSize: LOOK_SIZE,
   onAirPosition: { x: 0, y: 0 },
   children: [

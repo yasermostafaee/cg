@@ -81,45 +81,56 @@ async function render(): Promise<HTMLDivElement> {
   return container;
 }
 
-const posterSelect = (c: HTMLElement): HTMLSelectElement | null =>
-  c.querySelector('select[aria-label="poster"]');
-function choose(select: HTMLSelectElement, value: string): void {
-  act(() => {
-    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
-    setter?.call(select, value);
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+const posterButton = (c: HTMLElement): HTMLButtonElement | null =>
+  c.querySelector('button[aria-label="poster"]');
+
+function click(button: HTMLButtonElement): void {
+  act(() => button.click());
 }
 
 describe('D-137 — the poster picker', () => {
   it('🔴 offers "bars" and the PICTURES — the project’s and the shared library’s, never a font', async () => {
     seedPlate();
-    const select = posterSelect(await render());
-    expect([...(select?.options ?? [])].map((o) => o.value)).toEqual(['', 'img-1', 'logo-1']);
-    expect([...(select?.options ?? [])].map((o) => o.textContent)).toEqual([
-      'bars',
-      'studio (project)',
-      'brand (shared)',
-    ]);
-    expect(select?.value).toBe('');
+    const trigger = posterButton(await render());
+    expect(trigger?.textContent).toContain('Bars');
+    if (trigger === null) throw new Error('no poster picker');
+    click(trigger);
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
+    expect(dialog?.textContent).toContain('Bars');
+    expect(dialog?.querySelector('button[title="studio (project)"]')).not.toBeNull();
+    expect(dialog?.querySelector('button[title="brand (shared)"]')).not.toBeNull();
+    expect(dialog?.textContent).not.toContain('Vazir');
   });
 
   it('choosing a picture writes posterAssetId; choosing "bars" clears it', async () => {
     seedPlate();
-    const select = posterSelect(await render());
-    if (select === null) throw new Error('no poster select');
-    choose(select, 'img-1');
+    const container = await render();
+    const trigger = posterButton(container);
+    if (trigger === null) throw new Error('no poster picker');
+    click(trigger);
+    const projectPicture = document.querySelector<HTMLButtonElement>(
+      '[role="dialog"] button[title="studio (project)"]',
+    );
+    if (projectPicture === null) throw new Error('no project picture choice');
+    click(projectPicture);
     expect(plateNow().posterAssetId).toBe('img-1');
-    choose(select, '');
+    const selectedTrigger = posterButton(container);
+    if (selectedTrigger === null) throw new Error('no selected poster picker');
+    click(selectedTrigger);
+    const bars = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
+      (button) => button.textContent?.includes('Bars'),
+    );
+    if (bars === undefined) throw new Error('no bars choice');
+    click(bars);
     expect(plateNow().posterAssetId).toBeUndefined();
   });
 
   it('a stored poster that resolves to neither list is shown as itself, missing', async () => {
     seedPlate({ posterAssetId: 'gone' });
-    const select = posterSelect(await render());
-    expect(select?.value).toBe('gone');
-    expect([...(select?.options ?? [])].find((o) => o.value === 'gone')?.textContent).toBe(
-      'gone (missing)',
-    );
+    const trigger = posterButton(await render());
+    expect(trigger?.textContent).toContain('gone (missing)');
+    if (trigger === null) throw new Error('no poster picker');
+    click(trigger);
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('gone (missing)');
   });
 });

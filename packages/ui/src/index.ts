@@ -5,6 +5,7 @@
 
 export { chrome, spacing, radius, fontSize, fontStack, tokens } from './tokens.js';
 export { TAG_MARKER, tagProps, tag, type TagRole } from './tag.js';
+export { clearImageThumbnailCache, imageThumbnailUrl } from './image-thumbnail.js';
 
 /**
  * Join truthy class names. Tiny `clsx` stand-in so feature code can compose

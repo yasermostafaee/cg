@@ -2,24 +2,24 @@ import { test, expect } from './fixtures/designer.js';
 
 /**
  * D-119 + D-179 — the starter catalog is the audited Persian starter set,
- * in landing order with the composite leading, none carries
+ * in the owner-defined landing order, none carries
  * the "New" badge (owner decision), and picking one loads its scene into the
  * Studio (the designer-shell "Operator picks a starter" scenario).
  */
 
 const EXPECTED_LABELS = [
-  'میان‌برنامهٔ خبر',
-  'نوار اخبار',
-  'آرم شبکه',
-  'زیرنویس معرفی',
-  'توالی خبر',
-  'جدول لیگ برتر ایران',
+  'لوگو شبکه',
+  'عنوان معرفی',
+  'زیرنویس حرکت افقی',
+  'زیرنویس با ساعت',
+  'زیرنویس حرکت عمودی',
+  'نمایش تلاوت قرآن',
+  'چهارقاب',
+  'شمارش معکوس اذان',
   'آب‌وهوای مراکز استان‌ها',
   'پیش‌بینی چندروزهٔ هوا',
   'آب‌وهوای شهرها — کارت‌های تصویری',
-  'توالی تصاویر پوشه',
-  'شمارش معکوس اذان',
-  'میزگرد چندقابه',
+  'جدول لیگ برتر ایران',
 ];
 
 test.describe('D-119 + D-179 — starter landing catalog', () => {
@@ -171,7 +171,7 @@ test.describe('D-119 + D-179 — starter landing catalog', () => {
   }) => {
     await app.goto();
     // The owner's simplified logo keeps the bound wordmark, without its former sub-tag/separator.
-    await app.page.getByTestId('starter-card').nth(2).click();
+    await app.page.getByTestId('starter-card').first().click();
     await app.expectStudio();
 
     await expect(app.canvasFrame.locator('[data-cg-element-id="lb-word"]')).toHaveText('شبکه جدید');

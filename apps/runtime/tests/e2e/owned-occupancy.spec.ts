@@ -38,7 +38,7 @@ test('a seeded owned-slot warning names the layer and item, offers no Clear, and
     this spec is what caught it — it rendered "put there by layer 60 (not a row) · …", saying
     the coordinate twice and calling a layer an item owns "not a row".
   */
-  await expect(banner).toContainText('میان‌برنامهٔ خبر');
+  await expect(banner).toContainText('زیرنویس با ساعت');
   await expect(banner, 'the raw item id is back in the sentence').not.toContainText(
     'item-irib-news',
   );

@@ -8,11 +8,14 @@ import { Inspector } from '../src/renderer/features/inspector/Inspector.js';
 import {
   __resetDraftsForTest,
   buildApplyPayload,
+  stageFieldBatch,
   valueAt,
 } from '../src/renderer/features/inspector/draftStore.js';
 import {
   __resetFromFileForTest,
   attachFileSource,
+  claimAuthoredFileAutoLoad,
+  fromFileState,
 } from '../src/renderer/features/inspector/fromFileStore.js';
 import { fillBridgeStub } from './support/authStub.js';
 import { connectionsStub, linkFor } from './support/reachability.js';
@@ -170,13 +173,25 @@ async function render(
 }
 
 describe('D-180 — one operator table for all Sequence pages', () => {
-  it('flattens the page Repeaters and hides the repetitive page groups', async () => {
+  it('flattens the page Repeaters into one modal and hides the repetitive page groups', async () => {
     const el = await render();
     const combined = el.querySelector('section[aria-label="Weather pages all rows"]');
 
     expect(combined).not.toBeNull();
-    expect(combined?.querySelectorAll('input[aria-label*=" City"]')).toHaveLength(3);
-    expect(combined?.querySelectorAll('select[aria-label*=" Weather"]')).toHaveLength(3);
+    expect(combined?.querySelectorAll('input[aria-label*=" City"]')).toHaveLength(0);
+    const editRows = [...(combined?.querySelectorAll('button') ?? [])].find(
+      (button) => button.textContent?.trim() === 'Edit rows…',
+    );
+    if (editRows === undefined) throw new Error('Edit rows button missing');
+    await act(async () => {
+      editRows.click();
+      await Promise.resolve();
+    });
+    const dialog = document.body.querySelector<HTMLElement>(
+      '[role="dialog"][aria-label="Edit Cities rows"]',
+    );
+    expect(dialog?.querySelectorAll('input[aria-label*=" City"]')).toHaveLength(3);
+    expect(dialog?.querySelectorAll('select[aria-label*=" Weather"]')).toHaveLength(3);
     expect(el.querySelector('section[aria-label="Weather card — item 1 fields"]')).toBeNull();
     expect(combined?.textContent).toContain('2 pages · 2 per page');
     expect(combined?.textContent).toContain('Not connected');
@@ -184,7 +199,7 @@ describe('D-180 — one operator table for all Sequence pages', () => {
     expect(combined?.textContent).not.toContain('From Excel/CSV');
     expect(combined?.querySelector('svg')).not.toBeNull();
     expect(
-      combined
+      dialog
         ?.querySelector('input[aria-label="Cities item 1 Temperature"]')
         ?.classList.contains('cg-field'),
     ).toBe(true);
@@ -222,22 +237,82 @@ describe('D-180 — one operator table for all Sequence pages', () => {
         page('page-2', 2, FIELD, 'weather/cities.xlsx'),
       ],
     };
+    act(() => {
+      attachFileSource(
+        'stack-weather',
+        ['$sequence-rows', 'weather'],
+        {
+          name: 'cities.xlsx',
+          bridgePath: 'weather/cities.xlsx',
+          displayPath: String.raw`C:\FRONTEND-01\share-files\cities.xlsx`,
+          read: () => Promise.resolve(''),
+          readBytes: () => Promise.resolve(new Uint8Array()),
+        },
+        { split: false, delimiter: '', format: 'csv' },
+      );
+    });
     const el = await render(template);
     const combined = el.querySelector('section[aria-label="Weather pages all rows"]');
 
     expect(combined?.textContent).toContain('File managed');
-    expect(combined?.textContent).toContain('Not connected');
-    expect(combined?.textContent).toContain('Connect this workbook in Designer');
+    expect(combined?.textContent).toContain('Connected · cities.xlsx');
+    expect(combined?.textContent).toContain('Share file · weather/cities.xlsx');
+    expect(combined?.textContent).toContain(
+      String.raw`Read from · C:\FRONTEND-01\share-files\cities.xlsx`,
+    );
+    expect(combined?.textContent).not.toContain('Not connected');
     expect(combined?.textContent).toContain('View current data');
     expect(combined?.textContent).not.toContain('Save and connect Excel');
     expect(combined?.querySelector('input')).toBeNull();
     expect(combined?.querySelector('select')).toBeNull();
   });
 
+  it('keeps one connected Sequence workbook while allowing row edits when the author opts in', async () => {
+    const operatorField = {
+      ...FIELD,
+      allowFileSource: true,
+      fileSource: { inputMode: 'operator-choice' as const, format: 'csv' as const },
+    };
+    const template: TemplateInfo = {
+      ...TEMPLATE,
+      groups: [
+        page('page-1', 1, operatorField, 'weather/cities.xlsx'),
+        page('page-2', 2, operatorField, 'weather/cities.xlsx'),
+      ],
+    };
+    act(() => {
+      attachFileSource(
+        'stack-weather',
+        ['$sequence-rows', 'weather'],
+        {
+          name: 'cities.xlsx',
+          bridgePath: 'weather/cities.xlsx',
+          displayPath: String.raw`C:\FRONTEND-01\share-files\cities.xlsx`,
+          read: () => Promise.resolve(''),
+          readBytes: () => Promise.resolve(new Uint8Array()),
+        },
+        { split: false, delimiter: '', format: 'csv' },
+      );
+    });
+    const el = await render(template);
+    const combined = el.querySelector('section[aria-label="Weather pages all rows"]');
+
+    expect(combined?.textContent).toContain('File connected');
+    expect(combined?.textContent).toContain('Connected · cities.xlsx');
+    expect(combined?.textContent).toContain('Edit rows…');
+    expect(combined?.textContent).toContain('View current data…');
+    expect(combined?.textContent).not.toContain('Save and connect another Excel');
+    expect(combined?.textContent).not.toContain('Detach');
+    expect(combined?.textContent).toContain('Share file · weather/cities.xlsx');
+    expect(combined?.textContent).toContain(
+      String.raw`Read from · C:\FRONTEND-01\share-files\cities.xlsx`,
+    );
+  });
+
   it('refreshes an open Inspector when re-import adds the Sequence workbook owner', async () => {
     const el = await render();
     const combined = el.querySelector('section[aria-label="Weather pages all rows"]');
-    expect(combined?.querySelector('input')).not.toBeNull();
+    expect(combined?.textContent).toContain('Edit rows…');
     expect(combined?.textContent).toContain('Save and connect Excel');
 
     servedTemplate = {
@@ -258,6 +333,61 @@ describe('D-180 — one operator table for all Sequence pages', () => {
     expect(combined?.textContent).not.toContain('Save and connect Excel');
     expect(combined?.querySelector('input')).toBeNull();
     expect(combined?.querySelector('select')).toBeNull();
+  });
+
+  it('removes the old authored connection and its automatic draft when Designer detaches it', async () => {
+    const withWorkbook: TemplateInfo = {
+      ...TEMPLATE,
+      groups: [
+        page('page-1', 1, FIELD, 'weather/cities.xlsx'),
+        page('page-2', 2, FIELD, 'weather/cities.xlsx'),
+      ],
+    };
+    const el = await render(withWorkbook);
+    act(() => {
+      attachFileSource(
+        'stack-weather',
+        ['$sequence-rows', 'weather'],
+        {
+          name: 'cities.xlsx',
+          bridgePath: 'weather/cities.xlsx',
+          read: () => Promise.resolve(''),
+          readBytes: () => Promise.resolve(new Uint8Array()),
+        },
+        { split: false, delimiter: '', format: 'csv' },
+      );
+      claimAuthoredFileAutoLoad(
+        'stack-weather',
+        ['$sequence-rows', 'weather'],
+        'weather/cities.xlsx',
+      );
+      stageFieldBatch('stack-weather', [
+        {
+          path: ['weather:page-1', 'cities'],
+          value: [{ id: 'tehran', city: 'Changed by old file', temperature: 20, weather: 0 }],
+        },
+        {
+          path: ['weather:page-2', 'cities'],
+          value: [{ id: 'shiraz', city: 'Changed by old file', temperature: 24, weather: 1 }],
+        },
+      ]);
+    });
+    expect(fromFileState('stack-weather', ['$sequence-rows', 'weather'])).toBeDefined();
+
+    servedTemplate = TEMPLATE;
+    await act(async () => {
+      publishTemplatesChanged?.();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const combined = el.querySelector('section[aria-label="Weather pages all rows"]');
+    expect(fromFileState('stack-weather', ['$sequence-rows', 'weather'])).toBeUndefined();
+    expect(combined?.textContent).toContain('Not connected');
+    expect(combined?.textContent).toContain('Edit rows…');
+    expect(combined?.textContent).not.toContain('Connected');
+    expect(buildApplyPayload('stack-weather', stackItem().fields)).toEqual(stackItem().fields);
+    expect(el.textContent).not.toContain('● draft');
   });
 
   it('shows current File-only rows read-only and identifies an invalid legacy cell', async () => {
@@ -281,8 +411,8 @@ describe('D-180 — one operator table for all Sequence pages', () => {
       },
     };
     const el = await render(template, item);
-    const view = [...el.querySelectorAll('button')].find(
-      (button) => button.textContent?.trim() === 'View current data',
+    const view = [...el.querySelectorAll('button')].find((button) =>
+      button.textContent?.trim().startsWith('View current data'),
     );
     if (view === undefined) throw new Error('View current data button missing');
 
@@ -315,13 +445,29 @@ describe('D-180 — one operator table for all Sequence pages', () => {
 
   it('stages an edited flat row back into the correct page namespace', async () => {
     const el = await render();
-    const city = el.querySelector<HTMLInputElement>('input[aria-label="Cities item 3 City"]');
+    const editRows = [...el.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === 'Edit rows…',
+    );
+    await act(async () => {
+      editRows?.click();
+      await Promise.resolve();
+    });
+    const city = document.body.querySelector<HTMLInputElement>(
+      '[role="dialog"] input[aria-label="Cities item 3 City"]',
+    );
     if (city === null) throw new Error('third city input missing');
     const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
 
     await act(async () => {
       setter?.call(city, 'Yazd');
       city.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+    const rowDialog = document.body.querySelector<HTMLElement>('[role="dialog"]');
+    await act(async () => {
+      [...(rowDialog?.querySelectorAll('button') ?? [])]
+        .find((button) => button.textContent?.trim() === 'Apply')
+        ?.click();
       await Promise.resolve();
     });
 
@@ -332,10 +478,124 @@ describe('D-180 — one operator table for all Sequence pages', () => {
     expect(valueAt(payload, ['weather:page-1', 'cities'])).toHaveLength(2);
   });
 
+  it('grows and shrinks the generated page count with the operator row count', async () => {
+    const el = await render();
+    const combined = el.querySelector('section[aria-label="Weather pages all rows"]');
+    expect(combined?.querySelector('[aria-label="cities has unapplied edits"]')).toBeNull();
+    const editRows = [...el.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === 'Edit rows…',
+    );
+    await act(async () => {
+      editRows?.click();
+      await Promise.resolve();
+    });
+
+    const dialog = document.body.querySelector<HTMLElement>(
+      '[role="dialog"][aria-label="Edit Cities rows"]',
+    );
+    const add = dialog?.querySelector<HTMLButtonElement>('[aria-label="Add Cities item"]');
+    if (add === null || add === undefined) throw new Error('Add row button missing');
+    await act(async () => {
+      add.click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      add.click();
+      await Promise.resolve();
+    });
+    expect(dialog?.querySelectorAll('[role="separator"][aria-label^="Page "]')).toHaveLength(3);
+    expect(add.disabled).toBe(false);
+    await act(async () => {
+      [...(dialog?.querySelectorAll('button') ?? [])]
+        .find((button) => button.textContent?.trim() === 'Apply')
+        ?.click();
+      await Promise.resolve();
+    });
+
+    let payload = buildApplyPayload('stack-weather', stackItem().fields);
+    expect(valueAt(payload, ['$sequence-rows', 'weather'])).toHaveLength(5);
+    expect(valueAt(payload, ['weather:page-1', 'cities'])).toHaveLength(2);
+    expect(valueAt(payload, ['weather:page-2', 'cities'])).toHaveLength(2);
+    expect(combined?.textContent).toContain('5 rows · 3 pages · 2 per page');
+    expect(combined?.querySelector('[aria-label="cities has unapplied edits"]')).not.toBeNull();
+
+    await act(async () => {
+      editRows?.click();
+      await Promise.resolve();
+    });
+    const shrinkDialog = document.body.querySelector<HTMLElement>(
+      '[role="dialog"][aria-label="Edit Cities rows"]',
+    );
+    for (let remaining = 5; remaining > 1; remaining -= 1) {
+      const remove = shrinkDialog?.querySelector<HTMLButtonElement>(
+        `[aria-label="Remove Cities item ${String(remaining)}"]`,
+      );
+      if (remove === null || remove === undefined) throw new Error('Remove row button missing');
+      await act(async () => {
+        remove.click();
+        await Promise.resolve();
+      });
+    }
+    expect(shrinkDialog?.querySelectorAll('[role="separator"][aria-label^="Page "]')).toHaveLength(
+      1,
+    );
+    await act(async () => {
+      [...(shrinkDialog?.querySelectorAll('button') ?? [])]
+        .find((button) => button.textContent?.trim() === 'Apply')
+        ?.click();
+      await Promise.resolve();
+    });
+
+    payload = buildApplyPayload('stack-weather', stackItem().fields);
+    expect(valueAt(payload, ['$sequence-rows', 'weather'])).toHaveLength(1);
+    expect(combined?.textContent).toContain('1 row · 1 page · 2 per page');
+  });
+
+  it('shrinks the generated page count without requiring an earlier overflow', async () => {
+    const el = await render();
+    const editRows = [...el.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === 'Edit rows…',
+    );
+    await act(async () => {
+      editRows?.click();
+      await Promise.resolve();
+    });
+    const dialog = document.body.querySelector<HTMLElement>(
+      '[role="dialog"][aria-label="Edit Cities rows"]',
+    );
+    for (const item of [3, 2]) {
+      const remove = dialog?.querySelector<HTMLButtonElement>(
+        `[aria-label="Remove Cities item ${String(item)}"]`,
+      );
+      if (remove === null || remove === undefined) throw new Error('Remove row button missing');
+      await act(async () => {
+        remove.click();
+        await Promise.resolve();
+      });
+    }
+    await act(async () => {
+      [...(dialog?.querySelectorAll('button') ?? [])]
+        .find((button) => button.textContent?.trim() === 'Apply')
+        ?.click();
+      await Promise.resolve();
+    });
+
+    const payload = buildApplyPayload('stack-weather', stackItem().fields);
+    expect(valueAt(payload, ['$sequence-rows', 'weather'])).toHaveLength(1);
+    expect(el.textContent).toContain('1 row · 1 page · 2 per page');
+  });
+
   it('offers the authored numeric choices and stages one in CG Control', async () => {
     const el = await render();
-    const weather = el.querySelector<HTMLSelectElement>(
-      'select[aria-label="Cities item 1 Weather"]',
+    const editRows = [...el.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === 'Edit rows…',
+    );
+    await act(async () => {
+      editRows?.click();
+      await Promise.resolve();
+    });
+    const weather = document.body.querySelector<HTMLSelectElement>(
+      '[role="dialog"] select[aria-label="Cities item 1 Weather"]',
     );
     if (weather === null) throw new Error('weather dropdown missing');
     expect([...weather.options].map((option) => option.textContent)).toEqual([
@@ -347,6 +607,13 @@ describe('D-180 — one operator table for all Sequence pages', () => {
     await act(async () => {
       weather.value = '2';
       weather.dispatchEvent(new Event('change', { bubbles: true }));
+      await Promise.resolve();
+    });
+    const rowDialog = document.body.querySelector<HTMLElement>('[role="dialog"]');
+    await act(async () => {
+      [...(rowDialog?.querySelectorAll('button') ?? [])]
+        .find((button) => button.textContent?.trim() === 'Apply')
+        ?.click();
       await Promise.resolve();
     });
 
@@ -376,6 +643,6 @@ describe('D-180 — one operator table for all Sequence pages', () => {
     const combined = el.querySelector('section[aria-label="Weather pages all rows"]');
     expect(combined?.textContent).toContain('Connected · update file · weather.xlsx');
     expect(combined?.textContent).toContain('Excel choices may be outdated');
-    expect(combined?.textContent).toContain('Reload file');
+    expect(combined?.textContent).toContain('Reload');
   });
 });

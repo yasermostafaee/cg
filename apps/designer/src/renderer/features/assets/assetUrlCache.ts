@@ -1,4 +1,5 @@
 import type { AssetMeta } from '@cg/shared-ipc';
+import { publishProjectImageUrls } from './imageAssetUrlRegistry.js';
 
 /**
  * D-011 — module-level cache that resolves image + font assetIds to
@@ -25,6 +26,7 @@ const handlers = new Set<Handler>();
 
 function notify(): void {
   for (const h of handlers) h();
+  publishProjectImageUrls(getAll());
 }
 
 export function getAll(): Readonly<Record<string, string>> {

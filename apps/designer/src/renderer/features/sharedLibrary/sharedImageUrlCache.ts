@@ -1,4 +1,5 @@
 import type { AssetMeta } from '@cg/shared-ipc';
+import { publishSharedImageUrls } from '../assets/imageAssetUrlRegistry.js';
 
 /**
  * D-040 — module-level cache resolving SHARED-library image ids to blob URLs,
@@ -18,6 +19,7 @@ const handlers = new Set<Handler>();
 
 function notify(): void {
   for (const h of handlers) h();
+  publishSharedImageUrls(getAll());
 }
 
 export function getAll(): Readonly<Record<string, string>> {

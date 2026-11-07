@@ -41,6 +41,7 @@ const SCENE: Scene = {
 
 const AUTHORING_OVERRIDE = '.cg-pending { opacity: 1 !important; }';
 const AUTHORING_STAGE_OVERRIDE = '.cg-pending .cg-stage { visibility: visible !important; }';
+const REHEARSE_CLEAR_OVERRIDE = '.cg-rehearse-cleared .cg-stage { visibility: hidden !important; }';
 
 describe('Preview — D-087 blank until play (broadcast flag)', () => {
   let preview: Preview;
@@ -60,6 +61,8 @@ describe('Preview — D-087 blank until play (broadcast flag)', () => {
     expect(html).toContain(AUTHORING_OVERRIDE);
     expect(html).toContain(AUTHORING_STAGE_OVERRIDE);
     expect(html).toContain('const REVEAL_ON_LOAD = true;');
+    expect(html).toContain(REHEARSE_CLEAR_OVERRIDE);
+    expect(html).toContain("msg.action === 'authoring-restore'");
   });
 
   it('broadcast preview stays blank: omits the cg-pending override + REVEAL_ON_LOAD=false', () => {

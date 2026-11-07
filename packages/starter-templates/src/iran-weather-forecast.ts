@@ -1,11 +1,11 @@
 import type { Element, Scene } from '@cg/shared-schema';
+import { anim, EASE, kf, kfLinear, track } from './anim.js';
 import {
   galleryScene,
   gradient,
   image,
   layer,
   PALETTE,
-  reveal,
   shape,
   text,
   tf,
@@ -13,8 +13,28 @@ import {
 import { weatherTypeField, weatherIconElements } from './weather-icons.js';
 
 const FAM = 'asset-iran-weather-forecast-vazir';
-const TITLE = 'پیش‌بینی پنج‌روزهٔ تهران';
+const TITLE = 'پیش‌بینی آب و هوای پنج‌روزهٔ تهران';
 const CARD_COMP = 'comp-weather-forecast-card';
+
+const forecastHeaderReveal = (
+  opacityDelay: number,
+  poses: readonly { frame: number; y: number; linear?: boolean }[],
+): NonNullable<Element['animation']> =>
+  anim({
+    opacity: track(
+      kf(opacityDelay, 0),
+      kf(opacityDelay + 12, 1, EASE.outExpo),
+      kf(116, 1),
+      kf(138, 0),
+    ),
+    'position.y': track(
+      ...poses.map(({ frame, y, linear }, index) => {
+        if (linear === true) return kfLinear(frame, y);
+        if (frame === 138) return kf(frame, y, EASE.inCubic);
+        return index < 2 ? kf(frame, y, EASE.outExpo) : kf(frame, y);
+      }),
+    ),
+  });
 
 const forecast = [
   { id: 'today', day: 'امروز', weatherType: 'آفتابی', high: 22, low: 12 },
@@ -44,23 +64,31 @@ const card: NonNullable<Scene['compositions']>[number] = {
         'forecast-card-bg',
         'کارت',
         tf(0, 0, 296, 460),
-        gradient(160, '#092337B8', '#123C55A3'),
+        gradient(160, '#2D54715B', '#123C55A3'),
         0,
         {
           radius: 28,
-          stroke: { color: '#8BE7FF33', width: 2 },
-          shadow: { offsetX: 0, offsetY: 14, blur: 30, color: '#0000004D' },
+          stroke: { color: '#8BE7FF33', width: 0 },
+          shadow: { offsetX: 0, offsetY: 0, blur: 0, color: '#00000000', inset: false },
         },
       ),
       shape(
         'forecast-card-top',
         'نوار روز',
         tf(14, 14, 268, 66),
-        gradient(90, '#075985E6', '#0F766EE6'),
+        {
+          kind: 'radial',
+          center: { x: 0.5, y: 0.5 },
+          radius: 135,
+          stops: [
+            { at: 0, color: '#075985E6' },
+            { at: 1, color: '#0F766E00' },
+          ],
+        },
         1,
         {
           radius: 17,
-          stroke: { color: '#CFFAFE3D', width: 1 },
+          stroke: { color: '#CFFAFE3D', width: 0 },
         },
       ),
       text('forecast-day', 'روز', 'امروز', tf(24, 19, 248, 56), FAM, 30, 800, PALETTE.white, 2, {
@@ -81,7 +109,7 @@ const card: NonNullable<Scene['compositions']>[number] = {
           align: 'center',
         },
       ),
-      text('forecast-high', 'بیشینه', '۲۲', tf(127, 320, 96, 80), FAM, 52, 800, '#FFF6DF', 2, {
+      text('forecast-high', 'بیشینه', '۲۲', tf(127, 320, 96, 80), FAM, 52, 800, '#F43358', 2, {
         align: 'end',
         direction: 'ltr',
       }),
@@ -93,14 +121,14 @@ const card: NonNullable<Scene['compositions']>[number] = {
         FAM,
         26,
         600,
-        '#FFF6DF',
+        '#F43358',
         2,
         {
           align: 'start',
           direction: 'ltr',
         },
       ),
-      text('forecast-low', 'کمینه', '۱۲', tf(0, 320, 96, 80), FAM, 52, 800, '#7DD3FC', 2, {
+      text('forecast-low', 'کمینه', '۱۲', tf(0, 320, 96, 80), FAM, 52, 800, '#3C8DEA', 2, {
         align: 'end',
         direction: 'ltr',
       }),
@@ -112,7 +140,7 @@ const card: NonNullable<Scene['compositions']>[number] = {
         FAM,
         26,
         600,
-        '#7DD3FC',
+        '#3C8DEA',
         2,
         {
           align: 'start',
@@ -204,46 +232,39 @@ const children: Element[] = [
   shape(
     'forecast-title-ribbon',
     'نوار عنوان',
-    tf(405, 42, 1300, 102),
-    gradient(90, '#075985E6', '#0F766EE6'),
+    tf(90, 42, 1570, 102),
+    {
+      kind: 'radial',
+      center: { x: 0.5, y: 0.5 },
+      radius: 433,
+      stops: [
+        { at: 0, color: '#1785BFD5' },
+        { at: 1, color: '#0F766E00' },
+      ],
+    },
     2,
     {
       radius: 26,
-      stroke: { color: '#CFFAFE44', width: 1 },
-      animation: reveal(0, 42),
+      stroke: { color: '#CFFAFE44', width: 0 },
+      animation: forecastHeaderReveal(0, [
+        { frame: 0, y: 62 },
+        { frame: 16, y: 42 },
+        { frame: 60, y: 42, linear: true },
+        { frame: 116, y: 42 },
+        { frame: 138, y: 58 },
+      ]),
     },
   ),
-  text('forecast-title', 'عنوان', TITLE, tf(450, 52, 1210, 80), FAM, 42, 900, PALETTE.white, 3, {
-    align: 'start',
-    animation: reveal(4, 52),
+  text('forecast-title', 'عنوان', TITLE, tf(270, 52, 1210, 80), FAM, 42, 900, PALETTE.white, 3, {
+    align: 'center',
+    animation: forecastHeaderReveal(4, [
+      { frame: 4, y: 72 },
+      { frame: 20, y: 52 },
+      { frame: 60, y: 53, linear: true },
+      { frame: 116, y: 52 },
+      { frame: 138, y: 68 },
+    ]),
   }),
-  shape(
-    'forecast-mark',
-    'نشان پیش‌بینی',
-    tf(55, 42, 320, 102),
-    gradient(135, '#D97706', '#FBBF24'),
-    2,
-    {
-      radius: 26,
-      shadow: { offsetX: 0, offsetY: 12, blur: 28, color: '#F59E0B30' },
-      animation: reveal(2, 42),
-    },
-  ),
-  text(
-    'forecast-mark-text',
-    'عنوان کوتاه',
-    '۵ روز آینده',
-    tf(80, 52, 270, 80),
-    FAM,
-    29,
-    900,
-    '#172033',
-    3,
-    {
-      align: 'center',
-      animation: reveal(6, 52),
-    },
-  ),
   {
     id: 'forecast-repeater',
     name: 'روزهای پیش‌بینی',

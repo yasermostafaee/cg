@@ -6,6 +6,7 @@ import { CG_RUNTIME_VERSION } from '@cg/shared-schema';
 import type { AssetEntry, FontReference, Manifest, Scene } from '@cg/shared-schema';
 import { WS_MAX_FRAME_BYTES } from '@cg/shared-ipc';
 import {
+  assertTemplateRuntimeCompatibility,
   importTemplateFromBytes,
   produceTemplateDelivery,
   TEMPLATE_DAMAGED,
@@ -303,6 +304,30 @@ describe('produceTemplateDelivery', () => {
 });
 
 describe('produceTemplateDelivery — B-196 the runtime-contract guard', () => {
+  it('B-384 — an older CG Control gets the version refusal before strict scene parsing', async () => {
+    const scene = { ...fixtureScene(), frameRate: 30 as const };
+    const bytes = await buildVcgWithImage(
+      'tpl-thirty-fps',
+      '30 fps lower third',
+      CG_RUNTIME_VERSION,
+      PNG_1X1,
+      scene,
+    );
+
+    await expect(assertTemplateRuntimeCompatibility(bytes, '1.0.0')).rejects.toThrow(
+      /30 fps lower third/,
+    );
+    await expect(assertTemplateRuntimeCompatibility(bytes, '1.0.0')).rejects.toThrow(/1\.1\.0/);
+    await expect(assertTemplateRuntimeCompatibility(bytes, '1.0.0')).rejects.toThrow(/1\.0\.0/);
+    await expect(assertTemplateRuntimeCompatibility(bytes, '1.0.0')).rejects.toThrow(
+      /Update this station/,
+    );
+
+    await expect(produceTemplateDelivery(bytes)).resolves.toMatchObject({
+      template: { templateId: 'tpl-thirty-fps' },
+    });
+  });
+
   it('🔴 REFUSES a package from a newer build, and the message names both versions', async () => {
     /*
       The direction that needs a guard: a package declaring a rendering contract this build does

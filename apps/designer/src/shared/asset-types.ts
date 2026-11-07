@@ -22,7 +22,11 @@ interface KindSpec {
 
 const SPEC: Record<PickKind, KindSpec> = {
   image: {
-    accept: 'image/*',
+    // Keep the individual extensions as well as MIME types.  Chromium's native
+    // picker does not consistently include SVG under the broad `image/*` filter,
+    // even though SVG is a valid image asset everywhere else in the product.
+    accept:
+      '.png,.jpg,.jpeg,.webp,.gif,.svg,image/png,image/jpeg,image/webp,image/gif,image/svg+xml',
     extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'],
     mimes: ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml'],
   },

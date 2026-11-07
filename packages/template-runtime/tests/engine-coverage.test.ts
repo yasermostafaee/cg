@@ -180,6 +180,20 @@ describe('applyFieldValues — transform + lottie-override targets', () => {
     const img = elementMap.get('im') as HTMLImageElement;
     expect(img.dataset['cgAssetId']).toBe('newAsset');
     expect(img.src).toContain('newAsset');
+
+    applyFieldValues(scene, { logo: { assetId: '' } }, elementMap, textOriginals, container);
+    expect(img.hidden).toBe(true);
+    expect(img.hasAttribute('src')).toBe(false);
+
+    applyFieldValues(
+      scene,
+      { logo: { assetId: 'restoredAsset' } },
+      elementMap,
+      textOriginals,
+      container,
+    );
+    expect(img.hidden).toBe(false);
+    expect(img.src).toContain('restoredAsset');
   });
 });
 

@@ -959,6 +959,13 @@ content" to "let the element animate ITSELF off"). A Lottie owning an outro is
 marked `data-cg-outro` and is excluded from the blanket `fadeContentOut` /
 `hideContentNow`, so an opacity transition never fights `goToAndStop`.
 
+A Sequence can own the same seam through ordinary element keyframes. When its
+root element has a keyframe strictly after the scope's `outPoint`, Runtime marks
+that host `data-cg-outro="sequence-frame"`; Stop therefore keeps the current
+text, picture or nested composition mounted while the composition frame driver
+paints the authored Outro. Sequence page-turn `transitionOut` stays independent:
+it still owns Next/page replacement and does not imply a composition Outro.
+
 Two signals are kept deliberately separate:
 
 - **`whenComplete()`** — the content-driven HOLD contribution, and only when the

@@ -169,6 +169,64 @@ describe('SequenceDriver (D-029)', () => {
     expect(visible(h.host)).toEqual([ITEMS[0]?.text]); // still item 1
   });
 
+  it('prewarms composition pages and reuses their exact DOM after page 1', () => {
+    const calls = new Map<
+      string,
+      { show: number; resume: number; pause: number; hide: number; node: HTMLElement }
+    >();
+    const renderComposition: NonNullable<SequenceDriverOptions['renderComposition']> = (item) => {
+      const node = document.createElement('div');
+      node.dataset['cgSequenceItem'] = '1';
+      node.dataset['page'] = item.id;
+      node.textContent = item.id;
+      const state = { show: 0, resume: 0, pause: 0, hide: 0, node };
+      calls.set(item.id, state);
+      return {
+        node,
+        show: () => {
+          state.show += 1;
+        },
+        resume: () => {
+          state.resume += 1;
+        },
+        pause: () => {
+          state.pause += 1;
+        },
+        hide: () => {
+          state.hide += 1;
+        },
+      };
+    };
+    const h = make({
+      advance: 'manual',
+      transitionIn: 'none',
+      transitionOut: 'none',
+      prewarmCompositionItems: true,
+      items: ['page-1', 'page-2', 'page-3'].map((id) => ({
+        kind: 'composition' as const,
+        id,
+        compositionId: 'page',
+      })),
+      renderComposition,
+    });
+
+    h.driver.start();
+    expect(calls.size).toBe(3);
+    expect([...calls.values()].map((state) => state.show)).toEqual([1, 1, 1]);
+    expect(visible(h.host)).toEqual(['page-1']);
+    const warmedSecondPage = calls.get('page-2')?.node;
+
+    h.driver.next();
+    expect(visible(h.host)).toEqual(['page-2']);
+    expect(calls.size).toBe(3);
+    expect(h.host.querySelector('[data-page="page-2"]')).toBe(warmedSecondPage);
+    expect(calls.get('page-2')).toMatchObject({ show: 1, resume: 1 });
+    expect(calls.get('page-1')).toMatchObject({ pause: 1 });
+
+    h.driver.destroy();
+    expect([...calls.values()].map((state) => state.hide)).toEqual([1, 1, 1]);
+  });
+
   it('a finite repeat plays the boundary transitions and completes after the LAST item EXITS — by timer', async () => {
     const h = make({ repeat: 1, defaultDwellMs: 500 });
     const done = completionFlag(h.driver);
@@ -306,6 +364,50 @@ describe('SequenceDriver (D-029)', () => {
       h.driver.start();
       h.driver.setItems([{ id: 'a', text: 'A2' }, ...ITEMS.slice(1).map((i) => ({ ...i }))]);
       expect(visible(h.host)).toEqual(['A2']); // same node, new text
+    });
+
+    it('refreshes a current composition page when its generated row values change', () => {
+      const renderComposition: NonNullable<SequenceDriverOptions['renderComposition']> = (item) => {
+        const node = document.createElement('div');
+        node.dataset['cgSequenceItem'] = '1';
+        const applyFields = (): void => {
+          const rows = item.fieldValues?.['rows'];
+          node.textContent = Array.isArray(rows) ? String(rows.length) : '0';
+        };
+        applyFields();
+        return {
+          node,
+          show: () => undefined,
+          pause: () => undefined,
+          resume: () => undefined,
+          hide: () => undefined,
+          applyFields,
+        };
+      };
+      const h = make({
+        items: [
+          {
+            kind: 'composition',
+            id: 'page-1',
+            compositionId: 'page',
+            fieldValues: { rows: [{ id: 'one' }] },
+          },
+        ],
+        renderComposition,
+      });
+      h.driver.start();
+      expect(visible(h.host)).toEqual(['1']);
+
+      h.driver.setItems([
+        {
+          kind: 'composition',
+          id: 'page-1',
+          compositionId: 'page',
+          fieldValues: { rows: [{ id: 'one' }, { id: 'two' }] },
+        },
+      ]);
+      h.driver.applyFieldsToCurrent({});
+      expect(visible(h.host)).toEqual(['2']);
     });
 
     it('removing the current item takes effect at the NEXT advance', () => {

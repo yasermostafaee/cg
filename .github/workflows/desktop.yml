@@ -165,9 +165,11 @@ jobs:
       # each installer's step rail and the art at its foot. A GUI-subsystem program, so it is waited for.
       - name: Render CG Setup's pages (each rail's art)
         shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           $p = Start-Process -FilePath target/i686-pc-windows-msvc/release/cg-setup.exe -Wait -PassThru -NoNewWindow -ArgumentList @(
-            '--cg-preview', 'setup-rail-art', 'apps/runtime/src-tauri/icons/icon.png', 'apps/designer/src-tauri/icons/icon.png')
+            '--cg-preview', 'setup-rail-art', 'apps/runtime/src-tauri/icons/icon.png', 'apps/designer/src-tauri/icons/icon.png', $env:VERSION)
           if ($p.ExitCode -ne 0) { "The preview exited $($p.ExitCode)."; exit 1 }
           foreach ($role in 'control', 'designer', 'bridge') {
             if (-not (Test-Path "setup-rail-art/$role-welcome.png")) { "No $role-welcome.png."; exit 1 }

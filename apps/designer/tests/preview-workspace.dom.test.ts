@@ -15,11 +15,12 @@ import {
 import {
   canvasDisplayFrame,
   canvasDisplayLimitMs,
+  hasAuthoredOutroMotion,
   previewDisplayFrame,
   previewElapsedLimitMs,
   shouldDeferPreviewNaturalStop,
 } from '../src/renderer/features/fields/preview-elapsed.js';
-import type { AggregatedFields, Scene } from '@cg/shared-schema';
+import type { AggregatedFields, Element, Scene } from '@cg/shared-schema';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -295,6 +296,51 @@ describe('D-173 — Preview command workspace', () => {
     expect(canvasDisplayFrame(autoOutScene, 50, 700)).toBe(30);
     expect(canvasDisplayFrame(autoOutScene, 50, 900)).toBe(35);
     expect(canvasDisplayFrame(autoOutScene, 50, 1_200)).toBe(50);
+  });
+
+  it('D-199 distinguishes a real authored Outro from an immediate-clear picture Sequence', () => {
+    const layer = (children: Element[]): Scene['layers'][number] => ({
+      id: 'layer-1',
+      name: 'Layer',
+      visible: true,
+      locked: false,
+      blendMode: 'normal',
+      children,
+    });
+    const pictureSequence = {
+      id: 'pictures',
+      type: 'sequence',
+      animation: undefined,
+    } as unknown as Element;
+    const folderScene = timingScene({
+      activeRange: { in: 0, out: 160 },
+      frameRange: { in: 0, out: 160 },
+      lifecycle: { outPoint: 100 },
+      layers: [layer([pictureSequence])],
+    });
+    expect(hasAuthoredOutroMotion(folderScene)).toBe(false);
+
+    const animatedFolderScene = timingScene({
+      ...folderScene,
+      layers: [
+        layer([
+          {
+            ...pictureSequence,
+            animation: {
+              tracks: {
+                opacity: {
+                  keyframes: [
+                    { frame: 100, value: 1, easing: 'linear' },
+                    { frame: 160, value: 0, easing: 'linear' },
+                  ],
+                },
+              },
+            },
+          } as Element,
+        ]),
+      ],
+    });
+    expect(hasAuthoredOutroMotion(animatedFolderScene)).toBe(true);
   });
 
   it('puts elapsed status before commands and exposes Stop but no Out', () => {

@@ -4,6 +4,6 @@ Both startup splashes currently show a compact support stamp whose middle Git re
 
 ## Scope
 
-- Format the shared splash stamp with explicit Version, Revision and Build date labels.
+- Format the shared splash stamp with explicit Version and Build date labels; retain Revision only in diagnostic metadata.
 - Apply the same shared format to CG Designer and CG Control.
 - Keep truthful fallbacks for development/source trees without a release version or Git revision.

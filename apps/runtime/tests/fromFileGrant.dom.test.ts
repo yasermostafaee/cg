@@ -147,6 +147,7 @@ function item(): StackItemState {
 
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
+let publishTemplatesChanged: (() => void) | null = null;
 
 /** `get` is a THUNK so a test can hand back null, or a promise that never settles. */
 async function render(
@@ -177,7 +178,12 @@ async function render(
     templates: {
       get: vi.fn(get),
       list: vi.fn(() => Promise.resolve([])),
-      onChanged: () => () => undefined,
+      onChanged: (handler: () => void) => {
+        publishTemplatesChanged = handler;
+        return () => {
+          if (publishTemplatesChanged === handler) publishTemplatesChanged = null;
+        };
+      },
     },
     // Phase 6 — the Inspector names the ROW (`useOperatorNames`), so it reads the bank too.
     fixedLayers: {
@@ -237,6 +243,7 @@ afterEach(() => {
   root = null;
   container?.remove();
   container = null;
+  publishTemplatesChanged = null;
   vi.restoreAllMocks();
 });
 
@@ -354,6 +361,9 @@ describe('the FROM FILE control renders only where the author granted a file sou
     });
 
     expect(el.textContent).toContain('Connected · league.xlsx');
+    expect(el.textContent).toContain('File connected');
+    expect(el.textContent).toContain('Edit rows…');
+    expect(el.querySelector('.cg-file-managed-connection .cg-file-chip')).toBeNull();
     expect(el.querySelector('button[aria-label="Reload items from file"]')).not.toBeNull();
     expect(el.textContent).toContain('View current data');
     expect(el.textContent).toContain('Save and connect another Excel');
@@ -373,6 +383,59 @@ describe('the FROM FILE control renders only where the author granted a file sou
 });
 
 describe('R-102 — authored file-only and locked Bridge sources', () => {
+  it('removes a direct Repeater connection and its automatic draft after Designer detaches it', async () => {
+    const itemFields = [
+      { id: 'day', type: 'text' as const, label: 'Day', required: true, default: '' },
+      { id: 'high', type: 'number' as const, label: 'High', required: true, default: 0 },
+    ];
+    let current: TemplateInfo = {
+      ...withFieldPolicy('items', {
+        bridgePath: 'weather/forecast-rows.xlsx',
+        format: 'csv',
+      }),
+      fields: TEMPLATE.fields?.map((field) =>
+        field.id === 'items' && field.type === 'list'
+          ? {
+              ...field,
+              maxItems: 5,
+              itemFields,
+              fileSource: {
+                bridgePath: 'weather/forecast-rows.xlsx',
+                format: 'csv' as const,
+              },
+            }
+          : field,
+      ),
+    };
+    const el = await render(() => Promise.resolve(current));
+    act(() => {
+      stageField('item-1', ['items'], [{ id: 'old-file-row', day: 'Sunday', high: 10 }]);
+    });
+    expect(el.textContent).toContain('Connected · weather/forecast-rows.xlsx');
+    expect(fromFileState('item-1', ['items'])).toBeDefined();
+
+    current = {
+      ...current,
+      fields: current.fields?.map((field) =>
+        field.id === 'items' && field.type === 'list'
+          ? { ...field, fileSource: { format: 'csv' as const } }
+          : field,
+      ),
+    };
+    await act(async () => {
+      publishTemplatesChanged?.();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fromFileState('item-1', ['items'])).toBeUndefined();
+    expect(stagedValue('item-1', ['items'])).toBeUndefined();
+    expect(el.textContent).toContain('Not connected');
+    expect(el.textContent).toContain('Edit rows…');
+    expect(el.textContent).not.toContain('Connected');
+    expect(el.textContent).not.toContain('● draft');
+  });
+
   it('removes manual editing and leaves file-only connection ownership in Designer', async () => {
     const headlinePolicy = withFieldPolicy('headline', { inputMode: 'file-only' });
     const template = {
@@ -448,6 +511,8 @@ describe('R-102 — authored file-only and locked Bridge sources', () => {
     expect(readText).toHaveBeenCalledWith({ path: 'newsroom/crawl.txt' });
     expect(stagedValue('item-1', ['crawl'])).toBe('خبر تازه');
     expect(onApply).not.toHaveBeenCalled();
+    expect(el.textContent).toContain('Share file · newsroom/crawl.txt');
+    expect(el.textContent).toContain(String.raw`Read from · \\newsroom\CG Text\newsroom\crawl.txt`);
   });
 
   it('does not re-read or replace a later operator edit on an unrelated Inspector render', async () => {

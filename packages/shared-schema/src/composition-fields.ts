@@ -106,6 +106,15 @@ export interface NestedFieldValues {
 }
 
 /**
+ * Runtime-only field namespace used by CG Control when one operator table owns
+ * every Repeater page inside a composition Sequence.  The authored page
+ * namespaces remain in the payload for backwards compatibility; this list is
+ * the unbounded source from which a current template runtime derives the exact
+ * page count (for example 5 rows → 1 page, 33 rows → 5 pages at 8 per page).
+ */
+export const SEQUENCE_ROWS_FIELD_NAMESPACE = '$sequence-rows';
+
+/**
  * A namespace sub-object — NOT a scalar field value, NOT a list, NOT an image `{assetId}`.
  *
  * The one rule that separates "a nested composition's values" from "a field value that
@@ -582,6 +591,26 @@ function compOwningElement(
   return comps.find((c) => c.layers.some((l) => l.children.some((el) => el.id === elementId)));
 }
 
+/** Exact wire identity; transforms change the value, not which field/target pair is wired. */
+function sameBindingWire(a: FieldBinding, b: FieldBinding): boolean {
+  if (a.fieldId !== b.fieldId) return false;
+  const aTarget = a.target as unknown as Record<string, unknown>;
+  const bTarget = b.target as unknown as Record<string, unknown>;
+  const keys = Object.keys(aTarget);
+  return (
+    keys.length === Object.keys(bTarget).length &&
+    keys.every((key) => aTarget[key] === bTarget[key])
+  );
+}
+
+function uniqueBindings(bindings: readonly FieldBinding[]): FieldBinding[] {
+  const unique: FieldBinding[] = [];
+  for (const binding of bindings) {
+    if (!unique.some((candidate) => sameBindingWire(candidate, binding))) unique.push(binding);
+  }
+  return unique;
+}
+
 /**
  * Migrate a legacy project whose fields/bindings live globally on the root scene
  * into per-composition ownership. Each binding moves to the composition that
@@ -591,9 +620,23 @@ function compOwningElement(
  * namespacing, exactly as before.
  */
 export function migrateGlobalFieldsToCompositions(scene: Scene): Scene {
-  if (scene.fields.length === 0 && scene.bindings.length === 0) return scene;
   const comps = scene.compositions ?? [];
   if (comps.length === 0) return scene; // nothing to migrate into
+
+  // Direct full-frame starters once carried the same wires at root and on their entry
+  // composition. Older saves may therefore already contain duplicate composition wires even
+  // after the root was drained. Repair those on every open, while preserving object identity for
+  // a clean scene.
+  if (scene.fields.length === 0 && scene.bindings.length === 0) {
+    let changed = false;
+    const compositions = comps.map((composition) => {
+      const bindings = uniqueBindings(composition.bindings ?? []);
+      if (bindings.length === (composition.bindings?.length ?? 0)) return composition;
+      changed = true;
+      return { ...composition, bindings };
+    });
+    return changed ? { ...scene, compositions } : scene;
+  }
 
   const perComp = new Map<string, { fields: DynamicField[]; bindings: FieldBinding[] }>();
   const ensure = (id: string): { fields: DynamicField[]; bindings: FieldBinding[] } => {
@@ -622,13 +665,20 @@ export function migrateGlobalFieldsToCompositions(scene: Scene): Scene {
 
   const nextComps = comps.map((c) => {
     const bucket = perComp.get(c.id);
-    if (bucket === undefined) return c;
+    if (bucket === undefined) {
+      const bindings = uniqueBindings(c.bindings ?? []);
+      return bindings.length === (c.bindings?.length ?? 0) ? c : { ...c, bindings };
+    }
     // Keep any fields already on the comp; append migrated ones not already present.
     const ownFields = c.fields ?? [];
     const ownBindings = c.bindings ?? [];
     const ids = new Set(ownFields.map((f) => f.id));
     const mergedFields = [...ownFields, ...bucket.fields.filter((f) => !ids.has(f.id))];
-    return { ...c, fields: mergedFields, bindings: [...ownBindings, ...bucket.bindings] };
+    return {
+      ...c,
+      fields: mergedFields,
+      bindings: uniqueBindings([...ownBindings, ...bucket.bindings]),
+    };
   });
 
   return { ...scene, compositions: nextComps, fields: [], bindings: [] };

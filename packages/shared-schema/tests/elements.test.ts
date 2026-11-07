@@ -959,6 +959,13 @@ describe('SequenceElement (D-029)', () => {
     expect(parsed.transitionIn).toBe('none');
     expect(parsed.repeat).toBe(3);
   });
+  it('preserves the opt-in composition-page prewarm flag', () => {
+    expect(
+      SequenceElementSchema.parse({ ...sequence, prewarmCompositionItems: true })
+        .prewarmCompositionItems,
+    ).toBe(true);
+    expect(SequenceElementSchema.parse(sequence).prewarmCompositionItems).toBeUndefined();
+  });
   it('rejects a non-positive per-item dwellMs', () => {
     expect(() =>
       SequenceElementSchema.parse({

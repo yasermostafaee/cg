@@ -8,7 +8,13 @@ const DynamicFieldBaseSchema = z.object({
   group: z.string().optional(),
   required: z.boolean(),
   description: z.string().optional(),
+  /** False keeps a Repeater column visible but read-only in CG Control. Absent remains editable. */
+  operatorEditable: z.literal(false).optional(),
 });
+
+export function fieldOperatorEditable(field: { operatorEditable?: false | undefined }): boolean {
+  return field.operatorEditable !== false;
+}
 
 /**
  * A regular-expression *source* string (no slashes/flags), validated to compile.
@@ -170,19 +176,45 @@ export const ImageFieldAssetOptionSchema = z.object({
   assetId: IdSchema,
   /** Operator-facing package filename. Never fall back to the opaque asset id. */
   label: z.string().min(1),
+  /** Store ownership is authored so export can package choices from either library. */
+  source: z.enum(['project', 'shared']).optional(),
 });
 export type ImageFieldAssetOption = z.infer<typeof ImageFieldAssetOptionSchema>;
+
+export const ImageFieldInputModeSchema = z.enum(['choices', 'upload', 'choices-and-upload']);
+export type ImageFieldInputMode = z.infer<typeof ImageFieldInputModeSchema>;
 
 const ImageFieldSchema = DynamicFieldBaseSchema.extend({
   type: z.literal('image'),
   defaultAssetId: IdSchema.optional(),
   accept: z.array(z.enum(['png', 'jpg', 'webp', 'svg'])).min(1),
+  /** Which operator controls the author exposes in Preview and CG Control. */
+  inputMode: ImageFieldInputModeSchema.optional(),
   /**
-   * D-180 — package-derived picker metadata for CG Control. The Designer does
-   * not author this list; import derives it from the manifest asset index.
+   * D-180/B-407 — authored image allowlist. Legacy fields without a list keep
+   * the package-derived choices so existing templates remain operable.
    */
   assetOptions: z.array(ImageFieldAssetOptionSchema).optional(),
 });
+
+/** Legacy image fields were choice pickers, so absence remains choice-only. */
+export function imageFieldInputMode(
+  field: Pick<z.infer<typeof ImageFieldSchema>, 'inputMode'>,
+): ImageFieldInputMode {
+  return field.inputMode ?? 'choices';
+}
+
+export function imageFieldAllowsChoices(
+  field: Pick<z.infer<typeof ImageFieldSchema>, 'inputMode'>,
+): boolean {
+  return imageFieldInputMode(field) !== 'upload';
+}
+
+export function imageFieldAllowsUpload(
+  field: Pick<z.infer<typeof ImageFieldSchema>, 'inputMode'>,
+): boolean {
+  return imageFieldInputMode(field) !== 'choices';
+}
 
 const ColorFieldSchema = DynamicFieldBaseSchema.extend({
   type: z.literal('color'),

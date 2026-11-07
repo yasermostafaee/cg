@@ -534,6 +534,45 @@ describe('migrateGlobalFieldsToCompositions', () => {
     const scene = { compositions: [child], fields: [], bindings: [] } as unknown as Scene;
     expect(migrateGlobalFieldsToCompositions(scene)).toBe(scene);
   });
+
+  it('repairs duplicate field-to-target wires already stored on a composition', () => {
+    const binding: FieldBinding = {
+      fieldId: 'forecast',
+      target: { kind: 'repeater-items', elementId: 'forecast-repeater' },
+    };
+    const child = comp({
+      id: 'forecast',
+      fields: [textField('forecast')],
+      bindings: [binding, { ...binding }],
+    });
+    const scene = { compositions: [child], fields: [], bindings: [] } as unknown as Scene;
+
+    const migrated = migrateGlobalFieldsToCompositions(scene);
+    expect(migrated.compositions?.[0]?.bindings).toEqual([binding]);
+  });
+
+  it('does not append a legacy root wire already owned by the target composition', () => {
+    const binding: FieldBinding = {
+      fieldId: 'forecast',
+      target: { kind: 'repeater-items', elementId: 'forecast-repeater' },
+    };
+    const repeater = { id: 'forecast-repeater', type: 'repeater' } as unknown as Element;
+    const child = comp({
+      id: 'forecast',
+      layers: [layer([repeater])],
+      fields: [textField('forecast')],
+      bindings: [binding],
+    });
+    const scene = {
+      compositions: [child],
+      fields: [textField('forecast')],
+      bindings: [{ ...binding }],
+    } as unknown as Scene;
+
+    const migrated = migrateGlobalFieldsToCompositions(scene);
+    expect(migrated.compositions?.[0]?.bindings).toEqual([binding]);
+    expect(migrated.bindings).toEqual([]);
+  });
 });
 
 /**

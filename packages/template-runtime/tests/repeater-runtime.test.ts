@@ -617,6 +617,38 @@ describe('repeater — rows are real scopes (lifecycle by reuse)', () => {
     runtime.remove();
   });
 
+  it('clips an alternating row fill to the child row plate corner radius', async () => {
+    const rowPlate: Element = {
+      ...baseElProps,
+      id: 'row-plate',
+      name: 'rounded row plate',
+      type: 'shape',
+      shape: 'rounded-rect',
+      transform: {
+        ...baseTransform,
+        size: { w: 200, h: 50 },
+      },
+      fill: { kind: 'solid', color: '#00000000' },
+      cornerRadius: [8, 4, 2, 0],
+    } as unknown as Element;
+    const runtime = createRuntime(
+      repeaterScene({
+        comp: rowComp({ extra: [rowPlate] }),
+        element: {
+          itemEntrance: 'fade',
+          alternatingRowFill: '#FFFFFF20',
+        },
+        playout: { mode: 'manual' },
+      }),
+      { skipFontLoad: true, clock: makeClock() },
+    );
+    await runtime.play({});
+    expect(cells()[0]?.style.borderRadius).toBe('');
+    expect(cells()[1]?.style.borderRadius).toBe('16px 8px 4px 0px');
+    expect(motions()[1]?.style.backgroundColor).not.toBe('');
+    runtime.remove();
+  });
+
   it.each(['forward', 'reverse'] as const)(
     'exits %s from an interrupted entrance without revealing rows that never entered',
     async (itemExitOrder) => {

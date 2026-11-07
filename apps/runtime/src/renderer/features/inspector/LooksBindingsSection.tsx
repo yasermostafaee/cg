@@ -100,11 +100,17 @@ const styles = {
    * cannot be pressed must not look like a control, and a shape that CAN must stay one.
    */
   lookTabs: {
-    display: 'flex',
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(88px, 1fr))',
     gap: 'var(--r-space-1)',
-    flexWrap: 'wrap' as const,
     marginBottom: 'var(--r-space-2)',
   },
+  /*
+   * Every preset owns one equal grid cell. The live/selected badge is extra state text, not
+   * permission to make that one button wider and push it onto a new line (B-401). Keeping the
+   * button a small vertical stack also means the Persian preset name and its state can wrap
+   * inside the same fixed geometry without changing the neighbouring presets' alignment.
+   */
   lookName: { fontWeight: 700, fontSize: 'var(--r-text-sm)' },
   /**
    * 🔴 **SESSION BP — THE BADGE WEARS THE STATE'S OWN COLOUR, and the argument that said it
@@ -234,11 +240,13 @@ const styles = {
 export function badgeFor(
   onAir: boolean,
   rehearsing: boolean,
-): { text: string; tone: 'on-air' | 'rehearsing' | 'not-on-air'; color: string } {
+): { text: string | null; tone: 'on-air' | 'rehearsing' | 'not-on-air'; color: string } {
   if (rehearsing)
     return { text: 'SHOWING IN PVW', tone: 'rehearsing', color: styles.rehearsing.color };
   if (onAir) return { text: 'ON AIR NOW', tone: 'on-air', color: styles.live.color };
-  return { text: 'SELECTED — A TAKE SHOWS THIS', tone: 'not-on-air', color: styles.selected.color };
+  // The pressed tab already carries selection. Repeating it as a long sentence made the
+  // selected preset resize the whole row and added no operational fact (owner, B-401).
+  return { text: null, tone: 'not-on-air', color: styles.selected.color };
 }
 
 /**
@@ -461,6 +469,7 @@ export function LooksBindingsSection({
               key={look.id}
               variant={isActive ? 'secondary' : 'neutral'}
               active={isActive}
+              className="cg-look-preset"
               aria-pressed={isActive}
               data-look-tab={look.id}
               {...(isActive ? { 'data-look-tab-active': '' } : {})}
@@ -468,7 +477,7 @@ export function LooksBindingsSection({
             >
               {/* The look's name is the TEMPLATE AUTHOR'S string — isolated, never bare. */}
               <IsolatedName>{look.name}</IsolatedName>
-              {isLive && (
+              {isLive && badge.text !== null && (
                 <span
                   /*
                     SESSION BP — ONE decision, read three ways. `badgeFor` returns the words,

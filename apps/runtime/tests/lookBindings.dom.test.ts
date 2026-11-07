@@ -146,6 +146,10 @@ async function selectLook(el: HTMLElement, lookId: string): Promise<void> {
 it('🔴 §6.5 — the LIVE look is distinguishable from the others, in the markup', async () => {
   const el = await render();
 
+  const tabGroup = el.querySelector<HTMLElement>('[aria-label="Look to edit"]');
+  expect(tabGroup?.style.display).toBe('grid');
+  expect(tabGroup?.style.gridTemplateColumns).toContain('minmax(88px, 1fr)');
+
   /*
     EVERY look is reachable — one TAB each. That replaces "both are listed": the section shows
     one look's frames at a time now, and what must stay true is that none of them is
@@ -165,6 +169,10 @@ it('🔴 §6.5 — the LIVE look is distinguishable from the others, in the mark
   expect(el.querySelectorAll('[data-look-live]')).toHaveLength(1);
   // The mark says ON AIR NOW in words, not by colour alone.
   expect(el.querySelector('[data-look-live="two"]')?.textContent).toContain('ON AIR');
+  // B-401 — state text never buys one preset a different geometry.
+  for (const tab of el.querySelectorAll<HTMLButtonElement>('[data-look-tab]')) {
+    expect(tab.classList.contains('cg-look-preset')).toBe(true);
+  }
 });
 
 it('each look lists ONLY its own frames — solo has one, 2-box has two', async () => {
@@ -316,19 +324,11 @@ function asRendered(token: string): string {
  *
  * One test per state, because the defect was that two of the three were never distinguished.
  */
-it('🔴 B-156 — a LOADED row does NOT claim air: the badge says a take would show it', async () => {
+it('🔴 B-156 — a LOADED row does NOT claim air and needs no redundant selected sentence', async () => {
   const el = await render({ status: 'loaded' });
   const badge = el.querySelector('[data-look-live="two"]');
-  expect(badge, 'the selected look is still marked').not.toBeNull();
-  expect(badge?.textContent, 'but it must not claim air').not.toContain('ON AIR');
-  expect(badge?.textContent).toContain('TAKE');
-  expect(badge?.getAttribute('data-look-badge')).toBe('not-on-air');
-  /*
-    🔴 SESSION BP §1.3 — …and it wears READY's own sky, because READY is precisely the row
-    state this badge is describing. ⚠ `colors.ready`, NOT `--r-accent`: identical value,
-    opposite rule (the accent is explicitly not a state colour). See `theme.ts`.
-  */
-  expect((badge as HTMLElement | null)?.style.color).toBe(asRendered(colors.ready));
+  expect(badge).toBeNull();
+  expect(el.querySelector('[data-look-tab="two"]')?.getAttribute('aria-pressed')).toBe('true');
 });
 
 it('B-156 — an ON-AIR row DOES say so, which is the state the label was right about', async () => {
@@ -360,8 +360,7 @@ it('🔴 FIELD-FIXES-01 C — a row whose take was REFUSED does not claim air fo
     takeRefusal: { code: 'amcp-403', command: 'PLAY 2-60 DECKLINK DEVICE 1' },
   });
   const badge = el.querySelector('[data-look-live="two"]');
-  expect(badge?.textContent).not.toContain('ON AIR');
-  expect(badge?.getAttribute('data-look-badge')).toBe('not-on-air');
+  expect(badge).toBeNull();
 });
 
 it.each([
@@ -370,7 +369,7 @@ it.each([
   ['a take still in flight', { status: 'playing' as const, pending: true }],
 ])('C — %s: not ON AIR NOW', async (_, over) => {
   const el = await render(over);
-  expect(el.querySelector('[data-look-live="two"]')?.textContent).not.toContain('ON AIR');
+  expect(el.querySelector('[data-look-live="two"]')).toBeNull();
 });
 
 it('C — CONTROL: a take the server ACKNOWLEDGED (playing, settled) says ON AIR NOW', async () => {

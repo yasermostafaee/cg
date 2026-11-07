@@ -20,6 +20,25 @@ an internal id. Unknown row keys are preserved so a temporarily older editor can
 New rows are seeded from child-field defaults. Existing rows that contain legacy scalar image ids are
 read leniently and normalised to `{ assetId }` on edit.
 
+Image fields are not a starter-only or source-code-only facility. Selecting an ordinary Image element
+shows the same **Dynamic / Data** Data-key control as a text element. Assigning a key creates the
+image field plus its `image` binding; when that composition becomes a Repeater child, the existing
+row-schema derivation turns it into an image picker column automatically.
+
+## Owner-revised built-in examples
+
+The latest owner-exported province-weather `.vcg` supersedes the earlier province `.cgproj`; the
+owner-edited five-day-weather and Iran-league `.cgproj` files remain the other visual references.
+Reconciliation copies presentation choices while deliberately retaining the starter catalogue's
+stable font/image asset ids, public image fields/bindings, complete province data and current dynamic
+page contracts. The Landing PNG and WebM are regenerated from the reconciled scenes so the card never
+previews an older design.
+
+Examples must not hide their mechanism. The province temperature strip therefore owns its own fill
+rules and the number owns its own text-colour rules. Both read the same `temp` field, but selecting the
+strip now reveals the rules responsible for its colour instead of requiring the author to discover a
+cross-element effect attached to the number.
+
 At package import, image fields receive optional `assetOptions: [{ assetId, label }]` metadata derived
 from the manifest image index. New exports preserve the original filename on each image
 `AssetEntry`; older packages receive stable `Picture N` labels. Both root image fields and
@@ -120,12 +139,21 @@ the warning.
 
 CG Control recognises the same shape from additive Sequence ownership metadata carried in
 `TemplateInfo`. It hides the repetitive per-page groups, flattens their current/draft rows into one
-table, and stages every edit back into the existing page namespaces. The generated Excel connection is persisted
-and can be reloaded after another user edits the file; loading and reloading only stage data, so the
-normal **Update** remains the single action that can reach on air. CG Control cannot add runtime
-structure to an already packaged template: if the workbook exceeds its authored capacity it refuses with
-the Designer/regenerate remedy instead of truncating. Arbitrary scalar/nested/mixed page structures
-continue to use the generated self-documenting JSON format.
+table, and stages every edit back into the existing page namespaces. The generated Excel connection is
+persisted and can be reloaded after another user edits the file; loading and reloading only stage data,
+so the normal **Update** remains the single action that can reach on air. For the recognised homogeneous
+Sequence-of-Repeater shape, CG Control also stages one reserved flat row list. The packaged runtime
+derives the exact page count from that list (`ceil(rows / maxItems)`), reuses authored page identities
+first, creates stable generated page identities beyond them, and removes surplus generated pages when
+data shrinks. Thus 5 rows at 8 per page produce one page, 32 produce four and 33–40 produce five without
+truncation or a Designer round trip. Arbitrary scalar/nested/mixed page structures continue to use the
+generated self-documenting JSON format.
+
+The combined row editor owns the visual editing context for that derived pagination. Both **Edit rows**
+and read-only **View current data** insert a light labelled separator before each page chunk; the modal
+derives those separators from its current private row snapshot so add/remove updates them immediately.
+After Apply, the combined section shows the same dirty dot as a direct Repeater field, locating which
+part of the Inspector owns the item-level `draft`.
 
 A structured row set has one effective source owner. A standalone Repeater owns its workbook through
 **Rows and data file…**; its generic Dynamic / Data section keeps the Data key and field schema but
@@ -207,6 +235,54 @@ runtime URL lookup continue to use `assetId`; filenames are never accepted as st
 
 All schema additions are optional. Existing list items remain open objects and text-only rows are
 unchanged. Internal asset ids remain stable. No saved project is rewritten merely by opening it.
+
+## Follow-up: source facts and SVG picker contract
+
+Preview determines a structured table's effective source before it chooses its editor: an outer
+Sequence `pageDataFile` wins; otherwise a directly connected structured Repeater's `fileSource`
+wins. Connection does not by itself decide edit authority: an explicit `operator-choice` mode keeps
+the row editor, while legacy/`file-only` sources render the compact **File managed** fact instead of
+numbered placeholder cells. Persistence remains on the existing source owner and neither Preview nor
+CG Control creates another data path. CG Control uses one status grammar for both owners: green check
+plus ordinary Connected text, dark tags, matching Reload/View/Detach labels and the Share path.
+
+The image picker advertises SVG explicitly with both the extension and MIME type. Relying on the
+generic `image/*` accept token is insufficient because native Chromium pickers do not consistently
+surface SVG under that token. SVG remains loaded as a normal image Blob URL and follows the existing
+asset/export closure.
+
+An image field optionally stores `inputMode: choices | upload | choices-and-upload` and authored
+`assetOptions[]` with `project | shared` ownership. Absence keeps the legacy package-derived choice
+picker. Designer Preview and CG Control share that policy; Browse values are data URLs so the same
+value reaches Preview and playout without exposing or accepting an internal filename. The export
+closure includes every authored option even when it is not the current default.
+
+A child field may additionally persist `operatorEditable: false`; absence remains editable for
+backward compatibility. This is column authority, independent of whether the outer row set is
+file-managed or manually editable. CG Control keeps the column visible but disables its input, and
+both direct-Repeater and Sequence workbook loaders restore that column from the current authored row
+by position after parsing. Editable columns continue to use the loaded value. Since an added,
+removed or reordered row has no safe authored identity for a locked column, the presence of any lock
+also disables Add/Remove/Reorder in CG Control and makes the authored row count mandatory on file
+load/reload; a mismatch is rejected before any draft is staged.
+
+Current-data tables resolve image cells through the same packaged `assetUrls` map used by Preview
+and playout. The visible cell is a compact `object-fit: contain` thumbnail; the asset label remains a
+tooltip rather than occupying the table as a filename. Visual pickers and tables request a bounded,
+session-cached WebP derivative sized for their card (at most two conversions at once), while canvas,
+export and playout continue to consume the original URL/bytes.
+
+The legacy Image loader placement tool is no longer presented. It duplicated the supported Project
+Assets drag route and suggested that a shared-library picture was a different element type. Existing
+image elements remain valid; source replacement still offers both Project Assets and Shared Library.
+
+Manual structured rows use the same modal boundary in CG Control as in Designer/Preview. The narrow
+Inspector owns only row count, **Edit rows…**, file status/actions and the normal Update gate. An
+authored Bridge source is identifiable by `bridgePath`; when that path disappears from the updated
+template it is detached, while an operator-picked durable handle is preserved. If that authored
+source had been auto-read, its staged field/page values are withdrawn with it. Load migration treats
+`fieldId + target` as wire identity and keeps the first identical binding, including projects whose
+root was drained in an earlier session.
 
 ## Rejected alternatives
 

@@ -80,15 +80,15 @@ const WEATHER_ASSETS: StarterAsset[] = WEATHER_CHOICES.map(({ icon }) => ({
 }));
 
 /**
- * All starter templates exposed to the Designer — D-119's audited core plus
- * D-179's production workflow examples. Every entry is a fully animated,
- * schema-valid Persian Scene with a real playout lifecycle.
- * Order is the order they appear on the landing page.
+ * Catalog of starter templates exposed to the Designer — D-119's audited core
+ * plus D-179's production workflow examples. Every entry is a fully animated,
+ * schema-valid Persian Scene with a real playout lifecycle. The explicit order
+ * below controls their landing-page positions.
  */
-export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
+const STARTER_TEMPLATE_CATALOG: readonly StarterTemplate[] = [
   {
     id: 'irib-news',
-    label: 'میان‌برنامهٔ خبر',
+    label: 'زیرنویس با ساعت',
     // `DESIGNER-FIX-0905` — ONE line per card. What each starter does on air is the badge
     // (`describePlayout`), not a sentence at the end of the description.
     description:
@@ -113,7 +113,7 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
   },
   {
     id: 'ticker',
-    label: 'نوار اخبار',
+    label: 'زیرنویس حرکت افقی',
     description:
       'Persian news strap with a measured RTL crawl; the headlines are an editable list.',
     preview: '/starters/ticker.png',
@@ -130,7 +130,7 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
   },
   {
     id: 'logo-bug',
-    label: 'آرم شبکه',
+    label: 'لوگو شبکه',
     description:
       'Corner channel bug with a replaceable APASAI image asset and a ready-made animated sting.',
     preview: '/starters/logo-bug.png',
@@ -153,7 +153,7 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
   },
   {
     id: 'title',
-    label: 'زیرنویس معرفی',
+    label: 'عنوان معرفی',
     description:
       'Two-tier guest / expert title flush right, with a transparent replaceable logo and bound name and role.',
     preview: '/starters/title.png',
@@ -176,7 +176,7 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
   },
   {
     id: 'sequence',
-    label: 'توالی خبر',
+    label: 'زیرنویس حرکت عمودی',
     description:
       'Headlines rotate one at a time, then the strap closes itself; the items are an editable list.',
     preview: '/starters/sequence.png',
@@ -294,7 +294,7 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
   },
   {
     id: 'image-folder-sequence',
-    label: 'توالی تصاویر پوشه',
+    label: 'نمایش تلاوت قرآن',
     description:
       'Sequence تصویری آماده برای جایگزینی گروهی با Add folder و مرتب‌سازی طبیعی نام فایل‌ها.',
     preview: '/starters/image-folder-sequence.png',
@@ -363,7 +363,7 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
   },
   {
     id: 'multibox',
-    label: 'میزگرد چندقابه',
+    label: 'چهارقاب',
     description:
       'پریست‌های واقعی یک تا چهار قاب؛ تک‌قاب تمام‌صفحه و سه‌قاب با دو قاب بالا و یکی پایین، بدون عنوان ثابت.',
     preview: '/starters/multibox.png',
@@ -385,6 +385,32 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
     scene: multiboxScene,
   },
 ];
+
+const STARTER_TEMPLATE_ORDER = [
+  'logo-bug',
+  'title',
+  'ticker',
+  'irib-news',
+  'sequence',
+  'image-folder-sequence',
+  'multibox',
+  'countdown-steps',
+  'iran-weather-pages',
+  'iran-weather-forecast',
+  'iran-weather-cards',
+  'iran-premier-league',
+] as const;
+
+const starterOrderById: ReadonlyMap<string, number> = new Map(
+  STARTER_TEMPLATE_ORDER.map((id, index) => [id, index]),
+);
+
+/** Landing-page order: the owner's eight core templates first, then weather and sport. */
+export const STARTER_TEMPLATES: readonly StarterTemplate[] = [...STARTER_TEMPLATE_CATALOG].sort(
+  (left, right) =>
+    (starterOrderById.get(left.id) ?? Number.MAX_SAFE_INTEGER) -
+    (starterOrderById.get(right.id) ?? Number.MAX_SAFE_INTEGER),
+);
 
 /** Lookup by id, or null when the id isn't known. */
 export function getStarter(id: string): StarterTemplate | null {
