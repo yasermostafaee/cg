@@ -115,7 +115,7 @@ describe('Exporter (.vcg) — D-125 Lottie packaging', () => {
     // allowed by the .vcg's strict 'self' CSP; no external / file:// request).
     expect(indexHtml).toContain('lottieAssets');
     expect(indexHtml).toContain(LOTTIE_PATH);
-    expect(indexHtml).toContain('lottieAssets }');
+    expect(indexHtml).toContain('lottieAssets,');
     // Package-relative only — no external/file escape.
     expect(indexHtml).not.toMatch(/(https?:|file:)/);
   });

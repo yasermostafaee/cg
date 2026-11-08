@@ -170,8 +170,13 @@ it('🔴 the plate is REPLACED IN PLACE — no CLEAR, same layer, neighbour unto
   expect(lines[lines.findIndex((l) => l.startsWith('PLAY '))]).toContain('route://4');
   // The neighbour is not disturbed — not re-played, not re-fitted, not cleared.
   expect(lines.some((l) => l.includes(`1-${String(neighbour ?? -1)}`))).toBe(false);
-  // …and the template's own layer is untouched: the graphic never left air.
-  expect(lines.some((l) => l.startsWith('CG 1-'))).toBe(false);
+  // R-105 — the graphic stays on air, but its page receives exactly one geometry-only UPDATE
+  // so the authored fallback under this plate follows the replacement source's aspect.
+  const pageLines = lines.filter((l) => l.startsWith('CG 1-'));
+  expect(pageLines).toHaveLength(1);
+  expect(pageLines[0]).toContain(' UPDATE ');
+  expect(pageLines[0]).toContain('\\"plates\\"');
+  expect(pageLines.some((l) => l.includes(' ADD ') || l.includes(' PLAY '))).toBe(false);
   expect(layerOf(r, 'guest-1')).toBe(layer);
 });
 

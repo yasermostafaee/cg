@@ -292,7 +292,7 @@ describe('Decision 1 — a fresh take airs everything or nothing', () => {
     */
     const RECORDED = [
       'MIXER 2-59 VOLUME 0',
-      `CG 2-59 ADD 0 "http://127.0.0.1:<PORT>/template/${TWO_BOX_KEY}?cw=1920&ch=1080" 0 "{\\"__cg\\":{\\"look\\":\\"look-2\\",\\"take\\":\\"<TOKEN>\\"}}"`,
+      `CG 2-59 ADD 0 "http://127.0.0.1:<PORT>/template/${TWO_BOX_KEY}?cw=1920&ch=1080" 0 "{\\"__cg\\":{\\"look\\":\\"look-2\\",\\"plates\\":{\\"l1\\":{\\"aspect\\":1.7777777777777777,\\"mode\\":\\"contain\\"},\\"l2\\":{\\"aspect\\":1.7777777777777777,\\"mode\\":\\"contain\\"}},\\"take\\":\\"<TOKEN>\\"}}"`,
       'MIXER 2-59 VOLUME 1',
       'MIXER 2-60 OPACITY 0 DEFER',
       'MIXER 2-60 VOLUME 0 DEFER',
@@ -339,7 +339,7 @@ describe('Decision 1 — a fresh take airs everything or nothing', () => {
     const lines = await sentSince(from);
     expect(lines.map(normalise)).toEqual([
       'MIXER 2-59 VOLUME 0',
-      `CG 2-59 ADD 0 "http://127.0.0.1:<PORT>/template/${TWO_BOX_KEY}?cw=1920&ch=1080" 0 "{\\"__cg\\":{\\"look\\":\\"look-2\\",\\"take\\":\\"<TOKEN>\\"}}"`,
+      `CG 2-59 ADD 0 "http://127.0.0.1:<PORT>/template/${TWO_BOX_KEY}?cw=1920&ch=1080" 0 "{\\"__cg\\":{\\"look\\":\\"look-2\\",\\"plates\\":{\\"l1\\":{\\"aspect\\":1.7777777777777777,\\"mode\\":\\"contain\\"},\\"l2\\":{\\"aspect\\":1.7777777777777777,\\"mode\\":\\"contain\\"}},\\"take\\":\\"<TOKEN>\\"}}"`,
       'MIXER 2-59 VOLUME 1',
       // `LOOK-SWITCH-01` — both layers are hidden first, in one commit; only then the PLAYs.
       'MIXER 2-60 OPACITY 0 DEFER',

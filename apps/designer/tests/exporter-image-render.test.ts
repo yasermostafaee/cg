@@ -146,7 +146,9 @@ describe('D-062 — .vcg image rendering', () => {
     // a Live Source paint zero pixels in the package that goes on air. Asserted here
     // (rather than only in `mode-boot-sites.test.ts`) because this is the test that
     // reads the real emitted index.html.
-    expect(indexHtml).toContain("createRuntime(scene, { mode: 'output', assetUrls:");
+    expect(indexHtml).toContain('const runtime = createRuntime(scene, {');
+    expect(indexHtml).toContain("mode: 'output'");
+    expect(indexHtml).toContain('assetUrls:');
     expect(indexHtml).toContain(ASSET_ID);
     expect(indexHtml).toContain(RELATIVE_PATH);
     // no external/absolute reference — relative packaged path only
