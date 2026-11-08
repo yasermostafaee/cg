@@ -4239,3 +4239,13 @@ Measured free before use: the immediately preceding tracked pointer named `R-108
 the tracked PRD-heading audit found no existing `R-108` heading.
 
 ⇒ **Next free after this entry is `B-415`**, **`D-201`**, **`P-078`**, **`R-109`** and **`C-049`**.
+
+### 2026-11-08 — new-element stack order takes `B-415`
+
+- `B-415` — an element added after a layer reorder could appear at the top of the Timeline while
+  painting behind an older higher-`zIndex` sibling — [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the immediately preceding tracked pointer named `B-415` as next free, and
+the tracked PRD-heading audit found no existing `B-415` heading.
+
+⇒ **Next free after this entry is `B-416`**, **`D-201`**, **`P-078`**, **`R-109`** and **`C-049`**.

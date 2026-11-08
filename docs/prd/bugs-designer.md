@@ -4862,3 +4862,14 @@ checking any one image, the now-explicit list is honoured. **Expected / Fix:** a
 `inputMode` with no checked images means an empty allowlist on Preview, workbook schema and CG
 Control. Only a legacy field that predates `inputMode` retains the compatibility fallback to every
 packaged image. Focused Designer and shared-schema tests cover scalar and Repeater-row fields.
+
+## [x] B-415 — A newly added text can sit at the top of the Timeline but paint behind a live plate ⟨priority: high — authoring and rendered stack disagree⟩ — FIXED 2026-11-08 · `openspec/changes/frontmost-new-elements/`
+
+**Repro:** reorder any sibling once so the layer owns explicit increasing `zIndex` values, select
+the Text tool and add text over a live plate. **Actual:** `addElement` appends the text, so its
+Timeline row appears front-most, but keeps the factory's `zIndex: 0`; the renderer sorts by
+`zIndex`, so an older plate with a higher value paints over it. Dragging the row away and back
+renumbers the sibling set and makes the text appear. **Fix / Acceptance:** insertion through the
+normal Add path assigns the new element one value above the current sibling maximum. Timeline,
+array and renderer paint order therefore agree immediately, including after earlier reorders; one
+undo still removes the addition as before.

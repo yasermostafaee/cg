@@ -3,7 +3,7 @@ import type { Element } from '@cg/shared-schema';
 import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
 import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
-import { defaultShape } from '../src/renderer/state/element-defaults.js';
+import { defaultShape, defaultText } from '../src/renderer/state/element-defaults.js';
 
 /**
  * D-047 — `reorderElement(id, targetVisualIndex)` reorders an element within its
@@ -48,10 +48,11 @@ afterEach(() => {
 });
 
 describe('designerStore.reorderElement — D-047 layer reorder', () => {
-  it('seeds three same-z elements (paint == array order via stable sort)', () => {
+  it('seeds new elements front-most in both Timeline and explicit paint order', () => {
     expect(ids()).toEqual(['el-1', 'el-2', 'el-3']);
-    expect(zIndices()).toEqual([0, 0, 0]);
+    expect(zIndices()).toEqual([0, 1, 2]);
     expect(rowOrder()).toEqual(['el-3', 'el-2', 'el-1']);
+    expect(paintOrder()).toEqual(ids());
   });
 
   it('moves the bottom row to the top and renumbers zIndex (top = highest = front)', () => {
@@ -85,14 +86,14 @@ describe('designerStore.reorderElement — D-047 layer reorder', () => {
     expect(ids()).toEqual(['el-2', 'el-3', 'el-1']);
     designerStore.undo();
     expect(ids()).toEqual(['el-1', 'el-2', 'el-3']);
-    expect(zIndices()).toEqual([0, 0, 0]);
+    expect(zIndices()).toEqual([0, 1, 2]);
   });
 
   it('dropping at the origin index is a no-op (no reorder, no zIndex change)', () => {
     // el-3 already sits at the top (visual index 0).
     designerStore.reorderElement('el-3', 0);
     expect(ids()).toEqual(['el-1', 'el-2', 'el-3']);
-    expect(zIndices()).toEqual([0, 0, 0]);
+    expect(zIndices()).toEqual([0, 1, 2]);
   });
 
   it('clamps an out-of-range target into the list', () => {
@@ -103,6 +104,18 @@ describe('designerStore.reorderElement — D-047 layer reorder', () => {
   it('is a no-op for an unknown element id', () => {
     designerStore.reorderElement('nope', 0);
     expect(ids()).toEqual(['el-1', 'el-2', 'el-3']);
-    expect(zIndices()).toEqual([0, 0, 0]);
+    expect(zIndices()).toEqual([0, 1, 2]);
+  });
+
+  it('adds above an already-renumbered live-plate stack without requiring a row drag', () => {
+    designerStore.reorderElement('el-1', 0);
+    expect(zIndices()).toEqual([0, 1, 2]);
+
+    const text = defaultText('new-text', 0, 0);
+    designerStore.addElement(text);
+
+    expect(rowOrder()[0]).toBe('new-text');
+    expect(paintOrder().at(-1)).toBe('new-text');
+    expect(children().find((element) => element.id === 'new-text')?.zIndex).toBe(3);
   });
 });

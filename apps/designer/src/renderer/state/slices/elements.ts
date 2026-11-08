@@ -231,7 +231,25 @@ export const elementsSlice = {
       ];
     } else {
       nextLayers = layers.map((l, i) =>
-        i === 0 ? { ...l, children: [...l.children, element] } : l,
+        i === 0
+          ? {
+              ...l,
+              children: [
+                ...l.children,
+                {
+                  ...element,
+                  // B-415 — appending makes the Timeline row front-most, so its explicit
+                  // z-order must say the same thing. A layer that has ever been reordered
+                  // can hold z=0,1,2…; keeping a factory's z=0 here put a newly added text
+                  // behind the older high-z plate until any row drag renumbered the set.
+                  zIndex:
+                    l.children.length === 0
+                      ? 0
+                      : Math.max(...l.children.map((child) => child.zIndex)) + 1,
+                } as Element,
+              ],
+            }
+          : l,
       );
     }
     set({ scene: withActiveLayers(current.scene, nextLayers), selection: new Set([element.id]) });
