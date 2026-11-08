@@ -726,6 +726,19 @@ describe('TickerElement (D-028)', () => {
     const viaUnion = ElementSchema.parse({ ...ticker, separator: imageSep });
     expect((viaUnion as { separator?: unknown }).separator).toEqual(imageSep);
   });
+  it('D-200 — preserves an optional signed vertical offset for an image separator', () => {
+    const parsed = TickerElementSchema.parse({
+      ...ticker,
+      separator: {
+        kind: 'image',
+        assetId: 'logo-1',
+        source: 'shared',
+        size: { w: 30, h: 24 },
+        offsetY: -7,
+      },
+    });
+    expect(typeof parsed.separator === 'object' ? parsed.separator.offsetY : undefined).toBe(-7);
+  });
   it('D-039ext — rejects a malformed image separator (missing assetId / non-positive size)', () => {
     expect(() =>
       TickerElementSchema.parse({

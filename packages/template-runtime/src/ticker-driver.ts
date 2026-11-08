@@ -52,6 +52,8 @@ export interface TickerSeparatorImage {
   assetId: string;
   source: 'project' | 'shared';
   size: { w: number; h: number };
+  /** D-200 — signed scene-pixel correction after vertical alignment (negative = up). */
+  offsetY?: number | undefined;
   url?: string | undefined;
 }
 
@@ -702,6 +704,7 @@ export class TickerDriver {
       img.style.bottom = '0';
     } else {
       img.style.top = '50%';
+      img.dataset['cgTickerSepMiddle'] = '1';
       img.style.transform = 'translateY(-50%)';
     }
     return img;
@@ -806,6 +809,19 @@ function applyImageSeparator(img: HTMLImageElement, sep: TickerSeparatorImage): 
   img.style.width = `${sep.size.w}px`;
   img.style.height = `${sep.size.h}px`;
   img.style.objectFit = 'contain';
+  // D-200 — apply the artwork correction without replacing middle alignment's existing
+  // translateY(-50%). Static-row images have no middle marker and receive only the offset.
+  const offsetY = sep.offsetY ?? 0;
+  if (img.dataset['cgTickerSepMiddle'] === '1') {
+    img.style.transform =
+      offsetY === 0
+        ? 'translateY(-50%)'
+        : offsetY > 0
+          ? `translateY(calc(-50% + ${offsetY}px))`
+          : `translateY(calc(-50% - ${Math.abs(offsetY)}px))`;
+  } else {
+    img.style.transform = offsetY === 0 ? '' : `translateY(${offsetY}px)`;
+  }
   img.dataset['cgAssetId'] = sep.assetId;
   img.dataset['cgAssetSource'] = sep.source;
   if (sep.url !== undefined && sep.url !== '') img.src = sep.url;

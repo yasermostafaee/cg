@@ -77,6 +77,7 @@ export function TickerSeparatorControl({
         assetId,
         source,
         size: imageSep?.size ?? { ...DEFAULT_SEP_SIZE },
+        ...(imageSep?.offsetY === undefined ? {} : { offsetY: imageSep.offsetY }),
       },
     } as Partial<Element>);
   };
@@ -85,6 +86,14 @@ export function TickerSeparatorControl({
     if (imageSep === null) return;
     designerStore.updateElement(id, {
       separator: { ...imageSep, size: next },
+    } as Partial<Element>);
+  };
+
+  const setOffsetY = (offsetY: number): void => {
+    if (imageSep === null) return;
+    const { offsetY: _previous, ...withoutOffset } = imageSep;
+    designerStore.updateElement(id, {
+      separator: offsetY === 0 ? withoutOffset : { ...imageSep, offsetY },
     } as Partial<Element>);
   };
 
@@ -147,6 +156,13 @@ export function TickerSeparatorControl({
                 min={1}
                 suffix="px"
                 onCommit={(h) => setSize({ w: imageSep.size.w, h: Math.max(1, Math.round(h)) })}
+              />
+              <NumberField
+                label="vertical offset"
+                value={imageSep.offsetY ?? 0}
+                step={1}
+                suffix="px"
+                onCommit={setOffsetY}
               />
             </>
           )}

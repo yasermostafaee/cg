@@ -6627,3 +6627,18 @@ frame and ignores hold loops, outro triggers and other playout state. **Acceptan
   playout setting is changed
 - WHEN the selected composition cannot use Next THEN Next is visibly disabled rather than silently
   acting like timeline step-forward
+
+## [~] D-200 — Ticker separator image has an independent vertical offset ⟨priority: medium — the owner, 2026-11-08⟩ — `openspec/changes/ticker-separator-vertical-offset/`
+
+**What:** Add a signed pixel offset below the ticker image separator's width and height controls so
+the author can move that picture higher or lower without moving the ticker text.
+
+**Why:** Different logo artwork has different transparent padding and visual centres; following the
+ticker's general vertical alignment alone can leave the chosen picture visibly misaligned with text.
+
+**Acceptance:**
+
+- WHEN an image separator is selected THEN the Inspector exposes a signed vertical-offset input
+- WHEN the offset changes THEN negative values move only the separator upward and positive values
+  move it downward in the authoring Canvas, Preview and exported/on-air runtime
+- WHEN an older ticker has no offset THEN its separator remains at the existing aligned position

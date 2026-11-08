@@ -306,6 +306,8 @@ export const TickerImageSeparatorSchema = z.object({
   assetId: IdSchema,
   source: z.enum(['project', 'shared']),
   size: z.object({ w: z.number().positive(), h: z.number().positive() }),
+  /** D-200 — signed scene-pixel correction after the ticker's vertical alignment. */
+  offsetY: z.number().finite().optional(),
 });
 export type TickerImageSeparator = z.infer<typeof TickerImageSeparatorSchema>;
 

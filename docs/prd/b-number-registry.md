@@ -4208,3 +4208,13 @@ Measured free before use: the immediately preceding tracked pointer named `P-077
 tracked PRD-heading audit found no existing `P-077` heading.
 
 ⇒ **Next free after this entry is `B-414`**, **`D-200`**, **`P-078`**, **`R-108`** and **`C-049`**.
+
+### 2026-11-08 — ticker separator vertical offset takes `D-200`
+
+- `D-200` — give an image/logo ticker separator an independent signed vertical offset —
+  [designer.md](designer.md).
+
+Measured free before use: the immediately preceding tracked pointer named `D-200` as next free, and the
+tracked PRD-heading audit found no existing `D-200` heading.
+
+⇒ **Next free after this entry is `B-414`**, **`D-201`**, **`P-078`**, **`R-108`** and **`C-049`**.

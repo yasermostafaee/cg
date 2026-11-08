@@ -206,6 +206,12 @@ describe('TickerDriver — image separator (D-039ext)', () => {
     middle.driver.start();
     expect(fedSeps(middle.track)[0]?.style.top).toBe('50%');
   });
+
+  it('D-200 — applies the authored vertical offset without losing middle alignment', () => {
+    const h = make({ separator: { ...imageSep, offsetY: -7 } });
+    h.driver.start();
+    expect(fedSeps(h.track)[0]?.style.transform).toBe('translateY(calc(-50% - 7px))');
+  });
 });
 
 describe('populateTickerStaticRow — image separator (D-039ext)', () => {
@@ -234,6 +240,16 @@ describe('populateTickerStaticRow — image separator (D-039ext)', () => {
     expect(img.getAttribute('src')).toBeNull();
     // No pinned alignSelf → it follows the row's verticalAlign (like the items).
     expect(img.style.alignSelf).toBe('');
+  });
+
+  it('D-200 — applies the same vertical offset to the static authoring row', () => {
+    const row = document.createElement('div');
+    populateTickerStaticRow(row, [itemA, itemB], {
+      direction: 'rtl',
+      gap: 10,
+      separator: { ...imageSep, offsetY: 9 },
+    });
+    expect(row.querySelector<HTMLImageElement>('img')?.style.transform).toBe('translateY(9px)');
   });
 
   it('a TEXT separator does NOT pin alignSelf, so it follows the row verticalAlign (D-045 parity)', () => {

@@ -98,10 +98,18 @@ test.describe('Ticker / crawler (D-028)', () => {
     // The size box appears once an image separator is committed.
     await expect(app.inspector.getByLabel('width', { exact: true })).toBeVisible();
     await expect(app.inspector.getByLabel('height', { exact: true })).toBeVisible();
+    await expect(app.inspector.getByLabel('vertical offset', { exact: true })).toBeVisible();
+
+    await app.inspector.getByLabel('vertical offset', { exact: true }).fill('-6');
+    await app.inspector.getByLabel('vertical offset', { exact: true }).press('Enter');
 
     // The authoring canvas renders the logo as an <img> BETWEEN the 3 default items
     // (exactly 2 gaps) — never leading, never trailing (D-081).
     await expect(app.canvasFrame.locator('img[data-cg-ticker-sep]')).toHaveCount(2);
+    await expect(app.canvasFrame.locator('img[data-cg-ticker-sep]').first()).toHaveCSS(
+      'transform',
+      /matrix\(1, 0, 0, 1, 0, -6\)/,
+    );
 
     // The separator image ALSO resolves in the PREVIEW modal — its src is wired from the
     // merged project+shared asset map (a shared image was previously absent from the
