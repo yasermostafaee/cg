@@ -485,6 +485,8 @@ export function LayerRow({
   // `C-038` — the ONE console-side permission answer; the verbs read it, nothing else does.
   const canOperate = useCanOperate();
   const hasPlates = (template?.liveSources?.sources.length ?? 0) > 0;
+  const liveAudioSummary = item === null ? null : audioSummary(seatedPlates);
+  const liveAudioOn = (liveAudioSummary?.audible ?? 0) > 0;
   // `R-100` — the row's book (null unless its template has a page list): the counter and NEXT / PREV.
   const rowBook = bookOf(template, item);
 
@@ -1055,15 +1057,16 @@ export function LayerRow({
             variant="icon"
             className="cg-row-audio-btn"
             data-row-audio=""
-            title="Live audio · right-click this row"
-            aria-label={`Audio controls for ${rowName}`}
+            data-row-audio-state={liveAudioOn ? 'on' : 'muted'}
+            title={`Live audio ${liveAudioOn ? 'ON' : 'MUTED'} · right-click this row`}
+            aria-label={`Audio controls for ${rowName} · audio ${liveAudioOn ? 'on' : 'muted'}`}
             onClick={(e) => {
               // The row itself selects on click; this button is a different act.
               e.stopPropagation();
               void openPlateAudio();
             }}
           >
-            <Icon icon={Volume2} size={16} />
+            <Icon icon={liveAudioOn ? Volume2 : VolumeX} size={16} />
           </Button>
         )}
         {/*
@@ -1116,11 +1119,9 @@ export function LayerRow({
           </Tag>
         )}
         {item !== null &&
-          (() => {
-            const summary = audioSummary(seatedPlates);
-            return summary === null ? null : (
-              <Tag
-                /*
+          (liveAudioSummary === null ? null : (
+            <Tag
+              /*
                   §3 — IT NOW CARRIES THE STATE COLOUR THE PILLS ALREADY USE, and the earlier
                   argument for muted-only is retired rather than overridden by taste: it said a
                   second coloured mark would compete with the row's STATE cell. SKY is not a
@@ -1132,17 +1133,18 @@ export function LayerRow({
                   bar, no ramp. There is no per-input level to draw, and a shape that implied
                   one would be this product claiming a measurement it cannot take.
                 */
-                className={
-                  summary.audible > 0 ? 'cg-chip-audio cg-chip-audio--audible' : 'cg-chip-audio'
-                }
-                data-audio-summary={summary.label}
-                title={summary.detail}
-                aria-label={summary.detail}
-              >
-                {summary.label}
-              </Tag>
-            );
-          })()}
+              className={
+                liveAudioSummary.audible > 0
+                  ? 'cg-chip-audio cg-chip-audio--audible'
+                  : 'cg-chip-audio'
+              }
+              data-audio-summary={liveAudioSummary.label}
+              title={liveAudioSummary.detail}
+              aria-label={liveAudioSummary.detail}
+            >
+              {liveAudioSummary.label}
+            </Tag>
+          ))}
       </span>
       {spec.showTemplate &&
         (refusalLine !== null ? (

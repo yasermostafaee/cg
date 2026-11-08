@@ -1,5 +1,5 @@
 import type { FieldValues } from './fields.js';
-import type { LiveFitMode } from './live-fit.js';
+import { LIVE_FIT_MODES, type LiveFitMode } from './live-fit.js';
 
 /**
  * `multibox-layout-switch` `tasks.md` 6.7 — **the BRIDGE→PAGE control channel, carried inside
@@ -159,6 +159,12 @@ export interface CgSound {
   muted: boolean;
 }
 
+/** R-105 — the resolved source shape the graphics-bed fallback must mirror. */
+export interface CgPlateFit {
+  aspect: number | null;
+  mode: LiveFitMode;
+}
+
 /** Bridge→page control data. Every member optional: a payload may carry any subset. */
 export interface CgControl {
   /**
@@ -231,23 +237,11 @@ export interface CgControl {
    * no member, and its wire is what it was.
    */
   sound?: CgSound;
-  /*
-    🔴 **`single-clock-look-switch` — `from` AND `plates` ARE GONE, and each for its own reason.**
-
-    `from` (`SKEW-INTERSECT-01`) narrowed the page's holes to `outgoing ∩ entering` while the
-    two clocks disagreed. There are no holes now — the page sits BELOW its plates — so there is
-    nothing to narrow, and a member whose only effect was on a mask cannot survive the mask.
-
-    `plates` (`C-028`) carried each plate's resolved aspect and mode so the PAGE could compute
-    the same fit the bridge did. Only the mask consumed that; the fit that reaches air is the
-    bridge's `MIXER FILL` / `CLIP`, computed from the same facts on its own side. The rule the
-    member was built on — *"the facts cross the wire, never the rect"* — is unchanged and is
-    now satisfied with ONE consumer instead of two, which is what it was always for.
-
-    ⚠ A page from an older build receiving a payload without them punches the entering look's
-    holes on its own clock, exactly as it did before either member existed — over plates that
-    are now on top of it, so the punch has no visible effect. Degradation, not a new artefact.
-  */
+  /**
+   * R-105 — resolved source aspect/mode per plate. The page uses it only to size the fallback
+   * underneath the producer; the bridge remains the sole owner of live-picture FILL/CLIP.
+   */
+  plates?: Record<string, CgPlateFit>;
 }
 
 /** Attach control data to a field payload. The ONE writer — the bridge calls this. */
@@ -296,11 +290,28 @@ export function readCgControl(payload: unknown): CgControl | undefined {
       also discard a perfectly good count.
     */
     ...(typeof take === 'string' && take !== '' ? { take } : {}),
+    ...readPlateFits((raw as Record<string, unknown>)['plates']),
     ...readPassTiming((raw as Record<string, unknown>)['timing']),
     ...readPage((raw as Record<string, unknown>)['page']),
     ...readPageAdvance((raw as Record<string, unknown>)['pageAdvance']),
     ...readSound((raw as Record<string, unknown>)['sound']),
   };
+}
+
+function readPlateFits(raw: unknown): { plates?: Record<string, CgPlateFit> } {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {};
+  const plates: Record<string, CgPlateFit> = {};
+  for (const [plateId, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) continue;
+    const entry = value as Record<string, unknown>;
+    const aspect = entry['aspect'];
+    const mode = entry['mode'];
+    if (aspect !== null && (typeof aspect !== 'number' || !Number.isFinite(aspect) || aspect <= 0))
+      continue;
+    if (typeof mode !== 'string' || !(LIVE_FIT_MODES as readonly string[]).includes(mode)) continue;
+    plates[plateId] = { aspect: aspect as number | null, mode: mode as LiveFitMode };
+  }
+  return Object.keys(plates).length === 0 ? {} : { plates };
 }
 
 /** `RUN-NEXT-VERSION-02` Q9 — the sound member, defensively: anything but a boolean `muted` is dropped. */

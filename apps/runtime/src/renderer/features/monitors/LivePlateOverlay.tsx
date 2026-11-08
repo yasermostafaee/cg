@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { Volume2, VolumeX } from 'lucide-react';
 // The SUBPATH, never the package's entry index — see `livePlateGeometry.ts` for
 // the full reason. Short form: the index reaches `adapters/caspar-globals.ts`,
 // whose `declare global` claims `window.cg` for the SERVED PAGE's runtime, and
@@ -6,6 +7,7 @@ import type { CSSProperties } from 'react';
 import { smpteBarsGradient } from '@cg/template-runtime/scene-builder';
 import type { ChannelRaster } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
+import { Icon } from '../../ui/Icon.js';
 import { SourceLabel } from '../sources/SourceLabel.js';
 import { frameBox } from './rehearsalFrames.js';
 import type { PlatePlacement } from './livePlateGeometry.js';
@@ -179,13 +181,17 @@ const styles = {
  * surfaces cannot come to disagree about whether a held plate is a problem. GREEN is not used
  * at all: it is the sacred ON AIR mark of the layer table.
  */
-const AUDIO_GLYPH: Record<'audible' | 'silent' | 'held', { text: string; color: string }> = {
-  audible: { text: '♪ AUDIO ON', color: colors.ready },
-  silent: { text: '✕ SILENT', color: cssVars['--r-plate-ink-dim'] },
+const AUDIO_GLYPH = {
+  audible: { text: 'AUDIO ON', color: colors.ready, icon: Volume2 },
+  silent: { text: 'SILENT', color: cssVars['--r-plate-ink-dim'], icon: VolumeX },
   // "This box is not audible because the LOOK hides it" — a fact about the layout, not a
   // fault, so it says which and stays uncoloured.
-  held: { text: '✕ NOT IN THIS LOOK', color: cssVars['--r-plate-ink-dim'] },
-};
+  held: {
+    text: 'NOT IN THIS LOOK',
+    color: cssVars['--r-plate-ink-dim'],
+    icon: VolumeX,
+  },
+} as const;
 
 interface Props {
   /** Every rehearsing row's plates, already placed in RASTER pixels. */
@@ -250,10 +256,22 @@ export function anyRegionTooSmallForCaveat(
  * an isolate around this would imply it is a NAME. The source's own name inside it is the
  * part that is data — and it is already isolated by the chip that renders it.
  */
-function regionCaveat(plateId: string, sourceName: string | null): string {
+function regionCaveat(
+  plateId: string,
+  sourceName: string | null,
+  audio: PlatePlacement['audio'],
+): string {
   const source =
     sourceName === null ? 'No source is assigned to it.' : `Its source is ${sourceName}.`;
-  return `Live source ${plateId} — a placeholder, not video. This region is not rendered in preview; the picture appears only on the server's own output. ${source}`;
+  const sound =
+    audio === undefined
+      ? 'Its audio state is not available.'
+      : audio === 'audible'
+        ? 'Its audio is on.'
+        : audio === 'held'
+          ? 'Its audio is muted because this plate is not in the active look.'
+          : 'Its audio is muted.';
+  return `Live source ${plateId} — a placeholder, not video. This region is not rendered in preview; the picture appears only on the server's own output. ${source} ${sound}`;
 }
 
 export function LivePlateOverlay({ placements, raster, fit, zIndex }: Props): JSX.Element | null {
@@ -284,7 +302,7 @@ export function LivePlateOverlay({ placements, raster, fit, zIndex }: Props): JS
               were laid out.
             */
             role="img"
-            aria-label={regionCaveat(p.plateId, p.sourceName)}
+            aria-label={regionCaveat(p.plateId, p.sourceName, p.audio)}
             style={{
               position: 'absolute',
               left: `${String(p.x)}px`,
@@ -345,6 +363,7 @@ export function LivePlateOverlay({ placements, raster, fit, zIndex }: Props): JS
                   style={{ ...styles.audio, color: AUDIO_GLYPH[p.audio].color }}
                   data-live-plate-audio={p.audio}
                 >
+                  <Icon icon={AUDIO_GLYPH[p.audio].icon} size={11} />
                   {AUDIO_GLYPH[p.audio].text}
                 </span>
               )}

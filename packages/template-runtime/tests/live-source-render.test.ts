@@ -75,6 +75,8 @@ function build(scene: Scene, mode: 'author' | 'output'): { doc: Document; root: 
 
 const node = (root: HTMLElement, id = 'live-a'): HTMLElement =>
   root.querySelector<HTMLElement>(`[data-cg-element-id="${id}"]`) as HTMLElement;
+const fallback = (root: HTMLElement, id = 'live-a'): HTMLElement =>
+  node(root, id).querySelector<HTMLElement>('[data-cg-live-fallback]') as HTMLElement;
 
 describe("D-137 — 'author' mode paints the bars", () => {
   it('renders SMPTE bars with the id label overlaid', () => {
@@ -83,8 +85,8 @@ describe("D-137 — 'author' mode paints the bars", () => {
     expect(el).not.toBeNull();
     // Procedural: a gradient, not a bundled bitmap. If this ever becomes a `url(…)`
     // the element has acquired a shipped asset, which is exactly what D-137 refuses.
-    expect(el.style.backgroundImage).toContain('linear-gradient');
-    expect(el.style.backgroundImage).not.toContain('url(');
+    expect(fallback(root).style.backgroundImage).toContain('linear-gradient');
+    expect(fallback(root).style.backgroundImage).not.toContain('url(');
     const label = el.querySelector<HTMLElement>('[data-cg-live-source-label]');
     expect(label?.textContent).toBe('guest-1');
     expect(label?.style.left).toBe('50%');
@@ -99,7 +101,7 @@ describe("D-137 — 'author' mode paints the bars", () => {
     // stops shipped in 72. The short form renders correctly in every browser we
     // develop in and breaks on air — so the shape of the string is the assertion.
     const { root } = build(sceneWith([liveSource()]), 'author');
-    const g = node(root).style.backgroundImage;
+    const g = fallback(root).style.backgroundImage;
     // Seven bars ⇒ fourteen stops, each `#rrggbb NN%`.
     expect((g.match(/#[0-9a-f]{6} [0-9.]+%/g) ?? []).length).toBe(14);
     // No `#rrggbb A% B%` anywhere.
@@ -112,7 +114,7 @@ describe("D-137 — 'author' mode paints the bars", () => {
     // surfaces must be one table: a hand-written second copy is how the paired
     // stops above get lost on the ONE build nobody develops against.
     const { root } = build(sceneWith([liveSource()]), 'author');
-    expect(node(root).style.backgroundImage).toBe(smpteBarsGradient());
+    expect(fallback(root).style.backgroundImage).toBe(smpteBarsGradient());
     // Seven bars, 75 % amplitude, in authored order. Pinned so a colour that is
     // silently changed shows up here rather than in a gallery.
     expect(SMPTE_BARS).toEqual([
@@ -174,23 +176,29 @@ describe("D-137 — 'author' mode paints the bars", () => {
   });
 });
 
-describe("D-137 — 'output' mode preserves transparent Live Source holes", () => {
-  it('has no opaque bed, preview bars or label', () => {
+describe("R-105 — 'output' mode paints the selected fallback under the live producer", () => {
+  it('defaults to Bars and keeps the author-only label out', () => {
     const { root } = build(sceneWith([liveSource()]), 'output');
     const el = node(root);
     expect(el).not.toBeNull();
-    expect(el.style.backgroundImage).toBe('');
-    expect(el.style.background).toBe('');
-    expect(el.style.backgroundColor).toBe('');
-    // Zero children: no label node, no poster, nothing that could paint.
-    expect(el.childElementCount).toBe(0);
+    expect(fallback(root).style.backgroundImage).toBe(smpteBarsGradient());
+    expect(el.querySelector('[data-cg-live-source-label]')).toBeNull();
+    expect(el.childElementCount).toBe(1);
   });
 
-  it('a POSTER does not paint either — the export is not a preview', () => {
+  it('an authored picture is the on-air fallback too', () => {
     const { root } = build(sceneWith([liveSource({ posterAssetId: 'asset-1' })]), 'output');
     const el = node(root);
-    expect(el.querySelector('img')).toBeNull();
-    expect(el.childElementCount).toBe(0);
+    expect(el.querySelector<HTMLImageElement>('img')?.dataset['cgAssetId']).toBe('asset-1');
+    expect(el.childElementCount).toBe(1);
+  });
+
+  it('supports an explicit solid colour fallback', () => {
+    const { root } = build(
+      sceneWith([liveSource({ fallbackKind: 'color', fallbackColor: '#123456' } as never)]),
+      'output',
+    );
+    expect(fallback(root).style.background).toBe('#123456');
   });
 
   it('but the DECLARATION still rides the DOM — data costs no pixels', () => {
@@ -207,8 +215,8 @@ describe("D-137 — 'output' mode preserves transparent Live Source holes", () =
     const window = new Window();
     const built = buildScene(sceneWith([liveSource()]), window.document as unknown as Document);
     const el = node(built.container);
-    expect(el.style.backgroundImage).toBe('');
-    expect(el.childElementCount).toBe(0);
+    expect(fallback(built.container).style.backgroundImage).toBe(smpteBarsGradient());
+    expect(el.childElementCount).toBe(1);
   });
 });
 
@@ -326,9 +334,9 @@ describe('D-137 — the mode reaches a NESTED Live Source', () => {
       ],
     } as unknown as Scene;
 
-    expect(node(build(scene, 'author').root, 'nested-live').childElementCount).toBe(1);
+    expect(node(build(scene, 'author').root, 'nested-live').childElementCount).toBe(2);
     const out = node(build(scene, 'output').root, 'nested-live');
-    expect(out.childElementCount).toBe(0);
+    expect(out.childElementCount).toBe(1);
     expect(out.style.backgroundImage).toBe('');
   });
 });
@@ -430,9 +438,9 @@ describe('§9a.1 — the frame paints OUTSIDE the hole, in BOTH modes', () => {
     expect(el.style.width).toBe('640px');
   });
 
-  it('the frame does not add content: output mode keeps a transparent hole', () => {
+  it('the frame does not add content beyond the selected fallback', () => {
     const el = node(build(sceneWith([framed]), 'output').root);
-    expect(el.childElementCount).toBe(0);
+    expect(el.childElementCount).toBe(1);
     expect(el.style.backgroundImage).toBe('');
     expect(el.style.background).toBe('');
     expect(el.style.backgroundColor).toBe('');

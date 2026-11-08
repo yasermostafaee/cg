@@ -29,6 +29,7 @@ import {
 import type {
   AuditEntry,
   CgControl,
+  CgPlateFit,
   CgPassTiming,
   FieldValues,
   LiveCropFocus,
@@ -767,6 +768,8 @@ type LiveSeatingPlan =
        * edited default.
        */
       readonly resolvedFrom: Readonly<Record<string, string>>;
+      /** R-105 — source shape/mode for sizing the page's always-under fallback. */
+      readonly plateFits: Readonly<Record<string, CgPlateFit>>;
       /**
        * ⭐ `B-178` — **each plate's fit mode WITH WHERE IT CAME FROM**, for the operator-facing
        * report. One entry per resolved frame, in binding order.
@@ -1619,18 +1622,8 @@ export class CasparRuntime {
    * facts cannot share one store without one of them becoming unrepresentable.
    */
   readonly #activeLooks = new Map<string, string>();
-  /*
-    🔴 **`single-clock-look-switch` — `#plateFits` IS GONE, and its rule survives it.**
-
-    `C-028` kept each plan's resolved `{ aspect, mode }` so the PAGE could be told what to
-    punch its holes with, and the rule it enforced was that the hole and the fill must be ONE
-    computation. That rule now has one consumer instead of two: the page has no holes, and the
-    only `fitPictureToBox` that reaches air is the one behind `MIXER FILL` / `CLIP`. Two
-    evaluations cannot disagree when there is only one.
-
-    `B-178`'s `fitProvenance` is UNTOUCHED and is a different thing: it is the operator-facing
-    report of where each mode came from, which is still worth saying out loud.
-  */
+  /** R-105 — the last landed plate-fit facts, mirrored to the graphics-bed fallback. */
+  readonly #plateFits = new Map<string, Readonly<Record<string, CgPlateFit>>>();
   /**
    * B-039 — itemIds whose slot currently has a LIVE producer (a `CG ADD` succeeded
    * and no later `CLEAR` destroyed it). The prescriptive signal: `take` plays when
@@ -4145,6 +4138,7 @@ export class CasparRuntime {
     this.#sourceOverrides.delete(itemId);
     this.#lookSourceBindings.delete(itemId);
     this.#frozenAssignments.delete(itemId);
+    this.#plateFits.delete(itemId);
     this.#plateVolumes.delete(itemId);
     this.#activeLooks.delete(itemId);
     this.#passTimings.delete(itemId);
@@ -5454,6 +5448,9 @@ export class CasparRuntime {
       product than the defect this closes.
     */
     this.#frozenAssignments.set(itemId, { ...plan.resolvedFrom });
+    // R-105 — keep the page fallback on the same visible fitted area as the external
+    // producer this take is about to seat. Both ADD and resident-take control read this.
+    this.#plateFits.set(itemId, { ...plan.plateFits });
     // `B-178` — SAY what each plate is running, where anything fell through to the
     // default. At the take, off the same plan the wire is built from, so the log can never
     // describe a resolution the payload did not carry.
@@ -6212,12 +6209,17 @@ export class CasparRuntime {
     // picture's address, IN THE SAME COMMAND as the new book: two commands could land apart.
     const pageTurn =
       touchedPages === undefined ? undefined : await this.#pageTurnFor(itemId, touchedPages);
+    const plateFits = this.#plateFits.get(itemId);
+    const control: CgControl = {
+      ...(pageTurn !== undefined && { page: pageTurn }),
+      ...(plateFits !== undefined &&
+        Object.keys(plateFits).length > 0 && {
+          plates: { ...plateFits },
+        }),
+    };
     this.#armExpiry(seq);
     const { ok, errorCode, command } = await this.#send(
-      this.#builder.update(
-        slot,
-        pageTurn === undefined ? merged : withCgControl(merged, { page: pageTurn }),
-      ),
+      this.#builder.update(slot, withCgControl(merged, control)),
       seq,
       'normal',
     );
@@ -7633,6 +7635,7 @@ export class CasparRuntime {
         // EMPTY freeze, not the absent one, and it is the honest answer: this row's level 2
         // is "nothing", permanently, and pinning it costs nothing.
         resolvedFrom: {},
+        plateFits: {},
         // `B-178` — no plates, so nothing to report. Empty, never absent.
         fitProvenance: [],
       };
@@ -7753,6 +7756,7 @@ export class CasparRuntime {
     const resolved = new Map<string, SourceDefinition>();
     const declared = new Set<string>();
     const offFrame = new Set<string>();
+    const plateFits: Record<string, CgPlateFit> = {};
     /*
       `B-178` — each frame's resolution WITH WHERE IT CAME FROM, for the operator-facing report.
 
@@ -7851,6 +7855,7 @@ export class CasparRuntime {
       // 🔴 THE PUNCHED SEAT WINS — see the accumulator's own note above for why one plateId
       // can arrive twice and why a parked seat may only fill a gap.
       if (rect !== undefined || !fitProvenance.has(frame.plateId)) {
+        plateFits[frame.plateId] = { aspect: aspect.aspect, mode: fitMode.mode };
         /*
           ⭐ `B-178` half two — **THE PROVENANCE, KEPT so a human can be told.** `contain` is both
           the shipped default and a legitimate authored choice, so the mode alone is not evidence
@@ -8010,6 +8015,7 @@ export class CasparRuntime {
         declared,
         unresolved,
         resolvedFrom,
+        plateFits,
         fitProvenance: [...fitProvenance.values()],
       };
 
@@ -8180,6 +8186,7 @@ export class CasparRuntime {
       placements: allocated.filter((p) => !p.held),
       parked: allocated.filter((p) => p.held),
       resolvedFrom,
+      plateFits,
       fitProvenance: [...fitProvenance.values()],
       ...(foregroundLayer !== undefined
         ? { foregroundSlot: { channel: slot.channel, layer: foregroundLayer } }
@@ -8641,6 +8648,7 @@ export class CasparRuntime {
   #thawAssignment(itemId: string, landed: boolean): void {
     if (!landed) return;
     this.#frozenAssignments.delete(itemId);
+    this.#plateFits.delete(itemId);
   }
 
   /** The level-2 answer in force for one item, flattened to `{plate → catalog id}`. */
@@ -8873,6 +8881,7 @@ export class CasparRuntime {
     itemId: string,
     slot: CommandSlot,
     lookId: string,
+    plateFits: Readonly<Record<string, CgPlateFit>> | undefined = this.#plateFits.get(itemId),
   ): Promise<{ ok: boolean; errorCode?: string }> {
     /*
       🔴 **`single-clock-look-switch` — ONE ARGUMENT NOW, and that is the whole of what a page
@@ -8890,7 +8899,7 @@ export class CasparRuntime {
       because nothing composited over a picture depends on when it arrives.
     */
     const told = await this.#send(
-      this.#builder.updateLook(slot, lookId),
+      this.#builder.updateLook(slot, lookId, {}, plateFits),
       this.#nextSeq(),
       'urgent',
     );
@@ -8898,6 +8907,26 @@ export class CasparRuntime {
       return { ok: false, ...(told.errorCode !== undefined && { errorCode: told.errorCode }) };
     this.#recordActiveLook(itemId, lookId);
     return { ok: true };
+  }
+
+  /** R-105 — refresh only the under-plate fallback geometry after a live source swap. */
+  async #tellPagePlateFits(
+    itemId: string,
+    slot: CommandSlot,
+  ): Promise<{ ok: boolean; errorCode?: string }> {
+    const plateFits = this.#plateFits.get(itemId);
+    if (plateFits === undefined || Object.keys(plateFits).length === 0) return { ok: true };
+    const told = await this.#send(
+      this.#builder.update(slot, withCgControl({}, { plates: { ...plateFits } })),
+      this.#nextSeq(),
+      'urgent',
+    );
+    return told.ok
+      ? { ok: true }
+      : {
+          ok: false,
+          ...(told.errorCode !== undefined && { errorCode: told.errorCode }),
+        };
   }
 
   /**
@@ -9371,10 +9400,10 @@ export class CasparRuntime {
       const reconciled = await this.reconcileLivePlates(itemId, {
         mode: 'switch',
         lookId: look.id,
-        beforeApply: async () => {
+        beforeApply: async (plan) => {
           pageLoaded = this.#loaded.has(itemId);
           if (!pageLoaded) return { ok: true };
-          const told = await this.#tellPageLook(itemId, slot, lookId);
+          const told = await this.#tellPageLook(itemId, slot, lookId, plan.plateFits);
           if (!told.ok) {
             return {
               ok: false,
@@ -9665,7 +9694,9 @@ export class CasparRuntime {
        * has not happened yet — a parked preset missing its producer stays missing until
        * the apply, exactly as a refused plan leaves it.)
        */
-      beforeApply?: () => Promise<{ ok: boolean; errorCode?: string; message?: string }>;
+      beforeApply?: (
+        plan: Extract<LiveSeatingPlan, { ok: true }>,
+      ) => Promise<{ ok: boolean; errorCode?: string; message?: string }>;
     },
   ): Promise<{
     ok: boolean;
@@ -9788,7 +9819,7 @@ export class CasparRuntime {
       }
     }
     if (opts.beforeApply !== undefined) {
-      const gate = await opts.beforeApply();
+      const gate = await opts.beforeApply(plan);
       if (!gate.ok) {
         // Nothing of the switch reaches air: what its pre-seat started comes back off.
         await this.#undoPreSeat(preSeated);
@@ -9800,6 +9831,7 @@ export class CasparRuntime {
       }
     }
     const applied = await this.#applyLivePlates(itemId, plan, opts.mode, preSeated);
+    if (applied.ok) this.#plateFits.set(itemId, { ...plan.plateFits });
     return applied;
   }
 
@@ -11847,7 +11879,18 @@ export class CasparRuntime {
         overrides: next,
         bindings: nextBindings,
       });
-      if (applied.ok) return { ok: true };
+      if (applied.ok) {
+        // The external producer is already switched. This best-effort tell only sizes the
+        // authored Bars/colour/image bed for a later loss-of-picture event, so its refusal
+        // cannot truthfully turn a landed swap into a refused operator action.
+        const told = await this.#tellPagePlateFits(itemId, itemSlot);
+        if (!told.ok) {
+          process.stderr.write(
+            `[caspar-bridge] live fallback fit refresh failed for ${itemId}: ${told.errorCode ?? 'amcp-error'}\n`,
+          );
+        }
+        return { ok: true };
+      }
       return {
         ok: false,
         reason: applied.reason ?? 'amcp-error',
@@ -14399,6 +14442,7 @@ export class CasparRuntime {
     // would resolve a brand-new row against a retired show's assignment, and the take that
     // should have re-frozen it would instead find the pin already there.
     this.#frozenAssignments.delete(itemId);
+    this.#plateFits.delete(itemId);
     // 6.5f — and the audio intent. A re-used itemId inheriting a RAISED plate is
     // the worst of the three: it puts a microphone on air that nobody asked for.
     this.#plateVolumes.delete(itemId);
@@ -17481,8 +17525,13 @@ export class CasparRuntime {
     // `RUN-NEXT-VERSION-02` Q9 — the row's sound mute, once it has been set: a take that rebuilds the
     // page, or tells a resident one, leaves it muted (or unmuted) as the operator last asked.
     const soundMuted = this.#soundMutes.get(itemId);
+    const plateFits = this.#plateFits.get(itemId);
     const shared: Omit<TakeControl, 'take'> = {
       ...(activeLook !== undefined && { look: activeLook.id }),
+      ...(plateFits !== undefined &&
+        Object.keys(plateFits).length > 0 && {
+          plates: { ...plateFits },
+        }),
       ...(passTiming !== undefined && { timing: CasparRuntime.#wireTiming(passTiming) }),
       ...(soundMuted !== undefined && { sound: { muted: soundMuted } }),
     };

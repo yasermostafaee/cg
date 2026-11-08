@@ -3,6 +3,7 @@ import { redactUrlCredentials, type SourceProducer } from '@cg/shared-ipc';
 import {
   withCgControl,
   type CgControl,
+  type CgPlateFit,
   type CgPage,
   type CgPageAdvance,
   type CgPassTiming,
@@ -26,6 +27,7 @@ export interface CommandSlot {
 export interface TakeControl {
   readonly take: string;
   readonly look?: string;
+  readonly plates?: Record<string, CgPlateFit>;
   readonly timing?: CgPassTiming;
   /** `R-100` — the page a row's page list is on, naming that page's picture by address when it needs one. */
   readonly page?: CgPage;
@@ -161,27 +163,33 @@ export class CommandBuilder {
    * to send anyway must be able to send both in ONE command rather than two — a second command
    * is a second chance for the two to land apart.
    *
-   * ⭐ `C-028` — `plates` rides the SAME payload for exactly that reason. A switch can change
-   * a plate's fit (two looks may bind one input to different boxes and assert different shapes
-   * for it), so the id and the facts must land together or the page punches the new look's
-   * holes at the old look's aspects. Absent — a non-`C-028` caller, or a template with no
-   * plates — leaves the payload byte-for-byte what it was.
+   * R-105 — `plates` rides the SAME payload for exactly that reason. A switch can change a
+   * plate's resolved source shape, so the look and fallback fit must land together. Absent —
+   * a caller with no fit facts, or a template with no plates — leaves the payload byte-for-byte
+   * what it was.
    */
-  updateLook(slot: CommandSlot, lookId: string, fields: FieldValues = {}): string {
+  updateLook(
+    slot: CommandSlot,
+    lookId: string,
+    fields: FieldValues = {},
+    plates?: Readonly<Record<string, CgPlateFit>>,
+  ): string {
     /*
-      🔴 **`single-clock-look-switch` — the `plates` and `from` arguments are GONE.**
+      🔴 **`single-clock-look-switch` — the old mask-oriented `from` argument is GONE.**
 
-      `plates` (`C-028`) sent each plate's resolved aspect and mode so the PAGE could compute
-      the same fit; `from` (`SKEW-INTERSECT-01`) named the look being left so the page could
-      narrow its holes to `outgoing ∩ entering`. Both existed to steer a MASK, and a
-      plate-bearing page now sits BELOW its plates and punches nothing. The fit that reaches
-      air is the bridge's own `MIXER FILL` / `CLIP`, from the same facts, on the side that
-      owns the picture.
+      `from` (`SKEW-INTERSECT-01`) named the look being left so the page could narrow its holes
+      to `outgoing ∩ entering`. A plate-bearing page now sits BELOW its plates and punches
+      nothing, so that member stays retired. R-105 reuses the resolved `plates` facts only to
+      size the authored fallback beneath the producer; the bridge's `MIXER FILL` / `CLIP`
+      remains the only geometry applied to the live picture.
 
       ⚠ What SURVIVES is the look id, and the reason it survives is unchanged: the page still
       flips its own per-look decoration, and it still has to be told which look that is.
     */
-    const control: CgControl = { look: lookId };
+    const control: CgControl = {
+      look: lookId,
+      ...(plates !== undefined && Object.keys(plates).length > 0 && { plates: { ...plates } }),
+    };
     return `CG ${target(slot)} UPDATE ${String(FLASH_LAYER)} ${quote(
       serialize(withCgControl(fields, control)),
     )}`;
@@ -247,6 +255,7 @@ export class CommandBuilder {
       ...(control.pageAdvance !== undefined && { pageAdvance: control.pageAdvance }),
       // `RUN-NEXT-VERSION-02` Q9 — after it, for the same reason: a row nobody muted is unchanged.
       ...(control.sound !== undefined && { sound: control.sound }),
+      ...(control.plates !== undefined && { plates: control.plates }),
     };
     return `CG ${target(slot)} UPDATE ${String(FLASH_LAYER)} ${quote(
       serialize(withCgControl(fields, ordered)),

@@ -1516,6 +1516,13 @@ export type LiveRevealMask = z.infer<typeof LiveRevealMaskSchema>;
  */
 export const VideoPlaceholderElementSchema = ElementBaseSchema.extend({
   type: z.literal('video-placeholder'),
+  /**
+   * R-105 — what the graphics bed paints underneath this live picture. Absent preserves the
+   * long-standing Designer choice: Bars. `posterAssetId` supplies the image branch's asset.
+   * A solid colour includes black; it is not a separate mode.
+   */
+  fallbackKind: z.enum(['bars', 'color', 'image']).optional(),
+  fallbackColor: HexColorSchema.optional(),
   posterAssetId: IdSchema.optional(),
   /**
    * D-147 — the author's DECLARATION about the source's shape, and now OPTIONAL.

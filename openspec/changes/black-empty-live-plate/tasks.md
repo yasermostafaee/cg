@@ -1,10 +1,12 @@
-## 1. Routing
+## 1. Authoring and routing
 
-- [ ] 1.1 Establish the CasparCG producer/layer mechanism for an opaque black fallback without obscuring a live picture.
-- [ ] 1.2 Seat, move, hold and clear fallback + picture atomically as one plate.
-- [ ] 1.3 Preserve unavailable-source preflight/refusal.
+- [x] 1.1 Use the existing Live Source picker for Bars/solid colour/picture, with a real Bars thumbnail and Bars as the legacy default.
+- [x] 1.2 Render the selected fallback in the graphics bed underneath the external live producer.
+- [x] 1.3 Carry Bridge-resolved source aspect/fit facts to the page and size the fallback to the producer's visible fit.
+- [x] 1.4 Include selected fallback pictures in export packaging and preserve unavailable-source preflight/refusal.
 
 ## 2. Verification
 
-- [ ] 2.1 Add integration coverage for empty, resumed and invalid sources.
-- [ ] 2.2 Run full gate and a real CasparCG/Playout on-air pass.
+- [x] 2.1 Add schema, DOM, export, runtime-fit and Bridge integration coverage.
+- [ ] 2.2 Run the full repository gate.
+- [ ] 2.3 Run a real CasparCG/Playout on-air pass.

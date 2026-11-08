@@ -1760,12 +1760,9 @@ export { SMPTE_BARS, smpteBarsGradient };
  * contracts, which is why they are branched here on an explicit
  * {@link RenderMode} rather than differentiated by a stylesheet the host injects:
  *
- * - `'output'` (both exporters) — **ZERO PAINTED PIXELS INSIDE THE HOLE.** No
- *   background and no children. The element still emits its box (positioned,
- *   sized, id'd) so layout, bindings and the element map are unchanged, and so the
- *   hole's rect is inspectable in the artifact. Nothing may paint INSIDE the rect,
- *   because a live guest goes BEHIND it: a pixel painted there is a lid over the
- *   guest's face.
+ * - `'output'` (both exporters) — R-105 paints the selected fallback on the graphics
+ *   bed BELOW the live producer. The producer covers it while it has picture; a
+ *   transparent/empty upstream reveals it without a template re-take.
  *   ⭐ **AMENDED (owner, 2026-08-10; `live-source-multibox` design.md §9a.1) — an
  *   authored `stroke` DOES paint, in BOTH modes, and that is not an exception to
  *   the rule above.** It is rendered as a CSS `outline`, which is painted outside the
@@ -1831,13 +1828,19 @@ function buildLiveSource(element: VideoPlaceholderElement, ctx: BuildCtx): HTMLE
     el.style.outline = strokeShorthand(element.stroke);
   }
 
-  // The current playout layer contract composites Live Sources behind transparent
-  // holes. R-105's black fallback requires its coordinated graphics-bed bridge
-  // changes; a browser-only Designer update must not obscure existing live sources.
-  if (ctx.mode === 'output') return el;
-
   el.style.overflow = 'hidden';
-  if (element.posterAssetId !== undefined) {
+  const fallback = ctx.doc.createElement('div');
+  fallback.dataset['cgLiveFallback'] = element.id;
+  fallback.style.position = 'absolute';
+  fallback.style.left = '0';
+  fallback.style.top = '0';
+  fallback.style.width = '100%';
+  fallback.style.height = '100%';
+  fallback.style.overflow = 'hidden';
+  fallback.style.pointerEvents = 'none';
+  const fallbackKind =
+    element.fallbackKind ?? (element.posterAssetId === undefined ? 'bars' : 'image');
+  if (fallbackKind === 'image' && element.posterAssetId !== undefined) {
     // The poster REPLACES the bars (D-137). `src` is left unset exactly as
     // `buildImage` leaves it — the host resolves `data-cg-asset-id`, and the
     // runtime's `applyAssetUrls` walk finds this nested `<img>` too.
@@ -1852,10 +1855,16 @@ function buildLiveSource(element: VideoPlaceholderElement, ctx: BuildCtx): HTMLE
     const focus = element.cropFocus ?? { x: 0.5, y: 0.5 };
     poster.style.objectPosition = `${focus.x * 100}% ${focus.y * 100}%`;
     poster.style.display = 'block';
-    el.appendChild(poster);
+    fallback.appendChild(poster);
+  } else if (fallbackKind === 'color') {
+    fallback.style.background = element.fallbackColor ?? '#000000';
   } else {
-    el.style.backgroundImage = smpteBarsGradient();
+    fallback.style.backgroundImage = smpteBarsGradient();
   }
+  el.appendChild(fallback);
+
+  // On air the fallback is the only plate-owned pixel. Labels and reveal guides remain author-only.
+  if (ctx.mode === 'output') return el;
 
   if (element.revealMask !== undefined) {
     const reveal = ctx.doc.createElement('div');

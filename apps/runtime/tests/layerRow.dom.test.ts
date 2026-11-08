@@ -1042,6 +1042,44 @@ describe('LayerRow — the live-plate audio summary', () => {
     held,
   });
 
+  const liveTemplate = templateWith({
+    liveSources: {
+      resolution: { width: 1920, height: 1080 },
+      defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
+      sources: [
+        {
+          elementId: 'el-guest-1',
+          sourceId: 'guest-1',
+          rect: { x: 0, y: 0, width: 960, height: 540 },
+          dynamic: false,
+        },
+      ],
+    },
+  });
+
+  it('shows ON/MUTED on the row audio icon itself', async () => {
+    rendered = await renderLayerRow({
+      item: itemWith('on-air', { plateVolumes: { 'guest-1': 1 } }),
+      template: liveTemplate,
+      seatedPlates: [plate('guest-1', 1)],
+    });
+    let button = rendered.container.querySelector<HTMLButtonElement>('[data-row-audio]');
+    expect(button?.dataset['rowAudioState']).toBe('on');
+    expect(button?.querySelector('.lucide-volume-2')).not.toBeNull();
+    expect(button?.getAttribute('aria-label')).toContain('audio on');
+
+    await rendered.unmount();
+    rendered = await renderLayerRow({
+      item: itemWith('on-air', { plateVolumes: { 'guest-1': 0 } }),
+      template: liveTemplate,
+      seatedPlates: [plate('guest-1', 0)],
+    });
+    button = rendered.container.querySelector<HTMLButtonElement>('[data-row-audio]');
+    expect(button?.dataset['rowAudioState']).toBe('muted');
+    expect(button?.querySelector('.lucide-volume-x')).not.toBeNull();
+    expect(button?.getAttribute('aria-label')).toContain('audio muted');
+  });
+
   /*
     🔴 B-164 — THE OWNER'S TABLE, DRIVEN.
 

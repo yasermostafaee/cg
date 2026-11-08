@@ -702,8 +702,11 @@ it('🔴 §12.4 fallback — a MEDIA clip set to RESTART is torn down BY NAME', 
   for (const e of seen) expect(e.reason).not.toMatch(/live-\d/);
   // CONTROL — the switch's wire (the look switch and the plate release) is the one recorded
   // before `B-308`, line for line: the sentences changed and nothing sent did.
-  expect(lines.filter((l) => /^(PLAY|LOAD|LOADBG|MIXER|CLEAR|STOP|CG) /.test(l))).toEqual([
-    'CG 1-60 UPDATE 0 "{\\"__cg\\":{\\"look\\":\\"solo\\"}}"',
+  const wire = lines.filter((l) => /^(PLAY|LOAD|LOADBG|MIXER|CLEAR|STOP|CG) /.test(l));
+  const control = readCgControl(dataArgOf(wire[0] as string, 'UPDATE'));
+  expect(control?.look).toBe('solo');
+  expect(control?.plates?.['live-1']).toEqual({ aspect: 16 / 9, mode: 'cover' });
+  expect(wire.slice(1)).toEqual([
     'MIXER 1-30 FILL 0 0 1 1 DEFER',
     'MIXER 1-30 CLIP 0 0 1 1 DEFER',
     'MIXER 1-32 VOLUME 0 DEFER',
@@ -1273,8 +1276,8 @@ it('🔴 the switch tells the PAGE which look — the payload carries the id, be
   expect(updates, 'exactly ONE CG UPDATE — the look, told once').toHaveLength(1);
   const control = readCgControl(dataArgOf(updates[0] as string, 'UPDATE'));
   expect(control?.look).toBe('solo');
-  // Nothing else rides the payload: `from` and `plates` went with the mask that read them.
-  expect(Object.keys(control ?? {})).toEqual(['look']);
+  expect(Object.keys(control ?? {})).toEqual(['look', 'plates']);
+  expect(control?.plates?.['live-1']).toEqual({ aspect: 16 / 9, mode: 'cover' });
 
   /*
     🔴 ORDER — `B-174` REVERSED THIS: the page is told FIRST, then the fills move after the
@@ -1404,7 +1407,8 @@ it('🔴 B-178 — the same source in TWO looks is fitted per look, and the swit
   const updates = updateLines(await since(before));
   const control = readCgControl(dataArgOf(updates[0] as string, 'UPDATE'));
   expect(control?.look).toBe('solo');
-  expect(Object.keys(control ?? {})).toEqual(['look']);
+  expect(Object.keys(control ?? {})).toEqual(['look', 'plates']);
+  expect(control?.plates?.['live-1']).toEqual({ aspect: 16 / 9, mode: 'cover' });
 });
 
 it('🔴 B-178 — "nobody said" resolves to the DEFAULT, and the take SAYS SO as `default`', async () => {
@@ -1729,8 +1733,12 @@ it('🔴 7.9 — a REFUSED switch leaves no intent, and the next swap does ONLY 
   // claim is "it did not move" rather than a re-statement of the fit arithmetic.
   expect(lines.some((l) => l.startsWith(`MIXER 1-${String(soloLayer)} FILL `))).toBe(true);
   expect(recordOf(r, 'live-1')?.fill, 'the swap must not move the box').toEqual(sixFill);
-  // R-048 is UNCHANGED by 7.9: a swap still tells the page nothing, and does not need to.
-  expect(updateLines(lines), 'the swap sends no look, by design').toEqual([]);
+  // R-105: the swap sends only fallback geometry; it still carries no look or author field.
+  const fallbackUpdates = updateLines(lines);
+  expect(fallbackUpdates).toHaveLength(1);
+  const fallbackControl = readCgControl(dataArgOf(fallbackUpdates[0] as string, 'UPDATE'));
+  expect(fallbackControl?.look).toBeUndefined();
+  expect(fallbackControl?.plates?.['live-1']).toEqual({ aspect: 16 / 9, mode: 'contain' });
 });
 
 it('🔴 7.9 — the FILLS and the HOLES never disagree across refuse → swap → switch → swap', async () => {
@@ -2936,7 +2944,10 @@ it("🔴 B-155 §B — the common path's exact wire sequence: a plain switch, by
   expect(flip).toMatch(/^CG 1-\d+ UPDATE 0 /);
   const flipControl = readCgControl(dataArgOf(flip, 'UPDATE'));
   expect(flipControl?.look).toBe('solo');
-  expect(Object.keys(flipControl ?? {}), 'the id alone rides the payload').toEqual(['look']);
+  expect(Object.keys(flipControl ?? {}), 'look and fallback fit ride one payload').toEqual([
+    'look',
+    'plates',
+  ]);
   expect(lines.slice(1)).toEqual(expected);
 });
 

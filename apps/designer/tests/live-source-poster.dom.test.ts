@@ -82,7 +82,7 @@ async function render(): Promise<HTMLDivElement> {
 }
 
 const posterButton = (c: HTMLElement): HTMLButtonElement | null =>
-  c.querySelector('button[aria-label="poster"]');
+  c.querySelector('button[aria-label="fallback"]');
 
 function click(button: HTMLButtonElement): void {
   act(() => button.click());
@@ -97,6 +97,8 @@ describe('D-137 — the poster picker', () => {
     click(trigger);
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
     expect(dialog?.textContent).toContain('Bars');
+    expect(dialog?.querySelector('img[src^="data:image/svg+xml"]')).not.toBeNull();
+    expect(dialog?.querySelector('button[title="Solid colour"]')).not.toBeNull();
     expect(dialog?.querySelector('button[title="studio (project)"]')).not.toBeNull();
     expect(dialog?.querySelector('button[title="brand (shared)"]')).not.toBeNull();
     expect(dialog?.textContent).not.toContain('Vazir');
@@ -114,6 +116,7 @@ describe('D-137 — the poster picker', () => {
     if (projectPicture === null) throw new Error('no project picture choice');
     click(projectPicture);
     expect(plateNow().posterAssetId).toBe('img-1');
+    expect(plateNow().fallbackKind).toBe('image');
     const selectedTrigger = posterButton(container);
     if (selectedTrigger === null) throw new Error('no selected poster picker');
     click(selectedTrigger);
@@ -123,6 +126,21 @@ describe('D-137 — the poster picker', () => {
     if (bars === undefined) throw new Error('no bars choice');
     click(bars);
     expect(plateNow().posterAssetId).toBeUndefined();
+    expect(plateNow().fallbackKind).toBe('bars');
+  });
+
+  it('choosing a solid colour uses the same fallback picker', async () => {
+    seedPlate();
+    const trigger = posterButton(await render());
+    if (trigger === null) throw new Error('no fallback picker');
+    click(trigger);
+    const colour = document.querySelector<HTMLButtonElement>(
+      '[role="dialog"] button[title="Solid colour"]',
+    );
+    if (colour === null) throw new Error('no solid colour choice');
+    click(colour);
+    expect(plateNow().fallbackKind).toBe('color');
+    expect(plateNow().fallbackColor).toBe('#000000');
   });
 
   it('a stored poster that resolves to neither list is shown as itself, missing', async () => {

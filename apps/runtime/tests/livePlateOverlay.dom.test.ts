@@ -106,12 +106,13 @@ const CATALOG: SourceCatalog = {
   ],
 };
 
-const item = (itemId: string): StackItemState => ({
+const item = (itemId: string, over: Partial<StackItemState> = {}): StackItemState => ({
   itemId,
   templateId: TEMPLATE_ID,
   fields: {},
   status: 'loaded',
   pending: false,
+  ...over,
 });
 
 const slot = (layer: number): FixedSlotState => ({
@@ -123,6 +124,7 @@ const slot = (layer: number): FixedSlotState => ({
 
 interface Fixture {
   rehearsals: Rehearsal[];
+  items?: StackItemState[];
   templates?: TemplateInfo[];
   assignments?: SourceAssignments;
   /**
@@ -138,7 +140,7 @@ function stubBridge(f: Fixture): void {
   const stub = {
     rehearse: { state: () => Promise.resolve(f.rehearsals), onStateChanged: noop },
     stack: {
-      snapshot: () => Promise.resolve(f.rehearsals.map((r) => item(r.itemId))),
+      snapshot: () => Promise.resolve(f.items ?? f.rehearsals.map((r) => item(r.itemId))),
       onStateChanged: noop,
     },
     fixedLayers: {
@@ -334,5 +336,23 @@ describe('R-049 — a template with no live plates draws nothing', () => {
     expect(el.querySelector('[data-live-plate-overlay]')).toBeNull();
     // The rehearsal itself is unaffected — this is an overlay, not a render path.
     expect(el.querySelectorAll('iframe[data-rehearsal-frame]')).toHaveLength(1);
+  });
+});
+
+describe('R-109 — each PVW plate says whether its audio is on', () => {
+  it('uses distinct volume icons and accessible names for audible and muted plates', async () => {
+    const el = await render({
+      rehearsals: REHEARSING,
+      items: [item('a', { plateVolumes: { 'guest-1': 1, 'guest-2': 0 } })],
+    });
+    const audible = plate(el, 'guest-1');
+    const muted = plate(el, 'guest-2');
+
+    expect(
+      audible.querySelector('[data-live-plate-audio="audible"] .lucide-volume-2'),
+    ).not.toBeNull();
+    expect(muted.querySelector('[data-live-plate-audio="silent"] .lucide-volume-x')).not.toBeNull();
+    expect(audible.getAttribute('aria-label')).toContain('audio is on');
+    expect(muted.getAttribute('aria-label')).toContain('audio is muted');
   });
 });

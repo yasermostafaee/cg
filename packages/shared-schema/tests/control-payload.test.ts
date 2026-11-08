@@ -27,6 +27,20 @@ describe('the round trip — the bridge writes, the page reads', () => {
     expect(readCgControl(received)?.look).toBe('solo');
   });
 
+  it('carries only valid live-plate fit facts through the wire payload', () => {
+    const payload = withCgControl({} as FieldValues, {
+      plates: {
+        left: { aspect: 16 / 9, mode: 'cover' },
+        right: { aspect: null, mode: 'contain' },
+      },
+    });
+
+    expect(readCgControl(JSON.parse(JSON.stringify(payload)))?.plates).toEqual({
+      left: { aspect: 16 / 9, mode: 'cover' },
+      right: { aspect: null, mode: 'contain' },
+    });
+  });
+
   it('leaves the author fields untouched, and keeps them out of the control object', () => {
     const payload = withCgControl({ headline: 'Tehran', sub: 'Live' } as FieldValues, {
       look: 'six',
@@ -81,6 +95,23 @@ describe('readCgControl — defensive, because this arrives over AMCP', () => {
     expect(readCgControl({ [CG_CONTROL_KEY]: { look: '' } })).toEqual({});
     expect(readCgControl({ [CG_CONTROL_KEY]: { other: 'x' } })).toEqual({});
   });
+
+  it('drops malformed plate fits one entry at a time', () => {
+    expect(
+      readCgControl({
+        [CG_CONTROL_KEY]: {
+          plates: {
+            good: { aspect: 4 / 3, mode: 'contain' },
+            zero: { aspect: 0, mode: 'contain' },
+            infinite: { aspect: Number.POSITIVE_INFINITY, mode: 'cover' },
+            mode: { aspect: 1, mode: 'stretch' },
+            scalar: 'bad',
+          },
+        },
+      }),
+    ).toEqual({ plates: { good: { aspect: 4 / 3, mode: 'contain' } } });
+    expect(readCgControl({ [CG_CONTROL_KEY]: { plates: [] } })).toEqual({});
+  });
 });
 
 /*
@@ -88,8 +119,8 @@ describe('readCgControl — defensive, because this arrives over AMCP', () => {
  *
  * `from` named the look a switch was LEAVING so the page could punch `outgoing ∩ entering`
  * while the two clocks disagreed. There are no holes now — the page sits BELOW its plates —
- * so there is nothing to narrow. `C-028`'s `plates` went the same way and for the same
- * reason: only the mask consumed it.
+ * so there is nothing to narrow. R-105 later restored `plates` for a different consumer: the
+ * authored fallback below the external producer follows the same visible fitted area.
  *
  * ⚠ What SURVIVES, and is still covered above, is the look id itself and the codec's
  * defensiveness: an unknown member is DROPPED rather than carried, which is what lets a page

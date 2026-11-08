@@ -1351,18 +1351,36 @@ function RevealMaskRows({ element }: { element: VideoPlaceholderElement }): JSX.
  * field forces an author who has never seen the feed into a guess that can refuse a
  * take on air. Absent means no comparison and no refusal.
  */
+const LIVE_FALLBACK_COLOR_CHOICE = '__cg-live-fallback-color__';
+const svgThumbnail = (body: string): string =>
+  `data:image/svg+xml,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 80">${body}</svg>`,
+  )}`;
+const LIVE_BARS_THUMBNAIL = svgThumbnail(
+  ['#c0c0c0', '#c0c000', '#00c0c0', '#00c000', '#c000c0', '#c00000', '#0000c0']
+    .map(
+      (color, index) =>
+        `<path fill="${color}" d="M${String(index * 20)} 0h20v80H${String(index * 20)}z"/>`,
+    )
+    .join(''),
+);
+
 /**
- * ⭐ `D-137` — THE POSTER, at last settable. The runtime has always drawn `posterAssetId` in place
- * of the bars on the canvas and in Preview (`scene-builder.ts`, authoring only — the output page
- * paints nothing for a plate), but nothing in the Designer could write it. A picture from the
- * project or the shared library; "bars" is no poster. A stored id that resolves to neither list
- * is shown as itself, "(missing)", so the control never shows a value the scene does not hold.
+ * D-137 + R-105 — the ONE visual picker for both the authoring poster and the bed painted under
+ * the real live producer. Bars is the default and gets a real thumbnail; a solid colour (including
+ * black) and project/shared pictures are alternatives in this same control.
  */
 function LivePosterRow({ element }: { element: VideoPlaceholderElement }): JSX.Element {
   const project = useAssets().filter((a) => a.kind === 'image');
   const shared = useSharedImages();
   const imageUrls = useImageAssetUrls();
+  const fallbackColor = element.fallbackColor ?? '#000000';
   const choices = [
+    {
+      value: LIVE_FALLBACK_COLOR_CHOICE,
+      label: 'Solid colour',
+      thumbnailUrl: svgThumbnail(`<rect width="140" height="80" fill="${fallbackColor}"/>`),
+    },
     ...project.map((asset) => ({
       value: asset.assetId,
       label: `${stripExtension(asset.filename)} (project)`,
@@ -1374,21 +1392,55 @@ function LivePosterRow({ element }: { element: VideoPlaceholderElement }): JSX.E
       ...(imageUrls[asset.assetId] === undefined ? {} : { thumbnailUrl: imageUrls[asset.assetId] }),
     })),
   ];
-  const current = element.posterAssetId ?? '';
+  const kind = element.fallbackKind ?? (element.posterAssetId === undefined ? 'bars' : 'image');
+  const current =
+    kind === 'color'
+      ? LIVE_FALLBACK_COLOR_CHOICE
+      : kind === 'image'
+        ? (element.posterAssetId ?? '')
+        : '';
   return (
-    <ImageChoicePicker
-      label="poster"
-      value={current}
-      choices={choices}
-      emptyLabel="Bars"
-      currentLabel={`${current} (missing)`}
-      currentThumbnailUrl={imageUrls[current]}
-      onChange={(value) =>
-        designerStore.updateElement(element.id, {
-          posterAssetId: value === '' ? undefined : value,
-        } as Partial<Element>)
-      }
-    />
+    <>
+      <ImageChoicePicker
+        label="fallback"
+        value={current}
+        choices={choices}
+        emptyLabel="Bars"
+        emptyThumbnailUrl={LIVE_BARS_THUMBNAIL}
+        currentLabel={`${current} (missing)`}
+        currentThumbnailUrl={imageUrls[current]}
+        onChange={(value) => {
+          if (value === '') {
+            designerStore.updateElement(element.id, {
+              fallbackKind: 'bars',
+              posterAssetId: undefined,
+            } as Partial<Element>);
+            return;
+          }
+          if (value === LIVE_FALLBACK_COLOR_CHOICE) {
+            designerStore.updateElement(element.id, {
+              fallbackKind: 'color',
+              fallbackColor,
+              posterAssetId: undefined,
+            } as Partial<Element>);
+            return;
+          }
+          designerStore.updateElement(element.id, {
+            fallbackKind: 'image',
+            posterAssetId: value,
+          } as Partial<Element>);
+        }}
+      />
+      {kind === 'color' && (
+        <ColorField
+          label="fallback"
+          value={fallbackColor}
+          onCommit={(fallbackColor) =>
+            designerStore.updateElement(element.id, { fallbackColor } as Partial<Element>)
+          }
+        />
+      )}
+    </>
   );
 }
 

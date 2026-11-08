@@ -4853,13 +4853,15 @@ operator had to fail over before seeing whether its programme picture and sound 
 - WHEN B is requested THEN CG Bridge authorizes the logical channel, maps it to B's physical channel, uses B's
   core programme port and B engine's own meter session, and never exposes another channel or token
 
-## [~] R-105 — A healthy but empty live source shows a black plate on air ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/black-empty-live-plate/`
+## [~] R-105 — A healthy but empty live source shows its authored fallback on air ⟨priority: high — the owner, 2026-11-02; clarified 2026-11-08⟩ — `openspec/changes/black-empty-live-plate/`
 
-**What:** Keep the geometry of an assigned, healthy Live Source visible as black when its upstream currently has no picture, such as an ended playlist.
+**What:** Keep the geometry of an assigned, healthy Live Source visible when its upstream currently has no picture, such as an ended playlist. The existing Designer fallback picker is the source of truth: Bars by default, or an authored solid colour/picture.
 **Why:** A transparent/missing plate makes a multi-box layout collapse visually even though the source assignment itself is valid.
 **Acceptance:**
 
-- WHEN a valid assigned source has no current picture THEN its authored plate remains a black rectangle in the requested geometry
+- WHEN a valid assigned source has no current picture THEN its authored plate shows the selected Bars/colour/picture fallback in the same visible fitted geometry
+- WHEN Bars is selected THEN actual SMPTE Bars are rendered on air and their thumbnail is visible in the Designer picker
+- WHEN a solid colour or picture is selected THEN it replaces Bars as the fallback; black remains available as a colour rather than a second implicit mode
 - WHEN picture resumes THEN it replaces the black fallback without re-taking the template
 - WHEN the source is invalid or unavailable THEN the existing refusal still prevents the take or update
 
@@ -4917,3 +4919,38 @@ it unclear whether current CG Control text/images or the edited file should win.
   Reload is disabled with a reason; importing it through the chooser establishes the source
 - WHEN another CG Control opens the same channel THEN it does not inherit an unusable workstation
   path; source handles are local to each console while the template catalogue remains Bridge-owned
+
+## [~] R-109 — Live-frame audio state is visible on both the frame and its layer-row icon ⟨priority: high — the owner, 2026-11-08⟩ — `openspec/changes/show-live-plate-audio-state/`
+
+**What:** Each Live Source placeholder in PVW carries a real volume-on or volume-muted icon beside
+its existing intent wording. The layer row's audio button uses the same ON/MUTED answer instead of
+always drawing the same volume icon.
+**Why:** The compact row icon looked enabled even while every visible frame was muted, and the frame
+status depended too heavily on reading a small label.
+**Acceptance:**
+
+- WHEN any shown plate on a row is asking for sound THEN the row audio button shows Volume On and
+  names the state in its tooltip/accessibility label
+- WHEN no shown plate is asking for sound THEN that button shows Volume Muted
+- WHEN a PVW plate is audible, silent or held by the active look THEN its frame shows the matching
+  volume icon and includes the same fact in the frame's accessible name
+- The state remains recorded intent, not a per-input audio meter
+
+## [ ] R-110 — The operator can set Playlist programme-output gain without unmuting its duplicated frame route ⟨priority: high — the owner, 2026-11-08; gated on a Playout API contract⟩ — `openspec/changes/control-playlist-program-audio/`
+
+**What:** Add an operator gain control for the Playout Playlist programme output, at minimum when
+that output is not used by any on-air Live Source frame. The control targets the canonical programme
+mix owned by Playout; the duplicated `route://N-L` frame remains `VOLUME 0` under contract v1.3.
+**Why:** The operator needs to control the programme sound even when Playlist picture is not part of
+the active multi-box look, without creating the approximately +6 dB duplicate path the existing
+anti-interference rule prevents.
+**Acceptance:**
+
+- WHEN no on-air frame uses a Playlist output THEN an authorized operator can read and set that
+  programme output's gain
+- WHEN the Playlist output is used by an on-air frame THEN its route-copy layer remains locked at
+  zero; any allowed programme adjustment acts on the original Playout-owned path, never the copy
+- WHEN Playout cannot report or accept programme gain THEN the control is unavailable with a reason
+  and CG Bridge sends no speculative AMCP command to Playout's layer
+- The implementation starts only after the Playout team defines authenticated read/set semantics,
+  range, persistence, ownership and A/B behaviour

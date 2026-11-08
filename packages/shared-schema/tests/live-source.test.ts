@@ -89,6 +89,22 @@ describe('VideoPlaceholderElementSchema — additive, and still frozen for D-128
     expect(VideoPlaceholderElementSchema.parse(v)).toEqual(v);
   });
 
+  it('R-105 — Bars/colour/picture fallback choices round-trip without changing old scenes', () => {
+    for (const fallback of [
+      { fallbackKind: 'bars' as const },
+      { fallbackKind: 'color' as const, fallbackColor: '#123456' },
+      { fallbackKind: 'image' as const, posterAssetId: 'asset-poster' },
+    ]) {
+      const v = {
+        ...base,
+        type: 'video-placeholder' as const,
+        routeKey: 'guest-1',
+        ...fallback,
+      };
+      expect(VideoPlaceholderElementSchema.parse(v)).toEqual(v);
+    }
+  });
+
   it('⭐ C-028 — `fitMode` round-trips, and an ABSENT one is left absent', () => {
     // The persistence half of "the fit mode survives a save and reload": every save and
     // every load goes through this parse, so a field that round-trips here survives both.

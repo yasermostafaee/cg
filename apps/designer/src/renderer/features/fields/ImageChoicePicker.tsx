@@ -17,6 +17,7 @@ interface Props {
   label: string;
   onChange: (value: string) => void;
   emptyLabel?: string;
+  emptyThumbnailUrl?: string | undefined;
   currentThumbnailUrl?: string | undefined;
   allowEmpty?: boolean;
   currentLabel?: string;
@@ -29,6 +30,7 @@ export function ImageChoicePicker({
   label,
   onChange,
   emptyLabel = 'No picture selected',
+  emptyThumbnailUrl,
   currentThumbnailUrl,
   allowEmpty = true,
   currentLabel = 'Current uploaded picture',
@@ -46,7 +48,8 @@ export function ImageChoicePicker({
     ];
   }, [choices, currentLabel, currentThumbnailUrl, value]);
   const selected = options.find((choice) => choice.value === value);
-  const selectedThumbnail = selected?.thumbnailUrl ?? currentThumbnailUrl;
+  const selectedThumbnail =
+    value === '' ? emptyThumbnailUrl : (selected?.thumbnailUrl ?? currentThumbnailUrl);
 
   return (
     <>
@@ -89,7 +92,11 @@ export function ImageChoicePicker({
                 }}
               >
                 <span className={s.choiceThumb} aria-hidden="true">
-                  <Icon icon={ImageIcon} size={22} />
+                  {emptyThumbnailUrl === undefined ? (
+                    <Icon icon={ImageIcon} size={22} />
+                  ) : (
+                    <img src={emptyThumbnailUrl} alt="" />
+                  )}
                 </span>
                 <span className={s.choiceLabel}>{emptyLabel}</span>
               </Button>

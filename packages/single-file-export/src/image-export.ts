@@ -73,6 +73,16 @@ export function collectImageElements(scene: Scene): ImageRef[] {
           rule.effect.value.source,
         );
       }
+      // R-105 — a Live Source's selected picture is now an on-air fallback, not only an
+      // authoring poster. Its id predates source tagging, so resolve project-first with the
+      // exporter's existing shared-library fallback.
+      if (
+        el.type === 'video-placeholder' &&
+        el.posterAssetId !== undefined &&
+        (el.fallbackKind === undefined || el.fallbackKind === 'image')
+      ) {
+        addDynamic(`${el.id}:live-fallback`, el.id, el.posterAssetId);
+      }
       if (el.type === 'image') {
         if (!seen.has(el.id)) {
           seen.add(el.id);
