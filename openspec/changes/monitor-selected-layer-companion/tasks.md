@@ -11,4 +11,4 @@
 
 - [x] 2.1 Run focused Runtime tests and typecheck (9 DOM cases; Runtime typecheck).
 - [x] 2.2 Run strict OpenSpec validation (`monitor-selected-layer-companion` passed).
-- [ ] 2.3 Run the repository full gate and record the result.
+- [x] 2.3 Run the repository full gate (`103/103` gate sections passed on 2026-11-08).
