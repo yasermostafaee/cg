@@ -657,7 +657,9 @@ function buildText(element: TextElement, ctx: BuildCtx): HTMLElement {
       el.style.whiteSpace = 'nowrap';
     }
     if (element.verticalAlign !== undefined) {
-      el.style.display = 'flex';
+      // B-412 — vertical alignment needs a flex host, but must not resurrect an
+      // element whose authored visibility was already applied by `applyBaseStyles`.
+      el.style.display = element.visible ? 'flex' : 'none';
       el.style.flexDirection = 'column';
       el.style.justifyContent =
         element.verticalAlign === 'middle'
@@ -707,7 +709,9 @@ function renderTextGlyphs(el: HTMLElement, element: TextElement, doc: Document):
     // shrinks to its content (auto width + non-stretch align), capped at the box width
     // so long text still wraps. `justify` stretches it (text-justify needs full width).
     inner.style.maxWidth = '100%';
-    el.style.display = 'flex';
+    // B-412 — the gradient glyph wrapper uses flex for alignment, while the
+    // authored hide flag remains authoritative.
+    el.style.display = element.visible ? 'flex' : 'none';
     el.style.flexDirection = 'column';
     el.style.justifyContent = vAlignToFlex(element.verticalAlign);
     el.style.alignItems = hAlignToFlex(element.align);

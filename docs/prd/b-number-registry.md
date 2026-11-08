@@ -4177,3 +4177,14 @@ Measured free before use: the registry named `B-411` as next free and the tracke
 found no existing allocation for `B-411`.
 
 ⇒ **Next free after this entry is `B-412`**, **`D-200`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-08 — hidden text visibility takes `B-412`
+
+- `B-412` — vertical alignment and gradient glyph layout could overwrite a fixed text element's
+  authored `display:none` — [bugs-runtime.md](bugs-runtime.md).
+
+Measured free before use: the tracked PRD-heading audit found `B-411` as the highest allocated bug
+and no existing `B-412` heading. The same audit found later platform and runtime allocations that
+the older pointer had not yet incorporated (`P-076`, `R-107`).
+
+⇒ **Next free after this entry is `B-413`**, **`D-200`**, **`P-077`**, **`R-108`** and **`C-049`**.

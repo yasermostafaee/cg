@@ -130,6 +130,32 @@ describe('buildScene', () => {
     expect(hid.get('seq')?.style.display).toBe('none');
   });
 
+  it('B-412 — a hidden text stays hidden when vertical alignment or gradient glyphs require flex', () => {
+    const hiddenTextScene = (gradient: boolean): Scene => {
+      const scene = structuredClone(lowerThirdScene);
+      const text = scene.layers[0]?.children.find((element) => element.id === 'name');
+      if (text === undefined || text.type !== 'text') throw new Error('fixture changed');
+      text.visible = false;
+      text.verticalAlign = 'middle';
+      if (gradient) {
+        text.colorFill = {
+          kind: 'linear',
+          angle: 90,
+          stops: [
+            { at: 0, color: '#FFFFFF' },
+            { at: 1, color: '#00AEEF' },
+          ],
+        };
+      }
+      return scene;
+    };
+
+    expect(buildScene(hiddenTextScene(false)).elementMap.get('name')?.style.display).toBe('none');
+    const gradient = buildScene(hiddenTextScene(true)).elementMap.get('name');
+    expect(gradient?.querySelector('[data-cg-text]')).not.toBeNull();
+    expect(gradient?.style.display).toBe('none');
+  });
+
   it('does not paint a transparent background', () => {
     const { container } = buildScene(lowerThirdScene);
     // happy-dom returns '' when the property isn't set

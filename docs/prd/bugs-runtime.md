@@ -14025,3 +14025,13 @@ runtime, DOM and browser tests cover both directions.
 also gave no page landmarks while editing a long row list. **Expected / Fix:** the combined heading
 shows its own dirty dot whenever any authored/generated page row differs, and both editing and
 read-only data modals render live labelled page separators derived from the current row count.
+
+## [x] B-412 — A hidden fixed text is rendered again when vertical alignment or a gradient fill enables flex layout ⟨priority: high — authored visibility is false on Canvas, Preview and on air⟩ — FIXED 2026-11-08 · `openspec/changes/preserve-hidden-text-visibility/`
+
+**Repro:** open the owner's multi-day weather project and hide **عنوان** or **به‌روزرسانی**. Both
+are fixed text boxes using vertical alignment; the same defect also applies to gradient text.
+**Actual:** `applyBaseStyles` writes `display:none`, then the text builder unconditionally replaces it
+with `display:flex` to position glyphs, so the timeline says hidden while the picture remains visible.
+**Expected / Fix:** authored visibility remains authoritative after every text-layout pass. Flex is
+used only for a visible text host; hidden vertically-aligned and hidden gradient text both finish as
+`display:none`. A renderer regression covers the two independent paths.
