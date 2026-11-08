@@ -110,6 +110,20 @@ export function countdownsGoverning(scene: Scene, elementId: string): CountdownR
   return out;
 }
 
+/** D-203 — whether a layer owns Steps or is explicitly changed by one of them. */
+export function elementParticipatesInSteps(scene: Scene, elementId: string): boolean {
+  for (const doc of docsOf(scene)) {
+    for (const clock of docElements(layersOf(scene, doc)).filter(isStepCountdown)) {
+      if (clock.id === elementId) return true;
+      const groups = [clock.steps?.before, ...(clock.steps?.steps ?? [])];
+      if (groups.some((group) => group?.changes.some((change) => change.elementId === elementId))) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 /**
  * The Preview's rehearsal choices: every step of every countdown with steps, Before first, as
  * `{ value: '<clockId>|<token>', label }` — the countdown's name leads when there is more than one.

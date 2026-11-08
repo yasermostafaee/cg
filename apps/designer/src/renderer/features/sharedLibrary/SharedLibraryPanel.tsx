@@ -10,6 +10,7 @@ import { Control } from '../../ui/Control.js';
 import { Icon } from '../../ui/Icon.js';
 import { ImportingThumb } from '../assets/ImportingThumb.js';
 import { useImportPending } from '../assets/useImportPending.js';
+import { writeAssetDrag } from '../assets/asset-dnd.js';
 import { partitionSupported, skippedFilesMessage } from '../../../shared/asset-types.js';
 import { fileExt, formatBytes } from '../assets/AssetThumb.js';
 import { emitSharedImageRemoved, useSharedImages, useSharedImageUrl } from './useSharedImages.js';
@@ -279,7 +280,7 @@ export function SharedLibraryPanel(): JSX.Element {
   );
 }
 
-function SharedAssetThumb({
+export function SharedAssetThumb({
   asset,
   layout,
   active,
@@ -295,6 +296,7 @@ function SharedAssetThumb({
   const url = useSharedImageUrl(asset.kind === 'image' ? asset.assetId : null);
   const isList = layout === 'list';
   const isFont = asset.kind === 'font';
+  const isDraggable = asset.kind === 'image';
   return (
     <div
       // List rows reuse AssetThumb's row class for the same hover affordance (Project Assets parity).
@@ -306,6 +308,14 @@ function SharedAssetThumb({
       role={onSelect === undefined ? undefined : 'button'}
       tabIndex={onSelect === undefined ? undefined : 0}
       aria-pressed={onSelect === undefined ? undefined : active}
+      draggable={isDraggable}
+      onDragStart={
+        isDraggable
+          ? (e) => {
+              writeAssetDrag(e.dataTransfer, asset, 'shared');
+            }
+          : undefined
+      }
       title={asset.filename}
       onClick={onSelect}
       onKeyDown={(e) => {

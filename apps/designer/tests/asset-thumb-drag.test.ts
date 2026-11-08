@@ -78,6 +78,7 @@ describe('AssetThumb — thumbnail drag (B-019)', () => {
       cell.dispatchEvent(evt);
     });
     expect(setData).toHaveBeenCalledWith('application/x-cg-asset-id', 'asset-img-1');
+    expect(setData).toHaveBeenCalledWith('application/x-cg-asset-source', 'project');
   });
 });
 

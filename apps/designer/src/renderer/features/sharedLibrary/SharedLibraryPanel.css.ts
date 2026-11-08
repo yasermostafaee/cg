@@ -1,7 +1,7 @@
 import { style } from '@vanilla-extract/css';
 import { colors } from '../../theme.js';
 
-/** Shared library thumbnails are click-to-select (not drag sources like project assets). */
+/** Shared image thumbnails stay click-to-select and are also canvas drag sources. */
 export const clickable = style({
   cursor: 'pointer',
 });

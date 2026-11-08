@@ -10,6 +10,8 @@ import {
   Group,
   Image,
   Key,
+  ListFilter,
+  Milestone,
   MoveHorizontal,
   PenTool,
   PanelsTopLeft,
@@ -39,6 +41,7 @@ import { Icon } from '../../ui/Icon.js';
 import { Tag } from '../../ui/Tag.js';
 import { colors } from '../../theme.js';
 import * as s from './ElementRow.css.js';
+import { elementParticipatesInSteps } from '../inspector/countdown-steps.js';
 
 export { ELEMENT_ROW_HEIGHT } from './metrics.js';
 
@@ -156,6 +159,8 @@ function ElementRowLabel(props: Props): JSX.Element {
         return t.kind !== 'scene-background' && t.elementId === element.id;
       }),
   );
+  const hasRules = element.valueRules !== undefined && element.valueRules.rules.length > 0;
+  const hasSteps = scene !== null && elementParticipatesInSteps(scene, element.id);
   return (
     <div
       className={cx(
@@ -242,6 +247,26 @@ function ElementRowLabel(props: Props): JSX.Element {
         {bound && (
           <span className={s.boundKey} title="Bound to data" aria-label="bound to data">
             <Icon icon={Key} size={11} style={{ display: 'block' }} />
+          </span>
+        )}
+        {hasRules && (
+          <span
+            className={cx(s.automationBadge, s.ruleBadge)}
+            data-testid="layer-has-rules"
+            title="Value rules defined"
+            aria-label="value rules defined"
+          >
+            <Icon icon={ListFilter} size={11} style={{ display: 'block' }} />
+          </span>
+        )}
+        {hasSteps && (
+          <span
+            className={cx(s.automationBadge, s.stepBadge)}
+            data-testid="layer-has-steps"
+            title="Countdown steps defined or targeting this element"
+            aria-label="countdown steps defined or targeting this element"
+          >
+            <Icon icon={Milestone} size={11} style={{ display: 'block' }} />
           </span>
         )}
       </span>

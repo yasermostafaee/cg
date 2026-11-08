@@ -6689,3 +6689,36 @@ the upper source as the main picture while exposing only that lower source regio
   THEN export is refused with a targeted error
 - WHEN the live-source band lacks the extra layer required by a reveal THEN take is refused before
   any producer or graphic is put on air
+
+## [~] D-203 — Timeline layers expose Rule and Step participation ⟨priority: medium — the owner, 2026-11-08⟩ — `openspec/changes/timeline-automation-badges/`
+
+**What:** Add small, distinct Timeline badges beside the existing Data-key badge for Value Rules and
+Countdown Steps. The Step badge appears both on the countdown that owns the step set and on every
+element explicitly changed by it.
+
+**Why:** An author can currently see that a layer has a Data key, but automation hidden in Rules or
+Steps is discoverable only after opening inspectors and dialogs.
+
+**Acceptance:**
+
+- WHEN a layer owns one or more Value Rules THEN its Timeline row shows the Rule badge
+- WHEN a countdown owns Steps THEN its Timeline row shows the Step badge
+- WHEN one of those Steps explicitly changes another element THEN that target row also shows the
+  Step badge
+- WHEN a layer has none of those relations THEN no automation badge is shown for it
+
+## [~] D-204 — Shared Library images drag directly onto the Canvas ⟨priority: medium — the owner, 2026-11-08⟩ — `openspec/changes/drag-shared-images-to-canvas/`
+
+**What:** Make image tiles in both Shared Library layouts draggable onto the Canvas, matching the
+Project Assets gesture while creating an image whose source remains `shared`.
+
+**Why:** Shared images were selectable through the Image source picker but could not use the faster
+drag-to-place workflow already available to project assets.
+
+**Acceptance:**
+
+- WHEN an image tile is dragged from Shared Library grid or list view onto the Canvas THEN a shared
+  image element is created at the drop position and selected
+- WHEN the same gesture starts in Project Assets THEN its existing project-source behavior is
+  unchanged, including compatibility with old drag payloads that have no source marker
+- WHEN a Shared Library font tile is shown THEN it is not exposed as a Canvas image drag target

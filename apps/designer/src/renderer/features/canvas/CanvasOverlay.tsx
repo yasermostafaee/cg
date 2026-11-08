@@ -81,6 +81,7 @@ import { nextAutoSourceId } from '../../state/auto-source-id.js';
 import { lookGroupOf } from '@cg/shared-schema';
 import { frameAabb } from '../../state/off-frame.js';
 import { locate } from '../../state/scene-doc.js';
+import { ASSET_DND_ID, ASSET_DND_KIND, assetDragSource } from '../assets/asset-dnd.js';
 
 /**
  * The default canvas pointer — a bold black arrow with a white outline, a bit
@@ -860,7 +861,7 @@ export function CanvasOverlay({
   // pressed state and clutters the canvas — removed.
   function onDragOver(e: React.DragEvent<HTMLDivElement>): void {
     const t = e.dataTransfer.types;
-    if (!t.includes('application/x-cg-asset-id') && !t.includes(COMPOSITION_DND_TYPE)) return;
+    if (!t.includes(ASSET_DND_ID) && !t.includes(COMPOSITION_DND_TYPE)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
   }
@@ -889,28 +890,32 @@ export function CanvasOverlay({
       });
       return;
     }
-    const assetId = e.dataTransfer.getData('application/x-cg-asset-id');
+    const assetId = e.dataTransfer.getData(ASSET_DND_ID);
     if (assetId === '') return;
     e.preventDefault();
     const scenePoint = viewportToScene(e.clientX, e.clientY);
     // D-125 — a Lottie asset drops as a lottie element (its phases/size come from the
     // parsed animation); every other asset kind is an image (today's path, unchanged).
-    if (e.dataTransfer.getData('application/x-cg-asset-kind') === 'lottie') {
+    if (e.dataTransfer.getData(ASSET_DND_KIND) === 'lottie') {
       void insertLottieFromAsset(assetId, scenePoint);
       return;
     }
     // D-128 — a dropped video asset places a `video` element (async metadata probe).
-    if (e.dataTransfer.getData('application/x-cg-asset-kind') === 'video') {
+    if (e.dataTransfer.getData(ASSET_DND_KIND) === 'video') {
       void insertVideoFromAsset(assetId, scenePoint, scene.resolution);
       return;
     }
     // `D-165` — a dropped sound places an `audio` element (no box; the drop point is not used).
-    if (e.dataTransfer.getData('application/x-cg-asset-kind') === 'audio') {
+    if (e.dataTransfer.getData(ASSET_DND_KIND) === 'audio') {
       void insertAudioFromAsset(assetId);
       return;
     }
     const id = `el-${String(Date.now())}`;
-    designerStore.addElement(defaultImage(id, scenePoint.x, scenePoint.y, assetId));
+    designerStore.addElement(
+      defaultImage(id, scenePoint.x, scenePoint.y, assetId, {
+        source: assetDragSource(e.dataTransfer),
+      }),
+    );
     designerStore.setSelection([id]);
   }
 

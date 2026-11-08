@@ -4280,3 +4280,23 @@ Measured free before use: the immediately preceding tracked pointer named `B-416
 the tracked PRD-heading audit found no existing `B-416` heading.
 
 ⇒ **Next free after this entry is `B-417`**, **`D-203`**, **`P-078`**, **`R-109`** and **`C-049`**.
+
+### 2026-11-08 — Timeline automation badges take `D-203`
+
+- `D-203` — show distinct Timeline layer badges when an element owns Value Rules or participates in
+  Countdown Steps — [designer.md](designer.md).
+
+Measured free before use: the immediately preceding tracked pointer named `D-203` as next free, and
+the tracked PRD-heading audit found no existing `D-203` heading.
+
+⇒ **Next free after this entry is `B-417`**, **`D-204`**, **`P-078`**, **`R-109`** and **`C-049`**.
+
+### 2026-11-08 — Shared Library image drag takes `D-204`
+
+- `D-204` — let Shared Library image tiles drag directly onto the Canvas with the same placement
+  gesture as Project Assets while preserving their shared source identity — [designer.md](designer.md).
+
+Measured free before use: the immediately preceding tracked pointer named `D-204` as next free, and
+the tracked PRD-heading audit found no existing `D-204` heading.
+
+⇒ **Next free after this entry is `B-417`**, **`D-205`**, **`P-078`**, **`R-109`** and **`C-049`**.

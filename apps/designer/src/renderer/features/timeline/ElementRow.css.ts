@@ -82,6 +82,26 @@ export const boundKey = style({
   opacity: 0.8,
 });
 
+export const automationBadge = style({
+  flexShrink: 0,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: '15px',
+  height: '15px',
+  borderRadius: '3px',
+});
+
+export const ruleBadge = style({
+  color: '#fbbf24',
+  background: 'rgba(251, 191, 36, 0.14)',
+});
+
+export const stepBadge = style({
+  color: '#c084fc',
+  background: 'rgba(192, 132, 252, 0.14)',
+});
+
 // D-047 — the row currently being dragged to reorder: dim it so the drop
 // indicator (the insertion point) reads as the focus.
 export const rowReordering = style({ opacity: 0.45 });

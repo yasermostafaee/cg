@@ -7,6 +7,7 @@ import { VideoPoster } from './VideoPoster.js';
 import { Volume2 } from 'lucide-react';
 import { Icon } from '../../ui/Icon.js';
 import { formatPeak, formatSeconds } from './wav-stats.js';
+import { writeAssetDrag } from './asset-dnd.js';
 
 interface Props {
   asset: AssetMeta;
@@ -54,11 +55,7 @@ export function AssetThumb({
       onDragStart={
         isDraggable
           ? (e) => {
-              e.dataTransfer.setData('application/x-cg-asset-id', asset.assetId);
-              // D-125 — carry the kind so the canvas drop builds an image OR a lottie
-              // element without re-looking-up the asset list.
-              e.dataTransfer.setData('application/x-cg-asset-kind', asset.kind);
-              e.dataTransfer.effectAllowed = 'copy';
+              writeAssetDrag(e.dataTransfer, asset, 'project');
               onDragStart?.(asset);
             }
           : undefined
