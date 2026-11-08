@@ -29,6 +29,7 @@ import type {
   CgControl,
   CgPassTiming,
   FieldValues,
+  LiveCropFocus,
   LiveFitMode,
   LivePlateVolumes,
   LiveSourceDeclaration,
@@ -118,6 +119,7 @@ import {
   activeLookOf,
   liveSourceCarrierState,
   lookPlateFits,
+  lookPlateFocuses,
   lookPlateRects,
   pruneAssignmentsForCatalog,
   // `PLAYOUT-SOURCES-01` — what may be bound and what may be seated, asked of the ONE module.
@@ -7150,6 +7152,8 @@ export class CasparRuntime {
      * override over the author's declaration — that is the caller's to walk.
      */
     fitMode?: LiveFitMode | undefined;
+    /** D-178 — normalized focal point for cover crops. */
+    cropFocus?: LiveCropFocus | undefined;
   }): LiveSourceFit {
     return liveSourceFit({
       rect: input.rect,
@@ -7158,6 +7162,7 @@ export class CasparRuntime {
       position: this.#effectivePosition(input.itemId, input.carriedDefaultPosition),
       sourceAspect: input.sourceAspect,
       fitMode: input.fitMode,
+      cropFocus: input.cropFocus,
     });
   }
 
@@ -7638,6 +7643,7 @@ export class CasparRuntime {
         fitOverrides.get(frame.plateId),
         lookPlateFits(carrier, frame.lookId)[frame.plateId],
       );
+      const cropFocus = lookPlateFocuses(carrier, frame.lookId)[frame.plateId];
       const aspect = resolvePlateAspect({
         plateId: frame.plateId,
         plateLabel: plateLabel(carrier.sources, frame.plateId),
@@ -7713,6 +7719,7 @@ export class CasparRuntime {
         carriedDefaultPosition: carrier.defaultPosition,
         sourceAspect: aspect.aspect,
         fitMode: fitMode.mode,
+        cropFocus,
       });
       /*
         6.4 — a hole ENTIRELY outside the scene rect has an empty mask.
@@ -8421,6 +8428,7 @@ export class CasparRuntime {
       carriedDefaultPosition: carrier.defaultPosition,
       sourceAspect,
       fitMode: lookPlateFits(carrier, frame.lookId)[frame.plateId],
+      cropFocus: lookPlateFocuses(carrier, frame.lookId)[frame.plateId],
     });
     return { width: fit.fill.width, height: fit.fill.height };
   }

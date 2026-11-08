@@ -62,6 +62,18 @@ const px = (
  * regression bullet forbids.
  */
 describe('crop-to-fill (6.3, now `cover`) — cover the hole, keep the proportions, mask the overflow', () => {
+  it('D-178 — crop focus reaches the normalized FILL while CLIP stays on the plate', () => {
+    const first = liveSourceFit(
+      base({ sourceAspect: 2.5, fitMode: 'cover', cropFocus: { x: 0, y: 0.5 } }),
+    );
+    const last = liveSourceFit(
+      base({ sourceAspect: 2.5, fitMode: 'cover', cropFocus: { x: 1, y: 0.5 } }),
+    );
+    expectRect(px(first.fill), { x: 460, y: 270, width: 1250, height: 500 });
+    expectRect(px(last.fill), { x: 210, y: 270, width: 1250, height: 500 });
+    expect(first.clip).toEqual(last.clip);
+  });
+
   it('a source WIDER than the hole overflows HORIZONTALLY, matched on height', () => {
     // Hole 1000×500 (aspect 2). A 16:9 source (1.778) is NARROWER, so this case is
     // the other one — use 2.5 to get a genuinely wider source.

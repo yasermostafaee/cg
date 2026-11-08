@@ -8,6 +8,7 @@ import {
 import type {
   FieldBinding,
   FlatElement,
+  LiveCropFocus,
   LiveFitMode,
   LiveSourceArrangement,
   LiveSourceDeclaration,
@@ -226,6 +227,7 @@ export function collectLiveSources(scene: Scene): LiveSourceDeclaration[] {
       // default belongs at the ONE resolution point (the bridge's mode chain), and a
       // carrier that spelled it out would be a second place the default lives.
       ...(el.fitMode !== undefined ? { fitMode: el.fitMode } : {}),
+      ...(el.cropFocus !== undefined ? { cropFocus: el.cropFocus } : {}),
       dynamic: roles?.has('fill') ?? false,
       ...(boxRelativeRect !== null ? { boxRelativeRect } : {}),
     });
@@ -275,6 +277,8 @@ export interface TemplateLookCarrier {
    * that resolves the mode.
    */
   fits: Record<string, LiveFitMode>;
+  /** D-178 — crop focus belongs to the plate/look pairing beside its rect and fit. */
+  focuses: Record<string, LiveCropFocus>;
 }
 
 /**
@@ -355,6 +359,9 @@ export function collectLookCarrier(scene: Scene): {
   const fitsByLook = new Map<string, Record<string, LiveFitMode>>(
     group.looks.map((l) => [l.id, {}]),
   );
+  const focusesByLook = new Map<string, Record<string, LiveCropFocus>>(
+    group.looks.map((l) => [l.id, {}]),
+  );
   const firstPlateFor = new Map<string, string>();
   /**
    * ⭐ `B-179` — **the AUTHOR's `expectedAspect` and the FILL-binding flag, per source, from
@@ -417,6 +424,10 @@ export function collectLookCarrier(scene: Scene): {
         const fits = fitsByLook.get(look.id);
         if (fits !== undefined) fits[routeKey] = el.fitMode;
       }
+      if (el.cropFocus !== undefined) {
+        const focuses = focusesByLook.get(look.id);
+        if (focuses !== undefined) focuses[routeKey] = el.cropFocus;
+      }
     }
   }
 
@@ -464,6 +475,7 @@ export function collectLookCarrier(scene: Scene): {
       entered: l.entered,
       rects: rectsByLook.get(l.id) ?? {},
       fits: fitsByLook.get(l.id) ?? {},
+      focuses: focusesByLook.get(l.id) ?? {},
     })),
     ...(group.defaultLookId !== undefined ? { defaultLookId: group.defaultLookId } : {}),
   };

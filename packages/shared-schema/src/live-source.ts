@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { IdSchema } from './primitives.js';
 import { LiveSourceIdSchema } from './elements.js';
-import { LiveFitModeSchema } from './live-fit.js';
+import { LiveCropFocusSchema, LiveFitModeSchema } from './live-fit.js';
 
 /**
  * D-137 / C-015 — the flattened axis-aligned rect a Live Source occupies, in the
@@ -92,6 +92,8 @@ export const LiveSourceDeclarationSchema = z.object({
    * able to read without opening the scene.
    */
   fitMode: LiveFitModeSchema.optional(),
+  /** D-178 — the author's normalized focal point when this plate uses `cover`. */
+  cropFocus: LiveCropFocusSchema.optional(),
   /**
    * Whether a field binding can retarget the FILL id at playout (the
    * `live-source-id` binding target with `role: 'fill'`).

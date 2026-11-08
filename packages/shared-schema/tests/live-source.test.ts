@@ -113,6 +113,20 @@ describe('VideoPlaceholderElementSchema — additive, and still frozen for D-128
     );
   });
 
+  it('D-178 — crop focus round-trips and refuses coordinates outside the plate', () => {
+    const v = {
+      ...base,
+      type: 'video-placeholder' as const,
+      routeKey: 'guest-1',
+      fitMode: 'cover' as const,
+      cropFocus: { x: 0.2, y: 0.8 },
+    };
+    expect(VideoPlaceholderElementSchema.parse(v)).toEqual(v);
+    expect(
+      VideoPlaceholderElementSchema.safeParse({ ...v, cropFocus: { x: 1.2, y: 0.5 } }).success,
+    ).toBe(false);
+  });
+
   it('a device-shaped source id is refused AT THE SCHEMA BOUNDARY', () => {
     for (const routeKey of ['DECKLINK DEVICE 3', 'route://1-1', 'C:\\media\\guest.mp4']) {
       const res = VideoPlaceholderElementSchema.safeParse({

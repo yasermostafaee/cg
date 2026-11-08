@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_LIVE_FIT_MODE,
+  LiveCropFocusSchema,
   fitPictureToBox,
   type FitRect,
   type LiveFitMode,
@@ -70,6 +71,38 @@ describe('C-028 — fitPictureToBox: the ONE fit', () => {
         close(picture.width / picture.height, aspect);
       }
     });
+
+    it('D-178 — focus moves only the overflowing axis, from first edge to last edge', () => {
+      const left = fitPictureToBox(BOX, WIDE, 'cover', { x: 0, y: 0 });
+      const right = fitPictureToBox(BOX, WIDE, 'cover', { x: 1, y: 1 });
+      expectRect(left.picture, { x: BOX.x, y: BOX.y, width: 1600 / 3, height: 300 });
+      expectRect(right.picture, {
+        x: BOX.x + BOX.width - 1600 / 3,
+        y: BOX.y,
+        width: 1600 / 3,
+        height: 300,
+      });
+      expectRect(left.visible, BOX);
+      expectRect(right.visible, BOX);
+    });
+
+    it('D-178 — absent focus is byte-identical to explicit centre', () => {
+      expect(fitPictureToBox(BOX, WIDE, 'cover')).toEqual(
+        fitPictureToBox(BOX, WIDE, 'cover', { x: 0.5, y: 0.5 }),
+      );
+    });
+  });
+
+  it('D-178 — contain ignores focus because no source edge is cropped', () => {
+    expect(fitPictureToBox(BOX, WIDE, 'contain', { x: 0, y: 1 })).toEqual(
+      fitPictureToBox(BOX, WIDE, 'contain', { x: 1, y: 0 }),
+    );
+  });
+
+  it('D-178 — focus is bounded at the schema boundary', () => {
+    expect(LiveCropFocusSchema.safeParse({ x: 0, y: 1 }).success).toBe(true);
+    expect(LiveCropFocusSchema.safeParse({ x: -0.01, y: 0.5 }).success).toBe(false);
+    expect(LiveCropFocusSchema.safeParse({ x: 0.5, y: 1.01 }).success).toBe(false);
   });
 
   /**

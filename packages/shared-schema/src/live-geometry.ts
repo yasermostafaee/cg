@@ -5,7 +5,12 @@ import {
   type Position,
   type Raster,
 } from './scene.js';
-import { DEFAULT_LIVE_FIT_MODE, fitPictureToBox, type LiveFitMode } from './live-fit.js';
+import {
+  DEFAULT_LIVE_FIT_MODE,
+  fitPictureToBox,
+  type LiveCropFocus,
+  type LiveFitMode,
+} from './live-fit.js';
 import type { LiveSourceRect } from './live-source.js';
 
 /**
@@ -110,6 +115,8 @@ export interface LiveSourceFitInput {
    * bridge holds the override.
    */
   readonly fitMode?: LiveFitMode | undefined;
+  /** D-178 — normalized focal point used by `cover`; absent preserves centred crop. */
+  readonly cropFocus?: LiveCropFocus | undefined;
 }
 
 /** The two rects, always produced together — see `CommandBuilder.mixerFit`. */
@@ -208,7 +215,12 @@ export function liveSourceFit(input: LiveSourceFitInput): LiveSourceFit {
   // `contain` and the hole itself under `cover`. The template's mask punches `visible`
   // through this same function, in scene px; see `fitPictureToBox` for why the two
   // spaces agree.
-  const fitted = fitPictureToBox(hole, input.sourceAspect, input.fitMode ?? DEFAULT_LIVE_FIT_MODE);
+  const fitted = fitPictureToBox(
+    hole,
+    input.sourceAspect,
+    input.fitMode ?? DEFAULT_LIVE_FIT_MODE,
+    input.cropFocus,
+  );
 
   // ── the mask: what is VISIBLE ∩ the scene rect, both in raster px ──────────
   //

@@ -36,6 +36,8 @@ const plate = (
   fitMode?: 'contain' | 'cover',
   /** `B-179` — the AUTHOR's expected aspect on the ELEMENT. Absent = asserted nothing. */
   expectedAspect?: number,
+  /** D-178 — the normalized point preserved by a cover crop. */
+  cropFocus?: { x: number; y: number },
 ): Element =>
   ({
     ...baseElProps,
@@ -46,6 +48,7 @@ const plate = (
     routeKey,
     ...(fitMode !== undefined ? { fitMode } : {}),
     ...(expectedAspect !== undefined ? { expectedAspect } : {}),
+    ...(cropFocus !== undefined ? { cropFocus } : {}),
   }) as unknown as Element;
 
 const comp = (id: string, children: Element[]) => ({
@@ -475,6 +478,50 @@ describe('B-178 — per-look fit modes, from the plate ELEMENT', () => {
     const carrier = collectLookCarrier(twoLookScene());
     for (const l of carrier?.looks ?? []) expect(l.fits).toBeDefined();
     expect(carrier?.looks.find((l) => l.id === 'look-empty')?.fits).toEqual({});
+  });
+});
+
+describe('D-178 — per-look crop focus, from the plate element', () => {
+  it('carries distinct focus for the same source in two looks and nowhere else', () => {
+    const s = scene({
+      rootChildren: [
+        instance('inst-a', 'comp-a', 0, 0, 1920, 1080),
+        instance('inst-b', 'comp-b', 0, 0, 1920, 1080),
+      ],
+      compositions: [
+        comp('comp-a', [
+          plate('a', 'guest-1', 0, 0, 640, 360, 'cover', undefined, { x: 0, y: 0.5 }),
+        ]),
+        comp('comp-b', [
+          plate('b', 'guest-1', 0, 0, 640, 360, 'cover', undefined, { x: 1, y: 0.5 }),
+        ]),
+      ],
+      lookGroups: [
+        {
+          id: 'g1',
+          looks: [look('left', 'inst-a'), look('right', 'inst-b')],
+          defaultLookId: 'left',
+        },
+      ],
+    });
+    const carrier = collectLookCarrier(s);
+    expect(carrier?.looks.find((l) => l.id === 'left')?.focuses).toEqual({
+      'guest-1': { x: 0, y: 0.5 },
+    });
+    expect(carrier?.looks.find((l) => l.id === 'right')?.focuses).toEqual({
+      'guest-1': { x: 1, y: 0.5 },
+    });
+    expect(carrier?.sources[0]).not.toHaveProperty('cropFocus');
+  });
+
+  it('the no-look carrier keeps focus on the declaration', () => {
+    const s = scene({
+      rootChildren: [
+        plate('a', 'guest-1', 0, 0, 640, 360, 'cover', undefined, { x: 0.25, y: 0.75 }),
+      ],
+      compositions: [],
+    });
+    expect(buildTemplateLiveSources(s).sources[0]?.cropFocus).toEqual({ x: 0.25, y: 0.75 });
   });
 });
 

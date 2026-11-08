@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   TemplateLiveSourcesSchema,
+  lookPlateFocuses,
   lookPlateFits,
   lookPlateRects,
   type LiveSourceRect,
@@ -40,6 +41,7 @@ function withLooks(): TemplateLiveSources {
         entered: { mode: 'cut' },
         rects: { 'guest-1': RECT, 'guest-2': OTHER },
         fits: { 'guest-1': 'contain', 'guest-2': 'cover' },
+        focuses: { 'guest-1': { x: 0.2, y: 0.8 }, 'guest-2': { x: 0.5, y: 0.5 } },
       },
       {
         id: 'solo',
@@ -47,6 +49,7 @@ function withLooks(): TemplateLiveSources {
         entered: { mode: 'cut' },
         rects: { 'guest-1': OTHER },
         fits: { 'guest-1': 'cover' },
+        focuses: { 'guest-1': { x: 0.8, y: 0.2 } },
       },
       // A look that authored NOTHING — the third state, and it must stay empty.
       { id: 'bare', name: 'bare', entered: { mode: 'cut' }, rects: { 'guest-1': RECT } },
@@ -61,7 +64,14 @@ function withoutLooks(): TemplateLiveSources {
     resolution: { width: 1920, height: 1080 },
     defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
     sources: [
-      { elementId: 'el-1', sourceId: 'guest-1', rect: RECT, dynamic: false, fitMode: 'cover' },
+      {
+        elementId: 'el-1',
+        sourceId: 'guest-1',
+        rect: RECT,
+        dynamic: false,
+        fitMode: 'cover',
+        cropFocus: { x: 0.3, y: 0.7 },
+      },
       { elementId: 'el-2', sourceId: 'guest-2', rect: OTHER, dynamic: false },
     ],
   } as unknown as TemplateLiveSources;
@@ -142,6 +152,25 @@ describe('B-178 — lookPlateFits resolves the AUTHOR’s mode for the active lo
     const fits = lookPlateFits(live, 'grid');
     fits['guest-1'] = 'cover';
     expect(lookPlateFits(live, 'grid')['guest-1']).toBe('contain');
+  });
+});
+
+describe('D-178 — lookPlateFocuses resolves focus through both carrier shapes', () => {
+  it('uses the active look and can differ for one source between looks', () => {
+    expect(lookPlateFocuses(withLooks(), 'grid')['guest-1']).toEqual({ x: 0.2, y: 0.8 });
+    expect(lookPlateFocuses(withLooks(), 'solo')['guest-1']).toEqual({ x: 0.8, y: 0.2 });
+  });
+
+  it('falls back to declaration focus without looks and preserves absence', () => {
+    expect(lookPlateFocuses(withoutLooks(), undefined)).toEqual({
+      'guest-1': { x: 0.3, y: 0.7 },
+    });
+  });
+
+  it('survives the wire schema and an older look may omit it', () => {
+    const parsed = TemplateLiveSourcesSchema.parse(withLooks());
+    expect(lookPlateFocuses(parsed, 'grid')['guest-1']).toEqual({ x: 0.2, y: 0.8 });
+    expect(lookPlateFocuses(parsed, 'bare')).toEqual({});
   });
 });
 

@@ -99,6 +99,14 @@ function pick(c: HTMLElement, value: string): void {
   });
 }
 
+function typeInto(el: HTMLInputElement, value: string): void {
+  act(() => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    setter?.call(el, value);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+
 function seedLiveSource(over: Partial<VideoPlaceholderElement> = {}): string {
   seedScene();
   designerStore.addElement({ ...defaultLiveSource('ls1', 100, 100), ...over } as Element);
@@ -204,6 +212,29 @@ describe('C-028 — the fit mode is written to the ELEMENT', () => {
 
     act(() => designerStore.undo());
     expect(elementById(id).fitMode).toBeUndefined();
+  });
+});
+
+describe('D-178 — crop focus is authored on the plate', () => {
+  const focusInput = (c: HTMLElement, axis: 'X' | 'Y'): HTMLInputElement =>
+    c.querySelector<HTMLInputElement>(`input[aria-label="crop focus ${axis}"]`) as HTMLInputElement;
+
+  it('defaults to centred without writing a field and is withheld outside cover mode', () => {
+    const id = seedLiveSource();
+    const c = renderStyle(elementById(id));
+    expect(focusInput(c, 'X').value).toBe('50');
+    expect(focusInput(c, 'Y').value).toBe('50');
+    expect(focusInput(c, 'X').disabled).toBe(true);
+    expect(elementById(id).cropFocus).toBeUndefined();
+  });
+
+  it('writes bounded percentages when cover mode is active', () => {
+    const id = seedLiveSource({ fitMode: 'cover' });
+    const c = renderStyle(elementById(id));
+    expect(focusInput(c, 'X').disabled).toBe(false);
+    typeInto(focusInput(c, 'X'), '20');
+    typeInto(focusInput(c, 'Y'), '80');
+    expect(elementById(id).cropFocus).toEqual({ x: 0.2, y: 0.8 });
   });
 });
 

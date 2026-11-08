@@ -133,9 +133,18 @@ describe("D-137 — 'author' mode paints the bars", () => {
     const img = el.querySelector<HTMLImageElement>('img[data-cg-asset-id]');
     expect(img?.dataset['cgAssetId']).toBe('asset-1');
     expect(img?.style.objectFit).toBe('cover');
+    expect(img?.style.objectPosition).toBe('50% 50%');
     // `src` is deliberately unset — the host resolves it, exactly as for `buildImage`.
     expect(img?.getAttribute('src')).toBeNull();
     expect(el.querySelector('[data-cg-live-source-label]')?.textContent).toBe('guest-1');
+  });
+
+  it('D-178 — the authoring poster previews the stored crop focus', () => {
+    const { root } = build(
+      sceneWith([liveSource({ posterAssetId: 'asset-1', cropFocus: { x: 0.2, y: 0.8 } } as never)]),
+      'author',
+    );
+    expect(node(root).querySelector<HTMLImageElement>('img')?.style.objectPosition).toBe('20% 80%');
   });
 
   it('the label is pinned LTR, so a Persian scene cannot flip `guest-1` to `1-guest`', () => {

@@ -6033,11 +6033,13 @@ including its audio, before Take/Update on air. **Blocker:** CG Control currentl
 catalogue/control metadata, not a bounded preview stream and per-source monitor-audio contract from
 Playout; the client must not invent a vendor-specific capture endpoint.
 
-## [ ] D-178 — Pan a live input inside a differently shaped plate ⟨priority: high — the owner, 2026-11-02⟩
+## [~] D-178 — Pan a live input inside a differently shaped plate ⟨priority: high — implementation complete; full gate remains, 2026-11-08⟩ — `openspec/changes/pan-live-input-focus/`
 
-**What:** when a source is cropped by a plate's aspect, allow an authorised drag on its PVW/PGM plate
-to choose the visible source region. Persist a normalised focus/crop value per plate/look and apply it
-identically in preview, bridge routing and on-air mixer geometry.
+**What:** when a source is cropped by a plate's aspect, expose normalised horizontal/vertical focus
+controls in the Designer Inspector, persist them per plate/look and apply the same value to the
+authoring poster and Bridge/on-air mixer geometry. An absent value is exactly centred and `contain`
+ignores focus. The owner's later acceptance allowed the Inspector instead of a direct PVW/PGM drag;
+direct picture dragging remains coupled to D-177's still-blocked preview-picture contract.
 
 ## [~] D-179 — Rebuild and re-audit the Persian production starter gallery ⟨priority: high — owner re-review reopened 2026-11-04⟩ — `openspec/changes/rebuild-production-starter-gallery/`
 

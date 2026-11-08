@@ -22,7 +22,7 @@ import {
   ListItemSchema,
   type FieldDigits,
 } from './fields.js';
-import { LiveFitModeSchema } from './live-fit.js';
+import { LiveCropFocusSchema, LiveFitModeSchema } from './live-fit.js';
 import {
   ChangeTransitionSchema,
   ElementChangeSchema,
@@ -1517,6 +1517,8 @@ export const VideoPlaceholderElementSchema = ElementBaseSchema.extend({
    * separate concerns.
    */
   fitMode: LiveFitModeSchema.optional(),
+  /** D-178 — normalized focal point for a source cropped with `cover`. */
+  cropFocus: LiveCropFocusSchema.optional(),
   /**
    * The FILL source's symbolic id, e.g. `guest-1` — **or absent, meaning UNASSIGNED.**
    *

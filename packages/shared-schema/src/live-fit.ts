@@ -49,6 +49,14 @@ export const LIVE_FIT_MODES = ['contain', 'cover'] as const;
 export const LiveFitModeSchema = z.enum(LIVE_FIT_MODES);
 export type LiveFitMode = z.infer<typeof LiveFitModeSchema>;
 
+/** D-178 — source point kept inside a cropped (`cover`) plate, in 0..1 fractions. */
+export const LiveCropFocusSchema = z.object({
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+});
+export type LiveCropFocus = z.infer<typeof LiveCropFocusSchema>;
+export const DEFAULT_LIVE_CROP_FOCUS: LiveCropFocus = { x: 0.5, y: 0.5 };
+
 /**
  * `C-028` — the DEFAULT, and it is `contain` rather than today's `cover`.
  *
@@ -140,6 +148,7 @@ export function fitPictureToBox(
   box: FitRect,
   sourceAspect: number | null,
   mode: LiveFitMode,
+  focus: LiveCropFocus = DEFAULT_LIVE_CROP_FOCUS,
 ): FittedPicture {
   if (sourceAspect === null || sourceAspect <= 0 || box.width <= 0 || box.height <= 0) {
     // NO FIT — the picture is the box, and all of it is seen. Identical objects rather
@@ -161,8 +170,8 @@ export function fitPictureToBox(
     // Centred on BOTH axes. Under `cover` that makes the crop take evenly from both
     // edges — an off-centre crop would cut one side of a face and not the other. Under
     // `contain` it is what the client asked for in so many words.
-    x: box.x + (box.width - width) / 2,
-    y: box.y + (box.height - height) / 2,
+    x: box.x + (box.width - width) * (mode === 'cover' ? focus.x : 0.5),
+    y: box.y + (box.height - height) * (mode === 'cover' ? focus.y : 0.5),
     width,
     height,
   };

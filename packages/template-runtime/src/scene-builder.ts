@@ -1845,6 +1845,8 @@ function buildLiveSource(element: VideoPlaceholderElement, ctx: BuildCtx): HTMLE
     // Posters are an authoring aid and always fill the plate. This remains
     // independent from the real live picture's on-air fitMode.
     poster.style.objectFit = 'cover';
+    const focus = element.cropFocus ?? { x: 0.5, y: 0.5 };
+    poster.style.objectPosition = `${focus.x * 100}% ${focus.y * 100}%`;
     poster.style.display = 'block';
     el.appendChild(poster);
   } else {

@@ -4,6 +4,7 @@ import {
   DynamicFieldSchema,
   IdSchema,
   ImageFitSchema,
+  LiveCropFocusSchema,
   LiveSourceArrangementSchema,
   LiveFitModeSchema,
   LiveSourceDeclarationSchema,
@@ -12,7 +13,7 @@ import {
   PositionSchema,
   ResolutionSchema,
 } from '@cg/shared-schema';
-import type { LiveFitMode, LiveSourceRect } from '@cg/shared-schema';
+import type { LiveCropFocus, LiveFitMode, LiveSourceRect } from '@cg/shared-schema';
 import { defineChannel } from '../channel.js';
 import { definePublishChannel } from '../publish.js';
 import { WS_MAX_FRAME_BYTES } from '../ws-frame.js';
@@ -99,6 +100,8 @@ export const TemplateLookSchema = z.object({
    * simply means "authored nothing".
    */
   fits: z.record(z.string(), LiveFitModeSchema).optional(),
+  /** D-178 — routeKey → normalized focal point for this look's cropped plate. */
+  focuses: z.record(z.string(), LiveCropFocusSchema).optional(),
 });
 export type TemplateLook = z.infer<typeof TemplateLookSchema>;
 
@@ -232,6 +235,19 @@ export function lookPlateFits(
     (s): s is typeof s & { fitMode: LiveFitMode } => s.fitMode !== undefined,
   );
   return Object.fromEntries(stated.map((s) => [s.sourceId, s.fitMode] as const));
+}
+
+/** D-178 — routeKey → authored crop focus for the active look. */
+export function lookPlateFocuses(
+  live: TemplateLiveSources,
+  activeLookId: string | undefined,
+): Record<string, LiveCropFocus> {
+  const look = activeLookOf(live, activeLookId);
+  if (look !== undefined) return { ...look.focuses };
+  const stated = live.sources.filter(
+    (s): s is typeof s & { cropFocus: LiveCropFocus } => s.cropFocus !== undefined,
+  );
+  return Object.fromEntries(stated.map((s) => [s.sourceId, s.cropFocus] as const));
 }
 
 export const TemplateInfoSchema = z.object({

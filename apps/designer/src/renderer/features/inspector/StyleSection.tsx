@@ -4,6 +4,7 @@ import { lottieClipMidpoint, lottieFollowWindow, lottieTiming } from '@cg/lottie
 import type { LottieTiming } from '@cg/lottie-bridge';
 import {
   DEFAULT_LIVE_FIT_MODE,
+  DEFAULT_LIVE_CROP_FOCUS,
   LIVE_FIT_MODES,
   elementLoopsOnHold,
   elementDigitsOf,
@@ -93,7 +94,7 @@ import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { elementDataField, typedTextDigits } from '../../state/slices/fields.js';
 import { isAspectLocked } from '../../state/slices/view.js';
 import { DigitsField } from './DigitsField.js';
-import { activeDocOf, activeFieldData, activeLayersOf } from '../../state/scene-doc.js';
+import { activeDocOf, activeFieldData, activeLayersOf, locate } from '../../state/scene-doc.js';
 import { nextAutoSourceId } from '../../state/auto-source-id.js';
 import { lottieFollowAttachPhases, videoFollowAttachPhases } from '../../state/follow-attach.js';
 import { deriveLookSources } from '@cg/shared-schema';
@@ -886,6 +887,7 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
         />
         <AspectRow element={element} />
         <FitModeRow element={element} />
+        <CropFocusRows element={element} />
         <LivePosterRow element={element} />
         {/*
           ⭐ `DESIGNER-FIX-0905` — the paragraph that stood here is gone, and its sentences
@@ -1171,6 +1173,48 @@ function FitModeRow({ element }: { element: VideoPlaceholderElement }): JSX.Elem
         </span>
       }
     />
+  );
+}
+
+/** D-178 — choose the source point preserved by a cover crop. */
+function CropFocusRows({ element }: { element: VideoPlaceholderElement }): JSX.Element {
+  const focus = element.cropFocus ?? DEFAULT_LIVE_CROP_FOCUS;
+  const withheld =
+    (element.fitMode ?? DEFAULT_LIVE_FIT_MODE) !== 'cover'
+      ? 'Crop focus is used only when fit is “Fill box (crop edges)”.'
+      : undefined;
+  const commit = (axis: 'x' | 'y', percent: number): void => {
+    const scene = designerStore.get().scene;
+    const found = scene === null ? null : locate(scene, element.id);
+    const latest = found?.layer.children[found.elIdx] as VideoPlaceholderElement | undefined;
+    const current = latest?.cropFocus ?? focus;
+    designerStore.updateElement(element.id, {
+      cropFocus: { ...current, [axis]: Math.max(0, Math.min(1, percent / 100)) },
+    } as Partial<Element>);
+  };
+  return (
+    <>
+      <NumberField
+        label="crop focus X"
+        value={focus.x * 100}
+        min={0}
+        max={100}
+        step={1}
+        suffix="%"
+        withheld={withheld}
+        onCommit={(x) => commit('x', x)}
+      />
+      <NumberField
+        label="crop focus Y"
+        value={focus.y * 100}
+        min={0}
+        max={100}
+        step={1}
+        suffix="%"
+        withheld={withheld}
+        onCommit={(y) => commit('y', y)}
+      />
+    </>
   );
 }
 
