@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import type { Composition, Scene, SequenceElement } from '@cg/shared-schema';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Composition, Element, Scene, SequenceElement } from '@cg/shared-schema';
 import { createRuntime } from '../src/runtime.js';
 import { SequenceDriver } from '../src/sequence-driver.js';
 
@@ -521,6 +521,100 @@ describe('createRuntime — D-083 composition sequence items (text | composition
     } as unknown as Composition;
   }
 
+  /** A composition page whose repeater authored shell differs from the page's field values. */
+  function repeaterPageComps(): Composition[] {
+    const row = {
+      id: 'comp-row',
+      name: 'Repeater row',
+      resolution: { width: 400, height: 60 },
+      frameRange: { in: 0, out: 50 },
+      editorBackdrop: 'transparent',
+      layers: [
+        {
+          id: 'row-layer',
+          name: 'row',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [
+            {
+              id: 'row-label',
+              name: 'label',
+              type: 'text',
+              text: 'authored-row',
+              transform: baseTransform,
+              opacity: 1,
+              visible: true,
+              locked: false,
+              zIndex: 0,
+              font: {
+                family: 'Vazirmatn',
+                weight: 400,
+                style: 'normal',
+                size: 24,
+                lineHeight: 1.2,
+                letterSpacing: 0,
+              },
+              color: '#FFFFFF',
+              align: 'start',
+              direction: 'ltr',
+              fitMode: 'autosize',
+              overflow: 'ellipsis',
+            },
+          ],
+        },
+      ],
+      fields: [{ id: 'label', label: 'Label', required: false, type: 'text', default: 'DEFAULT' }],
+      bindings: [{ fieldId: 'label', target: { kind: 'text', elementId: 'row-label' } }],
+    } as unknown as Composition;
+    const page = {
+      id: 'comp-repeater-page',
+      name: 'Repeater page',
+      resolution: { width: 400, height: 60 },
+      frameRange: { in: 0, out: 50 },
+      editorBackdrop: 'transparent',
+      layers: [
+        {
+          id: 'page-layer',
+          name: 'page',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [
+            {
+              id: 'page-repeater',
+              name: 'rows',
+              type: 'repeater',
+              compositionId: 'comp-row',
+              direction: 'column',
+              flow: 'ltr',
+              gap: 0,
+              items: [{ id: 'default-row', label: 'DEFAULT' }],
+              transform: baseTransform,
+              opacity: 1,
+              visible: true,
+              locked: false,
+              zIndex: 0,
+            } as unknown as Element,
+          ],
+        },
+      ],
+      fields: [
+        {
+          id: 'rows',
+          label: 'Rows',
+          required: false,
+          type: 'list',
+          default: [{ id: 'default-row', label: 'DEFAULT' }],
+        },
+      ],
+      bindings: [
+        { fieldId: 'rows', target: { kind: 'repeater-items', elementId: 'page-repeater' } },
+      ],
+    } as unknown as Composition;
+    return [page, row];
+  }
+
   function compScene(
     seq: Partial<SequenceElement>,
     comps: Composition[] = [clockComp()],
@@ -617,6 +711,46 @@ describe('createRuntime — D-083 composition sequence items (text | composition
     expect(hostText()).toContain('Tehran');
     await runtime.update({ 'seq:c1': { label: 'Tabriz' } });
     expect(hostText()).toContain('Tabriz');
+  });
+
+  it('B-414 reveals a composition-page repeater only after its sequence item values are applied', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      compScene(
+        {
+          advance: 'manual',
+          repeat: 'infinite',
+          items: [
+            {
+              kind: 'composition',
+              id: 'weather-page',
+              compositionId: 'comp-repeater-page',
+              fieldValues: { rows: [{ id: 'sequence-row', label: 'SEQUENCE' }] },
+            },
+          ],
+        },
+        repeaterPageComps(),
+      ),
+      { skipFontLoad: true, clock },
+    );
+    const revealedFrame: string[] = [];
+    const originalRemove = document.body.classList.remove.bind(document.body.classList);
+    const remove = vi
+      .spyOn(document.body.classList, 'remove')
+      .mockImplementation((...tokens: string[]) => {
+        if (tokens.includes('cg-pending')) revealedFrame.push(hostText());
+        originalRemove(...tokens);
+      });
+    try {
+      await runtime.play({});
+    } finally {
+      remove.mockRestore();
+    }
+
+    expect(revealedFrame).toEqual([expect.stringContaining('SEQUENCE')]);
+    expect(revealedFrame[0]).not.toContain('DEFAULT');
+    expect(hostText()).toContain('SEQUENCE');
+    expect(hostText()).not.toContain('DEFAULT');
   });
 
   it('(D-083 follow-up) an UNBOUND text item stays STATIC — no per-item key overrides it', async () => {

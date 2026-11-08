@@ -14035,3 +14035,14 @@ with `display:flex` to position glyphs, so the timeline says hidden while the pi
 **Expected / Fix:** authored visibility remains authoritative after every text-layout pass. Flex is
 used only for a visible text host; hidden vertically-aligned and hidden gradient text both finish as
 `display:none`. A renderer regression covers the two independent paths.
+
+## [x] B-414 — A Sequence composition briefly reveals a Repeater's authored default rows before its page data ⟨priority: high — output shows the wrong data for the first frame⟩ — FIXED 2026-11-08 · `openspec/changes/prevent-sequence-repeater-default-flash/`
+
+**Repro:** take a Sequence whose current composition page contains a Repeater and whose item
+`fieldValues` replace the Repeater's authored rows. **Actual:** `play()` cleared the stage's
+`cg-pending` guard before resetting the Sequence. The already-mounted authoring shell therefore became
+visible first, then the Sequence replaced it with the item-data subtree. **Expected / Fix:** all
+data-driven drivers, including the current Sequence page and its nested Repeater, are reset from the
+current field values while the stage is still hidden; only then is the stage revealed and the
+controller entrance started. A runtime regression captures the DOM at the exact `cg-pending` removal
+and proves it contains the Sequence row and never the authored default.

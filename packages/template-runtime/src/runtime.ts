@@ -3169,7 +3169,6 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       if (control?.page !== undefined) applyPageTurn(control.page);
       machine.transition('playing');
       bus.emit('play.start');
-      doc.body.classList.remove('cg-pending');
       // D-105 — clear any out()/stop() exit styling so a fresh play shows the
       // content again, and supersede an in-flight out() fade.
       exitGen += 1;
@@ -3296,6 +3295,12 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // DELTA-RUN-NEXT-VERSION-01-A / -F — the step current at Take is in force from the first
       // frame of the entrance: instances primed before the cascade, the step published after it.
       primeStepsForTake();
+      // B-414 — reveal only after every data-driven subtree has been reset from CURRENT values.
+      // A composition Sequence has an authored static page before play; revealing above the
+      // sequence reset exposed that shell (including a Repeater's default rows) for one frame.
+      // All preparation above is synchronous, so the first paint now contains the Sequence page's
+      // own fieldValues/operator rows without delaying the controller entrance.
+      doc.body.classList.remove('cg-pending');
       cascade(rootNode, (c) => c.play());
       publishStepsForTake();
       // Session Z — THE TRIPWIRE. Everything above put a graphic ON AIR. If the machine

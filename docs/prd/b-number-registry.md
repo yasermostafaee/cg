@@ -4218,3 +4218,13 @@ Measured free before use: the immediately preceding tracked pointer named `D-200
 tracked PRD-heading audit found no existing `D-200` heading.
 
 ⇒ **Next free after this entry is `B-414`**, **`D-201`**, **`P-078`**, **`R-108`** and **`C-049`**.
+
+### 2026-11-08 — Sequence/Repeater first-frame data takes `B-414`
+
+- `B-414` — a Sequence composition page revealed its Repeater's authored shell before resetting to
+  the page's current field values — [bugs-runtime.md](bugs-runtime.md).
+
+Measured free before use: the immediately preceding tracked pointer named `B-414` as next free, and
+the tracked PRD-heading audit found no existing `B-414` heading.
+
+⇒ **Next free after this entry is `B-415`**, **`D-201`**, **`P-078`**, **`R-108`** and **`C-049`**.
