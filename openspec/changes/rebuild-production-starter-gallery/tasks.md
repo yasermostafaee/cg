@@ -309,3 +309,7 @@ type remain required; compact degree adjacency is now a targeted correction acro
       manually terminated rather than relabelled as a normal process exit.
 - [ ] 10.5 Run the final repository gate and record carrying-commit Linux evidence; focused results
       do not discharge this Full-lane follow-up.
+      The current local carrying tree passed 103/103 uncached gate tasks plus formatting,
+      control-byte checks and 149 strict OpenSpec items on 2026-11-08
+      (`gate-20261108T151635Z-11184.log`, exit 0, 9m56s before repository-wide final checks).
+      Completed carrying-commit Linux evidence remains outstanding, so this task stays open.

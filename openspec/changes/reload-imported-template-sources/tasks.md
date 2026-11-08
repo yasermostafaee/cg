@@ -15,5 +15,9 @@
 ## 3. Verification
 
 - [x] 3.1 Cover source persistence, permission, identity, both data policies and both Reload doors.
-- [ ] 3.2 Run Runtime typecheck/lint/unit checks, strict OpenSpec validation, real-browser review and
+- [x] 3.2 Run Runtime typecheck/lint/unit checks, strict OpenSpec validation, real-browser review and
       the full gate.
+      The focused Runtime suite passes 37 tests; typecheck, lint and build pass. Real Chromium verifies
+      per-template reload and the direct management door. The final repository gate passed 103/103
+      uncached tasks plus formatting, control-byte checks and 149 strict OpenSpec items on 2026-11-08
+      (`gate-20261108T151635Z-11184.log`, exit 0, 9m56s before repository-wide final checks).

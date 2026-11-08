@@ -11,4 +11,7 @@
 ## 3. Verification
 
 - [x] 3.1 Cover schema, static and live rendering plus the real Inspector/Canvas path
-- [ ] 3.2 Run focused package checks and the full repository gate
+- [x] 3.2 Run focused package checks and the full repository gate.
+      The final repository gate passed 103/103 uncached tasks plus formatting, control-byte checks
+      and 149 strict OpenSpec items on 2026-11-08 (`gate-20261108T151635Z-11184.log`, exit 0,
+      9m56s before repository-wide final checks).
