@@ -52,6 +52,7 @@ let cg: RuntimeBridge;
 let storage: Storage;
 
 beforeEach(async () => {
+  Object.defineProperty(globalThis, 'innerWidth', { configurable: true, value: 1280 });
   // The offline mock, armed exactly as the E2E harness arms it: test mode plus the
   // declared bank, so the Layers list has rows to load onto.
   (globalThis as { CG_E2E?: boolean }).CG_E2E = true;
@@ -150,6 +151,14 @@ async function click(el: Element | null): Promise<void> {
   if (el === null) throw new Error('nothing to click');
   await act(async () => {
     (el as HTMLElement).click();
+    await flush();
+  });
+}
+
+async function resizeViewport(width: number): Promise<void> {
+  Object.defineProperty(globalThis, 'innerWidth', { configurable: true, value: width });
+  await act(async () => {
+    globalThis.dispatchEvent(new Event('resize'));
     await flush();
   });
 }
@@ -307,6 +316,26 @@ describe('selected ↔ maximized monitor companion', () => {
     expect(inspector()).toBeNull();
     expect(pressed(ROW_A)).toBe('true');
     expect(document.querySelector('[data-monitor-layer-companion]')).not.toBeNull();
+  });
+
+  it('allocates a separate lower row on narrow screens instead of overlaying the monitor', async () => {
+    await resizeViewport(800);
+    await selectRow(ROW_A);
+    await click(document.querySelector('button[aria-label="Show PREVIEW (PVW) fullscreen"]'));
+    await click(
+      document.querySelector('button[aria-label="Monitor, selected layer and Inspector"]'),
+    );
+
+    const monitor = document.querySelector<HTMLElement>('[data-monitor-strip]');
+    const layer = document.querySelector<HTMLElement>('[data-monitor-layer-companion]');
+    const inspectorCompanion = document.querySelector<HTMLElement>(
+      '[data-monitor-inspector-companion]',
+    );
+    expect(monitor?.style.gridRow).toBe('1');
+    expect(layer?.style.gridRow).toBe('2');
+    expect(inspectorCompanion?.style.gridRow).toBe('2');
+    expect(document.querySelector('.cg-inspector-overlay')).toBeNull();
+    expect(pressed(ROW_A)).toBe('true');
   });
 });
 

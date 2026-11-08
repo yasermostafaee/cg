@@ -4975,3 +4975,6 @@ they are actively checking; fullscreen should change presentation, not silently 
 - WHEN the selected row is clicked in the compact companion THEN it stays selected
 - WHEN the Inspector is shown beside the maximized monitor THEN closing that Inspector returns to the
   selected-layer layout without clearing the selected layer
+- WHEN either companion layout is active THEN the layer and Inspector occupy allocated layout space
+  and never overlay or obscure the PGM/PVW picture; at narrow widths the monitor stays in the upper
+  row and the selected layer/Inspector use a lower row

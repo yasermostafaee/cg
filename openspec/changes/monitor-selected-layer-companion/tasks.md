@@ -5,6 +5,7 @@
 - [x] 1.3 Preserve selection across every companion transition and a repeated selected-row click.
 - [x] 1.4 Make closing the companion Inspector return to layer-only without deselecting.
 - [x] 1.5 Add focused whole-App DOM coverage.
+- [x] 1.6 Keep every companion in allocated layout space, never over the monitor picture.
 
 ## 2. Verification
 

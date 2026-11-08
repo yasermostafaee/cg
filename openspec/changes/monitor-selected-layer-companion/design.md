@@ -11,6 +11,8 @@ the list and Inspector by presentation conditions; it does not need a second sel
   same controls as the normal list rather than a second imitation.
 - In companion mode, translate the selected row's normal toggle-off result back to the current id.
 - Treat closing the companion Inspector as a layout change to selected-layer, not as deselection.
+- Companions always participate in layout and never overlay the monitor picture. Wide shells allocate
+  adjacent columns; narrow shells keep the monitor in an upper row and place layer/Inspector below it.
 
 ## Non-goals
 

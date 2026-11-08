@@ -378,6 +378,20 @@ export function App(): JSX.Element {
     />
   );
 
+  const renderInspector = (onClose: () => void): JSX.Element => (
+    <Inspector
+      onClose={onClose}
+      item={selected}
+      // B-156 — ONE derivation of "is this row rehearsing", shared with the row picker.
+      rehearsing={selected !== null && isRehearsing(rehearsals, selected.itemId)}
+      onApply={(id) => {
+        const target = items.find((i) => i.itemId === id);
+        return target !== undefined ? applyItem(target) : Promise.resolve({ accepted: false });
+      }}
+      onDiscard={(id) => clearDraft(id)}
+    />
+  );
+
   return (
     <ShellLayoutProvider layout={layout}>
       <main style={styles.page}>
@@ -465,10 +479,16 @@ export function App(): JSX.Element {
               <section
                 style={
                   showMonitorLayerCompanion
-                    ? {
-                        ...styles.workspace,
-                        flexDirection: layout.narrow ? 'column' : 'row',
-                      }
+                    ? layout.narrow
+                      ? {
+                          ...styles.workspace,
+                          display: 'grid',
+                          gridTemplateColumns: showMonitorInspectorCompanion
+                            ? 'minmax(0, 1fr) minmax(0, 1fr)'
+                            : 'minmax(0, 1fr)',
+                          gridTemplateRows: 'minmax(0, 3fr) minmax(0, 2fr)',
+                        }
+                      : { ...styles.workspace, flexDirection: 'row' }
                     : styles.workspace
                 }
               >
@@ -509,6 +529,9 @@ export function App(): JSX.Element {
                               minHeight: 0,
                               minWidth: 0,
                               overflow: 'hidden',
+                              ...(layout.narrow && showMonitorLayerCompanion
+                                ? { gridColumn: '1 / -1', gridRow: '1' }
+                                : {}),
                             }
                           : {
                               display: 'flex',
@@ -571,9 +594,25 @@ export function App(): JSX.Element {
                       minWidth: layout.narrow ? 0 : '24rem',
                       minHeight: 0,
                       overflow: 'hidden',
+                      ...(layout.narrow ? { gridColumn: '1', gridRow: '2' } : {}),
                     }}
                   >
                     {renderLayersPanel(true)}
+                  </div>
+                )}
+                {layout.narrow && showMonitorInspectorCompanion && (
+                  <div
+                    data-monitor-inspector-companion=""
+                    style={{
+                      display: 'flex',
+                      minWidth: 0,
+                      minHeight: 0,
+                      overflow: 'hidden',
+                      gridColumn: '2',
+                      gridRow: '2',
+                    }}
+                  >
+                    {renderInspector(() => setMonitorCompanionMode('layer'))}
                   </div>
                 )}
               </section>
@@ -592,23 +631,13 @@ export function App(): JSX.Element {
                 />
               )}
             {showInspectorColumn && (
-              <Inspector
-                onClose={
+              <>
+                {renderInspector(
                   showMonitorInspectorCompanion
                     ? () => setMonitorCompanionMode('layer')
-                    : closeInspector
-                }
-                item={selected}
-                // B-156 — ONE derivation of "is this row rehearsing", shared with the row picker.
-                rehearsing={selected !== null && isRehearsing(rehearsals, selected.itemId)}
-                onApply={(id) => {
-                  const target = items.find((i) => i.itemId === id);
-                  return target !== undefined
-                    ? applyItem(target)
-                    : Promise.resolve({ accepted: false });
-                }}
-                onDiscard={(id) => clearDraft(id)}
-              />
+                    : closeInspector,
+                )}
+              </>
             )}
           </div>
         </ChannelScope>
@@ -622,18 +651,14 @@ export function App(): JSX.Element {
         state would make the operator work blind. Dismissing is also a single
         action (the backdrop, or the same hamburger).
       */}
-        {layout.narrow && inspectorOpen && (!monitorFocused || showMonitorInspectorCompanion) && (
+        {layout.narrow && inspectorOpen && !monitorFocused && (
           <>
             {/* The scrim DESELECTS rather than merely hiding — see `closeInspector`.
                 Dismissing the editor and letting go of the row are one act, so the
                 list can never keep claiming a selection with no editor behind it. */}
             <div
               style={styles.overlayScrim}
-              onClick={
-                showMonitorInspectorCompanion
-                  ? () => setMonitorCompanionMode('layer')
-                  : closeInspector
-              }
+              onClick={closeInspector}
               aria-hidden="true"
               // A stable hook for the E2E. The scrim is `aria-hidden` by design (it is
               // a dismissal surface, not content), and every Icon in the app is too —
@@ -654,23 +679,7 @@ export function App(): JSX.Element {
                 ...(layout.focus === 'inspector' ? { width: '100%' } : {}),
               }}
             >
-              <Inspector
-                onClose={
-                  showMonitorInspectorCompanion
-                    ? () => setMonitorCompanionMode('layer')
-                    : closeInspector
-                }
-                item={selected}
-                // B-156 — ONE derivation of "is this row rehearsing", shared with the row picker.
-                rehearsing={selected !== null && isRehearsing(rehearsals, selected.itemId)}
-                onApply={(id) => {
-                  const target = items.find((i) => i.itemId === id);
-                  return target !== undefined
-                    ? applyItem(target)
-                    : Promise.resolve({ accepted: false });
-                }}
-                onDiscard={(id) => clearDraft(id)}
-              />
+              {renderInspector(closeInspector)}
             </div>
           </>
         )}
