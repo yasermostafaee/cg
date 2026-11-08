@@ -131,7 +131,11 @@ export function columnsForFields(
                       label: option.label,
                       ...(thumbnailUrl === undefined ? {} : { thumbnailUrl }),
                     };
-                  }) ?? imageChoices,
+                  }) ??
+                  // B-413 — an explicit modern image mode with no authored checks means an
+                  // empty allowlist. Only a legacy field (no inputMode key) keeps the historical
+                  // implicit "all project images" behaviour.
+                  (f.inputMode === undefined ? imageChoices : []),
               }
             : {}),
           ...(imageFieldAllowsUpload(f) ? { allowUpload: true } : {}),

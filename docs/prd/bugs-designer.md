@@ -4852,3 +4852,13 @@ weather starters opt into composition-page prewarming. Future pages are mounted 
 content settles while hidden; the exact prepared DOM and SVG document is revealed on every turn.
 Browser coverage walks pages 1→2→3→4 and proves that source, node identity and icon geometry do not
 restart after page 1. Other Sequence books keep lazy rendering unless explicitly opted in.
+
+## [x] B-413 — A modern image field with no checked allowed images widens to every packaged picture ⟨priority: high — the operator sees choices the author never allowed⟩ — FIXED 2026-11-08 · `openspec/changes/preserve-empty-authored-image-allowlist/`
+
+**Repro:** create an Image Data key, leave every checkbox clear in **Choose images…**, export and
+import the template, then open its image picker in CG Control (directly or inside a Repeater row).
+**Actual:** the undefined allowlist falls through to every project/shared image in the package; after
+checking any one image, the now-explicit list is honoured. **Expected / Fix:** an explicit modern
+`inputMode` with no checked images means an empty allowlist on Preview, workbook schema and CG
+Control. Only a legacy field that predates `inputMode` retains the compatibility fallback to every
+packaged image. Focused Designer and shared-schema tests cover scalar and Repeater-row fields.

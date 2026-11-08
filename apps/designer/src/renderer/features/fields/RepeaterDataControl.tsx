@@ -106,9 +106,16 @@ function itemFieldsFor(
   }));
   return (child?.fields ?? [])
     .filter((field): field is ListItemField => field.type !== 'list')
-    .map((field) =>
-      field.type === 'image' ? ({ ...field, assetOptions } as ListItemField) : field,
-    );
+    .map((field) => {
+      if (field.type !== 'image') return field;
+      if (field.assetOptions !== undefined) {
+        return { ...field, assetOptions: field.assetOptions.map((option) => ({ ...option })) };
+      }
+      // B-413 — retain the old implicit-all contract only for fields authored before inputMode.
+      // A modern field whose author checked nothing exports an explicit empty allowlist.
+      if (field.inputMode === undefined) return { ...field, assetOptions } as ListItemField;
+      return { ...field, assetOptions: [] } as ListItemField;
+    });
 }
 
 function owningSequences(scene: Scene, compositionId: string | null): SequenceElement[] {

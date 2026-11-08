@@ -49,9 +49,14 @@ function withImageAssets(
         ...(packagedOption?.label === undefined ? {} : { label: packagedOption.label }),
       };
     });
-  } else {
-    // Backward compatibility: old templates implicitly offered every packaged image.
+  } else if (field.inputMode === undefined) {
+    // Backward compatibility: fields authored before inputMode implicitly offered every packaged
+    // image. B-413 deliberately limits that fallback to legacy records only.
     next.assetOptions = [...imageAssets];
+  } else {
+    // B-413 — a modern author explicitly chose an image mode but checked no images. Preserve that
+    // empty allowlist instead of silently widening it to every picture in the package.
+    next.assetOptions = [];
   }
   return next;
 }

@@ -71,4 +71,24 @@ describe('repeater editor columns (D-030)', () => {
     expect(columnsForFields(undefined)).toEqual([]);
     expect(columnsForFields([])).toEqual([]);
   });
+
+  it('B-413 — an explicit choice mode with no checked images stays empty', () => {
+    const field: DynamicField = {
+      id: 'icon',
+      label: 'Weather icon',
+      required: false,
+      type: 'image',
+      accept: ['png'],
+      inputMode: 'choices',
+    };
+    expect(columnsForFields([field], [{ value: 'sunny', label: 'Sunny' }])).toEqual([
+      {
+        key: 'icon',
+        label: 'Weather icon',
+        kind: 'image',
+        choices: [],
+        accept: '.png',
+      },
+    ]);
+  });
 });

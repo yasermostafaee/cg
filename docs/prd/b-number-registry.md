@@ -4188,3 +4188,13 @@ and no existing `B-412` heading. The same audit found later platform and runtime
 the older pointer had not yet incorporated (`P-076`, `R-107`).
 
 ⇒ **Next free after this entry is `B-413`**, **`D-200`**, **`P-077`**, **`R-108`** and **`C-049`**.
+
+### 2026-11-08 — empty authored image allowlists take `B-413`
+
+- `B-413` — a modern image field with no checked choices fell back to every packaged image instead
+  of preserving an empty allowlist — [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the immediately preceding tracked allocation took `B-412`, and the
+tracked PRD-heading audit found no existing `B-413` heading.
+
+⇒ **Next free after this entry is `B-414`**, **`D-200`**, **`P-077`**, **`R-108`** and **`C-049`**.

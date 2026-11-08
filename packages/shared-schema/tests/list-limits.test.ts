@@ -181,4 +181,47 @@ describe('withListLimits', () => {
     });
     expect(out.fields[1]).not.toHaveProperty('assetOptions');
   });
+
+  it('B-413 — an explicit image mode with no authored checks packages an empty allowlist', () => {
+    const row = doc(
+      [],
+      [
+        {
+          id: 'icon',
+          label: 'Icon',
+          required: false,
+          type: 'image',
+          accept: ['png'],
+          inputMode: 'choices',
+        },
+      ],
+      [],
+    );
+    const d = doc([repeater('r')], [], [drives('weather', 'r')]);
+    d.compositions = [{ ...row, id: 'row', name: 'row' }] as Scene['compositions'];
+    const out = withListLimits(
+      d,
+      d,
+      {
+        fields: [
+          list('weather'),
+          {
+            id: 'hero',
+            label: 'Hero',
+            required: false,
+            type: 'image',
+            accept: ['png'],
+            inputMode: 'choices-and-upload',
+          },
+        ],
+        groups: [],
+      },
+      [{ assetId: 'sun', label: 'sunny.png' }],
+    );
+
+    expect(out.fields[0]).toMatchObject({
+      itemFields: [{ id: 'icon', assetOptions: [] }],
+    });
+    expect(out.fields[1]).toMatchObject({ assetOptions: [] });
+  });
 });
