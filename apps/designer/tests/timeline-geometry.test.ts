@@ -11,7 +11,8 @@ import {
   frameToPctClamped,
   insertionFromPointer,
   isKeyframeSelected,
-  pickStride,
+  pickGridStride,
+  pickLabelStride,
   type RowSpan,
   segmentPct,
   stackOffsetPx,
@@ -19,6 +20,7 @@ import {
   tickFrames,
   type KeyframeRefLike,
 } from '../src/renderer/features/timeline/timeline-geometry.js';
+import { timelineZoomMax } from '../src/renderer/state/timeline-zoom.js';
 
 /**
  * Pure timeline-authoring geometry extracted from the React event closures in
@@ -115,16 +117,36 @@ describe('deltaFramesFromPx', () => {
   });
 });
 
-describe('pickStride', () => {
-  it('walks the 1/2/5/10/25 ladder by visible-frame count', () => {
-    expect(pickStride(44)).toBe(1);
-    expect(pickStride(45)).toBe(2);
-    expect(pickStride(90)).toBe(2);
-    expect(pickStride(91)).toBe(5);
-    expect(pickStride(200)).toBe(5);
-    expect(pickStride(201)).toBe(10);
-    expect(pickStride(500)).toBe(10);
-    expect(pickStride(501)).toBe(25);
+describe('B-416 — adaptive ruler density and frame-level zoom', () => {
+  it('keeps 1,500 and 5,000-frame labels readable in a 1,000px viewport', () => {
+    expect(pickLabelStride(1500, 1000, 1500)).toBe(100);
+    expect(pickLabelStride(5000, 1000, 5000)).toBe(250);
+    expect(tickFrames(0, 1500, pickLabelStride(1500, 1000, 1500))).toHaveLength(16);
+    expect(tickFrames(0, 5000, pickLabelStride(5000, 1000, 5000))).toHaveLength(21);
+    expect(
+      pickLabelStride(5000, 1000, 5000) %
+        pickGridStride(5000, 1000, pickLabelStride(5000, 1000, 5000)),
+    ).toBe(0);
+  });
+
+  it('adapts to the real viewport and label width', () => {
+    expect(pickLabelStride(5000, 600, 5000)).toBeGreaterThan(pickLabelStride(5000, 1600, 5000));
+    expect(pickLabelStride(5000, 1000, 99999)).toBeGreaterThanOrEqual(
+      pickLabelStride(5000, 1000, 999),
+    );
+  });
+
+  it('draws every frame at maximum zoom, including a 5,000-frame composition', () => {
+    const max = timelineZoomMax(0, 5000);
+    expect(max).toBe(125);
+    const visible = 5000 / max;
+    expect(visible).toBeLessThanOrEqual(40);
+    expect(pickGridStride(visible, 1000)).toBe(1);
+  });
+
+  it('retains the historical 20× maximum for short compositions', () => {
+    expect(timelineZoomMax(0, 300)).toBe(20);
+    expect(timelineZoomMax(0, 1500)).toBe(38);
   });
 });
 

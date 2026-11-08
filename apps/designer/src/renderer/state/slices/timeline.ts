@@ -30,6 +30,7 @@ import {
 } from '../path-structure.js';
 import { designerStore } from '../store.js';
 import { commitToActiveCell } from './arrangements.js';
+import { clampTimelineZoom } from '../timeline-zoom.js';
 
 /**
  * Apply an immutable transform to the located element's `animation` field.
@@ -220,9 +221,11 @@ function syncSelectionAfterMove(
  * See `state/README.md`.
  */
 export const timelineSlice = {
-  /** Set the timeline horizontal zoom, clamped to [1, 20]. */
+  /** B-416 — zoom far enough for frame-by-frame inspection, scaled to the active duration. */
   setTimelineZoom(z: number): void {
-    const clamped = Math.max(1, Math.min(20, z));
+    const range =
+      current.scene === null ? { in: 0, out: 300 } : activeDocOf(current.scene).frameRange;
+    const clamped = clampTimelineZoom(z, range.in, range.out);
     if (clamped === current.timelineZoom) return;
     set({ timelineZoom: clamped });
   },

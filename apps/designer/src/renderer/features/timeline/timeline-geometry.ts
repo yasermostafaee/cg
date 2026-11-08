@@ -105,24 +105,50 @@ export function deltaFramesFromPx(
   return dxPx / pxPerFrame;
 }
 
+/** Smallest 1/2/2.5/5×10ⁿ interval at least as large as `raw`. */
+function niceStride(raw: number): number {
+  if (!Number.isFinite(raw) || raw <= 1) return 1;
+  const magnitude = 10 ** Math.floor(Math.log10(raw));
+  const normalized = raw / magnitude;
+  const step =
+    normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 2.5 ? 2.5 : normalized <= 5 ? 5 : 10;
+  return Math.max(1, Math.round(step * magnitude));
+}
+
 /**
- * Choose a ruler tick stride from how many frames are visible. The 1/2/5/10/25
- * ladder reads naturally — the eye groups "every 5" without effort, where 3 or 7
- * would feel arbitrary. Shared by the ruler labels and the body gridlines so
- * they stay in lockstep.
- *
- *      ≤  44 → every frame
- *     45–90 → every 2
- *    91–200 → every 5
- *   201–500 → every 10
- *      >500 → every 25
+ * B-416 — choose labelled ticks from actual viewport width and label digits. Unlike the old
+ * hard-coded terminal stride of 25, this continues scaling for 1,500/5,000+ frame compositions,
+ * so labels retain a minimum readable gap instead of painting hundreds of numbers on each other.
  */
-export function pickStride(visibleFrames: number): number {
-  if (visibleFrames <= 44) return 1;
-  if (visibleFrames <= 90) return 2;
-  if (visibleFrames <= 200) return 5;
-  if (visibleFrames <= 500) return 10;
-  return 25;
+export function pickLabelStride(
+  visibleFrames: number,
+  viewportWidthPx: number,
+  largestFrame: number,
+): number {
+  const digits = Math.max(1, String(Math.max(0, Math.round(Math.abs(largestFrame)))).length);
+  const minimumLabelWidth = Math.max(38, digits * 7 + 14);
+  const visibleLabels = Math.max(2, Math.floor(Math.max(1, viewportWidthPx) / minimumLabelWidth));
+  return niceStride(Math.max(1, visibleFrames) / visibleLabels);
+}
+
+/**
+ * Minor grid lines are denser than number labels but never become a solid smear. At maximum zoom
+ * (≤40 visible frames) this resolves to one, making every individual frame column visible.
+ */
+export function pickGridStride(
+  visibleFrames: number,
+  viewportWidthPx: number,
+  labelStride?: number,
+): number {
+  const visibleLines = Math.max(2, Math.floor(Math.max(1, viewportWidthPx) / 16));
+  const desired = niceStride(Math.max(1, visibleFrames) / visibleLines);
+  if (labelStride === undefined) return desired;
+  // Keep every number on one of the same ruler/body lines. The label ladder is integral, so the
+  // nearest divisor at or below the desired minor spacing is deterministic and stays readable.
+  for (let divisor = Math.min(desired, labelStride); divisor >= 1; divisor -= 1) {
+    if (labelStride % divisor === 0) return divisor;
+  }
+  return 1;
 }
 
 /** The labelled frames from `lo` to `hi` inclusive, every `stride`. */

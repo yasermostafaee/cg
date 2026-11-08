@@ -20,7 +20,8 @@ import {
   frameToPct,
   frameToPctClamped,
   insertionFromPointer,
-  pickStride,
+  pickGridStride,
+  pickLabelStride,
   type RowSpan,
   stridePeriodPct,
 } from './timeline-geometry.js';
@@ -82,8 +83,10 @@ export function TimelineDock({
   const activePct = frameToPctClamped(active.out, frameIn, frameOut);
   const hasInactiveTail = active.out < frameOut;
   const visibleFrames = span / Math.max(1, timelineZoom);
-  const tickStride = pickStride(visibleFrames);
-  const gridPeriodPct = stridePeriodPct(tickStride, frameIn, frameOut).toFixed(4);
+  const [timelineViewportWidth, setTimelineViewportWidth] = useState(1000);
+  const labelStride = pickLabelStride(visibleFrames, timelineViewportWidth, frameOut);
+  const gridStride = pickGridStride(visibleFrames, timelineViewportWidth, labelStride);
+  const gridPeriodPct = stridePeriodPct(gridStride, frameIn, frameOut).toFixed(4);
   const rightBodyRef = useRef<HTMLDivElement | null>(null);
   // Outer label viewport (overflow:hidden) — used to forward wheel events to
   // the lane body. Its content is offset by `leftBodyInnerRef`'s transform.
@@ -95,6 +98,17 @@ export function TimelineDock({
   const sceneLabelRef = useRef<HTMLDivElement | null>(null);
   const zoomRef = useRef(timelineZoom);
   zoomRef.current = timelineZoom;
+
+  useLayoutEffect(() => {
+    const rb = rightBodyRef.current;
+    if (rb === null) return;
+    const measure = (): void => setTimelineViewportWidth(Math.max(1, rb.clientWidth));
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(rb);
+    return () => observer.disconnect();
+  }, []);
 
   // The right body is the master scroll container; we mirror its scroll
   // into the left label column (vertical only) and the top ruler strip
@@ -597,7 +611,8 @@ export function TimelineDock({
               <FrameRuler
                 frameIn={frameIn}
                 frameOut={frameOut}
-                stride={tickStride}
+                labelStride={labelStride}
+                gridStride={gridStride}
                 onScrub={(f) => {
                   // B-375 — a paused real lifecycle still owns its Video/Lottie drivers. A ruler
                   // drag is an explicit authoring seek, so release that lifecycle before moving

@@ -4270,3 +4270,13 @@ Measured free before use: the immediately preceding tracked pointer named `D-202
 the tracked PRD-heading audit found no existing `D-202` heading.
 
 ⇒ **Next free after this entry is `B-416`**, **`D-203`**, **`P-078`**, **`R-109`** and **`C-049`**.
+
+### 2026-11-08 — adaptive long-composition timeline takes `B-416`
+
+- `B-416` — long compositions painted hundreds of overlapping frame numbers and the fixed 20×
+  zoom ceiling prevented frame-by-frame inspection — [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the immediately preceding tracked pointer named `B-416` as next free, and
+the tracked PRD-heading audit found no existing `B-416` heading.
+
+⇒ **Next free after this entry is `B-417`**, **`D-203`**, **`P-078`**, **`R-109`** and **`C-049`**.

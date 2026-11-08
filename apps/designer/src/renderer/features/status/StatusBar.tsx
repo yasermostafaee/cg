@@ -10,14 +10,12 @@ import { Icon } from '../../ui/Icon.js';
 import { IssuesPanel } from '../issues/IssuesPanel.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
 import { Tag } from '../../ui/Tag.js';
+import { TIMELINE_ZOOM_MIN, timelineZoomMax } from '../../state/timeline-zoom.js';
 
 interface Props {
   scene: Scene | null;
   issues: readonly ExportIssue[];
 }
-
-const ZOOM_MIN = 1;
-const ZOOM_MAX = 20;
 
 /** Bottom-of-window status bar — project chrome + issues badge + a
  *  slider that horizontally zooms the timeline. Save / Export live in
@@ -43,6 +41,14 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
   const totalFrames = scene === null ? 0 : scene.frameRange.out - scene.frameRange.in;
   const durationSecs =
     scene === null || scene.frameRate <= 0 ? '0' : (totalFrames / scene.frameRate).toFixed(1);
+  const timelineZoomMaxForScene =
+    scene === null ? 20 : timelineZoomMax(scene.frameRange.in, scene.frameRange.out);
+
+  useEffect(() => {
+    if (timelineZoom > timelineZoomMaxForScene) {
+      designerStore.setTimelineZoom(timelineZoomMaxForScene);
+    }
+  }, [timelineZoom, timelineZoomMaxForScene]);
 
   return (
     <footer className={s.bar} aria-label="Status bar">
@@ -84,7 +90,7 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
           variant="bare"
           className={s.zoomButton}
           onClick={() => designerStore.setTimelineZoom(timelineZoom - 1)}
-          disabled={timelineZoom <= ZOOM_MIN}
+          disabled={timelineZoom <= TIMELINE_ZOOM_MIN}
           aria-label="Zoom out timeline"
           title="Zoom out timeline"
         >
@@ -92,8 +98,8 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
         </Control>
         <input
           type="range"
-          min={ZOOM_MIN}
-          max={ZOOM_MAX}
+          min={TIMELINE_ZOOM_MIN}
+          max={timelineZoomMaxForScene}
           step={1}
           value={timelineZoom}
           onChange={(e) => designerStore.setTimelineZoom(Number(e.target.value))}
@@ -105,7 +111,7 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
           variant="bare"
           className={s.zoomButton}
           onClick={() => designerStore.setTimelineZoom(timelineZoom + 1)}
-          disabled={timelineZoom >= ZOOM_MAX}
+          disabled={timelineZoom >= timelineZoomMaxForScene}
           aria-label="Zoom in timeline"
           title="Zoom in timeline"
         >

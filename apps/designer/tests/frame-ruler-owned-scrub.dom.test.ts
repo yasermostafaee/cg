@@ -39,7 +39,8 @@ describe('B-367 — the timeline ruler owns only scrubs that start on the ruler'
         createElement(FrameRuler, {
           frameIn: 0,
           frameOut: 100,
-          stride: 10,
+          labelStride: 10,
+          gridStride: 5,
           onScrub,
         }),
       );

@@ -4873,3 +4873,16 @@ renumbers the sibling set and makes the text appear. **Fix / Acceptance:** inser
 normal Add path assigns the new element one value above the current sibling maximum. Timeline,
 array and renderer paint order therefore agree immediately, including after earlier reorders; one
 undo still removes the addition as before.
+
+## [~] B-416 — Long timelines overlap frame numbers and cannot zoom to individual frames ⟨priority: medium — the ruler becomes unreadable above about 1,500 frames⟩ — `openspec/changes/adaptive-timeline-ruler/`
+
+**Repro:** set a composition duration to 5,000 frames and inspect the Timeline at fit zoom. **Actual:**
+the ruler's stride stops growing at 25, so hundreds of 3–4 digit labels paint over each other; the
+global 20× ceiling still leaves 250 frames in view and never reaches a distinct line per frame.
+
+**Fix / Acceptance:** choose number-label density from the visible frame count, measured viewport
+width and largest label, while choosing a denser minor-grid stride independently. At fit zoom, 1,500
+and 5,000-frame rulers keep readable numeric gaps. The maximum zoom scales with duration until no
+more than 40 frames occupy the viewport; at that point the minor grid uses stride one, so every frame
+is visibly selectable. Short compositions retain the historical 20× range and all pointer/frame
+mapping remains unchanged.

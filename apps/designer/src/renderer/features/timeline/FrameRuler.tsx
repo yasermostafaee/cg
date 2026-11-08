@@ -7,29 +7,33 @@ interface Props {
   frameIn: number;
   frameOut: number;
   /**
-   * Distance between labelled frames, computed once in TimelineDock
-   * from `visibleFrames = span / timelineZoom` and shared with the
-   * body gridlines so labels and lines stay aligned. See `pickStride`.
+   * Distance between numbered frames, chosen from visible frames, viewport width and digit count.
    */
-  stride: number;
+  labelStride: number;
+  /** Denser minor-line stride; becomes one when the user reaches frame-level zoom. */
+  gridStride: number;
   onScrub: (frame: number) => void;
 }
 
 /**
  * Frame ruler with tick labels and a draggable playhead. Click anywhere on
- * the ruler to scrub. `stride` is computed by TimelineDock and shared
- * between the ruler labels and the body vertical gridlines.
+ * the ruler to scrub. Labels and minor grid lines have independent adaptive strides so long
+ * compositions stay readable while maximum zoom can still expose every frame.
  */
-export function FrameRuler({ frameIn, frameOut, stride, onScrub }: Props): JSX.Element {
+export function FrameRuler({
+  frameIn,
+  frameOut,
+  labelStride,
+  gridStride,
+  onScrub,
+}: Props): JSX.Element {
   const ref = useRef<HTMLDivElement | null>(null);
   // A held button is not enough to mean "scrub": an unrelated drag can start over the
   // canvas/Inspector and then cross this ruler. Only the pointer whose press STARTED here may
   // move the playhead.
   const scrubPointerRef = useRef<number | null>(null);
-  const ticks = tickFrames(frameIn, frameOut, stride);
-  // Same stride drives the ruler's own background lines so labels sit
-  // directly above their gridline rather than landing between two.
-  const linePeriodPct = stridePeriodPct(stride, frameIn, frameOut).toFixed(4);
+  const ticks = tickFrames(frameIn, frameOut, labelStride);
+  const linePeriodPct = stridePeriodPct(gridStride, frameIn, frameOut).toFixed(4);
 
   function frameAt(clientX: number): number {
     const el = ref.current;
