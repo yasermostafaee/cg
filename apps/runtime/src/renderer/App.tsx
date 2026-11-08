@@ -33,6 +33,7 @@ import { ChannelScope } from './features/channels/ChannelScope.js';
 import { useChannelBankState } from './features/channels/useSelectedChannel.js';
 import { onChannel } from './features/stack/onAir.js';
 import { AppHeader } from './features/shell/AppHeader.js';
+import { useTemplatePicker } from './features/fixedLayers/useTemplatePicker.js';
 import { ConsoleCloseGuard } from './features/shell/ConsoleCloseGuard.js';
 import { MonitorStrip } from './features/monitors/MonitorStrip.js';
 import { ShellDivider } from './ui/ShellDivider.js';
@@ -155,6 +156,8 @@ export function App(): JSX.Element {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // R-028 part B — the operator's own workspace geometry (persisted per browser).
   const layout = useShellLayout();
+  // R-108 — a shell-level catalogue door, independent of whether any layer is empty.
+  const { openTemplateLibrary, pickerDialog: templateLibraryDialog } = useTemplatePicker();
   const [auditOpen, setAuditOpen] = useState(false);
   // `STATION-SETUP-02` — ONE settings dialog, opened at a section from five surfaces; the
   // request lives in a module store so the Inspector and the Layers panel can raise it too.
@@ -166,7 +169,7 @@ export function App(): JSX.Element {
     table's own `onChannel` rule. The choice itself is kept: coming back to channel 1 finds it
     as it was, because a switch is a scope change and never a mutation.
   */
-  const { viewChannel, verbScope, multiChannel } = useChannelBankState();
+  const { selected: selectedChannel, viewChannel, verbScope, multiChannel } = useChannelBankState();
   const selected = useMemo(
     () => onChannel(items, viewChannel).find((i) => i.itemId === selectedId) ?? null,
     [items, viewChannel, selectedId],
@@ -353,10 +356,12 @@ export function App(): JSX.Element {
         */}
         <AppHeader
           layout={layout}
+          onOpenTemplates={() => void openTemplateLibrary(selectedChannel)}
           onOpenSettings={() => openStationSetup()}
           onOpenAudit={() => setAuditOpen(true)}
           {...(signals !== undefined ? { channelSignals: signals } : {})}
         />
+        {templateLibraryDialog}
         {/* R-006 — a not-live link means NOTHING can reach air. That is a full-width alert,
           not a pill: the pill lost to the green HEALTHY pill beside it, and the operator
           believed a graphic was on air. Renders nothing when the link is live. */}

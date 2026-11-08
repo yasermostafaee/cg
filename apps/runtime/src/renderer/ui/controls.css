@@ -7816,12 +7816,20 @@ input[type='checkbox']:disabled:checked {
  * §29.2), and a destructive control repeated down a list must not shout. The confirm it opens is
  * what carries the danger, as it always did.
  */
-.cg-tpl-row__delete.cg-btn {
+.cg-tpl-row__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--r-audit-line-gap);
+}
+.cg-tpl-row__delete.cg-btn,
+.cg-tpl-row__reload.cg-btn {
   align-self: center;
   color: var(--r-text-muted);
 }
 .cg-tpl-row__delete.cg-btn:hover:not(:disabled),
-.cg-tpl-row__delete.cg-btn:focus-visible {
+.cg-tpl-row__delete.cg-btn:focus-visible,
+.cg-tpl-row__reload.cg-btn:hover:not(:disabled),
+.cg-tpl-row__reload.cg-btn:focus-visible {
   color: var(--r-text);
 }
 .cg-tpl-empty {

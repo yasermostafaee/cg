@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import { importVcgToStation } from '../src/renderer/features/fixedLayers/fixedSlotLoad.js';
-import type { ChooseOnClash } from '../src/renderer/features/library/importVcgFile.js';
+import {
+  importVcgFile,
+  type ChooseOnClash,
+} from '../src/renderer/features/library/importVcgFile.js';
 import * as feedback from '../src/renderer/features/status/commandFeedback.js';
 import { buildValidVcg } from './e2e/fixtures/runtime.js';
 
@@ -104,5 +107,15 @@ describe('🔴 B-352 — a package whose id the channel already lists', () => {
     await importVcgToStation(async () => file('tpl-1', 'telavat.vcg'), 1);
     expect(station.registry.size).toBe(1);
     expect(station.imports).toHaveLength(2);
+  });
+});
+
+describe('R-108 — Reload remains bound to the remembered template', () => {
+  it('refuses a different template at that path before importing anything', async () => {
+    const station = fakeStation();
+    await expect(
+      importVcgFile(await file('different-id', 'weather.vcg'), 1, undefined, 'expected-id'),
+    ).rejects.toThrow(/contains template different-id, not expected-id/);
+    expect(station.imports).toEqual([]);
   });
 });

@@ -77,6 +77,7 @@ export async function importVcgFile(
   file: File,
   channel?: number,
   choose?: ChooseOnClash,
+  expectedTemplateId?: string,
 ): Promise<ImportedVcg | null> {
   let bytes: Uint8Array;
   try {
@@ -106,6 +107,14 @@ export async function importVcgFile(
     delivery = await produceTemplateDelivery(bytes, opts);
   } catch (err) {
     throw named(err);
+  }
+  // R-108 — Reload is bound to the source remembered for ONE catalogue entry. If somebody
+  // replaces that path with another `.vcg`, importing it as a surprise second template would make
+  // the Reload button lie about what it refreshed. Refuse before anything reaches CG Bridge.
+  if (expectedTemplateId !== undefined && delivery.template.templateId !== expectedTemplateId) {
+    throw new Error(
+      `“${file.name}” now contains template ${delivery.template.templateId}, not ${expectedTemplateId}; choose Import if this is a different template.`,
+    );
   }
 
   /*

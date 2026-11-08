@@ -4883,3 +4883,37 @@ calculation. Gregorian and Solar Hijri selection remains per field in Designer.
 calendar selector rather than a station-wide correction.
 **Acceptance:** WHEN an operator opens station settings THEN the rail and card identify a Lunar Hijri
 correction, explain when it is needed, and say that zero/**As calculated** needs no change.
+
+## [x] R-108 — Imported templates reload from their original file, singly or together, without silently choosing the row-data authority ⟨priority: high — the owner, 2026-11-08⟩ — `openspec/changes/reload-imported-template-sources/`
+
+**What:** a direct **Templates** button in the main CG Control header opens the current channel's
+catalogue without requiring an empty layer and without inventing a Load destination. When CG Control
+imports a `.vcg` through the Windows chooser, it remembers that file for the template on the current
+channel. The Templates dialog offers Reload on that template and Reload all for every visible
+template whose source this console remembers. Before reading the file, the operator chooses either
+to keep the current data of rows already holding the template, or to replace those row values with
+the defaults in the reloaded package.
+
+**Why:** newsroom templates are commonly edited in a shared folder after the first import. Requiring
+operators to find and import every package again is slow and, without an explicit data choice, makes
+it unclear whether current CG Control text/images or the edited file should win.
+
+**Acceptance:**
+
+- WHEN every layer is occupied, or the operator only wants to refresh packages, THEN the main
+  header's Templates button still opens the current channel's catalogue with management actions and
+  no Load commit
+- WHEN a package was imported through the chooser and its original local/UNC file still exists THEN
+  its row offers Reload and Reload all includes it
+- WHEN the operator chooses **keep current data** THEN the package/catalogue entry updates while
+  existing row field values stay unchanged
+- WHEN the operator chooses **use file defaults** THEN rows holding that template on the current
+  channel are replaced through the normal Update path with the reloaded package defaults
+- WHEN the remembered file now contains another template id THEN Reload refuses before importing it
+  and tells the operator to use Import for the different template
+- WHEN the file is missing, inaccessible or permission is refused THEN the existing catalogue entry
+  and row data remain available and the dialog reports the failure
+- WHEN a package arrived by drag/drop, or this CG Control has never remembered its source, THEN
+  Reload is disabled with a reason; importing it through the chooser establishes the source
+- WHEN another CG Control opens the same channel THEN it does not inherit an unusable workstation
+  path; source handles are local to each console while the template catalogue remains Bridge-owned

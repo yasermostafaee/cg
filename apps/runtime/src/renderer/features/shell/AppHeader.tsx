@@ -1,4 +1,4 @@
-import { Monitor, MonitorOff, ScrollText, Settings } from 'lucide-react';
+import { LayoutTemplate, Monitor, MonitorOff, ScrollText, Settings } from 'lucide-react';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { ApasaiMark } from '../../ui/ApasaiMark.js';
@@ -26,16 +26,14 @@ import type { ShellLayout } from '../../hooks/useShellLayout.js';
  * toggle, a `PVW · N` badge, and `Templates` / `Import` / `Audit log` at the right. Taken:
  * the channel strip, the monitors toggle, `PVW · N`, Settings and the audit log.
  *
- * NOT taken, and each for a reason of its own kind rather than a preference:
+ * `Import` is not a separate header button: it remains inside the catalogue. `Templates` was
+ * originally declined because the only contract was row-scoped Load and a header had no honest
+ * destination. R-108 changes that premise: Reload/management must remain reachable when no layer
+ * is empty. The new header door opens the catalogue with no Load action, so it invents no row and
+ * the row-scoped binding contract stays intact.
  *
- *   - `Templates` and `Import` — **the picker's door is the ROW**, and that is a CONTRACT
- *     (`design.md` §15.3, the `Into` select argued the same way). A header button opening the
- *     picker would be a second door with its own refusals about which row it lands on, which
- *     is precisely what the row-scoped load contract exists to avoid.
+ * NOT taken:
  *
- * ⭐ `RUNTIME-REPAIR-05` — that contract is now SELECT-then-commit rather than one press, and
- * this argument is untouched by the change: it is about WHICH ROW a load lands on, not about
- * how many presses land it. A header button would still have to invent a destination.
  *   - `PROTOTYPE` — the drawing labelling itself. There is nothing here to adopt.
  *   - The brand block now links to APASAI's website by owner request. It names APASAI once and
  *     leaves the product name to the title bar, avoiding a repeated "CG Control" label.
@@ -54,6 +52,8 @@ interface Props {
   layout: ShellLayout;
   onOpenSettings: () => void;
   onOpenAudit: () => void;
+  /** R-108 — catalogue management is reachable without finding an empty layer first. */
+  onOpenTemplates: () => void;
   /** `MULTI-CHANNEL-01` §2 L — the strip's marks (`channelSignals`); none by default. */
   channelSignals?: ReadonlyMap<number, ChannelSignal>;
 }
@@ -62,6 +62,7 @@ export function AppHeader({
   layout,
   onOpenSettings,
   onOpenAudit,
+  onOpenTemplates,
   channelSignals,
 }: Props): JSX.Element {
   const rehearsals = useRehearse();
@@ -140,7 +141,18 @@ export function AppHeader({
         {layout.monitorsShown ? 'HIDE MONITORS' : 'SHOW MONITORS'}
       </Button>
       {/*
-        SETTINGS and AUDIT LOG — the two doors the reference puts up here. Both keep their
+        R-108 — TEMPLATES IS NOW A REAL HEADER DOOR. The earlier design rejected it because a
+        header could not name which row a Load should land on. Reload changed the requirement:
+        an operator must be able to inspect/import/reload/remove the catalogue even when no row is
+        empty. This door therefore opens management mode and offers NO Load action; row LOAD stays
+        the one path that binds a template to a destination.
+      */}
+      <Button onClick={onOpenTemplates} aria-label="Open templates">
+        <Icon icon={LayoutTemplate} />
+        TEMPLATES
+      </Button>
+      {/*
+        SETTINGS and AUDIT LOG — the other two doors the reference puts up here. Both keep their
         accessible names exactly (`Open Station setup`, `Open audit log`), which is how every
         spec and the e2e fixture address them: this is a relocation, and a relocation that
         renamed its controls would be a rewrite wearing a relocation's clothes.

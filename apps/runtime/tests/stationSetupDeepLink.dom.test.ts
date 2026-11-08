@@ -252,6 +252,7 @@ describe('a deep link opens ONE dialog at the named section', () => {
             layout: headerLayoutStub(),
             onOpenSettings,
             onOpenAudit: () => undefined,
+            onOpenTemplates: () => undefined,
           }),
         ),
       );

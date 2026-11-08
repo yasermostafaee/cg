@@ -4228,3 +4228,14 @@ Measured free before use: the immediately preceding tracked pointer named `B-414
 the tracked PRD-heading audit found no existing `B-414` heading.
 
 ⇒ **Next free after this entry is `B-415`**, **`D-201`**, **`P-078`**, **`R-108`** and **`C-049`**.
+
+### 2026-11-08 — imported-template source reload takes `R-108`
+
+- `R-108` — remember each chooser-imported `.vcg` on this CG Control and reload one or all from
+  their original files with an explicit keep-current-data/file-defaults choice —
+  [runtime.md](runtime.md).
+
+Measured free before use: the immediately preceding tracked pointer named `R-108` as next free, and
+the tracked PRD-heading audit found no existing `R-108` heading.
+
+⇒ **Next free after this entry is `B-415`**, **`D-201`**, **`P-078`**, **`R-109`** and **`C-049`**.

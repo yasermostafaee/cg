@@ -127,13 +127,15 @@ export function channelView(banks: readonly FixedLayerBank[], selected: number):
  */
 export function useChannelBankState(): {
   bank: FixedLayerBank | null;
+  selected: number;
   ready: boolean;
   failed: boolean;
 } & ChannelView {
-  const { bank, banksReady, banksFailed, multiChannel, viewChannel, verbScope } =
+  const { bank, selected, banksReady, banksFailed, multiChannel, viewChannel, verbScope } =
     useSelectedChannel();
   return {
     bank,
+    selected,
     ready: banksReady,
     failed: banksFailed,
     multiChannel,

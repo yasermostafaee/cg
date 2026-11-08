@@ -1,0 +1,84 @@
+# runtime-template-library — original-source Reload
+
+## ADDED Requirements
+
+### Requirement: Template management SHALL not require an empty row
+
+CG Control SHALL provide a direct main-header Templates door for the current channel. It SHALL open
+the catalogue without a row destination and SHALL expose import, search, details, Reload and removal
+without offering a Load commit. Row LOAD SHALL remain the only action that binds a template to a
+layer.
+
+#### Scenario: Every row is occupied
+
+- **GIVEN** the current channel has no empty layer
+- **WHEN** the operator presses the main-header Templates button
+- **THEN** the current channel's catalogue opens
+- **AND** Reload and other catalogue actions remain available without a destination or Load action
+
+### Requirement: Chooser imports SHALL remember a reloadable source on that console
+
+When a `.vcg` is imported through the file chooser, CG Control SHALL retain a browser-local file
+handle for that template and channel. The handle SHALL re-read the current bytes at the original
+local or network location and SHALL NOT be synchronized to other consoles. A drag/drop import MAY
+remain without a reloadable source and SHALL explain how to establish one.
+
+#### Scenario: A shared package is saved again
+
+- **GIVEN** a template was imported from a shared file through the chooser
+- **AND** the author saves a newer valid package at the same path
+- **WHEN** the operator invokes Reload
+- **THEN** CG Control reads and imports the newer bytes without another browse step
+
+#### Scenario: Another console has no local capability
+
+- **WHEN** another CG Control opens the same Bridge channel
+- **THEN** the template remains in the shared catalogue
+- **AND** Reload remains unavailable there until that console imports the source through its chooser
+
+### Requirement: Reload SHALL preserve template identity
+
+Before importing a remembered source, CG Control SHALL verify that its template id is the catalogue
+entry being reloaded. A different id, missing file, denied permission or unreadable source SHALL
+produce a visible refusal without replacing that catalogue entry or its current row data.
+
+#### Scenario: The share path now contains another package
+
+- **GIVEN** template `weather` remembers `weather.vcg`
+- **AND** that path is replaced by a package whose template id is `league`
+- **WHEN** the operator reloads `weather`
+- **THEN** import is refused before Bridge registration
+- **AND** the refusal directs the operator to use Import for the different template
+
+### Requirement: Reload SHALL ask which row-data authority wins
+
+Before reading one or all remembered sources, CG Control SHALL offer **keep current data** and **use
+file defaults**. Keeping data SHALL update packages without changing existing row field maps. Using
+file defaults SHALL replace fields on rows holding those templates on the current channel through
+the normal stack Update path.
+
+#### Scenario: Current newsroom data is retained
+
+- **WHEN** the operator reloads a package and chooses **keep current data**
+- **THEN** the package updates
+- **AND** every row already holding it retains its current field values
+
+#### Scenario: Reloaded defaults replace row data
+
+- **WHEN** the operator reloads a package and chooses **use file defaults**
+- **THEN** the package updates
+- **AND** every current-channel row holding it is replaced with the reloaded package defaults
+
+### Requirement: Reload all SHALL include every remembered source in the current list
+
+The Templates dialog SHALL offer Reload all when at least one visible template has a source
+remembered on this console. It SHALL run the same identity, permission and row-data policy checks for
+each source and SHALL visibly report full or partial failure.
+
+#### Scenario: One shared file is unavailable
+
+- **GIVEN** two visible templates have remembered sources
+- **AND** one source is currently unavailable
+- **WHEN** the operator runs Reload all
+- **THEN** the accessible template reloads
+- **AND** the dialog reports that the other reload failed
