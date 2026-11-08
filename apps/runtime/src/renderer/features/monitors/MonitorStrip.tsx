@@ -10,6 +10,17 @@ import { airTally, onChannel } from '../stack/onAir.js';
 import { MonitorPanel } from './MonitorPanel.js';
 import { PreviewPanel } from './PreviewPanel.js';
 import { useProgramMonitorPreferences } from './useProgramMonitorPreferences.js';
+import { Button } from '../../ui/Button.js';
+import { Icon } from '../../ui/Icon.js';
+import { Columns3, Monitor, PanelRight } from 'lucide-react';
+
+export type MonitorCompanionMode = 'monitor' | 'layer' | 'layer-inspector';
+
+interface Props {
+  companionMode: MonitorCompanionMode;
+  hasSelectedLayer: boolean;
+  onCompanionModeChange: (mode: MonitorCompanionMode) => void;
+}
 
 /**
  * The monitor strip: PREVIEW beside PROGRAM, in their final positions.
@@ -30,7 +41,11 @@ import { useProgramMonitorPreferences } from './useProgramMonitorPreferences.js'
  * monitor: the shell's job is "the workspace is fullscreen-ing something", and
  * which box that is belongs here.
  */
-export function MonitorStrip(): JSX.Element {
+export function MonitorStrip({
+  companionMode,
+  hasSelectedLayer,
+  onCompanionModeChange,
+}: Props): JSX.Element {
   const { focus } = useShellLayoutContext();
   /*
     🔴 `CONSOLE-MATCH-03` §1 — the two facts PGM's strip states, read HERE and passed down.
@@ -97,6 +112,31 @@ export function MonitorStrip(): JSX.Element {
     showPgm && audioAvailable ? viewChannel : null,
     monitorPreferences.audioEngine,
   );
+  const companionActions =
+    hasSelectedLayer && (focus === 'pgm' || focus === 'pvw') ? (
+      <div role="group" aria-label="Maximized monitor layout" data-monitor-companion-controls="">
+        {(
+          [
+            ['monitor', Monitor, 'Monitor only'],
+            ['layer', PanelRight, 'Monitor and selected layer'],
+            ['layer-inspector', Columns3, 'Monitor, selected layer and Inspector'],
+          ] as const
+        ).map(([mode, glyph, label]) => (
+          <Button
+            key={mode}
+            variant="ghost"
+            active={companionMode === mode}
+            aria-label={label}
+            aria-pressed={companionMode === mode}
+            data-monitor-companion-mode={mode}
+            title={label}
+            onClick={() => onCompanionModeChange(mode)}
+          >
+            <Icon icon={glyph} size={13} />
+          </Button>
+        ))}
+      </div>
+    ) : undefined;
 
   return (
     /*
@@ -135,7 +175,7 @@ export function MonitorStrip(): JSX.Element {
         show; now it shows all of them, and the selection's remaining job — which
         row an edit applies to — belongs to the Inspector and never to this panel.
       */}
-      {showPvw && <PreviewPanel />}
+      {showPvw && <PreviewPanel companionActions={companionActions} />}
       {showPgm && (
         <MonitorPanel
           id="pgm"
@@ -168,6 +208,7 @@ export function MonitorStrip(): JSX.Element {
           backupAvailable={backupAvailable}
           air={air}
           backupLine={backupLine}
+          companionActions={companionActions}
         />
       )}
     </div>

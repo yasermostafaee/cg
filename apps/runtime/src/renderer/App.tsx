@@ -35,7 +35,7 @@ import { onChannel } from './features/stack/onAir.js';
 import { AppHeader } from './features/shell/AppHeader.js';
 import { useTemplatePicker } from './features/fixedLayers/useTemplatePicker.js';
 import { ConsoleCloseGuard } from './features/shell/ConsoleCloseGuard.js';
-import { MonitorStrip } from './features/monitors/MonitorStrip.js';
+import { MonitorStrip, type MonitorCompanionMode } from './features/monitors/MonitorStrip.js';
 import { ShellDivider } from './ui/ShellDivider.js';
 import { useShellLayout } from './hooks/useShellLayout.js';
 import { ShellLayoutProvider } from './hooks/shellLayoutContext.js';
@@ -156,6 +156,8 @@ export function App(): JSX.Element {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // R-028 part B — the operator's own workspace geometry (persisted per browser).
   const layout = useShellLayout();
+  // R-111 — presentation only. Fullscreen changes what surrounds the monitor, never selection.
+  const [monitorCompanionMode, setMonitorCompanionMode] = useState<MonitorCompanionMode>('monitor');
   // R-108 — a shell-level catalogue door, independent of whether any layer is empty.
   const { openTemplateLibrary, pickerDialog: templateLibraryDialog } = useTemplatePicker();
   const [auditOpen, setAuditOpen] = useState(false);
@@ -329,17 +331,52 @@ export function App(): JSX.Element {
   const inspectorOpen = selected !== null;
   const closeInspector = useCallback(() => setSelectedId(null), []);
 
+  const showMonitorLayerCompanion =
+    monitorFocused && selected !== null && monitorCompanionMode !== 'monitor';
+  const showMonitorInspectorCompanion =
+    monitorFocused && selected !== null && monitorCompanionMode === 'layer-inspector';
+
   const showInspectorColumn =
-    !layout.narrow && inspectorOpen && (layout.focus === 'none' || layout.focus === 'inspector');
+    !layout.narrow &&
+    inspectorOpen &&
+    (layout.focus === 'none' || layout.focus === 'inspector' || showMonitorInspectorCompanion);
   /*
    * A CLOSED Inspector gives its width back to the workspace (owner request: the
    * panel is closed when no layer is selected). The divider goes with it — a resize
    * handle for a column that is not there would be a control that does nothing.
    */
   const shellColumns =
-    layout.narrow || layout.focus !== 'none' || !inspectorOpen
-      ? '1fr'
-      : `1fr 6px ${String(layout.inspectorPx)}px`;
+    !layout.narrow && inspectorOpen && (layout.focus === 'none' || showMonitorInspectorCompanion)
+      ? `1fr 6px ${String(layout.inspectorPx)}px`
+      : '1fr';
+
+  const renderLayersPanel = (companion: boolean): JSX.Element => (
+    <LayersPanel
+      /* `B-232` (owner) — the SAME notice the strip above renders, so the
+         marked rows and the strip's list are one reading, not two. */
+      emptiedAirRows={emptiedAir?.rows ?? []}
+      /* `B-235` — the SAME orphan set the strip above renders, so the
+         Station layers tab and the strip are one reading, not two. */
+      orphans={orphans}
+      onSelectionChange={setSelectedId}
+      selectedId={selectedId}
+      layout={layout}
+      selectedOnly={companion}
+      preserveSelection={companion}
+      inspectorOpen={companion ? showMonitorInspectorCompanion : inspectorOpen}
+      /* In the compact companion this button changes layout; it must not clear the row. */
+      onToggleInspector={
+        companion
+          ? () =>
+              setMonitorCompanionMode(showMonitorInspectorCompanion ? 'layer' : 'layer-inspector')
+          : closeInspector
+      }
+      onUpdate={(id) => {
+        const target = items.find((i) => i.itemId === id);
+        return target !== undefined ? applyItem(target) : Promise.resolve({ accepted: false });
+      }}
+    />
+  );
 
   return (
     <ShellLayoutProvider layout={layout}>
@@ -425,7 +462,16 @@ export function App(): JSX.Element {
             longer a thing parked in a side panel, so there is no side panel.
             Load lives on the row and does import+load in one action. */}
             {showWorkspace && (
-              <section style={styles.workspace}>
+              <section
+                style={
+                  showMonitorLayerCompanion
+                    ? {
+                        ...styles.workspace,
+                        flexDirection: layout.narrow ? 'column' : 'row',
+                      }
+                    : styles.workspace
+                }
+              >
                 {/* PGM / PREVIEW — reserved in their final positions. Hidden only
                 when the LAYER LIST is the fullscreen panel; a fullscreen monitor is
                 still the strip, showing one box.
@@ -476,7 +522,11 @@ export function App(): JSX.Element {
                       {/* R-022 — PVW follows the selection when the selected row is
                         rehearsing, so the preview and the Inspector agree about
                         which graphic the operator is working on. */}
-                      <MonitorStrip />
+                      <MonitorStrip
+                        companionMode={monitorCompanionMode}
+                        hasSelectedLayer={selected !== null}
+                        onCompanionModeChange={setMonitorCompanionMode}
+                      />
                     </div>
                     {/* The strip's height is the operator's too — same clamped,
                     persisted, keyboard-nudgeable treatment as the Inspector's
@@ -509,47 +559,45 @@ export function App(): JSX.Element {
                     </div>
                     {/* R-028 (4.1) — ONE layer list, replacing the Stack and Fixed
                     Layers panels, with the playout system's layers on their own tab. */}
-                    <LayersPanel
-                      /* `B-232` (owner) — the SAME notice the strip above renders, so the
-                         marked rows and the strip's list are one reading, not two. */
-                      emptiedAirRows={emptiedAir?.rows ?? []}
-                      /* `B-235` — the SAME orphan set the strip above renders, so the
-                         Station layers tab and the strip are one reading, not two. */
-                      orphans={orphans}
-                      onSelectionChange={setSelectedId}
-                      selectedId={selectedId}
-                      layout={layout}
-                      inspectorOpen={inspectorOpen}
-                      /* The hamburger now toggles the SELECTION, because that is what
-                         openness is derived from. Closing deselects; there is nothing
-                         sensible for it to re-open, since an Inspector with no item is
-                         exactly the state the owner asked to be closed. */
-                      onToggleInspector={closeInspector}
-                      onUpdate={(id) => {
-                        const target = items.find((i) => i.itemId === id);
-                        return target !== undefined
-                          ? applyItem(target)
-                          : Promise.resolve({ accepted: false });
-                      }}
-                    />
+                    {renderLayersPanel(false)}
                   </>
+                )}
+                {showMonitorLayerCompanion && (
+                  <div
+                    data-monitor-layer-companion=""
+                    style={{
+                      display: 'flex',
+                      flex: layout.narrow ? '0 1 42%' : '0 1 min(34rem, 42vw)',
+                      minWidth: layout.narrow ? 0 : '24rem',
+                      minHeight: 0,
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {renderLayersPanel(true)}
+                  </div>
                 )}
               </section>
             )}
             {/* The divider only exists where there are two columns to divide — so it
                 goes away with a CLOSED Inspector, not just with a fullscreen one. */}
-            {!layout.narrow && layout.focus === 'none' && inspectorOpen && (
-              <ShellDivider
-                orientation="vertical"
-                invert
-                value={layout.inspectorPx}
-                onResize={layout.setInspectorPx}
-                label="Resize the Inspector"
-              />
-            )}
+            {!layout.narrow &&
+              inspectorOpen &&
+              (layout.focus === 'none' || showMonitorInspectorCompanion) && (
+                <ShellDivider
+                  orientation="vertical"
+                  invert
+                  value={layout.inspectorPx}
+                  onResize={layout.setInspectorPx}
+                  label="Resize the Inspector"
+                />
+              )}
             {showInspectorColumn && (
               <Inspector
-                onClose={closeInspector}
+                onClose={
+                  showMonitorInspectorCompanion
+                    ? () => setMonitorCompanionMode('layer')
+                    : closeInspector
+                }
                 item={selected}
                 // B-156 — ONE derivation of "is this row rehearsing", shared with the row picker.
                 rehearsing={selected !== null && isRehearsing(rehearsals, selected.itemId)}
@@ -574,14 +622,18 @@ export function App(): JSX.Element {
         state would make the operator work blind. Dismissing is also a single
         action (the backdrop, or the same hamburger).
       */}
-        {layout.narrow && inspectorOpen && (
+        {layout.narrow && inspectorOpen && (!monitorFocused || showMonitorInspectorCompanion) && (
           <>
             {/* The scrim DESELECTS rather than merely hiding — see `closeInspector`.
                 Dismissing the editor and letting go of the row are one act, so the
                 list can never keep claiming a selection with no editor behind it. */}
             <div
               style={styles.overlayScrim}
-              onClick={closeInspector}
+              onClick={
+                showMonitorInspectorCompanion
+                  ? () => setMonitorCompanionMode('layer')
+                  : closeInspector
+              }
               aria-hidden="true"
               // A stable hook for the E2E. The scrim is `aria-hidden` by design (it is
               // a dismissal surface, not content), and every Icon in the app is too —
@@ -603,7 +655,11 @@ export function App(): JSX.Element {
               }}
             >
               <Inspector
-                onClose={closeInspector}
+                onClose={
+                  showMonitorInspectorCompanion
+                    ? () => setMonitorCompanionMode('layer')
+                    : closeInspector
+                }
                 item={selected}
                 // B-156 — ONE derivation of "is this row rehearsing", shared with the row picker.
                 rehearsing={selected !== null && isRehearsing(rehearsals, selected.itemId)}

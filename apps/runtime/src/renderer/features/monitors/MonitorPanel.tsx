@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type CSSProperties } from 'react';
+import { useLayoutEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { Columns2, MonitorOff, Rows2, Volume2, VolumeX } from 'lucide-react';
 import type { PgmEngine } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
@@ -175,6 +175,8 @@ interface Props {
     readonly mapped: boolean;
     readonly channel?: number;
   } | null;
+  /** R-111 — session-only layout choices while this monitor is maximized. */
+  companionActions?: ReactNode;
 }
 
 /** The head's neutral tags: `Output unknown` when it is, then the playlist's state in its words. */
@@ -197,6 +199,7 @@ export function MonitorPanel({
   backupAvailable,
   air,
   backupLine = null,
+  companionActions,
 }: Props): JSX.Element {
   const liveCount = returns.filter((item) => item.programReturn.signal === 'live').length;
   const stalled = returns.some((item) => item.programReturn.signal === 'stalled');
@@ -296,7 +299,12 @@ export function MonitorPanel({
         a state (the state is on the strip below); it names the source, so an operator reading
         a black box knows what would have filled it.
       */
-      actions={displayControls}
+      actions={
+        <>
+          {displayControls}
+          {companionActions}
+        </>
+      }
       /* REPAIR-03 A1, audit row 38 — the monitor box's own ground (--r-monitor-bg), a
          shade below the panels around it so the screen reads as inset. */
       style={{

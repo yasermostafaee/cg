@@ -140,6 +140,10 @@ interface Props {
    * `B-235` is about. Optional and defaulted, so every existing spec keeps its meaning.
    */
   orphans?: readonly OrphanLayer[];
+  /** R-111 — the maximized-monitor companion renders only the row already selected. */
+  selectedOnly?: boolean;
+  /** R-111 — clicking that sole selected row is inspection, not a request to deselect it. */
+  preserveSelection?: boolean;
 }
 
 /** A stable empty default, so the memo below does not see a new array every render. */
@@ -318,6 +322,8 @@ export function LayersPanel({
   onToggleInspector,
   emptiedAirRows = NO_EMPTIED_AIR_ROWS,
   orphans = NO_ORPHANS,
+  selectedOnly = false,
+  preserveSelection = false,
 }: Props): JSX.Element {
   /**
    * §3 — THE LIST AND WHETHER IT HAS ARRIVED, never the list alone.
@@ -711,14 +717,32 @@ export function LayersPanel({
     [bank, templates],
   );
 
-  const shownRowBindings = useMemo(
-    () => rowBindings.filter((entry) => rowIsShown(filterableOf(entry), filter)),
-    [rowBindings, filterableOf, filter],
-  );
+  const shownRowBindings = useMemo(() => {
+    const filtered = rowBindings.filter((entry) => rowIsShown(filterableOf(entry), filter));
+    if (!selectedOnly) return filtered;
+    return filtered.filter(
+      ({ binding }) => binding.kind === 'bound' && binding.item.itemId === selectedId,
+    );
+  }, [rowBindings, filterableOf, filter, selectedOnly, selectedId]);
 
   const filterTally = useMemo(
-    () => layerTally(rowBindings.map(filterableOf), filter),
-    [rowBindings, filterableOf, filter],
+    () =>
+      layerTally(
+        (selectedOnly ? shownRowBindings : rowBindings).map(filterableOf),
+        selectedOnly ? NO_FILTER : filter,
+      ),
+    [selectedOnly, shownRowBindings, rowBindings, filterableOf, filter],
+  );
+
+  const selectRow = useCallback(
+    (itemId: string | null): void => {
+      if (preserveSelection && itemId === null && selectedId !== null) {
+        onSelectionChange(selectedId);
+        return;
+      }
+      onSelectionChange(itemId);
+    },
+    [preserveSelection, selectedId, onSelectionChange],
   );
 
   // STOP ALL's count: the status IS the right question there — a row that never
@@ -1239,13 +1263,17 @@ export function LayersPanel({
         nothing that addresses this panel by name had to move.
       */
       heading={
-        <TabStrip
-          tabs={tabs}
-          activeId={activeTab}
-          onSelect={setActiveTab}
-          ariaLabel="Layer surfaces"
-          inPanelBar
-        />
+        selectedOnly ? (
+          <span className="cg-panel-title">SELECTED LAYER</span>
+        ) : (
+          <TabStrip
+            tabs={tabs}
+            activeId={activeTab}
+            onSelect={setActiveTab}
+            ariaLabel="Layer surfaces"
+            inPanelBar
+          />
+        )
       }
       actions={
         <>
@@ -1262,7 +1290,7 @@ export function LayersPanel({
             because it can change between the glance and the press. A principal's permission
             cannot. It is fixed for the session, so there is no target to move.
           */}
-          {canOperate && (
+          {!selectedOnly && canOperate && (
             <>
               {/*
             The bulk verbs, in C-012 order: graceful first, hard second — so the
@@ -1413,7 +1441,7 @@ export function LayersPanel({
           {/* NARROW — the hamburger that brings the Inspector up as an overlay.
               Only on small screens: with two columns the Inspector is already
               there and a toggle would be a control that does nothing visible. */}
-          {layout.narrow && (
+          {!selectedOnly && layout.narrow && (
             <Button
               variant="ghost"
               aria-label={inspectorOpen ? 'Hide the Inspector' : 'Show the Inspector'}
@@ -1439,7 +1467,7 @@ export function LayersPanel({
           {/* THE WAY BACK. Always reachable once anything is customised, so an
               operator who drags a panel somewhere useless at 2 a.m. is never
               stuck with it. */}
-          {layout.customized && (
+          {!selectedOnly && layout.customized && (
             <Button
               variant="ghost"
               aria-label="Reset the panel layout"
@@ -1660,7 +1688,11 @@ export function LayersPanel({
                 reference puts it, and OUTSIDE the scroll area — a filter that scrolled away
                 from the list it is filtering would be a control you cannot see the effect of.
               */}
-              <div className="cg-layers-subbar" data-layers-subbar="">
+              <div
+                className="cg-layers-subbar"
+                data-layers-subbar=""
+                style={selectedOnly ? { display: 'none' } : undefined}
+              >
                 <span className="cg-layers-subbar__search">
                   <Icon icon={Search} size={14} />
                   <input
@@ -1949,7 +1981,7 @@ export function LayersPanel({
                               templates,
                             )
                       }
-                      onSelect={onSelectionChange}
+                      onSelect={selectRow}
                       onUpdate={onUpdate}
                     />
                   );
@@ -1979,7 +2011,12 @@ export function LayersPanel({
                 accident. `role="note"` and not `status` — it never changes, so there is
                 nothing to announce.
               */}
-              <div className="cg-layers-foothint" role="note" data-layers-foothint="">
+              <div
+                className="cg-layers-foothint"
+                role="note"
+                data-layers-foothint=""
+                style={selectedOnly ? { display: 'none' } : undefined}
+              >
                 <Icon icon={Info} size={12} />
                 <span>
                   Click a populated row to inspect · ON PVW adds to the composite · Play takes the

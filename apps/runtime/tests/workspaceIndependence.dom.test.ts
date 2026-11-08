@@ -268,6 +268,48 @@ describe('in PVW ↔ monitors shown', () => {
   });
 });
 
+describe('selected ↔ maximized monitor companion', () => {
+  it('offers no empty companion surface when no layer is selected', async () => {
+    await click(document.querySelector('button[aria-label="Show PROGRAM (PGM) fullscreen"]'));
+    expect(document.querySelector('[data-monitor-companion-controls]')).toBeNull();
+    expect(document.querySelector('[data-monitor-layer-companion]')).toBeNull();
+  });
+
+  it('keeps the row selected across all three layouts and a repeated compact-row click', async () => {
+    await selectRow(ROW_A);
+    expect(pressed(ROW_A)).toBe('true');
+
+    await click(document.querySelector('button[aria-label="Show PROGRAM (PGM) fullscreen"]'));
+    expect(document.querySelector('[data-monitor-companion-controls]')).not.toBeNull();
+    expect(document.querySelector('[aria-label="Layers"]')).toBeNull();
+
+    await click(document.querySelector('button[aria-label="Monitor and selected layer"]'));
+    expect(document.querySelector('[data-monitor-layer-companion]')).not.toBeNull();
+    expect(pressed(ROW_A)).toBe('true');
+    expect(document.querySelector(`[data-layer="${String(ROW_B)}"]`)).toBeNull();
+
+    // R-111 owner clarification: this compact row is context, not a deselect toggle.
+    await click(row(ROW_A).querySelector('[data-row-body]'));
+    expect(pressed(ROW_A)).toBe('true');
+
+    await click(document.querySelector('button[aria-label="Monitor only"]'));
+    expect(document.querySelector('[data-monitor-layer-companion]')).toBeNull();
+    await click(document.querySelector('button[aria-label="Monitor and selected layer"]'));
+    expect(pressed(ROW_A)).toBe('true');
+
+    await click(
+      document.querySelector('button[aria-label="Monitor, selected layer and Inspector"]'),
+    );
+    expect(inspector()).not.toBeNull();
+    expect(pressed(ROW_A)).toBe('true');
+
+    await click(document.querySelector('button[aria-label="Close INSPECTOR"]'));
+    expect(inspector()).toBeNull();
+    expect(pressed(ROW_A)).toBe('true');
+    expect(document.querySelector('[data-monitor-layer-companion]')).not.toBeNull();
+  });
+});
+
 describe('the flag itself', () => {
   it('is session state: hiding the monitors writes nothing new into the persisted shell layout', async () => {
     await click(toggle());

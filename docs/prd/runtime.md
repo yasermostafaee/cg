@@ -4954,3 +4954,24 @@ anti-interference rule prevents.
   and CG Bridge sends no speculative AMCP command to Playout's layer
 - The implementation starts only after the Playout team defines authenticated read/set semantics,
   range, persistence, ownership and A/B behaviour
+
+## [~] R-111 — A maximized monitor can keep the selected layer and Inspector beside it ⟨priority: high — the owner, 2026-11-08⟩ — `openspec/changes/monitor-selected-layer-companion/`
+
+**What:** When PROGRAM or PREVIEW is maximized and a layer was already selected, the monitor header
+offers three session-only layouts: monitor only, monitor plus the selected layer, or monitor plus the
+selected layer and its Inspector. The compact layer companion shows only the selected row. Switching
+between these layouts never clears the selection, and clicking that already-selected compact row does
+not toggle it off. With no selected layer, no companion controls or empty companion surface appear.
+**Why:** Operators need the larger confidence-monitor picture without losing the row state and fields
+they are actively checking; fullscreen should change presentation, not silently change editing context.
+**Acceptance:**
+
+- WHEN PGM or PVW is maximized with no selected layer THEN it remains monitor-only and offers no
+  layer/Inspector companion choices
+- WHEN a layer is already selected THEN the maximized monitor offers monitor-only, selected-layer and
+  selected-layer-plus-Inspector layouts, defaulting to monitor-only
+- WHEN the operator switches to monitor-only and later restores either companion layout THEN the same
+  layer remains selected and reappears without a new row click
+- WHEN the selected row is clicked in the compact companion THEN it stays selected
+- WHEN the Inspector is shown beside the maximized monitor THEN closing that Inspector returns to the
+  selected-layer layout without clearing the selected layer

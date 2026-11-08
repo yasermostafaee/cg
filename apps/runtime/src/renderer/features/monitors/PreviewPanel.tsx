@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { ArrowRightFromLine, CircleArrowOutDownRight, Play, SquareDashed } from 'lucide-react';
 import { REFERENCE_RASTER } from '@cg/shared-ipc';
 import { Panel } from '../../ui/Panel.js';
@@ -113,7 +113,7 @@ const PVW_TRANSPORT_TITLE = {
   stop: 'Stop every preview graphic; keep all layers on PVW',
 } as const;
 
-export function PreviewPanel(): JSX.Element {
+export function PreviewPanel({ companionActions }: { companionActions?: ReactNode }): JSX.Element {
   const rehearsals = useRehearse();
   const items = useStack();
   const channelSettings = useChannelSettings();
@@ -426,13 +426,16 @@ export function PreviewPanel(): JSX.Element {
         borrowing the other's number.
       */
       actions={
-        <MonitorHeadFact
-          tone="pvw"
-          testId="data-pvw-count"
-          {...(subjects.length > 0 ? { title: subjects.map((s) => s.rowName).join(' · ') } : {})}
-        >
-          {subjects.length} {subjects.length === 1 ? 'layer' : 'layers'} on PVW
-        </MonitorHeadFact>
+        <>
+          <MonitorHeadFact
+            tone="pvw"
+            testId="data-pvw-count"
+            {...(subjects.length > 0 ? { title: subjects.map((s) => s.rowName).join(' · ') } : {})}
+          >
+            {subjects.length} {subjects.length === 1 ? 'layer' : 'layers'} on PVW
+          </MonitorHeadFact>
+          {companionActions}
+        </>
       }
       /* `REPAIR-03` A1, audit row 38 — the monitor box's own ground; see `--r-monitor-bg`. */
       style={{
