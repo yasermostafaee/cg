@@ -620,6 +620,14 @@ describe('buildTemplateLiveSources — the assembly, and the coexistence control
     expect(block.looks?.[0]?.entered).toEqual({ mode: 'cut' });
   });
 
+  it('D-201 — records when the scene needs an authored foreground pass', () => {
+    const s = twoLookScene();
+    const overlay = s.layers[0]?.children[0];
+    if (overlay === undefined) throw new Error('fixture drift');
+    overlay.liveForeground = true;
+    expect(buildTemplateLiveSources(s).foregroundOverlay).toBe(true);
+  });
+
   it('⚠ WITHOUT a group the legacy per-element path is untouched — coexistence, one session wide', () => {
     const s = scene({
       rootChildren: [

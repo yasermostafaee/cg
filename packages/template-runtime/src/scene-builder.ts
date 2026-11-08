@@ -186,6 +186,10 @@ function buildLayer(layer: Layer, ctx: BuildCtx): HTMLElement {
       : element;
     const elementNode = buildElement(built, ctx);
     if (elementNode === null) continue;
+    // D-201 — the split-page filter reads one marker after the ordinary scene has been built.
+    // The marker lives on the element's OUTERMOST node, so marking a composition keeps/removes
+    // its complete subtree while marking one child affects only that child.
+    if (element.liveForeground === true) elementNode.dataset['cgLiveForeground'] = '';
     const stepIndex = plan.elements.get(element.id);
     if (stepIndex !== undefined) elementNode.dataset[STEP_EL_DATASET] = String(stepIndex);
     if (stepIndex !== undefined && plan.wrapped.has(element.id)) {

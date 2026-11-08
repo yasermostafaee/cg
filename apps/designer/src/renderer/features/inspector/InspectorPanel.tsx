@@ -1,3 +1,4 @@
+import { flattenElements } from '@cg/shared-schema';
 import type { AnimatableProperty, Element, FieldBinding, Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { Control } from '../../ui/Control.js';
@@ -124,6 +125,7 @@ function ElementInspector({
         </CollapseSection>
       )}
       <StyleSection element={element} selectedKeyframe={selectedKeyframe} />
+      <LiveForegroundSection element={element} scene={scene} />
       {hasDynamicData ? (
         <>
           {element.type !== 'image' && (
@@ -147,6 +149,42 @@ function ElementInspector({
         </CollapseSection>
       )}
     </aside>
+  );
+}
+
+/** D-201 — opt a visual element into the transparent page composited above live producers. */
+function LiveForegroundSection({
+  element,
+  scene,
+}: {
+  element: Element;
+  scene: Scene;
+}): JSX.Element | null {
+  if (element.type === 'video-placeholder' || element.type === 'audio') return null;
+  const hasPlate = flattenElements(scene, 'document').some(
+    ({ element: candidate }) => candidate.type === 'video-placeholder',
+  );
+  if (!hasPlate && element.liveForeground !== true) return null;
+  return (
+    <CollapseSection title="Live foreground">
+      <label className={s.row}>
+        <span className={s.label}>Above inputs</span>
+        <input
+          type="checkbox"
+          aria-label="Show above live inputs"
+          checked={element.liveForeground === true}
+          onChange={(event) =>
+            designerStore.updateElement(element.id, {
+              liveForeground: event.currentTarget.checked ? true : undefined,
+            } as Partial<Element>)
+          }
+        />
+      </label>
+      <p className={s.empty}>
+        Keep this element inside the same composition as its plate so both travel together between
+        Presets.
+      </p>
+    </CollapseSection>
   );
 }
 

@@ -500,8 +500,12 @@ export function buildTemplateLiveSources(scene: Scene): {
   arrangements: LiveSourceArrangement[];
   looks?: TemplateLookCarrier[];
   defaultLookId?: string;
+  foregroundOverlay?: true;
 } {
   const lookCarrier = collectLookCarrier(scene);
+  const foregroundOverlay = flattenElements(scene, 'document').some(
+    ({ element }) => element.liveForeground === true,
+  );
   return {
     resolution: scene.resolution,
     defaultPosition: resolveDefaultPosition(scene),
@@ -509,6 +513,7 @@ export function buildTemplateLiveSources(scene: Scene): {
     // source); the per-element emission would double-seat a source two looks share.
     sources: lookCarrier === null ? collectLiveSources(scene) : lookCarrier.sources,
     arrangements: collectArrangements(scene),
+    ...(foregroundOverlay ? { foregroundOverlay: true as const } : {}),
     ...(lookCarrier === null
       ? {}
       : {

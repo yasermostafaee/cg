@@ -179,6 +179,13 @@ export const ElementBaseSchema = z.object({
    * effect; no match restores the target element's authored value. Optional and additive.
    */
   valueRules: ValueRuleSetSchema.optional(),
+  /**
+   * D-201 — paint this authored element on the transparent foreground page above Live Source
+   * producers. Optional/additive: absent keeps every existing scene on the single background page.
+   * Position ownership still comes from the scene graph, so a title nested with a plate travels
+   * with that frame when its composition/Look moves.
+   */
+  liveForeground: z.boolean().optional(),
 });
 export type ElementBase = z.infer<typeof ElementBaseSchema>;
 

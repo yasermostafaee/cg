@@ -6653,7 +6653,7 @@ ticker's general vertical alignment alone can leave the chosen picture visibly m
   move it downward in the authoring Canvas, Preview and exported/on-air runtime
 - WHEN an older ticker has no offset THEN its separator remains at the existing aligned position
 
-## [ ] D-201 — Foreground graphics and titles can travel with a live frame ⟨priority: high — the owner, 2026-11-08⟩ — `openspec/changes/live-plate-foreground-overlays/`
+## [~] D-201 — Foreground graphics and titles can travel with a live frame ⟨priority: high — the owner, 2026-11-08⟩ — `openspec/changes/live-plate-foreground-overlays/`
 
 **What:** Let a live frame own a title or other authored foreground element so the frame and its
 label can swap together between looks while that foreground paints above the external live producer.

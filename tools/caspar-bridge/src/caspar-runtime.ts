@@ -778,6 +778,11 @@ type LiveSeatingPlan =
        * consumes — the shape `B-143` already names.
        */
       readonly fitProvenance: readonly PlateFitReport[];
+      /**
+       * D-201 — the synchronized HTML pass that renders authored titles/overlays above every
+       * live producer. It is allocated atomically with the seats and is always higher than them.
+       */
+      readonly foregroundSlot?: CommandSlot;
     }
   | {
       readonly ok: false;
@@ -1637,6 +1642,11 @@ export class CasparRuntime {
    * would bare-PLAY nothing.
    */
   readonly #loaded = new Set<string>();
+  /**
+   * D-201 — synchronized foreground-page coordinates, keyed by their stack item. A reconnect
+   * does not erase the reservation; a 403 PLAY proves the producer itself must be re-ADDed.
+   */
+  readonly #foregroundPages = new Map<string, CommandSlot>();
   /**
    * Reconnect-reconciliation — layers this process has CLEARed at least once
    * (adoption, out, remove), i.e. layers whose producer state the bridge KNOWS.
@@ -4130,6 +4140,7 @@ export class CasparRuntime {
     const slot = this.#slots.get(itemId);
     this.#reconciler.applyIntent({ kind: 'remove', itemId }, this.#nextSeq());
     this.#loaded.delete(itemId);
+    this.#foregroundPages.delete(itemId);
     this.#positions.delete(itemId);
     this.#sourceOverrides.delete(itemId);
     this.#lookSourceBindings.delete(itemId);
@@ -5083,6 +5094,92 @@ export class CasparRuntime {
     this.#markDirty(itemId);
   }
 
+  /** D-201 — hide, clear and release a synchronized foreground page owned by one item. */
+  async #clearForegroundPage(
+    itemId: string,
+  ): Promise<{ ok: boolean; errorCode?: string; command?: string }> {
+    const slot = this.#foregroundPages.get(itemId);
+    if (slot === undefined) return { ok: true };
+    // Hide first. If CLEAR is refused, an old title is still safer invisible than stranded on air.
+    await this.#send(this.#builder.mixerOpacity(slot, 0), this.#nextSeq(), 'urgent');
+    const cleared = await this.#send(this.#builder.out(slot), this.#nextSeq(), 'urgent');
+    if (cleared.ok) {
+      this.#foregroundPages.delete(itemId);
+      await this.#resetPlateMixerIfCleared(slot, cleared);
+    }
+    return {
+      ok: cleared.ok,
+      ...(cleared.errorCode !== undefined && { errorCode: cleared.errorCode }),
+      ...(cleared.command !== undefined && { command: cleared.command }),
+    };
+  }
+
+  /**
+   * D-201 — make the foreground pass resident and playing, but keep it invisible until the
+   * background page and all live inputs have landed. Volume remains zero for its lifetime.
+   */
+  async #prepareForegroundPage(
+    itemId: string,
+    slot: CommandSlot,
+    templateId: string,
+    fields: FieldValues,
+  ): Promise<{ ok: boolean; errorCode?: string; command?: string }> {
+    const existing = this.#foregroundPages.get(itemId);
+    if (
+      existing !== undefined &&
+      (existing.channel !== slot.channel || existing.layer !== slot.layer)
+    ) {
+      const cleared = await this.#clearForegroundPage(itemId);
+      if (!cleared.ok) return cleared;
+    }
+
+    const resident = this.#foregroundPages.get(itemId);
+    const hidden = await this.#send(this.#builder.mixerOpacity(slot, 0), this.#nextSeq(), 'urgent');
+    if (!hidden.ok) {
+      return {
+        ok: false,
+        ...(hidden.errorCode !== undefined && { errorCode: hidden.errorCode }),
+        ...(hidden.command !== undefined && { command: hidden.command }),
+      };
+    }
+
+    if (resident === undefined) {
+      const added = await this.#sendAdd(
+        itemId,
+        slot,
+        templateId,
+        fields,
+        this.#nextSeq(),
+        'foreground',
+      );
+      if (!added.ok) return added;
+      this.#foregroundPages.set(itemId, slot);
+    }
+
+    const played = await this.#send(this.#builder.take(slot), this.#nextSeq(), 'normal');
+    if (!played.ok) {
+      if (
+        resident !== undefined &&
+        played.errorCode === PAGE_NOT_ON_LAYER_CODE &&
+        played.onPrimary
+      ) {
+        const cleared = await this.#clearForegroundPage(itemId);
+        if (cleared.ok) {
+          return this.#prepareForegroundPage(itemId, slot, templateId, fields);
+        }
+      }
+      // A failed PLAY can leave an ADDed page resident. Take it back so the next take cannot
+      // mistake a half-prepared pass for one that is ready to reveal.
+      await this.#clearForegroundPage(itemId);
+      return {
+        ok: false,
+        ...(played.errorCode !== undefined && { errorCode: played.errorCode }),
+        ...(played.command !== undefined && { command: played.command }),
+      };
+    }
+    return { ok: true };
+  }
+
   async #takeImpl(itemId: string): Promise<TakeVerdict> {
     /**
      * R-022 — THE INTERLOCK. A rehearsing item cannot be taken to air, and the
@@ -5552,6 +5649,34 @@ export class CasparRuntime {
       );
     }
 
+    // D-201 — prepare the synchronized page while hidden. It must be ready before a single
+    // live producer is seated, otherwise a successful take could put titles behind pictures.
+    const itemForForeground = this.#reconciler.get(itemId);
+    const foreground =
+      plan.foregroundSlot === undefined
+        ? await this.#clearForegroundPage(itemId)
+        : await this.#prepareForegroundPage(
+            itemId,
+            plan.foregroundSlot,
+            itemForForeground?.templateId ?? itemId,
+            itemForForeground?.fields ?? {},
+          );
+    if (!foreground.ok) {
+      if (addedPage) await this.#removeUnplayedPage(itemId, slot);
+      const code = foreground.errorCode ?? 'amcp-error';
+      this.#recordTakeRefusal(itemId, {
+        code,
+        ...(foreground.command !== undefined && { command: foreground.command }),
+      });
+      this.#reconciler.applyAck(seq, false, code);
+      return {
+        accepted: false,
+        errorCode: code,
+        refusalOnRow: true,
+        ...(foreground.command !== undefined && { command: foreground.command }),
+      };
+    }
+
     /*
       C-015 phase 6 (6.0) — SEAT THE PLATES, one command before the graphic they
       belong to.
@@ -5581,6 +5706,7 @@ export class CasparRuntime {
     const seated = await this.#applyLivePlates(itemId, plan, 'take');
     if (!seated.ok) {
       const code = seated.errorCode ?? 'amcp-error';
+      if (plan.foregroundSlot !== undefined) await this.#clearForegroundPage(itemId);
       if (addedPage) await this.#removeUnplayedPage(itemId, slot);
       this.#recordTakeRefusal(itemId, {
         code,
@@ -5629,6 +5755,7 @@ export class CasparRuntime {
         if (!cleared) stillOurs.push(record);
       }
       this.registerLiveLayers(itemId, stillOurs);
+      if (plan.foregroundSlot !== undefined) await this.#clearForegroundPage(itemId);
       if (addedPage) await this.#removeUnplayedPage(itemId, slot);
       const code = errorCode ?? 'amcp-error';
       this.#recordTakeRefusal(itemId, { code, ...(command !== undefined && { command }) });
@@ -5638,6 +5765,24 @@ export class CasparRuntime {
         refusalOnRow: true,
         ...(command !== undefined && { command }),
       };
+    }
+    if (plan.foregroundSlot !== undefined) {
+      const revealed = await this.#send(
+        this.#builder.mixerOpacity(plan.foregroundSlot, 1),
+        this.#nextSeq(),
+        'urgent',
+      );
+      if (!revealed.ok) {
+        process.stderr.write(
+          `[caspar-bridge] ${itemId}: on air, but its live-input foreground pass could not be revealed\n`,
+        );
+        return {
+          accepted: true,
+          message:
+            `The graphic and its live inputs are on air, but CasparCG refused the foreground ` +
+            `overlay reveal. Titles marked “above live inputs” may be missing; clear and take again.`,
+        };
+      }
     }
     // `B-191` — the take LANDED, and the one thing that may still be wrong about it is said
     // rather than swallowed: the pictures are on the recorded look, the holes are not.
@@ -6665,6 +6810,9 @@ export class CasparRuntime {
       behind it.
     */
     await this.teardownLiveLayers(itemId);
+    // D-201 — titles sit above the plates, so they come down after the pictures but before the
+    // background page. Hiding is part of the helper, so even a refused CLEAR cannot strand text.
+    const foreground = await this.#clearForegroundPage(itemId);
     const { ok, onPrimary, errorCode, command } = await this.#send(
       this.#builder.out(slot),
       seq,
@@ -6696,9 +6844,17 @@ export class CasparRuntime {
     // waiting for the link, the second means the graphic is still on air and
     // needs another route off. It answered a bare `{ accepted: false }`.
     return {
-      accepted: ok,
-      ...(!ok && errorCode !== undefined && { errorCode }),
-      ...(!ok && command !== undefined && { command }),
+      accepted: ok && foreground.ok,
+      ...(!ok && errorCode !== undefined
+        ? { errorCode }
+        : !foreground.ok && foreground.errorCode !== undefined
+          ? { errorCode: foreground.errorCode }
+          : {}),
+      ...(!ok && command !== undefined
+        ? { command }
+        : !foreground.ok && foreground.command !== undefined
+          ? { command: foreground.command }
+          : {}),
     };
   }
 
@@ -7102,6 +7258,9 @@ export class CasparRuntime {
     for (const records of this.#liveLayers.values()) {
       for (const record of records) keys.add(adoptionKey(record.slot));
     }
+    // D-201 — foreground pages occupy the same declared band and are just as bridge-owned as
+    // their picture seats. This keeps the orphan sweep and foreign quarantine away from them.
+    for (const slot of this.#foregroundPages.values()) keys.add(adoptionKey(slot));
     return keys;
   }
 
@@ -7477,6 +7636,7 @@ export class CasparRuntime {
         // `B-178` — no plates, so nothing to report. Empty, never absent.
         fitProvenance: [],
       };
+    const needsForeground = carrier.foregroundOverlay === true;
 
     /*
       🔴 THE ONE RESOLUTION, for EVERY look — not just the one being entered.
@@ -7921,22 +8081,68 @@ export class CasparRuntime {
     // source, exactly as `#declaredLayerClass` is for the three DECLARED classes.
     const bound = new Set<number>();
     for (const s of this.#slots.values()) if (s.channel === slot.channel) bound.add(s.layer);
+    const occupiedForeground = new Set<number>();
+    for (const [owner, foreground] of this.#foregroundPages) {
+      if (owner !== itemId && foreground.channel === slot.channel) {
+        occupiedForeground.add(foreground.layer);
+      }
+    }
+    const currentForeground = this.#foregroundPages.get(itemId);
+    const currentForegroundLayer =
+      currentForeground?.channel === slot.channel ? currentForeground.layer : undefined;
+    const ordinaryAvailable = (layer: number): boolean =>
+      ours.has(layer) ||
+      (this.#declaredLayerClass(slot.channel, layer) === null &&
+        !bound.has(layer) &&
+        !occupiedForeground.has(layer) &&
+        layer !== currentForegroundLayer);
 
-    const layers = allocateLiveLayers({
-      range,
-      preferred,
-      // ⚠ OUR OWN ledgered layers count as AVAILABLE — for this item, and only for the seats
-      // this plan is actually placing (see `ours` above).
-      isAvailable: (layer) =>
-        ours.has(layer) ||
-        (this.#declaredLayerClass(slot.channel, layer) === null && !bound.has(layer)),
-    });
+    /*
+      D-201 — the foreground HTML page is a real producer and therefore consumes one layer.
+      Choose it FIRST, highest-first, then allocate every live seat strictly below it. This is
+      the compositing invariant the feature exists for: a title marked "above live inputs" may
+      never land below a plate merely because an older seat kept a preferred coordinate.
+
+      The loop also makes the admission atomic. A band that has room for the pictures but not
+      their foreground pass refuses before any AMCP, instead of taking a layout whose titles
+      silently disappear behind the inputs.
+    */
+    let foregroundLayer: number | undefined;
+    let layers: number[] | null = null;
+    if (needsForeground) {
+      for (let candidate = range.end; candidate >= range.start; candidate -= 1) {
+        const candidateIsCurrent = candidate === currentForegroundLayer;
+        const candidateIsFree =
+          candidateIsCurrent ||
+          (this.#declaredLayerClass(slot.channel, candidate) === null &&
+            !bound.has(candidate) &&
+            !occupiedForeground.has(candidate));
+        if (!candidateIsFree || ours.has(candidate)) continue;
+        const candidateLayers = allocateLiveLayers({
+          range,
+          preferred,
+          isAvailable: (layer) => layer < candidate && ordinaryAvailable(layer),
+        });
+        if (candidateLayers === null) continue;
+        foregroundLayer = candidate;
+        layers = candidateLayers;
+        break;
+      }
+    } else {
+      layers = allocateLiveLayers({
+        range,
+        preferred,
+        // ⚠ OUR OWN ledgered layers count as AVAILABLE — for this item, and only for the seats
+        // this plan is actually placing (see `ours` above).
+        isAvailable: ordinaryAvailable,
+      });
+    }
     if (layers === null) {
       return {
         ok: false,
         errorCode: LIVE_PLATE_NO_LAYER,
         message: liveBandExhaustedMessage({
-          needed: seated.length,
+          needed: seated.length + (needsForeground ? 1 : 0),
           range,
           channel: slot.channel,
         }),
@@ -7975,6 +8181,9 @@ export class CasparRuntime {
       parked: allocated.filter((p) => p.held),
       resolvedFrom,
       fitProvenance: [...fitProvenance.values()],
+      ...(foregroundLayer !== undefined
+        ? { foregroundSlot: { channel: slot.channel, layer: foregroundLayer } }
+        : {}),
     };
   }
 
@@ -14215,6 +14424,7 @@ export class CasparRuntime {
     // itemId, so an item whose slot was already released can still own live
     // layers, and those are precisely the ones nothing else would ever reach.
     await this.teardownLiveLayers(itemId);
+    await this.#clearForegroundPage(itemId);
     if (slot !== undefined) {
       this.#slots.delete(itemId);
       this.#removeInterest(slot);
@@ -14355,6 +14565,7 @@ export class CasparRuntime {
     this.#wireAdapter();
     for (const slot of this.#slots.values()) this.#addInterest(slot);
     this.#loaded.clear();
+    this.#foregroundPages.clear();
     this.#adopted.clear();
     // The last failover described the old server pair — a new era starts clean.
     this.#lastFailover = undefined;
@@ -16848,6 +17059,7 @@ export class CasparRuntime {
     templateId: string,
     fields: FieldValues,
     seq: number,
+    outputPass: 'background' | 'foreground' = 'background',
   ): Promise<{ ok: boolean; errorCode?: string; command?: string }> {
     // fix-setconfig-serve-restart — the loud-failure contract: when serving
     // is INTENDED for this process but the server is down, a load must fail
@@ -16882,7 +17094,15 @@ export class CasparRuntime {
     }
     this.#templates.pin(versionId);
     try {
-      const sent = await this.#sendAddServed(itemId, slot, templateId, fields, seq, serveKey);
+      const sent = await this.#sendAddServed(
+        itemId,
+        slot,
+        templateId,
+        fields,
+        seq,
+        serveKey,
+        outputPass,
+      );
       if (sent.ok) this.#templates.hold(itemId, versionId);
       return sent;
     } finally {
@@ -16900,6 +17120,7 @@ export class CasparRuntime {
     fields: FieldValues,
     seq: number,
     serveKey: string,
+    outputPass: 'background' | 'foreground',
   ): Promise<{ ok: boolean; errorCode?: string; command?: string }> {
     let templateArg = this.#templateServer.listening
       ? this.#templateServer.urlFor(serveKey)
@@ -16932,6 +17153,14 @@ export class CasparRuntime {
       // position half is the only optional part.
       const raster = this.#channelSettings.rasterFor(slot.channel);
       params.push(`cw=${String(raster.width)}`, `ch=${String(raster.height)}`);
+      // D-201 — both pages load the same immutable package. The query selects which authored
+      // pixels this producer renders and gives the pair a private page-local sync channel.
+      const usesForegroundPair =
+        outputPass === 'foreground' ||
+        this.#templates.getOn(slot.channel, templateId)?.liveSources?.foregroundOverlay === true;
+      if (usesForegroundPair) {
+        params.push(`cgpass=${outputPass}`, `cgsync=${encodeURIComponent(itemId)}`);
+      }
       templateArg += `?${params.join('&')}`;
     }
     /*
@@ -17055,8 +17284,14 @@ export class CasparRuntime {
     */
     // `LOGO-LOOP-01` — built by the one helper the resident route's tell uses too.
     // `R-100` — and the row's page, naming its picture: a rebuilt page opens on the page it was on.
+    const takeControl =
+      outputPass === 'background'
+        ? this.#takeControl(itemId, templateId)
+        : this.#takeControl(itemId, templateId, false);
     const control: CgControl = {
-      ...this.#takeControl(itemId, templateId),
+      ...takeControl,
+      // Page-list state can itself be a marked foreground visual, so both passes need it. Only
+      // the TAKE TOKEN is background-owned; the foreground must never arm completion signalling.
       ...(await this.#pageControl(itemId, templateId)),
     };
     const addFields = withCgControl(fields, control);
@@ -17065,7 +17300,7 @@ export class CasparRuntime {
       seq,
       'normal',
     );
-    if (ok) this.#loaded.add(itemId);
+    if (ok && outputPass === 'background') this.#loaded.add(itemId);
     return {
       ok,
       ...(errorCode !== undefined && { errorCode }),
@@ -17226,7 +17461,17 @@ export class CasparRuntime {
    * ⚠ Absent members are absent, never defaulted: a row with no override carries no `timing`, so
    * its wire is what it was. And it MINTS — call it once per take.
    */
-  #takeControl(itemId: string, templateId: string | undefined): TakeControl {
+  #takeControl(itemId: string, templateId: string | undefined): TakeControl;
+  #takeControl(
+    itemId: string,
+    templateId: string | undefined,
+    includeTakeToken: false,
+  ): Omit<TakeControl, 'take'>;
+  #takeControl(
+    itemId: string,
+    templateId: string | undefined,
+    includeTakeToken = true,
+  ): TakeControl | Omit<TakeControl, 'take'> {
     const activeLook = this.#activeLookOf(itemId);
     // `PASSES-CYCLE-ONLY-26` — a recorded count crosses only for a template whose stated mode
     // is `loop-cycle`. See `#admitsPassTiming`: the record keeps it either way.
@@ -17236,12 +17481,12 @@ export class CasparRuntime {
     // `RUN-NEXT-VERSION-02` Q9 — the row's sound mute, once it has been set: a take that rebuilds the
     // page, or tells a resident one, leaves it muted (or unmuted) as the operator last asked.
     const soundMuted = this.#soundMutes.get(itemId);
-    return {
+    const shared: Omit<TakeControl, 'take'> = {
       ...(activeLook !== undefined && { look: activeLook.id }),
       ...(passTiming !== undefined && { timing: CasparRuntime.#wireTiming(passTiming) }),
       ...(soundMuted !== undefined && { sound: { muted: soundMuted } }),
-      take: this.#mintTakeToken(itemId),
     };
+    return includeTakeToken ? { ...shared, take: this.#mintTakeToken(itemId) } : shared;
   }
 
   #mintTakeToken(itemId: string): string {

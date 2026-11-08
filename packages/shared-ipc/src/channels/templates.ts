@@ -145,6 +145,8 @@ export const TemplateLiveSourcesSchema = z.object({
   looks: z.array(TemplateLookSchema).optional(),
   /** Which look a fresh take enters. Present exactly when `looks` is non-empty. */
   defaultLookId: z.string().min(1).optional(),
+  /** D-201 — this template needs its marked authored elements on a transparent page above plates. */
+  foregroundOverlay: z.literal(true).optional(),
 });
 export type TemplateLiveSources = z.infer<typeof TemplateLiveSourcesSchema>;
 

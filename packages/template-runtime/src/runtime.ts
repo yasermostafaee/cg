@@ -477,6 +477,29 @@ function applyAssetUrls(
   });
 }
 
+/** D-201 — split one authored scene into its below-producer and above-producer DOM passes. */
+function applyOutputPass(
+  container: HTMLElement,
+  pass: NonNullable<RuntimeBootOptions['outputPass']>,
+): void {
+  if (pass === 'full') return;
+  const marker = '[data-cg-live-foreground]';
+  const nodes = Array.from(container.querySelectorAll<HTMLElement>('[data-cg-element-id]'));
+  if (pass === 'background') {
+    // Only remove marker roots. Descendants disappear with a marked composition/container, and an
+    // individually marked title leaves its unmarked siblings on the background page.
+    for (const node of nodes) if (node.matches(marker)) node.remove();
+    return;
+  }
+  // A foreground leaf needs every composition/container ancestor that positions it. Conversely,
+  // every descendant of an explicitly marked composition belongs to that marked foreground tree.
+  for (const node of nodes.reverse()) {
+    const keep =
+      node.matches(marker) || node.closest(marker) !== null || node.querySelector(marker) !== null;
+    if (!keep) node.remove();
+  }
+}
+
 /**
  * B-088 + D-125 Phase 3a — compose the two independent reasons an intro/outro leg must be
  * SWEPT frame-by-frame instead of collapsing to a single end-frame paint:
@@ -546,6 +569,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const stepPlan = stepPlanOf(scene);
 
   const built = buildScene(scene, doc, mode, paintEditorBackdrop);
+  if (mode === 'output') applyOutputPass(built.container, options.outputPass ?? 'full');
   root.appendChild(built.container);
 
   /**

@@ -88,7 +88,7 @@ interface PlateSpec {
 }
 
 /** A template declaring one hole per entry, each with its own rect. */
-function template(plates: readonly PlateSpec[]): TemplateInfo {
+function template(plates: readonly PlateSpec[], foregroundOverlay = false): TemplateInfo {
   return {
     templateId: 'lower-third',
     templateType: 'lower-third',
@@ -105,6 +105,7 @@ function template(plates: readonly PlateSpec[]): TemplateInfo {
         ...(p.fitMode !== undefined && { fitMode: p.fitMode }),
         ...(p.revealMask !== undefined && { revealMask: p.revealMask }),
       })),
+      ...(foregroundOverlay ? { foregroundOverlay: true as const } : {}),
     },
   };
 }
@@ -247,6 +248,76 @@ it('the plates are seated BEFORE the graphic they belong to plays', async () => 
   expect(playedAt, "the template's own CG PLAY must be on the wire").toBeGreaterThanOrEqual(0);
   expect(seatedAt).toBeGreaterThanOrEqual(0);
   expect(seatedAt).toBeLessThan(playedAt);
+});
+
+it('D-201 — an authored foreground pass is paired above every live input and revealed last', async () => {
+  const r = await boot({ template: template([{ id: 'guest-1', rect: BOX }], true) });
+
+  const verdict = await loadAndTake(r);
+  expect(verdict.accepted).toBe(true);
+
+  const lines = await recvLines();
+  const foregroundLayer = BAND.end;
+  const backgroundAdd = lines.find(
+    (line) =>
+      line.startsWith('CG 1-') && line.includes(' ADD ') && line.includes('cgpass=background'),
+  );
+  const foregroundAddAt = lines.findIndex(
+    (line) =>
+      line.startsWith(`CG 1-${String(foregroundLayer)} ADD `) &&
+      line.includes('cgpass=foreground') &&
+      line.includes('cgsync=item-1'),
+  );
+  const foregroundPlayAt = at(lines, `CG 1-${String(foregroundLayer)} PLAY`);
+  const platePlayAt = at(lines, `PLAY 1-${String(BAND.start)} `);
+  const backgroundPlayAt = lines.findIndex(
+    (line) => /^CG 1-\d+ PLAY/.test(line) && !line.startsWith(`CG 1-${String(foregroundLayer)} `),
+  );
+  const revealAt = at(lines, `MIXER 1-${String(foregroundLayer)} OPACITY 1`);
+
+  expect(backgroundAdd).toContain('cgsync=item-1');
+  const pairedAdds = lines.filter((line) => line.includes(' ADD ') && line.includes('cgpass='));
+  expect(pairedAdds).toHaveLength(2);
+  expect(
+    pairedAdds.filter((line) => line.includes('take')),
+    'only the background page may own the completion take token',
+  ).toHaveLength(1);
+  expect(foregroundAddAt).toBeGreaterThanOrEqual(0);
+  expect(foregroundPlayAt).toBeGreaterThan(foregroundAddAt);
+  expect(platePlayAt).toBeGreaterThan(foregroundPlayAt);
+  expect(backgroundPlayAt).toBeGreaterThan(platePlayAt);
+  expect(revealAt).toBeGreaterThan(backgroundPlayAt);
+  expect(foregroundLayer).toBeGreaterThan(BAND.start);
+});
+
+it('D-201 — the extra foreground layer is admitted atomically before any take wire', async () => {
+  const r = await boot({
+    template: template([{ id: 'guest-1', rect: BOX }], true),
+    catalog: catalog({ layerRange: { start: 30, end: 30 } }),
+  });
+  await r.load('item-1', 'lower-third', {});
+  const before = (await recvLines()).length;
+
+  const verdict = await r.take('item-1');
+
+  expect(verdict).toMatchObject({ accepted: false, errorCode: 'live-source-no-layer' });
+  expect((await recvLines()).slice(before)).toEqual([]);
+});
+
+it('D-201 — Clear removes the live input, foreground pass and background page in that order', async () => {
+  const r = await boot({ template: template([{ id: 'guest-1', rect: BOX }], true) });
+  await loadAndTake(r);
+  const before = (await recvLines()).length;
+
+  expect((await r.out('item-1')).accepted).toBe(true);
+
+  const lines = (await recvLines()).slice(before);
+  const plateClear = lines.indexOf(`CLEAR 1-${String(BAND.start)}`);
+  const foregroundClear = lines.indexOf(`CLEAR 1-${String(BAND.end)}`);
+  const backgroundClear = lines.findIndex((line) => /^CLEAR 1-1\d$/.test(line));
+  expect(plateClear).toBeGreaterThanOrEqual(0);
+  expect(foregroundClear).toBeGreaterThan(plateClear);
+  expect(backgroundClear).toBeGreaterThan(foregroundClear);
 });
 
 it('the ledger records the layer, the plate and the producer ARGUMENT that was sent', async () => {

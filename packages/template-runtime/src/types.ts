@@ -285,6 +285,9 @@ export interface StopOptions {
  */
 export type RenderMode = 'author' | 'output';
 
+/** D-201 — which half of a split broadcast page this runtime paints. */
+export type OutputPass = 'full' | 'background' | 'foreground';
+
 export interface RuntimeBootOptions {
   /**
    * Where the runtime renders. Defaults to `document.body`. In the
@@ -299,6 +302,13 @@ export interface RuntimeBootOptions {
    * `'output'`, the safe direction.
    */
   mode?: RenderMode;
+
+  /**
+   * D-201 — output-only page split. `background` removes elements explicitly marked for the
+   * foreground; `foreground` keeps only those elements and the ancestors needed to position them.
+   * Absent/`full` preserves the existing single-page export and every authoring surface.
+   */
+  outputPass?: OutputPass;
 
   /**
    * B-134 — whether this surface paints the EDITOR BACKDROP.
