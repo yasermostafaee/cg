@@ -4249,3 +4249,24 @@ Measured free before use: the immediately preceding tracked pointer named `B-415
 the tracked PRD-heading audit found no existing `B-415` heading.
 
 ⇒ **Next free after this entry is `B-416`**, **`D-201`**, **`P-078`**, **`R-109`** and **`C-049`**.
+
+### 2026-11-08 — live-plate foreground overlays take `D-201`
+
+- `D-201` — let text and other authored foreground graphics travel with a live frame while painting
+  above its producer, including look swaps that move the frame and its title together —
+  [designer.md](designer.md).
+
+Measured free before use: the immediately preceding tracked pointer named `D-201` as next free, and
+the tracked PRD-heading audit found no existing `D-201` heading.
+
+⇒ **Next free after this entry is `B-416`**, **`D-202`**, **`P-078`**, **`R-109`** and **`C-049`**.
+
+### 2026-11-08 — live-plate reveal masks take `D-202`
+
+- `D-202` — allow an explicitly linked upper live plate to reveal a rectangular region of a lower
+  live input while ordinary overlapping plates remain export-blocking — [designer.md](designer.md).
+
+Measured free before use: the immediately preceding tracked pointer named `D-202` as next free, and
+the tracked PRD-heading audit found no existing `D-202` heading.
+
+⇒ **Next free after this entry is `B-416`**, **`D-203`**, **`P-078`**, **`R-109`** and **`C-049`**.

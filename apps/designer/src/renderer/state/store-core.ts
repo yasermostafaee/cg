@@ -32,6 +32,8 @@ export type DesignerTool =
   // entry and no factory in `element-defaults.ts`, so "standalone creation
   // unchanged" described a creation path that did not exist.
   | 'live-source'
+  // D-202 — contextual tool launched from a selected upper Plate's Inspector.
+  | 'live-reveal'
   | 'hand';
 
 export type DesignerView = 'landing' | 'studio';

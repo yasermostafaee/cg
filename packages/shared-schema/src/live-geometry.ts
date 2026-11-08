@@ -12,6 +12,7 @@ import {
   type LiveFitMode,
 } from './live-fit.js';
 import type { LiveSourceRect } from './live-source.js';
+import type { LiveRevealRect } from './elements.js';
 
 /**
  * C-015 phase 6 (tasks 6.2 / 6.3 / 6.4) — **scene pixels → the `MIXER FILL` and
@@ -132,6 +133,29 @@ export interface LiveSourceFit {
    * is the case where the correct behaviour is to seat no producer at all.
    */
   readonly clip: NormalizedRect | null;
+}
+
+/** D-202 — map an upper plate's normalized reveal window into scene pixels. */
+export function liveRevealSceneRect(upper: LiveSourceRect, reveal: LiveRevealRect): LiveSourceRect {
+  return {
+    x: upper.x + reveal.x * upper.width,
+    y: upper.y + reveal.y * upper.height,
+    width: reveal.width * upper.width,
+    height: reveal.height * upper.height,
+  };
+}
+
+/** D-202 — intersection in channel-normalized space; `null` means nothing can be revealed. */
+export function intersectNormalizedRects(
+  a: NormalizedRect,
+  b: NormalizedRect,
+): NormalizedRect | null {
+  const left = Math.max(a.x, b.x);
+  const top = Math.max(a.y, b.y);
+  const right = Math.min(a.x + a.width, b.x + b.width);
+  const bottom = Math.min(a.y + a.height, b.y + b.height);
+  if (right <= left || bottom <= top) return null;
+  return { x: left, y: top, width: right - left, height: bottom - top };
 }
 
 /**

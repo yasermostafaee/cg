@@ -180,6 +180,67 @@ function overlaps(a: Aabb, b: Aabb): boolean {
   );
 }
 
+/** D-202 — the authored reveal window in the same coordinates as its upper plate. */
+function revealAabb(upper: FlatLiveSource): Aabb | null {
+  const reveal = upper.element.revealMask;
+  if (reveal === undefined) return null;
+  const width = upper.box.maxX - upper.box.minX;
+  const height = upper.box.maxY - upper.box.minY;
+  return {
+    minX: upper.box.minX + reveal.rect.x * width,
+    minY: upper.box.minY + reveal.rect.y * height,
+    maxX: upper.box.minX + (reveal.rect.x + reveal.rect.width) * width,
+    maxY: upper.box.minY + (reveal.rect.y + reveal.rect.height) * height,
+  };
+}
+
+function revealRect(upper: FlatElement): LiveSourceRect | null {
+  if (upper.element.type !== 'video-placeholder' || upper.element.revealMask === undefined)
+    return null;
+  const mask = upper.element.revealMask.rect;
+  return {
+    x: upper.rect.x + mask.x * upper.rect.width,
+    y: upper.rect.y + mask.y * upper.rect.height,
+    width: mask.width * upper.rect.width,
+    height: mask.height * upper.rect.height,
+  };
+}
+
+/** Only the explicitly linked upper/lower pair may overlap, and its window must reach the lower. */
+function allowedRevealOverlap(a: FlatLiveSource, b: FlatLiveSource): boolean {
+  const aWindow = revealAabb(a);
+  if (
+    a.element.revealMask?.targetSourceId === b.element.routeKey &&
+    aWindow !== null &&
+    overlaps(aWindow, b.box)
+  )
+    return true;
+  const bWindow = revealAabb(b);
+  return (
+    b.element.revealMask?.targetSourceId === a.element.routeKey &&
+    bWindow !== null &&
+    overlaps(bWindow, a.box)
+  );
+}
+
+function allowedFlatRevealOverlap(a: FlatElement, b: FlatElement): boolean {
+  if (a.element.type !== 'video-placeholder' || b.element.type !== 'video-placeholder')
+    return false;
+  const aWindow = revealRect(a);
+  if (
+    a.element.revealMask?.targetSourceId === b.element.routeKey &&
+    aWindow !== null &&
+    rectsOverlap(aWindow, b.rect)
+  )
+    return true;
+  const bWindow = revealRect(b);
+  return (
+    b.element.revealMask?.targetSourceId === a.element.routeKey &&
+    bWindow !== null &&
+    rectsOverlap(bWindow, a.rect)
+  );
+}
+
 /** Whether the element carries a keyframe on any geometry-affecting track. */
 function hasGeometryKeyframe(el: Element): boolean {
   const tracks = el.animation?.tracks as Record<string, unknown> | undefined;
@@ -212,6 +273,60 @@ function plateRef(el: Element, box?: Aabb): string {
 /** The four Live Source preflight checks, over the whole project. */
 export function liveSourceIssues(scene: Scene): ExportIssue[] {
   const issues: ExportIssue[] = [];
+
+  // D-202 — validate relationships independently of overlap so a dangling or cyclic mask never
+  // turns into a silent no-op merely because its plates happen not to touch in the current look.
+  const projectPlates = flattenElements(scene, 'document').filter(
+    (
+      flat,
+    ): flat is FlatElement & { element: FlatElement['element'] & { type: 'video-placeholder' } } =>
+      flat.element.type === 'video-placeholder',
+  );
+  for (const upper of projectPlates) {
+    const reveal = upper.element.revealMask;
+    if (reveal === undefined) continue;
+    if (upper.element.routeKey === reveal.targetSourceId) {
+      issues.push({
+        severity: 'error',
+        code: 'live-reveal-self-target',
+        message: `${plateRef(upper.element)} cannot reveal itself. Choose a different lower Plate.`,
+        elementId: upper.element.id,
+      });
+      continue;
+    }
+    const targets = projectPlates.filter(
+      (candidate) => candidate.element.routeKey === reveal.targetSourceId,
+    );
+    if (targets.length === 0) {
+      issues.push({
+        severity: 'error',
+        code: 'live-reveal-target-missing',
+        message: `${plateRef(upper.element)} reveals “${reveal.targetSourceId}”, but no Plate with that source exists.`,
+        elementId: upper.element.id,
+      });
+      continue;
+    }
+    if (
+      targets.some((target) => target.element.revealMask?.targetSourceId === upper.element.routeKey)
+    ) {
+      issues.push({
+        severity: 'error',
+        code: 'live-reveal-cycle',
+        message: `${plateRef(upper.element)} and its lower Plate reveal each other. A reveal must point one way: lower → upper → reveal overlay.`,
+        elementId: upper.element.id,
+      });
+      continue;
+    }
+    const window = revealRect(upper);
+    if (window !== null && !targets.some((target) => rectsOverlap(window, target.rect))) {
+      issues.push({
+        severity: 'error',
+        code: 'live-reveal-window-misses-target',
+        message: `${plateRef(upper.element)} has a reveal window that does not reach “${reveal.targetSourceId}”. Move or resize the window onto the lower Plate.`,
+        elementId: upper.element.id,
+      });
+    }
+  }
 
   // 🔴 `multibox-layout-switch` 4.6 — a plate inside a STAMPED scope (`sequence` item or
   // `repeater`) is invisible to BOTH sides at once: nothing declares it, so no producer is
@@ -424,7 +539,7 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
         const a = flat[i];
         const b = flat[j];
         if (a === undefined || b === undefined) continue;
-        if (!overlaps(a.box, b.box)) continue;
+        if (!overlaps(a.box, b.box) || allowedRevealOverlap(a, b)) continue;
         for (const [self, other] of [
           [a, b],
           [b, a],
@@ -475,7 +590,7 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
         if (a === undefined || b === undefined) continue;
         // A box with no cell in this arrangement is not on screen, so it cannot collide.
         if (hiddenInArrangement(a, view) || hiddenInArrangement(b, view)) continue;
-        if (!rectsOverlap(a.rect, b.rect)) continue;
+        if (!rectsOverlap(a.rect, b.rect) || allowedFlatRevealOverlap(a, b)) continue;
         for (const [self, other] of [
           [a, b],
           [b, a],
@@ -608,7 +723,7 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
           const ownerA = lookContaining(group, ancestorIds(a));
           const ownerB = lookContaining(group, ancestorIds(b));
           if ((ownerA === undefined) === (ownerB === undefined)) continue;
-          if (!rectsOverlap(a.rect, b.rect)) continue;
+          if (!rectsOverlap(a.rect, b.rect) || allowedFlatRevealOverlap(a, b)) continue;
           for (const [self, other] of [
             [a, b],
             [b, a],

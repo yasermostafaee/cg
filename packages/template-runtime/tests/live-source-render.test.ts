@@ -147,6 +147,26 @@ describe("D-137 — 'author' mode paints the bars", () => {
     expect(node(root).querySelector<HTMLImageElement>('img')?.style.objectPosition).toBe('20% 80%');
   });
 
+  it('D-202 — author mode draws the exact reveal guide and output paints none of it', () => {
+    const plate = liveSource({
+      revealMask: {
+        targetSourceId: 'guest-2',
+        rect: { x: 0.1, y: 0.6, width: 0.8, height: 0.3 },
+      },
+    } as never);
+    const author = node(build(sceneWith([plate]), 'author').root).querySelector<HTMLElement>(
+      '[data-cg-live-reveal-mask]',
+    );
+    expect(author?.dataset['cgLiveRevealMask']).toBe('guest-2');
+    expect(author?.style.left).toBe('10%');
+    expect(author?.style.top).toBe('60%');
+    expect(author?.style.width).toBe('80%');
+    expect(author?.style.height).toBe('30%');
+    expect(
+      node(build(sceneWith([plate]), 'output').root).querySelector('[data-cg-live-reveal-mask]'),
+    ).toBeNull();
+  });
+
   it('the label is pinned LTR, so a Persian scene cannot flip `guest-1` to `1-guest`', () => {
     const { root } = build(sceneWith([liveSource()]), 'author');
     const label = node(root).querySelector<HTMLElement>('[data-cg-live-source-label]');

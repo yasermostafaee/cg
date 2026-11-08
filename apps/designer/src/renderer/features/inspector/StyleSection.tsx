@@ -888,6 +888,7 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
         <AspectRow element={element} />
         <FitModeRow element={element} />
         <CropFocusRows element={element} />
+        <RevealMaskRows element={element} />
         <LivePosterRow element={element} />
         {/*
           ⭐ `DESIGNER-FIX-0905` — the paragraph that stood here is gone, and its sentences
@@ -1214,6 +1215,124 @@ function CropFocusRows({ element }: { element: VideoPlaceholderElement }): JSX.E
         withheld={withheld}
         onCommit={(y) => commit('y', y)}
       />
+    </>
+  );
+}
+
+function currentPlate(element: VideoPlaceholderElement): VideoPlaceholderElement {
+  const scene = designerStore.get().scene;
+  const found = scene === null ? null : locate(scene, element.id);
+  return (found?.layer.children[found.elIdx] as VideoPlaceholderElement | undefined) ?? element;
+}
+
+/** D-202 — explicitly link one upper plate to the lower source shown through its window. */
+function RevealMaskRows({ element }: { element: VideoPlaceholderElement }): JSX.Element {
+  const scene = designerStore.get().scene;
+  const plates: VideoPlaceholderElement[] = [];
+  const collect = (children: readonly Element[]): void => {
+    for (const child of children) {
+      if (child.type === 'video-placeholder') plates.push(child);
+      else if (child.type === 'container') collect(child.children);
+    }
+  };
+  if (scene !== null) for (const layer of activeLayersOf(scene)) collect(layer.children);
+  const candidates = plates.filter(
+    (plate) => plate.id !== element.id && plate.routeKey !== undefined,
+  );
+  const options = ['', ...candidates.map((plate) => plate.routeKey as string)] as const;
+  const labels = [
+    '— no reveal —',
+    ...candidates.map((plate) => `${plate.name || 'Plate'} — ${plate.routeKey as string}`),
+  ];
+  const reveal = element.revealMask;
+  const rect = reveal?.rect ?? { x: 0.05, y: 0.7, width: 0.9, height: 0.25 };
+  const commitRect = (key: 'x' | 'y' | 'width' | 'height', percent: number): void => {
+    const latest = currentPlate(element);
+    if (latest.revealMask === undefined) return;
+    const current = latest.revealMask.rect;
+    const raw = Math.max(0, Math.min(1, percent / 100));
+    const next = { ...current, [key]: raw };
+    next.x = Math.min(next.x, 1 - next.width);
+    next.y = Math.min(next.y, 1 - next.height);
+    next.width = Math.max(0.001, Math.min(next.width, 1 - next.x));
+    next.height = Math.max(0.001, Math.min(next.height, 1 - next.y));
+    designerStore.updateElement(element.id, {
+      revealMask: { ...latest.revealMask, rect: next },
+    } as Partial<Element>);
+  };
+  return (
+    <>
+      <SelectField
+        label="reveal lower plate"
+        value={reveal?.targetSourceId ?? ''}
+        options={options}
+        labels={labels}
+        withheld={
+          candidates.length === 0
+            ? 'Add and assign another Plate first; it will be the lower live input.'
+            : undefined
+        }
+        onCommit={(targetSourceId) => {
+          designerStore.updateElement(element.id, {
+            revealMask:
+              targetSourceId === '' ? undefined : { targetSourceId, rect: reveal?.rect ?? rect },
+          } as Partial<Element>);
+        }}
+      />
+      {reveal !== undefined && (
+        <>
+          <NumberField
+            label="reveal X"
+            value={rect.x * 100}
+            min={0}
+            max={100}
+            step={1}
+            suffix="%"
+            onCommit={(value) => commitRect('x', value)}
+          />
+          <NumberField
+            label="reveal Y"
+            value={rect.y * 100}
+            min={0}
+            max={100}
+            step={1}
+            suffix="%"
+            onCommit={(value) => commitRect('y', value)}
+          />
+          <NumberField
+            label="reveal width"
+            value={rect.width * 100}
+            min={0.1}
+            max={100}
+            step={1}
+            suffix="%"
+            onCommit={(value) => commitRect('width', value)}
+          />
+          <NumberField
+            label="reveal height"
+            value={rect.height * 100}
+            min={0.1}
+            max={100}
+            step={1}
+            suffix="%"
+            onCommit={(value) => commitRect('height', value)}
+          />
+          <div className={fieldCss.row}>
+            <span className={fieldCss.label}>window</span>
+            <Button
+              variant="secondary"
+              aria-label="Draw reveal window"
+              onClick={() => {
+                designerStore.setSelection([element.id]);
+                designerStore.setTool('live-reveal');
+              }}
+              title="Drag a rectangle on this upper Plate. Only this linked overlap is allowed."
+            >
+              Draw on canvas
+            </Button>
+          </div>
+        </>
+      )}
     </>
   );
 }

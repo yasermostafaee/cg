@@ -1853,6 +1853,21 @@ function buildLiveSource(element: VideoPlaceholderElement, ctx: BuildCtx): HTMLE
     el.style.backgroundImage = smpteBarsGradient();
   }
 
+  if (element.revealMask !== undefined) {
+    const reveal = ctx.doc.createElement('div');
+    reveal.dataset['cgLiveRevealMask'] = element.revealMask.targetSourceId;
+    reveal.style.position = 'absolute';
+    reveal.style.left = `${element.revealMask.rect.x * 100}%`;
+    reveal.style.top = `${element.revealMask.rect.y * 100}%`;
+    reveal.style.width = `${element.revealMask.rect.width * 100}%`;
+    reveal.style.height = `${element.revealMask.rect.height * 100}%`;
+    reveal.style.border = '2px dashed #00e5ff';
+    reveal.style.background = 'rgba(0, 229, 255, 0.18)';
+    reveal.style.boxSizing = 'border-box';
+    reveal.style.pointerEvents = 'none';
+    el.appendChild(reveal);
+  }
+
   const label = ctx.doc.createElement('div');
   label.dataset['cgLiveSourceLabel'] = '';
   /*

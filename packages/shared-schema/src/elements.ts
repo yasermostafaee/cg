@@ -1458,6 +1458,39 @@ export const LiveSourceIdSchema = z
       'concern and never travels in the scene.',
   );
 
+/** D-202 — a normalized rectangle inside an upper plate that reveals another live source. */
+export const LiveRevealRectSchema = z
+  .object({
+    x: z.number().min(0).max(1),
+    y: z.number().min(0).max(1),
+    width: z.number().positive().max(1),
+    height: z.number().positive().max(1),
+  })
+  .superRefine((rect, ctx) => {
+    if (rect.x + rect.width > 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['width'],
+        message: 'Reveal exceeds plate width',
+      });
+    }
+    if (rect.y + rect.height > 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['height'],
+        message: 'Reveal exceeds plate height',
+      });
+    }
+  });
+export type LiveRevealRect = z.infer<typeof LiveRevealRectSchema>;
+
+export const LiveRevealMaskSchema = z.object({
+  /** Symbolic source shown through the window; never a device or element id. */
+  targetSourceId: LiveSourceIdSchema,
+  rect: LiveRevealRectSchema,
+});
+export type LiveRevealMask = z.infer<typeof LiveRevealMaskSchema>;
+
 /**
  * D-137 — a **Live Source**: an axis-aligned region that renders as NOTHING in
  * both exports, so CasparCG can composite a live input on a LOWER layer behind the
@@ -1519,6 +1552,8 @@ export const VideoPlaceholderElementSchema = ElementBaseSchema.extend({
   fitMode: LiveFitModeSchema.optional(),
   /** D-178 — normalized focal point for a source cropped with `cover`. */
   cropFocus: LiveCropFocusSchema.optional(),
+  /** D-202 — an intentional overlap: this upper plate reveals the target inside `rect`. */
+  revealMask: LiveRevealMaskSchema.optional(),
   /**
    * The FILL source's symbolic id, e.g. `guest-1` — **or absent, meaning UNASSIGNED.**
    *

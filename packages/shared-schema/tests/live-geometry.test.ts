@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { liveSourceFit, type LiveSourceFitInput } from '../src/live-geometry.js';
+import {
+  intersectNormalizedRects,
+  liveRevealSceneRect,
+  liveSourceFit,
+  type LiveSourceFitInput,
+} from '../src/live-geometry.js';
 
 /**
  * C-015 phase 6 — the plate geometry: crop-to-fill (6.3) and the scene-rect clamp
@@ -50,6 +55,32 @@ const px = (
   y: r.y * raster.height,
   width: r.width * raster.width,
   height: r.height * raster.height,
+});
+
+describe('D-202 — reveal geometry', () => {
+  it('maps a normalized window through its upper plate', () => {
+    expect(
+      liveRevealSceneRect(
+        { x: 400, y: 200, width: 800, height: 400 },
+        { x: 0.1, y: 0.5, width: 0.75, height: 0.25 },
+      ),
+    ).toEqual({ x: 480, y: 400, width: 600, height: 100 });
+  });
+
+  it('intersects the reveal window with the lower picture and refuses empty contact', () => {
+    expect(
+      intersectNormalizedRects(
+        { x: 0.2, y: 0.2, width: 0.5, height: 0.5 },
+        { x: 0.4, y: 0.5, width: 0.5, height: 0.25 },
+      ),
+    ).toEqual({ x: 0.4, y: 0.5, width: 0.29999999999999993, height: 0.19999999999999996 });
+    expect(
+      intersectNormalizedRects(
+        { x: 0, y: 0, width: 0.1, height: 0.1 },
+        { x: 0.2, y: 0.2, width: 0.1, height: 0.1 },
+      ),
+    ).toBeNull();
+  });
 });
 
 /**

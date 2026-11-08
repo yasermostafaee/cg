@@ -274,6 +274,80 @@ describe('D-137 — overlapping holes are reported against BOTH elements', () =>
     expect(overlap.map((i) => i.elementId).sort()).toEqual(['guest-1', 'guest-2']);
   });
 
+  it('D-202 — exempts only an explicitly linked pair whose reveal reaches the lower plate', () => {
+    const upper = live('upper', 100, 100, {
+      revealMask: {
+        targetSourceId: 'lower',
+        rect: { x: 0.1, y: 0.5, width: 0.8, height: 0.4 },
+      },
+    });
+    const lower = live('lower', 300, 200);
+    expect(
+      liveSourceIssues(scene([upper, lower])).filter((i) => i.code === 'live-source-overlap'),
+    ).toEqual([]);
+
+    const third = live('third', 350, 220);
+    const thirdParty = liveSourceIssues(scene([upper, lower, third])).filter(
+      (i) => i.code === 'live-source-overlap',
+    );
+    expect(thirdParty.some((i) => i.elementId === 'third')).toBe(true);
+  });
+
+  it('D-202 — missing, self and two-way reveal relationships are blocking errors', () => {
+    expect(
+      codes(
+        scene([
+          live('upper', 100, 100, {
+            revealMask: {
+              targetSourceId: 'missing',
+              rect: { x: 0, y: 0, width: 0.5, height: 0.5 },
+            },
+          }),
+        ]),
+      ),
+    ).toContain('live-reveal-target-missing');
+    expect(
+      codes(
+        scene([
+          live('upper', 100, 100, {
+            revealMask: {
+              targetSourceId: 'upper',
+              rect: { x: 0, y: 0, width: 0.5, height: 0.5 },
+            },
+          }),
+        ]),
+      ),
+    ).toContain('live-reveal-self-target');
+    const cyclic = scene([
+      live('upper', 100, 100, {
+        revealMask: {
+          targetSourceId: 'lower',
+          rect: { x: 0, y: 0, width: 0.5, height: 0.5 },
+        },
+      }),
+      live('lower', 200, 150, {
+        revealMask: {
+          targetSourceId: 'upper',
+          rect: { x: 0, y: 0, width: 0.5, height: 0.5 },
+        },
+      }),
+    ]);
+    expect(codes(cyclic)).toContain('live-reveal-cycle');
+  });
+
+  it('D-202 — a reveal window that misses its linked lower plate is a targeted error', () => {
+    const s = scene([
+      live('upper', 0, 0, {
+        revealMask: {
+          targetSourceId: 'lower',
+          rect: { x: 0, y: 0, width: 0.1, height: 0.1 },
+        },
+      }),
+      live('lower', 300, 200),
+    ]);
+    expect(codes(s)).toContain('live-reveal-window-misses-target');
+  });
+
   it('edge-touching is NOT an overlap — zero shared area is not a collision', () => {
     // 640 wide at x=0 ends exactly where x=640 begins.
     expect(codes(scene([live('guest-1', 0, 0), live('guest-2', 640, 0)]))).toEqual([]);

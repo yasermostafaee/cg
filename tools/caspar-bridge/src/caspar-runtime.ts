@@ -19,6 +19,8 @@ import {
 } from '@cg/caspar-client';
 import {
   isRestorable,
+  intersectNormalizedRects,
+  liveRevealSceneRect,
   liveSourceFit,
   positionQuery,
   resolveDefaultPosition,
@@ -120,6 +122,7 @@ import {
   liveSourceCarrierState,
   lookPlateFits,
   lookPlateFocuses,
+  lookPlateReveals,
   lookPlateRects,
   pruneAssignmentsForCatalog,
   // `PLAYOUT-SOURCES-01` — what may be bound and what may be seated, asked of the ONE module.
@@ -428,6 +431,8 @@ interface LivePlatePlacement {
    * new persisted field: the ledger already records `producer` as SENT.
    */
   readonly producerArg: string;
+  /** D-202 — seat identity; normally the producer argument, unique for a reveal duplicate. */
+  readonly seatId: string;
   /** The assigned catalog entry's producer, still as a parsed union. */
   readonly producer: SourceProducer;
   /**
@@ -460,6 +465,8 @@ interface LivePlatePlacement {
    * Its {@link fit} is the parked one (`B-154`), so it renders nothing.
    */
   readonly held: boolean;
+  /** D-202 — a duplicate lower picture above the upper plate; visual-only and always silent. */
+  readonly revealOverlay?: true;
   /**
    * 🔴 `ROUTE-PLATES-01` rule 5 — for a PLAYOUT ROUTE, the `epoch` of the D10 answer its
    * `route://H-L` was resolved from (canonical). The seat step sends the route only while this is
@@ -473,6 +480,8 @@ interface LivePlatePlacement {
    */
   readonly playback?: MediaPlayback;
 }
+
+const liveSeatId = (record: LiveLayerRecord): string => record.seatId ?? record.producer;
 
 /** Is this placement a Playout route (`@cg/shared-ipc`'s one predicate, asked of a placement)? */
 function placementIsPlayoutRoute(placement: LivePlatePlacement): boolean {
@@ -624,6 +633,7 @@ function isSeatUnchanged(
     mode !== 'take' &&
     prior !== undefined &&
     adoptionKey(prior.slot) === adoptionKey(placement.slot) &&
+    liveSeatId(prior) === placement.seatId &&
     prior.producer === placement.producerArg
   );
 }
@@ -7597,11 +7607,13 @@ export class CasparRuntime {
     const fitProvenance = new Map<string, PlateFitReport>();
     const seated: {
       plateId: string;
+      seatId: string;
       producerArg: string;
       producer: SourceProducer;
       source: LivePlatePlacement['source'];
       fit: LivePlatePlacement['fit'];
       held: boolean;
+      revealOverlay?: true;
       playback?: MediaPlayback;
     }[] = [];
 
@@ -7701,6 +7713,7 @@ export class CasparRuntime {
         // bind it, so the record still says how big the box will be when it arrives.
         seated.push({
           plateId: frame.plateId,
+          seatId: seat.producerArg,
           producerArg: seat.producerArg,
           producer: seat.source.producer,
           source: sourceLabelOf(seat.source),
@@ -7750,6 +7763,7 @@ export class CasparRuntime {
         if (seat.frames.length === 1) continue;
         seated.push({
           plateId: frame.plateId,
+          seatId: seat.producerArg,
           producerArg: seat.producerArg,
           producer: seat.source.producer,
           source: sourceLabelOf(seat.source),
@@ -7761,12 +7775,64 @@ export class CasparRuntime {
       }
       seated.push({
         plateId: frame.plateId,
+        seatId: seat.producerArg,
         producerArg: seat.producerArg,
         producer: seat.source.producer,
         source: sourceLabelOf(seat.source),
         fit: { fill: fit.fill, clip: fit.clip },
         held: false,
         ...clip,
+      });
+    }
+
+    /*
+      D-202 — a reveal is rendered as one extra, always-muted copy of the LOWER producer above
+      the upper plate. Its FILL is the lower plate's exact FILL; only its CLIP is intersected with
+      the authored window. This is equivalent to cutting a rectangular hole in the upper picture,
+      while using only the measured FILL/CLIP primitives CasparCG already provides.
+    */
+    const reveals = lookPlateReveals(carrier, lookId);
+    const activeMain = new Map(
+      seated.filter((entry) => !entry.held).map((entry) => [entry.plateId, entry]),
+    );
+    // Lower must be below upper. Move each linked lower before its upper without changing unrelated order.
+    for (const [upperId, reveal] of Object.entries(reveals)) {
+      const upperIndex = seated.findIndex((entry) => entry.plateId === upperId && !entry.held);
+      const lowerIndex = seated.findIndex(
+        (entry) => entry.plateId === reveal.targetSourceId && !entry.held,
+      );
+      if (upperIndex >= 0 && lowerIndex > upperIndex) {
+        const [lower] = seated.splice(lowerIndex, 1);
+        if (lower !== undefined) seated.splice(upperIndex, 0, lower);
+      }
+    }
+    for (const [upperId, reveal] of Object.entries(reveals)) {
+      const upper = activeMain.get(upperId);
+      const lower = activeMain.get(reveal.targetSourceId);
+      const upperRect = desired[upperId];
+      if (upper === undefined || lower === undefined || upperRect === undefined) continue;
+      const maskFit = this.liveSourceFitFor({
+        channel: slot.channel,
+        itemId,
+        rect: liveRevealSceneRect(upperRect, reveal.rect),
+        sceneResolution: carrier.resolution,
+        carriedDefaultPosition: carrier.defaultPosition,
+        sourceAspect: null,
+      });
+      if (maskFit.clip === null) continue;
+      const clip = intersectNormalizedRects(lower.fit.clip, maskFit.clip);
+      if (clip === null) continue;
+      const seatId = `${lower.producerArg}\u001freveal:${upperId}`;
+      declared.add(seatId);
+      const lowerSource = resolved.get(lower.producerArg);
+      if (lowerSource !== undefined) resolved.set(seatId, lowerSource);
+      seated.push({
+        ...lower,
+        plateId: reveal.targetSourceId,
+        seatId,
+        fit: { fill: lower.fit.fill, clip },
+        held: false,
+        revealOverlay: true,
       });
     }
 
@@ -7832,12 +7898,12 @@ export class CasparRuntime {
     const departingLayerOfPlate = new Map<string, number>();
     for (const record of this.#liveLayers.get(itemId) ?? []) {
       if (record.slot.channel !== slot.channel) continue;
-      currentLayer.set(record.producer, record.slot.layer);
-      if (!declared.has(record.producer))
+      currentLayer.set(liveSeatId(record), record.slot.layer);
+      if (!declared.has(liveSeatId(record)))
         departingLayerOfPlate.set(record.sourceId, record.slot.layer);
     }
     const preferred = seated.map(
-      (s) => currentLayer.get(s.producerArg) ?? departingLayerOfPlate.get(s.plateId),
+      (s) => currentLayer.get(s.seatId) ?? departingLayerOfPlate.get(s.plateId),
     );
     /*
       🔴 `ours` IS THE LAYERS THIS PLAN WILL OCCUPY — **NOT** EVERY LAYER THE ITEM OWNS.
@@ -7882,11 +7948,13 @@ export class CasparRuntime {
     const allocated = seated.map((s, i) => ({
       slot: { channel: slot.channel, layer: layers[i] as number },
       plateId: s.plateId,
+      seatId: s.seatId,
       producerArg: s.producerArg,
       producer: s.producer,
       source: s.source,
       fit: s.fit,
       held: s.held,
+      ...(s.revealOverlay === true && { revealOverlay: true as const }),
       ...(epoch !== undefined && isPlayoutRoute({ origin: s.source.origin, producer: s.producer })
         ? { epoch }
         : {}),
@@ -9460,10 +9528,10 @@ export class CasparRuntime {
         plan = planReconcile();
         if (!plan.ok) return refusePlan(plan);
       }
-      const prior = new Map((this.#liveLayers.get(itemId) ?? []).map((r) => [r.producer, r]));
+      const prior = new Map((this.#liveLayers.get(itemId) ?? []).map((r) => [liveSeatId(r), r]));
       const staleReturn = plan.placements.find((p) => {
         if (!placementIsPlayoutRoute(p)) return false;
-        const record = prior.get(p.producerArg);
+        const record = prior.get(p.seatId);
         return record?.held === true && record.epoch !== this.#sourceCatalog.inputsEpoch;
       });
       if (staleReturn !== undefined)
@@ -9913,7 +9981,7 @@ export class CasparRuntime {
       }
       if (hideFailure !== undefined) {
         for (const r of requests) {
-          results.set(r.placement.producerArg, {
+          results.set(r.placement.seatId, {
             placement: r.placement,
             outcome: 'refused',
             sent: false,
@@ -9929,7 +9997,7 @@ export class CasparRuntime {
       const sent = await this.#startSeatProducer(r.placement);
       // `ROUTE-PLATES-01` — a route names its own outcome when its `LOADBG` landed (`loaded`).
       const outcome = sent.outcome ?? outcomeOf(sent);
-      results.set(r.placement.producerArg, {
+      results.set(r.placement.seatId, {
         placement: r.placement,
         outcome,
         sent: true,
@@ -9951,7 +10019,7 @@ export class CasparRuntime {
     await this.#restoreInPlaceMutes(
       requests.filter((r) => {
         if (!mutedInPlace(r)) return false;
-        const seat = results.get(r.placement.producerArg);
+        const seat = results.get(r.placement.seatId);
         return seat === undefined || foregroundUnchanged(seat.outcome);
       }),
     );
@@ -10159,15 +10227,14 @@ export class CasparRuntime {
     | { readonly ok: false; readonly refusal: LivePlateApplyResult }
   > {
     const previous = this.#liveLayers.get(itemId) ?? [];
-    const priorByProducer = new Map(previous.map((r) => [r.producer, r] as const));
+    const priorByProducer = new Map(previous.map((r) => [liveSeatId(r), r] as const));
     const oursBefore = this.#liveLayerKeys();
     const requests: SeatRequest[] = [];
     for (const placement of [
       ...plan.placements,
-      ...plan.parked.filter((p) => !priorByProducer.has(p.producerArg)),
+      ...plan.parked.filter((p) => !priorByProducer.has(p.seatId)),
     ]) {
-      if (isSeatUnchanged('switch', priorByProducer.get(placement.producerArg), placement))
-        continue;
+      if (isSeatUnchanged('switch', priorByProducer.get(placement.seatId), placement)) continue;
       if (oursBefore.has(adoptionKey(placement.slot))) continue;
       requests.push({ placement, hide: true, optional: placement.held });
     }
@@ -10179,12 +10246,12 @@ export class CasparRuntime {
       await this.#commitStagedMixer();
     }
     const failed = requests.find((r) => {
-      const seat = seats.get(r.placement.producerArg);
+      const seat = seats.get(r.placement.seatId);
       return !r.optional && seat !== undefined && seat.outcome !== 'landed';
     });
     if (failed === undefined) return { ok: true, seats };
     await this.#undoPreSeat(seats);
-    const seat = seats.get(failed.placement.producerArg);
+    const seat = seats.get(failed.placement.seatId);
     return {
       ok: false,
       refusal: {
@@ -10257,7 +10324,7 @@ export class CasparRuntime {
       frame changed name across a look switch and re-seat a producer that never moved: a
       visible re-acquire on air, which is precisely what §12.4 chose "held" to avoid.
     */
-    const priorByProducer = new Map(previous.map((r) => [r.producer, r] as const));
+    const priorByProducer = new Map(previous.map((r) => [liveSeatId(r), r] as const));
     const priorBySlot = new Map(previous.map((r) => [adoptionKey(r.slot), r] as const));
 
     /** The ledger this action is building — seated plates first, then the held ones. */
@@ -10337,7 +10404,7 @@ export class CasparRuntime {
       nobody is showing. It needs the same `PLAY` every other seat needs, so it goes through
       the same loop — one seating path, one rollback, one failure vocabulary.
     */
-    const freshParked = parked.filter((p) => !priorByProducer.has(p.producerArg));
+    const freshParked = parked.filter((p) => !priorByProducer.has(p.seatId));
 
     /*
       🔴 `LOOK-SWITCH-01` — **THE SEAT STEP RUNS FIRST, before this batch stages a single line.**
@@ -10351,8 +10418,8 @@ export class CasparRuntime {
     */
     const toSeat: SeatRequest[] = [];
     for (const placement of [...placements, ...freshParked]) {
-      if (isSeatUnchanged(mode, priorByProducer.get(placement.producerArg), placement)) continue;
-      if (preSeated?.has(placement.producerArg) === true) continue;
+      if (isSeatUnchanged(mode, priorByProducer.get(placement.seatId), placement)) continue;
+      if (preSeated?.has(placement.seatId) === true) continue;
       toSeat.push({ placement, hide: !oursBefore.has(key(placement)), optional: placement.held });
     }
     const seats = new Map<string, SeatResult>(preSeated ?? []);
@@ -10369,7 +10436,7 @@ export class CasparRuntime {
     const takeRefused =
       mode === 'take' &&
       toSeat.some((r) => {
-        const seat = seats.get(r.placement.producerArg);
+        const seat = seats.get(r.placement.seatId);
         return !r.optional && seat !== undefined && seat.outcome !== 'landed';
       });
     /*
@@ -10411,7 +10478,7 @@ export class CasparRuntime {
      * this loop already had in hand.
      */
     for (const placement of [...placements, ...freshParked]) {
-      const prior = priorByProducer.get(placement.producerArg);
+      const prior = priorByProducer.get(placement.seatId);
       const priorSlotRecord = priorBySlot.get(adoptionKey(placement.slot));
       const producer = placement.producerArg;
       /*
@@ -10433,7 +10500,7 @@ export class CasparRuntime {
       const seatUnchanged = isSeatUnchanged(mode, prior, placement);
       // `PLAYOUT-SOURCES-01` §1.C — the argument the seat step actually played: the one retry
       // may have played a media item's fresh `clip` instead of the placement's.
-      const playedArg = seatUnchanged ? undefined : seats.get(producer)?.playedArg;
+      const playedArg = seatUnchanged ? undefined : seats.get(placement.seatId)?.playedArg;
       /*
         🔴 `MEDIA-PLATES-01` §1.C — A CLIP A LOOK HID AND PAUSED IS `RESUME`d AS A LOOK SHOWS IT, from
         the same frame. Only a `hidden` pause: one the OPERATOR pressed stays paused whatever the looks
@@ -10463,10 +10530,17 @@ export class CasparRuntime {
         // appear in a line nobody edited.
         // 🔴 `PLAYOUT-FEATURES-01` C — the playlist output's box is 0, whatever intent was armed:
         // every line that reads this record (the reveal, an unhold, a reconnect's re-send) sends 0.
-        intendedVolume: isPlaylistOutput(placement.source)
-          ? CREATED_MUTED_VOLUME
-          : (intent[placement.plateId] ?? CREATED_MUTED_VOLUME),
-        ...(isPlaylistOutput(placement.source) && { audioLocked: true as const }),
+        intendedVolume:
+          placement.revealOverlay === true
+            ? CREATED_MUTED_VOLUME
+            : isPlaylistOutput(placement.source)
+              ? CREATED_MUTED_VOLUME
+              : (intent[placement.plateId] ?? CREATED_MUTED_VOLUME),
+        ...((isPlaylistOutput(placement.source) || placement.revealOverlay === true) && {
+          audioLocked: true as const,
+        }),
+        ...(placement.seatId !== producer && { seatId: placement.seatId }),
+        ...(placement.revealOverlay === true && { revealOverlay: true as const }),
         // `PLAYOUT-SOURCES-01` §1.I — a later raise reaches this layer from the record alone.
         ...(placement.source.origin !== undefined && { origin: placement.source.origin }),
         // `ROUTE-PLATES-01` rule 5 — the epoch of the route actually running: the prior one for a
@@ -10876,7 +10950,7 @@ export class CasparRuntime {
         const restoredSlots = new Set(moved.map((m) => adoptionKey(m.slot)));
         for (const [i, rec] of next.entries()) {
           if (!restoredSlots.has(key(rec))) continue;
-          const was = priorByProducer.get(rec.producer);
+          const was = priorByProducer.get(liveSeatId(rec));
           if (was === undefined) continue;
           next[i] = {
             ...rec,
@@ -11030,7 +11104,7 @@ export class CasparRuntime {
         as `prior`.
       */
       const settled = next
-        .filter((r) => failed === undefined || r.producer !== failed.record.producer)
+        .filter((r) => failed === undefined || liveSeatId(r) !== liveSeatId(failed.record))
         .concat(settledFailed);
       const bySlot = new Map<string, LiveLayerRecord>();
       for (const r of previous) bySlot.set(key(r), r);
@@ -11115,7 +11189,7 @@ export class CasparRuntime {
       loop above. What reaches here is a seat that EXISTS and is not punched — parked (§12.4's
       hold), or torn down when no look binds its input any more.
     */
-    const placed = new Set(placements.map((p) => p.producerArg));
+    const placed = new Set(placements.map((p) => p.seatId));
     /*
       A seat REPLACED IN PLACE is not a release, and must not be announced as one. When a
       plate is re-pointed, the arriving producer takes the departing one's layer (see
@@ -11125,14 +11199,14 @@ export class CasparRuntime {
       repair just put on air.
     */
     const seatOnSlot = new Map<string, string>();
-    for (const p of [...placements, ...parked]) seatOnSlot.set(adoptionKey(p.slot), p.producerArg);
+    for (const p of [...placements, ...parked]) seatOnSlot.set(adoptionKey(p.slot), p.seatId);
     const releases: LivePlateRelease[] = [];
     for (const record of previous) {
-      if (placed.has(record.producer)) continue;
+      if (placed.has(liveSeatId(record))) continue;
       // A DIFFERENT seat now holds this coordinate ⇒ replaced in place, not released. Its own
       // seat continuing on it (a park) is not that, and must fall through to be parked.
       const taker = seatOnSlot.get(key(record));
-      if (taker !== undefined && taker !== record.producer) continue;
+      if (taker !== undefined && taker !== liveSeatId(record)) continue;
       /*
         🔴 UNRESOLVABLE IS NOT A DISPOSITION. This plate is declared and seated; we simply
         could not say which catalog entry is behind it — usually because a live action only
@@ -11144,7 +11218,7 @@ export class CasparRuntime {
         next.push(record);
         continue;
       }
-      const entry = resolved.get(record.producer);
+      const entry = resolved.get(liveSeatId(record));
       const release = releaseLivePlate({
         itemId,
         plateId: record.sourceId,
@@ -11159,7 +11233,7 @@ export class CasparRuntime {
           would strand a producer on a band layer for a binding nobody has. It subsumes the
           old question: a plate the template no longer declares binds nothing either.
         */
-        stillDeclared: declared.has(record.producer),
+        stillDeclared: declared.has(liveSeatId(record)),
         offFrame: offFrame.has(record.sourceId),
         // `B-308` — the sentence names the plate `Plate N`; its id stays in the release's payload.
         plateLabel: this.#plateLabelOf(itemId, record.sourceId),
@@ -12334,7 +12408,12 @@ export class CasparRuntime {
    */
   #plateAudioLocked(itemId: string, plateId: string): boolean {
     const records = this.#liveLayers.get(itemId) ?? [];
-    if (records.some((r) => r.sourceId === plateId && r.audioLocked === true)) return true;
+    if (
+      records.some(
+        (r) => r.sourceId === plateId && r.audioLocked === true && r.revealOverlay !== true,
+      )
+    )
+      return true;
     const templateId = this.#reconciler.get(itemId)?.templateId;
     const slot = this.#slots.get(itemId);
     if (templateId === undefined || slot === undefined) return false;

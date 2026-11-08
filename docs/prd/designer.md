@@ -6652,3 +6652,40 @@ ticker's general vertical alignment alone can leave the chosen picture visibly m
 - WHEN the offset changes THEN negative values move only the separator upward and positive values
   move it downward in the authoring Canvas, Preview and exported/on-air runtime
 - WHEN an older ticker has no offset THEN its separator remains at the existing aligned position
+
+## [ ] D-201 — Foreground graphics and titles can travel with a live frame ⟨priority: high — the owner, 2026-11-08⟩ — `openspec/changes/live-plate-foreground-overlays/`
+
+**What:** Let a live frame own a title or other authored foreground element so the frame and its
+label can swap together between looks while that foreground paints above the external live producer.
+
+**Why:** The current page is below the live producer, so a text element can be correct in the
+Designer stack and still disappear behind the live picture on air. Re-entering the two captions in
+CG Control after swapping left/right inputs is not an acceptable operating workflow.
+
+**Acceptance:**
+
+- WHEN an authored foreground element belongs to a live frame THEN it paints above that frame's live
+  producer in output while ordinary background graphics remain below it
+- WHEN two framed inputs swap through a look THEN each frame's title and foreground treatment travel
+  with the frame without rewriting field data
+- WHEN no foreground overlay is authored THEN the template uses the existing single-page path and
+  consumes no extra static-CG layer
+
+## [~] D-202 — An upper live plate can reveal part of a lower live input ⟨priority: high — the owner, 2026-11-08⟩ — `openspec/changes/live-plate-reveal-mask/`
+
+**What:** Explicitly link an upper plate to a lower plate and draw a rectangular reveal window on
+the upper plate. The revealed pixels come directly from the lower input, including burned-in text.
+
+**Why:** Some sources already contain subtitles or captions in their video. A production may need
+the upper source as the main picture while exposing only that lower source region, as in Cinegy.
+
+**Acceptance:**
+
+- WHEN an upper plate selects a lower plate and owns a valid reveal rectangle THEN the Designer
+  allows that linked overlap and the Bridge places an always-muted clipped copy of the lower input
+  above the upper producer
+- WHEN plates merely overlap without that explicit relation THEN both remain red/export-blocking
+- WHEN the relation is missing, self-referential, cyclic or its window does not reach the lower plate
+  THEN export is refused with a targeted error
+- WHEN the live-source band lacks the extra layer required by a reveal THEN take is refused before
+  any producer or graphic is put on air

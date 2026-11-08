@@ -76,6 +76,10 @@ export interface LiveLayerRecord {
    * what is on the layer and not what a since-edited mapping now says.
    */
   readonly producer: string;
+  /** D-202 — identity when one producer is intentionally seated twice for a reveal overlay. */
+  readonly seatId?: string | undefined;
+  /** D-202 — this duplicate is visual-only and must remain silent. */
+  readonly revealOverlay?: true | undefined;
   /** The `MIXER … FILL` rect last emitted for this layer. */
   readonly fill: NormalizedRect;
   /** The `MIXER … CLIP` mask emitted in the SAME batch as {@link fill}. */
@@ -209,6 +213,8 @@ const LiveLayerRecordSchema = z.object({
   sourceId: z.string().min(1),
   role: z.enum(['fill', 'key']),
   producer: z.string(),
+  seatId: z.string().min(1).optional(),
+  revealOverlay: z.literal(true).optional(),
   fill: NormalizedRectSchema,
   clip: NormalizedRectSchema,
   intendedVolume: z.number(),

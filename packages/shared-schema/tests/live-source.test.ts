@@ -127,6 +127,25 @@ describe('VideoPlaceholderElementSchema — additive, and still frozen for D-128
     ).toBe(false);
   });
 
+  it('D-202 — reveal relation round-trips and its window must stay inside the upper plate', () => {
+    const v = {
+      ...base,
+      type: 'video-placeholder' as const,
+      routeKey: 'upper',
+      revealMask: {
+        targetSourceId: 'lower',
+        rect: { x: 0.1, y: 0.6, width: 0.8, height: 0.3 },
+      },
+    };
+    expect(VideoPlaceholderElementSchema.parse(v)).toEqual(v);
+    expect(
+      VideoPlaceholderElementSchema.safeParse({
+        ...v,
+        revealMask: { ...v.revealMask, rect: { x: 0.7, y: 0.6, width: 0.4, height: 0.3 } },
+      }).success,
+    ).toBe(false);
+  });
+
   it('a device-shaped source id is refused AT THE SCHEMA BOUNDARY', () => {
     for (const routeKey of ['DECKLINK DEVICE 3', 'route://1-1', 'C:\\media\\guest.mp4']) {
       const res = VideoPlaceholderElementSchema.safeParse({

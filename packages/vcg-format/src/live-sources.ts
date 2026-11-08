@@ -10,6 +10,7 @@ import type {
   FlatElement,
   LiveCropFocus,
   LiveFitMode,
+  LiveRevealMask,
   LiveSourceArrangement,
   LiveSourceDeclaration,
   LiveSourceRect,
@@ -228,6 +229,7 @@ export function collectLiveSources(scene: Scene): LiveSourceDeclaration[] {
       // carrier that spelled it out would be a second place the default lives.
       ...(el.fitMode !== undefined ? { fitMode: el.fitMode } : {}),
       ...(el.cropFocus !== undefined ? { cropFocus: el.cropFocus } : {}),
+      ...(el.revealMask !== undefined ? { revealMask: el.revealMask } : {}),
       dynamic: roles?.has('fill') ?? false,
       ...(boxRelativeRect !== null ? { boxRelativeRect } : {}),
     });
@@ -279,6 +281,8 @@ export interface TemplateLookCarrier {
   fits: Record<string, LiveFitMode>;
   /** D-178 — crop focus belongs to the plate/look pairing beside its rect and fit. */
   focuses: Record<string, LiveCropFocus>;
+  /** D-202 — intentional upper/lower reveal relationships for this look. */
+  reveals: Record<string, LiveRevealMask>;
 }
 
 /**
@@ -362,6 +366,9 @@ export function collectLookCarrier(scene: Scene): {
   const focusesByLook = new Map<string, Record<string, LiveCropFocus>>(
     group.looks.map((l) => [l.id, {}]),
   );
+  const revealsByLook = new Map<string, Record<string, LiveRevealMask>>(
+    group.looks.map((l) => [l.id, {}]),
+  );
   const firstPlateFor = new Map<string, string>();
   /**
    * ⭐ `B-179` — **the AUTHOR's `expectedAspect` and the FILL-binding flag, per source, from
@@ -428,6 +435,10 @@ export function collectLookCarrier(scene: Scene): {
         const focuses = focusesByLook.get(look.id);
         if (focuses !== undefined) focuses[routeKey] = el.cropFocus;
       }
+      if (el.revealMask !== undefined) {
+        const reveals = revealsByLook.get(look.id);
+        if (reveals !== undefined) reveals[routeKey] = el.revealMask;
+      }
     }
   }
 
@@ -476,6 +487,7 @@ export function collectLookCarrier(scene: Scene): {
       rects: rectsByLook.get(l.id) ?? {},
       fits: fitsByLook.get(l.id) ?? {},
       focuses: focusesByLook.get(l.id) ?? {},
+      reveals: revealsByLook.get(l.id) ?? {},
     })),
     ...(group.defaultLookId !== undefined ? { defaultLookId: group.defaultLookId } : {}),
   };

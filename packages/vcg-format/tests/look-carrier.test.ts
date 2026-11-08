@@ -38,6 +38,11 @@ const plate = (
   expectedAspect?: number,
   /** D-178 — the normalized point preserved by a cover crop. */
   cropFocus?: { x: number; y: number },
+  /** D-202 — an intentional upper → lower reveal relation. */
+  revealMask?: {
+    targetSourceId: string;
+    rect: { x: number; y: number; width: number; height: number };
+  },
 ): Element =>
   ({
     ...baseElProps,
@@ -49,6 +54,7 @@ const plate = (
     ...(fitMode !== undefined ? { fitMode } : {}),
     ...(expectedAspect !== undefined ? { expectedAspect } : {}),
     ...(cropFocus !== undefined ? { cropFocus } : {}),
+    ...(revealMask !== undefined ? { revealMask } : {}),
   }) as unknown as Element;
 
 const comp = (id: string, children: Element[]) => ({
@@ -522,6 +528,50 @@ describe('D-178 — per-look crop focus, from the plate element', () => {
       compositions: [],
     });
     expect(buildTemplateLiveSources(s).sources[0]?.cropFocus).toEqual({ x: 0.25, y: 0.75 });
+  });
+});
+
+describe('D-202 — per-look reveal relation, from the upper plate element', () => {
+  const reveal = {
+    targetSourceId: 'guest-2',
+    rect: { x: 0.1, y: 0.65, width: 0.8, height: 0.25 },
+  };
+
+  it('carries a reveal only in the look that authors it', () => {
+    const s = scene({
+      rootChildren: [
+        instance('inst-a', 'comp-a', 0, 0, 1920, 1080),
+        instance('inst-b', 'comp-b', 0, 0, 1920, 1080),
+      ],
+      compositions: [
+        comp('comp-a', [
+          plate('upper-a', 'guest-1', 0, 0, 640, 360, undefined, undefined, undefined, reveal),
+        ]),
+        comp('comp-b', [plate('upper-b', 'guest-1', 0, 0, 640, 360)]),
+      ],
+      lookGroups: [
+        {
+          id: 'g1',
+          looks: [look('masked', 'inst-a'), look('plain', 'inst-b')],
+          defaultLookId: 'masked',
+        },
+      ],
+    });
+    const carrier = collectLookCarrier(s);
+    expect(carrier?.looks.find((l) => l.id === 'masked')?.reveals).toEqual({
+      'guest-1': reveal,
+    });
+    expect(carrier?.looks.find((l) => l.id === 'plain')?.reveals).toEqual({});
+  });
+
+  it('the no-look carrier keeps the reveal on its declaration', () => {
+    const s = scene({
+      rootChildren: [
+        plate('upper', 'guest-1', 0, 0, 640, 360, undefined, undefined, undefined, reveal),
+      ],
+      compositions: [],
+    });
+    expect(buildTemplateLiveSources(s).sources[0]?.revealMask).toEqual(reveal);
   });
 });
 

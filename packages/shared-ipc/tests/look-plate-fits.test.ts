@@ -3,6 +3,7 @@ import {
   TemplateLiveSourcesSchema,
   lookPlateFocuses,
   lookPlateFits,
+  lookPlateReveals,
   lookPlateRects,
   type LiveSourceRect,
   type TemplateLiveSources,
@@ -42,6 +43,12 @@ function withLooks(): TemplateLiveSources {
         rects: { 'guest-1': RECT, 'guest-2': OTHER },
         fits: { 'guest-1': 'contain', 'guest-2': 'cover' },
         focuses: { 'guest-1': { x: 0.2, y: 0.8 }, 'guest-2': { x: 0.5, y: 0.5 } },
+        reveals: {
+          'guest-2': {
+            targetSourceId: 'guest-1',
+            rect: { x: 0.05, y: 0.7, width: 0.9, height: 0.25 },
+          },
+        },
       },
       {
         id: 'solo',
@@ -71,6 +78,10 @@ function withoutLooks(): TemplateLiveSources {
         dynamic: false,
         fitMode: 'cover',
         cropFocus: { x: 0.3, y: 0.7 },
+        revealMask: {
+          targetSourceId: 'guest-2',
+          rect: { x: 0.1, y: 0.6, width: 0.8, height: 0.3 },
+        },
       },
       { elementId: 'el-2', sourceId: 'guest-2', rect: OTHER, dynamic: false },
     ],
@@ -171,6 +182,28 @@ describe('D-178 — lookPlateFocuses resolves focus through both carrier shapes'
     const parsed = TemplateLiveSourcesSchema.parse(withLooks());
     expect(lookPlateFocuses(parsed, 'grid')['guest-1']).toEqual({ x: 0.2, y: 0.8 });
     expect(lookPlateFocuses(parsed, 'bare')).toEqual({});
+  });
+});
+
+describe('D-202 — lookPlateReveals resolves explicit overlap through both carrier shapes', () => {
+  it('uses only the active look relation and survives the wire schema', () => {
+    const parsed = TemplateLiveSourcesSchema.parse(withLooks());
+    expect(lookPlateReveals(parsed, 'grid')).toEqual({
+      'guest-2': {
+        targetSourceId: 'guest-1',
+        rect: { x: 0.05, y: 0.7, width: 0.9, height: 0.25 },
+      },
+    });
+    expect(lookPlateReveals(parsed, 'solo')).toEqual({});
+  });
+
+  it('falls back to the groupless declaration', () => {
+    expect(lookPlateReveals(withoutLooks(), undefined)).toEqual({
+      'guest-1': {
+        targetSourceId: 'guest-2',
+        rect: { x: 0.1, y: 0.6, width: 0.8, height: 0.3 },
+      },
+    });
   });
 });
 

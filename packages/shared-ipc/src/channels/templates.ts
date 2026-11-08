@@ -5,6 +5,7 @@ import {
   IdSchema,
   ImageFitSchema,
   LiveCropFocusSchema,
+  LiveRevealMaskSchema,
   LiveSourceArrangementSchema,
   LiveFitModeSchema,
   LiveSourceDeclarationSchema,
@@ -13,7 +14,7 @@ import {
   PositionSchema,
   ResolutionSchema,
 } from '@cg/shared-schema';
-import type { LiveCropFocus, LiveFitMode, LiveSourceRect } from '@cg/shared-schema';
+import type { LiveCropFocus, LiveFitMode, LiveRevealMask, LiveSourceRect } from '@cg/shared-schema';
 import { defineChannel } from '../channel.js';
 import { definePublishChannel } from '../publish.js';
 import { WS_MAX_FRAME_BYTES } from '../ws-frame.js';
@@ -102,6 +103,8 @@ export const TemplateLookSchema = z.object({
   fits: z.record(z.string(), LiveFitModeSchema).optional(),
   /** D-178 — routeKey → normalized focal point for this look's cropped plate. */
   focuses: z.record(z.string(), LiveCropFocusSchema).optional(),
+  /** D-202 — upper routeKey → lower source plus normalized reveal window. */
+  reveals: z.record(z.string(), LiveRevealMaskSchema).optional(),
 });
 export type TemplateLook = z.infer<typeof TemplateLookSchema>;
 
@@ -248,6 +251,19 @@ export function lookPlateFocuses(
     (s): s is typeof s & { cropFocus: LiveCropFocus } => s.cropFocus !== undefined,
   );
   return Object.fromEntries(stated.map((s) => [s.sourceId, s.cropFocus] as const));
+}
+
+/** D-202 — upper routeKey → intentional reveal relationship for the active look. */
+export function lookPlateReveals(
+  live: TemplateLiveSources,
+  activeLookId: string | undefined,
+): Record<string, LiveRevealMask> {
+  const look = activeLookOf(live, activeLookId);
+  if (look !== undefined) return { ...look.reveals };
+  const stated = live.sources.filter(
+    (s): s is typeof s & { revealMask: LiveRevealMask } => s.revealMask !== undefined,
+  );
+  return Object.fromEntries(stated.map((s) => [s.sourceId, s.revealMask] as const));
 }
 
 export const TemplateInfoSchema = z.object({

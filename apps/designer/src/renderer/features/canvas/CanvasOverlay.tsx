@@ -79,6 +79,8 @@ import * as s from './CanvasOverlay.css.js';
 import { hasNoActiveCell, renderedTransformAt } from '../../state/slices/arrangements.js';
 import { nextAutoSourceId } from '../../state/auto-source-id.js';
 import { lookGroupOf } from '@cg/shared-schema';
+import { frameAabb } from '../../state/off-frame.js';
+import { locate } from '../../state/scene-doc.js';
 
 /**
  * The default canvas pointer — a bold black arrow with a white outline, a bit
@@ -359,6 +361,10 @@ export function CanvasOverlay({
   // D-193 — the compatible element under the bind cursor. It is presentation-only;
   // the binding is still committed solely by pointer-down through resolveBinding.
   const [bindHoverId, setBindHoverId] = useState<string | null>(null);
+  const [revealDraft, setRevealDraft] = useState<{
+    start: { x: number; y: number };
+    end: { x: number; y: number };
+  } | null>(null);
   // The frame-origin box (scene 0,0). The pointer LAYER spans the whole pasteboard;
   // this inner box is inset by `frameOffset`, so its rect is the scene origin used by
   // both the gizmo/`canvas-surface` positioning and click→scene mapping.
@@ -486,6 +492,12 @@ export function CanvasOverlay({
         }
         return;
       }
+      if (tool === 'live-reveal' && e.key === 'Escape') {
+        e.preventDefault();
+        setRevealDraft(null);
+        designerStore.setTool('cursor');
+        return;
+      }
       if (e.key !== 'Escape') return;
       // D-124 — exit path point-edit mode BEFORE deselect: the first Esc leaves
       // edit mode (selection kept), the next deselects. Menu-Esc never reaches
@@ -522,6 +534,62 @@ export function CanvasOverlay({
     );
   }
 
+  function beginRevealDraw(
+    plate: Extract<Element, { type: 'video-placeholder' }>,
+    start: { x: number; y: number },
+  ): void {
+    const rendered = {
+      ...plate,
+      transform: renderedTransformAt(plate, frameForElement(plate.id)),
+    };
+    const box = frameAabb(rendered, []);
+    const clamp = (point: { x: number; y: number }) => ({
+      x: Math.max(box.minX, Math.min(box.maxX, point.x)),
+      y: Math.max(box.minY, Math.min(box.maxY, point.y)),
+    });
+    const first = clamp(start);
+    setRevealDraft({ start: first, end: first });
+    const onMove = (event: PointerEvent): void => {
+      setRevealDraft({ start: first, end: clamp(viewportToScene(event.clientX, event.clientY)) });
+    };
+    const onUp = (event: PointerEvent): void => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      const end = clamp(viewportToScene(event.clientX, event.clientY));
+      setRevealDraft(null);
+      const left = Math.min(first.x, end.x);
+      const top = Math.min(first.y, end.y);
+      const width = Math.abs(end.x - first.x);
+      const height = Math.abs(end.y - first.y);
+      const currentScene = designerStore.get().scene;
+      const found = currentScene === null ? null : locate(currentScene, plate.id);
+      const latest = found?.layer.children[found.elIdx];
+      if (
+        latest?.type === 'video-placeholder' &&
+        latest.revealMask !== undefined &&
+        width >= 1 &&
+        height >= 1 &&
+        box.maxX > box.minX &&
+        box.maxY > box.minY
+      ) {
+        designerStore.updateElement(plate.id, {
+          revealMask: {
+            ...latest.revealMask,
+            rect: {
+              x: (left - box.minX) / (box.maxX - box.minX),
+              y: (top - box.minY) / (box.maxY - box.minY),
+              width: width / (box.maxX - box.minX),
+              height: height / (box.maxY - box.minY),
+            },
+          },
+        } as Partial<Element>);
+      }
+      designerStore.setTool('cursor');
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }
+
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>): void {
     if (e.button !== 0) return;
     // Don't steal pointer events while a text editor is up — let
@@ -548,6 +616,19 @@ export function CanvasOverlay({
         if (binding !== null) designerStore.addBinding(binding);
       }
       designerStore.setBindMode(null);
+      return;
+    }
+    if (tool === 'live-reveal') {
+      if (
+        selectedEl?.type === 'video-placeholder' &&
+        selectedEl.revealMask !== undefined &&
+        !selectedEl.locked
+      ) {
+        beginRevealDraw(selectedEl, scenePoint);
+      } else {
+        designerStore.showNotice('Select an upper Plate and choose its lower reveal Plate first.');
+        designerStore.setTool('cursor');
+      }
       return;
     }
     if (tool === 'cursor') {
@@ -896,6 +977,7 @@ export function CanvasOverlay({
           selectedEl.visible &&
           !selectedEl.locked &&
           tool !== 'pen' &&
+          tool !== 'live-reveal' &&
           editingPathId === null &&
           editingEl === null &&
           bindModeFieldId === null && (
@@ -922,6 +1004,22 @@ export function CanvasOverlay({
         {tool === 'pen' && penPointer !== null && penDraftPoints().length > 0 && (
           <PenDraftFeedback points={penDraftPoints()} pointer={penPointer} scale={scale} />
         )}
+        {tool === 'live-reveal' && revealDraft !== null && (
+          <div
+            data-testid="live-reveal-draft"
+            style={{
+              position: 'absolute',
+              pointerEvents: 'none',
+              left: Math.min(revealDraft.start.x, revealDraft.end.x) * scale,
+              top: Math.min(revealDraft.start.y, revealDraft.end.y) * scale,
+              width: Math.abs(revealDraft.end.x - revealDraft.start.x) * scale,
+              height: Math.abs(revealDraft.end.y - revealDraft.start.y) * scale,
+              border: '2px dashed #00e5ff',
+              background: 'rgba(0, 229, 255, 0.18)',
+              boxSizing: 'border-box',
+            }}
+          />
+        )}
         {editingEl !== null && editingEl.type === 'text' && (
           <TextEditor
             element={editingEl as TextElement}
@@ -932,6 +1030,9 @@ export function CanvasOverlay({
       </div>
       {bindModeFieldId !== null && (
         <div className={s.toolHint}>BIND → {bindModeFieldId} (Esc to cancel)</div>
+      )}
+      {tool === 'live-reveal' && (
+        <div className={s.toolHint}>DRAG REVEAL WINDOW · Esc to cancel</div>
       )}
       {/* D-071 Phase B — the snap/alignment guides moved to CanvasArea so they span
           the full visible canvas (the pasteboard), not just this frame-bound stage. */}
