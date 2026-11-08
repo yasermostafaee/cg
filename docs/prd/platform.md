@@ -4298,3 +4298,23 @@ and both app assertions now follow this contract; verification evidence belongs 
 
 **2026-11-07 owner supersession:** for the `1.0.0` installers, the visible Revision segment is removed.
 The revision remains in the shared structured build identity for diagnostics only.
+
+## [~] P-077 — Keep a website-ready version history with per-release downloads ⟨priority: high — the owner, 2026-11-08⟩ — `openspec/changes/add-versioned-release-history/`
+
+**What:** Keep release changes in one tracked data file and generate a self-contained Persian HTML page with
+one clickable section per version. Each released version owns the exact install-guide, Bridge, Control,
+Designer and checksum filenames; a later host base URL activates those five download links without editing
+the generated markup.
+
+**Why:** Product changes must not be lost between installer builds, and the company website needs a stable
+per-version surface that can receive hosted files later.
+
+**Acceptance:**
+
+- WHEN the history is generated THEN the standalone RTL HTML page lists each version, its changes and its
+  own guide/installer/checksum cards
+- WHEN a version has no host base URL THEN its file cards remain visibly disabled while preserving the exact
+  future filenames
+- WHEN a host base URL is supplied THEN all five cards bind to that version's files
+- WHEN installers are built THEN their version must already have a tracked history entry, otherwise the
+  build stops before packaging

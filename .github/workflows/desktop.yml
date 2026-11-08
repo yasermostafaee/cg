@@ -199,6 +199,24 @@ jobs:
             "No install guide for $env:VERSION: the installers carry none, and their Help is not shown."
           }
 
+      # P-077 — the website-ready release history is generated on the same version boundary as the
+      # installers. The build refuses a new installer identity until its changes have been recorded.
+      - name: Build the versioned release history
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          node tools/release/src/build-release-history.mjs --source docs/release/release-history.json --out release-history/index.html --current-version $env:VERSION
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Upload the website-ready release history
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-history-html
+          path: release-history/index.html
+          if-no-files-found: error
+          retention-days: ${{ github.ref_type == 'tag' && 30 || 7 }}
+
       # Each installer: CG Setup + the product's icon and version + its engine appended. The sizes of
       # each engine and each installer go to the log (the report compares them).
       - name: Pack the installers (CG Setup in front of each engine)

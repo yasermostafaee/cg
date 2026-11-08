@@ -4198,3 +4198,13 @@ Measured free before use: the immediately preceding tracked allocation took `B-4
 tracked PRD-heading audit found no existing `B-413` heading.
 
 ⇒ **Next free after this entry is `B-414`**, **`D-200`**, **`P-077`**, **`R-108`** and **`C-049`**.
+
+### 2026-11-08 — versioned release history takes `P-077`
+
+- `P-077` — keep a generated website-ready Persian history whose per-version guide, installer and checksum
+  links can be bound to hosted files — [platform.md](platform.md).
+
+Measured free before use: the immediately preceding tracked pointer named `P-077` as next free, and the
+tracked PRD-heading audit found no existing `P-077` heading.
+
+⇒ **Next free after this entry is `B-414`**, **`D-200`**, **`P-078`**, **`R-108`** and **`C-049`**.
