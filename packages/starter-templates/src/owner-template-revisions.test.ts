@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { iranPremierLeagueScene, iranWeatherForecastScene, iribNewsScene } from './index.js';
 
 function entry(scene: Scene): Composition {
-  const composition = scene.compositions?.find((candidate) => candidate.id === scene.entryCompositionId);
+  const composition = scene.compositions?.find(
+    (candidate) => candidate.id === scene.entryCompositionId,
+  );
   if (composition === undefined) throw new Error(`Missing entry composition for ${scene.id}`);
   return composition;
 }
