@@ -183,7 +183,17 @@ const BEFORE_AND_AFTER = {
     'cg-runtime:source-assignments',
     'cg-runtime:source-catalog',
   ],
-  indexedDb: ['cg-runtime-from-file'],
+  indexedDb: [
+    'cg-runtime-from-file',
+    /*
+      `R-108` — NEW: the original `.vcg` file handle for an imported template, keyed by channel
+      and template id. The handle is a browser-local capability used only by the explicit Reload
+      action; the Bridge catalogue remains authoritative. No migration is owed: ABSENT means the
+      template still works but Reload is disabled until it is imported once through the chooser.
+      An unavailable or unreadable database is treated the same way and never blocks Import.
+    */
+    'cg-runtime-template-sources',
+  ],
   opfs: ['runtime'],
 };
 
