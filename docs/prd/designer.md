@@ -6065,6 +6065,14 @@ marks are transparent, without the app icon's tile or a separate disc.
 The Guest Title's existing blue nameplate extends beneath the logo as one continuous background;
 the logo remains a replaceable transparent image, without an independent backplate.
 
+**Latest owner project adoption (2026-11-08):** adopt the supplied revisions of the clock lower
+third, five-day forecast and Iran league table without modifying the original `.cgproj` files. The
+lower third uses «خبر فوری», the APASAI image as its crawl separator and its saved file-only
+`اخبار.txt` source. The forecast keeps the saved timed auto-out, background/footer fades and
+left-to-right card transition timing. The league exposes all eighteen packaged crests as authored
+logo choices and preserves the saved locked workbook path. Regenerate affected gallery media after
+source adoption; earlier captures do not prove these revisions.
+
 **Final playback/readability corrections:** the league builds top-to-bottom, exits last-to-first,
 keeps all 18 rows inside its panel, uses restrained navy/slate/ivory rather than yellow/turquoise,
 and closes its background through visible opacity keyframes after the rows. City weather has no

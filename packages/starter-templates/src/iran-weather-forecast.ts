@@ -30,7 +30,7 @@ const forecastHeaderReveal = (
     'position.y': track(
       ...poses.map(({ frame, y, linear }, index) => {
         if (linear === true) return kfLinear(frame, y);
-        if (frame === 138) return kf(frame, y, EASE.inCubic);
+        if (index === poses.length - 1) return kf(frame, y, EASE.inCubic);
         return index < 2 ? kf(frame, y, EASE.outExpo) : kf(frame, y);
       }),
     ),
@@ -215,6 +215,11 @@ const children: Element[] = [
     tf(-80, -90, 1920, 1080),
     0,
     'cover',
+    {
+      animation: anim({
+        opacity: track(kfLinear(130, 1), kfLinear(160, 0)),
+      }),
+    },
   ),
   shape(
     'forecast-bg',
@@ -227,6 +232,9 @@ const children: Element[] = [
       opacity: 0.8,
       stroke: { color: '#67E8F955', width: 2 },
       shadow: { offsetX: 0, offsetY: 24, blur: 58, color: '#00000099' },
+      animation: anim({
+        opacity: track(kfLinear(130, 0.8), kfLinear(160, 0)),
+      }),
     },
   ),
   shape(
@@ -248,10 +256,9 @@ const children: Element[] = [
       stroke: { color: '#CFFAFE44', width: 0 },
       animation: forecastHeaderReveal(0, [
         { frame: 0, y: 62 },
-        { frame: 16, y: 42 },
-        { frame: 60, y: 42, linear: true },
-        { frame: 116, y: 42 },
-        { frame: 138, y: 58 },
+        { frame: 20, y: 42 },
+        { frame: 100, y: 42 },
+        { frame: 130, y: 58 },
       ]),
     },
   ),
@@ -260,9 +267,8 @@ const children: Element[] = [
     animation: forecastHeaderReveal(4, [
       { frame: 4, y: 72 },
       { frame: 20, y: 52 },
-      { frame: 60, y: 53, linear: true },
-      { frame: 116, y: 52 },
-      { frame: 138, y: 68 },
+      { frame: 100, y: 52 },
+      { frame: 130, y: 68 },
     ]),
   }),
   {
@@ -279,10 +285,10 @@ const children: Element[] = [
     flow: 'rtl',
     gap: 25,
     maxItems: 5,
-    itemEntrance: 'fade-top',
-    itemExit: 'fade-bottom',
-    itemTransitionMs: 480,
-    itemStaggerMs: 140,
+    itemEntrance: 'fade-left',
+    itemExit: 'fade-right',
+    itemTransitionMs: 1000,
+    itemStaggerMs: 200,
     items: forecast,
   } as Element,
   shape(
@@ -294,6 +300,9 @@ const children: Element[] = [
     {
       radius: 18,
       stroke: { color: '#67E8F933', width: 1 },
+      animation: anim({
+        opacity: track(kfLinear(105, 1), kfLinear(130, 0)),
+      }),
     },
   ),
   text(
@@ -308,6 +317,9 @@ const children: Element[] = [
     3,
     {
       align: 'center',
+      animation: anim({
+        opacity: track(kfLinear(105, 1), kfLinear(130, 0)),
+      }),
     },
   ),
 ];
@@ -319,6 +331,12 @@ export const iranWeatherForecastScene = galleryScene({
     'پیش‌بینی امروز و چهار روز آینده در یک صفحه با Repeater افقی و ورودی‌های عددی محدودشده.',
   templateType: 'fullscreen',
   direct: true,
+  entryPlayout: {
+    mode: 'auto-out',
+    holdSource: 'timed',
+    holdBehavior: 'freeze',
+    holdMs: 10_000,
+  },
   fontFamily: FAM,
   onAirId: 'comp-iran-weather-forecast-onair',
   onAirName: 'پیش‌بینی هوا (روی آنتن)',

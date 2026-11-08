@@ -83,7 +83,7 @@ const HEADLINES = [
 // Bound-field copy. Each of these is BOTH the element's base text and the
 // field's `default`, so the Designer shows real Persian (never a raw token) and
 // an operator who sends no value gets the same string on air.
-const PROGRAM_DEFAULT = 'مشروح اخبار ساعت ۲۱';
+const PROGRAM_DEFAULT = 'خبر فوری';
 const BRAND_DEFAULT = '@IRIBNEWS';
 
 // ── Rotating-panel state comps (360×134, transparent over the red panel) ──
@@ -223,7 +223,12 @@ const strapChildren: Element[] = [
     repeat: 'infinite',
     cycleBoundary: 'seamless',
     gap: 72,
-    separator: '◆',
+    separator: {
+      kind: 'image',
+      assetId: 'apasai-logo',
+      source: 'project',
+      size: { w: 50, h: 50 },
+    },
     items: HEADLINES,
     animation: anim({
       opacity: track(kf(44, 0), kf(56, 1), kf(60, 1), kf(70, 0)),
@@ -256,7 +261,7 @@ const strapChildren: Element[] = [
     id: 'ir-program',
     name: 'program-title',
     type: 'text',
-    transform: tf(24, 8, 1480, 42, { ax: 0, ay: 0 }),
+    transform: tf(24, 8, 791, 42, { ax: 0, ay: 0 }),
     opacity: 1,
     visible: true,
     locked: false,
@@ -277,7 +282,7 @@ const strapChildren: Element[] = [
     overflow: 'clip',
     animation: anim({
       opacity: track(kf(36, 0), kf(54, 1), kf(64, 1), kf(78, 0)),
-      'position.x': track(kf(36, 44, EASE.outExpo), kf(56, 24, EASE.outExpo)),
+      'position.x': track(kf(36, 44, EASE.outExpo), kfLinear(60, 656), kfLinear(112, 662)),
     }),
   },
   // Replaceable APASAI logo beside the program title. Its authored transform
@@ -290,7 +295,7 @@ const strapChildren: Element[] = [
     source: 'project',
     fit: 'contain',
     preserveAspect: true,
-    transform: tf(1512, 8, 42, 42),
+    transform: tf(1474, 8, 66, 42),
     opacity: 1,
     visible: true,
     locked: false,
@@ -363,6 +368,7 @@ const strapChildren: Element[] = [
     ],
     defaultDwellMs: 4000,
     advance: 'auto',
+    operatorSteps: false,
     transitionIn: 'bottom',
     transitionOut: 'top',
     transitionTiming: 'simultaneous',
@@ -491,6 +497,14 @@ export const iribNewsScene: Scene = {
       required: true,
       type: 'list',
       default: HEADLINES,
+      digits: 'persian',
+      allowFileSource: true,
+      fileSource: {
+        inputMode: 'file-only',
+        bridgePath: 'اخبار.txt',
+        lockFile: true,
+        delimiter: '\n',
+      },
     },
   ],
   bindings: [

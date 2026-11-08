@@ -603,9 +603,9 @@ describe('starter templates', () => {
     expect(row?.fields?.find((field) => field.id === 'team')).toMatchObject({
       operatorEditable: false,
     });
-    expect(row?.fields?.find((field) => field.id === 'logo')).toMatchObject({
-      operatorEditable: false,
-    });
+    expect(row?.fields?.find((field) => field.id === 'logo')).not.toHaveProperty(
+      'operatorEditable',
+    );
     expect(row?.fields?.find((field) => field.id === 'wins')).not.toHaveProperty(
       'operatorEditable',
     );

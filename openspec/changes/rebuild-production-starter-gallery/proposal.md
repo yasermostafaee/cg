@@ -68,6 +68,9 @@ broadcast designer now needs to discover from the landing page.
   data, retain the image and wordmark, and preserve the revised wordmark position/animation. Compare
   packaged asset bytes, leave the supplied project untouched, and regenerate its poster/motion.
   This authored-animation follow-up is Full lane; it does not change the runtime lifecycle.
+- Adopt the owner's 2026-11-08 saved revisions of the clock lower third, five-day forecast and Iran
+  league table: preserve their headline file source, image separator, timed forecast exit/motion and
+  eighteen authored crest choices, while leaving all three supplied `.cgproj` files unchanged.
 - Present the APASAI mark, name and website link on the Designer landing/About surfaces and in the
   CG Control header.
 - Generate and verify a real landing-card poster for every starter.

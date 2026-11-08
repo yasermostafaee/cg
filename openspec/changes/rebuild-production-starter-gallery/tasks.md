@@ -286,3 +286,26 @@ type remain required; compact degree adjacency is now a targeted correction acro
       Subsequent corrected-tree gate `gate-20261104T190855Z-16092.log` passes all 103 uncached
       tasks, formatting, control-byte checks and 141 OpenSpec items, exit 0 in 727.5 seconds.
       Carrying-commit Linux evidence remains outstanding; prior failed attempts are not relabelled.
+
+## 10. Owner-supplied lower-third, forecast and league revisions — Full lane, 2026-11-08
+
+- [x] 10.1 Compare the three supplied `.cgproj` files semantically and keep the originals read-only.
+      SHA-256: lower third `5327b3a2bd8f5d4b13608fa473cdbc802d31098b161f277dcc20c79ce9884d37`;
+      forecast `b7a4667fa2564eef56db84110eb031ef6fbcdf4274139c4bc6d4a2864cf59474`;
+      league `35bb7e6d65ee859c20f08696642e25f905fbd3dfbb90aefccd81a19f0f8cac75`.
+- [x] 10.2 Adopt the saved lower-third headline/file source/image separator, forecast timed exit and
+      motion, and league crest choices/locked workbook source using portable starter asset keys.
+      Preserve the lower third's existing brand binding because the supplied save omitted it as a
+      projection artefact rather than an owner-visible design change.
+- [x] 10.3 Add exact focused regressions for the adopted fields, keyframes, row transitions and all
+      eighteen crest choices. The focused starter run passes 37 tests across three files; starter
+      typecheck also passes.
+- [x] 10.4 Regenerate and visually review the affected posters and motion clips from the adopted
+      sources. The lower third, forecast and league captures contain 305/295/197 real painted source
+      frames and encode to 62,072 / 75,571 / 134,513-byte VP9 clips lasting 5.37 / 5.37 / 5.93
+      seconds. All three current posters and representative decoded motion frames were visually
+      reviewed. The seven-case Landing run, including all twelve clips' real browser decode check,
+      emitted seven passing results; its known local Vite teardown then remained open and was
+      manually terminated rather than relabelled as a normal process exit.
+- [ ] 10.5 Run the final repository gate and record carrying-commit Linux evidence; focused results
+      do not discharge this Full-lane follow-up.

@@ -189,6 +189,18 @@ Designer and CG Control SHALL expose a clear APASAI website link on their brande
   the supplied project
 - **AND** its poster and motion excerpt are regenerated from the adopted scene, not the earlier design
 
+#### Scenario: The three latest owner projects remain the gallery source of truth
+
+- **WHEN** the author opens the clock lower third, five-day forecast or Iran league starter after
+  the 2026-11-08 project adoption
+- **THEN** the lower third uses «خبر فوری», its APASAI image separator and locked file-only
+  `اخبار.txt` headline source
+- **AND** the forecast uses its saved timed auto-out, exit fades and horizontal card transitions
+- **AND** the league logo column offers the eighteen packaged club crests and retains its locked
+  workbook source
+- **AND** the three supplied `.cgproj` files remain unmodified and affected gallery media is
+  regenerated from the adopted scenes
+
 #### Scenario: User follows product attribution
 
 - **WHEN** the user activates the APASAI brand on the Designer landing/About surface or CG Control

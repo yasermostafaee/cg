@@ -129,7 +129,11 @@ const rowComposition: NonNullable<Scene['compositions']>[number] = {
       type: 'image',
       defaultAssetId: 'league-zwlji1u1',
       accept: ['png', 'svg', 'webp'],
-      operatorEditable: false,
+      assetOptions: LEAGUE_LOGOS.map(({ name, code }) => ({
+        assetId: `league-${code}`,
+        label: `${name}.png`,
+        source: 'project' as const,
+      })),
     },
     {
       id: 'played',
@@ -325,14 +329,18 @@ export const iranPremierLeagueScene = galleryScene({
     },
     {
       id: 'teams',
-      label: 'تیم‌ها',
+      label: 'ردیف‌های جدول',
       required: true,
       type: 'list',
       default: rows,
       digits: 'persian',
       allowFileSource: true,
-      fileSource: { inputMode: 'operator-choice', format: 'csv' },
-      maxItems: 18,
+      fileSource: {
+        inputMode: 'operator-choice',
+        format: 'csv',
+        bridgePath: 'ردیف-های-جدول-rows.sample.xlsx',
+        lockFile: true,
+      },
     },
   ],
   bindings: [
