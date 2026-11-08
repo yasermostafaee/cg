@@ -51,6 +51,11 @@ The new set is:
 7. `iran-weather-cards` — «آب‌وهوای شهرها — کارت‌های تصویری», a separate image-forward city variant
    with four large cards per page and eight pages for all 31 alphabetically ordered capitals.
 
+The Azan lower third uses a cool translucent glass body, a separate soft highlight, a crisp white
+edge and a controlled blue depth shadow. These are ordinary editable shape fills/strokes/shadows,
+not a browser-only backdrop-filter effect, so Canvas, Preview and exported CEF render the same
+design. The timer plate keeps opaque high-contrast Step colors and the outer frame remains clear.
+
 The attempted `iran-weather-outlook` / «پیش‌بینی پنج‌روزه — نمای تلویزیونی» entry is removed by the
 latest owner decision. Its earlier source/capture records are historical, not a required catalog item.
 

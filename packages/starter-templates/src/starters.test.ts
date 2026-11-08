@@ -466,8 +466,21 @@ describe('starter templates', () => {
       fill: {
         kind: 'linear',
         stops: [
-          { at: 0, color: '#FFF9ED' },
-          { at: 1, color: '#E3F0E8' },
+          { at: 0, color: '#F8FDFFE8' },
+          { at: 1, color: '#C8E6EAD6' },
+        ],
+      },
+      stroke: { color: '#FFFFFFF2', width: 2 },
+      shadow: { offsetX: 0, offsetY: 14, blur: 34, color: '#0C35505C' },
+    });
+    expect(elements.find((element) => element.id === 'countdown-glass-highlight')).toMatchObject({
+      type: 'shape',
+      opacity: 0.72,
+      fill: {
+        kind: 'linear',
+        stops: [
+          { at: 0, color: '#FFFFFFB8' },
+          { at: 1, color: '#FFFFFF12' },
         ],
       },
     });

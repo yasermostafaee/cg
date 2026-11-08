@@ -136,7 +136,8 @@ for data-rich sports, weather, image-sequence, countdown-step and multibox workf
 #### Scenario: Azan countdown becomes a persistent announcement
 
 - **WHEN** the author opens the Azan countdown starter
-- **THEN** a compact bright, readable lower third occupies the lower safe area with transparency outside it
+- **THEN** a compact bright, readable glass lower third occupies the lower safe area with transparency outside it
+- **AND** its translucent cool-white body has a visible highlight, crisp light edge and controlled depth shadow
 - **AND** its editable absolute date/time is a demonstration deadline, not a calculated prayer schedule
 - **AND** ordinary editable Steps at 60, 30, 10, 5 and 1 minute have vivid, visibly distinct colors
 - **AND** an editable Azan icon replaces the right-side «مغرب» badge

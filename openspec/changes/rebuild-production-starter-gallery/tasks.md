@@ -313,3 +313,14 @@ type remain required; compact degree adjacency is now a targeted correction acro
       control-byte checks and 149 strict OpenSpec items on 2026-11-08
       (`gate-20261108T151635Z-11184.log`, exit 0, 9m56s before repository-wide final checks).
       Completed carrying-commit Linux evidence remains outstanding, so this task stays open.
+
+## 11. Azan glass restyle — bounded owner follow-up, 2026-11-08
+
+- [x] 11.1 Record the requested glass direction without changing the countdown/zero/manual-Stop contract.
+- [x] 11.2 Restyle the ordinary Azan shapes with a translucent body, highlight, light edge and depth shadow while retaining readable Step colors.
+- [x] 11.3 Add exact source regressions for the glass layers and run focused starter/runtime checks.
+- [x] 11.4 Refresh and visually inspect the Azan poster/motion in the running Designer. The scoped
+      poster capture passed, the motion capture produced 262 real painted frames and encoded to a
+      58,452-byte VP9 clip lasting 5.33 seconds, and the eleven-case starter authoring/Landing run
+      (including Chromium decoding of every gallery clip) passed.
+- [ ] 11.5 Include the restyle in the final repository gate.

@@ -15,7 +15,7 @@ const TITLE = 'تا اذان مغرب به افق تهران';
 const ANNOUNCEMENT = 'اذان مغرب به افق تهران';
 // A teaching deadline, not a calculated prayer time. The normal bound date/time field owns it.
 const DEMO_TARGET = new Date(Date.now() + 7 * 60_000).toISOString();
-const INK = '#174B46';
+const INK = '#123C4A';
 const TIMER_INK = '#FFFFFF';
 // Ordinary, inspectable countdown Steps; each threshold colors the same editable timer plate.
 const TIME_STAGES = [
@@ -27,27 +27,43 @@ const TIME_STAGES = [
 ] as const;
 
 const children: Element[] = [
-  shape('countdown-bg', 'پلیت اذان', tf(0, 0, 1400, 164), gradient(135, '#FFF9ED', '#E3F0E8'), 0, {
-    radius: 26,
-    stroke: { color: '#FFFFFFCC', width: 1 },
-    shadow: { offsetX: 0, offsetY: 12, blur: 30, color: '#052E2B4D' },
-  }),
+  shape(
+    'countdown-bg',
+    'پلیت شیشه‌ای اذان',
+    tf(0, 0, 1400, 164),
+    gradient(135, '#F8FDFFE8', '#C8E6EAD6'),
+    0,
+    {
+      radius: 30,
+      stroke: { color: '#FFFFFFF2', width: 2 },
+      shadow: { offsetX: 0, offsetY: 14, blur: 34, color: '#0C35505C' },
+    },
+  ),
+  shape(
+    'countdown-glass-highlight',
+    'بازتاب شیشه',
+    tf(18, 10, 1364, 58),
+    gradient(180, '#FFFFFFB8', '#FFFFFF12'),
+    1,
+    { radius: 24, opacity: 0.72 },
+  ),
   shape(
     'countdown-top-accent',
     'خط روشن',
     tf(40, 12, 1090, 2),
-    gradient(90, '#B58A3D00', '#B58A3D'),
-    1,
+    gradient(90, '#38BDF800', '#38BDF8D9'),
+    2,
   ),
   shape(
     'countdown-badge',
     'نشان اوقات شرعی',
     tf(1160, 18, 220, 128),
-    gradient(135, '#DFEFE5', '#C6E2D5'),
+    gradient(135, '#F5FFFFD9', '#B8DDE3B8'),
     1,
     {
       radius: 20,
-      stroke: { color: '#98BBAA66', width: 1 },
+      stroke: { color: '#FFFFFFE6', width: 1 },
+      shadow: { offsetX: 0, offsetY: 8, blur: 20, color: '#134E5E29' },
     },
   ),
   text(
@@ -58,7 +74,7 @@ const children: Element[] = [
     FAM,
     17,
     500,
-    '#35635B',
+    '#315C68',
     2,
     {
       align: 'center',
@@ -72,9 +88,10 @@ const children: Element[] = [
     2,
     'contain',
   ),
-  shape('countdown-clock-bg', 'قاب شمارش', tf(28, 22, 340, 120), solid('#1D6477'), 1, {
+  shape('countdown-clock-bg', 'قاب شمارش', tf(28, 22, 340, 120), solid('#155E75'), 1, {
     radius: 18,
-    stroke: { color: '#FFFFFF99', width: 1 },
+    stroke: { color: '#FFFFFFD9', width: 1 },
+    shadow: { offsetX: 0, offsetY: 8, blur: 20, color: '#082F4966' },
   }),
   text('countdown-title', 'عنوان', TITLE, tf(410, 34, 710, 64), FAM, 40, 800, INK, 2, {
     align: 'start',
@@ -87,7 +104,7 @@ const children: Element[] = [
     FAM,
     21,
     500,
-    '#48665D',
+    '#496B73',
     2,
     {
       align: 'start',
@@ -125,7 +142,7 @@ const children: Element[] = [
         transition: { kind: 'fade', ms: 300 },
         changes: [
           { elementId: 'countdown-clock', property: 'textColor', value: TIMER_INK },
-          { elementId: 'countdown-clock-bg', property: 'fill', value: '#1D6477' },
+          { elementId: 'countdown-clock-bg', property: 'fill', value: '#155E75' },
           { elementId: 'countdown-zero', property: 'visible', value: false },
         ],
       },

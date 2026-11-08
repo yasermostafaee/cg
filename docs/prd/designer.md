@@ -6133,6 +6133,11 @@ and regenerated motion's browser playback checks are complete. Capture and encod
 revised source on 2026-11-04; exact evidence
 is in gallery tasks 6.14/6.25. Final gate and Linux evidence remain pending.
 
+**Azan glass follow-up (owner, 2026-11-08):** keep the bright/readable Step colors and manual-Stop
+announcement, but restyle the lower third as a polished glass panel: translucent cool-white body,
+visible glass highlight, crisp light edge and controlled depth shadow. The timer and editable Azan
+icon remain high-contrast and the outer frame stays transparent.
+
 **Saved-project and motion follow-up:** the owner's `جدول-لیگ-برتر-ایران.cgproj` is the
 league starter's new authored baseline; preserve its layout, keyframes and independent row timings,
 normalize packaged asset identifiers and leave the supplied file unchanged. Replace the sparse
