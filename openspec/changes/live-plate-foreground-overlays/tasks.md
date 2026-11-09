@@ -17,5 +17,5 @@
 
 - [x] 3.1 Cover DOM pass filtering, carrier survival and served-page synchronization bootstrap
 - [x] 3.2 Prove paired URLs, layer order, reveal order, capacity refusal and Clear order on AMCP wire
-- [ ] 3.3 Run strict OpenSpec validation and the final full repository gate
+- [x] 3.3 The full pre-push gate and strict OpenSpec validation passed on `d6383de0`.
 - [ ] 3.4 Confirm foreground pixels, field updates and look swaps on the target CasparCG plant

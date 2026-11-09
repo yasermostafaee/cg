@@ -15,4 +15,5 @@
 ## 3. Verification
 
 - [x] 3.1 Cover schema bounds, both fit modes, per-look carrier, wire parse, poster and Inspector writes
-- [ ] 3.2 Run package checks, strict OpenSpec validation and the final full repository gate
+- [x] 3.2 Package checks and the full pre-push gate passed on `d6383de0`.
+- [ ] 3.3 Verify crop focus on a real input in the target plant.

@@ -7,4 +7,4 @@
 ## 2. Verification
 
 - [x] 2.1 Run focused Runtime DOM tests and Runtime typecheck.
-- [ ] 2.2 Run the repository full gate and record the result.
+- [x] 2.2 The full pre-push gate passed on `d6383de0`.

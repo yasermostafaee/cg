@@ -12,4 +12,5 @@
 ## 3. Verification
 
 - [x] 3.1 Cover a Rule owner, Step owner, Step target and unrelated badge absence
-- [ ] 3.2 Verify the badges in the running Designer and pass the final full repository gate
+- [x] 3.2 Chromium showed Step badges in Azan and Rule badges in the weather forecast.
+      The full pre-push gate passed on `d6383de0`.

@@ -17,5 +17,5 @@
 
 - [x] 3.1 Cover schema bounds, carrier/wire survival and the narrow preflight exception
 - [x] 3.2 Prove real Bridge wire order, geometry, duplicate identity and permanent mute in AMCP integration
-- [ ] 3.3 Run package checks, strict OpenSpec validation and the final full repository gate
+- [x] 3.3 Package checks and the full pre-push gate passed on `d6383de0`.
 - [ ] 3.4 Confirm FILL/CLIP behaviour on the target CasparCG plant

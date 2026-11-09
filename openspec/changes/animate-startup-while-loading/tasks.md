@@ -8,5 +8,5 @@
 
 - [x] 2.1 Both inline pages animated in Chromium while the entry bundle was held and began
       dismissal in the real boot callback. Reduced-motion and build-stamp cases passed.
-- [ ] 2.2 Run the repository gate and strict OpenSpec validation.
+- [x] 2.2 The full pre-push gate and strict OpenSpec validation passed on `d6383de0`.
 - [ ] 2.3 Verify the rebuilt installed apps when installers are requested.

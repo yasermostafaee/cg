@@ -9,7 +9,7 @@
 ## 2. Verification
 
 - [x] 2.1 Add schema, DOM, export, runtime-fit and Bridge integration coverage.
-- [ ] 2.2 Run the full repository gate.
+- [x] 2.2 The full pre-push gate passed on `d6383de0`.
 - [ ] 2.3 Run a real CasparCG/Playout on-air pass.
 - [x] 2.4 Chromium verified black on a new plate, the decoded Bars thumbnail and the selected
       Bars choice in the export. Multiple-selection tests verified the same picker and Undo.

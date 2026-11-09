@@ -14,4 +14,5 @@
 
 - [x] 3.1 Cover shared grid/list payloads and the unchanged Project Asset payload
 - [x] 3.2 Pass Designer TypeScript and focused DOM tests
-- [ ] 3.3 Verify the drag gesture in the running Designer and pass the final full repository gate
+- [x] 3.3 Chromium placed the same Shared Library image from both Grid and List on the canvas.
+      The full pre-push gate passed on `d6383de0`.

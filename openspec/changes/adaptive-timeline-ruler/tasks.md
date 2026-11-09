@@ -15,4 +15,4 @@
 
 - [x] 3.1 Cover 1,500 and 5,000-frame label counts, viewport adaptation and maximum-zoom stride one
 - [x] 3.2 Chromium verifies 5,000 frames at fit and at single-frame zoom after horizontal scrolling.
-- [ ] 3.3 Run Designer checks, strict OpenSpec validation and the final full repository gate
+- [x] 3.3 Designer checks and the full pre-push gate passed on `d6383de0`.
