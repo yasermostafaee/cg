@@ -37,7 +37,9 @@
       passed on `0a553a24`, including the PGM drag in the built CG Control.
 - [x] 3.8 Verify the always-visible tools and practice drag at idle and with a Crop edges plate.
       The focused local Chromium tests passed, including the scoped PGM command.
-- [ ] 3.9 Record carrying Linux E2E for the new controls.
+- [x] 3.9 [Carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42676776212/job/129360266303)
+      passed on `40974e03` for the initial monitor controls. The revised guides and overview
+      are tracked in sections 4 and 5.
 
 ## 4. Crop overview
 
@@ -59,3 +61,4 @@
 - [x] 5.4 Verify vertical PGM dragging on the return and crop map with a 4:3 source in a 16:9
       plate. Chromium and Bridge tests passed, including edge clamping, Center, and unchanged
       horizontal placement, clip and volume.
+- [x] 5.5 Strengthen the blue Pan guide around the plate with a dark contrast edge.

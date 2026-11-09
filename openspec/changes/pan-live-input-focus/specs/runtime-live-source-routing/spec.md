@@ -40,6 +40,7 @@ current on-air plate.
 
 - **WHEN** the operator opens the monitors **THEN** both headers show Pan
 - **WHEN** the operator enables or closes Pan **THEN** its pressed appearance follows the active tool state
+- **WHEN** Pan displays a plate guide **THEN** the guide has a strong blue border with a dark edge for contrast over the picture
 - **WHEN** PGM has no selected on-air row or the active engine's return is unavailable **THEN**
   its Pan action is disabled and no Bridge edit is requested
 - **WHEN** the operator opens Pan in PVW with a visible Crop edges plate **THEN** a clearly labelled

@@ -334,6 +334,8 @@ test.describe('C-016 — the PROGRAM monitor shows the programme return', () => 
       }),
     );
     const hit = page.getByRole('button', { name: 'Pan Plate 1', exact: true });
+    await expect(hit).toHaveCSS('border-top-width', '3px');
+    await expect(hit).not.toHaveCSS('box-shadow', 'none');
     const slot = { channel: 1, layer: 60 };
     const before = engine.layerState(slot);
     expect(before?.fill?.x).toBeCloseTo(0.25);
@@ -384,6 +386,7 @@ test.describe('C-016 — the PROGRAM monitor shows the programme return', () => 
     await expect(pan).toHaveAttribute('aria-pressed', 'false');
     await expect(pan).not.toHaveClass(/\bis-on\b/);
     await expect(cropMap).toHaveCount(0);
+    await expect(hit).toHaveCount(0);
   });
 
   test('D-178 — a 4:3 PGM input can pan vertically in a 16:9 plate', async ({ page }) => {

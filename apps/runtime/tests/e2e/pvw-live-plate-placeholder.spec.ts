@@ -232,6 +232,7 @@ test('D-178 — practice keeps the full source and each plate aspect across both
     });
     const picture = practice.locator('[data-pan-practice-picture]');
     const crop = practice.locator('[data-pan-practice-crop]');
+    await expect(crop).toHaveCSS('border-top-width', '3px');
     await expect(practice).toHaveAttribute('data-pan-practice-axis', axis);
     const [plate, full, window] = await Promise.all([
       marker(page, plateId).boundingBox(),

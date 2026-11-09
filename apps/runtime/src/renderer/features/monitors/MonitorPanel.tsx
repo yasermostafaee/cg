@@ -657,6 +657,7 @@ function ProgramCropOverlay({
           <button
             type="button"
             key={target.id + ':' + String(index)}
+            className="cg-pgm-crop-overlay__handle"
             aria-label={'Pan ' + target.label}
             title={'Drag ' + target.label + ' to pan its picture'}
             disabled={pending}
@@ -665,7 +666,6 @@ function ProgramCropOverlay({
               boxSizing: 'border-box',
               background: 'transparent',
               padding: 0,
-              border: '1px solid ' + cssVars['--r-accent'],
               pointerEvents: 'auto',
               touchAction: 'none',
               cursor:

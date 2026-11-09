@@ -187,8 +187,8 @@
       },
       "features": [
         {
-          "fa": "دکمهٔ Pan در PVW و PGM هنگام فعال بودن روشن می‌ماند. تمرین PVW فقط روی قاب قابل‌مشاهدهٔ دارای Crop edges فعال است.",
-          "en": "The Pan toggle stays highlighted while active in PVW and PGM. PVW practice is available on a visible Crop edges plate."
+          "fa": "دکمهٔ Pan در PVW و PGM هنگام فعال بودن روشن می‌ماند و خط آبی دور قاب واضح‌تر است. تمرین PVW فقط روی قاب قابل‌مشاهدهٔ دارای Crop edges فعال است.",
+          "en": "The Pan toggle stays highlighted while active in PVW and PGM, with a clearer blue plate outline. PVW practice is available on a visible Crop edges plate."
         },
         {
           "fa": "کادر برش در ابزار Pan با توجه به نسبت تصویر منبع و قاب، افقی یا عمودی حرکت می‌کند و با Center به وسط برمی‌گردد. نقشهٔ دقیق برش PGM با Bridge به‌روز در دسترس است.",

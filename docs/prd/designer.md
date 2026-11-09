@@ -6047,8 +6047,9 @@ visible Crop edges plate shows no practice image. Practice movement stays in the
 is discarded on close.
 
 **Crop workspace:** show the whole practice source in PVW and a proportional source map in PGM.
-Outline the portion shown by the plate, move the outline continuously during a drag and offer
-Centre. PGM applies the selected position on release through the existing scoped Bridge operation.
+Outline the portion shown by the plate in blue with a dark edge for contrast, move the outline
+continuously during a drag and offer Centre. PGM applies the selected position on release through
+the existing scoped Bridge operation.
 The exact PGM map and Centre require current geometry from Bridge.
 The source image and crop window retain their own aspect ratios. A 16:9 crop on a 4:3 source
 uses the source width and moves vertically. Sources matching the plate ratio use the full picture.
