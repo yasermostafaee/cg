@@ -235,6 +235,14 @@
         {
           "fa": "دکمهٔ Center در PVW هنگام کوچک‌شدن مانیتور خوانا می‌ماند. فیلتر فیلدهای پریست در تمپلیت‌های قبلاً ایمپورت‌شده از صفحهٔ معتبر همان کانال استفاده می‌کند.",
           "en": "PVW's Center button stays readable in smaller monitors. Preset field filtering can use the retained channel page for previously imported templates."
+        },
+        {
+          "fa": "وقتی تصویر ورودی تمام قاب را پر می‌کند، هم‌ترازی لبه‌ها نوار باریک پس‌زمینهٔ قاب را در PGM برطرف می‌کند.",
+          "en": "Align full-picture live plates to output pixels to remove thin fallback seams in PGM."
+        },
+        {
+          "fa": "متن راهنمای پایین جدول Layers حذف شد تا جدول فضای بیشتری داشته باشد.",
+          "en": "Remove the footer hint from the Layers table."
         }
       ],
       "planned": [

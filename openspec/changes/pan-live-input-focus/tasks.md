@@ -69,5 +69,5 @@
 - [x] 7.2 Validate and save the row's crop drafts in a single Bridge batch on Update. Allow an off-air save after OFF PVW.
 - [x] 7.3 Keep generic practice on the existing browser session and preserve it through PVW toggles.
 - [x] 7.4 Verify the Inspector draft, OFF/ON PVW, Discard, Update and first FILL before reveal in Chromium.
-- [ ] 7.5 Record carrying Linux E2E for Inspector crop saving.
+- [x] 7.5 [Carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42701892701/job/129448618037) passed on `88cfa392` for Inspector crop saving.
 - [x] 7.6 Keep the Center button readable at a fixed screen size and verify its hitbox in Chromium.

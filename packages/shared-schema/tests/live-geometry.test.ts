@@ -58,6 +58,77 @@ const px = (
   height: r.height * raster.height,
 });
 
+describe('full live plate output pixel alignment', () => {
+  it.each([
+    {
+      mode: 'contain' as const,
+      rect: { x: 54, y: 238.5, width: 1072, height: 603 },
+      alignedY: 239,
+      expectedFillX: 54,
+      expectedFillWidth: 1072,
+    },
+    {
+      mode: 'cover' as const,
+      rect: { x: 1263, y: 238.5, width: 603, height: 603 },
+      alignedY: 239,
+      expectedFillX: 1263 - (1072 - 603) * 0.25,
+      expectedFillWidth: 1072,
+    },
+    {
+      mode: 'cover' as const,
+      rect: { x: 1019, y: 116.5, width: 847, height: 847 },
+      alignedY: 117,
+      expectedFillX: 1019 - ((847 * 16) / 9 - 847) * 0.25,
+      expectedFillWidth: (847 * 16) / 9,
+    },
+  ])('moves the half-pixel edges of a $mode plate onto the output pixel grid', (entry) => {
+    const input = base({
+      rect: entry.rect,
+      fitMode: entry.mode,
+      sourceAspect: 16 / 9,
+      cropFocus: { x: 0.25, y: 0.75 },
+    });
+    const aligned = liveSourceFit({ ...input, alignFullPlateToPixels: true });
+    const continuous = liveSourceFit(input);
+    if (aligned.clip === null || continuous.clip === null) throw new Error('The plate has no clip');
+    expectRect(px(aligned.clip), { ...entry.rect, y: entry.alignedY });
+    expectRect(px(aligned.fill), {
+      x: entry.expectedFillX,
+      y: entry.alignedY,
+      width: entry.expectedFillWidth,
+      height: entry.rect.height,
+    });
+    expectRect(px(continuous.clip), entry.rect);
+  });
+
+  it('snaps near and far edges, then clamps the visible window to the stage', () => {
+    const fit = liveSourceFit(
+      base({
+        rect: { x: -0.5, y: -10.7, width: 101, height: 100.1 },
+        alignFullPlateToPixels: true,
+      }),
+    );
+    expectRect(px(fit.fill), { x: 0, y: -11, width: 101, height: 100 });
+    if (fit.clip === null) throw new Error('The stage intersection has no clip');
+    expectRect(px(fit.clip), { x: 0, y: 0, width: 101, height: 89 });
+  });
+
+  it('keeps real contain margins and avoids collapsing a subpixel plate', () => {
+    for (const input of [
+      base({
+        rect: { x: 1019, y: 116.5, width: 847, height: 847 },
+        fitMode: 'contain',
+        sourceAspect: 16 / 9,
+      }),
+      base({ rect: { x: 200.1, y: 200.1, width: 0.1, height: 0.2 } }),
+    ]) {
+      expect(liveSourceFit({ ...input, alignFullPlateToPixels: true })).toEqual(
+        liveSourceFit(input),
+      );
+    }
+  });
+});
+
 describe('D-202 — reveal geometry', () => {
   it('keeps the union in Mask and subtracts it in Revert, including overlapping windows', () => {
     const rects = [

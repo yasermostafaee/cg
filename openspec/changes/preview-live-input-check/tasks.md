@@ -66,7 +66,7 @@
 - [x] 5.2 Show the correct poster for visible Media rows and keep selection available if it is missing.
 - [x] 5.3 Chromium verified distinct posters, viewport demand, missing-poster selection and no input check.
 - [ ] 5.4 Verify an authenticated Media result with a poster on the target station. The station OpenAPI lists the thumbnail route.
-- [ ] 5.5 Record carrying Linux E2E.
+- [x] 5.5 [Carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42701892701/job/129448618037) passed on `88cfa392` for Media posters and live source thumbnail slots.
 
 ## 6. Playout 2.18.17 adoption
 

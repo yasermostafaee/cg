@@ -42,4 +42,12 @@
 
 - [x] 5.1 Keep the authored fallback in Designer and PVW with Show fallback on air off.
 - [x] 5.2 Chromium verified Canvas, Rehearse, Preview and the same retained page played in PVW and output.
-- [ ] 5.3 Record carrying Linux E2E and verify on the target station.
+- [x] 5.3 [Carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42701892701/job/129448618037) passed on `88cfa392` for the PGM-only toggle.
+- [ ] 5.4 Verify the toggle on the target station.
+
+## 6. Align fractional edges on PGM
+
+- [x] 6.1 Reproduce the owner report in direct station return and in an isolated CasparCG 2.5.0 fixture.
+- [x] 6.2 Verify full-fit raster edge alignment, true contain margins and unchanged crop identity.
+- [x] 6.3 The aligned local native commands replaced row 963's Bars with the live picture and kept row 964 outside the plate.
+- [ ] 6.4 Verify on the target station with an updated Bridge.

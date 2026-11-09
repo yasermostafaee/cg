@@ -20,6 +20,13 @@ a template re-take. An invalid or unavailable source SHALL still be refused befo
 - **AND** Designer and PVW keep showing the chosen Bars, colour or picture
 - **WHEN** it is checked again **THEN** the previously selected background paints behind the plate in PGM
 
+#### Scenario: A live picture fills a plate whose edge is between output pixels
+
+- **GIVEN** an unmasked plate with an available source and a fit that fills the whole plate
+- **WHEN** its fallback and source are composited at a fractional output edge
+- **THEN** the live picture covers the last raster row painted by the fallback
+- **AND** genuine contain margins and authored mask windows keep their intended geometry
+
 #### Scenario: A new plate starts with Bars
 
 - **WHEN** the author creates a Live Source plate **THEN** its default fallback is SMPTE Bars

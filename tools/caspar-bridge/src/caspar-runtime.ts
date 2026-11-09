@@ -435,6 +435,27 @@ function maskSeatPrefix(plateId: string): string {
   return '\u001fmask:' + plateId + ':';
 }
 
+function exactPlateEdges(
+  masks: ReturnType<typeof lookPlateMasks>,
+  reveals: ReturnType<typeof lookPlateReveals>,
+): ReadonlySet<string> {
+  return new Set([
+    ...Object.keys(masks),
+    ...Object.keys(reveals),
+    ...Object.values(reveals).map(({ targetSourceId }) => targetSourceId),
+  ]);
+}
+
+function sameMixerRect(a: NormalizedRect, b: NormalizedRect | null, tolerance = 0): boolean {
+  return (
+    b !== null &&
+    Math.abs(a.x - b.x) <= tolerance &&
+    Math.abs(a.y - b.y) <= tolerance &&
+    Math.abs(a.width - b.width) <= tolerance &&
+    Math.abs(a.height - b.height) <= tolerance
+  );
+}
+
 interface LivePlatePlacement {
   /** The layer this seat's producer goes on — inside the declared band. */
   readonly slot: CommandSlot;
@@ -7382,6 +7403,7 @@ export class CasparRuntime {
     fitMode?: LiveFitMode | undefined;
     /** D-178 — normalized focal point for cover crops. */
     cropFocus?: LiveCropFocus | undefined;
+    alignFullPlateToPixels?: boolean | undefined;
   }): LiveSourceFit {
     return liveSourceFit({
       rect: input.rect,
@@ -7391,6 +7413,7 @@ export class CasparRuntime {
       sourceAspect: input.sourceAspect,
       fitMode: input.fitMode,
       cropFocus: input.cropFocus,
+      alignFullPlateToPixels: input.alignFullPlateToPixels,
     });
   }
 
@@ -7756,6 +7779,8 @@ export class CasparRuntime {
     }
     const desired = lookPlateRects(carrier, lookId);
     const masks = lookPlateMasks(carrier, lookId);
+    const reveals = lookPlateReveals(carrier, lookId);
+    const exactEdges = exactPlateEdges(masks, reveals);
     const previewCropTargets: PreviewPlateCropTarget[] = [];
     const entering = framesOfLook(bindings, lookId);
 
@@ -7764,8 +7789,9 @@ export class CasparRuntime {
       picture and may never refuse: its assignment vanishing under it is not a reason to
       refuse the operator's repair of a different box, nor to tear it down.
     */
+    const currentSeats = this.#liveLayers.get(itemId) ?? [];
     const punchedAlready = new Set(
-      (this.#liveLayers.get(itemId) ?? []).filter((r) => r.held !== true).map((r) => r.sourceId),
+      currentSeats.filter((r) => r.held !== true).map((r) => r.sourceId),
     );
     const unresolved = new Set<string>();
     const mustResolve: LiveSourceDeclaration[] = [];
@@ -7994,12 +8020,13 @@ export class CasparRuntime {
           : (landedFocus ??
             stagedCrop?.focus ??
             lookPlateFocuses(carrier, frame.lookId)[frame.plateId]);
-      const fit = this.liveSourceFitFor({ ...fitInput, cropFocus });
+      const continuousFit = this.liveSourceFitFor({ ...fitInput, cropFocus });
       if (
         token !== undefined &&
         cropAspect !== null &&
         box !== undefined &&
-        (fit.fill.width - box.fill.width > 1e-6 || fit.fill.height - box.fill.height > 1e-6)
+        (continuousFit.fill.width - box.fill.width > 1e-6 ||
+          continuousFit.fill.height - box.fill.height > 1e-6)
       ) {
         previewCropTargets.push({
           plateId: frame.plateId,
@@ -8010,6 +8037,17 @@ export class CasparRuntime {
           ...(stagedCrop !== undefined && landedFocus === undefined && { staged: true }),
         });
       }
+      // The legacy on-air drag must keep every seated clip, including a pre-upgrade one.
+      const prior =
+        proposedCrop === undefined
+          ? undefined
+          : currentSeats.find((record) => liveSeatId(record) === seat.producerArg);
+      const keepContinuous =
+        exactEdges.has(frame.plateId) ||
+        (prior !== undefined && sameMixerRect(prior.clip, continuousFit.clip, 1e-8));
+      const fit = keepContinuous
+        ? continuousFit
+        : this.liveSourceFitFor({ ...fitInput, cropFocus, alignFullPlateToPixels: true });
       /*
         6.4 — a hole ENTIRELY outside the scene rect has an empty mask.
 
@@ -8065,7 +8103,6 @@ export class CasparRuntime {
       D-202 — each window seats an always-muted copy of the lower producer above the upper plate.
       The copy keeps the lower plate's FILL, and its CLIP is intersected with that window.
     */
-    const reveals = lookPlateReveals(carrier, lookId);
     const activeMain = new Map(
       seated.filter((entry) => !entry.held).map((entry) => [entry.plateId, entry]),
     );
@@ -8948,29 +8985,49 @@ export class CasparRuntime {
     if (carrier === undefined) return [];
     const lookId = this.activeLookId(itemId);
     const rects = lookPlateRects(carrier, lookId);
+    const exactEdges = exactPlateEdges(
+      lookPlateMasks(carrier, lookId),
+      lookPlateReveals(carrier, lookId),
+    );
     const fits = this.#plateFits.get(itemId);
     const targets: PgmCropCandidate[] = [];
     for (const record of records) {
       const plateId = record.sourceId;
       const rect = rects[plateId];
+      const plateFit = fits?.[plateId];
       if (
         record.held === true ||
         record.revealOverlay === true ||
         rect === undefined ||
-        fits?.[plateId]?.mode !== 'cover' ||
+        plateFit?.mode !== 'cover' ||
         intersectNormalizedRects(record.fill, record.clip) === null
       )
         continue;
-      const box = this.liveSourceFitFor({
+      const fitInput = {
         channel: slot.channel,
         itemId,
         rect,
         sceneResolution: carrier.resolution,
         carriedDefaultPosition: carrier.defaultPosition,
         sourceAspect: null,
+      };
+      const continuousBox = this.liveSourceFitFor(fitInput).fill;
+      const alignedBox = exactEdges.has(plateId)
+        ? null
+        : this.liveSourceFitFor({ ...fitInput, alignFullPlateToPixels: true });
+      const box =
+        alignedBox !== null && sameMixerRect(record.clip, alignedBox.clip, 1e-8)
+          ? alignedBox.fill
+          : continuousBox;
+      const nominal = this.liveSourceFitFor({
+        ...fitInput,
+        sourceAspect: plateFit.aspect,
+        fitMode: plateFit.mode,
       }).fill;
-      const horizontal = record.fill.width - box.width > 1e-6;
-      const vertical = record.fill.height - box.height > 1e-6;
+      const horizontal =
+        nominal.width - continuousBox.width > 1e-6 && record.fill.width - box.width > 1e-6;
+      const vertical =
+        nominal.height - continuousBox.height > 1e-6 && record.fill.height - box.height > 1e-6;
       if (!horizontal && !vertical) continue;
       const areas = [
         record.clip,
@@ -11004,8 +11061,6 @@ export class CasparRuntime {
     */
     const intent = this.#plateVolumes.get(itemId) ?? {};
     const key = (record: { slot: CommandSlot }): string => adoptionKey(record.slot);
-    const same = (a: NormalizedRect, b: NormalizedRect): boolean =>
-      a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
     /*
       🔴 KEYED ON THE PRODUCER, NOT THE PLATE (session BM). The prior record for a seat is
       the one carrying the same INPUT — that is the seat's identity, and it is what must not
@@ -11289,7 +11344,7 @@ export class CasparRuntime {
           reading a map this action is in the middle of rewriting — and the record it would
           find is the ATTEMPTED one, which is exactly the lie `B-167` is made of.
         */
-        if (!same(prior.fill, record.fill) || !same(prior.clip, record.clip)) {
+        if (!sameMixerRect(prior.fill, record.fill) || !sameMixerRect(prior.clip, record.clip)) {
           moved.push({ slot: placement.slot, fill: prior.fill, clip: prior.clip });
         }
         if (prior.held === true) unmuted.push(placement.slot);
@@ -11302,7 +11357,7 @@ export class CasparRuntime {
         // the ONLY thing that moves it, and getting it wrong is a wrong CROP on a picture
         // that is otherwise perfectly on air — `MIXER FILL` survives a producer swap, so
         // nothing downstream would correct it and nothing would look broken.
-        if (!same(prior.fill, record.fill) || !same(prior.clip, record.clip)) {
+        if (!sameMixerRect(prior.fill, record.fill) || !sameMixerRect(prior.clip, record.clip)) {
           lines.push(...this.#builder.mixerFit(placement.slot, placement.fit));
         }
         // A plate coming back from HELD was muted by the hold, so its intent has to be

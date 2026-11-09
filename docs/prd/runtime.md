@@ -4622,14 +4622,16 @@ shell's own tests; a foreign holder is never offered `Free the port`.
 the choice is remembered per viewer. **Acceptance:** dom tests for a mixed group, an all-pass group, the toggle
 and its memory; the persisted-key census lists the key.
 
-## [~] R-093 — The last explanatory prose on operator surfaces: the NOT CONNECTED banner and the layer list's wait ⟨priority: low — the owner's standing rule⟩ — FILED 2026-10-07 by `RELEASE-0114-01` Part C · `openspec/changes/console-check-scope/`
+## [~] R-093 — Remove explanatory prose from the connection banner and Layers panel ⟨priority: low — the owner's standing rule⟩ — FILED 2026-10-07 by `RELEASE-0114-01` Part C · `openspec/changes/console-check-scope/`
 
 **What:** the banner keeps the state, the address and the one fact an operator acts on
 (`Takes are refused until it is back.`), and drops the explanations ("nothing is listening on port 5280 there", "switched off, a wrong
 address, or a firewall", "something there answers, but not as CG Bridge", "On-air commands are refused, not
 queued: reissue them …"); `Loading the layer list…` loses "Waiting for the bridge to send the declared rows. This
-is not an empty list — the rows appear as soon as it answers." **Acceptance:** both absences pinned in specs; the
-old strings swept by string and by component.
+is not an empty list — the rows appear as soon as it answers." On 2026-11-10 the owner also removed the
+instruction strip below the Layers table, returning its height to the scrollable list.
+**Acceptance:** verify the banner, loading text and footer removals. In Chromium, the list reaches the
+bottom border of its panel.
 
 ## [~] R-094 — CG Control does not close on a slip ⟨priority: medium⟩ — FILED 2026-10-07 by `RELEASE-0114-01-B` B2 · `openspec/changes/close-guard/`
 
@@ -4859,6 +4861,8 @@ operator had to fail over before seeing whether its programme picture and sound 
 - WHEN Bars is selected THEN actual SMPTE Bars are rendered on air and their thumbnail is visible in the Designer picker
 - WHEN a solid colour or picture is selected THEN it becomes the fallback; black is one available colour
 - WHEN picture resumes THEN it covers the selected fallback without re-taking the template
+- WHEN a full-picture fit meets a fractional raster edge THEN the live producer covers the
+  same last output pixel as the fallback. Preserve actual contain margins and mask windows.
 - WHEN the source is invalid or unavailable THEN the existing refusal still prevents the take or update
 
 ## [x] R-106 — PVW Live Source markers follow Play and the Safe Area control is removed ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/pvw-plate-lifecycle/`

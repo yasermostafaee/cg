@@ -20,6 +20,24 @@ its first frame. The engine's transition producer can keep drawing the outgoing 
 case. Reliable detection needs an input signal/first-frame report. A black picture can be valid.
 [CasparCG 2.5.0 transition producer](https://github.com/CasparCG/server/blob/v2.5.0-stable/src/core/producer/transition/transition_producer.cpp)
 
+## Fractional output edges
+
+In the reported `chan-ghab` Look, the 1080-line raster has a plate from y=116.5 through
+y=963.5. CEF paints the fallback through raster row 963. The old fractional FILL/CLIP leaves that
+row exposed. The live return showed the same seven Bars hues as the authored fallback.
+[CasparCG's output transforms](https://github.com/CasparCG/server/blob/v2.5.0-stable/src/accelerator/ogl/util/transforms.cpp#L84-L103)
+turn the clip into output geometry.
+
+For a full-coverage plate, Bridge aligns both near and far output edges to pixels and then fits
+the source with the same aspect and focus. It computes width and height from the aligned edges.
+Continuous geometry still supplies crop identity and eligibility. The correction applies to the
+main seating path for unmasked, unlinked plates. Intentional contain margins and authored mask
+boundaries retain their continuous coordinates.
+
+A separate local CasparCG 2.5.0 fixture at 1080i5000 reproduced Bars in row 963 with the old
+commands. With the aligned commands, that row contained only the source colour, and row 964
+still contained the scene outside the plate.
+
 ## Risk
 
 This changes on-air page pixels and the Bridge control payload, so it still requires a real CasparCG/Playout pass in addition to mocks.

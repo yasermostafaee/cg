@@ -476,6 +476,77 @@ it('D-178 — PGM drag pans a live cover input without replaying it or changing 
   expect((await recvLines()).slice(after)).toEqual([]);
 });
 
+it('aligns full plate edges on take and Look switch without altering the crop on legacy pan', async () => {
+  const preset2 = {
+    'guest-1': { x: 54, y: 238.5, width: 1072, height: 603 },
+    'guest-2': { x: 1263, y: 238.5, width: 603, height: 603 },
+  };
+  const preset3 = {
+    'guest-1': { x: 54, y: 116.5, width: 847, height: 847 },
+    'guest-2': { x: 1019, y: 116.5, width: 847, height: 847 },
+  };
+  const info = template([
+    { id: 'guest-1', rect: preset2['guest-1'] },
+    { id: 'guest-2', rect: preset2['guest-2'], fitMode: 'cover' },
+  ]);
+  const r = await boot({
+    template: {
+      ...info,
+      liveSources: {
+        ...info.liveSources!,
+        defaultLookId: 'preset-2',
+        looks: [
+          {
+            id: 'preset-2',
+            name: 'Preset 2',
+            entered: { mode: 'cut' },
+            rects: preset2,
+            fits: { 'guest-1': 'contain', 'guest-2': 'cover' },
+          },
+          {
+            id: 'preset-3',
+            name: 'Preset 3',
+            entered: { mode: 'cut' },
+            rects: preset3,
+            fits: { 'guest-1': 'cover', 'guest-2': 'cover' },
+          },
+        ],
+      },
+    },
+    assignments: assign([
+      ['guest-1', 'src-a'],
+      ['guest-2', 'src-b'],
+    ]),
+  });
+
+  const expectWireRows = (lines: readonly string[], layer: number, top: number, bottom: number) => {
+    for (const verb of ['FILL', 'CLIP']) {
+      const prefix = `MIXER 1-${String(layer)} ${verb} `;
+      const line = lines.find((candidate) => candidate.startsWith(prefix));
+      expect(line).toBeDefined();
+      const [, y, , height] = line!.slice(prefix.length).split(' ').map(Number);
+      expect(y! * SCENE.height).toBeCloseTo(top, 2);
+      expect((y! + height!) * SCENE.height).toBeCloseTo(bottom, 2);
+    }
+  };
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  const taken = await recvLines();
+  for (const layer of [30, 31]) expectWireRows(taken, layer, 239, 842);
+
+  expect(await r.setActiveLook('item-1', 'preset-3')).toMatchObject({ ok: true });
+  const switched = await recvLines();
+  for (const layer of [30, 31]) expectWireRows(switched.slice(taken.length), layer, 117, 964);
+
+  const crop = (await r.pgmPlateCrop('item-1')).targets.find(({ id }) => id === 'guest-2');
+  expect(crop).toMatchObject({ horizontal: true, vertical: false });
+  expect(await r.pgmPlateCrop('item-1', { token: crop!.token, dx: 0.02, dy: 0.2 })).toMatchObject({
+    ok: true,
+  });
+  const dragged = (await recvLines()).slice(switched.length);
+  expectWireRows(dragged, 31, 117, 964);
+  expect(dragged.some((line) => line.startsWith('PLAY '))).toBe(false);
+});
+
 it('stages PVW framing without AMCP and restores it into the first hidden Take geometry', async () => {
   const itemId = 'item-1';
   const rect = { x: 720, y: 270, width: 480, height: 540 };

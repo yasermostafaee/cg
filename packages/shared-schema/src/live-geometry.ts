@@ -8,6 +8,7 @@ import {
 import {
   DEFAULT_LIVE_FIT_MODE,
   fitPictureToBox,
+  type FitRect,
   type LiveCropFocus,
   type LiveFitMode,
 } from './live-fit.js';
@@ -118,6 +119,8 @@ export interface LiveSourceFitInput {
   readonly fitMode?: LiveFitMode | undefined;
   /** D-178 — normalized focal point used by `cover`; absent preserves centred crop. */
   readonly cropFocus?: LiveCropFocus | undefined;
+  /** Match a full live plate to the output pixel grid when sending mixer geometry. */
+  readonly alignFullPlateToPixels?: boolean | undefined;
 }
 
 /** The two rects, always produced together — see `CommandBuilder.mixerFit`. */
@@ -265,6 +268,7 @@ function holeInRaster(input: LiveSourceFitInput): {
 export function liveSourceFit(input: LiveSourceFitInput): LiveSourceFit {
   const raster = input.raster;
   const hole = holeInRaster(input);
+  const mode = input.fitMode ?? DEFAULT_LIVE_FIT_MODE;
 
   // ── the fit, in raster px: THE ONE COMPUTATION (`C-028`) ──────────────────
   //
@@ -273,12 +277,22 @@ export function liveSourceFit(input: LiveSourceFitInput): LiveSourceFit {
   // `contain` and the hole itself under `cover`. The template's mask punches `visible`
   // through this same function, in scene px; see `fitPictureToBox` for why the two
   // spaces agree.
-  const fitted = fitPictureToBox(
-    hole,
-    input.sourceAspect,
-    input.fitMode ?? DEFAULT_LIVE_FIT_MODE,
-    input.cropFocus,
-  );
+  const continuous = fitPictureToBox(hole, input.sourceAspect, mode, input.cropFocus);
+  const fullPlate =
+    Math.abs(continuous.visible.width - hole.width) < 1e-6 &&
+    Math.abs(continuous.visible.height - hole.height) < 1e-6;
+  const pixelBox = input.alignFullPlateToPixels === true && fullPlate ? pixelEdges(hole) : null;
+  const aligned = pixelBox !== null && pixelBox.width > 0 && pixelBox.height > 0;
+  // CasparCG rasterizes the mixer and CEF paints the fallback separately. Move the edges
+  // off half-pixel sample centres so the live picture covers the same output rows.
+  const fitted = aligned
+    ? fitPictureToBox(
+        pixelBox,
+        input.sourceAspect,
+        'cover',
+        mode === 'cover' ? input.cropFocus : undefined,
+      )
+    : continuous;
 
   // ── the mask: what is VISIBLE ∩ the scene rect, both in raster px ──────────
   //
@@ -288,12 +302,13 @@ export function liveSourceFit(input: LiveSourceFitInput): LiveSourceFit {
   const s = outputScale(raster);
   const pad = outputLetterbox(raster);
   const t = outputTranslate({ resolution: input.sceneResolution }, input.position);
-  const stage = {
+  const continuousStage = {
     x: pad.x + s * t.x,
     y: pad.y + s * t.y,
     width: s * input.sceneResolution.width,
     height: s * input.sceneResolution.height,
   };
+  const stage = aligned ? pixelEdges(continuousStage) : continuousStage;
   const seen = fitted.visible;
   const left = Math.max(seen.x, stage.x);
   const top = Math.max(seen.y, stage.y);
@@ -310,6 +325,18 @@ export function liveSourceFit(input: LiveSourceFitInput): LiveSourceFit {
       right > left && bottom > top
         ? normalize({ x: left, y: top, width: right - left, height: bottom - top }, raster)
         : null,
+  };
+}
+
+/** Round the two edges independently so the same boundary snaps the same way on either side. */
+function pixelEdges(rect: FitRect): FitRect {
+  const x = Math.round(rect.x);
+  const y = Math.round(rect.y);
+  return {
+    x,
+    y,
+    width: Math.round(rect.x + rect.width) - x,
+    height: Math.round(rect.y + rect.height) - y,
   };
 }
 
