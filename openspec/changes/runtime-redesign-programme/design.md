@@ -4405,6 +4405,9 @@ page's stylesheet is four waves deep and only the last one paints).
 | results hint           | `10/10 rows`                                                  | `29 of 29 rows`            | unchanged — ARGUED (d)                                  |
 | second tab             | `Live plates`                                                 | `LIVE SOURCES`             | `Live plates` — **FIXED**, owner's call, see §25.8      |
 
+The owner later removed the instruction strip below the table in `R-093`. The measurements above
+describe the earlier reference implementation.
+
 **ARGUED, each falsifiable in one line:**
 
 - **(a) the 1 px field radius.** The reference is not uniform — buttons 3–4, fields and badges 5,
@@ -5576,11 +5579,9 @@ too. Summarised here so the programme's own record is not a pointer alone:
 
 ⚠ **§2's quoted hint does not exist in our build.** The delta quotes a footer hint reading
 _"Look buttons apply immediately"_; a `git grep` for `immediately` across
-`apps/runtime/src/renderer` finds no such footer. Our foot hint reads _"Click a populated row
-to inspect · ON PVW adds to the composite · Play takes the row on air"_, and the immediacy
-claim lives on the LOOK label's tooltip and its `· NOW` qualifier. So the contradiction was
-between a TOOLTIP and a state, not between a footer and a state — which does not change the
-answer, and is recorded because the next reader will otherwise go looking for the footer.
+`apps/runtime/src/renderer` found no such footer. The general Layers instruction strip at the time
+covered row inspection, PVW and Play. The immediacy claim lived on the LOOK label's tooltip and its
+`· NOW` qualifier. The general strip was later removed in `R-093`.
 
 ⚠ **§3's boundary needed nothing withdrawn**: DELTA 8 is not built yet, and DELTA R already
 separated the transient surface from the persistent one, so (a)–(d) hold by construction.

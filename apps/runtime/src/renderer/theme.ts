@@ -486,7 +486,7 @@ export const APP_HEAD_PX = {
 } as const;
 
 /*
- * ── 🔴 `CONSOLE-MATCH-03` §2 — THE BULK GROUP'S SCOPE LABEL, ITS RULE, AND THE CARD'S FOOT ──
+ * ── 🔴 `CONSOLE-MATCH-03` §2 — THE BULK GROUP'S SCOPE LABEL AND RULE ──
  *
  * Measured in Chromium at 1280 × 800 on `04-playout-layers.html`, never read off the
  * stylesheet: that file appends its rules in FOUR waves restating the same selectors and a
@@ -495,7 +495,6 @@ export const APP_HEAD_PX = {
  *
  *   `.channel-target`     35.72 × 18   12 px, `padding: 0 9px 0 0`, no ground
  *   `.divider-vertical`        1 × 17   the line colour
- *   `.layer-footer`         1262 × 24   `padding: 3px 10px`, `gap: 9px`, 10 px muted
  */
 export const LAYER_BULK_PX = {
   /** The `CH N` scope label ahead of the three bulk verbs. */
@@ -504,14 +503,6 @@ export const LAYER_BULK_PX = {
   targetWell: 9,
   /** The rule that splits the irreversible verb off from the two remedies. */
   dividerH: 17,
-} as const;
-
-export const LAYER_FOOTHINT_PX = {
-  h: 24,
-  padY: 3,
-  padX: 10,
-  gap: 9,
-  text: 10,
 } as const;
 
 /*
@@ -2888,10 +2879,6 @@ export const cssVars = {
   '--r-bulk-target-text': `${String(LAYER_BULK_PX.targetText)}px`,
   '--r-bulk-target-well': `${String(LAYER_BULK_PX.targetWell)}px`,
   '--r-bulk-divider-h': `${String(LAYER_BULK_PX.dividerH)}px`,
-  '--r-foothint-h': `${String(LAYER_FOOTHINT_PX.h)}px`,
-  '--r-foothint-pad': `${String(LAYER_FOOTHINT_PX.padY)}px ${String(LAYER_FOOTHINT_PX.padX)}px`,
-  '--r-foothint-gap': `${String(LAYER_FOOTHINT_PX.gap)}px`,
-  '--r-foothint-text': `${String(LAYER_FOOTHINT_PX.text)}px`,
   /*
    * ⚠ There is deliberately NO `--r-row-icon-btn-narrow-w` here any more. Phase 2 transcribed
    * a `30px` destructive-group width from a stylesheet rule the prototype renders for no

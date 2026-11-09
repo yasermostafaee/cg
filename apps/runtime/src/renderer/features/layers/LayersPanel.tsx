@@ -35,7 +35,6 @@ import {
 } from '../sources/sourceStore.js';
 import {
   CircleArrowOutDownRight,
-  Info,
   LayoutGrid,
   LoaderCircle,
   PanelRight,
@@ -2015,28 +2014,6 @@ export function LayersPanel({
                 </span>
               </div>
               {renderLayerList(bank)}
-              {/*
-                🔴 `CONSOLE-MATCH-03` §2 — THE FOOTER HINT, which this card did not have.
-
-                The reference closes the layers card with one muted line naming the three
-                things a newcomer to this table cannot guess: that CLICKING a populated row is
-                what opens the Inspector, that ON PVW composites rather than airs, and that
-                PLAY is the take. Every one of those is a thing an operator currently learns by
-                pressing something and seeing what happens, on a console where pressing
-                something is the expensive way to find out.
-
-                OUTSIDE the scroll area, like the sub-bar above it and for the mirror reason:
-                a hint that scrolls away from the list it describes is only readable by
-                accident. `role="note"` and not `status` — it never changes, so there is
-                nothing to announce.
-              */}
-              <div className="cg-layers-foothint" role="note" data-layers-foothint="">
-                <Icon icon={Info} size={12} />
-                <span>
-                  Click a populated row to inspect · ON PVW adds to the composite · Play takes the
-                  row on air
-                </span>
-              </div>
             </>
           )
         ) : activeTab === 'live-sources' ? (

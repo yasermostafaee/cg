@@ -98,13 +98,14 @@ open every line, and `Show less` fold them again; the choice SHALL be remembered
   and `Reachable · 4 OK`, and Versions shows only `Versions · 2 OK`
 - **WHEN** `Show all` is pressed **THEN** every line shows **AND** a reload keeps it so
 
-### Requirement: The NOT CONNECTED banner and the layer list's wait SHALL carry no explanation
+### Requirement: The connection banner and Layers panel SHALL omit standing instructions
 
 The NOT CONNECTED banner SHALL carry its state, the CG Bridge address and the one fact an operator acts on,
 `Takes are refused until it is back.`, and SHALL carry no explanation of why — no "nothing is listening on port",
 "switched off, a wrong address, or a firewall", "something there answers, but not as CG Bridge", or "reissue
 them once the connection is back" (`R-093`). `Loading the layer list…` SHALL carry its title only — no "Waiting
-for the bridge to send the declared rows" and no "This is not an empty list".
+for the bridge to send the declared rows" and no "This is not an empty list". The Layers table SHALL occupy
+the rest of the panel below its filters, without a separate instruction strip.
 
 #### Scenario: The banner, absent the prose
 
@@ -115,3 +116,8 @@ for the bridge to send the declared rows" and no "This is not an empty list".
 #### Scenario: The layer list's wait, absent the prose
 
 - **WHEN** the declared rows have not arrived **THEN** the panel reads `Loading the layer list…` and nothing more
+
+#### Scenario: The Layers table uses the available height
+
+- **WHEN** the Layers table is shown **THEN** its scrollable area extends to the panel's bottom border
+  without a footer hint

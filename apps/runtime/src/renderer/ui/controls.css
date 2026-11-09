@@ -875,27 +875,6 @@
   flex: 0 0 auto;
 }
 
-/* ── 🔴 CONSOLE-MATCH-03 §2 — THE LAYERS CARD'S FOOTER HINT ─────────────────
- *
- * The reference's `.layer-footer`: 24 px tall, padded 3 × 10, gapped 9, 10 px muted text with
- * a leading info glyph. It sits BELOW the scroll area, so it never moves.
- */
-.cg-layers-foothint {
-  display: flex;
-  align-items: center;
-  gap: var(--r-foothint-gap);
-  min-height: var(--r-foothint-h);
-  box-sizing: border-box;
-  padding: var(--r-foothint-pad);
-  border-top: 1px solid var(--r-border);
-  font-size: var(--r-foothint-text);
-  color: var(--r-text-muted);
-  flex-shrink: 0;
-}
-.cg-layers-foothint > svg {
-  flex: 0 0 auto;
-}
-
 /* ── Panel chrome — THE bar, shared by every panel ──────────────────────────
  *
  * Owner report: «هدر پنل Inspector باید با هدر بقیه پنل‌ها یکی باشه» — the

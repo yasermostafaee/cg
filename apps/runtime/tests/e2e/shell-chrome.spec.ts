@@ -290,11 +290,8 @@ test('§B2 — the filter narrows the list, and never hides a row that would los
 /**
  * 🔴 `CONSOLE-MATCH-03` §2 — WHAT THE LAYERS CARD SAYS ABOUT ITSELF.
  *
- * Three additions, each measured against the rendered reference at 1280 × 800 (never against
- * a rule read out of its stylesheet — four waves, only the last paints, `PROMPT.md` §0):
- * the `CH N` scope at the head of the bulk group, the rule that splits the irreversible verb
- * off from the two remedies, and the card's footer hint. Boxes belong in a real engine
- * (golden rule 12c).
+ * The `CH N` scope and the rule before Remove all are measured at 1280 × 800 against
+ * the rendered reference. The Layers list uses the space once occupied by the footer hint.
  */
 test('§C1 — the bulk group states its scope, and the irreversible verb is fenced off', async ({
   app,
@@ -330,35 +327,19 @@ test('§C1 — the bulk group states its scope, and the irreversible verb is fen
   expect(rBox!.x, 'and precedes REMOVE ALL').toBeLessThan(mBox!.x);
 });
 
-test('§C2 — the card closes with the hint, below the list and never scrolling with it', async ({
-  app,
-}) => {
+test('R-093 — the Layers list reaches the bottom of its panel', async ({ app }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1280, height: 800 });
 
-  const hint = page.locator('[data-layers-foothint]');
-  await expect(hint).toHaveText(
-    'Click a populated row to inspect · ON PVW adds to the composite · Play takes the row on air',
-  );
-  const hBox = await hint.boundingBox();
-  expect(hBox).not.toBeNull();
-  // The reference's 24 px foot.
-  expect(hBox!.height).toBeCloseTo(24, 0);
-
-  /*
-    IT DOES NOT SCROLL WITH THE LIST. Proved by scrolling the list to its end and reading the
-    hint's box again: a hint inside the scroll area would move. This is the same property the
-    sub-bar has and for the mirror reason — a line describing a list you cannot see while
-    reading it describes nothing.
-  */
-  const before = hBox!.y;
-  await page.evaluate(() => {
-    const rows = document.querySelectorAll('[data-layer]');
-    rows[rows.length - 1]?.scrollIntoView({ block: 'end' });
-  });
-  await page.waitForTimeout(200);
-  const after = (await hint.boundingBox())?.y;
-  expect(after).toBeCloseTo(before, 0);
+  const panel = page.getByRole('region', { name: 'Layers', exact: true });
+  const row = panel.locator('[data-layer]').first();
+  await expect(row).toBeVisible();
+  await expect(panel.getByText('Click a populated row to inspect')).toHaveCount(0);
+  await expect(panel.locator('[data-layers-foothint]')).toHaveCount(0);
+  const list = await row.locator('..').boundingBox();
+  const frame = await panel.boundingBox();
+  if (list === null || frame === null) throw new Error('Layers panel is unavailable');
+  expect(frame.y + frame.height - (list.y + list.height)).toBeCloseTo(1, 0);
 });
 
 /**

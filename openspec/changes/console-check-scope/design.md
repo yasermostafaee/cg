@@ -59,3 +59,5 @@
    commands are thin wrappers in `main.rs`), so its tests — real reads of Windows' service and TCP tables
    included — run without a window or a manifest.
 9. **Fold** is presentation over the same lines; the choice is one per-viewer key, `cg.runtime.check-show-all.v1`.
+10. **Layers (`R-093`).** The scrollable list extends to the panel's bottom border. The panel removes
+    the instruction strip below the table, along with its icon and dedicated styling.

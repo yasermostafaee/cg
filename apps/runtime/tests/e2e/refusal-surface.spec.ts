@@ -39,13 +39,11 @@ test('§R — a refusal PERSISTS past any toast, coalesces, dismisses, and never
   await expect(banner, 'a refusal that hides itself is the defect').toBeVisible();
 
   /*
-    (c) IT DOES NOT COVER THE CONSOLE. The screenshot showed the old toast lying over the
-    footer hint AND a table row. Asserted as real box intersection against both — a refusal
-    about a row that hides the row is the failure mode, so it is measured rather than argued.
+    (c) The refusal stays clear of the Layers filters and a populated row.
   */
   const b = await banner.boundingBox();
   expect(b).not.toBeNull();
-  for (const sel of ['[data-layers-foothint]', '[data-layer][data-item-id]']) {
+  for (const sel of ['[data-layers-subbar]', '[data-layer][data-item-id]']) {
     const other = await page.locator(sel).first().boundingBox();
     expect(other, `${sel} has no box`).not.toBeNull();
     const overlaps =

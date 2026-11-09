@@ -33,6 +33,8 @@
 - [x] 5.1 The banner: the state, the address, `Takes are refused until it is back.`; the reachability reasons gone
 - [x] 5.2 `Loading the layer list…`: the title only
 - [x] 5.3 Absences pinned; swept by string and by component
+- [x] 5.4 Remove the instruction strip from the Layers table and update the Chromium geometry checks
+- [ ] 5.5 Record carrying Linux E2E for the Layers footer removal
 
 ## 6. Verification
 

@@ -36,7 +36,8 @@ VPN/proxy line failed on a process name alone. `B-317`, `B-318`, `R-090`…`R-09
 - **Fold the passes (`R-092`).** Each group shows what needs attention; its passes fold into `Reachable · 4 OK`;
   `Show all` opens them, remembered per viewer.
 - **The last prose (`R-093`).** The NOT CONNECTED banner keeps the state, the address and
-  `Takes are refused until it is back.`; `Loading the layer list…` keeps its title only.
+  `Takes are refused until it is back.`. The loading state keeps its title, and the Layers table
+  uses the space previously occupied by the instruction strip.
 
 ## Impact
 
