@@ -2322,9 +2322,9 @@ opening a change of its own.
 [run 31551511995](https://github.com/yasermostafaee/cg/actions/runs/31551511995) on commit
 `455318b4`, `conclusion: success`, with the `E2E (Playwright)` job RUN (not skipped) and green.
 
-**What:** in PVW, draw a **labelled placeholder** over each live plate's rect — procedural colour
-bars carrying the **plate's name** and, when one is assigned, **the assigned SOURCE's name**. Drawn
-by the **RUNTIME, OVER the rehearse frame**; the page beneath is untouched.
+**What:** in PVW, draw a labelled outline over each live plate. Show its plate and assigned source
+names, and show **Crop edges** below the plate name when its effective fit is `cover`. The retained
+page supplies the visible Bars, colour or picture (R-105/B-424).
 
 **Why:** an empty region is **indistinguishable from a broken render**. The operator looking at PVW
 today cannot tell whether the template is fine and the live box is simply not a browser thing, or
@@ -2339,12 +2339,9 @@ answered with **no frame grabs and no extra channel**.
 
 ### ⚠ This does NOT reopen §12.2, and the compatibility sentence is the point
 
-`live-source-multibox` design.md **§12.2 stands untouched**: rehearse renders the retained exported
-page **VERBATIM**, and the page paints **nothing** where a Live Source is. **This item adds no second
-render path and changes nothing about what is rendered** — the placeholders are an **overlay the
-Runtime draws on top of the rehearse frame**, so the page's contract and §12.2's decision are both
-exactly as they were. A later reader must not read these placeholders as a reversal of §12.2; they
-are a thing drawn beside it.
+Rehearse renders the retained exported page. The Runtime draws a transparent outline and labels on
+top of it. R-105 gives that page the authored fallback, so older pages with transparent regions show
+the outline over the stage background and recent pages show the chosen colour, image or Bars.
 
 Three consequences of that, each a reason this is cheap:
 

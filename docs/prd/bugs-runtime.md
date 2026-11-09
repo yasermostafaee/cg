@@ -14064,3 +14064,9 @@ and has no authored path, but CG Control hides the file picker.
 File content goes through the existing draft and Update flow.
 **Regression:** Reload the same loaded template without its missing path, choose a new file and
 verify both the retained row data and the replacement draft.
+
+## [~] B-424 — PVW covers the chosen plate fallback with Bars ⟨priority: high — the owner, 2026-11-09⟩ — `openspec/changes/black-empty-live-plate/`
+
+In a retained template with a solid-colour or picture fallback, PVW's live-source marker paints its
+own Bars over the plate. Draw the border and chip over the retained background. Use an amber
+outline for missing assignments. Show Crop edges below the plate name when the active fit is `cover`.

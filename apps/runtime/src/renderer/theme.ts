@@ -2588,7 +2588,6 @@ export const cssVars = {
   '--r-video-ground': '#000',
   '--r-checker-a': '#3D4253',
   '--r-checker-b': '#5B6075',
-  '--r-plate-hatch': 'rgba(0, 0, 0, 0.34)',
   '--r-plate-chip-bg': 'rgba(0, 0, 0, 0.78)',
   '--r-plate-ink': '#FFFFFF',
   /*

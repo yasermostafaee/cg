@@ -13,7 +13,6 @@ import type {
   TemplateInfo,
 } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
-import { smpteBarsGradient } from '@cg/template-runtime/scene-builder';
 import { PreviewPanel } from '../src/renderer/features/monitors/PreviewPanel.js';
 import { ShellLayoutProvider } from '../src/renderer/hooks/shellLayoutContext.js';
 import {
@@ -232,21 +231,17 @@ describe('R-049 — a live plate is VISIBLE in PVW', () => {
     expect(el.querySelectorAll('[data-live-plate]')).toHaveLength(2);
   });
 
-  it('the bars are the DESIGNER’s bars — the same call, never a second table', async () => {
+  it('B-424 — the markers leave the template background visible', async () => {
     const el = await render({ rehearsals: REHEARSING });
-    // Reuse asserted as an EQUALITY against the exported function, so a
-    // hand-written copy of the seven-colour table fails here rather than
-    // drifting silently and losing the paired-stop rule (B-066) on air.
-    expect(plate(el, 'guest-1').style.backgroundImage).toContain(smpteBarsGradient());
+    expect(plate(el, 'guest-1').style.backgroundImage).toBe('');
+    expect(plate(el, 'guest-1').style.backgroundColor).toBe('');
   });
 
   it('it declares itself a PLACEHOLDER and cannot read as an incoming picture', async () => {
     const el = await render({ rehearsals: REHEARSING });
     const box = plate(el, 'guest-1');
     expect(box.textContent).toContain('PLACEHOLDER');
-    // Hazard striping over the bars — nothing arriving on an SDI input looks
-    // like this, which is the point.
-    expect(box.style.backgroundImage).toContain('repeating-linear-gradient');
+    expect(box.getAttribute('aria-label')).toContain('server output for live video');
   });
 
   it('R-106 — follows Play/Stop while Next preserves visibility', async () => {
@@ -273,7 +268,7 @@ describe('R-049 — a live plate is VISIBLE in PVW', () => {
 });
 
 describe('R-049 — the two states, distinguishable without reading', () => {
-  it('an ASSIGNED plate is full-saturation and names plate AND source', async () => {
+  it('an ASSIGNED plate names the plate and its source', async () => {
     const el = await render({
       rehearsals: REHEARSING,
       assignments: {
@@ -282,19 +277,15 @@ describe('R-049 — the two states, distinguishable without reading', () => {
     });
     const box = plate(el, 'guest-1');
     expect(box.dataset['livePlateState']).toBe('assigned');
-    expect(box.style.filter).toBe('none');
     expect(box.textContent).toContain('guest-1');
     // The join no exported page can make: the INSTALLATION's name for the source.
     expect(box.textContent).toContain('Studio A');
   });
 
-  it('an UNASSIGNED plate is DESATURATED and says so in words', async () => {
+  it('an UNASSIGNED plate says so in words', async () => {
     const el = await render({ rehearsals: REHEARSING });
     const box = plate(el, 'guest-2');
     expect(box.dataset['livePlateState']).toBe('unassigned');
-    // The across-the-room signal. Asserted on the style because the requirement
-    // is that the states differ BEFORE a word is read.
-    expect(box.style.filter).toBe('grayscale(1)');
     expect(box.textContent).toContain('no source assigned');
   });
 
@@ -309,8 +300,6 @@ describe('R-049 — the two states, distinguishable without reading', () => {
     const unbound = plate(el, 'guest-2');
     expect(bound.textContent).toContain('Baku');
     expect(unbound.textContent).toContain('no source assigned');
-    expect(bound.style.filter).not.toBe(unbound.style.filter);
-    // …and the frames differ too, not just the fill.
     expect(bound.style.border).not.toBe(unbound.style.border);
   });
 

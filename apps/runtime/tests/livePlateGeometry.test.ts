@@ -301,7 +301,13 @@ describe('B-151 — the overlay draws the ACTIVE look, and only it', () => {
         },
         // SOLO shows one source, and at a DIFFERENT rect from its 2-box one — so a wrong
         // answer is visible in the geometry as well as in the count.
-        { id: 'solo', name: 'Solo', entered: { mode: 'cut' }, rects: { 'l-1': FULL } },
+        {
+          id: 'solo',
+          name: 'Solo',
+          entered: { mode: 'cut' },
+          rects: { 'l-1': FULL },
+          fits: { 'l-1': 'cover' },
+        },
       ],
       defaultLookId: 'pair',
     });
@@ -309,6 +315,21 @@ describe('B-151 — the overlay draws the ACTIVE look, and only it', () => {
   const RASTER: ChannelRaster = { width: 1920, height: 1080 };
   const place = (activeLookId: string | undefined) =>
     platePlacements(twoLooks(), RASTER, undefined, named('Studio A'), activeLookId);
+
+  it('B-424 — the crop label follows the look and respects the channel fit override', () => {
+    expect(place('pair')[0]?.cropEdges).toBeUndefined();
+    expect(place('solo')[0]?.cropEdges).toBe(true);
+    const overridden = lookup({
+      assignments: {
+        assignments: [
+          { templateId: 'tpl-1', plateId: 'l-1', sourceId: 'studio-1', fitMode: 'contain' },
+        ],
+      },
+    });
+    expect(
+      platePlacements(twoLooks(), RASTER, undefined, overridden, 'solo')[0]?.cropEdges,
+    ).toBeUndefined();
+  });
 
   it('🔴 4.2 — a hidden look’s plate has NO placement at all, not a covered one', () => {
     /*

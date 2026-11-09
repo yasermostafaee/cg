@@ -101,35 +101,10 @@ import type { PvwPage } from '../../../shared/pvwPage.js';
  * Browser rendering versus CasparCG's CEF 71 is faithful but NOT pixel-identical
  * (the B-066 class).
  *
- * ⚠ A LIVE SOURCE REGION: THE PAGE PAINTS NOTHING, THE RUNTIME DRAWS A MARKER.
- * Read both halves — this comment has been wrong in each direction once.
- *
- *   - THE RENDERED PAGE still paints ZERO PIXELS there, and that is unchanged.
- *     Rehearse renders the RETAINED EXPORTED PAGE VERBATIM (`srcDoc={html}` in
- *     `RehearsalFrame`), D-137 requires that page to paint nothing where a Live
- *     Source is, and no second render path exists. DECIDED 2026-08-08, owner —
- *     `openspec/changes/live-source-multibox/` design.md §12.2, NOT reopened by
- *     R-049. (`buildScene`'s `mode` seam is an enum, not a boolean, so a third
- *     `'rehearse'` mode remains addable without reopening it — and stays unused.)
- *   - R-049 THEN DRAWS A LABELLED PLACEHOLDER OVER IT — `LivePlateOverlay`, this
- *     component's own child, composited on top of the frames from the plate rects
- *     the template declares. It is a MARKER, never the feed: an empty region is
- *     indistinguishable from a broken render, and nothing but the Runtime can say
- *     WHICH SOURCE is behind WHICH plate, because the page carries a plate
- *     identifier and nothing else.
- *
- * What fills the region ON AIR is a CasparCG layer the bridge composites BEHIND
- * the template, which no browser preview was ever going to show — hence a marker
- * that is deliberately unmistakable for a picture, rather than a picture.
- *
- * The history is worth keeping, because the first version of this paragraph was
- * confidently wrong: until 2026-08-08 it read "after C-015 a Live Source region
- * renders as a labelled placeholder rather than video", describing a render path
- * that was never built and could not be on this surface. It was corrected to "an
- * empty transparent hole", which was true then and is HALF true now. Neither
- * short form survives contact with the truth: the PAGE paints nothing, the
- * RUNTIME draws a marker over it, and a reader needs both facts to reason about
- * either.
+ * The retained exported page paints the authored Live Source fallback (R-105).
+ * LivePlateOverlay frames and labels each plate during Play. The operator sees
+ * the template's background and source assignment, with live video on the
+ * server's programme output.
  *
  * Rehearse catches wrong values, broken layouts and bad motion; it is not a
  * confidence monitor (that is C-016). Those caveats are stated IN the panel below

@@ -4362,3 +4362,9 @@ The previous allocation and a heading search confirmed B-420 was free.
 - `B-423` — remove stale masks after deleting a lower Plate — [bugs-designer.md](bugs-designer.md).
 
 ⇒ **Next free after this entry is `B-424`**, **`D-207`**, **`P-078`**, **`R-113`** and **`C-049`**.
+
+### 2026-11-09 — Preserve the authored PVW plate fallback with B-424
+
+- `B-424` — keep the retained Bars, colour or picture visible under the plate marker — [bugs-runtime.md](bugs-runtime.md).
+
+⇒ **Next free after this entry is `B-425`**, **`D-207`**, **`P-078`**, **`R-113`** and **`C-049`**.

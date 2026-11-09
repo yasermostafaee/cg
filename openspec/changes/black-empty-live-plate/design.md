@@ -12,3 +12,9 @@ The page cannot resolve the installed source aspect. The Bridge sends the alread
 ## Risk
 
 This changes on-air page pixels and the Bridge control payload, so it still requires a real CasparCG/Playout pass in addition to mocks.
+
+## PVW
+
+The retained template page supplies the plate's fallback. The PVW marker adds a transparent outline
+and labels. Its border marks assignment state, and its Crop edges label resolves the same per-channel
+override and active-look fit as the Bridge. Older pages with no fallback still show the marker.

@@ -9,9 +9,14 @@
 // same program. The subpath keeps this app importing pure arithmetic and nothing
 // ambient.
 import { outputLetterbox, outputScale, outputTranslate } from '@cg/template-runtime/position';
-import { lookPlateRects, resolvePlateSourcesForLook } from '@cg/shared-ipc';
+import {
+  assignmentsOnChannel,
+  lookPlateFits,
+  lookPlateRects,
+  resolvePlateSourcesForLook,
+} from '@cg/shared-ipc';
 import type { ChannelRaster, SourceAssignments, TemplateLiveSources } from '@cg/shared-ipc';
-import type { Position } from '@cg/shared-schema';
+import type { LiveFitMode, Position } from '@cg/shared-schema';
 // The ONE audio vocabulary, shared with the LIVE PLATES strip and the layer row's summary.
 import type { PlateAudioState } from '../layers/plateAudio.js';
 
@@ -72,6 +77,8 @@ export interface PlatePlacement {
    * template's layout and nothing outside it (design.md §2z).
    */
   plateId: string;
+  /** The active fit mode crops the input at the edges of this box. */
+  cropEdges?: true;
   /**
    * The operator-facing NAME of the source bound to this plate, or `null` when
    * nothing is bound.
@@ -218,6 +225,16 @@ export function platePlacements(
     frame and a label at the origin.
   */
   const rects = lookPlateRects(live, activeLookId);
+  const authoredFits = lookPlateFits(live, activeLookId);
+  const overrideFits = new Map<string, LiveFitMode>();
+  if (sources.frozenAssignment === undefined) {
+    for (const assignment of assignmentsOnChannel(sources.assignments, sources.channel)
+      .assignments) {
+      if (assignment.templateId === sources.templateId && assignment.fitMode !== undefined) {
+        overrideFits.set(assignment.plateId, assignment.fitMode);
+      }
+    }
+  }
   /*
     🔴 SESSION BQ — THE NAMES COME FROM THE SAME LOOK AS THE RECTS, resolved by the SHARED
     four-level resolver rather than by anything this app owns.
@@ -245,10 +262,12 @@ export function platePlacements(
     // A binding whose catalog entry has gone reads as UNASSIGNED — the safe direction, since that
     // plate will refuse its take.
     const sourceName = catalogId === null ? null : sources.nameOf(catalogId);
+    const fitMode = overrideFits.get(plate.sourceId) ?? authoredFits[plate.sourceId];
     return [
       {
         elementId: plate.elementId,
         plateId: plate.sourceId,
+        ...(fitMode === 'cover' && { cropEdges: true as const }),
         sourceName,
         sourceId: sourceName === null ? null : catalogId,
         // `undefined` when the caller supplied no lookup, and `undefined` again when it has

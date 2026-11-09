@@ -1,10 +1,5 @@
 import type { CSSProperties } from 'react';
 import { Volume2, VolumeX } from 'lucide-react';
-// The SUBPATH, never the package's entry index — see `livePlateGeometry.ts` for
-// the full reason. Short form: the index reaches `adapters/caspar-globals.ts`,
-// whose `declare global` claims `window.cg` for the SERVED PAGE's runtime, and
-// this app's `window.cg` is the bridge. The two must not share a compilation.
-import { smpteBarsGradient } from '@cg/template-runtime/scene-builder';
 import type { ChannelRaster } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 import { Icon } from '../../ui/Icon.js';
@@ -13,102 +8,13 @@ import { frameBox } from './rehearsalFrames.js';
 import type { PlatePlacement } from './livePlateGeometry.js';
 
 /**
- * R-049 — the labelled placeholder PVW draws over each Live Source plate.
+ * R-049/B-424 — mark each live plate while leaving its authored fallback visible.
+ * The neutral outline indicates an assigned source. Amber marks a missing assignment.
+ * The chip identifies the plate, effective fit and source.
  *
- * ── 🔴 THIS DOES NOT REOPEN `live-source-multibox` design.md §12.2 ──────────
- *
- * §12.2 stands exactly as decided: rehearse renders the RETAINED EXPORTED PAGE
- * VERBATIM, and D-137 requires that page to paint ZERO PIXELS where a Live Source
- * is, because on air a CasparCG layer composites the real feed BEHIND the
- * template. Nothing here changes what is rendered. This is an overlay the RUNTIME
- * composites on top of the frame; the page beneath is untouched, no `.vcg` or
- * exporter changes, and `buildScene`'s `mode: 'author' | 'output'` seam stays
- * UNUSED and available for a real `'rehearse'` mode if one is ever wanted. A later
- * reader must not read these placeholders as a reversal of §12.2 — they are a
- * thing drawn BESIDE it.
- *
- * ── WHAT IT IS FOR: TWO QUESTIONS, ONE OF WHICH ONLY THIS SURFACE CAN ANSWER ─
- *
- *   1. "Is there a live region here, or did the page fail to render?" An empty
- *      region is indistinguishable from a broken render. The owner met exactly
- *      this in live testing: in PVW you could not tell a live plate existed.
- *   2. "WHICH SOURCE is behind WHICH plate?" The exported page cannot answer this
- *      at all — it carries a plate identifier and nothing else, by design
- *      (design.md §2z: the author names plates for the LAYOUT, the installation
- *      names sources for what they ARE). The Runtime holds the join.
- *
- * ── 🔴 UNMISTAKABLY NOT A PREVIEW — A REQUIREMENT, NOT A STYLING CHOICE ─────
- *
- * A browser cannot display SDI or NDI. A placeholder that READS AS A PICTURE is
- * worse than the blank region it replaces: it converts "I can't see it" into "I
- * saw it and it was fine", which is the one failure this surface must not
- * manufacture. So the look is deliberately anti-photographic and it is layered, so
- * that no single element carries the whole burden:
- *
- *   - procedural colour bars — no camera feed looks like a test pattern;
- *   - HAZARD STRIPING over them — and nothing that arrives on an SDI input has
- *     diagonal stripes across it;
- *   - the word PLACEHOLDER, and a line saying the live picture is not shown here.
- *
- * The bars are `smpteBarsGradient()` IMPORTED from `@cg/template-runtime`, the
- * very function the Designer's authoring surface paints — the same call, so a
- * change to the table reaches both surfaces or neither, never a second table.
- * It carries the B-066 lesson in its own comment (explicit PAIRED gradient stops,
- * because double-position stops shipped in Chromium 72 and CasparCG's CEF is
- * baseline 71), and a hand-written copy would very likely lose it.
- *
- * ── THE TWO STATES DIFFER BY COLOUR, NOT BY TEXT ────────────────────────────
- *
- * They demand different operator ACTIONS — an unassigned plate REFUSES the take
- * (C-015's empty-mapping acceptance), and PVW is the operator's last chance to see
- * that before air — so they must be told apart across the room, before a word is
- * read:
- *
- *   - ASSIGNED   — full-saturation bars, neutral frame, plate name + source name.
- *   - UNASSIGNED — DESATURATED bars, AMBER frame, "no source assigned".
- *
- * Amber is this palette's ATTENTION role, the same one the Inspector's LIVE PLATES
- * section already gives a plate that "needs a source" — so the two surfaces agree.
- * Not red: nothing is broken, the work is simply not done yet.
- *
- * `filter: grayscale(1)` desaturates the ONE bar table rather than introducing a
- * second, muted one. The CEF-71 baseline does not apply here and must not be
- * mis-cited: this renders in the OPERATOR CONSOLE's browser, not in CasparCG.
- *
- * ── R-106 — THE STAGE OWNS VISIBILITY ──────────────────────────────────────
- *
- * This component still has no private lifecycle input. `RehearsalStage` mounts it
- * only while the local composite is playing, from the same Play/Stop fact that
- * drives every retained page. That keeps the marker and template hidden together
- * before Play and after Stop; Next preserves the current visibility.
- *
- * ── GEOMETRY: ONE FIT SCALE, AND THE LABEL COUNTER-SCALES OUT OF IT ─────────
- *
- * The overlay box is the SAME `frameBox` the iframes use — same raster size, same
- * `translate(-50%,-50%) scale(fit)` — so plate rects land on the page beneath by
- * construction rather than by a second calculation that happens to agree.
- *
- * The LABEL then multiplies by `1/fit`. Without it the text would scale down with
- * everything else and be illegible in a small panel, which would delete the answer
- * to question 2 while leaving the box that promises it. Note what this is NOT: it
- * is not a second scale factor: it is the stage's own `fit`, inverted, so the two
- * cannot drift. Line weights and the stripe period take the same inversion, for
- * the same reason — a 2px border at fit 0.2 is 0.4px, which is no border at all.
+ * RehearsalStage mounts this overlay while the composite plays (R-106).
+ * Labels counter-scale against the frame fit to remain readable.
  */
-
-/** The hazard striping, over the bars, in BOTH states. */
-function hazardStripes(period: number): string {
-  const half = period / 2;
-  return (
-    `repeating-linear-gradient(135deg, ${
-      cssVars['--r-plate-hatch']
-    } 0px, ${cssVars['--r-plate-hatch']} ${String(half)}px,` +
-    // `transparent`, not `rgba(0,0,0,0)`: the gap between the stripes is the
-    // ABSENCE of ink, not a colour anyone chose, so it takes no token.
-    ` transparent ${String(half)}px, transparent ${String(period)}px)`
-  );
-}
-
 const styles = {
   /**
    * `pointerEvents: 'none'` on the whole layer, and it is load-bearing rather
@@ -150,6 +56,7 @@ const styles = {
     color: cssVars['--r-plate-ink'],
   },
   source: { fontSize: '12px', color: cssVars['--r-plate-ink'] },
+  fit: { fontSize: '10px', fontWeight: 600, color: cssVars['--r-plate-ink-dim'] },
   unassigned: { fontSize: '12px', fontWeight: 700, color: colors.pending },
   audio: {
     fontSize: '10px',
@@ -260,6 +167,7 @@ function regionCaveat(
   plateId: string,
   sourceName: string | null,
   audio: PlatePlacement['audio'],
+  cropEdges: PlatePlacement['cropEdges'],
 ): string {
   const source =
     sourceName === null ? 'No source is assigned to it.' : `Its source is ${sourceName}.`;
@@ -271,7 +179,8 @@ function regionCaveat(
         : audio === 'held'
           ? 'Its audio is muted because this plate is not in the active look.'
           : 'Its audio is muted.';
-  return `Live source ${plateId} — a placeholder, not video. This region is not rendered in preview; the picture appears only on the server's own output. ${source} ${sound}`;
+  const fit = cropEdges === true ? ' Crop edges.' : '';
+  return `Live source ${plateId} — preview placeholder.${fit} Check the server output for live video. ${source} ${sound}`;
 }
 
 export function LivePlateOverlay({ placements, raster, fit, zIndex }: Props): JSX.Element | null {
@@ -302,20 +211,13 @@ export function LivePlateOverlay({ placements, raster, fit, zIndex }: Props): JS
               were laid out.
             */
             role="img"
-            aria-label={regionCaveat(p.plateId, p.sourceName, p.audio)}
+            aria-label={regionCaveat(p.plateId, p.sourceName, p.audio, p.cropEdges)}
             style={{
               position: 'absolute',
               left: `${String(p.x)}px`,
               top: `${String(p.y)}px`,
               width: `${String(p.width)}px`,
               height: `${String(p.height)}px`,
-              // Bars UNDER the stripes: `background-image` paints first-listed on
-              // top, so the striping is named first.
-              backgroundImage: `${hazardStripes(16 * inv)}, ${smpteBarsGradient()}`,
-              // The whole plate desaturates — bars AND stripes — so the two
-              // states differ in colour across the entire rect rather than in one
-              // corner of it. That is what makes them separable at a glance.
-              filter: assigned ? 'none' : 'grayscale(1)',
               border: `${String(2 * inv)}px dashed ${assigned ? cssVars['--r-plate-outline'] : colors.pending}`,
               boxSizing: 'border-box',
               display: 'flex',
@@ -342,6 +244,7 @@ export function LivePlateOverlay({ placements, raster, fit, zIndex }: Props): JS
                 </span>
               )}
               <span style={styles.plate}>{p.plateId}</span>
+              {p.cropEdges === true && <span style={styles.fit}>Crop edges</span>}
               {assigned ? (
                 // `PLAYOUT-SOURCES-01` §2.B — the name as every surface names it.
                 <span style={styles.source}>

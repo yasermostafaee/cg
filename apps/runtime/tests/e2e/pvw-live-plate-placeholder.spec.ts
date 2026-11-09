@@ -1,4 +1,13 @@
 import type { Page } from '@playwright/test';
+import type { Scene } from '@cg/shared-schema';
+import {
+  buildVcgIndexHtml,
+  cgCss,
+  cgJs,
+  cgJsIife,
+  ExporterSingleFile,
+} from '@cg/single-file-export';
+import { pack } from '@cg/vcg-format';
 import { E2E_PLAYOUT, expect, test } from './fixtures/runtime.js';
 
 /**
@@ -81,12 +90,12 @@ body.cg-pending .cg-stage{visibility:hidden}
 </body></html>`;
 }
 
-async function stubRetainedPage(page: Page): Promise<void> {
+async function stubRetainedPage(page: Page, html = pageWithHoles()): Promise<void> {
   await page.evaluate((html: string) => {
     (
       window as unknown as { cg: { templates: { page: () => Promise<unknown> } } }
     ).cg.templates.page = () => Promise.resolve({ kind: 'page', html, source: 'bridge' });
-  }, pageWithHoles());
+  }, html);
 }
 
 /** Register a template declaring the two holes above, as an import would leave it. */
@@ -158,6 +167,97 @@ const pvwTransport = (page: Page, verb: 'PLAY' | 'NEXT' | 'STOP') =>
 test.beforeEach(async ({ app }) => {
   await app.showMonitors();
 });
+
+test('B-424 — PVW shows the authored solid fallback beside Bars and labels Crop edges', async ({
+  app,
+}) => {
+  const date = '2026-11-09T00:00:00.000Z';
+  const scene: Scene = {
+    schemaVersion: 1,
+    id: 'pvw-authored-fallback',
+    name: 'Authored plate fallback',
+    templateType: 'lower-third',
+    resolution: { width: 1920, height: 1080 },
+    frameRate: 50,
+    editorBackdrop: 'transparent',
+    frameRange: { in: 0, out: 50 },
+    safeAreas: { title: 10, action: 5 },
+    layers: [
+      {
+        id: 'plates',
+        name: 'Plates',
+        visible: true,
+        locked: false,
+        blendMode: 'normal',
+        children: Object.entries(HOLES).map(([routeKey, rect], index) => ({
+          id: `el-${routeKey}`,
+          name: routeKey,
+          type: 'video-placeholder',
+          routeKey,
+          visible: true,
+          locked: false,
+          opacity: 1,
+          zIndex: index,
+          transform: {
+            position: { x: rect.x, y: rect.y },
+            size: { w: rect.width, h: rect.height },
+            anchor: { x: 0, y: 0 },
+            scale: { x: 1, y: 1 },
+            rotation: 0,
+          },
+          ...(index === 0
+            ? { fallbackKind: 'color', fallbackColor: '#21405F', fitMode: 'cover' }
+            : { fallbackKind: 'bars' }),
+        })),
+      },
+    ],
+    fields: [],
+    bindings: [],
+    fonts: [],
+    metadata: { createdAt: date, updatedAt: date },
+  };
+  const vcg = await pack({
+    scene,
+    manifestExtras: {
+      id: scene.id,
+      name: scene.name,
+      fontDeps: [],
+      assetIndex: [],
+      authoring: { designerVersion: '1.0.0', createdAt: date, exportedAt: date },
+      compatibility: { minRuntimeVersion: '0.0.0', minCasparCGVersion: '2.3.0' },
+    },
+    indexHtml: buildVcgIndexHtml(scene, [], [], false),
+    cgJs,
+    cgCss,
+  });
+  const page = app.page;
+  const layer = await app.importVcg('plate-fallback.vcg', vcg, 59);
+  const { html } = await new ExporterSingleFile({
+    cgJsIife,
+    cgCss,
+    fontsCss: '',
+    assets: { get: () => Promise.resolve(null), bytes: () => Promise.resolve(null) },
+  }).produce(scene);
+  await stubRetainedPage(page, html);
+  await rehearseRow(page, layer);
+  await pvwTransport(page, 'PLAY').click();
+
+  const frame = page.frameLocator('iframe[data-rehearsal-frame]');
+  const solid = frame.locator('[data-cg-live-fallback="el-guest-1"]');
+  await expect(solid).toBeVisible();
+  await expect(solid).toHaveCSS('background-color', 'rgb(33, 64, 95)');
+  await expect(frame.locator('[data-cg-live-fallback="el-guest-2"]')).toHaveCSS(
+    'background-image',
+    /linear-gradient/,
+  );
+  for (const id of Object.keys(HOLES)) {
+    await expect(marker(page, id)).toHaveCSS('background-image', 'none');
+    await expect(marker(page, id)).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  }
+  await expect(marker(page, 'guest-1').getByText('Crop edges', { exact: true })).toBeVisible();
+  await expect(marker(page, 'guest-2').getByText('Crop edges', { exact: true })).toHaveCount(0);
+});
+
 test('PVW marks every live plate, and the marker lands ON the hole', async ({ app }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1600, height: 900 });
@@ -239,7 +339,7 @@ test('the two plate states are told apart WITHOUT reading the label', async ({ a
   await expect(page.locator('[data-stage-illustration]')).toHaveText(
     'ILLUSTRATIVE COMPOSITE · LOCAL · LIVE SOURCES NOT RENDERED',
   );
-  await expect(marker(page, 'guest-1')).toHaveAttribute('aria-label', /placeholder, not video/i);
+  await expect(marker(page, 'guest-1')).toHaveAttribute('aria-label', /preview placeholder/i);
 
   // BIND one plate to a Playout input through the Inspector. (`PLAYOUT-SOURCES-01` — the inputs
   // are the seeded Playout's; nothing in the console defines one any more.)
@@ -274,13 +374,12 @@ test('the two plate states are told apart WITHOUT reading the label', async ({ a
   // The requirement is that the states are separable before a word is read, so
   // the assertion is about what is painted, not about what is written. A test
   // that only compared the text would pass against two identical-looking boxes.
-  const filters = await Promise.all(
+  const borders = await Promise.all(
     ['guest-1', 'guest-2'].map((id) =>
-      marker(page, id).evaluate((el) => getComputedStyle(el).filter),
+      marker(page, id).evaluate((el) => getComputedStyle(el).borderTopColor),
     ),
   );
-  expect(filters[0]).not.toBe(filters[1]);
-  expect(filters[1]).toContain('grayscale');
+  expect(borders[0]).not.toBe(borders[1]);
 });
 
 /** R-106 — the template and its Runtime-owned marker share one local lifecycle. */
@@ -367,8 +466,10 @@ test('D6 — each live-source region states the caveat permanently, on canvas AN
   */
   for (let i = 0; i < count; i += 1) {
     const label = (await regions.nth(i).getAttribute('aria-label')) ?? '';
-    expect(label, 'the region says it is a placeholder').toMatch(/placeholder, not video/i);
-    expect(label, 'the region says it is not rendered here').toMatch(/not rendered in preview/i);
+    expect(label, 'the region says it is a placeholder').toMatch(/preview placeholder/i);
+    expect(label, 'the region directs the operator to the live output').toMatch(
+      /server output for live video/i,
+    );
   }
 
   /*

@@ -13,3 +13,8 @@
 - [ ] 2.3 Run a real CasparCG/Playout on-air pass.
 - [x] 2.4 Chromium verified Bars on a new plate, its thumbnail and a selectable solid colour.
 - [x] 2.5 Multiple-selection tests verified the shared picker and Undo.
+
+## 3. PVW fallback and fit label
+
+- [x] 3.1 B-424 — leave the retained fallback visible and show Crop edges below the plate name.
+- [x] 3.2 Chromium verified the exported solid and Bars backgrounds, Crop edges, and both marker states.
