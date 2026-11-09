@@ -36,6 +36,7 @@ import {
 import {
   CircleArrowOutDownRight,
   Info,
+  LayoutGrid,
   LoaderCircle,
   PanelRight,
   RotateCcw,
@@ -142,8 +143,6 @@ interface Props {
   orphans?: readonly OrphanLayer[];
   /** R-111 — the maximized-monitor companion renders only the row already selected. */
   selectedOnly?: boolean;
-  /** R-111 — clicking that sole selected row is inspection, not a request to deselect it. */
-  preserveSelection?: boolean;
 }
 
 /** A stable empty default, so the memo below does not see a new array every render. */
@@ -173,6 +172,13 @@ const styles = {
    * the header scrolling away with them.
    */
   list: { overflowY: 'auto' as const, minHeight: 0, flex: 1 },
+  compactCompanion: { display: 'flex', minWidth: 0, flex: 1 },
+  compactList: {
+    minWidth: 0,
+    flex: 1,
+    borderRadius: cssVars['--r-radius-md'],
+    overflow: 'hidden',
+  },
   /**
    * §0 — THE PANEL-LEVEL NOTICE, AND ITS PERMANENTLY RESERVED HEIGHT.
    *
@@ -207,38 +213,21 @@ const styles = {
     borderBottom: `1px solid ${colors.border}`,
     overflow: 'hidden',
   },
-  /**
-   * The break between the operator rows and the graphics beds. Quiet on purpose — it is a
-   * label for a boundary, not a warning about one — and it uses the same uppercase-muted
-   * treatment the table header does, so it reads as structure rather than as a row.
-   *
-   * `RUNTIME-REDESIGN-01` PHASE 3 — the BAND is the reference's `.bed-divider`, measured
-   * in Chromium: a 25 px row (`--r-bed-divider-h`) with `4px 12px` padding on the PANEL
-   * ground, ruled off above by the strong line.
-   *
-   * 🔴 `MONITORS-01` — AUDIT ROW 12: THE TYPE IS THE REFERENCE'S NOW.
-   *
-   * Phase 3 kept the sticky header's treatment here — `0.62rem` (9.92 px) tracked `.06em` —
-   * against the reference's own `10px / 700 / untracked`, arguing that the band and the
-   * header are the two pieces of structure in the list and must read as one voice. Measured
-   * in Chromium at 1280 × 800, `.bed-divider>td` renders `font-size: 10px`, `font-weight:
-   * 700`, `letter-spacing: normal`. The "one voice" argument was doing no work the WEIGHT
-   * was not already doing — both are 700 — and it cost the band the drawing's own size and
-   * tracking for a 0.08 px difference nobody can see and a tracking that is visible.
-   * Adopted as measured.
-   */
+  /** R-112 — keep the live-layout boundary legible without using a tally color. */
   bedGroupHead: {
     boxSizing: 'border-box' as const,
     minHeight: 'var(--r-bed-divider-h)',
     display: 'flex',
     alignItems: 'center',
+    gap: cssVars['--r-space-2'],
+    margin: 0,
     padding: `var(--r-space-1) ${ROW_GEOMETRY.headerPaddingX}`,
     fontSize: `${String(LAYER_ROW_PX.bedDividerText)}px`,
     fontWeight: 700,
     textTransform: 'uppercase' as const,
-    color: colors.textMuted,
-    background: colors.panel,
-    borderTop: `1px solid ${cssVars['--r-border-strong']}`,
+    color: colors.textSecondary,
+    background: colors.background,
+    borderTop: `2px solid ${cssVars['--r-border-strong']}`,
   },
   awaitingStrip: {
     height: '1.65rem',
@@ -323,7 +312,6 @@ export function LayersPanel({
   emptiedAirRows = NO_EMPTIED_AIR_ROWS,
   orphans = NO_ORPHANS,
   selectedOnly = false,
-  preserveSelection = false,
 }: Props): JSX.Element {
   /**
    * §3 — THE LIST AND WHETHER IT HAS ARRIVED, never the list alone.
@@ -497,7 +485,8 @@ export function LayersPanel({
       onRowFocus((layer) => {
         const row = document.querySelector<HTMLElement>(`[data-layer="${String(layer)}"]`);
         if (row === null) return;
-        if (typeof row.scrollIntoView === 'function') row.scrollIntoView({ block: 'center' });
+        if (!selectedOnly && typeof row.scrollIntoView === 'function')
+          row.scrollIntoView({ block: 'center' });
         row.focus();
         // `MULTI-CHANNEL-01` — the row of THIS table's channel: layer 99 exists on every channel.
         const bound = slots.find(
@@ -505,7 +494,7 @@ export function LayersPanel({
         )?.binding;
         if (bound !== null && bound !== undefined) onSelectionChange(bound.itemId);
       }),
-    [slots, bank, onSelectionChange],
+    [slots, bank, onSelectionChange, selectedOnly],
   );
 
   // Template identity for every bound row, joined once for the whole list.
@@ -718,31 +707,24 @@ export function LayersPanel({
   );
 
   const shownRowBindings = useMemo(() => {
-    const filtered = rowBindings.filter((entry) => rowIsShown(filterableOf(entry), filter));
-    if (!selectedOnly) return filtered;
-    return filtered.filter(
+    if (!selectedOnly)
+      return rowBindings.filter((entry) => rowIsShown(filterableOf(entry), filter));
+    return rowBindings.filter(
       ({ binding }) => binding.kind === 'bound' && binding.item.itemId === selectedId,
     );
   }, [rowBindings, filterableOf, filter, selectedOnly, selectedId]);
 
   const filterTally = useMemo(
-    () =>
-      layerTally(
-        (selectedOnly ? shownRowBindings : rowBindings).map(filterableOf),
-        selectedOnly ? NO_FILTER : filter,
-      ),
-    [selectedOnly, shownRowBindings, rowBindings, filterableOf, filter],
+    () => layerTally(rowBindings.map(filterableOf), filter),
+    [rowBindings, filterableOf, filter],
   );
 
   const selectRow = useCallback(
     (itemId: string | null): void => {
-      if (preserveSelection && itemId === null && selectedId !== null) {
-        onSelectionChange(selectedId);
-        return;
-      }
+      if (selectedOnly && itemId === null) return;
       onSelectionChange(itemId);
     },
-    [preserveSelection, selectedId, onSelectionChange],
+    [selectedOnly, onSelectionChange],
   );
 
   // STOP ALL's count: the status IS the right question there — a row that never
@@ -1249,6 +1231,218 @@ export function LayersPanel({
     },
   ];
 
+  const renderLayerList = (layerBank: NonNullable<typeof bank>): JSX.Element => (
+    <div style={selectedOnly ? styles.compactList : styles.list} ref={listRef}>
+      {/* STICKY, and inside the scroll area — see `LayerTableHeader`. */}
+      {!selectedOnly && <LayerTableHeader density={density} />}
+      {shownRowBindings.map(({ slot, binding }, index) => {
+        /*
+          THE `?? null` THAT USED TO BE HERE IS THE BUG, and it is worth
+          naming because it reads as harmless: a bound slot whose item had
+          not arrived became `null`, which is the SAME value an unbound
+          slot produces — so the row could not tell "nothing is on this
+          layer" from "we have not been told yet", and reported the first.
+
+          `resolveRowBinding` is now the one place that decision is made,
+          and it takes `stackReady` as a required argument so it cannot be
+          made without considering it. It is resolved ONCE for the whole
+          table, in `rowBindings`, so the panel notice above and these rows
+          are reading the same array rather than agreeing by coincidence.
+
+          The row is no longer handed an `item` beside its binding: it takes
+          one out of the `bound` arm. A nullable next to the union is what
+          let the VERBS go on conflating "unbound" with "not yet known"
+          after the state cell had stopped.
+        */
+        const item = binding.kind === 'bound' ? binding.item : null;
+        // `CHANNEL-TEMPLATES-01` — the row's own channel's version.
+        const template =
+          item !== null ? (templates.get(item.templateId, slot.channel) ?? null) : null;
+        /*
+          `single-clock-look-switch` — THE GROUP BREAK, drawn once, at the first
+          bed row.
+
+          The list is descending by layer and the beds are the lowest layers, so
+          they already fall at the bottom — which is also where they are on air.
+          What is missing without this is any statement that the bottom of the
+          list is a DIFFERENT KIND of row: `wrong-bank` refuses a load across the
+          line, and a refusal about a boundary nobody can see is not actionable.
+
+          Derived from the canonical predicate against the previous row rather
+          than from a layer number, so it stays correct for a station whose bed
+          rows are not 1–9.
+        */
+        // Against the VISIBLE list — the break belongs above the first bed row the
+        // operator can actually see, not above one a filter has removed.
+        const previous = shownRowBindings[index - 1];
+        const startsBedGroup =
+          !selectedOnly &&
+          isLowBankLayer(layerBank, slot.layer) &&
+          (previous === undefined || !isLowBankLayer(layerBank, previous.slot.layer));
+        const row = (
+          <LayerRow
+            key={slot.layer}
+            slot={slot}
+            binding={binding}
+            template={template}
+            // 🔴 `DESKTOP-APPS-01-D` h — `#` IS THE AMCP LAYER. A search, a tick or
+            // a filter can never renumber it, because it is not a position at all.
+            displayPosition={slot.layer}
+            // …and so is the default name's number (`Layer 99`, `Bed 59`).
+            defaultAlias={defaultLayerAlias(layerBank, slot.layer)}
+            // The SAME predicate the group break above is drawn from, and the
+            // same one the bridge refuses on — one derivation, three readers.
+            acceptsBank={isLowBankLayer(layerBank, slot.layer) ? 'low' : 'high'}
+            density={density}
+            selected={item !== null && item.itemId === selectedId}
+            /*
+              `B-232` (owner) — mark the rows the notice above is about, so the
+              operator can SEE which rows one press of PUT BACK ON AIR would
+              restore instead of carrying their names down from the strip.
+              Matched on `itemId`, which is what the restore is addressed by
+              (`emptiedAir.restore({ itemIds })`), so the mark and the press can
+              never disagree about the set.
+            */
+            emptiedAir={item !== null && emptiedAirItemIds.has(item.itemId)}
+            /*
+              B-139 — the applied-plate baseline is SUPPLIED, through the
+              canonical `appliedPlateSources` the Inspector already uses.
+              Omitting it used to collapse every plate's baseline to `''`,
+              so this chip disagreed with the Inspector's in both
+              directions — and the UPDATE verb, which reads this same
+              boolean, refused an un-assignment the operator had staged.
+              The chip and the verb answer ONE question and take ONE value.
+            */
+            dirty={
+              item !== null &&
+              isItemDirty(
+                item.itemId,
+                item.fields,
+                appliedPlateSources(
+                  item.templateId,
+                  template?.liveSources?.sources ?? [],
+                  itemChannelOf(item, slots, defaultsChannel),
+                ),
+                item.lookSourceOverride,
+                /*
+                  🔴 The POSITION is absent here and the TIMING is present, which looks
+                  inconsistent and is not.
+
+                  A position has to be RESOLVED against the template's default before
+                  it can be compared (`defaultPositionOf`), and this row does not hold
+                  that; passing `undefined` is the honest reading of "this caller
+                  cannot answer" rather than a claim of clean. Filed as `B-250`.
+
+                  The timing needs no resolution — `timingOverride` IS the applied
+                  truth, on the item this row already has — so there is nothing to stop
+                  this chip agreeing with the Inspector's about it.
+                */
+                undefined,
+                item.timingOverride,
+              )
+            }
+            // R-022 — read through the canonical `isRehearsing`, never a
+            // local `.some()`: the bridge refuses PLAY on the same
+            // predicate, and if the two ever disagreed the UI would offer a
+            // take the bridge rejects — or worse, allow one it thought was
+            // interlocked off.
+            rehearsing={item !== null && isRehearsing(rehearsals, item.itemId)}
+            /*
+              `add-multibox-audio` — the plates this row's item actually OWNS, for
+              the read-only audio summary.
+
+              Supplied from the SAME `liveRows` the LIVE PLATES tab renders rather
+              than re-derived from the template's declaration. The two are not the
+              same set — a declared plate that is not seated cannot be audible — and
+              a summary reading `audio 2/4` while the strip below listed three
+              plates would be the console disagreeing with itself about how many
+              boxes a row has.
+
+              🔴 `B-164` — `rowPlateAudioOf`, not `seatedPlatesOf`. The bare id list
+              is still exactly right for SOLO and PANIC, which address a SET; the
+              chip needs each plate's `held` and `volume` as well, because its
+              denominator is what the ACTIVE LOOK SHOWS and its numerator is
+              AUDIBILITY rather than intent. Same rows, same pass, two questions.
+            */
+            seatedPlates={item === null ? [] : rowPlateAudioOf(liveRows, item.itemId)}
+            audioLockedOf={
+              item === null
+                ? undefined
+                : (plateId: string) => liveSourceLocked(item.itemId, plateId)
+            }
+            // `FIELD-FIXES-01-A` — the ledger half of PLAY's gate, off the RAW ledger
+            // (every channel), exactly the fact the bridge's `#ownsLiveSeats` reads.
+            holdsLiveSeats={item !== null && live.some((l) => l.itemId === item.itemId)}
+            /*
+              Golden rule 11 — the row's operator name for its audio dialog, through
+              the ONE composition, from the bank and the registry this panel holds.
+            */
+            operatorName={
+              item === null
+                ? undefined
+                : operatorRowName(
+                    { itemId: item.itemId, templateId: item.templateId, slot: item.slot },
+                    layerBank,
+                    templates,
+                  )
+            }
+            onSelect={selectRow}
+            onUpdate={onUpdate}
+          />
+        );
+        if (!startsBedGroup) return row;
+        return (
+          <Fragment key={slot.layer}>
+            <h3 style={styles.bedGroupHead} data-bed-group-head="">
+              <Icon icon={LayoutGrid} size={14} />
+              Live layouts
+            </h3>
+            {row}
+          </Fragment>
+        );
+      })}
+    </div>
+  );
+
+  const renderPlateAudioDialog = (): JSX.Element | null => {
+    if (plateAudioFor === null) return null;
+    const audioItem = itemById.get(plateAudioFor.itemId);
+    if (audioItem === undefined) return null;
+    const audioTemplate = templates.get(audioItem.templateId, boundChannelOf(audioItem, slots));
+    if (audioTemplate === undefined) return null;
+    return (
+      <LivePlateAudioDialog
+        item={audioItem}
+        template={audioTemplate}
+        name={operatorRowName(
+          {
+            itemId: audioItem.itemId,
+            templateId: audioItem.templateId,
+            slot: audioItem.slot,
+          },
+          bank,
+          templates,
+        )}
+        seatedPlates={rowPlateAudioOf(liveRows, audioItem.itemId)}
+        audioLockedOf={(plateId) => liveSourceLocked(audioItem.itemId, plateId)}
+        focusPlateId={plateAudioFor.plateId}
+        onApplyVolumes={(volumes) => applyPlateVolumes(audioItem.itemId, volumes)}
+        onClose={() => {
+          setPlateAudioFor(null);
+        }}
+      />
+    );
+  };
+
+  if (selectedOnly) {
+    return (
+      <section aria-label="Selected layer" style={styles.compactCompanion}>
+        {selectedHeld && listReady && bank !== null && renderLayerList(bank)}
+        {renderPlateAudioDialog()}
+      </section>
+    );
+  }
+
   return (
     <Panel
       id="layers"
@@ -1263,17 +1457,13 @@ export function LayersPanel({
         nothing that addresses this panel by name had to move.
       */
       heading={
-        selectedOnly ? (
-          <span className="cg-panel-title">SELECTED LAYER</span>
-        ) : (
-          <TabStrip
-            tabs={tabs}
-            activeId={activeTab}
-            onSelect={setActiveTab}
-            ariaLabel="Layer surfaces"
-            inPanelBar
-          />
-        )
+        <TabStrip
+          tabs={tabs}
+          activeId={activeTab}
+          onSelect={setActiveTab}
+          ariaLabel="Layer surfaces"
+          inPanelBar
+        />
       }
       actions={
         <>
@@ -1290,7 +1480,7 @@ export function LayersPanel({
             because it can change between the glance and the press. A principal's permission
             cannot. It is fixed for the session, so there is no target to move.
           */}
-          {!selectedOnly && canOperate && (
+          {canOperate && (
             <>
               {/*
             The bulk verbs, in C-012 order: graceful first, hard second — so the
@@ -1441,7 +1631,7 @@ export function LayersPanel({
           {/* NARROW — the hamburger that brings the Inspector up as an overlay.
               Only on small screens: with two columns the Inspector is already
               there and a toggle would be a control that does nothing visible. */}
-          {!selectedOnly && layout.narrow && (
+          {layout.narrow && (
             <Button
               variant="ghost"
               aria-label={inspectorOpen ? 'Hide the Inspector' : 'Show the Inspector'}
@@ -1467,7 +1657,7 @@ export function LayersPanel({
           {/* THE WAY BACK. Always reachable once anything is customised, so an
               operator who drags a panel somewhere useless at 2 a.m. is never
               stuck with it. */}
-          {!selectedOnly && layout.customized && (
+          {layout.customized && (
             <Button
               variant="ghost"
               aria-label="Reset the panel layout"
@@ -1688,11 +1878,7 @@ export function LayersPanel({
                 reference puts it, and OUTSIDE the scroll area — a filter that scrolled away
                 from the list it is filtering would be a control you cannot see the effect of.
               */}
-              <div
-                className="cg-layers-subbar"
-                data-layers-subbar=""
-                style={selectedOnly ? { display: 'none' } : undefined}
-              >
+              <div className="cg-layers-subbar" data-layers-subbar="">
                 <span className="cg-layers-subbar__search">
                   <Icon icon={Search} size={14} />
                   <input
@@ -1828,174 +2014,7 @@ export function LayersPanel({
                   </span>
                 </span>
               </div>
-              <div style={styles.list} ref={listRef}>
-                {/* STICKY, and inside the scroll area — see `LayerTableHeader`. */}
-                <LayerTableHeader density={density} />
-                {shownRowBindings.map(({ slot, binding }, index) => {
-                  /*
-                    THE `?? null` THAT USED TO BE HERE IS THE BUG, and it is worth
-                    naming because it reads as harmless: a bound slot whose item had
-                    not arrived became `null`, which is the SAME value an unbound
-                    slot produces — so the row could not tell "nothing is on this
-                    layer" from "we have not been told yet", and reported the first.
-
-                    `resolveRowBinding` is now the one place that decision is made,
-                    and it takes `stackReady` as a required argument so it cannot be
-                    made without considering it. It is resolved ONCE for the whole
-                    table, in `rowBindings`, so the panel notice above and these rows
-                    are reading the same array rather than agreeing by coincidence.
-
-                    The row is no longer handed an `item` beside its binding: it takes
-                    one out of the `bound` arm. A nullable next to the union is what
-                    let the VERBS go on conflating "unbound" with "not yet known"
-                    after the state cell had stopped.
-                  */
-                  const item = binding.kind === 'bound' ? binding.item : null;
-                  // `CHANNEL-TEMPLATES-01` — the row's own channel's version.
-                  const template =
-                    item !== null ? (templates.get(item.templateId, slot.channel) ?? null) : null;
-                  /*
-                    `single-clock-look-switch` — THE GROUP BREAK, drawn once, at the first
-                    bed row.
-
-                    The list is descending by layer and the beds are the lowest layers, so
-                    they already fall at the bottom — which is also where they are on air.
-                    What is missing without this is any statement that the bottom of the
-                    list is a DIFFERENT KIND of row: `wrong-bank` refuses a load across the
-                    line, and a refusal about a boundary nobody can see is not actionable.
-
-                    Derived from the canonical predicate against the previous row rather
-                    than from a layer number, so it stays correct for a station whose bed
-                    rows are not 1–9.
-                  */
-                  // Against the VISIBLE list — the break belongs above the first bed row the
-                  // operator can actually see, not above one a filter has removed.
-                  const previous = shownRowBindings[index - 1];
-                  const startsBedGroup =
-                    isLowBankLayer(bank, slot.layer) &&
-                    (previous === undefined || !isLowBankLayer(bank, previous.slot.layer));
-                  const row = (
-                    <LayerRow
-                      key={slot.layer}
-                      slot={slot}
-                      binding={binding}
-                      template={template}
-                      // 🔴 `DESKTOP-APPS-01-D` h — `#` IS THE AMCP LAYER. A search, a tick or
-                      // a filter can never renumber it, because it is not a position at all.
-                      displayPosition={slot.layer}
-                      // …and so is the default name's number (`Layer 99`, `Bed 59`).
-                      defaultAlias={defaultLayerAlias(bank, slot.layer)}
-                      // The SAME predicate the group break above is drawn from, and the
-                      // same one the bridge refuses on — one derivation, three readers.
-                      acceptsBank={isLowBankLayer(bank, slot.layer) ? 'low' : 'high'}
-                      density={density}
-                      selected={item !== null && item.itemId === selectedId}
-                      /*
-                        `B-232` (owner) — mark the rows the notice above is about, so the
-                        operator can SEE which rows one press of PUT BACK ON AIR would
-                        restore instead of carrying their names down from the strip.
-                        Matched on `itemId`, which is what the restore is addressed by
-                        (`emptiedAir.restore({ itemIds })`), so the mark and the press can
-                        never disagree about the set.
-                      */
-                      emptiedAir={item !== null && emptiedAirItemIds.has(item.itemId)}
-                      /*
-                        B-139 — the applied-plate baseline is SUPPLIED, through the
-                        canonical `appliedPlateSources` the Inspector already uses.
-                        Omitting it used to collapse every plate's baseline to `''`,
-                        so this chip disagreed with the Inspector's in both
-                        directions — and the UPDATE verb, which reads this same
-                        boolean, refused an un-assignment the operator had staged.
-                        The chip and the verb answer ONE question and take ONE value.
-                      */
-                      dirty={
-                        item !== null &&
-                        isItemDirty(
-                          item.itemId,
-                          item.fields,
-                          appliedPlateSources(
-                            item.templateId,
-                            template?.liveSources?.sources ?? [],
-                            itemChannelOf(item, slots, defaultsChannel),
-                          ),
-                          item.lookSourceOverride,
-                          /*
-                            🔴 The POSITION is absent here and the TIMING is present, which looks
-                            inconsistent and is not.
-
-                            A position has to be RESOLVED against the template's default before
-                            it can be compared (`defaultPositionOf`), and this row does not hold
-                            that; passing `undefined` is the honest reading of "this caller
-                            cannot answer" rather than a claim of clean. Filed as `B-250`.
-
-                            The timing needs no resolution — `timingOverride` IS the applied
-                            truth, on the item this row already has — so there is nothing to stop
-                            this chip agreeing with the Inspector's about it.
-                          */
-                          undefined,
-                          item.timingOverride,
-                        )
-                      }
-                      // R-022 — read through the canonical `isRehearsing`, never a
-                      // local `.some()`: the bridge refuses PLAY on the same
-                      // predicate, and if the two ever disagreed the UI would offer a
-                      // take the bridge rejects — or worse, allow one it thought was
-                      // interlocked off.
-                      rehearsing={item !== null && isRehearsing(rehearsals, item.itemId)}
-                      /*
-                        `add-multibox-audio` — the plates this row's item actually OWNS, for
-                        the read-only audio summary.
-
-                        Supplied from the SAME `liveRows` the LIVE PLATES tab renders rather
-                        than re-derived from the template's declaration. The two are not the
-                        same set — a declared plate that is not seated cannot be audible — and
-                        a summary reading `audio 2/4` while the strip below listed three
-                        plates would be the console disagreeing with itself about how many
-                        boxes a row has.
-
-                        🔴 `B-164` — `rowPlateAudioOf`, not `seatedPlatesOf`. The bare id list
-                        is still exactly right for SOLO and PANIC, which address a SET; the
-                        chip needs each plate's `held` and `volume` as well, because its
-                        denominator is what the ACTIVE LOOK SHOWS and its numerator is
-                        AUDIBILITY rather than intent. Same rows, same pass, two questions.
-                      */
-                      seatedPlates={item === null ? [] : rowPlateAudioOf(liveRows, item.itemId)}
-                      audioLockedOf={
-                        item === null
-                          ? undefined
-                          : (plateId: string) => liveSourceLocked(item.itemId, plateId)
-                      }
-                      // `FIELD-FIXES-01-A` — the ledger half of PLAY's gate, off the RAW ledger
-                      // (every channel), exactly the fact the bridge's `#ownsLiveSeats` reads.
-                      holdsLiveSeats={item !== null && live.some((l) => l.itemId === item.itemId)}
-                      /*
-                        Golden rule 11 — the row's operator name for its audio dialog, through
-                        the ONE composition, from the bank and the registry this panel holds.
-                      */
-                      operatorName={
-                        item === null
-                          ? undefined
-                          : operatorRowName(
-                              { itemId: item.itemId, templateId: item.templateId, slot: item.slot },
-                              bank,
-                              templates,
-                            )
-                      }
-                      onSelect={selectRow}
-                      onUpdate={onUpdate}
-                    />
-                  );
-                  if (!startsBedGroup) return row;
-                  return (
-                    <Fragment key={slot.layer}>
-                      <div style={styles.bedGroupHead} data-bed-group-head="">
-                        Graphics beds — below the live plates
-                      </div>
-                      {row}
-                    </Fragment>
-                  );
-                })}
-              </div>
+              {renderLayerList(bank)}
               {/*
                 🔴 `CONSOLE-MATCH-03` §2 — THE FOOTER HINT, which this card did not have.
 
@@ -2011,12 +2030,7 @@ export function LayersPanel({
                 accident. `role="note"` and not `status` — it never changes, so there is
                 nothing to announce.
               */}
-              <div
-                className="cg-layers-foothint"
-                role="note"
-                data-layers-foothint=""
-                style={selectedOnly ? { display: 'none' } : undefined}
-              >
+              <div className="cg-layers-foothint" role="note" data-layers-foothint="">
                 <Icon icon={Info} size={12} />
                 <span>
                   Click a populated row to inspect · ON PVW adds to the composite · Play takes the
@@ -2083,38 +2097,7 @@ export function LayersPanel({
         )}
       </TabPanel>
       {confirmDialog}
-      {plateAudioFor !== null &&
-        (() => {
-          const audioItem = itemById.get(plateAudioFor.itemId);
-          if (audioItem === undefined) return null;
-          const audioTemplate = templates.get(
-            audioItem.templateId,
-            boundChannelOf(audioItem, slots),
-          );
-          if (audioTemplate === undefined) return null;
-          return (
-            <LivePlateAudioDialog
-              item={audioItem}
-              template={audioTemplate}
-              name={operatorRowName(
-                {
-                  itemId: audioItem.itemId,
-                  templateId: audioItem.templateId,
-                  slot: audioItem.slot,
-                },
-                bank,
-                templates,
-              )}
-              seatedPlates={rowPlateAudioOf(liveRows, audioItem.itemId)}
-              audioLockedOf={(plateId) => liveSourceLocked(audioItem.itemId, plateId)}
-              focusPlateId={plateAudioFor.plateId}
-              onApplyVolumes={(volumes) => applyPlateVolumes(audioItem.itemId, volumes)}
-              onClose={() => {
-                setPlateAudioFor(null);
-              }}
-            />
-          );
-        })()}
+      {renderPlateAudioDialog()}
     </Panel>
   );
 }

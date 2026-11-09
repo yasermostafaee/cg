@@ -9,10 +9,13 @@ the list and Inspector by presentation conditions; it does not need a second sel
 - Default to monitor-only on each Runtime mount, preserving the existing fullscreen behaviour.
 - Render the existing Layers panel filtered to the selected row, so its state and verbs remain the
   same controls as the normal list rather than a second imitation.
-- In companion mode, translate the selected row's normal toggle-off result back to the current id.
+- In companion mode, ignore the selected row's normal request to toggle itself off.
 - Treat closing the companion Inspector as a layout change to selected-layer, not as deselection.
-- Companions always participate in layout and never overlay the monitor picture. Wide shells allocate
-  adjacent columns; narrow shells keep the monitor in an upper row and place layer/Inspector below it.
+- Give the monitor the available height, with one intrinsic-height selected layer below it.
+  The optional Inspector gets a separate full-height column at the right. Its width adapts to
+  the window. Both the picture and the Inspector remain in their allocated space.
+- Hide the main header and status footer while any panel is maximized. Keep its controls and
+  active alerts in view.
 
 ## Non-goals
 

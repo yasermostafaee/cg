@@ -292,6 +292,7 @@ export function App(): JSX.Element {
   // replaces it. `MonitorStrip` decides which of its two boxes a monitor focus
   // means.
   const monitorFocused = layout.focus === 'pgm' || layout.focus === 'pvw';
+  const shellChromeVisible = layout.focus === 'none';
   const showWorkspace = layout.focus !== 'inspector';
   /*
    * 🔴 `RUNTIME-REDESIGN-01` PHASE 5 — THE MONITORS ARE SHOWN OR NOT, AND NOTHING ELSE DECIDES IT.
@@ -337,16 +338,14 @@ export function App(): JSX.Element {
     monitorFocused && selected !== null && monitorCompanionMode === 'layer-inspector';
 
   const showInspectorColumn =
-    !layout.narrow &&
-    inspectorOpen &&
-    (layout.focus === 'none' || layout.focus === 'inspector' || showMonitorInspectorCompanion);
+    !layout.narrow && inspectorOpen && (layout.focus === 'none' || layout.focus === 'inspector');
   /*
    * A CLOSED Inspector gives its width back to the workspace (owner request: the
    * panel is closed when no layer is selected). The divider goes with it — a resize
    * handle for a column that is not there would be a control that does nothing.
    */
   const shellColumns =
-    !layout.narrow && inspectorOpen && (layout.focus === 'none' || showMonitorInspectorCompanion)
+    !layout.narrow && inspectorOpen && layout.focus === 'none'
       ? `1fr 6px ${String(layout.inspectorPx)}px`
       : '1fr';
 
@@ -362,15 +361,8 @@ export function App(): JSX.Element {
       selectedId={selectedId}
       layout={layout}
       selectedOnly={companion}
-      preserveSelection={companion}
-      inspectorOpen={companion ? showMonitorInspectorCompanion : inspectorOpen}
-      /* In the compact companion this button changes layout; it must not clear the row. */
-      onToggleInspector={
-        companion
-          ? () =>
-              setMonitorCompanionMode(showMonitorInspectorCompanion ? 'layer' : 'layer-inspector')
-          : closeInspector
-      }
+      inspectorOpen={inspectorOpen}
+      onToggleInspector={closeInspector}
       onUpdate={(id) => {
         const target = items.find((i) => i.itemId === id);
         return target !== undefined ? applyItem(target) : Promise.resolve({ accepted: false });
@@ -405,13 +397,15 @@ export function App(): JSX.Element {
           own note for the measurement, and for the three controls the reference draws here
           that this one deliberately does not take.
         */}
-        <AppHeader
-          layout={layout}
-          onOpenTemplates={() => void openTemplateLibrary(selectedChannel)}
-          onOpenSettings={() => openStationSetup()}
-          onOpenAudit={() => setAuditOpen(true)}
-          {...(signals !== undefined ? { channelSignals: signals } : {})}
-        />
+        {shellChromeVisible && (
+          <AppHeader
+            layout={layout}
+            onOpenTemplates={() => void openTemplateLibrary(selectedChannel)}
+            onOpenSettings={() => openStationSetup()}
+            onOpenAudit={() => setAuditOpen(true)}
+            {...(signals !== undefined ? { channelSignals: signals } : {})}
+          />
+        )}
         {templateLibraryDialog}
         {/* R-006 — a not-live link means NOTHING can reach air. That is a full-width alert,
           not a pill: the pill lost to the green HEALTHY pill beside it, and the operator
@@ -479,16 +473,14 @@ export function App(): JSX.Element {
               <section
                 style={
                   showMonitorLayerCompanion
-                    ? layout.narrow
-                      ? {
-                          ...styles.workspace,
-                          display: 'grid',
-                          gridTemplateColumns: showMonitorInspectorCompanion
-                            ? 'minmax(0, 1fr) minmax(0, 1fr)'
-                            : 'minmax(0, 1fr)',
-                          gridTemplateRows: 'minmax(0, 3fr) minmax(0, 2fr)',
-                        }
-                      : { ...styles.workspace, flexDirection: 'row' }
+                    ? {
+                        ...styles.workspace,
+                        display: 'grid',
+                        gridTemplateColumns: showMonitorInspectorCompanion
+                          ? 'minmax(0, 1fr) min(42%, clamp(17rem, 25vw, 25rem))'
+                          : 'minmax(0, 1fr)',
+                        gridTemplateRows: 'minmax(0, 1fr) auto',
+                      }
                     : styles.workspace
                 }
               >
@@ -529,8 +521,8 @@ export function App(): JSX.Element {
                               minHeight: 0,
                               minWidth: 0,
                               overflow: 'hidden',
-                              ...(layout.narrow && showMonitorLayerCompanion
-                                ? { gridColumn: '1 / -1', gridRow: '1' }
+                              ...(showMonitorLayerCompanion
+                                ? { gridColumn: '1', gridRow: '1' }
                                 : {}),
                             }
                           : {
@@ -551,10 +543,8 @@ export function App(): JSX.Element {
                         onCompanionModeChange={setMonitorCompanionMode}
                       />
                     </div>
-                    {/* The strip's height is the operator's too — same clamped,
-                    persisted, keyboard-nudgeable treatment as the Inspector's
-                    width. No divider while a monitor is fullscreen: there is
-                    nothing below it to divide from. */}
+                    {/* The ordinary strip is resizable. A maximized monitor gets the
+                        space left by its compact companion row. */}
                     {!monitorFocused && (
                       <ShellDivider
                         orientation="horizontal"
@@ -590,26 +580,26 @@ export function App(): JSX.Element {
                     data-monitor-layer-companion=""
                     style={{
                       display: 'flex',
-                      flex: layout.narrow ? '0 1 42%' : '0 1 min(34rem, 42vw)',
-                      minWidth: layout.narrow ? 0 : '24rem',
+                      minWidth: 0,
                       minHeight: 0,
                       overflow: 'hidden',
-                      ...(layout.narrow ? { gridColumn: '1', gridRow: '2' } : {}),
+                      gridColumn: '1',
+                      gridRow: '2',
                     }}
                   >
                     {renderLayersPanel(true)}
                   </div>
                 )}
-                {layout.narrow && showMonitorInspectorCompanion && (
+                {showMonitorInspectorCompanion && (
                   <div
                     data-monitor-inspector-companion=""
                     style={{
-                      display: 'flex',
+                      display: 'grid',
                       minWidth: 0,
                       minHeight: 0,
                       overflow: 'hidden',
                       gridColumn: '2',
-                      gridRow: '2',
+                      gridRow: '1 / -1',
                     }}
                   >
                     {renderInspector(() => setMonitorCompanionMode('layer'))}
@@ -619,26 +609,16 @@ export function App(): JSX.Element {
             )}
             {/* The divider only exists where there are two columns to divide — so it
                 goes away with a CLOSED Inspector, not just with a fullscreen one. */}
-            {!layout.narrow &&
-              inspectorOpen &&
-              (layout.focus === 'none' || showMonitorInspectorCompanion) && (
-                <ShellDivider
-                  orientation="vertical"
-                  invert
-                  value={layout.inspectorPx}
-                  onResize={layout.setInspectorPx}
-                  label="Resize the Inspector"
-                />
-              )}
-            {showInspectorColumn && (
-              <>
-                {renderInspector(
-                  showMonitorInspectorCompanion
-                    ? () => setMonitorCompanionMode('layer')
-                    : closeInspector,
-                )}
-              </>
+            {!layout.narrow && inspectorOpen && layout.focus === 'none' && (
+              <ShellDivider
+                orientation="vertical"
+                invert
+                value={layout.inspectorPx}
+                onResize={layout.setInspectorPx}
+                label="Resize the Inspector"
+              />
             )}
+            {showInspectorColumn && renderInspector(closeInspector)}
           </div>
         </ChannelScope>
         {/*
@@ -685,7 +665,7 @@ export function App(): JSX.Element {
         )}
         {/* `AUDIT-CLOSE-01` B1 — the two doors are in the app header now; this bar is
             STATUS, plus the two controls the reference draws nowhere (see its own note). */}
-        <StatusBar engines={engines} backupChannels={backupChannels} />
+        {shellChromeVisible && <StatusBar engines={engines} backupChannels={backupChannels} />}
         <CommandToast />
         {/* THE tooltip, mounted ONCE. Every control carrying a `title` inherits it
           by delegation — nothing new has to be wired, which is the point (see

@@ -20,7 +20,7 @@ the maximized monitor picture.
 
 #### Scenario: The companion Inspector is closed
 
-- **WHEN** the operator closes the Inspector beside a maximized monitor **THEN** the layout becomes
+- **WHEN** the operator closes the Inspector to the right of a maximized monitor **THEN** the layout becomes
   selected-layer and the selection remains intact
 
 #### Scenario: No layer is selected
@@ -30,6 +30,15 @@ the maximized monitor picture.
 
 #### Scenario: Companions are visible at wide and narrow widths
 
-- **WHEN** the operator shows the selected layer or Inspector beside a maximized monitor **THEN** the
-  PGM/PVW picture remains unobscured; wide layouts allocate adjacent columns and narrow layouts keep
-  the monitor in a separate upper row
+- **WHEN** the operator shows the selected layer or Inspector with a maximized monitor
+- **THEN** a single intrinsic-height layer row sits below the monitor with no panel header, column
+  header or separate scroll area
+- **AND** the optional Inspector fills a separate full-height column to the right without covering
+  the picture or the layer row
+
+#### Scenario: Maximized panels use the space from the main chrome
+
+- **WHEN** the operator maximizes PROGRAM, PREVIEW, Layers or Inspector
+- **THEN** the app header and status footer are hidden, while the panel's own controls and
+  applicable alerts remain available
+- **AND** exiting the maximized panel restores both bars

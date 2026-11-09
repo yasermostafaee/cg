@@ -318,8 +318,8 @@ describe('selected ↔ maximized monitor companion', () => {
     expect(document.querySelector('[data-monitor-layer-companion]')).not.toBeNull();
   });
 
-  it('allocates a separate lower row on narrow screens instead of overlaying the monitor', async () => {
-    await resizeViewport(800);
+  it.each([800, 1400])('allocates a lower row and right Inspector at %ipx', async (width) => {
+    await resizeViewport(width);
     await selectRow(ROW_A);
     await click(document.querySelector('button[aria-label="Show PREVIEW (PVW) fullscreen"]'));
     await click(
@@ -333,7 +333,10 @@ describe('selected ↔ maximized monitor companion', () => {
     );
     expect(monitor?.style.gridRow).toBe('1');
     expect(layer?.style.gridRow).toBe('2');
-    expect(inspectorCompanion?.style.gridRow).toBe('2');
+    expect(inspectorCompanion?.style.gridColumn).toBe('2');
+    expect(inspectorCompanion?.style.gridRow).toBe('1 / -1');
+    expect(layer?.querySelector('header, [data-verb-head]')).toBeNull();
+    expect(document.querySelector('[data-app-header], footer[aria-label="Status bar"]')).toBeNull();
     expect(document.querySelector('.cg-inspector-overlay')).toBeNull();
     expect(pressed(ROW_A)).toBe('true');
   });

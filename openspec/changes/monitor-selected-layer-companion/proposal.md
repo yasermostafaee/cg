@@ -9,6 +9,8 @@ internally, but the operator cannot see the row or edit it until leaving fullscr
 - Show only the selected row in the layer companion.
 - Preserve selection while changing layouts and when the compact selected row is clicked again.
 - Hide every companion control and surface when there is no selected layer.
+- Place the compact selected row below the picture and the optional Inspector in its own right column.
+- Give any maximized panel the space from the app header and footer.
 
 ## Capabilities
 

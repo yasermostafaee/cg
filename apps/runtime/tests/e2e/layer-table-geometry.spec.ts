@@ -298,13 +298,18 @@ test('§3 — the header sits on its own ground, its labels clear AA, and the be
   // THE GRAPHICS-BEDS BAND — drawn once, the declared height, and ruled off above.
   const band = app.layers.locator('[data-bed-group-head]');
   await expect(band).toHaveCount(1);
+  await expect(band).toHaveText('Live layouts');
+  const workspaceBg = await page
+    .locator('main')
+    .evaluate((el) => getComputedStyle(el).backgroundColor);
+  await expect(band).toHaveCSS('background-color', workspaceBg);
   await band.scrollIntoViewIfNeeded();
   const bandBox = await band.evaluate((el) => {
     const cs = getComputedStyle(el);
     return { h: el.getBoundingClientRect().height, top: cs.borderTopWidth };
   });
   expect(round(bandBox.h)).toBe(px(t.bedH));
-  expect(px(bandBox.top)).toBeGreaterThanOrEqual(1);
+  expect(px(bandBox.top)).toBe(2);
 });
 
 test('§3 — the top bar’s STOP ALL and CLEAR ALL hover to their own verb colours; REMOVE ALL does not light while refused', async ({
