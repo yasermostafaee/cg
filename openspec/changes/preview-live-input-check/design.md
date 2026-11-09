@@ -62,11 +62,11 @@ for missing images and on older Bridges, keeping the normal source selection ava
 
 ## Live source thumbnails
 
-When the station supports read-only pictures per source, open the thumbnail feed for the eligible
-rows visible in a source list and show the pictures in place of their Check icons. Use bounded,
-low-resolution updates and reuse subscriptions when the same inputs remain visible. Stop demand
-on close, filter, scroll out of view, channel change or loss of access. Match each accepted frame
-to its source, generation and freshness before painting. Show an empty tile for a source whose
+When the station supports the 2.18.17 source-preview capability, batch the eligible visible
+inputs using `source-previews/snapshots` and show each picture in its row. Limit demand to eight
+selectors per batch and one batch per second per owner. Stop demand on close, filter, scroll out of
+view, channel change or loss of access. Match each accepted frame to its source and freshness
+before painting. Show an empty tile for a source whose
 frame is absent or stale. Distinguish verified loss of signal from unknown status, and preserve
 valid black frames. Thumbnails are silent. They use neither the explicit Check lease nor a new
 receiver. Station setup uses a larger slot than the source pickers. Both retain 16:9. Until the feeds
@@ -78,8 +78,9 @@ The current programme-channel lease can provide one distinct saved D10 input at 
 The station's Playlist output and D11 clip are not valid input IDs for that lease. The two-viewer
 limit permits two connections to the same picture. A missing frame reports the preview transport's
 condition. A source-level `No signal` label requires an authoritative signal state. The
-[Playout follow-up](../../../docs/integration/playout/CG-CONTROL-REQUEST-LIVE-INPUT-PREVIEW-2026-10-26.md)
-records the requested batch snapshots, live pictures and active-picture mapping for PVW plates.
+[2.18.17 handoff](../../../docs/integration/playout/source-previews-2.18.17-adoption.md)
+defines the separate snapshot and subscription routes. The PVW implementation will place each
+picture within its plate's authored paint order so foreground graphics and masks are preserved.
 
 The card shows a live picture only after the browser decodes a frame, and clears it when frames
 stall or the check ends. The speaker starts off on each check. The meter's label identifies the

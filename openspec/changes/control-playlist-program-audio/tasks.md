@@ -1,8 +1,8 @@
 ## 1. External contract
 
 - [x] 1.0 Ask for the programme-gain contract in the Playout team handoff for 2.18.10.
-- [ ] 1.1 Obtain the Playout team's authenticated programme-gain read/set contract.
-- [ ] 1.2 Record range, ramp, persistence, ownership, A/B and on-air-frame policy.
+- [x] 1.1 Obtain the Playout team's authenticated programme-gain read/set contract in 2.18.17.
+- [x] 1.2 Record range, ramp, persistence, ownership, A/B and on-air-frame policy in the [handoff record](../../../docs/integration/playout/source-previews-2.18.17-adoption.md).
 
 ## 2. Implementation after contract
 

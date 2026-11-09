@@ -5,12 +5,13 @@ is a second route on a CG-owned layer and remains at zero under contract v1.3. P
 to the original Playout path, so the control requires a Playout endpoint; it is not implemented as
 `MIXER ... VOLUME` against the Playout-owned playlist layer.
 
-The first Playout response must settle:
+The [2.18.17 handoff](../../../docs/integration/playout/source-previews-2.18.17-adoption.md)
+defines GET and PUT `/api/v1/channels/{code}/programme-gain` on the Engine that owns the output.
+Use the acting operator's bearer and the current D4 code. Send the expected revision, a gain
+from −60 to +12 dB and an optional ramp from 0 to 5000 ms. A 202 means the setting was saved
+and native confirmation is pending. Re-read after a conflict or uncertain reply.
 
-- authenticated read and set endpoints, units/range and ramping;
-- whether the value controls the playlist layer, channel master or another programme bus;
-- persistence across clip changes, core restart and application restart;
-- primary/backup mapping and failover semantics;
-- whether programme adjustment remains allowed while a muted frame copy is on air.
-
-Until those answers exist the UI may report the dependency, but it must not expose an enabled control.
+The original Playout path is adjustable while its CG frame copy is muted. Peer replication is
+asynchronous. CG reads the new owning Engine after failover and needs an operator session
+authorized on that Engine before writing. Disable the control when the owner, capability or
+session cannot be verified.

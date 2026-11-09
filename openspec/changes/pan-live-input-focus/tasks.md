@@ -12,11 +12,9 @@
 - [x] 2.2 Record the feasibility and contract dependencies of direct CG Control dragging
 - [x] 2.3 Apply focus to Bridge `FILL` through the shared live-source geometry
 - [x] 2.4 Preserve the scoped relative crop operation for existing 1.1.0 consoles.
-- [ ] 2.5 Add local PVW crop editing on the accepted C-023 live input feed
-      C-023 supplies one live picture. Its JPEG is in the Preview channel raster, and the
-      handoff does not identify the source's active picture rectangle or sample aspect ratio.
-      Request the mapping needed for accurate staged drag in
-      [the Playout follow-up](../../../docs/integration/playout/CG-CONTROL-REQUEST-LIVE-INPUT-PREVIEW-2026-10-26.md).
+- [ ] 2.5 Add PVW crop editing on the 2.18.17 source-preview JPEG and paired geometry.
+      Use the [new mapping](../../../docs/integration/playout/source-previews-2.18.17-adoption.md)
+      and validate it against the Bridge seating plan. The legacy MJPEG has no geometry mapping.
 - [x] 2.6 Show Crop edges below the Plate name and keep the name's screen size independent of fit and zoom
 - [x] 2.7 Expose a local PVW practice image for operator review
       before Playout supplies the active source rectangle and sample aspect ratio.

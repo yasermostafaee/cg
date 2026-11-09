@@ -10,8 +10,9 @@ Playlist `route://N-L` copy above zero duplicates programme audio by approximate
 - Report whether the output is currently referenced by any on-air frame.
 - Preserve `VOLUME 0` on every Playlist route-copy layer.
 
-Implementation is gated on a Playout API that defines read/set semantics, range, persistence,
-authorization and A/B behaviour. CG Bridge SHALL NOT guess these with AMCP against Playout's layer.
+The [2.18.17 Playout API](../../../docs/integration/playout/source-previews-2.18.17-adoption.md)
+defines read/set semantics, range, persistence, authorization and peer replication. CG Bridge
+will use that API and preserve the existing routing and mixer ownership boundary.
 
 ## Capabilities
 

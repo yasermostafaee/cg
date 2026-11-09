@@ -1359,9 +1359,10 @@ static poster for each visible item whose D11 record has a usable content finger
 reads the documented JPEG from the same Playout. Keep the item selectable and show `No poster`
 when an image is unavailable. Opening the list does not start playback or an input check.
 
-Simultaneous rehearsal plates separately need clean Playlist and D11 pictures and mapping into
-the plate raster. The [Playout follow-up](../integration/playout/CG-CONTROL-REQUEST-LIVE-INPUT-PREVIEW-2026-10-26.md)
-records the evidence and the read-only per-source contract needed for both workflows.
+The [2.18.17 handoff](../integration/playout/source-previews-2.18.17-adoption.md) supplies bounded
+picker snapshots and independent PVW subscriptions for supported open receivers, clean Playlist
+pictures and selected D11 frames. It also supplies measured geometry for each returned JPEG.
+CG integration and acceptance on a station with the matching Engine and native core remain open.
 
 ## [~] C-024 — the bridge advertises a HARDCODED LAN address, and only an uncommitted hack makes testing possible ⟨priority: high⟩ — the CURE that [[P-035]] merely NETS — **CLI half LANDED 2026-08-23 by [[B-162]]; PERSISTED + PANEL half LANDED 2026-08-24 (`serve-host-from-app`); HACK DELETED + never-stage entry DROPPED + warning sentence completed 2026-09-04 (`LAN-DEV-ACCESS-01`) — every Acceptance bullet now met; awaiting archive of `serve-host-from-app`**
 

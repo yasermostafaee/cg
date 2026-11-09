@@ -74,4 +74,5 @@ preview channel and layer. A sample is usable for at most 300 ms. An expired met
 while a valid moving picture can continue. Playout currently reports `sourceFreshness: unknown`
 and `hasSignal: null` even with fresh OSC and returned media. This contract therefore does not
 establish input signal availability for automatic preset fallback. Programme Playlist gain
-is a separate contract.
+is a separate contract. The [2.18.17 source previews and programme gain handoff](source-previews-2.18.17-adoption.md)
+records the additive APIs, deployment boundary and CG integration checks.

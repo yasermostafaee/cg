@@ -23,8 +23,9 @@ picture. Movement is clamped to the overflowing axis and keeps the authored plat
 
 PVW can save normalized focus for a source whose aspect and fit Bridge has resolved. The current
 guide displays that aspect and labels the absence of a live picture. Programme writes begin on
-the existing Take path after the operator exits rehearsal. The full source picture needs the
-active rectangle and pixel aspect ratio from Playout.
+the existing Take path after the operator exits rehearsal. The [2.18.17 handoff](../../../docs/integration/playout/source-previews-2.18.17-adoption.md)
+supplies the active rectangle, transform and sample aspect ratio paired with the new source JPEG.
+Validate the mapping against Take before using it for precise crop saving.
 
 ## Operator review before the picture mapping
 
@@ -35,8 +36,8 @@ with a dark contrast edge. Drag or arrow keys
 move it along the overflowing axis, and Center restores the centre. Drag and Center stage an
 Inspector draft that survives toggling PVW. Update applies practice framing in the current browser
 session. Discard restores the last applied position. Practice starts no input check and performs
-no Bridge writes. The real PVW gesture still requires the active source rectangle and sample aspect
-ratio from Playout.
+no Bridge writes. The real PVW gesture will use the source JPEG and its paired 2.18.17 geometry
+once that path is integrated.
 
 ## Save a PVW crop for Take
 

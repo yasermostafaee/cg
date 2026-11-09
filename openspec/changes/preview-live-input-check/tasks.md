@@ -48,10 +48,10 @@
 - [x] 4.3 Verify scoped picture, lease cleanup and unchanged source values in all source surfaces.
       The expanded local Chromium live-input-check scenario passed.
 - [ ] 4.4 Composite the actual assigned inputs in PVW, including clean Playlist and D11 media.
-      Await the Playout contract for concurrent safe reads and active-picture mapping.
+      Use the 2.18.17 subscription and paired geometry contract. Verify stacking, masks and source lifecycle.
 - [ ] 4.5 Replace the per-row Check icon on compatible stations with independently refreshing thumbnails.
       Start on open for visible inputs. Cover correct frame identity, source status, selection, filtering and
-      cleanup with at least two simultaneous feeds. Await the read-only per-source Playout capability.
+      cleanup with at least two distinct sources. Use the 2.18.17 bounded snapshot batch for visible rows.
 - [x] 4.6 [Carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42676776212/job/129360266303)
       passed on `40974e03` for the added source surfaces.
 - [x] 4.7 Record the 2.18.16 follow-up confirming the same v1 lease, single independent input,
@@ -67,3 +67,9 @@
 - [x] 5.3 Chromium verified distinct posters, viewport demand, missing-poster selection and no input check.
 - [ ] 5.4 Verify an authenticated Media result with a poster on the target station. The station OpenAPI lists the thumbnail route.
 - [ ] 5.5 Record carrying Linux E2E.
+
+## 6. Playout 2.18.17 adoption
+
+- [x] 6.1 Verify the [new handoff](../../../docs/integration/playout/source-previews-2.18.17-adoption.md) and station capability boundary.
+- [ ] 6.2 Implement the authenticated snapshot client and shared picker demand without opening receivers.
+- [ ] 6.3 Add independent PVW feeds inside the authored plate paint order and verify the station.

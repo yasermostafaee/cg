@@ -6052,9 +6052,10 @@ drag and offer Centre.
 The source image and crop window retain their own aspect ratios. A 16:9 crop on a 4:3 source
 uses the source width and moves vertically. Sources matching the plate ratio use the full picture.
 
-**Remaining dependency:** The C-023 check supplies a single live input preview. Playout must
-supply the full source picture with its active rectangle and sample aspect ratio to replace the
-proportional guide with actual pixels.
+**Remaining integration:** The [2.18.17 handoff](../integration/playout/source-previews-2.18.17-adoption.md)
+supplies a separate source JPEG with its active rectangle, transform and measured sample aspect
+ratio when known. Match these facts to the canonical Take geometry before enabling precise
+drag on that picture. The legacy C-023 MJPEG does not have this mapping.
 If PGM Pan is revisited, an equivalent in-place editor needs a read of the already-running source
 before the programme mix and crop, without opening a second receiver.
 

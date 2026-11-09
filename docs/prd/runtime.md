@@ -4934,7 +4934,7 @@ status depended too heavily on reading a small label.
   volume icon and includes the same fact in the frame's accessible name
 - The state remains recorded intent, not a per-input audio meter
 
-## [ ] R-110 — The operator can set Playlist programme-output gain without unmuting its duplicated frame route ⟨priority: high — the owner, 2026-11-08; gated on a Playout API contract⟩ — `openspec/changes/control-playlist-program-audio/`
+## [ ] R-110 — The operator can set Playlist programme-output gain without unmuting its duplicated frame route ⟨priority: high — the owner, 2026-11-08; contract supplied in 2.18.17⟩ — `openspec/changes/control-playlist-program-audio/`
 
 **What:** Add an operator gain control for the Playout Playlist programme output, at minimum when
 that output is not used by any on-air Live Source frame. The control targets the canonical programme
@@ -4950,8 +4950,9 @@ anti-interference rule prevents.
   zero; any allowed programme adjustment acts on the original Playout-owned path, never the copy
 - WHEN Playout cannot report or accept programme gain THEN the control is unavailable with a reason
   and CG Bridge sends no speculative AMCP command to Playout's layer
-- The implementation starts only after the Playout team defines authenticated read/set semantics,
-  range, persistence, ownership and A/B behaviour
+- The [2.18.17 handoff](../integration/playout/source-previews-2.18.17-adoption.md) defines
+  authorized read/set, revision, range, persistence and peer replication. CG must verify the
+  owning Engine and its authorized operator session before enabling writes.
 
 ## [~] R-111 — A maximized monitor can keep the selected layer and Inspector visible ⟨priority: high — the owner, 2026-11-08⟩ — `openspec/changes/monitor-selected-layer-companion/`
 
