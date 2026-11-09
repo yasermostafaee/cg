@@ -3,7 +3,6 @@ import {
   elementLoopsOnHold,
   followsComposition,
   followWindowMs,
-  fitPictureToBox,
   listBoundSequenceIds,
   migrateScene,
   playoutOf,
@@ -27,7 +26,6 @@ import {
   sequenceStepsByOperator,
   stripCgControl,
   type CgPage,
-  type CgPlateFit,
   type Look,
   type SequenceElement,
 } from '@cg/shared-schema';
@@ -574,35 +572,6 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   if (mode === 'output') applyOutputPass(built.container, options.outputPass ?? 'full');
   root.appendChild(built.container);
 
-  const plateFits = new Map<string, CgPlateFit>();
-  const applyPlateFallbackFits = (next?: Record<string, CgPlateFit>): void => {
-    if (next !== undefined) {
-      for (const [plateId, fit] of Object.entries(next)) plateFits.set(plateId, fit);
-    }
-    for (const fallback of built.container.querySelectorAll<HTMLElement>(
-      '[data-cg-live-fallback]',
-    )) {
-      const plateId = fallback.dataset['cgLiveFallback'];
-      const plate = fallback.parentElement;
-      if (plateId === undefined || plate === null) continue;
-      const width = Number.parseFloat(plate.style.width);
-      const height = Number.parseFloat(plate.style.height);
-      const fit = plateFits.get(plateId);
-      if (!(width > 0) || !(height > 0) || fit === undefined) {
-        fallback.style.left = '0px';
-        fallback.style.top = '0px';
-        fallback.style.width = '100%';
-        fallback.style.height = '100%';
-        continue;
-      }
-      const visible = fitPictureToBox({ x: 0, y: 0, width, height }, fit.aspect, fit.mode).visible;
-      fallback.style.left = `${String(visible.x)}px`;
-      fallback.style.top = `${String(visible.y)}px`;
-      fallback.style.width = `${String(visible.width)}px`;
-      fallback.style.height = `${String(visible.height)}px`;
-    }
-  };
-
   /**
    * ⭐ **`multibox-layout-switch` `tasks.md` 4.3 — UNIT B′'s re-punch pass.**
    *
@@ -634,7 +603,6 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     // hole the page punches and the hole the bridge fills a single computation.
     applyArrangementToNodes(scene, built.elementMap, view, arrangementView);
     arrangementView = view;
-    applyPlateFallbackFits();
     /*
       🔴 **`single-clock-look-switch` — THE RE-PUNCH IS GONE, and `liveArrangementView` with
       it.** The page no longer cuts holes in itself: a plate-bearing package is composited
@@ -671,9 +639,6 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     }
   };
   let arrangementView: ArrangementView | undefined;
-
-  // R-105 restores the resolved fit facts for one purpose only: size the graphics-bed fallback
-  // beneath the producer. Live-picture FILL/CLIP remains bridge-owned.
 
   // ── LOOKS (`design.md` §14, phase 1D) — the look-state driver ─────────────────────────
   //
@@ -3344,9 +3309,6 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // DELTA-RUN-NEXT-VERSION-01-A / -F — the step current at Take is in force from the first
       // frame of the entrance: instances primed before the cascade, the step published after it.
       primeStepsForTake();
-      // R-105 — fit the fallback before the pending body is revealed, so no full-box Bars frame
-      // can flash ahead of a contained source.
-      applyPlateFallbackFits(control?.plates);
       // B-414 — reveal after every data-driven subtree has been reset from current values.
       // Prepared Sequence pages remain independently paint-hidden after the stage opens.
       doc.body.classList.remove('cg-pending');
@@ -3461,7 +3423,6 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       applyDynamicSequenceRows();
       reapplySequenceItemFields();
       reapplyClockTargets();
-      applyPlateFallbackFits(control?.plates);
       /*
         🔴 THE LOOK IS APPLIED INSTEAD OF the ordinary re-punch, never in addition to it.
 

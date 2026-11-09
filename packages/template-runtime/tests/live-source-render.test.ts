@@ -79,6 +79,15 @@ const fallback = (root: HTMLElement, id = 'live-a'): HTMLElement =>
   node(root, id).querySelector<HTMLElement>('[data-cg-live-fallback]') as HTMLElement;
 
 describe("D-137 — 'author' mode paints the bars", () => {
+  it('R-105 — turning the fallback off keeps the guide and leaves both render passes transparent', () => {
+    const scene = sceneWith([liveSource({ showFallback: false, fallbackKind: 'color' })]);
+    const author = build(scene, 'author').root;
+    const output = build(scene, 'output').root;
+    expect(node(author).querySelector('[data-cg-live-source-label]')?.textContent).toBe('guest-1');
+    expect(node(author).querySelector('[data-cg-live-fallback]')).toBeNull();
+    expect(node(output).querySelector('[data-cg-live-fallback]')).toBeNull();
+  });
+
   it('renders SMPTE bars with the id label overlaid', () => {
     const { root } = build(sceneWith([liveSource()]), 'author');
     const el = node(root);

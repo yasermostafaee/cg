@@ -21,3 +21,12 @@
 - [x] 3.3 Remove the general PVW stamp and show the live-source note only when a plate label would clip.
 - [x] 3.4 [Carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42568697446/job/129000870086)
       passed on `665668e4`.
+
+## 4. Optional plate background
+
+- [x] 4.1 Add Show fallback to the shared Designer control and preserve the selected background.
+- [x] 4.2 Let the selected background fill the uncovered region around a contained picture. Leave it
+      transparent when disabled and preserve the Bridge's picture FILL/CLIP and input assignments.
+- [x] 4.3 Chromium verified toggling off, transparent export and restoring the chosen colour.
+      All 29 focused template-runtime tests and 22 Designer Inspector tests passed.
+- [ ] 4.4 Record the full gate and Linux E2E. Verify the uncovered region on Playout.

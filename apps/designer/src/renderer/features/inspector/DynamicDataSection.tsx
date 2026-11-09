@@ -1301,6 +1301,7 @@ export function CheckRow({
   onChange,
   title,
   disabled = false,
+  indeterminate = false,
 }: {
   label: string;
   checked: boolean;
@@ -1308,11 +1309,15 @@ export function CheckRow({
   /** What the option does, as the row's tooltip. */
   title?: string;
   disabled?: boolean;
+  indeterminate?: boolean;
 }): JSX.Element {
   return (
     <div className={cs.row} {...(title !== undefined ? { title } : {})}>
       <span className={cs.label}>{label}</span>
       <input
+        ref={(input) => {
+          if (input !== null) input.indeterminate = indeterminate;
+        }}
         type="checkbox"
         className={s.checkbox}
         checked={checked}

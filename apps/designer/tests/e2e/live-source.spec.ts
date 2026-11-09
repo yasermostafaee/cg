@@ -183,6 +183,18 @@ test.describe('Live Source (D-137 phase 1)', () => {
       .toBeGreaterThan(0);
     await picker.getByRole('button', { name: 'Solid colour', exact: true }).click();
     await expect(fallback).toHaveCSS('background-color', 'rgb(0, 0, 0)');
+    const showFallback = app.inspector.getByRole('checkbox', {
+      name: 'Show fallback',
+      exact: true,
+    });
+    await expect(showFallback).toBeChecked();
+    await showFallback.uncheck();
+    await expect(fallback).toHaveCount(0);
+    await expect(label(app)).toHaveText('guest-1');
+    const { html: hiddenFallback } = await app.exportHtml();
+    expect(hiddenFallback).toContain('"showFallback":false');
+    await showFallback.check();
+    await expect(fallback).toHaveCSS('background-color', 'rgb(0, 0, 0)');
     await app.inspector.getByRole('button', { name: 'fallback', exact: true }).click();
     await bars.click();
     await expect

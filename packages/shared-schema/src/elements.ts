@@ -1544,6 +1544,8 @@ export const VideoPlaceholderElementSchema = ElementBaseSchema.extend({
    */
   fallbackKind: z.enum(['bars', 'color', 'image']).optional(),
   fallbackColor: HexColorSchema.optional(),
+  /** Whether the authored background paints under the live picture. Defaults to visible. */
+  showFallback: z.boolean().optional(),
   posterAssetId: IdSchema.optional(),
   /**
    * D-147 — the author's DECLARATION about the source's shape, and now OPTIONAL.

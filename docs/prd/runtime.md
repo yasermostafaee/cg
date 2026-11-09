@@ -4851,7 +4851,10 @@ operator had to fail over before seeing whether its programme picture and sound 
 **Why:** A transparent/missing plate makes a multi-box layout collapse visually even though the source assignment itself is valid.
 **Acceptance:**
 
-- WHEN a valid assigned source has no current picture THEN its authored plate shows the selected Bars/colour/picture fallback in the same visible fitted geometry
+- WHEN Show fallback is checked THEN a valid plate paints its chosen background across the plate.
+  An empty source exposes the background and a contained source exposes it in the uncovered space.
+- WHEN Show fallback is unchecked in Designer THEN the empty and uncovered regions are transparent.
+  Re-enabling restores the selected Bars, colour or picture.
 - WHEN an author creates a new plate THEN it starts with Bars selected
 - WHEN Bars is selected THEN actual SMPTE Bars are rendered on air and their thumbnail is visible in the Designer picker
 - WHEN a solid colour or picture is selected THEN it becomes the fallback; black is one available colour

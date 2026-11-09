@@ -16,6 +16,10 @@
       },
       "features": [
         {
+          "fa": "در Designer، گزینهٔ Show fallback مشخص می‌کند که هنگام نبود تصویر یا در فضای خالی اطراف ورودی کوچک‌تر، پس‌زمینهٔ قاب نمایش داده شود یا شفاف بماند.",
+          "en": "Designer can show the authored plate background when the input is empty or leaves space, or keep those areas transparent."
+        },
+        {
           "fa": "پوستر و ویدیوی Hover هر ۱۲ کارت صفحهٔ Home از صحنهٔ فعلی تمپلیت‌ها دوباره ساخته شد.",
           "en": "Regenerated posters and hover clips for all 12 Home cards from their current template scenes."
         },

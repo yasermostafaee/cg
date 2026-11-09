@@ -4,6 +4,7 @@ import { ImageChoicePicker } from '../fields/ImageChoicePicker.js';
 import { useImageAssetUrls } from '../fields/useImageAssetUrls.js';
 import { useSharedImages } from '../sharedLibrary/useSharedImages.js';
 import { ColorField } from './controls.js';
+import { CheckRow } from './DynamicDataSection.js';
 
 const SOLID_COLOUR = '__cg-live-fallback-color__';
 const MIXED = '__cg-mixed-live-fallback__';
@@ -45,6 +46,8 @@ export function LivePlateFallbackPicker({
   const values = plates.map(choiceOf);
   const first = values[0] ?? '';
   const value = values.every((choice) => choice === first) ? first : MIXED;
+  const allVisible = plates.every((plate) => plate.showFallback !== false);
+  const someVisible = plates.some((plate) => plate.showFallback !== false);
   const imageChoices = (
     assets: readonly { assetId: string; filename: string }[],
     source: 'project' | 'shared',
@@ -68,6 +71,13 @@ export function LivePlateFallbackPicker({
 
   return (
     <>
+      <CheckRow
+        label="Show fallback"
+        checked={allVisible}
+        indeterminate={someVisible && !allVisible}
+        title="Show the selected background when the input is empty or leaves space in the plate."
+        onChange={(show) => onCommit({ showFallback: show ? undefined : false })}
+      />
       <ImageChoicePicker
         label="fallback"
         value={value}

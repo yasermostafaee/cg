@@ -59,19 +59,19 @@ afterEach(() => {
 const fallback = (): HTMLElement =>
   document.querySelector<HTMLElement>('[data-cg-live-fallback="plate-1"]') as HTMLElement;
 
-describe('R-105 — the page fallback follows the Bridge-resolved visible fit', () => {
-  it('applies a contain fit before play reveals the page', async () => {
+describe('R-105 — the authored background covers the whole plate', () => {
+  it('fills the space around a contained source before play reveals the page', async () => {
     const runtime = createRuntime(scene(), { skipFontLoad: true });
     await runtime.play(
       withCgControl(none, { plates: { 'plate-1': { aspect: 16 / 9, mode: 'contain' } } }),
     );
     expect(fallback().style.left).toBe('0px');
-    expect(fallback().style.top).toBe('75px');
-    expect(fallback().style.width).toBe('800px');
-    expect(fallback().style.height).toBe('450px');
+    expect(fallback().style.top).toBe('0px');
+    expect(fallback().style.width).toBe('100%');
+    expect(fallback().style.height).toBe('100%');
   });
 
-  it('updates the bed on a look/source fit change and leaves ordinary updates alone', async () => {
+  it('keeps the background when the Bridge changes fit or the operator updates fields', async () => {
     const runtime = createRuntime(scene(), { skipFontLoad: true });
     await runtime.play(
       withCgControl(none, { plates: { 'plate-1': { aspect: 16 / 9, mode: 'contain' } } }),
@@ -81,9 +81,9 @@ describe('R-105 — the page fallback follows the Bridge-resolved visible fit', 
     );
     expect(fallback().style.left).toBe('0px');
     expect(fallback().style.top).toBe('0px');
-    expect(fallback().style.width).toBe('800px');
-    expect(fallback().style.height).toBe('600px');
+    expect(fallback().style.width).toBe('100%');
+    expect(fallback().style.height).toBe('100%');
     await runtime.update({ headline: 'unchanged fit' } as unknown as FieldValues);
-    expect(fallback().style.height).toBe('600px');
+    expect(fallback().style.height).toBe('100%');
   });
 });

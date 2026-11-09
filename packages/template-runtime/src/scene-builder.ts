@@ -1830,39 +1830,7 @@ function buildLiveSource(element: VideoPlaceholderElement, ctx: BuildCtx): HTMLE
   }
 
   el.style.overflow = 'hidden';
-  const fallback = ctx.doc.createElement('div');
-  fallback.dataset['cgLiveFallback'] = element.id;
-  fallback.style.position = 'absolute';
-  fallback.style.left = '0';
-  fallback.style.top = '0';
-  fallback.style.width = '100%';
-  fallback.style.height = '100%';
-  fallback.style.overflow = 'hidden';
-  fallback.style.pointerEvents = 'none';
-  const fallbackKind =
-    element.fallbackKind ?? (element.posterAssetId === undefined ? 'bars' : 'image');
-  if (fallbackKind === 'image' && element.posterAssetId !== undefined) {
-    // The poster REPLACES the bars (D-137). `src` is left unset exactly as
-    // `buildImage` leaves it — the host resolves `data-cg-asset-id`, and the
-    // runtime's `applyAssetUrls` walk finds this nested `<img>` too.
-    const poster = ctx.doc.createElement('img');
-    poster.dataset['cgAssetId'] = element.posterAssetId;
-    poster.alt = '';
-    poster.style.width = '100%';
-    poster.style.height = '100%';
-    // Posters are an authoring aid and always fill the plate. This remains
-    // independent from the real live picture's on-air fitMode.
-    poster.style.objectFit = 'cover';
-    const focus = element.cropFocus ?? { x: 0.5, y: 0.5 };
-    poster.style.objectPosition = `${focus.x * 100}% ${focus.y * 100}%`;
-    poster.style.display = 'block';
-    fallback.appendChild(poster);
-  } else if (fallbackKind === 'color') {
-    fallback.style.background = element.fallbackColor ?? '#000000';
-  } else {
-    fallback.style.backgroundImage = smpteBarsGradient();
-  }
-  el.appendChild(fallback);
+  if (element.showFallback !== false) el.appendChild(buildLiveFallback(element, ctx.doc));
 
   // On air the fallback is the only plate-owned pixel. Labels and reveal guides remain author-only.
   if (ctx.mode === 'output') return el;
@@ -1936,4 +1904,40 @@ function buildLiveSource(element: VideoPlaceholderElement, ctx: BuildCtx): HTMLE
   }
   el.appendChild(label);
   return el;
+}
+
+function buildLiveFallback(element: VideoPlaceholderElement, doc: Document): HTMLElement {
+  const fallback = doc.createElement('div');
+  fallback.dataset['cgLiveFallback'] = element.id;
+  fallback.style.position = 'absolute';
+  fallback.style.left = '0';
+  fallback.style.top = '0';
+  fallback.style.width = '100%';
+  fallback.style.height = '100%';
+  fallback.style.overflow = 'hidden';
+  fallback.style.pointerEvents = 'none';
+  const fallbackKind =
+    element.fallbackKind ?? (element.posterAssetId === undefined ? 'bars' : 'image');
+  if (fallbackKind === 'image' && element.posterAssetId !== undefined) {
+    // The poster REPLACES the bars (D-137). `src` is left unset exactly as
+    // `buildImage` leaves it — the host resolves `data-cg-asset-id`, and the
+    // runtime's `applyAssetUrls` walk finds this nested `<img>` too.
+    const poster = doc.createElement('img');
+    poster.dataset['cgAssetId'] = element.posterAssetId;
+    poster.alt = '';
+    poster.style.width = '100%';
+    poster.style.height = '100%';
+    // Posters are an authoring aid and always fill the plate. This remains
+    // independent from the real live picture's on-air fitMode.
+    poster.style.objectFit = 'cover';
+    const focus = element.cropFocus ?? { x: 0.5, y: 0.5 };
+    poster.style.objectPosition = `${focus.x * 100}% ${focus.y * 100}%`;
+    poster.style.display = 'block';
+    fallback.appendChild(poster);
+  } else if (fallbackKind === 'color') {
+    fallback.style.background = element.fallbackColor ?? '#000000';
+  } else {
+    fallback.style.backgroundImage = smpteBarsGradient();
+  }
+  return fallback;
 }
