@@ -40,3 +40,15 @@
 - [ ] 3.4 Measure CPU and network cost with picture only, then with sound. Confirm the renderer accesses Bridge only.
 - [x] 3.5 Review the PRD, adopted contract and three deltas. The uncached pre-push gate passed all 103 tasks on
       `07455d4f`. The focused browser rerun also passed all 11 Preview, SourcePicker, rehearsal and PGM tests.
+
+## 4. Station feedback
+
+- [x] 4.1 Reuse the scoped v1 check in Look inputs, the live-source swap and Station setup → Live sources.
+- [x] 4.2 Give the check an empty picture frame while connecting or after losing the picture.
+- [x] 4.3 Verify scoped picture, lease cleanup and unchanged source values in all source surfaces.
+      The expanded local Chromium live-input-check scenario passed.
+- [ ] 4.6 Record carrying Linux E2E for the new source surfaces.
+- [ ] 4.4 Composite the actual assigned inputs in PVW, including clean Playlist and D11 media.
+      Await the Playout contract for concurrent safe reads and active-picture mapping.
+- [ ] 4.5 Show independent thumbnails and confirmed signal state in the input lists when the Playout
+      supplies read-only per-source pictures and signal state.

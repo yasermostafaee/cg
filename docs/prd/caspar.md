@@ -1335,8 +1335,17 @@ A fresh Preview frame or meter does not determine physical source signal availab
 - WHEN the picture stalls THEN the last frame is removed and optional audio stops
 - WHEN the meter is stale THEN it returns to floor independently of current picture delivery
 
-**Out of scope:** thumbnails on every source row, automatic scanning, multiview, simultaneous input
-checks, ad-hoc sources not present in D10, and replacing R-049's labelled Live Source placeholders.
+**Station follow-up, 2026-11-09:** Expose the v1 single-input check inside Look inputs, the row's
+live-source swap and Station setup → Live sources as well as Source defaults. The selected source,
+draft and output must remain intact. If a picture is absent or stale, show the empty picture frame
+and the check state. Use the signal label only when the source itself reports signal presence.
+
+The owner also requested simultaneous real pictures inside the assigned rehearsal plates and
+picture thumbnails wherever inputs can be selected. Track those as station acceptance beyond the
+single v1 lease, including clean Playlist picture, the assigned D11 clip, source signal state
+and mapping into the plate's raster. The [Playout follow-up](../integration/playout/CG-CONTROL-REQUEST-LIVE-INPUT-PREVIEW-2026-10-26.md)
+records the evidence and required contract. Arbitrary inputs outside the station catalogue and
+background scanning remain out of scope.
 
 ## [~] C-024 — the bridge advertises a HARDCODED LAN address, and only an uncommitted hack makes testing possible ⟨priority: high⟩ — the CURE that [[P-035]] merely NETS — **CLI half LANDED 2026-08-23 by [[B-162]]; PERSISTED + PANEL half LANDED 2026-08-24 (`serve-host-from-app`); HACK DELETED + never-stage entry DROPPED + warning sentence completed 2026-09-04 (`LAN-DEV-ACCESS-01`) — every Acceptance bullet now met; awaiting archive of `serve-host-from-app`**
 

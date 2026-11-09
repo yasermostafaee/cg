@@ -8917,7 +8917,7 @@ input[type='checkbox']:disabled:checked {
 .cg-pvw-stage > .cg-input-check {
   flex: 0 0 46%;
 }
-[data-defaults-body] > .cg-input-check {
+.cg-input-check--inline {
   height: clamp(9rem, 32vh, 18rem);
   margin-bottom: var(--r-space-3);
 }
@@ -8942,6 +8942,15 @@ input[type='checkbox']:disabled:checked {
   min-height: 0;
   justify-content: end;
   background: var(--r-video-ground);
+}
+.cg-input-check__empty {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  place-items: center;
+  color: var(--r-text-muted);
+  font-size: var(--r-text-xs);
+  text-align: center;
 }
 .cg-input-check__picture {
   flex: 1;

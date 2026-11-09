@@ -2035,7 +2035,7 @@ export function StationSetupDialog({
 
           {active === 'sources' && (
             <SetupSection id="sources">
-              <SourcesSection report={reporters.sources} />
+              <SourcesSection report={reporters.sources} channel={channel} />
             </SetupSection>
           )}
 

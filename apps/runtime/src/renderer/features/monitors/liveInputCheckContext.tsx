@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -210,4 +211,21 @@ export function LiveInputCheckProvider({
 
 export function useLiveInputCheck(): InputCheckControl | null {
   return useContext(InputCheckContext);
+}
+
+/** A surface owns its check until it closes or changes channels. */
+export function useInputCheckSurface(channel: number, visible = true, scope?: string) {
+  const surface = useId();
+  const control = useLiveInputCheck();
+  const stop = control?.stop;
+  useEffect(() => {
+    if (!visible) return undefined;
+    return () => stop?.(surface);
+  }, [channel, scope, stop, surface, visible]);
+
+  const inputCheck =
+    visible && control?.enabled === true
+      ? { channel, start: (source: SourceDefinition) => control.start(surface, channel, source) }
+      : undefined;
+  return { surface, inputCheck };
 }

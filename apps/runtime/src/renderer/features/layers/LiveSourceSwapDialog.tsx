@@ -4,6 +4,8 @@ import type { StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
 import { ChoiceLabel, SourcePicker } from '../sources/SourcePicker.js';
+import { LiveInputCheckCard } from '../monitors/LiveInputCheckCard.js';
+import { useInputCheckSurface } from '../monitors/liveInputCheckContext.js';
 import {
   currentSourceAssignments,
   sourcesVersion,
@@ -88,6 +90,7 @@ export function LiveSourceSwapDialog({
   onClose,
 }: LiveSourceSwapDialogProps): React.JSX.Element {
   useSyncExternalStore(subscribeSources, sourcesVersion);
+  const { surface, inputCheck } = useInputCheckSurface(channel);
   const [refusal, setRefusal] = useState<string | null>(null);
   const assignments = currentSourceAssignments();
   const plates = template.liveSources?.sources ?? [];
@@ -117,6 +120,7 @@ export function LiveSourceSwapDialog({
         </ModalAction>
       }
     >
+      <LiveInputCheckCard surface={surface} />
       {plates.map((plate, i) => {
         const assigned = assignedFor(plate.sourceId);
         const swapped = override[plate.sourceId];
@@ -153,6 +157,7 @@ export function LiveSourceSwapDialog({
               // `B-303` — the words and the name kept apart: the name in its own isolate and direction.
               choices={[{ value: '', label: 'Use template assignment', names: assigned ?? null }]}
               channel={item.slot?.channel}
+              inputCheck={inputCheck}
             />
           </div>
         );

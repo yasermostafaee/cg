@@ -2,11 +2,11 @@
 
 ### Requirement: PVW SHALL let the operator check one live input without changing rehearsal or air
 
-CG Control SHALL offer `Check input` for one Playout live source from the PVW workflow and from each eligible Inputs
-row in Source defaults. Both actions SHALL target one PVW input card labelled with the source's canonical name and
-channel. The card SHALL appear in the source dialog when launched there so the operator can see it while editing.
-Starting it from Source defaults SHALL leave that dialog open and SHALL NOT select, save or apply the source, alter
-any dirty draft, or change the rehearsing row.
+CG Control SHALL offer `Check input` for one Playout live source from the PVW workflow, Source defaults,
+Look inputs, the row's live-source swap and Station setup → Live sources. The actions SHALL target one input
+card labelled with the source's canonical name and channel. The card SHALL appear on the source surface that
+started it. It SHALL leave that surface open and SHALL NOT select, save or apply the source, alter any dirty
+draft, or change the rehearsing row. Closing the source surface or leaving its channel SHALL release its check.
 
 The card SHALL be separate from the rehearsal iframe and Live Source placeholders. It SHALL NOT composite the live
 picture into a plate, change the retained page, trigger Play/Take/Update, or imply that the checked picture is PGM.
@@ -24,12 +24,22 @@ picture into a plate, change the retained page, trigger Play/Take/Update, or imp
 - **THEN** the moving picture appears only in the labelled PVW input card
 - **AND** the rehearsal page and placeholder remain exactly as before
 
+#### Scenario: A check started from the other source surfaces
+
+- **WHEN** the operator uses `Check input` beside an eligible source in Look inputs, the live-source swap or
+  Station setup → Live sources
+- **THEN** the live card displays that source on the initiating surface
+- **AND** the existing input selection, assignments, row overrides, rehearsal and PGM are preserved
+- **AND** leaving the surface clears the card and releases its lease
+
 ### Requirement: A live-input check SHALL be honest about its lifecycle and SHALL never leave a frozen picture
 
 The card SHALL distinguish `connecting`, `live`, `stalled`, `unavailable`, `conflict`, `replaced`, `expired` and
 `forbidden`. It SHALL show picture only for the active preview generation in `live`. On stall, stop, replacement,
 expiry, loss of permission or air-priority conflict it SHALL remove the last picture and name the state; it SHALL NOT
 leave a last frame that can be mistaken for a current feed.
+The card SHALL show an empty frame when it has no current picture and reserve a source signal label for
+authoritative source-signal evidence.
 
 #### Scenario: Another check replaces this one
 

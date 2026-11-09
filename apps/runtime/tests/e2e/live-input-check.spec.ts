@@ -28,7 +28,7 @@ function freeUdpPort(): Promise<number> {
   });
 }
 
-test('C-023 · check from PVW and Source defaults, hear only on request, and clear stale picture', async ({
+test('C-023 · inspect input picture from PVW and source controls without changing a binding', async ({
   page,
 }) => {
   test.setTimeout(75_000);
@@ -121,6 +121,7 @@ test('C-023 · check from PVW and Source defaults, hear only on request, and cle
     preview.stalledVideo = true;
     await expect(card.locator(state)).toHaveAttribute('data-input-check-state', 'stalled');
     await expect(card.locator(picture)).toBeHidden();
+    await expect(card.getByText('No current picture', { exact: true })).toBeVisible();
     await expect(sound).toHaveAttribute('aria-pressed', 'false');
     await expect.poll(() => preview.audioCloses).toBe(1);
     await expect(pgm).toHaveAttribute('src', pgmUrl ?? '');
@@ -175,6 +176,44 @@ test('C-023 · check from PVW and Source defaults, hear only on request, and cle
     await expect(pv.locator('[data-rehearsal-frame]')).toHaveCount(1);
     expect(bridge.runtime.sourceAssignments().assignments).toEqual([]);
     await defaults.getByRole('button', { name: 'Cancel' }).click();
+    await expect.poll(() => preview.leases.size).toBe(0);
+
+    const look = page.locator('[aria-label="Look inputs"]');
+    const lookField = look.locator('[data-look-binding="one:plate-1"]');
+    const previousLookValue = await lookField.getAttribute('data-picker-value');
+    await lookField.click();
+    await options.getByRole('button', { name: 'Check input · Studio 1' }).click();
+    const lookCheck = look.getByRole('region', { name: 'PVW input check' });
+    await expect(lookCheck.locator(picture)).toBeVisible();
+    await expect(lookField).toHaveAttribute('data-picker-value', previousLookValue ?? '');
+    await lookCheck.getByRole('button', { name: 'Close input check' }).click();
+
+    const swap = page.getByRole('dialog', { name: 'Live source for this row' });
+    await expect(async () => {
+      if (await swap.isVisible()) return;
+      await row.click({ button: 'right' });
+      await page.getByRole('menuitem', { name: 'SOURCE', exact: true }).click({ force: true });
+      await expect(swap).toBeVisible();
+    }).toPass({ timeout: 10_000 });
+    const swapField = swap.getByRole('combobox', { name: 'Live source for Plate 1' });
+    await swapField.click();
+    await options.getByRole('button', { name: 'Check input · Studio 1' }).click();
+    await expect(
+      swap.getByRole('region', { name: 'PVW input check' }).locator(picture),
+    ).toBeVisible();
+    await expect(swapField).toHaveAttribute('data-picker-value', '');
+    await swap.locator('[data-modal-role="cancel"]').click();
+    await expect.poll(() => preview.leases.size).toBe(0);
+
+    await page.getByRole('button', { name: 'Open Station setup' }).click();
+    const setup = page.getByRole('dialog', { name: 'Station setup' });
+    await setup.getByRole('tab', { name: /^Live sources/ }).click();
+    await setup.getByRole('button', { name: 'Check input · Studio 1' }).click();
+    await expect(
+      setup.getByRole('region', { name: 'PVW input check' }).locator(picture),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(setup).toBeHidden();
     await expect.poll(() => preview.leases.size).toBe(0);
     await expect(pgm).toHaveAttribute('src', pgmUrl ?? '');
   } finally {

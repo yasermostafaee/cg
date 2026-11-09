@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore } from 'react';
-import { SUGGESTED_LIVE_SOURCE_LAYER_RANGE } from '@cg/shared-ipc';
+import { canCheckLiveInput, SUGGESTED_LIVE_SOURCE_LAYER_RANGE } from '@cg/shared-ipc';
 import { KIND_ICON, KIND_WORD } from './sourceKinds.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
@@ -8,6 +8,9 @@ import { NumericInput } from '../../ui/NumericInput.js';
 import { Tag } from '../../ui/Tag.js';
 import { useHoldsStationAdmin } from '../../hooks/useCanOperate.js';
 import { colors } from '../../theme.js';
+import { LiveInputCheckCard } from '../monitors/LiveInputCheckCard.js';
+import { useInputCheckSurface } from '../monitors/liveInputCheckContext.js';
+import { CheckInputButton } from './SourcePicker.js';
 import {
   commitSourceBand,
   currentPlateBand,
@@ -57,10 +60,13 @@ function parseLayerNumber(raw: string): number | null {
 
 export function SourcesSection({
   report,
+  channel,
 }: {
   report: (message: ModalMessage | null) => void;
+  channel: number;
 }): JSX.Element {
   useSyncExternalStore(subscribeSources, sourcesVersion);
+  const { surface, inputCheck } = useInputCheckSurface(channel);
   const catalog = currentSourceCatalog();
   // The Playout's list as it stands: its inputs, in its order. Media and the inputs it no longer
   // lists are not the list.
@@ -126,6 +132,7 @@ export function SourcesSection({
             : `Last read ${READ_TIME.format(new Date(catalog.inputsReadAt))}`}
         </span>
       </div>
+      <LiveInputCheckCard surface={surface} />
       <section className="cg-card cg-resource-list" aria-label="Inputs from the Playout">
         {inputs.length === 0 ? (
           <div className="cg-card__body">
@@ -172,6 +179,9 @@ export function SourcesSection({
                   </span>
                 </div>
               </div>
+              {inputCheck !== undefined && canCheckLiveInput(source, inputCheck.channel) && (
+                <CheckInputButton source={source} onCheck={inputCheck.start} />
+              )}
             </div>
           ))
         )}

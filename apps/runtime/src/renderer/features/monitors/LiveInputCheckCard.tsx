@@ -5,7 +5,7 @@ import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { meterClip, meterPercent, METER_SCALE_MARKS } from './meterScale.js';
 import { liveInputPictures } from './liveInputPicture.js';
-import { useLiveInputCheck } from './liveInputCheckContext.js';
+import { PVW_INPUT_SURFACE, useLiveInputCheck } from './liveInputCheckContext.js';
 import { PgmAudioPlayer, PGM_AUDIO_SAMPLE_RATE, type PcmOut } from './pgmAudioPlayer.js';
 
 const PICTURE_TIMEOUT_MS = 2_500;
@@ -28,6 +28,7 @@ export function LiveInputCheckCard({ surface }: { surface: string }): JSX.Elemen
     <InputCard
       key={check.view.previewId}
       view={check.view}
+      inline={surface !== PVW_INPUT_SURFACE}
       onClose={() => control.stop(surface, check.view.previewId)}
       onStall={control.stall}
     />
@@ -36,10 +37,12 @@ export function LiveInputCheckCard({ surface }: { surface: string }): JSX.Elemen
 
 function InputCard({
   view,
+  inline,
   onClose,
   onStall,
 }: {
   view: LivePreviewStatus;
+  inline: boolean;
   onClose: () => void;
   onStall: (previewId: string) => void;
 }): JSX.Element {
@@ -154,7 +157,11 @@ function InputCard({
   const audible = audio === 'connecting' || audio === 'playing';
   const state = view.state === 'ready' && !decoded ? 'connecting' : view.state;
   return (
-    <section className="cg-input-check" aria-label="PVW input check" data-input-check="">
+    <section
+      className={inline ? 'cg-input-check cg-input-check--inline' : 'cg-input-check'}
+      aria-label="PVW input check"
+      data-input-check=""
+    >
       <header className="cg-input-check__head">
         <span className="cg-input-check__name">
           PVW INPUT · CH {channel} · <bdi dir="auto">{view.sourceName}</bdi>
@@ -182,6 +189,11 @@ function InputCard({
           aria-label={`Live input picture for ${view.sourceName}`}
           data-input-picture=""
         />
+        {!pictureLive && (
+          <div className="cg-input-check__empty">
+            {state === 'connecting' ? 'Waiting for picture' : 'No current picture'}
+          </div>
+        )}
         <div
           className="cg-vu"
           role="img"

@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, useSyncExternalStore } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import type { LiveSourceDeclaration } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
@@ -15,7 +15,7 @@ import {
 } from '../sources/sourceStore.js';
 import { appliedPlateSources } from './livePlates.js';
 import { LiveInputCheckCard } from '../monitors/LiveInputCheckCard.js';
-import { useLiveInputCheck } from '../monitors/liveInputCheckContext.js';
+import { useInputCheckSurface } from '../monitors/liveInputCheckContext.js';
 
 /**
  * 🔴 **`SOURCE-DEFAULTS-20` — THE TEMPLATE'S SOURCE DEFAULTS, BEHIND A LINK.**
@@ -70,13 +70,7 @@ export function TemplateDefaultsDialog({
   channel: number;
 }): JSX.Element | null {
   useSyncExternalStore(subscribeSources, sourcesVersion);
-  const surface = useId();
-  const check = useLiveInputCheck();
-  const stopCheck = check?.stop;
-  useEffect(() => {
-    if (!open) return undefined;
-    return () => stopCheck?.(surface);
-  }, [open, stopCheck, surface, templateId, channel]);
+  const { surface, inputCheck } = useInputCheckSurface(channel, open, templateId);
   /*
     The edit is LOCAL to this dialog and committed by its own button — it does not ride the
     Inspector's draft store. That is deliberate and it is the whole point of the move: the
@@ -250,14 +244,7 @@ export function TemplateDefaultsDialog({
                     value={valueOf(plate.sourceId)}
                     onChange={(sourceId) => stage(plate.sourceId, sourceId)}
                     choices={[{ value: '', label: 'None' }]}
-                    inputCheck={
-                      check?.enabled === true
-                        ? {
-                            channel,
-                            start: (source) => check.start(surface, channel, source),
-                          }
-                        : undefined
-                    }
+                    inputCheck={inputCheck}
                   />
                   {/* `MEDIA-PLATES-01` §2 — a bound clip's Playback, the clip's own and station-wide. */}
                   <MediaPlaybackControl sourceId={valueOf(plate.sourceId)} />

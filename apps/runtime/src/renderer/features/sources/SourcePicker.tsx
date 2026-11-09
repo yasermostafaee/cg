@@ -154,6 +154,28 @@ export interface SourcePickerProps {
   data?: Readonly<Record<`data-${string}`, string>> | undefined;
 }
 
+export function CheckInputButton({
+  source,
+  onCheck,
+}: {
+  source: SourceDefinition;
+  onCheck: (source: SourceDefinition) => void;
+}): JSX.Element {
+  return (
+    <Button
+      variant="icon"
+      aria-label={`Check input · ${source.name}`}
+      title="Check input"
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
+      }}
+      onClick={() => onCheck(source)}
+    >
+      <Icon icon={MonitorPlay} size={14} />
+    </Button>
+  );
+}
+
 /** The panel's size (§2.A): at least this wide, at most this tall. */
 export const PICKER_MIN_WIDTH = 440;
 export const PICKER_MAX_HEIGHT = 480;
@@ -488,19 +510,7 @@ function InputsTab({
       data: { 'data-picker-input': source.id },
       ...(inputCheck !== undefined && checkable
         ? {
-            action: (
-              <Button
-                variant="icon"
-                aria-label={`Check input · ${source.name}`}
-                title="Check input"
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
-                }}
-                onClick={() => inputCheck.start(source)}
-              >
-                <Icon icon={MonitorPlay} size={14} />
-              </Button>
-            ),
+            action: <CheckInputButton source={source} onCheck={inputCheck.start} />,
           }
         : {}),
       content: (

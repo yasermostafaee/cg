@@ -49,6 +49,19 @@ check action beside the normal selection. The modal hosts the same card for chec
 and the picker returns focus to the field. The chosen source, draft, save state and rehearsal are
 independent of the check. No browser state persists the check or its speaker.
 
+The same scoped card and lease are available from a Look inputs picker, the row's live-source
+swap, and the Live sources section of Station setup. Opening a check is distinct from selecting
+the source. Leaving its scope releases its lease. While the check waits for a decodable frame
+or reports a terminal state, the card keeps an empty picture frame with the appropriate state.
+
+The requested true plate composite and picker thumbnails remain a Playout contract dependency.
+The current programme-channel lease can provide one distinct saved D10 input at a time.
+The station's Playlist output and D11 clip are not valid input IDs for that lease. The two-viewer
+limit permits two connections to the same picture. A missing frame reports the preview transport's
+condition. A source-level `No signal` label requires an authoritative signal state. The
+[Playout follow-up](../../../docs/integration/playout/CG-CONTROL-REQUEST-LIVE-INPUT-PREVIEW-2026-10-26.md)
+records the requested batch snapshots, live pictures and active-picture mapping.
+
 The card shows a live picture only after the browser decodes a frame, and clears it when frames
 stall or the check ends. The speaker starts off on each check. The meter's label identifies the
 input even when the speaker is muted. Playout's current transport and OSC cannot distinguish
