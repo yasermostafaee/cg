@@ -4,9 +4,10 @@ Reviewed 2026-11-10 from `CG-SOURCE-PREVIEW-2.18.17.zip` and the accompanying
 `PLAYOUT-CG-RESPONSE-SOURCE-PREVIEWS-v1.md`. The archive SHA-256 is
 `0ea5b477420f9c35bd7e661af75e30a7eebb3f5d997b9f1c3a03b93d28325506`.
 All 28 files listed in its manifest matched the recorded size and SHA-256. The archive contains
-standalone OpenAPI exports, examples and acceptance evidence. The deployed Engine at
-`192.168.21.32:8080` reported 2.18.15. Its OpenAPI listed the six legacy preview paths and did
-not list `source-previews` or `programme-gain`. This handoff is a wire reference for CG integration.
+standalone OpenAPI exports, examples and acceptance evidence. The Engine at
+`192.168.21.32:8080` initially reported 2.18.15. After the owner's upgrade it reported 2.18.17,
+and its OpenAPI listed both `source-previews` and `programme-gain`. Unauthenticated reads of
+both routes returned 401. CG integration and authenticated station acceptance remain open.
 
 ## Independent images and picker thumbnails
 

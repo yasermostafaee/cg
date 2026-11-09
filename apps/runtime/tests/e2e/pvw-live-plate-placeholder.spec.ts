@@ -260,10 +260,13 @@ test('D-178 — practice keeps the full source and each plate aspect across both
     expect(moved?.height).toBeCloseTo(window.height, 2);
     expect(await picture.boundingBox()).toEqual(full);
 
-    await practice
+    const center = practice
       .locator('..')
-      .getByRole('button', { name: 'Center preview crop', exact: true })
-      .click();
+      .getByRole('button', { name: 'Center preview crop', exact: true });
+    const centerBox = await center.boundingBox();
+    expect(centerBox?.height).toBeGreaterThanOrEqual(23.9);
+    expect(centerBox?.width).toBeGreaterThanOrEqual(28);
+    await center.click();
     await expect
       .poll(async () => (await crop.boundingBox())?.[activeKey])
       .toBeCloseTo(window[activeKey], 2);

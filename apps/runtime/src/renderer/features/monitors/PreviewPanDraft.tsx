@@ -51,12 +51,14 @@ export function PreviewPanRow({
   lookId,
   appliedCrops,
   plates,
+  fit,
 }: {
   itemId: string;
   scope: string;
   lookId: string | undefined;
   appliedCrops: StackItemState['previewPlateCrops'];
   plates: readonly PreviewPanPlacement[];
+  fit: number;
 }): JSX.Element {
   const hasSource = plates.some((plate) => plate.sourceId !== null);
   const [targets, setTargets] = useState<readonly PreviewPlateCropTarget[] | null>(
@@ -141,6 +143,9 @@ export function PreviewPanRow({
               blocked={targets === null}
               cropMessage={cropMessage}
               guide={target !== undefined}
+              compactCenter={
+                plate.width * fit < 80 || (plate.width * fit < 144 && plate.height * fit < 56)
+              }
               stagedFocus={draft?.focus ?? appliedFocus}
               onFocusChange={(focus) =>
                 stagePreviewCrop(
@@ -201,6 +206,7 @@ function PreviewPanDraft({
   blocked,
   cropMessage,
   guide,
+  compactCenter,
   stagedFocus,
   onFocusChange,
 }: {
@@ -212,6 +218,7 @@ function PreviewPanDraft({
   blocked: boolean;
   cropMessage: string | undefined;
   guide: boolean;
+  compactCenter: boolean;
   stagedFocus: LiveCropFocus;
   onFocusChange: (focus: LiveCropFocus) => void;
 }): JSX.Element {
@@ -343,7 +350,7 @@ function PreviewPanDraft({
         onClick={() => commitFocus(DEFAULT_LIVE_CROP_FOCUS)}
       >
         <Icon icon={RotateCcw} size={14} />
-        Center
+        {!compactCenter && 'Center'}
       </Button>
     </div>
   );

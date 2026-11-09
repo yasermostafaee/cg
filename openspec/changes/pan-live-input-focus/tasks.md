@@ -70,3 +70,4 @@
 - [x] 7.3 Keep generic practice on the existing browser session and preserve it through PVW toggles.
 - [x] 7.4 Verify the Inspector draft, OFF/ON PVW, Discard, Update and first FILL before reveal in Chromium.
 - [ ] 7.5 Record carrying Linux E2E for Inspector crop saving.
+- [x] 7.6 Keep the Center button readable at a fixed screen size and verify its hitbox in Chromium.

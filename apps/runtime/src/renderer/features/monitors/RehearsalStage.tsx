@@ -629,7 +629,13 @@ export function RehearsalStage({
         {panRows.length > 0 && (
           <div
             className="cg-pan-draft-layer"
-            style={{ ...frameBox(raster, fit), zIndex: overlayZIndex(renderable.length) + 1 }}
+            style={
+              {
+                ...frameBox(raster, fit),
+                zIndex: overlayZIndex(renderable.length) + 1,
+                '--cg-pan-ui-scale': 1 / fit,
+              } as CSSProperties
+            }
           >
             {panRows.map(({ subject, plates, key, scope, lookId }) => (
               <PreviewPanRow
@@ -639,6 +645,7 @@ export function RehearsalStage({
                 lookId={lookId}
                 appliedCrops={subject.previewPlateCrops}
                 plates={plates}
+                fit={fit}
               />
             ))}
           </div>

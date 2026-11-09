@@ -6048,7 +6048,7 @@ reviewing the PVW interaction. The programme monitor has no Pan controls or crop
 
 **Crop workspace:** show the whole practice source inside its plate in PVW. Outline the portion
 shown by the plate in blue with a dark edge for contrast, move the outline continuously during a
-drag and offer Centre.
+drag and offer Centre at a readable screen size independent of the monitor fit.
 The source image and crop window retain their own aspect ratios. A 16:9 crop on a 4:3 source
 uses the source width and moves vertically. Sources matching the plate ratio use the full picture.
 
@@ -6708,6 +6708,10 @@ CG Control after swapping left/right inputs is not an acceptable operating workf
   with the frame without rewriting field data
 - WHEN no foreground overlay is needed THEN the template uses the existing single-page path and
   consumes no extra static-CG layer
+
+**Target station observation, 2026-11-10:** CH 1 on 21.32 retained the `chan-ghab` background
+and both live producers while its foreground layer 78 was empty. The on-air row still appeared
+healthy in CG Control. The prior event that removed the foreground and station recovery remain open.
 
 ## [~] D-202 — Mask or revert regions of a live plate ⟨priority: high — clarified by the owner, 2026-11-09⟩ — `openspec/changes/live-plate-reveal-mask/`
 

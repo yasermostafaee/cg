@@ -539,8 +539,15 @@
   position: absolute;
   inset-block-start: var(--r-space-1);
   inset-inline-end: var(--r-space-1);
+  min-block-size: 24px;
+  padding: 0 var(--r-space-2);
+  scale: var(--cg-pan-ui-scale, 1);
+  transform-origin: top right;
   pointer-events: auto;
   background: var(--r-monitor-label-bg);
+}
+.cg-pan-draft__center:dir(rtl) {
+  transform-origin: top left;
 }
 .cg-pan-draft__label {
   position: absolute;

@@ -25,3 +25,8 @@
       local CasparCG 2.5.0. Sampled the foreground pixels on preset 2 before and after the switch.
 - [x] 3.8 The full pre-push gate and [carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42582556024/job/129044614984)
       passed on `0a553a24`.
+
+## 4. Target station partial output
+
+- [x] 4.1 On 2026-11-10, read CH 1 on 21.32. `chan-ghab` was on air on Bed 58 with the background HTML and its two sources on 60/61. Layer 78 was empty. Its authored text belongs to the foreground pass.
+- [ ] 4.2 Identify why the foreground producer was lost from the last Take and core logs. Reproduce a surviving background with a missing foreground and cover recovery without changing live source or Playlist state.
