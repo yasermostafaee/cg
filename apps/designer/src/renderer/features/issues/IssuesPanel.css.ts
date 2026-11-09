@@ -33,6 +33,6 @@ export const row = style({
   borderRadius: '0.2rem',
 });
 
-export const rowText = style({ color: colors.text });
+export const rowText = style({ color: colors.text, userSelect: 'text', cursor: 'text' });
 
 export const meta = style({ fontSize: '0.7rem', color: colors.textMuted, marginLeft: '0.3rem' });

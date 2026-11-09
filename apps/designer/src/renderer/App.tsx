@@ -430,6 +430,7 @@ export function App(): JSX.Element {
       const isCut = comboKey(e, 'KeyX');
       const isPaste = comboKey(e, 'KeyV');
       if (!isCopy && !isCut && !isPaste) return;
+      if (isCopy && window.getSelection()?.isCollapsed === false) return;
       const t = e.target;
       if (
         t instanceof HTMLElement &&

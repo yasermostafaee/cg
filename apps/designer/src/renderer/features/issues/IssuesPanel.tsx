@@ -89,14 +89,32 @@ function IssueRow({
   onPick?: (() => void) | undefined;
 }): JSX.Element {
   const color = severityColor[issue.severity];
-  function onClick(): void {
+  function pick(): void {
     if (issue.elementId !== undefined) {
       designerStore.setSelection([issue.elementId]);
     }
     onPick?.();
   }
   return (
-    <div className={s.row} onClick={onClick} role="button" tabIndex={0}>
+    <div
+      className={s.row}
+      role="button"
+      tabIndex={0}
+      onClick={(event) => {
+        const selectedText = window.getSelection();
+        if (
+          selectedText?.isCollapsed === false &&
+          event.currentTarget.contains(selectedText.anchorNode)
+        )
+          return;
+        pick();
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        pick();
+      }}
+    >
       <span style={badge(color)}>{issue.severity}</span>
       <span className={s.rowText}>
         {issue.message}
