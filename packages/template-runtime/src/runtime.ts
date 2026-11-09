@@ -4,6 +4,7 @@ import {
   followsComposition,
   followWindowMs,
   listBoundSequenceIds,
+  liveForegroundKeys,
   migrateScene,
   playoutOf,
   sequenceItemInstanceId,
@@ -568,8 +569,15 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   }
   const stepPlan = stepPlanOf(scene);
 
-  const built = buildScene(scene, doc, mode, paintEditorBackdrop);
-  if (mode === 'output') applyOutputPass(built.container, options.outputPass ?? 'full');
+  const outputPass = mode === 'output' ? (options.outputPass ?? 'full') : 'full';
+  const built = buildScene(
+    scene,
+    doc,
+    mode,
+    paintEditorBackdrop,
+    outputPass === 'full' ? undefined : liveForegroundKeys(scene),
+  );
+  applyOutputPass(built.container, outputPass);
   root.appendChild(built.container);
 
   /**

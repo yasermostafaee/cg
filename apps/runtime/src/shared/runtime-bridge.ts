@@ -76,6 +76,7 @@ import type {
   StackRemoveChannel,
   StackDismissErrorChannel,
   StackSetPlateVolumeChannel,
+  StackPgmPlateCropChannel,
   StackSetPlateVolumesChannel,
   StackSilenceAllLivePlatesChannel,
   StackSilenceChannelLivePlatesChannel,
@@ -503,6 +504,9 @@ export interface RuntimeBridge {
     setPlateVolume(
       req: ChannelRequest<typeof StackSetPlateVolumeChannel>,
     ): Promise<ChannelResponse<typeof StackSetPlateVolumeChannel>>;
+    pgmPlateCrop(
+      req: ChannelRequest<typeof StackPgmPlateCropChannel>,
+    ): Promise<ChannelResponse<typeof StackPgmPlateCropChannel>>;
     /**
      * `add-multibox-audio` — the same intent for SEVERAL plates of one row, as ONE action.
      *

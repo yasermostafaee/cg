@@ -45,10 +45,7 @@ describe('buildVcgIndexHtml', () => {
     expect(html).toContain('logo\\u003cid');
     expect(html).toContain("mode: 'output'");
     expect(html).toContain('outputPass');
-    expect(html).toContain("new BroadcastChannel('cg-live-foreground:' + syncKey)");
-    expect(html).toContain("const methods = ['update', 'stop', 'next', 'remove', 'out']");
-    expect(html).toContain('withoutTakeToken(args[0])');
-    expect(html).toContain('const { take: _take, ...safeControl } = control');
+    expect(html).toContain('const outputPass = casparOutputPass(globalThis.location.search)');
     expect(html).toContain('installCasparGlobals(runtime)');
   });
 

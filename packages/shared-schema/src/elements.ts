@@ -1493,6 +1493,13 @@ export type LiveRevealRect = z.infer<typeof LiveRevealRectSchema>;
 
 export const LIVE_REVEAL_MAX_RECTS = 8;
 
+/** A crop of the plate's own picture. Revert keeps the complement of the windows. */
+export const LivePlateMaskSchema = z.object({
+  mode: z.enum(['inside', 'outside']),
+  rects: z.array(LiveRevealRectSchema).min(1).max(LIVE_REVEAL_MAX_RECTS),
+});
+export type LivePlateMask = z.infer<typeof LivePlateMaskSchema>;
+
 export const LiveRevealMaskSchema = z.object({
   /** Symbolic source shown through the windows. */
   targetSourceId: LiveSourceIdSchema,
@@ -1591,6 +1598,8 @@ export const VideoPlaceholderElementSchema = ElementBaseSchema.extend({
   cropFocus: LiveCropFocusSchema.optional(),
   /** D-202 — an intentional overlap: this upper plate reveals the target inside its windows. */
   revealMask: LiveRevealMaskSchema.optional(),
+  /** D-202 — mask or revert rectangular regions of this plate's own picture. */
+  liveMask: LivePlateMaskSchema.optional(),
   /**
    * The FILL source's symbolic id, e.g. `guest-1` — **or absent, meaning UNASSIGNED.**
    *

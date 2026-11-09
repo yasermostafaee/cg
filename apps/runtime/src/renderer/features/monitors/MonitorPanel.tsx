@@ -1,6 +1,13 @@
-import { useLayoutEffect, useRef, type CSSProperties, type ReactNode } from 'react';
-import { Columns2, MonitorOff, Rows2, Volume2, VolumeX } from 'lucide-react';
-import type { PgmEngine } from '@cg/shared-ipc';
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+} from 'react';
+import { Columns2, Crop, MonitorOff, Rows2, Volume2, VolumeX } from 'lucide-react';
+import type { PgmEngine, PgmPlateCropTarget } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
@@ -177,6 +184,20 @@ interface Props {
   } | null;
   /** R-111 — session-only layout choices while this monitor is maximized. */
   companionActions?: ReactNode;
+  cropItemId?: string | null;
+  cropEngine?: PgmEngine;
+}
+
+interface CropDrag {
+  token: string;
+  dx: number;
+  dy: number;
+}
+interface CropEdit {
+  key: string;
+  pending: boolean;
+  targets: PgmPlateCropTarget[];
+  message?: string;
 }
 
 /** The head's neutral tags: `Output unknown` when it is, then the playlist's state in its words. */
@@ -200,7 +221,50 @@ export function MonitorPanel({
   air,
   backupLine = null,
   companionActions,
+  cropItemId = null,
+  cropEngine = 'A',
 }: Props): JSX.Element {
+  const cropKey =
+    cropItemId !== null &&
+    returns.some((entry) => entry.engine === cropEngine && entry.programReturn.signal === 'live')
+      ? cropEngine + ':' + cropItemId
+      : null;
+  const [cropEdit, setCropEdit] = useState<CropEdit | null>(null);
+  const cropRequest = useRef(0);
+  const activeCrop = cropKey !== null && cropEdit?.key === cropKey ? cropEdit : null;
+  useLayoutEffect(() => {
+    cropRequest.current += 1;
+    setCropEdit(null);
+  }, [cropKey]);
+
+  const requestCrop = (drag?: CropDrag): void => {
+    if (cropItemId === null || cropKey === null || activeCrop?.pending === true) return;
+    const request = ++cropRequest.current;
+    setCropEdit({ key: cropKey, pending: true, targets: activeCrop?.targets ?? [] });
+    void window.cg.stack
+      .pgmPlateCrop({ itemId: cropItemId, ...(drag !== undefined && { drag }) })
+      .then(
+        (result) => {
+          if (cropRequest.current !== request) return;
+          setCropEdit({
+            key: cropKey,
+            pending: false,
+            targets: result.targets,
+            ...(result.message !== undefined && { message: result.message }),
+          });
+        },
+        () => {
+          if (cropRequest.current === request) {
+            setCropEdit({
+              key: cropKey,
+              pending: false,
+              targets: [],
+              message: 'Crop editing is unavailable.',
+            });
+          }
+        },
+      );
+  };
   const liveCount = returns.filter((item) => item.programReturn.signal === 'live').length;
   const stalled = returns.some((item) => item.programReturn.signal === 'stalled');
   const overallSignal: ProgramSignal =
@@ -301,6 +365,23 @@ export function MonitorPanel({
       */
       actions={
         <>
+          {cropKey !== null && (
+            <Button
+              variant="ghost"
+              aria-label="Pan live input"
+              aria-pressed={activeCrop !== null}
+              title="Pan a cropped input on programme"
+              onClick={() => {
+                if (activeCrop === null) requestCrop();
+                else {
+                  cropRequest.current += 1;
+                  setCropEdit(null);
+                }
+              }}
+            >
+              <Icon icon={Crop} size={13} />
+            </Button>
+          )}
           {displayControls}
           {companionActions}
         </>
@@ -339,7 +420,14 @@ export function MonitorPanel({
             testId="data-monitor-air-count"
             title="What this console believes is on air on this channel. It is the same count the layer table's header carries."
           >
-            {onAirRows} {onAirRows === 1 ? 'row' : 'rows'} on air
+            {activeCrop === null
+              ? String(onAirRows) + (onAirRows === 1 ? ' row on air' : ' rows on air')
+              : (activeCrop.message ??
+                (activeCrop.pending
+                  ? 'Reading crop…'
+                  : activeCrop.targets.length === 0
+                    ? 'No cropped input on this row'
+                    : 'Drag a plate to pan its input'))}
           </MonitorHeadFact>
         }
       />
@@ -364,7 +452,7 @@ export function MonitorPanel({
               <div
                 key={engine}
                 style={styles.screen}
-                role="img"
+                role={activeCrop !== null && engine === cropEngine ? 'group' : 'img'}
                 aria-label={`${title} ${engine} CH ${String(physicalChannel ?? '—')} — ${tileWords}`}
                 data-pgm-screen={engine}
               >
@@ -377,6 +465,15 @@ export function MonitorPanel({
                     src={src}
                     visible={signal === 'live'}
                     onError={onError}
+                    crop={
+                      activeCrop !== null && engine === cropEngine && signal === 'live'
+                        ? {
+                            targets: activeCrop.targets,
+                            pending: activeCrop.pending,
+                            pan: requestCrop,
+                          }
+                        : undefined
+                    }
                   />
                 )}
                 {signal !== 'live' && (
@@ -427,10 +524,12 @@ function ProgramPicture({
   src,
   visible,
   onError,
+  crop,
 }: {
   src: string;
   visible: boolean;
   onError: () => void;
+  crop?: ProgramCropControls | undefined;
 }): JSX.Element {
   const ref = useRef<HTMLImageElement>(null);
   /*
@@ -451,12 +550,161 @@ function ProgramPicture({
     };
   }, [src]);
   return (
-    <img
-      ref={ref}
-      alt=""
-      data-pgm-picture=""
-      onError={onError}
-      style={{ ...styles.picture, visibility: visible ? 'visible' : 'hidden' }}
-    />
+    <>
+      <img
+        ref={ref}
+        alt=""
+        data-pgm-picture=""
+        onError={onError}
+        style={{ ...styles.picture, visibility: visible ? 'visible' : 'hidden' }}
+      />
+      {crop !== undefined && <ProgramCropOverlay picture={ref} {...crop} />}
+    </>
+  );
+}
+
+interface ProgramCropControls {
+  targets: readonly PgmPlateCropTarget[];
+  pending: boolean;
+  pan: (drag: CropDrag) => void;
+}
+
+function ProgramCropOverlay({
+  picture,
+  targets,
+  pending,
+  pan,
+}: ProgramCropControls & { picture: RefObject<HTMLImageElement> }): JSX.Element | null {
+  const [rect, setRect] = useState<{ x: number; y: number; width: number; height: number } | null>(
+    null,
+  );
+  const start = useRef<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    pointerId: number;
+  } | null>(null);
+  useLayoutEffect(() => {
+    const img = picture.current;
+    if (img === null) return;
+    const measure = () => {
+      if (img.naturalWidth === 0 || img.naturalHeight === 0) return;
+      const scale = Math.min(
+        img.clientWidth / img.naturalWidth,
+        img.clientHeight / img.naturalHeight,
+      );
+      const width = img.naturalWidth * scale;
+      const height = img.naturalHeight * scale;
+      setRect({
+        x: (img.clientWidth - width) / 2,
+        y: (img.clientHeight - height) / 2,
+        width,
+        height,
+      });
+    };
+    const resize = new ResizeObserver(measure);
+    resize.observe(img);
+    img.addEventListener('load', measure);
+    measure();
+    return () => {
+      resize.disconnect();
+      img.removeEventListener('load', measure);
+    };
+  }, [picture]);
+  if (rect === null || rect.width === 0 || rect.height === 0) return null;
+  const clamp = (value: number) => Math.max(-1, Math.min(1, value));
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        pointerEvents: 'none',
+        zIndex: 1,
+        left: rect.x,
+        top: rect.y,
+        width: rect.width,
+        height: rect.height,
+      }}
+    >
+      {targets.flatMap((target) =>
+        target.areas.map((area, index) => (
+          <button
+            type="button"
+            key={target.id + ':' + String(index)}
+            aria-label={'Pan ' + target.label}
+            title={'Drag ' + target.label + ' to pan its picture'}
+            disabled={pending}
+            style={{
+              position: 'absolute',
+              boxSizing: 'border-box',
+              background: 'transparent',
+              padding: 0,
+              border: '1px solid #67e8f9',
+              pointerEvents: 'auto',
+              touchAction: 'none',
+              cursor:
+                target.horizontal && target.vertical
+                  ? 'move'
+                  : target.horizontal
+                    ? 'ew-resize'
+                    : 'ns-resize',
+              left: area.x * rect.width,
+              top: area.y * rect.height,
+              width: area.width * rect.width,
+              height: area.height * rect.height,
+            }}
+            onPointerDown={(event) => {
+              if (event.button !== 0) return;
+              event.currentTarget.setPointerCapture(event.pointerId);
+              start.current = {
+                x: event.clientX,
+                y: event.clientY,
+                width: rect.width,
+                height: rect.height,
+                pointerId: event.pointerId,
+              };
+            }}
+            onPointerCancel={() => {
+              start.current = null;
+            }}
+            onLostPointerCapture={() => {
+              start.current = null;
+            }}
+            onPointerUp={(event) => {
+              const origin = start.current;
+              start.current = null;
+              if (origin?.pointerId !== event.pointerId) return;
+              const dx = target.horizontal ? event.clientX - origin.x : 0;
+              const dy = target.vertical ? event.clientY - origin.y : 0;
+              if (Math.hypot(dx, dy) < 2) return;
+              pan({
+                token: target.token,
+                dx: clamp(dx / origin.width),
+                dy: clamp(dy / origin.height),
+              });
+            }}
+            onKeyDown={(event) => {
+              const dx = target.horizontal
+                ? event.key === 'ArrowLeft'
+                  ? -0.01
+                  : event.key === 'ArrowRight'
+                    ? 0.01
+                    : 0
+                : 0;
+              const dy = target.vertical
+                ? event.key === 'ArrowUp'
+                  ? -0.01
+                  : event.key === 'ArrowDown'
+                    ? 0.01
+                    : 0
+                : 0;
+              if (dx === 0 && dy === 0) return;
+              event.preventDefault();
+              pan({ token: target.token, dx, dy });
+            }}
+          />
+        )),
+      )}
+    </div>
   );
 }

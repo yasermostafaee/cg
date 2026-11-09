@@ -24,10 +24,17 @@ muted, be prepared hidden and become opaque only after inputs and the ordinary p
 
 #### Scenario: Unmarked templates keep the existing path
 
-- **GIVEN** a live-source template has no marked foreground element
+- **GIVEN** a live-source template has no explicit or automatic foreground element
 - **WHEN** it is loaded and taken
 - **THEN** CG Bridge creates only its existing HTML page and input seats
 - **AND** no extra layer is consumed
+
+#### Scenario: Graphics drawn over a plate need no manual flag
+
+- **GIVEN** a visual element is above an overlapping live plate in the same template and active preset
+- **WHEN** CG Control imports and plays the template
+- **THEN** the served self-contained page renders the element in its foreground pass by default
+- **AND** a Behind inputs override keeps the element in the background pass
 
 #### Scenario: Clear removes every part of the paired output
 

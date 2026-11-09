@@ -1,3 +1,25 @@
+## ADDED Requirements
+
+### Requirement: An author can mask the picture inside one live plate
+
+The Designer SHALL let the author draw, edit and remove up to eight rectangles on a single live
+plate. In Mask mode the visible region SHALL be the union of the windows. In Revert it SHALL be
+the complement of that union inside the plate. The same rule SHALL clip the plate's fallback.
+
+#### Scenario: Mask a burned-in caption
+
+- **GIVEN** one live plate
+- **WHEN** the author draws a rectangle around a caption
+- **THEN** the region inside that rectangle remains visible
+- **AND** the plate is transparent outside it
+
+#### Scenario: Revert and remove a mask
+
+- **GIVEN** a plate with two windows
+- **WHEN** the author checks Revert
+- **THEN** the windows are transparent and the rest of the plate remains visible
+- **AND** deleting the final window restores the whole plate
+
 ## MODIFIED Requirements
 
 ### Requirement: Overlapping live plates are refused unless one explicitly reveals the other

@@ -34,6 +34,7 @@ export type DesignerTool =
   | 'live-source'
   // D-202 — contextual tool launched from a selected upper Plate's Inspector.
   | 'live-reveal'
+  | 'live-mask'
   | 'hand';
 
 export type DesignerView = 'landing' | 'studio';

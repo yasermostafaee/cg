@@ -36,7 +36,7 @@ export function buildVcgIndexHtml(
   </head>
   <body class="cg-pending">
     <script type="module">
-${playerImport}      import { createRuntime, installCasparGlobals } from './cg.js';
+${playerImport}      import { casparOutputPass, createRuntime, installCasparGlobals } from './cg.js';
       (async () => {
         const res = await fetch('./template.json');
         const scene = await res.json();
@@ -47,12 +47,7 @@ ${playerImport}      import { createRuntime, installCasparGlobals } from './cg.j
         for (const id of Object.keys(lottiePaths)) {
           lottieAssets[id] = await (await fetch('./' + lottiePaths[id])).json();
         }
-        const params = new URLSearchParams(globalThis.location.search);
-        const requestedPass = params.get('cgpass');
-        const outputPass = requestedPass === 'background' || requestedPass === 'foreground'
-          ? requestedPass
-          : 'full';
-        const syncKey = params.get('cgsync');
+        const outputPass = casparOutputPass(globalThis.location.search);
         // D-137 §9 — 'output': a Live Source paints ZERO PIXELS in the package
         // that goes on air, and is excluded from zone compilation so no authored
         // zone can fill the hole. Named explicitly, never inferred.
@@ -68,50 +63,6 @@ ${playerImport}      import { createRuntime, installCasparGlobals } from './cg.j
         installCasparGlobals(runtime);
         await runtime.ready;
 
-        if (syncKey && typeof BroadcastChannel !== 'undefined') {
-          const channel = new BroadcastChannel('cg-live-foreground:' + syncKey);
-          const methods = ['update', 'stop', 'next', 'remove', 'out'];
-          const withoutTakeToken = (payload) => {
-            let parsed = payload;
-            let stringify = false;
-            if (typeof payload === 'string') {
-              try {
-                parsed = JSON.parse(payload);
-                stringify = true;
-              } catch {
-                return payload;
-              }
-            }
-            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return payload;
-            const control = parsed.__cg;
-            if (!control || typeof control !== 'object' || Array.isArray(control) || !('take' in control)) {
-              return payload;
-            }
-            const { take: _take, ...safeControl } = control;
-            const safe = { ...parsed, __cg: safeControl };
-            return stringify ? JSON.stringify(safe) : safe;
-          };
-          if (outputPass === 'foreground') {
-            channel.addEventListener('message', (event) => {
-              const message = event.data;
-              if (!message || !methods.includes(message.method)) return;
-              const fn = globalThis[message.method];
-              if (typeof fn === 'function') fn(...(Array.isArray(message.args) ? message.args : []));
-            });
-          } else if (outputPass === 'background') {
-            for (const method of methods) {
-              const original = globalThis[method];
-              if (typeof original !== 'function') continue;
-              globalThis[method] = (...args) => {
-                const syncArgs = method === 'update' && args.length > 0
-                  ? [withoutTakeToken(args[0]), ...args.slice(1)]
-                  : args;
-                channel.postMessage({ method, args: syncArgs });
-                return original(...args);
-              };
-            }
-          }
-        }
       })();
     </script>
   </body>

@@ -19,6 +19,7 @@ export type MonitorCompanionMode = 'monitor' | 'layer' | 'layer-inspector';
 interface Props {
   companionMode: MonitorCompanionMode;
   hasSelectedLayer: boolean;
+  cropItemId: string | null;
   onCompanionModeChange: (mode: MonitorCompanionMode) => void;
 }
 
@@ -44,6 +45,7 @@ interface Props {
 export function MonitorStrip({
   companionMode,
   hasSelectedLayer,
+  cropItemId,
   onCompanionModeChange,
 }: Props): JSX.Element {
   const { focus } = useShellLayoutContext();
@@ -209,6 +211,8 @@ export function MonitorStrip({
           air={air}
           backupLine={backupLine}
           companionActions={companionActions}
+          cropItemId={cropItemId}
+          cropEngine={currentPrimary}
         />
       )}
     </div>

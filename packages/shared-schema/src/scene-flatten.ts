@@ -3,6 +3,12 @@ import type { Element } from './elements.js';
 import type { Transform } from './primitives.js';
 import type { LiveSourceRect } from './live-source.js';
 import type { VisibilitySubject } from './visibility.js';
+import { lookGroupOf } from './looks.js';
+import {
+  intersectNormalizedRects,
+  livePlateMaskRegions,
+  liveRevealSceneRect,
+} from './live-geometry.js';
 
 /**
  * C-015 phase 6 / 1.5c — **the ONE walk that flattens a scene's elements to SCENE
@@ -340,6 +346,49 @@ export function flattenElements(scene: Scene, order: SiblingOrder = 'document'):
   for (const layer of scene.layers)
     walk(layer.children, [], new Set<string>(), 0, '', [subjectOf(layer)]);
   return out;
+}
+
+/** The visual elements that need to paint above this template's live producers. */
+export function liveForegroundKeys(scene: Scene): ReadonlySet<string> {
+  const keys = new Set<string>();
+  const lookInstances = new Set(lookGroupOf(scene)?.looks.map((look) => look.instanceId));
+  const plates: { look: string | undefined; rect: LiveSourceRect }[] = [];
+
+  for (const flat of flattenElements(scene, 'paint')) {
+    const { element } = flat;
+    if (element.liveForeground === true) keys.add(flat.key);
+    if (
+      element.type === 'composition' ||
+      element.type === 'container' ||
+      element.type === 'audio'
+    ) {
+      continue;
+    }
+    if (flat.ancestry.some((ancestor) => !ancestor.visible && !lookInstances.has(ancestor.id))) {
+      continue;
+    }
+    const look = flat.ancestry.find((ancestor) => lookInstances.has(ancestor.id))?.id;
+    if (element.type === 'video-placeholder') {
+      if (!element.visible || element.routeKey === undefined) continue;
+      const rects =
+        element.liveMask === undefined
+          ? [flat.rect]
+          : livePlateMaskRegions(element.liveMask).map((rect) =>
+              liveRevealSceneRect(flat.rect, rect),
+            );
+      for (const rect of rects) plates.push({ look, rect });
+    } else if (
+      element.liveForeground !== false &&
+      plates.some(
+        (plate) =>
+          (plate.look === undefined || look === undefined || plate.look === look) &&
+          intersectNormalizedRects(plate.rect, flat.rect) !== null,
+      )
+    ) {
+      keys.add(flat.key);
+    }
+  }
+  return keys;
 }
 
 /*

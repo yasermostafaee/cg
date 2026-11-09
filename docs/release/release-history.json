@@ -16,6 +16,14 @@
       },
       "features": [
         {
+          "fa": "در CG Control با انتخاب لایهٔ on air و ابزار Pan live input در PGM می‌توان تصویر داخل قابِ Crop edges را با درگ جابه‌جا کرد.",
+          "en": "Select an on-air row and use Pan live input on PGM to drag the picture inside a cropped plate."
+        },
+        {
+          "fa": "در Designer می‌توان چند کادر روی خود قاب زنده کشید. Mask داخل کادرها را نشان می‌دهد و Revert بیرون آن‌ها را. کادرها جداگانه ویرایش یا حذف می‌شوند.",
+          "en": "Draw editable mask windows directly on a live plate. Mask keeps the inside of the windows and Revert keeps the outside."
+        },
+        {
           "fa": "در Designer، گزینهٔ Show fallback مشخص می‌کند که هنگام نبود تصویر یا در فضای خالی اطراف ورودی کوچک‌تر، پس‌زمینهٔ قاب نمایش داده شود یا شفاف بماند.",
           "en": "Designer can show the authored plate background when the input is empty or leaves space, or keep those areas transparent."
         },
@@ -72,8 +80,8 @@
           "en": "CG Control shows live-frame audio state on the frame and beside its layer row."
         },
         {
-          "fa": "در Designer می‌توان لایه‌ای مثل عنوان را روی قاب نمایش داد. برای دیدن بخش‌هایی از ورودی قاب زیرین می‌توان چند ماسک نام‌دار کشید و هرکدام را جداگانه ویرایش یا حذف کرد.",
-          "en": "Designer can show a layer such as a title above a live plate. Multiple labelled masks can reveal parts of the lower input, and each mask can be edited or removed independently."
+          "fa": "متن، شکل و سایر عناصر دیداری داخل همان تمپلیت بر اساس ترتیب لایه‌ها خودکار روی تصویر قاب دیده می‌شوند. Inspector امکان انتخاب دستی ترتیب را هم دارد.",
+          "en": "Text, shapes and other visuals overlapping a lower live plate within the same template are shown above the live picture automatically, with manual ordering available in the Inspector."
         },
         {
           "fa": "تاریخچهٔ نسخه‌ها به فارسی و انگلیسی از هر دو برنامه باز می‌شود. قابلیت‌ها و رفع باگ‌ها جدا هستند و هر نسخه دانلودهای خودش را دارد.",
@@ -81,6 +89,14 @@
         }
       ],
       "fixes": [
+        {
+          "fa": "صفحه‌ای که CG Control هنگام ایمپورت می‌سازد، عنوان‌ها و گرافیک‌های روی ورودی را در پاس جدا نمایش می‌دهد و با تغییر پریست به‌روز می‌کند.",
+          "en": "Pages rebuilt during CG Control import keep foreground graphics above the live picture and synchronize them when the preset changes."
+        },
+        {
+          "fa": "سوییچ به پریست دارای ماسک هنگام آماده‌کردن بخش‌های تصویر به‌اشتباه رد نمی‌شود.",
+          "en": "Switching to a masked preset recognizes each prepared picture fragment and applies its clip."
+        },
         {
           "fa": "صفحهٔ Home وضعیت پخش Hover کارت‌ها را نشان می‌دهد. وقتی تنظیم ویندوز حرکت را کاهش می‌دهد، می‌توان پخش پیش‌نمایش‌ها را از همان‌جا فعال کرد.",
           "en": "Home shows whether card hover previews are enabled and lets you turn them on when Windows reduces motion."

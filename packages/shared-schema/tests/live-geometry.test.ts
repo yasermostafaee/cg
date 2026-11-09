@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   intersectNormalizedRects,
+  livePlateMaskRegions,
   liveRevealSceneRect,
   liveSourceFit,
   type LiveSourceFitInput,
@@ -58,6 +59,27 @@ const px = (
 });
 
 describe('D-202 — reveal geometry', () => {
+  it('keeps the union in Mask and subtracts it in Revert, including overlapping windows', () => {
+    const rects = [
+      { x: 0.25, y: 0.25, width: 0.5, height: 0.25 },
+      { x: 0.375, y: 0.375, width: 0.25, height: 0.25 },
+    ];
+    const inside = livePlateMaskRegions({ mode: 'inside', rects });
+    const outside = livePlateMaskRegions({ mode: 'outside', rects });
+    const area = (regions: typeof inside): number =>
+      regions.reduce((sum, r) => sum + r.width * r.height, 0);
+    expect(area(inside)).toBe(0.15625);
+    expect(area(outside)).toBe(0.84375);
+    for (const [index, region] of [...inside, ...outside].entries()) {
+      for (const other of [...inside, ...outside].slice(index + 1)) {
+        expect(intersectNormalizedRects(region, other)).toBeNull();
+      }
+    }
+    expect(
+      livePlateMaskRegions({ mode: 'outside', rects: [{ x: 0, y: 0, width: 1, height: 1 }] }),
+    ).toEqual([]);
+  });
+
   it('maps a normalized window through its upper plate', () => {
     expect(
       liveRevealSceneRect(

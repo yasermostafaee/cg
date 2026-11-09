@@ -19,3 +19,7 @@
 - [x] 3.2 Prove paired URLs, layer order, reveal order, capacity refusal and Clear order on AMCP wire
 - [x] 3.3 The full pre-push gate and strict OpenSpec validation passed on `d6383de0`.
 - [ ] 3.4 Confirm foreground pixels, field updates and look swaps on the target CasparCG plant
+- [x] 3.5 Apply the output pass in the self-contained page generated on CG Control import
+- [x] 3.6 Infer visual foreground in the same template and preset, with manual overrides
+- [x] 3.7 Verify the reported package with automatic titles, an unmarked circle and look swaps on
+      local CasparCG 2.5.0. Sampled the foreground pixels on preset 2 before and after the switch.

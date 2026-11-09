@@ -6687,25 +6687,32 @@ CG Control after swapping left/right inputs is not an acceptable operating workf
 
 - WHEN an authored foreground element belongs to a live frame THEN it paints above that frame's live
   producer in output while ordinary background graphics remain below it
+- WHEN a visual element overlaps a lower live plate within the same template and preset THEN it
+  is assigned to the foreground automatically, unless Behind inputs overrides it
 - WHEN two framed inputs swap through a look THEN each frame's title and foreground treatment travel
   with the frame without rewriting field data
-- WHEN no foreground overlay is authored THEN the template uses the existing single-page path and
+- WHEN no foreground overlay is needed THEN the template uses the existing single-page path and
   consumes no extra static-CG layer
 
-## [~] D-202 — An upper live plate can reveal part of a lower live input ⟨priority: high — the owner, 2026-11-08⟩ — `openspec/changes/live-plate-reveal-mask/`
+## [~] D-202 — Mask or revert regions of a live plate ⟨priority: high — clarified by the owner, 2026-11-09⟩ — `openspec/changes/live-plate-reveal-mask/`
 
-**What:** Link an upper plate to a lower plate and draw up to eight rectangular masks on the upper
-plate. Each reveals pixels directly from the lower input, including burned-in text.
+**What:** Draw up to eight rectangular mask windows directly on a live plate. Mask keeps the union
+of their interiors. Revert keeps the rest of that plate and makes the windows transparent.
+Existing linked reveals between two plates keep their authored behaviour.
 
-**Why:** Some sources already contain subtitles or captions in their video. A production may need
-the upper source as the main picture while exposing only that lower source region, as in Cinegy.
+**Why:** Some inputs have captions burned into the picture. The operator needs to expose just that
+part of an input, or leave a transparent opening in the picture for another graphic.
 
 **Acceptance:**
 
+- WHEN a plate is selected THEN a mask can be drawn directly on it with no second input
+- WHEN Revert is checked THEN all windows become transparent and the rest of that plate remains
+- WHEN the last own-plate mask is removed THEN the entire plate becomes visible again
+- WHEN more than one fragment is needed THEN only one input is opened and auxiliary seats stay muted
 - WHEN an upper plate selects a lower plate and each mask reaches it THEN the Designer allows that
   linked overlap and the Bridge places a muted clipped copy of the lower input per mask
 - WHEN the author redraws, edits or removes a mask THEN the other masks keep their geometry
-- WHEN the last mask is removed THEN the plate returns to ordinary overlap validation
+- WHEN the last linked reveal is removed THEN the plate returns to ordinary overlap validation
 - WHEN plates merely overlap without that explicit relation THEN both remain red/export-blocking
 - WHEN the relation is missing, self-referential, cyclic or a window does not reach the lower plate
   THEN export is refused with a targeted error

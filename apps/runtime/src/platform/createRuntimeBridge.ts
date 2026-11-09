@@ -287,6 +287,7 @@ export function createMockBridge(): RuntimeBridge {
       setPlateVolume: (req) =>
         Promise.resolve(mock.setPlateVolume(req.itemId, req.plateId, req.volume)),
       // `add-multibox-audio` — the MAP door (FADER / ON-OFF / SOLO).
+      pgmPlateCrop: () => Promise.resolve({ ok: true, targets: [] }),
       setPlateVolumes: (req) => Promise.resolve(mock.setPlateVolumes(req.itemId, req.volumes)),
       // `MEDIA-PLATES-01` §1.D — the transport on a seeded clip, with the bridge's refusals.
       mediaPlateTransport: (req) =>

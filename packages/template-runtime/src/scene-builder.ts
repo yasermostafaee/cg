@@ -1,6 +1,7 @@
 import {
   elementDigitsOf,
   followsComposition,
+  livePlateMaskRegions,
   liveRevealRects,
   pathVisualBBox,
   repeaterRowLimit,
@@ -16,6 +17,7 @@ import type {
   Fill,
   Filter,
   Layer,
+  LivePlateMask,
   ListItem,
   LottieElement,
   PathElement,
@@ -91,6 +93,8 @@ interface BuildCtx {
    * surface above it suppressed.
    */
   paintEditorBackdrop: boolean;
+  foregroundKeys?: ReadonlySet<string> | undefined;
+  instancePrefix: string;
 }
 
 function newScope(container: HTMLElement, source: LifecycleSource): FieldScope {
@@ -119,6 +123,7 @@ export function buildScene(
   doc: Document = document,
   mode: RenderMode = 'output',
   paintEditorBackdrop = true,
+  foregroundKeys?: ReadonlySet<string>,
 ): BuildSceneResult {
   const container = doc.createElement('div');
   container.className = 'cg-stage';
@@ -150,6 +155,8 @@ export function buildScene(
     resolutionWidth: scene.resolution.width,
     mode,
     paintEditorBackdrop,
+    foregroundKeys,
+    instancePrefix: '',
   };
 
   for (const layer of scene.layers) {
@@ -190,7 +197,12 @@ function buildLayer(layer: Layer, ctx: BuildCtx): HTMLElement {
     // D-201 — the split-page filter reads one marker after the ordinary scene has been built.
     // The marker lives on the element's OUTERMOST node, so marking a composition keeps/removes
     // its complete subtree while marking one child affects only that child.
-    if (element.liveForeground === true) elementNode.dataset['cgLiveForeground'] = '';
+    if (
+      element.liveForeground === true ||
+      ctx.foregroundKeys?.has(ctx.instancePrefix + element.id) === true
+    ) {
+      elementNode.dataset['cgLiveForeground'] = '';
+    }
     const stepIndex = plan.elements.get(element.id);
     if (stepIndex !== undefined) elementNode.dataset[STEP_EL_DATASET] = String(stepIndex);
     if (stepIndex !== undefined && plan.wrapped.has(element.id)) {
@@ -395,9 +407,7 @@ function buildComposition(element: CompositionElement, ctx: BuildCtx): HTMLEleme
     depth: ctx.depth + 1,
     visited: new Set([...ctx.visited, element.compositionId]),
     resolutionWidth: comp.resolution.width,
-    // 1.5c — extend the instance PATH, matching `flattenElements`' key exactly. The
-    // bare element id would collide across two instances of the same composition,
-    // and a hole computed for one instance's scene position is wrong for the other's.
+    instancePrefix: ctx.instancePrefix + element.id + '/',
   };
   for (const layer of comp.layers) {
     inner.appendChild(buildLayer(layer, childCtx));
@@ -1131,6 +1141,7 @@ export function buildSequenceCompositionItem(
     resolutionWidth: comp.resolution.width,
     mode,
     paintEditorBackdrop,
+    instancePrefix: '',
   };
   for (const layer of comp.layers) {
     inner.appendChild(buildLayer(layer, itemCtx));
@@ -1332,6 +1343,7 @@ export function buildRepeaterRows(
       resolutionWidth: comp.resolution.width,
       mode,
       paintEditorBackdrop,
+      instancePrefix: '',
     };
     for (const layer of comp.layers) {
       inner.appendChild(buildLayer(layer, rowCtx));
@@ -1704,6 +1716,28 @@ function buildPlaceholder(element: SceneElement, doc: Document): HTMLElement {
  */
 const SMPTE_BARS = ['#c0c0c0', '#c0c000', '#00c0c0', '#00c000', '#c000c0', '#c00000', '#0000c0'];
 
+let nextPlateClipId = 0;
+
+function clipPlateFallback(fallback: HTMLElement, mask: LivePlateMask, doc: Document): void {
+  const svg = doc.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.style.cssText = 'position:absolute;width:0;height:0;pointer-events:none';
+  const clip = doc.createElementNS(SVG_NS, 'clipPath');
+  clip.id = 'cg-plate-clip-' + String(++nextPlateClipId);
+  clip.setAttribute('clipPathUnits', 'objectBoundingBox');
+  for (const region of livePlateMaskRegions(mask)) {
+    const rect = doc.createElementNS(SVG_NS, 'rect');
+    rect.setAttribute('x', String(region.x));
+    rect.setAttribute('y', String(region.y));
+    rect.setAttribute('width', String(region.width));
+    rect.setAttribute('height', String(region.height));
+    clip.appendChild(rect);
+  }
+  svg.appendChild(clip);
+  fallback.appendChild(svg);
+  fallback.style.clipPath = 'url(#' + clip.id + ')';
+}
+
 /**
  * The bars as one `linear-gradient`, written with EXPLICIT PAIRED STOPS
  * (`c 0%, c 14.2857%, …`) rather than the shorter double-position syntax
@@ -1825,22 +1859,38 @@ function buildLiveSource(element: VideoPlaceholderElement, ctx: BuildCtx): HTMLE
   // rounding waits on the punch (1.5d), and ⚠ when it lands, note that Chromium
   // follows `border-radius` on an OUTLINE only from ~94 — well above the CEF 71
   // baseline — so rounding the hole and the frame TOGETHER will need its own answer.
-  if (element.stroke !== undefined) {
+  if (element.stroke !== undefined && (element.liveMask === undefined || ctx.mode === 'author')) {
     el.style.outline = strokeShorthand(element.stroke);
   }
 
   el.style.overflow = 'hidden';
-  if (element.showFallback !== false) el.appendChild(buildLiveFallback(element, ctx.doc));
+  if (element.showFallback !== false) {
+    const fallback = buildLiveFallback(element, ctx.doc);
+    if (element.liveMask !== undefined) clipPlateFallback(fallback, element.liveMask, ctx.doc);
+    el.appendChild(fallback);
+  }
 
   // On air the fallback is the only plate-owned pixel. Labels and reveal guides remain author-only.
   if (ctx.mode === 'output') return el;
 
-  const mask = element.revealMask;
-  if (mask !== undefined) {
-    const rects = liveRevealRects(mask);
+  const masks = [
+    ...(element.liveMask === undefined
+      ? []
+      : [{ key: 'cgLivePlateMask', value: element.liveMask.mode, rects: element.liveMask.rects }]),
+    ...(element.revealMask === undefined
+      ? []
+      : [
+          {
+            key: 'cgLiveRevealMask',
+            value: element.revealMask.targetSourceId,
+            rects: liveRevealRects(element.revealMask),
+          },
+        ]),
+  ];
+  for (const { key, value, rects } of masks) {
     for (const [index, rect] of rects.entries()) {
       const reveal = ctx.doc.createElement('div');
-      reveal.dataset['cgLiveRevealMask'] = mask.targetSourceId;
+      reveal.dataset[key] = value;
       reveal.style.position = 'absolute';
       reveal.style.left = `${rect.x * 100}%`;
       reveal.style.top = `${rect.y * 100}%`;

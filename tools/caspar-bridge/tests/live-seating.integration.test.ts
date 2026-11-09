@@ -392,6 +392,85 @@ it('D-202 — each reveal seats a silent lower copy above the upper plate', asyn
   expect((await recvLines()).filter((line) => line.includes('"route://2"'))).toHaveLength(3);
 });
 
+it('D-202 — switching to a masked look seats the reveal and retains the foreground page', async () => {
+  const right = { ...BOX, x: 960 };
+  const info = template(
+    [
+      { id: 'lower', rect: BOX },
+      { id: 'upper', rect: right },
+    ],
+    true,
+  );
+  const sources = info.liveSources!;
+  const r = await boot({
+    template: {
+      ...info,
+      liveSources: {
+        ...sources,
+        defaultLookId: 'split',
+        looks: [
+          {
+            id: 'split',
+            name: 'Split',
+            entered: { mode: 'cut' },
+            rects: { lower: BOX, upper: right },
+          },
+          {
+            id: 'masked',
+            name: 'Masked',
+            entered: { mode: 'cut' },
+            rects: { lower: BOX, upper: BOX },
+            reveals: {
+              upper: {
+                targetSourceId: 'lower',
+                rect: { x: 0, y: 0.7, width: 1, height: 0.25 },
+              },
+            },
+          },
+        ],
+      },
+    },
+    catalog: catalog({ layerRange: { start: 30, end: 36 } }),
+    assignments: assign([
+      ['lower', 'src-a'],
+      ['upper', 'src-b'],
+    ]),
+  });
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  const before = (await recvLines()).length;
+  const switched = await r.setActiveLook('item-1', 'masked');
+  const lines = (await recvLines()).slice(before);
+  expect(switched, JSON.stringify({ switched, lines }, null, 2)).toMatchObject({ ok: true });
+  expect(lines).toContain('MIXER 1-32 CLIP 0.25 0.6 0.5 0.125 DEFER');
+  expect(lines).not.toContain('CLEAR 1-36');
+});
+
+it('D-178 — PGM drag pans a live cover input without replaying it or changing the crop box', async () => {
+  const rect = { x: 720, y: 270, width: 480, height: 540 };
+  const r = await boot({ template: template([{ id: 'guest-1', rect, fitMode: 'cover' }]) });
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  const initial = await r.pgmPlateCrop('item-1');
+  expect(initial.targets).toMatchObject([
+    {
+      id: 'guest-1',
+      horizontal: true,
+      vertical: false,
+      areas: [{ x: 0.375, y: 0.25, width: 0.25, height: 0.5 }],
+    },
+  ]);
+  const token = initial.targets[0]!.token;
+  const before = (await recvLines()).length;
+  expect(await r.pgmPlateCrop('item-1', { token, dx: 0.08, dy: 0.4 })).toMatchObject({ ok: true });
+  expect((await recvLines()).slice(before)).toEqual([
+    'MIXER 1-30 FILL 0.33 0.25 0.5 0.5 DEFER',
+    'MIXER 1-30 CLIP 0.375 0.25 0.25 0.5 DEFER',
+    'MIXER 1 COMMIT',
+  ]);
+  const after = (await recvLines()).length;
+  expect(await r.pgmPlateCrop('item-1', { token, dx: -0.1, dy: 0 })).toMatchObject({ ok: false });
+  expect((await recvLines()).slice(after)).toEqual([]);
+});
+
 it('D-202 — multiple reveals are refused atomically when only one extra seat fits', async () => {
   const r = await boot({
     template: template([
@@ -420,6 +499,75 @@ it('D-202 — multiple reveals are refused atomically when only one extra seat f
   expect(verdict).toMatchObject({ accepted: false, errorCode: 'live-source-no-layer' });
   expect(r.liveLayers().has('item-1')).toBe(false);
   expect((await recvLines()).slice(before)).toEqual([]);
+});
+
+it('D-202 — Mask and Revert crop a single producer and mute its routed fragments', async () => {
+  const info = template([{ id: 'guest-1', rect: BOX }], true);
+  const sources = info.liveSources!;
+  const rects = [{ x: 0.25, y: 0.25, width: 0.5, height: 0.5 }];
+  const r = await boot({
+    template: {
+      ...info,
+      liveSources: {
+        ...sources,
+        defaultLookId: 'mask',
+        looks: [
+          {
+            id: 'mask',
+            name: 'Mask',
+            entered: { mode: 'cut' },
+            rects: { 'guest-1': BOX },
+            masks: { 'guest-1': { mode: 'inside', rects } },
+          },
+          {
+            id: 'revert',
+            name: 'Revert',
+            entered: { mode: 'cut' },
+            rects: { 'guest-1': BOX },
+            masks: { 'guest-1': { mode: 'outside', rects } },
+          },
+        ],
+      },
+    },
+    catalog: catalog({ layerRange: { start: 30, end: 34 } }),
+  });
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  const fit = { x: 0.25, y: 0.25, width: 0.5, height: 0.5 };
+  expect(mock?.layerState({ channel: 1, layer: 30 })).toMatchObject({
+    fill: fit,
+    clip: { x: 0.375, y: 0.375, width: 0.25, height: 0.25 },
+  });
+  expect(await r.setActiveLook('item-1', 'revert')).toMatchObject({ ok: true });
+  const clips = [
+    { x: 0.25, y: 0.25, width: 0.5, height: 0.125 },
+    { x: 0.25, y: 0.625, width: 0.5, height: 0.125 },
+    { x: 0.25, y: 0.375, width: 0.125, height: 0.25 },
+    { x: 0.625, y: 0.375, width: 0.125, height: 0.25 },
+  ];
+  for (const [index, clip] of clips.entries()) {
+    expect(mock?.layerState({ channel: 1, layer: 30 + index })).toMatchObject({
+      fill: fit,
+      clip,
+      volume: 0,
+    });
+  }
+  const revertWire = await recvLines();
+  expect(
+    revertWire.filter((line) => line.startsWith('PLAY ') && line.includes('"route://2"')),
+  ).toHaveLength(1);
+  expect(
+    revertWire.filter((line) => line.startsWith('PLAY ') && line.includes('"route://1-30"')),
+  ).toHaveLength(3);
+
+  expect(await r.setActiveLook('item-1', 'mask')).toMatchObject({ ok: true });
+  const maskWire = (await recvLines()).slice(revertWire.length);
+  const hidden = at(maskWire, 'MIXER 1-33 OPACITY 0 DEFER');
+  const committed = at(maskWire, 'MIXER 1 COMMIT');
+  expect(hidden).toBeGreaterThanOrEqual(0);
+  expect(committed).toBeGreaterThan(hidden);
+  expect(at(maskWire, 'CLEAR 1-33')).toBeGreaterThan(committed);
+  expect(maskWire).not.toContain('CLEAR 1-30');
+  expect(maskWire).not.toContain('CLEAR 1-34');
 });
 
 it('three plates become three layers against ONE item, and all three come down together', async () => {

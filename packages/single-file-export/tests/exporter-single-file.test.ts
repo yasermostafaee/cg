@@ -81,6 +81,9 @@ describe('ExporterSingleFile', () => {
     // Live Source paint zero pixels in the artifact that goes on air.
     expect(html).toContain("CG.createRuntime(scene, { mode: 'output', assetUrls:");
     expect(html).toContain('CG.installCasparGlobals');
+    expect(html).toContain('CG.casparOutputPass(location.search)');
+    expect(html).toContain('outputPass: outputPass');
+    expect(html).toContain("outputPass !== 'foreground' && CG.installCompletionPing");
     // R-011 — the ON-AIR boot applies the output position (query override ??
     // scene.defaultPosition ?? centered). This boot script is the ONLY caller;
     // the Designer preview never applies positioning.

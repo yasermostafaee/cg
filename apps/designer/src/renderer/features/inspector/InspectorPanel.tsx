@@ -7,7 +7,7 @@ import { BackgroundControl } from '../canvas/BackgroundControl.js';
 import { describeBinding, elementNameResolver } from '../fields/bind-resolver.js';
 import { isFixedFileFieldId } from '../fields/fixedFileField.js';
 import { CollapseSection } from './CollapseSection.js';
-import { RealtimeNumberInput, VectorField } from './controls.js';
+import { RealtimeNumberInput, SelectField, VectorField } from './controls.js';
 import { DynamicDataSection, FixedFileSourceSection } from './DynamicDataSection.js';
 import { KeyframeInspector } from './KeyframeInspector.js';
 import { MultiSelectSection } from './MultiSelectSection.js';
@@ -167,22 +167,41 @@ function LiveForegroundSection({
   if (!hasPlate && element.liveForeground !== true) return null;
   return (
     <CollapseSection title="Live foreground">
-      <label className={s.row}>
-        <span className={s.label}>Above inputs</span>
-        <input
-          type="checkbox"
-          aria-label="Show above live inputs"
-          checked={element.liveForeground === true}
-          onChange={(event) =>
+      {element.type !== 'composition' && element.type !== 'container' ? (
+        <SelectField
+          label="Live order"
+          options={['auto', 'above', 'behind'] as const}
+          labels={['Automatic', 'Above inputs', 'Behind inputs']}
+          value={
+            element.liveForeground === undefined
+              ? 'auto'
+              : element.liveForeground
+                ? 'above'
+                : 'behind'
+          }
+          onCommit={(value) =>
             designerStore.updateElement(element.id, {
-              liveForeground: event.currentTarget.checked ? true : undefined,
+              liveForeground: value === 'auto' ? undefined : value === 'above',
             } as Partial<Element>)
           }
         />
-      </label>
+      ) : (
+        <label className={s.row}>
+          <span className={s.label}>Above inputs</span>
+          <input
+            type="checkbox"
+            aria-label="Show above live inputs"
+            checked={element.liveForeground === true}
+            onChange={(event) =>
+              designerStore.updateElement(element.id, {
+                liveForeground: event.currentTarget.checked ? true : undefined,
+              } as Partial<Element>)
+            }
+          />
+        </label>
+      )}
       <p className={s.empty}>
-        Keep this element inside the same composition as its plate so both travel together between
-        Presets.
+        Elements above an overlapping plate in the same preset are placed in front of its video.
       </p>
     </CollapseSection>
   );

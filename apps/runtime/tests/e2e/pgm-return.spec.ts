@@ -1,7 +1,9 @@
 import path from 'node:path';
+import { createSocket } from 'node:dgram';
 import { fileURLToPath } from 'node:url';
 import type { Page } from '@playwright/test';
 import { ConsoleHttpServer, createBridge, pgmPort, type BridgeHandle } from '@cg/caspar-bridge';
+import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { defaultFixedLayerBank } from '@cg/shared-ipc';
 import {
   startFakePgmFeed,
@@ -47,6 +49,7 @@ const CONSOLE_DIR = path.resolve(here, '../../dist');
 let feed: FakePgmFeed | null = null;
 let bridge: BridgeHandle | null = null;
 let consoleServer: ConsoleHttpServer | null = null;
+let engine: MockHandle | null = null;
 
 test.afterEach(async () => {
   await consoleServer?.stop();
@@ -55,6 +58,8 @@ test.afterEach(async () => {
   bridge = null;
   await feed?.stop();
   feed = null;
+  await engine?.stop();
+  engine = null;
 });
 
 async function startFeed(): Promise<FakePgmFeed> {
@@ -73,16 +78,32 @@ async function startFeed(): Promise<FakePgmFeed> {
  * A real bridge (auth off: the relay reads server A's host) and the console on its own origin,
  * served with no relay — the picture can only come from the bridge's control port.
  */
-async function startStation(): Promise<string> {
+async function startStation(enginePorts?: { amcpPort: number; oscPort: number }): Promise<string> {
   bridge = await createBridge({
     port: 0,
     connection: {
-      servers: { A: { host: STATION_HOST, amcpPort: 1, oscPort: 0 } },
+      servers: { A: { host: STATION_HOST, ...(enginePorts ?? { amcpPort: 1, oscPort: 0 }) } },
       strategy: 'mirror-sync',
       autoFailoverEnabled: false,
     },
     // Channel 1 is the channel on screen.
     fixedLayers: defaultFixedLayerBank(),
+    ...(enginePorts !== undefined && {
+      sourceCatalog: {
+        layerRange: { start: 60, end: 79 },
+        sources: [
+          {
+            id: 'input-2',
+            name: 'Input 2',
+            format: '1080i5000',
+            producer: { kind: 'route' as const, channel: 2 },
+          },
+        ],
+      },
+      sourceAssignments: {
+        assignments: [{ templateId: 'pan-live', plateId: 'plate-1', sourceId: 'input-2' }],
+      },
+    }),
   });
   consoleServer = new ConsoleHttpServer();
   await consoleServer.start({ dir: CONSOLE_DIR, port: 0 });
@@ -225,5 +246,76 @@ test.describe('C-016 — the PROGRAM monitor shows the programme return', () => 
     // The last one hides: released.
     await second.getByRole('button', { name: 'Hide monitors' }).click();
     await expect.poll(() => f.openCount(), { timeout: 6000 }).toBe(0);
+  });
+
+  test('D-178 — dragging the picture on PGM pans only the selected cover input', async ({
+    page,
+  }) => {
+    await startFeed();
+    const oscPort = await new Promise<number>((resolve, reject) => {
+      const socket = createSocket('udp4');
+      socket.once('error', reject);
+      socket.bind(0, '127.0.0.1', () => {
+        const { port } = socket.address();
+        socket.close(() => resolve(port));
+      });
+    });
+    engine = await createMock({
+      host: STATION_HOST,
+      amcpPort: 0,
+      oscPort,
+      oscHost: '127.0.0.1',
+      channels: 2,
+      oscHz: 20,
+    });
+    const url = await startStation({ amcpPort: engine.amcpPort, oscPort });
+    const runtime = (bridge as BridgeHandle | null)?.runtime;
+    if (runtime === undefined) throw new Error('Station did not start');
+    await runtime.whenServerHealthy(15_000);
+    runtime.templateImport(
+      {
+        templateId: 'pan-live',
+        name: 'Pan live',
+        templateType: 'custom',
+        fields: [],
+        liveSources: {
+          resolution: { width: 1920, height: 1080 },
+          defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
+          sources: [
+            {
+              elementId: 'plate-el',
+              sourceId: 'plate-1',
+              dynamic: false,
+              fitMode: 'cover',
+              rect: { x: 720, y: 270, width: 480, height: 540 },
+            },
+          ],
+        },
+      },
+      '<!doctype html><script>window.play=window.update=()=>{};</script>',
+    );
+    expect(
+      await runtime.loadFixed({ channel: 1, layer: 59 }, 'pan-row', 'pan-live', {}),
+    ).toMatchObject({ accepted: true });
+    expect(await runtime.take('pan-row')).toMatchObject({ accepted: true });
+    await openConsole(page, url);
+    await page.getByRole('region', { name: 'Layers' }).locator('[data-layer="59"]').click();
+    await page.getByRole('button', { name: 'Show monitors' }).click();
+    await expect(strip(page)).toHaveAttribute('data-pgm-signal', 'live', { timeout: 10_000 });
+    await page.getByRole('button', { name: 'Pan live input' }).click();
+    const hit = page.getByRole('button', { name: 'Pan Plate 1', exact: true });
+    await expect(hit).toBeVisible();
+    const box = await hit.boundingBox();
+    if (box === null) throw new Error('Crop target has no screen bounds');
+    const slot = { channel: 1, layer: 60 };
+    const before = engine.layerState(slot);
+    expect(before?.fill?.x).toBeCloseTo(0.25);
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.7, box.y + box.height / 2, { steps: 5 });
+    await page.mouse.up();
+    await expect.poll(() => engine?.layerState(slot)?.fill?.x).toBeCloseTo(0.3, 2);
+    expect(engine.layerState(slot)?.clip).toEqual(before?.clip);
+    expect(engine.layerState(slot)?.volume).toBe(before?.volume);
   });
 });

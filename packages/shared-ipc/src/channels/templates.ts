@@ -5,6 +5,7 @@ import {
   IdSchema,
   ImageFitSchema,
   LiveCropFocusSchema,
+  LivePlateMaskSchema,
   LiveRevealMaskSchema,
   LiveSourceArrangementSchema,
   LiveFitModeSchema,
@@ -14,7 +15,13 @@ import {
   PositionSchema,
   ResolutionSchema,
 } from '@cg/shared-schema';
-import type { LiveCropFocus, LiveFitMode, LiveRevealMask, LiveSourceRect } from '@cg/shared-schema';
+import type {
+  LiveCropFocus,
+  LiveFitMode,
+  LivePlateMask,
+  LiveRevealMask,
+  LiveSourceRect,
+} from '@cg/shared-schema';
 import { defineChannel } from '../channel.js';
 import { definePublishChannel } from '../publish.js';
 import { WS_MAX_FRAME_BYTES } from '../ws-frame.js';
@@ -105,6 +112,7 @@ export const TemplateLookSchema = z.object({
   focuses: z.record(z.string(), LiveCropFocusSchema).optional(),
   /** D-202 — upper routeKey → lower source plus normalized reveal window. */
   reveals: z.record(z.string(), LiveRevealMaskSchema).optional(),
+  masks: z.record(z.string(), LivePlateMaskSchema).optional(),
 });
 export type TemplateLook = z.infer<typeof TemplateLookSchema>;
 
@@ -266,6 +274,19 @@ export function lookPlateReveals(
     (s): s is typeof s & { revealMask: LiveRevealMask } => s.revealMask !== undefined,
   );
   return Object.fromEntries(stated.map((s) => [s.sourceId, s.revealMask] as const));
+}
+
+/** D-202 — crop of each plate's own picture in the active look. */
+export function lookPlateMasks(
+  live: TemplateLiveSources,
+  activeLookId: string | undefined,
+): Record<string, LivePlateMask> {
+  const look = activeLookOf(live, activeLookId);
+  if (look !== undefined) return { ...look.masks };
+  const stated = live.sources.filter(
+    (s): s is typeof s & { liveMask: LivePlateMask } => s.liveMask !== undefined,
+  );
+  return Object.fromEntries(stated.map((s) => [s.sourceId, s.liveMask] as const));
 }
 
 export const TemplateInfoSchema = z.object({

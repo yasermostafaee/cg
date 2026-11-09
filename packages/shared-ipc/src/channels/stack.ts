@@ -461,6 +461,43 @@ export const StackSetPlateVolumeChannel = defineChannel(
   z.object({ ok: z.boolean(), reason: z.string().optional() }),
 );
 
+const PgmPlateCropTargetSchema = z.object({
+  id: z.string(),
+  token: z.string().length(64),
+  label: z.string(),
+  areas: z.array(
+    z.object({
+      x: z.number(),
+      y: z.number(),
+      width: z.number().positive(),
+      height: z.number().positive(),
+    }),
+  ),
+  horizontal: z.boolean(),
+  vertical: z.boolean(),
+});
+export type PgmPlateCropTarget = z.infer<typeof PgmPlateCropTargetSchema>;
+
+/** An omitted drag inspects the current on-air row. The token pins the shown fit and input. */
+export const StackPgmPlateCropChannel = defineChannel(
+  'stack.pgm-plate-crop',
+  z.object({
+    itemId: IdSchema,
+    drag: z
+      .object({
+        token: z.string().regex(/^[0-9a-f]{64}$/),
+        dx: z.number().min(-1).max(1),
+        dy: z.number().min(-1).max(1),
+      })
+      .optional(),
+  }),
+  z.object({
+    ok: z.boolean(),
+    targets: z.array(PgmPlateCropTargetSchema),
+    message: z.string().optional(),
+  }),
+);
+
 /** `MEDIA-PLATES-01` — the operator's transport for a media plate on air. */
 export const MEDIA_PLATE_TRANSPORT_ACTIONS = ['play', 'pause', 'restart'] as const;
 export type MediaPlateTransportAction = (typeof MEDIA_PLATE_TRANSPORT_ACTIONS)[number];

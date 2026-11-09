@@ -31,3 +31,14 @@
 - [x] 4.7 Verify labelled guides at two Canvas zoom levels and icon actions in the mask group
 - [x] 4.8 [Carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42568697446/job/129000870086)
       passed on `665668e4`.
+
+## 5. Mask a single live plate
+
+- [x] 5.1 Draw, edit and remove windows directly on one plate and keep the complement in Revert
+- [x] 5.2 Carry the optional mask per look and clip the authored fallback in both modes
+- [x] 5.3 Clip the original producer and route further disjoint fragments from its layer
+- [x] 5.4 Read hidden-seat replies by their unique seat identity during a look switch
+- [x] 5.5 Verify the authoring, export and Bridge paths with local CasparCG 2.5.0 and Chromium.
+      Checked Mask, Revert and full-frame recovery by sampling output pixels, plus the reported
+      linked reveal on preset 1 of the owner's package.
+- [ ] 5.6 Confirm the new mask on the target Playout and record the carrying Linux E2E job

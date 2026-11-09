@@ -1,10 +1,10 @@
-# Reveal a lower live input through an upper plate (D-202)
+# Mask live input regions (D-202)
 
 ## Why
 
-Some live inputs already carry burned-in captions. An author needs to place a second input above
-them while revealing only that caption region, without recreating the incoming pixels as Designer
-text or disabling overlap safety for every plate.
+Some live inputs already carry burned-in captions. The author can display a rectangular portion
+of that picture as a graphic, or use Revert to show the rest of the picture with the rectangle
+removed. Existing projects can also reveal part of a second, explicitly linked input.
 
 ## What Changes
 
@@ -13,6 +13,8 @@ text or disabling overlap safety for every plate.
 - Keep every unrelated live-plate overlap blocking.
 - Render each window as a muted clipped copy of the lower producer above the upper producer.
 - Count each copy as an additional seat and refuse atomically when the live-source band lacks room.
+- Add an own-plate mask with independently editable windows and a Revert option.
+- Seat one input per own-plate mask. Route any extra disjoint fragments from that seat and mute them.
 
 ## Capabilities
 

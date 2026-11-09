@@ -1,5 +1,25 @@
 # Design — live-plate reveal mask (D-202)
 
+## Crop one live plate
+
+The author draws the windows on the plate itself. `liveMask = { mode, rects }` uses the same
+normalized rectangle bounds as a linked reveal and is carried per look. Mask keeps the union of
+the windows. Revert keeps its complement. Removing all windows removes the crop. The Designer
+keeps the named editing guides and the authored fallback is clipped to the same visible regions.
+The plate's full-size frame outline is an editing guide while its own mask is active.
+
+The Bridge intersects the disjoint regions with the fitted input and keeps the input's original
+`FILL`. The first region uses the original producer. Further regions use muted routes to that
+producer's own layer, so a capture device or media stream is opened once. CasparCG 2.5.0 strips the
+source layer's mixer transform from a layer route and orders same-channel routes after their source.
+The regions share the input's fit and audio remains with its original seat. A fully removed picture
+parks that seat's geometry. Each extra region requires an available live-source layer.
+The station's server B route fence applies to these layer taps. A multi-fragment crop is supported
+on A. Admission refuses it with B as the active engine.
+
+The self mask grants no overlap exception. The linked-reveal contract below still governs saved
+projects that use two plates.
+
 ## Explicit relation, narrow exception
 
 `revealMask = { targetSourceId, rect, additionalRects? }` lives on the upper plate. Each rectangle is

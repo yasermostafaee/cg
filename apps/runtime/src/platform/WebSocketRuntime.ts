@@ -60,6 +60,7 @@ import {
   type StackRestoreReport,
   StackStopChannel,
   StackSetPlateVolumeChannel,
+  StackPgmPlateCropChannel,
   StackSetPlateVolumesChannel,
   StackSilenceAllLivePlatesChannel,
   StackSilenceChannelLivePlatesChannel,
@@ -1861,6 +1862,8 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#invoke(StackSetSoundMutedChannel, req),
     setPlateVolume: (req: ChannelRequest<typeof StackSetPlateVolumeChannel>) =>
       this.#invoke(StackSetPlateVolumeChannel, req),
+    pgmPlateCrop: (req: ChannelRequest<typeof StackPgmPlateCropChannel>) =>
+      this.#invoke(StackPgmPlateCropChannel, req),
     // `add-multibox-audio` — the MAP door: FADER, ON/OFF and SOLO all arrive here.
     setPlateVolumes: (req: ChannelRequest<typeof StackSetPlateVolumesChannel>) =>
       this.#invoke(StackSetPlateVolumesChannel, req),

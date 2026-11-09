@@ -20,6 +20,7 @@ import {
 import {
   isRestorable,
   intersectNormalizedRects,
+  livePlateMaskRegions,
   liveRevealRects,
   liveRevealSceneRect,
   liveSourceFit,
@@ -124,8 +125,10 @@ import {
   liveSourceCarrierState,
   lookPlateFits,
   lookPlateFocuses,
+  lookPlateMasks,
   lookPlateReveals,
   lookPlateRects,
+  type PgmPlateCropTarget,
   pruneAssignmentsForCatalog,
   // `PLAYOUT-SOURCES-01` — what may be bound and what may be seated, asked of the ONE module.
   sourceSeatable,
@@ -173,7 +176,7 @@ import {
   FIRST_ALLOCATABLE_LAYER,
   type StationStray,
 } from '@cg/shared-ipc';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import {
   inAnyLayerBand,
   isInCgBands,
@@ -410,6 +413,20 @@ interface LivePlateApplyPlan {
   /** The producer arguments some look still binds. Keyed by identity, like `resolved`. */
   readonly declared: ReadonlySet<string>;
   readonly unresolved: ReadonlySet<string>;
+}
+
+interface PgmCropCandidate {
+  target: PgmPlateCropTarget;
+  record: LiveLayerRecord;
+  box: NormalizedRect;
+}
+
+function cropKey(lookId: string | undefined, plateId: string): string {
+  return (lookId ?? '') + '\u001f' + plateId;
+}
+
+function maskSeatPrefix(plateId: string): string {
+  return '\u001fmask:' + plateId + ':';
 }
 
 interface LivePlatePlacement {
@@ -1625,6 +1642,10 @@ export class CasparRuntime {
   readonly #activeLooks = new Map<string, string>();
   /** R-105 — the last landed plate-fit facts, mirrored to the graphics-bed fallback. */
   readonly #plateFits = new Map<string, Readonly<Record<string, CgPlateFit>>>();
+  readonly #liveCropFocuses = new Map<
+    string,
+    Map<string, { producer: string; focus: LiveCropFocus }>
+  >();
   /**
    * B-039 — itemIds whose slot currently has a LIVE producer (a `CG ADD` succeeded
    * and no later `CLEAR` destroyed it). The prescriptive signal: `take` plays when
@@ -1641,6 +1662,8 @@ export class CasparRuntime {
    * does not erase the reservation; a 403 PLAY proves the producer itself must be re-ADDed.
    */
   readonly #foregroundPages = new Map<string, CommandSlot>();
+  /** Seats started hidden, before the action can commit them to the live ledger. */
+  readonly #pendingSeatLayers = new Set<string>();
   /**
    * Reconnect-reconciliation — layers this process has CLEARed at least once
    * (adoption, out, remove), i.e. layers whose producer state the bridge KNOWS.
@@ -4140,6 +4163,7 @@ export class CasparRuntime {
     this.#lookSourceBindings.delete(itemId);
     this.#frozenAssignments.delete(itemId);
     this.#plateFits.delete(itemId);
+    this.#liveCropFocuses.delete(itemId);
     this.#plateVolumes.delete(itemId);
     this.#activeLooks.delete(itemId);
     this.#passTimings.delete(itemId);
@@ -7256,8 +7280,8 @@ export class CasparRuntime {
    * the sweep, the quarantine and the refusal (golden rule 6). Keyed through
    * `adoptionKey` so the format matches the sweep's `owned` set exactly.
    */
-  #liveLayerKeys(): Set<string> {
-    const keys = new Set<string>();
+  #liveLayerKeys(includePending = false): Set<string> {
+    const keys = new Set<string>(includePending ? this.#pendingSeatLayers : []);
     for (const records of this.#liveLayers.values()) {
       for (const record of records) keys.add(adoptionKey(record.slot));
     }
@@ -7265,6 +7289,19 @@ export class CasparRuntime {
     // their picture seats. This keeps the orphan sweep and foreign quarantine away from them.
     for (const slot of this.#foregroundPages.values()) keys.add(adoptionKey(slot));
     return keys;
+  }
+
+  #claimSeatLayers(plan: LivePlateApplyPlan): () => void {
+    const claimed = new Set<string>();
+    for (const placement of [...plan.placements, ...plan.parked]) {
+      const key = adoptionKey(placement.slot);
+      if (this.#pendingSeatLayers.has(key)) continue;
+      claimed.add(key);
+      this.#pendingSeatLayers.add(key);
+    }
+    return () => {
+      for (const key of claimed) this.#pendingSeatLayers.delete(key);
+    };
   }
 
   /**
@@ -7614,6 +7651,7 @@ export class CasparRuntime {
      * is a parameter of its own rather than read off `scope`.
      */
     levelTwo: LevelTwoSource,
+    proposedCrop?: { plateId: string; focus: LiveCropFocus },
   ): LiveSeatingPlan {
     const templateId = this.#reconciler.get(itemId)?.templateId ?? itemId;
     // `CHANNEL-TEMPLATES-01` — the carrier of the version the row's channel lists.
@@ -7780,6 +7818,7 @@ export class CasparRuntime {
       held: boolean;
       revealOverlay?: true;
       playback?: MediaPlayback;
+      routeFrom?: string;
     }[] = [];
 
     for (const seat of bindings.seats.values()) {
@@ -7820,7 +7859,15 @@ export class CasparRuntime {
         fitOverrides.get(frame.plateId),
         lookPlateFits(carrier, frame.lookId)[frame.plateId],
       );
-      const cropFocus = lookPlateFocuses(carrier, frame.lookId)[frame.plateId];
+      const storedCrop = this.#liveCropFocuses
+        .get(itemId)
+        ?.get(cropKey(frame.lookId, frame.plateId));
+      const cropFocus =
+        frame.lookId === lookId && proposedCrop?.plateId === frame.plateId
+          ? proposedCrop.focus
+          : storedCrop?.producer === seat.producerArg
+            ? storedCrop.focus
+            : lookPlateFocuses(carrier, frame.lookId)[frame.plateId];
       const aspect = resolvePlateAspect({
         plateId: frame.plateId,
         plateLabel: plateLabel(carrier.sources, frame.plateId),
@@ -8003,6 +8050,58 @@ export class CasparRuntime {
       }
     }
 
+    // Use the original producer for the first region, and tap that same layer for
+    // the other regions. A layer route reads the frame before its mixer transform,
+    // so every fragment keeps the same framing without reopening a device or stream.
+    for (const [plateId, mask] of Object.entries(lookPlateMasks(carrier, lookId))) {
+      const main = activeMain.get(plateId);
+      const rect = desired[plateId];
+      if (main === undefined || rect === undefined) continue;
+      const { fill, clip } = main.fit;
+      const clips = livePlateMaskRegions(mask).flatMap((region) => {
+        const window = this.liveSourceFitFor({
+          channel: slot.channel,
+          itemId,
+          rect: liveRevealSceneRect(rect, region),
+          sceneResolution: carrier.resolution,
+          carriedDefaultPosition: carrier.defaultPosition,
+          sourceAspect: null,
+        }).clip;
+        if (window === null) return [];
+        const visible = intersectNormalizedRects(clip, window);
+        return visible === null ? [] : [visible];
+      });
+      const [first, ...additional] = clips;
+      main.fit = first === undefined ? parkedFit(fill) : { fill, clip: first };
+      for (const [index, fragment] of additional.entries()) {
+        const seatId = maskSeatPrefix(plateId) + String(index);
+        declared.add(seatId);
+        seated.push({
+          plateId,
+          seatId,
+          producerArg: main.producerArg,
+          producer: main.producer,
+          source: { id: main.source.id, name: main.source.name },
+          fit: { fill, clip: fragment },
+          held: false,
+          revealOverlay: true,
+          routeFrom: main.seatId,
+        });
+      }
+    }
+
+    if (
+      this.#adapter.currentPrimary === 'B' &&
+      seated.some((seat) => seat.routeFrom !== undefined)
+    ) {
+      return {
+        ok: false,
+        errorCode: 'live-mask-backup',
+        message:
+          'This mask needs multiple picture regions. The backup engine cannot route its fragments.',
+      };
+    }
+
     // The EMPTY look is valid and carries an empty map — background alone. It is not an early
     // exit from the reconcile: everything the item has seated is still released or parked by
     // the policy in `#applyLivePlates`, which is the difference between a look with no plates
@@ -8067,11 +8166,13 @@ export class CasparRuntime {
     for (const record of this.#liveLayers.get(itemId) ?? []) {
       if (record.slot.channel !== slot.channel) continue;
       currentLayer.set(liveSeatId(record), record.slot.layer);
-      if (!declared.has(liveSeatId(record)))
+      if (record.revealOverlay !== true && !declared.has(liveSeatId(record)))
         departingLayerOfPlate.set(record.sourceId, record.slot.layer);
     }
     const preferred = seated.map(
-      (s) => currentLayer.get(s.seatId) ?? departingLayerOfPlate.get(s.plateId),
+      (s) =>
+        currentLayer.get(s.seatId) ??
+        (s.revealOverlay === true ? undefined : departingLayerOfPlate.get(s.plateId)),
     );
     /*
       🔴 `ours` IS THE LAYERS THIS PLAN WILL OCCUPY — **NOT** EVERY LAYER THE ITEM OWNS.
@@ -8159,21 +8260,27 @@ export class CasparRuntime {
 
     // `ROUTE-PLATES-01` rule 5 — a Playout route carries the epoch its `route://H-L` was read in.
     const epoch = this.#sourceCatalog.inputsEpoch;
-    const allocated = seated.map((s, i) => ({
-      slot: { channel: slot.channel, layer: layers[i] as number },
-      plateId: s.plateId,
-      seatId: s.seatId,
-      producerArg: s.producerArg,
-      producer: s.producer,
-      source: s.source,
-      fit: s.fit,
-      held: s.held,
-      ...(s.revealOverlay === true && { revealOverlay: true as const }),
-      ...(epoch !== undefined && isPlayoutRoute({ origin: s.source.origin, producer: s.producer })
-        ? { epoch }
-        : {}),
-      ...(s.playback !== undefined && { playback: s.playback }),
-    }));
+    const layerBySeat = new Map(seated.map((s, i) => [s.seatId, layers[i] as number]));
+    const allocated: LivePlatePlacement[] = seated.map(({ routeFrom, ...seat }, i) => {
+      const sourceLayer = routeFrom === undefined ? undefined : layerBySeat.get(routeFrom);
+      if (routeFrom !== undefined && sourceLayer === undefined) {
+        throw new Error('A mask fragment must route an allocated source seat.');
+      }
+      const producer: SourceProducer =
+        sourceLayer === undefined
+          ? seat.producer
+          : { kind: 'route', channel: slot.channel, layer: sourceLayer };
+      return {
+        ...seat,
+        slot: { channel: slot.channel, layer: layers[i] as number },
+        producer,
+        producerArg:
+          routeFrom === undefined ? seat.producerArg : this.#builder.sourceArgument(producer),
+        ...(epoch !== undefined && isPlayoutRoute({ origin: seat.source.origin, producer })
+          ? { epoch }
+          : {}),
+      };
+    });
     /*
       SPLIT AFTER ALLOCATION, and only after — a parked seat holds its layer exactly as a
       punched one does, so both have to be in the same allocation or a preset would be handed
@@ -8751,6 +8858,173 @@ export class CasparRuntime {
       bridge's: which item, and what this bridge has recorded for it.
     */
     return activeLookOf(carrier, this.#activeLooks.get(itemId));
+  }
+
+  #pgmCropCandidates(itemId: string): PgmCropCandidate[] {
+    const item = this.#reconciler.get(itemId);
+    const slot = this.#slots.get(itemId);
+    const records = this.#liveLayers.get(itemId);
+    if (
+      item === null ||
+      item.pending ||
+      item.status === 'exiting' ||
+      !isOnAirStatus(item) ||
+      slot === undefined ||
+      records === undefined ||
+      this.#adapter.primarySession.state !== 'healthy'
+    )
+      return [];
+    const carrier = this.#templates.getOn(slot.channel, item.templateId)?.liveSources;
+    if (carrier === undefined) return [];
+    const lookId = this.activeLookId(itemId);
+    const rects = lookPlateRects(carrier, lookId);
+    const fits = this.#plateFits.get(itemId);
+    const targets: PgmCropCandidate[] = [];
+    for (const record of records) {
+      const plateId = record.sourceId;
+      const rect = rects[plateId];
+      if (
+        record.held === true ||
+        record.revealOverlay === true ||
+        rect === undefined ||
+        fits?.[plateId]?.mode !== 'cover' ||
+        intersectNormalizedRects(record.fill, record.clip) === null
+      )
+        continue;
+      const box = this.liveSourceFitFor({
+        channel: slot.channel,
+        itemId,
+        rect,
+        sceneResolution: carrier.resolution,
+        carriedDefaultPosition: carrier.defaultPosition,
+        sourceAspect: null,
+      }).fill;
+      const horizontal = record.fill.width - box.width > 1e-6;
+      const vertical = record.fill.height - box.height > 1e-6;
+      if (!horizontal && !vertical) continue;
+      const areas = [
+        record.clip,
+        ...records
+          .filter(
+            (seat) =>
+              seat.held !== true && seat.seatId?.startsWith(maskSeatPrefix(plateId)) === true,
+          )
+          .map((seat) => seat.clip),
+      ];
+      const token = createHash('sha256')
+        .update(JSON.stringify([this.#adapter.currentPrimary, itemId, lookId, record, box, areas]))
+        .digest('hex');
+      targets.push({
+        record,
+        box,
+        target: {
+          id: plateId,
+          token,
+          label: this.#plateLabelOf(itemId, plateId) ?? plateId,
+          areas,
+          horizontal,
+          vertical,
+        },
+      });
+    }
+    return targets;
+  }
+
+  async pgmPlateCrop(
+    itemId: string,
+    drag?: { token: string; dx: number; dy: number },
+  ): Promise<{
+    ok: boolean;
+    targets: PgmPlateCropTarget[];
+    message?: string;
+  }> {
+    const targets = () => this.#pgmCropCandidates(itemId).map((candidate) => candidate.target);
+    if (drag === undefined) {
+      return this.#adapter.primarySession.state === 'healthy'
+        ? { ok: true, targets: targets() }
+        : { ok: false, targets: [], message: 'The programme engine is unavailable.' };
+    }
+    const stale = {
+      accepted: false,
+      errorCode: 'stale-plate-crop',
+      message: 'The on-air plate changed. Drag again on its current picture.',
+    };
+    const result = await this.#audited<{
+      accepted: boolean;
+      errorCode?: string;
+      message?: string;
+    }>('pan-live-plate', this.#itemDetail(itemId), () =>
+      this.#withLiveSeatLock(itemId, async () => {
+        const selected = this.#pgmCropCandidates(itemId).find(
+          ({ target }) => target.token === drag.token,
+        );
+        const records = this.#liveLayers.get(itemId);
+        const slot = this.#slots.get(itemId);
+        if (selected === undefined || records === undefined || slot === undefined) return stale;
+        const { record, box } = selected;
+        const focusAt = (
+          origin: number,
+          extent: number,
+          picture: number,
+          size: number,
+          shift: number,
+        ): number =>
+          size - extent <= 1e-6
+            ? 0.5
+            : Math.max(0, Math.min(1, (origin - picture - shift) / (size - extent)));
+        const focus = {
+          x: focusAt(box.x, box.width, record.fill.x, record.fill.width, drag.dx),
+          y: focusAt(box.y, box.height, record.fill.y, record.fill.height, drag.dy),
+        };
+        const lookId = this.activeLookId(itemId);
+        const plateId = record.sourceId;
+        const plan = this.#planLiveSeating(itemId, slot, lookId, 'already-live', 'pinned', {
+          plateId,
+          focus,
+        });
+        if (!plan.ok) return stale;
+        const placements = [...plan.placements, ...plan.parked];
+        const priorBySeat = new Map(records.map((seat) => [liveSeatId(seat), seat]));
+        // Panning is a geometry-only edit. Refuse if re-resolving would seat anything
+        // or touch a different input, its bounds, or its transport.
+        if (
+          placements.length !== records.length ||
+          placements.some((next) => {
+            const before = priorBySeat.get(next.seatId);
+            if (
+              !isSeatUnchanged('switch', before, next) ||
+              before.sourceId !== next.plateId ||
+              (before.held === true) !== next.held
+            )
+              return true;
+            if (next.held) return false;
+            return (['x', 'y', 'width', 'height'] as const).some(
+              (key) =>
+                Math.abs(next.fit.clip[key] - before.clip[key]) > 1e-8 ||
+                ((next.plateId !== plateId || key === 'width' || key === 'height') &&
+                  Math.abs(next.fit.fill[key] - before.fill[key]) > 1e-8),
+            );
+          })
+        )
+          return stale;
+        const applied = await this.#applyLivePlates(itemId, plan, 'switch', undefined, records);
+        if (!applied.ok)
+          return {
+            accepted: false,
+            errorCode: applied.errorCode ?? 'amcp-error',
+            message: applied.message ?? 'CasparCG could not apply the crop.',
+          };
+        const focuses = this.#liveCropFocuses.get(itemId) ?? new Map();
+        focuses.set(cropKey(lookId, plateId), { producer: record.producer, focus });
+        this.#liveCropFocuses.set(itemId, focuses);
+        return { accepted: true };
+      }),
+    );
+    return {
+      ok: result.accepted,
+      targets: targets(),
+      ...(result.message && { message: result.message }),
+    };
   }
 
   /** §14 phase 3 — the look this item is showing, for a caller that only needs the id. */
@@ -9785,25 +10059,27 @@ export class CasparRuntime {
       page untouched and nothing on air changed; accepted, the seats ride into the apply, which
       reveals them in the switch's one commit instead of `PLAY`ing inside it.
     */
-    let preSeated: ReadonlyMap<string, SeatResult> | undefined;
-    if (opts.mode === 'switch') {
-      // Read BEFORE the pre-seat: its awaits are a window an emergency verb can land in.
-      const ownedBefore = this.#ownsLiveSeats(itemId);
-      const heldBefore = this.#liveLayers.has(itemId);
-      const pre = await this.#preSeatSwitch(itemId, plan);
-      if (!pre.ok) return pre.refusal;
-      preSeated = pre.seats;
-      /*
+    const releaseClaims = this.#claimSeatLayers(plan);
+    try {
+      let preSeated: ReadonlyMap<string, SeatResult> | undefined;
+      if (opts.mode === 'switch') {
+        // Read BEFORE the pre-seat: its awaits are a window an emergency verb can land in.
+        const ownedBefore = this.#ownsLiveSeats(itemId);
+        const heldBefore = this.#liveLayers.has(itemId);
+        const pre = await this.#preSeatSwitch(itemId, plan);
+        if (!pre.ok) return pre.refusal;
+        preSeated = pre.seats;
+        /*
         🔴 THE PREROLL ({@link PRE_SEAT_PREROLL_HOLDS}): a plate this switch seated runs HIDDEN for
         three holds before the page is told, so its producer has its own picture by the reveal —
         measured, 3 runs in 10 revealed a media clip before its first frame. A switch that seated
         nothing waits for nothing.
       */
-      if ([...pre.seats.values()].some((seat) => seat.outcome === 'landed')) {
-        const preroll = PRE_SEAT_PREROLL_HOLDS * this.#lookMixerHoldMsFor(slot.channel);
-        if (preroll > 0) await sleepMs(preroll);
-      }
-      /*
+        if ([...pre.seats.values()].some((seat) => seat.outcome === 'landed')) {
+          const preroll = PRE_SEAT_PREROLL_HOLDS * this.#lookMixerHoldMsFor(slot.channel);
+          if (preroll > 0) await sleepMs(preroll);
+        }
+        /*
         🔴 AND THE ROW MAY HAVE LEFT THE AIR MEANWHILE. `out`, `stopItem` and `clearAll` are
         un-gated by design (an emergency verb never queues behind what it repairs), and the
         pre-seat and its preroll are awaits between the plan and the page tell. Before them, that
@@ -9812,29 +10088,32 @@ export class CasparRuntime {
         shape. So the same BEFORE → AFTER re-ask `beforeApply` makes after its hold is made here,
         and what the pre-seat started comes back off.
       */
-      if (
-        (ownedBefore && !this.#ownsLiveSeats(itemId)) ||
-        (heldBefore && !this.#liveLayers.has(itemId))
-      ) {
-        await this.#undoPreSeat(preSeated);
-        return { ok: false, errorCode: 'not-live', message: ROW_LEFT_AIR_MID_SWITCH };
+        if (
+          (ownedBefore && !this.#ownsLiveSeats(itemId)) ||
+          (heldBefore && !this.#liveLayers.has(itemId))
+        ) {
+          await this.#undoPreSeat(preSeated);
+          return { ok: false, errorCode: 'not-live', message: ROW_LEFT_AIR_MID_SWITCH };
+        }
       }
-    }
-    if (opts.beforeApply !== undefined) {
-      const gate = await opts.beforeApply(plan);
-      if (!gate.ok) {
-        // Nothing of the switch reaches air: what its pre-seat started comes back off.
-        await this.#undoPreSeat(preSeated);
-        return {
-          ok: false,
-          ...(gate.errorCode === undefined ? {} : { errorCode: gate.errorCode }),
-          ...(gate.message === undefined ? {} : { message: gate.message }),
-        };
+      if (opts.beforeApply !== undefined) {
+        const gate = await opts.beforeApply(plan);
+        if (!gate.ok) {
+          // Nothing of the switch reaches air: what its pre-seat started comes back off.
+          await this.#undoPreSeat(preSeated);
+          return {
+            ok: false,
+            ...(gate.errorCode === undefined ? {} : { errorCode: gate.errorCode }),
+            ...(gate.message === undefined ? {} : { message: gate.message }),
+          };
+        }
       }
+      const applied = await this.#applyLivePlates(itemId, plan, opts.mode, preSeated);
+      if (applied.ok) this.#plateFits.set(itemId, { ...plan.plateFits });
+      return applied;
+    } finally {
+      releaseClaims();
     }
-    const applied = await this.#applyLivePlates(itemId, plan, opts.mode, preSeated);
-    if (applied.ok) this.#plateFits.set(itemId, { ...plan.plateFits });
-    return applied;
   }
 
   /**
@@ -9933,15 +10212,21 @@ export class CasparRuntime {
     plan: LivePlateApplyPlan,
     mode: 'take' | 'live' | 'switch',
     preSeated?: ReadonlyMap<string, SeatResult>,
+    cropBaseline?: readonly LiveLayerRecord[],
   ): Promise<LivePlateApplyResult> {
+    const releaseClaims = this.#claimSeatLayers(plan);
     try {
-      return await this.#applyLivePlatesUnguarded(itemId, plan, mode, preSeated);
+      return await this.#applyLivePlatesUnguarded(itemId, plan, mode, preSeated, cropBaseline);
     } finally {
       // Staged at this point ⇒ the batch did NOT reach either of its own commit points, i.e.
       // it threw. `#commitStagedMixer` is idempotent, so the ordinary paths cost nothing here.
       const abandoned = this.#stagedMixerChannel !== null;
-      await this.#commitStagedMixer();
-      if (abandoned) await this.#reassertLedgerGeometry(itemId);
+      try {
+        await this.#commitStagedMixer();
+        if (abandoned) await this.#reassertLedgerGeometry(itemId);
+      } finally {
+        releaseClaims();
+      }
     }
   }
 
@@ -10514,9 +10799,12 @@ export class CasparRuntime {
    * `PLAY` was refused put nothing there; one that landed (or went unanswered) is cleared. Never
    * a layer one of ours held before — the pre-seat seats no such layer.
    */
-  async #undoPreSeat(seats: ReadonlyMap<string, SeatResult> | undefined): Promise<void> {
-    for (const seat of seats?.values() ?? []) {
-      if (!seat.sent) continue;
+  async #undoPreSeat(
+    seats: ReadonlyMap<string, SeatResult> | undefined,
+    handled: ReadonlySet<string> = new Set(),
+  ): Promise<void> {
+    for (const [id, seat] of seats ?? []) {
+      if (!seat.sent || handled.has(id)) continue;
       await this.#clearAfterRefusal(
         seat.placement.slot,
         { outcome: seat.outcome, heldBefore: false },
@@ -10530,9 +10818,13 @@ export class CasparRuntime {
     plan: LivePlateApplyPlan,
     mode: 'take' | 'live' | 'switch',
     preSeated?: ReadonlyMap<string, SeatResult>,
+    cropBaseline?: readonly LiveLayerRecord[],
   ): Promise<LivePlateApplyResult> {
     const { placements, parked, resolved, offFrame, declared, unresolved } = plan;
     const previous = this.#liveLayers.get(itemId) ?? [];
+    const cropRowLeft = () =>
+      cropBaseline !== undefined &&
+      (this.#liveLayers.get(itemId) !== cropBaseline || !this.#ownsLiveSeats(itemId));
     if (placements.length === 0 && parked.length === 0 && previous.length === 0)
       return { ok: true };
     /*
@@ -10743,7 +11035,8 @@ export class CasparRuntime {
       const seatUnchanged = isSeatUnchanged(mode, prior, placement);
       // `PLAYOUT-SOURCES-01` §1.C — the argument the seat step actually played: the one retry
       // may have played a media item's fresh `clip` instead of the placement's.
-      const playedArg = seatUnchanged ? undefined : seats.get(placement.seatId)?.playedArg;
+      const seat = seatUnchanged ? undefined : seats.get(placement.seatId);
+      const playedArg = seat?.playedArg;
       /*
         🔴 `MEDIA-PLATES-01` §1.C — A CLIP A LOOK HID AND PAUSED IS `RESUME`d AS A LOOK SHOWS IT, from
         the same frame. Only a `hidden` pause: one the OPERATOR pressed stays paused whatever the looks
@@ -10824,9 +11117,7 @@ export class CasparRuntime {
           a seat this action does not re-`PLAY`; this `PLAY`'s for one it does.
         */
         ...(() => {
-          const reason = seatUnchanged
-            ? prior?.backupRefused?.reason
-            : seats.get(producer)?.backupRefused;
+          const reason = seatUnchanged ? prior?.backupRefused?.reason : seat?.backupRefused;
           return reason === undefined
             ? {}
             : { backupRefused: { reason, name: placement.source.name } };
@@ -10897,7 +11188,6 @@ export class CasparRuntime {
         there is nothing to have landed.
       */
       const reseat = !seatUnchanged;
-      const seat = reseat ? seats.get(producer) : undefined;
       const playLanded = seat?.outcome === 'landed';
       if (reseat) {
         // A `PLAY` that left this process may have made a producer: the take's rollback set.
@@ -11071,6 +11361,8 @@ export class CasparRuntime {
     */
     if (failure !== undefined) await this.#commitStagedMixer();
 
+    if (cropRowLeft())
+      return { ok: false, errorCode: 'not-live', message: ROW_LEFT_AIR_MID_SWITCH };
     if (failure !== undefined) {
       if (mode === 'take') {
         /*
@@ -11226,6 +11518,7 @@ export class CasparRuntime {
           );
           if (cleared) createdCleared.add(key(rec));
         }
+        await this.#undoPreSeat(preSeated, new Set(touched.map(liveSeatId)));
         for (let i = next.length - 1; i >= 0; i -= 1) {
           const rec = next[i];
           if (rec !== undefined && createdCleared.has(key(rec))) next.splice(i, 1);
@@ -11482,7 +11775,18 @@ export class CasparRuntime {
         plateLabel: this.#plateLabelOf(itemId, record.sourceId),
       });
       releases.push(release);
-      if (release.disposition !== 'held') continue;
+      if (release.disposition !== 'held') {
+        if (record.revealOverlay === true) {
+          // Departing fragments vanish with the new fit, before their layers are cleared.
+          this.#stagedMixerChannel = record.slot.channel;
+          await this.#send(
+            this.#builder.deferMixer(this.#builder.mixerOpacity(record.slot, 0)),
+            this.#nextSeq(),
+            'urgent',
+          );
+        }
+        continue;
+      }
       /*
         🔴 `held` RECORDS THAT THE MUTE LANDED, NOT THAT WE INTENDED IT.
 
@@ -11596,7 +11900,13 @@ export class CasparRuntime {
       below, because that sweep's `MIXER … CLEAR` is sent un-deferred and applies at once: a
       commit after it would re-apply a staged `FILL` onto a layer it had just reset.
     */
-    await this.#commitStagedMixer();
+    const committed = await this.#commitStagedMixer();
+    if (cropRowLeft())
+      return { ok: false, errorCode: 'not-live', message: ROW_LEFT_AIR_MID_SWITCH };
+    if (cropBaseline !== undefined && !committed.landed) {
+      await this.#reassertLedgerGeometry(itemId);
+      return { ok: false, errorCode: committed.errorCode ?? 'amcp-error' };
+    }
 
     /*
       🔴 `MEDIA-PLATES-01` §1.C — **THE `PAUSE`s, RIGHT AFTER THE COMMIT THAT HID THEIR CLIPS.** In the
@@ -12720,7 +13030,7 @@ export class CasparRuntime {
 
   /** Is this exact coordinate a bridge-owned Live Source layer? */
   #isLiveLayer(channel: number, layer: number): boolean {
-    return this.#liveLayerKeys().has(adoptionKey({ channel, layer }));
+    return this.#liveLayerKeys(true).has(adoptionKey({ channel, layer }));
   }
 
   /**
@@ -13706,7 +14016,7 @@ export class CasparRuntime {
      * DOOR 1 in `tests/live-source-ownership.integration.test.ts` fails if this
      * line is dropped, which is what protects it through any later rewrite.
      */
-    for (const key of this.#liveLayerKeys()) owned.add(key);
+    for (const key of this.#liveLayerKeys(true)) owned.add(key);
     /*
      * 🔴 THE ONE CLASS THAT IS DECLARED AND STILL A CANDIDATE — read this before
      * "finishing" the narrowing.
@@ -14445,6 +14755,7 @@ export class CasparRuntime {
     // should have re-frozen it would instead find the pin already there.
     this.#frozenAssignments.delete(itemId);
     this.#plateFits.delete(itemId);
+    this.#liveCropFocuses.delete(itemId);
     // 6.5f — and the audio intent. A re-used itemId inheriting a RAISED plate is
     // the worst of the three: it puts a microphone on air that nobody asked for.
     this.#plateVolumes.delete(itemId);
@@ -16756,7 +17067,7 @@ export class CasparRuntime {
     if (session.state !== 'healthy') return;
 
     const foreign = new Map<string, { slot: CommandSlot; producer: string }>();
-    const live = this.#liveLayerKeys();
+    const live = this.#liveLayerKeys(true);
     for (const occ of session.osc.occupancy.occupied(this.#occupancyStaleMs)) {
       /*
        * C-015 phase 5 (C-014) — DOOR 2 of 3: a bridge-owned Live Source layer is

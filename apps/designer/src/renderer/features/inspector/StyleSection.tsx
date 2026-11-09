@@ -37,6 +37,7 @@ import type {
   FollowAnchors,
   HoldBehavior,
   LiveFitMode,
+  LiveRevealRect,
 } from '@cg/shared-schema';
 import type {
   AnimatableProperty,
@@ -897,7 +898,8 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
         />
         <AspectRow element={element} />
         <FitModeRow element={element} />
-        <RevealMaskRows key={element.id} element={element} />
+        <PlateMaskRows key={'mask-' + element.id} element={element} />
+        <PlateMaskRows key={'reveal-' + element.id} element={element} linked />
         <LivePlateFallbackPicker
           plates={[element]}
           onCommit={(patch) => designerStore.updateElement(element.id, patch)}
@@ -1195,8 +1197,14 @@ function currentPlate(element: VideoPlaceholderElement): VideoPlaceholderElement
   return (found?.layer.children[found.elIdx] as VideoPlaceholderElement | undefined) ?? element;
 }
 
-/** D-202 — edit the windows that reveal a linked lower source. */
-function RevealMaskRows({ element }: { element: VideoPlaceholderElement }): JSX.Element {
+/** D-202 — edit the windows of a plate mask or a linked reveal. */
+function PlateMaskRows({
+  element,
+  linked = false,
+}: {
+  element: VideoPlaceholderElement;
+  linked?: boolean;
+}): JSX.Element {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const scene = designerStore.get().scene;
   const plates: VideoPlaceholderElement[] = [];
@@ -1206,7 +1214,7 @@ function RevealMaskRows({ element }: { element: VideoPlaceholderElement }): JSX.
       else if (child.type === 'container') collect(child.children);
     }
   };
-  if (scene !== null) for (const layer of activeLayersOf(scene)) collect(layer.children);
+  if (linked && scene !== null) for (const layer of activeLayersOf(scene)) collect(layer.children);
   const candidates = plates.filter(
     (plate) => plate.id !== element.id && plate.routeKey !== undefined,
   );
@@ -1216,49 +1224,64 @@ function RevealMaskRows({ element }: { element: VideoPlaceholderElement }): JSX.
     ...candidates.map((plate) => `${plate.name || 'Plate'} — ${plate.routeKey as string}`),
   ];
   const reveal = element.revealMask;
-  const rects = reveal === undefined ? [] : liveRevealRects(reveal);
+  const rects = linked
+    ? reveal === undefined
+      ? []
+      : liveRevealRects(reveal)
+    : (element.liveMask?.rects ?? []);
+  const kind = linked ? 'reveal mask' : 'plate mask';
+  const heading = linked ? 'Reveal masks' : 'Plate mask';
   const activeIndex = Math.min(selectedIndex, rects.length - 1);
   const rect = rects[activeIndex];
+  const writeRects = (nextRects: LiveRevealRect[]): void => {
+    const latest = currentPlate(element);
+    if (linked) {
+      if (latest.revealMask === undefined) return;
+      designerStore.updateElement(element.id, {
+        revealMask: liveRevealMaskFromRects(latest.revealMask.targetSourceId, nextRects),
+      } as Partial<Element>);
+    } else {
+      designerStore.updateElement(element.id, {
+        liveMask:
+          nextRects.length === 0
+            ? undefined
+            : { mode: latest.liveMask?.mode ?? 'inside', rects: nextRects },
+      } as Partial<Element>);
+    }
+  };
   const commitRect = (key: 'x' | 'y' | 'width' | 'height', percent: number): void => {
-    const mask = currentPlate(element).revealMask;
-    if (mask === undefined) return;
-    const currentRects = liveRevealRects(mask);
-    const current = currentRects[activeIndex];
-    if (current === undefined) return;
+    if (rect === undefined) return;
     const raw = Math.max(0, Math.min(1, percent / 100));
-    const next = { ...current, [key]: raw };
+    const next = { ...rect, [key]: raw };
     next.x = Math.min(next.x, 1 - next.width);
     next.y = Math.min(next.y, 1 - next.height);
     next.width = Math.max(0.001, Math.min(next.width, 1 - next.x));
     next.height = Math.max(0.001, Math.min(next.height, 1 - next.y));
-    currentRects[activeIndex] = next;
-    designerStore.updateElement(element.id, {
-      revealMask: liveRevealMaskFromRects(mask.targetSourceId, currentRects),
-    } as Partial<Element>);
+    writeRects(rects.map((entry, index) => (index === activeIndex ? next : entry)));
   };
   const draw = (index: number | null): void => {
     setSelectedIndex(index ?? rects.length);
     designerStore.setSelection([element.id]);
-    designerStore.setTool('live-reveal', index);
+    designerStore.setTool(linked ? 'live-reveal' : 'live-mask', index);
   };
   const remove = (): void => {
-    const mask = currentPlate(element).revealMask;
-    if (mask === undefined) return;
-    const remaining = liveRevealRects(mask).filter((_, index) => index !== activeIndex);
-    designerStore.updateElement(element.id, {
-      revealMask: liveRevealMaskFromRects(mask.targetSourceId, remaining),
-    } as Partial<Element>);
+    const remaining = rects.filter((_, index) => index !== activeIndex);
+    writeRects(remaining);
     setSelectedIndex(Math.max(0, Math.min(activeIndex, remaining.length - 1)));
   };
   return (
-    <div className={fieldCss.revealSection} role="group" aria-label="Reveal masks">
+    <div className={fieldCss.revealSection} role="group" aria-label={heading}>
       <div className={fieldCss.revealSectionHeader}>
-        <span>Reveal masks</span>
+        <span>{heading}</span>
         <div className={fieldCss.inlineActions}>
           <Control
             size="sm"
-            disabled={element.locked || rect === undefined || rects.length >= LIVE_REVEAL_MAX_RECTS}
-            aria-label="Add reveal mask"
+            disabled={
+              element.locked ||
+              (linked && rect === undefined) ||
+              rects.length >= LIVE_REVEAL_MAX_RECTS
+            }
+            aria-label={'Add ' + kind}
             onClick={() => draw(null)}
             title={`Drag a new window on this Plate (up to ${LIVE_REVEAL_MAX_RECTS} masks).`}
           >
@@ -1267,7 +1290,7 @@ function RevealMaskRows({ element }: { element: VideoPlaceholderElement }): JSX.
           <Control
             size="sm"
             disabled={element.locked || rect === undefined}
-            aria-label="Redraw reveal mask"
+            aria-label={'Redraw ' + kind}
             onClick={() => draw(activeIndex)}
             title="Drag a new rectangle for the selected mask."
           >
@@ -1275,8 +1298,8 @@ function RevealMaskRows({ element }: { element: VideoPlaceholderElement }): JSX.
           </Control>
           <Control
             size="sm"
-            disabled={rect === undefined}
-            aria-label="Remove reveal mask"
+            disabled={element.locked || rect === undefined}
+            aria-label={'Remove ' + kind}
             onClick={remove}
             title="Remove the selected mask."
           >
@@ -1284,40 +1307,57 @@ function RevealMaskRows({ element }: { element: VideoPlaceholderElement }): JSX.
           </Control>
         </div>
       </div>
-      <SelectField
-        label="reveal lower plate"
-        value={reveal?.targetSourceId ?? ''}
-        options={options}
-        labels={labels}
-        withheld={
-          candidates.length === 0
-            ? 'Add and assign another Plate first; it will be the lower live input.'
-            : undefined
-        }
-        onCommit={(targetSourceId) => {
-          const current = currentPlate(element).revealMask;
-          if (targetSourceId === '' || current === undefined) setSelectedIndex(0);
-          designerStore.updateElement(element.id, {
-            revealMask:
-              targetSourceId === ''
-                ? undefined
-                : current === undefined
-                  ? { targetSourceId, rect: { x: 0.05, y: 0.7, width: 0.9, height: 0.25 } }
-                  : { ...current, targetSourceId },
-          } as Partial<Element>);
-        }}
-      />
+      {linked && (
+        <SelectField
+          label="reveal lower plate"
+          value={reveal?.targetSourceId ?? ''}
+          options={options}
+          labels={labels}
+          withheld={
+            candidates.length === 0
+              ? 'Add and assign another Plate first; it will be the lower live input.'
+              : undefined
+          }
+          onCommit={(targetSourceId) => {
+            const current = currentPlate(element).revealMask;
+            if (targetSourceId === '' || current === undefined) setSelectedIndex(0);
+            designerStore.updateElement(element.id, {
+              revealMask:
+                targetSourceId === ''
+                  ? undefined
+                  : current === undefined
+                    ? { targetSourceId, rect: { x: 0.05, y: 0.7, width: 0.9, height: 0.25 } }
+                    : { ...current, targetSourceId },
+            } as Partial<Element>);
+          }}
+        />
+      )}
+      {!linked && element.liveMask !== undefined && (
+        <CheckRow
+          label="Revert"
+          checked={element.liveMask.mode === 'outside'}
+          disabled={element.locked}
+          title="Show the plate outside the mask windows. Untick to show only the inside."
+          onChange={(checked) => {
+            const mask = currentPlate(element).liveMask;
+            if (mask === undefined) return;
+            designerStore.updateElement(element.id, {
+              liveMask: { ...mask, mode: checked ? 'outside' : 'inside' },
+            } as Partial<Element>);
+          }}
+        />
+      )}
       {rect !== undefined && (
         <>
           <SelectField
-            label="reveal mask"
+            label={kind}
             value={String(activeIndex)}
             options={rects.map((_, index) => String(index))}
             labels={rects.map((_, index) => `Mask ${index + 1}`)}
             onCommit={(index) => setSelectedIndex(Number(index))}
           />
           <NumberField
-            label="reveal X"
+            label={linked ? 'reveal X' : 'mask X'}
             value={rect.x * 100}
             min={0}
             max={100}
@@ -1326,7 +1366,7 @@ function RevealMaskRows({ element }: { element: VideoPlaceholderElement }): JSX.
             onCommit={(value) => commitRect('x', value)}
           />
           <NumberField
-            label="reveal Y"
+            label={linked ? 'reveal Y' : 'mask Y'}
             value={rect.y * 100}
             min={0}
             max={100}
@@ -1335,7 +1375,7 @@ function RevealMaskRows({ element }: { element: VideoPlaceholderElement }): JSX.
             onCommit={(value) => commitRect('y', value)}
           />
           <NumberField
-            label="reveal width"
+            label={linked ? 'reveal width' : 'mask width'}
             value={rect.width * 100}
             min={0.1}
             max={100}
@@ -1344,7 +1384,7 @@ function RevealMaskRows({ element }: { element: VideoPlaceholderElement }): JSX.
             onCommit={(value) => commitRect('width', value)}
           />
           <NumberField
-            label="reveal height"
+            label={linked ? 'reveal height' : 'mask height'}
             value={rect.height * 100}
             min={0.1}
             max={100}

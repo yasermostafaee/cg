@@ -299,6 +299,39 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await expect(masks).toHaveCount(1);
   });
 
+  test('D-202 — a single plate can Mask, Revert and remove its windows', async ({ app }) => {
+    await app.newProject('SinglePlateMask');
+    await app.addLiveSource({ x: 200, y: 160 });
+    const plate = holes(app).first();
+    const bounds = await plate.boundingBox();
+    if (bounds === null) throw new Error('Plate is not visible');
+    const { x, y, width, height } = bounds;
+    const maskControls = app.inspector.getByRole('group', { name: 'Plate mask', exact: true });
+    const guides = plate.locator('[data-cg-live-plate-mask]');
+    for (const top of [0.15, 0.6]) {
+      await maskControls.getByRole('button', { name: 'Add plate mask' }).click();
+      await app.page.mouse.move(x + width * 0.2, y + height * top);
+      await app.page.mouse.down();
+      await app.page.mouse.move(x + width * 0.8, y + height * (top + 0.2), { steps: 5 });
+      await app.page.mouse.up();
+    }
+    await expect(guides).toHaveText(['Mask 1', 'Mask 2']);
+    await expect(guides.first()).toHaveAttribute('data-cg-live-plate-mask', 'inside');
+    const fallback = plate.locator('[data-cg-live-fallback]');
+    await expect(fallback.locator('clipPath rect')).toHaveCount(2);
+    await maskControls.getByRole('checkbox', { name: 'Revert' }).check();
+    await expect(guides.first()).toHaveAttribute('data-cg-live-plate-mask', 'outside');
+    await expect.poll(() => fallback.locator('clipPath rect').count()).toBeGreaterThan(2);
+    await expect(errorPill(app)).toHaveCount(0);
+    const { html } = await app.exportHtml();
+    expect(html).toContain('"liveMask":{"mode":"outside","rects":');
+    await maskControls.getByRole('button', { name: 'Remove plate mask' }).click();
+    await expect(guides).toHaveCount(1);
+    await maskControls.getByRole('button', { name: 'Remove plate mask' }).click();
+    await expect(guides).toHaveCount(0);
+    await expect(fallback).toHaveCSS('clip-path', 'none');
+  });
+
   test('an OFF-FRAME Live Source blocks the export instead of vanishing', async ({ app }) => {
     await app.newProject('LiveSourceOffFrame');
     await app.addLiveSource({ x: 200, y: 160 });

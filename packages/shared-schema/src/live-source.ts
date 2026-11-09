@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { IdSchema } from './primitives.js';
-import { LiveRevealMaskSchema, LiveSourceIdSchema } from './elements.js';
+import { LivePlateMaskSchema, LiveRevealMaskSchema, LiveSourceIdSchema } from './elements.js';
 import { LiveCropFocusSchema, LiveFitModeSchema } from './live-fit.js';
 
 /**
@@ -96,6 +96,7 @@ export const LiveSourceDeclarationSchema = z.object({
   cropFocus: LiveCropFocusSchema.optional(),
   /** D-202 — intentional upper/lower overlap and its normalized reveal window. */
   revealMask: LiveRevealMaskSchema.optional(),
+  liveMask: LivePlateMaskSchema.optional(),
   /**
    * Whether a field binding can retarget the FILL id at playout (the
    * `live-source-id` binding target with `role: 'fill'`).

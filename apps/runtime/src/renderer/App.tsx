@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { mismatchedChannels, type TemplateInfo } from '@cg/shared-ipc';
-import type { StackItemState } from '@cg/shared-schema';
+import { isOnAirStatus, type StackItemState } from '@cg/shared-schema';
 import { useTemplateIndex } from './hooks/useTemplateIndex.js';
 import { boundChannelOf } from './features/channels/itemChannel.js';
 import type { RuntimeBridge } from '../shared/runtime-bridge.js';
@@ -540,6 +540,9 @@ export function App(): JSX.Element {
                       <MonitorStrip
                         companionMode={monitorCompanionMode}
                         hasSelectedLayer={selected !== null}
+                        cropItemId={
+                          selected !== null && isOnAirStatus(selected) ? selected.itemId : null
+                        }
                         onCompanionModeChange={setMonitorCompanionMode}
                       />
                     </div>

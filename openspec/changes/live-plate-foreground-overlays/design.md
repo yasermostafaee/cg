@@ -9,9 +9,14 @@ rest of the same page below it. The output is therefore split from one authored 
 1. a background pass on the item's ordinary CG layer, below the live-source band; and
 2. a transparent foreground pass on one extra layer above every producer used by the item.
 
-The scene stores only `liveForeground: true` on an element. A marked composition keeps its subtree;
+The scene stores an optional `liveForeground` override on an element. A marked composition keeps its subtree;
 a marked leaf keeps the composition ancestors required to position it. The background removes
 marked roots. Direct package/browser use has no pass query and retains the historical full render.
+
+Visual elements use Automatic by default. An overlapping visual later in the authored paint order
+than a live plate is included in the foreground of that template. Plates and elements inside
+different presets do not participate in the same comparison. Above inputs and Behind inputs
+override the automatic decision. The carrier and runtime use the same instance-qualified keys.
 
 ## Synchronization and ownership
 
@@ -20,6 +25,10 @@ private item key and an explicit `background` or `foreground` pass. CasparCG dir
 pages. Afterwards the background page forwards update, stop, next, remove and coordinated-out calls
 over a page-local `BroadcastChannel`; the foreground runtime applies the same lifecycle operation.
 Only the background page receives a completion token, so one visual run can emit only one stop/out.
+
+CG Control imports a package by rebuilding its self-contained page. Both that page and the
+package-relative page select their pass and synchronize through the same runtime adapter.
+The exporter shell revision invalidates old served pages for the upgrade rebuild.
 
 The foreground page is always volume zero. It is played at opacity zero before any live input is
 seated and revealed only after the live producers and background CG PLAY have succeeded. Clear and

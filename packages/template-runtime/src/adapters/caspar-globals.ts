@@ -1,5 +1,12 @@
-import type { FieldValues } from '@cg/shared-schema';
-import type { TemplateRuntime } from '../types.js';
+import { readCgControl, stripCgControl, withCgControl, type FieldValues } from '@cg/shared-schema';
+import type { OutputPass, TemplateRuntime } from '../types.js';
+
+export function casparOutputPass(search: string): OutputPass {
+  const pass = new URLSearchParams(search).get('cgpass');
+  return pass === 'background' || pass === 'foreground' ? pass : 'full';
+}
+
+type PairedPageVerb = 'update' | 'stop' | 'next' | 'remove' | 'out';
 
 /**
  * CasparCG's HTML producer calls bare global functions on the page:
@@ -25,32 +32,82 @@ export function installCasparGlobals(
   const previousOut = win.out;
   const previousCg = win.cg;
 
+  const pass = casparOutputPass(win.location.search);
+  const syncKey = new URLSearchParams(win.location.search).get('cgsync');
+  const channel =
+    pass !== 'full' && syncKey && typeof win.BroadcastChannel === 'function'
+      ? new win.BroadcastChannel('cg-live-foreground:' + syncKey)
+      : undefined;
+  const forward = (verb: PairedPageVerb, fields?: Partial<FieldValues>): void => {
+    if (pass !== 'background' || channel === undefined) return;
+    const { take: _take, ...control } = readCgControl(fields) ?? {};
+    const safe =
+      fields === undefined
+        ? undefined
+        : withCgControl(stripCgControl(fields) as FieldValues, control);
+    channel.postMessage({ verb, fields: safe });
+  };
+  if (pass === 'foreground') {
+    channel?.addEventListener('message', (event: MessageEvent<unknown>) => {
+      const message = event.data;
+      if (message === null || typeof message !== 'object' || !('verb' in message)) return;
+      switch (message.verb) {
+        case 'update': {
+          const fields = 'fields' in message ? message.fields : undefined;
+          if (fields !== null && typeof fields === 'object') {
+            void runtime.update(fields as Partial<FieldValues>);
+          }
+          break;
+        }
+        case 'stop':
+          void runtime.stop();
+          break;
+        case 'next':
+          void runtime.next?.();
+          break;
+        case 'remove':
+          runtime.remove();
+          break;
+        case 'out':
+          void runtime.out();
+          break;
+      }
+    });
+  }
+
   win.play = (payload?: string | Record<string, unknown>) => {
     void runtime.play(coercePayload(payload) as FieldValues);
   };
   win.update = (payload?: string | Record<string, unknown>) => {
-    void runtime.update(coercePayload(payload));
+    const fields = coercePayload(payload);
+    forward('update', fields);
+    void runtime.update(fields);
   };
   // window.stop already exists in lib.dom (it cancels page loads). We're
   // overriding it intentionally for the broadcast template — the page
   // isn't loading anything by this point, so the original behavior is
   // irrelevant. Cast through unknown to satisfy the no-conflict check.
   (win as unknown as { stop: () => void }).stop = () => {
+    forward('stop');
     void runtime.stop();
   };
   win.next = () => {
+    forward('next');
     void runtime.next?.();
   };
   win.remove = () => {
+    forward('remove');
     runtime.remove();
   };
   // D-105 — the coordinated animated exit (distinct from `stop()`'s quick clear).
   win.out = () => {
+    forward('out');
     void runtime.out();
   };
   win.cg = runtime;
 
   return () => {
+    channel?.close();
     if (previousPlay !== undefined) win.play = previousPlay;
     else delete win.play;
     if (previousUpdate !== undefined) win.update = previousUpdate;

@@ -194,6 +194,25 @@ describe("D-137 — 'author' mode paints the bars", () => {
 });
 
 describe("R-105 — 'output' mode paints the selected fallback under the live producer", () => {
+  it('D-202 — Revert clips the fallback to the four sides and keeps mask guides out of output', () => {
+    const scene = sceneWith([
+      liveSource({
+        liveMask: { mode: 'outside', rects: [{ x: 0.25, y: 0.25, width: 0.5, height: 0.5 }] },
+      }),
+    ]);
+    const author = build(scene, 'author').root;
+    const output = build(scene, 'output').root;
+    const plate = fallback(output);
+    const clip = plate.querySelector('clipPath');
+    expect(clip?.getAttribute('clipPathUnits')).toBe('objectBoundingBox');
+    expect(clip?.children).toHaveLength(4);
+    expect(plate.style.clipPath).toBe('url(#' + clip?.id + ')');
+    expect(node(output).querySelector('[data-cg-live-plate-mask]')).toBeNull();
+    expect(node(author).querySelector('[data-cg-live-plate-mask="outside"]')?.textContent).toBe(
+      'Mask 1',
+    );
+  });
+
   it('defaults to Bars and keeps the author-only label out', () => {
     const { root } = build(sceneWith([liveSource()]), 'output');
     const el = node(root);

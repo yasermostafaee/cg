@@ -13,6 +13,9 @@
       operation; adopt it in the integration record without inference
 - [ ] 0.5 Decide from that response whether the official Playout endpoint fully supersedes the unimplemented
       Playout-input MON/PFL mechanism in `add-multibox-audio`; record the decision in both changes
+- [x] 0.6 Recheck Playout 2.18.1 on 2026-11-09. The installed channel is `apasai`; live-preview
+      still exposes POST/DELETE and the preview feed responds. The docs still depend on
+      `/openapi/v1.json`, which returns 500. The lease, auth and meter contract remain outstanding.
 
 > **Hard gate:** tasks 1–6 SHALL NOT start until 0.4 answers the wire, authorization and ownership questions. In
 > particular, do not prototype with an invented POST body or unconditional DELETE.

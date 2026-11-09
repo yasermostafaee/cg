@@ -10,8 +10,8 @@ which part of the live input stays visible while the plate and picture proportio
 - Support a normalized focus for the overflowing axis of a Live Source plate.
 - Carry it per look and use the one shared fit calculation for the authoring poster and Bridge geometry.
 - Keep existing files byte-for-byte centred when the field is absent; ignore focus under `contain`.
-- Scope the proposed editing surface to direct dragging on real PGM/PVW pictures in CG Control.
-  PVW needs the D-177 live preview contract.
+- Add direct dragging on the live programme return in CG Control.
+- Add direct dragging in PVW when the C-023 live input preview contract is available.
 
 ## Capabilities
 

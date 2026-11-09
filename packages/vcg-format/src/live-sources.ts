@@ -2,6 +2,7 @@ import {
   defaultLookOf,
   deriveLookSources,
   flattenElements,
+  liveForegroundKeys,
   lookGroupOf,
   resolveDefaultPosition,
 } from '@cg/shared-schema';
@@ -10,6 +11,7 @@ import type {
   FlatElement,
   LiveCropFocus,
   LiveFitMode,
+  LivePlateMask,
   LiveRevealMask,
   LiveSourceArrangement,
   LiveSourceDeclaration,
@@ -230,6 +232,7 @@ export function collectLiveSources(scene: Scene): LiveSourceDeclaration[] {
       ...(el.fitMode !== undefined ? { fitMode: el.fitMode } : {}),
       ...(el.cropFocus !== undefined ? { cropFocus: el.cropFocus } : {}),
       ...(el.revealMask !== undefined ? { revealMask: el.revealMask } : {}),
+      ...(el.liveMask !== undefined ? { liveMask: el.liveMask } : {}),
       dynamic: roles?.has('fill') ?? false,
       ...(boxRelativeRect !== null ? { boxRelativeRect } : {}),
     });
@@ -283,6 +286,7 @@ export interface TemplateLookCarrier {
   focuses: Record<string, LiveCropFocus>;
   /** D-202 — intentional upper/lower reveal relationships for this look. */
   reveals: Record<string, LiveRevealMask>;
+  masks?: Record<string, LivePlateMask> | undefined;
 }
 
 /**
@@ -369,6 +373,7 @@ export function collectLookCarrier(scene: Scene): {
   const revealsByLook = new Map<string, Record<string, LiveRevealMask>>(
     group.looks.map((l) => [l.id, {}]),
   );
+  const masksByLook = new Map<string, Record<string, LivePlateMask>>();
   const firstPlateFor = new Map<string, string>();
   /**
    * ⭐ `B-179` — **the AUTHOR's `expectedAspect` and the FILL-binding flag, per source, from
@@ -439,6 +444,11 @@ export function collectLookCarrier(scene: Scene): {
         const reveals = revealsByLook.get(look.id);
         if (reveals !== undefined) reveals[routeKey] = el.revealMask;
       }
+      if (el.liveMask !== undefined) {
+        const masks = masksByLook.get(look.id) ?? {};
+        masks[routeKey] = el.liveMask;
+        masksByLook.set(look.id, masks);
+      }
     }
   }
 
@@ -488,6 +498,7 @@ export function collectLookCarrier(scene: Scene): {
       fits: fitsByLook.get(l.id) ?? {},
       focuses: focusesByLook.get(l.id) ?? {},
       reveals: revealsByLook.get(l.id) ?? {},
+      ...(masksByLook.has(l.id) && { masks: masksByLook.get(l.id) }),
     })),
     ...(group.defaultLookId !== undefined ? { defaultLookId: group.defaultLookId } : {}),
   };
@@ -503,9 +514,7 @@ export function buildTemplateLiveSources(scene: Scene): {
   foregroundOverlay?: true;
 } {
   const lookCarrier = collectLookCarrier(scene);
-  const foregroundOverlay = flattenElements(scene, 'document').some(
-    ({ element }) => element.liveForeground === true,
-  );
+  const foregroundOverlay = liveForegroundKeys(scene).size > 0;
   return {
     resolution: scene.resolution,
     defaultPosition: resolveDefaultPosition(scene),

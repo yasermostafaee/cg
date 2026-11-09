@@ -7,7 +7,7 @@
 //     (M3.2-β) instead of CasparCG globals.
 
 export { createRuntime } from './runtime.js';
-export { installCasparGlobals } from './adapters/caspar-globals.js';
+export { casparOutputPass, installCasparGlobals } from './adapters/caspar-globals.js';
 export { installCompletionPing } from './adapters/completion-ping.js';
 export {
   applyOutputPosition,

@@ -12,7 +12,7 @@ import {
   type LiveFitMode,
 } from './live-fit.js';
 import type { LiveSourceRect } from './live-source.js';
-import type { LiveRevealRect } from './elements.js';
+import type { LivePlateMask, LiveRevealRect } from './elements.js';
 
 /**
  * C-015 phase 6 (tasks 6.2 / 6.3 / 6.4) — **scene pixels → the `MIXER FILL` and
@@ -156,6 +156,40 @@ export function intersectNormalizedRects(
   const bottom = Math.min(a.y + a.height, b.y + b.height);
   if (right <= left || bottom <= top) return null;
   return { x: left, y: top, width: right - left, height: bottom - top };
+}
+
+function subtractRect(rect: NormalizedRect, cut: NormalizedRect): NormalizedRect[] {
+  const overlap = intersectNormalizedRects(rect, cut);
+  if (overlap === null) return [rect];
+  const right = overlap.x + overlap.width;
+  const bottom = overlap.y + overlap.height;
+  return [
+    { ...rect, height: overlap.y - rect.y },
+    { ...rect, y: bottom, height: rect.y + rect.height - bottom },
+    { ...overlap, x: rect.x, width: overlap.x - rect.x },
+    { ...overlap, x: right, width: rect.x + rect.width - right },
+  ].filter((piece) => piece.width > 1e-9 && piece.height > 1e-9);
+}
+
+/** Non-overlapping visible rectangles, in plate-relative coordinates. */
+export function livePlateMaskRegions(mask: LivePlateMask): NormalizedRect[] {
+  if (mask.mode === 'outside') {
+    const frame = { x: 0, y: 0, width: 1, height: 1 };
+    return mask.rects.reduce(
+      (regions, window) => regions.flatMap((region) => subtractRect(region, window)),
+      [frame],
+    );
+  }
+  const regions: NormalizedRect[] = [];
+  for (const window of mask.rects) {
+    regions.push(
+      ...regions.reduce(
+        (remaining, region) => remaining.flatMap((piece) => subtractRect(piece, region)),
+        [window],
+      ),
+    );
+  }
+  return regions;
 }
 
 /**

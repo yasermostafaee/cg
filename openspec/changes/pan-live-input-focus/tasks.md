@@ -11,7 +11,7 @@
 - [x] 2.1 Remove Designer's percentage controls and preserve saved focus values
 - [x] 2.2 Record the feasibility and contract dependencies of direct CG Control dragging
 - [x] 2.3 Apply focus to Bridge `FILL` through the shared live-source geometry
-- [ ] 2.4 Add scoped crop editing on the live PGM return
+- [x] 2.4 Add scoped crop editing on the live PGM return
 - [ ] 2.5 Add local PVW crop editing on the accepted C-023 live input feed
 - [x] 2.6 Show Crop edges below the Plate name and keep the name's screen size independent of fit and zoom
 
@@ -22,3 +22,5 @@
 - [ ] 3.3 Verify crop focus on a real input in the target plant.
 - [x] 3.4 [Carrying Linux E2E for the implemented Designer and PVW labels](https://github.com/yasermostafaee/cg/actions/runs/42568697446/job/129000870086)
       passed on `665668e4`.
+- [x] 3.5 Verify the PGM drag gesture against the ticketed MJPEG return and scoped mixer update in
+      Chromium, with the clip, producer and volume preserved.

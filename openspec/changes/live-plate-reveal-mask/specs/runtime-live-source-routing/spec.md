@@ -1,3 +1,18 @@
+## ADDED Requirements
+
+### Requirement: An own-plate mask uses a single live input
+
+The Bridge SHALL apply the selected look's own-plate mask to its fitted input. If the visible
+region requires multiple rectangular fragments, the additional fragments SHALL route the same
+producer's layer and stay muted. The Bridge SHALL check the full layer demand before seating.
+
+#### Scenario: Revert a rectangular mask
+
+- **GIVEN** a live plate with a Revert window wholly inside the fitted picture
+- **WHEN** the row takes or switches to that look
+- **THEN** the original input and its routed fragments cover the plate except for the mask window
+- **AND** the input's audio is carried at most once
+
 ## MODIFIED Requirements
 
 ### Requirement: A linked reveal shows lower-input pixels above an upper live plate

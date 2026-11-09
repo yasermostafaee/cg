@@ -211,6 +211,7 @@ const BRIDGE_SURFACE: {
       // models the INTENT half only (record + publish) and answers the same
       // contract; the wire assertion is integration-tested bridge-side.
       'setPlateVolume',
+      'pgmPlateCrop',
       // `add-multibox-audio` — the MAP door (FADER / ON-OFF / SOLO / PANIC). The mock
       // composes its own single-plate writer exactly as the bridge composes its one, so the
       // offline console cannot teach the UI a model the bridge does not have. It takes no

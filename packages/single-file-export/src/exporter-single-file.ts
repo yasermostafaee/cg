@@ -516,7 +516,8 @@ ${playoutJson}
         try {
           /* D-137 §9 — 'output': zero painted pixels for a Live Source, and no
              zone rule that could fill its hole. Named, never inferred. */
-          var runtime = CG.createRuntime(scene, { mode: 'output', assetUrls: ${assetUrlsJson}, lottieAssets: ${lottieAssetsJson} });
+          var outputPass = CG.casparOutputPass ? CG.casparOutputPass(location.search) : 'full';
+          var runtime = CG.createRuntime(scene, { mode: 'output', assetUrls: ${assetUrlsJson}, lottieAssets: ${lottieAssetsJson}, outputPass: outputPass });
           CG.installCasparGlobals(runtime);
           // 🔴 SELF-STOP-24 / C-013 — the completion channel out of CEF. Inert unless the
           // bridge hands this page a take token (see completion-ping.ts), so a manually
@@ -525,7 +526,7 @@ ${playoutJson}
           // INSIDE the boot guard, like everything else here: B-066's lesson is that a boot
           // throw dies silent — a blank page whose only trace is a mystifying CEF log line —
           // so a reporter that failed to install must paint the visible "cg boot error" too.
-          if (CG.installCompletionPing) CG.installCompletionPing(runtime);
+          if (outputPass !== 'foreground' && CG.installCompletionPing) CG.installCompletionPing(runtime);
           // R-011 — output-only placement: operator query override (appended by
           // the bridge onto the served URL) ?? scene.defaultPosition ?? centered.
           // This boot script is the ONE page CasparCG loads; the Designer
