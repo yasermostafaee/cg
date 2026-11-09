@@ -2,6 +2,7 @@ import { createSocket } from 'node:dgram';
 import { createMock } from '@cg/amcp-mock';
 import { createBridge } from '@cg/caspar-bridge';
 import { defaultFixedLayerBank, type TemplateInfo } from '@cg/shared-ipc';
+import type { Locator } from '@playwright/test';
 import { FakeLivePreview } from '../../../../tools/caspar-bridge/tests/support/fake-live-preview.js';
 import { startFakePgmFeed } from '../../../../tools/caspar-bridge/tests/support/fake-pgm-feed.js';
 import {
@@ -13,6 +14,7 @@ import { expect, test } from './fixtures/runtime.js';
 
 const picture = '[data-input-picture]';
 const state = '[data-input-check-state]';
+const thumbnail = '[data-input-thumbnail]';
 const PGM_PREFERENCE = 'cg.runtime.pgm-audio.v1';
 const templateId = 'tpl-live-input-check';
 const itemId = 'row-live-input-check';
@@ -26,6 +28,14 @@ function freeUdpPort(): Promise<number> {
       socket.close(() => resolve(port));
     });
   });
+}
+
+async function visibleCheckThumbnail(list: Locator, sourceName: string): Promise<Locator> {
+  const tile = list.getByRole('button', { name: `Check input · ${sourceName}`, exact: true });
+  await expect(tile).toHaveAttribute('data-input-thumbnail', 'checkable');
+  await expect(tile).toHaveText('No signal');
+  await expect(tile).toBeVisible();
+  return tile;
 }
 
 test('C-023 · inspect input picture from PVW and source controls without changing a binding', async ({
@@ -154,11 +164,30 @@ test('C-023 · inspect input picture from PVW and source controls without changi
     const save = defaults.getByRole('button', { name: 'Save defaults' });
     await field.click();
     const options = page.getByRole('dialog', { name: 'Choose a source' });
-    await options.locator('[data-picker-input="in-li-studio1"]').click();
+    const studio1 = options.locator('[data-picker-input="in-li-studio1"]');
+    const studioTile = await visibleCheckThumbnail(options, 'Studio 1');
+    await expect(options.locator(thumbnail)).toHaveCount(
+      await options.locator('[data-picker-input]').count(),
+    );
+    const studioLabel = studio1.getByText('Studio 1', { exact: true });
+    const tileBox = (await studioTile.boundingBox())!;
+    const nameBox = (await studioLabel.boundingBox())!;
+    expect(Math.abs(tileBox.height - (tileBox.width * 9) / 16)).toBeLessThan(1);
+    expect(tileBox.x).toBeGreaterThanOrEqual(nameBox.x + nameBox.width);
+    const unavailableRow = options.getByRole('row').filter({
+      has: page.locator('[data-picker-input="in-li-input4"]'),
+    });
+    const passiveTile = unavailableRow.locator('[data-input-thumbnail="passive"]');
+    await expect(passiveTile).toBeVisible();
+    await expect(passiveTile).toHaveText('No signal');
+    await expect(passiveTile).not.toHaveRole('button');
+    expect(preview.starts).toHaveLength(1);
+    await studio1.click();
     await expect(field).toHaveAttribute('data-picker-value', 'in-li-studio1');
     await expect(save).toBeEnabled();
     await field.click();
-    const checkNews = options.getByRole('button', { name: 'Check input · دوربین خبر' });
+    const checkNews = await visibleCheckThumbnail(options, 'دوربین خبر');
+    expect(preview.starts).toHaveLength(1);
     await checkNews.focus();
     await page.keyboard.press('Enter');
     await expect(options).toHaveCount(0);
@@ -182,7 +211,9 @@ test('C-023 · inspect input picture from PVW and source controls without changi
     const lookField = look.locator('[data-look-binding="one:plate-1"]');
     const previousLookValue = await lookField.getAttribute('data-picker-value');
     await lookField.click();
-    await options.getByRole('button', { name: 'Check input · Studio 1' }).click();
+    const lookTile = await visibleCheckThumbnail(options, 'Studio 1');
+    expect(preview.starts).toHaveLength(2);
+    await lookTile.click();
     const lookCheck = look.getByRole('region', { name: 'PVW input check' });
     await expect(lookCheck.locator(picture)).toBeVisible();
     await expect(lookField).toHaveAttribute('data-picker-value', previousLookValue ?? '');
@@ -197,7 +228,9 @@ test('C-023 · inspect input picture from PVW and source controls without changi
     }).toPass({ timeout: 10_000 });
     const swapField = swap.getByRole('combobox', { name: 'Live source for Plate 1' });
     await swapField.click();
-    await options.getByRole('button', { name: 'Check input · Studio 1' }).click();
+    const swapTile = await visibleCheckThumbnail(options, 'Studio 1');
+    expect(preview.starts).toHaveLength(3);
+    await swapTile.click();
     await expect(
       swap.getByRole('region', { name: 'PVW input check' }).locator(picture),
     ).toBeVisible();
@@ -208,13 +241,25 @@ test('C-023 · inspect input picture from PVW and source controls without changi
     await page.getByRole('button', { name: 'Open Station setup' }).click();
     const setup = page.getByRole('dialog', { name: 'Station setup' });
     await setup.getByRole('tab', { name: /^Live sources/ }).click();
-    await setup.getByRole('button', { name: 'Check input · Studio 1' }).click();
+    const setupTile = await visibleCheckThumbnail(setup, 'Studio 1');
+    await expect(setup.locator(thumbnail)).toHaveCount(
+      await setup.locator('[data-source-input]').count(),
+    );
+    expect(preview.starts).toHaveLength(4);
+    await setupTile.click();
     await expect(
       setup.getByRole('region', { name: 'PVW input check' }).locator(picture),
     ).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(setup).toBeHidden();
     await expect.poll(() => preview.leases.size).toBe(0);
+    expect(preview.starts.map(({ body }) => body)).toMatchObject([
+      { inputId: 'li-studio1' },
+      { inputId: 'li-newscam' },
+      { inputId: 'li-studio1' },
+      { inputId: 'li-studio1' },
+      { inputId: 'li-studio1' },
+    ]);
     await expect(pgm).toHaveAttribute('src', pgmUrl ?? '');
   } finally {
     await bridge.close();

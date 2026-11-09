@@ -9,7 +9,7 @@ import {
   type KeyboardEvent,
   type RefObject,
 } from 'react';
-import { Cable, Check, Film, MonitorPlay } from 'lucide-react';
+import { Cable, Check, Film } from 'lucide-react';
 import {
   canCheckLiveInput,
   INPUT_GONE_REASON,
@@ -30,6 +30,7 @@ import { TabPanel, TabStrip } from '../../ui/Tabs.js';
 import { Tag } from '../../ui/Tag.js';
 import { TextInput } from '../../ui/TextInput.js';
 import { VirtualList, type VirtualListHandle, type VirtualRow } from '../../ui/VirtualList.js';
+import { InputThumbnail } from './InputThumbnail.js';
 import { SourceLabel, formatMediaDuration, labelledSource } from './SourceLabel.js';
 import {
   currentSourceCatalog,
@@ -154,34 +155,12 @@ export interface SourcePickerProps {
   data?: Readonly<Record<`data-${string}`, string>> | undefined;
 }
 
-export function CheckInputButton({
-  source,
-  onCheck,
-}: {
-  source: SourceDefinition;
-  onCheck: (source: SourceDefinition) => void;
-}): JSX.Element {
-  return (
-    <Button
-      variant="icon"
-      aria-label={`Check input · ${source.name}`}
-      title="Check input"
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
-      }}
-      onClick={() => onCheck(source)}
-    >
-      <Icon icon={MonitorPlay} size={14} />
-    </Button>
-  );
-}
-
 /** The panel's size (§2.A): at least this wide, at most this tall. */
 export const PICKER_MIN_WIDTH = 440;
 export const PICKER_MAX_HEIGHT = 480;
 /** How tall the list is inside the panel, and each kind of row. */
 const LIST_HEIGHT = 300;
-const INPUT_ROW = 34;
+const INPUT_ROW = 52;
 const MEDIA_ROW = 46;
 /** A media page, and how near the end the next one is asked for. */
 export const MEDIA_PAGE = 50;
@@ -508,11 +487,9 @@ function InputsTab({
             ? { title: source.reason }
             : {}),
       data: { 'data-picker-input': source.id },
-      ...(inputCheck !== undefined && checkable
-        ? {
-            action: <CheckInputButton source={source} onCheck={inputCheck.start} />,
-          }
-        : {}),
+      trailing: (
+        <InputThumbnail source={source} onCheck={checkable ? inputCheck?.start : undefined} />
+      ),
       content: (
         <span className="cg-picker-row">
           <Icon icon={Cable} size={14} />

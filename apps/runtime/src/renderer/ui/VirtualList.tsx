@@ -33,7 +33,8 @@ export interface VirtualRow {
   /** A stable key — the option's value, or the heading's label. */
   readonly key: string;
   readonly content: ReactNode;
-  readonly action?: ReactNode;
+  /** A separate action in a grid, or a decorative slot alongside a listbox option. */
+  readonly trailing?: ReactNode;
   /** An option that cannot be picked: shown, with its reason in `title`. */
   readonly disabled?: boolean | undefined;
   readonly selected?: boolean | undefined;
@@ -182,39 +183,35 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
             );
           }
           const active = index === activeIndex;
-          if (withActions) {
-            return (
-              <div key={`o:${row.key}`} role="row" className="cg-vlist-action-row" style={style}>
-                <div
-                  id={optionId(id, index)}
-                  role="gridcell"
-                  aria-selected={row.selected === true}
-                  aria-disabled={row.disabled === true}
-                  className={`cg-vlist-option${active ? ' is-active' : ''}`}
-                  data-vlist-index={String(index)}
-                  {...(row.title !== undefined ? { title: row.title } : {})}
-                  {...(row.data ?? {})}
-                >
-                  {row.content}
-                </div>
-                <div role="gridcell">{row.action}</div>
-              </div>
-            );
-          }
-          return (
+          const hasTrailing = withActions || row.trailing !== undefined;
+          const option = (
             <div
               key={`o:${row.key}`}
               id={optionId(id, index)}
-              role="option"
+              role={withActions ? 'gridcell' : 'option'}
               aria-selected={row.selected === true}
               aria-disabled={row.disabled === true}
               className={`cg-vlist-option${active ? ' is-active' : ''}`}
-              style={style}
+              style={hasTrailing ? undefined : style}
               data-vlist-index={String(index)}
               {...(row.title !== undefined ? { title: row.title } : {})}
               {...(row.data ?? {})}
             >
               {row.content}
+            </div>
+          );
+          if (!hasTrailing) return option;
+          return (
+            <div
+              key={`o:${row.key}`}
+              role={withActions ? 'row' : 'presentation'}
+              className="cg-vlist-action-row"
+              style={style}
+            >
+              {option}
+              <div role={withActions ? 'gridcell' : undefined} aria-hidden={!withActions}>
+                {row.trailing}
+              </div>
             </div>
           );
         })}

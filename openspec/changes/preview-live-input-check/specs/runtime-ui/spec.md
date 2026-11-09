@@ -33,6 +33,18 @@ picture into a plate, change the retained page, trigger Play/Take/Update, or imp
 - **AND** the existing input selection, assignments, row overrides, rehearsal and PGM are preserved
 - **AND** leaving the surface clears the card and releases its lease
 
+### Requirement: Source lists SHALL reserve the thumbnail slot before thumbnail delivery is available
+
+CG Control SHALL display a reserved thumbnail labelled `No signal` for each source row. Eligible
+sources SHALL use the thumbnail as the existing Check input action. The slot SHALL leave the
+source's own status and eligibility for selection intact.
+
+#### Scenario: A list opens on a station without thumbnail delivery
+
+- **WHEN** the operator opens a source picker or Station setup → Live sources
+- **THEN** the input rows show their `No signal` thumbnail slots without starting a check
+- **AND** activating an eligible slot opens the corresponding explicit check without selecting the row
+
 ### Requirement: A supported source list SHALL show independently refreshed live thumbnails
 
 CG Control SHALL show a thumbnail in place of the Check icon for each visible eligible input when Playout

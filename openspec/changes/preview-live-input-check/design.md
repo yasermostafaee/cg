@@ -62,7 +62,9 @@ on close, filter, scroll out of view, channel change or loss of access. Match ea
 to its source, generation and freshness before painting. Show an empty tile for a source whose
 frame is absent or stale. Distinguish verified loss of signal from unknown status, and preserve
 valid black frames. Thumbnails are silent. They use neither the explicit Check lease nor a new
-receiver. Earlier stations keep the row's Check action.
+receiver. Until those feeds are available, show the reserved slot labelled `No signal` and let it
+open the existing Check action where the source is checkable. The label describes the picture
+slot. The row keeps its catalogue availability and selecting the source still uses the row action.
 
 The current programme-channel lease can provide one distinct saved D10 input at a time.
 The station's Playlist output and D11 clip are not valid input IDs for that lease. The two-viewer

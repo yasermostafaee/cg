@@ -1349,7 +1349,9 @@ show its own continuously refreshed thumbnail in place of the Check icon. This a
 defaults, Look inputs, the live-source swap and Station setup → Live sources. Viewing the list
 does not require selecting an input. The thumbnails are silent and leave source selection,
 rehearsal and any active check intact. An unavailable picture has an empty tile and an accurate
-status. Older stations keep the explicit Check action in the input list.
+status. Until the feed is available, the row shows a reserved thumbnail labelled `No signal`.
+That label belongs to the thumbnail slot. The source's own availability still comes from the
+catalogue. Where an explicit check is available, the operator can open it from the slot.
 
 Simultaneous rehearsal plates separately need clean Playlist and D11 pictures and mapping into
 the plate raster. The [Playout follow-up](../integration/playout/CG-CONTROL-REQUEST-LIVE-INPUT-PREVIEW-2026-10-26.md)

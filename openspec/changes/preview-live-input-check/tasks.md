@@ -56,3 +56,5 @@
       passed on `40974e03` for the added source surfaces.
 - [x] 4.7 Record the 2.18.16 follow-up confirming the same v1 lease, single independent input,
       and the absence of measured geometry, decoded-frame signal status and Playlist master gain.
+- [x] 4.8 Reserve a `No signal` thumbnail slot in input lists. The focused Chromium test passed for
+      each list, checkable and passive tiles, keyboard activation, and unchanged selection.

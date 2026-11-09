@@ -10,7 +10,7 @@ import { useHoldsStationAdmin } from '../../hooks/useCanOperate.js';
 import { colors } from '../../theme.js';
 import { LiveInputCheckCard } from '../monitors/LiveInputCheckCard.js';
 import { useInputCheckSurface } from '../monitors/liveInputCheckContext.js';
-import { CheckInputButton } from './SourcePicker.js';
+import { InputThumbnail } from './InputThumbnail.js';
 import {
   commitSourceBand,
   currentPlateBand,
@@ -179,9 +179,14 @@ export function SourcesSection({
                   </span>
                 </div>
               </div>
-              {inputCheck !== undefined && canCheckLiveInput(source, inputCheck.channel) && (
-                <CheckInputButton source={source} onCheck={inputCheck.start} />
-              )}
+              <InputThumbnail
+                source={source}
+                onCheck={
+                  inputCheck !== undefined && canCheckLiveInput(source, inputCheck.channel)
+                    ? inputCheck.start
+                    : undefined
+                }
+              />
             </div>
           ))
         )}

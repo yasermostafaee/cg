@@ -8918,6 +8918,26 @@ input[type='checkbox']:disabled:checked {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+.cg-input-thumbnail,
+.cg-input-thumbnail.cg-btn {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  inline-size: 4.5rem;
+  aspect-ratio: 16 / 9;
+  padding: 0 var(--r-space-1);
+  border: 1px solid var(--r-border);
+  border-radius: var(--r-radius-field);
+  background: var(--r-video-ground);
+  color: var(--r-text-muted);
+  font-size: var(--r-text-xs);
+  font-weight: var(--r-weight-medium);
+  white-space: nowrap;
+}
+.cg-input-thumbnail.cg-btn:hover:not(:disabled) {
+  border-color: var(--r-accent);
+  color: var(--r-text);
+}
 .cg-picker-media {
   display: flex;
   flex-direction: column;
