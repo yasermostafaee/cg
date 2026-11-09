@@ -111,11 +111,53 @@ describe('🔴 B-352 — a package whose id the channel already lists', () => {
 });
 
 describe('R-108 — Reload remains bound to the remembered template', () => {
-  it('refuses a different template at that path before importing anything', async () => {
+  it('refuses a different package during Reload all before importing anything', async () => {
     const station = fakeStation();
     await expect(
-      importVcgFile(await file('different-id', 'weather.vcg'), 1, undefined, 'expected-id'),
-    ).rejects.toThrow(/contains template different-id, not expected-id/);
+      importVcgFile(await file('different-id', 'weather.vcg'), 1, undefined, {
+        templateId: 'expected-id',
+        packageId: 'expected-id',
+      }),
+    ).rejects.toThrow(/Reload it individually/);
     expect(station.imports).toEqual([]);
+  });
+
+  it('keeps the registered id and label when a copied catalogue entry reloads its original package', async () => {
+    const station = fakeStation();
+    const source = () => file('tpl-1', 'ghab-title.vcg');
+    await importVcgToStation(source, 1);
+    const copy = await importVcgToStation(source, 1, () => Promise.resolve('add'));
+    if (copy === null) throw new Error('Copy not created');
+    const result = await importVcgFile(await source(), 1, undefined, {
+      templateId: copy.templateId,
+      packageId: 'tpl-1',
+    });
+    expect(station.registry.size).toBe(2);
+    expect(result).toMatchObject({
+      templateId: copy.templateId,
+      packageId: 'tpl-1',
+      outcome: 'updated',
+    });
+    expect(station.imports.at(-1)?.sourceFileName).toBe(copy.sourceFileName);
+  });
+
+  it('updates only the chosen entry after explicit approval of a new package id', async () => {
+    const station = fakeStation();
+    await importVcgToStation(() => file('old-id', 'ghab-title.vcg'), 1);
+    const replacement = await file('new-id', 'ghab-title.vcg');
+    const target = { templateId: 'old-id', packageId: 'old-id' };
+    const cancelled = await importVcgFile(replacement, 1, undefined, {
+      ...target,
+      approvePackageChange: () => Promise.resolve(false),
+    });
+    expect(cancelled).toBeNull();
+    expect(station.imports).toHaveLength(1);
+    const approved = await importVcgFile(replacement, 1, undefined, {
+      ...target,
+      approvePackageChange: () => Promise.resolve(true),
+    });
+    expect(approved).toMatchObject({ templateId: 'old-id', packageId: 'new-id' });
+    expect([...station.registry.keys()]).toEqual(['old-id']);
+    expect(station.imports).toHaveLength(2);
   });
 });

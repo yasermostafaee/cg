@@ -209,7 +209,7 @@ describe('§8 — the picker follows `01`: search, kind chips, the meta line and
   it('the kind chips split beds from graphics by the SAME predicate the bridge refuses on', async () => {
     const { dialog } = await openPicker();
     const chips = [...dialog.querySelectorAll<HTMLButtonElement>('[data-template-filter]')];
-    expect(chips.map((c) => c.textContent)).toEqual(['All templates', 'Graphics', 'Graphics beds']);
+    expect(chips.map((c) => c.textContent)).toEqual(['All templates', 'Graphics', 'Live layouts']);
     expect(chips.map((c) => c.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false']);
     await press(dialog, '[data-template-filter="bed"]');
     expect(rowsOf(dialog)).toEqual(['tpl-bed']);
@@ -225,7 +225,7 @@ describe('§8 — the picker follows `01`: search, kind chips, the meta line and
   it('a row’s meta line counts fields, looks and plates from the CARRIER; the load is the FOOTER’s', async () => {
     const { dialog, choice } = await openPicker('low');
     const bed = dialog.querySelector('[data-template-id="tpl-bed"]');
-    expect(bed?.querySelector('.cg-tpl-meta')?.textContent).toContain('Graphics bed');
+    expect(bed?.querySelector('.cg-tpl-meta')?.textContent).toContain('Live layout');
     expect(bed?.querySelector('.cg-tpl-meta')?.textContent).toContain('0 fields');
     expect(bed?.querySelector('.cg-tpl-meta')?.textContent).toContain('2 looks');
     expect(bed?.querySelector('.cg-tpl-meta')?.textContent).toContain('1 plate');

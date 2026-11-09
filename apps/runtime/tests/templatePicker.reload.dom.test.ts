@@ -219,8 +219,9 @@ describe('R-108 — Reload doors in the template picker', () => {
     expect(reloadTemplateSource).toHaveBeenLastCalledWith(
       ONE,
       1,
-      expect.objectContaining({ name: 'one.vcg' }),
+      expect.objectContaining({ handle: expect.objectContaining({ name: 'one.vcg' }) }),
       'keep',
+      expect.any(Function),
     );
 
     await click(buttonByText(dialog, 'Reload all'));

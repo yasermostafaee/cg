@@ -22,10 +22,12 @@ source by importing through its chooser rather than receiving a path it may not 
 
 ### 3. Reload is identity-safe
 
-The package is verified and unpacked through the existing import chain, but before Bridge import its
-template id must equal the catalogue entry being reloaded. If the path now contains another package,
-Reload refuses and directs the operator to Import. This prevents an edited or replaced share file
-from silently switching the row to a different template.
+The package is verified and unpacked through the existing import chain. The remembered package id
+is distinct from the channel catalogue id, including after Add as new. An older source record falls
+back to its catalogue id. If the verified package differs, single Reload presents the existing
+entry and incoming package for explicit review. It then imports the exact approved bytes under the
+existing catalogue id and label, recording the verified id for future Reload. Closing or cancelling
+the question does not register any bytes. Bulk Reload reports the changed source for individual review.
 
 ### 4. Row data authority is an explicit operator choice
 

@@ -6,6 +6,7 @@ import {
   type ChooseOnClash,
 } from '../library/importVcgFile.js';
 import { newItemFields, newItemId } from '../library/newItemFields.js';
+import { saveTemplateSource } from '../library/templateSourceStore.js';
 import { reportCommandSuccess } from '../status/commandFeedback.js';
 
 /**
@@ -97,6 +98,7 @@ export async function importVcgToStation(
   pick: () => Promise<File | null>,
   channel?: number,
   choose?: ChooseOnClash,
+  sourceHandle?: FileSystemFileHandle,
 ): Promise<TemplateInfo | null> {
   const file = await pick();
   // The operator dismissed the OS file dialog — their own "no".
@@ -108,6 +110,9 @@ export async function importVcgToStation(
   // is the operator's own "no" too, and imports nothing.
   const imported = await importVcgFile(file, channel, choose);
   if (imported === null) return null;
+  if (sourceHandle !== undefined) {
+    await saveTemplateSource(imported.templateId, channel, sourceHandle, imported.packageId);
+  }
   reportCommandSuccess(importSuccessMessage(imported));
 
   // The registry is the authority on the registered template's shape; read the

@@ -59,9 +59,9 @@ import {
   deleteTemplateSource,
   loadTemplateSources,
   pickTemplatePackage,
-  saveTemplateSource,
   templateSourcePickerSupported,
   type PickedTemplatePackage,
+  type TemplateSourceRecord,
 } from '../library/templateSourceStore.js';
 import { reloadTemplateSource, type ReloadDataPolicy } from '../library/reloadTemplateSource.js';
 // `PAGE-REBUILD-01` — the faces every page is built with: part of the runtime a plan is asked for.
@@ -291,18 +291,16 @@ const REFUSAL = {
   /** The row is a BED row and the template is not a bed. */
   low: {
     chip: 'Requires an operator row',
-    title: 'Bed rows sit below the live plates',
-    text:
-      'This row is a graphics bed — it sits below the live plates, so only a template that ' +
-      'declares plates belongs on it. Load this one onto an operator row.',
+    title: 'Live-layout rows sit below the live plates',
+    text: 'This row is for layouts with live plates. Load this one onto an operator row.',
   },
   /** The row is an OPERATOR row and the template declares plates. */
   high: {
-    chip: 'Requires a bed row',
-    title: 'This template belongs on a bed row',
+    chip: 'Requires a live-layout row',
+    title: 'This template belongs on a live-layout row',
     text:
-      'This template declares live plates, so it is a graphics bed and must sit below them. ' +
-      'Load it onto one of the bed rows at the bottom of the list.',
+      'This template uses live plates and must sit below them. ' +
+      'Load it onto a row in Live layouts at the bottom of the list.',
   },
 } as const;
 
@@ -317,7 +315,7 @@ type KindFilter = 'all' | 'graphic' | 'bed';
 const KIND_CHIPS: readonly { key: KindFilter; label: string }[] = [
   { key: 'all', label: 'All templates' },
   { key: 'graphic', label: 'Graphics' },
-  { key: 'bed', label: 'Graphics beds' },
+  { key: 'bed', label: 'Live layouts' },
 ];
 
 /** `requiredBankFor` in the operator's words: a low-bank template is a graphics bed. */
@@ -518,7 +516,7 @@ export function useTemplatePicker(): {
   const [importingFileName, setImportingFileName] = useState<string | null>(null);
   const [busyLabel, setBusyLabel] = useState<'Importing' | 'Reloading'>('Importing');
   /** R-108 — source handles available on THIS browser/profile for the open channel. */
-  const [templateSources, setTemplateSources] = useState<ReadonlyMap<string, FileSystemFileHandle>>(
+  const [templateSources, setTemplateSources] = useState<ReadonlyMap<string, TemplateSourceRecord>>(
     new Map(),
   );
   const refreshTemplateSources = useCallback(
@@ -528,7 +526,7 @@ export function useTemplatePicker(): {
         new Map(
           records
             .filter((record) => record.channel === (onChannel ?? null))
-            .map((record) => [record.templateId, record.handle] as const),
+            .map((record) => [record.templateId, record] as const),
         ),
       );
     },
@@ -820,18 +818,17 @@ export function useTemplatePicker(): {
     [confirm, refreshTemplateSources],
   );
 
-  /** `B-352` — the open clash question's answer (see `askOnClash`), or `null` when none is open. */
-  const clashAnswer = useRef<((choice: ImportClashChoice | null) => void) | null>(null);
+  const cancelPackageQuestion = useRef<(() => void) | null>(null);
   const settle = useCallback((choice: TemplateChoice): void => {
     setRequest(null);
     setMessage(null);
     setReferences([]);
     setDragging(false);
     setSelected(null);
-    // `B-352` — a clash question still open is answered "no" by closing the dialog: nothing imports.
-    const unanswered = clashAnswer.current;
-    clashAnswer.current = null;
-    unanswered?.(null);
+    // Closing Templates cancels an unanswered package question.
+    const cancel = cancelPackageQuestion.current;
+    cancelPackageQuestion.current = null;
+    cancel?.();
     const resolve = resolver.current;
     resolver.current = null;
     resolve?.(choice);
@@ -848,11 +845,11 @@ export function useTemplatePicker(): {
       new Promise((resolve) => {
         const name = templateDisplayName(existing);
         const answer = (choice: ImportClashChoice): void => {
-          clashAnswer.current = null;
+          cancelPackageQuestion.current = null;
           setMessage(null);
           resolve(choice);
         };
-        clashAnswer.current = resolve;
+        cancelPackageQuestion.current = () => resolve(null);
         setMessage({
           role: 'notice',
           text: `“${name}” is already on this channel.`,
@@ -863,6 +860,34 @@ export function useTemplatePicker(): {
               </Button>
               <Button variant="secondary" onClick={() => answer('add')}>
                 Add as a new template
+              </Button>
+            </>
+          ),
+        });
+      }),
+    [],
+  );
+
+  const askReplaceSource = useCallback(
+    (target: TemplateInfo, filename: string, incoming: TemplateInfo): Promise<boolean> =>
+      new Promise((resolve) => {
+        const answer = (approved: boolean): void => {
+          cancelPackageQuestion.current = null;
+          setMessage(null);
+          resolve(approved);
+        };
+        cancelPackageQuestion.current = () => resolve(false);
+        setMessage({
+          role: 'notice',
+          text: `“${filename}” contains a different package.`,
+          detail: `Replace “${templateDisplayName(target)}” on this channel with “${incoming.name ?? filename}” from this file?`,
+          remedies: (
+            <>
+              <Button variant="primary" onClick={() => answer(true)}>
+                Replace from this file
+              </Button>
+              <Button variant="secondary" onClick={() => answer(false)}>
+                Cancel replacement
               </Button>
             </>
           ),
@@ -1030,10 +1055,14 @@ export function useTemplatePicker(): {
       try {
         // `CHANNEL-TEMPLATES-01` — onto the row's channel's list, and no other.
         // `B-352` — a package whose id the channel lists asks Update / Add as a new template.
-        const template = await importVcgToStation(() => Promise.resolve(file), channel, askOnClash);
+        const template = await importVcgToStation(
+          () => Promise.resolve(file),
+          channel,
+          askOnClash,
+          handle,
+        );
         if (template === null) return; // The injected file means this is defensive only.
         if (handle !== undefined) {
-          await saveTemplateSource(template.templateId, channel, handle);
           await refreshTemplateSources(channel);
         }
         const templates = await window.cg.templates.list(listRequest(channel));
@@ -1075,7 +1104,11 @@ export function useTemplatePicker(): {
 
   /** R-108 — one implementation behind the per-template and Reload-all doors. */
   const runReload = useCallback(
-    async (templates: readonly TemplateInfo[], policy: ReloadDataPolicy): Promise<void> => {
+    async (
+      templates: readonly TemplateInfo[],
+      policy: ReloadDataPolicy,
+      reviewSourceChange: boolean,
+    ): Promise<void> => {
       setMessage(null);
       setReferences([]);
       setBusyLabel('Reloading');
@@ -1085,17 +1118,27 @@ export function useTemplatePicker(): {
       const failures: string[] = [];
       try {
         for (const template of templates) {
-          const handle = templateSources.get(template.templateId);
-          if (handle === undefined) continue;
-          setImportingFileName(handle.name);
+          const source = templateSources.get(template.templateId);
+          if (source === undefined) continue;
+          setImportingFileName(source.handle.name);
           try {
-            const result = await reloadTemplateSource(template, channel, handle, policy);
+            const result = await reloadTemplateSource(
+              template,
+              channel,
+              source,
+              policy,
+              reviewSourceChange
+                ? (incoming) => askReplaceSource(template, source.handle.name, incoming)
+                : undefined,
+            );
+            if (result === null) continue;
             reloaded += 1;
             resetRows += result.resetRows;
           } catch (err) {
             failures.push(err instanceof Error ? err.message : String(err));
           }
         }
+        await refreshTemplateSources(channel);
         const listed = await window.cg.templates.list(listRequest(channel));
         setRequest((current) => (current === null ? null : { ...current, templates: listed }));
         setSelected((current) =>
@@ -1110,9 +1153,9 @@ export function useTemplatePicker(): {
               reloaded === 0
                 ? (failures[0] ?? 'No template was reloaded.')
                 : `${String(reloaded)} template(s) reloaded; ${String(failures.length)} failed.`,
-            ...(failures.length > 1 ? { detail: failures.join(' ') } : {}),
+            ...(reloaded > 0 || failures.length > 1 ? { detail: failures.join(' ') } : {}),
           });
-        } else {
+        } else if (reloaded > 0) {
           reportCommandSuccess(
             `Reloaded · ${String(reloaded)} template${reloaded === 1 ? '' : 's'}${policy === 'file-defaults' ? ` · ${String(resetRows)} row${resetRows === 1 ? '' : 's'} reset` : ' · current row data kept'}`,
           );
@@ -1123,12 +1166,12 @@ export function useTemplatePicker(): {
         setBusyLabel('Importing');
       }
     },
-    [channel, templateSources],
+    [askReplaceSource, channel, refreshTemplateSources, templateSources],
   );
 
   /** Ask which data authority wins before any package is read. */
   const askReload = useCallback(
-    (templates: readonly TemplateInfo[]): void => {
+    (templates: readonly TemplateInfo[], reviewSourceChange = false): void => {
       if (templates.length === 0 || importBusy) return;
       const label =
         templates.length === 1
@@ -1136,7 +1179,7 @@ export function useTemplatePicker(): {
           : `${String(templates.length)} templates`;
       const answer = (policy: ReloadDataPolicy): void => {
         setMessage(null);
-        void runReload(templates, policy);
+        void runReload(templates, policy, reviewSourceChange);
       };
       setMessage({
         role: 'notice',
@@ -1459,7 +1502,7 @@ export function useTemplatePicker(): {
                         onSelect={setSelected}
                         onCommit={commit}
                         reloadable={templateSources}
-                        onReload={(template) => askReload([template])}
+                        onReload={(template) => askReload([template], true)}
                         onDelete={(t) => void deleteTemplate(t, channel)}
                         onKeyDown={onListKeyDown}
                       />
@@ -1484,7 +1527,7 @@ export function useTemplatePicker(): {
                         where an operator finds the layer they may have to clear by hand.
                       */}
                           <span className="cg-tpl-dest__meta">
-                            {request.accepts === 'low' ? 'Graphics bed row' : 'Operator row'} · on{' '}
+                            {request.accepts === 'low' ? 'Live-layout row' : 'Operator row'} · on{' '}
                             {request.destination.coord}
                           </span>
                           <span className="cg-tpl-dest__meta">
@@ -1524,7 +1567,7 @@ export function useTemplatePicker(): {
                         <dl className="cg-tpl-kv">
                           <dt>Type</dt>
                           <dd>
-                            {kindOf(selected) === 'bed' ? 'Graphics bed' : selected.templateType}
+                            {kindOf(selected) === 'bed' ? 'Live layout' : selected.templateType}
                           </dd>
                           <dt>Text fields</dt>
                           <dd>{String(selected.fields.length)}</dd>
@@ -1653,7 +1696,7 @@ function PickerList({
   selected: TemplateInfo | null;
   onSelect: (t: TemplateInfo) => void;
   onCommit: (t: TemplateInfo) => void;
-  reloadable: ReadonlyMap<string, FileSystemFileHandle>;
+  reloadable: ReadonlyMap<string, TemplateSourceRecord>;
   onReload: (t: TemplateInfo) => void;
   onDelete: (t: TemplateInfo) => void;
   onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => void;
@@ -1711,8 +1754,8 @@ function PickerList({
               isSelected={selected?.templateId === t.templateId}
               onSelect={() => onSelect(t)}
               onCommit={() => onCommit(t)}
-              {...(reloadable.get(t.templateId)?.name !== undefined
-                ? { sourceName: reloadable.get(t.templateId)?.name }
+              {...(reloadable.get(t.templateId)?.handle.name !== undefined
+                ? { sourceName: reloadable.get(t.templateId)?.handle.name }
                 : {})}
               onReload={() => onReload(t)}
               onDelete={() => onDelete(t)}
@@ -1792,7 +1835,7 @@ function PickerRow({
                   `<bdi>` carrying the class was blockified here and flushed Persian titles right. */}
           <IsolatedName className="cg-tpl-name">{label}</IsolatedName>
           <span className="cg-tpl-meta">
-            <span>{templateKind === 'bed' ? 'Graphics bed' : t.templateType}</span>
+            <span>{templateKind === 'bed' ? 'Live layout' : t.templateType}</span>
             <span aria-hidden="true">·</span>
             <span>{count(t.fields.length, 'field')}</span>
             {looks > 0 && (

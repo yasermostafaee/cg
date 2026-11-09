@@ -36,19 +36,28 @@ remain without a reloadable source and SHALL explain how to establish one.
 - **THEN** the template remains in the shared catalogue
 - **AND** Reload remains unavailable there until that console imports the source through its chooser
 
-### Requirement: Reload SHALL preserve template identity
+### Requirement: Reload SHALL preserve the target catalogue entry
 
-Before importing a remembered source, CG Control SHALL verify that its template id is the catalogue
-entry being reloaded. A different id, missing file, denied permission or unreadable source SHALL
-produce a visible refusal without replacing that catalogue entry or its current row data.
+CG Control SHALL remember a verified package's identity separately from its channel catalogue id.
+Reload SHALL target the existing catalogue id, preserving the label, row bindings and matching
+Source defaults. A missing file, denied permission or unreadable source SHALL produce a visible
+refusal. A changed package identity SHALL require explicit approval through single Reload before
+any Bridge registration. Bulk Reload SHALL report and skip such a file.
 
 #### Scenario: The share path now contains another package
 
 - **GIVEN** template `weather` remembers `weather.vcg`
 - **AND** that path is replaced by a package whose template id is `league`
-- **WHEN** the operator reloads `weather`
-- **THEN** import is refused before Bridge registration
-- **AND** the refusal directs the operator to use Import for the different template
+- **WHEN** the operator reloads `weather` individually
+- **THEN** the operator is asked whether to replace that entry using the verified file
+- **AND** cancelling leaves the catalogue and row data unchanged
+- **AND** approving replaces the package under the original catalogue id and records the new file identity
+
+#### Scenario: A duplicate catalogue entry reloads its own source
+
+- **GIVEN** an imported copy has its own catalogue id and a remembered source handle
+- **WHEN** the source still contains the recorded package id
+- **THEN** Reload updates that copy without modifying the other entry
 
 ### Requirement: Reload SHALL ask which row-data authority wins
 

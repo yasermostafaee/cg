@@ -141,7 +141,7 @@ test('§4 — the picker and the audit log keep ONE box through every state that
   const search = page.getByPlaceholder('Search templates…');
   const all = (await frame(page)).box;
 
-  await page.getByRole('button', { name: 'Graphics beds' }).click();
+  await page.getByRole('button', { name: 'Live layouts' }).click();
   expect((await frame(page)).box, 'a filter that shows fewer rows resized the picker').toEqual(all);
 
   await page.getByRole('button', { name: 'All templates' }).click();

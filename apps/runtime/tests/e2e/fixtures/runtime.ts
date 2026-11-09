@@ -336,6 +336,11 @@ export class RuntimeApp {
     await expect(this.templatePicker).toBeVisible();
     // The tools row's door, not the footer's: the footer's primary is the LOAD now. Its press
     // IS the OS chooser, so the wait for it starts first.
+    // The generic fixture feeds the HTML input path. The reload spec exercises
+    // the separate file-handle chooser and its persisted capability.
+    await this.page.evaluate(() => {
+      Object.defineProperty(window, 'showOpenFilePicker', { value: undefined, configurable: true });
+    });
     const chooser = this.page.waitForEvent('filechooser');
     await this.page.getByRole('button', { name: 'Import a .vcg' }).click();
     await (

@@ -93,11 +93,11 @@ describe('R-108 template source handles', () => {
   it('persists the same template independently per channel and deletes only the named source', async () => {
     const ch1 = handle('one.vcg');
     const ch2 = handle('two.vcg');
-    await saveTemplateSource('tpl', 1, ch1);
-    await saveTemplateSource('tpl', 2, ch2);
-    expect((await loadTemplateSources()).map((r) => [r.key, r.handle.name])).toEqual([
-      [templateSourceKey('tpl', 1), 'one.vcg'],
-      [templateSourceKey('tpl', 2), 'two.vcg'],
+    await saveTemplateSource('tpl', 1, ch1, 'pkg-one');
+    await saveTemplateSource('tpl', 2, ch2, 'pkg-two');
+    expect((await loadTemplateSources()).map((r) => [r.key, r.handle.name, r.packageId])).toEqual([
+      [templateSourceKey('tpl', 1), 'one.vcg', 'pkg-one'],
+      [templateSourceKey('tpl', 2), 'two.vcg', 'pkg-two'],
     ]);
 
     await deleteTemplateSource('tpl', 1);

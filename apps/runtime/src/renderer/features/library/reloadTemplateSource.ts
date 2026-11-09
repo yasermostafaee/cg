@@ -1,7 +1,11 @@
 import type { TemplateInfo } from '@cg/shared-ipc';
-import { importVcgFile } from './importVcgFile.js';
+import { importVcgFile, type ReloadVcgTarget } from './importVcgFile.js';
 import { newItemFields } from './newItemFields.js';
-import { ensureTemplateSourcePermission } from './templateSourceStore.js';
+import {
+  ensureTemplateSourcePermission,
+  saveTemplateSource,
+  type TemplateSourceRecord,
+} from './templateSourceStore.js';
 
 /** What Reload does to rows that already hold the template. */
 export type ReloadDataPolicy = 'keep' | 'file-defaults';
@@ -24,9 +28,11 @@ export interface ReloadTemplateResult {
 export async function reloadTemplateSource(
   template: TemplateInfo,
   channel: number | undefined,
-  handle: FileSystemFileHandle,
+  source: Pick<TemplateSourceRecord, 'handle' | 'packageId'>,
   policy: ReloadDataPolicy,
-): Promise<ReloadTemplateResult> {
+  approvePackageChange?: ReloadVcgTarget['approvePackageChange'],
+): Promise<ReloadTemplateResult | null> {
+  const { handle, packageId } = source;
   if (!(await ensureTemplateSourcePermission(handle))) {
     throw new Error(`Access to “${handle.name}” was not granted; the template was not reloaded.`);
   }
@@ -40,8 +46,16 @@ export async function reloadTemplateSource(
     );
   }
 
-  const imported = await importVcgFile(file, channel, undefined, template.templateId);
-  if (imported === null) throw new Error(`Reload of “${handle.name}” was cancelled.`);
+  const imported = await importVcgFile(file, channel, undefined, {
+    templateId: template.templateId,
+    // Existing records predate this field and use the catalogue id until the next accepted reload.
+    packageId: packageId ?? template.templateId,
+    ...(approvePackageChange !== undefined && { approvePackageChange }),
+  });
+  if (imported === null) return null;
+  if (packageId !== imported.packageId) {
+    await saveTemplateSource(template.templateId, channel, handle, imported.packageId);
+  }
   const updated = await window.cg.templates.get({
     templateId: template.templateId,
     ...(channel !== undefined && { channel }),

@@ -8,6 +8,7 @@ vi.mock('../src/renderer/features/library/importVcgFile.js', () => ({
   importVcgFile: vi.fn(() =>
     Promise.resolve({
       templateId: 'tpl',
+      packageId: 'pkg',
       displayName: 'Weather',
       warnings: [],
       listFieldTargets: {},
@@ -61,20 +62,20 @@ beforeEach(() => {
 
 describe('R-108 reload data policy', () => {
   it('keep updates the package and leaves every loaded row untouched', async () => {
-    const result = await reloadTemplateSource(TEMPLATE, 1, handle, 'keep');
+    const result = await reloadTemplateSource(TEMPLATE, 1, { handle, packageId: 'pkg' }, 'keep');
     expect(importVcgFile).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'weather.vcg' }),
       1,
       undefined,
-      'tpl',
+      { templateId: 'tpl', packageId: 'pkg' },
     );
-    expect(result.resetRows).toBe(0);
+    expect(result?.resetRows).toBe(0);
     expect(updates).toEqual([]);
   });
 
   it('file-defaults replaces only rows on the template channel', async () => {
-    const result = await reloadTemplateSource(TEMPLATE, 1, handle, 'file-defaults');
-    expect(result.resetRows).toBe(1);
+    const result = await reloadTemplateSource(TEMPLATE, 1, { handle }, 'file-defaults');
+    expect(result?.resetRows).toBe(1);
     expect(updates).toEqual([
       { itemId: 'ch1', fields: { title: 'new-file' }, mergeMode: 'replace' },
     ]);

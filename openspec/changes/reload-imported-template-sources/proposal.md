@@ -18,6 +18,9 @@ the reloaded package defaults should win.
 
 ## Impact
 
+Single Reload can review a verified package whose id changed at the remembered path. It replaces the
+selected catalogue entry after explicit approval. Reload all skips files that require this review.
+
 - Affected PRD: R-108.
 - Modified capability: `runtime-template-library`.
 - Affected app: CG Control Templates dialog and browser-local IndexedDB.

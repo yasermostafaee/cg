@@ -39,6 +39,7 @@ import appFontsCss from '../../fonts.css?inline';
  */
 export interface ImportedVcg {
   templateId: string;
+  packageId: string;
   /** R-004 — what the operator should be told they imported. */
   displayName: string;
   warnings: string[];
@@ -65,6 +66,12 @@ export type ChooseOnClash = (
   incoming: TemplateInfo,
 ) => Promise<ImportClashChoice | null>;
 
+export interface ReloadVcgTarget {
+  templateId: string;
+  packageId: string;
+  approvePackageChange?: (incoming: TemplateInfo) => Promise<boolean>;
+}
+
 /**
  * `CHANNEL-TEMPLATES-01` — `channel` is the channel whose list the package joins (the picker's
  * row's); no other channel's list changes. Absent, the station-wide import a caller that names no
@@ -77,7 +84,7 @@ export async function importVcgFile(
   file: File,
   channel?: number,
   choose?: ChooseOnClash,
-  expectedTemplateId?: string,
+  reload?: ReloadVcgTarget,
 ): Promise<ImportedVcg | null> {
   let bytes: Uint8Array;
   try {
@@ -108,13 +115,16 @@ export async function importVcgFile(
   } catch (err) {
     throw named(err);
   }
-  // R-108 — Reload is bound to the source remembered for ONE catalogue entry. If somebody
-  // replaces that path with another `.vcg`, importing it as a surprise second template would make
-  // the Reload button lie about what it refreshed. Refuse before anything reaches CG Bridge.
-  if (expectedTemplateId !== undefined && delivery.template.templateId !== expectedTemplateId) {
-    throw new Error(
-      `“${file.name}” now contains template ${delivery.template.templateId}, not ${expectedTemplateId}; choose Import if this is a different template.`,
-    );
+  const packageId = delivery.template.templateId;
+  if (reload !== undefined && packageId !== reload.packageId) {
+    if (reload.approvePackageChange === undefined) {
+      throw new Error(
+        `“${file.name}” contains a different package. Reload it individually to review the replacement.`,
+      );
+    }
+    // Ask about the exact verified bytes we hold. Re-reading the share after approval could
+    // import a third package that the operator never saw.
+    if (!(await reload.approvePackageChange(delivery.template))) return null;
   }
 
   /*
@@ -125,10 +135,22 @@ export async function importVcgFile(
   let identity: TemplateIdentity | undefined;
   let outcome: ImportedVcg['outcome'] = 'imported';
   const existing = await window.cg.templates.get({
-    templateId: delivery.template.templateId,
+    templateId: reload?.templateId ?? packageId,
     ...(channel !== undefined && { channel }),
   });
-  if (existing !== null) {
+  if (reload !== undefined) {
+    if (existing === null) {
+      throw new Error(
+        `The template for “${file.name}” is no longer on this channel. Use Import to add it.`,
+      );
+    }
+    // Keep the channel's catalogue identity, label, loaded rows and per-plate Source defaults.
+    identity = {
+      templateId: existing.templateId,
+      sourceFileName: existing.sourceFileName ?? file.name,
+    };
+    outcome = 'updated';
+  } else if (existing !== null) {
     const choice = choose === undefined ? 'update' : await choose(existing, delivery.template);
     if (choice === null) return null;
     if (choice === 'update') outcome = 'updated';
@@ -156,7 +178,7 @@ export async function importVcgFile(
   // The library gained a template — whichever entry point ran. Emitted HERE so
   // every import path announces it, never only the one that remembered to.
   notifyLibraryChanged();
-  return { ...imported, outcome };
+  return { ...imported, outcome, packageId };
 }
 
 /**

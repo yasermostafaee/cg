@@ -248,7 +248,7 @@ describe('§3 — the ONE refusal, unchanged, said where there is room for it', 
     const bedRow = document.querySelector('[data-template-id="tpl-bed"]');
     expect(bedRow?.getAttribute('data-template-incompatible')).toBe('true');
     expect(bedRow?.hasAttribute('data-wrong-bank')).toBe(true);
-    expect(bedRow?.textContent).toContain('Requires a bed row');
+    expect(bedRow?.textContent).toContain('Requires a live-layout row');
 
     // The row is NOT disabled — it can be selected, which is how the operator reads why.
     const control = row('tpl-bed') as HTMLButtonElement | null;
@@ -258,7 +258,7 @@ describe('§3 — the ONE refusal, unchanged, said where there is room for it', 
     // The whole sentence is in the aside, and the primary refuses.
     const verdict = document.querySelector('[data-template-verdict]');
     expect(verdict?.getAttribute('data-template-verdict')).toBe('refused');
-    expect(verdict?.textContent).toContain('bed rows');
+    expect(verdict?.textContent).toContain('a row in Live layouts');
     expect(commitButton()?.disabled).toBe(true);
 
     /*

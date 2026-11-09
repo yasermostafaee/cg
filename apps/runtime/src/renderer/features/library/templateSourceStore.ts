@@ -17,6 +17,8 @@ export interface TemplateSourceRecord {
   templateId: string;
   channel: number | null;
   handle: FileSystemFileHandle;
+  /** The verified package's own identity. The catalogue can list it under a different id. */
+  packageId?: string;
 }
 
 export function templateSourceKey(templateId: string, channel?: number): string {
@@ -63,6 +65,7 @@ export async function saveTemplateSource(
   templateId: string,
   channel: number | undefined,
   handle: FileSystemFileHandle,
+  packageId: string,
 ): Promise<void> {
   const db = await openDb();
   if (db === null) return;
@@ -72,6 +75,7 @@ export async function saveTemplateSource(
       templateId,
       channel: channel ?? null,
       handle,
+      packageId,
     } satisfies TemplateSourceRecord),
   );
   db.close();
@@ -103,6 +107,7 @@ export async function loadTemplateSources(): Promise<TemplateSourceRecord[]> {
         return (
           typeof value.key === 'string' &&
           typeof value.templateId === 'string' &&
+          (value.packageId === undefined || typeof value.packageId === 'string') &&
           (value.channel === null || typeof value.channel === 'number') &&
           value.handle?.kind === 'file'
         );
