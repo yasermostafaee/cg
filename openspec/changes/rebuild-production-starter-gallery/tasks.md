@@ -356,4 +356,6 @@ type remain required; compact degree adjacency is now a targeted correction acro
       compositions. Use Static playback and keep Cut as the preset transition.
 - [x] 15.2 Chromium verified all five timelines, switched the canvas through each preset and
       unpacked the exported Static package with all four presets. All 71 starter tests passed.
-- [ ] 15.3 Run the repository gate and read the carrying commit's Linux E2E result.
+- [x] 15.3 The full pre-push gate passed 103 uncached tasks and 164 strict OpenSpec checks on
+      `1b4191e4` (`gate-20261109T003529Z-16904.log`).
+- [ ] 15.4 Read the carrying commit's Linux E2E result.
