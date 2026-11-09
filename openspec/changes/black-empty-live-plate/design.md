@@ -28,8 +28,9 @@ row exposed. The live return showed the same seven Bars hues as the authored fal
 [CasparCG's output transforms](https://github.com/CasparCG/server/blob/v2.5.0-stable/src/accelerator/ogl/util/transforms.cpp#L84-L103)
 turn the clip into output geometry.
 
-For a full-coverage plate, Bridge aligns both near and far output edges to pixels and then fits
-the source with the same aspect and focus. It computes width and height from the aligned edges.
+For a full-coverage plate, Bridge aligns edges near pixel centres and then fits the source with
+the same aspect and focus. It computes width and height from those edges and keeps ordinary
+fractional edges at their authored coordinates.
 Continuous geometry still supplies crop identity and eligibility. The correction applies to the
 main seating path for unmasked, unlinked plates. Intentional contain margins and authored mask
 boundaries retain their continuous coordinates.

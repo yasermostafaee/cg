@@ -20,12 +20,12 @@ a template re-take. An invalid or unavailable source SHALL still be refused befo
 - **AND** Designer and PVW keep showing the chosen Bars, colour or picture
 - **WHEN** it is checked again **THEN** the previously selected background paints behind the plate in PGM
 
-#### Scenario: A live picture fills a plate whose edge is between output pixels
+#### Scenario: A live picture fills a plate whose edge meets an output pixel centre
 
 - **GIVEN** an unmasked plate with an available source and a fit that fills the whole plate
-- **WHEN** its fallback and source are composited at a fractional output edge
+- **WHEN** its fallback and source are composited at an edge near a half-pixel coordinate
 - **THEN** the live picture covers the last raster row painted by the fallback
-- **AND** genuine contain margins and authored mask windows keep their intended geometry
+- **AND** ordinary fractional edges, contain margins and authored mask windows keep their intended geometry
 
 #### Scenario: A new plate starts with Bars
 

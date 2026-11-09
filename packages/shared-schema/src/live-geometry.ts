@@ -119,7 +119,7 @@ export interface LiveSourceFitInput {
   readonly fitMode?: LiveFitMode | undefined;
   /** D-178 — normalized focal point used by `cover`; absent preserves centred crop. */
   readonly cropFocus?: LiveCropFocus | undefined;
-  /** Match a full live plate to the output pixel grid when sending mixer geometry. */
+  /** Align a full live plate's edges near pixel centres when sending mixer geometry. */
   readonly alignFullPlateToPixels?: boolean | undefined;
 }
 
@@ -282,7 +282,8 @@ export function liveSourceFit(input: LiveSourceFitInput): LiveSourceFit {
     Math.abs(continuous.visible.width - hole.width) < 1e-6 &&
     Math.abs(continuous.visible.height - hole.height) < 1e-6;
   const pixelBox = input.alignFullPlateToPixels === true && fullPlate ? pixelEdges(hole) : null;
-  const aligned = pixelBox !== null && pixelBox.width > 0 && pixelBox.height > 0;
+  const aligned =
+    pixelBox !== null && pixelBox !== hole && pixelBox.width > 0 && pixelBox.height > 0;
   // CasparCG rasterizes the mixer and CEF paints the fallback separately. Move the edges
   // off half-pixel sample centres so the live picture covers the same output rows.
   const fitted = aligned
@@ -328,16 +329,29 @@ export function liveSourceFit(input: LiveSourceFitInput): LiveSourceFit {
   };
 }
 
-/** Round the two edges independently so the same boundary snaps the same way on either side. */
+/** Leave ordinary fractional edges alone so the authored fit keeps its size and focus. */
 function pixelEdges(rect: FitRect): FitRect {
-  const x = Math.round(rect.x);
-  const y = Math.round(rect.y);
+  const right = rect.x + rect.width;
+  const bottom = rect.y + rect.height;
+  const x = alignSampleEdge(rect.x);
+  const y = alignSampleEdge(rect.y);
+  const alignedRight = alignSampleEdge(right);
+  const alignedBottom = alignSampleEdge(bottom);
+  const horizontal = x !== rect.x || alignedRight !== right;
+  const vertical = y !== rect.y || alignedBottom !== bottom;
+  if (!horizontal && !vertical) return rect;
   return {
     x,
     y,
-    width: Math.round(rect.x + rect.width) - x,
-    height: Math.round(rect.y + rect.height) - y,
+    width: horizontal ? alignedRight - x : rect.width,
+    height: vertical ? alignedBottom - y : rect.height,
   };
+}
+
+function alignSampleEdge(edge: number): number {
+  const pixel = Math.floor(edge);
+  // Leave room for the six-decimal normalization of the origin and extent on the wire.
+  return Math.abs(edge - (pixel + 0.5)) <= 1 / 256 ? pixel + 1 : edge;
 }
 
 /**

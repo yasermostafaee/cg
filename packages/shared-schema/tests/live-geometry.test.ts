@@ -101,16 +101,16 @@ describe('full live plate output pixel alignment', () => {
     expectRect(px(continuous.clip), entry.rect);
   });
 
-  it('snaps near and far edges, then clamps the visible window to the stage', () => {
+  it('snaps edges close to pixel centres, then clamps the visible window to the stage', () => {
     const fit = liveSourceFit(
       base({
-        rect: { x: -0.5, y: -10.7, width: 101, height: 100.1 },
+        rect: { x: -0.5, y: -10.5008, width: 101, height: 100.0004 },
         alignFullPlateToPixels: true,
       }),
     );
-    expectRect(px(fit.fill), { x: 0, y: -11, width: 101, height: 100 });
+    expectRect(px(fit.fill), { x: 0, y: -10, width: 101, height: 100 });
     if (fit.clip === null) throw new Error('The stage intersection has no clip');
-    expectRect(px(fit.clip), { x: 0, y: 0, width: 101, height: 89 });
+    expectRect(px(fit.clip), { x: 0, y: 0, width: 101, height: 90 });
   });
 
   it('keeps real contain margins and avoids collapsing a subpixel plate', () => {

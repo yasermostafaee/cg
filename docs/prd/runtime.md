@@ -4861,8 +4861,9 @@ operator had to fail over before seeing whether its programme picture and sound 
 - WHEN Bars is selected THEN actual SMPTE Bars are rendered on air and their thumbnail is visible in the Designer picker
 - WHEN a solid colour or picture is selected THEN it becomes the fallback; black is one available colour
 - WHEN picture resumes THEN it covers the selected fallback without re-taking the template
-- WHEN a full-picture fit meets a fractional raster edge THEN the live producer covers the
-  same last output pixel as the fallback. Preserve actual contain margins and mask windows.
+- WHEN a full-picture fit meets a raster edge near a pixel centre THEN the live producer covers
+  the same last output pixel as the fallback. Preserve ordinary fractional edges, contain
+  margins and mask windows.
 - WHEN the source is invalid or unavailable THEN the existing refusal still prevents the take or update
 
 ## [x] R-106 — PVW Live Source markers follow Play and the Safe Area control is removed ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/pvw-plate-lifecycle/`
