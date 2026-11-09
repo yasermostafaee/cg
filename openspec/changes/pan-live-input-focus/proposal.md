@@ -2,19 +2,16 @@
 
 ## Why
 
-A `cover` fit can crop a face, logo or burned-in caption at the wrong edge. Authors need to choose
-which part of the source remains visible without changing the plate or stretching the picture.
+A `cover` fit can crop a face, logo or burned-in caption at the wrong edge. Operators need to choose
+which part of the live input stays visible while the plate and picture proportions stay fixed.
 
 ## What Changes
 
-- Add an optional normalized X/Y crop focus to a Live Source plate.
-- Author it as percentages in the Designer Inspector when `cover` is selected.
+- Support a normalized focus for the overflowing axis of a Live Source plate.
 - Carry it per look and use the one shared fit calculation for the authoring poster and Bridge geometry.
 - Keep existing files byte-for-byte centred when the field is absent; ignore focus under `contain`.
-
-Direct dragging on a meaningful PVW/PGM picture is not invented here because D-177 still has no
-bounded Playout preview-picture contract. The owner explicitly accepted an Inspector section as the
-alternative authoring surface.
+- Scope the proposed editing surface to direct dragging on real PGM/PVW pictures in CG Control.
+  PVW needs the D-177 live preview contract.
 
 ## Capabilities
 
@@ -25,5 +22,5 @@ alternative authoring surface.
 
 ## Impact
 
-Shared scene/carrier schemas, VCG export, Designer Inspector and poster preview, template runtime,
-and Caspar Bridge live-source geometry.
+Shared scene/carrier schemas, VCG export, Designer fit controls, CG Control monitors and Caspar Bridge
+live-source geometry.

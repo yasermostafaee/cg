@@ -2,8 +2,9 @@
 
 ### Requirement: Release history SHALL be a versioned website-ready artifact
 
-The repository SHALL keep one structured release-history source and generate a standalone Persian RTL HTML
-page with a clickable section for each recorded version. Every non-development version SHALL expose the exact
+The repository SHALL keep one structured release-history source and generate a standalone HTML page with a
+clickable section for each recorded version. The page SHALL offer Persian RTL and English LTR, embed a
+Persian font and separate features and fixes. Every non-development version SHALL expose the exact
 guide, CG Bridge installer, CG Control installer, CG Designer installer and checksum filenames. Until a host
 base URL is configured, those file cards SHALL remain visibly disabled rather than link to missing files.
 
@@ -16,6 +17,11 @@ base URL is configured, those file cards SHALL remain visibly disabled rather th
 
 - **WHEN** a release entry receives a host base URL **THEN** all five cards for that version link to the
   canonical filenames below that URL without changing the page template
+
+#### Scenario: Version history opens inside both apps
+
+- **WHEN** the user opens Version history from Designer Home, Designer Help or CG Control Station setup
+  **THEN** the app shows the same packaged bilingual page
 
 #### Scenario: Installer build requires recorded changes
 

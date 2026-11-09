@@ -1491,12 +1491,33 @@ export const LiveRevealRectSchema = z
   });
 export type LiveRevealRect = z.infer<typeof LiveRevealRectSchema>;
 
+export const LIVE_REVEAL_MAX_RECTS = 8;
+
 export const LiveRevealMaskSchema = z.object({
-  /** Symbolic source shown through the window; never a device or element id. */
+  /** Symbolic source shown through the windows. */
   targetSourceId: LiveSourceIdSchema,
   rect: LiveRevealRectSchema,
+  additionalRects: z
+    .array(LiveRevealRectSchema)
+    .max(LIVE_REVEAL_MAX_RECTS - 1)
+    .optional(),
 });
 export type LiveRevealMask = z.infer<typeof LiveRevealMaskSchema>;
+
+export function liveRevealRects(mask: LiveRevealMask): LiveRevealRect[] {
+  return [mask.rect, ...(mask.additionalRects ?? [])];
+}
+
+export function liveRevealMaskFromRects(
+  targetSourceId: string,
+  rects: readonly LiveRevealRect[],
+): LiveRevealMask | undefined {
+  const [rect, ...additionalRects] = rects;
+  if (rect === undefined) return undefined;
+  return additionalRects.length === 0
+    ? { targetSourceId, rect }
+    : { targetSourceId, rect, additionalRects };
+}
 
 /**
  * D-137 — a **Live Source**: an axis-aligned region that renders as NOTHING in
@@ -1566,7 +1587,7 @@ export const VideoPlaceholderElementSchema = ElementBaseSchema.extend({
   fitMode: LiveFitModeSchema.optional(),
   /** D-178 — normalized focal point for a source cropped with `cover`. */
   cropFocus: LiveCropFocusSchema.optional(),
-  /** D-202 — an intentional overlap: this upper plate reveals the target inside `rect`. */
+  /** D-202 — an intentional overlap: this upper plate reveals the target inside its windows. */
   revealMask: LiveRevealMaskSchema.optional(),
   /**
    * The FILL source's symbolic id, e.g. `guest-1` — **or absent, meaning UNASSIGNED.**

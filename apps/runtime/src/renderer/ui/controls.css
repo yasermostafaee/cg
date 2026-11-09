@@ -4958,6 +4958,10 @@ input[type='checkbox']:disabled:checked {
   padding: var(--r-setup-rail-foot-pad);
 }
 
+.cg-rail-foot__history {
+  margin-block-start: var(--r-space-2);
+}
+
 .cg-rail-station {
   display: flex;
   align-items: center;

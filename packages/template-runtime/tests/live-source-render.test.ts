@@ -149,21 +149,27 @@ describe("D-137 — 'author' mode paints the bars", () => {
     expect(node(root).querySelector<HTMLImageElement>('img')?.style.objectPosition).toBe('20% 80%');
   });
 
-  it('D-202 — author mode draws the exact reveal guide and output paints none of it', () => {
+  it('D-202 — author mode draws both reveal guides and output paints neither', () => {
     const plate = liveSource({
       revealMask: {
         targetSourceId: 'guest-2',
         rect: { x: 0.1, y: 0.6, width: 0.8, height: 0.3 },
+        additionalRects: [{ x: 0.2, y: 0.1, width: 0.6, height: 0.2 }],
       },
     } as never);
-    const author = node(build(sceneWith([plate]), 'author').root).querySelector<HTMLElement>(
-      '[data-cg-live-reveal-mask]',
+    const guides = node(build(sceneWith([plate]), 'author').root).querySelectorAll<HTMLElement>(
+      '[data-cg-live-reveal-mask="guest-2"]',
     );
+    expect(guides).toHaveLength(2);
+    const [author, second] = [...guides];
     expect(author?.dataset['cgLiveRevealMask']).toBe('guest-2');
     expect(author?.style.left).toBe('10%');
     expect(author?.style.top).toBe('60%');
     expect(author?.style.width).toBe('80%');
     expect(author?.style.height).toBe('30%');
+    expect(second?.style.top).toBe('10%');
+    expect(author?.textContent).toBe('Mask 1');
+    expect(second?.textContent).toBe('Mask 2');
     expect(
       node(build(sceneWith([plate]), 'output').root).querySelector('[data-cg-live-reveal-mask]'),
     ).toBeNull();

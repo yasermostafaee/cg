@@ -264,6 +264,24 @@ function withoutKeys(obj: object, keys: readonly string[]): Record<string, unkno
   return out;
 }
 
+/** B-423 — remove masks whose lower source no longer has any Plate in the project. */
+export function pruneDanglingLiveRevealMasks(scene: Scene): Scene {
+  const sourceIds = new Set<string>();
+  mapSceneElements(scene, (element) => {
+    if (element.type === 'video-placeholder' && element.routeKey !== undefined) {
+      sourceIds.add(element.routeKey);
+    }
+    return element;
+  });
+  return mapSceneElements(scene, (element) =>
+    element.type === 'video-placeholder' &&
+    element.revealMask !== undefined &&
+    !sourceIds.has(element.revealMask.targetSourceId)
+      ? { ...element, revealMask: undefined }
+      : element,
+  );
+}
+
 /** Map every element of the scene (root, compositions, containers), preserving identity. */
 function mapSceneElements(scene: Scene, fn: (el: Element) => Element): Scene {
   if (!Array.isArray(scene.layers)) return scene; // tolerate partial fixtures

@@ -3,6 +3,7 @@ import type {
   Element,
   FlatElement,
   Layer,
+  LiveRevealRect,
   LiveSourceRect,
   Scene,
 } from '@cg/shared-schema';
@@ -11,6 +12,8 @@ import {
   applyArrangementGeometry,
   flattenElements,
   lessThanBeyondNoise,
+  liveRevealRects,
+  liveRevealSceneRect,
   liveSourcesInStampedScopes,
   lookContaining,
   platesSharingASource,
@@ -181,64 +184,44 @@ function overlaps(a: Aabb, b: Aabb): boolean {
 }
 
 /** D-202 — the authored reveal window in the same coordinates as its upper plate. */
-function revealAabb(upper: FlatLiveSource): Aabb | null {
-  const reveal = upper.element.revealMask;
-  if (reveal === undefined) return null;
+function revealAabb(upper: FlatLiveSource, rect: LiveRevealRect): Aabb {
   const width = upper.box.maxX - upper.box.minX;
   const height = upper.box.maxY - upper.box.minY;
   return {
-    minX: upper.box.minX + reveal.rect.x * width,
-    minY: upper.box.minY + reveal.rect.y * height,
-    maxX: upper.box.minX + (reveal.rect.x + reveal.rect.width) * width,
-    maxY: upper.box.minY + (reveal.rect.y + reveal.rect.height) * height,
+    minX: upper.box.minX + rect.x * width,
+    minY: upper.box.minY + rect.y * height,
+    maxX: upper.box.minX + (rect.x + rect.width) * width,
+    maxY: upper.box.minY + (rect.y + rect.height) * height,
   };
 }
 
-function revealRect(upper: FlatElement): LiveSourceRect | null {
-  if (upper.element.type !== 'video-placeholder' || upper.element.revealMask === undefined)
-    return null;
-  const mask = upper.element.revealMask.rect;
-  return {
-    x: upper.rect.x + mask.x * upper.rect.width,
-    y: upper.rect.y + mask.y * upper.rect.height,
-    width: mask.width * upper.rect.width,
-    height: mask.height * upper.rect.height,
-  };
-}
-
-/** Only the explicitly linked upper/lower pair may overlap, and its window must reach the lower. */
+/** Only the linked upper/lower pair may overlap, and every window must reach the lower plate. */
 function allowedRevealOverlap(a: FlatLiveSource, b: FlatLiveSource): boolean {
-  const aWindow = revealAabb(a);
-  if (
-    a.element.revealMask?.targetSourceId === b.element.routeKey &&
-    aWindow !== null &&
-    overlaps(aWindow, b.box)
-  )
-    return true;
-  const bWindow = revealAabb(b);
-  return (
-    b.element.revealMask?.targetSourceId === a.element.routeKey &&
-    bWindow !== null &&
-    overlaps(bWindow, a.box)
-  );
+  const reaches = (upper: FlatLiveSource, lower: FlatLiveSource): boolean => {
+    const mask = upper.element.revealMask;
+    return (
+      mask !== undefined &&
+      mask.targetSourceId === lower.element.routeKey &&
+      liveRevealRects(mask).every((rect) => overlaps(revealAabb(upper, rect), lower.box))
+    );
+  };
+  return reaches(a, b) || reaches(b, a);
 }
 
 function allowedFlatRevealOverlap(a: FlatElement, b: FlatElement): boolean {
-  if (a.element.type !== 'video-placeholder' || b.element.type !== 'video-placeholder')
-    return false;
-  const aWindow = revealRect(a);
-  if (
-    a.element.revealMask?.targetSourceId === b.element.routeKey &&
-    aWindow !== null &&
-    rectsOverlap(aWindow, b.rect)
-  )
-    return true;
-  const bWindow = revealRect(b);
-  return (
-    b.element.revealMask?.targetSourceId === a.element.routeKey &&
-    bWindow !== null &&
-    rectsOverlap(bWindow, a.rect)
-  );
+  const reaches = (upper: FlatElement, lower: FlatElement): boolean => {
+    if (upper.element.type !== 'video-placeholder' || lower.element.type !== 'video-placeholder')
+      return false;
+    const mask = upper.element.revealMask;
+    return (
+      mask !== undefined &&
+      mask.targetSourceId === lower.element.routeKey &&
+      liveRevealRects(mask).every((rect) =>
+        rectsOverlap(liveRevealSceneRect(upper.rect, rect), lower.rect),
+      )
+    );
+  };
+  return reaches(a, b) || reaches(b, a);
 }
 
 /** Whether the element carries a keyframe on any geometry-affecting track. */
@@ -317,12 +300,13 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
       });
       continue;
     }
-    const window = revealRect(upper);
-    if (window !== null && !targets.some((target) => rectsOverlap(window, target.rect))) {
+    for (const [index, rect] of liveRevealRects(reveal).entries()) {
+      const window = liveRevealSceneRect(upper.rect, rect);
+      if (targets.some((target) => rectsOverlap(window, target.rect))) continue;
       issues.push({
         severity: 'error',
         code: 'live-reveal-window-misses-target',
-        message: `${plateRef(upper.element)} has a reveal window that does not reach “${reveal.targetSourceId}”. Move or resize the window onto the lower Plate.`,
+        message: `${plateRef(upper.element)} has a reveal window (Mask ${index + 1}) that does not reach “${reveal.targetSourceId}”. Move or resize the window onto the lower Plate.`,
         elementId: upper.element.id,
       });
     }

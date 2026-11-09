@@ -5,11 +5,12 @@
 
 ## 2. Generator and delivery
 
-- [x] 2.1 Generate a standalone responsive Persian page with one clickable section per version
+- [x] 2.1 Generate a standalone responsive bilingual page with features and fixes grouped per version
 - [x] 2.2 Derive and bind the guide, three installer and checksum links from an optional per-version host URL
 - [x] 2.3 Require the installer version in history and upload the generated page as a separate CI artifact
+- [x] 2.4 Embed Vazirmatn and open the packaged page from Designer Home, Designer Help and CG Control Station setup
 
 ## 3. Verification
 
 - [x] 3.1 Test disabled cards, hosted links and the missing-version build refusal
-- [ ] 3.2 Run release typecheck/lint/tests, strict OpenSpec validation and inspect the rendered page
+- [x] 3.2 Release typecheck, lint and tests passed. Both languages were checked in Chromium from both apps.

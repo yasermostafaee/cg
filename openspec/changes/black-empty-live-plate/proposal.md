@@ -5,7 +5,7 @@ A valid source can temporarily carry no picture. Its transparent output makes th
 ## What Changes
 
 - Paint the Designer-selected Bars/solid-colour/picture fallback beneath a valid live plate.
-- Keep Bars as the backward-compatible default and show a real Bars thumbnail in the picker.
+- Use Bars for new plates and legacy plates without a choice. Show a Bars thumbnail in the picker.
 - Keep the fallback on the Bridge-resolved visible fit of the producer.
 - Preserve refusal behavior for invalid/unavailable sources.
 

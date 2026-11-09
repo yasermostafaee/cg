@@ -6,8 +6,11 @@ web host without a framework or server-side renderer. Hosted file locations are 
 ## Decisions
 
 - `docs/release/release-history.json` is the source of truth; generated HTML is never edited by hand.
-- `docs/release/index.html` is self-contained, Persian, RTL and responsive. Native `details` elements make
-  each version independently clickable and usable without JavaScript.
+- `docs/release/index.html` is self-contained and responsive. Persian is the initial RTL view and uses
+  embedded Vazirmatn. A language switch shows English in LTR. Native `details` elements make each
+  version independently clickable, with separate feature, fix and pending lists.
+- Designer Home and Help and CG Control Station setup embed the generated artifact in a dialog.
+  The app build inputs include the generated HTML so cached builds refresh when the page changes.
 - A release stores only an optional `downloadBaseUrl`. Tooling derives the five canonical filenames, avoiding
   duplicated links and spelling drift. Missing URLs render disabled cards rather than dead anchors.
 - Installer CI passes its current version to the generator. A missing matching history entry is a packaging

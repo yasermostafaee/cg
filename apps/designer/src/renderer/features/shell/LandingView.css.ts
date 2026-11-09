@@ -22,6 +22,12 @@ export const brandSub = style({
   margin: 0,
 });
 
+export const versionActions = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.75rem',
+});
+
 export const brandLockup = style({
   display: 'inline-flex',
   alignItems: 'center',

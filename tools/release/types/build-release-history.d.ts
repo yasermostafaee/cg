@@ -1,11 +1,17 @@
+interface ReleaseHistoryTranslation {
+  fa: string;
+  en: string;
+}
+
 interface ReleaseHistoryEntry {
   version: string;
-  title: string;
+  title: ReleaseHistoryTranslation;
   date: string;
   status: 'development' | 'prepared' | 'published';
-  summary: string;
-  changes: string[];
-  planned: string[];
+  summary: ReleaseHistoryTranslation;
+  features: ReleaseHistoryTranslation[];
+  fixes: ReleaseHistoryTranslation[];
+  planned: ReleaseHistoryTranslation[];
   downloadBaseUrl: string | null;
 }
 

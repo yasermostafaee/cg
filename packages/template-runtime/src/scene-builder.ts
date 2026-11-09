@@ -1,6 +1,7 @@
 import {
   elementDigitsOf,
   followsComposition,
+  liveRevealRects,
   pathVisualBBox,
   repeaterRowLimit,
   sequencePictureFit,
@@ -1866,19 +1867,29 @@ function buildLiveSource(element: VideoPlaceholderElement, ctx: BuildCtx): HTMLE
   // On air the fallback is the only plate-owned pixel. Labels and reveal guides remain author-only.
   if (ctx.mode === 'output') return el;
 
-  if (element.revealMask !== undefined) {
-    const reveal = ctx.doc.createElement('div');
-    reveal.dataset['cgLiveRevealMask'] = element.revealMask.targetSourceId;
-    reveal.style.position = 'absolute';
-    reveal.style.left = `${element.revealMask.rect.x * 100}%`;
-    reveal.style.top = `${element.revealMask.rect.y * 100}%`;
-    reveal.style.width = `${element.revealMask.rect.width * 100}%`;
-    reveal.style.height = `${element.revealMask.rect.height * 100}%`;
-    reveal.style.border = '2px dashed #00e5ff';
-    reveal.style.background = 'rgba(0, 229, 255, 0.18)';
-    reveal.style.boxSizing = 'border-box';
-    reveal.style.pointerEvents = 'none';
-    el.appendChild(reveal);
+  const mask = element.revealMask;
+  if (mask !== undefined) {
+    const rects = liveRevealRects(mask);
+    for (const [index, rect] of rects.entries()) {
+      const reveal = ctx.doc.createElement('div');
+      reveal.dataset['cgLiveRevealMask'] = mask.targetSourceId;
+      reveal.style.position = 'absolute';
+      reveal.style.left = `${rect.x * 100}%`;
+      reveal.style.top = `${rect.y * 100}%`;
+      reveal.style.width = `${rect.width * 100}%`;
+      reveal.style.height = `${rect.height * 100}%`;
+      reveal.style.border = '2px dashed #00e5ff';
+      reveal.style.background = 'rgba(0, 229, 255, 0.18)';
+      reveal.style.boxSizing = 'border-box';
+      reveal.style.pointerEvents = 'none';
+      const name = ctx.doc.createElement('span');
+      name.textContent = `Mask ${index + 1}`;
+      name.style.cssText =
+        'display:inline-block;background:#092536;color:#a5f6ff;padding:2px 6px;font:700 13px/1.2 sans-serif;' +
+        'white-space:nowrap;transform:scale(var(--cg-author-guide-scale, 2));transform-origin:top left';
+      reveal.appendChild(name);
+      el.appendChild(reveal);
+    }
   }
 
   const label = ctx.doc.createElement('div');

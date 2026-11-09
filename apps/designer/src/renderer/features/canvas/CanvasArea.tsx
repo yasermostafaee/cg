@@ -210,6 +210,14 @@ function collectSceneLottieIds(scene: Scene): string[] {
   return [...ids];
 }
 
+/** Keep authoring guide labels readable while the preview iframe scales with the scene. */
+function setAuthorGuideScale(frame: HTMLIFrameElement | null, zoom: number): void {
+  frame?.contentDocument?.documentElement?.style.setProperty(
+    '--cg-author-guide-scale',
+    String(1 / zoom),
+  );
+}
+
 /**
  * Canvas work area with the cgpreview iframe + transparent input
  * overlay. D-007 added:
@@ -254,6 +262,9 @@ export function CanvasArea({
     () => new Map(),
   );
   const [zoom, setZoom] = useState<number>(ZOOM_DEFAULT);
+  useLayoutEffect(() => {
+    setAuthorGuideScale(iframeRef.current, zoom);
+  }, [zoom]);
   // Live mirror of `zoom` so the (once-bound) wheel listener + the zoom helpers read
   // the current value without re-subscribing.
   const zoomRef = useRef<number>(zoom);
@@ -1319,6 +1330,7 @@ export function CanvasArea({
                 <iframe
                   ref={iframeRef}
                   srcDoc={html}
+                  onLoad={(event) => setAuthorGuideScale(event.currentTarget, zoom)}
                   title="cgpreview"
                   className={s.iframe}
                   style={{

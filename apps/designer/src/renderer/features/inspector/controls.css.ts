@@ -20,6 +20,24 @@ export const rowBare = style({
   minWidth: 0,
 });
 
+export const inlineActions = style({ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' });
+
+export const revealSection = style({
+  marginBlock: '0.6rem',
+  paddingBlock: '0.4rem',
+  borderBlock: `1px solid ${colors.border}`,
+});
+
+export const revealSectionHeader = style({
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  gap: '0.5rem',
+  marginBottom: '0.25rem',
+  fontSize: '0.75rem',
+  fontWeight: 650,
+});
+
 export const rowMulti = style({
   display: 'grid',
   gridTemplateColumns: `74px 1fr 1fr`,

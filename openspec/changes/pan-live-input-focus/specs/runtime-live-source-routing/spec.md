@@ -19,3 +19,19 @@ be byte-identical to a centred focus, and `contain` SHALL ignore focus.
 - **GIVEN** one source appears with different focus in two looks
 - **WHEN** the active look changes
 - **THEN** the Bridge resolves that look's focus and recomputes the live-source geometry
+
+## ADDED Requirements
+
+### Requirement: Operators can pan the visible input on the CG Control monitors
+
+CG Control SHALL offer direct dragging on a visible, cropped live plate using the actual picture.
+The gesture SHALL move only the overflowing image axes and preserve the plate's boundaries and
+input assignment. PVW SHALL stage the change before Take, and PGM SHALL apply a scoped change to the
+current on-air plate.
+
+#### Scenario: The same interaction targets two different monitor contexts
+
+- **WHEN** an operator drags a cropped input in PVW **THEN** the local preview changes without a
+  programme write
+- **WHEN** an operator applies a drag to a cropped input in PGM **THEN** the on-air plate shows the
+  chosen region with the same clip and audio

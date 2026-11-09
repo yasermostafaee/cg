@@ -8,11 +8,11 @@ text or disabling overlap safety for every plate.
 
 ## What Changes
 
-- Add an explicit upper-source → lower-source relation and a normalized rectangular reveal window.
-- Let the author select the lower plate, edit exact percentages or draw the window on Canvas.
+- Add an explicit upper-source → lower-source relation and up to eight normalized reveal windows.
+- Let the author add, redraw, edit and remove each window independently in the Inspector and Canvas.
 - Keep every unrelated live-plate overlap blocking.
-- Render the reveal as an always-muted clipped copy of the lower producer above the upper producer.
-- Count that copy as one additional seat and refuse atomically when the live-source band lacks room.
+- Render each window as a muted clipped copy of the lower producer above the upper producer.
+- Count each copy as an additional seat and refuse atomically when the live-source band lacks room.
 
 ## Capabilities
 

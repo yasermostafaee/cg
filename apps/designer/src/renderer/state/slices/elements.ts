@@ -1,5 +1,10 @@
 import type { AnimatableProperty, Element, Layer } from '@cg/shared-schema';
-import { activeRangeOf, compositionInstancesOf, uniqueInstanceName } from '@cg/shared-schema';
+import {
+  activeRangeOf,
+  compositionInstancesOf,
+  pruneDanglingLiveRevealMasks,
+  uniqueInstanceName,
+} from '@cg/shared-schema';
 import {
   current,
   getClipboard,
@@ -583,6 +588,7 @@ export const elementsSlice = {
     const found = locate(current.scene, elementId);
     if (found === null) return;
     const { layer, layerIdx, elIdx } = found;
+    const removed = layer.children[elIdx];
     const nextChildren = layer.children.filter((_, i) => i !== elIdx);
     const nextLayers = [...activeLayersOf(current.scene)];
     // D-088 — if this removal empties an UNTOUCHED auto-created scaffold layer, prune it so
@@ -624,8 +630,15 @@ export const elementsSlice = {
       children: removeValueRulesForFields(candidate.children, removedFieldIds),
     }));
     const withLayers = withActiveLayers(current.scene, nextLayersWithRules);
+    const nextScene = withActiveFieldData(withLayers, {
+      fields: nextFields,
+      bindings: nextBindings,
+    });
     set({
-      scene: withActiveFieldData({ ...withLayers }, { fields: nextFields, bindings: nextBindings }),
+      scene:
+        removed?.type === 'video-placeholder' || removed?.type === 'container'
+          ? pruneDanglingLiveRevealMasks(nextScene)
+          : nextScene,
       selection: nextSelection,
       selectedKeyframe: keepKey ? current.selectedKeyframe : null,
       selectedKeyframes: keepKey ? current.selectedKeyframes : [],

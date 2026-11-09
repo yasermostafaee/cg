@@ -17,6 +17,7 @@ import { AboutModal } from './AboutModal.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { SaveBeforeSwitchModal } from './SaveBeforeSwitchModal.js';
 import { ShortcutsModal } from './ShortcutsModal.js';
+import { VersionHistoryModal } from './VersionHistoryModal.js';
 import { openProjectFromDisk } from './open-project.js';
 import * as s from './TopToolbar.css.js';
 
@@ -49,6 +50,7 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
   const [delimitersOpen, setDelimitersOpen] = useState(false);
   // `D-161` — Help → About.
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [newModalOpen, setNewModalOpen] = useState(false);
   // Queues a switch action (Close / New / Open) when there's already a
   // scene loaded — the SaveBeforeSwitchModal runs first and only then
@@ -498,7 +500,13 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
                   setAboutOpen(true);
                 }}
               />
-              <FileMenuItem label="Changelog" disabled onClick={() => undefined} />
+              <FileMenuItem
+                label="Version history"
+                onClick={() => {
+                  setOpenMenu(null);
+                  setHistoryOpen(true);
+                }}
+              />
             </div>
           )}
         </div>
@@ -558,6 +566,7 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
       {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
       {delimitersOpen && <DesignerDelimitersModal onClose={() => setDelimitersOpen(false)} />}
       {aboutOpen && <AboutModal onClose={() => setAboutOpen(false)} />}
+      {historyOpen && <VersionHistoryModal onClose={() => setHistoryOpen(false)} />}
       {newModalOpen && <NewProjectModal onClose={() => setNewModalOpen(false)} />}
       {pendingSwitch !== null && scene !== null && (
         <SaveBeforeSwitchModal

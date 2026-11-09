@@ -4,6 +4,7 @@ import { liveSourceIssues } from '../src/renderer/state/live-source-preflight.js
 import { dropFullyOffFrameForExport } from '../src/renderer/state/off-frame.js';
 import { resolveBinding, describeBinding } from '../src/renderer/features/fields/bind-resolver.js';
 import { defaultLiveSource } from '../src/renderer/state/element-defaults.js';
+import { designerStore } from '../src/renderer/state/store.js';
 
 /**
  * D-137 phase 1 — the Designer half that is not UI: the four preflight ERRORS, the
@@ -279,6 +280,7 @@ describe('D-137 — overlapping holes are reported against BOTH elements', () =>
       revealMask: {
         targetSourceId: 'lower',
         rect: { x: 0.1, y: 0.5, width: 0.8, height: 0.4 },
+        additionalRects: [{ x: 0.4, y: 0.3, width: 0.4, height: 0.1 }],
       },
     });
     const lower = live('lower', 300, 200);
@@ -335,17 +337,47 @@ describe('D-137 — overlapping holes are reported against BOTH elements', () =>
     expect(codes(cyclic)).toContain('live-reveal-cycle');
   });
 
-  it('D-202 — a reveal window that misses its linked lower plate is a targeted error', () => {
+  it('B-423 — opening a project clears only masks with missing Plates and marks the repair unsaved', () => {
+    const rect = { x: 0.1, y: 0.6, width: 0.8, height: 0.25 };
+    const project = scene([
+      live('plate-2', 100, 100, { revealMask: { targetSourceId: 'plate-3', rect } }),
+      live('plate-1', 100, 100, { revealMask: { targetSourceId: 'plate-2', rect } }),
+    ]);
+
+    try {
+      designerStore.setScene(project, 'plates.cgproj');
+      const plates = designerStore.allElements().filter((el) => el.type === 'video-placeholder');
+      expect(plates.find((plate) => plate.routeKey === 'plate-2')?.revealMask).toBeUndefined();
+      expect(plates.find((plate) => plate.routeKey === 'plate-1')?.revealMask).toEqual({
+        targetSourceId: 'plate-2',
+        rect,
+      });
+      expect(designerStore.get()).toMatchObject({
+        dirty: true,
+        notice: expect.stringMatching(/Save/),
+      });
+    } finally {
+      designerStore._reset();
+    }
+  });
+
+  it('D-202 — a second window that misses its linked lower plate is a targeted error', () => {
     const s = scene([
       live('upper', 0, 0, {
         revealMask: {
           targetSourceId: 'lower',
-          rect: { x: 0, y: 0, width: 0.1, height: 0.1 },
+          rect: { x: 0.5, y: 0.7, width: 0.4, height: 0.2 },
+          additionalRects: [{ x: 0, y: 0, width: 0.1, height: 0.1 }],
         },
       }),
       live('lower', 300, 200),
     ]);
-    expect(codes(s)).toContain('live-reveal-window-misses-target');
+    expect(liveSourceIssues(s)).toContainEqual(
+      expect.objectContaining({
+        code: 'live-reveal-window-misses-target',
+        message: expect.stringContaining('Mask 2'),
+      }),
+    );
   });
 
   it('edge-touching is NOT an overlap — zero shared area is not a collision', () => {

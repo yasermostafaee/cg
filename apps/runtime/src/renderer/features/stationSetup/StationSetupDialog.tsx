@@ -43,6 +43,7 @@ import { Modal, ModalAction, modalActionVariant, type ModalMessage } from '../..
 import { NumericInput } from '../../ui/NumericInput.js';
 import { RailStationCard, TabPanel, TabStrip, type TabSpec } from '../../ui/Tabs.js';
 import { APP_BUILD, APP_VERSION } from '../../appVersion.js';
+import historyUrl from '../../../../../../docs/release/index.html?url';
 import { useSelectedChannel } from '../channels/useSelectedChannel.js';
 import {
   CandidateLayersHelper,
@@ -524,6 +525,7 @@ export function StationSetupDialog({
   */
   const { selected: channel, names: channelNames, air: channelAirs } = useSelectedChannel();
   const [active, setActive] = useState<StationSetupSection>(section);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [primary, setPrimary] = useState<EndpointDraft>(UNREAD_SERVERS.primary);
   const [backupEnabled, setBackupEnabled] = useState(UNREAD_SERVERS.backupEnabled);
   const [backup, setBackup] = useState<EndpointDraft>(UNREAD_SERVERS.backup);
@@ -1366,7 +1368,11 @@ export function StationSetupDialog({
                     : loaded.servers.A.host
               }
               /* `CLIENT-TEST-RELEASE-01` B1 — the one line in CG Control that names its release. */
-              version={{ release: APP_VERSION, build: APP_BUILD }}
+              version={{
+                release: APP_VERSION,
+                build: APP_BUILD,
+                onOpenHistory: () => setHistoryOpen(true),
+              }}
             />
           }
         />
@@ -2087,6 +2093,27 @@ export function StationSetupDialog({
             setAddingBackup(false);
           }}
         />
+      )}
+      {historyOpen && (
+        <Modal
+          title="Version history"
+          size="library"
+          layer="sub"
+          onClose={() => setHistoryOpen(false)}
+          footer={
+            <ModalAction actionRole="cancel" onClick={() => setHistoryOpen(false)}>
+              Done
+            </ModalAction>
+          }
+        >
+          <iframe
+            src={historyUrl}
+            title="Version history"
+            sandbox="allow-scripts allow-downloads"
+            tabIndex={0}
+            style={{ display: 'block', width: '100%', height: 'min(70vh, 740px)', border: 0 }}
+          />
+        </Modal>
       )}
     </Modal>
   );

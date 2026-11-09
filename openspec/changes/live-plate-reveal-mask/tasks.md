@@ -19,3 +19,13 @@
 - [x] 3.2 Prove real Bridge wire order, geometry, duplicate identity and permanent mute in AMCP integration
 - [x] 3.3 Package checks and the full pre-push gate passed on `d6383de0`.
 - [ ] 3.4 Confirm FILL/CLIP behaviour on the target CasparCG plant
+
+## 4. Multiple masks on the same Plate
+
+- [x] 4.1 Extend the existing relation with optional extra windows and preserve one-window projects
+- [x] 4.2 Add Inspector selection, per-mask geometry, Canvas add/redraw and individual removal
+- [x] 4.3 Validate every mask and reserve a muted Bridge seat for each visible window
+- [x] 4.4 Verify the editor, carrier and AMCP paths with two distinct windows
+- [x] 4.5 B-423 — remove dependent masks on deletion and repair orphaned masks on open
+- [x] 4.6 Verify delete, Undo and the reported previously saved project
+- [x] 4.7 Verify labelled guides at two Canvas zoom levels and icon actions in the mask group

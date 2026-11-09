@@ -98,6 +98,7 @@ export interface DesignerStoreState {
    */
   view: DesignerView;
   tool: DesignerTool;
+  liveRevealDrawIndex: number | null;
   /** Element IDs currently selected. */
   selection: ReadonlySet<string>;
   /** When set, the canvas shows an inline TextEditor for this element. */
@@ -270,6 +271,7 @@ export const initialState: DesignerStoreState = {
   activeLookId: null,
   view: 'landing',
   tool: 'cursor',
+  liveRevealDrawIndex: null,
   selection: new Set<string>(),
   editingTextId: null,
   editingPathId: null,

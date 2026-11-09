@@ -1,5 +1,10 @@
 import type { Lifecycle, Playout, Scene } from '@cg/shared-schema';
-import { activeRangeOf, migrateScene, playoutOf } from '@cg/shared-schema';
+import {
+  activeRangeOf,
+  migrateScene,
+  playoutOf,
+  pruneDanglingLiveRevealMasks,
+} from '@cg/shared-schema';
 import {
   current,
   getNoticeTimer,
@@ -69,12 +74,14 @@ export const documentSlice = {
     // and open the first composition, if any.
     let activeId: string | null = null;
     let normalized: Scene | null = null;
+    let repaired: Scene | null = null;
     if (scene !== null) {
       // B-059/B-062 — migrate legacy paths to the size==visualBBox convention
       // FIRST (identity for conforming scenes, so a clean load stays clean) — with every other
       // registered migration (TEXT-FIT-01: the one spelling of fit), through the one registry.
       const ensured = ensureCompositions(normalizeKeyframeIds(migrateScene(scene)));
       normalized = ensured.scene;
+      repaired = pruneDanglingLiveRevealMasks(normalized);
       activeId = ensured.activeId;
     }
     // A freshly loaded/closed project starts clean — nothing to save yet. Baseline both
@@ -82,7 +89,7 @@ export const documentSlice = {
     setSavedBaseline(normalized);
     try {
       set({
-        scene: normalized,
+        scene: repaired,
         projectPath,
         activeCompositionId: activeId,
         view: scene === null ? 'landing' : 'studio',
@@ -98,6 +105,14 @@ export const documentSlice = {
       });
     } finally {
       setSuppressHistory(false);
+    }
+    if (repaired !== normalized) {
+      documentSlice.showNotice(
+        'Removed reveal masks for missing Plates. Save to keep the repair.',
+        {
+          tone: 'neutral',
+        },
+      );
     }
   },
 

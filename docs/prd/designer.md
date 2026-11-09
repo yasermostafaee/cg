@@ -6033,13 +6033,16 @@ including its audio, before Take/Update on air. **Blocker:** CG Control currentl
 catalogue/control metadata, not a bounded preview stream and per-source monitor-audio contract from
 Playout; the client must not invent a vendor-specific capture endpoint.
 
-## [~] D-178 — Pan a live input inside a differently shaped plate ⟨priority: high — implementation complete; full gate remains, 2026-11-08⟩ — `openspec/changes/pan-live-input-focus/`
+## [~] D-178 — Pan a live input inside a differently shaped plate ⟨priority: high — clarified by the owner, 2026-11-09⟩ — `openspec/changes/pan-live-input-focus/`
 
-**What:** when a source is cropped by a plate's aspect, expose normalised horizontal/vertical focus
-controls in the Designer Inspector, persist them per plate/look and apply the same value to the
-authoring poster and Bridge/on-air mixer geometry. An absent value is exactly centred and `contain`
-ignores focus. The owner's later acceptance allowed the Inspector instead of a direct PVW/PGM drag;
-direct picture dragging remains coupled to D-177's still-blocked preview-picture contract.
+**What:** In CG Control, drag the actual source picture inside its plate in PVW or PGM. Move only
+the overflowing source axis and preserve the plate, its title and the source assignment. PVW edits
+are staged for Take. PGM edits apply to the visible on-air plate through an explicit operator action.
+Existing saved focus values remain readable. Absent focus centres a cover crop.
+
+**Feasibility:** PGM already provides the live programme return, and the Bridge can translate a
+cropped source with its existing FILL/CLIP geometry. An operator gesture and scoped Bridge command
+are still needed. Seeing and panning the real input in PVW depends on the accepted D-177 preview feed.
 
 ## [~] D-179 — Rebuild and re-audit the Persian production starter gallery ⟨priority: high — owner re-review reopened 2026-11-04⟩ — `openspec/changes/rebuild-production-starter-gallery/`
 
@@ -6688,21 +6691,22 @@ CG Control after swapping left/right inputs is not an acceptable operating workf
 
 ## [~] D-202 — An upper live plate can reveal part of a lower live input ⟨priority: high — the owner, 2026-11-08⟩ — `openspec/changes/live-plate-reveal-mask/`
 
-**What:** Explicitly link an upper plate to a lower plate and draw a rectangular reveal window on
-the upper plate. The revealed pixels come directly from the lower input, including burned-in text.
+**What:** Link an upper plate to a lower plate and draw up to eight rectangular masks on the upper
+plate. Each reveals pixels directly from the lower input, including burned-in text.
 
 **Why:** Some sources already contain subtitles or captions in their video. A production may need
 the upper source as the main picture while exposing only that lower source region, as in Cinegy.
 
 **Acceptance:**
 
-- WHEN an upper plate selects a lower plate and owns a valid reveal rectangle THEN the Designer
-  allows that linked overlap and the Bridge places an always-muted clipped copy of the lower input
-  above the upper producer
+- WHEN an upper plate selects a lower plate and each mask reaches it THEN the Designer allows that
+  linked overlap and the Bridge places a muted clipped copy of the lower input per mask
+- WHEN the author redraws, edits or removes a mask THEN the other masks keep their geometry
+- WHEN the last mask is removed THEN the plate returns to ordinary overlap validation
 - WHEN plates merely overlap without that explicit relation THEN both remain red/export-blocking
-- WHEN the relation is missing, self-referential, cyclic or its window does not reach the lower plate
+- WHEN the relation is missing, self-referential, cyclic or a window does not reach the lower plate
   THEN export is refused with a targeted error
-- WHEN the live-source band lacks the extra layer required by a reveal THEN take is refused before
+- WHEN the live-source band lacks the extra layers required by the masks THEN take is refused before
   any producer or graphic is put on air
 
 ## [~] D-203 — Timeline layers expose Rule and Step participation ⟨priority: medium — the owner, 2026-11-08⟩ — `openspec/changes/timeline-automation-badges/`

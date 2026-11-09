@@ -57,8 +57,8 @@ export function isAspectLocked(
  * is session-only editor state (never saved into the scene). See `state/README.md`.
  */
 export const viewSlice = {
-  setTool(tool: DesignerTool): void {
-    set({ tool });
+  setTool(tool: DesignerTool, liveRevealDrawIndex: number | null = null): void {
+    set({ tool, liveRevealDrawIndex });
   },
 
   /** View menu — toggle the canvas pixel rulers. */

@@ -9,7 +9,7 @@ import {
 import { REPO } from '../src/build-guide.mjs';
 
 describe('versioned release history', () => {
-  it('renders the tracked Persian history with a clickable section per version', () => {
+  it('renders both locales with distinct feature and fix sections and an embedded Persian font', () => {
     const data = parseReleaseHistory(
       fs.readFileSync(path.join(REPO, 'docs', 'release', 'release-history.json'), 'utf8'),
     );
@@ -18,9 +18,34 @@ describe('versioned release history', () => {
     expect(html).toContain('lang="fa" dir="rtl"');
     expect(html).toContain('id="version-next"');
     expect(html).toContain('id="version-1.0.0"');
+    expect(html).toContain('id="en-version-1.0.0"');
+    expect(html).toContain('lang="en" dir="ltr"');
+    expect(html).toContain('Features and improvements');
+    expect(html).toContain('Bug fixes');
+    expect(html).toContain('قابلیت‌ها و بهبودها');
+    expect(html).toContain('رفع باگ‌ها');
+    expect(html).toContain('data:font/woff2;base64,');
     expect(html).toContain('لایه‌های متنی مخفی');
     expect(html).toContain('CG-Control_1.0.0_x64-setup.exe');
     expect(html).toContain('data-download-file=');
+  });
+
+  it('requires both locales for new history entries', () => {
+    expect(() =>
+      parseReleaseHistory(JSON.stringify({
+        schemaVersion: 2,
+        product: 'APASAI CG',
+        releases: [{
+          version: '1.2.3',
+          title: { fa: 'نسخه', en: 'Release' },
+          date: '2026-11-08',
+          status: 'prepared',
+          summary: { fa: 'آماده', en: 'Ready' },
+          features: [],
+          fixes: [{ fa: 'رفع باگ' }],
+        }],
+      })),
+    ).toThrow(/fixes\[0\]\.en/);
   });
 
   it('binds every version asset when its host base URL is supplied', () => {

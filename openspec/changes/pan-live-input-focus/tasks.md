@@ -8,12 +8,14 @@
 
 ## 2. Authoring and output
 
-- [x] 2.1 Add X/Y percentage controls to the Live Source Inspector
-- [x] 2.2 Preview focus on an authored poster
+- [x] 2.1 Remove Designer's percentage controls and preserve saved focus values
+- [x] 2.2 Record the feasibility and contract dependencies of direct CG Control dragging
 - [x] 2.3 Apply focus to Bridge `FILL` through the shared live-source geometry
+- [ ] 2.4 Add scoped crop editing on the live PGM return
+- [ ] 2.5 Add local PVW crop editing on the accepted C-023 live input feed
 
 ## 3. Verification
 
-- [x] 3.1 Cover schema bounds, both fit modes, per-look carrier, wire parse, poster and Inspector writes
+- [x] 3.1 Cover schema bounds, both fit modes, per-look carrier, wire parse and existing-project compatibility
 - [x] 3.2 Package checks and the full pre-push gate passed on `d6383de0`.
 - [ ] 3.3 Verify crop focus on a real input in the target plant.

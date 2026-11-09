@@ -15,6 +15,25 @@ const VERSION = (
   JSON.parse(readFileSync(path.resolve(here, '../../package.json'), 'utf8')) as { version: string }
 ).version;
 
+test('P-077 — version history opens inside Station setup and returns to the station', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.getByRole('button', { name: 'Open Station setup', exact: true }).click();
+  const settings = page.getByRole('dialog', { name: 'Station setup' });
+  await settings.getByRole('button', { name: 'Version history', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Version history' });
+  const history = dialog.frameLocator('iframe[title="Version history"]');
+  await expect(
+    history.getByRole('heading', { name: 'نسخه‌ها و تغییرات', exact: true }),
+  ).toBeVisible();
+  await history.getByRole('button', { name: 'English' }).click();
+  await expect(history.locator('html')).toHaveAttribute('lang', 'en');
+  await expect(history.getByRole('heading', { name: 'Bug fixes' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(settings.getByTestId('app-version')).toHaveText(`Version ${VERSION}`);
+});
+
 test('B1 — Station setup reads "Version <release>" at the foot of its rail, inside the dialog', async ({
   app,
 }) => {

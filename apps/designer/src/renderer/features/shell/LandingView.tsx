@@ -12,6 +12,7 @@ import { Tag } from '../../ui/Tag.js';
 import { APP_BUILD, APP_VERSION } from '../../appVersion.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { SaveBeforeSwitchModal } from './SaveBeforeSwitchModal.js';
+import { VersionHistoryModal } from './VersionHistoryModal.js';
 import { openProjectFromDisk } from './open-project.js';
 import { playoutBadge } from './playout-badge.js';
 import * as s from './LandingView.css.js';
@@ -43,6 +44,7 @@ export function LandingView(): JSX.Element {
   const [recent, setRecent] = useState<readonly RecentProject[]>([]);
   const [starters, setStarters] = useState<readonly StarterEntry[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   // When a project is already loaded and the operator picks a
   // different one, hold the would-be switch in `pendingSwitch` until
   // the save-or-discard modal resolves.
@@ -138,9 +140,14 @@ export function LandingView(): JSX.Element {
           Designer introduces itself and the first thing on screen at every launch (Help → About,
           `D-161`, names it too, with the build). A fact, so a `Tag`, in the line above's own treatment.
         */}
-        <Tag className={s.brandSub} title={APP_BUILD} data-testid="app-version">
-          Version {APP_VERSION}
-        </Tag>
+        <div className={s.versionActions}>
+          <Tag className={s.brandSub} title={APP_BUILD} data-testid="app-version">
+            Version {APP_VERSION}
+          </Tag>
+          <Button variant="bare" size="sm" onClick={() => setHistoryOpen(true)}>
+            Version history
+          </Button>
+        </div>
       </div>
 
       <div className={s.projectActions}>
@@ -221,6 +228,7 @@ export function LandingView(): JSX.Element {
       )}
 
       {modalOpen && <NewProjectModal onClose={() => setModalOpen(false)} />}
+      {historyOpen && <VersionHistoryModal onClose={() => setHistoryOpen(false)} />}
       {pendingSwitch !== null && scene !== null && (
         <SaveBeforeSwitchModal
           scene={scene}

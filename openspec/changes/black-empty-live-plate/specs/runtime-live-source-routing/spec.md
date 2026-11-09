@@ -2,16 +2,16 @@
 
 ### Requirement: A valid Live Source plate SHALL show its authored fallback while its upstream has no picture
 
-For every valid assigned Live Source, the graphics bed SHALL preserve the selected Bars/solid-colour/picture fallback whenever the routed producer is transparent/empty. Bars SHALL be the default for an older scene. The fallback SHALL occupy the Bridge-resolved visible fitted rectangle. A resumed picture SHALL cover it without a template re-take. An invalid or unavailable source SHALL still be refused before on-air state changes.
+For every valid assigned Live Source, the graphics bed SHALL preserve the selected Bars/solid-colour/picture fallback whenever the routed producer is transparent/empty. Bars SHALL be the default for a new plate and for a legacy plate without a fallback or poster. The fallback SHALL occupy the Bridge-resolved visible fitted rectangle. A resumed picture SHALL cover it without a template re-take. An invalid or unavailable source SHALL still be refused before on-air state changes.
 
 #### Scenario: Playlist ends
 
 - **WHEN** an assigned playlist output remains valid but its current item ends with no next picture **THEN** the plate shows its selected fallback at the producer's visible fitted geometry
 
-#### Scenario: A new plate starts with a black fallback
+#### Scenario: A new plate starts with Bars
 
-- **WHEN** the author creates a Live Source plate **THEN** its default fallback is solid black
-- **AND** choosing Bars from the same picker stores SMPTE Bars and shows its thumbnail
+- **WHEN** the author creates a Live Source plate **THEN** its default fallback is SMPTE Bars
+- **AND** the picker shows a Bars thumbnail and still offers solid colour or image choices
 
 #### Scenario: An older plate retains its Bars fallback
 

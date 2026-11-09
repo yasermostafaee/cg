@@ -15,8 +15,17 @@ look group exists. The Bridge resolves the active look and passes the value into
 All fields are optional. Old scenes, packages and persisted template records parse unchanged. Missing
 focus produces exactly the old centred crop. Schema bounds reject values outside the source frame.
 
-## Authoring surface
+## Operator surface
 
-The Inspector exposes X and Y percentages only as active controls for `cover`; under `contain` they
-stay visible but withheld with the reason. A poster uses CSS `object-position` so the author can inspect
-the result without claiming that a real live picture is available in Designer.
+The Designer Inspector has no crop-focus editor. Previously authored values remain readable in the
+scene and on export. The proposed CG Control gesture targets the selected, visible `cover` plate on
+its actual picture. Movement is clamped to the overflowing axes and keeps the authored plate fixed.
+
+PGM can map drag distance through the letterboxed programme return to the Bridge's applied fill and
+clip. The operator enters an explicit crop-edit mode. The action changes only the intended live plate
+after the Bridge confirms the row, look and source are still current. Reveal overlays showing that
+source need the same updated fill. The command must preserve producer, audio, clip and layer ownership.
+
+PVW needs the real input picture from C-023. Its focus is local to the preview until Take, with zero
+programme writes from dragging. The displayed preview raster and input aspect must be known before
+converting pointer coordinates. Neither a Designer poster nor a PVW placeholder substitutes for it.

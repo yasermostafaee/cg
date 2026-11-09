@@ -15,6 +15,36 @@ const VERSION = (
   JSON.parse(readFileSync(path.resolve(here, '../../package.json'), 'utf8')) as { version: string }
 ).version;
 
+test('P-077 — open the bilingual release history from Home and the editor Help menu', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.getByRole('button', { name: 'Version history' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Version history' });
+  const history = dialog.frameLocator('iframe[aria-label="Version history"]');
+  const persian = history.getByRole('heading', { name: 'نسخه‌ها و تغییرات', exact: true });
+  await expect(persian).toBeVisible();
+  await expect(history.getByRole('heading', { name: 'رفع باگ‌ها' })).toBeVisible();
+  expect(
+    await persian.evaluate(async (heading) => {
+      const loaded = await heading.ownerDocument.fonts.load('700 16px Vazirmatn', 'فارسی');
+      return loaded.length;
+    }),
+  ).toBeGreaterThan(0);
+  await history.getByRole('button', { name: 'English' }).click();
+  await expect(history.locator('html')).toHaveAttribute('dir', 'ltr');
+  await expect(history.getByRole('heading', { name: 'Features and improvements' })).toBeVisible();
+  await expect(history.getByRole('heading', { name: 'Bug fixes' })).toBeVisible();
+  await history.locator(`[id="en-version-${VERSION}"] summary`).click();
+  await expect(history.getByRole('heading', { name: 'Downloads for this version' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+
+  await app.newProject('History');
+  await page.getByRole('button', { name: 'Help', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Version history', exact: true }).click();
+  await expect(persian).toBeVisible();
+});
+
 test('B1 — the start screen reads "Version <release>" under its tagline, above New project', async ({
   app,
 }) => {

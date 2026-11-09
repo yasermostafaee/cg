@@ -20,6 +20,7 @@ import {
 import {
   isRestorable,
   intersectNormalizedRects,
+  liveRevealRects,
   liveRevealSceneRect,
   liveSourceFit,
   positionQuery,
@@ -7951,10 +7952,8 @@ export class CasparRuntime {
     }
 
     /*
-      D-202 — a reveal is rendered as one extra, always-muted copy of the LOWER producer above
-      the upper plate. Its FILL is the lower plate's exact FILL; only its CLIP is intersected with
-      the authored window. This is equivalent to cutting a rectangular hole in the upper picture,
-      while using only the measured FILL/CLIP primitives CasparCG already provides.
+      D-202 — each window seats an always-muted copy of the lower producer above the upper plate.
+      The copy keeps the lower plate's FILL, and its CLIP is intersected with that window.
     */
     const reveals = lookPlateReveals(carrier, lookId);
     const activeMain = new Map(
@@ -7976,29 +7975,32 @@ export class CasparRuntime {
       const lower = activeMain.get(reveal.targetSourceId);
       const upperRect = desired[upperId];
       if (upper === undefined || lower === undefined || upperRect === undefined) continue;
-      const maskFit = this.liveSourceFitFor({
-        channel: slot.channel,
-        itemId,
-        rect: liveRevealSceneRect(upperRect, reveal.rect),
-        sceneResolution: carrier.resolution,
-        carriedDefaultPosition: carrier.defaultPosition,
-        sourceAspect: null,
-      });
-      if (maskFit.clip === null) continue;
-      const clip = intersectNormalizedRects(lower.fit.clip, maskFit.clip);
-      if (clip === null) continue;
-      const seatId = `${lower.producerArg}\u001freveal:${upperId}`;
-      declared.add(seatId);
-      const lowerSource = resolved.get(lower.producerArg);
-      if (lowerSource !== undefined) resolved.set(seatId, lowerSource);
-      seated.push({
-        ...lower,
-        plateId: reveal.targetSourceId,
-        seatId,
-        fit: { fill: lower.fit.fill, clip },
-        held: false,
-        revealOverlay: true,
-      });
+      for (const [index, rect] of liveRevealRects(reveal).entries()) {
+        const maskFit = this.liveSourceFitFor({
+          channel: slot.channel,
+          itemId,
+          rect: liveRevealSceneRect(upperRect, rect),
+          sceneResolution: carrier.resolution,
+          carriedDefaultPosition: carrier.defaultPosition,
+          sourceAspect: null,
+        });
+        if (maskFit.clip === null) continue;
+        const clip = intersectNormalizedRects(lower.fit.clip, maskFit.clip);
+        if (clip === null) continue;
+        const suffix = index === 0 ? '' : `:${index}`;
+        const seatId = `${lower.producerArg}\u001freveal:${upperId}${suffix}`;
+        declared.add(seatId);
+        const lowerSource = resolved.get(lower.producerArg);
+        if (lowerSource !== undefined) resolved.set(seatId, lowerSource);
+        seated.push({
+          ...lower,
+          plateId: reveal.targetSourceId,
+          seatId,
+          fit: { fill: lower.fit.fill, clip },
+          held: false,
+          revealOverlay: true,
+        });
+      }
     }
 
     // The EMPTY look is valid and carries an empty map — background alone. It is not an early

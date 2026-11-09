@@ -4912,3 +4912,10 @@ Clear Hold start on a composition with an Outro start, or open the revised forec
 The timeline draws a dotted line and shaded range from the computed playback cue. Show the
 Hold line and shading only after Set records an explicit Hold start. Draw the orange Outro
 line from its authored marker independently.
+
+## [~] B-423 — Deleting a lower Plate leaves stale reveal masks ⟨priority: high — the owner, 2026-11-09⟩ — `openspec/changes/live-plate-reveal-mask/`
+
+Deleting Plate 3 left a reveal mask on Plate 2 that still targeted its source. Remove dependent masks
+when the last Plate declaring their lower source is deleted. Undo restores both the Plate and its
+masks. On open, repair already-dangling masks in memory, show a notice and mark the project unsaved.
+The valid mask from Plate 1 to Plate 2 in the reported project survives.

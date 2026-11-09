@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { LIVE_REVEAL_MAX_RECTS, liveRevealMaskFromRects, liveRevealRects } from '@cg/shared-schema';
 import type {
   AnchorPoint,
   Element,
@@ -539,6 +540,11 @@ export function CanvasOverlay({
     plate: Extract<Element, { type: 'video-placeholder' }>,
     start: { x: number; y: number },
   ): void {
+    const mask = plate.revealMask;
+    if (mask === undefined) return;
+    const rects = liveRevealRects(mask);
+    const index = designerStore.get().liveRevealDrawIndex;
+    if (index === null ? rects.length >= LIVE_REVEAL_MAX_RECTS : rects[index] === undefined) return;
     const rendered = {
       ...plate,
       transform: renderedTransformAt(plate, frameForElement(plate.id)),
@@ -551,44 +557,58 @@ export function CanvasOverlay({
     const first = clamp(start);
     setRevealDraft({ start: first, end: first });
     const onMove = (event: PointerEvent): void => {
-      setRevealDraft({ start: first, end: clamp(viewportToScene(event.clientX, event.clientY)) });
+      if (designerStore.get().tool === 'live-reveal') {
+        setRevealDraft({ start: first, end: clamp(viewportToScene(event.clientX, event.clientY)) });
+      }
     };
-    const onUp = (event: PointerEvent): void => {
+    const finish = (): void => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
-      const end = clamp(viewportToScene(event.clientX, event.clientY));
+      window.removeEventListener('pointercancel', onCancel);
       setRevealDraft(null);
+      if (designerStore.get().tool === 'live-reveal') designerStore.setTool('cursor');
+    };
+    const onCancel = (): void => finish();
+    const onUp = (event: PointerEvent): void => {
+      const { scene, tool: currentTool, liveRevealDrawIndex, selection } = designerStore.get();
+      finish();
+      if (
+        currentTool !== 'live-reveal' ||
+        liveRevealDrawIndex !== index ||
+        !selection.has(plate.id)
+      )
+        return;
+      const end = clamp(viewportToScene(event.clientX, event.clientY));
       const left = Math.min(first.x, end.x);
       const top = Math.min(first.y, end.y);
       const width = Math.abs(end.x - first.x);
       const height = Math.abs(end.y - first.y);
-      const currentScene = designerStore.get().scene;
-      const found = currentScene === null ? null : locate(currentScene, plate.id);
+      const found = scene === null ? null : locate(scene, plate.id);
       const latest = found?.layer.children[found.elIdx];
       if (
         latest?.type === 'video-placeholder' &&
-        latest.revealMask !== undefined &&
+        latest.revealMask === mask &&
         width >= 1 &&
         height >= 1 &&
         box.maxX > box.minX &&
         box.maxY > box.minY
       ) {
+        const x = (left - box.minX) / (box.maxX - box.minX);
+        const y = (top - box.minY) / (box.maxY - box.minY);
+        rects[index ?? rects.length] = {
+          x,
+          y,
+          width: Math.min(1 - x, width / (box.maxX - box.minX)),
+          height: Math.min(1 - y, height / (box.maxY - box.minY)),
+        };
         designerStore.updateElement(plate.id, {
-          revealMask: {
-            ...latest.revealMask,
-            rect: {
-              x: (left - box.minX) / (box.maxX - box.minX),
-              y: (top - box.minY) / (box.maxY - box.minY),
-              width: width / (box.maxX - box.minX),
-              height: height / (box.maxY - box.minY),
-            },
-          },
+          revealMask: liveRevealMaskFromRects(mask.targetSourceId, rects),
         } as Partial<Element>);
       }
-      designerStore.setTool('cursor');
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onCancel);
   }
 
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>): void {

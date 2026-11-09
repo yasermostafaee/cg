@@ -58,10 +58,8 @@ const errorPill = (app: DesignerApp) => app.page.getByRole('button', { name: 'Sh
  *  Issues panel, so an unscoped `getByText` is a strict-mode violation, not a bug. */
 const issuesModal = (app: DesignerApp) => app.page.getByRole('dialog', { name: 'Issues' });
 
-/** Issue ROWS in the modal matching `text`. Addressed by ROLE, not by text alone:
- *  a row nests its message in a span, so `getByText` matches the row AND the span. */
-const issueRows = (app: DesignerApp, text: RegExp) =>
-  issuesModal(app).getByRole('button', { name: text });
+/** Issue messages are selectable text. Navigation uses a separate button. */
+const issueRows = (app: DesignerApp, text: RegExp) => issuesModal(app).getByText(text);
 
 async function openIssues(app: DesignerApp): Promise<void> {
   await errorPill(app).click();
@@ -165,14 +163,16 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await expect(app.page.getByText(/is not a Plate id/)).toBeVisible();
   });
 
-  test('a new live plate is black until Bars is chosen from its thumbnail', async ({ app }) => {
+  test('a new live plate uses Bars and still offers a solid-colour fallback', async ({ app }) => {
     await app.newProject('LiveSourceBars');
     await app.addLiveSource({ x: 200, y: 160 });
     await app.setLiveSourceId('guest-1');
 
     await expect(label(app)).toHaveText('guest-1');
     const fallback = holes(app).first().locator('[data-cg-live-fallback]');
-    await expect(fallback).toHaveCSS('background-color', 'rgb(0, 0, 0)');
+    await expect
+      .poll(() => fallback.evaluate((el) => getComputedStyle(el).backgroundImage))
+      .toContain('gradient');
     await app.inspector.getByRole('button', { name: 'fallback', exact: true }).click();
     const picker = app.page.getByRole('dialog', { name: 'Choose picture for fallback' });
     const bars = picker.getByRole('button', { name: 'Bars', exact: true });
@@ -181,6 +181,9 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await expect
       .poll(() => thumbnail.evaluate((node) => (node as HTMLImageElement).naturalWidth))
       .toBeGreaterThan(0);
+    await picker.getByRole('button', { name: 'Solid colour', exact: true }).click();
+    await expect(fallback).toHaveCSS('background-color', 'rgb(0, 0, 0)');
+    await app.inspector.getByRole('button', { name: 'fallback', exact: true }).click();
     await bars.click();
     await expect
       .poll(() => fallback.evaluate((el) => getComputedStyle(el).backgroundImage))
@@ -203,6 +206,85 @@ test.describe('Live Source (D-137 phase 1)', () => {
     expect(html).toContain("mode: 'output'");
     // The exported page has no static authoring label.
     expect(html).not.toContain('data-cg-live-source-label');
+  });
+
+  test('D-202 — add, redraw, edit and remove individual masks on one upper plate', async ({
+    app,
+  }) => {
+    await app.newProject('MultiplePlateMasks');
+    await app.addLiveSource({ x: 200, y: 160 });
+    await app.addLiveSource({ x: 230, y: 190 });
+    await expect(holes(app)).toHaveCount(2);
+    const [upperId, lowerId] = await app.timelineRowIds();
+    await app.selectElementById(lowerId!);
+    await app.setLiveSourceId('lower');
+    await app.setInspectorNumber('X position', 480);
+    await app.setInspectorNumber('Y position', 300);
+    await app.selectElementById(upperId!);
+    await app.setLiveSourceId('upper');
+    await app.setInspectorNumber('X position', 480);
+    await app.setInspectorNumber('Y position', 300);
+
+    await expect(errorPill(app)).toBeVisible();
+    await app.inspector.getByLabel('reveal lower plate').selectOption('lower');
+    const upper = holes(app).filter({ hasText: 'upper' });
+    const masks = upper.locator('[data-cg-live-reveal-mask]');
+    await expect(masks).toHaveCount(1);
+    await expect(errorPill(app)).toHaveCount(0);
+
+    const dragMask = async (top: number, bottom: number): Promise<void> => {
+      const bounds = await upper.boundingBox();
+      if (bounds === null) throw new Error('upper plate is visible');
+      const { x, y, width, height } = bounds;
+      await app.page.mouse.move(x + width * 0.2, y + height * top);
+      await app.page.mouse.down();
+      await app.page.mouse.move(x + width * 0.8, y + height * bottom, { steps: 5 });
+      await app.page.mouse.up();
+    };
+
+    await app.inspector.getByRole('button', { name: 'Add reveal mask' }).click();
+    await dragMask(0.1, 0.3);
+    await expect(masks).toHaveCount(2);
+    await expect(masks).toHaveText(['Mask 1', 'Mask 2']);
+    const maskName = masks.first().getByText('Mask 1', { exact: true });
+    await expect.poll(async () => (await maskName.boundingBox())?.height ?? 0).toBeGreaterThan(16);
+    await app.page.getByRole('button', { name: 'Zoom out', exact: true }).click();
+    await expect.poll(async () => (await maskName.boundingBox())?.height ?? 0).toBeGreaterThan(16);
+    const selector = app.inspector.getByLabel('reveal mask', { exact: true });
+    await expect(selector).toHaveValue('1');
+    await app.inspector.getByRole('button', { name: 'Redraw reveal mask' }).click();
+    await dragMask(0.2, 0.4);
+    await expect(masks).toHaveCount(2);
+    await expect
+      .poll(() =>
+        masks.nth(1).evaluate((node) => Number.parseFloat((node as HTMLElement).style.top)),
+      )
+      .toBeCloseTo(20, -1);
+    await app.setInspectorNumber('reveal X', 25);
+    await app.setInspectorNumber('reveal height', 15);
+    await expect(masks.nth(1)).toHaveAttribute('style', /left: 25%;.*height: 15%/);
+    await expect(masks.nth(0)).toHaveAttribute('style', /left: 5%; top: 70%/);
+
+    const { html } = await app.exportHtml();
+    expect(html).toContain('"additionalRects":[{"x":0.25');
+    await selector.selectOption('0');
+    await app.inspector.getByRole('button', { name: 'Remove reveal mask' }).click();
+    await expect(masks).toHaveCount(1);
+    await expect(masks.first()).toHaveAttribute('style', /left: 25%;.*height: 15%/);
+    await app.inspector.getByRole('button', { name: 'Remove reveal mask' }).click();
+    await expect(masks).toHaveCount(0);
+    await expect(errorPill(app)).toBeVisible();
+
+    await app.undo();
+    await expect(masks).toHaveCount(1);
+    await app.selectElementById(lowerId!);
+    await app.page.keyboard.press('Delete');
+    await expect(holes(app)).toHaveCount(1);
+    await expect(masks).toHaveCount(0);
+    await expect(errorPill(app)).toHaveCount(0);
+    await app.undo();
+    await expect(holes(app)).toHaveCount(2);
+    await expect(masks).toHaveCount(1);
   });
 
   test('an OFF-FRAME Live Source blocks the export instead of vanishing', async ({ app }) => {
@@ -305,7 +387,7 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await expect(holes(app)).toHaveCount(2);
 
     await openIssues(app);
-    // One row per participant, so clicking either takes you to a real element.
+    // One message per participant.
     await expect(issueRows(app, /overlaps/)).toHaveCount(2);
   });
 
@@ -677,14 +759,22 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await expect(app.multiInspector).toBeVisible();
     await app.multiInspector.getByRole('button', { name: 'More frames on top' }).click();
 
-    const geometry = await holes(app).evaluateAll((nodes) =>
-      nodes
-        .map((node) => {
-          const rect = node.getBoundingClientRect();
-          return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
-        })
-        .sort((a, b) => a.y - b.y || a.x - b.x),
-    );
+    const readGeometry = () =>
+      holes(app).evaluateAll((nodes) =>
+        nodes
+          .map((node) => {
+            const rect = node.getBoundingClientRect();
+            return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+          })
+          .sort((a, b) => a.y - b.y || a.x - b.x),
+      );
+    await expect
+      .poll(async () => {
+        const [left, right] = await readGeometry();
+        return left === undefined || right === undefined ? Infinity : Math.abs(left.y - right.y);
+      })
+      .toBeLessThan(0.05);
+    const geometry = await readGeometry();
     expect(geometry).toHaveLength(3);
     const [topLeft, topRight, bottom] = geometry;
     expect(topLeft!.y).toBeCloseTo(topRight!.y, 1);
@@ -742,6 +832,12 @@ test.describe('Live Source (D-137 phase 1)', () => {
         }),
       );
 
+    await expect
+      .poll(async () => {
+        const [top, bottom] = (await readGeometry()).sort((a, b) => a.y - b.y);
+        return top === undefined || bottom === undefined ? 0 : bottom.y - top.y - top.height;
+      })
+      .toBeGreaterThan(0);
     const before = await readGeometry();
     const firstBefore = before.find((item) => item.id === ids[0]);
     const secondBefore = before.find((item) => item.id === ids[1]);
@@ -805,12 +901,12 @@ test.describe('Live Source (D-137 phase 1)', () => {
     expect(ids.filter((id) => id !== '')).toHaveLength(2);
     // Separated in SCENE units, as the test above explains, so overlap never enters into it.
     await app.selectElementById(ids[0]!);
-    await app.setInspectorNumber('X position', 0);
-    await app.setInspectorNumber('Y position', 0);
+    await app.setInspectorNumber('X position', 400);
+    await app.setInspectorNumber('Y position', 300);
     await app.setLiveSourceId('guest-1');
     await app.selectElementById(ids[1]!);
-    await app.setInspectorNumber('X position', 1000);
-    await app.setInspectorNumber('Y position', 0);
+    await app.setInspectorNumber('X position', 1200);
+    await app.setInspectorNumber('Y position', 300);
     await app.setLiveSourceId('guest-1');
 
     const marks = app.page.locator('[data-testid^="canvas-error-mark-"]');
@@ -829,7 +925,13 @@ test.describe('Live Source (D-137 phase 1)', () => {
     // The author's next move, as the sentence names it: give the second plate its own id.
     await app.selectElementById(ids[1]!);
     await app.setLiveSourceId('guest-2');
-    await expect(marks).toHaveCount(0);
+    await expect
+      .poll(() =>
+        marks
+          .getByRole('img')
+          .evaluateAll((icons) => icons.map((icon) => icon.getAttribute('aria-label'))),
+      )
+      .toEqual([]);
     await expect(errorPill(app)).toHaveCount(0);
   });
 });
@@ -900,6 +1002,7 @@ test.describe('Live Source — the frame (§9a.1)', () => {
             ),
           };
         });
+    await expect.poll(async () => (await readHole()).w).toBeGreaterThan(0);
     const before = await readHole();
 
     await setFrame(app, 8, 'FF8800');

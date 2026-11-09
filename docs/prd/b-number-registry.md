@@ -4354,3 +4354,11 @@ The previous allocation and a heading search confirmed B-419 was free.
 The previous allocation and a heading search confirmed B-420 was free.
 
 ⇒ **Next free after this entry is `B-421`**, **`D-207`**, **`P-078`**, **`R-113`** and **`C-049`**.
+
+### 2026-11-09 — Template binding, file source reload and dangling reveal masks take B-421 through B-423
+
+- `B-421` — select the destination after binding a template — [bugs-runtime.md](bugs-runtime.md).
+- `B-422` — restore the unlocked File only picker after Clear file and Reload — [bugs-runtime.md](bugs-runtime.md).
+- `B-423` — remove stale masks after deleting a lower Plate — [bugs-designer.md](bugs-designer.md).
+
+⇒ **Next free after this entry is `B-424`**, **`D-207`**, **`P-078`**, **`R-113`** and **`C-049`**.

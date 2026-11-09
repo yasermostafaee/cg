@@ -4849,11 +4849,12 @@ operator had to fail over before seeing whether its programme picture and sound 
 
 ## [~] R-105 — A healthy but empty live source shows its authored fallback on air ⟨priority: high — the owner, 2026-11-02; clarified 2026-11-08⟩ — `openspec/changes/black-empty-live-plate/`
 
-**What:** Keep the geometry of an assigned, healthy Live Source visible when its upstream currently has no picture, such as an ended playlist. The Designer fallback picker offers Bars, solid colour and project/shared pictures for one or more plates. New plates start with black and older plates retain their previous fallback.
+**What:** Keep the geometry of an assigned, healthy Live Source visible when its upstream currently has no picture, such as an ended playlist. The Designer fallback picker offers Bars, solid colour and project/shared pictures for one or more plates. New plates start with Bars and older plates retain their previous fallback.
 **Why:** A transparent/missing plate makes a multi-box layout collapse visually even though the source assignment itself is valid.
 **Acceptance:**
 
 - WHEN a valid assigned source has no current picture THEN its authored plate shows the selected Bars/colour/picture fallback in the same visible fitted geometry
+- WHEN an author creates a new plate THEN it starts with Bars selected
 - WHEN Bars is selected THEN actual SMPTE Bars are rendered on air and their thumbnail is visible in the Designer picker
 - WHEN a solid colour or picture is selected THEN it becomes the fallback; black is one available colour
 - WHEN picture resumes THEN it covers the selected fallback without re-taking the template

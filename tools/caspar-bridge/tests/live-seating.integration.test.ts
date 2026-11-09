@@ -11,7 +11,7 @@ import {
   type SourceCatalog,
   type TemplateInfo,
 } from '@cg/shared-ipc';
-import type { LiveFitMode } from '@cg/shared-schema';
+import type { LiveFitMode, LiveRevealMask } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { awaitChannelModeRead, HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 import { recvLines as readWireLines } from './support/wire-trace.js';
@@ -81,10 +81,7 @@ interface PlateSpec {
   expectedAspect?: number;
   /** `C-028` — the AUTHOR's fit mode. Absent ⇒ `contain`, the shipped default. */
   fitMode?: LiveFitMode;
-  revealMask?: {
-    targetSourceId: string;
-    rect: { x: number; y: number; width: number; height: number };
-  };
+  revealMask?: LiveRevealMask;
 }
 
 /** A template declaring one hole per entry, each with its own rect. */
@@ -348,16 +345,18 @@ it('the geometry that LANDS is the computed fit, and a 16:9 source in a 16:9 hol
   expect(state?.clip).toEqual({ x: 0.25, y: 0.25, width: 0.5, height: 0.5 });
 });
 
-it('D-202 — an explicit reveal seats a silent lower copy above the upper plate', async () => {
+it('D-202 — each reveal seats a silent lower copy above the upper plate', async () => {
   const reveal = {
     targetSourceId: 'lower',
     rect: { x: 0.1, y: 0.5, width: 0.8, height: 0.4 },
+    additionalRects: [{ x: 0.2, y: 0.1, width: 0.6, height: 0.2 }],
   };
   const r = await boot({
     template: template([
       { id: 'upper', rect: BOX, revealMask: reveal },
       { id: 'lower', rect: BOX },
     ]),
+    catalog: catalog({ layerRange: { start: 30, end: 33 } }),
     assignments: assign([
       ['upper', 'src-b'],
       ['lower', 'src-a'],
@@ -366,25 +365,34 @@ it('D-202 — an explicit reveal seats a silent lower copy above the upper plate
 
   expect((await loadAndTake(r)).accepted).toBe(true);
   const records = r.liveLayers().get('item-1') ?? [];
-  expect(records.map((record) => record.sourceId)).toEqual(['lower', 'upper', 'lower']);
-  expect(records.map((record) => record.slot.layer)).toEqual([30, 31, 32]);
-  expect(records[2]).toMatchObject({
-    revealOverlay: true,
-    intendedVolume: 0,
-    audioLocked: true,
-    fill: { x: 0.25, y: 0.25, width: 0.5, height: 0.5 },
-  });
-  expect(records[2]?.seatId).toContain('reveal:upper');
+  expect(records.map((record) => record.sourceId)).toEqual(['lower', 'upper', 'lower', 'lower']);
+  expect(records.map((record) => record.slot.layer)).toEqual([30, 31, 32, 33]);
+  for (const overlay of records.slice(2)) {
+    expect(overlay).toMatchObject({
+      revealOverlay: true,
+      intendedVolume: 0,
+      audioLocked: true,
+      fill: { x: 0.25, y: 0.25, width: 0.5, height: 0.5 },
+    });
+  }
+  expect(records[2]?.seatId).toMatch(/reveal:upper$/);
+  expect(records[3]?.seatId).toMatch(/reveal:upper:1$/);
   expect(mock?.layerState({ channel: 1, layer: 32 })?.clip).toEqual({
     x: 0.3,
     y: 0.5,
     width: 0.4,
     height: 0.2,
   });
-  expect((await recvLines()).filter((line) => line.includes('"route://2"'))).toHaveLength(2);
+  expect(mock?.layerState({ channel: 1, layer: 33 })?.clip).toEqual({
+    x: 0.35,
+    y: 0.3,
+    width: 0.3,
+    height: 0.1,
+  });
+  expect((await recvLines()).filter((line) => line.includes('"route://2"'))).toHaveLength(3);
 });
 
-it('D-202 — reveal layer demand is refused atomically when only the two base seats fit', async () => {
+it('D-202 — multiple reveals are refused atomically when only one extra seat fits', async () => {
   const r = await boot({
     template: template([
       {
@@ -393,11 +401,12 @@ it('D-202 — reveal layer demand is refused atomically when only the two base s
         revealMask: {
           targetSourceId: 'lower',
           rect: { x: 0.1, y: 0.5, width: 0.8, height: 0.4 },
+          additionalRects: [{ x: 0.2, y: 0.1, width: 0.6, height: 0.2 }],
         },
       },
       { id: 'lower', rect: BOX },
     ]),
-    catalog: catalog({ layerRange: { start: 30, end: 31 } }),
+    catalog: catalog({ layerRange: { start: 30, end: 32 } }),
     assignments: assign([
       ['upper', 'src-b'],
       ['lower', 'src-a'],

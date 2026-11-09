@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { platesSharingASource, type Element, type Scene } from '@cg/shared-schema';
+import {
+  platesSharingASource,
+  type Element,
+  type LiveRevealMask,
+  type Scene,
+} from '@cg/shared-schema';
 import { buildTemplateLiveSources, collectLookCarrier } from '../src/live-sources.js';
 
 /**
@@ -39,10 +44,7 @@ const plate = (
   /** D-178 — the normalized point preserved by a cover crop. */
   cropFocus?: { x: number; y: number },
   /** D-202 — an intentional upper → lower reveal relation. */
-  revealMask?: {
-    targetSourceId: string;
-    rect: { x: number; y: number; width: number; height: number };
-  },
+  revealMask?: LiveRevealMask,
 ): Element =>
   ({
     ...baseElProps,
@@ -537,7 +539,11 @@ describe('D-202 — per-look reveal relation, from the upper plate element', () 
     rect: { x: 0.1, y: 0.65, width: 0.8, height: 0.25 },
   };
 
-  it('carries a reveal only in the look that authors it', () => {
+  it('carries all reveal windows only in the look that authors them', () => {
+    const multiple = {
+      ...reveal,
+      additionalRects: [{ x: 0.2, y: 0.1, width: 0.6, height: 0.2 }],
+    };
     const s = scene({
       rootChildren: [
         instance('inst-a', 'comp-a', 0, 0, 1920, 1080),
@@ -545,7 +551,7 @@ describe('D-202 — per-look reveal relation, from the upper plate element', () 
       ],
       compositions: [
         comp('comp-a', [
-          plate('upper-a', 'guest-1', 0, 0, 640, 360, undefined, undefined, undefined, reveal),
+          plate('upper-a', 'guest-1', 0, 0, 640, 360, undefined, undefined, undefined, multiple),
         ]),
         comp('comp-b', [plate('upper-b', 'guest-1', 0, 0, 640, 360)]),
       ],
@@ -559,7 +565,7 @@ describe('D-202 — per-look reveal relation, from the upper plate element', () 
     });
     const carrier = collectLookCarrier(s);
     expect(carrier?.looks.find((l) => l.id === 'masked')?.reveals).toEqual({
-      'guest-1': reveal,
+      'guest-1': multiple,
     });
     expect(carrier?.looks.find((l) => l.id === 'plain')?.reveals).toEqual({});
   });

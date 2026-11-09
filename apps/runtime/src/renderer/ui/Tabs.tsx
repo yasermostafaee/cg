@@ -1,6 +1,7 @@
 import { Fragment, type KeyboardEvent, type ReactNode } from 'react';
 import { Lock, OctagonAlert, TriangleAlert, type LucideIcon } from 'lucide-react';
 import { STATION_SETUP_PX, cssVars } from '../theme.js';
+import { Button } from './Button.js';
 import { Icon } from './Icon.js';
 import { Tag } from './Tag.js';
 
@@ -376,7 +377,13 @@ export function RailStationCard({
    * 🔴 `CLIENT-TEST-RELEASE-01` B1 — the app's release version, in one line under the station, and
    * the exact build (`0.9.0 · 5f3c2a1 · 2026-09-29`) in its `title`. A fact, so a `Tag`.
    */
-  version?: { readonly release: string; readonly build: string } | undefined;
+  version?:
+    | {
+        readonly release: string;
+        readonly build: string;
+        readonly onOpenHistory?: () => void;
+      }
+    | undefined;
 }): JSX.Element {
   return (
     <div className="cg-rail-foot">
@@ -397,6 +404,15 @@ export function RailStationCard({
         <Tag className="cg-rail-foot__version" title={version.build} data-testid="app-version">
           Version {version.release}
         </Tag>
+      )}
+      {version?.onOpenHistory !== undefined && (
+        <Button
+          variant="secondary"
+          className="cg-rail-foot__history"
+          onClick={version.onOpenHistory}
+        >
+          Version history
+        </Button>
       )}
     </div>
   );
