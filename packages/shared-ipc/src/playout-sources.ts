@@ -355,6 +355,11 @@ export const inputSourceId = (playoutId: string): string => `in-${playoutId}`;
 /** The catalogue id of a D11 item — `md-<id>`. Never shown to anyone. */
 export const mediaSourceId = (playoutId: string): string => `md-${playoutId}`;
 
+/** The saved D10 id behind a CG catalogue id. */
+export function playoutInputIdOf(sourceId: string): string | null {
+  return sourceId.startsWith('in-') && sourceId.length > 3 ? sourceId.slice(3) : null;
+}
+
 /** The Playout id behind a catalogue id, when it is a media one. */
 export function playoutMediaIdOf(sourceId: string): string | null {
   return sourceId.startsWith('md-') && sourceId.length > 3 ? sourceId.slice(3) : null;

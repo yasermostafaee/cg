@@ -2234,6 +2234,16 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#pgmReturnSubs.add(handler),
   };
 
+  readonly livePreview: RuntimeBridge['livePreview'] = {
+    start: (req) => this.#invoke(ipcChannels.LivePreviewStartChannel, req),
+    status: (req) => this.#invoke(ipcChannels.LivePreviewStatusChannel, req),
+    stop: (req) => this.#invoke(ipcChannels.LivePreviewStopChannel, req),
+    url: async (req, stream) => {
+      const { path } = await this.#invoke(ipcChannels.LivePreviewTicketChannel, { ...req, stream });
+      return path === null ? null : this.#bridgeHttpUrl(path);
+    },
+  };
+
   // R-021 stage 2a — the fixed-bank wire contract (facts only; verb
   // derivation is the renderer's ONE function, design (f)/(g)).
   readonly fixedLayers = {

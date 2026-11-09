@@ -9,8 +9,9 @@ import {
   type KeyboardEvent,
   type RefObject,
 } from 'react';
-import { Cable, Check, Film } from 'lucide-react';
+import { Cable, Check, Film, MonitorPlay } from 'lucide-react';
 import {
+  canCheckLiveInput,
   INPUT_GONE_REASON,
   isPlaylistOutput,
   ownOutputTitle,
@@ -142,6 +143,8 @@ export interface SourcePickerProps {
   choices: readonly SourceChoice[];
   /** The channel of the row being bound, for v1.3's per-channel inputs. Absent: no gating. */
   channel?: number | undefined;
+  checkOnly?: boolean | undefined;
+  inputCheck?: { channel: number; start: (source: SourceDefinition) => void } | undefined;
   'aria-label': string;
   id?: string | undefined;
   /** Appended to the closed field (`is-dirty`, a struck value). */
@@ -177,6 +180,8 @@ export function SourcePicker({
   onChange,
   choices,
   channel,
+  checkOnly = false,
+  inputCheck,
   'aria-label': ariaLabel,
   id,
   className,
@@ -197,6 +202,16 @@ export function SourcePicker({
     setOpen(false);
     if (next !== value) onChange(next);
   };
+  const check =
+    inputCheck === undefined
+      ? undefined
+      : {
+          channel: inputCheck.channel,
+          start: (source: SourceDefinition): void => {
+            close();
+            inputCheck.start(source);
+          },
+        };
 
   return (
     <>
@@ -231,20 +246,39 @@ export function SourcePicker({
           anchor={field}
           onClose={close}
           id={panelId}
-          aria-label="Choose a source"
+          aria-label={checkOnly ? 'Choose an input to check' : 'Choose a source'}
           minWidth={PICKER_MIN_WIDTH}
           maxHeight={PICKER_MAX_HEIGHT}
           variant="raised"
           initialFocusSelector={isMediaId(value) ? '[data-picker-search]' : '[data-picker-list]'}
         >
-          <PickerPanel
-            base={base}
-            value={value}
-            choices={choices}
-            channel={channel}
-            onPick={pick}
-            initialTab={isMediaId(value) ? 'media' : 'inputs'}
-          />
+          {checkOnly ? (
+            <div className="cg-picker">
+              <InputsTab
+                listId={`${base}-inputs`}
+                inputs={currentSourceCatalog().sources.filter(
+                  (source) =>
+                    source.origin === 'input' &&
+                    !isPlaylistOutput(source) &&
+                    source.departed !== true,
+                )}
+                value=""
+                channel={channel}
+                onPick={pick}
+                checkOnly
+              />
+            </div>
+          ) : (
+            <PickerPanel
+              base={base}
+              value={value}
+              choices={choices}
+              channel={channel}
+              onPick={pick}
+              initialTab={isMediaId(value) ? 'media' : 'inputs'}
+              inputCheck={check}
+            />
+          )}
         </Popover>
       )}
     </>
@@ -258,6 +292,7 @@ function PickerPanel({
   channel,
   onPick,
   initialTab,
+  inputCheck,
 }: {
   base: string;
   value: string;
@@ -265,6 +300,7 @@ function PickerPanel({
   channel: number | undefined;
   onPick: (value: string) => void;
   initialTab: Tab;
+  inputCheck: SourcePickerProps['inputCheck'];
 }): JSX.Element {
   const [tab, setTab] = useState<Tab>(initialTab);
   const media = useMediaSearch();
@@ -318,6 +354,7 @@ function PickerPanel({
             value={value}
             channel={channel}
             onPick={onPick}
+            inputCheck={inputCheck}
           />
         ) : (
           <MediaTab listId={`${base}-media`} value={value} media={media} onPick={onPick} />
@@ -405,12 +442,16 @@ function InputsTab({
   value,
   channel,
   onPick,
+  checkOnly = false,
+  inputCheck,
 }: {
   listId: string;
   inputs: readonly SourceDefinition[];
   value: string;
   channel: number | undefined;
   onPick: (value: string) => void;
+  checkOnly?: boolean;
+  inputCheck?: SourcePickerProps['inputCheck'];
 }): JSX.Element {
   const [filter, setFilter] = useState('');
   const list = useRef<VirtualListHandle>(null);
@@ -430,19 +471,38 @@ function InputsTab({
     const playlistDown = isPlaylistOutput(source) && source.status === 'unavailable';
     const bindable = sourceBindable(source);
     const selected = source.id === value;
+    const checkable = canCheckLiveInput(source, inputCheck?.channel ?? channel ?? 0);
+    const disabled = checkOnly ? !checkable : !bindable || offChannel || loops || playlistDown;
     return {
       kind: 'option',
       key: source.id,
-      disabled: !bindable || offChannel || loops || playlistDown,
+      disabled,
       selected,
       ...(loops
         ? { title: ownOutputTitle(channel) }
         : offChannel
           ? { title: `Not available on CH ${String(channel)}` }
-          : (!bindable || playlistDown) && source.reason !== undefined
+          : disabled && source.reason !== undefined
             ? { title: source.reason }
             : {}),
       data: { 'data-picker-input': source.id },
+      ...(inputCheck !== undefined && checkable
+        ? {
+            action: (
+              <Button
+                variant="icon"
+                aria-label={`Check input · ${source.name}`}
+                title="Check input"
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
+                }}
+                onClick={() => inputCheck.start(source)}
+              >
+                <Icon icon={MonitorPlay} size={14} />
+              </Button>
+            ),
+          }
+        : {}),
       content: (
         <span className="cg-picker-row">
           <Icon icon={Cable} size={14} />
@@ -460,7 +520,7 @@ function InputsTab({
   });
   const keys = useListKeys(rows, list, (index) => {
     const row = rows[index];
-    if (row !== undefined) onPick(row.key);
+    if (row !== undefined && row.disabled !== true) onPick(row.key);
   });
   return (
     <div className="cg-picker-tab" data-picker-tab="inputs">
@@ -496,6 +556,7 @@ function InputsTab({
           }}
           onKeyDown={(e) => keys.onKeyDown(e)}
           data={{ 'data-picker-list': '' }}
+          withActions={inputCheck !== undefined}
         />
       )}
     </div>

@@ -190,6 +190,10 @@ nothing and reported success.
 
 ## 3. SPEC ONLY — the MONITOR / PFL channel ⏳ gated on 1.11 (W1, W2, W5, W6)
 
+The single saved Playout input check uses the Playout-owned lease from
+[`preview-live-input-check`](../preview-live-input-check/proposal.md). Section 3's separate CasparCG
+monitor channel remains a proposal for other monitoring workflows.
+
 - [ ] 3.1 A second CasparCG channel declared as MONITOR, consuming `<system-audio/>` (+ `<screen/>`
       for a multiview), fed per box by `route://<pgm>-<layer>`.
 - [ ] 3.2 Selecting an input for monitoring sends NOTHING to the programme channel.

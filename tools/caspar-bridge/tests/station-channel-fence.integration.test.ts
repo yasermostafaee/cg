@@ -609,7 +609,7 @@ describe('the census: every route that names a channel, classified', () => {
       { fixedBank: BANK },
     );
 
-  it('twenty-four routes carry a channel key; nineteen carry it at the top level, where the fence reads', () => {
+  it('twenty-eight routes carry a channel key; twenty-three carry it at the top level, where the fence reads', () => {
     const table = buildRoutes(runtime());
     expect(table.size, 'the census is looking at the real table').toBeGreaterThan(50);
     const found = Object.fromEntries(
@@ -644,6 +644,11 @@ describe('the census: every route that names a channel, classified', () => {
       'fixedLayers.set-banks': ['req.banks[].channel'],
       'fixedLayers.set-config': ['req.channel'],
       'layers.clear': ['req.channel'],
+      // C-023 — every live-input check request is scoped to its programme channel.
+      'livePreview.start': ['req.channel'],
+      'livePreview.status': ['req.channel'],
+      'livePreview.stop': ['req.channel'],
+      'livePreview.ticket': ['req.channel'],
       /*
         `CENTRAL-BRIDGE-01` (D9) — a ticket for ONE channel's programme return names it at the top
         level, so the fence refuses a channel this station does not declare (and the handler refuses
@@ -715,6 +720,10 @@ describe('the census: every route that names a channel, classified', () => {
       'fixedLayers.clear-layer',
       'fixedLayers.load',
       'layers.clear',
+      'livePreview.start',
+      'livePreview.status',
+      'livePreview.stop',
+      'livePreview.ticket',
       // `CENTRAL-BRIDGE-01` (D9) — a programme-return ticket for one channel.
       'pgmReturn.ticket',
       'playoutLayers.clear',

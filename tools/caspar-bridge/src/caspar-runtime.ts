@@ -309,6 +309,7 @@ import {
 import { TemplateRegistry, type AppliedRebuild } from './template-registry.js';
 import { DelimiterStore } from './delimiter-store.js';
 import { CalendarStore } from './calendar-store.js';
+import type { LivePreviewAudit } from './live-preview.js';
 import {
   TemplateHttpServer,
   deriveServeOptions,
@@ -15860,6 +15861,23 @@ export class CasparRuntime {
         channel: e.channel,
         backupChannel: e.backupChannel,
       })),
+    });
+  }
+
+  /** C-023. The socket identity is captured before starting, so it also covers later cleanup. */
+  recordLivePreview(entry: LivePreviewAudit): void {
+    this.#recordAudit({
+      action: 'live-preview',
+      actor: entry.actor,
+      actorSub: entry.actorSub,
+      ...(entry.consoleAddress !== null && { consoleAddress: entry.consoleAddress }),
+      outcome: entry.ok ? 'ok' : 'failed',
+      ...(entry.code !== undefined && { errorCode: entry.code }),
+      inputPreview: {
+        channel: entry.channel,
+        sourceName: entry.sourceName,
+        operation: entry.operation,
+      },
     });
   }
 

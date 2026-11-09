@@ -39,6 +39,7 @@ import { MonitorStrip, type MonitorCompanionMode } from './features/monitors/Mon
 import { ShellDivider } from './ui/ShellDivider.js';
 import { useShellLayout } from './hooks/useShellLayout.js';
 import { ShellLayoutProvider } from './hooks/shellLayoutContext.js';
+import { LiveInputCheckProvider } from './features/monitors/liveInputCheckContext.js';
 import { Inspector } from './features/inspector/Inspector.js';
 import { applyDraft } from './features/inspector/applyDraft.js';
 import { clearDraft } from './features/inspector/draftStore.js';
@@ -384,7 +385,7 @@ export function App(): JSX.Element {
     />
   );
 
-  return (
+  const shell = (
     <ShellLayoutProvider layout={layout}>
       <main style={styles.page}>
         {/*
@@ -705,5 +706,14 @@ export function App(): JSX.Element {
         <ConsoleCloseGuard items={items} />
       </main>
     </ShellLayoutProvider>
+  );
+  return (
+    <LiveInputCheckProvider
+      channel={viewChannel}
+      pvwVisible={monitorsVisible && layout.focus !== 'pgm'}
+      locked={lockCovers}
+    >
+      {shell}
+    </LiveInputCheckProvider>
   );
 }

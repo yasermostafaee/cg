@@ -14,7 +14,7 @@ import { commandForDisplay, placeName, rebuildClause, timingClause } from './ope
 
 /** The CasparCG channel a row is about: its layer's, else the channel a refusal was about. */
 export function auditChannelOf(entry: AuditEntry): number | undefined {
-  return entry.slot?.channel ?? entry.refused?.casparChannel;
+  return entry.slot?.channel ?? entry.refused?.casparChannel ?? entry.inputPreview?.channel;
 }
 
 /** How a reader names a row's place and template — the bank set and the template list it holds. */
@@ -43,6 +43,8 @@ export function auditShownWords(entry: AuditEntry, naming: AuditNaming): string[
     timingClause(entry.timing),
     // `PAGE-REBUILD-01` — a rebuild row's releases, as the row shows them.
     rebuildClause(entry.rebuild),
+    entry.inputPreview?.sourceName,
+    entry.inputPreview?.operation,
   ].filter((v): v is string => typeof v === 'string' && v !== '');
 }
 

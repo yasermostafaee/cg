@@ -22,7 +22,13 @@ export type TicketGrant =
       /** `PLAYOUT-FEATURES-01` E — the sound's ticket opens the sound only. Absent = the picture. */
       readonly stream?: 'picture' | 'audio';
     }
-  | { readonly kind: 'logs' };
+  | { readonly kind: 'logs' }
+  | {
+      readonly kind: 'input-preview';
+      readonly channel: number;
+      readonly previewId: string;
+      readonly stream: 'picture' | 'audio';
+    };
 
 interface Held {
   readonly grant: TicketGrant;

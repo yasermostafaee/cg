@@ -39,7 +39,7 @@ The check card SHALL use the same canonical source label as look inputs, on-air 
 refresh removes the current source or marks it unavailable, Bridge SHALL end the check and publish that source and
 reason; it SHALL NOT silently retain the last picture under an obsolete label.
 
-#### Scenario: The checked input loses signal
+#### Scenario: Playout's catalogue withdraws a checked input
 
 - **WHEN** `Studio A` is live in the check and the next accepted catalogue says it is unavailable with reason
   `Holder disconnected`

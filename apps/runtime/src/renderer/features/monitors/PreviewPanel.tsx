@@ -34,6 +34,9 @@ import { RehearsalStage } from './RehearsalStage.js';
 import { templateName } from '../../ui/operatorNaming.js';
 import type { PvwPage } from '../../../shared/pvwPage.js';
 import { rowNameFor, subjectsFor, type RehearsalSubject } from './rehearsalFrames.js';
+import { SourcePicker } from '../sources/SourcePicker.js';
+import { LiveInputCheckCard } from './LiveInputCheckCard.js';
+import { PVW_INPUT_SURFACE, useLiveInputCheck } from './liveInputCheckContext.js';
 
 /**
  * PREVIEW — the PVW box.
@@ -493,15 +496,17 @@ export function PreviewPanel({ companionActions }: { companionActions?: ReactNod
           {rehearsalCaption(renderableCount, subjects.length)}
         </span>
         <span className="cg-monitor-strip__spacer" />
+        <CheckInput channel={viewChannel} />
       </div>
-      {subjects.length === 0 ? (
-        <div
-          style={styles.screen}
-          role="img"
-          aria-label="PREVIEW — No layers on preview. Use ON PVW on one or more loaded rows to render them here."
-        >
-          <Icon icon={SquareDashed} size={22} />
-          {/*
+      <div className="cg-pvw-stage">
+        {subjects.length === 0 ? (
+          <div
+            style={styles.screen}
+            role="img"
+            aria-label="PREVIEW — No layers on preview. Use ON PVW on one or more loaded rows to render them here."
+          >
+            <Icon icon={SquareDashed} size={22} />
+            {/*
             🔴 `CONSOLE-MATCH-03` §1 — the reference's heading and its instruction, over our
             own honesty sentence rather than instead of it. `No layers on preview` names the
             MECHANISM (layers, PVW) where "Nothing to preview" named only the absence, and
@@ -509,21 +514,42 @@ export function PreviewPanel({ companionActions }: { companionActions?: ReactNod
             kept is the last sentence: `R-022` is explicit that nothing here is sent to
             CasparCG, and that is the fact an operator must not have to infer from a blank box.
           */}
-          <span style={styles.label}>No layers on preview</span>
-          <span style={styles.detail}>
-            Use ON PVW on one or more loaded rows and their graphics render here, in this browser,
-            with the field values you have typed. Nothing is sent to CasparCG.
-          </span>
-        </div>
-      ) : (
-        <RehearsalStage
-          subjects={subjects}
-          pageByItem={pageByItem}
-          templateNames={templateNames}
-          raster={raster}
-          onTransport={setTransport}
-        />
-      )}
+            <span style={styles.label}>No layers on preview</span>
+            <span style={styles.detail}>
+              Use ON PVW on one or more loaded rows and their graphics render here, in this browser,
+              with the field values you have typed. Nothing is sent to CasparCG.
+            </span>
+          </div>
+        ) : (
+          <RehearsalStage
+            subjects={subjects}
+            pageByItem={pageByItem}
+            templateNames={templateNames}
+            raster={raster}
+            onTransport={setTransport}
+          />
+        )}
+        <LiveInputCheckCard surface={PVW_INPUT_SURFACE} />
+      </div>
     </Panel>
+  );
+}
+
+function CheckInput({ channel }: { channel: number | null }): JSX.Element | null {
+  const control = useLiveInputCheck();
+  if (channel === null || control?.enabled !== true) return null;
+  return (
+    <SourcePicker
+      aria-label="Check input"
+      value=""
+      choices={[{ value: '', label: 'Check input' }]}
+      className="cg-input-check-picker"
+      channel={channel}
+      checkOnly
+      onChange={(id) => {
+        const source = currentSourceCatalog().sources.find((item) => item.id === id);
+        if (source !== undefined) control.start(PVW_INPUT_SURFACE, channel, source);
+      }}
+    />
   );
 }

@@ -64,6 +64,7 @@ export interface PgmAudioPlayerOptions {
   /** Wall clock for the underrun window. `performance.now` by default. */
   readonly now?: () => number;
   readonly onState?: (state: PgmAudioState) => void;
+  readonly retry?: boolean;
 }
 
 export class PgmAudioPlayer {
@@ -72,6 +73,7 @@ export class PgmAudioPlayer {
   readonly #fetch: typeof fetch;
   readonly #now: () => number;
   readonly #onState: (state: PgmAudioState) => void;
+  readonly #retryOnLoss: boolean;
 
   #running = false;
   #state: PgmAudioState = 'stopped';
@@ -93,6 +95,7 @@ export class PgmAudioPlayer {
     this.#fetch = options.fetchImpl ?? ((input, init) => fetch(input, init));
     this.#now = options.now ?? ((): number => performance.now());
     this.#onState = options.onState ?? ((): void => undefined);
+    this.#retryOnLoss = options.retry ?? true;
   }
 
   /** The buffer in force now, in ms — a test's instrument, and the e2e's. */
@@ -202,6 +205,10 @@ export class PgmAudioPlayer {
       )
       .finally(() => {
         if (!this.#running || abort.signal.aborted) return;
+        if (!this.#retryOnLoss) {
+          this.stop();
+          return;
+        }
         const delay = Math.min(RETRY_BASE_MS * 2 ** this.#failures, RETRY_MAX_MS);
         this.#failures++;
         this.#setState('connecting');
@@ -215,7 +222,11 @@ export class PgmAudioPlayer {
   async #read(abort: AbortController): Promise<void> {
     const url = await this.#url();
     if (url === null || abort.signal.aborted) return;
-    const res = await this.#fetch(url, { signal: abort.signal, cache: 'no-store' });
+    const res = await this.#fetch(url, {
+      signal: abort.signal,
+      cache: 'no-store',
+      referrerPolicy: 'no-referrer',
+    });
     if (!res.ok || res.body === null) return;
     const reader = res.body.getReader();
     this.resetConnection();

@@ -33,6 +33,7 @@ export interface VirtualRow {
   /** A stable key — the option's value, or the heading's label. */
   readonly key: string;
   readonly content: ReactNode;
+  readonly action?: ReactNode;
   /** An option that cannot be picked: shown, with its reason in `title`. */
   readonly disabled?: boolean | undefined;
   readonly selected?: boolean | undefined;
@@ -67,6 +68,7 @@ export interface VirtualListProps {
   overscan?: number | undefined;
   /** A finder's attributes on the listbox (`data-*`). */
   data?: Readonly<Record<`data-${string}`, string>> | undefined;
+  withActions?: boolean;
 }
 
 /** The option id for a row, for a field's `aria-activedescendant`. */
@@ -88,6 +90,7 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
     onNearEnd,
     nearEndRows = 10,
     overscan = 6,
+    withActions = false,
     data,
   },
   ref,
@@ -143,7 +146,7 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
     <div
       ref={viewport}
       id={id}
-      role="listbox"
+      role={withActions ? 'grid' : 'listbox'}
       aria-label={ariaLabel}
       tabIndex={0}
       {...(activeIndex !== null ? { 'aria-activedescendant': optionId(id, activeIndex) } : {})}
@@ -179,6 +182,25 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
             );
           }
           const active = index === activeIndex;
+          if (withActions) {
+            return (
+              <div key={`o:${row.key}`} role="row" className="cg-vlist-action-row" style={style}>
+                <div
+                  id={optionId(id, index)}
+                  role="gridcell"
+                  aria-selected={row.selected === true}
+                  aria-disabled={row.disabled === true}
+                  className={`cg-vlist-option${active ? ' is-active' : ''}`}
+                  data-vlist-index={String(index)}
+                  {...(row.title !== undefined ? { title: row.title } : {})}
+                  {...(row.data ?? {})}
+                >
+                  {row.content}
+                </div>
+                <div role="gridcell">{row.action}</div>
+              </div>
+            );
+          }
           return (
             <div
               key={`o:${row.key}`}

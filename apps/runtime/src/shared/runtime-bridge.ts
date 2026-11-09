@@ -61,6 +61,10 @@ import type {
   PgmReturnStatus,
   PgmEngine,
   PgmReturnStatusChannel,
+  LivePreviewHandle,
+  LivePreviewStartChannel,
+  LivePreviewStatus,
+  LivePreviewStream,
   LockEngageChannel,
   ClearedOutsideLayer,
   OrphanLayer,
@@ -790,6 +794,13 @@ export interface RuntimeBridge {
     /** Every WATCHED channel's state. A channel nobody watches has no entry. */
     status(): Promise<ChannelResponse<typeof PgmReturnStatusChannel>>;
     onStatusChanged(handler: (status: readonly PgmReturnStatus[]) => void): Unsubscribe;
+  };
+
+  livePreview: {
+    start(req: ChannelRequest<typeof LivePreviewStartChannel>): Promise<LivePreviewStatus>;
+    status(req: LivePreviewHandle): Promise<LivePreviewStatus>;
+    stop(req: LivePreviewHandle): Promise<{ ok: boolean }>;
+    url(req: LivePreviewHandle, stream: LivePreviewStream): Promise<string | null>;
   };
 
   lock: {

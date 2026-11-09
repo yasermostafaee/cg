@@ -1620,7 +1620,21 @@ class FakePlayoutServer implements FakePlayout {
       });
     });
     this.#server.on('request', (req: http.IncomingMessage, res: http.ServerResponse) => {
-      void this.#route(req, res).catch((err: unknown) => {
+      const route = async (): Promise<void> => {
+        if (
+          options.livePreview !== undefined &&
+          /^\/api\/v1\/channels\/[^/]+\/live-preview(?:[/?]|$)/.test(req.url ?? '')
+        ) {
+          if (!(await this.#ownBearer(req))) {
+            sendError(res, 'invalid_token');
+            return;
+          }
+          await options.livePreview(req, res);
+          return;
+        }
+        await this.#route(req, res);
+      };
+      void route().catch((err: unknown) => {
         // A fixture bug must not hang the test on a socket that never answers.
         if (!res.headersSent) {
           sendJson(res, 500, { error: 'fake_playout_failed', message: String(err) });
@@ -2660,6 +2674,8 @@ export interface FakePlayoutOptions {
    * this engine's own keys, so the other engine's token is `401`. Default off.
    */
   readonly verifyBearers?: boolean;
+  /** C-023 lease-contract fixture, reached after this fake verifies the CG bearer. */
+  readonly livePreview?: (req: http.IncomingMessage, res: http.ServerResponse) => Promise<void>;
 }
 
 export async function startFakePlayout(options: FakePlayoutOptions = {}): Promise<FakePlayout> {

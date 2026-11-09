@@ -4,7 +4,8 @@
 
 Only CG Bridge SHALL call the Playout's official channel-scoped live-preview API. A console renderer SHALL NOT call
 that API or open the Playout's raw preview feed. Bridge SHALL authorize the requesting socket for the station and
-channel, resolve the selected input from its own current catalogue, and use only its server-side Playout session.
+channel, resolve the saved input id from its own current D10 catalogue, and call Playout server-side with the exact
+verified socket bearer. Bridge SHALL require authenticated lease capability v1 before sending the start.
 
 Starting, replacing, stopping or failing a preview SHALL send no AMCP command, address no programme layer, and change
 no row, look, source binding, Source default, PGM relay or programme meter. If the accepted Playout contract cannot
@@ -28,9 +29,10 @@ have an opaque owner, preview id, generation and expiry. Operations SHALL be ser
 start SHALL atomically replace the prior generation and notify its owner; a stop, close, disconnect or timeout SHALL
 stop upstream only when its owner and generation still match.
 
-Bridge SHALL use a Playout-enforced lease/owner token and conditional delete, or an equivalently precise contracted
-mechanism. A stale operation SHALL be an idempotent no-op and SHALL NOT stop a newer preview, including one started by
-another console or the Playout client. Bridge SHALL NOT issue an unconditional recovery DELETE after restart.
+Bridge SHALL renew and conditionally delete using the original bearer, lease id and generation. A stale operation SHALL
+be an idempotent no-op and SHALL NOT stop a newer preview, including one started by another console or the Playout client.
+Bridge SHALL NOT issue an unconditional recovery DELETE after restart. When the start is unconfirmed, Bridge SHALL only
+reconcile the original request id and SHALL NOT replay the start.
 
 #### Scenario: A stale dialog closes after replacement
 
@@ -49,10 +51,9 @@ another console or the Playout client. Bridge SHALL NOT issue an unconditional r
 
 ### Requirement: Bridge SHALL relay preview picture and optional sound through distinct ticketed resources
 
-Bridge SHALL, after the control API accepts a lease for programme channel `n`, allow the preview subsystem to read
-picture from `previewPort(n) = 9350 + n - 1` and sound from `GET /audio.wav` on that same port, subject to the
-accepted Playout contract. `previewPort` SHALL be separate from `pgmPort`; the PGM subsystem SHALL continue never to
-address `935x`.
+After a ready lease, Bridge SHALL read the authenticated lease-specific `video.mjpeg` and, on request, `audio`
+routes on the configured Playout API origin. The preview subsystem SHALL NOT open the raw `935x` ports. The PGM
+subsystem SHALL keep its existing `pgmPort(n) = 9250 + n - 1` and relay.
 
 Bridge SHALL be a bounded, well-behaved feed client and SHALL hold at most one upstream of each requested resource
 for the current generation. It SHALL relay them only behind short-lived tickets scoped to station, channel,
@@ -68,16 +69,17 @@ explicitly requests it, unless the accepted meter contract explicitly requires a
 
 #### Scenario: The PGM port rule survives
 
-- **WHEN** live-input preview reads channel 2 on port 9351
-- **THEN** only the preview subsystem made that read
-- **AND** `pgmPort(2)` is still 9251 and the PGM relay never addressed 9351
+- **WHEN** live-input preview reads the authorized lease for programme channel 2
+- **THEN** only the preview subsystem reads the lease's Engine API routes
+- **AND** `pgmPort(2)` is still 9251 and neither relay addresses 9351
 
 ### Requirement: Bridge SHALL keep INPUT preview levels separate from programme levels
 
 Bridge SHALL accept INPUT levels only from the Playout's contracted preview-channel meter surface and SHALL
-correlate them to the current preview lease/generation before forwarding them to its owner. Stale, prior-generation,
-other-channel and programme-channel events SHALL be discarded. When the stream is stale or the lease ends, Bridge
-SHALL publish floor/reset for INPUT without changing its existing PGM meter stream.
+correlate lease id, generation, core generation, channel code, preview channel and layer before forwarding to its
+owner. Bridge SHALL accept samples for at most 300 ms. Stale, prior-generation, other-channel and programme-channel
+samples SHALL be discarded. When the sample is stale or the lease ends, the INPUT meter SHALL fall to floor while
+the PGM meter retains its own data path.
 
 #### Scenario: A late preview-meter event
 

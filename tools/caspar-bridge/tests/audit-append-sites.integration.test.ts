@@ -152,6 +152,8 @@ const NON_VERB_ACTIONS = [
     the console that built it — and one `failed` row with the reason.
   */
   'template-rebuild',
+  // C-023 records preview-only lifecycle in the live-preview integration suite.
+  'live-preview',
 ] as const;
 
 it('the "every playout verb" list is COMPLETE — each schema action is driven or named non-verb', () => {

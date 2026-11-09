@@ -8,7 +8,7 @@
 - **مبدأ:** CG Control / CG Bridge
 - **Playout مشاهده‌شده:** `2.12.0` روی `192.168.21.112`
 - **قابلیت CG:** `C-023` / OpenSpec `preview-live-input-check`
-- **وضعیت پیاده‌سازی CG:** `BLOCKED / WAITING FOR PLAYOUT CONTRACT`
+- **پاسخ تیم Playout:** قرارداد Lease نسخهٔ ۱ از بستهٔ ۲.۱۸.۱۲ دریافت شد. [ثبت قرارداد و وضعیت ایستگاه](PLAYOUT-CG-RESPONSE-LIVE-PREVIEW-v1.md)
 
 ## پرامپت برای Codex تیم Playout · ۲۰۲۶-۱۱-۰۹
 

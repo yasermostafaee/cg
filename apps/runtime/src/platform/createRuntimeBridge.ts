@@ -473,6 +473,22 @@ export function createMockBridge(): RuntimeBridge {
       onStatusChanged: () => () => undefined,
     },
 
+    livePreview: {
+      start: (req) =>
+        Promise.resolve({
+          channel: req.channel,
+          previewId: req.previewId,
+          state: 'unavailable',
+          sourceName: 'Input',
+          dbFs: null,
+          message: 'Live input preview requires a connected Playout.',
+        }),
+      status: (req) =>
+        Promise.resolve({ ...req, state: 'expired', sourceName: 'Input', dbFs: null }),
+      stop: () => Promise.resolve({ ok: true }),
+      url: () => Promise.resolve(null),
+    },
+
     // R-021 stage 2a — fixed-bank parity (offline: occupancy honestly unknown).
     fixedLayers: {
       config: () => Promise.resolve(mock.fixedLayersConfig()),

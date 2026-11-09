@@ -813,6 +813,15 @@ function EventDetails({
         </dd>
         <dt>Action</dt>
         <dd>{entry.action}</dd>
+        {entry.inputPreview !== undefined && (
+          <>
+            <dt>Input preview</dt>
+            <dd>
+              CH {entry.inputPreview.channel} · <bdi>{entry.inputPreview.sourceName}</bdi> ·{' '}
+              {entry.inputPreview.operation}
+            </dd>
+          </>
+        )}
         {entry.slot !== undefined && (
           <>
             <dt>Channel / layer</dt>

@@ -173,7 +173,11 @@ export function auditFor(rows: readonly AuditEntry[], holds: Holds): AuditEntry[
  * scoped console's page is a full page of what it may see) and the live push all ask.
  */
 export function auditRowTold(entry: AuditEntry, holds: Holds): boolean {
-  return told(holds, entry.slot?.channel) && told(holds, entry.refused?.casparChannel);
+  return (
+    told(holds, entry.slot?.channel) &&
+    told(holds, entry.refused?.casparChannel) &&
+    told(holds, entry.inputPreview?.channel)
+  );
 }
 
 /** `R-083` — a page: its rows by {@link auditRowTold}; the cursor is no row and is kept. */
@@ -359,6 +363,10 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'fixedLayers.set-banks': INTENT,
   'fixedLayers.set-config': INTENT,
   'layers.clear': INTENT,
+  'livePreview.start': INTENT,
+  'livePreview.status': INTENT,
+  'livePreview.stop': INTENT,
+  'livePreview.ticket': INTENT,
   'lock.engage': INTENT,
   'lock.release': INTENT,
   'playoutLayers.clear': INTENT,

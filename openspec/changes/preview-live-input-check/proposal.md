@@ -5,11 +5,10 @@ PRD: `C-023` (`docs/prd/caspar.md`). Playout contract request:
 
 ## Status
 
-**BLOCKED / WAITING FOR PLAYOUT CONTRACT.** Read-only recon on Playout `2.12.0` proves that
-`POST` and `DELETE /api/v1/channels/{code}/live-preview` exist and that the corresponding preview picture and
-sound are served on the `935x` feed. It does not prove the write DTOs, success/error response shapes,
-authorization policy or ownership semantics. `/openapi/v1.json` currently returns `500` because its generator
-encounters an unsupported `PROPFIND` action. No production implementation may begin by guessing those facts.
+Playout's 2.18.12 handoff supplies the request, authorization, ownership and feed contracts.
+The Bridge requires lease capability v1 before opening a check. See the
+[accepted response](../../../docs/integration/playout/PLAYOUT-CG-RESPONSE-LIVE-PREVIEW-v1.md)
+for the native test evidence and the read-only 2.18.14 station check.
 
 ## Why
 
@@ -51,11 +50,10 @@ describes the final programme mix. Re-labelling that meter as an input meter wou
 
 ## Impact
 
-- Expected production areas after the contract is unblocked: Runtime PVW and SourcePicker/Source-defaults UI,
+- Production areas include Runtime PVW and SourcePicker/Source-defaults UI,
   shared IPC schemas, bridge Playout client, preview relay and lifecycle manager.
 - The official Playout `live-preview` API and preview feed are the intended plant path; no new CasparCG monitor
   channel, frame-grab loop or direct renderer-to-Playout connection is introduced.
-- `add-multibox-audio` remains the source of the shipped/on-air plate-audio controls. Its unimplemented proposal for
-  a CG-owned MON/PFL channel array is not implemented in parallel for Playout inputs if this official endpoint can
-  satisfy the contract; that relationship is decided only after the requested response.
+- `add-multibox-audio` remains the source of the on-air plate-audio controls. This lease satisfies its separate
+  one-input Playout MON/PFL check. Multi-input monitoring and programme audio control remain outside this change.
 - No persisted template, row, look, source-default or PGM-audio schema changes are required.

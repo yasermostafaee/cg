@@ -130,6 +130,30 @@ export async function playoutFetch(
   input: string | URL | Request,
   init: PlayoutFetchInit = {},
 ): Promise<Response> {
+  const res = await openPlayoutResponse(input, init);
+  const chunks: Buffer[] = [];
+  for await (const chunk of res) chunks.push(chunk as Buffer);
+  const status = res.statusCode ?? 0;
+  if (status < 200 || status > 599) {
+    throw new PlayoutRequestError('FAILED', `the Playout answered status ${String(status)}`);
+  }
+  const out = new Headers();
+  for (const [name, value] of Object.entries(res.headers)) {
+    if (value === undefined) continue;
+    for (const one of Array.isArray(value) ? value : [value]) out.append(name, one);
+  }
+  return new Response(NULL_BODY.has(status) ? null : new Uint8Array(Buffer.concat(chunks)), {
+    status,
+    statusText: res.statusMessage ?? '',
+    headers: out,
+  });
+}
+
+/** Open an authenticated Playout stream through the same address and agent as finite reads. */
+export async function openPlayoutResponse(
+  input: string | URL | Request,
+  init: PlayoutFetchInit = {},
+): Promise<http.IncomingMessage> {
   const url = new URL(
     typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
   );
@@ -156,7 +180,7 @@ export async function playoutFetch(
   }
   const https_ = url.protocol === 'https:';
   const bareHost = url.hostname.replace(/^\[|\]$/g, '');
-  return new Promise<Response>((resolve, reject) => {
+  return new Promise<http.IncomingMessage>((resolve, reject) => {
     if (signal?.aborted === true) {
       reject(signal.reason);
       return;
@@ -174,32 +198,7 @@ export async function playoutFetch(
         agent: plainAgentFor(url),
         ...(https_ && !net.isIP(bareHost) ? { servername: bareHost } : {}),
       },
-      (res) => {
-        const chunks: Buffer[] = [];
-        res.on('data', (chunk: Buffer) => chunks.push(chunk));
-        res.on('error', reject);
-        res.on('end', () => {
-          const status = res.statusCode ?? 0;
-          if (status < 200 || status > 599) {
-            reject(
-              new PlayoutRequestError('FAILED', `the Playout answered status ${String(status)}`),
-            );
-            return;
-          }
-          const out = new Headers();
-          for (const [name, value] of Object.entries(res.headers)) {
-            if (value === undefined) continue;
-            for (const one of Array.isArray(value) ? value : [value]) out.append(name, one);
-          }
-          resolve(
-            new Response(NULL_BODY.has(status) ? null : new Uint8Array(Buffer.concat(chunks)), {
-              status,
-              statusText: res.statusMessage ?? '',
-              headers: out,
-            }),
-          );
-        });
-      },
+      resolve,
     );
     if (init.connectTimeoutMs !== undefined) {
       const bound = init.connectTimeoutMs;

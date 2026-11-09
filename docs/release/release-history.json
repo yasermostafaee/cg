@@ -16,6 +16,10 @@
       },
       "features": [
         {
+          "fa": "در CG Control، گزینهٔ Check input در PVW و Source defaults تصویر یک ورودی زندهٔ Playout را با سطح صدا و شنود اختیاری نشان می‌دهد.",
+          "en": "Check input in PVW and Source defaults shows one live Playout input with its own audio meter and optional sound."
+        },
+        {
           "fa": "در CG Control با انتخاب لایهٔ on air و ابزار Pan live input در PGM می‌توان تصویر داخل قابِ Crop edges را با درگ جابه‌جا کرد.",
           "en": "Select an on-air row and use Pan live input on PGM to drag the picture inside a cropped plate."
         },

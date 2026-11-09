@@ -638,8 +638,8 @@ and 1–2 MB; 24.9 fps in, 24.9 relayed, 321 KB/s. Table: `docs/integration/play
 **Superseded C-023 finding.** The feed is per CHANNEL (every programme channel and every preview
 channel has one), not per source. C-023 no longer asks this PGM relay to make thumbnails: Playout
 now offers a preview-only lifecycle that puts one selected input on the corresponding preview
-channel. C-023 uses that distinct `935x` path only after its control/auth/lease contract is answered;
-this PGM relay remains on `925x` and unchanged.
+channel. C-023 uses the authenticated lease-specific Engine feeds described in
+`docs/integration/playout/PLAYOUT-CG-RESPONSE-LIVE-PREVIEW-v1.md`. This PGM relay remains on `925x`.
 
 **Acceptance as delivered** (the four bullets below are the grab-era wording; the first and third
 are superseded by the owner's decision): the panel shows the programme channel **live, not at
@@ -1286,7 +1286,7 @@ not the CasparCG **server**, and its capture date is unknown. It is evidence abo
 expects to consume**, which is exactly what this item needs it for — it is NOT evidence about server
 capability.
 
-## [~] C-023 — check one live input with picture and optional sound in PVW ⟨priority: high⟩ — **BLOCKED / WAITING FOR PLAYOUT CONTRACT** · `openspec/changes/preview-live-input-check/`
+## [~] C-023 — check one live input with picture and optional sound in PVW ⟨priority: high⟩ — **LEASE CONTRACT ADOPTED / STATION ACCEPTANCE OPEN** · `openspec/changes/preview-live-input-check/`
 
 **Owner decision, 2026-10-26 — this supersedes the periodic-thumbnail proposal in full.** The
 operator chooses one Playout live input and checks its current moving picture before it is needed.
@@ -1308,24 +1308,15 @@ present?"_ before take, without guessing from a status tag or putting the source
 3. The new card carries a separately labelled `PVW INPUT` meter for the one checked source. Its
    sound starts OFF on every check and plays only after an explicit operator gesture.
 
-**Intended mechanism:** Playout `2.12.0` exposes
-`POST/DELETE /api/v1/channels/{code}/live-preview` and the corresponding preview-channel MJPEG/WAV
-on `9350 + channel − 1`. CG Bridge — never the renderer — owns start, replacement, relay, stop and
-cleanup. It uses no C-016/PGM frame grab, sends no AMCP command, touches no programme layer and never
-changes PGM, a look, a binding or Source defaults.
+**Accepted mechanism:** the Playout team's 2.18.12 handoff defines authenticated v1 preview leases.
+CG Bridge reads the capability and starts the saved input with the acting operator's bearer. The
+lease owns independent MJPEG, optional WAV and meter endpoints under the Engine API. Bridge
+renews and stops it with the original owner and exact generation. Renderer access uses Bridge
+tickets, and the check sends no AMCP, PGM, look, binding or Source-defaults write.
 
-**Hard blocker:** read-only recon deliberately sent no POST or DELETE. The installed OpenAPI cannot
-provide the missing shapes because `/openapi/v1.json` returns `500` while Swashbuckle processes an
-unsupported `PROPFIND`. We do not yet have the exact request/response DTO, endpoint auth policy,
-preview-meter correlation or a server-enforced owner/lease token with TTL and conditional DELETE.
-Without that ownership contract, a stale dialog can stop a newer client's preview. Production work
-must not guess around this.
-
-The exact request to the Playout team is
-`docs/integration/playout/CG-CONTROL-REQUEST-LIVE-INPUT-PREVIEW-2026-10-26.md`. Implementation may
-start only after a versioned response answers the DTO, success/errors, auth role/scope,
-owner/generation/TTL/conditional-stop race, port/index/feed formats, air-priority revocation and
-preview-meter API.
+See [the adopted Playout contract](../integration/playout/PLAYOUT-CG-RESPONSE-LIVE-PREVIEW-v1.md)
+and the change's tasks for station acceptance. The 2.18.14 station advertises the lease API.
+A fresh Preview frame or meter does not determine physical source signal availability.
 
 **Acceptance:**
 
@@ -1341,8 +1332,8 @@ preview-meter API.
   the reason is shown; a stale stop cannot close the newer preview
 - WHEN any start, failure, replacement or cleanup occurs THEN no PGM, programme layer, row, look,
   binding, rehearsal page or Source default changes, and no AMCP command is sent
-- WHEN the picture or meter stalls THEN its last value is removed/reset rather than masquerading as
-  live
+- WHEN the picture stalls THEN the last frame is removed and optional audio stops
+- WHEN the meter is stale THEN it returns to floor independently of current picture delivery
 
 **Out of scope:** thumbnails on every source row, automatic scanning, multiview, simultaneous input
 checks, ad-hoc sources not present in D10, and replacing R-049's labelled Live Source placeholders.

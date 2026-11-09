@@ -87,6 +87,11 @@ import {
   PgmReturnStatusChangedChannel,
   PgmReturnStatusChannel,
   PgmReturnTicketChannel,
+  LIVE_PREVIEW_HTTP_PREFIX,
+  LivePreviewStartChannel,
+  LivePreviewStatusChannel,
+  LivePreviewStopChannel,
+  LivePreviewTicketChannel,
   BridgeLogsTicketChannel,
   BRIDGE_LOGS_PATH,
   PGM_RETURN_PATH_PREFIX,
@@ -299,6 +304,7 @@ import { pinnedIPv4, playoutFetchForSession } from './playout-http.js';
 import { BridgeSession } from './bridge-session.js';
 import { PgmReturnRelay, type PgmReturnTuning } from './pgm-return.js';
 import { PgmAudioRelay } from './pgm-audio.js';
+import { LivePreviewService } from './live-preview.js';
 import { PlayoutMetersReader, type PlayoutMetersTuning } from './playout-meters.js';
 import { PlayoutAuth, type PlayoutAuthOptions, type VerifiedToken } from './playout-auth.js';
 import { PlayoutLicenseReader, type PlayoutLicenseReaderOptions } from './playout-license.js';
@@ -3014,8 +3020,39 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     issued by the routes below over the verified socket, redeemed by the control port's own server.
   */
   const tickets = new HttpTickets();
+  const previewOrigin = auth.playout === null ? null : new URL(auth.playout.channelsUrl).origin;
+  const livePreview = new LivePreviewService(
+    (owner, channel) => {
+      const token = owner.token;
+      const lock = runtime.lockState();
+      if (
+        previewOrigin === null ||
+        token === null ||
+        token.jti === null ||
+        authGateState(owner, playoutAuth) !== 'signed-in' ||
+        !holdsPermissionClass(token.principal.roles, 'operator') ||
+        (lock.engaged && (lock.channels === undefined || lock.channels.includes(channel)))
+      )
+        return null;
+      const named = stationChannelsFor(
+        owner,
+        'signed-in',
+        auth.mode,
+        runtime,
+        playoutCatalogue?.rows() ?? null,
+      ).channels.find(
+        (row) => row.channel === channel && row.declared && row.permitted === true,
+      )?.named;
+      return named == null
+        ? null
+        : { origin: previewOrigin, code: named.id, bearer: token.rawToken };
+    },
+    (id) => runtime.sourceCatalog().sources.find((source) => source.id === id),
+    (row) => runtime.recordLivePreview(row),
+  );
   const routes = buildRoutes(runtime, {
     issueTicket: (grant) => tickets.issue(grant),
+    livePreview,
     logsAvailable: options.logsDir !== undefined,
     setupPhase,
     // `CENTRAL-BRIDGE-01` — this bridge's release, told to every console at connect.
@@ -3090,6 +3127,20 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   const controlHttp = http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://cg-bridge');
     const pathname = url.pathname;
+    if (req.method === 'GET' && pathname.startsWith(LIVE_PREVIEW_HTTP_PREFIX)) {
+      const match = /^\/input-preview\/([\w-]+)\/(picture|audio)$/.exec(pathname);
+      const grant = tickets.redeem(
+        url.searchParams.get('ticket'),
+        (g) => g.kind === 'input-preview' && g.previewId === match?.[1] && g.stream === match[2],
+      );
+      res.setHeader('access-control-allow-origin', '*');
+      if (grant?.kind !== 'input-preview') {
+        res.writeHead(403).end();
+        return;
+      }
+      void livePreview.serve(res, grant).catch(() => res.destroy());
+      return;
+    }
     /*
       `CENTRAL-BRIDGE-01` (D9) — the programme return for a console on another machine, behind a
       ticket its verified socket was given for THIS channel. No ticket, a spent one, or one for
@@ -3442,6 +3493,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
         playoutAuth,
         runtime,
         (signIn) => {
+          livePreview.changed(session);
           // A principal was just seated on this socket: its `permitted` moved, and its bearer
           // may be the first this bridge has had — read the catalogue now rather than at the
           // next tick, so the names arrive with the sign-in. A station-admin's sign-in also reads
@@ -3460,6 +3512,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       );
     });
     const dropSocket = (): void => {
+      livePreview.disconnect(session);
       for (const off of unsubscribers) off();
       /*
         ⚠ A CLOSED TAB IS A SIGN-OUT THE OPERATOR NEVER PRESSED. Without this the bridge keeps
@@ -3702,6 +3755,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     },
     async close() {
       for (const client of wss.clients) client.terminate();
+      await livePreview.dispose();
       // `CENTRAL-BRIDGE-01` — the stack's last change is on disk before anything stops.
       stack?.flush();
       // `C-037` — stop the D9 tick with the bridge. It is `unref`'d, so it never held the
@@ -4509,6 +4563,7 @@ export function buildRoutes(
     playoutSources?: PlayoutSources | null;
     /** `CENTRAL-BRIDGE-01` (D9) — a ticket for one of CG Bridge's HTTP resources. */
     issueTicket?: (grant: TicketGrant) => string;
+    livePreview?: LivePreviewService;
     /** Does this bridge keep a log folder to download? */
     logsAvailable?: boolean;
   } = {},
@@ -4738,6 +4793,7 @@ export function buildRoutes(
     ),
     route(AuthSignOutChannel, 'operator', 'read', () => {
       const session = currentAuthSession();
+      if (session !== null) paths.livePreview?.drop(session);
       const leaving = session?.token?.principal ?? null;
       // The bridge must stop calling the Playout with a token whose operator has left.
       const raw = session?.token?.rawToken;
@@ -5111,6 +5167,45 @@ export function buildRoutes(
       it is relayed on the console's own origin (`/pgm/<n>`, `pgm-return.ts`).
     */
     route(PgmReturnStatusChannel, 'read', 'read', () => pgmReturnStatus()),
+    route(
+      LivePreviewStartChannel,
+      'operator',
+      'operator',
+      (req: ChannelRequest<typeof LivePreviewStartChannel>) =>
+        paths.livePreview?.start(currentAuthSession(), req) ?? {
+          channel: req.channel,
+          previewId: req.previewId,
+          sourceName: 'Input',
+          state: 'unavailable',
+          dbFs: null,
+        },
+    ),
+    route(
+      LivePreviewStatusChannel,
+      'operator',
+      'operator',
+      (req: ChannelRequest<typeof LivePreviewStatusChannel>) =>
+        paths.livePreview?.status(currentAuthSession(), req) ?? {
+          ...req,
+          sourceName: 'Input',
+          state: 'expired',
+          dbFs: null,
+        },
+    ),
+    route(
+      LivePreviewStopChannel,
+      'operator',
+      'operator',
+      (req: ChannelRequest<typeof LivePreviewStopChannel>) =>
+        paths.livePreview?.stop(currentAuthSession(), req) ?? { ok: true },
+    ),
+    route(
+      LivePreviewTicketChannel,
+      'operator',
+      'operator',
+      (req: ChannelRequest<typeof LivePreviewTicketChannel>) =>
+        paths.livePreview?.ticket(currentAuthSession(), req, issueTicket) ?? { path: null },
+    ),
     /*
       🔴 `CENTRAL-BRIDGE-01` (D9) — the picture is fetched by the console's `<img>`, which carries no
       token, from CG Bridge's control port: a ticket issued HERE, over the verified socket, opens

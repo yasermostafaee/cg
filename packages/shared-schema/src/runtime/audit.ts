@@ -47,6 +47,7 @@ export const AuditEntrySchema = z.object({
     // configuration verb, like the timing above: it puts a value in force and seats nothing).
     'set-sound-muted',
     'pan-live-plate',
+    'live-preview',
     // `book-in-cg-control` delta B — the row-local Auto/Manual book configuration.
     'set-page-advance',
     'update-deferred',
@@ -143,6 +144,13 @@ export const AuditEntrySchema = z.object({
    * Absent on every row written while auth is OFF, which is every row written today.
    */
   actorSub: z.string().min(1).optional(),
+  inputPreview: z
+    .object({
+      channel: z.number().int().positive(),
+      sourceName: z.string().max(256),
+      operation: z.enum(['start', 'replace', 'stop']),
+    })
+    .optional(),
   /**
    * ⚠ ADR 0010's open note, recorded rather than assumed: `true` when the Playout's display
    * name was LONGER than `MAX_ACTOR_LENGTH` and the bridge shortened it, so the record says

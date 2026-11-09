@@ -3,9 +3,10 @@
 ### Requirement: PVW SHALL let the operator check one live input without changing rehearsal or air
 
 CG Control SHALL offer `Check input` for one Playout live source from the PVW workflow and from each eligible Inputs
-row in Source defaults. Both actions SHALL target one live-input card in PVW, labelled with the source's canonical
-name and channel. Starting it from Source defaults SHALL leave that dialog open and SHALL NOT select, save or apply
-the source, alter any dirty draft, or change the rehearsing row.
+row in Source defaults. Both actions SHALL target one PVW input card labelled with the source's canonical name and
+channel. The card SHALL appear in the source dialog when launched there so the operator can see it while editing.
+Starting it from Source defaults SHALL leave that dialog open and SHALL NOT select, save or apply the source, alter
+any dirty draft, or change the rehearsing row.
 
 The card SHALL be separate from the rehearsal iframe and Live Source placeholders. It SHALL NOT composite the live
 picture into a plate, change the retained page, trigger Play/Take/Update, or imply that the checked picture is PGM.
@@ -13,7 +14,7 @@ picture into a plate, change the retained page, trigger Play/Take/Update, or imp
 #### Scenario: A check started while editing defaults
 
 - **WHEN** the operator starts `Check input` for `Studio A` from the Source defaults Inputs tab
-- **THEN** the PVW input card checks `Studio A` and names its channel
+- **THEN** the PVW input card in the dialog checks `Studio A` and names its channel
 - **AND** Source defaults stays open with the same draft, dirty state and saved values
 - **AND** rehearsal, row bindings, active look and PGM are unchanged
 
@@ -74,5 +75,5 @@ when the Playout playlist picture is not one of the visible boxes.
 #### Scenario: Preview levels become stale
 
 - **WHEN** no accepted INPUT level arrives for the stale interval
-- **THEN** the INPUT bars fall to floor and the card leaves `live`
+- **THEN** the INPUT bars fall to floor independently of the picture
 - **AND** the PGM meter keeps following its own programme stream
