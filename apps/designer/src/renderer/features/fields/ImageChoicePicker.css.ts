@@ -73,9 +73,13 @@ export const choice = style({
 });
 
 export const choiceThumb = style({
+  width: '100%',
+  height: '100%',
   minWidth: 0,
-  display: 'grid',
-  placeItems: 'center',
+  minHeight: 0,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
   overflow: 'hidden',
   padding: '0.45rem',
   boxSizing: 'border-box',
@@ -85,10 +89,11 @@ export const choiceThumb = style({
 });
 
 globalStyle(`${choiceThumb} img`, {
-  width: 'auto',
-  height: 'auto',
-  maxWidth: '100%',
-  maxHeight: '100%',
+  display: 'block',
+  width: '100%',
+  height: '100%',
+  minWidth: 0,
+  minHeight: 0,
   objectFit: 'contain',
   objectPosition: 'center',
 });

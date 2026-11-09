@@ -161,6 +161,51 @@ test.describe('D-119 + D-179 — starter landing catalog', () => {
     await app.expectStudio();
   });
 
+  test('B-417: the clock ticker exports with its project-local separator icon', async ({ app }) => {
+    await app.page.getByTestId('starter-card').filter({ hasText: 'زیرنویس با ساعت' }).click();
+    await app.expectStudio();
+    const id = await app.page.evaluate(async () => {
+      const assets = await window.cg.assets.list();
+      return assets.find((asset) => asset.filename === 'irib-news-separator.svg')?.assetId;
+    });
+    expect(id).toBeTruthy();
+    const { html } = await app.exportHtml();
+    expect(html).toContain(`"assetId":"${id}"`);
+  });
+
+  test('B-418: the picture chooser fits both starter images inside their thumbnail frames', async ({
+    app,
+  }) => {
+    await app.page.getByTestId('starter-card').filter({ hasText: 'زیرنویس با ساعت' }).click();
+    await app.expectStudio();
+    await app.openComposition('میان‌برنامه (روی آنتن)');
+    await app.selectElementById('ir-crawl');
+    await app.inspector.getByRole('button', { name: 'image', exact: true }).click();
+    const dialog = app.page.getByRole('dialog', { name: 'Choose picture for image' });
+    const images = dialog.locator('button img');
+    await expect(images).toHaveCount(2);
+    await expect
+      .poll(() =>
+        images.evaluateAll((nodes) =>
+          nodes.every((node) => {
+            const img = node as HTMLImageElement;
+            const frame = img.parentElement?.getBoundingClientRect();
+            const box = img.getBoundingClientRect();
+            return (
+              frame !== undefined &&
+              img.naturalWidth > 0 &&
+              getComputedStyle(img).objectFit === 'contain' &&
+              box.left >= frame.left - 1 &&
+              box.top >= frame.top - 1 &&
+              box.right <= frame.right + 1 &&
+              box.bottom <= frame.bottom + 1
+            );
+          }),
+        ),
+      )
+      .toBe(true);
+  });
+
   /**
    * D-119 polish — a bound field's base text is its real Persian default, not a
    * raw `{{token}}`. The operator opening a starter sees broadcast copy on the
