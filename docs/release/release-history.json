@@ -213,6 +213,10 @@
         {
           "fa": "Inspector در CG Control فیلدهای داینامیک پریست انتخاب‌شده و فیلدهای مشترک را نشان می‌دهد. تغییر پریست، پیش‌نویس‌ها را حفظ می‌کند.",
           "en": "CG Control Inspector shows the selected preset's dynamic fields alongside shared fields. Switching presets keeps drafts."
+        },
+        {
+          "fa": "فهرست Media در انتخاب‌گر ورودی، پوستر هر فایل را از کتابخانهٔ Playout نشان می‌دهد. فایل‌های بدون پوستر همچنان قابل انتخاب‌اند.",
+          "en": "The source picker's Media tab shows each file's Playout library poster when available. Items without a poster remain selectable."
         }
       ],
       "fixes": [

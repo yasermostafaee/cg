@@ -53,6 +53,13 @@ swap, and the Live sources section of Station setup. Opening a check is distinct
 the source. Leaving its scope releases its lease. While the check waits for a decodable frame
 or reports a terminal state, the card keeps an empty picture frame with the appropriate state.
 
+## Media posters
+
+The Media tab uses the static D11 library poster. The Bridge resolves a known catalogue ID to
+its content fingerprint and reads `size=bin` from the documented thumbnail route on the same
+Engine. The console reads a bounded JPEG through Bridge for mounted rows. It displays `No poster`
+for missing images and on older Bridges, keeping the normal source selection available.
+
 ## Live source thumbnails
 
 When the station supports read-only pictures per source, open the thumbnail feed for the eligible

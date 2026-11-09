@@ -8943,9 +8943,30 @@ input[type='checkbox']:disabled:checked {
 }
 .cg-picker-media {
   display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--r-space-2);
+  min-width: 0;
+}
+.cg-picker-media__text {
+  display: flex;
+  flex: 1;
   flex-direction: column;
   justify-content: center;
   min-width: 0;
+}
+.cg-media-thumbnail {
+  flex: none;
+  overflow: hidden;
+  padding: 0;
+}
+.cg-media-thumbnail img {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 0;
+  object-fit: contain;
 }
 .cg-picker-media__facts {
   overflow: hidden;

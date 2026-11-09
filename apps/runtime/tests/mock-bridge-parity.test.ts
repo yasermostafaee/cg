@@ -174,8 +174,9 @@ const BRIDGE_SURFACE: {
       'assignments',
       'setAssignments',
       'onAssignmentsChanged',
-      // `PLAYOUT-SOURCES-01` — the picker's two reads, on both backends.
+      // `PLAYOUT-SOURCES-01` — the picker's reads, on both backends.
       'mediaSearch',
+      'mediaThumbnail',
       'refresh',
       // `MEDIA-PLATES-01` — a bound clip's Loop and When hidden, on the bound-media reference.
       'setMediaPlayback',

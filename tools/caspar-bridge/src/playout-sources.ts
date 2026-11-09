@@ -4,6 +4,9 @@ import {
   BoundMediaStateSchema,
   EMPTY_PLAYOUT_INPUTS,
   LIVE_SOURCE_FORMATS,
+  MAX_MEDIA_THUMBNAIL_BYTES,
+  MEDIA_THUMBNAIL_DATA_URL_PREFIX,
+  PlayoutFingerprintSchema,
   PlayoutInputsStateSchema,
   boundMediaPlayback,
   buildPlayoutSourceCatalog,
@@ -13,6 +16,7 @@ import {
   parsePlayoutJson,
   parsePlayoutMediaPage,
   playoutMediaIdOf,
+  probeImage,
   toBoundMedia,
   type BoundMediaItem,
   type ConsoleMediaItem,
@@ -23,7 +27,7 @@ import {
   type PlayoutMediaItem,
   type SourceCatalog,
 } from '@cg/shared-ipc';
-import { playoutFetch } from './playout-http.js';
+import { openPlayoutResponse, playoutFetch } from './playout-http.js';
 
 /**
  * 🔴 `PLAYOUT-SOURCES-01` — **THE PLAYOUT'S INPUTS (D10) AND MEDIA (D11), READ AND KEPT.**
@@ -47,6 +51,8 @@ export const PICKER_FRESH_MS = 5_000;
 export const SOURCES_TICK_MS = 1_000;
 /** A media search page, bounded. */
 export const MEDIA_SEARCH_TIMEOUT_MS = 5_000;
+const MEDIA_THUMBNAIL_TIMEOUT_MS = 3_000;
+const MAX_MEDIA_THUMBNAIL_DIMENSION = 2_048;
 /** The one retry's fresh read, bounded (§1.C). */
 export const RETRY_READ_TIMEOUT_MS = 1_500;
 /** D10 and `ids=` reads, bounded. */
@@ -101,6 +107,8 @@ export interface PlayoutSourcesProvider {
     ids: readonly string[],
     timeoutMs: number,
   ): Promise<{ readonly kind: 'ok'; readonly body: unknown } | { readonly kind: 'failed' }>;
+  /** The existing JPEG poster for a D11 content fingerprint. */
+  readMediaThumbnail?(fingerprint: string): Promise<Buffer | null>;
 }
 
 /** The Playout's own D10/D11 over HTTP — server-side, no `Origin`, no proxy (B1.4), bearer at use. */
@@ -188,6 +196,55 @@ export class HttpPlayoutSources implements PlayoutSourcesProvider {
       return { kind: 'ok', body: await res.json() };
     } catch {
       return { kind: 'failed' };
+    }
+  }
+
+  async readMediaThumbnail(fingerprint: string): Promise<Buffer | null> {
+    const bearer = this.#bearer();
+    const key = PlayoutFingerprintSchema.safeParse(fingerprint);
+    if (bearer === null || !key.success) return null;
+
+    try {
+      const url = new URL('/api/v1/media/thumbnail', this.#mediaUrl);
+      url.searchParams.set('fingerprint', key.data);
+      url.searchParams.set('size', 'bin');
+      const response = await openPlayoutResponse(url, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${bearer}`, Accept: 'image/jpeg' },
+        signal: AbortSignal.timeout(MEDIA_THUMBNAIL_TIMEOUT_MS),
+      });
+      const contentType = response.headers['content-type']?.split(';')[0]?.trim().toLowerCase();
+      if (
+        response.statusCode !== 200 ||
+        contentType !== 'image/jpeg' ||
+        Number(response.headers['content-length']) > MAX_MEDIA_THUMBNAIL_BYTES
+      ) {
+        response.destroy();
+        return null;
+      }
+
+      const chunks: Buffer[] = [];
+      let size = 0;
+      for await (const chunk of response as AsyncIterable<Buffer>) {
+        size += chunk.length;
+        if (size > MAX_MEDIA_THUMBNAIL_BYTES) {
+          response.destroy();
+          return null;
+        }
+        chunks.push(chunk);
+      }
+      const bytes = Buffer.concat(chunks, size);
+      const image = probeImage(bytes);
+      if (
+        image?.mime !== 'image/jpeg' ||
+        Math.max(image.width, image.height) > MAX_MEDIA_THUMBNAIL_DIMENSION ||
+        bytes[size - 2] !== 0xff ||
+        bytes[size - 1] !== 0xd9
+      )
+        return null;
+      return bytes;
+    } catch {
+      return null;
     }
   }
 }
@@ -525,6 +582,23 @@ export class PlayoutSources {
       total: page.total,
       nextCursor: page.nextCursor,
     };
+  }
+
+  async mediaThumbnail(sourceId: string): Promise<{ ok: boolean; dataUrl?: string }> {
+    const playoutId = playoutMediaIdOf(sourceId);
+    const provider = this.#provider;
+    if (playoutId === null || provider?.readMediaThumbnail === undefined || !this.#signedIn()) {
+      return { ok: false };
+    }
+    const recent = this.#recent.get(playoutId);
+    const bound = this.#media.get(playoutId);
+    if (recent === undefined && bound?.unavailable === true) return { ok: false };
+    const fingerprint = (recent ?? bound)?.fingerprint;
+    if (fingerprint === undefined) return { ok: false };
+    const bytes = await provider.readMediaThumbnail(fingerprint);
+    return bytes === null
+      ? { ok: false }
+      : { ok: true, dataUrl: MEDIA_THUMBNAIL_DATA_URL_PREFIX + bytes.toString('base64') };
   }
 
   #remember(item: PlayoutMediaItem): void {

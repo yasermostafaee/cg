@@ -31,6 +31,11 @@ import { Tag } from '../../ui/Tag.js';
 import { TextInput } from '../../ui/TextInput.js';
 import { VirtualList, type VirtualListHandle, type VirtualRow } from '../../ui/VirtualList.js';
 import { InputThumbnail } from './InputThumbnail.js';
+import {
+  createMediaThumbnailLoader,
+  MediaThumbnail,
+  type MediaThumbnailLoader,
+} from './MediaThumbnail.js';
 import { SourceLabel, formatMediaDuration, labelledSource } from './SourceLabel.js';
 import {
   currentSourceCatalog,
@@ -305,6 +310,7 @@ function PickerPanel({
 }): JSX.Element {
   const [tab, setTab] = useState<Tab>(initialTab);
   const media = useMediaSearch();
+  const loadThumbnail = useMemo(createMediaThumbnailLoader, []);
   const catalog = currentSourceCatalog();
   const catalogInputs = catalog.sources.filter(
     (source) => source.origin !== 'media' && source.departed !== true,
@@ -358,7 +364,13 @@ function PickerPanel({
             inputCheck={inputCheck}
           />
         ) : (
-          <MediaTab listId={`${base}-media`} value={value} media={media} onPick={onPick} />
+          <MediaTab
+            listId={`${base}-media`}
+            value={value}
+            media={media}
+            onPick={onPick}
+            loadThumbnail={loadThumbnail}
+          />
         )}
       </TabPanel>
     </div>
@@ -650,6 +662,7 @@ function mediaRow(
     readonly unavailable?: boolean | undefined;
   },
   value: string,
+  loadThumbnail: MediaThumbnailLoader,
 ): VirtualRow {
   const selected = item.id === value;
   const facts = [
@@ -665,27 +678,30 @@ function mediaRow(
     data: { 'data-picker-media': item.id },
     content: (
       <span className="cg-picker-media">
-        <span className="cg-picker-row">
-          <Icon icon={Film} size={14} />
-          <bdi className="cg-picker-row__name" dir={directionOf(item.name)}>
-            {item.name}
-          </bdi>
-          {item.unavailable === true && (
-            <Tag className="cg-source-tag cg-source-tag--unavailable">Unavailable</Tag>
-          )}
-          {selected && <Icon icon={Check} size={14} />}
+        <span className="cg-picker-media__text">
+          <span className="cg-picker-row">
+            <Icon icon={Film} size={14} />
+            <bdi className="cg-picker-row__name" dir={directionOf(item.name)}>
+              {item.name}
+            </bdi>
+            {item.unavailable === true && (
+              <Tag className="cg-source-tag cg-source-tag--unavailable">Unavailable</Tag>
+            )}
+            {selected && <Icon icon={Check} size={14} />}
+          </span>
+          <span className="cg-picker-media__facts">
+            {item.folder !== undefined && item.folder !== '' && (
+              <bdi dir={directionOf(item.folder)}>{item.folder}</bdi>
+            )}
+            {facts.map((f, i) => (
+              <span key={f}>
+                {(i > 0 || (item.folder !== undefined && item.folder !== '')) && ' · '}
+                {f}
+              </span>
+            ))}
+          </span>
         </span>
-        <span className="cg-picker-media__facts">
-          {item.folder !== undefined && item.folder !== '' && (
-            <bdi dir={directionOf(item.folder)}>{item.folder}</bdi>
-          )}
-          {facts.map((f, i) => (
-            <span key={f}>
-              {(i > 0 || (item.folder !== undefined && item.folder !== '')) && ' · '}
-              {f}
-            </span>
-          ))}
-        </span>
+        <MediaThumbnail id={item.unavailable === true ? undefined : item.id} load={loadThumbnail} />
       </span>
     ),
   };
@@ -696,11 +712,13 @@ function MediaTab({
   value,
   media,
   onPick,
+  loadThumbnail,
 }: {
   listId: string;
   value: string;
   media: MediaState;
   onPick: (value: string) => void;
+  loadThumbnail: MediaThumbnailLoader;
 }): JSX.Element {
   const list = useRef<VirtualListHandle>(null);
   const search = useRef<HTMLInputElement>(null);
@@ -742,6 +760,7 @@ function MediaTab({
               unavailable: current.unavailable,
             },
             value,
+            loadThumbnail,
           ),
         );
       }
@@ -762,14 +781,17 @@ function MediaTab({
               unavailable: r.status === 'unavailable',
             },
             value,
+            loadThumbnail,
           ),
         );
       }
       out.push({ kind: 'heading', key: 'All media', content: 'All media' });
     }
-    for (const item of media.items) out.push(mediaRow(`all:${item.id}`, item, value));
+    for (const item of media.items) {
+      out.push(mediaRow(`all:${item.id}`, item, value, loadThumbnail));
+    }
     return out;
-  }, [media.items, media.q, catalog, value]);
+  }, [media.items, media.q, catalog, value, loadThumbnail]);
 
   const idOf = (index: number): string | null => {
     const key = rows[index]?.key;

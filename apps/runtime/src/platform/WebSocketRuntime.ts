@@ -100,6 +100,7 @@ import {
   SourcesConfigChangedChannel,
   SourcesConfigChannel,
   SourcesMediaSearchChannel,
+  SourcesMediaThumbnailChannel,
   SourcesRefreshChannel,
   SourcesSetAssignmentsChannel,
   SourcesSetConfigChannel,
@@ -209,6 +210,11 @@ const APP_INFO: AppInfo = { name: 'cg Runtime', version: '0.0.0', platform: 'bro
 
 const WS_OPEN = 1;
 const REQUEST_TIMEOUT_MS = 8000;
+// Same-release Bridges can omit these features without affecting standard playout.
+const OPTIONAL_CHANNELS = new Set([
+  StackPreviewPlateCropChannel.name,
+  SourcesMediaThumbnailChannel.name,
+]);
 /** `R-100` — one picture of a book may be 4 MB; see `pages.put`. */
 const PAGE_PUT_TIMEOUT_MS = 30_000;
 /**
@@ -1046,10 +1052,9 @@ export class WebSocketRuntime implements RuntimeBridge {
         // `DELTA-RUN-NEXT-VERSION-01-C` — CG Bridge's machine clock; an older bridge says nothing.
         bridgeClock: caps.clock ?? null,
       });
-      // D-178 — a compatible Bridge may offer PVW practice without saving the crop for Take.
       const missing = ipcChannels
         .runtimeRequestChannelNames(ipcChannels)
-        .filter((n) => n !== StackPreviewPlateCropChannel.name && !routed.has(n));
+        .filter((n) => !OPTIONAL_CHANNELS.has(n) && !routed.has(n));
       this.#setSkew(missing.length === 0 ? null : missing);
       // `CENTRAL-BRIDGE-01` — the release line, from the same answer (no second round trip).
       this.#setVersionMismatch(
@@ -1592,6 +1597,11 @@ export class WebSocketRuntime implements RuntimeBridge {
     }
   }
 
+  async #optionalChannelMissing(name: string): Promise<boolean> {
+    const routed = await this.#capsHandshake;
+    return this.#status === 'live' && this.#versionMismatch === null && routed?.has(name) === false;
+  }
+
   /** Validate the request, relay it, and resolve the validated response. */
   async #invoke<C extends AnyChannel>(
     channel: C,
@@ -1871,12 +1881,7 @@ export class WebSocketRuntime implements RuntimeBridge {
     previewPlateCrop: async (
       req: ChannelRequest<typeof StackPreviewPlateCropChannel>,
     ): Promise<ChannelResponse<typeof StackPreviewPlateCropChannel>> => {
-      const routed = await this.#capsHandshake;
-      if (
-        this.#status === 'live' &&
-        this.#versionMismatch === null &&
-        routed?.has(StackPreviewPlateCropChannel.name) === false
-      ) {
+      if (await this.#optionalChannelMissing(StackPreviewPlateCropChannel.name)) {
         return {
           ok: false,
           targets: [],
@@ -2537,9 +2542,15 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#invoke(SourcesSetAssignmentsChannel, req),
     onAssignmentsChanged: (handler: (assignments: SourceAssignments) => void) =>
       this.#sourceAssignmentSubs.add(handler),
-    // `PLAYOUT-SOURCES-01` — the picker's two reads.
+    // `PLAYOUT-SOURCES-01` — the picker's reads.
     mediaSearch: (req: ChannelRequest<typeof SourcesMediaSearchChannel>) =>
       this.#invoke(SourcesMediaSearchChannel, req),
+    mediaThumbnail: async (
+      req: ChannelRequest<typeof SourcesMediaThumbnailChannel>,
+    ): Promise<ChannelResponse<typeof SourcesMediaThumbnailChannel>> =>
+      (await this.#optionalChannelMissing(SourcesMediaThumbnailChannel.name))
+        ? { ok: false }
+        : this.#invoke(SourcesMediaThumbnailChannel, req),
     refresh: () => this.#invoke(SourcesRefreshChannel, undefined),
     // `MEDIA-PLATES-01` §1.A — a bound clip's Loop and When hidden, station-wide.
     setMediaPlayback: (req: ChannelRequest<typeof SourcesSetMediaPlaybackChannel>) =>

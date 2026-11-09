@@ -3,11 +3,14 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  MAX_MEDIA_THUMBNAIL_BYTES,
+  MEDIA_THUMBNAIL_DATA_URL_PREFIX,
   PlayoutInputsStateSchema,
   inputSourceId,
   mediaSourceId,
   parsePlayoutMediaPage,
 } from '@cg/shared-ipc';
+import { createBridge } from '../src/bridge.js';
 import {
   HttpPlayoutSources,
   PICKER_FRESH_MS,
@@ -21,7 +24,8 @@ import {
   startFakePlayout,
   type FakePlayout,
 } from './support/fake-playout.js';
-import { openClient, startAuthedBridge, waitFor } from './support/auth-harness.js';
+import { deadConnection, openClient, startAuthedBridge, waitFor } from './support/auth-harness.js';
+import { FRAME_A } from './support/fake-pgm-feed.js';
 
 /**
  * 🔴 `PLAYOUT-SOURCES-01` §4 — **D10 AND D11 OVER HTTP, against the fake Playout.**
@@ -316,6 +320,78 @@ describe('the bridge’s routes, as a console reaches them', () => {
     );
     expect(JSON.stringify(payload)).not.toContain('clip');
     expect(JSON.stringify(payload)).not.toContain('C:/');
+  });
+
+  it('reads an existing JPEG poster by D11 fingerprint for a viewer without binding the clip', async () => {
+    const fingerprint = 'a'.repeat(64);
+    const received: { url: string | undefined; authorization: string | undefined }[] = [];
+    let poster: 'jpeg' | 'missing' | 'bad' | 'oversize' = 'jpeg';
+    const playout = track(
+      await startFakePlayout({
+        mediaThumbnail: (req, res) => {
+          received.push({ url: req.url, authorization: req.headers.authorization });
+          if (poster === 'missing') {
+            res.writeHead(404).end();
+            return;
+          }
+          res.writeHead(200, { 'Content-Type': 'image/jpeg' });
+          if (poster === 'oversize') {
+            // No Content-Length. Verify the Bridge caps the response even when it is streamed.
+            res.write(FRAME_A);
+            res.end(Buffer.alloc(MAX_MEDIA_THUMBNAIL_BYTES));
+            return;
+          }
+          res.end(poster === 'jpeg' ? FRAME_A : '<html>Not a poster</html>');
+        },
+      }),
+      (p) => p.stop(),
+    );
+    const media = playout.mediaItem(FAKE_MEDIA_IDS.studio1);
+    if (media === undefined) throw new Error('The test clip is missing');
+    playout.setMedia([{ ...media, fingerprint }]);
+    const handle = track(
+      await createBridge({
+        port: 0,
+        connection: deadConnection(),
+        playout: { auth: 'playout', address: playout.baseUrl, issuer: playout.issuer },
+      }),
+      (h) => h.close(),
+    );
+    const client = await openClient(handle);
+    const id = mediaSourceId(media.id);
+    expect(
+      (await client.ask('before-auth', 'sources.media-thumbnail', { id })).error,
+    ).toBeDefined();
+    const viewer = await playout.issueToken({ user: 'viewer' });
+    expect((await client.authenticate('viewer', viewer.token)).error).toBeUndefined();
+
+    expect((await client.ask('before-search', 'sources.media-thumbnail', { id })).payload).toEqual({
+      ok: false,
+    });
+    expect(received).toHaveLength(0);
+    expect(
+      (await client.ask('search', 'sources.media-search', { q: 'Studio' })).payload,
+    ).toMatchObject({
+      ok: true,
+      items: [{ id }],
+    });
+    expect((await client.ask('poster', 'sources.media-thumbnail', { id })).payload).toEqual({
+      ok: true,
+      dataUrl: MEDIA_THUMBNAIL_DATA_URL_PREFIX + FRAME_A.toString('base64'),
+    });
+    expect(received).toEqual([
+      {
+        url: `/api/v1/media/thumbnail?fingerprint=${fingerprint}&size=bin`,
+        authorization: `Bearer ${viewer.token}`,
+      },
+    ]);
+    expect(handle.runtime.sourceCatalog().sources.some((source) => source.id === id)).toBe(false);
+    for (const failure of ['missing', 'bad', 'oversize'] as const) {
+      poster = failure;
+      expect((await client.ask(failure, 'sources.media-thumbnail', { id })).payload).toEqual({
+        ok: false,
+      });
+    }
   });
 
   it('🔴 the bridge’s data wins: a bind that carries its own `clip` is ignored; the bridge’s read decides', async () => {

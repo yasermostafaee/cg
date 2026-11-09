@@ -59,3 +59,11 @@
 - [x] 4.8 Reserve a `No signal` thumbnail slot in input lists. The focused Chromium test passed for
       each list, checkable and passive tiles, keyboard activation, and unchanged selection.
 - [x] 4.9 Enlarge the Station setup Live sources thumbnail slots and verify their aspect and relative size in Chromium.
+
+## 5. Static media posters
+
+- [x] 5.1 Read the thumbnail by a known D11 item's content fingerprint and return a bounded JPEG.
+- [x] 5.2 Show the correct poster for visible Media rows and keep selection available if it is missing.
+- [x] 5.3 Chromium verified distinct posters, viewport demand, missing-poster selection and no input check.
+- [ ] 5.4 Verify an authenticated Media result with a poster on the target station. The station OpenAPI lists the thumbnail route.
+- [ ] 5.5 Record carrying Linux E2E.

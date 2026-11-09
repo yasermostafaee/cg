@@ -1416,3 +1416,27 @@ describe('D-178 — preview framing transport', () => {
     expect(wireOf(bridge).slice(initialCount)).toEqual([channel]);
   });
 });
+
+it('reads a poster through Bridge and uses an empty result on an earlier same-release build', async () => {
+  const channel = 'sources.media-thumbnail';
+  const channels = ipc.runtimeRequestChannelNames(ipc);
+  const request = { id: 'md-clip-1' };
+  const previous = new FakeBridge();
+  previous.capabilities = { channels: channels.filter((name) => name !== channel) };
+  const oldRuntime = start(previous);
+  previous.socket().open();
+  await expect(oldRuntime.sources.mediaThumbnail(request)).resolves.toEqual({ ok: false });
+  expect(oldRuntime.link.skew()).toBeNull();
+  expect(wireOf(previous)).not.toContain(channel);
+
+  const current = new FakeBridge();
+  current.capabilities = { channels };
+  const result = { ok: true, dataUrl: 'data:image/jpeg;base64,/9j/' };
+  current.succeed.set(channel, result);
+  const runtime = start(current);
+  current.socket().open();
+  await expect(runtime.sources.mediaThumbnail(request)).resolves.toEqual(result);
+  expect(current.socket().sent).toContainEqual(
+    expect.objectContaining({ type: 'request', channel, payload: request }),
+  );
+});

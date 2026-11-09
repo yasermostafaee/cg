@@ -638,6 +638,7 @@ export function createMockBridge(): RuntimeBridge {
       setAssignments: (req) => Promise.resolve(mock.setSourceAssignments(req)),
       onAssignmentsChanged: (handler) => mock.sourceAssignmentsChanged.subscribe(handler),
       mediaSearch: (req) => Promise.resolve(mock.searchMedia(req)),
+      mediaThumbnail: () => Promise.resolve({ ok: false }),
       // Nothing to read again offline: the seeded lists are all there is.
       refresh: () => Promise.resolve({ ok: true as const }),
       // `MEDIA-PLATES-01` §1.A — a bound clip's Loop and When hidden, on the mock's bound media.

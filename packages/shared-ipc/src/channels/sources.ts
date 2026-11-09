@@ -1393,6 +1393,27 @@ export const SourcesMediaSearchChannel = defineChannel(
   ]),
 );
 
+export const MAX_MEDIA_THUMBNAIL_BYTES = 256 * 1024;
+export const MEDIA_THUMBNAIL_DATA_URL_PREFIX = 'data:image/jpeg;base64,';
+
+/** Read the Playout's existing poster for a D11 media row known to the Bridge. */
+export const SourcesMediaThumbnailChannel = defineChannel(
+  'sources.media-thumbnail',
+  z.object({ id: SourceDefinitionIdSchema }),
+  z.object({
+    ok: z.boolean(),
+    dataUrl: z
+      .string()
+      .max(MEDIA_THUMBNAIL_DATA_URL_PREFIX.length + 4 * Math.ceil(MAX_MEDIA_THUMBNAIL_BYTES / 3))
+      .refine(
+        (value) =>
+          value.startsWith(MEDIA_THUMBNAIL_DATA_URL_PREFIX) &&
+          /^[A-Za-z0-9+/]+={0,2}$/.test(value.slice(MEDIA_THUMBNAIL_DATA_URL_PREFIX.length)),
+      )
+      .optional(),
+  }),
+);
+
 /**
  * `PLAYOUT-SOURCES-01` §1.A — **A PICKER OPENED.** Asks the bridge to read D10 and the bound media
  * now if its last read is older than 5 s. Answers at once and never waits on the Playout: whatever

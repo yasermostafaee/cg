@@ -1622,6 +1622,18 @@ class FakePlayoutServer implements FakePlayout {
     this.#server.on('request', (req: http.IncomingMessage, res: http.ServerResponse) => {
       const route = async (): Promise<void> => {
         if (
+          options.mediaThumbnail !== undefined &&
+          req.method === 'GET' &&
+          (req.url ?? '').startsWith('/api/v1/media/thumbnail?')
+        ) {
+          if (!(await this.#ownBearer(req))) {
+            sendError(res, 'invalid_token');
+            return;
+          }
+          options.mediaThumbnail(req, res);
+          return;
+        }
+        if (
           options.livePreview !== undefined &&
           /^\/api\/v1\/channels\/[^/]+\/live-preview(?:[/?]|$)/.test(req.url ?? '')
         ) {
@@ -2676,6 +2688,8 @@ export interface FakePlayoutOptions {
   readonly verifyBearers?: boolean;
   /** C-023 lease-contract fixture, reached after this fake verifies the CG bearer. */
   readonly livePreview?: (req: http.IncomingMessage, res: http.ServerResponse) => Promise<void>;
+  /** D11's existing poster fixture, reached after this fake verifies the CG bearer. */
+  readonly mediaThumbnail?: (req: http.IncomingMessage, res: http.ServerResponse) => void;
 }
 
 export async function startFakePlayout(options: FakePlayoutOptions = {}): Promise<FakePlayout> {

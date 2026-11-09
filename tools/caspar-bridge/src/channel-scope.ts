@@ -331,6 +331,7 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'sources.assignments': STATION_WIDE,
   'sources.config': STATION_WIDE,
   'sources.media-search': STATION_WIDE,
+  'sources.media-thumbnail': STATION_WIDE,
   'sources.refresh': STATION_WIDE,
   'templates.get': STATION_WIDE,
   'templates.list': STATION_WIDE,

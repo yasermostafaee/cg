@@ -1354,6 +1354,11 @@ That label belongs to the thumbnail slot. The source's own availability still co
 catalogue. Where an explicit check is available, the operator can open it from the slot. Station setup
 uses a larger 16:9 thumbnail than the compact source pickers.
 
+**Media posters, 2026-11-10.** In the Media tab of a source picker, show the Playout library's
+static poster for each visible item whose D11 record has a usable content fingerprint. CG Bridge
+reads the documented JPEG from the same Playout. Keep the item selectable and show `No poster`
+when an image is unavailable. Opening the list does not start playback or an input check.
+
 Simultaneous rehearsal plates separately need clean Playlist and D11 pictures and mapping into
 the plate raster. The [Playout follow-up](../integration/playout/CG-CONTROL-REQUEST-LIVE-INPUT-PREVIEW-2026-10-26.md)
 records the evidence and the read-only per-source contract needed for both workflows.

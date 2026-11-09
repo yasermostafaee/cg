@@ -190,6 +190,7 @@ import {
   SourcesConfigChangedChannel,
   SourcesConfigChannel,
   SourcesMediaSearchChannel,
+  SourcesMediaThumbnailChannel,
   SourcesRefreshChannel,
   SourcesSetAssignmentsChannel,
   SourcesSetConfigChannel,
@@ -5638,6 +5639,13 @@ export function buildRoutes(
             message: 'The Playout did not answer.',
           }
         : playoutSources.searchMedia(r),
+    ),
+    route(
+      SourcesMediaThumbnailChannel,
+      'read',
+      'read',
+      (r: ChannelRequest<typeof SourcesMediaThumbnailChannel>) =>
+        playoutSources?.mediaThumbnail(r.id) ?? { ok: false },
     ),
     // §1.A — a picker opened: read again if the last read is older than 5 s. Never waits.
     route(SourcesRefreshChannel, 'read', 'read', () => {

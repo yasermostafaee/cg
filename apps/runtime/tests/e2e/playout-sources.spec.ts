@@ -296,6 +296,81 @@ test('🔴 separation: the media `Studio 1` is a media row only, and the input `
   await page.keyboard.press('Escape');
 });
 
+test('Media: visible posters decode separately, and a clip without a poster can still be selected', async ({
+  app,
+}) => {
+  const page = app.page;
+  const dialog = await openDefaults(app);
+  await page.evaluate(() => {
+    const state = { reads: [] as string[], inputChecks: 0 };
+    Object.assign(window, { mediaPosterTest: state });
+    const canvas = document.createElement('canvas');
+    canvas.width = 16;
+    canvas.height = 9;
+    const ctx = canvas.getContext('2d');
+    if (ctx === null) throw new Error('Canvas 2D is unavailable');
+    ctx.fillStyle = '#f00000';
+    ctx.fillRect(0, 0, 16, 9);
+    const red = canvas.toDataURL('image/jpeg');
+    ctx.fillStyle = '#0000f0';
+    ctx.fillRect(0, 0, 16, 9);
+    const blue = canvas.toDataURL('image/jpeg');
+    window.cg.sources.mediaThumbnail = ({ id }) => {
+      state.reads.push(id);
+      if (id === 'md-m-clip-001') return Promise.resolve({ ok: true, dataUrl: red });
+      if (id === 'md-m-clip-002') return Promise.resolve({ ok: true, dataUrl: blue });
+      return Promise.resolve({ ok: false });
+    };
+    const start = window.cg.livePreview.start;
+    window.cg.livePreview.start = (request) => {
+      state.inputChecks += 1;
+      return start(request);
+    };
+  });
+  const readState = () =>
+    page.evaluate(
+      () =>
+        (window as unknown as { mediaPosterTest: { reads: string[]; inputChecks: number } })
+          .mediaPosterTest,
+    );
+
+  const field = dialog.locator('[data-defaults-select="l-1"]');
+  await field.click();
+  const panel = picker(page);
+  expect(await readState()).toEqual({ reads: [], inputChecks: 0 });
+  await panel.getByRole('tab', { name: /^Media/ }).click();
+  const tile = (id: string) => panel.locator(`[data-picker-media="${id}"] [data-media-thumbnail]`);
+  const red = tile('md-m-clip-001').locator('img');
+  const blue = tile('md-m-clip-002').locator('img');
+  const missing = tile('md-m-clip-003');
+  const sample = (image: Locator) =>
+    image.evaluate(async (element: HTMLImageElement) => {
+      await element.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 1;
+      const ctx = canvas.getContext('2d');
+      if (ctx === null) throw new Error('Canvas 2D is unavailable');
+      ctx.drawImage(element, 0, 0, 1, 1);
+      return [...ctx.getImageData(0, 0, 1, 1).data];
+    });
+  await expect(red).toBeVisible();
+  await expect(blue).toBeVisible();
+  const [redPixel, bluePixel] = await Promise.all([sample(red), sample(blue)]);
+  expect(redPixel[0]).toBeGreaterThan(220);
+  expect(redPixel[2]).toBeLessThan(15);
+  expect(bluePixel[0]).toBeLessThan(15);
+  expect(bluePixel[2]).toBeGreaterThan(220);
+  await expect(missing).toHaveText('No poster');
+  await expect(missing.locator('img')).toHaveCount(0);
+  await expect.poll(async () => (await readState()).reads).toContain('md-m-clip-003');
+  expect((await readState()).reads).not.toContain('md-m-clip-009');
+  await expect(field).toHaveAttribute('data-picker-value', '');
+  await missing.click();
+  await expect(panel).toHaveCount(0);
+  await expect(field).toHaveAttribute('data-picker-value', 'md-m-clip-003');
+  expect((await readState()).inputChecks).toBe(0);
+});
+
 test('🔴 the owner’s take: a plate on an input and a plate on a media item — it plays, and Look inputs name both', async ({
   app,
 }) => {

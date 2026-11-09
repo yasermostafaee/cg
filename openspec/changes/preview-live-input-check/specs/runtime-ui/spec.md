@@ -46,6 +46,24 @@ source's own status and eligibility for selection intact.
 - **AND** Station setup shows larger 16:9 slots than the pickers
 - **AND** activating an eligible slot opens the corresponding explicit check without selecting the row
 
+### Requirement: Media rows show their Playout library posters
+
+CG Control SHALL show an available static poster for each visible Media row in a source picker.
+Missing or failed posters SHALL show `No poster` and leave selection available. Showing a poster
+SHALL start neither playback nor an input-check lease.
+
+#### Scenario: Compare media by their posters
+
+- **GIVEN** the Playout returns different posters for two Media results
+- **WHEN** the operator opens the Media tab
+- **THEN** each visible result shows its own poster
+- **AND** selecting the row still selects the Media item
+
+#### Scenario: A poster is unavailable
+
+- **WHEN** the poster is missing or Bridge does not offer poster reads
+- **THEN** the Media row shows `No poster` and remains selectable
+
 ### Requirement: A supported source list SHALL show independently refreshed live thumbnails
 
 CG Control SHALL show a thumbnail in place of the Check icon for each visible eligible input when Playout
