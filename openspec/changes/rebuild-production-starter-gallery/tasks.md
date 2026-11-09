@@ -340,7 +340,8 @@ type remain required; compact degree adjacency is now a targeted correction acro
       element roles, Step thresholds, date/time binding and manual Stop.
 - [x] 13.2 Verified the new poster, zero state and the gallery's motion decoding in Chromium.
       The scoped 106-frame capture produced a 55,152-byte 640×360 BT.709 VP9 clip at 30 fps.
-- [ ] 13.3 Run the repository gate.
+- [x] 13.3 The pre-push gate passed 103 uncached tasks and 164 strict OpenSpec checks on
+      `d6383de0` (`gate-20261109T002047Z-18768.log`).
 
 ## 14. Clock ticker separator — 2026-11-09
 
@@ -348,3 +349,11 @@ type remain required; compact degree adjacency is now a targeted correction acro
 - [x] 14.2 Resolve starter project-image separator keys at import. Keep Shared Library IDs.
 - [x] 14.3 Chromium exported the clock ticker with its imported local separator asset. Rebuilt
       the poster and a 61,315-byte BT.709 VP9 hover clip from 171 captured frames.
+
+## 15. Static four-frame teaching example — 2026-11-09
+
+- [x] 15.1 Remove Hold Start and Outro Start from the main composition and all four preset
+      compositions. Use Static playback and keep Cut as the preset transition.
+- [x] 15.2 Chromium verified all five timelines, switched the canvas through each preset and
+      unpacked the exported Static package with all four presets. All 71 starter tests passed.
+- [ ] 15.3 Run the repository gate and read the carrying commit's Linux E2E result.

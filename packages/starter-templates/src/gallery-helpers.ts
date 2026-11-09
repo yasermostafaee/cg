@@ -284,7 +284,9 @@ export function galleryScene(options: GallerySceneOptions): Scene {
     name: options.name,
     resolution: { width: FRAME_WIDTH, height: FRAME_HEIGHT },
     frameRange: { in: 0, out: entryOut },
-    lifecycle: { outPoint, contentStart: Math.min(20, outPoint) },
+    ...(entryPlayout.mode === 'static'
+      ? {}
+      : { lifecycle: { outPoint, contentStart: Math.min(20, outPoint) } }),
     playout: entryPlayout,
     editorBackdrop: '#071426',
     layers: [layer(`layer-${options.id}-entry`, 'Frame', entryChildren)],

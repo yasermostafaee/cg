@@ -133,6 +133,15 @@ for data-rich sports, weather, image-sequence, countdown-step and multibox workf
 - **AND** the one-plate multibox preset is full-screen and the three-plate preset is two-above-one
 - **AND** multibox presets have no independent per-input titles or background plates
 
+#### Scenario: The multibox example teaches Static playback
+
+- **GIVEN** the author opens the `چهارقاب` starter
+- **THEN** the main composition and its four preset compositions use Static playback
+- **AND** Hold Start and Outro Start markers are absent in all five compositions
+- **WHEN** the author changes the preset and exports the main composition
+- **THEN** the preview cuts to the selected layout and the package retains all four presets
+- **AND** the exported main composition uses Static playback with no lifecycle markers
+
 #### Scenario: Azan countdown becomes a persistent announcement
 
 - **WHEN** the author opens the Azan countdown starter

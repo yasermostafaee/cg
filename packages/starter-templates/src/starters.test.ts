@@ -167,14 +167,16 @@ describe('starter templates', () => {
 
   it('full-screen starters use one direct main comp; compact overlays keep an on-air comp', () => {
     for (const s of STARTER_TEMPLATES) {
-      // Entry (exported-for-now) comp: full-frame, out-point + mode.
+      // Every entry comp is full-frame and has an explicit playback mode.
       const entry = s.scene.compositions?.find((c) => c.id === s.scene.entryCompositionId);
       expect(entry, `${s.id} has an entry composition`).toBeDefined();
       expect(entry?.resolution, `${s.id} entry comp is full-frame`).toEqual({
         width: 1920,
         height: 1080,
       });
-      expect(entry?.lifecycle?.outPoint, `${s.id} has an out-point`).toBeGreaterThan(0);
+      if (s.id !== 'multibox') {
+        expect(entry?.lifecycle?.outPoint, `${s.id} has an out-point`).toBeGreaterThan(0);
+      }
       expect(entry?.playout?.mode, `${s.id} has a playout mode`).toBeDefined();
 
       const direct = s.scene.metadata.tags?.includes('fullscreen:direct') === true;
@@ -491,11 +493,15 @@ describe('starter templates', () => {
     );
     expect(entry?.lookGroups?.[0]?.looks).toHaveLength(4);
     expect(entry?.lookGroups?.[0]?.defaultLookId).toBe('multibox-look-4');
+    expect(entry?.playout?.mode).toBe('static');
+    expect(entry?.lifecycle).toBeUndefined();
 
     for (const [index, count] of [1, 2, 3, 4].entries()) {
       const composition = multiboxScene.compositions?.find(
         (candidate) => candidate.id === `comp-multibox-look-${String(count)}`,
       );
+      expect(composition?.playout?.mode).toBe('static');
+      expect(composition?.lifecycle).toBeUndefined();
       const liveSources = composition?.layers
         .flatMap((layer) => layer.children)
         .filter((element) => element.type === 'video-placeholder');

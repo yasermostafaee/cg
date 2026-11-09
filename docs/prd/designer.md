@@ -6064,6 +6064,8 @@ wide full-screen ornamental title or verse/translation image matching the owner'
 the two-page-spread requirement is superseded. Multibox has a full-screen single plate and larger two/four-plate presets,
 with three plates arranged two-above-one and no independent input captions/backgrounds. APASAI starter
 marks are transparent, without the app icon's tile or a separate disc.
+The four-frame starter is a teaching example for Static playback. Its main composition and four
+preset compositions have no Hold Start or Outro Start markers. Presets still switch by Cut.
 The Guest Title's existing blue nameplate extends beneath the logo as one continuous background;
 the logo remains a replaceable transparent image, without an independent backplate.
 

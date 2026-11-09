@@ -35,8 +35,7 @@ const lookCompositions: Composition[] = layouts.map((rects, index) => ({
   name: `پریست ${index + 1} قاب`,
   resolution: LOOK_SIZE,
   frameRange: { in: 0, out: 140 },
-  lifecycle: { outPoint: 100, contentStart: 20 },
-  playout: { mode: 'manual', holdSource: 'timed' },
+  playout: { mode: 'static' },
   editorBackdrop: 'transparent',
   layers: [
     layer(
@@ -92,9 +91,10 @@ export const multiboxScene = galleryScene({
   id: 'multibox',
   name: 'چهارقاب',
   description:
-    'چهار پریست واقعی: تک‌قاب تمام‌صفحه، دوقاب، سه‌قاب دو بالا و یکی پایین، و چهار قاب؛ بدون عنوان یا پلیت ثابتِ وابسته به ورودی.',
+    'نمونهٔ پخش ثابت با پریست‌های یک تا چهار قاب. تک‌قاب تمام‌صفحه است و پریست‌ها با Cut عوض می‌شوند.',
   templateType: 'fullscreen',
   direct: true,
+  entryPlayout: { mode: 'static' },
   fontFamily: FAM,
   onAirId: 'comp-multibox-onair',
   onAirName: 'چهارقاب',

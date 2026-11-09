@@ -1,4 +1,39 @@
+import { readFile } from 'node:fs/promises';
+import { unpack } from '@cg/vcg-format';
 import { expect, test } from './fixtures/designer.js';
+
+test('four-frame starter uses Static playback and exports all four presets', async ({ app }) => {
+  const name = 'چهارقاب';
+  await app.page.getByTestId('starter-card').filter({ hasText: name }).click();
+  await app.expectStudio();
+
+  const presetCounts = [1, 2, 3, 4];
+  for (const composition of [...presetCounts.map((count) => `پریست ${count} قاب`), name]) {
+    await app.openComposition(composition);
+    await expect(app.inspector.getByRole('combobox', { name: 'Playback mode' })).toHaveValue(
+      'static',
+    );
+    await expect(
+      app.page.getByRole('separator', { name: /^(Hold|Outro) start marker$/ }),
+    ).toHaveCount(0);
+  }
+
+  const preset = app.page.getByLabel('Active preset');
+  const visiblePlates = app.canvasFrame.locator('[data-cg-live-source]:visible');
+  for (const count of presetCounts) {
+    await preset.selectOption(`multibox-look-${count}`);
+    await expect(visiblePlates).toHaveCount(count);
+  }
+
+  const [download] = await Promise.all([
+    app.page.waitForEvent('download'),
+    app.page.getByRole('button', { name: 'Export .vcg' }).click(),
+  ]);
+  const { scene } = await unpack(await readFile(await download.path()));
+  expect(scene.playout?.mode).toBe('static');
+  expect(scene.lifecycle).toBeUndefined();
+  expect(scene.lookGroups?.[0]?.looks).toHaveLength(4);
+});
 
 test('guest-title shared plate extends behind the replaceable logo', async ({ app }) => {
   await app.page.getByTestId('starter-card').filter({ hasText: 'عنوان معرفی' }).click();

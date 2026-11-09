@@ -371,7 +371,7 @@ const STARTER_TEMPLATE_CATALOG: readonly StarterTemplate[] = [
     id: 'multibox',
     label: 'چهارقاب',
     description:
-      'پریست‌های واقعی یک تا چهار قاب؛ تک‌قاب تمام‌صفحه و سه‌قاب با دو قاب بالا و یکی پایین، بدون عنوان ثابت.',
+      'نمونهٔ چیدمان ثابت با پریست‌های یک تا چهار قاب. تک‌قاب تمام‌صفحه است و سه‌قاب دو قاب بالا و یک قاب پایین دارد.',
     preview: '/starters/multibox.png',
     motionPreview: '/starters/motion/multibox.webm',
     assets: [
