@@ -220,9 +220,7 @@ test.describe('Live Source (D-137 phase 1)', () => {
     expect(html).not.toContain('data-cg-live-source-label');
   });
 
-  test('D-202 — add, redraw, edit and remove individual masks on one upper plate', async ({
-    app,
-  }) => {
+  test('D-202 — add, edit and remove individual masks on one upper plate', async ({ app }) => {
     await app.newProject('MultiplePlateMasks');
     await app.addLiveSource({ x: 200, y: 160 });
     await app.addLiveSource({ x: 230, y: 190 });
@@ -242,6 +240,7 @@ test.describe('Live Source (D-137 phase 1)', () => {
     const upper = holes(app).filter({ hasText: 'upper' });
     const masks = upper.locator('[data-cg-live-reveal-mask]');
     const edit = app.inspector.getByRole('button', { name: 'Edit reveal mask on Canvas' });
+    await expect(app.inspector.getByRole('button', { name: 'Redraw reveal mask' })).toHaveCount(0);
     await expect(masks).toHaveCount(1);
     await expect(errorPill(app)).toHaveCount(0);
     await expect(edit).toHaveAttribute('aria-pressed', 'true');
@@ -258,7 +257,7 @@ test.describe('Live Source (D-137 phase 1)', () => {
 
     await app.inspector.getByRole('button', { name: 'Add reveal mask' }).click();
     await expect(edit).toHaveAttribute('aria-pressed', 'false');
-    await dragMask(0.1, 0.3);
+    await dragMask(0.2, 0.4);
     await expect(masks).toHaveCount(2);
     await expect(masks).toHaveText(['Mask 1', 'Mask 2']);
     const maskName = masks.first().getByText('Mask 1', { exact: true });
@@ -267,10 +266,6 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await expect.poll(async () => (await maskName.boundingBox())?.height ?? 0).toBeGreaterThan(16);
     const selector = app.inspector.getByLabel('reveal mask', { exact: true });
     await expect(selector).toHaveValue('1');
-    await app.inspector.getByRole('button', { name: 'Redraw reveal mask' }).click();
-    await expect(edit).toHaveAttribute('aria-pressed', 'false');
-    await dragMask(0.2, 0.4);
-    await expect(masks).toHaveCount(2);
     await expect(edit).toHaveAttribute('aria-pressed', 'true');
     await expect
       .poll(() =>
@@ -334,6 +329,7 @@ test.describe('Live Source (D-137 phase 1)', () => {
     const maskControls = app.inspector.getByRole('group', { name: 'Plate mask', exact: true });
     const guides = plate.locator('[data-cg-live-plate-mask]');
     const edit = maskControls.getByRole('button', { name: 'Edit plate mask on Canvas' });
+    await expect(maskControls.getByRole('button', { name: 'Redraw plate mask' })).toHaveCount(0);
     for (const top of [0.15, 0.6]) {
       await maskControls.getByRole('button', { name: 'Add plate mask' }).click();
       await app.page.mouse.move(x + width * 0.2, y + height * top);
@@ -344,6 +340,11 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await expect(guides).toHaveText(['Mask 1', 'Mask 2']);
     await expect(edit).toHaveAttribute('aria-pressed', 'true');
     await expect(edit).toHaveCSS('background-color', 'rgb(58, 63, 89)');
+    await maskControls.getByRole('button', { name: 'Add plate mask' }).click();
+    await expect(edit).toHaveAttribute('aria-pressed', 'false');
+    await app.page.keyboard.press('Escape');
+    await expect(edit).toHaveAttribute('aria-pressed', 'false');
+    await expect(guides).toHaveCount(2);
     const selector = maskControls.getByLabel('plate mask', { exact: true });
     await selector.selectOption('0');
     const sibling = await guides.nth(1).getAttribute('style');

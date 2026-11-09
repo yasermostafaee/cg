@@ -6715,7 +6715,7 @@ part of an input, or leave a transparent opening in the picture for another grap
 - WHEN more than one fragment is needed THEN only one input is opened and auxiliary seats stay muted
 - WHEN an upper plate selects a lower plate and each mask reaches it THEN the Designer allows that
   linked overlap and the Bridge places a muted clipped copy of the lower input per mask
-- WHEN the author redraws, edits or removes a mask THEN the other masks keep their geometry
+- WHEN the author edits or removes a mask THEN the other masks keep their geometry
 - WHEN the author edits a mask on the Canvas THEN dragging its body moves it and dragging a corner resizes it within the plate, with one undoable edit per drag
 - WHEN the author selects an existing mask or finishes drawing one THEN direct editing is active by default and its Inspector icon shows the active state
 - WHEN the author cancels an in-progress mask drag THEN the saved window keeps its geometry

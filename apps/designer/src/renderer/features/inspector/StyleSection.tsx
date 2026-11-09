@@ -8,7 +8,6 @@ import {
   Plus,
   Scan,
   Square,
-  SquareDashed,
   Trash2,
 } from 'lucide-react';
 import { lottieClipMidpoint, lottieFollowWindow, lottieTiming } from '@cg/lottie-bridge';
@@ -1266,10 +1265,10 @@ function PlateMaskRows({
     next.height = Math.max(0.001, Math.min(next.height, 1 - next.y));
     writeRects(rects.map((entry, index) => (index === activeIndex ? next : entry)));
   };
-  const draw = (index: number | null): void => {
-    setSelectedIndex(index ?? rects.length);
+  const draw = (): void => {
+    setSelectedIndex(rects.length);
     designerStore.setSelection([element.id]);
-    designerStore.setTool(linked ? 'live-reveal' : 'live-mask', index);
+    designerStore.drawLiveMask(element.id, linked);
   };
   const remove = (): void => {
     const remaining = rects.filter((_, index) => index !== activeIndex);
@@ -1294,7 +1293,7 @@ function PlateMaskRows({
               rects.length >= LIVE_REVEAL_MAX_RECTS
             }
             aria-label={'Add ' + kind}
-            onClick={() => draw(null)}
+            onClick={draw}
             title={`Drag a new window on this Plate (up to ${LIVE_REVEAL_MAX_RECTS} masks).`}
           >
             <Icon icon={Plus} size={14} />
@@ -1312,15 +1311,6 @@ function PlateMaskRows({
             title="Drag the mask to move it or drag a corner to resize it."
           >
             <Icon icon={Move} size={14} />
-          </Control>
-          <Control
-            size="sm"
-            disabled={element.locked || rect === undefined}
-            aria-label={'Redraw ' + kind}
-            onClick={() => draw(activeIndex)}
-            title="Drag a new rectangle for the selected mask."
-          >
-            <Icon icon={SquareDashed} size={14} />
           </Control>
           <Control
             size="sm"

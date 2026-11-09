@@ -23,6 +23,8 @@ display counters enter scene persistence.
 `liveMaskEdit` is session-only view state owned by `editLiveMask` and cleared by `setTool`. It
 identifies the plate, mask kind and index for the Canvas editor. `updateElement` records the
 completed rectangle edit in the scene's normal undo history.
+`drawLiveMask` arms Add for a specific plate and clears direct editing. The two modes
+replace each other's view state and leave the scene alone until a rectangle is committed.
 
 | File                             | Role                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

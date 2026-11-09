@@ -100,7 +100,7 @@ export interface DesignerStoreState {
    */
   view: DesignerView;
   tool: DesignerTool;
-  liveRevealDrawIndex: number | null;
+  liveMaskDraw: { plateId: string } | null;
   liveMaskEdit: { plateId: string; linked: boolean; index: number } | null;
   /** Element IDs currently selected. */
   selection: ReadonlySet<string>;
@@ -274,7 +274,7 @@ export const initialState: DesignerStoreState = {
   activeLookId: null,
   view: 'landing',
   tool: 'cursor',
-  liveRevealDrawIndex: null,
+  liveMaskDraw: null,
   liveMaskEdit: null,
   selection: new Set<string>(),
   editingTextId: null,

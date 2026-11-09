@@ -353,6 +353,7 @@ export function CanvasOverlay({
   // Self-subscribed (like TransformSection's currentFrame) rather than drilled.
   const editingPathId = useDesignerSelector((s) => s.editingPathId);
   const maskEdit = useDesignerSelector((s) => s.liveMaskEdit);
+  const maskDraw = useDesignerSelector((s) => s.liveMaskDraw);
   // (A′'s cell-overlay subscription sat here; the mount is disabled — owner, 2026-08-19.)
   // LOOKS phase 2 (§14) — which look the canvas is showing, resolved the same way the
   // preview resolves it (session pick, else the group's default). Self-subscribed like
@@ -366,6 +367,7 @@ export function CanvasOverlay({
   // the binding is still committed solely by pointer-down through resolveBinding.
   const [bindHoverId, setBindHoverId] = useState<string | null>(null);
   const [revealDraft, setRevealDraft] = useState<{
+    draw: NonNullable<typeof maskDraw>;
     start: { x: number; y: number };
     end: { x: number; y: number };
   } | null>(null);
@@ -473,11 +475,14 @@ export function CanvasOverlay({
           height: maskBounds.maxY - maskBounds.minY,
         };
   const maskEditAvailable = maskRect !== undefined && maskBox !== null && bindModeFieldId === null;
+  const maskDrawAvailable = maskDraw !== null && selectedEl?.id === maskDraw.plateId;
   useEffect(() => {
     // Default once per selection, so Escape and the cursor tool can leave the editor.
     const changedPlate = previousMaskPlate.current !== defaultMaskPlateId;
     previousMaskPlate.current = defaultMaskPlateId;
-    const lostEdit = tool === 'live-mask-edit' && !maskEditAvailable;
+    const lostEdit =
+      (tool === 'live-mask-edit' && !maskEditAvailable) ||
+      ((tool === 'live-reveal' || tool === 'live-mask') && !maskDrawAvailable);
     if (
       changedPlate &&
       defaultMaskPlateId !== null &&
@@ -488,7 +493,14 @@ export function CanvasOverlay({
     } else if (lostEdit) {
       designerStore.setTool('cursor');
     }
-  }, [defaultMaskPlateId, defaultMaskLinked, tool, maskEditAvailable, bindModeFieldId]);
+  }, [
+    defaultMaskPlateId,
+    defaultMaskLinked,
+    tool,
+    maskEditAvailable,
+    maskDrawAvailable,
+    bindModeFieldId,
+  ]);
   // D-041 — the selected elements for the multi-selection gizmo (size > 1).
   const selectedEls = selection.size > 1 ? allElements.filter((e) => selection.has(e.id)) : [];
   // Inline editing follows the same painted pose as the double-click target.
@@ -609,6 +621,8 @@ export function CanvasOverlay({
     start: { x: number; y: number },
     drawTool: 'live-reveal' | 'live-mask',
   ): void {
+    const draw = designerStore.get().liveMaskDraw;
+    if (draw?.plateId !== plate.id) return;
     const reveal = plate.revealMask;
     const ownMask = plate.liveMask;
     const rects =
@@ -617,8 +631,7 @@ export function CanvasOverlay({
           ? []
           : liveRevealRects(reveal)
         : [...(ownMask?.rects ?? [])];
-    const index = designerStore.get().liveRevealDrawIndex;
-    if (index === null ? rects.length >= LIVE_REVEAL_MAX_RECTS : rects[index] === undefined) return;
+    if (rects.length >= LIVE_REVEAL_MAX_RECTS) return;
     const rendered = {
       ...plate,
       transform: renderedTransformAt(plate, frameForElement(plate.id)),
@@ -629,25 +642,28 @@ export function CanvasOverlay({
       y: Math.max(box.minY, Math.min(box.maxY, point.y)),
     });
     const first = clamp(start);
-    setRevealDraft({ start: first, end: first });
+    setRevealDraft({ draw, start: first, end: first });
     const onMove = (event: PointerEvent): void => {
-      if (designerStore.get().tool === drawTool) {
-        setRevealDraft({ start: first, end: clamp(viewportToScene(event.clientX, event.clientY)) });
+      if (designerStore.get().liveMaskDraw === draw) {
+        setRevealDraft({
+          draw,
+          start: first,
+          end: clamp(viewportToScene(event.clientX, event.clientY)),
+        });
       }
     };
     const finish = (): void => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onCancel);
-      setRevealDraft(null);
-      if (designerStore.get().tool === drawTool) designerStore.setTool('cursor');
+      setRevealDraft((draft) => (draft?.draw === draw ? null : draft));
+      if (designerStore.get().liveMaskDraw === draw) designerStore.setTool('cursor');
     };
     const onCancel = (): void => finish();
     const onUp = (event: PointerEvent): void => {
-      const { scene, tool: currentTool, liveRevealDrawIndex, selection } = designerStore.get();
+      const { scene, liveMaskDraw, selection } = designerStore.get();
       finish();
-      if (currentTool !== drawTool || liveRevealDrawIndex !== index || !selection.has(plate.id))
-        return;
+      if (liveMaskDraw !== draw || selection.size !== 1 || !selection.has(plate.id)) return;
       const end = clamp(viewportToScene(event.clientX, event.clientY));
       const left = Math.min(first.x, end.x);
       const top = Math.min(first.y, end.y);
@@ -668,13 +684,13 @@ export function CanvasOverlay({
       ) {
         const x = (left - box.minX) / (box.maxX - box.minX);
         const y = (top - box.minY) / (box.maxY - box.minY);
-        const savedIndex = index ?? rects.length;
-        rects[savedIndex] = {
+        const savedIndex = rects.length;
+        rects.push({
           x,
           y,
           width: Math.min(1 - x, width / (box.maxX - box.minX)),
           height: Math.min(1 - y, height / (box.maxY - box.minY)),
-        };
+        });
         const maskPatch =
           drawTool === 'live-reveal' && reveal !== undefined
             ? { revealMask: liveRevealMaskFromRects(reveal.targetSourceId, rects) }
@@ -753,6 +769,7 @@ export function CanvasOverlay({
     if (tool === 'live-reveal' || tool === 'live-mask') {
       if (
         selectedEl?.type === 'video-placeholder' &&
+        maskDrawAvailable &&
         (tool === 'live-mask' || selectedEl.revealMask !== undefined) &&
         !selectedEl.locked
       ) {
@@ -1143,7 +1160,7 @@ export function CanvasOverlay({
         {tool === 'pen' && penPointer !== null && penDraftPoints().length > 0 && (
           <PenDraftFeedback points={penDraftPoints()} pointer={penPointer} scale={scale} />
         )}
-        {(tool === 'live-reveal' || tool === 'live-mask') && revealDraft !== null && (
+        {revealDraft !== null && revealDraft.draw === maskDraw && (
           <div
             data-testid="live-reveal-draft"
             style={{

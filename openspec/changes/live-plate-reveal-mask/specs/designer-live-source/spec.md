@@ -18,7 +18,7 @@ the complement of that union inside the plate. The same rule SHALL clip the plat
 
 - **WHEN** the author selects a plate with masks or picks another mask in the Inspector
 - **THEN** the active mask shows its drag and resize handles and the edit icon is pressed
-- **AND** Add and Redraw switch to drawing until that gesture finishes
+- **AND** Add switches to drawing until the new window is complete or the gesture is cancelled
 - **AND** clicking outside the editor leaves it and follows ordinary Canvas selection
 
 #### Scenario: Mask a burned-in caption
@@ -54,7 +54,7 @@ Missing targets, self-links, cycles and unrelated third-party overlap SHALL rema
 #### Scenario: Each mask can be edited or removed
 
 - **GIVEN** an upper plate with two masks for the same lower plate
-- **WHEN** the author moves, resizes, redraws, edits the percentages of or removes one mask
+- **WHEN** the author moves, resizes, edits the percentages of or removes one mask
 - **THEN** the other mask keeps its geometry
 - **AND** removing the final mask restores ordinary overlap validation
 

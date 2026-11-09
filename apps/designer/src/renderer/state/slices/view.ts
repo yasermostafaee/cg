@@ -57,14 +57,22 @@ export function isAspectLocked(
  * is session-only editor state (never saved into the scene). See `state/README.md`.
  */
 export const viewSlice = {
-  setTool(tool: DesignerTool, liveRevealDrawIndex: number | null = null): void {
-    set({ tool, liveRevealDrawIndex, liveMaskEdit: null });
+  setTool(tool: DesignerTool): void {
+    set({ tool, liveMaskDraw: null, liveMaskEdit: null });
+  },
+
+  drawLiveMask(plateId: string, linked: boolean): void {
+    set({
+      tool: linked ? 'live-reveal' : 'live-mask',
+      liveMaskDraw: { plateId },
+      liveMaskEdit: null,
+    });
   },
 
   editLiveMask(plateId: string, linked: boolean, index: number): void {
     set({
       tool: 'live-mask-edit',
-      liveRevealDrawIndex: null,
+      liveMaskDraw: null,
       liveMaskEdit: { plateId, linked, index },
     });
   },

@@ -9,7 +9,7 @@ removed. Existing projects can also reveal part of a second, explicitly linked i
 ## What Changes
 
 - Add an explicit upper-source → lower-source relation and up to eight normalized reveal windows.
-- Let the author add, redraw, edit and remove each window independently in the Inspector and Canvas.
+- Let the author add, edit and remove each window independently in the Inspector and Canvas.
 - Default to direct editing for a selected mask. Drag its body to move it or a corner to resize it.
 - Keep every unrelated live-plate overlap blocking.
 - Render each window as a muted clipped copy of the lower producer above the upper producer.
