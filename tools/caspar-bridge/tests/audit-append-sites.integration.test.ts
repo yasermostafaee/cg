@@ -357,7 +357,7 @@ describe('B-141 — every playout verb records exactly one entry, at its real ou
   );
 });
 
-it('D-178 — an accepted pan and a stale drag each write one audit row', async () => {
+it('D-178 — an accepted pan, stale drag and Center each write one audit row', async () => {
   const { r, file } = await boot({ reachable: true });
   expect(
     r.setSourceCatalog({
@@ -401,14 +401,19 @@ it('D-178 — an accepted pan and a stale drag each write one audit row', async 
   const [target] = (await r.pgmPlateCrop('item1')).targets;
   if (target === undefined) throw new Error('The assigned cover plate must be editable');
   const drag = { token: target.token, dx: 0.08, dy: 0 };
-  expect((await r.pgmPlateCrop('item1', drag)).ok).toBe(true);
+  const panned = await r.pgmPlateCrop('item1', drag);
+  expect(panned.ok).toBe(true);
   expect((await r.pgmPlateCrop('item1', drag)).ok).toBe(false);
+  const [moved] = panned.targets;
+  if (moved === undefined) throw new Error('The panned cover plate must stay editable');
+  expect((await r.pgmPlateCrop('item1', { token: moved.token, center: true })).ok).toBe(true);
 
-  const rows = forAction(await entriesOnDisk(file, 5), 'pan-live-plate');
-  expect(rows).toHaveLength(2);
+  const rows = forAction(await entriesOnDisk(file, 6), 'pan-live-plate');
+  expect(rows).toHaveLength(3);
   expect(rows).toMatchObject([
     { outcome: 'ok', itemId: 'item1', templateId: TEMPLATE.templateId, slot: SLOT },
     { outcome: 'failed', itemId: 'item1', errorCode: 'stale-plate-crop' },
+    { outcome: 'ok', itemId: 'item1', templateId: TEMPLATE.templateId, slot: SLOT },
   ]);
 });
 
