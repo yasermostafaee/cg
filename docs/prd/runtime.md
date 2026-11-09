@@ -4994,4 +4994,6 @@ and the station's layer assignments.
 **What:** Show the selected Look's fields and shared fields. Match ownership by the managed composition instance.
 
 **Acceptance:** Switching Look tabs changes the field list and preserves drafts. Root fields and other
-shared groups remain visible. Templates without ownership metadata keep all fields accessible.
+shared groups remain visible. If the catalogue lacks ownership metadata, use a coherent
+Look map from the same channel's retained template page. Keep all fields accessible when there
+is no verified ownership map.

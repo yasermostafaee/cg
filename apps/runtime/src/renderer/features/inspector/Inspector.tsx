@@ -72,6 +72,7 @@ import { fieldPatternRefusal } from './patternCheck.js';
 import { bookOf, type RowBook } from '../layers/bookOf.js';
 import { LivePlatesSection } from './LivePlatesSection.js';
 import { LooksBindingsSection } from './LooksBindingsSection.js';
+import { retainedLookOwnership } from './retainedLookOwnership.js';
 import { TimingSection } from './TimingSection.js';
 import { appliedPlateSources } from './livePlates.js';
 import { boundChannelOf, itemChannelOf } from '../channels/itemChannel.js';
@@ -398,7 +399,12 @@ function MetaChip({
  * inspector is never empty.
  */
 export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Props): JSX.Element {
-  const [info, setInfo] = useState<TemplateInfo | null>(null);
+  const [lookup, setLookup] = useState<{
+    templateId: string;
+    channel: number | undefined;
+    info: TemplateInfo | null;
+    legacyOwnership: ReadonlyMap<string, string> | null;
+  } | null>(null);
   const [pinnedLook, setPinnedLook] = useState<{ itemId: string; lookId: string } | null>(null);
   const selectedItemId = item?.itemId;
   useEffect(() => {
@@ -412,7 +418,8 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
   const [siblings, setSiblings] = useState<readonly TemplateInfo[]>([]);
   // THE SECOND HOP — Update reaches air, so it needs CasparCG. Editing does not.
   const casparReach = useCasparReach();
-  const linkDown = useLink() === 'disconnected';
+  const link = useLink();
+  const linkDown = link === 'disconnected';
   /**
    * …and it names the RIGHT HOP, like every other refused verb. Apply used to say
    * "CasparCG cannot be reached" whenever health was absent — which is also what a
@@ -451,44 +458,69 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
     ones this row will take. A row on no channel reads the station-wide entry.
   */
   const templateChannel = boundChannelOf(item, slots);
+  const templateId = item?.templateId;
   // Re-render on any draft change so dirty markers + the draft-or-applied
   // values stay live (a push to `item` also re-renders via props).
   useSyncExternalStore(subscribeDrafts, draftsVersion);
 
   useEffect(() => {
-    if (item === null) {
-      setInfo(null);
+    if (templateId === undefined) {
+      setLookup(null);
       return;
     }
     let cancelled = false;
+    let generation = 0;
     const pull = (): void => {
-      // B-085 — `templates.get` is browser-local now, so this resolves offline. The
-      // rejection handler is kept as a guard so a failed lookup can NEVER become an
-      // unhandled promise rejection: on failure we keep `info` null and the
-      // Inspector falls back to type-inferred fields rather than throwing.
-      window.cg.templates
+      const request = ++generation;
+      const current = (): boolean => !cancelled && request === generation;
+      const publish = (
+        info: TemplateInfo | null,
+        legacyOwnership: ReadonlyMap<string, string> | null = null,
+      ): void => {
+        if (current()) setLookup({ templateId, channel: templateChannel, info, legacyOwnership });
+      };
+      // The Bridge owns live metadata. The adapter can answer offline from the local copy.
+      void window.cg.templates
         .get({
-          templateId: item.templateId,
+          templateId,
           ...(templateChannel !== undefined && { channel: templateChannel }),
         })
         .then(
-          (resolved) => {
-            if (!cancelled) setInfo(resolved);
+          async (info) => {
+            if (!current()) return;
+            if (info?.templateId !== templateId) {
+              publish(null);
+              return;
+            }
+            publish(info);
+            const looks = info?.liveSources?.looks ?? [];
+            if (
+              looks.length < 2 ||
+              looks.every((look) => look.instanceId !== undefined) ||
+              !(info.groups ?? []).some((group) => aggregateHasFields(group.aggregate)) ||
+              typeof window.cg.templates.page !== 'function'
+            )
+              return;
+            // Legacy Bridge schemas strip instance ids, but keep the exact scene in this page.
+            // A browser-local fallback may be a different version than this catalogue response.
+            const page = await window.cg.templates.page(templateId, templateChannel);
+            if (!current() || page.kind !== 'page' || page.source !== 'bridge') return;
+            const ownership = retainedLookOwnership(info, page.html);
+            if (ownership !== null) publish(info, ownership);
           },
-          () => {
-            if (!cancelled) setInfo(null);
-          },
-        );
+          () => publish(null),
+        )
+        .catch(() => undefined);
       // Same guard, same reason: a failed lookup leaves the heading without its
       // disambiguator rather than throwing.
       void window.cg.templates
         .list(templateChannel === undefined ? undefined : { channel: templateChannel })
         .then(
           (list) => {
-            if (!cancelled) setSiblings(list);
+            if (current()) setSiblings(list);
           },
           () => {
-            if (!cancelled) setSiblings([]);
+            if (current()) setSiblings([]);
           },
         );
     };
@@ -501,7 +533,7 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
       cancelled = true;
       offChanged();
     };
-  }, [item, templateChannel]);
+  }, [templateId, templateChannel, link]);
 
   /*
    * `templates.get` resolves after selection.  During that gap React still owns
@@ -512,8 +544,9 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
    * That is how merely visiting weather, then football, produced a football
    * draft containing weather rows.
    */
-  const resolvedInfo =
-    item !== null && info !== null && info.templateId === item.templateId ? info : null;
+  const currentLookup =
+    lookup?.templateId === templateId && lookup?.channel === templateChannel ? lookup : null;
+  const resolvedInfo = currentLookup?.info ?? null;
 
   /*
    * TEXT-FILE-OPT-01 — reconcile this item's file attachments against what its
@@ -575,10 +608,13 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
   const editingLook =
     looks.find((look) => pinnedLook?.itemId === itemId && pinnedLook.lookId === look.id) ??
     (lookCarrier === undefined ? undefined : activeLookOf(lookCarrier, item.activeLookId));
-  // An older catalogue without instance ids cannot distinguish shared groups from presets.
+  const legacyOwnership = currentLookup?.legacyOwnership;
+  const instanceOf = (look: (typeof looks)[number]): string | undefined =>
+    look.instanceId ?? legacyOwnership?.get(look.id);
+  // Without complete ownership, every group remains available.
   const inactiveLookInstances = new Set(
-    editingLook !== undefined && looks.every((look) => look.instanceId !== undefined)
-      ? looks.filter((look) => look.id !== editingLook.id).map((look) => look.instanceId)
+    editingLook !== undefined && looks.every((look) => instanceOf(look) !== undefined)
+      ? looks.filter((look) => look.id !== editingLook.id).map(instanceOf)
       : [],
   );
   /*

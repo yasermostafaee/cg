@@ -1,4 +1,12 @@
 import type { Page } from '@playwright/test';
+import {
+  aggregateBoundCompositionFields,
+  type Composition,
+  type Element,
+  type Scene,
+} from '@cg/shared-schema';
+import { cgCss, cgJsIife, ExporterSingleFile } from '@cg/single-file-export';
+import { buildTemplateLiveSources } from '@cg/vcg-format';
 import { expect, test } from './fixtures/runtime.js';
 
 /**
@@ -22,6 +30,159 @@ import { expect, test } from './fixtures/runtime.js';
 
 const LOOKS_TPL = 'tpl-e2e-looks';
 const FLAT_TPL = 'tpl-e2e-flat';
+const LEGACY_LOOKS_TPL = 'tpl-e2e-legacy-looks';
+
+const lookFixtureResolution = { width: 1920, height: 1080 };
+const lookFixtureRange = { in: 0, out: 50 };
+const lookFixtureElement = { opacity: 1, visible: true, locked: false, zIndex: 0 };
+const lookFixtureTransform = (x: number, y: number, w: number, h: number) => ({
+  position: { x, y },
+  size: { w, h },
+  anchor: { x: 0, y: 0 },
+  scale: { x: 1, y: 1 },
+  rotation: 0,
+});
+
+/** The chan-ghab pattern: two shared text fields, two independent fields per managed Look. */
+function lookFieldScope(ids: readonly string[]): {
+  fields: Scene['fields'];
+  bindings: Scene['bindings'];
+  elements: Element[];
+} {
+  return {
+    fields: ids.map((id) => ({ id, label: id, type: 'text', required: false, default: id })),
+    bindings: ids.map((id) => ({
+      fieldId: id,
+      target: { kind: 'text', elementId: `text-${id}`, placeholder: `{{${id}}}` },
+    })),
+    elements: ids.map((id, index) => ({
+      ...lookFixtureElement,
+      id: `text-${id}`,
+      name: id,
+      type: 'text',
+      transform: lookFixtureTransform(80, 80 + index * 60, 320, 48),
+      text: `{{${id}}}`,
+      font: {
+        family: 'sans-serif',
+        weight: 400,
+        style: 'normal',
+        size: 32,
+        lineHeight: 1.2,
+        letterSpacing: 0,
+      },
+      color: '#FFFFFF',
+      align: 'start',
+      direction: 'ltr',
+      fitMode: 'autosize',
+      overflow: 'ellipsis',
+    })),
+  };
+}
+
+const lookFixtureLayer = (id: string, children: Element[]): Composition['layers'][number] => ({
+  id,
+  name: id,
+  visible: true,
+  locked: false,
+  blendMode: 'normal',
+  children,
+});
+
+async function registerLegacyLookTemplate(page: Page): Promise<void> {
+  const shared = lookFieldScope(['common-top', 'common-bottom']);
+  const looks = [1, 2, 3].map((index) => ({
+    id: `look-${String(index)}`,
+    name: `Preset ${String(index)}`,
+    instanceId: `instance-${String(index)}`,
+    entered: { mode: 'cut' as const },
+  }));
+  const compositions: Composition[] = looks.map((look, index) => {
+    const scope = lookFieldScope([`plate-1-${String(index + 1)}`, `plate-2-${String(index + 1)}`]);
+    const plates: Element[] = [1, 2].map((plate) => ({
+      ...lookFixtureElement,
+      id: `${look.id}-plate-${String(plate)}`,
+      name: `Plate ${String(plate)}`,
+      type: 'video-placeholder',
+      routeKey: `plate-${String(plate)}`,
+      transform: lookFixtureTransform(80 + 880 * (plate - 1), 260, 800, 480),
+    }));
+    return {
+      id: `comp-${look.id}`,
+      name: look.name,
+      resolution: lookFixtureResolution,
+      frameRange: lookFixtureRange,
+      editorBackdrop: 'transparent',
+      layers: [lookFixtureLayer(`layer-${look.id}`, [...plates, ...scope.elements])],
+      fields: scope.fields,
+      bindings: scope.bindings,
+    };
+  });
+  const instances: Element[] = looks.map((look) => ({
+    ...lookFixtureElement,
+    id: look.instanceId,
+    name: look.name,
+    type: 'composition',
+    compositionId: `comp-${look.id}`,
+    transform: lookFixtureTransform(
+      0,
+      0,
+      lookFixtureResolution.width,
+      lookFixtureResolution.height,
+    ),
+  }));
+  const date = '2026-11-10T00:00:00Z';
+  const scene: Scene = {
+    schemaVersion: 1,
+    id: 'source-legacy-looks',
+    name: 'Legacy Looks',
+    templateType: 'lower-third',
+    resolution: lookFixtureResolution,
+    frameRate: 50,
+    safeAreas: { title: 10, action: 5 },
+    frameRange: lookFixtureRange,
+    editorBackdrop: 'transparent',
+    layers: [lookFixtureLayer('root', [...instances, ...shared.elements])],
+    fields: shared.fields,
+    bindings: shared.bindings,
+    fonts: [],
+    compositions,
+    lookGroups: [{ id: 'looks', looks, defaultLookId: 'look-1' }],
+    metadata: { createdAt: date, updatedAt: date },
+  };
+  const { html } = await new ExporterSingleFile({
+    cgJsIife,
+    cgCss,
+    fontsCss: '',
+    assets: { get: () => Promise.resolve(null), bytes: () => Promise.resolve(null) },
+  }).produce(scene);
+  const fields = aggregateBoundCompositionFields(scene, scene);
+  const liveSources = buildTemplateLiveSources(scene);
+  const template = {
+    templateId: LEGACY_LOOKS_TPL,
+    name: scene.name,
+    templateType: scene.templateType,
+    fields: [...fields.fields],
+    groups: [...fields.groups],
+    liveSources: {
+      ...liveSources,
+      looks: liveSources.looks?.map(({ instanceId: _instanceId, ...look }) => look),
+    },
+  };
+  await page.evaluate(
+    async ({ template, html }) => {
+      await window.cg.templates.import({ template, html });
+      const reads: { templateId: string; channel: number | undefined }[] = [];
+      Object.assign(window, { legacyLookPageReads: reads });
+      const readPage = window.cg.templates.page;
+      window.cg.templates.page = (templateId, channel) => {
+        if (templateId !== template.templateId) return readPage(templateId, channel);
+        reads.push({ templateId, channel });
+        return Promise.resolve({ kind: 'page', html, source: 'bridge' });
+      };
+    },
+    { template, html },
+  );
+}
 
 /** A template with two looks over two plates — the shape the section exists for. */
 async function registerLooksTemplate(app: { page: Page }): Promise<void> {
@@ -272,6 +433,39 @@ test('the selected look shows only its own dynamic fields alongside shared field
   await expect(two.getByLabel('guest', { exact: true })).toHaveValue('مهمان اول');
   await tabs.locator('[data-look-tab="solo"]').click();
   await expect(solo.getByLabel('guest', { exact: true })).toHaveValue('مهمان دوم');
+});
+
+test('legacy catalogue recovers per-preset fields from the retained page and keeps shared fields', async ({
+  app,
+}) => {
+  await registerLegacyLookTemplate(app.page);
+  const row = await app.loadTemplate(LEGACY_LOOKS_TPL);
+  await app.selectLayerRow(row);
+  const inspector = app.inspector;
+  const field = (name: string) => inspector.getByRole('textbox', { name, exact: true });
+  const selectLook = (index: number) =>
+    inspector.locator(`[data-look-tab="look-${String(index)}"]`).click();
+  for (const index of [1, 2, 3]) {
+    if (index !== 1) await selectLook(index);
+    await expect(field('common-top')).toBeVisible();
+    await expect(field('common-bottom')).toBeVisible();
+    for (const preset of [1, 2, 3]) {
+      const count = preset === index ? 1 : 0;
+      await expect(field(`plate-1-${String(preset)}`)).toHaveCount(count);
+      await expect(field(`plate-2-${String(preset)}`)).toHaveCount(count);
+    }
+    await field(`plate-1-${String(index)}`).fill(`draft ${String(index)}`);
+  }
+  await selectLook(1);
+  await expect(field('plate-1-1')).toHaveValue('draft 1');
+  await selectLook(2);
+  await expect(field('plate-1-2')).toHaveValue('draft 2');
+  await selectLook(3);
+  await expect(field('plate-1-3')).toHaveValue('draft 3');
+  const reads = await app.page.evaluate(
+    () => (window as unknown as { legacyLookPageReads: unknown[] }).legacyLookPageReads,
+  );
+  expect(reads).toEqual([{ templateId: LEGACY_LOOKS_TPL, channel: 1 }]);
 });
 
 test('🔴 B-156 — a LOADED row does not claim air or repeat selection as a sentence', async ({
