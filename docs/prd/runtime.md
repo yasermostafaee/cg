@@ -4987,3 +4987,10 @@ Use **Live layouts** for the section that holds multi-frame graphics and for tha
 Templates. A grey rule, neutral background and layout icon mark the transition from ordinary
 graphics. Draw the divider once before the first visible layout row. Keep existing row aliases
 and the station's layer assignments.
+
+## [~] R-113 — Show the selected preset's dynamic fields in Inspector ⟨priority: medium — the owner, 2026-11-10⟩ — `openspec/changes/show-inspector-fields-for-selected-look/`
+
+**What:** Show the selected Look's fields and shared fields. Match ownership by the managed composition instance.
+
+**Acceptance:** Switching Look tabs changes the field list and preserves drafts. Root fields and other
+shared groups remain visible. Templates without ownership metadata keep all fields accessible.

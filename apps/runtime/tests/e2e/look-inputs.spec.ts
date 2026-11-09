@@ -31,13 +31,36 @@ async function registerLooksTemplate(app: { page: Page }): Promise<void> {
     };
     const left = { x: 0, y: 0, width: 960, height: 540 };
     const right = { x: 960, y: 0, width: 960, height: 540 };
+    const guestGroup = (instanceId: string, name: string, label: string) => ({
+      instanceId,
+      name,
+      label,
+      compositionId: 'same-guest-card',
+      aggregate: {
+        fields: [{ id: 'guest', type: 'text', label: 'Guest', required: false, default: label }],
+        groups: [],
+      },
+    });
     await w.cg.templates.import({
       template: {
         templateId,
         name: 'debate',
         sourceFileName: 'debate.vcg',
         templateType: 'lower-third',
-        fields: [],
+        fields: [
+          {
+            id: 'headline',
+            type: 'text',
+            label: 'Headline',
+            required: false,
+            default: 'Shared headline',
+          },
+        ],
+        groups: [
+          guestGroup('two-instance', 'two-card', 'Two box guest'),
+          guestGroup('solo-instance', 'solo-card', 'Solo guest'),
+          guestGroup('shared-instance', 'shared-card', 'Shared guest'),
+        ],
         liveSources: {
           resolution: { width: 1920, height: 1080 },
           defaultPosition: { anchor: 'center', dx: 0, dy: 0 },
@@ -49,24 +72,28 @@ async function registerLooksTemplate(app: { page: Page }): Promise<void> {
             {
               id: 'two',
               name: '2-box',
+              instanceId: 'two-instance',
               entered: { mode: 'cut' },
               rects: { 'l-1': left, 'l-2': right },
             },
             {
               id: 'solo',
               name: 'Solo',
+              instanceId: 'solo-instance',
               entered: { mode: 'cut' },
               rects: { 'l-1': { x: 0, y: 0, width: 1920, height: 1080 } },
             },
             {
               id: 'three',
               name: '3-box',
+              instanceId: 'three-instance',
               entered: { mode: 'cut' },
               rects: { 'l-1': left, 'l-2': right },
             },
             {
               id: 'four',
               name: '4-box',
+              instanceId: 'four-instance',
               entered: { mode: 'cut' },
               rects: { 'l-1': left, 'l-2': right },
             },
@@ -209,6 +236,42 @@ test('LOOK INPUTS lists every look with its own frames, and the flat template ke
   await app.selectLayerRow(flatRow);
   await expect(app.inspector.locator('[aria-label="Look inputs"]')).toHaveCount(0);
   await expect(app.inspector.locator('[aria-label="Live plates"]')).toBeVisible();
+});
+
+test('the selected look shows only its own dynamic fields alongside shared fields', async ({
+  app,
+}) => {
+  await registerLooksTemplate(app);
+  const row = await app.loadTemplate(LOOKS_TPL);
+  await app.selectLayerRow(row);
+
+  const inspector = app.inspector;
+  const tabs = inspector.getByRole('group', { name: 'Look to edit' });
+  const two = inspector.getByRole('region', { name: 'Two box guest fields' });
+  const solo = inspector.getByRole('region', { name: 'Solo guest fields' });
+  const shared = inspector.getByRole('region', { name: 'Shared guest fields' });
+  await expect(two).toBeVisible();
+  await expect(solo).toHaveCount(0);
+  await expect(shared).toBeVisible();
+  await expect(inspector.getByLabel('headline', { exact: true })).toBeVisible();
+  await two.getByLabel('guest', { exact: true }).fill('مهمان اول');
+
+  await tabs.locator('[data-look-tab="solo"]').click();
+  await expect(solo).toBeVisible();
+  await expect(two).toHaveCount(0);
+  await expect(shared).toBeVisible();
+  await solo.getByLabel('guest', { exact: true }).fill('مهمان دوم');
+
+  await tabs.locator('[data-look-tab="three"]').click();
+  await expect(two).toHaveCount(0);
+  await expect(solo).toHaveCount(0);
+  await expect(shared).toBeVisible();
+  await expect(inspector.getByLabel('headline', { exact: true })).toBeVisible();
+
+  await tabs.locator('[data-look-tab="two"]').click();
+  await expect(two.getByLabel('guest', { exact: true })).toHaveValue('مهمان اول');
+  await tabs.locator('[data-look-tab="solo"]').click();
+  await expect(solo.getByLabel('guest', { exact: true })).toHaveValue('مهمان دوم');
 });
 
 test('🔴 B-156 — a LOADED row does not claim air or repeat selection as a sentence', async ({

@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from 'vitest';
-import { createElement } from 'react';
+import { createElement, useState, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
-import type { SourceAssignments, SourceCatalog } from '@cg/shared-ipc';
+import { activeLookOf, type SourceAssignments, type SourceCatalog } from '@cg/shared-ipc';
 import { LooksBindingsSection } from '../src/renderer/features/inspector/LooksBindingsSection.js';
 import { colors } from '../src/renderer/theme.js';
 import {
@@ -76,6 +76,18 @@ const TEMPLATE = templateWith({
 let root: Root | null = null;
 let host: HTMLElement | null = null;
 
+function ControlledLookInputs(
+  props: Omit<ComponentProps<typeof LooksBindingsSection>, 'editingLook' | 'onEditLook'>,
+): ReturnType<typeof createElement> {
+  const [lookId, setLookId] = useState(props.item.activeLookId);
+  const carrier = props.info?.liveSources;
+  return createElement(LooksBindingsSection, {
+    ...props,
+    editingLook: carrier === undefined ? undefined : activeLookOf(carrier, lookId),
+    onEditLook: setLookId,
+  });
+}
+
 afterEach(() => {
   act(() => root?.unmount());
   root = null;
@@ -116,7 +128,7 @@ async function render(
   const item = itemWith('on-air', { activeLookId: 'two', ...over });
   await act(async () => {
     root?.render(
-      createElement(LooksBindingsSection, { item, info: TEMPLATE, channel: 1, ...props }),
+      createElement(ControlledLookInputs, { item, info: TEMPLATE, channel: 1, ...props }),
     );
   });
   return host;

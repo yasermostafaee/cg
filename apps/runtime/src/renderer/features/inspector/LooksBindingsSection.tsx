@@ -1,6 +1,5 @@
-import { useState, useSyncExternalStore } from 'react';
-import type { TemplateInfo } from '@cg/shared-ipc';
-import { activeLookOf } from '@cg/shared-ipc';
+import { useSyncExternalStore } from 'react';
+import { activeLookOf, type TemplateInfo, type TemplateLook } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
@@ -283,9 +282,14 @@ export function LooksBindingsSection({
   info,
   rehearsing = false,
   channel,
+  editingLook,
+  onEditLook,
 }: {
   item: StackItemState;
   info: TemplateInfo | null;
+  /** The Inspector shares this selection with its dynamic field groups. */
+  editingLook: TemplateLook | undefined;
+  onEditLook: (lookId: string) => void;
   /**
    * `CHANNEL-SOURCES-01` — the row's channel: `Default (…)` names THAT channel's own Source
    * default. A prop, for the same reason as `rehearsing` below.
@@ -306,25 +310,12 @@ export function LooksBindingsSection({
   useSyncExternalStore(subscribeDrafts, draftsVersion);
   // `MEDIA-PLATES-01` — which seats carry a clip, and how each is playing: the bridge's answer.
   const mediaStateOf = useMediaState();
-  /*
-    🔴 WHICH LOOK THE OPERATOR IS EDITING — `INSPECTOR-DELTA` §4.
-
-    `null` means "whichever one is live", which is what a freshly opened Inspector should
-    show and what it should keep showing when a take changes the live look under it. Only an
-    explicit tab press pins it, and it stays pinned until the row is deselected (the section
-    is keyed by item upstream, so switching rows re-seeds it).
-
-    ⚠ ABOVE THE EARLY RETURN, and it has to be: hooks may not sit behind a conditional, and
-    the `carrier === undefined` bail below is exactly that. Declaring it here costs nothing
-    on a template with no looks — the component returns before anything reads it.
-  */
-  const [pinnedLookId, setPinnedLookId] = useState<string | null>(null);
   const carrier = info?.liveSources;
   const looks = carrier?.looks ?? [];
   const { surface, inputCheck } = useInputCheckSurface(channel, looks.length > 0);
   // A template with no LOOKS gets no section — its plates have one answer, and the flat list
   // above already is it. An empty heading is a question the operator did not ask.
-  if (carrier === undefined || looks.length === 0) return null;
+  if (carrier === undefined || editingLook === undefined) return null;
 
   const liveLookId = activeLookOf(carrier, item.activeLookId)?.id;
   const badge = badgeFor(claimsAir(item), rehearsing);
@@ -397,10 +388,6 @@ export function LooksBindingsSection({
     body — a template that was re-imported with different looks is exactly how a pinned id
     comes to name nothing.
   */
-  const activeLook =
-    looks.find((l) => l.id === pinnedLookId) ??
-    looks.find((l) => l.id === liveLookId) ??
-    (looks[0] as (typeof looks)[number]);
   /*
     Which looks hold an unapplied edit — asked of EVERY look, not just the visible one,
     because that is the whole point: the tabs hide the others and a hidden draft that says
@@ -467,7 +454,7 @@ export function LooksBindingsSection({
       <div style={styles.lookTabs} role="group" aria-label="Look to edit">
         {looks.map((look) => {
           const isLive = look.id === liveLookId;
-          const isActive = look.id === activeLook.id;
+          const isActive = look.id === editingLook.id;
           return (
             <Button
               key={look.id}
@@ -477,7 +464,7 @@ export function LooksBindingsSection({
               aria-pressed={isActive}
               data-look-tab={look.id}
               {...(isActive ? { 'data-look-tab-active': '' } : {})}
-              onClick={() => setPinnedLookId(look.id)}
+              onClick={() => onEditLook(look.id)}
             >
               {/* The look's name is the TEMPLATE AUTHOR'S string — isolated, never bare. */}
               <IsolatedName>{look.name}</IsolatedName>
@@ -518,7 +505,7 @@ export function LooksBindingsSection({
           );
         })}
       </div>
-      {[activeLook].map((look) => {
+      {[editingLook].map((look) => {
         const rects = look.rects;
         const plates = (carrier.sources ?? []).filter((p) => rects[p.sourceId] !== undefined);
         return (

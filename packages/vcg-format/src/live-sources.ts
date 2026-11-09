@@ -264,6 +264,7 @@ export function collectLiveSources(scene: Scene): LiveSourceDeclaration[] {
 export interface TemplateLookCarrier {
   id: string;
   name: string;
+  instanceId: string;
   entered: LookTransition;
   rects: Record<string, LiveSourceRect>;
   /**
@@ -493,6 +494,7 @@ export function collectLookCarrier(scene: Scene): {
     looks: group.looks.map((l) => ({
       id: l.id,
       name: l.name,
+      instanceId: l.instanceId,
       entered: l.entered,
       rects: rectsByLook.get(l.id) ?? {},
       fits: fitsByLook.get(l.id) ?? {},

@@ -26,7 +26,7 @@ import {
   type ImageFit,
   type StackItemState,
 } from '@cg/shared-schema';
-import type { TemplateInfo } from '@cg/shared-ipc';
+import { activeLookOf, type TemplateInfo } from '@cg/shared-ipc';
 import { airStateVisual, colors, cssVars } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { AutoGrowTextarea } from '../../ui/AutoGrowTextarea.js';
@@ -399,6 +399,11 @@ function MetaChip({
  */
 export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Props): JSX.Element {
   const [info, setInfo] = useState<TemplateInfo | null>(null);
+  const [pinnedLook, setPinnedLook] = useState<{ itemId: string; lookId: string } | null>(null);
+  const selectedItemId = item?.itemId;
+  useEffect(() => {
+    setPinnedLook((current) => (current?.itemId === selectedItemId ? current : null));
+  }, [selectedItemId]);
   /**
    * Every template this browser holds — read ONLY to answer "does another
    * template share this one's display name?". Browser-local (B-085), so it
@@ -565,6 +570,17 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
 
   const itemId = item.itemId;
   const schema = resolvedInfo?.fields ?? null;
+  const lookCarrier = resolvedInfo?.liveSources;
+  const looks = lookCarrier?.looks ?? [];
+  const editingLook =
+    looks.find((look) => pinnedLook?.itemId === itemId && pinnedLook.lookId === look.id) ??
+    (lookCarrier === undefined ? undefined : activeLookOf(lookCarrier, item.activeLookId));
+  // An older catalogue without instance ids cannot distinguish shared groups from presets.
+  const inactiveLookInstances = new Set(
+    editingLook !== undefined && looks.every((look) => look.instanceId !== undefined)
+      ? looks.filter((look) => look.id !== editingLook.id).map((look) => look.instanceId)
+      : [],
+  );
   /*
    * Only groups that CARRY a field, at any depth.
    *
@@ -580,7 +596,8 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
    *    instance is which. Those got a readable label instead — see
    *    `sequenceItemHeading` (`R-037`: `<composition> — item N`; `R-040`: a stub on a collision).
    */
-  const visibleGroups = (resolvedInfo?.groups ?? []).filter((g) => aggregateHasFields(g.aggregate));
+  const fieldGroups = (resolvedInfo?.groups ?? []).filter((g) => aggregateHasFields(g.aggregate));
+  const visibleGroups = fieldGroups.filter((group) => !inactiveLookInstances.has(group.instanceId));
   const sequenceRowSets = sequenceRowsPageSets(visibleGroups);
   const combinedGroupNames = new Set(
     sequenceRowSets.flatMap((set) => set.pages.map((page) => page.name)),
@@ -591,8 +608,7 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
   const inferredRows: { field: DynamicField | null; key: string }[] = Object.keys(item.fields)
     .filter((key) => !isFieldNamespace(item.fields[key]))
     .map((key) => ({ field: null, key }));
-  const hasSchema =
-    (schema !== null && schema.length > 0) || groups.length > 0 || sequenceRowSets.length > 0;
+  const hasSchema = (schema !== null && schema.length > 0) || fieldGroups.length > 0;
   const rootFields: { field: DynamicField | null; key: string }[] = hasSchema
     ? (schema ?? []).map((f) => ({ field: f, key: f.id }))
     : inferredRows;
@@ -810,6 +826,8 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
           info={resolvedInfo}
           rehearsing={rehearsing}
           channel={itemChannel}
+          editingLook={editingLook}
+          onEditLook={(lookId) => setPinnedLook({ itemId, lookId })}
         />
         {/* `TIMING-WIRE-22` §4 — the template's timing: `mode`/`hold` as FACTS, and the
             operator's passes/gap as controls. Renders nothing for a template imported before

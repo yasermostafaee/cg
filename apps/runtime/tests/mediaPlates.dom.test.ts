@@ -3,7 +3,12 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
-import type { MediaPlateState, SourceAssignments, SourceCatalog } from '@cg/shared-ipc';
+import {
+  activeLookOf,
+  type MediaPlateState,
+  type SourceAssignments,
+  type SourceCatalog,
+} from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { LooksBindingsSection } from '../src/renderer/features/inspector/LooksBindingsSection.js';
 import { formatRemaining } from '../src/renderer/features/sources/MediaPlayback.js';
@@ -140,7 +145,18 @@ async function render(
   root = createRoot(host);
   const item = options.item ?? itemWith('on-air', { activeLookId: 'two' });
   await act(async () => {
-    root?.render(createElement(LooksBindingsSection, { item, info: TEMPLATE, channel: 1 }));
+    root?.render(
+      createElement(LooksBindingsSection, {
+        item,
+        info: TEMPLATE,
+        channel: 1,
+        editingLook:
+          TEMPLATE.liveSources === undefined
+            ? undefined
+            : activeLookOf(TEMPLATE.liveSources, item.activeLookId),
+        onEditLook: () => undefined,
+      }),
+    );
   });
   // The pull of the clips' state settles.
   await act(async () => {

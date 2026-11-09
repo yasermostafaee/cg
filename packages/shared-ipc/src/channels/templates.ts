@@ -89,6 +89,8 @@ import {
 export const TemplateLookSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
+  /** The managed composition instance whose nested fields belong to this look. */
+  instanceId: z.string().min(1).optional(),
   /** Cut-only in v1 (`design.md` §14.4 parks the other modes with the animated phase). */
   entered: LookTransitionSchema,
   /** routeKey → scene-px rect while this look is active. No entry = not in this look. */

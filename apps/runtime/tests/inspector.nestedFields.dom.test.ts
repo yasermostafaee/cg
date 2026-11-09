@@ -115,6 +115,30 @@ async function render(info: TemplateInfo): Promise<HTMLDivElement> {
 }
 
 describe('B-067 — the Inspector renders nested-composition fields', () => {
+  it('keeps every field group visible for a legacy look catalogue without instance ownership', async () => {
+    const card = NESTED_TEMPLATE.groups?.[0];
+    if (card === undefined) throw new Error('Missing title fixture group');
+    const el = await render({
+      ...NESTED_TEMPLATE,
+      groups: [card, { ...card, instanceId: 'second-card', name: 'other', label: 'Other card' }],
+      liveSources: {
+        resolution: { width: 1920, height: 1080 },
+        defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
+        sources: [],
+        looks: [
+          { id: 'one', name: 'One', entered: { mode: 'cut' }, rects: {} },
+          { id: 'two', name: 'Two', entered: { mode: 'cut' }, rects: {} },
+        ],
+        defaultLookId: 'one',
+      },
+    });
+
+    await act(async () => el.querySelector<HTMLButtonElement>('[data-look-tab="two"]')?.click());
+    expect(el.querySelector('[data-look-tab-active]')?.getAttribute('data-look-tab')).toBe('two');
+    expect(el.querySelector('section[aria-label="کارت عنوان fields"]')).not.toBeNull();
+    expect(el.querySelector('section[aria-label="Other card fields"]')).not.toBeNull();
+  });
+
   it('shows a labelled group for the nested instance, with its fields (not "No fields.")', async () => {
     const el = await render(NESTED_TEMPLATE);
 

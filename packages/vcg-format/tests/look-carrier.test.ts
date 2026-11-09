@@ -622,6 +622,7 @@ describe('buildTemplateLiveSources — the assembly, and the coexistence control
     const block = buildTemplateLiveSources(twoLookScene());
     expect(block.sources.map((s) => s.sourceId)).toEqual(['guest-1', 'guest-2']);
     expect(block.looks?.map((l) => l.id)).toEqual(['look-a', 'look-solo', 'look-empty']);
+    expect(block.looks?.map((l) => l.instanceId)).toEqual(['inst-a', 'inst-b', 'inst-empty']);
     expect(block.defaultLookId).toBe('look-a');
     expect(block.looks?.[0]?.entered).toEqual({ mode: 'cut' });
   });
