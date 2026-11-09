@@ -63,7 +63,7 @@ const TWO_BOX: TemplateInfo = {
 };
 const HTML = '<!doctype html><html><head><meta charset="utf-8"></head><body>swap</body></html>';
 
-/** What the UNCHANGED dialog's swap of plate 1 to `NAME_2` sent, recorded before `B-306`. */
+/** The recorded swap of plate 1 to `NAME_2`, with the R-105 fallback fit update. */
 const RECORDED_WIRE = [
   'MIXER 1-61 OPACITY 0 DEFER',
   'MIXER 1-61 VOLUME 0 DEFER',
@@ -76,6 +76,7 @@ const RECORDED_WIRE = [
   'MIXER 1-60 FILL 0.522917 0.261458 0.477083 0.477083 DEFER',
   'MIXER 1-60 CLIP 0.522917 0.261458 0.477083 0.477083 DEFER',
   'MIXER 1 COMMIT',
+  'CG 1-59 UPDATE 0 "{\\"__cg\\":{\\"plates\\":{\\"l1\\":{\\"aspect\\":1.7777777777777777,\\"mode\\":\\"contain\\"},\\"l2\\":{\\"aspect\\":1.7777777777777777,\\"mode\\":\\"contain\\"}}}}"',
 ];
 
 function freeUdpPort(): Promise<number> {
