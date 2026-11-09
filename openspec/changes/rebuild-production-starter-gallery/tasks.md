@@ -379,4 +379,7 @@ type remain required; compact degree adjacency is now a targeted correction acro
       preview rate. The largest clip is 168,284 bytes and their total is 989,015 bytes.
 - [x] 17.2 All 17 Designer browser checks passed, including decoding each of the twelve new
       clips. Five asset-reference and size-budget tests also passed.
-- [ ] 17.3 Run the full gate and verify the Windows plant-test package.
+- [x] 17.3 The full gate passed 103 uncached tasks and 168 strict OpenSpec checks on
+      `4b3bb243`. [Windows build and acceptance](https://github.com/yasermostafaee/cg/actions/runs/42560037533)
+      passed the three builds, clean offline install, smokes and the eight legacy upgrade paths.
+      The three downloaded installers matched the Windows build's SHA-256 values.

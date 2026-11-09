@@ -10,7 +10,7 @@ test.describe('Repeater authoring workspace', () => {
     await app.openPreviewModal();
     await expect(app.previewDialog.locator('[data-structured-rows]')).toHaveCount(0);
     await app.previewDialog.getByRole('button', { name: /Edit rows/ }).click();
-    const dialog = app.page.getByRole('dialog', { name: 'Rows · تیم‌ها', exact: true });
+    const dialog = app.page.getByRole('dialog', { name: 'Rows · ردیف‌های جدول', exact: true });
     const rows = dialog.locator('[data-structured-rows]');
     await expect(rows).toBeVisible();
     const geometry = await rows.evaluate((node) => {

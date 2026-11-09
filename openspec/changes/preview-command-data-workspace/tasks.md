@@ -51,6 +51,9 @@ is inferred from a checkbox without its carrying-commit run URL. The combined so
       (39.0 seconds), including playing/paused/closing teardown, restored values, blank idle state
       and explicit replay. The same run re-verifies readiness, data updates and responsive behavior.
 - [ ] I.2 Run the final merged-tree gate and record completed Linux E2E evidence for its carrying commit.
+- [x] I.3 Align the league row-editor test with the authored `ردیف‌های جدول` label. The
+      [previous Linux run](https://github.com/yasermostafaee/cg/actions/runs/42560037714/job/128974291509)
+      found the obsolete selector after the owner revised the starter in `6ccd08b8`.
 
 Integration scope and shared validation checklist: `../reconcile-current-designer-gallery/tasks.md`.
 
