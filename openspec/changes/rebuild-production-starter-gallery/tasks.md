@@ -371,3 +371,12 @@ type remain required; compact degree adjacency is now a targeted correction acro
       cues restored, both crawls started on the browser frame in which their straps
       became visible. Removing the horizontal cue had started its hidden feed 966 ms early.
 - [ ] 16.4 Run the repository gate and read the carrying commit's Linux E2E result.
+
+## 17. Home gallery refresh for the plant test build — 2026-11-09
+
+- [x] 17.1 Capture and visually review all twelve posters and all twelve hover clips from the
+      current Designer. The silent BT.709 VP9 clips are 640×360 at 30 fps and retain the 1.15×
+      preview rate. The largest clip is 168,284 bytes and their total is 989,015 bytes.
+- [x] 17.2 All 17 Designer browser checks passed, including decoding each of the twelve new
+      clips. Five asset-reference and size-budget tests also passed.
+- [ ] 17.3 Run the full gate and verify the Windows plant-test package.
