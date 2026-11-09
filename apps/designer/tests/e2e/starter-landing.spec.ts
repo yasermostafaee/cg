@@ -86,6 +86,42 @@ test.describe('D-119 + D-179 — starter landing catalog', () => {
       .toBe(true);
   });
 
+  test('the gallery can opt into hover playback while system motion is reduced', async ({
+    app,
+  }) => {
+    await app.page.emulateMedia({ reducedMotion: 'no-preference' });
+    await app.goto();
+    const control = app.page.getByRole('button', { name: 'Hover previews', exact: true });
+    const card = app.page.getByTestId('starter-card').first();
+    const video = card.getByTestId('starter-motion-preview');
+    const currentTime = () => video.evaluate((node) => (node as HTMLVideoElement).currentTime);
+
+    await card.hover();
+    await expect.poll(currentTime).toBeGreaterThan(0.5);
+    await app.page.emulateMedia({ reducedMotion: 'reduce' });
+    await expect(control).toHaveAttribute('aria-pressed', 'false');
+    await expect(app.page.getByText('System motion is reduced')).toBeVisible();
+    await card.hover();
+    await expect(video).toHaveCSS('opacity', '0');
+    await expect.poll(currentTime).toBe(0);
+
+    await control.click();
+    await expect(control).toHaveAttribute('aria-pressed', 'true');
+    await card.hover();
+    await expect.poll(currentTime).toBeGreaterThan(0.5);
+    await expect(video).toHaveCSS('opacity', '1');
+
+    await app.goto();
+    await expect(control).toHaveAttribute('aria-pressed', 'true');
+    await card.hover();
+    await expect.poll(currentTime).toBeGreaterThan(0.5);
+    await control.click();
+    await expect(control).toHaveAttribute('aria-pressed', 'false');
+    await card.hover();
+    await expect(video).toHaveCSS('opacity', '0');
+    expect(await currentTime()).toBe(0);
+  });
+
   test('every smooth gallery clip decodes real frames without a browser media error', async ({
     app,
   }, testInfo) => {

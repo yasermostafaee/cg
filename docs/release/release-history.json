@@ -78,6 +78,10 @@
       ],
       "fixes": [
         {
+          "fa": "صفحهٔ Home وضعیت پخش Hover کارت‌ها را نشان می‌دهد. وقتی تنظیم ویندوز حرکت را کاهش می‌دهد، می‌توان پخش پیش‌نمایش‌ها را از همان‌جا فعال کرد.",
+          "en": "Home shows whether card hover previews are enabled and lets you turn them on when Windows reduces motion."
+        },
+        {
           "fa": "پس از Clear file و Reload، برای تیکر و فیلد متنی File only که قفل فایل ندارد می‌توان در CG Control فایل تازه انتخاب کرد.",
           "en": "After Clear file and Reload, unlocked file-only ticker and text fields can pick a new source file in CG Control."
         },

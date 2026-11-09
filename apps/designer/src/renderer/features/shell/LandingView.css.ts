@@ -98,6 +98,21 @@ export const sectionTitle = style({
   margin: '0.8rem 0 0.4rem',
 });
 
+export const galleryHeader = style({
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  flexWrap: 'wrap',
+  gap: '0.6rem',
+});
+
+export const previewSettings = style({
+  display: 'flex',
+  alignItems: 'center',
+  flexWrap: 'wrap',
+  gap: '0.6rem',
+});
+
 export const grid = style({
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',

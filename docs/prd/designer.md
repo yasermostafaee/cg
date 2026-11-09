@@ -6078,6 +6078,9 @@ The Guest Title's existing blue nameplate extends beneath the logo as one contin
 the logo remains a replaceable transparent image, without an independent backplate.
 For the plant test build, regenerate the posters and hover clips for all twelve Home cards from
 the current scenes and verify playback in the built Designer.
+The 1.0.0 Windows test build kept the posters static when WebView2 reported reduced motion. Show
+the effective Hover previews state in Home and let the user opt into gallery motion without
+changing the system setting. Keep the explicit choice across app restarts.
 
 **Latest owner project adoption (2026-11-08):** adopt the supplied revisions of the clock lower
 third, five-day forecast and Iran league table without modifying the original `.cgproj` files. The

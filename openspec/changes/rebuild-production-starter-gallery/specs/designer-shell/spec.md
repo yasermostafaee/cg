@@ -185,9 +185,19 @@ editable project with a real playout lifecycle and complete default data.
 - **AND** its display title is Persian-only, without redundant English translations
 - **AND** every card offers a short, silent, smooth 30 fps motion excerpt at a modest 1.15× rate on pointer hover or keyboard focus
 - **AND** each lazy-loaded motion asset remains below 180 KB while preserving real frame cadence and readable graphics
-- **AND** motion media is lazy-loaded, resets to the poster when interaction ends and remains static
-  when the user prefers reduced motion
+- **AND** motion media is lazy-loaded, resets to the poster when interaction ends and follows
+  the system's reduced-motion preference until the user sets a gallery preference
 - **AND** no English Premier League starter is present
+
+#### Scenario: The operator opts into previews while system motion is reduced
+
+- **GIVEN** a Windows WebView2 or browser that reports reduced motion
+- **WHEN** the operator opens the gallery without an explicit preference
+- **THEN** the Hover previews control shows Off and the cards remain static
+- **WHEN** the operator turns Hover previews on and hovers a card or focuses it with the keyboard
+- **THEN** the bundled clip decodes and plays silently, and the explicit choice survives reopening Home
+- **WHEN** the operator turns Hover previews off
+- **THEN** the gallery shows static posters again
 
 ### Requirement: Replaceable starter branding and product attribution
 

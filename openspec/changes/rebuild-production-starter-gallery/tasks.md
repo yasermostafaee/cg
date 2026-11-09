@@ -358,7 +358,8 @@ type remain required; compact degree adjacency is now a targeted correction acro
       unpacked the exported Static package with all four presets. All 71 starter tests passed.
 - [x] 15.3 The full pre-push gate passed 103 uncached tasks and 164 strict OpenSpec checks on
       `1b4191e4` (`gate-20261109T003529Z-16904.log`).
-- [ ] 15.4 Read the carrying commit's Linux E2E result.
+- [x] 15.4 [The carrying Linux E2E job](https://github.com/yasermostafaee/cg/actions/runs/42568697446/job/129000870086)
+      passed on `665668e4`.
 
 ## 16. Teaching gallery phase-marker audit — 2026-11-09
 
@@ -370,7 +371,8 @@ type remain required; compact degree adjacency is now a targeted correction acro
       Azan, the vertical Sequence, and the logo and news-dot cycles. With the required
       cues restored, both crawls started on the browser frame in which their straps
       became visible. Removing the horizontal cue had started its hidden feed 966 ms early.
-- [ ] 16.4 Run the repository gate and read the carrying commit's Linux E2E result.
+- [x] 16.4 The full gate and [carrying Linux E2E job](https://github.com/yasermostafaee/cg/actions/runs/42568697446/job/129000870086)
+      passed on `665668e4`.
 
 ## 17. Home gallery refresh for the plant test build — 2026-11-09
 
@@ -383,3 +385,16 @@ type remain required; compact degree adjacency is now a targeted correction acro
       `4b3bb243`. [Windows build and acceptance](https://github.com/yasermostafaee/cg/actions/runs/42560037533)
       passed the three builds, clean offline install, smokes and the eight legacy upgrade paths.
       The three downloaded installers matched the Windows build's SHA-256 values.
+
+## 18. Hover playback with Windows reduced motion — 2026-11-09
+
+- [x] 18.1 Reproduce on the exact `4b3bb243` Designer executable in WebView2. With the system
+      preference active, the gallery stopped before starting the bundled video. Emulating
+      no preference on the same executable played it, with 57 decoded frames and no media error.
+- [x] 18.2 Expose the effective Hover previews state in Home and persist an explicit choice.
+      Before the user makes a choice, follow system changes and stop any running preview.
+- [x] 18.3 All ten gallery Chromium checks and seven focused DOM tests passed. In the local
+      Windows executable, reduced motion kept the poster static. Opt-in decoded 56 frames,
+      pointer leave paused and reset the clip, and reopening the page kept the choice.
+- [ ] 18.4 Record the full gate and Linux E2E result. Exercise the installed-app smoke on the
+      next requested Windows installer build.

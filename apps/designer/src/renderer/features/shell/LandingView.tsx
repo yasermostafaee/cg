@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { RecentProject, StarterEntry } from '@cg/shared-ipc';
 import {
   designerStore,
@@ -16,6 +16,30 @@ import { VersionHistoryModal } from './VersionHistoryModal.js';
 import { openProjectFromDisk } from './open-project.js';
 import { playoutBadge } from './playout-badge.js';
 import * as s from './LandingView.css.js';
+
+const HOVER_PREVIEWS_KEY = 'cg-designer:hover-previews';
+const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
+
+function readHoverPreviewPreference(): boolean | null {
+  try {
+    const value = window.localStorage.getItem(HOVER_PREVIEWS_KEY);
+    if (value === 'on') return true;
+    if (value === 'off') return false;
+  } catch {
+    // The gallery still works when storage is blocked.
+  }
+  return null;
+}
+
+function systemReducesMotion(): boolean {
+  return window.matchMedia?.(REDUCED_MOTION).matches === true;
+}
+
+function subscribeToReducedMotion(onChange: () => void): () => void {
+  const media = window.matchMedia?.(REDUCED_MOTION);
+  media?.addEventListener('change', onChange);
+  return () => media?.removeEventListener('change', onChange);
+}
 
 /**
  * Full-viewport landing screen — the Designer's entry point per D-007.
@@ -45,6 +69,12 @@ export function LandingView(): JSX.Element {
   const [starters, setStarters] = useState<readonly StarterEntry[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [hoverPreference, setHoverPreference] = useState(readHoverPreviewPreference);
+  const reducedMotion = useSyncExternalStore(subscribeToReducedMotion, systemReducesMotion);
+  const hoverPreviews = hoverPreference ?? !reducedMotion;
+  const hasMotion = starters.some(
+    (starter) => starter.previewUrl !== undefined && starter.motionPreviewUrl !== undefined,
+  );
   // When a project is already loaded and the operator picks a
   // different one, hold the would-be switch in `pendingSwitch` until
   // the save-or-discard modal resolves.
@@ -170,7 +200,32 @@ export function LandingView(): JSX.Element {
         </Button>
       </div>
 
-      <h2 className={s.sectionTitle}>START FROM A TEMPLATE</h2>
+      <div className={s.galleryHeader}>
+        <h2 className={s.sectionTitle}>START FROM A TEMPLATE</h2>
+        {hasMotion && (
+          <div className={s.previewSettings}>
+            {hoverPreference === null && reducedMotion && (
+              <span className={s.brandSub}>System motion is reduced</span>
+            )}
+            <Button
+              size="sm"
+              aria-pressed={hoverPreviews}
+              selected={hoverPreviews}
+              onClick={() => {
+                const next = !hoverPreviews;
+                setHoverPreference(next);
+                try {
+                  window.localStorage.setItem(HOVER_PREVIEWS_KEY, next ? 'on' : 'off');
+                } catch {
+                  // Keep the choice for this visit when storage is blocked.
+                }
+              }}
+            >
+              Hover previews <span aria-hidden="true">· {hoverPreviews ? 'On' : 'Off'}</span>
+            </Button>
+          </div>
+        )}
+      </div>
       {starters.length === 0 ? (
         <p className={s.empty}>No starters available.</p>
       ) : (
@@ -179,6 +234,7 @@ export function LandingView(): JSX.Element {
             <StarterCard
               key={st.id}
               starter={st}
+              motionEnabled={hoverPreviews}
               onOpen={() => guardedSwitch(st.label, () => loadStarter(st.id))}
             />
           ))}
@@ -252,9 +308,11 @@ export function LandingView(): JSX.Element {
  */
 export function StarterCard({
   starter,
+  motionEnabled,
   onOpen,
 }: {
   starter: StarterEntry;
+  motionEnabled: boolean;
   onOpen: () => void;
 }): JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -262,12 +320,7 @@ export function StarterCard({
 
   function startMotion(): void {
     const video = videoRef.current;
-    if (
-      video === null ||
-      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
-    ) {
-      return;
-    }
+    if (video === null || !motionEnabled) return;
     video.currentTime = 0;
     const pending = video.play();
     if (pending !== undefined) {
@@ -275,14 +328,22 @@ export function StarterCard({
     }
   }
 
-  function stopMotion(): void {
+  const stopMotion = useCallback((): void => {
     const video = videoRef.current;
     if (video !== null) {
       video.pause();
       video.currentTime = 0;
     }
     setMotionVisible(false);
-  }
+  }, []);
+
+  useEffect(() => {
+    if (motionEnabled) return;
+    if (videoRef.current?.paused === false) stopMotion();
+    else setMotionVisible(false);
+  }, [motionEnabled, stopMotion]);
+
+  const showMotion = motionEnabled && motionVisible;
 
   return (
     <Button
@@ -305,19 +366,21 @@ export function StarterCard({
                 ref={videoRef}
                 src={starter.motionPreviewUrl}
                 poster={starter.previewUrl}
-                className={`${s.cardMotion} ${motionVisible ? s.cardMotionVisible : ''}`}
+                className={`${s.cardMotion} ${showMotion ? s.cardMotionVisible : ''}`}
                 muted
                 loop
                 playsInline
                 preload="none"
                 aria-hidden="true"
                 data-testid="starter-motion-preview"
-                onPlaying={() => setMotionVisible(true)}
+                onPlaying={() => setMotionVisible(motionEnabled)}
                 onError={() => setMotionVisible(false)}
               />
-              <span className={`${s.motionHint} ${motionVisible ? s.motionHintHidden : ''}`}>
-                <span aria-hidden="true">▶</span> Hover preview
-              </span>
+              {motionEnabled && (
+                <span className={`${s.motionHint} ${showMotion ? s.motionHintHidden : ''}`}>
+                  <span aria-hidden="true">▶</span> Hover preview
+                </span>
+              )}
             </>
           )}
         </span>

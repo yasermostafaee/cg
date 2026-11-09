@@ -19,18 +19,13 @@ const starter: StarterEntry = {
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 
-function setReducedMotion(matches: boolean): void {
-  Object.defineProperty(window, 'matchMedia', {
-    configurable: true,
-    value: vi.fn(() => ({ matches })),
-  });
-}
-
-function renderCard(): { button: HTMLButtonElement; video: HTMLVideoElement } {
+function renderCard(motionEnabled = true): { button: HTMLButtonElement; video: HTMLVideoElement } {
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
-  act(() => root?.render(createElement(StarterCard, { starter, onOpen: () => undefined })));
+  act(() =>
+    root?.render(createElement(StarterCard, { starter, motionEnabled, onOpen: () => undefined })),
+  );
   const button = container.querySelector<HTMLButtonElement>('[data-testid="starter-card"]');
   const video = container.querySelector<HTMLVideoElement>('[data-testid="starter-motion-preview"]');
   if (button === null || video === null) throw new Error('motion preview card did not render');
@@ -47,7 +42,6 @@ afterEach(() => {
 
 describe('starter card motion preview', () => {
   it('lazy-plays on keyboard focus and resets to the poster on blur', () => {
-    setReducedMotion(false);
     const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
     const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
     const { button, video } = renderCard();
@@ -68,10 +62,9 @@ describe('starter card motion preview', () => {
     expect(video.className).not.toBe(activeClass);
   });
 
-  it('keeps the static poster when reduced motion is requested', () => {
-    setReducedMotion(true);
+  it('keeps the static poster when gallery playback is disabled', () => {
     const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
-    const { button } = renderCard();
+    const { button } = renderCard(false);
 
     act(() => button.focus());
     expect(play).not.toHaveBeenCalled();

@@ -16,3 +16,6 @@
 
 - [x] 3.1 Test disabled cards, hosted links and the missing-version build refusal
 - [x] 3.2 Release typecheck, lint and tests passed. Both languages were checked in Chromium from both apps.
+- [x] 3.3 [Carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42568697446/job/129000870086)
+      passed on `665668e4`. The Windows installer run on `4b3bb243` produced a standalone HTML
+      artifact identical to the repository page.

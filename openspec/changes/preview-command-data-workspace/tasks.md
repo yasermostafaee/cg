@@ -50,7 +50,8 @@ is inferred from a checkbox without its carrying-commit run URL. The combined so
       actual Reset behavior is now verified by the fresh-build 16/16 Preview browser batch
       (39.0 seconds), including playing/paused/closing teardown, restored values, blank idle state
       and explicit replay. The same run re-verifies readiness, data updates and responsive behavior.
-- [ ] I.2 Run the final merged-tree gate and record completed Linux E2E evidence for its carrying commit.
+- [x] I.2 The full gate and [carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42568697446/job/129000870086)
+      passed on `665668e4`, including the league row editor.
 - [x] I.3 Align the league row-editor test with the authored `ردیف‌های جدول` label. The
       [previous Linux run](https://github.com/yasermostafaee/cg/actions/runs/42560037714/job/128974291509)
       found the obsolete selector after the owner revised the starter in `6ccd08b8`.

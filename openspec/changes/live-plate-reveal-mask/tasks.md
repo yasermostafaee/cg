@@ -29,3 +29,5 @@
 - [x] 4.5 B-423 — remove dependent masks on deletion and repair orphaned masks on open
 - [x] 4.6 Verify delete, Undo and the reported previously saved project
 - [x] 4.7 Verify labelled guides at two Canvas zoom levels and icon actions in the mask group
+- [x] 4.8 [Carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42568697446/job/129000870086)
+      passed on `665668e4`.

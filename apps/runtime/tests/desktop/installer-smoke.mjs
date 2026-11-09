@@ -874,6 +874,52 @@ async function designer() {
     `save ${facts.showSaveFilePicker}, open ${facts.showOpenFilePicker}, directory ${facts.showDirectoryPicker}`,
   );
   await page.screenshot(path.join(out, 'designer.png'));
+  await page.send('Emulation.setEmulatedMedia', {
+    features: [{ name: 'prefers-reduced-motion', value: 'reduce' }],
+  });
+  try {
+    await until(
+      'the installed gallery follows reduced motion',
+      () => page.evaluate(() => document.body.innerText.includes('System motion is reduced')),
+      10_000,
+    );
+    const point = await page.evaluate(() => {
+      const card = document.querySelector('[data-testid="starter-card"]');
+      card.scrollIntoView({ block: 'center' });
+      const rect = card.getBoundingClientRect();
+      return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+    });
+    const hover = (where) =>
+      page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...where });
+    await hover(point);
+    const staticPoster = await page.evaluate(
+      () => document.querySelector('[data-testid="starter-motion-preview"]').paused,
+    );
+    await hover({ x: 5, y: 5 });
+    await page.evaluate(() => {
+      const toggle = [...document.querySelectorAll('button[aria-pressed]')].find((button) =>
+        button.textContent.includes('Hover previews'),
+      );
+      toggle.click();
+    });
+    await hover(point);
+    const playing = await until(
+      'the installed gallery decodes its bundled video after opting in',
+      () =>
+        page.evaluate(() => {
+          const video = document.querySelector('[data-testid="starter-motion-preview"]');
+          return video.error === null && video.muted && video.currentTime > 0.5;
+        }),
+      15_000,
+    );
+    check(
+      'CG Designer plays gallery hover previews after opt-in under reduced motion',
+      staticPoster && playing,
+    );
+    await hover({ x: 5, y: 5 });
+  } finally {
+    await page.send('Emulation.setEmulatedMedia', { features: [] });
+  }
   {
     const title = windowTitle('cg-designer.exe');
     check(

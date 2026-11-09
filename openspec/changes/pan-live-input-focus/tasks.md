@@ -20,3 +20,5 @@
 - [x] 3.1 Cover schema bounds, both fit modes, per-look carrier, wire parse and existing-project compatibility
 - [x] 3.2 Package checks and the full pre-push gate passed on `d6383de0`.
 - [ ] 3.3 Verify crop focus on a real input in the target plant.
+- [x] 3.4 [Carrying Linux E2E for the implemented Designer and PVW labels](https://github.com/yasermostafaee/cg/actions/runs/42568697446/job/129000870086)
+      passed on `665668e4`.
