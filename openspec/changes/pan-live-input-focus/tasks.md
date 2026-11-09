@@ -12,7 +12,7 @@
 - [x] 2.2 Record the feasibility and contract dependencies of direct CG Control dragging
 - [x] 2.3 Apply focus to Bridge `FILL` through the shared live-source geometry
 - [x] 2.4 Preserve the scoped relative crop operation for existing 1.1.0 consoles.
-- [ ] 2.5 Add PVW crop editing on the 2.18.17 source-preview JPEG and paired geometry.
+- [x] 2.5 Add PVW crop editing on the 2.18.17 source-preview JPEG and paired geometry.
       Use the [new mapping](../../../docs/integration/playout/source-previews-2.18.17-adoption.md)
       and validate it against the Bridge seating plan. The legacy MJPEG has no geometry mapping.
 - [x] 2.6 Show Crop edges below the Plate name and keep the name's screen size independent of fit and zoom
@@ -71,3 +71,12 @@
 - [x] 7.4 Verify the Inspector draft, OFF/ON PVW, Discard, Update and first FILL before reveal in Chromium.
 - [x] 7.5 [Carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42701892701/job/129448618037) passed on `88cfa392` for Inspector crop saving.
 - [x] 7.6 Keep the Center button readable at a fixed screen size and verify its hitbox in Chromium.
+
+## 8. Measured source picture
+
+- [x] 8.1 Validate and forward active JPEG geometry. Use the actual picture in Pan only when it
+      matches the canonical Take target. Preserve guide-only operation and stable crop draft identity.
+- [x] 8.2 The focused authenticated Bridge and fresh Chromium tests verified the measured JPEG
+      bounds, stable same-revision samples, stale-gesture cancellation and Bars fallback.
+- [ ] 8.3 Record carrying Linux E2E and verify the same source and crop on PVW and first Take
+      on the target station.

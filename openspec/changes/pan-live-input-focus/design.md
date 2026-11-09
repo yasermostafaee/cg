@@ -18,26 +18,36 @@ focus produces exactly the old centred crop. Schema bounds reject values outside
 ## Operator surface
 
 The Designer Inspector has no crop-focus editor. Previously authored values remain readable in the
-scene and on export. The planned CG Control gesture targets the visible `cover` plate on its source
-picture. Movement is clamped to the overflowing axis and keeps the authored plate fixed.
+scene and on export. The CG Control gesture targets a visible `cover` plate. Movement is clamped to
+the overflowing axis and keeps the authored plate fixed.
 
-PVW can save normalized focus for a source whose aspect and fit Bridge has resolved. The current
-guide displays that aspect and labels the absence of a live picture. Programme writes begin on
-the existing Take path after the operator exits rehearsal. The [2.18.17 handoff](../../../docs/integration/playout/source-previews-2.18.17-adoption.md)
-supplies the active rectangle, transform and sample aspect ratio paired with the new source JPEG.
-Validate the mapping against Take before using it for precise crop saving.
+PVW can save normalized focus for a source whose aspect and fit Bridge has resolved. Programme
+writes begin on the existing Take path after the operator exits rehearsal.
 
-## Operator review before the picture mapping
+## Picture and guide geometry
 
-The PVW action opens a practice-only picture inside a visible Crop edges plate. A preset with no
-such plate has no practice surface. The whole practice source retains its aspect ratio within
-the available footprint. The shaded crop guide has the authored plate ratio and a blue outline
+The [2.18.17 handoff](../../../docs/integration/playout/source-previews-2.18.17-adoption.md) supplies
+an active rectangle, transform and sample aspect ratio paired with the source JPEG. Bridge forwards
+normalized active bounds only for a frame with known source SAR, full visible coverage, explicit
+zero source and applied rotation, and agreement between the transformed visible rectangle and the
+delivered active rectangle. It derives display aspect from the visible raster and SAR. The frame's
+source, producer and geometry determine a stable revision independent of sample sequence.
+
+The verified axis-aligned transform makes positions normalized within the active JPEG rectangle
+equivalent to positions normalized within the visible source. The browser clips delivery padding
+and draws the active picture at its display aspect. Pan uses that picture only when the active
+Bridge target matches its source and aspect. A producer or geometry change cancels the in-progress
+gesture. A new sample at the same revision updates the JPEG without reinitializing the gesture.
+Draft identity continues to come from the existing Take token. The legacy MJPEG is outside this
+mapping. Acceptance with a real input on the target station is still open.
+
+Without a usable JPEG mapping, Pan shows proportional Bars. With no visible Crop edges plate it
+has no editing surface. The shaded crop guide has the authored plate ratio and a blue outline
 with a dark contrast edge. Drag or arrow keys
 move it along the overflowing axis, and Center restores the centre. Drag and Center stage an
-Inspector draft that survives toggling PVW. Update applies practice framing in the current browser
-session. Discard restores the last applied position. Practice starts no input check and performs
-no Bridge writes. The real PVW gesture will use the source JPEG and its paired 2.18.17 geometry
-once that path is integrated.
+Inspector draft that survives toggling PVW. With no eligible Bridge target, Update applies practice
+framing in the current browser session. Discard restores the last applied position. Practice starts
+no input check and performs no Bridge writes.
 
 ## Save a PVW crop for Take
 
@@ -47,7 +57,8 @@ Inspector draft during rehearsal. It survives OFF PVW and is available on return
 drafts together after validating them against the current plan for each Look. It can run after
 leaving PVW while the row is off air. Bridge leaves the mixer and input transport alone. The saved
 crop applies to the first seating plan of the matching Take. A stale target refuses the crop batch.
-Unknown geometry offers only the generic practice guide.
+Missing or mismatched JPEG geometry retains the Bars guide. An unresolved Take target keeps the
+guide in local practice.
 
 The row's existing interlock still requires OFF PVW before PLAY. A saved Center is explicit centred
 focus for that crop, including on a plate with a different authored default.

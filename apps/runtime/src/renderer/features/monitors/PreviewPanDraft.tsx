@@ -6,7 +6,7 @@ import {
   type LiveCropFocus,
   type StackItemState,
 } from '@cg/shared-schema';
-import type { PreviewPlateCropTarget } from '@cg/shared-ipc';
+import type { PreviewPlateCropTarget, SourcePreviewFrame } from '@cg/shared-ipc';
 import { smpteBarsGradient } from '@cg/template-runtime/scene-builder';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
@@ -18,11 +18,32 @@ import {
   subscribeDrafts,
 } from '../inspector/draftStore.js';
 import type { PlatePlacement } from './livePlateGeometry.js';
+import { fullJpegRect } from './pvwPlatePictures.js';
 
 const PRACTICE_SOURCE_ASPECT = 16 / 9;
 
 interface PreviewPanPlacement extends PlatePlacement {
   catalogAspect: number | null;
+}
+
+interface SourcePicture {
+  jpegBase64: string;
+  geometry: NonNullable<SourcePreviewFrame['geometry']>;
+}
+
+function matchingPicture(
+  frame: SourcePreviewFrame | undefined,
+  target: PreviewPlateCropTarget | undefined,
+): SourcePicture | undefined {
+  if (
+    frame?.jpegBase64 === undefined ||
+    frame.geometry === undefined ||
+    target === undefined ||
+    frame.sourceId !== target.sourceId ||
+    Math.abs(frame.geometry.sourceAspect / target.sourceAspect - 1) >= 1e-6
+  )
+    return undefined;
+  return { jpegBase64: frame.jpegBase64, geometry: frame.geometry };
 }
 
 type CropState =
@@ -51,6 +72,7 @@ export function PreviewPanRow({
   lookId,
   appliedCrops,
   plates,
+  sourceFrames,
   fit,
 }: {
   itemId: string;
@@ -58,6 +80,7 @@ export function PreviewPanRow({
   lookId: string | undefined;
   appliedCrops: StackItemState['previewPlateCrops'];
   plates: readonly PreviewPanPlacement[];
+  sourceFrames: ReadonlyMap<string, SourcePreviewFrame>;
   fit: number;
 }): JSX.Element {
   const hasSource = plates.some((plate) => plate.sourceId !== null);
@@ -112,6 +135,8 @@ export function PreviewPanRow({
             plate.height,
           ]);
         const draft = previewCropDraftOf(itemId, key);
+        const frame = sourceFrames.get(plate.sourceId ?? '');
+        const sourcePicture = matchingPicture(frame, target);
         const saved =
           target === undefined
             ? appliedPracticeCropOf(itemId, key)
@@ -134,7 +159,8 @@ export function PreviewPanRow({
             }}
           >
             <PreviewPanDraft
-              key={key}
+              // JPEG refreshes preserve the current gesture. New producer geometry does not.
+              key={JSON.stringify([key, frame?.geometry?.revision, sourcePicture !== undefined])}
               plateId={plate.plateId}
               width={plate.width}
               height={plate.height}
@@ -143,6 +169,7 @@ export function PreviewPanRow({
               blocked={targets === null}
               cropMessage={cropMessage}
               guide={target !== undefined}
+              sourcePicture={sourcePicture}
               compactCenter={
                 plate.width * fit < 80 || (plate.width * fit < 144 && plate.height * fit < 56)
               }
@@ -206,6 +233,7 @@ function PreviewPanDraft({
   blocked,
   cropMessage,
   guide,
+  sourcePicture,
   compactCenter,
   stagedFocus,
   onFocusChange,
@@ -218,6 +246,7 @@ function PreviewPanDraft({
   blocked: boolean;
   cropMessage: string | undefined;
   guide: boolean;
+  sourcePicture: SourcePicture | undefined;
   compactCenter: boolean;
   stagedFocus: LiveCropFocus;
   onFocusChange: (focus: LiveCropFocus) => void;
@@ -235,6 +264,10 @@ function PreviewPanDraft({
     setDragFocus(null);
   };
   const picture = fitPictureToBox({ x: 0, y: 0, width, height }, sourceAspect, 'contain').picture;
+  const jpeg =
+    sourcePicture === undefined
+      ? undefined
+      : fullJpegRect({ ...picture, x: 0, y: 0 }, sourcePicture.geometry.activeRect);
   const crop = fitPictureToBox(picture, width / height, 'contain').picture;
   const cropWidth = crop.width / picture.width;
   const cropHeight = crop.height / picture.height;
@@ -248,14 +281,14 @@ function PreviewPanDraft({
       ? 'Drag or use the up and down arrows.'
       : 'The image fits this plate.';
   const description = guide
-    ? `${instructions} The guide uses bars. Press Update to save this crop for Take.`
+    ? `${instructions} ${sourcePicture === undefined ? 'The guide uses bars.' : 'This is the decoded source picture.'} Press Update to save this crop for Take.`
     : `${instructions} Press Update to keep this practice crop in this console. ${cropMessage ?? 'Practice changes stay in Preview.'}`;
   return (
     <div className="cg-pan-draft" data-pan-crop-state={state}>
       <Button
         variant="ghost"
         className="cg-pan-draft__handle"
-        aria-label={`Pan ${guide ? 'crop guide' : 'practice image'} in ${plateId}`}
+        aria-label={`Pan ${sourcePicture !== undefined ? 'source picture' : guide ? 'crop guide' : 'practice image'} in ${plateId}`}
         aria-disabled={blocked || (!horizontal && !vertical)}
         data-pan-practice-axis={horizontal ? 'horizontal' : vertical ? 'vertical' : undefined}
         disabled={!horizontal && !vertical}
@@ -315,8 +348,16 @@ function PreviewPanDraft({
           aria-hidden="true"
           className="cg-pan-draft__picture"
           data-pan-practice-picture=""
+          data-pan-source-revision={sourcePicture?.geometry.revision}
           style={{
-            backgroundImage: smpteBarsGradient(),
+            ...(jpeg === undefined || sourcePicture === undefined
+              ? { backgroundImage: smpteBarsGradient() }
+              : {
+                  backgroundImage: `url(data:image/jpeg;base64,${sourcePicture.jpegBase64})`,
+                  backgroundSize: `${jpeg.width}px ${jpeg.height}px`,
+                  backgroundPosition: `${jpeg.x}px ${jpeg.y}px`,
+                  backgroundRepeat: 'no-repeat',
+                }),
             left: `${(picture.x / width) * 100}%`,
             top: `${(picture.y / height) * 100}%`,
             width: `${(picture.width / width) * 100}%`,
@@ -337,7 +378,9 @@ function PreviewPanDraft({
       </Button>
       <span className="cg-pan-draft__label">
         <Icon icon={Move} size={13} />
-        <span role="status">{CROP_LABEL[state]}</span>
+        <span role="status">
+          {sourcePicture !== undefined && state === 'ready' ? 'Source picture' : CROP_LABEL[state]}
+        </span>
         <bdi>{plateId}</bdi>
       </span>
       <Button

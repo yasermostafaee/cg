@@ -10,16 +10,37 @@ import {
 import type { PlatePlacement } from './livePlateGeometry.js';
 import type { PvwSourceFrame } from './usePvwSourceFrames.js';
 
+/** Position the delivered JPEG so its active rectangle exactly fills the source picture. */
+export function fullJpegRect(picture: FitRect, activeRect: FitRect): FitRect {
+  const width = picture.width / activeRect.width;
+  const height = picture.height / activeRect.height;
+  return {
+    x: picture.x - activeRect.x * width,
+    y: picture.y - activeRect.y * height,
+    width,
+    height,
+  };
+}
+
 function pictureFor(plate: PlatePlacement, frames: ReadonlyMap<string, PvwSourceFrame>) {
   const frame = plate.sourceId === null ? undefined : frames.get(plate.sourceId);
   if (frame?.jpegBase64 === undefined || !frame.width || !frame.height) return undefined;
   const fit = fitPictureToBox(
     plate,
-    frame.width / frame.height,
+    frame.geometry?.sourceAspect ?? frame.width / frame.height,
     plate.cropEdges ? 'cover' : DEFAULT_LIVE_FIT_MODE,
     plate.focus,
   );
-  return { ...fit, sourceId: frame.sourceId, jpegBase64: frame.jpegBase64 };
+  return {
+    ...fit,
+    jpeg:
+      frame.geometry === undefined
+        ? fit.picture
+        : fullJpegRect(fit.picture, frame.geometry.activeRect),
+    sourceId: frame.sourceId,
+    jpegBase64: frame.jpegBase64,
+    geometryRevision: frame.geometry?.revision ?? '',
+  };
 }
 
 function percent(value: number, extent: number): string {
@@ -74,12 +95,16 @@ export function paintPvwPlatePictures(
     const visible = intersectNormalizedRects(fit.visible, window);
     if (visible === null) return;
     const prior = retained.get(key);
-    const reusable = prior?.parentElement === node && prior.dataset['sourceId'] === fit.sourceId;
+    const reusable =
+      prior?.parentElement === node &&
+      prior.dataset['sourceId'] === fit.sourceId &&
+      prior.dataset['geometryRevision'] === fit.geometryRevision;
     const part = reusable ? prior : doc.createElement('div');
     if (!reusable) {
       prior?.remove();
       part.dataset['cgPvwPicturePart'] = key;
       part.dataset['sourceId'] = fit.sourceId;
+      part.dataset['geometryRevision'] = fit.geometryRevision;
       part.style.cssText = 'position:absolute;overflow:hidden;pointer-events:none';
       part.setAttribute('aria-hidden', 'true');
       const image = doc.createElement('img');
@@ -93,7 +118,7 @@ export function paintPvwPlatePictures(
     placeWithin(part, visible, plate);
     const image = part.querySelector('img');
     if (image === null) return;
-    placeWithin(image, fit.picture, visible);
+    placeWithin(image, fit.jpeg, visible);
     const url = `data:image/jpeg;base64,${fit.jpegBase64}`;
     if (image.getAttribute('src') !== url) image.src = url;
   }

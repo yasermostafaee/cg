@@ -45,6 +45,9 @@ class FakeSourcePreviews {
   readonly snapshots: SourcePreviewSelector[][] = [];
   readonly leases = new Map<string, Lease>();
   liveAbsent = false;
+  liveGeometry: 'unmeasured' | 'measured' | 'inconsistent' = 'unmeasured';
+  liveProducerGeneration = 'live-native-generation';
+  liveSample = 0;
 
   readonly handle = async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
     const url = new URL(request.url ?? '/', 'http://fake-playout.invalid');
@@ -139,6 +142,7 @@ class FakeSourcePreviews {
   #frame(source: SourcePreviewSelector) {
     const isLive = source.kind === 'live';
     const absent = isLive && this.liveAbsent;
+    const measured = isLive && this.liveGeometry !== 'unmeasured';
     const raster = { x: 0, y: 0, width: 64, height: 36 };
     return {
       schemaVersion: 1,
@@ -151,23 +155,32 @@ class FakeSourcePreviews {
           : 'receiving'
         : 'not-applicable-to-programme-source',
       signalScope: isLive ? 'decoded-input-video' : 'programme-image-only',
-      producerGeneration: source.kind + '-native-generation',
+      producerGeneration: isLive ? this.liveProducerGeneration : source.kind + '-native-generation',
+      ...(isLive && { sampleSequence: ++this.liveSample }),
       frameAgeMs: absent ? 4000 : 0,
       capturedAtUtc: new Date().toISOString(),
       // The native feed can retain a previous JPEG after it reports absent.
       jpegBase64: (isLive ? FRAME_A : FRAME_B).toString('base64'),
       mimeType: 'image/jpeg',
       geometry: {
-        sourceWidth: 64,
-        sourceHeight: 36,
-        sourceSar: { numerator: 1, denominator: 1 },
-        visibleSourceRect: raster,
+        sourceWidth: measured ? 100 : 64,
+        sourceHeight: measured ? 64 : 36,
+        sourceSar: measured ? { numerator: 4, denominator: 3 } : { numerator: 1, denominator: 1 },
+        ...(measured && { sourceRotationDegrees: 0, appliedRotationDegrees: 0 }),
+        visibleSourceRect: measured ? { x: 12, y: 4, width: 72, height: 54 } : raster,
         deliveredWidth: 64,
         deliveredHeight: 36,
-        activeRect: raster,
+        activeRect: measured ? { x: 8, y: 4, width: 48, height: 27 } : raster,
         coversFullVisibleSource: true,
         geometryRevision: 'native-geometry-v1',
-        sourceToDelivered: { scaleX: 1, scaleY: 1, translateX: 0, translateY: 0 },
+        sourceToDelivered: measured
+          ? {
+              scaleX: 2 / 3,
+              scaleY: 1 / 2,
+              translateX: this.liveGeometry === 'inconsistent' ? 2 : 0,
+              translateY: 2,
+            }
+          : { scaleX: 1, scaleY: 1, translateX: 0, translateY: 0 },
       },
     };
   }
@@ -276,6 +289,38 @@ describe('C-023 independent source previews through authenticated Bridge WebSock
     );
     expect(new Set(preview.starts.map((lease) => lease.requestId)).size).toBe(3);
     expect(preview.requests.every((request) => request.path.startsWith(BASE))).toBe(true);
+
+    const livePicture = async () =>
+      (await pvw(first, firstView, [LIVE, PLAYLIST])).frames.find(
+        (picture) => picture.sourceId === LIVE,
+      );
+    preview.liveGeometry = 'measured';
+    await waitUntil(
+      async () => (await livePicture())?.geometry !== undefined,
+      'measured live geometry',
+    );
+    const measured = (await livePicture())?.geometry;
+    expect(measured).toEqual({
+      activeRect: { x: 8 / 64, y: 4 / 36, width: 48 / 64, height: 27 / 36 },
+      sourceAspect: 16 / 9,
+      revision: expect.stringMatching(/^[a-f0-9]{64}$/),
+    });
+    const firstSample = preview.liveSample;
+    await waitUntil(async () => {
+      await livePicture();
+      return preview.liveSample > firstSample;
+    }, 'a successive decoded sample');
+    expect((await livePicture())?.geometry?.revision).toBe(measured?.revision);
+    preview.liveProducerGeneration = 'restarted-live-decoder';
+    await waitUntil(async () => {
+      const revision = (await livePicture())?.geometry?.revision;
+      return revision !== undefined && revision !== measured?.revision;
+    }, 'the new decoder geometry revision');
+    preview.liveGeometry = 'inconsistent';
+    await waitUntil(async () => {
+      const picture = await livePicture();
+      return picture?.jpegBase64 === liveFrame.jpegBase64 && picture.geometry === undefined;
+    }, 'omit incompatible mapping while retaining the JPEG');
 
     preview.liveAbsent = true;
     await waitUntil(async () => {

@@ -24,7 +24,7 @@ be byte-identical to a centred focus, and `contain` SHALL ignore focus.
 
 ### Requirement: Operators can review the Pan interaction in PVW
 
-CG Control SHALL show the Pan practice tool in PVW. The gesture SHALL move only the overflowing
+CG Control SHALL show the Pan tool in PVW. The gesture SHALL move only the overflowing
 axis and preserve the plate's boundaries and input assignment. PGM SHALL show its programme
 return without Pan controls or crop guides.
 
@@ -34,16 +34,16 @@ return without Pan controls or crop guides.
 - **WHEN** the operator enables or closes Pan **THEN** its pressed appearance follows the active tool state
 - **WHEN** Pan displays a plate guide **THEN** the guide has a strong blue border with a dark edge for contrast over the picture
 - **WHEN** the operator opens Pan in PVW with a visible Crop edges plate **THEN** a clearly labelled
-  practice image can be dragged inside that plate's footprint
+  source picture or Bars guide can be dragged inside that plate's footprint
 - **WHEN** the preset has no visible Crop edges plate **THEN** no practice plate appears
 - **WHEN** the practice crop moves **THEN** its position is drafted locally and can be applied with Update or reset with Discard
 - **AND** the authored plate, source assignment and programme output stay as they were
 
 #### Scenario: The crop guide moves smoothly over the source
 
-- **WHEN** the operator opens Pan in PVW **THEN** the complete practice image and current crop guide are visible inside the plate
+- **WHEN** the operator opens Pan in PVW **THEN** the complete available source picture or Bars guide and current crop are visible inside the plate
 - **WHEN** the operator drags the guide **THEN** it follows the pointer locally without a Bridge command
-- **WHEN** the operator presses `Center` **THEN** the crop guide returns to the centre of the practice image
+- **WHEN** the operator presses `Center` **THEN** the crop guide returns to the centre of the source picture or Bars guide
 
 #### Scenario: Source and plate have different ratios
 
@@ -51,6 +51,37 @@ return without Pan controls or crop guides.
 - **WHEN** a wider source is cropped into a narrower plate **THEN** the crop uses the source height and can move horizontally
 - **THEN** the source and crop guide keep their respective ratios throughout the gesture
 - **WHEN** both ratios match **THEN** the whole image is visible and there is no panning range
+
+### Requirement: Measured source pictures agree with the Take fit before Pan displays them
+
+Bridge SHALL pair each measured source JPEG with normalized active bounds, display aspect and a
+stable source, producer and geometry revision. It SHALL only supply that mapping when the source
+SAR is known, the decoded visible source is fully covered, source and applied rotation are zero,
+and the visible source transformed into the JPEG agrees with the delivered active rectangle.
+CG Control SHALL only display that image in Pan if its source and display aspect match the resolved
+Take target. It SHALL remove the JPEG delivery padding and preserve the measured display aspect.
+Bars SHALL remain available when those checks do not pass.
+
+#### Scenario: A compatible active rectangle fills the Pan source picture
+
+- **GIVEN** a full visible source is delivered as a letterboxed JPEG with validated geometry
+- **WHEN** the measured source identity and display aspect match the current Take target
+- **THEN** Pan shows the active source at its display aspect and excludes the delivered padding
+- **AND** the crop moves along the overflowing axis of that active source
+
+#### Scenario: Frame refresh and geometry changes have different effects on a drag
+
+- **WHEN** a new JPEG arrives with the same source, producer and geometry revision
+- **THEN** the image refreshes without restarting the gesture
+- **WHEN** the revision or source changes during a drag
+- **THEN** the gesture ends without staging its old coordinates
+- **AND** existing drafts retain their Take-token identity
+
+#### Scenario: Unmatched image geometry keeps the guide available
+
+- **WHEN** measured geometry is unavailable or its source or display aspect disagrees with Take
+- **THEN** Pan shows Bars for that plate
+- **AND** a verified Take target can still accept normalized framing from the guide
 
 ### Requirement: A verified PVW crop reaches the matching Take
 
@@ -70,7 +101,7 @@ require leaving PVW before Take.
 
 #### Scenario: An unavailable or stale crop cannot affect another input
 
-- **WHEN** Bridge cannot verify the input geometry **THEN** a generic Pan guide remains practice only
+- **WHEN** Bridge cannot supply a valid Take crop target **THEN** a generic Pan guide remains practice only
 - **WHEN** the look, plate, source or fit has changed **THEN** the old target cannot stage a new edit on the changed input
 - **WHEN** Take resolves a different target **THEN** the earlier stage does not override that target's authored or centred crop
 

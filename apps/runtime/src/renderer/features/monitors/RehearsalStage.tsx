@@ -276,7 +276,7 @@ export interface RehearsalTransport {
 }
 
 const REHEARSAL_CAVEATS =
-  'The browser preview can differ from programme output. Source pictures are silent snapshots; ' +
+  'The browser preview can differ from the programme output. Source pictures are silent snapshots; ' +
   'a placeholder identifies a plate with no preview picture.';
 
 function plateInRaster(plate: PlatePlacement, raster: ChannelRaster): boolean {
@@ -677,6 +677,7 @@ export function RehearsalStage({
                 lookId={lookId}
                 appliedCrops={subject.previewPlateCrops}
                 plates={plates}
+                sourceFrames={sourceFrames}
                 fit={fit}
               />
             ))}

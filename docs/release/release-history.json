@@ -221,6 +221,10 @@
         {
           "fa": "با Bridge سازگار و Playout 2.18.17، تصویرهای مستقل و بی‌صدای ورودی‌های سازگار در قاب‌های PVW و بندانگشتی انتخاب‌گر نمایش داده می‌شوند. Check input همچنان برای شنود یک ورودی در دسترس است.",
           "en": "With a compatible Bridge and Playout 2.18.17, PVW plates and visible source rows show independent, silent snapshots of supported sources. Check input remains available for listening to one input."
+        },
+        {
+          "fa": "وقتی هندسهٔ تصویر ورودی با Take تطبیق دارد، Pan در PVW تصویر کامل ورودی را برای انتخاب برش نشان می‌دهد.",
+          "en": "PVW Pan shows the full source picture for crop selection when its measured geometry agrees with Take."
         }
       ],
       "fixes": [
@@ -263,8 +267,8 @@
           "en": "Verify live picture, meter and optional sound in PVW and the source picker on the target station. Switching or closing a check must leave PGM and Playlist independent."
         },
         {
-          "fa": "هندسهٔ اندازه‌گیری‌شدهٔ Playout 2.18.17 برای هم‌ترازی دقیق برش Pan به کار گرفته و روی ایستگاه آزموده شود.",
-          "en": "Use the measured Playout 2.18.17 geometry for precise Pan framing and verify it on the station."
+          "fa": "تطابق برش انتخاب‌شده در Pan با فریم اول Take روی ایستگاه آزموده شود.",
+          "en": "Verify that the crop selected in PVW matches the first frame of Take on the station."
         },
         {
           "fa": "نمایش هم‌زمان ورودی‌ها، Playlist و Media در PVW و بندانگشتی‌ها با حساب اپراتور روی 21.32 آزموده شود.",

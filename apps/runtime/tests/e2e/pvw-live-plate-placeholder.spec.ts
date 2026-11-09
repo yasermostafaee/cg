@@ -323,6 +323,119 @@ test('D-178 — practice crop Draft and Update survive OFF PVW and ON PVW', asyn
   await expect(page.locator('[data-pan-crop-state="practice-saved"]')).toHaveCount(1);
 });
 
+test('D-178 — measured JPEG crop clips delivery padding and cancels only stale gestures', async ({
+  app,
+}) => {
+  const { page } = app;
+  await registerTwoBox(page, PAN_HOLES, true);
+  await stubRetainedPage(page, pageWithHoles(PAN_HOLES));
+  const layer = await app.loadTemplate(TWO_BOX);
+  await app.selectLayerRow(layer);
+  await app.setTemplateDefault('portrait', 'Studio 1');
+  await page.evaluate(() => {
+    function sourceImage(color: string): string {
+      const canvas = document.createElement('canvas');
+      canvas.width = 160;
+      canvas.height = 160;
+      const ctx = canvas.getContext('2d')!;
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, 160, 160);
+      ctx.fillStyle = color;
+      ctx.fillRect(0, 35, 160, 90);
+      return canvas.toDataURL('image/jpeg').split(',')[1]!;
+    }
+    const state = {
+      sourceId: '',
+      index: 0,
+      sourceAspect: 16 / 9,
+      revision: 'a'.repeat(64),
+      jpegs: [sourceImage('#FF0000'), sourceImage('#00FF00')],
+    };
+    Object.assign(window, { measuredPan: state });
+    Object.assign(window.cg, {
+      sourcePreviews: {
+        pvw: async ({ sourceIds }: { sourceIds: string[] }) => {
+          state.sourceId = sourceIds[0] ?? state.sourceId;
+          return {
+            frames: sourceIds.map((sourceId) => ({
+              sourceId,
+              signal: 'present',
+              jpegBase64: state.jpegs[state.index],
+              width: 160,
+              height: 160,
+              geometry: {
+                sourceAspect: state.sourceAspect,
+                revision: state.revision,
+                activeRect: { x: 0, y: 35 / 160, width: 1, height: 90 / 160 },
+              },
+            })),
+          };
+        },
+      },
+    });
+    window.cg.stack.previewPlateCrop = async () => ({
+      ok: true,
+      targets: [
+        {
+          plateId: 'portrait',
+          sourceId: state.sourceId,
+          token: 'b'.repeat(64),
+          sourceAspect: 16 / 9,
+          focus: { x: 0.5, y: 0.5 },
+        },
+      ],
+    });
+  });
+  await rehearseRow(page, layer);
+  await pvwTransport(page, 'PLAY').click();
+  await page.waitForFunction(() =>
+    Boolean((window as unknown as { measuredPan: { sourceId: string } }).measuredPan.sourceId),
+  );
+  await page.getByRole('button', { name: 'Pan preview input', exact: true }).click();
+  const handle = page.getByRole('button', { name: 'Pan source picture in portrait', exact: true });
+  const picture = handle.locator('[data-pan-source-revision]');
+  await expect(picture).toBeVisible();
+  await expect(picture).toHaveCSS('background-size', '350px 350px');
+  await expect(picture).toHaveCSS('background-position', '0px -76.5625px');
+  const original = await picture.evaluate((el) => {
+    el.dataset['probe'] = 'same-gesture';
+    return el.style.backgroundImage;
+  });
+  await page.evaluate(() => {
+    (window as unknown as { measuredPan: { index: number } }).measuredPan.index = 1;
+  });
+  await expect.poll(() => picture.evaluate((el) => el.style.backgroundImage)).not.toBe(original);
+  await expect(picture).toHaveAttribute('data-probe', 'same-gesture');
+
+  const rect = await picture.boundingBox();
+  if (rect === null) throw new Error('The source picture is missing');
+  await page.mouse.move(rect.x + rect.width / 2, rect.y + rect.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(rect.x + rect.width * 0.75, rect.y + rect.height / 2);
+  await page.evaluate(() => {
+    (window as unknown as { measuredPan: { revision: string } }).measuredPan.revision = 'c'.repeat(
+      64,
+    );
+  });
+  await expect(picture).toHaveAttribute('data-pan-source-revision', 'c'.repeat(64));
+  await page.mouse.up();
+  await expect(page.locator('[data-pan-crop-state="draft"]')).toHaveCount(0);
+  await handle.press('ArrowRight');
+  await expect(page.locator('[data-pan-crop-state="draft"]')).toHaveCount(1);
+
+  await page.evaluate(() => {
+    (window as unknown as { measuredPan: { sourceAspect: number } }).measuredPan.sourceAspect =
+      4 / 3;
+  });
+  await expect(handle).toHaveCount(0);
+  const bars = page.getByRole('button', { name: 'Pan crop guide in portrait', exact: true });
+  await expect(bars.locator('[data-pan-practice-picture]')).toHaveCSS(
+    'background-image',
+    /linear-gradient/,
+  );
+  await expect(page.locator('[data-pan-crop-state="draft"]')).toHaveCount(1);
+});
+
 test('B-424 — PVW keeps the authored fallback when on-air fallback is off', async ({ app }) => {
   const date = '2026-11-09T00:00:00.000Z';
   const scene: Scene = {

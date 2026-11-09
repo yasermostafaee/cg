@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type {
   ChannelRequest,
   SourcePreviewFrame,
@@ -71,10 +71,64 @@ function sameTarget(a: Target, b: Target): boolean {
   return a.origin === b.origin && a.code === b.code && a.bearer === b.bearer;
 }
 
+function projectGeometry(
+  frame: UpstreamFrame,
+  session: SourcePreviewSession,
+): SourcePreviewFrame['geometry'] {
+  const g = frame.geometry;
+  if (
+    g === null ||
+    g.sourceSar === null ||
+    !g.coversFullVisibleSource ||
+    g.sourceRotationDegrees !== 0 ||
+    g.appliedRotationDegrees !== 0 ||
+    frame.producerGeneration == null
+  )
+    return undefined;
+
+  const { activeRect: active, visibleSourceRect: visible, sourceToDelivered: map } = g;
+  const sourceAspect =
+    (visible.width * g.sourceSar.numerator) / (visible.height * g.sourceSar.denominator);
+  if (!Number.isFinite(sourceAspect) || sourceAspect <= 0 || active.width < 1 || active.height < 1)
+    return undefined;
+
+  const projected = [
+    visible.x * map.scaleX + map.translateX,
+    (visible.x + visible.width) * map.scaleX + map.translateX,
+    visible.y * map.scaleY + map.translateY,
+    (visible.y + visible.height) * map.scaleY + map.translateY,
+  ];
+  const observed = [active.x, active.x + active.width, active.y, active.y + active.height];
+  // The reported JPEG rectangle is rounded to delivered pixels. Compare both edges on each axis.
+  if (!observed.every((edge, index) => Math.abs(edge - (projected[index] ?? Infinity)) <= 0.5))
+    return undefined;
+
+  return {
+    activeRect: {
+      x: active.x / g.deliveredWidth,
+      y: active.y / g.deliveredHeight,
+      width: Math.min(active.width, g.deliveredWidth - active.x) / g.deliveredWidth,
+      height: Math.min(active.height, g.deliveredHeight - active.y) / g.deliveredHeight,
+    },
+    sourceAspect,
+    revision: createHash('sha256')
+      .update(
+        JSON.stringify([
+          session.sourceRevision,
+          session.coreGeneration,
+          frame.producerGeneration,
+          g,
+        ]),
+      )
+      .digest('hex'),
+  };
+}
+
 function projectFrame(
   sourceId: string,
   frame: UpstreamFrame,
   kind: SourcePreviewSelector['kind'],
+  session?: SourcePreviewSession,
 ): SourcePreviewFrame {
   const result = { sourceId, signal: frame.signal };
   if (
@@ -87,11 +141,13 @@ function projectFrame(
     frame.signal === 'absent'
   )
     return result;
+  const geometry = session === undefined ? undefined : projectGeometry(frame, session);
   return {
     ...result,
     jpegBase64: frame.jpegBase64,
     width: frame.geometry.deliveredWidth,
     height: frame.geometry.deliveredHeight,
+    ...(geometry === undefined ? {} : { geometry }),
   };
 }
 
@@ -377,7 +433,7 @@ export class SourcePreviewService {
       }
       return null;
     }
-    lease.frame = projectFrame(id, result.value.frame, source.kind);
+    lease.frame = projectFrame(id, result.value.frame, source.kind, lease.session);
     lease.frameAt = Date.now();
     return lease.frame;
   }

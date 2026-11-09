@@ -6041,21 +6041,31 @@ Center stage a draft for the same row, look, plate and input. The draft survives
 saves it for Take, including when PVW is off. Discard restores the last applied position. Take
 applies the saved position before the first on-air frame. Absent focus centres a cover crop.
 
-**Implementation:** A compatible Bridge supplies eligible crops and their source aspect. With
-known geometry, PVW can save the crop using a proportional guide while the source picture is
-unavailable. Update applies generic practice framing in the current browser session. The owner deferred PGM Pan after
-reviewing the PVW interaction. The programme monitor has no Pan controls or crop overlays.
+**Implementation**
 
-**Crop workspace:** show the whole practice source inside its plate in PVW. Outline the portion
+A compatible Bridge supplies eligible crops and their source aspect. Pan shows the complete decoded
+source picture when the measured active rectangle and display aspect agree with the same input's
+Take fit. Delivery padding is clipped. When picture geometry is unavailable or disagrees, Pan uses
+the proportional Bars guide. A verified Take target can still save its crop from that guide. Generic
+practice keeps framing in the current browser session. The programme monitor has no Pan controls
+or crop overlays.
+
+**Crop workspace**
+
+Show the whole source picture or guide inside its plate in PVW. Outline the portion
 shown by the plate in blue with a dark edge for contrast, move the outline continuously during a
 drag and offer Centre at a readable screen size independent of the monitor fit.
 The source image and crop window retain their own aspect ratios. A 16:9 crop on a 4:3 source
 uses the source width and moves vertically. Sources matching the plate ratio use the full picture.
+Successive JPEGs with the same geometry preserve the gesture. A change of source, producer or
+geometry cancels the active drag and preserves drafts for their valid Take targets.
 
-**Remaining integration:** The [2.18.17 handoff](../integration/playout/source-previews-2.18.17-adoption.md)
-supplies a separate source JPEG with its active rectangle, transform and measured sample aspect
-ratio when known. Match these facts to the canonical Take geometry before enabling precise
-drag on that picture. The legacy C-023 MJPEG does not have this mapping.
+**Target acceptance**
+
+The [2.18.17 handoff](../integration/playout/source-previews-2.18.17-adoption.md) supplies the
+separate source JPEG and its active rectangle, transform and measured sample aspect ratio. Verify
+the full PVW picture, saved crop and first on-air fit on the target station. The legacy C-023 MJPEG
+does not have this mapping.
 If PGM Pan is revisited, an equivalent in-place editor needs a read of the already-running source
 before the programme mix and crop, without opening a second receiver.
 
