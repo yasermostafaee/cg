@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Scene } from '@cg/shared-schema';
+import { PlayoutSchema } from '@cg/shared-schema';
 import { buildPlayoutMetadata } from '../src/playout-metadata.js';
 import { fixtureScene } from './fixtures.js';
 
@@ -47,6 +48,21 @@ function withContentDriver(base: Scene): Scene {
     layers: [{ ...layer0, children: [...layer0.children, ticker] }, ...base.layers.slice(1)],
   } as unknown as Scene;
 }
+
+it('D-205: export describes a saved exit delay only with an effective Content-driven hold', () => {
+  const playout = PlayoutSchema.parse({
+    mode: 'auto-out',
+    holdSource: 'content-driven',
+    contentEndDelayMs: 60_000,
+  });
+  const scene = { ...fixtureScene, playout };
+  expect(buildPlayoutMetadata(withContentDriver(scene)).contentEndDelayMs).toBe(60_000);
+  expect(buildPlayoutMetadata(scene).contentEndDelayMs).toBeUndefined();
+  expect(
+    buildPlayoutMetadata(withContentDriver({ ...scene, playout: { ...playout, mode: 'manual' } }))
+      .contentEndDelayMs,
+  ).toBeUndefined();
+});
 
 /**
  * D-128 — a video is an OPT-IN hold driver (`drivesHold === true`, the media inverse of the

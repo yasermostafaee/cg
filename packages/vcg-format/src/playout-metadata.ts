@@ -25,6 +25,8 @@ export interface PlayoutMetadata {
   outPoint?: number;
   /** The hold WITHIN a pass. ⚠ Not the gap between passes — see {@link PlayoutMetadata.delayMs}. */
   holdMs?: number;
+  /** Extra on-screen time after effective Content-driven content completes. */
+  contentEndDelayMs?: number;
   repeat?: number | 'infinite';
   /**
    * `TIMING-BUILD-21` — the gap BETWEEN passes in milliseconds, so a scheduler computing a
@@ -52,7 +54,15 @@ export function buildPlayoutMetadata(scene: Scene): PlayoutMetadata {
       ? 'timed'
       : playout.holdSource;
   const meta: PlayoutMetadata = { mode: playout.mode };
-  if (holdSource === 'content-driven') meta.holdSource = 'content-driven';
+  if (holdSource === 'content-driven') {
+    meta.holdSource = 'content-driven';
+    if (
+      (playout.mode === 'auto-out' || playout.mode === 'loop-cycle') &&
+      playout.contentEndDelayMs !== undefined
+    ) {
+      meta.contentEndDelayMs = playout.contentEndDelayMs;
+    }
+  }
   if (playout.holdMs !== undefined) meta.holdMs = playout.holdMs;
   if (playout.repeat !== undefined) meta.repeat = playout.repeat;
   if (playout.delayMs !== undefined) meta.delayMs = playout.delayMs;

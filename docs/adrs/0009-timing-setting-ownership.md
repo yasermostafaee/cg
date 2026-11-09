@@ -35,15 +35,20 @@ That sentence sorts every timing setting into one of two owners.
 
 ### Designer-owned — stored with the template, read-only everywhere else
 
-| Setting | Field                | Authored in                                 |
-| ------- | -------------------- | ------------------------------------------- |
-| `mode`  | `Playout.mode`       | the Designer's Inspector (`PlayoutSection`) |
-| `hold`  | `Playout.holdSource` | the Designer's Inspector (`PlayoutSection`) |
+| Setting                   | Field                       | Authored in                                 |
+| ------------------------- | --------------------------- | ------------------------------------------- |
+| `mode`                    | `Playout.mode`              | the Designer's Inspector (`PlayoutSection`) |
+| `hold`                    | `Playout.holdSource`        | the Designer's Inspector (`PlayoutSection`) |
+| Content-driven exit delay | `Playout.contentEndDelayMs` | the Designer's Inspector (`PlayoutSection`) |
 
-Both are stored on the composition's `playout` object
+These settings are stored on the composition's `playout` object
 (`PlayoutSchema`, `packages/shared-schema/src/scene.ts`) and read by
 `@cg/template-runtime`'s `playout-controller.ts`, the single-file exporter and the
 `.vcg` exporter.
+
+D-205 keeps the exit delay with the template because it sets how long a finished
+message remains visible. Preview runs that authored value and the exported page
+reports its usual completion after the Outro.
 
 ### Operator-owned — per session, never written back to the template
 

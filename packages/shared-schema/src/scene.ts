@@ -45,10 +45,9 @@ export type PlayoutMode = z.infer<typeof PlayoutModeSchema>;
 
 /**
  * D-028 — what ends a hold (orthogonal to `mode`): `timed` holds for `holdMs`;
- * `content-driven` holds until the scope's content elements (tickers) signal
- * completion — all finite tickers done; an infinite ticker holds until `stop()`;
- * a scope with no content elements gets a zero-length hold. Ignored by `manual`
- * (the operator ends the hold).
+ * `content-driven` holds until all enabled content drivers complete and then
+ * for the optional `contentEndDelayMs`. A scope with no drivers uses its Timed
+ * hold. Manual and Static holds end on operator Stop.
  */
 export const HoldSourceSchema = z.enum(['timed', 'content-driven']);
 export type HoldSource = z.infer<typeof HoldSourceSchema>;
@@ -73,6 +72,8 @@ export type HoldBehavior = z.infer<typeof HoldBehaviorSchema>;
  */
 export const DEFAULT_REPEAT = 'infinite' as const;
 export const DEFAULT_DELAY_MS = 0;
+/** Largest duration representable by one browser timer. */
+export const MAX_CONTENT_END_DELAY_MS = 2_147_483_647;
 
 const PlayoutObjectSchema = z.object({
   mode: PlayoutModeSchema.default('manual'),
@@ -94,6 +95,8 @@ const PlayoutObjectSchema = z.object({
    * outro runs. ⚠ NOT the gap between passes; see {@link PlayoutObjectSchema.delayMs}.
    */
   holdMs: z.number().min(0).optional(),
+  /** Time on screen after content completes and before Outro. Absent means zero. */
+  contentEndDelayMs: z.number().int().min(0).max(MAX_CONTENT_END_DELAY_MS).optional(),
   /**
    * How many open/close passes `loop-cycle` runs. Absent ⇒ {@link DEFAULT_REPEAT}
    * (`'infinite'`), read through {@link repeatOf}.

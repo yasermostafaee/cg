@@ -122,7 +122,8 @@ export interface PlayoutControllerOptions {
   /**
    * D-028 — content-completion supplier for `holdSource: 'content-driven'`:
    * invoked at each hold entry; the hold lasts until the returned promise
-   * resolves (all the scope's finite tickers done). Returning `null` (no
+   * resolves (all of the scope's content drivers done), plus any authored exit
+   * delay. Returning `null` (no
    * content elements in scope) ⇒ a zero-length hold. A promise that never
    * resolves (an infinite ticker) holds until `stop()`. Stale resolutions
    * (after stop / a later cycle) are ignored via a hold token.
@@ -628,8 +629,12 @@ export class PlayoutController {
       // Started AFTER `waitForContent()` so a zero-length hold above never opens one.
       if ((this.o.playout.holdBehavior ?? 'freeze') === 'loop') this.startHoldLoop();
       void wait.then(() => {
-        if (token === this.holdToken && this.phase === 'hold') {
+        if (token !== this.holdToken || this.phase !== 'hold') return;
+        const delayMs = this.o.playout.contentEndDelayMs ?? 0;
+        if (delayMs === 0) {
           this.finishContentDrivenHold(token);
+        } else {
+          this.scheduleHold(delayMs, () => this.finishContentDrivenHold(token));
         }
       });
       return;
@@ -994,6 +999,10 @@ export class PlayoutController {
 
   private scheduleHold(ms: number, cb: () => void): void {
     this.holdCb = cb;
+    if (this.paused) {
+      this.holdRemainingMs = ms;
+      return;
+    }
     this.holdDurationMs = ms;
     this.holdStartedAt = this.clock.now();
     this.holdTimer = this.clock.setTimeout(() => {

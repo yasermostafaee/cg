@@ -4,6 +4,7 @@ import {
   elementLoopsOnHold,
   followsComposition,
   hasEffectiveHoldDrivers,
+  MAX_CONTENT_END_DELAY_MS,
   playoutOf,
   type Composition,
   type Element,
@@ -818,7 +819,7 @@ function HoldBehaviorRow({
  * a stored schema field, and it had no authoring control anywhere, so a designer could rehearse
  * a three-pass loop and export a template that stored nothing.
  *
- * ⚠ The section carries TWO OWNERSHIPS and marks them (ADR 0009): `mode` and `hold` are
+ * ⚠ The section carries TWO OWNERSHIPS and marks them (ADR 0009): `mode`, `hold` and the exit delay are
  * designer-only everywhere downstream; `hold ms`, `repeat` and `delay ms` are defaults the
  * operator may override per row. Keep the marking accurate if a field is added — an author who
  * believes an overridable value is guaranteed designs against a promise nobody made.
@@ -1028,6 +1029,31 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
 
       {holdCapable && playout.holdSource === 'content-driven' && (
         <ContentHoldChecklist scene={scene} />
+      )}
+
+      {holdCapable && holdSourceEff === 'content-driven' && (
+        <div className={cls.infoRow}>
+          <span className={s.label}>exit delay</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+            <RealtimeNumberInput
+              style={holdMsNumStyle}
+              scrub={false}
+              min={0}
+              max={MAX_CONTENT_END_DELAY_MS}
+              step={100}
+              value={playout.contentEndDelayMs ?? 0}
+              onCommit={(n) => designerStore.setPlayout({ contentEndDelayMs: Math.round(n) })}
+              ariaLabel="Exit delay in milliseconds"
+            />
+            <span style={mutedStyle}>ms</span>
+          </div>
+          <InfoTip title="Exit delay">
+            <p>
+              The graphic stays visible for this time after all Hold drivers finish, then plays the
+              Outro. Enter 60000 for one minute. Stop starts the Outro immediately.
+            </p>
+          </InfoTip>
+        </div>
       )}
 
       {(showHoldMs || mode === 'loop-cycle') && (

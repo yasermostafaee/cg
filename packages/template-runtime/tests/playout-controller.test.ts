@@ -309,6 +309,89 @@ describe('PlayoutController', () => {
     expect(h.events).toEqual(['exit', 'settle']);
   });
 
+  it('D-205 — the full exit delay follows completion and pauses with Hold', async () => {
+    let finishContent: () => void = () => undefined;
+    const h = make(
+      { mode: 'auto-out', holdSource: 'content-driven', contentEndDelayMs: 60_000 },
+      { waitForContent: () => new Promise<void>((resolve) => (finishContent = resolve)) },
+    );
+    h.controller.play();
+    h.clock.advance(120_000);
+    expect(h.events).toEqual([]);
+    h.controller.pause();
+    finishContent();
+    await flushMicrotasks();
+    h.clock.advance(120_000);
+    expect(h.events).toEqual([]);
+
+    h.controller.resume();
+    h.clock.advance(30_000);
+    h.controller.pause();
+    h.clock.advance(120_000);
+    expect(h.events).toEqual([]);
+    h.controller.resume();
+    h.clock.advance(29_999);
+    expect(h.events).toEqual([]);
+    h.clock.advance(1);
+    expect(h.events).toEqual(['exit', 'settle']);
+  });
+
+  it('D-205 — Stop cancels the exit timer and replay waits for fresh content', async () => {
+    const finishes: (() => void)[] = [];
+    const h = make(
+      { mode: 'auto-out', holdSource: 'content-driven', contentEndDelayMs: 1_000 },
+      { waitForContent: () => new Promise<void>((resolve) => finishes.push(resolve)) },
+    );
+    h.controller.play();
+    finishes[0]?.();
+    await flushMicrotasks();
+    h.clock.advance(900);
+    h.controller.stop();
+    expect(h.events).toEqual(['exit', 'settle']);
+
+    h.controller.play();
+    h.clock.advance(2_000);
+    expect(h.events).toEqual(['exit', 'settle']);
+    finishes[1]?.();
+    await flushMicrotasks();
+    h.clock.advance(999);
+    expect(h.events).toEqual(['exit', 'settle']);
+    h.clock.advance(1);
+    expect(h.events).toEqual(['exit', 'settle', 'exit', 'settle']);
+  });
+
+  it('D-205 — each pass delays its own Outro before starting the separate gap', async () => {
+    const finishes: (() => void)[] = [];
+    const h = make(
+      {
+        mode: 'loop-cycle',
+        holdSource: 'content-driven',
+        repeat: 2,
+        contentEndDelayMs: 600,
+        delayMs: 300,
+      },
+      { waitForContent: () => new Promise<void>((resolve) => finishes.push(resolve)) },
+    );
+    h.controller.play();
+    finishes[0]?.();
+    await flushMicrotasks();
+    h.clock.advance(599);
+    expect(h.frames).toEqual([40]);
+    h.clock.advance(1);
+    expect(h.frames).toEqual([40, 50]);
+    h.clock.advance(299);
+    expect(finishes).toHaveLength(1);
+    h.clock.advance(1);
+    expect(finishes).toHaveLength(2);
+
+    finishes[1]?.();
+    await flushMicrotasks();
+    h.clock.advance(599);
+    expect(h.events).toEqual([]);
+    h.clock.advance(1);
+    expect(h.events).toEqual(['exit', 'settle']);
+  });
+
   it('D-187 — content completion drains the current Middle pass before Outro', async () => {
     const clock = makeClock();
     const middle: number[] = [];

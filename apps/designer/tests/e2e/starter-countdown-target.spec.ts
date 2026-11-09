@@ -1,6 +1,21 @@
-import { expect, test } from './fixtures/designer.js';
+import { expect, test, type DesignerApp } from './fixtures/designer.js';
 
-test('Azan uses five readable minute colors and a replaceable mosque icon', async ({ app }) => {
+async function setAzanTarget(app: DesignerApp, target: Date): Promise<void> {
+  const time = app.previewDialog.getByRole('textbox', { name: 'زمان اذان time', exact: true });
+  const parts = [target.getHours(), target.getMinutes(), target.getSeconds()].map((value) =>
+    String(value).padStart(2, '0'),
+  );
+  await time.focus();
+  await time.press('Control+a');
+  await time.pressSequentially(parts.join(''));
+  await time.press('Tab');
+  await expect(time).toHaveValue(parts.join(':'));
+  await app.updateAllPreviewFields();
+}
+
+test('Azan uses five readable minute colors and a replaceable prayer-time mark', async ({
+  app,
+}) => {
   await app.page.getByTestId('starter-card').filter({ hasText: 'شمارش معکوس اذان' }).click();
   await app.expectStudio();
   await app.openPreviewModal();
@@ -62,22 +77,7 @@ test('Azan lower-third uses the shared date picker, replaces zero with its messa
 
   // The parent exposes the nested countdown through its ordinary bound date/time
   // field, not a root-only duration override. Use that operator path verbatim.
-  const target = new Date(Date.now() + 8_000);
-  const time = form.getByRole('textbox', { name: 'زمان اذان time', exact: true });
-  await time.focus();
-  await time.press('Control+a');
-  await time.pressSequentially(
-    [target.getHours(), target.getMinutes(), target.getSeconds()]
-      .map((value) => String(value).padStart(2, '0'))
-      .join(''),
-  );
-  await time.press('Tab');
-  await expect(time).toHaveValue(
-    [target.getHours(), target.getMinutes(), target.getSeconds()]
-      .map((value) => String(value).padStart(2, '0'))
-      .join(':'),
-  );
-  await app.previewDialog.getByRole('button', { name: 'Update all', exact: true }).click();
+  await setAzanTarget(app, new Date(Date.now() + 8_000));
   await app.play();
   await expect(app.previewElement('countdown-clock')).toBeVisible();
   const message = app.previewElement('countdown-zero');
@@ -151,4 +151,43 @@ test('Azan lower-third uses the shared date picker, replaces zero with its messa
   // Replaying a genuinely expired absolute deadline must not invent more time.
   await app.play();
   await expect.poll(messageOpacity).toBe('1');
+});
+
+test('D-205: the authored exit delay holds the Azan announcement and then runs Outro', async ({
+  app,
+}) => {
+  await app.page.getByTestId('starter-card').filter({ hasText: 'شمارش معکوس اذان' }).click();
+  await app.expectStudio();
+  await app.setPlayoutTiming('auto-out');
+  const holdSource = app.inspector.getByRole('combobox', { name: 'Hold source' });
+  await holdSource.selectOption('content-driven');
+  const driver = app.inspector.getByRole('checkbox', { name: /drives the hold/ });
+  const delay = app.inspector.getByRole('spinbutton', { name: 'Exit delay in milliseconds' });
+  await expect(driver).not.toBeChecked();
+  await expect(delay).toHaveCount(0);
+  await driver.check();
+  await app.setInspectorNumber('Exit delay in milliseconds', 2_400);
+  await driver.uncheck();
+  await expect(delay).toHaveCount(0);
+  await driver.check();
+  await expect(delay).toHaveValue('2400');
+
+  await app.openPreviewModal();
+  await setAzanTarget(app, new Date(Date.now() + 5_000));
+  await app.play();
+  const message = app.previewElement('countdown-zero');
+  const announcement = message.locator('xpath=ancestor::*[@data-cg-step-wrap][1]');
+  await expect(announcement).toHaveCSS('opacity', '0');
+  await expect(announcement).toHaveCSS('opacity', '1', { timeout: 9_000 });
+  const visibleDuringDelay = await announcement.evaluate(async (node) => {
+    const until = performance.now() + 700;
+    while (performance.now() < until) {
+      if (document.body.classList.contains('cg-pending') || getComputedStyle(node).opacity !== '1')
+        return false;
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    }
+    return true;
+  });
+  expect(visibleDuringDelay).toBe(true);
+  await expect(app.previewFrame.locator('body.cg-pending')).toHaveCount(1, { timeout: 6_000 });
 });
