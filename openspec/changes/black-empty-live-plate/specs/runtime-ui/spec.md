@@ -36,3 +36,14 @@ or stage stamp. Each marker SHALL provide the preview caveat in its accessible n
 
 - **WHEN** the retained page uses a picture as the plate fallback
 - **THEN** its marker leaves that picture visible and identifies it as a preview placeholder
+
+### Requirement: PVW's stated caveats match what PVW now draws
+
+The stage's accessible description SHALL explain the local browser preview and live-source
+placeholders. The visible note SHALL appear only when a playing live plate is too narrow for its
+own label.
+
+#### Scenario: The rehearsal leaves room for the picture
+
+- **WHEN** a rehearsal displays graphics without a live plate requiring the shared note
+- **THEN** the picture has no permanent illustrative-composite stamp

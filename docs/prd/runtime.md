@@ -1003,9 +1003,10 @@ local preview catches wrong values and broken layouts before air.
 - WHEN an item is previewed THEN its template renders with its current field values and
   re-renders on edits
 - WHEN previewing THEN the intro/lifecycle plays, so motion is assessable
-- WHEN the preview is shown THEN two honest caveats are stated IN the item: browser-vs-CEF-71
-  rendering may differ in detail ([[B-066]] class — "faithful, not pixel-identical"), and after
-  [[C-015]] a Live Source region renders as a labeled placeholder, not video
+- WHEN the preview is shown THEN the stage's accessible description explains that browser
+  rendering may differ from programme output and live plates are labelled placeholders
+- WHEN the rehearsal has a live plate too narrow to show its placeholder label THEN the canvas
+  displays the live-source note. Other rehearsals leave the picture clear of a general stamp
 - WHEN previewing THEN nothing is ever sent to CasparCG
 
 **Notes:** deliberately NOT a server-side PVW channel — that would require solving [[C-016]]'s

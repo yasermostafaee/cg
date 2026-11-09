@@ -267,22 +267,10 @@ test('the transport reads PLAY / NEXT / STOP, and is there before anything is', 
   await app.layerRow(layer).getByRole('button', { name: 'ON PVW', exact: true }).click();
   await expect(pvw.getByRole('button', { name: /^PLAY/ })).toBeEnabled();
 
-  /*
-    🔴 SUPERSEDED BY THE OWNER, 2026-09-12, and replaced rather than deleted so the change is
-    visible: «آیکون اینفو و نمایش توضیحات روی canvas نیاز نیست» — the info icon and the
-    on-canvas description are not wanted. What this used to assert was the DISCLOSURE (hidden
-    by default, one click to open).
-
-    `R-022`'s acceptance still asks for the two honest caveats to be stated IN the item, so
-    they moved to the stamp that already names what this render is, where they cost no
-    picture. Both halves are asserted, exactly as before: the toggle is GONE, and the caveats
-    are really there.
-  */
   await expect(pvw.getByRole('button', { name: /rehearsal does not prove/i })).toHaveCount(0);
-  const stamp = pvw.locator('[data-stage-illustration]');
-  await expect(stamp).toBeVisible();
-  const caveats = (await stamp.getAttribute('title')) ?? '';
-  expect(caveats).toMatch(/not pixel-identical/i);
+  const stage = pvw.getByRole('group', { name: 'Local preview', exact: true });
+  const caveats = (await stage.getAttribute('aria-description')) ?? '';
+  expect(caveats).toMatch(/can differ from the programme output/i);
   expect(caveats).toMatch(/placeholder/i);
 });
 

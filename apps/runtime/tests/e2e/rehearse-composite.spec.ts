@@ -215,16 +215,9 @@ test('the checkerboard is NOT covered by a loaded frame', async ({ app }) => {
  * SELECTED row, and a composite that re-placed graphics nobody edited would be
  * its own defect.
  */
-/**
- * 🔴 `CONSOLE-MATCH-03` §1 — THE STAMP THAT SAYS THIS PICTURE IS NOT AIR.
- *
- * `PROMPT.md` §0 lists `ILLUSTRATIVE COMPOSITE · LOCAL` among the handful of the reference's
- * own strings that are TRUE FOR US and therefore stay: `R-022` is explicit that this render
- * happens in the browser and reaches no channel. It is measured HERE and not in jsdom because
- * every claim below is a box or a stacking order, and jsdom has no layout (golden rule 12c —
- * a geometry assertion there passes against a surface of any shape at all).
- */
-test('the stage stamps what it is, and no graphic can cover the stamp', async ({ app }) => {
+test('an ordinary rehearsal leaves its picture clear and the header counts its row', async ({
+  app,
+}) => {
   const page = app.page;
   await page.setViewportSize({ width: 1600, height: 900 });
   const layer = await app.importVcg('a.vcg', await buildValidVcg('tpl-stamp'));
@@ -232,33 +225,8 @@ test('the stage stamps what it is, and no graphic can cover the stamp', async ({
   await rehearseRow(page, layer);
   await expect(frames(page)).toHaveCount(1);
 
-  const stamp = page.locator('[data-stage-illustration]');
-  await expect(stamp).toHaveCount(1);
-  await expect(stamp).toHaveText('ILLUSTRATIVE COMPOSITE · LOCAL');
-
-  /*
-    ABOVE the graphic, which is the whole point: a full-frame lower third would otherwise
-    paint over the one label saying this is not what is on air. Asserted as a real stacking
-    comparison against the frame's own z-index, not against a constant — `frameZIndex` may
-    grow its range and this must stay above whatever it becomes.
-  */
-  const stampZ = Number(await stamp.evaluate((el) => getComputedStyle(el).zIndex));
-  const frameZ = Number(
-    await frames(page)
-      .first()
-      .evaluate((el) => getComputedStyle(el).zIndex),
-  );
-  expect(stampZ).toBeGreaterThan(frameZ);
-
-  // …and it is IN the stage, at the bottom-left, rather than floating in the panel chrome.
-  const sBox = await stamp.boundingBox();
-  const fBox = await frames(page).first().boundingBox();
-  expect(sBox).not.toBeNull();
-  expect(fBox).not.toBeNull();
-  expect(sBox!.height, 'the stamp is laid out, not collapsed').toBeGreaterThan(0);
-  expect(sBox!.y + sBox!.height, 'it sits at the FOOT of the stage').toBeGreaterThan(
-    fBox!.y + fBox!.height / 2,
-  );
+  await expect(page.getByText('ILLUSTRATIVE COMPOSITE · LOCAL', { exact: false })).toHaveCount(0);
+  await expect(page.locator('[data-live-source-note]')).toHaveCount(0);
 
   /*
     🔴 AND THE HEAD COUNTS WHAT IS ON PVW, with the ROW NAMES relocated to the title — golden
@@ -281,7 +249,7 @@ test('PVW offers no safe-area control or guides', async ({ app }) => {
   await expect(page.locator('[data-pvw-guides]')).toHaveCount(0);
 });
 
-test('the info icon and its on-canvas description are gone, and the caveats moved to the stamp', async ({
+test('the local preview caveats are available without painting a stamp over the picture', async ({
   app,
 }) => {
   const page = app.page;
@@ -295,16 +263,11 @@ test('the info icon and its on-canvas description are gone, and the caveats move
   await expect(page.getByRole('button', { name: /rehearsal does not prove/i })).toHaveCount(0);
   await expect(page.locator('#rehearsal-caveats')).toHaveCount(0);
 
-  /*
-    🔴 BUT `R-022`'s TWO CAVEATS ARE STILL STATED IN THE ITEM, which its acceptance requires:
-    they ride the stamp that already names what this render is, where they cost no picture.
-    Asserted on the CONTENT, not on the element's existence — a `title` that lost its text
-    would still pass a presence check.
-  */
-  const stamp = page.locator('[data-stage-illustration]');
-  await expect(stamp).toHaveText('ILLUSTRATIVE COMPOSITE · LOCAL');
-  const caveats = await stamp.getAttribute('title');
-  expect(caveats ?? '', 'the browser-vs-CEF caveat').toMatch(/not pixel-identical/i);
+  const stage = page.getByRole('group', { name: 'Local preview', exact: true });
+  const caveats = await stage.getAttribute('aria-description');
+  expect(caveats ?? '', 'the browser-vs-CEF caveat').toMatch(
+    /can differ from the programme output/i,
+  );
   expect(caveats ?? '', 'the Live Source placeholder caveat').toMatch(/placeholder/i);
 });
 

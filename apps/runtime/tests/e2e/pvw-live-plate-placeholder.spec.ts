@@ -338,9 +338,7 @@ test('the two plate states are told apart WITHOUT reading the label', async ({ a
     permanent and still on canvas. So the claim is asserted where it now holds, and the
     marker keeps the half that always fits: its accessible name.
   */
-  await expect(page.locator('[data-stage-illustration]')).toHaveText(
-    'ILLUSTRATIVE COMPOSITE · LOCAL · LIVE SOURCES NOT RENDERED',
-  );
+  await expect(page.locator('[data-live-source-note]')).toHaveText('LIVE SOURCES NOT RENDERED');
   await expect(marker(page, 'guest-1')).toHaveAttribute('aria-label', /preview placeholder/i);
 
   // BIND one plate to a Playout input through the Inspector. (`PLAYOUT-SOURCES-01` — the inputs
@@ -432,10 +430,8 @@ test('the marker is hidden before Play, survives Next, and hides with Stop', asy
  * MET with both caveats riding a `title`: "a hover is not where they live. Put each caveat at
  * the thing it describes, permanently."
  *
- *   1. *faithful, not pixel-identical* — MET BY THE STAMP. `ILLUSTRATIVE COMPOSITE · LOCAL`
- *      says it in three words: ILLUSTRATIVE is not-pixel-identical, LOCAL is
- *      rendered-here-and-not-the-server's-output. No paragraph is needed and none is missing.
- *   2. *a Live Source region is a placeholder, not video* — MET BY THE REGION'S OWN CHIP,
+ *   1. The local stage's accessible description names the limits of the preview.
+ *   2. The region's own chip identifies the live-source placeholder,
  *      which has been on canvas since `add-multibox-audio`: `LIVE SOURCE · PLACEHOLDER`,
  *      uppercase, tracked, muted, unmistakably chrome. The stamp cannot say this one, because
  *      the stamp describes the whole picture and this is about one region inside it.
@@ -483,7 +479,7 @@ test('D6 — each live-source region states the caveat permanently, on canvas AN
     Measured on this seed at 1600 × 900: its two plates render 97.2 px and 72.9 px wide
     against a label that is a fixed 156.8 px, so BOTH degrade here and the stamp says so.
   */
-  const stamp = page.locator('[data-stage-illustration]');
+  const note = page.locator('[data-live-source-note]');
   let degraded = 0;
   for (let i = 0; i < count; i += 1) {
     const region = regions.nth(i);
@@ -507,16 +503,12 @@ test('D6 — each live-source region states the caveat permanently, on canvas AN
 
   if (degraded > 0) {
     // The ONE allowed fallback: the stamp's own line. Permanent, on canvas, never a title.
-    await expect(stamp).toHaveText('ILLUSTRATIVE COMPOSITE · LOCAL · LIVE SOURCES NOT RENDERED');
+    await expect(note).toHaveText('LIVE SOURCES NOT RENDERED');
+  } else {
+    await expect(note).toHaveCount(0);
   }
   // …and it is never a hover in either branch: there is no disclosure control to press.
   await expect(page.getByRole('button', { name: /rehearsal does not prove/i })).toHaveCount(0);
 
-  /*
-    🔴 AND CAVEAT 1 IS ON THE STAMP, on canvas, in its first three words: ILLUSTRATIVE is
-    not-pixel-identical and LOCAL is rendered-here-not-the-server's-output. Asserted as a
-    PREFIX because the line may have taken caveat 2's words as well (above) — what must hold
-    either way is that caveat 1 is stated, permanently and visibly.
-  */
-  await expect(stamp).toContainText('ILLUSTRATIVE COMPOSITE · LOCAL');
+  await expect(page.getByText('ILLUSTRATIVE COMPOSITE · LOCAL', { exact: false })).toHaveCount(0);
 });

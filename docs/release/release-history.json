@@ -126,6 +126,10 @@
           "en": "PVW preserves each plate’s chosen background. Designer and PVW show Crop edges below the plate name when cover fit is active. Designer keeps the plate name readable and the same size in both modes. CG Control gives the crop label a distinct color."
         },
         {
+          "fa": "متن ILLUSTRATIVE COMPOSITE · LOCAL از روی تصویر PVW حذف شد.",
+          "en": "Removed the ILLUSTRATIVE COMPOSITE · LOCAL stamp from the PVW picture."
+        },
+        {
           "fa": "با دابل‌کلیک روی متن متحرک در Designer، کادر ویرایش در موقعیت همان فریم باز می‌شود.",
           "en": "Double-clicking animated text opens its editor at the current frame position."
         },

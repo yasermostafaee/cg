@@ -131,22 +131,8 @@ const styles = {
     overflow: 'hidden',
     position: 'relative' as const,
   },
-  /**
-   * 🔴 `CONSOLE-MATCH-03` §1 — WHAT THIS PICTURE IS, said ON the picture.
-   *
-   * The reference stamps `ILLUSTRATIVE COMPOSITE · LOCAL` in the stage's bottom-left, and
-   * `PROMPT.md` §0 lists it among the few prototype strings that are TRUE FOR US and stay —
-   * because `R-022` is explicit that this render never reaches CasparCG. It is the same
-   * argument `MonitorPanel`'s header makes about a black box: a broadcast surface showing a
-   * frame that is not the frame on air must say so ON the frame, not in a panel title above
-   * it and not in a caveats drawer the operator has to open.
-   *
-   * ABOVE every layer and the plate overlay (`zIndex` past `frameZIndex`'s range), because a
-   * full-frame graphic would otherwise cover the one label that says this is not air. It is
-   * `aria-hidden`: the same fact is already in the panel's own accessible name and in the
-   * caveats, and a screen reader meeting it three times is noise.
-   */
-  illustrationNote: {
+  /** The live input caveat for plates too narrow to fit a label. */
+  liveSourceNote: {
     position: 'absolute' as const,
     insetInlineStart: cssVars['--r-stage-note-inset'],
     insetBlockEnd: cssVars['--r-stage-note-inset'],
@@ -210,11 +196,8 @@ const styles = {
    * with the lifecycle bar itself, which `CONSOLE-LOOK-06` §2 replaced with `PreviewPanel`'s
    * persistent controls row — the caption is rendered there now, from the same two numbers.
    *
-   * 🔴 WHAT THE PANEL STILL SAYS ABOUT ITSELF, because the removal must not take the honesty
-   * with it: the `ILLUSTRATIVE COMPOSITE · LOCAL` stamp on the canvas (above every frame, so
-   * no graphic can cover it), the panel's own accessible name, and the empty state's
-   * "Nothing is sent to CasparCG". See the report — `R-022`'s acceptance asked for the
-   * caveats to be stated IN the panel, and that clause is now only partly met.
+   * The stage describes the local preview to assistive technology. Live plates carry a
+   * visible placeholder label or the shared note when a label would be clipped.
    */
   missing: {
     flex: 1,
@@ -285,23 +268,9 @@ interface Props {
     | undefined;
 }
 
-/**
- * 🔴 `R-022`'s TWO HONEST CAVEATS, kept as one string after the paragraph was removed.
- *
- * Its acceptance reads: _"WHEN the preview is shown THEN two honest caveats are stated IN the
- * item: browser-vs-CEF-71 rendering may differ in detail (`B-066` class — 'faithful, not
- * pixel-identical'), and after `C-015` a Live Source region renders as a labeled placeholder,
- * not video."_ The owner removed the on-canvas paragraph and its info icon on 2026-09-12; that
- * is a decision about the SURFACE, and it does not repeal the clause, so the two facts moved
- * to where they cost no picture — the stamp that already names what this render is.
- *
- * ⚠ Reported to the owner as PARTLY MET rather than met: a hover is weaker than a paragraph,
- * and whether that is enough for `R-022` is his call, not this file's.
- */
 const REHEARSAL_CAVEATS =
-  'Rendered in this browser, not on air — faithful but not pixel-identical to the on-air ' +
-  'render. A Live Source region paints nothing in the page; the marked box over it is a ' +
-  'placeholder this app draws, naming the plate and its source — it is not the live picture.';
+  'The browser preview can differ from the programme output. A Live Source placeholder ' +
+  'identifies the plate and its source. Check the server output for live video.';
 
 /**
  * 🔴 `RELEASE-091-01` §1 (`B-288`) — WHY A ROW HAS NO PAGE, in one line that names its template.
@@ -437,23 +406,7 @@ export function RehearsalStage({
       }),
     [renderable, raster],
   );
-  /*
-    🔴 `CONSOLE-LOOK-06` DELTA D6 — THE STAMP TAKES THE WORDS WHEN A REGION CANNOT HOLD THEM.
-
-    The owner's ruling names exactly one fallback for caveat 2 and this is it: when a
-    live-source region is too narrow for its own `LIVE SOURCE · PLACEHOLDER` label, the words
-    move to this line — `ILLUSTRATIVE COMPOSITE · LOCAL · LIVE SOURCES NOT RENDERED` — which
-    is permanent and still on canvas. It never degrades to a hover.
-
-    ⚠ Derived from `anyRegionTooSmallForCaveat`, the SAME predicate `LivePlateOverlay` uses to
-    drop the label, called with the same `placements` and the same `fit`. Two spellings of
-    one threshold is how a label vanishes from a region while the stamp goes on saying nothing
-    about it — golden rule 6's shape, one level down from a predicate's name.
-  */
-  const stampText =
-    placements.length > 0 && anyRegionTooSmallForCaveat(placements, fit)
-      ? 'ILLUSTRATIVE COMPOSITE · LOCAL · LIVE SOURCES NOT RENDERED'
-      : 'ILLUSTRATIVE COMPOSITE · LOCAL';
+  const showLiveSourceNote = playing && anyRegionTooSmallForCaveat(placements, fit);
 
   // The FIT scale — preview only. Measured rather than assumed, so the rehearsal
   // stays whole at any panel width, including mid divider-drag.
@@ -553,7 +506,13 @@ export function RehearsalStage({
         here, so the pane did not grow a strip — the caption and the caveats toggle moved into
         it beside the transport.
       */}
-      <div ref={fitRef} style={styles.fitBox}>
+      <div
+        ref={fitRef}
+        style={styles.fitBox}
+        role="group"
+        aria-label="Local preview"
+        aria-description={REHEARSAL_CAVEATS}
+      >
         {/*
           Sized to the frame AS DISPLAYED (raster × fit) rather than scaled with
           it: a `transform: scale()` here would shrink the 24px squares too, and a
@@ -591,36 +550,13 @@ export function RehearsalStage({
             }}
           />
         ))}
-        {/*
-          🔴 THE STAMP CARRIES THE TWO CAVEATS NOW, in its `title`.
-
-          The owner removed the info icon and the on-canvas description (2026-09-12), and
-          `R-022`'s acceptance still asks for two honest caveats to be stated IN the item:
-          that the browser render is faithful but NOT pixel-identical to CEF's, and that a
-          Live Source region is a drawn placeholder rather than video. Those are facts about
-          exactly what this stamp already names, so they ride it — a hover and an accessible
-          name cost no canvas at all, which is what the owner objected to.
-
-          It therefore stops being `aria-hidden`: a `title` nothing can reach is not a
-          statement. `pointerEvents: auto` for the same reason, and it is a 157 × 17 strip in
-          a corner, so nothing on the picture becomes harder to reach.
-        */}
-        <span
-          style={{ ...styles.illustrationNote, pointerEvents: 'auto' }}
-          data-stage-illustration=""
-          title={REHEARSAL_CAVEATS}
-          aria-label={`Illustrative composite, local. ${REHEARSAL_CAVEATS}`}
-        >
-          {stampText}
-        </span>
+        {showLiveSourceNote && (
+          <span style={styles.liveSourceNote} data-live-source-note="">
+            LIVE SOURCES NOT RENDERED
+          </span>
+        )}
         {/* `RELEASE-091-01` §1 — a row that has no page, beside the ones that do. */}
         {missingLines !== null && <div style={styles.missingOverlay}>{missingLines}</div>}
-        {/*
-          R-049 — the live-plate markers, ABOVE every frame. See `LivePlateOverlay`
-          for why they are drawn over rather than behind, and for the standing note
-          that none of this reopens design.md §12.2: the pages below still paint
-          nothing where a Live Source is.
-        */}
         {playing && (
           <LivePlateOverlay
             placements={placements}

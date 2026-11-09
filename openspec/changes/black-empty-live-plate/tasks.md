@@ -18,3 +18,4 @@
 
 - [x] 3.1 B-424 — leave the retained fallback visible and show Crop edges below the plate name.
 - [x] 3.2 Chromium verified the exported solid and Bars backgrounds, Crop edges, and both marker states.
+- [x] 3.3 Remove the general PVW stamp and show the live-source note only when a plate label would clip.
