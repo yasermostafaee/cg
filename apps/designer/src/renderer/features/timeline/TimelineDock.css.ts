@@ -120,13 +120,22 @@ export const zoomInner = style({
   minWidth: '100%',
 });
 
-// `width`, `backgroundColor` and the grid `backgroundImage` are applied inline.
+// `width` and `backgroundColor` are applied inline.
 export const rightBodyInner = style({
   position: 'relative',
   minWidth: '100%',
   // Fill the whole body height even with no layers, so the frame grid and the
   // playhead run to the bottom of the timeline (not just behind the rows).
   minHeight: '100%',
+});
+
+export const gridLine = style({
+  position: 'absolute',
+  top: 0,
+  bottom: 0,
+  width: '1px',
+  backgroundColor: '#2e3247',
+  pointerEvents: 'none',
 });
 
 // `left` (the playhead frame position) is applied inline.

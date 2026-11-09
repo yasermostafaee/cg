@@ -1,40 +1,25 @@
 import { useEffect, useRef } from 'react';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import * as s from './FrameRuler.css.js';
-import { frameFromClientX, frameToPct, stridePeriodPct, tickFrames } from './timeline-geometry.js';
+import { frameFromClientX, frameToPct } from './timeline-geometry.js';
 
 interface Props {
   frameIn: number;
   frameOut: number;
-  /**
-   * Distance between numbered frames, chosen from visible frames, viewport width and digit count.
-   */
-  labelStride: number;
-  /** Denser minor-line stride; becomes one when the user reaches frame-level zoom. */
-  gridStride: number;
+  ticks: readonly number[];
   onScrub: (frame: number) => void;
 }
 
 /**
  * Frame ruler with tick labels and a draggable playhead. Click anywhere on
- * the ruler to scrub. Labels and minor grid lines have independent adaptive strides so long
- * compositions stay readable while maximum zoom can still expose every frame.
+ * the ruler to scrub. Each numbered tick lines up with the matching stroke in the lanes.
  */
-export function FrameRuler({
-  frameIn,
-  frameOut,
-  labelStride,
-  gridStride,
-  onScrub,
-}: Props): JSX.Element {
+export function FrameRuler({ frameIn, frameOut, ticks, onScrub }: Props): JSX.Element {
   const ref = useRef<HTMLDivElement | null>(null);
   // A held button is not enough to mean "scrub": an unrelated drag can start over the
   // canvas/Inspector and then cross this ruler. Only the pointer whose press STARTED here may
   // move the playhead.
   const scrubPointerRef = useRef<number | null>(null);
-  const ticks = tickFrames(frameIn, frameOut, labelStride);
-  const linePeriodPct = stridePeriodPct(gridStride, frameIn, frameOut).toFixed(4);
-
   function frameAt(clientX: number): number {
     const el = ref.current;
     if (el === null) return designerStore.get().currentFrame;
@@ -64,9 +49,6 @@ export function FrameRuler({
     <div
       ref={ref}
       className={s.outer}
-      style={{
-        backgroundImage: `repeating-linear-gradient(to right, rgb(72, 74, 88) 0, rgb(72, 74, 88) 1px, transparent 1px, transparent ${linePeriodPct}%)`,
-      }}
       role="slider"
       aria-label="Frame ruler"
       aria-valuemin={frameIn}
@@ -81,9 +63,16 @@ export function FrameRuler({
         <span
           key={f}
           className={s.tick}
-          style={{ left: `${frameToPct(f, frameIn, frameOut).toFixed(3)}%` }}
+          data-timeline-tick={f}
+          style={{ left: `min(calc(100% - 1px), ${String(frameToPct(f, frameIn, frameOut))}%)` }}
         >
-          {f}
+          <span
+            className={
+              f === frameIn ? s.startTickLabel : f === frameOut ? s.endTickLabel : s.tickLabel
+            }
+          >
+            {f}
+          </span>
         </span>
       ))}
       <RulerPlayhead frameIn={frameIn} frameOut={frameOut} sliderRef={ref} />

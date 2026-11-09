@@ -9,8 +9,8 @@ an author from reaching a distinct column for every frame in a long composition.
 ## What Changes
 
 - Derive label stride from visible frames, measured viewport width and label digit count.
-- Derive a separate denser minor-grid stride so numbers can thin without losing frame structure.
-- Scale maximum zoom with composition duration until a frame-by-frame minor grid is reachable.
+- Draw exactly one ruler and lane line for each numbered tick.
+- Scale maximum zoom with composition duration until each frame has its own number and line.
 - Preserve the existing minimum and 20× maximum for short compositions.
 
 ## Capabilities

@@ -126,29 +126,9 @@ export function pickLabelStride(
   largestFrame: number,
 ): number {
   const digits = Math.max(1, String(Math.max(0, Math.round(Math.abs(largestFrame)))).length);
-  const minimumLabelWidth = Math.max(38, digits * 7 + 14);
+  const minimumLabelWidth = Math.max(38, digits * 10 + 10);
   const visibleLabels = Math.max(2, Math.floor(Math.max(1, viewportWidthPx) / minimumLabelWidth));
   return niceStride(Math.max(1, visibleFrames) / visibleLabels);
-}
-
-/**
- * Minor grid lines are denser than number labels but never become a solid smear. At maximum zoom
- * (≤40 visible frames) this resolves to one, making every individual frame column visible.
- */
-export function pickGridStride(
-  visibleFrames: number,
-  viewportWidthPx: number,
-  labelStride?: number,
-): number {
-  const visibleLines = Math.max(2, Math.floor(Math.max(1, viewportWidthPx) / 16));
-  const desired = niceStride(Math.max(1, visibleFrames) / visibleLines);
-  if (labelStride === undefined) return desired;
-  // Keep every number on one of the same ruler/body lines. The label ladder is integral, so the
-  // nearest divisor at or below the desired minor spacing is deterministic and stays readable.
-  for (let divisor = Math.min(desired, labelStride); divisor >= 1; divisor -= 1) {
-    if (labelStride % divisor === 0) return divisor;
-  }
-  return 1;
 }
 
 /** The labelled frames from `lo` to `hi` inclusive, every `stride`. */
@@ -159,13 +139,21 @@ export function tickFrames(lo: number, hi: number, stride: number): readonly num
   return out;
 }
 
-/**
- * The CSS background-gradient period (percent of span) for one tick stride — the
- * same number drives the ruler's own gridlines and the lane body's, so labels
- * sit directly above their line.
- */
-export function stridePeriodPct(stride: number, frameIn: number, frameOut: number): number {
-  return (stride * 100) / frameSpan(frameIn, frameOut);
+/** Ruler and lane render the same ticks, with one interval of overscan on either side. */
+export function visibleTickFrames(
+  frameIn: number,
+  frameOut: number,
+  stride: number,
+  firstVisibleFrame: number,
+  visibleFrames: number,
+): readonly number[] {
+  const offset = Math.max(
+    0,
+    Math.min(frameOut - frameIn - visibleFrames, firstVisibleFrame - frameIn),
+  );
+  const first = Math.max(0, Math.floor(offset / stride) - 1);
+  const last = Math.ceil((offset + visibleFrames) / stride) + 1;
+  return tickFrames(frameIn + first * stride, Math.min(frameOut, frameIn + last * stride), stride);
 }
 
 /**

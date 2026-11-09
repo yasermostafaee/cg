@@ -1,19 +1,14 @@
 # Design — adaptive Timeline ruler (B-416)
 
-## Two densities
+## One tick list
 
-Number labels and minor grid lines no longer share one terminal stride. Label spacing estimates the
-largest frame number's rendered width and divides the measured lane viewport by that minimum. Grid
-spacing targets a denser 16 px minimum. Both raw intervals round upward on a readable
-`1 / 2 / 2.5 / 5 × 10ⁿ` ladder, so they continue scaling at any duration without arbitrary values.
-
-The same grid stride drives the ruler background and lane-body background, keeping vertical lines
-aligned. Every numbered tick still lands on a grid line because both strides come from the same
-divisible ladder.
+Estimate the label width from the largest frame number and choose the spacing on an integral
+`1 / 2 / 2.5 / 5 × 10ⁿ` ladder. The ruler and lane body draw from the same scroll-window slice of
+ticks. One interval of overscan on either side keeps scrolling continuous without mounting a node
+for every frame of a long composition.
 
 ## Frame-level zoom
 
-Maximum zoom is `max(20, ceil(frameSpan / 40))`. Short projects therefore preserve their existing
-range. At the maximum of a long project, at most 40 frames are visible; on a normal Timeline viewport
-the minor-grid calculation resolves to stride one, exposing every frame. Percent-based frame mapping,
-scrub rounding and zoom anchoring are unchanged.
+Maximum zoom is `max(20, ceil(frameSpan / 12))`. With at most 12 frames in view, a normal Timeline
+viewport has room to number each frame. Percent-based frame mapping, scrub rounding and zoom
+anchoring are unchanged.

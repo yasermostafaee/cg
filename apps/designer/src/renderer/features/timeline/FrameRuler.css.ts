@@ -1,7 +1,6 @@
 import { style } from '@vanilla-extract/css';
 import { colors } from '../../theme.js';
 
-// The repeating gridline background is applied inline (its period is dynamic).
 export const outer = style({
   position: 'relative',
   height: '34px',
@@ -16,11 +15,20 @@ export const tick = style({
   position: 'absolute',
   top: 0,
   bottom: 0,
+  width: '1px',
+  backgroundColor: '#484a58',
+});
+
+export const tickLabel = style({
+  position: 'absolute',
+  transform: 'translateX(-50%)',
   color: colors.textMuted,
   fontSize: '0.66rem',
-  paddingLeft: '4px',
   lineHeight: '34px',
 });
+
+export const startTickLabel = style([tickLabel, { left: '4px', transform: 'none' }]);
+export const endTickLabel = style([tickLabel, { right: '4px', transform: 'none' }]);
 
 // `left` (the playhead frame position) is applied inline.
 export const playhead = style({

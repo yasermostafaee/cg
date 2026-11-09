@@ -11,13 +11,12 @@ import {
   frameToPctClamped,
   insertionFromPointer,
   isKeyframeSelected,
-  pickGridStride,
   pickLabelStride,
   type RowSpan,
   segmentPct,
   stackOffsetPx,
-  stridePeriodPct,
   tickFrames,
+  visibleTickFrames,
   type KeyframeRefLike,
 } from '../src/renderer/features/timeline/timeline-geometry.js';
 import { timelineZoomMax } from '../src/renderer/state/timeline-zoom.js';
@@ -123,10 +122,6 @@ describe('B-416 — adaptive ruler density and frame-level zoom', () => {
     expect(pickLabelStride(5000, 1000, 5000)).toBe(250);
     expect(tickFrames(0, 1500, pickLabelStride(1500, 1000, 1500))).toHaveLength(16);
     expect(tickFrames(0, 5000, pickLabelStride(5000, 1000, 5000))).toHaveLength(21);
-    expect(
-      pickLabelStride(5000, 1000, 5000) %
-        pickGridStride(5000, 1000, pickLabelStride(5000, 1000, 5000)),
-    ).toBe(0);
   });
 
   it('adapts to the real viewport and label width', () => {
@@ -138,15 +133,15 @@ describe('B-416 — adaptive ruler density and frame-level zoom', () => {
 
   it('draws every frame at maximum zoom, including a 5,000-frame composition', () => {
     const max = timelineZoomMax(0, 5000);
-    expect(max).toBe(125);
+    expect(max).toBe(417);
     const visible = 5000 / max;
-    expect(visible).toBeLessThanOrEqual(40);
-    expect(pickGridStride(visible, 1000)).toBe(1);
+    expect(visible).toBeLessThanOrEqual(12);
+    expect(pickLabelStride(visible, 680, 5000)).toBe(1);
   });
 
   it('retains the historical 20× maximum for short compositions', () => {
-    expect(timelineZoomMax(0, 300)).toBe(20);
-    expect(timelineZoomMax(0, 1500)).toBe(38);
+    expect(timelineZoomMax(0, 240)).toBe(20);
+    expect(timelineZoomMax(0, 1500)).toBe(125);
   });
 });
 
@@ -163,10 +158,10 @@ describe('tickFrames', () => {
   });
 });
 
-describe('stridePeriodPct', () => {
-  it('is the percent-of-span occupied by one stride', () => {
-    expect(stridePeriodPct(5, 0, 100)).toBe(5);
-    expect(stridePeriodPct(10, 0, 200)).toBe(5);
+describe('visibleTickFrames', () => {
+  it('renders only the visible slice and preserves its alignment with the composition origin', () => {
+    expect(visibleTickFrames(3, 5000, 10, 1947, 20)).toEqual([1933, 1943, 1953, 1963, 1973, 1983]);
+    expect(visibleTickFrames(0, 5000, 1, 5001, 3)).toEqual([4996, 4997, 4998, 4999, 5000]);
   });
 });
 

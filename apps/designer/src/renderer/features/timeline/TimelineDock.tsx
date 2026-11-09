@@ -20,10 +20,9 @@ import {
   frameToPct,
   frameToPctClamped,
   insertionFromPointer,
-  pickGridStride,
   pickLabelStride,
   type RowSpan,
-  stridePeriodPct,
+  visibleTickFrames,
 } from './timeline-geometry.js';
 
 interface Props {
@@ -84,9 +83,10 @@ export function TimelineDock({
   const hasInactiveTail = active.out < frameOut;
   const visibleFrames = span / Math.max(1, timelineZoom);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(1000);
-  const labelStride = pickLabelStride(visibleFrames, timelineViewportWidth, frameOut);
-  const gridStride = pickGridStride(visibleFrames, timelineViewportWidth, labelStride);
-  const gridPeriodPct = stridePeriodPct(gridStride, frameIn, frameOut).toFixed(4);
+  const [laneScrollLeft, setLaneScrollLeft] = useState(0);
+  const firstVisibleFrame = frameIn + (laneScrollLeft / timelineViewportWidth) * visibleFrames;
+  const tickStride = pickLabelStride(visibleFrames, timelineViewportWidth, frameOut);
+  const ticks = visibleTickFrames(frameIn, frameOut, tickStride, firstVisibleFrame, visibleFrames);
   const rightBodyRef = useRef<HTMLDivElement | null>(null);
   // Outer label viewport (overflow:hidden) — used to forward wheel events to
   // the lane body. Its content is offset by `leftBodyInnerRef`'s transform.
@@ -132,6 +132,7 @@ export function TimelineDock({
     if (sceneLabelRef.current !== null)
       sceneLabelRef.current.style.transform = `translateY(${String(rb.scrollTop)}px)`;
     if (topScrollRef.current !== null) topScrollRef.current.scrollLeft = rb.scrollLeft;
+    setLaneScrollLeft(rb.scrollLeft);
   }
 
   // Zoom anchoring: when the timeline zoom changes, adjust the horizontal
@@ -611,8 +612,7 @@ export function TimelineDock({
               <FrameRuler
                 frameIn={frameIn}
                 frameOut={frameOut}
-                labelStride={labelStride}
-                gridStride={gridStride}
+                ticks={ticks}
                 onScrub={(f) => {
                   // B-375 — a paused real lifecycle still owns its Video/Lottie drivers. A ruler
                   // drag is an explicit authoring seek, so release that lifecycle before moving
@@ -636,13 +636,19 @@ export function TimelineDock({
               style={{
                 width: `${String(timelineZoom * 100)}%`,
                 backgroundColor: TIMELINE_BG,
-                // One vertical line per `tickStride` frames, at the same
-                // period the ruler labels use. Without this thinning, a
-                // 1000-frame scene at default zoom paints ~4px-spaced
-                // lines that read as a solid smear.
-                backgroundImage: `repeating-linear-gradient(to right, #2e3247 0, #2e3247 1px, transparent 1px, transparent ${gridPeriodPct}%)`,
               }}
             >
+              {ticks.map((frame) => (
+                <div
+                  key={frame}
+                  aria-hidden="true"
+                  className={s.gridLine}
+                  data-timeline-grid-frame={frame}
+                  style={{
+                    left: `min(calc(100% - 1px), ${String(frameToPct(frame, frameIn, frameOut))}%)`,
+                  }}
+                />
+              ))}
               <BodyPlayhead frameIn={frameIn} frameOut={frameOut} />
               {loopRange !== null && (
                 <>

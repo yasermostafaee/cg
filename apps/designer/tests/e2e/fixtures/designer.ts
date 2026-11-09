@@ -810,7 +810,12 @@ export class DesignerApp {
     if (box === null) throw new Error('frame ruler not visible');
     const pct = Math.min(1, Math.max(0, (frame - min) / (max - min || 1)));
     await ruler.click({
-      position: { x: Math.round(pct * box.width), y: Math.round(box.height / 2) },
+      // The right edge is outside the ruler's hit box. The last interior pixel
+      // still rounds to the terminal frame at the fixture's zoom.
+      position: {
+        x: Math.min(Math.floor(box.width) - 1, Math.round(pct * box.width)),
+        y: Math.round(box.height / 2),
+      },
     });
   }
 
