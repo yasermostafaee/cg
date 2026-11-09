@@ -11,7 +11,12 @@ import {
   type SourceCatalog,
   type TemplateInfo,
 } from '@cg/shared-ipc';
-import type { LiveFitMode, LiveRevealMask } from '@cg/shared-schema';
+import {
+  RetainedStackItemSchema,
+  retainedFromStackItem,
+  type LiveFitMode,
+  type LiveRevealMask,
+} from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { awaitChannelModeRead, HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 import { recvLines as readWireLines } from './support/wire-trace.js';
@@ -469,6 +474,128 @@ it('D-178 — PGM drag pans a live cover input without replaying it or changing 
   const after = (await recvLines()).length;
   expect(await r.pgmPlateCrop('item-1', { token, dx: -0.1, dy: 0 })).toMatchObject({ ok: false });
   expect((await recvLines()).slice(after)).toEqual([]);
+});
+
+it('stages PVW framing without AMCP and restores it into the first hidden Take geometry', async () => {
+  const itemId = 'item-1';
+  const rect = { x: 720, y: 270, width: 480, height: 540 };
+  const r = await boot({ template: template([{ id: 'guest-1', rect, fitMode: 'cover' }]) });
+  expect(await r.load(itemId, 'lower-third', {})).toMatchObject({ accepted: true });
+  const { targets } = r.previewPlateCrop(itemId);
+  expect(targets).toMatchObject([
+    { plateId: 'guest-1', sourceId: 'src-a', sourceAspect: 16 / 9, focus: { x: 0.5, y: 0.5 } },
+  ]);
+  const edit = { token: targets[0]!.token, focus: { x: 1, y: 0.5 } };
+  expect(r.previewPlateCrop(itemId, edit).ok).toBe(false);
+  expect(await r.enterRehearse(itemId)).toMatchObject({ ok: true });
+  const beforeEdit = (await recvLines()).length;
+  expect(r.previewPlateCrop(itemId, edit)).toMatchObject({
+    ok: true,
+    targets: [{ ...targets[0], focus: edit.focus }],
+  });
+  expect(await r.take(itemId)).toMatchObject({ accepted: false, errorCode: 'rehearsing' });
+  expect((await recvLines()).slice(beforeEdit)).toEqual([]);
+  expect(await r.exitRehearse(itemId)).toMatchObject({ ok: true });
+
+  const retained = RetainedStackItemSchema.parse(retainedFromStackItem(r.stackSnapshot()[0]!));
+  expect(retained.previewPlateCrops).toEqual([edit]);
+  expect(await r.remove(itemId)).toMatchObject({ accepted: true });
+  expect(await r.restore([retained])).toMatchObject({ restored: 1 });
+  expect(r.previewPlateCrop(itemId).targets).toMatchObject([{ ...targets[0], focus: edit.focus }]);
+
+  const beforeTake = (await recvLines()).length;
+  expect(await r.take(itemId)).toMatchObject({ accepted: true });
+  const lines = (await recvLines()).slice(beforeTake);
+  const fill = at(lines, 'MIXER 1-30 FILL 0.125 0.25 0.5 0.5 DEFER');
+  const clip = at(lines, 'MIXER 1-30 CLIP 0.375 0.25 0.25 0.5 DEFER');
+  const hideCommit = lines.findIndex((line, index) => index > clip && line === 'MIXER 1 COMMIT');
+  const play = at(lines, 'PLAY 1-30 ');
+  expect(fill).toBeGreaterThan(at(lines, 'MIXER 1-30 OPACITY 0'));
+  expect(clip).toBeGreaterThan(fill);
+  expect(hideCommit).toBeGreaterThan(clip);
+  expect(play).toBeGreaterThan(hideCommit);
+  expect(r.previewPlateCrop(itemId, edit)).toMatchObject({ ok: false, targets: [] });
+});
+
+it('scopes a staged PVW crop to the active look, source and row', async () => {
+  const rect = { x: 720, y: 270, width: 480, height: 540 };
+  const info = template([{ id: 'guest-1', rect, fitMode: 'cover' }]);
+  const r = await boot({
+    template: {
+      ...info,
+      liveSources: {
+        ...info.liveSources!,
+        defaultLookId: 'first',
+        looks: [
+          {
+            id: 'first',
+            name: 'First',
+            entered: { mode: 'cut' },
+            rects: { 'guest-1': rect },
+            fits: { 'guest-1': 'cover' },
+          },
+          {
+            id: 'second',
+            name: 'Second',
+            entered: { mode: 'cut' },
+            rects: { 'guest-1': rect },
+            fits: { 'guest-1': 'cover' },
+          },
+        ],
+      },
+    },
+  });
+  await r.load('item-1', 'lower-third', {});
+  await r.load('item-2', 'lower-third', {});
+  expect(await r.enterRehearse('item-1')).toMatchObject({ ok: true });
+  expect(await r.enterRehearse('item-2')).toMatchObject({ ok: true });
+  const [first] = r.previewPlateCrop('item-1').targets;
+  const edit = { token: first!.token, focus: { x: 1, y: 0.5 } };
+  expect(r.previewPlateCrop('item-1', edit).ok).toBe(true);
+  expect(r.previewPlateCrop('item-2', edit)).toMatchObject({
+    ok: false,
+    targets: [{ focus: { x: 0.5, y: 0.5 } }],
+  });
+
+  expect(await r.setActiveLook('item-1', 'second')).toMatchObject({ ok: true });
+  expect(r.previewPlateCrop('item-1', edit)).toMatchObject({
+    ok: false,
+    targets: [{ focus: { x: 0.5, y: 0.5 } }],
+  });
+  expect(await r.setActiveLook('item-1', 'first')).toMatchObject({ ok: true });
+  expect(r.setSourceAssignments(assign([['guest-1', 'src-b']]))).toMatchObject({ ok: true });
+  expect(r.previewPlateCrop('item-1', edit)).toMatchObject({
+    ok: false,
+    targets: [{ sourceId: 'src-b', focus: { x: 0.5, y: 0.5 } }],
+  });
+  expect(r.setSourceAssignments(assign([['guest-1', 'src-a']]))).toMatchObject({ ok: true });
+  expect(r.previewPlateCrop('item-1').targets).toMatchObject([{ ...first, focus: edit.focus }]);
+  expect(r.setSourceAssignments(assign([['guest-1', 'src-b']]))).toMatchObject({ ok: true });
+  expect(await r.exitRehearse('item-1')).toMatchObject({ ok: true });
+  const beforeTake = (await recvLines()).length;
+  expect(await r.take('item-1')).toMatchObject({ accepted: true });
+  expect(
+    (await recvLines()).slice(beforeTake).find((line) => line.startsWith('MIXER 1-30 FILL')),
+  ).toBe('MIXER 1-30 FILL 0.25 0.25 0.5 0.5 DEFER');
+});
+
+it('does not offer staging for cover overflow based only on the authored source aspect', async () => {
+  const rect = { x: 720, y: 270, width: 480, height: 540 };
+  const r = await boot({
+    template: template([{ id: 'guest-1', rect, expectedAspect: 16 / 9, fitMode: 'cover' }]),
+    catalog: catalog({
+      sources: [
+        {
+          id: 'src-a',
+          name: 'Unknown aspect',
+          format: 'AUTO',
+          producer: { kind: 'route', channel: 2 },
+        },
+      ],
+    }),
+  });
+  await r.load('item-1', 'lower-third', {});
+  expect(r.previewPlateCrop('item-1')).toEqual({ ok: true, targets: [] });
 });
 
 it('D-202 — multiple reveals are refused atomically when only one extra seat fits', async () => {

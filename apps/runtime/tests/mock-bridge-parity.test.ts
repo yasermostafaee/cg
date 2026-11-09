@@ -212,6 +212,7 @@ const BRIDGE_SURFACE: {
       // contract; the wire assertion is integration-tested bridge-side.
       'setPlateVolume',
       'pgmPlateCrop',
+      'previewPlateCrop',
       // `add-multibox-audio` — the MAP door (FADER / ON-OFF / SOLO / PANIC). The mock
       // composes its own single-plate writer exactly as the bridge composes its one, so the
       // offline console cannot teach the UI a model the bridge does not have. It takes no
@@ -467,6 +468,20 @@ it('the mock bridge exposes the same RuntimeBridge method tree as the live one',
     expect({ group, methods: methodKeys(mock[group]) }).toEqual({ group, methods: declared });
     expect({ group, methods: methodKeys(real[group]) }).toEqual({ group, methods: declared });
   }
+});
+
+it('refuses to stage preview framing in Test mode', async () => {
+  const mock = createMockBridge();
+  await expect(
+    mock.stack.previewPlateCrop({
+      itemId: 'item-ticker',
+      edit: { token: 'a'.repeat(64), focus: { x: 0.25, y: 0.5 } },
+    }),
+  ).resolves.toEqual({
+    ok: false,
+    targets: [],
+    message: 'Preview framing is practice-only in Test mode.',
+  });
 });
 
 it('the mock publishes the applied position override in StackItemState (B-072)', () => {

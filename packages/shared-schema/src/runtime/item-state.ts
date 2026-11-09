@@ -2,12 +2,18 @@ import { z } from 'zod';
 import { IdSchema, ISODateSchema } from '../primitives.js';
 import { FieldValuesSchema } from '../fields.js';
 import { PositionSchema } from '../scene.js';
+import { LiveCropFocusSchema } from '../live-fit.js';
 import {
   LivePlateVolumesSchema,
   LiveSourceFrozenAssignmentSchema,
   LiveSourceLookOverrideSchema,
   LiveSourceOverrideSchema,
 } from '../live-source.js';
+
+export const MAX_PREVIEW_PLATE_CROPS = 512;
+const PreviewPlateCropsSchema = z
+  .array(z.object({ token: z.string().regex(/^[0-9a-f]{64}$/), focus: LiveCropFocusSchema }))
+  .max(MAX_PREVIEW_PLATE_CROPS);
 
 /** A CasparCG (channel, layer) coordinate plus which server it lives on. */
 export const LayerSlotSchema = z.object({
@@ -263,6 +269,8 @@ export const StackItemStateSchema = z.object({
    * row's speaker mark reads it. ABSENT means the row never set it — the sound plays.
    */
   soundMuted: z.boolean().optional(),
+  /** Operator framing staged in PVW, keyed by the Bridge's exact take geometry token. */
+  previewPlateCrops: PreviewPlateCropsSchema.optional(),
   /**
    * `FIELD-FIXES-01` B — why this row's last take was refused (see {@link TakeRefusalSchema}).
    * ABSENT on every row whose last take landed, or that has been cleared since.
@@ -659,6 +667,8 @@ export const RetainedStackItemSchema = z.object({
    * dropped, a row the operator muted comes back after a bridge restart and plays its sound on air.
    */
   soundMuted: z.boolean().optional(),
+  /** Keeps staged framing through a Bridge restart, before any seats are restored. */
+  previewPlateCrops: PreviewPlateCropsSchema.optional(),
 });
 export type RetainedStackItem = z.infer<typeof RetainedStackItemSchema>;
 
@@ -711,5 +721,6 @@ export function retainedFromStackItem(item: StackItemState): RetainedStackItem {
     ...(item.pages !== undefined && { pages: item.pages }),
     ...(item.pageAdvance !== undefined && { pageAdvance: item.pageAdvance }),
     ...(item.soundMuted !== undefined && { soundMuted: item.soundMuted }),
+    ...(item.previewPlateCrops !== undefined && { previewPlateCrops: item.previewPlateCrops }),
   };
 }

@@ -159,6 +159,7 @@ import {
   StackSetSoundMutedChannel,
   StackSetPlateVolumeChannel,
   StackPgmPlateCropChannel,
+  StackPreviewPlateCropChannel,
   StackSetPlateVolumesChannel,
   StackSilenceAllLivePlatesChannel,
   StackSilenceChannelLivePlatesChannel,
@@ -4952,6 +4953,13 @@ export function buildRoutes(
       'operator',
       'operator',
       (r: ChannelRequest<typeof StackPgmPlateCropChannel>) => b.pgmPlateCrop(r.itemId, r.drag),
+    ),
+    route(
+      StackPreviewPlateCropChannel,
+      'operator',
+      'operator',
+      (r: ChannelRequest<typeof StackPreviewPlateCropChannel>) =>
+        b.previewPlateCrop(r.itemId, r.edit),
     ),
     /*
       `MEDIA-PLATES-01` §1.D — Play/Pause and Restart for one media plate of an on-air row. It names

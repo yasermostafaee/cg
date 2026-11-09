@@ -195,6 +195,10 @@
           "en": "PVW practice moves the crop guide horizontally or vertically, depending on the source and plate aspect ratios. Center restores the middle of the crop."
         },
         {
+          "fa": "در PVW و با Bridge سازگار، برش ورودی‌هایی که نسبت تصویرشان مشخص است برای همان قاب و پریست ذخیره می‌شود. Take همان برش را پیش از نمایش اولین فریم اعمال می‌کند.",
+          "en": "With a compatible Bridge, PVW saves a crop for the matching plate, look and input when its aspect is known. Take applies that crop before the first visible frame."
+        },
+        {
           "fa": "بررسی تصویر و شنود یک ورودی زنده در Look inputs، پنجرهٔ تغییر ورودی قاب و بخش Live sources تنظیمات در دسترس است.",
           "en": "Check the picture and optional sound of one live input from Look inputs, the plate source swap and Live sources in Settings."
         },

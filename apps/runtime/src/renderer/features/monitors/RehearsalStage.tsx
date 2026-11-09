@@ -12,11 +12,11 @@ import type { CSSProperties } from 'react';
 // those four pure functions add 3.5 kB to the built SPA (1,271.6 → 1,275.1 kB with
 // them stubbed out and back), because nothing else in the package is reachable
 // from them and both imports go through subpaths rather than the entry index.
-import type { ChannelRaster } from '@cg/shared-ipc';
+import { activeLookOf, type ChannelRaster } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 import { LivePlateOverlay, anyRegionTooSmallForCaveat } from './LivePlateOverlay.js';
 import { platePlacements, type PlatePlacement } from './livePlateGeometry.js';
-import { PreviewPanDraft } from './PreviewPanDraft.js';
+import { PreviewPanRow } from './PreviewPanDraft.js';
 import { RehearsalFrame, type RehearsalFrameHandle } from './RehearsalFrame.js';
 import { frameBox, frameZIndex, overlayZIndex, type RehearsalSubject } from './rehearsalFrames.js';
 import type { PvwPage } from '../../../shared/pvwPage.js';
@@ -258,7 +258,8 @@ interface Props {
   templateNames: ReadonlyMap<string, string | null>;
   /** The channel's real raster (R-030). Every iframe is sized to it. */
   raster: ChannelRaster;
-  panPractice?: boolean;
+  panOpen?: boolean;
+  panSourceAspects?: ReadonlyMap<string, number | null>;
   /**
    * Publishes the local transport upward so a persistent controls row can drive it, and
    * `null` on unmount so that row can disable itself rather than hold a stale handle.
@@ -320,7 +321,8 @@ export function RehearsalStage({
   pageByItem,
   templateNames,
   raster,
-  panPractice = false,
+  panOpen = false,
+  panSourceAspects,
   onTransport,
 }: Props): JSX.Element {
   const fitRef = useRef<HTMLDivElement | null>(null);
@@ -397,7 +399,7 @@ export function RehearsalStage({
    * twice; `elementId` is prefixed with the item id to keep the React keys unique
    * across rows rather than across the template.
    */
-  const placements = useMemo<PlatePlacement[]>(
+  const placements = useMemo<(PlatePlacement & { itemId: string })[]>(
     () =>
       renderable.flatMap(({ subject }) => {
         const live = subject.liveSources;
@@ -408,12 +410,16 @@ export function RehearsalStage({
           subject.position,
           subject.plateSources,
           subject.activeLookId,
-        ).map((p) => ({ ...p, elementId: `${subject.itemId}:${p.elementId}` }));
+        ).map((p) => ({
+          ...p,
+          itemId: subject.itemId,
+          elementId: `${subject.itemId}:${p.elementId}`,
+        }));
       }),
     [renderable, raster],
   );
   const showLiveSourceNote = playing && anyRegionTooSmallForCaveat(placements, fit);
-  const practicePlates = placements.filter(
+  const panPlates = placements.filter(
     (plate) =>
       plate.cropEdges === true &&
       plate.width > 0 &&
@@ -423,7 +429,41 @@ export function RehearsalStage({
       plate.x + plate.width > 0 &&
       plate.y + plate.height > 0,
   );
-  const panAvailable = playing && practicePlates.length > 0;
+  const panAvailable = playing && panPlates.length > 0;
+  const panRows =
+    panOpen && panAvailable
+      ? renderable.flatMap(({ subject }) => {
+          const plates = panPlates
+            .filter((plate) => plate.itemId === subject.itemId)
+            .map((plate) => ({
+              ...plate,
+              catalogAspect: panSourceAspects?.get(plate.sourceId ?? '') ?? null,
+            }));
+          if (plates.length === 0) return [];
+          const look =
+            subject.liveSources === undefined
+              ? undefined
+              : activeLookOf(subject.liveSources, subject.activeLookId);
+          // A changed look, binding or footprint must unmount old crop tokens immediately.
+          const key = JSON.stringify([
+            subject.itemId,
+            subject.plateSources?.templateId,
+            look?.id,
+            raster.width,
+            raster.height,
+            plates.map(({ plateId, sourceId, catalogAspect, x, y, width, height }) => [
+              plateId,
+              sourceId,
+              catalogAspect,
+              x,
+              y,
+              width,
+              height,
+            ]),
+          ]);
+          return [{ itemId: subject.itemId, plates, key }];
+        })
+      : [];
 
   // The FIT scale — preview only. Measured rather than assumed, so the rehearsal
   // stays whole at any panel width, including mid divider-drag.
@@ -582,28 +622,13 @@ export function RehearsalStage({
             zIndex={overlayZIndex(renderable.length)}
           />
         )}
-        {panPractice && panAvailable && (
+        {panRows.length > 0 && (
           <div
             className="cg-pan-draft-layer"
             style={{ ...frameBox(raster, fit), zIndex: overlayZIndex(renderable.length) + 1 }}
           >
-            {practicePlates.map((plate) => (
-              <div
-                key={plate.elementId}
-                style={{
-                  position: 'absolute',
-                  left: plate.x,
-                  top: plate.y,
-                  width: plate.width,
-                  height: plate.height,
-                }}
-              >
-                <PreviewPanDraft
-                  plateId={plate.plateId}
-                  width={plate.width}
-                  height={plate.height}
-                />
-              </div>
+            {panRows.map(({ itemId, plates, key }) => (
+              <PreviewPanRow key={key} itemId={itemId} plates={plates} />
             ))}
           </div>
         )}

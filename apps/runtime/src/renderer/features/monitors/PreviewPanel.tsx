@@ -6,7 +6,7 @@ import {
   Play,
   SquareDashed,
 } from 'lucide-react';
-import { REFERENCE_RASTER } from '@cg/shared-ipc';
+import { REFERENCE_RASTER, sourceAspect } from '@cg/shared-ipc';
 import { Panel } from '../../ui/Panel.js';
 import { effectiveTimingFor } from '../inspector/timingToSend.js';
 import { Button } from '../../ui/Button.js';
@@ -158,6 +158,10 @@ export function PreviewPanel({ companionActions }: { companionActions?: ReactNod
   );
   const sourceVersion = useSyncExternalStore(subscribeSources, sourcesVersion, sourcesVersion);
   const catalog = currentSourceCatalog();
+  const panSourceAspects = useMemo(
+    () => new Map(catalog.sources.map((source) => [source.id, sourceAspect(source)])),
+    [catalog],
+  );
   /*
     `add-multibox-audio` — the bridge's live-layer ledger, for the HELD half of each box's
     audio glyph. The intent half rides the stack item this panel already holds; the two are
@@ -399,7 +403,7 @@ export function PreviewPanel({ companionActions }: { companionActions?: ReactNod
   */
   const [transport, setTransport] = useState<RehearsalTransport | null>(null);
   const panAvailable = subjects.length > 0 && transport?.panAvailable === true;
-  const panPractice = panAvailable && panChannel === viewChannel;
+  const panOpen = panAvailable && panChannel === viewChannel;
   useEffect(() => {
     if (!panAvailable) setPanChannel(undefined);
   }, [panAvailable]);
@@ -447,17 +451,17 @@ export function PreviewPanel({ companionActions }: { companionActions?: ReactNod
           </MonitorHeadFact>
           <Button
             variant="ghost"
-            active={panPractice}
+            active={panOpen}
             aria-label="Pan preview input"
-            aria-pressed={panPractice}
+            aria-pressed={panOpen}
             data-monitor-pan=""
             disabled={!panAvailable}
             title={
               panAvailable
-                ? 'Practice panning a cropped input in Preview'
-                : 'Show a Crop edges plate in Preview to practice panning'
+                ? 'Frame a cropped input in Preview'
+                : 'Show a Crop edges plate in Preview to use Pan'
             }
-            onClick={() => setPanChannel(panPractice ? undefined : viewChannel)}
+            onClick={() => setPanChannel(panOpen ? undefined : viewChannel)}
           >
             <Icon icon={Move} size={13} />
             Pan
@@ -552,7 +556,8 @@ export function PreviewPanel({ companionActions }: { companionActions?: ReactNod
             templateNames={templateNames}
             raster={raster}
             onTransport={setTransport}
-            panPractice={panPractice}
+            panOpen={panOpen}
+            panSourceAspects={panSourceAspects}
           />
         )}
         <LiveInputCheckCard surface={PVW_INPUT_SURFACE} />

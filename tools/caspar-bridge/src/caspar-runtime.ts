@@ -18,6 +18,8 @@ import {
   type ServerSessionState,
 } from '@cg/caspar-client';
 import {
+  DEFAULT_LIVE_CROP_FOCUS,
+  MAX_PREVIEW_PLATE_CROPS,
   isRestorable,
   intersectNormalizedRects,
   livePlateMaskRegions,
@@ -129,8 +131,10 @@ import {
   lookPlateReveals,
   lookPlateRects,
   type PgmPlateCropTarget,
+  type PreviewPlateCropTarget,
   pruneAssignmentsForCatalog,
   // `PLAYOUT-SOURCES-01` — what may be bound and what may be seated, asked of the ONE module.
+  sourceAspect,
   sourceSeatable,
   unseatableWords,
   // `ROUTE-PLATES-01` — which entries are Playout routes, and on which channels one may be shown.
@@ -789,6 +793,7 @@ type LiveSeatingPlan =
       readonly resolvedFrom: Readonly<Record<string, string>>;
       /** R-105 — source shape/mode for sizing the page's always-under fallback. */
       readonly plateFits: Readonly<Record<string, CgPlateFit>>;
+      readonly previewCropTargets: PreviewPlateCropTarget[];
       /**
        * ⭐ `B-178` — **each plate's fit mode WITH WHERE IT CAME FROM**, for the operator-facing
        * report. One entry per resolved frame, in binding order.
@@ -1647,6 +1652,7 @@ export class CasparRuntime {
     string,
     Map<string, { producer: string; focus: LiveCropFocus }>
   >();
+  readonly #previewPlateCrops = new Map<string, NonNullable<StackItemState['previewPlateCrops']>>();
   /**
    * B-039 — itemIds whose slot currently has a LIVE producer (a `CG ADD` succeeded
    * and no later `CLEAR` destroyed it). The prescriptive signal: `take` plays when
@@ -3144,6 +3150,7 @@ export class CasparRuntime {
       // is the one property of a graphic an operator cannot see, so a console that
       // cannot read this back cannot tell a live guest from a silent one.
       const plateVolumes = this.#plateVolumes.get(item.itemId);
+      const previewPlateCrops = this.#previewPlateCrops.get(item.itemId);
       // §14 (LOOKS) Stage E — and the ACTIVE LOOK, through the ONE resolver rather than
       // off `#activeLooks` directly. The map holds only what an operator explicitly
       // picked; `activeLookId()` answers what the row is actually SHOWING (the pick, else
@@ -3209,6 +3216,7 @@ export class CasparRuntime {
         lookSourceOverride === undefined &&
         frozenAssignment === undefined &&
         plateVolumes === undefined &&
+        previewPlateCrops === undefined &&
         activeLookId === undefined &&
         // 🔴 `TIMING-WIRE-22` (e) — BOTH HALVES, and this is the half that bites. A row whose
         // ONLY override is a pass count would take the fast path above and be published without
@@ -3234,6 +3242,7 @@ export class CasparRuntime {
         ...(lookSourceOverride !== undefined && { lookSourceOverride }),
         ...(frozenAssignment !== undefined && { frozenAssignment }),
         ...(plateVolumes !== undefined && { plateVolumes }),
+        ...(previewPlateCrops !== undefined && { previewPlateCrops }),
         ...(activeLookId !== undefined && { activeLookId }),
         ...(timingOverride !== undefined && { timingOverride }),
         ...(pages !== undefined && { pages }),
@@ -3934,6 +3943,9 @@ export class CasparRuntime {
       if (item.plateVolumes !== undefined) {
         this.#plateVolumes.set(item.itemId, item.plateVolumes);
       }
+      if (item.previewPlateCrops !== undefined) {
+        this.#previewPlateCrops.set(item.itemId, item.previewPlateCrops);
+      }
       /*
         §14 (LOOKS) Stage E — and the ACTIVE LOOK, re-applied HERE for the same reason as
         its three neighbours: BEFORE any adopt-vs-re-ADD decision runs, so whatever this
@@ -4165,6 +4177,7 @@ export class CasparRuntime {
     this.#frozenAssignments.delete(itemId);
     this.#plateFits.delete(itemId);
     this.#liveCropFocuses.delete(itemId);
+    this.#previewPlateCrops.delete(itemId);
     this.#plateVolumes.delete(itemId);
     this.#activeLooks.delete(itemId);
     this.#passTimings.delete(itemId);
@@ -5437,12 +5450,16 @@ export class CasparRuntime {
     const routeSeat = planSeatsPlayoutRoute(plan);
     if (routeSeat !== undefined) {
       const epochBefore = this.#sourceCatalog.inputsEpoch;
+      const cropsBefore = this.#previewPlateCrops.get(itemId);
       const confirmed = await this.#ensureRouteEpoch();
       // The read is an await: re-ask what the take's first lines asked before it.
       if (this.#rehearsing.has(itemId)) return { accepted: false, errorCode: 'rehearsing' };
       if (this.#ownsLiveSeats(itemId)) return { accepted: false, errorCode: TAKE_ON_AIR_CODE };
       if (!confirmed) return this.#refuseRouteWaiting(itemId, routeSeat);
-      if (this.#sourceCatalog.inputsEpoch !== epochBefore) {
+      if (
+        this.#sourceCatalog.inputsEpoch !== epochBefore ||
+        this.#previewPlateCrops.get(itemId) !== cropsBefore
+      ) {
         plan = planTake();
         if (!plan.ok) return refusePlan(plan);
       }
@@ -7676,6 +7693,7 @@ export class CasparRuntime {
         // is "nothing", permanently, and pinning it costs nothing.
         resolvedFrom: {},
         plateFits: {},
+        previewCropTargets: [],
         // `B-178` — no plates, so nothing to report. Empty, never absent.
         fitProvenance: [],
       };
@@ -7736,6 +7754,8 @@ export class CasparRuntime {
       fitOverrides.set(a.plateId, a.fitMode);
     }
     const desired = lookPlateRects(carrier, lookId);
+    const masks = lookPlateMasks(carrier, lookId);
+    const previewCropTargets: PreviewPlateCropTarget[] = [];
     const entering = framesOfLook(bindings, lookId);
 
     /*
@@ -7860,15 +7880,6 @@ export class CasparRuntime {
         fitOverrides.get(frame.plateId),
         lookPlateFits(carrier, frame.lookId)[frame.plateId],
       );
-      const storedCrop = this.#liveCropFocuses
-        .get(itemId)
-        ?.get(cropKey(frame.lookId, frame.plateId));
-      const cropFocus =
-        frame.lookId === lookId && proposedCrop?.plateId === frame.plateId
-          ? proposedCrop.focus
-          : storedCrop?.producer === seat.producerArg
-            ? storedCrop.focus
-            : lookPlateFocuses(carrier, frame.lookId)[frame.plateId];
       const aspect = resolvePlateAspect({
         plateId: frame.plateId,
         plateLabel: plateLabel(carrier.sources, frame.plateId),
@@ -7938,7 +7949,7 @@ export class CasparRuntime {
         continue;
       }
 
-      const fit = this.liveSourceFitFor({
+      const fitInput = {
         channel: slot.channel,
         itemId,
         rect,
@@ -7946,8 +7957,58 @@ export class CasparRuntime {
         carriedDefaultPosition: carrier.defaultPosition,
         sourceAspect: aspect.aspect,
         fitMode: fitMode.mode,
-        cropFocus,
-      });
+      };
+      const cropAspect = sourceAspect(frame.source);
+      const box =
+        fitMode.mode === 'cover' && cropAspect !== null
+          ? this.liveSourceFitFor({ ...fitInput, sourceAspect: null })
+          : undefined;
+      const token =
+        box?.clip == null
+          ? undefined
+          : createHash('sha256')
+              .update(
+                JSON.stringify([
+                  itemId,
+                  templateId,
+                  slot.channel,
+                  frame.lookId,
+                  frame.plateId,
+                  frame.source.id,
+                  seat.producerArg,
+                  fitMode.mode,
+                  cropAspect,
+                  box,
+                  this.#channelSettings.rasterFor(slot.channel),
+                  masks[frame.plateId],
+                ]),
+              )
+              .digest('hex');
+      const stagedCrop = this.#previewPlateCrops.get(itemId)?.find((crop) => crop.token === token);
+      const liveCrop = this.#liveCropFocuses.get(itemId)?.get(cropKey(frame.lookId, frame.plateId));
+      const landedFocus = liveCrop?.producer === seat.producerArg ? liveCrop.focus : undefined;
+      const cropFocus =
+        frame.lookId === lookId && proposedCrop?.plateId === frame.plateId
+          ? proposedCrop.focus
+          : (landedFocus ??
+            stagedCrop?.focus ??
+            lookPlateFocuses(carrier, frame.lookId)[frame.plateId]);
+      const fit = this.liveSourceFitFor({ ...fitInput, cropFocus });
+      if (
+        token !== undefined &&
+        cropAspect !== null &&
+        box !== undefined &&
+        (fit.fill.width - box.fill.width > 1e-6 || fit.fill.height - box.fill.height > 1e-6)
+      ) {
+        previewCropTargets.push({
+          plateId: frame.plateId,
+          sourceId: frame.source.id,
+          token,
+          sourceAspect: cropAspect,
+          focus: cropFocus ?? DEFAULT_LIVE_CROP_FOCUS,
+          ...(stagedCrop !== undefined && landedFocus === undefined && { staged: true }),
+        });
+      }
       /*
         6.4 — a hole ENTIRELY outside the scene rect has an empty mask.
 
@@ -8054,7 +8115,7 @@ export class CasparRuntime {
     // Use the original producer for the first region, and tap that same layer for
     // the other regions. A layer route reads the frame before its mixer transform,
     // so every fragment keeps the same framing without reopening a device or stream.
-    for (const [plateId, mask] of Object.entries(lookPlateMasks(carrier, lookId))) {
+    for (const [plateId, mask] of Object.entries(masks)) {
       const main = activeMain.get(plateId);
       const rect = desired[plateId];
       if (main === undefined || rect === undefined) continue;
@@ -8118,6 +8179,7 @@ export class CasparRuntime {
         unresolved,
         resolvedFrom,
         plateFits,
+        previewCropTargets: [],
         fitProvenance: [...fitProvenance.values()],
       };
 
@@ -8297,6 +8359,12 @@ export class CasparRuntime {
       parked: allocated.filter((p) => p.held),
       resolvedFrom,
       plateFits,
+      previewCropTargets: previewCropTargets.filter(({ plateId }) => {
+        const main = activeMain.get(plateId);
+        return (
+          main !== undefined && intersectNormalizedRects(main.fit.fill, main.fit.clip) !== null
+        );
+      }),
       fitProvenance: [...fitProvenance.values()],
       ...(foregroundLayer !== undefined
         ? { foregroundSlot: { channel: slot.channel, layer: foregroundLayer } }
@@ -8929,6 +8997,50 @@ export class CasparRuntime {
       });
     }
     return targets;
+  }
+
+  previewPlateCrop(
+    itemId: string,
+    edit?: { token: string; focus: LiveCropFocus },
+  ): { ok: boolean; targets: PreviewPlateCropTarget[]; message?: string } {
+    const item = this.#reconciler.get(itemId);
+    const slot = this.#slots.get(itemId);
+    if (item == null || slot === undefined) {
+      return { ok: false, targets: [], message: 'This preview row is no longer available.' };
+    }
+    if (
+      this.#ownsLiveSeats(itemId) ||
+      this.#pendingRestore.has(itemId) ||
+      this.#restoreBlocked.has(itemId)
+    ) {
+      return { ok: false, targets: [], message: 'This row is not ready for preview framing.' };
+    }
+
+    const lookId = this.activeLookId(itemId);
+    const plan = this.#planLiveSeating(itemId, slot, lookId, 'entering-look', 'fresh');
+    if (!plan.ok) return { ok: false, targets: [], message: plan.message };
+    const targets = plan.previewCropTargets;
+    if (edit === undefined) return { ok: true, targets };
+    if (!this.#rehearsing.has(itemId)) {
+      return { ok: false, targets, message: 'Put this row on Preview before framing it.' };
+    }
+    const target = targets.find(({ token }) => token === edit.token);
+    if (target === undefined) {
+      return { ok: false, targets, message: 'The preview plate changed. Frame its current input.' };
+    }
+
+    const prior = this.#previewPlateCrops.get(itemId) ?? [];
+    const crops = [...prior.filter(({ token }) => token !== edit.token), edit];
+    this.#previewPlateCrops.set(itemId, crops.slice(-MAX_PREVIEW_PLATE_CROPS));
+    // A new off-air edit supersedes an older PGM pan from a previous take of this plate.
+    this.#liveCropFocuses.get(itemId)?.delete(cropKey(lookId, target.plateId));
+    this.#markDirty(itemId);
+    return {
+      ok: true,
+      targets: targets.map((entry) =>
+        entry === target ? { ...entry, focus: edit.focus, staged: true } : entry,
+      ),
+    };
   }
 
   async pgmPlateCrop(
@@ -14757,6 +14869,7 @@ export class CasparRuntime {
     this.#frozenAssignments.delete(itemId);
     this.#plateFits.delete(itemId);
     this.#liveCropFocuses.delete(itemId);
+    this.#previewPlateCrops.delete(itemId);
     // 6.5f — and the audio intent. A re-used itemId inheriting a RAISED plate is
     // the worst of the three: it puts a microphone on air that nobody asked for.
     this.#plateVolumes.delete(itemId);

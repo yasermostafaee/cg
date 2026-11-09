@@ -65,15 +65,41 @@ function freeUdpPort(): Promise<number> {
   });
 }
 
-async function boot(): Promise<BridgeHandle> {
+async function boot(withCropSource = false): Promise<BridgeHandle> {
   const oscPort = await freeUdpPort();
-  mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 10 });
+  mock = await createMock({
+    amcpPort: 0,
+    oscPort,
+    oscHost: '127.0.0.1',
+    oscHz: 10,
+    ...(withCropSource && { channels: 2 }),
+  });
   const connection: ConnectionConfig = {
     servers: { A: { host: '127.0.0.1', amcpPort: mock.amcpPort, oscPort } },
     strategy: 'mirror-sync',
     autoFailoverEnabled: false,
   };
-  bridge = await createBridge({ port: 0, connection, fixedLayers: BANK });
+  bridge = await createBridge({
+    port: 0,
+    connection,
+    fixedLayers: BANK,
+    ...(withCropSource && {
+      sourceCatalog: {
+        layerRange: { start: 60, end: 79 },
+        sources: [
+          {
+            id: 'crop-source',
+            name: 'Crop source',
+            format: '1080i5000',
+            producer: { kind: 'route', channel: 2 },
+          },
+        ],
+      },
+      sourceAssignments: {
+        assignments: [{ templateId: 'tpl-pvw-crop', plateId: 'guest', sourceId: 'crop-source' }],
+      },
+    }),
+  });
   return bridge;
 }
 
@@ -208,4 +234,96 @@ test('🔴 a template imported in profile A is rehearsed in a fresh profile B, f
 
   await b.context().close();
   await c.context().close();
+});
+
+test('D-178 — a saved PVW crop survives leaving Preview and is applied in the first Take FILL', async ({
+  page,
+}) => {
+  const handle = await boot(true);
+  const engine = mock;
+  if (engine === null) throw new Error('Test engine is unavailable');
+  await handle.runtime.whenServerHealthy(15_000);
+  const cropItem = 'pvw-crop-item';
+  handle.runtime.templateImport(
+    {
+      templateId: 'tpl-pvw-crop',
+      name: 'PVW crop fixture',
+      templateType: 'custom',
+      fields: [],
+      liveSources: {
+        resolution: { width: 1920, height: 1080 },
+        defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
+        sources: [
+          {
+            elementId: 'guest-el',
+            sourceId: 'guest',
+            dynamic: false,
+            fitMode: 'cover',
+            rect: { x: 720, y: 270, width: 480, height: 540 },
+          },
+        ],
+      },
+    },
+    HTML,
+    1,
+  );
+  expect(
+    await handle.runtime.loadFixed({ channel: 1, layer: 59 }, cropItem, 'tpl-pvw-crop', {}),
+  ).toMatchObject({ accepted: true });
+  await openConsole(page, handle.url);
+  await showMonitors(page);
+  const pvw = page.getByRole('region', { name: 'PREVIEW (PVW)' });
+  const plateRow = page.getByRole('region', { name: 'Layers' }).locator('[data-layer="59"]');
+  const take = plateRow.getByRole('button', { name: 'PLAY', exact: true });
+  await plateRow.getByRole('button', { name: 'ON PVW', exact: true }).click();
+  await expect(take).toBeDisabled();
+  await pvw.getByRole('button', { name: 'PLAY', exact: true }).click();
+  const pan = pvw.getByRole('button', { name: 'Pan preview input', exact: true });
+  await pan.click();
+  const crop = pvw.locator('[data-pan-practice-crop]');
+  const source = pvw.locator('[data-pan-practice-picture]');
+  const saved = pvw.locator('[data-pan-crop-state="saved"]');
+  await expect(pvw.getByRole('button', { name: 'Pan crop guide in guest' })).toBeVisible();
+  const [sourceBox, cropBox] = await Promise.all([source.boundingBox(), crop.boundingBox()]);
+  if (sourceBox === null || cropBox === null) throw new Error('Missing crop geometry');
+  const x = cropBox.x + cropBox.width / 2;
+  const y = cropBox.y + cropBox.height / 2;
+  const wireStart = engine.receivedCommands().length;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + sourceBox.width / 8, y, { steps: 5 });
+  await page.mouse.up();
+  await expect(saved).toBeVisible();
+  const readLeft = () => crop.evaluate((element) => Number.parseFloat(element.style.left));
+  await expect.poll(readLeft).toBeCloseTo(37.5, 0);
+
+  await pan.click();
+  await expect(crop).toHaveCount(0);
+  await pan.click();
+  await expect(pvw.getByRole('button', { name: 'Pan crop guide in guest' })).toBeVisible();
+  await expect(saved).toBeVisible();
+  await expect.poll(readLeft).toBeCloseTo(37.5, 0);
+  const staged = engine
+    .receivedCommands()
+    .slice(wireStart)
+    .map(({ line }) => line);
+  expect(staged.some((line) => /(?:^| )(?:MIXER 1-60|PLAY 1-60) /.test(line))).toBe(false);
+
+  await plateRow.getByRole('button', { name: 'OFF PVW', exact: true }).click();
+  await take.click();
+  const slot = { channel: 1, layer: 60 };
+  await expect.poll(() => engine.layerState(slot)?.fill?.x).toBeCloseTo(0.1875, 2);
+  await expect.poll(() => engine.layerState(slot)?.opacity).toBe(1);
+  const wire = engine
+    .receivedCommands()
+    .slice(wireStart)
+    .map(({ line }) => line);
+  const fill = wire.findIndex((line) => /(?:^| )MIXER 1-60 FILL /.test(line));
+  const play = wire.findIndex((line) => /(?:^| )PLAY 1-60 /.test(line));
+  const reveal = wire.findIndex((line) => /(?:^| )MIXER 1-60 OPACITY 1(?: |$)/.test(line));
+  expect(fill).toBeGreaterThanOrEqual(0);
+  const xSent = /FILL ([\d.]+)/.exec(wire[fill] ?? '')?.[1];
+  expect(Number(xSent)).toBeCloseTo(0.1875, 2);
+  expect(play).toBeGreaterThan(fill);
+  expect(reveal).toBeGreaterThan(play);
 });

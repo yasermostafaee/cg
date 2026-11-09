@@ -143,11 +143,12 @@ describe('B-153 — the bridge is asked what it can do, at connect', () => {
   it('🔴 4.4 — a bridge missing channels is named at CONNECT, before any button is pressed', async () => {
     const all = ipc.runtimeRequestChannelNames(ipc);
     const withheld = ['stack.set-active-look', 'stack.swap-live-source'];
+    const optional = ipc.StackPreviewPlateCropChannel.name;
     runtime = new WebSocketRuntime('ws://fake', {
       createWebSocket: () =>
         fakeBridge((channel) =>
           channel === ipc.BridgeCapabilitiesChannel.name
-            ? { channels: all.filter((n) => !withheld.includes(n)) }
+            ? { channels: all.filter((n) => n !== optional && !withheld.includes(n)) }
             : 'unknown-channel',
         ),
     });

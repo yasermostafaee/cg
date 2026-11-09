@@ -10,10 +10,11 @@ which part of the live input stays visible while the plate and picture proportio
 - Support a normalized focus for the overflowing axis of a Live Source plate.
 - Carry it per look and use the one shared fit calculation for the authoring poster and Bridge geometry.
 - Keep existing files byte-for-byte centred when the field is absent; ignore focus under `contain`.
-- Keep Pan in PVW for review with a labelled practice image on the active Crop edges plate.
-- Show the movable crop window inside the full practice picture and offer Centre.
+- Keep Pan in PVW with a proportional guide on the active Crop edges plate and offer Centre.
+- Save the crop for its row, look, plate and assigned input when Bridge can verify the geometry.
+- Use the saved crop in the normal Take before revealing the source. Keep the PVW safety interlock.
 - Defer the PGM operator control until an in-place editor can show the uncropped source.
-- Add accurate PVW focus staging when the C-023 feed includes the source picture mapping.
+- Show the actual source in the PVW editor when Playout supplies the source picture mapping.
 
 ## Capabilities
 

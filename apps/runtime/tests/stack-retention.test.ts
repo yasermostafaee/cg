@@ -649,9 +649,10 @@ it('B-107: the projection ROUND-TRIPS, so displaying offline can never corrupt t
   // break it silently.
   const retention = new StackRetentionStore(new MemoryWorkspace());
   await retention.hydrate();
+  const previewPlateCrops = [{ token: 'a'.repeat(64), focus: { x: 0.25, y: 0.5 } }];
   const source: StackItemState[] = [
     { ...ON_AIR_ITEM, itemId: 'a', status: 'on-air' },
-    { ...ON_AIR_ITEM, itemId: 'b', status: 'loaded' },
+    { ...ON_AIR_ITEM, itemId: 'b', status: 'loaded', previewPlateCrops },
     { ...ON_AIR_ITEM, itemId: 'c', status: 'idle' },
     { ...ON_AIR_ITEM, itemId: 'd', status: 'error', errorCode: 'no-layer' },
   ];
@@ -668,6 +669,7 @@ it('B-107: the projection ROUND-TRIPS, so displaying offline can never corrupt t
   // Project it out, then mirror the projection straight back in.
   await retention.mirror(await rt.stack.snapshot());
   expect(retention.items().map((i) => i.state)).toEqual(before);
+  expect(retention.items()[1]?.previewPlateCrops).toEqual(previewPlateCrops);
   expect(retention.items()[3]?.errorCode).toBe('no-layer');
 });
 
@@ -742,6 +744,7 @@ it('🔴 every OPEN-AXIS field a published row carries survives retainedFromStac
     activeLookId: 'solo',
     lookSourceOverride: { solo: { 'l-1': 'studio-3' } },
     frozenAssignment: { 'l-1': 'studio-1' },
+    previewPlateCrops: [{ token: 'a'.repeat(64), focus: { x: 0.25, y: 0.5 } }],
     // `TIMING-BUILD-21` §2(a) — the row's passes/delay override. Added here the day the field
     // was added, because this guard refuses to run against a fixture that does not populate
     // every carriable key: an unpopulated field would make the assertion below pass vacuously.

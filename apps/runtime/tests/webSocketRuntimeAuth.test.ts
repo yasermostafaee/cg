@@ -4,6 +4,7 @@ import { MemoryWorkspace } from '@cg/storage';
 import { LibraryStore } from '../src/platform/library/LibraryStore.js';
 import { PlayoutSignInError } from '../src/platform/playoutSession.js';
 import { WebSocketRuntime, type WebSocketLike } from '../src/platform/WebSocketRuntime.js';
+import { BridgeSkewError } from '../src/shared/bridgeSkew.js';
 import { installMemoryStorage } from './support/localStorage.js';
 
 /**
@@ -1328,5 +1329,90 @@ describe('CENTRAL-BRIDGE-01 rule 8 — the connection check, native or not', () 
       playoutAddress: 'http://192.0.2.10:8080',
       origin: 'http://tauri.localhost',
     });
+  });
+});
+
+describe('D-178 — preview framing transport', () => {
+  it('reads a crop target and sends its staged focus only through the preview channel', async () => {
+    const bridge = new FakeBridge();
+    bridge.capabilities = { channels: ipc.runtimeRequestChannelNames(ipc) };
+    const runtime = start(bridge);
+    bridge.socket().open();
+    await settle();
+
+    const channel = 'stack.preview-plate-crop';
+    const target = {
+      plateId: 'plate-1',
+      token: 'a'.repeat(64),
+      sourceAspect: 16 / 9,
+      focus: { x: 0.5, y: 0.5 },
+    };
+    const itemId = 'ready-layout';
+    const sent = bridge.socket().sent;
+    const initialCount = sent.length;
+    bridge.succeed.set(channel, { ok: true, targets: [target] });
+    await expect(runtime.stack.previewPlateCrop({ itemId })).resolves.toEqual({
+      ok: true,
+      targets: [target],
+    });
+
+    const edit = { token: target.token, focus: { x: 0.25, y: 0.5 } };
+    bridge.succeed.set(channel, { ok: true, targets: [{ ...target, focus: edit.focus }] });
+    await expect(runtime.stack.previewPlateCrop({ itemId, edit })).resolves.toEqual({
+      ok: true,
+      targets: [{ ...target, focus: edit.focus }],
+    });
+    expect(sent.slice(initialCount)).toEqual([
+      expect.objectContaining({ type: 'request', channel, payload: { itemId } }),
+      expect.objectContaining({ type: 'request', channel, payload: { itemId, edit } }),
+    ]);
+  });
+
+  it('keeps earlier builds of the same release compatible without sending unsupported crop requests', async () => {
+    const bridge = new FakeBridge();
+    const channel = 'stack.preview-plate-crop';
+    bridge.capabilities = {
+      channels: ipc.runtimeRequestChannelNames(ipc).filter((name) => name !== channel),
+    };
+    const runtime = start(bridge);
+    bridge.socket().open();
+    const itemId = 'ready-layout';
+    // The call arrives while the capability handshake is still in flight.
+    const read = runtime.stack.previewPlateCrop({ itemId });
+    await settle();
+
+    const unsupported = {
+      ok: false,
+      targets: [],
+      message: 'Saving preview framing for Take requires an updated CG Bridge.',
+    };
+    await expect(read).resolves.toEqual(unsupported);
+    await expect(
+      runtime.stack.previewPlateCrop({
+        itemId,
+        edit: { token: 'a'.repeat(64), focus: { x: 0.25, y: 0.5 } },
+      }),
+    ).resolves.toEqual(unsupported);
+    expect(wireOf(bridge)).not.toContain(channel);
+    expect(runtime.link.skew()).toBeNull();
+    expect(runtime.link.versionMismatch()).toBeNull();
+  });
+
+  it('surfaces a bridge refusal when the bridge advertised crop support', async () => {
+    const bridge = new FakeBridge();
+    const channel = 'stack.preview-plate-crop';
+    bridge.capabilities = { channels: ipc.runtimeRequestChannelNames(ipc) };
+    const runtime = start(bridge);
+    bridge.socket().open();
+    await settle();
+
+    const initialCount = wireOf(bridge).length;
+    const request = runtime.stack.previewPlateCrop({ itemId: 'ready-layout' });
+    await expect(request).rejects.toBeInstanceOf(BridgeSkewError);
+    await expect(request).rejects.toMatchObject({
+      channel,
+      message: expect.stringMatching(/older build/i),
+    });
+    expect(wireOf(bridge).slice(initialCount)).toEqual([channel]);
   });
 });

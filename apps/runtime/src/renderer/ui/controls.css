@@ -489,7 +489,7 @@
   flex: 1;
 }
 
-/* D-178 · show the full practice source behind its movable crop. */
+/* D-178 · show the full guide or practice image behind its movable crop. */
 .cg-pan-draft-layer {
   pointer-events: none;
 }
@@ -555,10 +555,15 @@
   color: var(--r-text);
   border-radius: var(--r-radius-sm);
   white-space: nowrap;
+  pointer-events: none;
 }
-.cg-pan-draft__label bdi {
+.cg-pan-draft__label bdi,
+.cg-pan-draft__label > span {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.cg-pan-draft[data-pan-crop-state='error'] .cg-pan-draft__label {
+  color: var(--r-caution-text);
 }
 
 /*

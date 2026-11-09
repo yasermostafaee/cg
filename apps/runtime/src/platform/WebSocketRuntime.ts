@@ -61,6 +61,7 @@ import {
   StackStopChannel,
   StackSetPlateVolumeChannel,
   StackPgmPlateCropChannel,
+  StackPreviewPlateCropChannel,
   StackSetPlateVolumesChannel,
   StackSilenceAllLivePlatesChannel,
   StackSilenceChannelLivePlatesChannel,
@@ -502,7 +503,7 @@ export class WebSocketRuntime implements RuntimeBridge {
    * answer is answered by its own skew. That is still how such a bridge is answered — quickly, as
    * `unknown channel` — and it is now also refused as another release.
    */
-  #capsHandshake: Promise<void> | null = null;
+  #capsHandshake: Promise<ReadonlySet<string> | null> | null = null;
   /**
    * 🔴 The bridge has told us it is refusing this console's intents for want of a principal.
    *
@@ -1016,10 +1017,11 @@ export class WebSocketRuntime implements RuntimeBridge {
    * Never throws: a guard that can break the connect path is a guard that takes the station
    * off air. Anything unexpected resolves to "no skew known".
    */
-  async #checkSkew(): Promise<void> {
+  async #checkSkew(): Promise<ReadonlySet<string> | null> {
     try {
       const caps = await this.#invoke(ipcChannels.BridgeCapabilitiesChannel, {});
       const { channels } = caps;
+      const routed = new Set(channels);
       /*
         `C-037` — the auth MODE rides the answer this call already makes. A second round trip
         would be a second thing that can fail on the connect path, and `B-153` put this
@@ -1044,10 +1046,10 @@ export class WebSocketRuntime implements RuntimeBridge {
         // `DELTA-RUN-NEXT-VERSION-01-C` — CG Bridge's machine clock; an older bridge says nothing.
         bridgeClock: caps.clock ?? null,
       });
-      const routed = new Set(channels);
+      // D-178 — a compatible Bridge may offer PVW practice without saving the crop for Take.
       const missing = ipcChannels
         .runtimeRequestChannelNames(ipcChannels)
-        .filter((n) => !routed.has(n));
+        .filter((n) => n !== StackPreviewPlateCropChannel.name && !routed.has(n));
       this.#setSkew(missing.length === 0 ? null : missing);
       // `CENTRAL-BRIDGE-01` — the release line, from the same answer (no second round trip).
       this.#setVersionMismatch(
@@ -1055,6 +1057,7 @@ export class WebSocketRuntime implements RuntimeBridge {
           ? null
           : ipcChannels.versionMismatchRefusal(this.#consoleVersion, caps.bridgeVersion),
       );
+      return routed;
     } catch (err) {
       if (err instanceof BridgeSkewError) {
         // The bridge predates the handshake itself. It cannot tell us WHICH channels it
@@ -1065,11 +1068,12 @@ export class WebSocketRuntime implements RuntimeBridge {
         this.#setVersionMismatch(
           ipcChannels.versionMismatchRefusal(this.#consoleVersion, undefined),
         );
-        return;
+        return null;
       }
       // A timeout, a disconnect mid-handshake, anything else: we do not KNOW there is skew,
       // and claiming one would be its own false alarm on a healthy station.
       this.#setSkew(null);
+      return null;
     }
   }
 
@@ -1864,6 +1868,23 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#invoke(StackSetPlateVolumeChannel, req),
     pgmPlateCrop: (req: ChannelRequest<typeof StackPgmPlateCropChannel>) =>
       this.#invoke(StackPgmPlateCropChannel, req),
+    previewPlateCrop: async (
+      req: ChannelRequest<typeof StackPreviewPlateCropChannel>,
+    ): Promise<ChannelResponse<typeof StackPreviewPlateCropChannel>> => {
+      const routed = await this.#capsHandshake;
+      if (
+        this.#status === 'live' &&
+        this.#versionMismatch === null &&
+        routed?.has(StackPreviewPlateCropChannel.name) === false
+      ) {
+        return {
+          ok: false,
+          targets: [],
+          message: 'Saving preview framing for Take requires an updated CG Bridge.',
+        };
+      }
+      return this.#invoke(StackPreviewPlateCropChannel, req);
+    },
     // `add-multibox-audio` — the MAP door: FADER, ON/OFF and SOLO all arrive here.
     setPlateVolumes: (req: ChannelRequest<typeof StackSetPlateVolumesChannel>) =>
       this.#invoke(StackSetPlateVolumesChannel, req),
@@ -1964,6 +1985,7 @@ export class WebSocketRuntime implements RuntimeBridge {
         ...(i.errorCode !== undefined && { errorCode: i.errorCode }),
         ...(i.slot !== undefined && { slot: i.slot }),
         ...(i.position !== undefined && { position: i.position }),
+        ...(i.previewPlateCrops !== undefined && { previewPlateCrops: i.previewPlateCrops }),
       }),
     );
   }

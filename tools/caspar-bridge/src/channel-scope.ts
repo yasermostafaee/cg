@@ -388,6 +388,7 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'pages.put': INTENT,
   'stack.out': INTENT,
   'stack.pgm-plate-crop': INTENT,
+  'stack.preview-plate-crop': INTENT,
   'stack.remove': INTENT,
   'stack.remove-all': INTENT,
   'stack.set-active-look': INTENT,

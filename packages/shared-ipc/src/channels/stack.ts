@@ -3,6 +3,7 @@ import {
   FieldValuesSchema,
   IdSchema,
   LayerSlotSchema,
+  LiveCropFocusSchema,
   LiveSourceLookOverrideSchema,
   PositionSchema,
   StackItemStateSchema,
@@ -494,6 +495,30 @@ export const StackPgmPlateCropChannel = defineChannel(
   z.object({
     ok: z.boolean(),
     targets: z.array(PgmPlateCropTargetSchema),
+    message: z.string().optional(),
+  }),
+);
+
+const PreviewPlateCropTargetSchema = z.object({
+  plateId: z.string(),
+  sourceId: z.string().optional(),
+  token: z.string().regex(/^[0-9a-f]{64}$/),
+  sourceAspect: z.number().positive(),
+  focus: LiveCropFocusSchema,
+  staged: z.boolean().optional(),
+});
+export type PreviewPlateCropTarget = z.infer<typeof PreviewPlateCropTargetSchema>;
+
+/** Inspect the next Take's crop targets, or stage an exact framing without sending AMCP. */
+export const StackPreviewPlateCropChannel = defineChannel(
+  'stack.preview-plate-crop',
+  z.object({
+    itemId: IdSchema,
+    edit: PreviewPlateCropTargetSchema.pick({ token: true, focus: true }).optional(),
+  }),
+  z.object({
+    ok: z.boolean(),
+    targets: z.array(PreviewPlateCropTargetSchema),
     message: z.string().optional(),
   }),
 );

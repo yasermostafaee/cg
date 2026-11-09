@@ -55,3 +55,12 @@
 - [x] 5.3 Show an accent-filled, pressed Pan toggle in the PVW header while editing.
 - [x] 5.4 Verify horizontal and vertical practice drags and Center in Chromium.
 - [x] 5.5 Strengthen the blue PVW Pan guide around the crop with a dark contrast edge.
+
+## 6. PVW crop handoff to Take
+
+- [x] 6.1 Carry an authenticated row-scoped crop read and save using the existing seating plan.
+- [x] 6.2 Persist accepted edits for the matching look, plate and input, and preserve the rehearsal interlock.
+- [x] 6.3 Draw and save the proportional guide when known geometry is available. Keep practice for unknown geometry or older Bridges.
+- [x] 6.4 Chromium and Bridge checks passed for restoring the guide, isolating stale scopes, and applying the crop in the first FILL before reveal on Take.
+- [ ] 6.5 Record carrying Linux E2E and verify the workflow on an updated target Bridge.
+- [x] 6.6 Verify an older compatible Bridge keeps Pan in practice mode without a crop request or a global warning for that optional capability.

@@ -51,3 +51,28 @@ return without Pan controls or crop guides.
 - **WHEN** a wider source is cropped into a narrower plate **THEN** the crop uses the source height and can move horizontally
 - **THEN** the source and crop guide keep their respective ratios throughout the gesture
 - **WHEN** both ratios match **THEN** the whole image is visible and there is no panning range
+
+### Requirement: A verified PVW crop reaches the matching Take
+
+CG Control SHALL allow staging a normalized crop for an off-air rehearsing row with a visible
+cover-fit plate and known source geometry. Bridge SHALL persist it with the row, matching its
+look, plate, source and geometry before applying it. The existing rehearsal interlock SHALL
+require leaving PVW before Take.
+
+#### Scenario: A staged crop is the first fit applied on air
+
+- **GIVEN** the active look has a visible Crop edges plate with known source geometry
+- **WHEN** the operator releases a crop drag or presses Center **THEN** the accepted focus is saved without a mixer or producer command
+- **WHEN** the operator reopens Pan **THEN** the saved crop is restored for the same target
+- **WHEN** the operator leaves PVW and takes the row **THEN** the first hidden FILL uses that crop before the producer becomes visible
+
+#### Scenario: An unavailable or stale crop cannot affect another input
+
+- **WHEN** Bridge cannot verify the input geometry **THEN** a generic Pan guide remains practice only
+- **WHEN** the look, plate, source or fit has changed **THEN** the old target cannot stage a new edit on the changed input
+- **WHEN** Take resolves a different target **THEN** the earlier stage does not override that target's authored or centred crop
+
+#### Scenario: A previous Bridge still supports PVW practice
+
+- **WHEN** Bridge capabilities omit the optional PVW crop channel **THEN** the console offers practice, with the reason shown in Pan
+- **AND** the absent optional channel sends no crop request and does not raise the global Bridge compatibility warning

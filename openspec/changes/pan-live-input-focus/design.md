@@ -21,9 +21,10 @@ The Designer Inspector has no crop-focus editor. Previously authored values rema
 scene and on export. The planned CG Control gesture targets the visible `cover` plate on its source
 picture. Movement is clamped to the overflowing axis and keeps the authored plate fixed.
 
-PVW needs the real input picture from C-023. Its focus is local to the preview until Take, with zero
-programme writes from dragging. The displayed preview raster and input aspect must be known before
-converting pointer coordinates. Neither a Designer poster nor a PVW placeholder substitutes for it.
+PVW can save normalized focus for a source whose aspect and fit Bridge has resolved. The current
+guide displays that aspect and labels the absence of a live picture. Programme writes begin on
+the existing Take path after the operator exits rehearsal. The full source picture needs the
+active rectangle and pixel aspect ratio from Playout.
 
 ## Operator review before the picture mapping
 
@@ -35,6 +36,21 @@ move it along the overflowing axis, and Center restores its starting position. T
 belongs to the rendered control and is discarded when it closes. It starts no input check, performs
 no Bridge writes and cannot become an Inspector draft or reach Take. The real PVW gesture still
 requires the active source rectangle and sample aspect ratio from Playout.
+
+## Save a PVW crop for Take
+
+Bridge reads eligible Crop edges plates from the same resolved seating plan used by Take. A target
+token binds the crop to the row, look, plate, input and fit geometry. Stage an edit only during
+rehearsal. Saving updates the row and leaves the mixer and input transport alone. The stage is
+available when returning to Pan and applies to the first seating plan of the matching Take. A stale
+target cannot set a crop on a different input. Unknown geometry offers only the generic practice guide.
+
+The row's existing interlock still requires OFF PVW before PLAY. A saved Center is explicit centred
+focus for that crop, including on a plate with a different authored default.
+
+The console treats the staging route as an optional capability. An older Bridge keeps the practice
+guide available and explains inside Pan why saving is unavailable. Required routes still use the
+global compatibility check.
 
 ## PGM deferred
 
