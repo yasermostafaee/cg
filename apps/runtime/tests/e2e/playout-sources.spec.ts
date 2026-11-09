@@ -1,4 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
+import { FRAME_A, FRAME_B } from '../../../../tools/caspar-bridge/tests/support/fake-pgm-feed.js';
 import { E2E_PLAYOUT, expect, test } from './fixtures/runtime.js';
 
 /**
@@ -369,6 +370,132 @@ test('Media: visible posters decode separately, and a clip without a poster can 
   await expect(panel).toHaveCount(0);
   await expect(field).toHaveAttribute('data-picker-value', 'md-m-clip-003');
   expect((await readState()).inputChecks).toBe(0);
+});
+
+test.describe('live source thumbnails', () => {
+  test.use({
+    playoutSources: {
+      ...E2E_PLAYOUT,
+      inputs: {
+        ...E2E_PLAYOUT.inputs,
+        inputs: [
+          ...E2E_PLAYOUT.inputs.inputs,
+          {
+            id: 'fixture-playlist',
+            name: 'Clean Playlist',
+            casparHost: '127.0.0.1',
+            producer: { kind: 'route', channel: 1, layer: 7 },
+            available: true,
+            playlistOf: { casparHost: '127.0.0.1', casparChannel: 1 },
+            compatibleChannels: [{ casparHost: '127.0.0.1', casparChannel: 1 }],
+          },
+          ...Array.from({ length: 6 }, (_, index) => ({
+            id: `extra-${index + 1}`,
+            name: `Extra ${index + 1}`,
+            producer: { kind: 'ndi', source: `Extra ${index + 1}` },
+          })),
+        ],
+      },
+    },
+  });
+
+  test('only visible rows request pictures and filtering or closing drops thumbnail demand', async ({
+    app,
+  }) => {
+    const page = app.page;
+    const dialog = await openDefaults(app);
+    const liveJpeg = FRAME_A.toString('base64');
+    const playlistJpeg = FRAME_B.toString('base64');
+    await page.evaluate(
+      ({ liveJpeg, playlistJpeg }) => {
+        const batches: { channel: number; ids: string[]; time: number }[] = [];
+        const state = { batches, checks: 0 };
+        Object.assign(window, { sourcePreviewTest: state });
+        window.cg.sourcePreviews = {
+          pvw: () => Promise.resolve({ frames: [] }),
+          thumbnails: ({ channel, sourceIds }) => {
+            batches.push({ channel, ids: sourceIds, time: performance.now() });
+            return Promise.resolve({
+              frames: sourceIds.map((sourceId) => ({
+                sourceId,
+                signal:
+                  sourceId === 'in-studio-2'
+                    ? 'absent'
+                    : sourceId === 'in-fixture-playlist'
+                      ? 'unknown'
+                      : 'present',
+                jpegBase64: sourceId === 'in-fixture-playlist' ? playlistJpeg : liveJpeg,
+                width: 64,
+                height: 36,
+              })),
+            });
+          },
+        };
+        const start = window.cg.livePreview.start;
+        window.cg.livePreview.start = (request) => {
+          state.checks++;
+          return start(request);
+        };
+      },
+      { liveJpeg, playlistJpeg },
+    );
+    await page.clock.install();
+    const readState = () =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              sourcePreviewTest: {
+                batches: { channel: number; ids: string[]; time: number }[];
+                checks: number;
+              };
+            }
+          ).sourcePreviewTest,
+      );
+    expect(await readState()).toEqual({ batches: [], checks: 0 });
+    const field = dialog.locator('[data-defaults-select="l-1"]');
+    await field.click();
+    const panel = picker(page);
+    const tile = (id: string) =>
+      panel
+        .locator('.cg-vlist-action-row', { has: page.locator(`[data-picker-input="${id}"]`) })
+        .locator('[data-input-thumbnail]');
+    const live = tile('in-studio-1').locator('img');
+    const playlist = tile('in-fixture-playlist').locator('img');
+    await expect(live).toHaveAttribute('src', `data:image/jpeg;base64,${liveJpeg}`);
+    await expect(playlist).toHaveAttribute('src', `data:image/jpeg;base64,${playlistJpeg}`);
+    expect(
+      await live.evaluate(async (image: HTMLImageElement) => {
+        await image.decode();
+        return image.naturalWidth;
+      }),
+    ).toBe(64);
+    await expect(tile('in-studio-2')).toHaveText('No signal');
+    await expect(tile('in-studio-2').locator('img')).toHaveCount(0);
+    const { batches: initial } = await readState();
+    expect(initial[0]?.channel).toBe(1);
+    expect(initial[0]?.ids).toEqual(expect.arrayContaining(['in-studio-1', 'in-fixture-playlist']));
+    expect(initial.flatMap((batch) => batch.ids)).not.toContain('in-extra-6');
+
+    await panel.getByRole('textbox', { name: 'Filter inputs' }).fill('Extra 6');
+    await expect(tile('in-extra-6').locator('img')).toBeVisible();
+    const { batches, checks } = await readState();
+    expect(batches.at(-1)?.ids).toEqual(['in-extra-6']);
+    expect(batches.every((batch) => batch.ids.length <= 8)).toBe(true);
+    expect(
+      batches.every(
+        (batch, index) => index === 0 || batch.time - (batches[index - 1]?.time ?? 0) >= 999,
+      ),
+    ).toBe(true);
+    expect(checks).toBe(0);
+    await expect(field).toHaveAttribute('data-picker-value', '');
+
+    await page.keyboard.press('Escape');
+    await expect(panel).toHaveCount(0);
+    const closed = await readState();
+    await page.clock.runFor(1_100);
+    expect(await readState()).toEqual(closed);
+  });
 });
 
 test('🔴 the owner’s take: a plate on an input and a plate on a media item — it plays, and Look inputs name both', async ({

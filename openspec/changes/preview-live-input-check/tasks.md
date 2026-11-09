@@ -71,5 +71,11 @@
 ## 6. Playout 2.18.17 adoption
 
 - [x] 6.1 Verify the [new handoff](../../../docs/integration/playout/source-previews-2.18.17-adoption.md) and station capability boundary.
-- [ ] 6.2 Implement the authenticated snapshot client and shared picker demand without opening receivers.
-- [ ] 6.3 Add independent PVW feeds inside the authored plate paint order and verify the station.
+- [x] 6.2 Implement the authenticated snapshot client and shared picker demand without opening receivers.
+- [x] 6.3 Compose independent PVW snapshots inside the authored plate paint order.
+- [x] 6.4 Signed Bridge-to-Engine loopback verified distinct live and Playlist frames, channel
+      grants, absence handling, exact lease cleanup and no AMCP writes.
+- [ ] 6.5 Confirm authenticated PVW and thumbnail pictures on the target station with a compatible Bridge.
+- [ ] 6.6 Verify the carrying Linux browser job.
+- [x] 6.7 Chromium verified distinct PVW pictures, foreground and mask pixels, applied source
+      changes, removal of a stale image on signal loss, and visible-only thumbnail demand.

@@ -63,6 +63,8 @@ import type {
   PgmReturnStatusChannel,
   LivePreviewHandle,
   LivePreviewStartChannel,
+  SourcePreviewPvwChannel,
+  SourcePreviewThumbnailsChannel,
   LivePreviewStatus,
   LivePreviewStream,
   LockEngageChannel,
@@ -806,6 +808,15 @@ export interface RuntimeBridge {
     status(req: LivePreviewHandle): Promise<LivePreviewStatus>;
     stop(req: LivePreviewHandle): Promise<{ ok: boolean }>;
     url(req: LivePreviewHandle, stream: LivePreviewStream): Promise<string | null>;
+  };
+
+  sourcePreviews: {
+    pvw(
+      req: ChannelRequest<typeof SourcePreviewPvwChannel>,
+    ): Promise<ChannelResponse<typeof SourcePreviewPvwChannel>>;
+    thumbnails(
+      req: ChannelRequest<typeof SourcePreviewThumbnailsChannel>,
+    ): Promise<ChannelResponse<typeof SourcePreviewThumbnailsChannel>>;
   };
 
   lock: {

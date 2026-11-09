@@ -368,6 +368,8 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'livePreview.status': INTENT,
   'livePreview.stop': INTENT,
   'livePreview.ticket': INTENT,
+  'sourcePreviews.pvw': INTENT,
+  'sourcePreviews.thumbnails': INTENT,
   'lock.engage': INTENT,
   'lock.release': INTENT,
   'playoutLayers.clear': INTENT,

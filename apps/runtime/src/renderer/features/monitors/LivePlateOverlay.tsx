@@ -6,6 +6,7 @@ import { Icon } from '../../ui/Icon.js';
 import { SourceLabel } from '../sources/SourceLabel.js';
 import { frameBox } from './rehearsalFrames.js';
 import type { PlatePlacement } from './livePlateGeometry.js';
+import type { PvwSourceFrame } from './usePvwSourceFrames.js';
 
 /**
  * R-049/B-424 — mark each live plate while leaving its authored fallback visible.
@@ -103,6 +104,7 @@ const AUDIO_GLYPH = {
 interface Props {
   /** Every rehearsing row's plates, already placed in RASTER pixels. */
   placements: readonly PlatePlacement[];
+  sourceFrames?: ReadonlyMap<string, PvwSourceFrame>;
   /** The channel's real raster — the overlay box is sized to it, like the frames. */
   raster: ChannelRaster;
   /** The stage's FIT scale. The ONE it gives the frames; never re-measured here. */
@@ -168,6 +170,7 @@ function regionCaveat(
   sourceName: string | null,
   audio: PlatePlacement['audio'],
   cropEdges: PlatePlacement['cropEdges'],
+  preview?: PvwSourceFrame,
 ): string {
   const source =
     sourceName === null ? 'No source is assigned to it.' : `Its source is ${sourceName}.`;
@@ -180,10 +183,21 @@ function regionCaveat(
           ? 'Its audio is muted because this plate is not in the active look.'
           : 'Its audio is muted.';
   const fit = cropEdges === true ? ' Crop edges.' : '';
+  if (preview?.jpegBase64 !== undefined) {
+    return `Live source ${plateId} — silent preview snapshots.${fit} ${source} ${sound}`;
+  }
+  if (preview?.signal === 'absent')
+    return `Live source ${plateId} — no signal.${fit} ${source} ${sound}`;
   return `Live source ${plateId} — preview placeholder.${fit} Check the server output for live video. ${source} ${sound}`;
 }
 
-export function LivePlateOverlay({ placements, raster, fit, zIndex }: Props): JSX.Element | null {
+export function LivePlateOverlay({
+  placements,
+  sourceFrames,
+  raster,
+  fit,
+  zIndex,
+}: Props): JSX.Element | null {
   if (placements.length === 0) return null;
   // `fit` is positive by construction (the stage only sets it from a positive
   // box against a positive raster), but a guard here is cheaper than a frame of
@@ -194,11 +208,19 @@ export function LivePlateOverlay({ placements, raster, fit, zIndex }: Props): JS
       aria-hidden={false}
       data-live-plate-overlay=""
       role="group"
-      aria-label="Live source placeholders"
+      aria-label={
+        sourceFrames !== undefined && sourceFrames.size > 0
+          ? 'Live source preview'
+          : 'Live source placeholders'
+      }
       style={{ ...frameBox(raster, fit), ...styles.layer, zIndex }}
     >
       {placements.map((p) => {
         const assigned = p.sourceName !== null;
+        const preview = p.sourceId === null ? undefined : sourceFrames?.get(p.sourceId);
+        const hasPicture = preview?.jpegBase64 !== undefined;
+        const audio = p.audio === undefined ? undefined : AUDIO_GLYPH[p.audio];
+        const roomForLabel = regionFitsCaveat(p.width * fit);
         return (
           <div
             key={p.elementId}
@@ -211,14 +233,16 @@ export function LivePlateOverlay({ placements, raster, fit, zIndex }: Props): JS
               were laid out.
             */
             role="img"
-            aria-label={regionCaveat(p.plateId, p.sourceName, p.audio, p.cropEdges)}
+            aria-label={regionCaveat(p.plateId, p.sourceName, p.audio, p.cropEdges, preview)}
             style={{
               position: 'absolute',
               left: `${String(p.x)}px`,
               top: `${String(p.y)}px`,
               width: `${String(p.width)}px`,
               height: `${String(p.height)}px`,
-              border: `${String(2 * inv)}px dashed ${assigned ? cssVars['--r-plate-outline'] : colors.pending}`,
+              border: hasPicture
+                ? undefined
+                : `${String(2 * inv)}px dashed ${assigned ? cssVars['--r-plate-outline'] : colors.pending}`,
               boxSizing: 'border-box',
               display: 'flex',
               alignItems: 'center',
@@ -226,51 +250,80 @@ export function LivePlateOverlay({ placements, raster, fit, zIndex }: Props): JS
               overflow: 'hidden',
             }}
           >
-            <div
-              style={{
-                ...styles.chip,
-                // Anchored at the plate's centre and then un-scaled, so the chip
-                // reads at console size wherever the panel is dragged to.
-                transform: `translate(-50%, -50%) scale(${String(inv)})`,
-                transformOrigin: 'center center',
-              }}
-            >
-              {/* Dropped, not clipped, when the region cannot hold it — the stamp says it
+            {hasPicture ? (
+              (roomForLabel || audio !== undefined) && (
+                <div
+                  style={{
+                    ...styles.chip,
+                    left: 'auto',
+                    top: 'auto',
+                    bottom: `${String(4 * inv)}px`,
+                    right: `${String(4 * inv)}px`,
+                    padding: '2px 4px',
+                    gap: '4px',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    transform: `scale(${String(inv)})`,
+                    transformOrigin: 'right bottom',
+                  }}
+                >
+                  {roomForLabel && <span style={styles.source}>{p.plateId}</span>}
+                  {roomForLabel && p.cropEdges && <span style={styles.fit}>Crop edges</span>}
+                  {audio !== undefined && (
+                    <span
+                      style={{ ...styles.audio, color: audio.color }}
+                      data-live-plate-audio={p.audio}
+                    >
+                      <Icon icon={audio.icon} size={11} />
+                    </span>
+                  )}
+                </div>
+              )
+            ) : (
+              <div
+                style={{
+                  ...styles.chip,
+                  transform: `translate(-50%, -50%) scale(${String(inv)})`,
+                  transformOrigin: 'center center',
+                }}
+              >
+                {/* Dropped, not clipped, when the region cannot hold it — the stamp says it
                   instead (see `regionFitsCaveat`). The ACCESSIBLE name below is unaffected:
                   it carries the full sentence at every size. */}
-              {regionFitsCaveat(p.width * fit) && (
-                <span style={styles.kind} data-live-plate-caveat="">
-                  {REGION_CAVEAT}
-                </span>
-              )}
-              <span style={styles.plate}>{p.plateId}</span>
-              {p.cropEdges === true && <span style={styles.fit}>Crop edges</span>}
-              {assigned ? (
-                // `PLAYOUT-SOURCES-01` §2.B — the name as every surface names it.
-                <span style={styles.source}>
-                  <SourceLabel sourceId={p.sourceId} fallback={p.sourceName ?? undefined} />
-                </span>
-              ) : (
-                <span style={styles.unassigned} data-live-plate-unassigned="">
-                  no source assigned
-                </span>
-              )}
-              {/*
+                {(preview?.signal === 'absent' || roomForLabel) && (
+                  <span style={styles.kind} data-live-plate-caveat="">
+                    {preview?.signal === 'absent' ? 'No signal' : REGION_CAVEAT}
+                  </span>
+                )}
+                <span style={styles.plate}>{p.plateId}</span>
+                {p.cropEdges === true && <span style={styles.fit}>Crop edges</span>}
+                {assigned ? (
+                  // `PLAYOUT-SOURCES-01` §2.B — the name as every surface names it.
+                  <span style={styles.source}>
+                    <SourceLabel sourceId={p.sourceId} fallback={p.sourceName ?? undefined} />
+                  </span>
+                ) : (
+                  <span style={styles.unassigned} data-live-plate-unassigned="">
+                    no source assigned
+                  </span>
+                )}
+                {/*
                 ABSENT means NOT STATED, and nothing is drawn for it — the stack and the ledger
                 are separate snapshots from the template registry that produced this placement,
                 and a glyph rendered before they land would assert silence on the one property
                 an operator cannot check by looking at the frame.
               */}
-              {p.audio !== undefined && (
-                <span
-                  style={{ ...styles.audio, color: AUDIO_GLYPH[p.audio].color }}
-                  data-live-plate-audio={p.audio}
-                >
-                  <Icon icon={AUDIO_GLYPH[p.audio].icon} size={11} />
-                  {AUDIO_GLYPH[p.audio].text}
-                </span>
-              )}
-            </div>
+                {audio !== undefined && (
+                  <span
+                    style={{ ...styles.audio, color: audio.color }}
+                    data-live-plate-audio={p.audio}
+                  >
+                    <Icon icon={audio.icon} size={11} />
+                    {audio.text}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         );
       })}

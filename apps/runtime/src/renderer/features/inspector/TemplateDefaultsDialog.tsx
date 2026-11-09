@@ -244,6 +244,7 @@ export function TemplateDefaultsDialog({
                     value={valueOf(plate.sourceId)}
                     onChange={(sourceId) => stage(plate.sourceId, sourceId)}
                     choices={[{ value: '', label: 'None' }]}
+                    previewChannel={channel}
                     inputCheck={inputCheck}
                   />
                   {/* `MEDIA-PLATES-01` §2 — a bound clip's Playback, the clip's own and station-wide. */}

@@ -52,6 +52,7 @@ export * from './channels/auth.js';
 // `CHANNEL-AUTHORITY-01` — which channels this station writes to, and the refusal for the rest.
 export * from './channels/stationChannels.js';
 export * from './channels/livePreview.js';
+export * from './channels/sourcePreviews.js';
 export * from './channels/stationStrays.js';
 // `DESKTOP-APPS-01` — first-run: the phase, the connection check, the unjoined catalogue.
 export * from './channels/setup.js';

@@ -490,6 +490,207 @@ test('PVW marks every live plate, and the marker lands ON the hole', async ({ ap
     .toBeLessThan(1.5);
 });
 
+test('PVW composites distinct source snapshots under authored shapes and inside a plate mask', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1600, height: 900 });
+  const date = '2026-11-10T00:00:00.000Z';
+  const transform = (x: number, y: number, w: number, h: number) => ({
+    position: { x, y },
+    size: { w, h },
+    anchor: { x: 0, y: 0 },
+    scale: { x: 1, y: 1 },
+    rotation: 0,
+  });
+  const base = { visible: true, locked: false, opacity: 1 };
+  const scene: Scene = {
+    schemaVersion: 1,
+    id: 'pvw-source-pictures',
+    name: 'Source pictures',
+    templateType: 'lower-third',
+    resolution: { width: 1920, height: 1080 },
+    frameRate: 50,
+    editorBackdrop: 'transparent',
+    frameRange: { in: 0, out: 50 },
+    safeAreas: { title: 10, action: 5 },
+    layers: [
+      {
+        id: 'plates',
+        name: 'Plates',
+        visible: true,
+        locked: false,
+        blendMode: 'normal',
+        children: [
+          ...Object.entries(HOLES).map(([routeKey, rect], zIndex) => ({
+            ...base,
+            id: routeKey,
+            name: routeKey,
+            type: 'video-placeholder' as const,
+            routeKey,
+            zIndex,
+            transform: transform(rect.x, rect.y, rect.width, rect.height),
+            fallbackKind: 'color' as const,
+            fallbackColor: '#FF0044',
+            ...(zIndex === 0 && {
+              liveMask: { mode: 'inside' as const, rects: [{ x: 0, y: 0, width: 0.5, height: 1 }] },
+            }),
+          })),
+          {
+            ...base,
+            id: 'foreground',
+            name: 'Foreground shape',
+            type: 'shape',
+            shape: 'rect',
+            zIndex: 2,
+            transform: transform(190, 190, 90, 60),
+            fill: { kind: 'solid', color: '#FFFF00' },
+          },
+        ],
+      },
+    ],
+    fields: [],
+    bindings: [],
+    fonts: [],
+    metadata: { createdAt: date, updatedAt: date },
+  };
+  const vcg = await pack({
+    scene,
+    manifestExtras: {
+      id: scene.id,
+      name: scene.name,
+      fontDeps: [],
+      assetIndex: [],
+      authoring: { designerVersion: '1.0.0', createdAt: date, exportedAt: date },
+      compatibility: { minRuntimeVersion: '0.0.0', minCasparCGVersion: '2.3.0' },
+    },
+    indexHtml: buildVcgIndexHtml(scene, [], [], false),
+    cgJs,
+    cgCss,
+  });
+  const layer = await app.importVcg('source-pictures.vcg', vcg, 59);
+  const { html } = await new ExporterSingleFile({
+    cgJsIife,
+    cgCss,
+    fontsCss: '',
+    assets: { get: () => Promise.resolve(null), bytes: () => Promise.resolve(null) },
+  }).produce(scene);
+  await stubRetainedPage(page, html);
+  await app.selectLayerRow(layer);
+  await app.setTemplateDefault('guest-1', 'Studio 1');
+  await app.setTemplateDefault('guest-2', 'Studio 2');
+  await page.evaluate(() => {
+    const jpeg = (color: string): string => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 160;
+      canvas.height = 90;
+      const context = canvas.getContext('2d')!;
+      context.fillStyle = color;
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL('image/jpeg').split(',')[1]!;
+    };
+    const green = jpeg('#00FF00');
+    const blue = jpeg('#0000FF');
+    const state = {
+      lost: false,
+      requests: [] as { channel: number; viewId: string; sourceIds: string[] }[],
+    };
+    Object.assign(window, { pvwSourceTest: state });
+    Object.assign(window.cg, {
+      sourcePreviews: {
+        pvw: async (request: (typeof state.requests)[number]) => {
+          state.requests.push(request);
+          return {
+            frames: request.sourceIds.map((sourceId) => {
+              const studioOne = sourceId.endsWith('studio-1');
+              if (studioOne && state.lost) return { sourceId, signal: 'absent' };
+              return {
+                sourceId,
+                signal: 'present',
+                jpegBase64: studioOne ? green : blue,
+                width: 160,
+                height: 90,
+              };
+            }),
+          };
+        },
+      },
+    });
+  });
+  await rehearseRow(page, layer);
+  await pvwTransport(page, 'PLAY').click();
+  const frame = page.frameLocator('iframe[data-rehearsal-frame]');
+  const plate = (id: string) => frame.locator(`[data-cg-live-source="${id}"]`);
+  const sourcePicture = (id: string) => plate(id).locator('[data-cg-pvw-picture-part] img');
+  await expect(sourcePicture('guest-1')).toHaveJSProperty('naturalWidth', 160);
+  await expect(sourcePicture('guest-2')).toHaveJSProperty('naturalWidth', 160);
+  const a = await plate('guest-1').boundingBox();
+  const b = await plate('guest-2').boundingBox();
+  if (a === null || b === null) throw new Error('Live plates are missing');
+  const colors = await page.evaluate(
+    async ({ screenshot, points }) => {
+      const image = new Image();
+      image.src = `data:image/png;base64,${screenshot}`;
+      await image.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(image, 0, 0);
+      return points.map(([x, y]) => Array.from(ctx.getImageData(x!, y!, 1, 1).data));
+    },
+    {
+      screenshot: (await page.screenshot()).toString('base64'),
+      points: [
+        [a.x + a.width * 0.1, a.y + a.height * 0.65],
+        [a.x + a.width * 0.18, a.y + a.height * 0.2],
+        [a.x + a.width * 0.7, a.y + a.height * 0.65],
+        [b.x + b.width * 0.1, b.y + b.height * 0.65],
+      ],
+    },
+  );
+  expect(colors[0]?.[1]).toBeGreaterThan(240);
+  expect(colors[0]?.[0]).toBeLessThan(20);
+  expect(colors[1]?.slice(0, 3)).toEqual([255, 255, 0]);
+  expect(colors[2]?.[1]).toBeLessThan(160);
+  expect(colors[3]?.[2]).toBeGreaterThan(240);
+  expect(colors[3]?.[1]).toBeLessThan(20);
+  await page.evaluate(() => {
+    (window as unknown as { pvwSourceTest: { lost: boolean } }).pvwSourceTest.lost = true;
+  });
+  await expect(sourcePicture('guest-1')).toHaveCount(0);
+  await expect(marker(page, 'guest-1').getByText('No signal')).toBeVisible();
+  await expect(sourcePicture('guest-2')).toHaveJSProperty('naturalWidth', 160);
+  await app.setTemplateDefault('guest-1', 'Studio 2');
+  await expect(plate('guest-1').locator('[data-cg-pvw-picture-part]')).toHaveAttribute(
+    'data-source-id',
+    /studio-2$/,
+  );
+  await expect(sourcePicture('guest-1')).toHaveJSProperty('naturalWidth', 160);
+  await pvwTransport(page, 'STOP').click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const { requests } = (
+          window as unknown as {
+            pvwSourceTest: {
+              requests: { channel: number; viewId: string; sourceIds: string[] }[];
+            };
+          }
+        ).pvwSourceTest;
+        return (
+          requests[0]?.sourceIds.length === 2 &&
+          requests.at(-1)?.sourceIds.length === 0 &&
+          requests.some((r) => r.sourceIds.length === 1 && r.sourceIds[0]?.endsWith('studio-2')) &&
+          requests.every(
+            (r) => r.channel === requests[0]?.channel && r.viewId === requests[0]?.viewId,
+          )
+        );
+      }),
+    )
+    .toBe(true);
+});
+
 test('the two plate states are told apart WITHOUT reading the label', async ({ app }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1600, height: 900 });

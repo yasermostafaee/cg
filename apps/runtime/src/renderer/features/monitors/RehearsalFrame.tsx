@@ -11,6 +11,9 @@ import {
 } from './frameEnvironment.js';
 import type { TimingToSend } from '../inspector/timingToSend.js';
 import { frameBox } from './rehearsalFrames.js';
+import type { PlatePlacement } from './livePlateGeometry.js';
+import { paintPvwPlatePictures } from './pvwPlatePictures.js';
+import type { PvwSourceFrame } from './usePvwSourceFrames.js';
 import type { BookPage } from '../layers/bookOf.js';
 import { MISSING_PICTURE_URL, pageExtOf, pictureDataUrl } from '../book/pagePictures.js';
 
@@ -143,6 +146,8 @@ interface Props {
   timing: TimingToSend | undefined;
   /** `RUN-NEXT-VERSION-03` 1.1 — the page a take would show (`bookPageOf`), or undefined. */
   book?: BookPage | undefined;
+  livePlates: readonly PlatePlacement[];
+  sourceFrames: ReadonlyMap<string, PvwSourceFrame>;
   handleRef?: Ref<RehearsalFrameHandle>;
   /** Told whenever this frame's readiness flips, so the stage can gate its transport. */
   onReadyChange?: (itemId: string, ready: boolean) => void;
@@ -160,6 +165,8 @@ export function RehearsalFrame({
   activeLookId,
   timing,
   book,
+  livePlates,
+  sourceFrames,
   handleRef,
   onReadyChange,
 }: Props): JSX.Element {
@@ -412,6 +419,13 @@ export function RehearsalFrame({
     // `position` is deliberately absent from the deps: `placementKey` is its
     // value, and adding the object back would restore the identity churn above.
   }, [ready, placementKey]);
+
+  // The template's own update and position are in place before the parent matches its plate DOM.
+  useEffect(() => {
+    if (!ready) return;
+    const doc = frameRef.current?.contentDocument;
+    if (doc !== undefined && doc !== null) paintPvwPlatePictures(doc, livePlates, sourceFrames);
+  }, [ready, livePlates, sourceFrames]);
 
   return (
     /*

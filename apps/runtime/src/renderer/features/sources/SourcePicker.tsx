@@ -149,6 +149,8 @@ export interface SourcePickerProps {
   choices: readonly SourceChoice[];
   /** The channel of the row being bound, for v1.3's per-channel inputs. Absent: no gating. */
   channel?: number | undefined;
+  /** Snapshot authority when the choices themselves do not have channel gating. */
+  previewChannel?: number | undefined;
   checkOnly?: boolean | undefined;
   inputCheck?: { channel: number; start: (source: SourceDefinition) => void } | undefined;
   'aria-label': string;
@@ -186,6 +188,7 @@ export function SourcePicker({
   onChange,
   choices,
   channel,
+  previewChannel,
   checkOnly = false,
   inputCheck,
   'aria-label': ariaLabel,
@@ -218,6 +221,7 @@ export function SourcePicker({
             inputCheck.start(source);
           },
         };
+  const thumbnailChannel = previewChannel ?? inputCheck?.channel ?? channel;
 
   return (
     <>
@@ -270,6 +274,7 @@ export function SourcePicker({
                 )}
                 value=""
                 channel={channel}
+                previewChannel={thumbnailChannel}
                 onPick={pick}
                 checkOnly
               />
@@ -280,6 +285,7 @@ export function SourcePicker({
               value={value}
               choices={choices}
               channel={channel}
+              previewChannel={thumbnailChannel}
               onPick={pick}
               initialTab={isMediaId(value) ? 'media' : 'inputs'}
               inputCheck={check}
@@ -296,6 +302,7 @@ function PickerPanel({
   value,
   choices,
   channel,
+  previewChannel,
   onPick,
   initialTab,
   inputCheck,
@@ -304,6 +311,7 @@ function PickerPanel({
   value: string;
   choices: readonly SourceChoice[];
   channel: number | undefined;
+  previewChannel: number | undefined;
   onPick: (value: string) => void;
   initialTab: Tab;
   inputCheck: SourcePickerProps['inputCheck'];
@@ -360,6 +368,7 @@ function PickerPanel({
             inputs={inputs}
             value={value}
             channel={channel}
+            previewChannel={previewChannel}
             onPick={onPick}
             inputCheck={inputCheck}
           />
@@ -454,6 +463,7 @@ function InputsTab({
   inputs,
   value,
   channel,
+  previewChannel,
   onPick,
   checkOnly = false,
   inputCheck,
@@ -462,6 +472,7 @@ function InputsTab({
   inputs: readonly SourceDefinition[];
   value: string;
   channel: number | undefined;
+  previewChannel: number | undefined;
   onPick: (value: string) => void;
   checkOnly?: boolean;
   inputCheck?: SourcePickerProps['inputCheck'];
@@ -500,7 +511,11 @@ function InputsTab({
             : {}),
       data: { 'data-picker-input': source.id },
       trailing: (
-        <InputThumbnail source={source} onCheck={checkable ? inputCheck?.start : undefined} />
+        <InputThumbnail
+          source={source}
+          channel={previewChannel}
+          onCheck={checkable ? inputCheck?.start : undefined}
+        />
       ),
       content: (
         <span className="cg-picker-row">

@@ -12,11 +12,20 @@ import { outputLetterbox, outputScale, outputTranslate } from '@cg/template-runt
 import {
   assignmentsOnChannel,
   lookPlateFits,
+  lookPlateFocuses,
+  lookPlateMasks,
   lookPlateRects,
+  lookPlateReveals,
   resolvePlateSourcesForLook,
 } from '@cg/shared-ipc';
 import type { ChannelRaster, SourceAssignments, TemplateLiveSources } from '@cg/shared-ipc';
-import type { LiveFitMode, Position } from '@cg/shared-schema';
+import type {
+  LiveCropFocus,
+  LiveFitMode,
+  LivePlateMask,
+  LiveRevealMask,
+  Position,
+} from '@cg/shared-schema';
 // The ONE audio vocabulary, shared with the LIVE PLATES strip and the layer row's summary.
 import type { PlateAudioState } from '../layers/plateAudio.js';
 
@@ -79,6 +88,9 @@ export interface PlatePlacement {
   plateId: string;
   /** The active fit mode crops the input at the edges of this box. */
   cropEdges?: true;
+  focus?: LiveCropFocus;
+  mask?: LivePlateMask;
+  reveal?: LiveRevealMask;
   /**
    * The operator-facing NAME of the source bound to this plate, or `null` when
    * nothing is bound.
@@ -226,6 +238,9 @@ export function platePlacements(
   */
   const rects = lookPlateRects(live, activeLookId);
   const authoredFits = lookPlateFits(live, activeLookId);
+  const focuses = lookPlateFocuses(live, activeLookId);
+  const masks = lookPlateMasks(live, activeLookId);
+  const reveals = lookPlateReveals(live, activeLookId);
   const overrideFits = new Map<string, LiveFitMode>();
   if (sources.frozenAssignment === undefined) {
     for (const assignment of assignmentsOnChannel(sources.assignments, sources.channel)
@@ -268,6 +283,9 @@ export function platePlacements(
         elementId: plate.elementId,
         plateId: plate.sourceId,
         ...(fitMode === 'cover' && { cropEdges: true as const }),
+        ...(focuses[plate.sourceId] !== undefined && { focus: focuses[plate.sourceId] }),
+        ...(masks[plate.sourceId] !== undefined && { mask: masks[plate.sourceId] }),
+        ...(reveals[plate.sourceId] !== undefined && { reveal: reveals[plate.sourceId] }),
         sourceName,
         sourceId: sourceName === null ? null : catalogId,
         // `undefined` when the caller supplied no lookup, and `undefined` again when it has

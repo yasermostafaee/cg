@@ -649,6 +649,8 @@ describe('the census: every route that names a channel, classified', () => {
       'livePreview.status': ['req.channel'],
       'livePreview.stop': ['req.channel'],
       'livePreview.ticket': ['req.channel'],
+      'sourcePreviews.pvw': ['req.channel'],
+      'sourcePreviews.thumbnails': ['req.channel'],
       /*
         `CENTRAL-BRIDGE-01` (D9) — a ticket for ONE channel's programme return names it at the top
         level, so the fence refuses a channel this station does not declare (and the handler refuses
@@ -727,6 +729,8 @@ describe('the census: every route that names a channel, classified', () => {
       // `CENTRAL-BRIDGE-01` (D9) — a programme-return ticket for one channel.
       'pgmReturn.ticket',
       'playoutLayers.clear',
+      'sourcePreviews.pvw',
+      'sourcePreviews.thumbnails',
       // `MULTI-CHANNEL-01` §2 B — the housekeeping verbs, when they name a channel.
       'stack.clear-all',
       // `CENTRAL-BRIDGE-01` — a restore-report dismissal for the channel on screen.

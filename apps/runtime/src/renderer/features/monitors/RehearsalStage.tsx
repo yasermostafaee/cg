@@ -20,6 +20,7 @@ import { PreviewPanRow } from './PreviewPanDraft.js';
 import { RehearsalFrame, type RehearsalFrameHandle } from './RehearsalFrame.js';
 import { frameBox, frameZIndex, overlayZIndex, type RehearsalSubject } from './rehearsalFrames.js';
 import type { PvwPage } from '../../../shared/pvwPage.js';
+import { usePvwSourceFrames } from './usePvwSourceFrames.js';
 
 /**
  * R-022 — the rehearsal render: EVERY rehearsing row's graphic, with the
@@ -275,8 +276,19 @@ export interface RehearsalTransport {
 }
 
 const REHEARSAL_CAVEATS =
-  'The browser preview can differ from the programme output. A Live Source placeholder ' +
-  'identifies the plate and its source. Check the server output for live video.';
+  'The browser preview can differ from programme output. Source pictures are silent snapshots; ' +
+  'a placeholder identifies a plate with no preview picture.';
+
+function plateInRaster(plate: PlatePlacement, raster: ChannelRaster): boolean {
+  return (
+    plate.width > 0 &&
+    plate.height > 0 &&
+    plate.x < raster.width &&
+    plate.y < raster.height &&
+    plate.x + plate.width > 0 &&
+    plate.y + plate.height > 0
+  );
+}
 
 /**
  * 🔴 `RELEASE-091-01` §1 (`B-288`) — WHY A ROW HAS NO PAGE, in one line that names its template.
@@ -399,7 +411,7 @@ export function RehearsalStage({
    * twice; `elementId` is prefixed with the item id to keep the React keys unique
    * across rows rather than across the template.
    */
-  const placements = useMemo<(PlatePlacement & { itemId: string })[]>(
+  const placements = useMemo<(PlatePlacement & { itemId: string; channel: number })[]>(
     () =>
       renderable.flatMap(({ subject }) => {
         const live = subject.liveSources;
@@ -413,21 +425,36 @@ export function RehearsalStage({
         ).map((p) => ({
           ...p,
           itemId: subject.itemId,
+          channel: subject.channel,
           elementId: `${subject.itemId}:${p.elementId}`,
         }));
       }),
     [renderable, raster],
   );
-  const showLiveSourceNote = playing && anyRegionTooSmallForCaveat(placements, fit);
+  const channel = renderable[0]?.subject.channel;
+  const sourceFrames = usePvwSourceFrames(
+    channel,
+    playing
+      ? placements.flatMap((plate) =>
+          plate.channel === channel && plate.sourceId !== null && plateInRaster(plate, raster)
+            ? [plate.sourceId]
+            : [],
+        )
+      : [],
+  );
+  const hasSourcePicture = [...sourceFrames.values()].some(
+    (frame) => frame.jpegBase64 !== undefined,
+  );
+  const showLiveSourceNote =
+    playing &&
+    anyRegionTooSmallForCaveat(
+      placements.filter(
+        (plate) => sourceFrames.get(plate.sourceId ?? '')?.jpegBase64 === undefined,
+      ),
+      fit,
+    );
   const panPlates = placements.filter(
-    (plate) =>
-      plate.cropEdges === true &&
-      plate.width > 0 &&
-      plate.height > 0 &&
-      plate.x < raster.width &&
-      plate.y < raster.height &&
-      plate.x + plate.width > 0 &&
-      plate.y + plate.height > 0,
+    (plate) => plate.cropEdges === true && plateInRaster(plate, raster),
   );
   const panAvailable = playing && panPlates.length > 0;
   const panRows =
@@ -604,6 +631,10 @@ export function RehearsalStage({
             activeLookId={subject.activeLookId}
             timing={subject.timing}
             book={subject.book}
+            livePlates={placements.filter(
+              (plate) => plate.channel === channel && plate.itemId === subject.itemId,
+            )}
+            sourceFrames={sourceFrames}
             onReadyChange={onReadyChange}
             handleRef={(handle) => {
               if (handle === null) handles.current.delete(subject.itemId);
@@ -613,7 +644,7 @@ export function RehearsalStage({
         ))}
         {showLiveSourceNote && (
           <span style={styles.liveSourceNote} data-live-source-note="">
-            LIVE SOURCES NOT RENDERED
+            {hasSourcePicture ? 'SOME LIVE SOURCES NOT RENDERED' : 'LIVE SOURCES NOT RENDERED'}
           </span>
         )}
         {/* `RELEASE-091-01` §1 — a row that has no page, beside the ones that do. */}
@@ -621,6 +652,7 @@ export function RehearsalStage({
         {playing && (
           <LivePlateOverlay
             placements={placements}
+            sourceFrames={sourceFrames}
             raster={raster}
             fit={fit}
             zIndex={overlayZIndex(renderable.length)}

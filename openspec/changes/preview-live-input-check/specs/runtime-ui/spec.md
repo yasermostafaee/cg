@@ -141,3 +141,22 @@ when the Playout playlist picture is not one of the visible boxes.
 - **WHEN** no accepted INPUT level arrives for the stale interval
 - **THEN** the INPUT bars fall to floor independently of the picture
 - **AND** the PGM meter keeps following its own programme stream
+
+### Requirement: PVW shows each compatible source inside its assigned plate
+
+On a compatible station CG Control SHALL request silent, independently identified snapshots
+for the current applied plate bindings. It SHALL paint accepted pictures within the retained
+rehearsal page and release those subscriptions when the view ends.
+
+#### Scenario: A rehearsal contains two different compatible pictures
+
+- **GIVEN** a rehearsed template with two plates, an authored foreground shape and a plate mask
+- **WHEN** the acting operator receives fresh snapshots for both assigned sources
+- **THEN** each plate shows its own picture, preserving its fit, foreground paint order and mask
+- **AND** the console leaves the explicit Check lease and programme untouched
+
+#### Scenario: An assigned receiver loses its picture or leaves rehearsal
+
+- **WHEN** the receiver reports absent or the selected plate no longer needs a snapshot
+- **THEN** PVW removes that picture, leaving the plate's authored fallback
+- **AND** ending rehearsal releases its independent subscriptions

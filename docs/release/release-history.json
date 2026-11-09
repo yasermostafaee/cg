@@ -217,6 +217,10 @@
         {
           "fa": "فهرست Media در انتخاب‌گر ورودی، پوستر هر فایل را از کتابخانهٔ Playout نشان می‌دهد. فایل‌های بدون پوستر همچنان قابل انتخاب‌اند.",
           "en": "The source picker's Media tab shows each file's Playout library poster when available. Items without a poster remain selectable."
+        },
+        {
+          "fa": "با Bridge سازگار و Playout 2.18.17، تصویرهای مستقل و بی‌صدای ورودی‌های سازگار در قاب‌های PVW و بندانگشتی انتخاب‌گر نمایش داده می‌شوند. Check input همچنان برای شنود یک ورودی در دسترس است.",
+          "en": "With a compatible Bridge and Playout 2.18.17, PVW plates and visible source rows show independent, silent snapshots of supported sources. Check input remains available for listening to one input."
         }
       ],
       "fixes": [
@@ -255,16 +259,16 @@
           "en": "Verify live picture, meter and optional sound in PVW and the source picker on the target station. Switching or closing a check must leave PGM and Playlist independent."
         },
         {
-          "fa": "درگ تصویر داخل قاب در PVW به اطلاعات محدودهٔ فعال و نسبت پیکسل تصویر ورودی از Playout نیاز دارد.",
-          "en": "Dragging a live picture inside a plate in PVW depends on the active picture rectangle and pixel aspect ratio from Playout."
+          "fa": "هندسهٔ اندازه‌گیری‌شدهٔ Playout 2.18.17 برای هم‌ترازی دقیق برش Pan به کار گرفته و روی ایستگاه آزموده شود.",
+          "en": "Use the measured Playout 2.18.17 geometry for precise Pan framing and verify it on the station."
         },
         {
-          "fa": "نمایش هم‌زمان تصویر ورودی‌های اختصاص‌یافته در قاب‌های PVW و بندانگشتی ورودی‌ها به فیدهای مستقل و وضعیت سیگنال از Playout نیاز دارد.",
-          "en": "Showing the assigned pictures together in PVW plates and source thumbnails in pickers requires independent Playout feeds and signal status."
+          "fa": "نمایش هم‌زمان ورودی‌ها، Playlist و Media در PVW و بندانگشتی‌ها با حساب اپراتور روی 21.32 آزموده شود.",
+          "en": "Verify simultaneous live, Playlist and Media pictures in PVW and source pickers on 21.32 with an operator account."
         },
         {
-          "fa": "کنترل سطح صدای خروجی اصلی Playlist و تشخیص خودکار ورودی بدون سیگنال به قراردادهای مربوط از Playout نیاز دارند.",
-          "en": "Programme Playlist gain and automatic detection of inputs with no signal depend on the corresponding Playout contracts."
+          "fa": "کنترل سطح صدای خروجی اصلی Playlist با قرارداد Playout 2.18.17 در CG Control تکمیل و روی ایستگاه آزموده شود.",
+          "en": "Complete Playlist programme gain in CG Control using the Playout 2.18.17 contract and verify it on the station."
         }
       ],
       "downloadBaseUrl": null

@@ -214,6 +214,8 @@ const REQUEST_TIMEOUT_MS = 8000;
 const OPTIONAL_CHANNELS = new Set([
   StackPreviewPlateCropChannel.name,
   SourcesMediaThumbnailChannel.name,
+  ipcChannels.SourcePreviewPvwChannel.name,
+  ipcChannels.SourcePreviewThumbnailsChannel.name,
 ]);
 /** `R-100` — one picture of a book may be 4 MB; see `pages.put`. */
 const PAGE_PUT_TIMEOUT_MS = 30_000;
@@ -2269,6 +2271,17 @@ export class WebSocketRuntime implements RuntimeBridge {
       const { path } = await this.#invoke(ipcChannels.LivePreviewTicketChannel, { ...req, stream });
       return path === null ? null : this.#bridgeHttpUrl(path);
     },
+  };
+
+  readonly sourcePreviews: RuntimeBridge['sourcePreviews'] = {
+    pvw: async (req) =>
+      (await this.#optionalChannelMissing(ipcChannels.SourcePreviewPvwChannel.name))
+        ? { frames: [] }
+        : this.#invoke(ipcChannels.SourcePreviewPvwChannel, req),
+    thumbnails: async (req) =>
+      (await this.#optionalChannelMissing(ipcChannels.SourcePreviewThumbnailsChannel.name))
+        ? { frames: [] }
+        : this.#invoke(ipcChannels.SourcePreviewThumbnailsChannel, req),
   };
 
   // R-021 stage 2a — the fixed-bank wire contract (facts only; verb

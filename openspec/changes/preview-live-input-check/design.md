@@ -74,13 +74,19 @@ are available, show the reserved slot labelled `No signal` and let it
 open the existing Check action where the source is checkable. The label describes the picture
 slot. The row keeps its catalogue availability and selecting the source still uses the row action.
 
-The current programme-channel lease can provide one distinct saved D10 input at a time.
+The explicit programme-channel check lease provides one distinct saved D10 input at a time.
 The station's Playlist output and D11 clip are not valid input IDs for that lease. The two-viewer
 limit permits two connections to the same picture. A missing frame reports the preview transport's
 condition. A source-level `No signal` label requires an authoritative signal state. The
 [2.18.17 handoff](../../../docs/integration/playout/source-previews-2.18.17-adoption.md)
-defines the separate snapshot and subscription routes. The PVW implementation will place each
+defines the separate snapshot and subscription routes. The Bridge verifies the acting operator
+and maps catalogue IDs to exact D10/D11 selectors. PVW owns one demand scope per console, with
+at most four distinct subscribed sources on the viewed channel. Poll and renew using the
+advertised limits. Scope close, expiry and socket disconnect release exact handles. Source lists
+share a visible-only demand scheduler and one bounded batch per second. PVW places each decoded
 picture within its plate's authored paint order so foreground graphics and masks are preserved.
+The picture currently uses its delivered aspect and the existing authored fit. Precise Pan
+based on the measured source transform has separate acceptance.
 
 The card shows a live picture only after the browser decodes a frame, and clears it when frames
 stall or the check ends. The speaker starts off on each check. The meter's label identifies the

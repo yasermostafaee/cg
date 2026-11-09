@@ -91,6 +91,12 @@ import {
   LivePreviewStartChannel,
   LivePreviewStatusChannel,
   LivePreviewStopChannel,
+  SourcePreviewPvwChannel,
+  SourcePreviewThumbnailsChannel,
+  playoutInputIdOf,
+  playoutMediaIdOf,
+  sourceSeatable,
+  sourceShowableOn,
   LivePreviewTicketChannel,
   BridgeLogsTicketChannel,
   BRIDGE_LOGS_PATH,
@@ -306,7 +312,8 @@ import { pinnedIPv4, playoutFetchForSession } from './playout-http.js';
 import { BridgeSession } from './bridge-session.js';
 import { PgmReturnRelay, type PgmReturnTuning } from './pgm-return.js';
 import { PgmAudioRelay } from './pgm-audio.js';
-import { LivePreviewService } from './live-preview.js';
+import { LivePreviewService, type LivePreviewTarget } from './live-preview.js';
+import { SourcePreviewService } from './source-preview-service.js';
 import { PlayoutMetersReader, type PlayoutMetersTuning } from './playout-meters.js';
 import { PlayoutAuth, type PlayoutAuthOptions, type VerifiedToken } from './playout-auth.js';
 import { PlayoutLicenseReader, type PlayoutLicenseReaderOptions } from './playout-license.js';
@@ -3023,38 +3030,71 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   */
   const tickets = new HttpTickets();
   const previewOrigin = auth.playout === null ? null : new URL(auth.playout.channelsUrl).origin;
+  const previewTarget = (owner: AuthSession, channel: number): LivePreviewTarget | null => {
+    const token = owner.token;
+    const lock = runtime.lockState();
+    if (
+      previewOrigin === null ||
+      token === null ||
+      token.jti === null ||
+      authGateState(owner, playoutAuth) !== 'signed-in' ||
+      !holdsPermissionClass(token.principal.roles, 'operator') ||
+      (lock.engaged && (lock.channels === undefined || lock.channels.includes(channel)))
+    )
+      return null;
+    const named = stationChannelsFor(
+      owner,
+      'signed-in',
+      auth.mode,
+      runtime,
+      playoutCatalogue?.rows() ?? null,
+    ).channels.find(
+      (row) => row.channel === channel && row.declared && row.permitted === true,
+    )?.named;
+    return named == null ? null : { origin: previewOrigin, code: named.id, bearer: token.rawToken };
+  };
   const livePreview = new LivePreviewService(
-    (owner, channel) => {
-      const token = owner.token;
-      const lock = runtime.lockState();
-      if (
-        previewOrigin === null ||
-        token === null ||
-        token.jti === null ||
-        authGateState(owner, playoutAuth) !== 'signed-in' ||
-        !holdsPermissionClass(token.principal.roles, 'operator') ||
-        (lock.engaged && (lock.channels === undefined || lock.channels.includes(channel)))
-      )
-        return null;
-      const named = stationChannelsFor(
-        owner,
-        'signed-in',
-        auth.mode,
-        runtime,
-        playoutCatalogue?.rows() ?? null,
-      ).channels.find(
-        (row) => row.channel === channel && row.declared && row.permitted === true,
-      )?.named;
-      return named == null
-        ? null
-        : { origin: previewOrigin, code: named.id, bearer: token.rawToken };
-    },
+    previewTarget,
     (id) => runtime.sourceCatalog().sources.find((source) => source.id === id),
     (row) => runtime.recordLivePreview(row),
   );
+  const sourcePreviews = new SourcePreviewService(previewTarget, (owner, channel, id) => {
+    const source = runtime.sourceCatalog().sources.find((entry) => entry.id === id);
+    if (source === undefined || !sourceSeatable(source) || !sourceShowableOn(source, channel))
+      return null;
+    if (source.origin === 'media') {
+      const mediaId = playoutMediaIdOf(source.id);
+      return mediaId === null ? null : { kind: 'media', mediaId };
+    }
+    if (source.origin !== 'input') return null;
+    if (source.playlistOf !== undefined) {
+      const pair = playoutSources?.playlistPreviewPair(source.id);
+      const principal = owner.token?.principal;
+      const row =
+        pair == null
+          ? undefined
+          : playoutCatalogue
+              ?.rows()
+              ?.find(
+                (entry) =>
+                  entry.casparChannel === pair.casparChannel &&
+                  entry.casparHost.toLowerCase() === pair.casparHost.toLowerCase(),
+              );
+      return pair == null ||
+        principal === undefined ||
+        row === undefined ||
+        row.cgLicensed === false ||
+        !grantsChannel(principal.channels, [row.casparHost], row.casparChannel)
+        ? null
+        : { kind: 'playlist', playlistOf: pair };
+    }
+    const inputId = playoutInputIdOf(source.id);
+    return inputId === null ? null : { kind: 'live', inputId };
+  });
   const routes = buildRoutes(runtime, {
     issueTicket: (grant) => tickets.issue(grant),
     livePreview,
+    sourcePreviews,
     logsAvailable: options.logsDir !== undefined,
     setupPhase,
     // `CENTRAL-BRIDGE-01` — this bridge's release, told to every console at connect.
@@ -3515,6 +3555,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     });
     const dropSocket = (): void => {
       livePreview.disconnect(session);
+      void sourcePreviews.drop(session);
       for (const off of unsubscribers) off();
       /*
         ⚠ A CLOSED TAB IS A SIGN-OUT THE OPERATOR NEVER PRESSED. Without this the bridge keeps
@@ -3758,6 +3799,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     async close() {
       for (const client of wss.clients) client.terminate();
       await livePreview.dispose();
+      await sourcePreviews.dispose();
       // `CENTRAL-BRIDGE-01` — the stack's last change is on disk before anything stops.
       stack?.flush();
       // `C-037` — stop the D9 tick with the bridge. It is `unref`'d, so it never held the
@@ -4566,6 +4608,7 @@ export function buildRoutes(
     /** `CENTRAL-BRIDGE-01` (D9) — a ticket for one of CG Bridge's HTTP resources. */
     issueTicket?: (grant: TicketGrant) => string;
     livePreview?: LivePreviewService;
+    sourcePreviews?: SourcePreviewService;
     /** Does this bridge keep a log folder to download? */
     logsAvailable?: boolean;
   } = {},
@@ -4795,7 +4838,10 @@ export function buildRoutes(
     ),
     route(AuthSignOutChannel, 'operator', 'read', () => {
       const session = currentAuthSession();
-      if (session !== null) paths.livePreview?.drop(session);
+      if (session !== null) {
+        paths.livePreview?.drop(session);
+        void paths.sourcePreviews?.drop(session);
+      }
       const leaving = session?.token?.principal ?? null;
       // The bridge must stop calling the Playout with a token whose operator has left.
       const raw = session?.token?.rawToken;
@@ -5214,6 +5260,20 @@ export function buildRoutes(
       'operator',
       (req: ChannelRequest<typeof LivePreviewTicketChannel>) =>
         paths.livePreview?.ticket(currentAuthSession(), req, issueTicket) ?? { path: null },
+    ),
+    route(
+      SourcePreviewPvwChannel,
+      'operator',
+      'operator',
+      (req: ChannelRequest<typeof SourcePreviewPvwChannel>) =>
+        paths.sourcePreviews?.pvw(currentAuthSession(), req) ?? { frames: [] },
+    ),
+    route(
+      SourcePreviewThumbnailsChannel,
+      'operator',
+      'operator',
+      (req: ChannelRequest<typeof SourcePreviewThumbnailsChannel>) =>
+        paths.sourcePreviews?.thumbnails(currentAuthSession(), req) ?? { frames: [] },
     ),
     /*
       🔴 `CENTRAL-BRIDGE-01` (D9) — the picture is fetched by the console's `<img>`, which carries no

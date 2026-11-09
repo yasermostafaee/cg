@@ -495,6 +495,11 @@ export function createMockBridge(): RuntimeBridge {
       url: () => Promise.resolve(null),
     },
 
+    sourcePreviews: {
+      pvw: () => Promise.resolve({ frames: [] }),
+      thumbnails: () => Promise.resolve({ frames: [] }),
+    },
+
     // R-021 stage 2a — fixed-bank parity (offline: occupancy honestly unknown).
     fixedLayers: {
       config: () => Promise.resolve(mock.fixedLayersConfig()),

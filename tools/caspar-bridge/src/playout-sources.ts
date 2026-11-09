@@ -15,6 +15,7 @@ import {
   parsePlayoutInputs,
   parsePlayoutJson,
   parsePlayoutMediaPage,
+  playoutInputIdOf,
   playoutMediaIdOf,
   probeImage,
   toBoundMedia,
@@ -582,6 +583,11 @@ export class PlayoutSources {
       total: page.total,
       nextCursor: page.nextCursor,
     };
+  }
+
+  playlistPreviewPair(sourceId: string) {
+    const inputId = playoutInputIdOf(sourceId);
+    return this.#inputs.inputs.find((input) => input.id === inputId)?.playlistOf ?? null;
   }
 
   async mediaThumbnail(sourceId: string): Promise<{ ok: boolean; dataUrl?: string }> {

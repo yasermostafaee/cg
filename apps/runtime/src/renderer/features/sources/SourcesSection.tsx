@@ -181,6 +181,7 @@ export function SourcesSection({
               </div>
               <InputThumbnail
                 source={source}
+                channel={channel}
                 onCheck={
                   inputCheck !== undefined && canCheckLiveInput(source, inputCheck.channel)
                     ? inputCheck.start

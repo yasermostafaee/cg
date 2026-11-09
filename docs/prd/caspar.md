@@ -1299,9 +1299,9 @@ present?"_ before take, without guessing from a status tag or putting the source
 
 **The three truths stay separate:**
 
-1. Rehearse remains the retained exported page plus Runtime-owned Live Source placeholders. The
-   live check is a distinct card in the PVW area; it is not composited into a template plate and
-   does not make the browser iframe capable of SDI/NDI.
+1. Rehearse uses the retained exported page. A compatible station supplies silent source
+   snapshots inside its assigned plates. The separate check card still carries one live input's
+   moving picture and sound.
 2. PGM remains the real programme return. Its speaker preference and VU meter continue to describe
    the final programme mix, including a one-to-four-box look. Even when the Playlist picture is not
    one of the visible boxes, that meter is still PGM and is not an input meter.
@@ -1318,9 +1318,11 @@ See [the adopted Playout contract](../integration/playout/PLAYOUT-CG-RESPONSE-LI
 and the change's tasks for station acceptance. The station advertises the lease API on 2.18.15.
 A fresh Preview frame or meter does not determine physical source signal availability.
 
-The 2.18.16 follow-up confirms the same one-input lease. Concurrent source views, clean Playlist
-and D11 pictures, measured picture mapping, decoded-frame availability and channel Playlist
-master gain remain Playout contract work. See the follow-up in the adopted contract record.
+The 2.18.16 follow-up confirms the same one-input lease. The
+[2.18.17 contract](../integration/playout/source-previews-2.18.17-adoption.md) adds independent
+silent snapshots of supported open receivers, clean Playlist, and selected D11 frames. Verify the
+operator's access and exact picture on the target station. Precise measured Pan and channel
+Playlist gain have separate acceptance.
 
 **Acceptance:**
 
@@ -1338,6 +1340,10 @@ master gain remain Playout contract work. See the follow-up in the adopted contr
   binding, rehearsal page or Source default changes, and no AMCP command is sent
 - WHEN the picture stalls THEN the last frame is removed and optional audio stops
 - WHEN the meter is stale THEN it returns to floor independently of current picture delivery
+- WHEN two assigned sources are eligible THEN PVW shows each image inside its own plate,
+  preserving authored graphics, masks and fit. Ending rehearsal releases its subscriptions.
+- WHEN a source list shows eligible rows THEN it requests a bounded batch for the visible rows.
+  A missing or stale frame leaves the picture slot empty and selection stays independent.
 
 **Station follow-up, 2026-11-09:** Expose the v1 single-input check inside Look inputs, the row's
 live-source swap and Station setup → Live sources as well as Source defaults. The selected source,

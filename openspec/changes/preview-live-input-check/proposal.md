@@ -41,6 +41,8 @@ describes the final programme mix. Re-labelling that meter as an input meter wou
 - Use Playout's existing static library poster for Media items in the source pickers.
 - With a compatible read-only Playout capability, show each visible eligible input's live thumbnail in that slot
   as soon as the source list opens.
+- Place independent silent snapshots into the assigned PVW plates on a compatible 2.18.17 station.
+  Keep the explicit check, its input meter and optional sound separate.
 
 ## Capabilities
 
