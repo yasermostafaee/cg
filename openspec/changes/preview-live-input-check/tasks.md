@@ -5,7 +5,7 @@
 - [x] 0.1 Supersede the periodic-thumbnail proposal with one live-input check.
 - [x] 0.2 Record the read-only findings for 2.12.0, 2.18.1 and 2.18.10, including the old OpenAPI failure.
 - [x] 0.3 Record the request to Playout for the wire, ownership, authorization and meter contract.
-- [x] 0.4 Adopt the 2.18.12 handoff and record the read-only 2.18.14 check in
+- [x] 0.4 Adopt the 2.18.12 handoff and record the read-only 2.18.14 and 2.18.15 checks in
       [the integration record](../../../docs/integration/playout/PLAYOUT-CG-RESPONSE-LIVE-PREVIEW-v1.md).
 - [x] 0.5 Use the official lease for the one-input MON/PFL workflow and cross-link `add-multibox-audio`.
 
@@ -27,13 +27,16 @@
       stop sound on a terminal check. Keep audio state local to that check.
 - [x] 2.3 Verify both entry points, keyboard/focus return, stale picture and meter, and independent PGM with Playwright.
       `apps/runtime/tests/e2e/live-input-check.spec.ts` passed in local Chrome.
-- [ ] 2.4 Record the completed green Linux E2E run for the commit carrying this UI.
+- [x] 2.4 [Linux E2E for `07455d4f`](https://github.com/yasermostafaee/cg/actions/runs/42643491807/job/129250570771)
+      completed successfully. 431 Designer, 408 CG Control and 2 Pack Factory tests passed.
+      The new live-input check passed on Chromium in the CG Control suite.
 
 ## 3. Station acceptance
 
-- [ ] 3.1 On an off-air 2.18.14 channel with a permitted operator, verify physical SDI, NDI and network inputs,
+- [ ] 3.1 On an off-air 2.18.15 channel with a permitted operator, verify physical SDI, NDI and network inputs,
       moving picture, optional sound, preview meter and cleanup.
 - [ ] 3.2 Observe PGM and Playlist independently while starting, replacing, failing and stopping preview.
 - [ ] 3.3 Exercise two CG consoles and the Playout UI concurrently. Capture replacement, stale close and air priority.
 - [ ] 3.4 Measure CPU and network cost with picture only, then with sound. Confirm the renderer accesses Bridge only.
-- [ ] 3.5 Run the full gate and review the PRD, adopted contract and three deltas before archive.
+- [x] 3.5 Review the PRD, adopted contract and three deltas. The uncached pre-push gate passed all 103 tasks on
+      `07455d4f`. The focused browser rerun also passed all 11 Preview, SourcePicker, rehearsal and PGM tests.

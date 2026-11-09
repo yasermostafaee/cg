@@ -1315,7 +1315,7 @@ renews and stops it with the original owner and exact generation. Renderer acces
 tickets, and the check sends no AMCP, PGM, look, binding or Source-defaults write.
 
 See [the adopted Playout contract](../integration/playout/PLAYOUT-CG-RESPONSE-LIVE-PREVIEW-v1.md)
-and the change's tasks for station acceptance. The 2.18.14 station advertises the lease API.
+and the change's tasks for station acceptance. The station advertises the lease API on 2.18.15.
 A fresh Preview frame or meter does not determine physical source signal availability.
 
 **Acceptance:**

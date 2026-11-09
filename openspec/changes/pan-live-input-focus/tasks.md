@@ -13,6 +13,10 @@
 - [x] 2.3 Apply focus to Bridge `FILL` through the shared live-source geometry
 - [x] 2.4 Add scoped crop editing on the live PGM return
 - [ ] 2.5 Add local PVW crop editing on the accepted C-023 live input feed
+      C-023 supplies one live picture. Its JPEG is in the Preview channel raster, and the
+      handoff does not identify the source's active picture rectangle or sample aspect ratio.
+      Request the mapping needed for accurate staged drag in
+      [the Playout follow-up](../../../docs/integration/playout/CG-CONTROL-REQUEST-LIVE-INPUT-PREVIEW-2026-10-26.md).
 - [x] 2.6 Show Crop edges below the Plate name and keep the name's screen size independent of fit and zoom
 
 ## 3. Verification

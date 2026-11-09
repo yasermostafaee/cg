@@ -17,6 +17,11 @@ On 2026-11-09, a read-only check of `192.168.21.32:8080` returned **2.18.14** fr
 Live Preview paths. The capability request without a bearer returned 401. An authenticated
 preview on the installed station remains a separate acceptance test.
 
+The same station subsequently reported **2.18.15**. Its OpenAPI still lists all six Live Preview
+paths. The capability request still returned 401 without a bearer. OpenAPI lists a settings
+`POST /api/v1/settings/live-inputs/probe` with a `LiveProbeInput` body, but does not document a
+read-only signal status for a saved input or a programme Playlist gain operation.
+
 ## Requests used by Bridge
 
 Bridge uses the verified socket operator's exact CG bearer for every call, including cleanup.

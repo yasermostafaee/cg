@@ -8,7 +8,7 @@ PRD: `C-023` (`docs/prd/caspar.md`). Playout contract request:
 Playout's 2.18.12 handoff supplies the request, authorization, ownership and feed contracts.
 The Bridge requires lease capability v1 before opening a check. See the
 [accepted response](../../../docs/integration/playout/PLAYOUT-CG-RESPONSE-LIVE-PREVIEW-v1.md)
-for the native test evidence and the read-only 2.18.14 station check.
+for the native test evidence and the read-only 2.18.14 and 2.18.15 station checks.
 
 ## Why
 

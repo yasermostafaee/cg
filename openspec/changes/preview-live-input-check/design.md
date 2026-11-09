@@ -58,5 +58,5 @@ healthy video from repeated fallback frames, so source-signal fallback requires 
 
 Use a signed fake Playout fixture with the native HTTP shapes, independent PGM, and a real Bridge
 and browser to exercise the two doors, lease ownership, picture, optional sound and meter.
-Confirm hardware behavior separately on an approved off-air 2.18.14 channel with PGM observed
+Confirm hardware behavior separately on an approved off-air 2.18.15 channel with PGM observed
 independently. The active tasks track the station matrix and Linux browser run.
