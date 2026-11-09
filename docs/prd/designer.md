@@ -6741,5 +6741,5 @@ separate off-screen gap between passes.
 ## [~] D-206 — Issues messages can be selected and copied ⟨priority: medium — the owner, 2026-11-09⟩ — `openspec/changes/copy-designer-issues/`
 
 The author can select issue text and copy it with the operating system's clipboard shortcut.
-Selecting text keeps the Issues dialog open. Clicking an issue or activating it by keyboard
-continues to select the affected element.
+Clicking or selecting text keeps the Issues dialog open. A separate control selects the
+affected element when available and can be activated with the keyboard.

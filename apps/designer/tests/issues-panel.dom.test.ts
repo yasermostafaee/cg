@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { ExportIssue } from '@cg/shared-ipc';
@@ -23,7 +23,7 @@ afterEach(() => {
 });
 
 describe('B-366 — internal element ids stay out of Issues copy', () => {
-  it('keeps the element id for click-to-select without rendering it to the author', () => {
+  it('uses the hidden element id only when the author activates the navigation button', () => {
     const elementId = 'el-1793551207639';
     const { scene } = new ProjectStore(new MemoryWorkspace(), new MemoryKv()).newScene(
       'issues',
@@ -31,6 +31,7 @@ describe('B-366 — internal element ids stay out of Issues copy', () => {
     );
     designerStore.setScene(scene, null);
     designerStore.addElement(defaultLiveSource(elementId, 459, 327));
+    designerStore.setSelection([]);
     const issue: ExportIssue = {
       severity: 'error',
       code: 'live-source-unset',
@@ -40,13 +41,24 @@ describe('B-366 — internal element ids stay out of Issues copy', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
-    act(() => root?.render(createElement(IssuesPanel, { issues: [issue], embedded: true })));
+    const onPick = vi.fn();
+    act(() =>
+      root?.render(createElement(IssuesPanel, { issues: [issue], embedded: true, onPick })),
+    );
 
     expect(container.textContent).toContain('The unnamed Plate at (459, 327)');
     expect(container.textContent).not.toContain(elementId);
-    const row = container.querySelector<HTMLElement>('[role="button"]');
-    if (row === null) throw new Error('no issue row');
-    act(() => row.click());
+    const message = [...container.querySelectorAll('span')].find(
+      (span) => span.textContent === issue.message,
+    );
+    const action = container.querySelector<HTMLButtonElement>('button[aria-label="Go to element"]');
+    if (message === undefined || action === null) throw new Error('no issue message or action');
+    act(() => message.click());
+    expect(onPick).not.toHaveBeenCalled();
+    expect([...designerStore.get().selection]).toEqual([]);
+
+    act(() => action.click());
+    expect(onPick).toHaveBeenCalledOnce();
     expect([...designerStore.get().selection]).toEqual([elementId]);
   });
 });

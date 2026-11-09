@@ -24,15 +24,19 @@ export const heading = style({
 
 export const row = style({
   display: 'grid',
-  gridTemplateColumns: 'auto 1fr',
+  gridTemplateColumns: 'auto minmax(0, 1fr) auto',
   gap: '0.4rem',
   alignItems: 'baseline',
   fontSize: '0.78rem',
-  cursor: 'pointer',
   padding: '0.15rem 0.2rem',
   borderRadius: '0.2rem',
 });
 
-export const rowText = style({ color: colors.text, userSelect: 'text', cursor: 'text' });
+export const rowText = style({
+  color: colors.text,
+  userSelect: 'text',
+  cursor: 'text',
+  overflowWrap: 'anywhere',
+});
 
 export const meta = style({ fontSize: '0.7rem', color: colors.textMuted, marginLeft: '0.3rem' });

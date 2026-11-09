@@ -1,10 +1,13 @@
+import { LocateFixed } from 'lucide-react';
 import type { ExportIssue } from '@cg/shared-ipc';
 import { designerStore } from '../../state/store.js';
+import { Control } from '../../ui/Control.js';
+import { Icon } from '../../ui/Icon.js';
 import * as s from './IssuesPanel.css.js';
 
 interface Props {
   issues: readonly ExportIssue[];
-  /** Called after an issue row is activated (e.g. to close a host modal). */
+  /** Called after navigating to the affected element (e.g. to close a host modal). */
   onPick?: () => void;
   /**
    * When true, render just the issue rows without the bordered panel chrome
@@ -34,9 +37,8 @@ const badge = (color: string): React.CSSProperties => ({
 });
 
 /**
- * Issues panel — shows the live `export.preflight` output. Clicking an
- * issue with an `elementId` selects that element so the operator can
- * jump to the source. Clicking the heading badge cycles through severities.
+ * Issues panel — shows the live `export.preflight` output. An issue with
+ * an `elementId` has a dedicated control to select that element.
  *
  * Phase 8 §10's exit criterion ("Designer rejects an export with an
  * unbound required field") relies on the preflight returning that
@@ -89,37 +91,27 @@ function IssueRow({
   onPick?: (() => void) | undefined;
 }): JSX.Element {
   const color = severityColor[issue.severity];
-  function pick(): void {
-    if (issue.elementId !== undefined) {
-      designerStore.setSelection([issue.elementId]);
-    }
-    onPick?.();
-  }
+  const { elementId } = issue;
   return (
-    <div
-      className={s.row}
-      role="button"
-      tabIndex={0}
-      onClick={(event) => {
-        const selectedText = window.getSelection();
-        if (
-          selectedText?.isCollapsed === false &&
-          event.currentTarget.contains(selectedText.anchorNode)
-        )
-          return;
-        pick();
-      }}
-      onKeyDown={(event) => {
-        if (event.key !== 'Enter' && event.key !== ' ') return;
-        event.preventDefault();
-        pick();
-      }}
-    >
+    <div className={s.row}>
       <span style={badge(color)}>{issue.severity}</span>
       <span className={s.rowText}>
         {issue.message}
         {issue.fieldId !== undefined && <span className={s.meta}>· field {issue.fieldId}</span>}
       </span>
+      {elementId !== undefined && (
+        <Control
+          size="sm"
+          aria-label="Go to element"
+          title="Go to element"
+          onClick={() => {
+            designerStore.setSelection([elementId]);
+            onPick?.();
+          }}
+        >
+          <Icon icon={LocateFixed} size={14} />
+        </Control>
+      )}
     </div>
   );
 }

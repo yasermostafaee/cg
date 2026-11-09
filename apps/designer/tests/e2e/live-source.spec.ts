@@ -382,12 +382,14 @@ test.describe('Live Source (D-137 phase 1)', () => {
     const message = issues.getByText(`Plate "${offender}" overlaps`, { exact: false });
     await expect(message).toBeVisible();
     await expect(message).toHaveCSS('user-select', 'text');
-    const selected = await message.evaluate((node) => {
+    await message.click({ position: { x: 5, y: 6 } });
+    await expect(issues).toBeVisible();
+    const drag = await message.evaluate((node) => {
       const range = document.createRange();
       range.selectNodeContents(node);
-      const selection = window.getSelection();
-      selection?.removeAllRanges();
-      selection?.addRange(range);
+      const lines = [...range.getClientRects()];
+      const first = lines[0]!;
+      const last = lines.at(-1)!;
       document.addEventListener(
         'copy',
         (event) => {
@@ -396,12 +398,23 @@ test.describe('Live Source (D-137 phase 1)', () => {
         },
         { once: true },
       );
-      return selection?.toString() ?? '';
+      // Integer pointer coordinates match the native pointer selection path in Chrome.
+      return {
+        start: { x: Math.ceil(first.left), y: Math.round(first.top + first.height / 2) },
+        end: { x: Math.ceil(last.right), y: Math.round(last.top + last.height / 2) },
+      };
     });
-    expect(selected).toContain('overlaps');
-    await app.page.keyboard.press('Control+c');
+    await app.page.mouse.move(drag.start.x, drag.start.y);
+    await app.page.mouse.down();
+    await app.page.mouse.move(drag.end.x, drag.end.y, { steps: 12 });
+    await app.page.mouse.up();
+    const selected = await app.page.evaluate(() => window.getSelection()?.toString() ?? '');
+    expect(selected).toBe(await message.textContent());
+    await app.page.keyboard.press('ControlOrMeta+c');
     await expect(message).toHaveAttribute('data-copied-issue', selected);
     await expect(issues).toBeVisible();
+    await issues.getByRole('button', { name: 'Go to element', exact: true }).first().press('Enter');
+    await expect(issues).toBeHidden();
   });
 
   test('D-157 — the POSITIVE CONTROL: a clean composition marks nothing and Export is live', async ({
