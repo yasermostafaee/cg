@@ -613,6 +613,13 @@ test.describe('Live Source (D-137 phase 1)', () => {
     );
     const cropLabel = label(app).getByText('Crop edges', { exact: true });
     await expect(cropLabel).toHaveCount(0);
+    await expect(label(app)).toHaveCSS('font-size', '16px');
+    const nameHeight = (await label(app).boundingBox())?.height ?? 0;
+    expect(nameHeight).toBeGreaterThan(27);
+    await app.page.getByRole('button', { name: 'Zoom out', exact: true }).click();
+    await expect
+      .poll(async () => (await label(app).boundingBox())?.height ?? 0)
+      .toBeCloseTo(nameHeight, 1);
 
     // Scenario: "The fit mode is chosen in the Inspector" — both modes are offered.
     await expect(app.liveSourceFitModeSelect.locator('option')).toHaveCount(2);
@@ -620,6 +627,7 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await expect(app.liveSourceFitModeSelect).toHaveValue('cover');
     await expect(app.liveSourceFitModeSelect.locator('option:checked')).toHaveText(/crop/i);
     await expect(cropLabel).toBeVisible();
+    await expect(label(app)).toHaveCSS('font-size', '16px');
 
     // Choosing a fit is not a geometry change, so nothing is a preflight error.
     await expect(errorPill(app)).toHaveCount(0);

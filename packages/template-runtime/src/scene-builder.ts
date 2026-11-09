@@ -1911,14 +1911,14 @@ function buildLiveSource(element: VideoPlaceholderElement, ctx: BuildCtx): HTMLE
   label.style.position = 'absolute';
   label.style.left = '50%';
   label.style.top = '50%';
-  label.style.transform = 'translate(-50%, -50%)';
-  label.style.maxWidth = '90%';
-  label.style.padding = '10px 16px';
+  label.style.transform = 'translate(-50%, -50%) scale(var(--cg-author-guide-scale, 2))';
+  label.style.maxWidth = 'calc(90% / var(--cg-author-guide-scale, 2))';
+  label.style.padding = '4px 7px';
   label.style.background = 'rgba(4, 12, 24, 0.86)';
-  label.style.border = '2px solid rgba(255, 255, 255, 0.82)';
-  label.style.borderRadius = '6px';
+  label.style.border = '1px solid rgba(255, 255, 255, 0.82)';
+  label.style.borderRadius = '4px';
   label.style.color = '#ffffff';
-  label.style.font = '800 32px/1.25 system-ui, sans-serif';
+  label.style.font = '800 16px/1.25 system-ui, sans-serif';
   label.style.textAlign = 'center';
   label.style.whiteSpace = 'nowrap';
   label.style.overflow = 'hidden';
@@ -1927,11 +1927,10 @@ function buildLiveSource(element: VideoPlaceholderElement, ctx: BuildCtx): HTMLE
   // scene must not flip `guest-1` to `1-guest` around the surrounding RTL context.
   label.style.direction = 'ltr';
   if (element.fitMode === 'cover') {
-    label.style.fontSize = 'max(32px, calc(12px * var(--cg-author-guide-scale, 1)))';
     const fitLabel = ctx.doc.createElement('div');
     fitLabel.textContent = 'Crop edges';
     fitLabel.style.color = '#a5f6ff';
-    fitLabel.style.fontSize = 'max(20px, calc(11px * var(--cg-author-guide-scale, 1)))';
+    fitLabel.style.fontSize = '12px';
     fitLabel.style.fontWeight = '700';
     label.appendChild(fitLabel);
   }

@@ -5,7 +5,8 @@
 A Live Source plate SHALL offer a fit control and retain any stored crop focus per plate/look.
 Designer SHALL leave direct input panning to CG Control. An absent focus SHALL default to the centre
 without writing a field into an older scene, and `contain` SHALL ignore a stored focus.
-The Canvas SHALL show Crop edges below the Plate name when the author selects `cover`.
+The Canvas SHALL use the same readable Plate-name size for both fits across zoom levels and show
+Crop edges on the line below when the author selects `cover`.
 
 #### Scenario: Existing projects retain saved focus
 
