@@ -36,8 +36,8 @@ return without Pan controls or crop guides.
 - **WHEN** the operator opens Pan in PVW with a visible Crop edges plate **THEN** a clearly labelled
   practice image can be dragged inside that plate's footprint
 - **WHEN** the preset has no visible Crop edges plate **THEN** no practice plate appears
-- **WHEN** the practice image moves or the operator closes it **THEN** the authored plate, source,
-  staged focus and programme output stay as they were
+- **WHEN** the practice crop moves **THEN** its position is drafted locally and can be applied with Update or reset with Discard
+- **AND** the authored plate, source assignment and programme output stay as they were
 
 #### Scenario: The crop guide moves smoothly over the source
 
@@ -62,9 +62,11 @@ require leaving PVW before Take.
 #### Scenario: A staged crop is the first fit applied on air
 
 - **GIVEN** the active look has a visible Crop edges plate with known source geometry
-- **WHEN** the operator releases a crop drag or presses Center **THEN** the accepted focus is saved without a mixer or producer command
-- **WHEN** the operator reopens Pan **THEN** the saved crop is restored for the same target
-- **WHEN** the operator leaves PVW and takes the row **THEN** the first hidden FILL uses that crop before the producer becomes visible
+- **WHEN** the operator drags the crop or presses Center **THEN** the focus becomes an Inspector draft
+- **AND** the draft survives turning ON PVW off and back on
+- **WHEN** the operator discards the draft **THEN** the last applied crop is restored
+- **WHEN** the operator clicks Update on the off-air row **THEN** Bridge validates and saves its crop drafts together without a mixer or producer command
+- **WHEN** the operator leaves PVW and takes the row **THEN** the first hidden FILL uses the saved crop before the producer becomes visible
 
 #### Scenario: An unavailable or stale crop cannot affect another input
 

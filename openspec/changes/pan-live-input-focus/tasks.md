@@ -44,7 +44,7 @@
 
 - [x] 4.1 Show the complete practice image and moving crop guide within the PVW plate and offer Center.
 - [x] 4.2 Remove the PGM Pan action and guides. Revisit the PGM interaction if the owner asks for it.
-- [ ] 4.3 Record carrying Linux E2E for the PVW-only workflow and monitor layout.
+- [x] 4.3 [Carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42689856329/job/129406540835) passed on `9dd4b023` for the PVW-only workflow and monitor layout.
 
 ## 5. Aspect and eligibility review
 
@@ -64,3 +64,11 @@
 - [x] 6.4 Chromium and Bridge checks passed for restoring the guide, isolating stale scopes, and applying the crop in the first FILL before reveal on Take.
 - [ ] 6.5 Record carrying Linux E2E and verify the workflow on an updated target Bridge.
 - [x] 6.6 Verify an older compatible Bridge keeps Pan in practice mode without a crop request or a global warning for that optional capability.
+
+## 7. Apply the crop through Inspector
+
+- [x] 7.1 Draft Drag and Center in the row, preserve across OFF PVW and restore the applied value on Discard.
+- [x] 7.2 Validate and save the row's crop drafts in a single Bridge batch on Update. Allow an off-air save after OFF PVW.
+- [x] 7.3 Keep generic practice on the existing browser session and preserve it through PVW toggles.
+- [x] 7.4 Verify the Inspector draft, OFF/ON PVW, Discard, Update and first FILL before reveal in Chromium.
+- [ ] 7.5 Record carrying Linux E2E for Inspector crop saving.

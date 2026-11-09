@@ -598,6 +598,70 @@ it('does not offer staging for cover overflow based only on the authored source 
   expect(r.previewPlateCrop('item-1')).toEqual({ ok: true, targets: [] });
 });
 
+it('updates PVW crop drafts atomically across presets after leaving Preview', async () => {
+  const itemId = 'item-1';
+  const rect = { x: 720, y: 270, width: 480, height: 540 };
+  const info = template([{ id: 'guest-1', rect, fitMode: 'cover' }]);
+  const r = await boot({
+    template: {
+      ...info,
+      liveSources: {
+        ...info.liveSources!,
+        defaultLookId: 'first',
+        looks: ['first', 'second'].map((id) => ({
+          id,
+          name: id,
+          entered: { mode: 'cut' as const },
+          rects: { 'guest-1': rect },
+          fits: { 'guest-1': 'cover' as const },
+        })),
+      },
+    },
+  });
+  expect(await r.load(itemId, 'lower-third', {})).toMatchObject({ accepted: true });
+  expect(await r.enterRehearse(itemId)).toMatchObject({ ok: true });
+  const [first] = r.previewPlateCrop(itemId).targets;
+  expect(await r.setActiveLook(itemId, 'second')).toMatchObject({ ok: true });
+  const [second] = r.previewPlateCrop(itemId).targets;
+  expect(await r.exitRehearse(itemId)).toMatchObject({ ok: true });
+  const firstEdit = { lookId: 'first', token: first!.token, focus: { x: 1, y: 0.5 } };
+  const secondEdit = { lookId: 'second', token: second!.token, focus: { x: 0.25, y: 0.5 } };
+  const beforeUpdate = (await recvLines()).length;
+
+  const stale = r.previewPlateCrop(itemId, undefined, [
+    firstEdit,
+    { ...secondEdit, lookId: 'first' },
+  ]);
+  expect(stale).toMatchObject({ ok: false });
+  expect(stale.applied).toBeUndefined();
+  expect(r.stackSnapshot()[0]?.previewPlateCrops).toBeUndefined();
+  const applied = r.previewPlateCrop(itemId, undefined, [firstEdit, secondEdit]);
+  expect(applied).toMatchObject({
+    ok: true,
+    applied: [firstEdit.token, secondEdit.token],
+    targets: [{ ...second, focus: secondEdit.focus, staged: true }],
+  });
+  expect(r.stackSnapshot()[0]?.previewPlateCrops).toEqual([
+    { token: firstEdit.token, focus: firstEdit.focus },
+    { token: secondEdit.token, focus: secondEdit.focus },
+  ]);
+  expect(await r.setActiveLook(itemId, 'first')).toMatchObject({ ok: true });
+  expect(r.previewPlateCrop(itemId).targets).toMatchObject([
+    { ...first, focus: firstEdit.focus, staged: true },
+  ]);
+  expect((await recvLines()).slice(beforeUpdate)).toEqual([]);
+
+  expect(await r.take(itemId)).toMatchObject({ accepted: true });
+  const firstFill = (await recvLines())
+    .slice(beforeUpdate)
+    .find((line) => line.startsWith('MIXER 1-30 FILL'));
+  expect(firstFill).toBe('MIXER 1-30 FILL 0.125 0.25 0.5 0.5 DEFER');
+  expect(r.previewPlateCrop(itemId, undefined, [firstEdit])).toMatchObject({
+    ok: false,
+    targets: [],
+  });
+});
+
 it('D-202 — multiple reveals are refused atomically when only one extra seat fits', async () => {
   const r = await boot({
     template: template([

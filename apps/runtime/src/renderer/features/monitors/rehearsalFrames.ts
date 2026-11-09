@@ -6,7 +6,7 @@ import {
   type Rehearsal,
   type TemplateLiveSources,
 } from '@cg/shared-ipc';
-import type { FieldValues, Position } from '@cg/shared-schema';
+import type { FieldValues, Position, StackItemState } from '@cg/shared-schema';
 import type { PlateSourceLookup } from './livePlateGeometry.js';
 import type { TimingToSend } from '../inspector/timingToSend.js';
 import type { BookPage } from '../layers/bookOf.js';
@@ -26,6 +26,7 @@ export interface RehearsalSubject {
   position: Position | undefined;
   /** Applied fields with any staged edits layered on. */
   fields: FieldValues;
+  previewPlateCrops?: StackItemState['previewPlateCrops'];
   /**
    * R-049 — the template's Live Source carrier, when this browser's registry
    * holds one. `undefined` covers BOTH "this template declares none" and "the

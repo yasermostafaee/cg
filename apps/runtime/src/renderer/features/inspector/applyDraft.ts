@@ -9,6 +9,7 @@ import { isPositionLocked } from './PositionPicker.js';
 import { recordSentPasses } from './timingSent.js';
 import { patternRefusalsOf } from './patternCheck.js';
 import {
+  beginPreviewCropApply,
   buildApplyPayload,
   buildLookBindingsPayload,
   buildOverlayPayload,
@@ -131,7 +132,8 @@ export function applyDraft(
     PLATES FIRST, and it is not arbitrary: the assignment reaches NOTHING on air (it is read at
     the next take), while `stack.update` reaches the graphic on the channel now. Doing the
     harmless halves first means a refused one cannot leave a half-applied on-air change behind
-    it. The FIELDS are therefore always last.
+    it. The crop batch comes after accepted fields, so it validates against the updated bindings
+    and changes no on-air layer.
 
     EVERY half runs regardless, and the verdict is the AND of them: a refused assignment must
     not silently discard a field edit the operator also staged, and a refused field update must
@@ -147,11 +149,56 @@ export function applyDraft(
     position,
     timing,
   ];
+  const crop = beginPreviewCropApply(item.itemId);
+  if (crop === null) return Promise.resolve({ accepted: false });
   return preflight
-    .reduce<
-      Promise<boolean>
-    >((prior, half) => prior.then((ok) => half().then((mine) => ok && mine)), Promise.resolve(true))
-    .then((ok) => fields().then((res) => (ok ? res : { ...res, accepted: false })));
+    .reduce<Promise<boolean>>(
+      (prior, half) => prior.then((ok) => half().then((mine) => ok && mine)),
+      Promise.resolve(true),
+    )
+    .then(async (ok) => {
+      const res = await fields();
+      if (!res.accepted) return res;
+      const cropsAccepted = await applyPreviewCropDrafts(item.itemId, crop);
+      return ok && cropsAccepted ? res : { ...res, accepted: false };
+    })
+    .finally(crop.finish);
+}
+
+async function applyPreviewCropDrafts(
+  itemId: string,
+  crop: NonNullable<ReturnType<typeof beginPreviewCropApply>>,
+): Promise<boolean> {
+  crop.accept('practice');
+  const edits = crop.drafts.flatMap((draft) =>
+    draft.kind === 'guide'
+      ? [
+          {
+            token: draft.token,
+            focus: draft.focus,
+            ...(draft.lookId === undefined ? {} : { lookId: draft.lookId }),
+          },
+        ]
+      : [],
+  );
+  if (edits.length === 0) return true;
+  try {
+    const result = await window.cg.stack.previewPlateCrop({ itemId, edits });
+    if (
+      result.ok &&
+      result.applied?.length === edits.length &&
+      edits.every(({ token }, index) => result.applied?.[index] === token)
+    ) {
+      crop.accept('guide');
+      return true;
+    }
+    reportCommandError(result.message ?? 'CG Bridge did not confirm the preview framing update.');
+  } catch (error) {
+    reportCommandError(
+      error instanceof Error ? error.message : 'The preview framing update failed.',
+    );
+  }
+  return false;
 }
 
 /**

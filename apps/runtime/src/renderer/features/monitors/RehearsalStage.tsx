@@ -445,12 +445,16 @@ export function RehearsalStage({
               ? undefined
               : activeLookOf(subject.liveSources, subject.activeLookId);
           // A changed look, binding or footprint must unmount old crop tokens immediately.
-          const key = JSON.stringify([
-            subject.itemId,
-            subject.plateSources?.templateId,
+          const scope = JSON.stringify([
+            subject.channel,
+            subject.plateSources.templateId,
             look?.id,
             raster.width,
             raster.height,
+          ]);
+          const key = JSON.stringify([
+            subject.itemId,
+            scope,
             plates.map(({ plateId, sourceId, catalogAspect, x, y, width, height }) => [
               plateId,
               sourceId,
@@ -461,7 +465,7 @@ export function RehearsalStage({
               height,
             ]),
           ]);
-          return [{ itemId: subject.itemId, plates, key }];
+          return [{ subject, plates, key, scope, lookId: look?.id }];
         })
       : [];
 
@@ -627,8 +631,15 @@ export function RehearsalStage({
             className="cg-pan-draft-layer"
             style={{ ...frameBox(raster, fit), zIndex: overlayZIndex(renderable.length) + 1 }}
           >
-            {panRows.map(({ itemId, plates, key }) => (
-              <PreviewPanRow key={key} itemId={itemId} plates={plates} />
+            {panRows.map(({ subject, plates, key, scope, lookId }) => (
+              <PreviewPanRow
+                key={key}
+                itemId={subject.itemId}
+                scope={scope}
+                lookId={lookId}
+                appliedCrops={subject.previewPlateCrops}
+                plates={plates}
+              />
             ))}
           </div>
         )}

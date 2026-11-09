@@ -1,10 +1,22 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Move, RotateCcw } from 'lucide-react';
-import { DEFAULT_LIVE_CROP_FOCUS, fitPictureToBox, type LiveCropFocus } from '@cg/shared-schema';
+import {
+  DEFAULT_LIVE_CROP_FOCUS,
+  fitPictureToBox,
+  type LiveCropFocus,
+  type StackItemState,
+} from '@cg/shared-schema';
 import type { PreviewPlateCropTarget } from '@cg/shared-ipc';
 import { smpteBarsGradient } from '@cg/template-runtime/scene-builder';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
+import {
+  appliedPracticeCropOf,
+  draftsVersion,
+  previewCropDraftOf,
+  stagePreviewCrop,
+  subscribeDrafts,
+} from '../inspector/draftStore.js';
 import type { PlatePlacement } from './livePlateGeometry.js';
 
 const PRACTICE_SOURCE_ASPECT = 16 / 9;
@@ -13,29 +25,37 @@ interface PreviewPanPlacement extends PlatePlacement {
   catalogAspect: number | null;
 }
 
-interface CropSave {
-  plateId: string;
-  phase: 'saving' | 'saved' | 'error';
-  focus: LiveCropFocus;
-}
-
-type CropState = 'practice' | 'loading' | 'ready' | CropSave['phase'];
+type CropState =
+  | 'practice'
+  | 'practice-draft'
+  | 'practice-saved'
+  | 'loading'
+  | 'ready'
+  | 'draft'
+  | 'saved';
 
 const CROP_LABEL = {
   practice: 'Practice image',
+  'practice-draft': 'Practice draft',
+  'practice-saved': 'Practice saved',
   loading: 'Checking crop…',
   ready: 'Crop guide',
-  saving: 'Saving crop…',
+  draft: 'Crop draft',
   saved: 'Saved for Take',
-  error: 'Crop not saved',
 } as const satisfies Record<CropState, string>;
 
 /** One request per rehearsing row. The stage remounts this row when its crop context changes. */
 export function PreviewPanRow({
   itemId,
+  scope,
+  lookId,
+  appliedCrops,
   plates,
 }: {
   itemId: string;
+  scope: string;
+  lookId: string | undefined;
+  appliedCrops: StackItemState['previewPlateCrops'];
   plates: readonly PreviewPanPlacement[];
 }): JSX.Element {
   const hasSource = plates.some((plate) => plate.sourceId !== null);
@@ -43,12 +63,9 @@ export function PreviewPanRow({
     hasSource ? null : [],
   );
   const [cropMessage, setCropMessage] = useState<string>();
-  const [save, setSave] = useState<CropSave | null>(null);
-  const pending = useRef(false);
-  const mounted = useRef(false);
+  useSyncExternalStore(subscribeDrafts, draftsVersion, draftsVersion);
 
   useEffect(() => {
-    mounted.current = true;
     let current = true;
     if (hasSource) {
       void (async () => {
@@ -66,34 +83,8 @@ export function PreviewPanRow({
     }
     return () => {
       current = false;
-      mounted.current = false;
     };
   }, [hasSource, itemId]);
-
-  const saveFocus = async (target: PreviewPlateCropTarget, focus: LiveCropFocus): Promise<void> => {
-    if (pending.current) return;
-    pending.current = true;
-    setSave({ plateId: target.plateId, phase: 'saving', focus });
-    try {
-      const result = await window.cg.stack.previewPlateCrop({
-        itemId,
-        edit: { token: target.token, focus },
-      });
-      if (!mounted.current) return;
-      if (result.ok && result.targets.some((entry) => entry.token === target.token)) {
-        setTargets(result.targets);
-        setSave({ plateId: target.plateId, phase: 'saved', focus });
-        return;
-      }
-    } catch {
-      if (!mounted.current) return;
-    } finally {
-      pending.current = false;
-    }
-    // A refusal can mean the crop plan has changed. Reopen Pan to inspect it again.
-    setTargets([]);
-    setSave({ plateId: target.plateId, phase: 'error', focus });
-  };
 
   return (
     <>
@@ -108,10 +99,27 @@ export function PreviewPanRow({
                   (plate.catalogAspect === null ||
                     Math.abs(entry.sourceAspect / plate.catalogAspect - 1) < 1e-6),
               );
-        const plateSave = save?.plateId === plate.plateId ? save : null;
+        const key =
+          target?.token ??
+          JSON.stringify([
+            scope,
+            plate.plateId,
+            plate.sourceId,
+            plate.catalogAspect,
+            plate.width,
+            plate.height,
+          ]);
+        const draft = previewCropDraftOf(itemId, key);
+        const saved =
+          target === undefined
+            ? appliedPracticeCropOf(itemId, key)
+            : appliedCrops?.find((crop) => crop.token === target.token)?.focus;
+        const appliedFocus = saved ?? target?.focus ?? DEFAULT_LIVE_CROP_FOCUS;
         let state: CropState = targets === null ? 'loading' : 'practice';
-        if (target !== undefined) state = target.staged === true ? 'saved' : 'ready';
-        if (plateSave !== null) state = plateSave.phase;
+        if (target !== undefined)
+          state = saved !== undefined || target.staged === true ? 'saved' : 'ready';
+        else if (saved !== undefined) state = 'practice-saved';
+        if (draft !== undefined) state = target === undefined ? 'practice-draft' : 'draft';
         return (
           <div
             key={plate.elementId}
@@ -124,22 +132,30 @@ export function PreviewPanRow({
             }}
           >
             <PreviewPanDraft
-              key={target?.token ?? 'practice'}
+              key={key}
               plateId={plate.plateId}
               width={plate.width}
               height={plate.height}
-              practiceAspect={plate.catalogAspect ?? PRACTICE_SOURCE_ASPECT}
+              sourceAspect={target?.sourceAspect ?? plate.catalogAspect ?? PRACTICE_SOURCE_ASPECT}
               state={state}
-              blocked={targets === null || save?.phase === 'saving'}
+              blocked={targets === null}
               cropMessage={cropMessage}
-              guide={
-                target === undefined
-                  ? undefined
-                  : {
-                      aspect: target.sourceAspect,
-                      focus: plateSave?.phase === 'saving' ? plateSave.focus : target.focus,
-                      save: (focus) => void saveFocus(target, focus),
-                    }
+              guide={target !== undefined}
+              stagedFocus={draft?.focus ?? appliedFocus}
+              onFocusChange={(focus) =>
+                stagePreviewCrop(
+                  itemId,
+                  target === undefined
+                    ? { kind: 'practice', key, focus }
+                    : {
+                        kind: 'guide',
+                        key,
+                        token: target.token,
+                        focus,
+                        ...(lookId !== undefined && { lookId }),
+                      },
+                  appliedFocus,
+                )
               }
             />
           </div>
@@ -180,29 +196,29 @@ function PreviewPanDraft({
   plateId,
   width,
   height,
-  practiceAspect,
+  sourceAspect,
   state,
   blocked,
   cropMessage,
   guide,
+  stagedFocus,
+  onFocusChange,
 }: {
   plateId: string;
   width: number;
   height: number;
-  practiceAspect: number;
+  sourceAspect: number;
   state: CropState;
   blocked: boolean;
   cropMessage: string | undefined;
-  guide: { aspect: number; focus: LiveCropFocus; save: (focus: LiveCropFocus) => void } | undefined;
+  guide: boolean;
+  stagedFocus: LiveCropFocus;
+  onFocusChange: (focus: LiveCropFocus) => void;
 }): JSX.Element {
-  const [practiceFocus, setPracticeFocus] = useState(DEFAULT_LIVE_CROP_FOCUS);
   const [dragFocus, setDragFocus] = useState<LiveCropFocus | null>(null);
-  const appliedFocus = guide?.focus ?? practiceFocus;
-  const focus = dragFocus ?? appliedFocus;
+  const focus = dragFocus ?? stagedFocus;
   const commitFocus = (next: LiveCropFocus): void => {
-    if (blocked || (next.x === appliedFocus.x && next.y === appliedFocus.y)) return;
-    if (guide === undefined) setPracticeFocus(next);
-    else guide.save(next);
+    if (!blocked && (next.x !== stagedFocus.x || next.y !== stagedFocus.y)) onFocusChange(next);
   };
   const source = useRef<HTMLSpanElement>(null);
   const start = useRef<PointerOrigin | null>(null);
@@ -211,11 +227,7 @@ function PreviewPanDraft({
     start.current = null;
     setDragFocus(null);
   };
-  const picture = fitPictureToBox(
-    { x: 0, y: 0, width, height },
-    guide?.aspect ?? practiceAspect,
-    'contain',
-  ).picture;
+  const picture = fitPictureToBox({ x: 0, y: 0, width, height }, sourceAspect, 'contain').picture;
   const crop = fitPictureToBox(picture, width / height, 'contain').picture;
   const cropWidth = crop.width / picture.width;
   const cropHeight = crop.height / picture.height;
@@ -228,12 +240,9 @@ function PreviewPanDraft({
     : vertical
       ? 'Drag or use the up and down arrows.'
       : 'The image fits this plate.';
-  const description =
-    state === 'error'
-      ? 'Could not save the crop. Reopen Pan to check the assigned input again.'
-      : guide
-        ? `${instructions} The guide uses bars. Changes are saved for Take.`
-        : `${instructions} ${cropMessage ?? 'Practice changes stay in Preview.'}`;
+  const description = guide
+    ? `${instructions} The guide uses bars. Press Update to save this crop for Take.`
+    : `${instructions} Press Update to keep this practice crop in this console. ${cropMessage ?? 'Practice changes stay in Preview.'}`;
   return (
     <div className="cg-pan-draft" data-pan-crop-state={state}>
       <Button

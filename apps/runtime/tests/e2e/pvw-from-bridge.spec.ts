@@ -236,7 +236,7 @@ test('🔴 a template imported in profile A is rehearsed in a fresh profile B, f
   await c.context().close();
 });
 
-test('D-178 — a saved PVW crop survives leaving Preview and is applied in the first Take FILL', async ({
+test('D-178 — PVW crop stays a draft until Update and reaches the first Take FILL', async ({
   page,
 }) => {
   const handle = await boot(true);
@@ -275,32 +275,55 @@ test('D-178 — a saved PVW crop survives leaving Preview and is applied in the 
   const pvw = page.getByRole('region', { name: 'PREVIEW (PVW)' });
   const plateRow = page.getByRole('region', { name: 'Layers' }).locator('[data-layer="59"]');
   const take = plateRow.getByRole('button', { name: 'PLAY', exact: true });
-  await plateRow.getByRole('button', { name: 'ON PVW', exact: true }).click();
+  await plateRow.locator('[data-row-body]').click();
+  const update = page.getByRole('button', { name: 'Apply staged edits', exact: true });
+  const discard = page.getByRole('button', { name: 'Discard staged edits' });
+  const startPan = async () => {
+    await plateRow.getByRole('button', { name: 'ON PVW', exact: true }).click();
+    await pvw.getByRole('button', { name: 'PLAY', exact: true }).click();
+    await pvw.getByRole('button', { name: 'Pan preview input', exact: true }).click();
+    await expect(pvw.getByRole('button', { name: 'Pan crop guide in guest' })).toBeVisible();
+  };
+  const leavePreview = () => plateRow.getByRole('button', { name: 'OFF PVW', exact: true }).click();
+  await startPan();
   await expect(take).toBeDisabled();
-  await pvw.getByRole('button', { name: 'PLAY', exact: true }).click();
-  const pan = pvw.getByRole('button', { name: 'Pan preview input', exact: true });
-  await pan.click();
   const crop = pvw.locator('[data-pan-practice-crop]');
   const source = pvw.locator('[data-pan-practice-picture]');
+  const draft = pvw.locator('[data-pan-crop-state="draft"]');
   const saved = pvw.locator('[data-pan-crop-state="saved"]');
-  await expect(pvw.getByRole('button', { name: 'Pan crop guide in guest' })).toBeVisible();
-  const [sourceBox, cropBox] = await Promise.all([source.boundingBox(), crop.boundingBox()]);
-  if (sourceBox === null || cropBox === null) throw new Error('Missing crop geometry');
-  const x = cropBox.x + cropBox.width / 2;
-  const y = cropBox.y + cropBox.height / 2;
   const wireStart = engine.receivedCommands().length;
-  await page.mouse.move(x, y);
-  await page.mouse.down();
-  await page.mouse.move(x + sourceBox.width / 8, y, { steps: 5 });
-  await page.mouse.up();
-  await expect(saved).toBeVisible();
   const readLeft = () => crop.evaluate((element) => Number.parseFloat(element.style.left));
+  const dragRight = async () => {
+    const [sourceBox, cropBox] = await Promise.all([source.boundingBox(), crop.boundingBox()]);
+    if (sourceBox === null || cropBox === null) throw new Error('Missing crop geometry');
+    const x = cropBox.x + cropBox.width / 2;
+    const y = cropBox.y + cropBox.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + sourceBox.width / 8, y, { steps: 5 });
+    await page.mouse.up();
+    await expect(draft).toBeVisible();
+  };
+  await dragRight();
   await expect.poll(readLeft).toBeCloseTo(37.5, 0);
+  expect(handle.runtime.previewPlateCrop(cropItem).targets[0]?.focus.x).toBe(0.5);
 
-  await pan.click();
+  await leavePreview();
   await expect(crop).toHaveCount(0);
-  await pan.click();
-  await expect(pvw.getByRole('button', { name: 'Pan crop guide in guest' })).toBeVisible();
+  await startPan();
+  await expect(draft).toBeVisible();
+  await expect.poll(readLeft).toBeCloseTo(37.5, 0);
+  await discard.click();
+  await expect(draft).toHaveCount(0);
+  await expect.poll(readLeft).toBeCloseTo(25, 0);
+
+  await dragRight();
+  await leavePreview();
+  await update.click();
+  await expect
+    .poll(() => handle.runtime.previewPlateCrop(cropItem).targets[0]?.focus.x)
+    .toBeCloseTo(0.75, 1);
+  await startPan();
   await expect(saved).toBeVisible();
   await expect.poll(readLeft).toBeCloseTo(37.5, 0);
   const staged = engine
@@ -309,7 +332,7 @@ test('D-178 — a saved PVW crop survives leaving Preview and is applied in the 
     .map(({ line }) => line);
   expect(staged.some((line) => /(?:^| )(?:MIXER 1-60|PLAY 1-60) /.test(line))).toBe(false);
 
-  await plateRow.getByRole('button', { name: 'OFF PVW', exact: true }).click();
+  await leavePreview();
   await take.click();
   const slot = { channel: 1, layer: 60 };
   await expect.poll(() => engine.layerState(slot)?.fill?.x).toBeCloseTo(0.1875, 2);

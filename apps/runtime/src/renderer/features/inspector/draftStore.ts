@@ -2,6 +2,7 @@ import {
   isFieldNamespace,
   type FieldValue,
   type FieldValues,
+  type LiveCropFocus,
   type PositionAnchor,
   type StackItemTimingOverride,
 } from '@cg/shared-schema';
@@ -152,6 +153,88 @@ export interface PositionDraft {
 }
 
 const positionDrafts = new Map<string, PositionDraft>();
+
+/** D-178 — practice framing stays in this console. A guide is scoped by Bridge's crop token. */
+export type PreviewCropDraft =
+  | { readonly key: string; readonly focus: LiveCropFocus; readonly kind: 'practice' }
+  | {
+      readonly key: string;
+      readonly focus: LiveCropFocus;
+      readonly kind: 'guide';
+      readonly token: string;
+      readonly lookId?: string | undefined;
+    };
+
+const previewCropDrafts = new Map<string, Map<string, PreviewCropDraft>>();
+const appliedPracticeCrops = new Map<string, Map<string, LiveCropFocus>>();
+const applyingPreviewCrops = new Map<string, ReadonlyMap<string, PreviewCropDraft>>();
+
+export function previewCropDraftOf(itemId: string, key: string): PreviewCropDraft | undefined {
+  return previewCropDrafts.get(itemId)?.get(key);
+}
+
+export function appliedPracticeCropOf(itemId: string, key: string): LiveCropFocus | undefined {
+  return appliedPracticeCrops.get(itemId)?.get(key);
+}
+
+function sameCropFocus(a: LiveCropFocus, b: LiveCropFocus): boolean {
+  return a.x === b.x && a.y === b.y;
+}
+
+export function stagePreviewCrop(
+  itemId: string,
+  draft: PreviewCropDraft,
+  appliedFocus: LiveCropFocus,
+): void {
+  const item = previewCropDrafts.get(itemId) ?? new Map<string, PreviewCropDraft>();
+  const applying = applyingPreviewCrops.get(itemId)?.get(draft.key);
+  if (
+    sameCropFocus(draft.focus, appliedFocus) &&
+    (applying === undefined || sameCropFocus(draft.focus, applying.focus))
+  ) {
+    if (!item.delete(draft.key)) return;
+    if (item.size === 0) previewCropDrafts.delete(itemId);
+  } else {
+    // A return to the old baseline is still an edit if Update may change that baseline.
+    item.set(draft.key, { ...draft });
+    previewCropDrafts.set(itemId, item);
+  }
+  bump();
+}
+
+/** Snapshot this press, keeping another Update from racing it for the same row. */
+export function beginPreviewCropApply(itemId: string): {
+  drafts: readonly PreviewCropDraft[];
+  accept: (kind: PreviewCropDraft['kind']) => void;
+  finish: () => void;
+} | null {
+  if (applyingPreviewCrops.has(itemId)) return null;
+  const sent = new Map(previewCropDrafts.get(itemId));
+  if (sent.size > 0) applyingPreviewCrops.set(itemId, sent);
+  return {
+    drafts: [...sent.values()],
+    accept(kind) {
+      if (applyingPreviewCrops.get(itemId) !== sent) return;
+      const current = previewCropDrafts.get(itemId);
+      const practice = appliedPracticeCrops.get(itemId) ?? new Map<string, LiveCropFocus>();
+      let changed = false;
+      for (const draft of sent.values()) {
+        if (draft.kind !== kind) continue;
+        if (draft.kind === 'practice') {
+          practice.set(draft.key, draft.focus);
+          appliedPracticeCrops.set(itemId, practice);
+          changed = true;
+        }
+        if (current?.get(draft.key) === draft) changed = current.delete(draft.key) || changed;
+      }
+      if (current?.size === 0) previewCropDrafts.delete(itemId);
+      if (changed) bump();
+    },
+    finish() {
+      if (applyingPreviewCrops.get(itemId) === sent) applyingPreviewCrops.delete(itemId);
+    },
+  };
+}
 
 /** Stage the item's whole position draft (the picker writes all three together). */
 export function stagePosition(itemId: string, draft: PositionDraft): void {
@@ -735,7 +818,7 @@ export function isItemDirty(
     there.
   */
   if (isTimingDirty(itemId, appliedTiming)) return true;
-  return false;
+  return previewCropDrafts.has(itemId);
 }
 
 /**
@@ -772,7 +855,7 @@ export function buildOverlayPayload(applied: FieldValues, overlay: FieldValues):
   return deepMerge(applied, overlay);
 }
 
-/** Drop an item's entire draft — fields, plates, per-look inputs AND position — on Discard. */
+/** Drop every unapplied edit of an item on Discard. */
 export function clearDraft(itemId: string): void {
   const hadFields = drafts.delete(itemId);
   const hadPlates = plateDrafts.delete(itemId);
@@ -789,7 +872,8 @@ export function clearDraft(itemId: string): void {
   // …AND THE TIMING (`DELTA B4`), by the same argument: a staged count that survived a Discard
   // is an unapplied edit nobody can see, and this one reaches air at the next take.
   const hadTiming = timingDrafts.delete(itemId);
-  if (hadFields || hadPlates || hadLooks || hadPosition || hadTiming) bump();
+  const hadPreviewCrops = previewCropDrafts.delete(itemId);
+  if (hadFields || hadPlates || hadLooks || hadPosition || hadTiming || hadPreviewCrops) bump();
 }
 
 /**
@@ -938,16 +1022,17 @@ export function pruneDrafts(snapshot: StackPruneInput): void {
   if (!snapshot.ready) return;
   const live = snapshot.liveItemIds;
   let changed = false;
-  /*
-    EVERY map, from the one guard. A draft of any kind that outlived this sweep would be an
-    unapplied edit the operator can no longer see or reach.
-
-    ⚠ This used to say the position was "the one map `clearDraft` leaves alone". That stopped
-    being true when the owner folded the position into the one commit (2026-09-14), and it is
-    corrected rather than left standing: Discard drops every map in this list. A prune differs
-    only in its reason — the ROW is gone, so there is nothing left for any draft to belong to.
-  */
-  for (const map of [drafts, plateDrafts, lookBindingDrafts, positionDrafts, timingDrafts] as {
+  // A removed row has no owner for drafts, applied practice framing or an outstanding receipt.
+  for (const map of [
+    drafts,
+    plateDrafts,
+    lookBindingDrafts,
+    positionDrafts,
+    timingDrafts,
+    previewCropDrafts,
+    appliedPracticeCrops,
+    applyingPreviewCrops,
+  ] as {
     delete: (k: string) => boolean;
     keys: () => IterableIterator<string>;
   }[]) {
@@ -968,6 +1053,9 @@ export function __resetDraftsForTest(): void {
   lookBindingDrafts.clear();
   positionDrafts.clear();
   timingDrafts.clear();
+  previewCropDrafts.clear();
+  appliedPracticeCrops.clear();
+  applyingPreviewCrops.clear();
   bump();
 }
 

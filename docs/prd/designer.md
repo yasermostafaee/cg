@@ -6036,13 +6036,14 @@ Playout; the client must not invent a vendor-specific capture endpoint.
 ## [~] D-178 — Pan a live input inside a differently shaped plate ⟨priority: high — clarified by the owner, 2026-11-09⟩ — `openspec/changes/pan-live-input-focus/`
 
 **What:** In CG Control, choose the visible region of an input inside its plate in PVW. Move only
-the overflowing source axis and preserve the plate, its title and the source assignment. Save the
-crop for the same row, look, plate and resolved input so Take applies it before the first on-air
-frame. Existing authored focus values remain readable. Absent focus centres a cover crop.
+the overflowing source axis and preserve the plate, its title and the source assignment. Drag and
+Center stage a draft for the same row, look, plate and input. The draft survives OFF PVW. Update
+saves it for Take, including when PVW is off. Discard restores the last applied position. Take
+applies the saved position before the first on-air frame. Absent focus centres a cover crop.
 
 **Implementation:** A compatible Bridge supplies eligible crops and their source aspect. With
 known geometry, PVW can save the crop using a proportional guide while the source picture is
-unavailable. A generic practice guide stays in the browser. The owner deferred PGM Pan after
+unavailable. Update applies generic practice framing in the current browser session. The owner deferred PGM Pan after
 reviewing the PVW interaction. The programme monitor has no Pan controls or crop overlays.
 
 **Crop workspace:** show the whole practice source inside its plate in PVW. Outline the portion

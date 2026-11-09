@@ -5,6 +5,7 @@ import {
   LayerSlotSchema,
   LiveCropFocusSchema,
   LiveSourceLookOverrideSchema,
+  MAX_PREVIEW_PLATE_CROPS,
   PositionSchema,
   StackItemStateSchema,
 } from '@cg/shared-schema';
@@ -509,16 +510,27 @@ const PreviewPlateCropTargetSchema = z.object({
 });
 export type PreviewPlateCropTarget = z.infer<typeof PreviewPlateCropTargetSchema>;
 
-/** Inspect the next Take's crop targets, or stage an exact framing without sending AMCP. */
+const PreviewPlateCropEditSchema = PreviewPlateCropTargetSchema.pick({
+  token: true,
+  focus: true,
+}).extend({ lookId: z.string().min(1).optional() });
+export type PreviewPlateCropEdit = z.infer<typeof PreviewPlateCropEditSchema>;
+
+/** Inspect the next Take's crop targets, or save an atomic Inspector batch without sending AMCP. */
 export const StackPreviewPlateCropChannel = defineChannel(
   'stack.preview-plate-crop',
   z.object({
     itemId: IdSchema,
     edit: PreviewPlateCropTargetSchema.pick({ token: true, focus: true }).optional(),
+    edits: z.array(PreviewPlateCropEditSchema).min(1).max(MAX_PREVIEW_PLATE_CROPS).optional(),
   }),
   z.object({
     ok: z.boolean(),
     targets: z.array(PreviewPlateCropTargetSchema),
+    applied: z
+      .array(PreviewPlateCropTargetSchema.shape.token)
+      .max(MAX_PREVIEW_PLATE_CROPS)
+      .optional(),
     message: z.string().optional(),
   }),
 );

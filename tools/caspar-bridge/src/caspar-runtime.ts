@@ -131,6 +131,7 @@ import {
   lookPlateReveals,
   lookPlateRects,
   type PgmPlateCropTarget,
+  type PreviewPlateCropEdit,
   type PreviewPlateCropTarget,
   pruneAssignmentsForCatalog,
   // `PLAYOUT-SOURCES-01` — what may be bound and what may be seated, asked of the ONE module.
@@ -9001,8 +9002,9 @@ export class CasparRuntime {
 
   previewPlateCrop(
     itemId: string,
-    edit?: { token: string; focus: LiveCropFocus },
-  ): { ok: boolean; targets: PreviewPlateCropTarget[]; message?: string } {
+    edit?: Pick<PreviewPlateCropEdit, 'token' | 'focus'>,
+    edits?: readonly PreviewPlateCropEdit[],
+  ): { ok: boolean; targets: PreviewPlateCropTarget[]; applied?: string[]; message?: string } {
     const item = this.#reconciler.get(itemId);
     const slot = this.#slots.get(itemId);
     if (item == null || slot === undefined) {
@@ -9016,30 +9018,69 @@ export class CasparRuntime {
       return { ok: false, targets: [], message: 'This row is not ready for preview framing.' };
     }
 
-    const lookId = this.activeLookId(itemId);
-    const plan = this.#planLiveSeating(itemId, slot, lookId, 'entering-look', 'fresh');
-    if (!plan.ok) return { ok: false, targets: [], message: plan.message };
-    const targets = plan.previewCropTargets;
-    if (edit === undefined) return { ok: true, targets };
-    if (!this.#rehearsing.has(itemId)) {
+    const activeLookId = this.activeLookId(itemId);
+    const activePlan = this.#planLiveSeating(itemId, slot, activeLookId, 'entering-look', 'fresh');
+    const targets = activePlan.ok ? activePlan.previewCropTargets : [];
+    if (!activePlan.ok && edits === undefined) {
+      return { ok: false, targets, message: activePlan.message };
+    }
+    if (edit === undefined && edits === undefined) return { ok: true, targets };
+    if (edit !== undefined && edits !== undefined) {
+      return { ok: false, targets, message: 'Send one crop edit or one Inspector update.' };
+    }
+    if (edit !== undefined && !this.#rehearsing.has(itemId)) {
       return { ok: false, targets, message: 'Put this row on Preview before framing it.' };
     }
-    const target = targets.find(({ token }) => token === edit.token);
-    if (target === undefined) {
-      return { ok: false, targets, message: 'The preview plate changed. Frame its current input.' };
+
+    const drafts: readonly PreviewPlateCropEdit[] = edits ?? (edit === undefined ? [] : [edit]);
+    if (drafts.length === 0 || drafts.length > MAX_PREVIEW_PLATE_CROPS) {
+      return { ok: false, targets, message: 'The Inspector crop update has an invalid size.' };
+    }
+    const looks = this.#templates.getOn(slot.channel, item.templateId)?.liveSources?.looks;
+    const plans = new Map([[activeLookId, activePlan]]);
+    const accepted = new Map<
+      string,
+      { lookId: string | undefined; plateId: string; focus: LiveCropFocus }
+    >();
+    for (const draft of drafts) {
+      const lookId = draft.lookId ?? activeLookId;
+      if (draft.lookId !== undefined && !looks?.some(({ id }) => id === lookId)) {
+        return { ok: false, targets, message: 'A preview preset changed. Check the crop again.' };
+      }
+      const plan =
+        plans.get(lookId) ?? this.#planLiveSeating(itemId, slot, lookId, 'entering-look', 'fresh');
+      if (!plan.ok) return { ok: false, targets, message: plan.message };
+      plans.set(lookId, plan);
+      const target = plan.previewCropTargets.find(({ token }) => token === draft.token);
+      if (target === undefined || accepted.has(draft.token)) {
+        return {
+          ok: false,
+          targets,
+          message: 'The preview plate changed. Frame its current input.',
+        };
+      }
+      accepted.set(draft.token, { lookId, plateId: target.plateId, focus: draft.focus });
     }
 
+    // All tokens refer to this row's current inputs and geometry. Commit the batch in one write.
     const prior = this.#previewPlateCrops.get(itemId) ?? [];
-    const crops = [...prior.filter(({ token }) => token !== edit.token), edit];
+    const crops = [
+      ...prior.filter(({ token }) => !accepted.has(token)),
+      ...Array.from(accepted, ([token, { focus }]) => ({ token, focus })),
+    ];
     this.#previewPlateCrops.set(itemId, crops.slice(-MAX_PREVIEW_PLATE_CROPS));
-    // A new off-air edit supersedes an older PGM pan from a previous take of this plate.
-    this.#liveCropFocuses.get(itemId)?.delete(cropKey(lookId, target.plateId));
+    // A saved off-air crop supersedes an older PGM pan from a previous take of that plate.
+    const liveCrops = this.#liveCropFocuses.get(itemId);
+    for (const { lookId, plateId } of accepted.values())
+      liveCrops?.delete(cropKey(lookId, plateId));
     this.#markDirty(itemId);
     return {
       ok: true,
-      targets: targets.map((entry) =>
-        entry === target ? { ...entry, focus: edit.focus, staged: true } : entry,
-      ),
+      ...(edits !== undefined && { applied: [...accepted.keys()] }),
+      targets: targets.map((entry) => {
+        const crop = accepted.get(entry.token);
+        return crop === undefined ? entry : { ...entry, focus: crop.focus, staged: true };
+      }),
     };
   }
 

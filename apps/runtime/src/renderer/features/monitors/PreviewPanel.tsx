@@ -221,6 +221,7 @@ export function PreviewPanel({ companionActions }: { companionActions?: ReactNod
             // Inspector's Apply uses — so what is rehearsed is exactly what Apply
             // would send.
             fields,
+            previewPlateCrops: item.previewPlateCrops,
             // `RUN-NEXT-VERSION-03` 1.1 / 1.3 — the page a take of these values would show.
             book: bookPageOf(info, item, fields) ?? undefined,
             liveSources: live,

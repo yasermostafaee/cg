@@ -282,6 +282,44 @@ test('D-178 — practice keeps the full source and each plate aspect across both
   await expect(preview).toHaveAttribute('aria-pressed', 'false');
 });
 
+test('D-178 — practice crop Draft and Update survive OFF PVW and ON PVW', async ({ app }) => {
+  const { page } = app;
+  await registerTwoBox(page, PAN_HOLES, true);
+  await stubRetainedPage(page, pageWithHoles(PAN_HOLES));
+  const layer = await app.loadTemplate(TWO_BOX);
+  await app.selectLayerRow(layer);
+  const pan = page.getByRole('button', { name: 'Pan preview input', exact: true });
+  const plate = page.getByRole('button', { name: 'Pan practice image in portrait', exact: true });
+  const crop = plate.locator('[data-pan-practice-crop]');
+  const readLeft = () => crop.evaluate((element) => element.style.left);
+  const enter = async () => {
+    await rehearseRow(page, layer);
+    await pvwTransport(page, 'PLAY').click();
+    await pan.click();
+    await expect(plate).toBeVisible();
+  };
+  const leave = () =>
+    page
+      .locator(`[data-layer="${String(layer)}"]`)
+      .getByRole('button', { name: 'OFF PVW', exact: true })
+      .click();
+  await enter();
+  const centered = await readLeft();
+  await plate.press('ArrowRight');
+  await expect.poll(readLeft).not.toBe(centered);
+  const moved = await readLeft();
+  await expect(page.locator('[data-pan-crop-state="practice-draft"]')).toHaveCount(1);
+  await leave();
+  await enter();
+  await expect.poll(readLeft).toBe(moved);
+  await app.inspector.getByRole('button', { name: 'Apply staged edits', exact: true }).click();
+  await expect(page.locator('[data-pan-crop-state="practice-saved"]')).toHaveCount(1);
+  await leave();
+  await enter();
+  await expect.poll(readLeft).toBe(moved);
+  await expect(page.locator('[data-pan-crop-state="practice-saved"]')).toHaveCount(1);
+});
+
 test('B-424 — PVW shows the authored solid fallback beside Bars and labels Crop edges', async ({
   app,
 }) => {

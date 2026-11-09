@@ -4959,7 +4959,7 @@ export function buildRoutes(
       'operator',
       'operator',
       (r: ChannelRequest<typeof StackPreviewPlateCropChannel>) =>
-        b.previewPlateCrop(r.itemId, r.edit),
+        b.previewPlateCrop(r.itemId, r.edit, r.edits),
     ),
     /*
       `MEDIA-PLATES-01` §1.D — Play/Pause and Restart for one media plate of an on-air row. It names

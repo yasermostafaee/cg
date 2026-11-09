@@ -32,24 +32,27 @@ The PVW action opens a practice-only picture inside a visible Crop edges plate. 
 such plate has no practice surface. The whole practice source retains its aspect ratio within
 the available footprint. The shaded crop guide has the authored plate ratio and a blue outline
 with a dark contrast edge. Drag or arrow keys
-move it along the overflowing axis, and Center restores its starting position. The practice state
-belongs to the rendered control and is discarded when it closes. It starts no input check, performs
-no Bridge writes and cannot become an Inspector draft or reach Take. The real PVW gesture still
-requires the active source rectangle and sample aspect ratio from Playout.
+move it along the overflowing axis, and Center restores the centre. Drag and Center stage an
+Inspector draft that survives toggling PVW. Update applies practice framing in the current browser
+session. Discard restores the last applied position. Practice starts no input check and performs
+no Bridge writes. The real PVW gesture still requires the active source rectangle and sample aspect
+ratio from Playout.
 
 ## Save a PVW crop for Take
 
 Bridge reads eligible Crop edges plates from the same resolved seating plan used by Take. A target
-token binds the crop to the row, look, plate, input and fit geometry. Stage an edit only during
-rehearsal. Saving updates the row and leaves the mixer and input transport alone. The stage is
-available when returning to Pan and applies to the first seating plan of the matching Take. A stale
-target cannot set a crop on a different input. Unknown geometry offers only the generic practice guide.
+token binds the crop to the row, look, plate, input and fit geometry. Drag or Center makes an
+Inspector draft during rehearsal. It survives OFF PVW and is available on return. Update saves the
+drafts together after validating them against the current plan for each Look. It can run after
+leaving PVW while the row is off air. Bridge leaves the mixer and input transport alone. The saved
+crop applies to the first seating plan of the matching Take. A stale target refuses the crop batch.
+Unknown geometry offers only the generic practice guide.
 
 The row's existing interlock still requires OFF PVW before PLAY. A saved Center is explicit centred
 focus for that crop, including on a plate with a different authored default.
 
 The console treats the staging route as an optional capability. An older Bridge keeps the practice
-guide available and explains inside Pan why saving is unavailable. Required routes still use the
+guide available and explains inside Pan that Update keeps the position for local practice. Required routes still use the
 global compatibility check.
 
 ## PGM deferred
