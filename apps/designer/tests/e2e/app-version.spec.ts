@@ -35,8 +35,15 @@ test('P-077 — open the bilingual release history from Home and the editor Help
   await expect(history.locator('html')).toHaveAttribute('dir', 'ltr');
   await expect(history.getByRole('heading', { name: 'Features and improvements' })).toBeVisible();
   await expect(history.getByRole('heading', { name: 'Bug fixes' })).toBeVisible();
-  await history.locator(`[id="en-version-${VERSION}"] summary`).click();
-  await expect(history.getByRole('heading', { name: 'Downloads for this version' })).toBeVisible();
+  const currentRelease = history.locator(`[id="en-version-${VERSION}"]`);
+  await expect(
+    currentRelease.getByRole('heading', { name: 'Downloads for this version' }),
+  ).toBeVisible();
+  const historicalRelease = history.locator('[id="en-version-1.0.0"]');
+  await historicalRelease.locator('summary').click();
+  await expect(
+    historicalRelease.getByRole('heading', { name: 'Downloads for this version' }),
+  ).toBeVisible();
   await dialog.getByRole('button', { name: 'Close', exact: true }).click();
 
   await app.newProject('History');

@@ -1,6 +1,13 @@
+import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 
 /** Browser coverage for the pre-bundle splash, with the bootstrap held only where needed. */
+
+const VERSION = (
+  JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as {
+    version: string;
+  }
+).version;
 
 /** The splash element. It REMOVES itself when dismissed, so "gone" is a count of zero. */
 function splash(page: Page) {
@@ -105,7 +112,9 @@ test('the foot carries a build stamp that identifies the running build', async (
 
   // P-074/P-076 — the exact release identity is visible and explicitly labelled before boot.
   const stamp = (await splash(page).locator('#cg-splash-version').textContent())?.trim();
-  expect(stamp).toMatch(/^Version 1\.0\.0 · Build date \d{4}-\d{2}-\d{2}$/);
+  expect(stamp).toMatch(
+    new RegExp(`^Version ${VERSION.replaceAll('.', '\\.')} · Build date \\d{4}-\\d{2}-\\d{2}$`),
+  );
 });
 
 test.describe('reduced motion', () => {
