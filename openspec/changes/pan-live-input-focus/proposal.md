@@ -11,7 +11,9 @@ which part of the live input stays visible while the plate and picture proportio
 - Carry it per look and use the one shared fit calculation for the authoring poster and Bridge geometry.
 - Keep existing files byte-for-byte centred when the field is absent; ignore focus under `contain`.
 - Add direct dragging on the live programme return in CG Control.
-- Add direct dragging in PVW when the C-023 live input preview contract is available.
+- Keep the Pan control visible on both monitors. Let the operator review the PVW gesture with a
+  clearly marked practice image before the Playout mapping is available.
+- Add accurate PVW focus staging when the C-023 feed includes the source picture mapping.
 
 ## Capabilities
 

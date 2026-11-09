@@ -18,6 +18,8 @@
       Request the mapping needed for accurate staged drag in
       [the Playout follow-up](../../../docs/integration/playout/CG-CONTROL-REQUEST-LIVE-INPUT-PREVIEW-2026-10-26.md).
 - [x] 2.6 Show Crop edges below the Plate name and keep the name's screen size independent of fit and zoom
+- [x] 2.7 Keep Pan visible on both monitors and expose a local PVW practice image for operator review
+      before Playout supplies the active source rectangle and sample aspect ratio.
 
 ## 3. Verification
 
@@ -33,3 +35,6 @@
       unchanged.
 - [x] 3.7 The full pre-push gate and [carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42582556024/job/129044614984)
       passed on `0a553a24`, including the PGM drag in the built CG Control.
+- [x] 3.8 Verify the always-visible tools and practice drag at idle and with a Crop edges plate.
+      The focused local Chromium tests passed, including the scoped PGM command.
+- [ ] 3.9 Record carrying Linux E2E for the new controls.

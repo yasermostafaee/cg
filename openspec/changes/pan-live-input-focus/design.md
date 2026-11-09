@@ -31,3 +31,16 @@ look and source during the row's Bridge session.
 PVW needs the real input picture from C-023. Its focus is local to the preview until Take, with zero
 programme writes from dragging. The displayed preview raster and input aspect must be known before
 converting pointer coordinates. Neither a Designer poster nor a PVW placeholder substitutes for it.
+
+## Operator review before the picture mapping
+
+Both headers keep Pan visible. PGM disables its action without a selected on-air row or a live
+return from the active engine. It continues to obtain eligible plates and apply focus through the
+existing scoped Bridge operation.
+
+The PVW action opens a practice-only picture made of colour bars. If a rehearsing template has
+Crop edges plates, each practice target follows its existing raster footprint. Otherwise a sample
+plate is available. Drag or arrow keys move the image inside the fixed rectangle. The practice state
+belongs to the rendered control and is discarded when it closes. It starts no input check, performs
+no Bridge writes and cannot become an Inspector draft or reach Take. The real PVW gesture still
+requires the active source rectangle and sample aspect ratio from Playout.

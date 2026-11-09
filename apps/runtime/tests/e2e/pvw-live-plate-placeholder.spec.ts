@@ -168,6 +168,40 @@ test.beforeEach(async ({ app }) => {
   await app.showMonitors();
 });
 
+test('D-178 — both monitors show Pan, and idle Preview can practice without selecting an on-air row', async ({
+  app,
+}) => {
+  const { page } = app;
+  const programme = page.getByRole('button', { name: 'Pan live input', exact: true });
+  await expect(programme).toBeVisible();
+  await expect(programme).toBeDisabled();
+  await expect(programme).toHaveAttribute('title', 'Select an on-air row to pan its input');
+  const airCount = page.locator('[data-monitor-air-count]');
+  const initialAirCount = await airCount.innerText();
+
+  const preview = page.getByRole('button', { name: 'Pan preview input', exact: true });
+  await expect(preview).toBeVisible();
+  await preview.click();
+  await expect(preview).toHaveAttribute('aria-pressed', 'true');
+  const practice = page.getByRole('button', { name: 'Pan practice image', exact: true });
+  const picture = practice.locator('[data-pan-practice-picture]');
+  await expect(picture).toHaveCSS('background-position-x', '50%');
+  const plate = await practice.boundingBox();
+  if (plate === null) throw new Error('Missing practice plate');
+  await page.mouse.move(plate.x + plate.width / 2, plate.y + plate.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(plate.x + (plate.width * 3) / 4, plate.y + plate.height / 2);
+  await page.mouse.up();
+  await expect(picture).not.toHaveCSS('background-position-x', '50%');
+  expect(await practice.boundingBox()).toEqual(plate);
+  await expect(airCount).toHaveText(initialAirCount);
+
+  await preview.click();
+  await expect(practice).toHaveCount(0);
+  await preview.click();
+  await expect(picture).toHaveCSS('background-position-x', '50%');
+});
+
 test('B-424 — PVW shows the authored solid fallback beside Bars and labels Crop edges', async ({
   app,
 }) => {
@@ -258,6 +292,13 @@ test('B-424 — PVW shows the authored solid fallback beside Bars and labels Cro
   await expect(cropLabel).toBeVisible();
   await expect(cropLabel).toHaveCSS('color', 'rgb(132, 235, 233)');
   await expect(marker(page, 'guest-2').getByText('Crop edges', { exact: true })).toHaveCount(0);
+
+  const coverPlate = await marker(page, 'guest-1').boundingBox();
+  await page.getByRole('button', { name: 'Pan preview input', exact: true }).click();
+  const coverPractice = page.getByRole('button', { name: 'Pan practice image in guest-1' });
+  await expect(coverPractice).toBeVisible();
+  expect(await coverPractice.boundingBox()).toEqual(coverPlate);
+  await expect(page.getByRole('button', { name: 'Pan practice image in guest-2' })).toHaveCount(0);
 });
 
 test('PVW marks every live plate, and the marker lands ON the hole', async ({ app }) => {

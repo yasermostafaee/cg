@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { ArrowRightFromLine, CircleArrowOutDownRight, Play, SquareDashed } from 'lucide-react';
+import {
+  ArrowRightFromLine,
+  CircleArrowOutDownRight,
+  Move,
+  Play,
+  SquareDashed,
+} from 'lucide-react';
 import { REFERENCE_RASTER } from '@cg/shared-ipc';
 import { Panel } from '../../ui/Panel.js';
 import { effectiveTimingFor } from '../inspector/timingToSend.js';
@@ -31,6 +37,7 @@ import {
   subscribeSources,
 } from '../sources/sourceStore.js';
 import { RehearsalStage } from './RehearsalStage.js';
+import { PreviewPanDraft } from './PreviewPanDraft.js';
 import { templateName } from '../../ui/operatorNaming.js';
 import type { PvwPage } from '../../../shared/pvwPage.js';
 import { rowNameFor, subjectsFor, type RehearsalSubject } from './rehearsalFrames.js';
@@ -122,6 +129,8 @@ export function PreviewPanel({ companionActions }: { companionActions?: ReactNod
   const channelSettings = useChannelSettings();
   // `MULTI-CHANNEL-01` — the SELECTED channel's bank: PREVIEW is the channel on screen.
   const { bank, viewChannel } = useChannelBankState();
+  const [panChannel, setPanChannel] = useState<number | null | undefined>(undefined);
+  const panPractice = panChannel === viewChannel;
   const slots = useFixedSlots();
   // `RELEASE-091-01` §1 — each rehearsing row's page: the bridge's first, this browser's copy only
   // when the bridge cannot be reached, or why there is none (`templates.page`).
@@ -437,6 +446,17 @@ export function PreviewPanel({ companionActions }: { companionActions?: ReactNod
           >
             {subjects.length} {subjects.length === 1 ? 'layer' : 'layers'} on PVW
           </MonitorHeadFact>
+          <Button
+            variant="ghost"
+            aria-label="Pan preview input"
+            aria-pressed={panPractice}
+            data-toggle-on={panPractice ? '' : undefined}
+            title="Practice panning an input in Preview"
+            onClick={() => setPanChannel(panPractice ? undefined : viewChannel)}
+          >
+            <Icon icon={Move} size={13} />
+            Pan
+          </Button>
           {companionActions}
         </>
       }
@@ -499,7 +519,11 @@ export function PreviewPanel({ companionActions }: { companionActions?: ReactNod
         <CheckInput channel={viewChannel} />
       </div>
       <div className="cg-pvw-stage">
-        {subjects.length === 0 ? (
+        {subjects.length === 0 && panPractice ? (
+          <div style={styles.screen}>
+            <PreviewPanDraft />
+          </div>
+        ) : subjects.length === 0 ? (
           <div
             style={styles.screen}
             role="img"
@@ -527,6 +551,7 @@ export function PreviewPanel({ companionActions }: { companionActions?: ReactNod
             templateNames={templateNames}
             raster={raster}
             onTransport={setTransport}
+            panPractice={panPractice}
           />
         )}
         <LiveInputCheckCard surface={PVW_INPUT_SURFACE} />

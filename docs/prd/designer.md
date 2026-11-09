@@ -6040,9 +6040,13 @@ the overflowing source axis and preserve the plate, its title and the source ass
 are staged for Take. PGM edits apply to the visible on-air plate through an explicit operator action.
 Existing saved focus values remain readable. Absent focus centres a cover crop.
 
-**Feasibility:** PGM already provides the live programme return, and the Bridge can translate a
-cropped source with its existing FILL/CLIP geometry. An operator gesture and scoped Bridge command
-are still needed. Seeing and panning the real input in PVW depends on the accepted D-177 preview feed.
+**Implementation:** PGM pans through the scoped Bridge command and existing FILL/CLIP geometry.
+Both monitor headers expose Pan even when a programme edit is unavailable. PVW offers a labelled
+practice image for reviewing the gesture. It uses the visible Crop edges plate's footprint when
+available and a sample when idle. Practice movement stays in the browser and is discarded on close.
+
+**Remaining dependency:** The C-023 check supplies a single live input preview, and Playout must
+identify its active picture rectangle and pixel aspect ratio before PVW can stage accurate focus.
 
 ## [~] D-179 — Rebuild and re-audit the Persian production starter gallery ⟨priority: high — owner re-review reopened 2026-11-04⟩ — `openspec/changes/rebuild-production-starter-gallery/`
 

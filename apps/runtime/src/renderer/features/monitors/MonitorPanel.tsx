@@ -6,7 +6,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import { Columns2, Crop, MonitorOff, Rows2, Volume2, VolumeX } from 'lucide-react';
+import { Columns2, MonitorOff, Move, Rows2, Volume2, VolumeX } from 'lucide-react';
 import type { PgmEngine, PgmPlateCropTarget } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
@@ -365,23 +365,30 @@ export function MonitorPanel({
       */
       actions={
         <>
-          {cropKey !== null && (
-            <Button
-              variant="ghost"
-              aria-label="Pan live input"
-              aria-pressed={activeCrop !== null}
-              title="Pan a cropped input on programme"
-              onClick={() => {
-                if (activeCrop === null) requestCrop();
-                else {
-                  cropRequest.current += 1;
-                  setCropEdit(null);
-                }
-              }}
-            >
-              <Icon icon={Crop} size={13} />
-            </Button>
-          )}
+          <Button
+            variant="ghost"
+            aria-label="Pan live input"
+            aria-pressed={activeCrop !== null}
+            data-toggle-on={activeCrop !== null ? '' : undefined}
+            disabled={cropKey === null}
+            title={
+              cropItemId === null
+                ? 'Select an on-air row to pan its input'
+                : cropKey === null
+                  ? 'Programme return unavailable for input pan'
+                  : 'Pan a cropped input on programme'
+            }
+            onClick={() => {
+              if (activeCrop === null) requestCrop();
+              else {
+                cropRequest.current += 1;
+                setCropEdit(null);
+              }
+            }}
+          >
+            <Icon icon={Move} size={13} />
+            Pan
+          </Button>
           {displayControls}
           {companionActions}
         </>

@@ -16,8 +16,9 @@ import type { ChannelRaster } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 import { LivePlateOverlay, anyRegionTooSmallForCaveat } from './LivePlateOverlay.js';
 import { platePlacements, type PlatePlacement } from './livePlateGeometry.js';
+import { PreviewPanDraft } from './PreviewPanDraft.js';
 import { RehearsalFrame, type RehearsalFrameHandle } from './RehearsalFrame.js';
-import { frameZIndex, overlayZIndex, type RehearsalSubject } from './rehearsalFrames.js';
+import { frameBox, frameZIndex, overlayZIndex, type RehearsalSubject } from './rehearsalFrames.js';
 import type { PvwPage } from '../../../shared/pvwPage.js';
 
 /**
@@ -257,6 +258,7 @@ interface Props {
   templateNames: ReadonlyMap<string, string | null>;
   /** The channel's real raster (R-030). Every iframe is sized to it. */
   raster: ChannelRaster;
+  panPractice?: boolean;
   /**
    * Publishes the local transport upward so a persistent controls row can drive it, and
    * `null` on unmount so that row can disable itself rather than hold a stale handle.
@@ -315,6 +317,7 @@ export function RehearsalStage({
   pageByItem,
   templateNames,
   raster,
+  panPractice = false,
   onTransport,
 }: Props): JSX.Element {
   const fitRef = useRef<HTMLDivElement | null>(null);
@@ -407,6 +410,7 @@ export function RehearsalStage({
     [renderable, raster],
   );
   const showLiveSourceNote = playing && anyRegionTooSmallForCaveat(placements, fit);
+  const practicePlates = panPractice ? placements.filter((plate) => plate.cropEdges === true) : [];
 
   // The FIT scale — preview only. Measured rather than assumed, so the rehearsal
   // stays whole at any panel width, including mid divider-drag.
@@ -486,6 +490,7 @@ export function RehearsalStage({
     return (
       <div style={styles.missing} data-pvw-no-page>
         {missingLines}
+        {panPractice && <PreviewPanDraft />}
       </div>
     );
   }
@@ -565,6 +570,32 @@ export function RehearsalStage({
             zIndex={overlayZIndex(renderable.length)}
           />
         )}
+        {panPractice &&
+          (practicePlates.length === 0 ? (
+            <div className="cg-pan-draft-sample-layer">
+              <PreviewPanDraft />
+            </div>
+          ) : (
+            <div
+              className="cg-pan-draft-layer"
+              style={{ ...frameBox(raster, fit), zIndex: overlayZIndex(renderable.length) + 1 }}
+            >
+              {practicePlates.map((plate) => (
+                <div
+                  key={plate.elementId}
+                  style={{
+                    position: 'absolute',
+                    left: plate.x,
+                    top: plate.y,
+                    width: plate.width,
+                    height: plate.height,
+                  }}
+                >
+                  <PreviewPanDraft plateId={plate.plateId} />
+                </div>
+              ))}
+            </div>
+          ))}
       </div>
     </>
   );
