@@ -1,5 +1,5 @@
 import type { Scene } from '@cg/shared-schema';
-import { iribNewsScene } from './irib-news.js';
+import { IRIB_NEWS_SEPARATOR_ASSET, iribNewsScene } from './irib-news.js';
 import { iranPremierLeagueScene, LEAGUE_LOGOS } from './azadegan-table.js';
 import { countdownStepsScene } from './countdown-steps.js';
 import { imageFolderSequenceScene } from './image-folder-sequence.js';
@@ -107,6 +107,12 @@ const STARTER_TEMPLATE_CATALOG: readonly StarterTemplate[] = [
         kind: 'image',
         filename: 'apasai-logo.svg',
         url: '/starters/assets/apasai-logo.svg',
+      },
+      {
+        key: IRIB_NEWS_SEPARATOR_ASSET,
+        kind: 'image',
+        filename: `${IRIB_NEWS_SEPARATOR_ASSET}.svg`,
+        url: `/starters/assets/${IRIB_NEWS_SEPARATOR_ASSET}.svg`,
       },
     ],
     scene: iribNewsScene,

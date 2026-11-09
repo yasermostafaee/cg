@@ -12,12 +12,12 @@ describe('countdown starter authored motion coordinates', () => {
     document.body.appendChild(root);
     const runtime = createRuntime({ ...scene, ...entry }, { root, skipFontLoad: true });
     const positions = {
-      'countdown-bg': 0,
-      'countdown-title': 34,
-      'countdown-clock-bg': 22,
-      'countdown-clock': 34,
-      'countdown-normal': 104,
-      'countdown-zero': 38,
+      'countdown-bg': 18,
+      'countdown-title': 64,
+      'countdown-clock-bg': 18,
+      'countdown-clock': 62,
+      'countdown-normal': 35,
+      'countdown-zero': 64,
     };
     const yOf = (id: string): number => {
       const node = root.querySelector<HTMLElement>(`[data-cg-element-id="${id}"]`);

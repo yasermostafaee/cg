@@ -1,12 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 176 88" fill="none">
-  <title>Azan mosque and crescent</title>
-  <path d="M88 5a10 10 0 1 0 10 13A8 8 0 0 1 88 5Z" fill="#B58A3D"/>
-  <path d="M57 53c0-15 20-19 31-31 11 12 31 16 31 31H57Z" fill="#226B5E"/>
-  <path d="M58 54h60v25H58z" fill="#226B5E"/>
-  <path d="M80 79V66a8 8 0 0 1 16 0v13" fill="#E5F1E8"/>
-  <path d="M38 79V41h12v38M126 79V41h12v38" fill="#226B5E"/>
-  <path d="m34 41 10-16 10 16H34Zm88 0 10-16 10 16h-20Z" fill="#226B5E"/>
-  <path d="M44 19v6m88-6v6M32 79h112" stroke="#226B5E" stroke-width="3" stroke-linecap="round"/>
-  <path d="M42 49h4m84 0h4M65 62h5m36 0h5" stroke="#E5F1E8" stroke-width="3" stroke-linecap="round"/>
-  <path d="M19 63h8m122 0h8M24 55l5 2m118 0 5-2" stroke="#B58A3D" stroke-width="2" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Prayer time mark</title>
+  <path d="M11 50V31c0-8 8-13 17-21 9 8 17 13 17 21v19"
+        stroke="#F4F2FF" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M21 50V36c0-4 3-7 7-11 4 4 7 7 7 11v14"
+        stroke="#C4BDFF" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M54 50V30" stroke="#F4F2FF" stroke-width="3.5" stroke-linecap="round"/>
+  <circle cx="54" cy="22" r="2.4" fill="#C4BDFF"/>
 </svg>

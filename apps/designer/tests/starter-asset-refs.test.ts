@@ -5,11 +5,29 @@ import {
   imageFolderSequenceScene,
   iranPremierLeagueScene,
   iranWeatherForecastScene,
+  iribNewsScene,
   STARTER_TEMPLATES,
 } from '@cg/starter-templates';
 import { rewriteStarterAssetRefs } from '../src/platform/starter-asset-refs.js';
 
 describe('starter asset reference rewrite', () => {
+  it.each(['project', 'shared'] as const)(
+    'B-417: resolves the bundled ticker separator without rewriting a %s reference incorrectly',
+    (source) => {
+      const scene = structuredClone(iribNewsScene);
+      const ticker = scene.compositions
+        ?.flatMap((comp) => comp.layers)
+        .flatMap((layer) => layer.children)
+        .find((element) => element.id === 'ir-crawl');
+      if (ticker?.type !== 'ticker' || ticker.separator?.kind !== 'image')
+        throw new Error('Missing clock ticker separator');
+      const bundledId = ticker.separator.assetId;
+      ticker.separator.source = source;
+      rewriteStarterAssetRefs(scene, new Map([[bundledId, 'local-separator']]), new Map());
+      expect(ticker.separator.assetId).toBe(source === 'project' ? 'local-separator' : bundledId);
+    },
+  );
+
   it('remaps image rules and repeated image values as well as authored defaults', () => {
     const weather = structuredClone(iranWeatherForecastScene);
     rewriteStarterAssetRefs(weather, new Map([['weather-rain', 'imported-rain']]), new Map());

@@ -20,7 +20,7 @@ function element(scene: Scene, id: string): Element {
 }
 
 describe('D-179 — owner-saved starter revisions from 2026-11-08', () => {
-  it('adopts the saved lower-third headline source, logo separator and title motion', () => {
+  it('keeps the saved lower-third headline source and title motion with a project separator', () => {
     const crawl = element(iribNewsScene, 'ir-crawl');
     const program = element(iribNewsScene, 'ir-program');
     const logo = element(iribNewsScene, 'ir-star');
@@ -31,7 +31,7 @@ describe('D-179 — owner-saved starter revisions from 2026-11-08', () => {
       type: 'ticker',
       separator: {
         kind: 'image',
-        assetId: 'apasai-logo',
+        assetId: 'irib-news-separator',
         source: 'project',
         size: { w: 50, h: 50 },
       },

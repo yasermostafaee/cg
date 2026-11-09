@@ -466,21 +466,20 @@ describe('starter templates', () => {
       fill: {
         kind: 'linear',
         stops: [
-          { at: 0, color: '#F8FDFFE8' },
-          { at: 1, color: '#C8E6EAD6' },
+          { at: 0, color: '#111326F7' },
+          { at: 1, color: '#2C2C51EC' },
         ],
       },
-      stroke: { color: '#FFFFFFF2', width: 2 },
-      shadow: { offsetX: 0, offsetY: 14, blur: 34, color: '#0C35505C' },
+      stroke: { color: '#C4CBFF40', width: 1 },
+      shadow: { offsetX: 0, offsetY: 10, blur: 24, color: '#07081A7A' },
     });
     expect(elements.find((element) => element.id === 'countdown-glass-highlight')).toMatchObject({
       type: 'shape',
-      opacity: 0.72,
       fill: {
         kind: 'linear',
         stops: [
-          { at: 0, color: '#FFFFFFB8' },
-          { at: 1, color: '#FFFFFF12' },
+          { at: 0, color: '#AFB5FF0A' },
+          { at: 1, color: '#A59DFF2B' },
         ],
       },
     });

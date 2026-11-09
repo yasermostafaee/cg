@@ -1,6 +1,8 @@
 import type { Element, Fill, Scene, Transform } from '@cg/shared-schema';
 import { anim, EASE, kf, kfLinear, track } from './anim.js';
 
+export const IRIB_NEWS_SEPARATOR_ASSET = 'irib-news-separator';
+
 /**
  * «زیرنویس با ساعت» — the marquee composite, modeled on a real Persian news
  * lower-strap: a two-deck full-bleed band. The RIGHT block (the RTL reading
@@ -225,7 +227,7 @@ const strapChildren: Element[] = [
     gap: 72,
     separator: {
       kind: 'image',
-      assetId: 'apasai-logo',
+      assetId: IRIB_NEWS_SEPARATOR_ASSET,
       source: 'project',
       size: { w: 50, h: 50 },
     },

@@ -27,6 +27,12 @@ export function rewriteStarterAssetRefs(
       el.assetId = fixImageId(el.assetId) ?? el.assetId;
     } else if (el.type === 'video-placeholder') {
       el.posterAssetId = fixImageId(el.posterAssetId);
+    } else if (
+      el.type === 'ticker' &&
+      el.separator?.kind === 'image' &&
+      el.separator.source !== 'shared'
+    ) {
+      el.separator.assetId = fixImageId(el.separator.assetId) ?? el.separator.assetId;
     }
 
     if (

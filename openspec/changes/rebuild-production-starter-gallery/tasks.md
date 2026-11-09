@@ -324,3 +324,27 @@ type remain required; compact degree adjacency is now a targeted correction acro
       58,452-byte VP9 clip lasting 5.33 seconds, and the eleven-case starter authoring/Landing run
       (including Chromium decoding of every gallery clip) passed.
 - [ ] 11.5 Include the restyle in the final repository gate.
+
+## 12. Azan re-review — 2026-11-09
+
+- [x] 12.1 Replace the pale bar with a navy and teal glass body, warm seam and raised mosque badge.
+- [x] 12.2 Recapture the poster and hover excerpt from the revised scene. The focused capture run
+      passed all four tests, including both countdown behavior cases. The 120 source frames encode
+      to a 59,415-byte 640×360 BT.709 VP9 clip at 30 fps lasting 5.33 seconds.
+- [x] 12.3 Verified this iteration in the Chromium gallery. The owner requested a different visual
+      treatment afterward, tracked below.
+
+## 13. Azan visual redesign — 2026-11-09
+
+- [x] 13.1 Redesign the glass modules, typography and replaceable prayer-time mark while retaining
+      element roles, Step thresholds, date/time binding and manual Stop.
+- [x] 13.2 Verified the new poster, zero state and the gallery's motion decoding in Chromium.
+      The scoped 106-frame capture produced a 55,152-byte 640×360 BT.709 VP9 clip at 30 fps.
+- [ ] 13.3 Run the repository gate.
+
+## 14. Clock ticker separator — 2026-11-09
+
+- [x] 14.1 Give the clock ticker its own bundled Project Assets separator icon.
+- [x] 14.2 Resolve starter project-image separator keys at import. Keep Shared Library IDs.
+- [x] 14.3 Chromium exported the clock ticker with its imported local separator asset. Rebuilt
+      the poster and a 61,315-byte BT.709 VP9 hover clip from 171 captured frames.
