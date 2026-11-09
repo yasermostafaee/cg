@@ -215,8 +215,16 @@ describe('MultiSelectSection — single-inspector parity (D-049)', () => {
       'lower-third',
     );
     designerStore.setScene(scene, null);
-    designerStore.addElement(defaultLiveSource('live-a', 0, 0));
-    designerStore.addElement(defaultLiveSource('live-b', 640, 0));
+    designerStore.addElement({
+      ...defaultLiveSource('live-a', 0, 0),
+      fallbackKind: 'color',
+      fallbackColor: '#162331',
+    });
+    designerStore.addElement({
+      ...defaultLiveSource('live-b', 640, 0),
+      fallbackKind: 'color',
+      fallbackColor: '#272543',
+    });
     const children = () =>
       editSceneOf(designerStore.get().scene, designerStore.get().activeCompositionId)!.layers[0]!
         .children;
@@ -237,6 +245,11 @@ describe('MultiSelectSection — single-inspector parity (D-049)', () => {
     expect(kinds()).toEqual(['bars', 'bars']);
     designerStore.undo();
     expect(kinds()).toEqual(['color', 'color']);
+    expect(
+      children().map((element) =>
+        element.type === 'video-placeholder' ? element.fallbackColor : undefined,
+      ),
+    ).toEqual(['#162331', '#272543']);
   });
 
   it('D-167 — stroke width preserves each colour and repairs each plate to its own aspect', () => {

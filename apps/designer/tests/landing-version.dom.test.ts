@@ -54,7 +54,9 @@ describe('CLIENT-TEST-RELEASE-01 B1 — the version line on the Designer’s sta
     expect(line).not.toBeNull();
     expect(line?.textContent).toBe(`Version ${MANIFEST_VERSION}`);
     // Positive control: the start screen rendered, and the line follows its tagline.
-    expect(line?.previousElementSibling?.textContent).toMatch(/^Broadcast template builder/);
+    expect(line?.parentElement?.previousElementSibling?.textContent).toMatch(
+      /^Broadcast template builder/,
+    );
   });
 
   it('is a FACT, not a control — a Tag, not focusable — with the exact build in its title', async () => {

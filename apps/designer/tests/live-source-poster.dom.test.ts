@@ -92,12 +92,13 @@ describe('D-137 — the poster picker', () => {
   it('🔴 offers "bars" and the PICTURES — the project’s and the shared library’s, never a font', async () => {
     seedPlate();
     const trigger = posterButton(await render());
-    expect(trigger?.textContent).toContain('Solid colour');
+    expect(trigger?.textContent).toContain('Bars');
     if (trigger === null) throw new Error('no poster picker');
     click(trigger);
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
-    expect(dialog?.textContent).toContain('Bars');
-    expect(dialog?.querySelector('img[src^="data:image/svg+xml"]')).not.toBeNull();
+    const bars = dialog?.querySelector('button[aria-pressed="true"]');
+    expect(bars?.textContent).toBe('Bars');
+    expect(bars?.querySelector('img[src^="data:image/svg+xml"]')).not.toBeNull();
     expect(dialog?.querySelector('button[title="Solid colour"]')).not.toBeNull();
     expect(dialog?.querySelector('button[title="studio (project)"]')).not.toBeNull();
     expect(dialog?.querySelector('button[title="brand (shared)"]')).not.toBeNull();

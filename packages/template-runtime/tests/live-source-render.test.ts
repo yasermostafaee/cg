@@ -91,9 +91,11 @@ describe("D-137 — 'author' mode paints the bars", () => {
     expect(label?.textContent).toBe('guest-1');
     expect(label?.style.left).toBe('50%');
     expect(label?.style.top).toBe('50%');
-    expect(label?.style.transform).toBe('translate(-50%, -50%)');
+    expect(label?.style.transform).toBe(
+      'translate(-50%, -50%) scale(var(--cg-author-guide-scale, 2))',
+    );
     expect(label?.style.textAlign).toBe('center');
-    expect(label?.style.font).toContain('32px');
+    expect(label?.style.font).toContain('16px');
   });
 
   it('the gradient uses PAIRED stops, never the Chromium-72 double-position form', () => {
