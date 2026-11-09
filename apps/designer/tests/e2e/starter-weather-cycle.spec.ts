@@ -11,6 +11,52 @@ const cardPages = Array.from({ length: 8 }, (_, index) =>
   allCities.slice(index * 4, index * 4 + 4),
 );
 
+test('B-414: the first painted weather page excludes rows from every prepared page', async ({
+  app,
+}) => {
+  await app.page.getByTestId('starter-card').filter({ hasText: 'آب‌وهوای مراکز استان‌ها' }).click();
+  await app.expectStudio();
+  await app.openPreviewModal();
+  const iframe = await app.previewDialog.locator('iframe').elementHandle();
+  const frame = await iframe?.contentFrame();
+  if (frame === undefined || frame === null) throw new Error('No weather Preview frame');
+  const sample = (ms: number) =>
+    frame.evaluate(async (duration) => {
+      const painted = new Set<string>();
+      const until = performance.now() + duration;
+      do {
+        for (const city of document.querySelectorAll('[data-cg-element-id="weather-city"]')) {
+          // CSS visibility can be overridden by a descendant. Opacity is composited and
+          // cannot: a child of a zero-opacity page never contributes pixels.
+          if (
+            getComputedStyle(city).visibility !== 'visible' ||
+            city.getClientRects().length === 0
+          ) {
+            continue;
+          }
+          let visible = true;
+          for (let node: Element | null = city; node !== null; node = node.parentElement) {
+            const style = getComputedStyle(node);
+            if (style.display === 'none' || Number(style.opacity) <= 0.001) {
+              visible = false;
+              break;
+            }
+          }
+          if (visible) painted.add(city.textContent?.trim() ?? '');
+        }
+        await new Promise(requestAnimationFrame);
+      } while (performance.now() < until);
+      return [...painted];
+    }, ms);
+
+  const pending = await sample(200);
+  await app.play();
+  const opening = await sample(2400);
+  expect(pending).toEqual([]);
+  expect(opening).toContain('اراک');
+  expect(opening.filter((name) => !originalPages[0]!.includes(name))).toEqual([]);
+});
+
 for (const variant of [
   {
     name: 'province weather',

@@ -8,8 +8,8 @@ import { Preview } from '../src/platform/preview.js';
  * share `preview.ts`'s `#buildHtml`; the `broadcast` flag on `load()` is the seam.
  * This pins the generated document: a broadcast document omits the `cg-pending`
  * CSS override and sets `REVEAL_ON_LOAD = false`, so the runtime keeps its native
- * `cg-pending` (blank) state until `play()`; the default (authoring) document keeps
- * the override and reveals frame 0. Live blank↔paint behaviour is covered by the
+ * `cg-pending` (blank) state until `play()`. The authoring document reveals frame
+ * 0 after preparing its current fields and Sequence page. Live behavior is covered by the
  * E2E (`preview-blank-until-play.spec.ts`).
  */
 
@@ -56,11 +56,15 @@ describe('Preview — D-087 blank until play (broadcast flag)', () => {
     });
   });
 
-  it('authoring (default) reveals frame 0: keeps the cg-pending override + REVEAL_ON_LOAD=true', () => {
+  it('authoring reveals frame 0 after the selected page has been applied', () => {
     const { html } = preview.load(SCENE);
-    expect(html).toContain(AUTHORING_OVERRIDE);
-    expect(html).toContain(AUTHORING_STAGE_OVERRIDE);
+    expect(html).not.toContain(AUTHORING_OVERRIDE);
+    expect(html).not.toContain(AUTHORING_STAGE_OVERRIDE);
     expect(html).toContain('const REVEAL_ON_LOAD = true;');
+    const reveal = "if (REVEAL_ON_LOAD) document.body.classList.remove('cg-pending');";
+    expect(html).toContain(reveal);
+    const build = html.slice(html.indexOf('async function applyScene'), html.indexOf(reveal));
+    expect(build).toContain('applyShownSequenceItem();');
     expect(html).toContain(REHEARSE_CLEAR_OVERRIDE);
     expect(html).toContain("msg.action === 'authoring-restore'");
   });

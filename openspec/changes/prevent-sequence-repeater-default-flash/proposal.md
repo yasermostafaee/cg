@@ -3,14 +3,14 @@
 ## Why
 
 A Sequence composition page can contain a Repeater whose authored rows are only a design shell. On
-Take, the runtime currently reveals that mounted shell before the Sequence reset builds the current
-page with its item/operator rows, so the wrong data can be visible for the first frame.
+Take, a prepared page's animated row can override the inherited visibility of its hidden page and
+the pending stage. In Chromium, 24 cities from later pages painted before Play.
 
 ## What Changes
 
 - Keep the stage pending while every data-driven subtree is reset from current values.
 - Reveal only after the current Sequence page and its nested Repeater contain their final Take data.
-- Pin the reveal boundary with a focused runtime regression.
+- Keep prewarmed pages fully transparent until their own entry and verify real browser frames.
 
 ## Impact
 

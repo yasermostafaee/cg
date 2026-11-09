@@ -3347,11 +3347,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // R-105 — fit the fallback before the pending body is revealed, so no full-box Bars frame
       // can flash ahead of a contained source.
       applyPlateFallbackFits(control?.plates);
-      // B-414 — reveal only after every data-driven subtree has been reset from CURRENT values.
-      // A composition Sequence has an authored static page before play; revealing above the
-      // sequence reset exposed that shell (including a Repeater's default rows) for one frame.
-      // All preparation above is synchronous, so the first paint now contains the Sequence page's
-      // own fieldValues/operator rows without delaying the controller entrance.
+      // B-414 — reveal after every data-driven subtree has been reset from current values.
+      // Prepared Sequence pages remain independently paint-hidden after the stage opens.
       doc.body.classList.remove('cg-pending');
       cascade(rootNode, (c) => c.play());
       publishStepsForTake();

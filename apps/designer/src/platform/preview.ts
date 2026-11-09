@@ -114,14 +114,9 @@ export class Preview {
     const cgJsLottieUrl = this.#cgJsLottieUrl;
     // Escape `<` so scene text containing "</script>" can't break out.
     const sceneJson = JSON.stringify(scene).replace(/</g, '\\u003c');
-    // D-087 — one flag drives both the CSS override and the boot-time reveal.
-    // Authoring (canvas): reveal frame 0 on load. Broadcast (Preview modal):
-    // keep the runtime's native `cg-pending` (blank) state until play().
+    // D-087 — the canvas reveals its hydrated authoring frame. The broadcast
+    // Preview modal keeps the runtime's pending state until play().
     const revealOnLoad = !broadcast;
-    const pendingOverrideCss = revealOnLoad
-      ? `.cg-pending { opacity: 1 !important; }
-      .cg-pending .cg-stage { visibility: visible !important; }`
-      : `/* D-087 — broadcast preview: the stage stays blank (cg-pending) until play(). */`;
     // D-071 Phase B — the off-frame PASTEBOARD (CANVAS iframe only). When on, the
     // frame (`.cg-stage`) stays at the iframe top-left with its clip lifted
     // (`overflow: visible`) so off-frame shapes paint into the dark margin, and
@@ -199,19 +194,8 @@ export class Preview {
          editor; without this, built-in fonts fall back to a system face. -->
     <style>${this.#fontsCss}</style>
     <style>${this.#cgCss}</style>
-    <!--
-      Authoring override: the broadcast runtime hides the stage while
-      \`body.cg-pending\` is set (.cg-pending{opacity:0} and
-      .cg-pending .cg-stage{visibility:hidden}). On the editor CANVAS the
-      operator must see what they're building before play() is ever
-      called, so we lift those rules with !important. D-087 — the Preview
-      MODAL passes broadcast=true and OMITS this lift, so it opens blank
-      (loaded but unpainted) and paints only on play(), matching the
-      exported .vcg (which keeps the original CSS).
-    -->
     <style>
-      ${pendingOverrideCss}
-      /* D-199 — the editing canvas normally lifts cg-pending so authored content stays visible.
+      /* D-199 — the editing canvas normally reveals the hydrated authoring frame.
          Rehearse Stop deliberately opts back into Preview's cleared picture until Play or an
          explicit return to authoring. */
       .cg-rehearse-cleared .cg-stage { visibility: hidden !important; }
@@ -820,9 +804,6 @@ export class Preview {
             // LOOKS phase 1D — re-assert the active look onto the fresh runtime, for the
             // same reason as the arrangement line above (a rebuild forgets it).
             if (activeLookId) runtime.setActiveLook(activeLookId);
-            // D-087 — a broadcast preview leaves cg-pending in place so the
-            // stage stays blank until play(); the canvas reveals frame 0 now.
-            if (REVEAL_ON_LOAD) document.body.classList.remove('cg-pending');
             await runtime.update(currentFields);
             runtime.tick(currentFrame);
             applyAssetUrls();
@@ -838,6 +819,9 @@ export class Preview {
             applyRehearsedSteps();
             // …and so does the sequence item the author is working on (RUN-NEXT-VERSION-03 1.7).
             applyShownSequenceItem();
+            // B-414 — reveal the canvas only after its current fields, frame and selected
+            // Sequence page are applied. Broadcast Preview still waits for Play.
+            if (REVEAL_ON_LOAD) document.body.classList.remove('cg-pending');
           } finally {
             busy = false;
           }

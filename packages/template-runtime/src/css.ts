@@ -19,6 +19,7 @@ export const BASELINE_CSS = `
 }
 .cg-pending .cg-stage {
   visibility: hidden;
+  opacity: 0;
 }
 .cg-removed .cg-stage {
   display: none;

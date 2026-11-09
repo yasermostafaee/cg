@@ -246,6 +246,9 @@ during a transition) with item 1 statically rendered through the driver's
 shared item-node factory (bidi-isolated per `direction`); registered as
 `{ element, host }` on `scope.sequences`.
 
+The pending stage and prepared Sequence pages are composited at zero opacity until their reveal.
+Row motion can explicitly set descendant visibility, so visibility alone cannot gate a subtree.
+
 A `repeater` element builds as the clipped outer box, registered as
 `{ element, host, depth, visited }` on `scope.repeaters` (the build-context
 guards travel with it so runtime row stamping keeps the cycle/depth limits).

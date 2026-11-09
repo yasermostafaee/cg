@@ -788,8 +788,7 @@ export class SequenceDriver {
       this.currentHooks.pause();
       if (this.currentNode !== null) {
         this.currentNode.style.transform = '';
-        this.currentNode.style.opacity = '';
-        this.currentNode.style.visibility = 'hidden';
+        this.setItemPaint(this.currentNode, false);
       }
     } else {
       this.currentHooks?.hide(); // D-083 — teardown the outgoing item's inner drivers
@@ -803,8 +802,7 @@ export class SequenceDriver {
     this.incomingHooks = null;
     if (this.currentNode !== null) {
       this.currentNode.style.transform = '';
-      this.currentNode.style.visibility = '';
-      this.currentNode.style.opacity = '';
+      this.setItemPaint(this.currentNode, true);
     }
     this.enterPhase('dwell');
     this.consumePending(); // D-163 — a goTo that arrived mid-transition
@@ -903,8 +901,7 @@ export class SequenceDriver {
       // The first item has settled at rest — start the dwell.
       if (this.currentNode !== null) {
         this.currentNode.style.transform = '';
-        this.currentNode.style.visibility = '';
-        this.currentNode.style.opacity = '';
+        this.setItemPaint(this.currentNode, true);
       }
       this.enterPhase('dwell');
       this.consumePending(); // D-163 — a Go-to or queued turn that arrived during the entrance
@@ -912,7 +909,7 @@ export class SequenceDriver {
     }
     // exit — the last item has left the box; NOW signal completion and freeze (the parent's outro
     // follows, so content exits before the background — D-105).
-    if (this.currentNode !== null) this.currentNode.style.visibility = 'hidden';
+    if (this.currentNode !== null) this.setItemPaint(this.currentNode, false);
     if (this.exitCompletesRun) this.fireComplete();
     this.running = false;
     // Keep the settled phase operable for `previous()`'s documented post-completion repair path.
@@ -927,9 +924,15 @@ export class SequenceDriver {
       pose.offset.x === 0 && pose.offset.y === 0
         ? ''
         : `translate(${pose.offset.x}px, ${pose.offset.y}px)`;
-    node.style.visibility = pose.visible ? '' : 'hidden';
+    this.setItemPaint(node, pose.visible, pose.opacity);
+  }
+
+  private setItemPaint(node: HTMLElement, visible: boolean, opacity = 1): void {
+    node.style.visibility = visible ? '' : 'hidden';
+    // B-414 — an animated row can set its own visibility to visible. Opacity on the
+    // enclosing page keeps the whole subtree out of the picture while still prewarming it.
     // `D-163` — a `fade` side; an opaque pose writes nothing, so a slide's items are unchanged.
-    node.style.opacity = pose.opacity >= 1 ? '' : String(pose.opacity);
+    node.style.opacity = visible && opacity >= 1 ? '' : String(visible ? opacity : 0);
   }
 
   /** rAF runs only while something is time-driven: a transition, or an auto dwell. */
@@ -1008,7 +1011,7 @@ export class SequenceDriver {
     this.current = prepared.item;
     this.currentHooks = prepared.rendered;
     this.currentNode = prepared.rendered.node;
-    this.currentNode.style.visibility = '';
+    this.setItemPaint(this.currentNode, true);
     this.o.host.appendChild(this.currentNode);
     this.prewarmItems(this.current.id);
   }
@@ -1029,7 +1032,7 @@ export class SequenceDriver {
       }
       const snapshot: SequenceDriverItem = { ...item };
       const rendered = this.renderItem(snapshot);
-      rendered.node.style.visibility = 'hidden';
+      this.setItemPaint(rendered.node, false);
       this.prepared.set(item.id, { item: snapshot, rendered });
       this.preparedHooks.add(rendered);
       this.o.host.appendChild(rendered.node);
@@ -1048,7 +1051,7 @@ export class SequenceDriver {
     for (const item of this.logical) {
       if (item.kind !== 'composition' || excluded.has(item.id)) continue;
       const { rendered } = this.prepareItem(item);
-      rendered.node.style.visibility = 'hidden';
+      this.setItemPaint(rendered.node, false);
       if (!this.activatedHooks.has(rendered)) {
         this.activatedHooks.add(rendered);
         rendered.show();
