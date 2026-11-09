@@ -62,7 +62,6 @@ test('a heavy authored raster is shown from a small Blob thumbnail, not its orig
     new URL('../../../designer/public/starters/assets/weather-atmosphere.png', import.meta.url),
   );
   const sourceUrl = `data:image/png;base64,${picture.toString('base64')}`;
-  await app.importVcg('image-thumbnail-derivative.vcg', await buildImageFieldVcg(templateId));
   await app.page.evaluate((source) => {
     const target = window as unknown as {
       cg: {
@@ -80,7 +79,7 @@ test('a heavy authored raster is shown from a small Blob thumbnail, not its orig
         source: 'bridge',
       });
   }, sourceUrl);
-  await app.selectStackRow(templateId);
+  await app.importVcg('image-thumbnail-derivative.vcg', await buildImageFieldVcg(templateId));
   await app.inspector.getByRole('button', { name: 'img', exact: true }).click();
 
   const picker = app.page.getByRole('dialog', { name: 'Choose picture for img' });
@@ -113,10 +112,6 @@ test('all authored heavy rasters finish loading as small Blob thumbnails', async
     }),
   );
   const options = ['default.png', 'choice-2.png', 'choice-3.png', 'choice-4.png', 'choice-5.png'];
-  await app.importVcg(
-    'image-thumbnail-queue.vcg',
-    await buildImageFieldVcg(templateId, options.length),
-  );
   await app.page.evaluate((pictureSources) => {
     const target = window as unknown as {
       cg: {
@@ -138,7 +133,10 @@ test('all authored heavy rasters finish loading as small Blob thumbnails', async
         source: 'bridge',
       });
   }, sources);
-  await app.selectStackRow(templateId);
+  await app.importVcg(
+    'image-thumbnail-queue.vcg',
+    await buildImageFieldVcg(templateId, options.length),
+  );
   await app.inspector.getByRole('button', { name: 'img', exact: true }).click();
 
   const picker = app.page.getByRole('dialog', { name: 'Choose picture for img' });

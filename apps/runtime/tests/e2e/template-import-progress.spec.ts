@@ -1,4 +1,4 @@
-import { buildValidVcg, expect, test } from './fixtures/runtime.js';
+import { buildValidVcg, expect, openVcgFileChooser, test } from './fixtures/runtime.js';
 
 /**
  * R-103 — after the operating-system chooser returns a file, a slow package import owns the
@@ -24,11 +24,8 @@ test('a selected slow package replaces the template list with a named loading st
     };
   });
 
-  const chooser = app.page.waitForEvent('filechooser');
-  await dialog.getByRole('button', { name: 'Import a .vcg' }).click();
-  await (
-    await chooser
-  ).setFiles({
+  const chooser = await openVcgFileChooser(app.page, dialog);
+  await chooser.setFiles({
     name: 'slow-news.vcg',
     mimeType: 'application/octet-stream',
     buffer: Buffer.from(await buildValidVcg('tpl-slow-import-e2e')),

@@ -4,7 +4,6 @@ test('B-368 — an authored file stages its current bytes when the Inspector fir
   app,
 }) => {
   const templateId = 'tpl-e2e-authored-file-autoload';
-  await app.importVcg('authored-file.vcg', await buildFileSourceVcg(templateId), 84);
   await app.page.evaluate(() => {
     const target = window as unknown as {
       __authoredFileReads: number;
@@ -22,7 +21,7 @@ test('B-368 — an authored file stages its current bytes when the Inspector fir
   });
   await app.installUpdateSpy();
 
-  await app.selectLayerRow(84);
+  await app.importVcg('authored-file.vcg', await buildFileSourceVcg(templateId), 84);
   const dirty = app.inspector
     .locator('[data-field-heading="headlines"]')
     .locator('..')

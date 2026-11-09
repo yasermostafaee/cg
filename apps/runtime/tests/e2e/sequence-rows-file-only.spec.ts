@@ -1,4 +1,4 @@
-import { buildPagedRepeaterVcg, expect, test } from './fixtures/runtime.js';
+import { buildPagedRepeaterVcg, expect, openVcgFileChooser, test } from './fixtures/runtime.js';
 
 test.describe('D-180 — paged Repeater input authority', () => {
   test('File only shows connection status and read-only data without workbook authoring', async ({
@@ -94,13 +94,6 @@ test.describe('D-180 — paged Repeater input authority', () => {
     app,
   }) => {
     const templateId = 'tpl-e2e-sequence-owned-clean-file';
-    await app.importVcg(
-      'sequence-owned-clean-file.vcg',
-      await buildPagedRepeaterVcg(templateId, {
-        pageDataFile: 'weather/cities.csv',
-        allowOperatorRows: true,
-      }),
-    );
     await app.page.evaluate(() => {
       const target = window as unknown as {
         __sequenceFileReads: number;
@@ -120,7 +113,13 @@ test.describe('D-180 — paged Repeater input authority', () => {
       };
     });
 
-    await app.selectStackRow(templateId);
+    await app.importVcg(
+      'sequence-owned-clean-file.vcg',
+      await buildPagedRepeaterVcg(templateId, {
+        pageDataFile: 'weather/cities.csv',
+        allowOperatorRows: true,
+      }),
+    );
     const rows = app.inspector.getByRole('region', { name: 'Weather pages all rows' });
     await expect(rows).toContainText('File connected');
     await expect(rows).toContainText('Connected');
@@ -237,11 +236,8 @@ test.describe('D-180 — paged Repeater input authority', () => {
     await expect(rows).toContainText('Save and connect Excel');
 
     await app.openTemplatePicker();
-    const chooser = app.page.waitForEvent('filechooser');
-    await app.templatePicker.getByRole('button', { name: 'Import a .vcg' }).first().click();
-    await (
-      await chooser
-    ).setFiles({
+    const chooser = await openVcgFileChooser(app.page, app.templatePicker);
+    await chooser.setFiles({
       name: 'sequence-owner.vcg',
       mimeType: 'application/octet-stream',
       buffer: Buffer.from(

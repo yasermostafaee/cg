@@ -39,7 +39,8 @@ test('the commit control is accented off air, green and named `Update on air` on
   // ── OFF AIR ────────────────────────────────────────────────────────────────────────
   await expect(commit).toHaveAttribute('data-inspector-commit', 'off-air');
   await expect(commit).toHaveText('Update');
-  const offAir = await commit.evaluate(look);
+  // Binding can open the Inspector under the pointer that clicked the Templates footer.
+  await page.mouse.move(0, 0);
   /*
     ⚠ THE COMPARISON LOST ITS PARTNER. It read the off-air Update against `Apply position`,
     which was the other `accent` control on this panel — and `INSPECTOR-DELTA` folded that
@@ -62,7 +63,11 @@ test('the commit control is accented off air, green and named `Update on air` on
     el.remove();
     return c;
   }, accentFill);
-  expect(offAir.split(' | ')[0], 'off air, Update wears the accent fill').toBe(asRendered);
+  await expect(commit, 'off air, Update wears the accent fill').toHaveCSS(
+    'background-color',
+    asRendered,
+  );
+  const offAir = await commit.evaluate(look);
 
   // THE SUB-LINE IS GONE — asserted, so a parity pass cannot paste it back quietly.
   await expect(app.inspector.getByText(/No Take is sent/i)).toHaveCount(0);

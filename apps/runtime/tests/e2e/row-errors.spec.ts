@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { buildInvalidVcg, expect, test } from './fixtures/runtime.js';
+import { buildInvalidVcg, expect, openVcgFileChooser, test } from './fixtures/runtime.js';
 
 /**
  * 🔴 `B-301` (`CONSOLE-POLISH-01` §2) — **THE LAYERS BADGE COUNTS CURRENT ROW ERRORS, AND CLEARS.**
@@ -18,11 +18,8 @@ test('🔴 a broken .vcg import fails in the picker with its reason, and the bad
 }) => {
   const { page } = app;
   await app.openTemplatePicker();
-  const chooser = page.waitForEvent('filechooser');
-  await app.templatePicker.getByRole('button', { name: 'Import a .vcg' }).click();
-  await (
-    await chooser
-  ).setFiles({
+  const chooser = await openVcgFileChooser(page, app.templatePicker);
+  await chooser.setFiles({
     name: 'broken.vcg',
     mimeType: 'application/octet-stream',
     buffer: Buffer.from(buildInvalidVcg()),

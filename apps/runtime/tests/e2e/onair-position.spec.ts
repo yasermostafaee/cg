@@ -107,29 +107,14 @@ test('B-072: an applied override survives deselect → reselect, and re-Apply do
   // itself binds the first row now (import and load are one action), so the
   // second comes from the library — one of each path, which is also the truer
   // shape of what an operator does.
-  await app.importVcg('positioned.vcg', await buildPositionedVcg(templateId));
-  await app.loadTemplate(templateId);
+  const firstLayer = await app.importVcg('positioned.vcg', await buildPositionedVcg(templateId));
+  const secondLayer = await app.loadTemplate(templateId);
 
   const picker = app.inspector;
-  // R-004 — the rows no longer print the templateId; they carry it as a data anchor. A and B
-  // are simply the two rows of this template (the list renders newest-first, which is
-  // immaterial here: the test only needs two DISTINCT rows to move selection between).
-  //
-  // Click each row's LABEL BODY, never the row root — the root's geometric centre can land in
-  // the actions column (which stops propagation) or straight on a button. See
-  // `RuntimeApp.selectStackRow`: that is the bug which failed all the row-selecting specs on
-  // CI while passing locally by 19 pixels.
-  const rows = app.stackRow(templateId);
-  const selectA = async (): Promise<void> => {
-    await rows.nth(0).locator('[data-row-body]').click();
-  };
-  const selectB = async (): Promise<void> => {
-    await rows.nth(1).locator('[data-row-body]').click();
-  };
 
   // Item A seeds from the manifest default (bottom-right, −10/−20), then the
   // operator applies a DIFFERENT position.
-  await selectA();
+  await app.selectLayerRow(firstLayer);
   await expect(picker.getByRole('button', { name: 'Anchor bottom-right' })).toHaveAttribute(
     'aria-pressed',
     'true',
@@ -142,7 +127,7 @@ test('B-072: an applied override survives deselect → reselect, and re-Apply do
 
   // DESELECT (switch to item B) — B has no override, so it still shows the
   // template's manifest default. This is the per-item proof.
-  await selectB();
+  await app.selectLayerRow(secondLayer);
   await expect(picker.getByRole('button', { name: 'Anchor bottom-right' })).toHaveAttribute(
     'aria-pressed',
     'true',
@@ -151,7 +136,7 @@ test('B-072: an applied override survives deselect → reselect, and re-Apply do
 
   // RESELECT item A — the picker must show A's APPLIED OVERRIDE, not the
   // manifest default. This is the bug: before B-072 it showed bottom-right/−10.
-  await selectA();
+  await app.selectLayerRow(firstLayer);
   await expect(picker.getByRole('button', { name: 'Anchor top-left' })).toHaveAttribute(
     'aria-pressed',
     'true',

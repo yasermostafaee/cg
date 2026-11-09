@@ -166,6 +166,7 @@ test('the checker shows through a frame — the canvas is not opaque', async ({ 
   const page = app.page;
   await page.setViewportSize({ width: 1600, height: 900 });
   const layer = await app.importVcg('a.vcg', await buildValidVcg('tpl-clear'));
+  await app.inspector.getByRole('button', { name: 'Close INSPECTOR' }).click();
   await stubPagesByTemplate(page, { 'tpl-clear': transparentPage() });
   await rehearseRow(page, layer);
   await expect(frames(page)).toHaveCount(1);

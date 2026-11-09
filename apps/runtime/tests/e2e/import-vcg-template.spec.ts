@@ -18,6 +18,7 @@ import { buildInvalidVcg, buildValidVcg, expect, test } from './fixtures/runtime
  */
 
 test('a verified .vcg is registered, loads onto a layer, and shows its fields', async ({ app }) => {
+  await app.page.setViewportSize({ width: 1600, height: 900 });
   const templateId = 'tpl-e2e-import';
   const before = await app.templateCount();
 
@@ -57,8 +58,8 @@ test('a verified .vcg is registered, loads onto a layer, and shows its fields', 
   // …and it is registered in the library, exactly once.
   expect(await app.templateCount()).toBe(before + 1);
 
-  // Selecting the row surfaces its field schema in the Inspector.
-  await app.selectLayerRow(84);
+  // The successful load selects the row and surfaces its field schema.
+  await expect(row).toHaveAttribute('aria-pressed', 'true');
   await expect(app.inspector.getByText('Anchor name')).toBeVisible();
 });
 

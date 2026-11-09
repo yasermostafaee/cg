@@ -74,7 +74,7 @@ test('WIDE — a second click on the SAME row closes the Inspector (toggle selec
 
   // Toggle-select and openness are the same fact, so this cannot half-work: the row
   // deselects, and because openness is DERIVED, the panel goes with it.
-  await app.selectLayerRow(80);
+  await app.toggleLayerRow(80);
   await expect(app.inspector).toHaveCount(0);
   await expect(app.layerRow(80)).toHaveAttribute('aria-pressed', 'false');
 });

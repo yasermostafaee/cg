@@ -1,5 +1,11 @@
 import type { Locator, Page } from '@playwright/test';
-import { test, expect, buildValidVcg, buildLoopingVcg } from './fixtures/runtime.js';
+import {
+  test,
+  expect,
+  buildValidVcg,
+  buildLoopingVcg,
+  type RuntimeApp,
+} from './fixtures/runtime.js';
 
 /**
  * 🔴 `SELF-STOP-24 · REPLY 1` §R2 — **ONLY A CasparCG PAGE MAY HOLD A LIVE TAKE TOKEN.**
@@ -118,12 +124,8 @@ function timingsOn(calls: readonly Call[], door: string): unknown[] {
 }
 
 /** Set this row's pass count through the Inspector, exactly as the operator does. */
-async function selectRow(app: { page: Page }, layer: number): Promise<void> {
-  await app.page.locator(`[data-layer="${String(layer)}"] [data-row-body]`).click();
-}
-
-async function setCount(app: { page: Page }, layer: number, count: string): Promise<void> {
-  await selectRow(app, layer);
+async function setCount(app: RuntimeApp, layer: number, count: string): Promise<void> {
+  await app.selectLayerRow(layer);
   await app.page.getByRole('button', { name: 'Count', exact: true }).click();
   // The box's accessible name is air-state dependent — 'Passes next take' off air,
   // 'Passes remaining' on air. A PVW row is not on air, but match the prefix so the case does

@@ -38,10 +38,12 @@ afterEach(async () => {
 
 /** Load `TEMPLATE` onto an empty row through LOAD → select → commit; `removedOnTheWay` races it. */
 async function loadRefused(removedOnTheWay: TemplateAct | null): Promise<string[]> {
+  const onSelect = vi.fn();
   rendered = await renderLayerRow({
     item: null,
     template: null,
     slot: slotWith({ binding: null, observed: { kind: 'empty' } }),
+    onSelect,
   });
   let acted: ((a: TemplateAct) => void)[] = [];
   const cg = (
@@ -80,6 +82,7 @@ async function loadRefused(removedOnTheWay: TemplateAct | null): Promise<string[
   await click('[data-template-id="tpl-news"] .cg-tpl-row__load');
   await click('[data-template-commit]');
   await vi.waitFor(() => expect(errors).toHaveLength(1));
+  expect(onSelect).not.toHaveBeenCalled();
   off();
   return errors;
 }

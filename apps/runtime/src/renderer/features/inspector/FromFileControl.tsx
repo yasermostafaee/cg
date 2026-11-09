@@ -232,6 +232,8 @@ export function FromFileControl({
     kind,
     path,
     pathKey,
+    // The authored source can attach after the Inspector opens and restoration finishes.
+    state?.source,
   ]);
 
   const choose = async (): Promise<void> => {

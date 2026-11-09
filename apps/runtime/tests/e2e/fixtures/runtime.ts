@@ -61,6 +61,19 @@ const TEMPLATE_PROBE_LAYER = 95;
 const FIRST_LOADABLE_BED_LAYER = 50;
 const LAST_LOADABLE_BED_LAYER = 59;
 
+/** Use the HTML file input for imports that Playwright drives with a FileChooser. */
+export async function openVcgFileChooser(page: Page, picker: Locator): Promise<FileChooser> {
+  // The template Reload specs supply their own durable handles to exercise the other path.
+  await page.evaluate(() => {
+    Object.defineProperty(window, 'showOpenFilePicker', { value: undefined, configurable: true });
+  });
+  const [chooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    picker.getByRole('button', { name: 'Import a .vcg' }).first().click(),
+  ]);
+  return chooser;
+}
+
 export class RuntimeApp {
   constructor(readonly page: Page) {}
 
@@ -334,18 +347,8 @@ export class RuntimeApp {
     const before = await this.templateCount();
     await this.layerRow(target).getByRole('button', { name: 'LOAD' }).click();
     await expect(this.templatePicker).toBeVisible();
-    // The tools row's door, not the footer's: the footer's primary is the LOAD now. Its press
-    // IS the OS chooser, so the wait for it starts first.
-    // The generic fixture feeds the HTML input path. The reload spec exercises
-    // the separate file-handle chooser and its persisted capability.
-    await this.page.evaluate(() => {
-      Object.defineProperty(window, 'showOpenFilePicker', { value: undefined, configurable: true });
-    });
-    const chooser = this.page.waitForEvent('filechooser');
-    await this.page.getByRole('button', { name: 'Import a .vcg' }).click();
-    await (
-      await chooser
-    ).setFiles({
+    const chooser = await openVcgFileChooser(this.page, this.templatePicker);
+    await chooser.setFiles({
       name: filename,
       mimeType: 'application/octet-stream',
       buffer: Buffer.from(bytes),
@@ -511,12 +514,21 @@ export class RuntimeApp {
    * handler exactly as an operator's click does.
    */
   async selectStackRow(templateId: string): Promise<void> {
-    await this.stackRow(templateId).first().locator('[data-row-body]').click();
+    await this.#selectRow(this.stackRow(templateId).first());
   }
 
   /** R-028 — select a row by its LAYER, which is the row identity now. */
   async selectLayerRow(layer: number): Promise<void> {
+    await this.#selectRow(this.layerRow(layer));
+  }
+
+  async toggleLayerRow(layer: number): Promise<void> {
     await this.layerRow(layer).locator('[data-row-body]').click();
+  }
+
+  async #selectRow(row: Locator): Promise<void> {
+    if ((await row.getAttribute('aria-pressed')) === 'true') return;
+    await row.locator('[data-row-body]').click();
   }
 
   /**

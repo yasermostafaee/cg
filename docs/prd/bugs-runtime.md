@@ -14046,3 +14046,11 @@ Repeater row motion explicitly sets descendant visibility, which can override an
 **Expected / Fix:** apply current fields before revealing the stage and keep every prepared page
 composited at zero opacity until it enters. The Designer canvas waits for its current field and
 selected-page projection before reveal. Browser coverage samples pending and first-page frames.
+
+## [~] B-421 — Binding a template leaves the destination layer unselected ⟨priority: medium⟩ — `openspec/changes/select-bound-template-layer/`
+
+**Repro:** Select a bound layer, open **Load** on an empty layer and commit a template.
+**Actual:** The Templates dialog closes while the Inspector still points to the previous layer.
+**Expected:** After a successful bind, select the destination layer and show its Inspector. Closing
+the dialog without a bind or receiving a refusal preserves the previous selection.
+**Regression:** Exercise import then load, catalogue reuse, dismissal and a refused bind.

@@ -53,11 +53,12 @@ export interface FixedSlotCoord {
 export function loadTemplateOntoFixedSlot(
   slot: FixedSlotCoord,
   template: TemplateInfo,
+  itemId = newItemId(),
 ): Promise<AsyncResult> {
   return window.cg.fixedLayers.load({
     channel: slot.channel,
     layer: slot.layer,
-    itemId: newItemId(),
+    itemId,
     templateId: template.templateId,
     fields: newItemFields(template),
   });

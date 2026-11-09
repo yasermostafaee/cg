@@ -96,13 +96,14 @@ test('selecting a row neither adds it to PVW nor removes another from it', async
   expect(before).toEqual([await itemIdOf(page, a)]);
 
   // Select B (not in PVW), then A (in PVW), then deselect A: the set never moves.
+  await app.selectLayerRow(a);
   await app.selectLayerRow(b);
   await expect(app.layerRow(b)).toHaveAttribute('aria-pressed', 'true');
   expect(await pvwItemIds(page)).toEqual(before);
   await app.selectLayerRow(a);
   await expect(app.layerRow(a)).toHaveAttribute('aria-pressed', 'true');
   expect(await pvwItemIds(page)).toEqual(before);
-  await app.selectLayerRow(a);
+  await app.toggleLayerRow(a);
   await expect(app.layerRow(a)).toHaveAttribute('aria-pressed', 'false');
   expect(await pvwItemIds(page)).toEqual(before);
 });
@@ -150,7 +151,7 @@ test('selecting and deselecting a row leaves the monitors as they were — shown
   await monitorsToggle(page).click();
   await expect(strip(page)).toHaveCount(0);
   await expect(monitorsToggle(page)).toHaveAttribute('aria-expanded', 'false');
-  await app.selectLayerRow(a); // deselect
+  await app.toggleLayerRow(a); // deselect
   await expect(app.inspector).toHaveCount(0);
   await expect(strip(page)).toHaveCount(0);
   await app.selectLayerRow(a); // reselect

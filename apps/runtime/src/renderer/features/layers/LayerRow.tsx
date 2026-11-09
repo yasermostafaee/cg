@@ -20,6 +20,7 @@ import { useLink } from '../../hooks/useLink.js';
 import { useCasparReach } from '../../hooks/useCasparReachable.js';
 import { casparRefusalReason } from '../../ui/reachWording.js';
 import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
+import { newItemId } from '../library/newItemFields.js';
 import { displayLabel } from '../library/templateName.js';
 import { recentRemovalElsewhere } from '../library/templateActs.js';
 import { isOnAir } from '../stack/onAir.js';
@@ -564,7 +565,8 @@ export function LayerRow({
       });
       // The operator's own dismissal: not a success, not a refusal to report.
       if (chosen === null) return { accepted: false, cancelled: true };
-      const res = await loadTemplateOntoFixedSlot(coord, chosen);
+      const itemId = newItemId();
+      const res = await loadTemplateOntoFixedSlot(coord, chosen, itemId);
       /*
         🔴 DELTA 8 — THE LOAD ANNOUNCES ITSELF, AND ITS SENTENCE NAMES WHAT LANDED.
 
@@ -578,6 +580,7 @@ export function LayerRow({
         import saying nothing at all.
       */
       if (res.accepted) {
+        onSelect(itemId);
         reportCommandSuccess(`${rowName} loaded · ${displayLabel(chosen) ?? chosen.templateId}`);
         return res;
       }
@@ -867,6 +870,8 @@ export function LayerRow({
         propagation rather than by this handler knowing where the buttons are.
       */
       onClick={(e) => {
+        // A modal portal belongs to this row in React but lies outside the row in the DOM.
+        if (!e.currentTarget.contains(e.target as Node)) return;
         // Anything the operator can PRESS handles its own click; the row must not
         // also select on it. Asking the event where it came from beats hanging a
         // `stopPropagation` on a wrapper: it covers the verb buttons, the

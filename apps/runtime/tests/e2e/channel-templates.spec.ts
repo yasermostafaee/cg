@@ -1,5 +1,11 @@
 import type { Page } from '@playwright/test';
-import { buildValidVcg, test, expect, type RuntimeApp } from './fixtures/runtime.js';
+import {
+  buildValidVcg,
+  test,
+  expect,
+  openVcgFileChooser,
+  type RuntimeApp,
+} from './fixtures/runtime.js';
 
 /**
  * 🔴 `CHANNEL-TEMPLATES-01` (the owner, 2026-09-28) — **EACH CHANNEL HAS ITS OWN TEMPLATE LIST.**
@@ -50,11 +56,8 @@ async function importInPicker(
   /** `B-352` — a package this channel already lists asks first; a re-import answers Update. */
   reimport = false,
 ): Promise<void> {
-  const chooser = app.page.waitForEvent('filechooser');
-  await app.templatePicker.getByRole('button', { name: 'Import a .vcg' }).first().click();
-  await (
-    await chooser
-  ).setFiles({
+  const chooser = await openVcgFileChooser(app.page, app.templatePicker);
+  await chooser.setFiles({
     name,
     mimeType: 'application/octet-stream',
     buffer: Buffer.from(await buildValidVcg(templateId)),

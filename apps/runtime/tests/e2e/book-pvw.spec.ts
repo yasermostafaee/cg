@@ -3,7 +3,7 @@ import type { Locator, Page } from '@playwright/test';
 import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { ConnectionConfig, FixedLayerBank } from '@cg/shared-ipc';
-import { buildBookVcg, expect, test } from './fixtures/runtime.js';
+import { buildBookVcg, expect, openVcgFileChooser, test } from './fixtures/runtime.js';
 import { solidPng } from './fixtures/pictures.js';
 import { buildTelavat2Vcg } from '../support/telavat2Vcg.js';
 
@@ -95,12 +95,8 @@ const inspector = (page: Page): Locator => page.getByRole('complementary', { nam
 /** LOAD → `Import a .vcg` → the file → `Load onto` — what the operator presses (`importVcg`'s steps). */
 async function importAndLoad(page: Page, bytes: Uint8Array): Promise<void> {
   await row(page).getByRole('button', { name: 'LOAD' }).click();
-  const chooser = page.waitForEvent('filechooser');
-  // An empty library offers the same door twice (the tools row and the empty state): either opens it.
-  await page.getByRole('dialog').getByRole('button', { name: 'Import a .vcg' }).first().click();
-  await (
-    await chooser
-  ).setFiles({
+  const chooser = await openVcgFileChooser(page, page.getByRole('dialog'));
+  await chooser.setFiles({
     name: 'book.vcg',
     mimeType: 'application/octet-stream',
     buffer: Buffer.from(bytes),
@@ -109,6 +105,7 @@ async function importAndLoad(page: Page, bytes: Uint8Array): Promise<void> {
   await expect(commit).toBeEnabled({ timeout: 30_000 });
   await commit.click();
   await expect(row(page)).toHaveAttribute('data-item-id', /.+/);
+  await expect(row(page)).toHaveAttribute('aria-pressed', 'true');
 }
 
 async function sampleRgb(page: Page, locator: Locator, fx: number, fy: number): Promise<RGB> {
@@ -160,7 +157,6 @@ test('🔴 1.1 — PVW draws the loaded pictures, not their names; a turn moves 
   await openConsole(page, handle.url);
   await showMonitors(page);
   await importAndLoad(page, await buildBookVcg(TEMPLATE_ID));
-  await row(page).locator('[data-row-body]').click();
   await row(page).getByRole('button', { name: 'ON PVW', exact: true }).click();
   await expect(page.locator('iframe[data-rehearsal-frame]')).toHaveCount(1);
   // PVW draws once it is played — the bar's PLAY, as the operator plays a rehearsal.
@@ -229,7 +225,6 @@ test('🔴 1.3 — the preview bar’s NEXT turns the loaded pages, exactly as t
   await openConsole(page, handle.url);
   await showMonitors(page);
   await importAndLoad(page, await buildBookVcg(TEMPLATE_ID));
-  await row(page).locator('[data-row-body]').click();
   await row(page).getByRole('button', { name: 'ON PVW', exact: true }).click();
   await expect(page.locator('iframe[data-rehearsal-frame]')).toHaveCount(1);
   const pvwBar = page.locator('[data-pvw-controls]');
@@ -273,7 +268,6 @@ test('1.4 — the strip draws the template’s own pages from the page the bridg
   const handle = await boot();
   await openConsole(page, handle.url);
   await importAndLoad(page, await buildTelavat2Vcg({ templateId: 'tpl-e2e-strip', pages: 3 }));
-  await row(page).locator('[data-row-body]').click();
   const face = inspector(page).locator('[data-book-thumb="current"] img');
   await expect(face).toHaveAttribute('src', /^data:image\/png/, { timeout: 15_000 });
   expect(await face.evaluate((img) => (img as HTMLImageElement).naturalWidth)).toBe(8);

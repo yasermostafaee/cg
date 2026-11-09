@@ -69,7 +69,7 @@ for (const { what, refusal, tail } of [
     // …and its Inspector says the same line.
     await app.selectLayerRow(99);
     await expect(page.locator('[data-inspector-take-refusal]')).toHaveText(tail);
-    await app.selectLayerRow(99); // toggles it closed again
+    await app.toggleLayerRow(99); // toggles it closed again
     await expect(page.locator('[data-inspector-take-refusal]')).toHaveCount(0);
     await expect(row.locator('[data-take-refusal]')).toHaveText(tail);
 
@@ -102,7 +102,7 @@ test('🔴 C4 — a row whose live boxes are not mirrored says so, on the row an
   await expect(page.locator('[data-refusal]')).toHaveCount(0);
   await app.selectLayerRow(96);
   await expect(page.locator('[data-inspector-backup-unmirrored]')).toHaveText(BACKUP_LINE);
-  await app.selectLayerRow(96); // toggles it closed again
+  await app.toggleLayerRow(96); // toggles it closed again
   const line = row.locator('[data-backup-unmirrored]');
   await expect(line).toHaveText(BACKUP_LINE);
   // The cell keeps the template's name on its title (`<line> — <template>`): the control's anchor.

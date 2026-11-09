@@ -260,9 +260,10 @@ test('CLEAR is confirm-gated and mirrored in the context menu; cancel does nothi
   await expect(app.layerState(81)).toHaveText('EMPTY');
 });
 
-test('import+load lands on the EXACT row, and the template stays available for reuse', async ({
+test('B-421: import+load selects the exact row, and the template stays available for reuse', async ({
   app,
 }) => {
+  await app.page.setViewportSize({ width: 1600, height: 900 });
   const before = await app.templateCount();
 
   // ONE operator action on the row they chose: press LOAD, hand it a `.vcg`,
@@ -271,7 +272,10 @@ test('import+load lands on the EXACT row, and the template stays available for r
 
   // 1. The created item is bound to THIS row's layer — the one assertion this
   //    whole task exists for. The row names it; no other row does.
-  await expect(app.layerRow(84)).toContainText('clock');
+  const row = app.layerRow(84);
+  await expect(row).toContainText('clock');
+  await expect(row).toHaveAttribute('aria-pressed', 'true');
+  await expect(app.inspector.getByRole('textbox', { name: 'anchor', exact: true })).toBeVisible();
 
   // 2. The template went into the SHARED registry — and STAYS there for reuse.
   await expect.poll(() => app.templateCount()).toBe(before + 1);
@@ -286,18 +290,35 @@ test('import+load lands on the EXACT row, and the template stays available for r
 // §6 — the picker is now reached through the row's own LOAD, not a context-menu
 // entry named after a deleted panel. The SUBJECT is unchanged: re-using a template
 // this browser already holds binds the exact row and imports nothing.
-test('picking an already-imported template binds the same exact row, without a second import', async ({
+test('B-421: loading from the catalogue switches selection, while dismissing preserves it', async ({
   app,
 }) => {
+  await app.page.setViewportSize({ width: 1600, height: 900 });
   await app.importVcg('lower-third.vcg', await buildValidVcg('tpl-lib-e2e'), 84);
   await expect(app.layerRow(84)).toContainText('lower third');
   const registrySize = await app.templateCount();
+
+  await app.selectLayerRow(80);
+  await app.openTemplatePicker(85);
+  // Dismiss by the scrim, which is rendered in a portal owned by the destination row.
+  await app.page.locator('[data-modal-layer]').click({ position: { x: 5, y: 5 } });
+  await expect(app.templatePicker).toHaveCount(0);
+  await expect(app.layerRow(80)).toHaveAttribute('aria-pressed', 'true');
+  await expect(app.layerRow(85)).toHaveAttribute('aria-pressed', 'false');
 
   await app.loadTemplate('tpl-lib-e2e', 85);
 
   // The row is headed by the FILE the operator imported, humanised — never the
   // raw id and never the scene's internal name.
-  await expect(app.layerRow(85)).toContainText('lower third');
+  const row = app.layerRow(85);
+  await expect(row).toContainText('lower third');
+  await expect(row).toHaveAttribute('aria-pressed', 'true');
+  await expect(app.layerRow(80)).toHaveAttribute('aria-pressed', 'false');
+  const itemId = await row.getAttribute('data-item-id');
+  await expect(app.inspector.locator('[data-inspector-heading]')).toHaveAttribute(
+    'title',
+    `template tpl-lib-e2e · item ${String(itemId)}`,
+  );
   // Nothing was imported — the registry is exactly as it was.
   await expect.poll(() => app.templateCount()).toBe(registrySize);
 });

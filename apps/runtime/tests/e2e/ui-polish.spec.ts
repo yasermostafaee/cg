@@ -1,5 +1,12 @@
 import type { Locator, Page } from '@playwright/test';
-import { buildInvalidVcg, buildValidVcg, cssColour, test, expect } from './fixtures/runtime.js';
+import {
+  buildInvalidVcg,
+  buildValidVcg,
+  cssColour,
+  openVcgFileChooser,
+  test,
+  expect,
+} from './fixtures/runtime.js';
 
 /**
  * 🔴 `UI-POLISH-01` — the owner's first-run check of 2026-09-26, measured in a real engine. Every
@@ -196,9 +203,7 @@ test.describe('D — importing is one step: the OS chooser, or a drop on the lis
     const picker = app.templatePicker;
     const before = await app.templateCount();
 
-    const chooser = page.waitForEvent('filechooser');
-    await picker.getByRole('button', { name: 'Import a .vcg' }).click();
-    const opened = await chooser;
+    const opened = await openVcgFileChooser(page, picker);
     // The press opened the chooser — and no dialog of ours stands in front of it.
     await expect(page.getByRole('dialog')).toHaveCount(1);
     await expect(page.locator('[data-import-drop]')).toHaveCount(0);
@@ -227,11 +232,8 @@ test.describe('D — importing is one step: the OS chooser, or a drop on the lis
     await app.openTemplatePicker();
     const picker = app.templatePicker;
     const before = await app.templateCount();
-    const chooser = page.waitForEvent('filechooser');
-    await picker.getByRole('button', { name: 'Import a .vcg' }).click();
-    await (
-      await chooser
-    ).setFiles({
+    const chooser = await openVcgFileChooser(page, picker);
+    await chooser.setFiles({
       name: 'broken.vcg',
       mimeType: 'application/octet-stream',
       buffer: Buffer.from(buildInvalidVcg()),
