@@ -1,9 +1,8 @@
 import { test, expect, type DesignerApp } from './fixtures/designer.js';
 
 /**
- * D-133 — THE LOOP RANGE: authorable on any composition that has an out-point, drawn on
- * the timeline by default with full-height indicator lines, and named apart from the two
- * other loops this app already has.
+ * D-133 and B-420 cover authoring Hold start in a composition with an Outro, the
+ * authored range's full-height indicators, and the separate loop controls.
  *
  * Scenario coverage, mapped from `specs/designer-playout-lifecycle/spec.md`:
  *
@@ -69,6 +68,7 @@ test.describe('D-133 — the loop range is authorable and on the timeline', () =
       await app.page.getByRole('menuitemradio', { name: color, exact: true }).click();
     }
     await app.deselect();
+    await app.page.getByRole('button', { name: 'Set hold start' }).click();
     const band = app.page.getByTestId('loop-range-band');
     const start = app.page.getByTestId('loop-range-start');
     await expect(band).toHaveCSS('background-image', /^linear-gradient\(/);
@@ -82,13 +82,6 @@ test.describe('D-133 — the loop range is authorable and on the timeline', () =
       'border-left-color',
       'rgb(255, 174, 87)',
     );
-    await expect(start).toHaveCSS('border-left-style', 'dashed');
-    await testInfo.attach('automatic-green-range-colored-layers', {
-      body: await app.page.getByRole('region', { name: 'Animation timeline' }).screenshot(),
-      contentType: 'image/png',
-    });
-
-    await app.page.getByRole('button', { name: 'Set hold start' }).click();
     await expect(start).toHaveCSS('border-left-style', 'solid');
     // A selected bar formerly covered the range completely. Verify paint order AND that
     // the non-interactive overlay leaves the actual lifespan click usable.
@@ -106,33 +99,33 @@ test.describe('D-133 — the loop range is authorable and on the timeline', () =
     });
   });
 
-  test('Hold start and its range are green while the playhead stays blue', async ({ app }) => {
+  test('B-420 — a green Hold range appears on Set and disappears on Clear', async ({ app }) => {
     await app.newProject('GreenHoldRange');
     await shapesOnlyWithOutPoint(app);
     const start = app.page.getByTestId('loop-range-start');
+    const band = app.page.getByTestId('loop-range-band');
+    const end = app.page.getByTestId('loop-range-end');
     const setHold = app.page.getByRole('button', { name: 'Set hold start' });
     await expect(setHold).toHaveCSS('color', 'rgb(95, 174, 128)');
-    await expect(start).toHaveCSS('border-left-style', 'dashed');
-    await expect(start).toHaveCSS('border-left-color', 'rgb(95, 174, 128)');
-    await expect(app.page.getByTestId('loop-range-band')).toHaveCSS(
-      'background-color',
-      'rgba(95, 174, 128, 0.14)',
-    );
+    await expect(start).toHaveCount(0);
+    await expect(band).toHaveCount(0);
     await expect(app.page.getByTestId('body-playhead')).toHaveCSS(
       'border-left-color',
       'rgb(56, 189, 248)',
     );
-    await expect(app.page.getByTestId('loop-range-end')).toHaveCSS(
-      'border-left-color',
-      'rgb(255, 174, 87)',
-    );
+    await expect(end).toHaveCSS('border-left-color', 'rgb(255, 174, 87)');
     await setHold.click();
     await expect(start).toHaveCSS('border-left-style', 'solid');
     await expect(start).toHaveCSS('border-left-color', 'rgb(95, 174, 128)');
+    await expect(band).toHaveCSS('background-color', 'rgba(95, 174, 128, 0.14)');
     await expect(app.page.getByRole('separator', { name: 'Hold start marker' })).toHaveCSS(
       'background-color',
       'rgb(95, 174, 128)',
     );
+    await app.page.getByRole('button', { name: 'Clear hold start' }).click();
+    await expect(start).toHaveCount(0);
+    await expect(band).toHaveCount(0);
+    await expect(end).toBeVisible();
   });
 
   test('a SHAPES-ONLY composition with an out-point offers the content-start pin — no ticker needed', async ({
@@ -151,12 +144,12 @@ test.describe('D-133 — the loop range is authorable and on the timeline', () =
     await expect(app.page.getByRole('separator', { name: 'Hold start marker' })).toBeVisible();
   });
 
-  test('the loop range is drawn BY DEFAULT and its indicator lines span the full timeline height', async ({
+  test('the authored Hold range and its indicator lines span the full timeline height', async ({
     app,
   }) => {
     await app.newProject('LoopRangeTimeline');
     await shapesOnlyWithOutPoint(app);
-    // Nothing else is done: no pin, no drag. "Present by default" is the claim.
+    await app.page.getByRole('button', { name: 'Set hold start' }).click();
 
     const start = app.page.getByTestId('loop-range-start');
     const end = app.page.getByTestId('loop-range-end');
@@ -533,7 +526,9 @@ test.describe('D-133 — the loop range is authorable and on the timeline', () =
     });
 
     await app.play();
-    await expect(app.previewFrame.locator('body')).toHaveClass(/cg-pending/, { timeout: 10_000 });
+    const previewBody = app.previewFrame.locator('body');
+    await expect(previewBody).not.toHaveClass(/cg-pending/);
+    await expect(previewBody).toHaveClass(/cg-pending/, { timeout: 10_000 });
 
     const sample = await app.page.evaluate(() => ({
       history: (Reflect.get(window, '__gracefulExitFrames') as string[] | undefined) ?? [],

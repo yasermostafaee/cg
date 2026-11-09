@@ -4905,3 +4905,10 @@ Keyframe a text layer's Y position, move the playhead to a frame where the text 
 and double-click it on the Canvas. The pointer hits the animated text, but the edit box uses
 the saved base transform. Use the same evaluated pose for hit testing and the inline editor.
 The edited text is then visible on that element across the animation.
+
+## [~] B-420 — The timeline draws a dotted Hold boundary when no Hold start was authored ⟨priority: medium — the owner, 2026-11-09⟩ — `openspec/changes/show-authored-hold-range-only/`
+
+Clear Hold start on a composition with an Outro start, or open the revised forecast starter.
+The timeline draws a dotted line and shaded range from the computed playback cue. Show the
+Hold line and shading only after Set records an explicit Hold start. Draw the orange Outro
+line from its authored marker independently.

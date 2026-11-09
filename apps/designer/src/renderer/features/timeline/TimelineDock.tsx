@@ -10,7 +10,6 @@ import { DisplayRow } from './DisplayRow.js';
 import { ElementRow, lifespanColorFor } from './ElementRow.js';
 import { FrameRuler } from './FrameRuler.js';
 import { LayerContextMenu } from './LayerContextMenu.js';
-import { contentStartDefaultFrom } from '../inspector/content-start-default.js';
 import { LABEL_COL_PX, timelineGroupsFor } from './keyframe-helpers.js';
 import { TrackRow } from './TrackRow.js';
 import {
@@ -436,31 +435,12 @@ export function TimelineDock({
   // Position a frame as a percent of the full span (markers + overlays).
   const markerPct = (f: number): number => frameToPctClamped(f, frameIn, frameOut);
 
-  /**
-   * D-133 — the HOLD LOOP range `[content start → out point]`, PRESENT BY DEFAULT.
-   *
-   * "By default" is the load-bearing word (design §9.2's consequence): because the loop
-   * range is only OFFERED where an out-point exists, what discharges D-133's "the
-   * conditional affordance is at most a shortcut, never the only path" is this — the range
-   * being drawn for every composition that holds, with nothing added by hand.
-   *
-   * So the start is the EFFECTIVE content start, not only the pinned one: the marker when
-   * the operator has authored it, else the marker-less runtime mirror
-   * `contentStartDefaultFrom`. The Set action deliberately has its own one-frame seed helper;
-   * that authoring convenience must not change what an unpinned scene renders. An UNPINNED
-   * start draws dashed: it is
-   * derived, and the timeline should not present a derivation as an authored decision.
-   *
-   * A legacy/imported degenerate range still draws both boundaries. They keep the same frame
-   * value but receive a tiny visual offset below, so an empty Middle is visible and editable
-   * instead of silently disappearing.
-   */
-  const loopRange = ((): { from: number; to: number; pinned: boolean } | null => {
-    const lc = scene.lifecycle;
-    if (lc === undefined) return null;
-    const from = lc.contentStart ?? contentStartDefaultFrom(scene.layers, active.in, lc.outPoint);
-    return { from, to: lc.outPoint, pinned: lc.contentStart !== undefined };
-  })();
+  // The Timeline shows the range only when Hold start has been authored.
+  const lifecycle = scene.lifecycle;
+  const loopRange =
+    lifecycle?.contentStart === undefined
+      ? null
+      : { from: lifecycle.contentStart, to: lifecycle.outPoint };
 
   const coincidentLoopOffsets = ((): { start?: string; end?: string } => {
     if (loopRange === null || loopRange.from !== loopRange.to) return {};
@@ -666,22 +646,24 @@ export function TimelineDock({
                     data-testid="loop-range-start"
                     style={{
                       left: `${markerPct(loopRange.from).toFixed(3)}%`,
-                      borderLeft: `1.5px ${loopRange.pinned ? 'solid' : 'dashed'} ${colors.markerIn}`,
+                      borderLeft: `1.5px solid ${colors.markerIn}`,
                       transform: coincidentLoopOffsets.start,
                     }}
                     aria-hidden
                   />
-                  <div
-                    className={s.loopRangeLine}
-                    data-testid="loop-range-end"
-                    style={{
-                      left: `${markerPct(loopRange.to).toFixed(3)}%`,
-                      borderLeft: `1.5px solid ${colors.markerOut}`,
-                      transform: coincidentLoopOffsets.end,
-                    }}
-                    aria-hidden
-                  />
                 </>
+              )}
+              {lifecycle !== undefined && (
+                <div
+                  className={s.loopRangeLine}
+                  data-testid="loop-range-end"
+                  style={{
+                    left: `${markerPct(lifecycle.outPoint).toFixed(3)}%`,
+                    borderLeft: `1.5px solid ${colors.markerOut}`,
+                    transform: coincidentLoopOffsets.end,
+                  }}
+                  aria-hidden
+                />
               )}
               {hasInactiveTail && (
                 <div

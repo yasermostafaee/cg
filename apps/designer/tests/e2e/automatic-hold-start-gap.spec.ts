@@ -9,11 +9,12 @@ test.describe('Set hold start seed', () => {
 
     const rangeStart = app.page.getByTestId('loop-range-start');
     const rangeEnd = app.page.getByTestId('loop-range-end');
-    await expect(rangeStart).toBeAttached();
+    await expect(rangeStart).toHaveCount(0);
     await expect(rangeEnd).toBeAttached();
 
     // Set authors a Hold start one frame before Outro start when no earlier settle exists.
     await app.page.getByRole('button', { name: 'Set hold start' }).click();
+    await expect(rangeStart).toBeAttached();
     const seededFrames = await Promise.all(
       [rangeStart, rangeEnd].map(async (marker) => {
         const left = await marker.evaluate((node) => Number.parseFloat(node.style.left));

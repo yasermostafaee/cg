@@ -4345,3 +4345,12 @@ The previous allocation and a heading search confirmed B-418 was free.
 The previous allocation and a heading search confirmed B-419 was free.
 
 ⇒ **Next free after this entry is `B-420`**, **`D-207`**, **`P-078`**, **`R-113`** and **`C-049`**.
+
+### 2026-11-09 — Timeline authored Hold range takes `B-420`
+
+- `B-420` — show a Hold start line and range shading only when the marker is authored —
+  [bugs-designer.md](bugs-designer.md).
+
+The previous allocation and a heading search confirmed B-420 was free.
+
+⇒ **Next free after this entry is `B-421`**, **`D-207`**, **`P-078`**, **`R-113`** and **`C-049`**.

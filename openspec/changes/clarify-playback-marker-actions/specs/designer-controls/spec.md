@@ -61,7 +61,7 @@ SHALL remain orange. Color changes SHALL NOT change authored frames or playback 
 
 #### Scenario: Green Hold start and range remain distinct from the blue playhead
 
-- **WHEN** an author views an explicit or automatic Hold start alongside the playhead
+- **WHEN** an author views an explicit Hold start alongside the playhead
 - **THEN** the Hold-start marker and line, related Inspector action/icon, and Loop range use green
 - **AND** the playhead/current-frame indicator remains blue and Outro start remains orange
 - **AND** marker dragging, coincident-boundary separation and persisted values are unchanged

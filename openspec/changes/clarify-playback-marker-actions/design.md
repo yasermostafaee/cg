@@ -42,9 +42,9 @@ uncovered. No hatch or thick boundary halo is retained. Pointer ownership does n
 validation includes strongly colored layer rows, not only the neutral ruler.
 
 The scoped implementation uses the existing 14% green tint over a uniform 18% black wash, painted
-above the colored layer bars, with thin full-opacity green/orange boundary lines. The automatic
-Hold boundary remains dashed. This flat treatment contains neither a repeating pattern nor a
-shadow halo; its actual contrast and row readability still require the pending browser check.
+above the colored layer bars, with thin full-opacity green/orange boundary lines. B-420 draws
+the range after Hold start is authored. The restrained plain fill preserves contrast over
+colored rows and keeps labels readable.
 
 ## References
 

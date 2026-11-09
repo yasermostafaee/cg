@@ -122,17 +122,17 @@ const el = (id: string): HTMLElement | null =>
 /** The `left` percent an absolutely-positioned frame marker was placed at. */
 const leftPct = (id: string): number => Number.parseFloat(el(id)?.style.left ?? 'NaN');
 
-describe('the loop range is drawn on the timeline by default', () => {
-  it('a composition that holds shows the range and BOTH indicator lines, hand-added by nobody', () => {
-    // Entrance settling at frame 30 ⇒ the effective content start is 30, out-point 80.
+describe('the timeline draws the range between authored phase markers', () => {
+  it('automatic Hold shows the authored Outro line alone', () => {
     mount(scene([shape('bg', 30)]));
-    expect(el('loop-range-band')).not.toBeNull();
-    expect(el('loop-range-start')).not.toBeNull();
+    expect(el('loop-range-band')).toBeNull();
+    expect(el('loop-range-start')).toBeNull();
     expect(el('loop-range-end')).not.toBeNull();
+    expect(leftPct('loop-range-end')).toBeCloseTo(80, 1);
   });
 
-  it('the range spans [effective content start → out point] — 30 → 80 of a 0–100 timeline', () => {
-    mount(scene([shape('bg', 30)]));
+  it('the range spans the authored Hold start and Outro start', () => {
+    mount(scene([shape('bg', 30)], { outPoint: 80, contentStart: 30 }));
     expect(leftPct('loop-range-start')).toBeCloseTo(30, 1);
     expect(leftPct('loop-range-end')).toBeCloseTo(80, 1);
     expect(leftPct('loop-range-band')).toBeCloseTo(30, 1);
@@ -147,7 +147,7 @@ describe('the loop range is drawn on the timeline by default', () => {
     // siblings of the shipped full-height body playhead, in the body-level overlay
     // container — NOT children of the fixed-height scene row, which cannot be full-height
     // however it is styled.
-    mount(scene([shape('bg', 30)]));
+    mount(scene([shape('bg', 30)], { outPoint: 80, contentStart: 30 }));
     const playhead = el('body-playhead')!;
     for (const id of ['loop-range-start', 'loop-range-end', 'loop-range-band']) {
       const node = el(id)!;
@@ -157,13 +157,7 @@ describe('the loop range is drawn on the timeline by default', () => {
     }
   });
 
-  it('a PINNED content start moves the range and draws it solid; an unpinned one is dashed', () => {
-    // Unpinned: derived from the entrance, so the line says so rather than presenting a
-    // derivation as an authored decision.
-    mount(scene([shape('bg', 30)]));
-    expect(el('loop-range-start')!.style.borderLeft).toMatch(/dashed/);
-    expect(el('loop-range-start')!.style.borderLeftColor).toBe('rgb(95, 174, 128)');
-
+  it('an authored Hold start draws a solid green line', () => {
     mount(scene([shape('bg', 30)], { outPoint: 80, contentStart: 55 }));
     expect(leftPct('loop-range-start')).toBeCloseTo(55, 1);
     expect(el('loop-range-start')!.style.borderLeft).toMatch(/solid/);
@@ -196,17 +190,14 @@ describe('the loop range is drawn on the timeline by default', () => {
     expect(start!.style.transform).not.toBe(end!.style.transform);
   });
 
-  it('marker-less runtime fallback stays coincident while both derived lines remain visible', () => {
-    // No entrance keyframes means runtime settles at Outro start. The one-frame default belongs
-    // only to the explicit Set action and must not leak into this unpinned effective range.
+  it('automatic Hold at Outro start draws a single line at the authored frame', () => {
     mount(scene([shape('bg')]));
     const start = el('loop-range-start');
     const end = el('loop-range-end');
-    expect(start).not.toBeNull();
+    expect(start).toBeNull();
     expect(end).not.toBeNull();
-    expect(leftPct('loop-range-start')).toBeCloseTo(80, 1);
     expect(leftPct('loop-range-end')).toBeCloseTo(80, 1);
-    expect(start!.style.transform).not.toBe(end!.style.transform);
+    expect(end!.style.transform).toBe('');
   });
 
   it('dragging Hold start through Outro start advances both markers to the same frame', () => {
