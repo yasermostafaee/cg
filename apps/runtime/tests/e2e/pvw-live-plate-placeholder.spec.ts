@@ -184,22 +184,31 @@ test('D-178 — both monitors show Pan, and idle Preview can practice without se
   await preview.click();
   await expect(preview).toHaveAttribute('aria-pressed', 'true');
   const practice = page.getByRole('button', { name: 'Pan practice image', exact: true });
+  const frame = practice.locator('..');
   const picture = practice.locator('[data-pan-practice-picture]');
-  await expect(picture).toHaveCSS('background-position-x', '50%');
-  const plate = await practice.boundingBox();
+  const crop = practice.locator('[data-pan-practice-crop]');
+  const transform = () => crop.evaluate((frame) => getComputedStyle(frame).transform);
+  await expect(picture).toHaveCSS('background-size', '100% 100%');
+  const centered = await transform();
+  const plate = await frame.boundingBox();
   if (plate === null) throw new Error('Missing practice plate');
   await page.mouse.move(plate.x + plate.width / 2, plate.y + plate.height / 2);
   await page.mouse.down();
+  await page.mouse.move(plate.x + (plate.width * 5) / 8, plate.y + plate.height / 2);
+  await expect.poll(transform).not.toBe(centered);
+  const intermediate = await transform();
   await page.mouse.move(plate.x + (plate.width * 3) / 4, plate.y + plate.height / 2);
+  await expect.poll(transform).not.toBe(intermediate);
   await page.mouse.up();
-  await expect(picture).not.toHaveCSS('background-position-x', '50%');
-  expect(await practice.boundingBox()).toEqual(plate);
+  expect(await frame.boundingBox()).toEqual(plate);
   await expect(airCount).toHaveText(initialAirCount);
+  await page.getByRole('button', { name: 'Center preview crop', exact: true }).click();
+  await expect.poll(transform).toBe(centered);
 
   await preview.click();
   await expect(practice).toHaveCount(0);
   await preview.click();
-  await expect(picture).toHaveCSS('background-position-x', '50%');
+  await expect.poll(transform).toBe(centered);
 });
 
 test('B-424 — PVW shows the authored solid fallback beside Bars and labels Crop edges', async ({

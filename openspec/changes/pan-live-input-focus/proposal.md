@@ -13,6 +13,8 @@ which part of the live input stays visible while the plate and picture proportio
 - Add direct dragging on the live programme return in CG Control.
 - Keep the Pan control visible on both monitors. Let the operator review the PVW gesture with a
   clearly marked practice image before the Playout mapping is available.
+- Show the crop window in a proportional source overview and allow a scoped return to the centre.
+  Update the guide during the gesture and apply PGM only on release.
 - Add accurate PVW focus staging when the C-023 feed includes the source picture mapping.
 
 ## Capabilities

@@ -191,6 +191,10 @@
           "en": "Pan is visible in both monitor headers. PVW offers a practice picture inside the plate for trying the drag gesture."
         },
         {
+          "fa": "در ابزار Pan، محدودهٔ کراپ همراه ماوس حرکت می‌کند و با Center به وسط برمی‌گردد. نقشهٔ دقیق PGM با Bridge به‌روز در دسترس است.",
+          "en": "Pan moves the crop guide with the pointer and offers Center. The accurate PGM crop map uses geometry from the updated Bridge."
+        },
+        {
           "fa": "بررسی تصویر و شنود یک ورودی زنده در Look inputs، پنجرهٔ تغییر ورودی قاب و بخش Live sources تنظیمات در دسترس است.",
           "en": "Check the picture and optional sound of one live input from Look inputs, the plate source swap and Live sources in Settings."
         },

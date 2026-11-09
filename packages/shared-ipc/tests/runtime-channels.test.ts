@@ -24,6 +24,7 @@ import {
   LockStateChannel,
   StackLoadChannel,
   StackOutChannel,
+  StackPgmPlateCropChannel,
   StackRemoveChannel,
   StackSnapshotChannel,
   StackStateChangedChannel,
@@ -71,6 +72,52 @@ describe('stack.* channel schemas', () => {
 
   it('stack.remove just needs itemId', () => {
     expect(StackRemoveChannel.request.parse({ itemId: 'i1' })).toBeTruthy();
+  });
+
+  it('D-178 — keeps old PGM crop requests and targets while accepting centre and map geometry', () => {
+    const { request, response } = StackPgmPlateCropChannel;
+    const itemId = 'i1';
+    const token = 'a'.repeat(64);
+    const shift = { token, dx: 0.1, dy: -0.2 };
+    const center = { token, center: true };
+    expect(request.parse({ itemId })).toEqual({ itemId });
+    expect(request.parse({ itemId, drag: { ...shift, extra: true } })).toEqual({
+      itemId,
+      drag: shift,
+    });
+    expect(request.parse({ itemId, drag: center })).toEqual({ itemId, drag: center });
+    expect(request.safeParse({ itemId, drag: { ...shift, ...center } }).success).toBe(false);
+    expect(request.safeParse({ itemId, drag: { token, center: false } }).success).toBe(false);
+    expect(request.safeParse({ itemId, drag: { token: 'stale', center: true } }).success).toBe(
+      false,
+    );
+    expect(request.safeParse({ itemId, drag: { ...shift, dx: 1.1 } }).success).toBe(false);
+
+    const box = { x: 0, y: 0, width: 0.25, height: 0.5 };
+    const target = {
+      id: 'guest',
+      token,
+      label: 'Plate 1',
+      areas: [box],
+      horizontal: true,
+      vertical: false,
+    };
+    expect(response.parse({ ok: true, targets: [target] })).toEqual({
+      ok: true,
+      targets: [target],
+    });
+    const geometry = { box, picture: { ...box, x: -0.125, width: 0.5 }, sourceAspect: 16 / 9 };
+    const mapped = { ...target, geometry };
+    expect(response.parse({ ok: true, targets: [mapped] })).toEqual({
+      ok: true,
+      targets: [mapped],
+    });
+    expect(
+      response.safeParse({
+        ok: true,
+        targets: [{ ...target, geometry: { ...geometry, sourceAspect: 0 } }],
+      }).success,
+    ).toBe(false);
   });
 
   it('stack.snapshot has a void request and an array response', () => {

@@ -6045,8 +6045,15 @@ Both monitor headers expose Pan even when a programme edit is unavailable. PVW o
 practice image for reviewing the gesture. It uses the visible Crop edges plate's footprint when
 available and a sample when idle. Practice movement stays in the browser and is discarded on close.
 
+**Crop workspace:** show the whole practice source in PVW and a proportional source map in PGM.
+Outline the portion shown by the plate, move the outline continuously during a drag and offer
+Centre. PGM applies the selected position on release through the existing scoped Bridge operation.
+The exact PGM map and Centre require current geometry from Bridge.
+
 **Remaining dependency:** The C-023 check supplies a single live input preview, and Playout must
 identify its active picture rectangle and pixel aspect ratio before PVW can stage accurate focus.
+To show real pixels outside an on-air crop, Playout must expose the already-running source before
+the programme mix, without opening a second receiver.
 
 ## [~] D-179 — Rebuild and re-audit the Persian production starter gallery ⟨priority: high — owner re-review reopened 2026-11-04⟩ — `openspec/changes/rebuild-production-starter-gallery/`
 

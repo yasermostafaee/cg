@@ -76,6 +76,28 @@ export interface FitRect {
   readonly height: number;
 }
 
+/** D-178 — resolve a pointer shift in the same coordinate space as the box and full picture. */
+export function liveCropFocusAfterShift(
+  box: FitRect,
+  picture: FitRect,
+  shift: { readonly x: number; readonly y: number },
+): LiveCropFocus {
+  const focusAt = (
+    origin: number,
+    extent: number,
+    start: number,
+    size: number,
+    delta: number,
+  ): number => {
+    const overflow = size - extent;
+    return overflow <= 1e-6 ? 0.5 : Math.max(0, Math.min(1, (origin - start - delta) / overflow));
+  };
+  return {
+    x: focusAt(box.x, box.width, picture.x, picture.width, shift.x),
+    y: focusAt(box.y, box.height, picture.y, picture.height, shift.y),
+  };
+}
+
 /**
  * Where the picture lands, and what of it is SEEN. Always produced together.
  *

@@ -40,7 +40,21 @@ existing scoped Bridge operation.
 
 The PVW action opens a practice-only picture made of colour bars. If a rehearsing template has
 Crop edges plates, each practice target follows its existing raster footprint. Otherwise a sample
-plate is available. Drag or arrow keys move the image inside the fixed rectangle. The practice state
+plate is available. The whole practice picture stays visible behind the shaded crop guide. Drag
+or arrow keys move the guide, and Centre restores its starting position. The practice state
 belongs to the rendered control and is discarded when it closes. It starts no input check, performs
 no Bridge writes and cannot become an Inspector draft or reach Take. The real PVW gesture still
 requires the active source rectangle and sample aspect ratio from Playout.
+
+## PGM crop overview and centring
+
+The target may carry the authored plate box, the currently applied FILL and the source aspect.
+Bridge reads those from the same scoped candidate that produces the gesture token. The console
+uses them to draw a source-proportional map with the crop window at its current position. Its
+window moves locally while dragging. PGM applies one scoped request on release and reloads the
+map from the accepted target. Centre uses the same token, seat lock and geometry-only application.
+An older Bridge can still receive relative drags through the existing path.
+
+The PGM return cannot supply pixels outside the on-air clip. The overview explicitly presents
+geometry until the Playout supplies an authenticated read of the already-open source before
+FILL, CLIP and the final programme mix. The browser never opens or routes that producer.

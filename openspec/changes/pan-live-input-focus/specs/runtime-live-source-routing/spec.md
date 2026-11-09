@@ -45,3 +45,11 @@ current on-air plate.
   inside the existing Crop edges plate's footprint, or inside a sample plate when none is present
 - **WHEN** the practice image moves or the operator closes it **THEN** the authored plate, source,
   staged focus and programme output stay as they were
+
+#### Scenario: The crop guide moves smoothly over the source
+
+- **WHEN** the operator opens Pan in PVW **THEN** the complete practice image and current crop guide are visible
+- **WHEN** the operator chooses an on-air crop with a compatible Bridge **THEN** PGM shows the proportional source extent and current crop guide
+- **WHEN** the operator drags the guide **THEN** it follows the pointer locally and the console sends at most one scoped PGM crop command on release
+- **WHEN** the operator presses `Center` **THEN** the supported axes return to the centred crop, with the same plate, clip, source and sound
+- **WHEN** source pixels outside the programme clip are unavailable **THEN** the map identifies itself as geometry

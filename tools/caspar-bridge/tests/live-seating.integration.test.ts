@@ -445,8 +445,10 @@ it('D-202 — switching to a masked look seats the reveal and retains the foregr
   expect(lines).not.toContain('CLEAR 1-36');
 });
 
-it('D-178 — PGM drag pans a live cover input without replaying it or changing the crop box', async () => {
+it('D-178 — PGM drag and centre move only the live cover input within its crop box', async () => {
   const rect = { x: 720, y: 270, width: 480, height: 540 };
+  const box = { x: 0.375, y: 0.25, width: 0.25, height: 0.5 };
+  const picture = { x: 0.25, y: 0.25, width: 0.5, height: 0.5 };
   const r = await boot({ template: template([{ id: 'guest-1', rect, fitMode: 'cover' }]) });
   expect(await loadAndTake(r)).toMatchObject({ accepted: true });
   const initial = await r.pgmPlateCrop('item-1');
@@ -455,12 +457,18 @@ it('D-178 — PGM drag pans a live cover input without replaying it or changing 
       id: 'guest-1',
       horizontal: true,
       vertical: false,
-      areas: [{ x: 0.375, y: 0.25, width: 0.25, height: 0.5 }],
+      areas: [box],
+      geometry: { box, picture, sourceAspect: 16 / 9 },
     },
   ]);
   const token = initial.targets[0]!.token;
   const before = (await recvLines()).length;
-  expect(await r.pgmPlateCrop('item-1', { token, dx: 0.08, dy: 0.4 })).toMatchObject({ ok: true });
+  const panned = await r.pgmPlateCrop('item-1', { token, dx: 0.08, dy: 0.4 });
+  expect(panned).toMatchObject({
+    ok: true,
+    targets: [{ geometry: { box, sourceAspect: 16 / 9 } }],
+  });
+  expect(panned.targets[0]?.geometry?.picture.x).toBeCloseTo(0.33, 8);
   expect((await recvLines()).slice(before)).toEqual([
     'MIXER 1-30 FILL 0.33 0.25 0.5 0.5 DEFER',
     'MIXER 1-30 CLIP 0.375 0.25 0.25 0.5 DEFER',
@@ -468,7 +476,40 @@ it('D-178 — PGM drag pans a live cover input without replaying it or changing 
   ]);
   const after = (await recvLines()).length;
   expect(await r.pgmPlateCrop('item-1', { token, dx: -0.1, dy: 0 })).toMatchObject({ ok: false });
+  expect(await r.pgmPlateCrop('item-1', { token, center: true })).toMatchObject({ ok: false });
   expect((await recvLines()).slice(after)).toEqual([]);
+
+  const currentToken = panned.targets[0]!.token;
+  expect(await r.pgmPlateCrop('item-1', { token: currentToken, center: true })).toMatchObject({
+    ok: true,
+    targets: [{ geometry: { box, picture, sourceAspect: 16 / 9 } }],
+  });
+  expect((await recvLines()).slice(after)).toEqual([
+    'MIXER 1-30 FILL 0.25 0.25 0.5 0.5 DEFER',
+    'MIXER 1-30 CLIP 0.375 0.25 0.25 0.5 DEFER',
+    'MIXER 1 COMMIT',
+  ]);
+});
+
+it('D-178 — PGM map geometry uses the output raster instead of the template aspect', async () => {
+  const rect = { x: 720, y: 270, width: 480, height: 540 };
+  const r = await boot({ template: template([{ id: 'guest-1', rect, fitMode: 'cover' }]) });
+  expect(r.setChannelSettings({ channel: 1, raster: { width: 1440, height: 1080 } })).toEqual({
+    ok: true,
+  });
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  expect(await r.pgmPlateCrop('item-1')).toMatchObject({
+    ok: true,
+    targets: [
+      {
+        geometry: {
+          box: { x: 0.375, y: 0.3125, width: 0.25, height: 0.375 },
+          picture: { x: 0.25, y: 0.3125, width: 0.5, height: 0.375 },
+          sourceAspect: 16 / 9,
+        },
+      },
+    ],
+  });
 });
 
 it('D-202 — multiple reveals are refused atomically when only one extra seat fits', async () => {

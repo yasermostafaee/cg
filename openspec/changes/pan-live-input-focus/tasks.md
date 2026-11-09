@@ -38,3 +38,13 @@
 - [x] 3.8 Verify the always-visible tools and practice drag at idle and with a Crop edges plate.
       The focused local Chromium tests passed, including the scoped PGM command.
 - [ ] 3.9 Record carrying Linux E2E for the new controls.
+
+## 4. Crop overview
+
+- [x] 4.1 Carry the token-scoped source geometry and apply Center through the existing Bridge operation.
+- [x] 4.2 Show the complete practice image in PVW and the geometry map in PGM. Update the
+      crop guide during the gesture and apply PGM on release.
+- [x] 4.3 Verify Center, local pointer motion, stale-token refusal and compatibility with relative drags.
+      Focused shared-schema, IPC, Bridge and Chromium checks passed.
+- [ ] 4.4 Show the actual uncropped live source in PGM once Playout exposes it safely.
+- [ ] 4.5 Record carrying Linux E2E and verify the overview on the station's updated Bridge.

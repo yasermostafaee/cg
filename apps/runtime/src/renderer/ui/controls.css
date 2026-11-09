@@ -471,7 +471,7 @@
   flex: 1;
 }
 
-/* D-178 · the preview practice image stays clipped to the plate during a drag. */
+/* D-178 · show the full practice source behind its movable crop. */
 .cg-pan-draft-layer,
 .cg-pan-draft-sample-layer {
   pointer-events: none;
@@ -484,6 +484,7 @@
   z-index: 61;
 }
 .cg-pan-draft {
+  position: relative;
   width: 100%;
   height: 100%;
 }
@@ -510,13 +511,30 @@
   position: absolute;
   inset: 0;
   z-index: -1;
-  background-size: 200% 100%;
+  background-size: 100% 100%;
+}
+.cg-pan-draft__crop {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border: 2px solid var(--r-accent);
+  box-shadow: 0 0 0 100vmax rgb(0 0 0 / 55%);
+  pointer-events: none;
+}
+.cg-pan-draft .cg-pan-draft__center {
+  position: absolute;
+  inset-block-start: var(--r-space-1);
+  inset-inline-end: var(--r-space-1);
+  pointer-events: auto;
+  background: var(--r-monitor-label-bg);
 }
 .cg-pan-draft__label {
+  position: absolute;
+  inset-block-end: var(--r-space-1);
+  inset-inline-start: var(--r-space-1);
   display: inline-flex;
   align-items: center;
   gap: var(--r-space-1);
-  min-width: 0;
+  max-width: calc(100% - 2 * var(--r-space-1));
   padding: var(--r-space-1) var(--r-space-2);
   background: var(--r-monitor-label-bg);
   color: var(--r-text);
@@ -614,6 +632,73 @@
   color: var(--r-text);
   font: inherit;
   font-size: 0.68rem;
+}
+
+.cg-pgm-crop-map {
+  flex: 0 0 clamp(7.5rem, 24cqi, 11rem);
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: var(--r-space-1);
+  padding: var(--r-space-1) var(--r-space-2);
+  overflow: auto;
+  border-inline-start: 1px solid var(--r-border);
+  font-size: var(--r-text-xs);
+  color: var(--r-text-muted);
+}
+.cg-pgm-crop-map__heading,
+.cg-pgm-crop-map__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--r-space-1);
+  align-self: stretch;
+  white-space: nowrap;
+}
+.cg-pgm-crop-map__heading bdi {
+  color: var(--r-text);
+  font-weight: var(--r-weight-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cg-pgm-crop-map__source {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+  background: var(--r-video-ground);
+  outline: 1px solid var(--r-border);
+}
+.cg-pgm-crop-map__window {
+  position: absolute;
+}
+.cg-pgm-crop-map__window .cg-pgm-crop-map__handle {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: inset 0 0 0 1px var(--r-accent);
+  background: var(--r-accent-line);
+  touch-action: none;
+  cursor: move;
+}
+.cg-pgm-crop-map__handle[data-crop-axis='horizontal']:not(:disabled) {
+  cursor: ew-resize;
+}
+.cg-pgm-crop-map__handle[data-crop-axis='vertical']:not(:disabled) {
+  cursor: ns-resize;
+}
+.cg-pgm-crop-map__source[data-pgm-crop-map='draft'] .cg-pgm-crop-map__handle {
+  box-shadow: inset 0 0 0 1px var(--r-caution);
+}
+.cg-pgm-crop-map__window .cg-pgm-crop-map__handle:focus-visible {
+  outline: 2px solid var(--r-text);
+  outline-offset: -3px;
 }
 
 /* `R-104` — two programme returns stay side by side until each tile would be too small to read. */

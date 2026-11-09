@@ -7,7 +7,7 @@ import {
   type RefObject,
 } from 'react';
 import { Columns2, MonitorOff, Move, Rows2, Volume2, VolumeX } from 'lucide-react';
-import type { PgmEngine, PgmPlateCropTarget } from '@cg/shared-ipc';
+import type { PgmEngine, PgmPlateCropEdit, PgmPlateCropTarget } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
@@ -17,6 +17,12 @@ import type { PanelId } from '../../hooks/useShellLayout.js';
 import type { ProgramReturn, ProgramSignal } from '../../hooks/useProgramReturn.js';
 import type { PgmAudio } from '../../hooks/usePgmAudio.js';
 import { LoudnessBadge, VuMeter } from './VuMeter.js';
+import { ProgramCropMap } from './ProgramCropMap.js';
+import {
+  useProgramCropGesture,
+  type ProgramCropDrag,
+  type ProgramCropGesture,
+} from './useProgramCropGesture.js';
 import { playlistTag, type ChannelAir } from '../channels/channelAir.js';
 import type {
   ProgramAudioChoice,
@@ -188,11 +194,6 @@ interface Props {
   cropEngine?: PgmEngine;
 }
 
-interface CropDrag {
-  token: string;
-  dx: number;
-  dy: number;
-}
 interface CropEdit {
   key: string;
   pending: boolean;
@@ -230,14 +231,13 @@ export function MonitorPanel({
       ? cropEngine + ':' + cropItemId
       : null;
   const [cropEdit, setCropEdit] = useState<CropEdit | null>(null);
+  const [cropTargetId, setCropTargetId] = useState<string | null>(null);
+  const [cropDraft, setCropDraft] = useState<ProgramCropDrag | null>(null);
   const cropRequest = useRef(0);
   const activeCrop = cropKey !== null && cropEdit?.key === cropKey ? cropEdit : null;
-  useLayoutEffect(() => {
-    cropRequest.current += 1;
-    setCropEdit(null);
-  }, [cropKey]);
-
-  const requestCrop = (drag?: CropDrag): void => {
+  const cropTarget =
+    activeCrop?.targets.find((target) => target.id === cropTargetId) ?? activeCrop?.targets[0];
+  const requestCrop = (drag?: PgmPlateCropEdit): void => {
     if (cropItemId === null || cropKey === null || activeCrop?.pending === true) return;
     const request = ++cropRequest.current;
     setCropEdit({ key: cropKey, pending: true, targets: activeCrop?.targets ?? [] });
@@ -246,6 +246,7 @@ export function MonitorPanel({
       .then(
         (result) => {
           if (cropRequest.current !== request) return;
+          setCropDraft(null);
           setCropEdit({
             key: cropKey,
             pending: false,
@@ -255,6 +256,7 @@ export function MonitorPanel({
         },
         () => {
           if (cropRequest.current === request) {
+            setCropDraft(null);
             setCropEdit({
               key: cropKey,
               pending: false,
@@ -265,6 +267,14 @@ export function MonitorPanel({
         },
       );
   };
+  const cropGesture = useProgramCropGesture(setCropDraft, requestCrop);
+  const cancelCropGesture = cropGesture.cancel;
+  useLayoutEffect(() => {
+    cropRequest.current += 1;
+    setCropEdit(null);
+    setCropTargetId(null);
+    cancelCropGesture();
+  }, [cropKey, cancelCropGesture]);
   const liveCount = returns.filter((item) => item.programReturn.signal === 'live').length;
   const stalled = returns.some((item) => item.programReturn.signal === 'stalled');
   const overallSignal: ProgramSignal =
@@ -376,13 +386,17 @@ export function MonitorPanel({
                 ? 'Select an on-air row to pan its input'
                 : cropKey === null
                   ? 'Programme return unavailable for input pan'
-                  : 'Pan a cropped input on programme'
+                  : cropTarget !== undefined && cropTarget.geometry === undefined
+                    ? 'Update CG Bridge for the crop map and center reset'
+                    : 'Pan a cropped input on programme'
             }
             onClick={() => {
               if (activeCrop === null) requestCrop();
               else {
                 cropRequest.current += 1;
                 setCropEdit(null);
+                setCropTargetId(null);
+                cropGesture.cancel();
               }
             }}
           >
@@ -477,7 +491,8 @@ export function MonitorPanel({
                         ? {
                             targets: activeCrop.targets,
                             pending: activeCrop.pending,
-                            pan: requestCrop,
+                            select: setCropTargetId,
+                            gesture: cropGesture,
                           }
                         : undefined
                     }
@@ -493,6 +508,15 @@ export function MonitorPanel({
             );
           })}
         </div>
+        {cropTarget !== undefined && activeCrop !== null && (
+          <ProgramCropMap
+            target={cropTarget}
+            draft={cropDraft}
+            pending={activeCrop.pending}
+            gesture={cropGesture}
+            center={() => requestCrop({ token: cropTarget.token, center: true })}
+          />
+        )}
         {/* `PLAYOUT-FEATURES-01` E — the programme meter, the Playout's own levels, beside the picture. */}
         <VuMeter channel={meterChannel} engine={monitorPreferences.audioEngine} />
       </div>
@@ -573,25 +597,20 @@ function ProgramPicture({
 interface ProgramCropControls {
   targets: readonly PgmPlateCropTarget[];
   pending: boolean;
-  pan: (drag: CropDrag) => void;
+  select: (id: string) => void;
+  gesture: ProgramCropGesture;
 }
 
 function ProgramCropOverlay({
   picture,
   targets,
   pending,
-  pan,
+  select,
+  gesture,
 }: ProgramCropControls & { picture: RefObject<HTMLImageElement> }): JSX.Element | null {
   const [rect, setRect] = useState<{ x: number; y: number; width: number; height: number } | null>(
     null,
   );
-  const start = useRef<{
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    pointerId: number;
-  } | null>(null);
   useLayoutEffect(() => {
     const img = picture.current;
     if (img === null) return;
@@ -620,7 +639,6 @@ function ProgramCropOverlay({
     };
   }, [picture]);
   if (rect === null || rect.width === 0 || rect.height === 0) return null;
-  const clamp = (value: number) => Math.max(-1, Math.min(1, value));
   return (
     <div
       style={{
@@ -660,55 +678,26 @@ function ProgramCropOverlay({
               width: area.width * rect.width,
               height: area.height * rect.height,
             }}
+            onFocus={() => select(target.id)}
             onPointerDown={(event) => {
-              if (event.button !== 0) return;
-              event.currentTarget.setPointerCapture(event.pointerId);
-              start.current = {
-                x: event.clientX,
-                y: event.clientY,
-                width: rect.width,
-                height: rect.height,
-                pointerId: event.pointerId,
-              };
+              if (
+                gesture.begin(event, target.token, {
+                  x: target.horizontal ? 1 / rect.width : 0,
+                  y: target.vertical ? 1 / rect.height : 0,
+                })
+              )
+                select(target.id);
             }}
-            onPointerCancel={() => {
-              start.current = null;
-            }}
-            onLostPointerCapture={() => {
-              start.current = null;
-            }}
-            onPointerUp={(event) => {
-              const origin = start.current;
-              start.current = null;
-              if (origin?.pointerId !== event.pointerId) return;
-              const dx = target.horizontal ? event.clientX - origin.x : 0;
-              const dy = target.vertical ? event.clientY - origin.y : 0;
-              if (Math.hypot(dx, dy) < 2) return;
-              pan({
-                token: target.token,
-                dx: clamp(dx / origin.width),
-                dy: clamp(dy / origin.height),
-              });
-            }}
-            onKeyDown={(event) => {
-              const dx = target.horizontal
-                ? event.key === 'ArrowLeft'
-                  ? -0.01
-                  : event.key === 'ArrowRight'
-                    ? 0.01
-                    : 0
-                : 0;
-              const dy = target.vertical
-                ? event.key === 'ArrowUp'
-                  ? -0.01
-                  : event.key === 'ArrowDown'
-                    ? 0.01
-                    : 0
-                : 0;
-              if (dx === 0 && dy === 0) return;
-              event.preventDefault();
-              pan({ token: target.token, dx, dy });
-            }}
+            onPointerMove={gesture.move}
+            onPointerCancel={(event) => gesture.cancel(event.pointerId)}
+            onLostPointerCapture={(event) => gesture.cancel(event.pointerId)}
+            onPointerUp={gesture.finish}
+            onKeyDown={(event) =>
+              gesture.nudge(event, target.token, {
+                x: target.horizontal ? 0.01 : 0,
+                y: target.vertical ? 0.01 : 0,
+              })
+            }
           />
         )),
       )}
