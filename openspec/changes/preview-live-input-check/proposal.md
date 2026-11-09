@@ -36,7 +36,7 @@ describes the final programme mix. Re-labelling that meter as an input meter wou
   The Playout programme channel, programme layers and PGM relay are never mutated by this feature.
 - Surface `connecting`, `live`, `stalled`, `unavailable`, `conflict`, `replaced` and `expired` honestly; never leave a
   frozen frame looking live.
-- Reserve a thumbnail slot on each input row. Show `No signal` in the slot until the independent feed is
+- Reserve a thumbnail slot on each input row and give Station setup a larger 16:9 slot. Show `No signal` in the slot until the independent feed is
   available, and open the existing one-input check when the operator activates an eligible slot.
 - With a compatible read-only Playout capability, show each visible eligible input's live thumbnail in that slot
   as soon as the source list opens.

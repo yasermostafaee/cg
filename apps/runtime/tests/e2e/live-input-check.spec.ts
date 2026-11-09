@@ -242,6 +242,9 @@ test('C-023 · inspect input picture from PVW and source controls without changi
     const setup = page.getByRole('dialog', { name: 'Station setup' });
     await setup.getByRole('tab', { name: /^Live sources/ }).click();
     const setupTile = await visibleCheckThumbnail(setup, 'Studio 1');
+    const setupBox = (await setupTile.boundingBox())!;
+    expect(setupBox.width).toBeGreaterThan(tileBox.width);
+    expect(Math.abs(setupBox.height - (setupBox.width * 9) / 16)).toBeLessThan(1);
     await expect(setup.locator(thumbnail)).toHaveCount(
       await setup.locator('[data-source-input]').count(),
     );

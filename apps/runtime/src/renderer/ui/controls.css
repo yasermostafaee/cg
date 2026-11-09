@@ -8934,6 +8934,9 @@ input[type='checkbox']:disabled:checked {
   font-weight: var(--r-weight-medium);
   white-space: nowrap;
 }
+[data-source-input] > .cg-input-thumbnail {
+  inline-size: 5.5rem;
+}
 .cg-input-thumbnail.cg-btn:hover:not(:disabled) {
   border-color: var(--r-accent);
   color: var(--r-text);

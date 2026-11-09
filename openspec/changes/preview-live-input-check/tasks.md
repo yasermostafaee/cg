@@ -58,3 +58,4 @@
       and the absence of measured geometry, decoded-frame signal status and Playlist master gain.
 - [x] 4.8 Reserve a `No signal` thumbnail slot in input lists. The focused Chromium test passed for
       each list, checkable and passive tiles, keyboard activation, and unchanged selection.
+- [x] 4.9 Enlarge the Station setup Live sources thumbnail slots and verify their aspect and relative size in Chromium.

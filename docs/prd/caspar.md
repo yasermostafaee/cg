@@ -1351,7 +1351,8 @@ does not require selecting an input. The thumbnails are silent and leave source 
 rehearsal and any active check intact. An unavailable picture has an empty tile and an accurate
 status. Until the feed is available, the row shows a reserved thumbnail labelled `No signal`.
 That label belongs to the thumbnail slot. The source's own availability still comes from the
-catalogue. Where an explicit check is available, the operator can open it from the slot.
+catalogue. Where an explicit check is available, the operator can open it from the slot. Station setup
+uses a larger 16:9 thumbnail than the compact source pickers.
 
 Simultaneous rehearsal plates separately need clean Playlist and D11 pictures and mapping into
 the plate raster. The [Playout follow-up](../integration/playout/CG-CONTROL-REQUEST-LIVE-INPUT-PREVIEW-2026-10-26.md)

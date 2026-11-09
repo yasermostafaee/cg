@@ -43,6 +43,7 @@ source's own status and eligibility for selection intact.
 
 - **WHEN** the operator opens a source picker or Station setup → Live sources
 - **THEN** the input rows show their `No signal` thumbnail slots without starting a check
+- **AND** Station setup shows larger 16:9 slots than the pickers
 - **AND** activating an eligible slot opens the corresponding explicit check without selecting the row
 
 ### Requirement: A supported source list SHALL show independently refreshed live thumbnails
