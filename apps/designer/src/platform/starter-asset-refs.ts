@@ -29,7 +29,7 @@ export function rewriteStarterAssetRefs(
       el.posterAssetId = fixImageId(el.posterAssetId);
     } else if (
       el.type === 'ticker' &&
-      el.separator?.kind === 'image' &&
+      typeof el.separator === 'object' &&
       el.separator.source !== 'shared'
     ) {
       el.separator.assetId = fixImageId(el.separator.assetId) ?? el.separator.assetId;

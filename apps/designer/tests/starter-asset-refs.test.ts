@@ -19,7 +19,7 @@ describe('starter asset reference rewrite', () => {
         ?.flatMap((comp) => comp.layers)
         .flatMap((layer) => layer.children)
         .find((element) => element.id === 'ir-crawl');
-      if (ticker?.type !== 'ticker' || ticker.separator?.kind !== 'image')
+      if (ticker?.type !== 'ticker' || typeof ticker.separator !== 'object')
         throw new Error('Missing clock ticker separator');
       const bundledId = ticker.separator.assetId;
       ticker.separator.source = source;
