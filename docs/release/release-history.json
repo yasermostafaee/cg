@@ -195,20 +195,24 @@
           "en": "PVW practice moves the crop guide horizontally or vertically, depending on the source and plate aspect ratios. Center restores the middle of the crop."
         },
         {
-          "fa": "در PVW و با Bridge سازگار، برش ورودی‌هایی که نسبت تصویرشان مشخص است برای همان قاب و پریست ذخیره می‌شود. Take همان برش را پیش از نمایش اولین فریم اعمال می‌کند.",
-          "en": "With a compatible Bridge, PVW saves a crop for the matching plate, look and input when its aspect is known. Take applies that crop before the first visible frame."
+          "fa": "در PVW جابه‌جایی کادر برش پیش‌نویس می‌شود و با خاموش و روشن کردن ON PVW باقی می‌ماند. با Update روی Bridge سازگار، Take همان برش را پیش از نمایش اولین فریم اعمال می‌کند.",
+          "en": "PVW Pan drafts survive turning ON PVW off and back on. With a compatible Bridge, Inspector Update saves the crop for Take before the first visible frame."
         },
         {
           "fa": "بررسی تصویر و شنود یک ورودی زنده در Look inputs، پنجرهٔ تغییر ورودی قاب و بخش Live sources تنظیمات در دسترس است.",
           "en": "Check the picture and optional sound of one live input from Look inputs, the plate source swap and Live sources in Settings."
         },
         {
-          "fa": "در فهرست‌های انتخاب ورودی، جای تصویر با برچسب موقت No signal دیده می‌شود. برای ورودی‌های قابل‌بررسی، کلیک روی همان کادر پنجرهٔ بررسی ورودی را باز می‌کند.",
-          "en": "Input lists reserve a picture slot labelled No signal. For checkable inputs, clicking the slot opens the existing input check."
+          "fa": "در فهرست‌های ورودی کادر No signal دیده می‌شود. این کادر در بخش Live sources تنظیمات بزرگ‌تر است و برای ورودی‌های قابل‌بررسی، پنجرهٔ بررسی ورودی را باز می‌کند.",
+          "en": "Input lists reserve No signal thumbnails. Live sources in Settings uses larger thumbnails, and eligible tiles open the existing input check."
         },
         {
           "fa": "کادر ماسک را در Designer از بدنه جابه‌جا کنید یا اندازه‌اش را با کشیدن گوشه‌ها تغییر دهید.",
           "en": "Move a mask rectangle directly in Designer or drag a corner to resize it."
+        },
+        {
+          "fa": "Inspector در CG Control فیلدهای داینامیک پریست انتخاب‌شده و فیلدهای مشترک را نشان می‌دهد. تغییر پریست، پیش‌نویس‌ها را حفظ می‌کند.",
+          "en": "CG Control Inspector shows the selected preset's dynamic fields alongside shared fields. Switching presets keeps drafts."
         }
       ],
       "fixes": [

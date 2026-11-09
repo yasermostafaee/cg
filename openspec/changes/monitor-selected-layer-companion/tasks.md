@@ -22,4 +22,4 @@
       840 px. All four panels hide and restore the main bars on fullscreen round-trips.
 - [x] 2.6 Verify browser reload without a layer selection and measure header controls for
       overflow and overlap in both monitor contexts. Focused Chromium cases passed.
-- [ ] 2.7 Record carrying Linux E2E for the revised headers.
+- [x] 2.7 [Carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42689856329/job/129406540835) passed on `9dd4b023` for the revised headers.

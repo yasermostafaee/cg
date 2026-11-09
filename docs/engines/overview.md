@@ -214,6 +214,14 @@ swaps it into the channel lists only once no row has the old page on a layer.
 Extension point: anything new that goes into every page must enter the fingerprint;
 a change to the shell itself must bump the revision.
 
+The template catalogue also carries each managed Look's composition instance ID from the verified scene.
+CG Control matches it to dynamic field groups in Inspector. Reload on a matching console and Bridge
+populates this optional metadata for previously imported templates whose source package has Looks.
+
+For PVW Pan, the console holds normalized focus in the row draft. Inspector Update submits one crop
+batch to CG Bridge. Bridge validates each target with the Take seating plan, stores the matching crop
+with the row state and uses it in the first FILL before reveal.
+
 **Countdown steps (`D-141`, `DELTA-RUN-NEXT-VERSION-01-A` … `-F`) are compiled by the runtime, from
 the scene.** A countdown flips one attribute on its scope root per step crossing; `step-css.ts` turns
 the steps' changes into one stylesheet of inherited custom properties at boot, and `step-effects.ts`
