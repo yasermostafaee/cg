@@ -142,6 +142,17 @@ for data-rich sports, weather, image-sequence, countdown-step and multibox workf
 - **THEN** the preview cuts to the selected layout and the package retains all four presets
 - **AND** the exported main composition uses Static playback with no lifecycle markers
 
+#### Scenario: Gallery phase markers demonstrate their actual purpose
+
+- **GIVEN** the author opens a gallery starter and inspects its compositions
+- **THEN** the weather rows, cards and page layouts and the league row use Static playback with no phase markers
+- **AND** their parent Sequences and Repeaters run the authored item entrances and exits
+- **AND** the Quran book starts on its first page and keeps the authored fade on Stop
+- **AND** title and logo animations retain their actual exits and authored hold durations
+- **AND** the logo sting and news dot use Loop cycle for their periodic motion
+- **AND** explicit Hold Start cues the crawl and clock panel in the horizontal and clock tickers
+- **AND** the other starters use automatic content timing with their authored Outro where present
+
 #### Scenario: Azan countdown becomes a persistent announcement
 
 - **WHEN** the author opens the Azan countdown starter

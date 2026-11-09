@@ -60,6 +60,7 @@ export const imageFolderSequenceScene = galleryScene({
     'پنج تصویر عریض و تمام‌صفحهٔ قرآن با تذهیب و ترجمهٔ فارسی؛ اپراتور با Next و Previous ورق می‌زند. تعویض مجموعه از Add folder در Inspector.',
   templateType: 'fullscreen',
   direct: true,
+  lifecycle: { outPoint: 100 },
   fontFamily: FAM,
   onAirId: 'comp-image-folder-sequence-onair',
   onAirName: 'توالی صفحات قرآن',

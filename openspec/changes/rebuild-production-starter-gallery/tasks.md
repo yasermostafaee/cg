@@ -359,3 +359,15 @@ type remain required; compact degree adjacency is now a targeted correction acro
 - [x] 15.3 The full pre-push gate passed 103 uncached tasks and 164 strict OpenSpec checks on
       `1b4191e4` (`gate-20261109T003529Z-16904.log`).
 - [ ] 15.4 Read the carrying commit's Linux E2E result.
+
+## 16. Teaching gallery phase-marker audit — 2026-11-09
+
+- [x] 16.1 Audit the twelve starter projects. Make lifecycle markers explicit in the shared builder.
+- [x] 16.2 Use Static in the six data layouts. Keep the explicit start cues needed by the
+      horizontal and clock tickers and derive content timing in the rest of the gallery.
+- [x] 16.3 All 72 starter tests passed. Chromium verified both natural weather cycles,
+      forecast auto-out, standalone Repeater rehearsal, league row order, Quran Stop,
+      Azan, the vertical Sequence, and the logo and news-dot cycles. With the required
+      cues restored, both crawls started on the browser frame in which their straps
+      became visible. Removing the horizontal cue had started its hidden feed 966 ms early.
+- [ ] 16.4 Run the repository gate and read the carrying commit's Linux E2E result.

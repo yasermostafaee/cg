@@ -155,7 +155,7 @@ export const logoBugScene: Scene = {
       name: 'لوگو شبکه',
       resolution: { width: W, height: H },
       frameRange: { in: 0, out: 132 },
-      lifecycle: { outPoint: 70, contentStart: 5 },
+      lifecycle: { outPoint: 70 },
       playout: { mode: 'manual' },
       editorBackdrop: 'transparent',
       layers: [
@@ -186,7 +186,7 @@ export const logoBugScene: Scene = {
       name: 'آرم (روی آنتن)',
       resolution: { width: MARK_W, height: MARK_H },
       frameRange: { in: 0, out: 120 },
-      lifecycle: { outPoint: 70, contentStart: 5 },
+      lifecycle: { outPoint: 70 },
       playout: { mode: 'loop-cycle', holdSource: 'timed', holdMs: 8000, repeat: 'infinite' },
       editorBackdrop: 'transparent',
       layers: [layer('L-mark', 'Mark', markChildren)],

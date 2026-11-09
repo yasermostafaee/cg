@@ -528,6 +528,48 @@ describe('starter templates', () => {
     }
   });
 
+  it('D-179: nested data layouts use Static and authored exits keep their working markers', () => {
+    const compositions = STARTER_TEMPLATES.flatMap(({ scene }) => scene.compositions ?? []);
+    for (const id of [
+      'comp-iran-weather-city-row',
+      'comp-iran-weather-page',
+      'comp-weather-forecast-card',
+      'comp-iran-weather-city-card',
+      'comp-iran-weather-cards-page',
+      'comp-iran-premier-league-row',
+    ]) {
+      const comp = compositions.find((candidate) => candidate.id === id);
+      expect(comp?.playout?.mode, id).toBe('static');
+      expect(comp?.lifecycle, id).toBeUndefined();
+    }
+    for (const [id, outPoint] of [
+      ['comp-logo-bug', 70],
+      ['comp-logo-mark', 70],
+      ['comp-title', 65],
+      ['comp-title-card', 65],
+      ['comp-ticker-pulse', 50],
+      ['comp-image-folder-sequence', 100],
+      ['comp-iran-weather-forecast', 100],
+      ['comp-iran-premier-league', 110],
+    ] as const) {
+      expect(compositions.find((candidate) => candidate.id === id)?.lifecycle, id).toEqual({
+        outPoint,
+      });
+    }
+    expect(
+      compositions.filter((comp) => comp.playout?.mode === 'loop-cycle').map((comp) => comp.id),
+    ).toEqual(['comp-logo-mark', 'comp-ticker-pulse']);
+    expect(
+      compositions
+        .filter((comp) => comp.lifecycle?.contentStart !== undefined)
+        .map((comp) => [comp.id, comp.lifecycle?.contentStart]),
+    ).toEqual([
+      ['comp-ticker', 55],
+      ['comp-irib', 55],
+      ['comp-irib-strap', 55],
+    ]);
+  });
+
   it('D-179: weather choices are bound to visible text and ordinary image rules', () => {
     for (const scene of [iranWeatherPagesScene, iranWeatherForecastScene]) {
       const composition = scene.compositions?.find((comp) =>
@@ -673,7 +715,7 @@ describe('starter templates', () => {
         iranPremierLeagueScene.frameRate) /
       1000;
     const outPoint = entry.lifecycle?.outPoint ?? 0;
-    expect(outPoint - (entry.lifecycle?.contentStart ?? 0)).toBeGreaterThanOrEqual(cascadeFrames);
+    expect(outPoint - entry.frameRange.in).toBeGreaterThanOrEqual(cascadeFrames);
     expect(entry.frameRange.out - outPoint).toBeGreaterThanOrEqual(cascadeFrames);
     expect(panel).toMatchObject({
       fill: { kind: 'linear', stops: [{ color: '#111B2C37' }, { color: '#172337E3' }] },

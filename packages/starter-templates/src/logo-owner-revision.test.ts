@@ -60,13 +60,13 @@ describe('logo-bug owner-authored revision', () => {
     expect(mark).toMatchObject({
       resolution: { width: 448, height: 144 },
       frameRange: { in: 0, out: 120 },
-      lifecycle: { outPoint: 70, contentStart: 5 },
+      lifecycle: { outPoint: 70 },
       playout: { mode: 'loop-cycle', holdSource: 'timed', holdMs: 8000, repeat: 'infinite' },
     });
     expect(root).toMatchObject({
       resolution: { width: 1920, height: 1080 },
       frameRange: { in: 0, out: 132 },
-      lifecycle: { outPoint: 70, contentStart: 5 },
+      lifecycle: { outPoint: 70 },
       playout: { mode: 'manual' },
     });
     expect(root?.layers[0]?.children[0]).toMatchObject({

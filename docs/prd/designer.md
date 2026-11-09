@@ -6066,6 +6066,11 @@ with three plates arranged two-above-one and no independent input captions/backg
 marks are transparent, without the app icon's tile or a separate disc.
 The four-frame starter is a teaching example for Static playback. Its main composition and four
 preset compositions have no Hold Start or Outro Start markers. Presets still switch by Cut.
+The rest of the gallery uses explicit phase markers where playback needs them. Weather data rows,
+cards and page layouts and the league row use Static. The logo sting and news dot retain their
+periodic loops. The Quran book starts at its first page and uses its existing fade on Stop.
+The horizontal and clock tickers keep the explicit cue for starting the crawl or clock panel.
+The remaining starters let their entrance determine the content start.
 The Guest Title's existing blue nameplate extends beneath the logo as one continuous background;
 the logo remains a replaceable transparent image, without an independent backplate.
 

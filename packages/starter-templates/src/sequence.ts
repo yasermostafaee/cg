@@ -276,7 +276,7 @@ export const sequenceScene: Scene = {
       name: 'زیرنویس حرکت عمودی',
       resolution: { width: W, height: H },
       frameRange: { in: 0, out: 122 },
-      lifecycle: { outPoint: 60, contentStart: 55 },
+      lifecycle: { outPoint: 60 },
       playout: { mode: 'auto-out', holdSource: 'content-driven' },
       editorBackdrop: 'transparent',
       layers: [
@@ -303,7 +303,7 @@ export const sequenceScene: Scene = {
       name: 'زیرنویس حرکت عمودی (روی آنتن)',
       resolution: { width: STRAP_W, height: STRAP_H },
       frameRange: { in: 0, out: 110 },
-      lifecycle: { outPoint: 60, contentStart: 55 },
+      lifecycle: { outPoint: 60 },
       playout: { mode: 'auto-out', holdSource: 'content-driven' },
       editorBackdrop: 'transparent',
       layers: [layer('L-strap', 'Strap', strapChildren)],

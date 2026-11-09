@@ -55,8 +55,7 @@ const card: NonNullable<Scene['compositions']>[number] = {
   name: 'کارت پیش‌بینی روز',
   resolution: { width: 296, height: 460 },
   frameRange: { in: 0, out: 140 },
-  lifecycle: { outPoint: 100, contentStart: 20 },
-  playout: { mode: 'manual', holdSource: 'timed' },
+  playout: { mode: 'static' },
   editorBackdrop: 'transparent',
   layers: [
     layer('forecast-card-layer', 'روز', [
@@ -331,6 +330,7 @@ export const iranWeatherForecastScene = galleryScene({
     'پیش‌بینی امروز و چهار روز آینده در یک صفحه با Repeater افقی و ورودی‌های عددی محدودشده.',
   templateType: 'fullscreen',
   direct: true,
+  lifecycle: { outPoint: 100 },
   entryPlayout: {
     mode: 'auto-out',
     holdSource: 'timed',

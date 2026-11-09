@@ -3,6 +3,7 @@ import type {
   Element,
   FieldBinding,
   Fill,
+  Lifecycle,
   LookGroups,
   Playout,
   Scene,
@@ -201,7 +202,7 @@ interface GallerySceneOptions {
   onAirPlayout?: Playout;
   entryOut?: number;
   onAirOut?: number;
-  outPoint?: number;
+  lifecycle?: Lifecycle;
   entryLookGroups?: LookGroups;
   /** Full-screen graphics are authored directly in their exported composition. */
   direct?: boolean;
@@ -244,12 +245,11 @@ function offsetElement(element: Element, x: number, y: number): Element {
 export function galleryScene(options: GallerySceneOptions): Scene {
   const entryOut = options.entryOut ?? 160;
   const onAirOut = options.onAirOut ?? 140;
-  const outPoint = options.outPoint ?? 100;
+  const { lifecycle } = options;
   const entryId = `comp-${options.id}`;
-  const entryPlayout = options.entryPlayout ?? {
-    mode: 'manual',
-    holdSource: 'timed',
-  };
+  const entryPlayout: Playout =
+    options.entryPlayout ??
+    (lifecycle === undefined ? { mode: 'static' } : { mode: 'manual', holdSource: 'timed' });
   const onAirPlayout = options.onAirPlayout ?? entryPlayout;
   const direct = options.direct === true;
   const entryChildren = direct
@@ -284,9 +284,7 @@ export function galleryScene(options: GallerySceneOptions): Scene {
     name: options.name,
     resolution: { width: FRAME_WIDTH, height: FRAME_HEIGHT },
     frameRange: { in: 0, out: entryOut },
-    ...(entryPlayout.mode === 'static'
-      ? {}
-      : { lifecycle: { outPoint, contentStart: Math.min(20, outPoint) } }),
+    ...(lifecycle === undefined ? {} : { lifecycle }),
     playout: entryPlayout,
     editorBackdrop: '#071426',
     layers: [layer(`layer-${options.id}-entry`, 'Frame', entryChildren)],
@@ -314,7 +312,7 @@ export function galleryScene(options: GallerySceneOptions): Scene {
               name: options.onAirName,
               resolution: options.onAirSize,
               frameRange: { in: 0, out: onAirOut },
-              lifecycle: { outPoint, contentStart: Math.min(20, outPoint) },
+              ...(lifecycle === undefined ? {} : { lifecycle }),
               playout: onAirPlayout,
               editorBackdrop: '#071426' as const,
               layers: [layer(`layer-${options.id}-onair`, 'On air', options.children)],

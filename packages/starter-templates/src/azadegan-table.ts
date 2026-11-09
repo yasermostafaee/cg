@@ -108,8 +108,7 @@ const rowComposition: NonNullable<Scene['compositions']>[number] = {
   name: 'ردیف جدول لیگ برتر',
   resolution: { width: 1660, height: 42 },
   frameRange: { in: 0, out: 140 },
-  lifecycle: { outPoint: 100, contentStart: 20 },
-  playout: { mode: 'manual', holdSource: 'timed' },
+  playout: { mode: 'static' },
   editorBackdrop: 'transparent',
   layers: [layer('az-row-layer', 'ردیف', rowChildren)],
   fields: [
@@ -311,7 +310,7 @@ export const iranPremierLeagueScene = galleryScene({
   templateType: 'fullscreen',
   direct: true,
   entryOut: END_FRAME,
-  outPoint: OUT_POINT,
+  lifecycle: { outPoint: OUT_POINT },
   fontFamily: FAM,
   onAirId: 'comp-iran-premier-league-onair',
   onAirName: 'جدول لیگ برتر',

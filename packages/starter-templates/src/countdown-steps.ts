@@ -202,6 +202,7 @@ export const countdownStepsScene = galleryScene({
   description:
     'زیرنویس اذان مغرب با زمان هدف نمونه و قابل ویرایش؛ در صفر، شمارش جای خود را به اعلان اذان می‌دهد و تا توقف دستی می‌ماند. زمان نمونه، ساعت شرعی محاسبه‌شده نیست.',
   templateType: 'lower-third',
+  lifecycle: { outPoint: 100 },
   fontFamily: FAM,
   onAirId: 'comp-countdown-steps-onair',
   onAirName: 'اذان مغرب',

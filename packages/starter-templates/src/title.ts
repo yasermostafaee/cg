@@ -244,7 +244,7 @@ export const titleScene: Scene = {
       name: 'عنوان معرفی',
       resolution: { width: W, height: H },
       frameRange: { in: 0, out: 128 },
-      lifecycle: { outPoint: 65, contentStart: 55 },
+      lifecycle: { outPoint: 65 },
       playout: { mode: 'auto-out', holdSource: 'timed', holdMs: 6000 },
       editorBackdrop: 'transparent',
       layers: [
@@ -271,7 +271,7 @@ export const titleScene: Scene = {
       name: 'زیرنویس (روی آنتن)',
       resolution: { width: CARD_W, height: CARD_H },
       frameRange: { in: 0, out: 115 },
-      lifecycle: { outPoint: 65, contentStart: 55 },
+      lifecycle: { outPoint: 65 },
       playout: { mode: 'auto-out', holdSource: 'timed', holdMs: 6000 },
       editorBackdrop: 'transparent',
       layers: [layer('L-card', 'Card', cardChildren)],

@@ -73,8 +73,7 @@ const cityCard: NonNullable<Scene['compositions']>[number] = {
   name: 'ردیف آب‌وهوای شهر',
   resolution: { width: 1600, height: 72 },
   frameRange: { in: 0, out: 140 },
-  lifecycle: { outPoint: 100, contentStart: 20 },
-  playout: { mode: 'manual', holdSource: 'timed' },
+  playout: { mode: 'static' },
   editorBackdrop: 'transparent',
   layers: [
     layer('weather-city-row-layer', 'شهر', [
@@ -175,8 +174,7 @@ const pageComposition: NonNullable<Scene['compositions']>[number] = {
   name: 'صفحه شهرها',
   resolution: { width: 1680, height: 730 },
   frameRange: { in: 0, out: 140 },
-  lifecycle: { outPoint: 100, contentStart: 20 },
-  playout: { mode: 'manual', holdSource: 'timed' },
+  playout: { mode: 'static' },
   editorBackdrop: 'transparent',
   layers: [
     layer('weather-page-layer', 'صفحه', [
@@ -339,7 +337,7 @@ export const iranWeatherPagesScene = galleryScene({
   templateType: 'fullscreen',
   direct: true,
   entryOut: END_FRAME,
-  outPoint: OUT_POINT,
+  lifecycle: { outPoint: OUT_POINT },
   entryPlayout: { mode: 'auto-out', holdSource: 'content-driven' },
   fontFamily: FAM,
   onAirId: 'comp-iran-weather-pages-onair',
