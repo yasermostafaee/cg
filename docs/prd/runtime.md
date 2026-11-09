@@ -1744,15 +1744,9 @@ build stamp belongs on it.
 - WHEN the page is opened THEN the splash is painted on the first frame, before any application
   JavaScript has run
 - WHEN the boot reaches a real step (initializing, bridge probe, interface start) THEN the phase
-  readout names that step, and the rail and the readout show ONE value: the monotone
-  `min(elapsed / floor, completed steps / total steps)` — a PERCENTAGE, gated by real steps so it
-  is never ahead of boot, reading 100 exactly when the floor has elapsed AND boot is done
-- WHEN boot completes THEN the phase label FADES OUT and the readout's left side is empty — there
-  is no terminal `READY` label anywhere in the markup, CSS or script
-- WHEN this is a cold start (no `CG_RUNTIME_SESSION` marker in `sessionStorage`) THEN the splash
-  is held for at least 8000 ms; WHEN it is a warm reload THEN the floor is 3000 ms
-- WHEN boot completes AFTER the floor THEN the hold extends to boot completion — the splash never
-  hides a boot that is still running
+  readout names that step and both the rail and percentage follow completed phases
+- WHEN boot completes THEN progress reaches 100% and the splash immediately starts a short
+  nonblocking fade. P-078 supersedes the cold and warm minimum holds.
 - WHEN 20000 ms have elapsed since first paint THEN the splash dismisses regardless of boot state,
   and the app shows its own DISCONNECTED / error surface
 - WHEN the bridge resolves to any of `live` / `offline-mock` / `disconnected` AND the app shell has
@@ -2077,7 +2071,7 @@ moment it is enlarged.
   the swap must update both.
 
 **Why this is NOT part of [[R-035]].** R-035 is `[~]` and its acceptance is entirely about splash
-BEHAVIOUR — first paint, the phase readout, the monotone percentage, the 8000/3000 ms floors.
+BEHAVIOUR — first paint, the phase readout, completed-work percentage and dismissal at readiness.
 Nothing in it specifies the mark's provenance. Replacing traced artwork with a real vector is an
 asset deliverable that will outlive R-035's archive, which is why it carries its own number.
 
@@ -4855,14 +4849,14 @@ operator had to fail over before seeing whether its programme picture and sound 
 
 ## [~] R-105 — A healthy but empty live source shows its authored fallback on air ⟨priority: high — the owner, 2026-11-02; clarified 2026-11-08⟩ — `openspec/changes/black-empty-live-plate/`
 
-**What:** Keep the geometry of an assigned, healthy Live Source visible when its upstream currently has no picture, such as an ended playlist. The existing Designer fallback picker is the source of truth: Bars by default, or an authored solid colour/picture.
+**What:** Keep the geometry of an assigned, healthy Live Source visible when its upstream currently has no picture, such as an ended playlist. The Designer fallback picker offers Bars, solid colour and project/shared pictures for one or more plates. New plates start with black and older plates retain their previous fallback.
 **Why:** A transparent/missing plate makes a multi-box layout collapse visually even though the source assignment itself is valid.
 **Acceptance:**
 
 - WHEN a valid assigned source has no current picture THEN its authored plate shows the selected Bars/colour/picture fallback in the same visible fitted geometry
 - WHEN Bars is selected THEN actual SMPTE Bars are rendered on air and their thumbnail is visible in the Designer picker
-- WHEN a solid colour or picture is selected THEN it replaces Bars as the fallback; black remains available as a colour rather than a second implicit mode
-- WHEN picture resumes THEN it replaces the black fallback without re-taking the template
+- WHEN a solid colour or picture is selected THEN it becomes the fallback; black is one available colour
+- WHEN picture resumes THEN it covers the selected fallback without re-taking the template
 - WHEN the source is invalid or unavailable THEN the existing refusal still prevents the take or update
 
 ## [x] R-106 — PVW Live Source markers follow Play and the Safe Area control is removed ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/pvw-plate-lifecycle/`
@@ -4911,8 +4905,10 @@ it unclear whether current CG Control text/images or the edited file should win.
   existing row field values stay unchanged
 - WHEN the operator chooses **use file defaults** THEN rows holding that template on the current
   channel are replaced through the normal Update path with the reloaded package defaults
-- WHEN the remembered file now contains another template id THEN Reload refuses before importing it
-  and tells the operator to use Import for the different template
+- WHEN the package id behind a remembered file changes THEN Reload all skips it with a visible
+  reason and single Reload lets the operator explicitly approve or cancel replacing that entry
+- WHEN the operator approves the replacement THEN the existing catalogue id, label, row bindings
+  and Source defaults survive and the new package id becomes the expected identity for future reloads
 - WHEN the file is missing, inaccessible or permission is refused THEN the existing catalogue entry
   and row data remain available and the dialog reports the failure
 - WHEN a package arrived by drag/drop, or this CG Control has never remembered its source, THEN
@@ -4955,7 +4951,7 @@ anti-interference rule prevents.
 - The implementation starts only after the Playout team defines authenticated read/set semantics,
   range, persistence, ownership and A/B behaviour
 
-## [~] R-111 — A maximized monitor can keep the selected layer and Inspector beside it ⟨priority: high — the owner, 2026-11-08⟩ — `openspec/changes/monitor-selected-layer-companion/`
+## [~] R-111 — A maximized monitor can keep the selected layer and Inspector visible ⟨priority: high — the owner, 2026-11-08⟩ — `openspec/changes/monitor-selected-layer-companion/`
 
 **What:** When PROGRAM or PREVIEW is maximized and a layer was already selected, the monitor header
 offers three session-only layouts: monitor only, monitor plus the selected layer, or monitor plus the
@@ -4973,8 +4969,17 @@ they are actively checking; fullscreen should change presentation, not silently 
 - WHEN the operator switches to monitor-only and later restores either companion layout THEN the same
   layer remains selected and reappears without a new row click
 - WHEN the selected row is clicked in the compact companion THEN it stays selected
-- WHEN the Inspector is shown beside the maximized monitor THEN closing that Inspector returns to the
+- WHEN the Inspector is shown to the right of the maximized monitor THEN closing it returns to the
   selected-layer layout without clearing the selected layer
-- WHEN either companion layout is active THEN the layer and Inspector occupy allocated layout space
-  and never overlay or obscure the PGM/PVW picture; at narrow widths the monitor stays in the upper
-  row and the selected layer/Inspector use a lower row
+- WHEN either companion layout is active THEN the selected layer occupies one unscrolled row
+  below the picture without headers
+- WHEN the Inspector is included THEN its separate right column spans the workspace height
+- WHEN any panel is maximized THEN hide the app header and status footer, keep the panel's own
+  controls and applicable alerts, and restore the bars on exit
+
+## [~] R-112 — Distinguish Live layouts in the Layers table ⟨priority: medium — the owner, 2026-11-09⟩ — `openspec/changes/distinguish-live-layout-rows/`
+
+Use **Live layouts** for the section that holds multi-frame graphics and for that category in
+Templates. A grey rule, neutral background and layout icon mark the transition from ordinary
+graphics. Draw the divider once before the first visible layout row. Keep existing row aliases
+and the station's layer assignments.

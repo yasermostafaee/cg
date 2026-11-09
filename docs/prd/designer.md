@@ -6133,10 +6133,11 @@ and regenerated motion's browser playback checks are complete. Capture and encod
 revised source on 2026-11-04; exact evidence
 is in gallery tasks 6.14/6.25. Final gate and Linux evidence remain pending.
 
-**Azan glass follow-up (owner, 2026-11-08):** keep the bright/readable Step colors and manual-Stop
-announcement, but restyle the lower third as a polished glass panel: translucent cool-white body,
-visible glass highlight, crisp light edge and controlled depth shadow. The timer and editable Azan
-icon remain high-contrast and the outer frame stays transparent.
+**Azan glass follow-up (owner re-review, 2026-11-09):** use a dark indigo glass title module and a
+separate color-changing countdown tile. Replace the decorative badge with a minimalist mihrab mark.
+Preserve the existing elements, five Step thresholds, editable date/time and persistent
+announcement. Generate the card poster and hover motion from the same scene and preserve
+transparency outside the graphic.
 
 **Saved-project and motion follow-up:** the owner's `جدول-لیگ-برتر-ایران.cgproj` is the
 league starter's new authored baseline; preserve its layout, keyframes and independent row timings,
@@ -6727,3 +6728,18 @@ drag-to-place workflow already available to project assets.
 - WHEN the same gesture starts in Project Assets THEN its existing project-source behavior is
   unchanged, including compatibility with old drag payloads that have no source marker
 - WHEN a Shared Library font tile is shown THEN it is not exposed as a Canvas image drag target
+
+## [~] D-205 — Keep the graphic on screen after a Content-driven hold completes ⟨priority: high — the owner, 2026-11-09⟩ — `openspec/changes/content-driven-exit-delay/`
+
+The composition's Playback Inspector exposes **Exit delay** in milliseconds for an effective
+Content-driven hold in Auto-out or Loop cycle. After all active hold drivers finish, the graphic
+remains in Hold for the authored duration, then plays its existing Outro. An Azan announcement can
+remain visible for one minute by setting 60000 ms. Stop interrupts the delay. A value of zero
+preserves immediate automatic exit. Each pass measures its own delay, before the Outro and the
+separate off-screen gap between passes.
+
+## [~] D-206 — Issues messages can be selected and copied ⟨priority: medium — the owner, 2026-11-09⟩ — `openspec/changes/copy-designer-issues/`
+
+The author can select issue text and copy it with the operating system's clipboard shortcut.
+Selecting text keeps the Issues dialog open. Clicking an issue or activating it by keyboard
+continues to select the affected element.

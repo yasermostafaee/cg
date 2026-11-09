@@ -4300,3 +4300,39 @@ Measured free before use: the immediately preceding tracked pointer named `D-204
 the tracked PRD-heading audit found no existing `D-204` heading.
 
 ⇒ **Next free after this entry is `B-417`**, **`D-205`**, **`P-078`**, **`R-109`** and **`C-049`**.
+
+### 2026-11-09 — Content-driven exit delay takes `D-205`
+
+- `D-205` — keep an Auto-out or Loop cycle graphic in Hold for an authored duration after its
+  content finishes — [designer.md](designer.md).
+
+The previous allocation names `D-205` as free, and the heading search found no existing item.
+
+⇒ **Next free after this entry is `B-417`**, **`D-206`**, **`P-078`**, **`R-109`** and **`C-049`**.
+
+### 2026-11-09 — Layers table boundary takes `R-112`
+
+- `R-112` — label the live-layout section in the Layers table and make its divider easier to see —
+  [runtime.md](runtime.md).
+
+The Runtime PRD already contains R-109 through R-111. Its heading search found no R-112.
+
+⇒ **Next free after this entry is `B-417`**, **`D-206`**, **`P-078`**, **`R-113`** and **`C-049`**.
+
+### 2026-11-09 — Starter separator and copyable Issues take `B-417` and `D-206`
+
+- `B-417` — resolve the clock ticker's bundled separator to its imported project asset —
+  [bugs-designer.md](bugs-designer.md).
+- `D-206` — allow native selection and copying of issue messages — [designer.md](designer.md).
+
+The previous allocation and a heading search confirmed both identifiers were free.
+
+⇒ **Next free after this entry is `B-418`**, **`D-207`**, **`P-078`**, **`R-113`** and **`C-049`**.
+
+### 2026-11-09 — Picture chooser thumbnails take `B-418`
+
+- `B-418` — contain the full image in each Designer picture-chooser tile — [bugs-designer.md](bugs-designer.md).
+
+The previous allocation and a heading search confirmed B-418 was free.
+
+⇒ **Next free after this entry is `B-419`**, **`D-207`**, **`P-078`**, **`R-113`** and **`C-049`**.

@@ -4880,9 +4880,21 @@ undo still removes the addition as before.
 the ruler's stride stops growing at 25, so hundreds of 3–4 digit labels paint over each other; the
 global 20× ceiling still leaves 250 frames in view and never reaches a distinct line per frame.
 
-**Fix / Acceptance:** choose number-label density from the visible frame count, measured viewport
-width and largest label, while choosing a denser minor-grid stride independently. At fit zoom, 1,500
-and 5,000-frame rulers keep readable numeric gaps. The maximum zoom scales with duration until no
-more than 40 frames occupy the viewport; at that point the minor grid uses stride one, so every frame
-is visibly selectable. Short compositions retain the historical 20× range and all pointer/frame
-mapping remains unchanged.
+**Fix / Acceptance:** choose one shared density from the visible frame count, measured viewport
+width and largest label. At fit zoom, 1,500 and 5,000-frame rulers keep readable numeric gaps and
+draw one vertical line per number. Maximum zoom scales with duration until at most 12 frames
+occupy the viewport, allowing every frame to have its own number and line. Short compositions
+retain the historical 20× range and all pointer/frame mapping remains unchanged.
+
+## [~] B-417 — The clock ticker starter can reference an unknown separator asset ⟨priority: high — blocks export⟩ — `openspec/changes/rebuild-production-starter-gallery/`
+
+Opening «زیرنویس با ساعت» imports its starter images under project-local asset IDs. The asset
+rewrite previously skipped the image inside a ticker's separator, leaving an unresolved seed key.
+Give the ticker a bundled separator icon, resolve it to its imported Project Assets ID and keep
+shared-library separator references distinct.
+
+## [~] B-418 — Choose picture clips image thumbnails ⟨priority: medium — the owner, 2026-11-09⟩ — `openspec/changes/contain-designer-picker-thumbnails/`
+
+The picture chooser's grid assigns each thumbnail a fixed row, while its image used intrinsic
+sizing inside a centered grid item. Tall or high-resolution images could exceed that row and
+get clipped. Give the thumbnail a definite padded box and fit the entire image in it.
