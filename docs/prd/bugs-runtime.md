@@ -14054,3 +14054,13 @@ selected-page projection before reveal. Browser coverage samples pending and fir
 **Expected:** After a successful bind, select the destination layer and show its Inspector. Closing
 the dialog without a bind or receiving a refusal preserves the previous selection.
 **Regression:** Exercise import then load, catalogue reuse, dismissal and a refused bind.
+
+## [~] B-422 — A file-only ticker cannot reconnect after Clear file and Reload ⟨priority: high⟩ — `openspec/changes/restore-unlocked-file-only-picker/`
+
+**Repro:** Clear the missing file of the clock ticker in Designer, export the updated VCG, and
+reload the existing catalogue entry in CG Control. **Actual:** the exported field retains File only
+and has no authored path, but CG Control hides the file picker.
+**Expected:** An unlocked text or text-list field accepts an operator file with File only enabled.
+File content goes through the existing draft and Update flow.
+**Regression:** Reload the same loaded template without its missing path, choose a new file and
+verify both the retained row data and the replacement draft.

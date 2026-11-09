@@ -198,6 +198,35 @@ describe('initial load (choose file) — stages like a hand edit', () => {
     expect(stagedValue('item-1', PATH)).toEqual(originalRows);
     expect(hasStaged('item-2', PATH)).toBe(false);
   });
+
+  it.each(['success', 'failure'] as const)(
+    'ignores a pending read’s %s after the file is replaced',
+    async (outcome) => {
+      let finishRead: (() => void) | undefined;
+      const oldSource: TextFileSource = {
+        name: 'old.txt',
+        read: () =>
+          new Promise((resolve, reject) => {
+            finishRead = () => {
+              if (outcome === 'success') resolve('Old content');
+              else reject(new Error('File was deleted'));
+            };
+          }),
+      };
+      const current = item({ crawl: 'Applied content' });
+      const defaults = { split: false, delimiter: '\n' };
+      attachFileSource(current.itemId, PATH, oldSource, defaults);
+      const pending = stageFromFile(current, PATH, 'text');
+
+      attachFileSource(current.itemId, PATH, fakeSource(['New content']), defaults);
+      await expect(stageFromFile(current, PATH, 'text')).resolves.toBe(true);
+      finishRead?.();
+
+      await expect(pending).resolves.toBe(false);
+      expect(stagedValue(current.itemId, PATH)).toBe('New content');
+      expect(fromFileState(current.itemId, PATH)?.error).toBeNull();
+    },
+  );
 });
 
 /**

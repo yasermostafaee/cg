@@ -30,25 +30,28 @@ async function readCurrentValue(
 ): Promise<FieldValue | null> {
   const state = fromFileState(itemId, path);
   if (state === undefined) return null;
+  const source = state.source;
   let content: string;
   try {
-    if (kind === 'list' && /\.xlsx$/iu.test(state.source.name)) {
-      if (state.source.readBytes === undefined) {
+    if (kind === 'list' && /\.xlsx$/iu.test(source.name)) {
+      if (source.readBytes === undefined) {
         throw new Error(
           'This Excel source cannot be read as binary data. Connect the workbook again.',
         );
       }
-      content = await structuredRowsXlsxToCsv(await state.source.readBytes());
+      content = await structuredRowsXlsxToCsv(await source.readBytes());
     } else {
-      content = await state.source.read();
+      content = await source.read();
     }
   } catch (err) {
+    if (fromFileState(itemId, path)?.source !== source) return null;
     const reason = err instanceof Error ? err.message : String(err);
-    const message = `Could not read “${state.source.name}” — the current value is kept. (${reason})`;
+    const message = `Could not read “${source.name}” — the current value is kept. (${reason})`;
     setFromFileError(itemId, path, message);
     reportCommandError(message);
     return null;
   }
+  if (fromFileState(itemId, path)?.source !== source) return null;
   try {
     const value = contentToFieldValue(content, kind, {
       split: state.split,
@@ -60,7 +63,7 @@ async function readCurrentValue(
     return value;
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
-    const message = `Could not use “${state.source.name}” — the current value is kept. (${reason})`;
+    const message = `Could not use “${source.name}” — the current value is kept. (${reason})`;
     setFromFileError(itemId, path, message);
     reportCommandError(message);
     return null;

@@ -343,19 +343,6 @@ export function FromFileControl({
         </div>
       );
     }
-    if (fileOnly) {
-      return (
-        <div className="cg-from-file" style={styles.wrap}>
-          <div style={styles.row}>
-            <Tag className="cg-sequence-file-status">
-              <Icon icon={Unplug} size={14} style={{ color: colors.textMuted }} />
-              Not connected
-            </Tag>
-          </div>
-          <p style={styles.hint}>Connect this file in Designer.</p>
-        </div>
-      );
-    }
     return (
       <div className="cg-from-file" style={styles.wrap}>
         <div style={styles.row}>
@@ -436,7 +423,7 @@ export function FromFileControl({
             <span className="cg-file-chip__name" title={state.source.name}>
               {state.source.name}
             </span>
-            {lockedPath === undefined && !fileOnly && (
+            {lockedPath === undefined && (
               <button
                 type="button"
                 className="cg-file-chip__detach"

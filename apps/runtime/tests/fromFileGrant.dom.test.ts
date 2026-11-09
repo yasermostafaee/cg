@@ -436,7 +436,7 @@ describe('R-102 — authored file-only and locked Bridge sources', () => {
     expect(el.textContent).not.toContain('● draft');
   });
 
-  it('removes manual editing and leaves file-only connection ownership in Designer', async () => {
+  it('removes manual editing while keeping file selection for unlocked plain inputs', async () => {
     const headlinePolicy = withFieldPolicy('headline', { inputMode: 'file-only' });
     const template = {
       ...headlinePolicy,
@@ -449,11 +449,10 @@ describe('R-102 — authored file-only and locked Bridge sources', () => {
     const el = await render(() => Promise.resolve(template));
 
     expect(el.querySelector('input[aria-label="headline"]')).toBeNull();
-    expect(fromFileButton(el, 'headline')).toBeNull();
+    expect(fromFileButton(el, 'headline')).not.toBeNull();
     expect(el.querySelector('[aria-label="Add items item"]')).toBeNull();
     expect(el.querySelector('[aria-label^="Remove items item"]')).toBeNull();
-    expect(fromFileButton(el, 'items')).toBeNull();
-    expect(el.textContent).toContain('Connect this file in Designer');
+    expect(fromFileButton(el, 'items')).not.toBeNull();
   });
 
   it('keeps the manual editor for lock-only, but exposes no choose or detach route', async () => {

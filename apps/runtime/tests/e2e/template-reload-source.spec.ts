@@ -1,4 +1,23 @@
-import { buildValidVcg, expect, test } from './fixtures/runtime.js';
+import type { Page } from '@playwright/test';
+import { buildFileSourceVcg, buildValidVcg, expect, test } from './fixtures/runtime.js';
+
+// The test browser owns this structured-cloneable file handle. Reload reads its latest bytes.
+async function writeTemplateSource(page: Page, filename: string, bytes: Uint8Array): Promise<void> {
+  await page.evaluate(
+    async ({ filename, data }) => {
+      const directory = await navigator.storage.getDirectory();
+      const handle = await directory.getFileHandle(filename, { create: true });
+      const writer = await handle.createWritable();
+      await writer.write(new Uint8Array(data));
+      await writer.close();
+      Object.defineProperty(window, 'showOpenFilePicker', {
+        value: () => Promise.resolve([handle]),
+        configurable: true,
+      });
+    },
+    { filename, data: Array.from(bytes) },
+  );
+}
 
 test('R-108 — the header opens destination-free template management', async ({ app }) => {
   const page = app.page;
@@ -30,29 +49,13 @@ test('R-108 — a shared-file replacement requires review and keeps the catalogu
   const page = app.page;
   const original = 'ghab-title-before';
   const updated = 'ghab-title-after';
-  // A real, structured-cloneable file handle with replaceable bytes. The browser profile
-  // used by the test owns the OPFS file, so the operating-system chooser is unnecessary.
-  const writeSource = async (id: string) => {
-    const bytes = Array.from(await buildValidVcg(id));
-    await page.evaluate(async (data) => {
-      const directory = await navigator.storage.getDirectory();
-      const handle = await directory.getFileHandle('ghab-title.vcg', { create: true });
-      const writer = await handle.createWritable();
-      await writer.write(new Uint8Array(data));
-      await writer.close();
-      Object.defineProperty(window, 'showOpenFilePicker', {
-        value: () => Promise.resolve([handle]),
-        configurable: true,
-      });
-    }, bytes);
-  };
-  await writeSource(original);
+  await writeTemplateSource(page, 'ghab-title.vcg', await buildValidVcg(original));
   await page.getByRole('button', { name: 'Open templates' }).click();
   const dialog = page.getByRole('dialog', { name: /Templates · CH 1/ });
   await dialog.getByRole('button', { name: 'Import a .vcg' }).click();
   const reload = dialog.locator(`[data-template-reload="${original}"]`);
   await expect(reload).toBeEnabled();
-  await writeSource(updated);
+  await writeTemplateSource(page, 'ghab-title.vcg', await buildValidVcg(updated));
 
   await dialog.getByRole('button', { name: 'Reload all', exact: true }).click();
   await dialog.getByRole('button', { name: 'Reload and keep current data' }).click();
@@ -79,4 +82,83 @@ test('R-108 — a shared-file replacement requires review and keeps the catalogu
   );
   expect(ids).toContain(original);
   expect(ids).not.toContain(updated);
+});
+
+test('B-422 — clearing a missing ticker file and reloading allows a replacement', async ({
+  app,
+}) => {
+  const { page } = app;
+  const templateId = 'tpl-reconnect-ticker-file';
+  await writeTemplateSource(
+    page,
+    'ticker.vcg',
+    await buildFileSourceVcg(templateId, { lockFile: true }),
+  );
+  await page.evaluate(() => {
+    window.cg.textSources.read = () => Promise.reject(new Error('File was deleted'));
+  });
+
+  const templates = page.getByRole('button', { name: 'Open templates' });
+  const dialog = page.getByRole('dialog', { name: /Templates · CH 1/ });
+  const reload = dialog.locator(`[data-template-reload="${templateId}"]`);
+  const close = dialog.locator('[data-modal-role="cancel"]');
+  await templates.click();
+  await dialog.getByRole('button', { name: 'Import a .vcg' }).click();
+  await expect(reload).toBeEnabled();
+  await close.click();
+
+  await app.loadTemplate(templateId, 84);
+  await app.selectLayerRow(84);
+  await app.inspector.getByRole('button', { name: 'Reload headlines from file' }).click();
+  await expect(app.inspector.getByRole('alert')).toContainText('File was deleted');
+  const choose = app.inspector.getByRole('button', {
+    name: 'Load headlines from file',
+    exact: true,
+  });
+  await expect(choose).toHaveCount(0);
+  const appliedHeadlines = () =>
+    page.evaluate(async (id) => {
+      const rows = await window.cg.stack.snapshot();
+      return rows.find((row) => row.templateId === id)?.fields['headlines'];
+    }, templateId);
+  const previous = await appliedHeadlines();
+
+  await writeTemplateSource(
+    page,
+    'ticker.vcg',
+    await buildFileSourceVcg(templateId, { clearFile: true }),
+  );
+  await templates.click();
+  await reload.click();
+  await dialog.getByRole('button', { name: 'Reload and keep current data' }).click();
+  await expect(app.success).toContainText('current row data kept');
+  await close.click();
+  await expect(app.inspector.getByRole('alert')).toHaveCount(0);
+  await expect(choose).toBeEnabled();
+  await expect(app.inspector.getByRole('button', { name: 'Add headlines item' })).toHaveCount(0);
+
+  await page.evaluate(async () => {
+    const directory = await navigator.storage.getDirectory();
+    const handle = await directory.getFileHandle('replacement.txt', { create: true });
+    const writer = await handle.createWritable();
+    await writer.write('خبر اول | خبر دوم');
+    await writer.close();
+    Object.defineProperty(window, 'showOpenFilePicker', {
+      value: () => Promise.resolve([handle]),
+      configurable: true,
+    });
+  });
+  await choose.click();
+  await expect(app.inspector.getByLabel('headlines has unapplied edits')).toBeVisible();
+  const detach = app.inspector.getByRole('button', { name: 'Detach headlines file source' });
+  await expect(detach).toBeVisible();
+  expect(await appliedHeadlines()).toEqual(previous);
+  await app.inspector.getByRole('button', { name: 'Apply staged edits' }).click();
+  const replacement = [{ text: 'خبر اول' }, { text: 'خبر دوم' }];
+  await expect.poll(appliedHeadlines).toMatchObject(replacement);
+
+  await detach.click();
+  await expect(detach).toHaveCount(0);
+  await expect(choose).toBeEnabled();
+  expect(await appliedHeadlines()).toMatchObject(replacement);
 });

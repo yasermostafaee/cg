@@ -1001,7 +1001,7 @@ export async function buildListFieldVcg(templateId = 'tpl-e2e-list'): Promise<Ui
  */
 export async function buildFileSourceVcg(
   templateId = 'tpl-e2e-file-source',
-  options: { lockFile?: boolean } = {},
+  options: { lockFile?: boolean; clearFile?: boolean } = {},
 ): Promise<Uint8Array> {
   const scene = fixtureScene();
   const layer = scene.layers[0];
@@ -1053,9 +1053,13 @@ export async function buildFileSourceVcg(
       default: [{ id: 'fallback-1', text: 'Fallback headline' }],
       fileSource: {
         inputMode: 'file-only',
-        bridgePath: 'headlines.txt',
         delimiter: '|',
-        ...(options.lockFile === true ? { lockFile: true as const } : {}),
+        ...(options.clearFile === true
+          ? {}
+          : {
+              bridgePath: 'headlines.txt',
+              ...(options.lockFile === true ? { lockFile: true as const } : {}),
+            }),
       },
     },
   ];
