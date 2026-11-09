@@ -187,12 +187,12 @@
       },
       "features": [
         {
-          "fa": "دکمهٔ Pan در PVW و PGM هنگام فعال بودن روشن می‌ماند و خط آبی دور قاب واضح‌تر است. تمرین PVW فقط روی قاب قابل‌مشاهدهٔ دارای Crop edges فعال است.",
-          "en": "The Pan toggle stays highlighted while active in PVW and PGM, with a clearer blue plate outline. PVW practice is available on a visible Crop edges plate."
+          "fa": "دکمهٔ Pan در PVW هنگام فعال بودن روشن می‌ماند و خط آبی دور قاب واضح‌تر است. تمرین Pan روی قاب قابل‌مشاهدهٔ دارای Crop edges فعال است.",
+          "en": "The PVW Pan toggle stays highlighted while active, with a clearer blue crop outline. Pan practice is available on a visible Crop edges plate."
         },
         {
-          "fa": "کادر برش در ابزار Pan با توجه به نسبت تصویر منبع و قاب، افقی یا عمودی حرکت می‌کند و با Center به وسط برمی‌گردد. نقشهٔ دقیق برش PGM با Bridge به‌روز در دسترس است.",
-          "en": "Pan moves the crop guide horizontally or vertically, depending on the source and plate aspect ratios. Center restores the middle of the crop. The accurate PGM crop map uses geometry from the updated Bridge."
+          "fa": "کادر برش در تمرین Pan با توجه به نسبت تصویر و قاب، افقی یا عمودی حرکت می‌کند و با Center به وسط برمی‌گردد.",
+          "en": "PVW practice moves the crop guide horizontally or vertically, depending on the source and plate aspect ratios. Center restores the middle of the crop."
         },
         {
           "fa": "بررسی تصویر و شنود یک ورودی زنده در Look inputs، پنجرهٔ تغییر ورودی قاب و بخش Live sources تنظیمات در دسترس است.",
@@ -207,12 +207,16 @@
         {
           "fa": "Pan با دکمه‌های هدر مانیتور هم‌پوشانی ندارد و گزینه‌های لایه و Inspector در حالت ماکزیمم دیده می‌شوند.",
           "en": "Pan no longer overlaps monitor header controls. Layer and Inspector controls stay visible on a maximized monitor."
+        },
+        {
+          "fa": "ابزار Pan فعلاً از PGM برداشته شده است. تمرین آن از PVW در دسترس است.",
+          "en": "Pan is currently available in PVW practice. The PGM operator control is deferred."
         }
       ],
       "planned": [
         {
-          "fa": "روی خروجی PGM ایستگاه Playout، نمایش عنوان و شکل روی قاب، حفظ اتصال ورودی هنگام تغییر پریست، ماسک و Revert، جابه‌جایی تصویر با درگ و پس‌زمینهٔ قاب بررسی شوند.",
-          "en": "On the target Playout PGM output, verify titles and shapes over live plates, preserved input assignments across presets, Mask and Revert, drag to pan, and plate fallback."
+          "fa": "روی خروجی PGM ایستگاه Playout، نمایش عنوان و شکل روی قاب، حفظ اتصال ورودی هنگام تغییر پریست، ماسک و Revert و پس‌زمینهٔ قاب بررسی شوند.",
+          "en": "On the target Playout PGM output, verify titles and shapes over live plates, preserved input assignments across presets, Mask and Revert, and plate fallback."
         },
         {
           "fa": "تصویر، متر و شنود ورودی زنده در PVW و انتخاب‌گر ورودی روی ایستگاه Playout آزموده شوند. تغییر یا بستن پیش‌نمایش باید مستقل از PGM و Playlist بماند.",

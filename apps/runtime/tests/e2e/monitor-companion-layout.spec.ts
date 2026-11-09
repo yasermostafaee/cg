@@ -5,8 +5,6 @@ const MAIN_CHROME = '[data-app-header], footer[aria-label="Status bar"]';
 
 async function expectHeaderActionsClear(panel: Locator): Promise<void> {
   const header = panel.locator('.cg-panel-header--monitor');
-  const pan = header.locator('[data-monitor-pan]');
-  await expect(pan).toBeVisible();
   const geometry = await header.evaluate((element) => {
     const frame = element.getBoundingClientRect();
     const buttons = [...element.querySelectorAll('button')];
@@ -19,10 +17,17 @@ async function expectHeaderActionsClear(panel: Locator): Promise<void> {
       Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5 &&
       Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5;
     const rects = buttons.map((button) => button.getBoundingClientRect());
+    const actions = {
+      insideHeader: rects.every((rect) => inside(frame, rect)),
+      distinctHitboxes: rects.every((rect, i) =>
+        rects.slice(i + 1).every((other) => !intersect(rect, other)),
+      ),
+    };
     const panButton = element.querySelector('[data-monitor-pan]');
-    const icon = panButton?.querySelector('svg')?.getBoundingClientRect();
-    const label = panButton?.lastChild;
-    if (panButton === null || icon === undefined || label == null) {
+    if (panButton === null) return { ...actions, iconAndTextFit: true };
+    const icon = panButton.querySelector('svg')?.getBoundingClientRect();
+    const label = panButton.lastChild;
+    if (icon === undefined || label === null) {
       throw new Error('Pan button is missing its icon or label');
     }
     const range = document.createRange();
@@ -30,10 +35,7 @@ async function expectHeaderActionsClear(panel: Locator): Promise<void> {
     const text = range.getBoundingClientRect();
     const button = panButton.getBoundingClientRect();
     return {
-      insideHeader: rects.every((rect) => inside(frame, rect)),
-      distinctHitboxes: rects.every((rect, i) =>
-        rects.slice(i + 1).every((other) => !intersect(rect, other)),
-      ),
+      ...actions,
       iconAndTextFit: inside(button, icon) && inside(button, text) && !intersect(icon, text),
     };
   });
@@ -59,6 +61,7 @@ for (const name of ['PROGRAM (PGM)', 'PREVIEW (PVW)']) {
     await expect(mainChrome).toHaveCount(2);
     await page.getByRole('button', { name: `Show ${name} fullscreen` }).click();
     await expect(mainChrome).toHaveCount(0);
+    await expect(panel.locator('[data-monitor-pan]')).toHaveCount(name === 'PREVIEW (PVW)' ? 1 : 0);
     if (name === 'PROGRAM (PGM)') {
       await panel.getByRole('button', { name: 'A+B', exact: true }).click();
     }

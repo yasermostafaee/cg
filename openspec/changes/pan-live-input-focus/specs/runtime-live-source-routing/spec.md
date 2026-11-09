@@ -22,27 +22,17 @@ be byte-identical to a centred focus, and `contain` SHALL ignore focus.
 
 ## ADDED Requirements
 
-### Requirement: Operators can pan the visible input on the CG Control monitors
+### Requirement: Operators can review the Pan interaction in PVW
 
-CG Control SHALL offer direct dragging on a visible, cropped live plate using the actual picture.
-The gesture SHALL move only the overflowing image axes and preserve the plate's boundaries and
-input assignment. PVW SHALL stage the change before Take, and PGM SHALL apply a scoped change to the
-current on-air plate.
-
-#### Scenario: The same interaction targets two different monitor contexts
-
-- **WHEN** an operator drags a cropped input in PVW **THEN** the local preview changes without a
-  programme write
-- **WHEN** an operator applies a drag to a cropped input in PGM **THEN** the on-air plate shows the
-  chosen region with the same clip and audio
+CG Control SHALL show the Pan practice tool in PVW. The gesture SHALL move only the overflowing
+axis and preserve the plate's boundaries and input assignment. PGM SHALL show its programme
+return without Pan controls or crop guides.
 
 #### Scenario: The Pan controls are discoverable before an input can be edited
 
-- **WHEN** the operator opens the monitors **THEN** both headers show Pan
+- **WHEN** the operator opens the monitors **THEN** the PVW header shows Pan and the PGM header has no Pan action
 - **WHEN** the operator enables or closes Pan **THEN** its pressed appearance follows the active tool state
 - **WHEN** Pan displays a plate guide **THEN** the guide has a strong blue border with a dark edge for contrast over the picture
-- **WHEN** PGM has no selected on-air row or the active engine's return is unavailable **THEN**
-  its Pan action is disabled and no Bridge edit is requested
 - **WHEN** the operator opens Pan in PVW with a visible Crop edges plate **THEN** a clearly labelled
   practice image can be dragged inside that plate's footprint
 - **WHEN** the preset has no visible Crop edges plate **THEN** no practice plate appears
@@ -51,11 +41,9 @@ current on-air plate.
 
 #### Scenario: The crop guide moves smoothly over the source
 
-- **WHEN** the operator opens Pan in PVW **THEN** the complete practice image and current crop guide are visible
-- **WHEN** the operator chooses an on-air crop with a compatible Bridge **THEN** PGM shows the proportional source extent and current crop guide
-- **WHEN** the operator drags the guide **THEN** it follows the pointer locally and the console sends at most one scoped PGM crop command on release
-- **WHEN** the operator presses `Center` **THEN** the supported axes return to the centred crop, with the same plate, clip, source and sound
-- **WHEN** source pixels outside the programme clip are unavailable **THEN** the map identifies itself as geometry
+- **WHEN** the operator opens Pan in PVW **THEN** the complete practice image and current crop guide are visible inside the plate
+- **WHEN** the operator drags the guide **THEN** it follows the pointer locally without a Bridge command
+- **WHEN** the operator presses `Center` **THEN** the crop guide returns to the centre of the practice image
 
 #### Scenario: Source and plate have different ratios
 

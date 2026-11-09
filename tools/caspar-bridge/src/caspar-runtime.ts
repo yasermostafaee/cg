@@ -18,10 +18,8 @@ import {
   type ServerSessionState,
 } from '@cg/caspar-client';
 import {
-  DEFAULT_LIVE_CROP_FOCUS,
   isRestorable,
   intersectNormalizedRects,
-  liveCropFocusAfterShift,
   livePlateMaskRegions,
   liveRevealRects,
   liveRevealSceneRect,
@@ -130,7 +128,6 @@ import {
   lookPlateMasks,
   lookPlateReveals,
   lookPlateRects,
-  type PgmPlateCropEdit,
   type PgmPlateCropTarget,
   pruneAssignmentsForCatalog,
   // `PLAYOUT-SOURCES-01` — what may be bound and what may be seated, asked of the ONE module.
@@ -8883,7 +8880,6 @@ export class CasparRuntime {
     const lookId = this.activeLookId(itemId);
     const rects = lookPlateRects(carrier, lookId);
     const fits = this.#plateFits.get(itemId);
-    const raster = this.#channelSettings.rasterFor(slot.channel);
     const targets: PgmCropCandidate[] = [];
     for (const record of records) {
       const plateId = record.sourceId;
@@ -8916,15 +8912,8 @@ export class CasparRuntime {
           )
           .map((seat) => seat.clip),
       ];
-      const geometry = {
-        box,
-        picture: record.fill,
-        sourceAspect: (record.fill.width * raster.width) / (record.fill.height * raster.height),
-      };
       const token = createHash('sha256')
-        .update(
-          JSON.stringify([this.#adapter.currentPrimary, itemId, lookId, record, geometry, areas]),
-        )
+        .update(JSON.stringify([this.#adapter.currentPrimary, itemId, lookId, record, box, areas]))
         .digest('hex');
       targets.push({
         record,
@@ -8936,7 +8925,6 @@ export class CasparRuntime {
           areas,
           horizontal,
           vertical,
-          geometry,
         },
       });
     }
@@ -8945,7 +8933,7 @@ export class CasparRuntime {
 
   async pgmPlateCrop(
     itemId: string,
-    drag?: PgmPlateCropEdit,
+    drag?: { token: string; dx: number; dy: number },
   ): Promise<{
     ok: boolean;
     targets: PgmPlateCropTarget[];
@@ -8975,10 +8963,20 @@ export class CasparRuntime {
         const slot = this.#slots.get(itemId);
         if (selected === undefined || records === undefined || slot === undefined) return stale;
         const { record, box } = selected;
-        const focus =
-          drag.center === true
-            ? DEFAULT_LIVE_CROP_FOCUS
-            : liveCropFocusAfterShift(box, record.fill, { x: drag.dx, y: drag.dy });
+        const focusAt = (
+          origin: number,
+          extent: number,
+          picture: number,
+          size: number,
+          shift: number,
+        ): number =>
+          size - extent <= 1e-6
+            ? 0.5
+            : Math.max(0, Math.min(1, (origin - picture - shift) / (size - extent)));
+        const focus = {
+          x: focusAt(box.x, box.width, record.fill.x, record.fill.width, drag.dx),
+          y: focusAt(box.y, box.height, record.fill.y, record.fill.height, drag.dy),
+        };
         const lookId = this.activeLookId(itemId);
         const plateId = record.sourceId;
         const plan = this.#planLiveSeating(itemId, slot, lookId, 'already-live', 'pinned', {

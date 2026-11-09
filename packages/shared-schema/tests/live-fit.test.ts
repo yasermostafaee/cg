@@ -3,7 +3,6 @@ import {
   DEFAULT_LIVE_FIT_MODE,
   LiveCropFocusSchema,
   fitPictureToBox,
-  liveCropFocusAfterShift,
   type FitRect,
   type LiveFitMode,
 } from '../src/live-fit.js';
@@ -20,16 +19,6 @@ const expectRect = (got: FitRect, want: FitRect): void => {
   close(got.width, want.width);
   close(got.height, want.height);
 };
-
-it('D-178 — pointer shifts clamp crop focus and leave a fitted axis centred', () => {
-  const box = { x: 0.375, y: 0.25, width: 0.25, height: 0.5 };
-  const picture = { x: 0.25, y: 0.25, width: 0.5, height: 0.5 };
-  const shifted = liveCropFocusAfterShift(box, picture, { x: 0.08, y: 0.4 });
-  close(shifted.x, 0.18);
-  expect(shifted.y).toBe(0.5);
-  expect(liveCropFocusAfterShift(box, picture, { x: 0.2, y: 0.4 })).toEqual({ x: 0, y: 0.5 });
-  expect(liveCropFocusAfterShift(box, picture, { x: -0.2, y: -0.4 })).toEqual({ x: 1, y: 0.5 });
-});
 
 describe('C-028 — fitPictureToBox: the ONE fit', () => {
   it('DEFAULTS to contain — the client decision, pinned as a value', () => {
@@ -102,8 +91,7 @@ describe('C-028 — fitPictureToBox: the ONE fit', () => {
       const sourceAspect = 4 / 3;
       const initial = fitPictureToBox(box, sourceAspect, 'cover');
       expectRect(initial.picture, { x: 0, y: -1.5, width: 16, height: 12 });
-      const focus = liveCropFocusAfterShift(box, initial.picture, { x: 9, y: -1.5 });
-      const moved = fitPictureToBox(box, sourceAspect, 'cover', focus);
+      const moved = fitPictureToBox(box, sourceAspect, 'cover', { x: 1, y: 1 });
       expectRect(moved.picture, { x: 0, y: -3, width: 16, height: 12 });
       expectRect(moved.visible, box);
       close(moved.visible.height / moved.picture.height, 0.75);

@@ -18,15 +18,8 @@ focus produces exactly the old centred crop. Schema bounds reject values outside
 ## Operator surface
 
 The Designer Inspector has no crop-focus editor. Previously authored values remain readable in the
-scene and on export. The proposed CG Control gesture targets the selected, visible `cover` plate on
-its actual picture. Movement is clamped to the overflowing axes and keeps the authored plate fixed.
-
-PGM maps drag distance through the letterboxed programme return. The operator selects an on-air row,
-enables Pan live input and drags the picture of a plate with cropped edges. On pointer release the
-Bridge checks a token for the current row, look, fit, producer and engine, and reuses its fitted-plate
-batch to apply only the geometry. The input, sound, clip and layer coordinates stay in place.
-Additional mask fragments and linked reveals follow the same picture. The focus is kept for that
-look and source during the row's Bridge session.
+scene and on export. The planned CG Control gesture targets the visible `cover` plate on its source
+picture. Movement is clamped to the overflowing axis and keeps the authored plate fixed.
 
 PVW needs the real input picture from C-023. Its focus is local to the preview until Take, with zero
 programme writes from dragging. The displayed preview raster and input aspect must be known before
@@ -34,30 +27,23 @@ converting pointer coordinates. Neither a Designer poster nor a PVW placeholder 
 
 ## Operator review before the picture mapping
 
-Both headers keep Pan visible. PGM disables its action without a selected on-air row or a live
-return from the active engine. It continues to obtain eligible plates and apply focus through the
-existing scoped Bridge operation.
-
-The PVW action opens a practice-only picture on a visible Crop edges plate. A preset with no
+The PVW action opens a practice-only picture inside a visible Crop edges plate. A preset with no
 such plate has no practice surface. The whole practice source retains its aspect ratio within
-the available footprint. The shaded crop guide has the authored plate ratio. Drag or arrow keys
+the available footprint. The shaded crop guide has the authored plate ratio and a blue outline
+with a dark contrast edge. Drag or arrow keys
 move it along the overflowing axis, and Center restores its starting position. The practice state
 belongs to the rendered control and is discarded when it closes. It starts no input check, performs
 no Bridge writes and cannot become an Inspector draft or reach Take. The real PVW gesture still
 requires the active source rectangle and sample aspect ratio from Playout.
 
-## PGM crop overview and centring
+## PGM deferred
 
-The target may carry the authored plate box, the currently applied FILL and the source aspect.
-Bridge reads those from the same scoped candidate that produces the gesture token. The console
-uses them to draw a source-proportional map with the crop window at its current position. Its
-window moves locally while dragging. PGM applies one scoped request on release and reloads the
-map from the accepted target. Centre uses the same token, seat lock and geometry-only application.
-An older Bridge can still receive relative drags through the existing path.
+The owner approved the in-plate PVW editor and deferred the PGM control. CG Control does not show
+a Pan button or crop overlay in PGM. The relative crop operation remains available to existing
+CG Control 1.1.0 installations through its original scoped Bridge contract.
 
-The PGM return cannot supply pixels outside the on-air clip. The overview explicitly presents
-geometry until the Playout supplies an authenticated read of the already-open source before
-FILL, CLIP and the final programme mix. The browser never opens or routes that producer.
+An equivalent PGM editor would need an authenticated read of the already-open source before FILL,
+CLIP and the final programme mix. The programme return carries only the on-air composite.
 
 The source and box use a shared raster when deriving the crop. A wider source overflows
 horizontally. A narrower source overflows vertically. A matching aspect uses the whole picture

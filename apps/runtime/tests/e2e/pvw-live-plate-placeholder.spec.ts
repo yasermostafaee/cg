@@ -179,14 +179,10 @@ test.beforeEach(async ({ app }) => {
   await app.showMonitors();
 });
 
-test('D-178 — both monitors show Pan and Preview requires a visible Crop edges plate', async ({
-  app,
-}) => {
+test('D-178 — Pan stays in Preview and requires a visible Crop edges plate', async ({ app }) => {
   const { page } = app;
   const programme = page.getByRole('button', { name: 'Pan live input', exact: true });
-  await expect(programme).toBeVisible();
-  await expect(programme).toBeDisabled();
-  await expect(programme).toHaveAttribute('title', 'Select an on-air row to pan its input');
+  await expect(programme).toHaveCount(0);
   const preview = page.getByRole('button', { name: 'Pan preview input', exact: true });
   await expect(preview).toBeVisible();
   await expect(preview).toBeDisabled();

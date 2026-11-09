@@ -11,14 +11,14 @@
 - [x] 2.1 Remove Designer's percentage controls and preserve saved focus values
 - [x] 2.2 Record the feasibility and contract dependencies of direct CG Control dragging
 - [x] 2.3 Apply focus to Bridge `FILL` through the shared live-source geometry
-- [x] 2.4 Add scoped crop editing on the live PGM return
+- [x] 2.4 Preserve the scoped relative crop operation for existing 1.1.0 consoles.
 - [ ] 2.5 Add local PVW crop editing on the accepted C-023 live input feed
       C-023 supplies one live picture. Its JPEG is in the Preview channel raster, and the
       handoff does not identify the source's active picture rectangle or sample aspect ratio.
       Request the mapping needed for accurate staged drag in
       [the Playout follow-up](../../../docs/integration/playout/CG-CONTROL-REQUEST-LIVE-INPUT-PREVIEW-2026-10-26.md).
 - [x] 2.6 Show Crop edges below the Plate name and keep the name's screen size independent of fit and zoom
-- [x] 2.7 Keep Pan visible on both monitors and expose a local PVW practice image for operator review
+- [x] 2.7 Expose a local PVW practice image for operator review
       before Playout supplies the active source rectangle and sample aspect ratio.
 
 ## 3. Verification
@@ -38,18 +38,13 @@
 - [x] 3.8 Verify the always-visible tools and practice drag at idle and with a Crop edges plate.
       The focused local Chromium tests passed, including the scoped PGM command.
 - [x] 3.9 [Carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42676776212/job/129360266303)
-      passed on `40974e03` for the initial monitor controls. The revised guides and overview
-      are tracked in sections 4 and 5.
+      passed on `40974e03` for the initial monitor controls. The PVW-only revision is tracked below.
 
-## 4. Crop overview
+## 4. Owner review
 
-- [x] 4.1 Carry the token-scoped source geometry and apply Center through the existing Bridge operation.
-- [x] 4.2 Show the complete practice image in PVW and the geometry map in PGM. Update the
-      crop guide during the gesture and apply PGM on release.
-- [x] 4.3 Verify Center, local pointer motion, stale-token refusal and compatibility with relative drags.
-      Focused shared-schema, IPC, Bridge and Chromium checks passed.
-- [ ] 4.4 Show the actual uncropped live source in PGM once Playout exposes it safely.
-- [ ] 4.5 Record carrying Linux E2E and verify the overview on the station's updated Bridge.
+- [x] 4.1 Show the complete practice image and moving crop guide within the PVW plate and offer Center.
+- [x] 4.2 Remove the PGM Pan action and guides. Revisit the PGM interaction if the owner asks for it.
+- [ ] 4.3 Record carrying Linux E2E for the PVW-only workflow and monitor layout.
 
 ## 5. Aspect and eligibility review
 
@@ -57,8 +52,6 @@
 - [x] 5.2 Keep the full practice source proportional and move the plate-shaped crop only along
       the overflowing axis. Focused Chromium cases passed for wide and portrait plates, and
       the shared fit test passed for a 4:3 source in a 16:9 plate.
-- [x] 5.3 Show an accent-filled, pressed Pan toggle in both monitor headers while editing.
-- [x] 5.4 Verify vertical PGM dragging on the return and crop map with a 4:3 source in a 16:9
-      plate. Chromium and Bridge tests passed, including edge clamping, Center, and unchanged
-      horizontal placement, clip and volume.
-- [x] 5.5 Strengthen the blue Pan guide around the plate with a dark contrast edge.
+- [x] 5.3 Show an accent-filled, pressed Pan toggle in the PVW header while editing.
+- [x] 5.4 Verify horizontal and vertical practice drags and Center in Chromium.
+- [x] 5.5 Strengthen the blue PVW Pan guide around the crop with a dark contrast edge.

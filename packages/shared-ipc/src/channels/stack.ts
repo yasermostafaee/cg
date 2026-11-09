@@ -461,49 +461,35 @@ export const StackSetPlateVolumeChannel = defineChannel(
   z.object({ ok: z.boolean(), reason: z.string().optional() }),
 );
 
-const PgmPlateCropRectSchema = z.object({
-  x: z.number().finite(),
-  y: z.number().finite(),
-  width: z.number().positive().finite(),
-  height: z.number().positive().finite(),
-});
-
 const PgmPlateCropTargetSchema = z.object({
   id: z.string(),
   token: z.string().length(64),
   label: z.string(),
-  areas: z.array(PgmPlateCropRectSchema),
+  areas: z.array(
+    z.object({
+      x: z.number(),
+      y: z.number(),
+      width: z.number().positive(),
+      height: z.number().positive(),
+    }),
+  ),
   horizontal: z.boolean(),
   vertical: z.boolean(),
-  /** Programme-normalized fit. The full picture can extend outside the raster. */
-  geometry: z
-    .object({
-      box: PgmPlateCropRectSchema,
-      picture: PgmPlateCropRectSchema,
-      sourceAspect: z.number().positive().finite(),
-    })
-    .optional(),
 });
 export type PgmPlateCropTarget = z.infer<typeof PgmPlateCropTargetSchema>;
 
-const pgmPlateCropToken = z.string().regex(/^[0-9a-f]{64}$/);
-const PgmPlateCropEditSchema = z.union([
-  z.object({
-    token: pgmPlateCropToken,
-    dx: z.number().min(-1).max(1),
-    dy: z.number().min(-1).max(1),
-    center: z.never().optional(),
-  }),
-  z.object({ token: pgmPlateCropToken, center: z.literal(true) }).strict(),
-]);
-export type PgmPlateCropEdit = z.infer<typeof PgmPlateCropEditSchema>;
-
-/** An omitted edit inspects the current on-air row. The token pins the shown fit and input. */
+/** An omitted drag inspects the current on-air row. The token pins the shown fit and input. */
 export const StackPgmPlateCropChannel = defineChannel(
   'stack.pgm-plate-crop',
   z.object({
     itemId: IdSchema,
-    drag: PgmPlateCropEditSchema.optional(),
+    drag: z
+      .object({
+        token: z.string().regex(/^[0-9a-f]{64}$/),
+        dx: z.number().min(-1).max(1),
+        dy: z.number().min(-1).max(1),
+      })
+      .optional(),
   }),
   z.object({
     ok: z.boolean(),
