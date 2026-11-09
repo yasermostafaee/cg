@@ -379,6 +379,7 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   // `R-100` — storing one picture of a book: the answer is the verdict on the principal's own press.
   'pages.put': INTENT,
   'stack.out': INTENT,
+  'stack.pgm-plate-crop': INTENT,
   'stack.remove': INTENT,
   'stack.remove-all': INTENT,
   'stack.set-active-look': INTENT,

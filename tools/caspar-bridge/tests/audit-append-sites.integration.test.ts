@@ -68,7 +68,11 @@ const CONFIG_VERBS = [
  * Driven by `tests/book-pages.integration.test.ts`, which asserts one `ok` row per accepted turn,
  * naming the item.
  */
-const PAGE_VERBS = ['page-turn'] as const;
+const SPECIALISED_PLAYOUT_VERBS = [
+  'page-turn',
+  // D-178 needs a cover-fitted live source. Its audit is driven below with an assigned plate.
+  'pan-live-plate',
+] as const;
 
 const NON_VERB_ACTIONS = [
   'failover',
@@ -151,9 +155,9 @@ const NON_VERB_ACTIONS = [
 ] as const;
 
 it('the "every playout verb" list is COMPLETE — each schema action is driven or named non-verb', () => {
-  expect([...PLAYOUT_VERBS, ...CONFIG_VERBS, ...PAGE_VERBS, ...NON_VERB_ACTIONS].sort()).toEqual(
-    [...AuditEntrySchema.shape.action.options].sort(),
-  );
+  expect(
+    [...PLAYOUT_VERBS, ...CONFIG_VERBS, ...SPECIALISED_PLAYOUT_VERBS, ...NON_VERB_ACTIONS].sort(),
+  ).toEqual([...AuditEntrySchema.shape.action.options].sort());
 });
 
 let mock: MockHandle | null = null;
@@ -349,6 +353,61 @@ describe('B-141 — every playout verb records exactly one entry, at its real ou
       }
     },
   );
+});
+
+it('D-178 — an accepted pan and a stale drag each write one audit row', async () => {
+  const { r, file } = await boot({ reachable: true });
+  expect(
+    r.setSourceCatalog({
+      sources: [
+        {
+          id: 'src-a',
+          name: 'Studio A',
+          format: '1080i5000',
+          producer: { kind: 'route', channel: 2 },
+        },
+      ],
+      layerRange: { start: 30, end: 32 },
+    }).ok,
+  ).toBe(true);
+  expect(
+    r.setSourceAssignments({
+      assignments: [{ templateId: TEMPLATE.templateId, plateId: 'guest', sourceId: 'src-a' }],
+    }).ok,
+  ).toBe(true);
+  r.templateImport(
+    {
+      ...TEMPLATE,
+      liveSources: {
+        resolution: { width: 1920, height: 1080 },
+        defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
+        sources: [
+          {
+            elementId: 'plate',
+            sourceId: 'guest',
+            rect: { x: 720, y: 270, width: 480, height: 540 },
+            dynamic: false,
+            fitMode: 'cover',
+          },
+        ],
+      },
+    },
+    HTML,
+  );
+  expect((await r.load('item1', TEMPLATE.templateId, {})).accepted).toBe(true);
+  expect((await r.take('item1')).accepted).toBe(true);
+  const [target] = (await r.pgmPlateCrop('item1')).targets;
+  if (target === undefined) throw new Error('The assigned cover plate must be editable');
+  const drag = { token: target.token, dx: 0.08, dy: 0 };
+  expect((await r.pgmPlateCrop('item1', drag)).ok).toBe(true);
+  expect((await r.pgmPlateCrop('item1', drag)).ok).toBe(false);
+
+  const rows = forAction(await entriesOnDisk(file, 5), 'pan-live-plate');
+  expect(rows).toHaveLength(2);
+  expect(rows).toMatchObject([
+    { outcome: 'ok', itemId: 'item1', templateId: TEMPLATE.templateId, slot: SLOT },
+    { outcome: 'failed', itemId: 'item1', errorCode: 'stale-plate-crop' },
+  ]);
 });
 
 describe('B-141 — the REFUSALS, each with the code that refused it', () => {

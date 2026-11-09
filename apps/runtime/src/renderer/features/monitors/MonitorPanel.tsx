@@ -639,7 +639,7 @@ function ProgramCropOverlay({
               boxSizing: 'border-box',
               background: 'transparent',
               padding: 0,
-              border: '1px solid #67e8f9',
+              border: '1px solid ' + cssVars['--r-accent'],
               pointerEvents: 'auto',
               touchAction: 'none',
               cursor:

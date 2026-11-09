@@ -16,6 +16,8 @@
 - [x] 0.6 Recheck Playout 2.18.1 on 2026-11-09. The installed channel is `apasai`; live-preview
       still exposes POST/DELETE and the preview feed responds. The docs still depend on
       `/openapi/v1.json`, which returns 500. The lease, auth and meter contract remain outstanding.
+- [x] 0.7 Recheck after the station updated to Playout 2.18.10. Picture and WAV still respond on 9350. OpenAPI still returns 500 and no alternative Preview API document was served.
+      Update the team prompt to refer to the installed build.
 
 > **Hard gate:** tasks 1–6 SHALL NOT start until 0.4 answers the wire, authorization and ownership questions. In
 > particular, do not prototype with an invented POST body or unconditional DELETE.
