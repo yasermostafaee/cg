@@ -3,6 +3,8 @@ import { expect, test } from './fixtures/designer.js';
 test('league builds top to bottom, contains all 18 rows, then closes bottom to top before its background fades', async ({
   app,
 }, testInfo) => {
+  const clock = app.page.clock;
+  await clock.install();
   await app.page.setViewportSize({ width: 1600, height: 1000 });
   await app.page.getByTestId('starter-card').filter({ hasText: 'جدول لیگ برتر ایران' }).click();
   await app.expectStudio();
@@ -37,34 +39,46 @@ test('league builds top to bottom, contains all 18 rows, then closes bottom to t
   await exitTime.fill('0.05');
   await exitTime.press('Enter');
   await app.openPreviewModal();
-  await app.play();
   const handle = await app.previewDialog.locator('iframe').elementHandle();
   const frame = await handle?.contentFrame();
   if (frame === undefined || frame === null) throw new Error('No league Preview frame');
+  await expect(app.previewDialog.getByRole('button', { name: /Play|Resume/ })).toBeEnabled();
+  // Pause while idle so neither Playwright round trips nor a busy runner can
+  // skip the authored 30 ms stagger. runFor executes every animation callback.
+  await clock.pauseAt(Date.now() + 60_000);
+  await app.play();
+  // Play re-stamps the Repeater. Observe the new nodes before advancing time.
+  await expect(frame.locator('body')).not.toHaveClass(/cg-pending/);
 
-  const entrance = await frame.evaluate(async () => {
+  const entrance = await frame.evaluateHandle(() => {
     const rows = [...document.querySelectorAll<HTMLElement>('[data-cg-repeater-motion]')];
-    let sawOrderedBuild = false;
-    let outOfOrder = false;
-    const started: number[] = [];
-    const until = performance.now() + 5_000;
-    while (performance.now() < until) {
+    const result = {
+      count: rows.length,
+      sawOrderedBuild: false,
+      outOfOrder: false,
+      started: [] as number[],
+      settled: false,
+    };
+    const sample = (): void => {
       const alpha = rows.map((row) =>
         row.style.visibility === 'hidden' ? 0 : Number(row.style.opacity || '1'),
       );
       for (let index = 0; index < alpha.length; index += 1) {
-        if (alpha[index]! > 0.01 && !started.includes(index)) started.push(index);
-        if (index > 0 && alpha[index]! > alpha[index - 1]! + 0.001) outOfOrder = true;
+        if (alpha[index]! > 0.01 && !result.started.includes(index)) result.started.push(index);
+        if (index > 0 && alpha[index]! > alpha[index - 1]! + 0.001) result.outOfOrder = true;
       }
-      if (alpha[0]! > 0.01 && alpha.at(-1) === 0) sawOrderedBuild = true;
+      if (alpha[0]! > 0.01 && alpha.at(-1) === 0) result.sawOrderedBuild = true;
       if (alpha.length === 18 && alpha.every((value) => value >= 0.999)) {
-        return { count: rows.length, sawOrderedBuild, outOfOrder, started, settled: true };
+        result.settled = true;
+        return;
       }
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    }
-    return { count: rows.length, sawOrderedBuild, outOfOrder, started, settled: false };
+      requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+    return result;
   });
-  expect(entrance).toEqual({
+  await clock.runFor(5_000);
+  expect(await entrance.jsonValue()).toEqual({
     count: 18,
     sawOrderedBuild: true,
     outOfOrder: false,
@@ -110,38 +124,31 @@ test('league builds top to bottom, contains all 18 rows, then closes bottom to t
       }),
     backgrounds,
   );
-  await app.stop();
-  const exit = await frame.evaluate(
-    async ({ ids, baseline }) => {
+  const exit = await frame.evaluateHandle(
+    ({ ids, baseline }) => {
       const rows = [...document.querySelectorAll<HTMLElement>('[data-cg-repeater-motion]')];
       const backgrounds = ids.map((id) => {
         const node = document.querySelector(`[data-cg-element-id="${id}"]`);
         if (node === null) throw new Error(`Missing background ${id}`);
         return node;
       });
-      const started: number[] = [];
-      const fading = backgrounds.map(() => false);
-      let sawReverseBuildDown = false;
-      let outOfOrder = false;
-      let allRowsGone = false;
-      let backgroundFadedBeforeRows = false;
-      let scrimStayedHidden = true;
+      const result = {
+        started: [] as number[],
+        fading: backgrounds.map(() => false),
+        sawReverseBuildDown: false,
+        outOfOrder: false,
+        allRowsGone: false,
+        backgroundFadedBeforeRows: false,
+        scrimStayedHidden: true,
+        settled: false,
+      };
       const scrim = document.querySelector('[data-cg-element-id="az-bg-scrim"]');
       if (scrim === null) throw new Error('Missing league scrim');
-      const until = performance.now() + 8_000;
-      while (performance.now() < until) {
-        if (Number(getComputedStyle(scrim).opacity) !== 0) scrimStayedHidden = false;
+      const sample = (): void => {
+        if (Number(getComputedStyle(scrim).opacity) !== 0) result.scrimStayedHidden = false;
         if (document.body.classList.contains('cg-pending')) {
-          return {
-            started,
-            fading,
-            sawReverseBuildDown,
-            outOfOrder,
-            allRowsGone,
-            backgroundFadedBeforeRows,
-            scrimStayedHidden,
-            settled: true,
-          };
+          result.settled = true;
+          return;
         }
         const alpha = rows.map((row) =>
           row.style.visibility === 'hidden' ? 0 : Number(row.style.opacity || '1'),
@@ -149,34 +156,28 @@ test('league builds top to bottom, contains all 18 rows, then closes bottom to t
         // Visit last-to-first so a single rendered frame that contains two adjacent
         // starts still reports the authored sequence, rather than DOM iteration order.
         for (let index = alpha.length - 1; index >= 0; index -= 1) {
-          if (alpha[index]! < 0.999 && !started.includes(index)) started.push(index);
-          if (index > 0 && alpha[index]! > alpha[index - 1]! + 0.001) outOfOrder = true;
+          if (alpha[index]! < 0.999 && !result.started.includes(index)) result.started.push(index);
+          if (index > 0 && alpha[index]! > alpha[index - 1]! + 0.001) result.outOfOrder = true;
         }
-        if (alpha[0]! >= 0.999 && alpha.at(-1)! < 0.99) sawReverseBuildDown = true;
-        if (alpha.every((value) => value <= 0.001)) allRowsGone = true;
+        if (alpha[0]! >= 0.999 && alpha.at(-1)! < 0.99) result.sawReverseBuildDown = true;
+        if (alpha.every((value) => value <= 0.001)) result.allRowsGone = true;
         backgrounds.forEach((node, index) => {
           const value = Number(getComputedStyle(node).opacity);
           if (value > 0 && value < baseline[index]! * 0.99) {
-            fading[index] = true;
-            if (!allRowsGone) backgroundFadedBeforeRows = true;
+            result.fading[index] = true;
+            if (!result.allRowsGone) result.backgroundFadedBeforeRows = true;
           }
         });
-        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      }
-      return {
-        started,
-        fading,
-        sawReverseBuildDown,
-        outOfOrder,
-        allRowsGone,
-        backgroundFadedBeforeRows,
-        scrimStayedHidden,
-        settled: false,
+        requestAnimationFrame(sample);
       };
+      requestAnimationFrame(sample);
+      return result;
     },
     { ids: backgrounds, baseline },
   );
-  expect(exit).toEqual({
+  await app.stop();
+  await clock.runFor(8_000);
+  expect(await exit.jsonValue()).toEqual({
     started: Array.from({ length: 18 }, (_, index) => 17 - index),
     fading: [true, true],
     sawReverseBuildDown: true,
