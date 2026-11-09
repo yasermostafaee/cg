@@ -223,6 +223,10 @@
         {
           "fa": "ابزار Pan فعلاً از PGM برداشته شده است. تمرین آن از PVW در دسترس است.",
           "en": "Pan is currently available in PVW practice. The PGM operator control is deferred."
+        },
+        {
+          "fa": "خاموش کردن Show fallback on air پس‌زمینهٔ انتخاب‌شده را در Designer و PVW حفظ می‌کند و فقط در خروجی PGM روی نمایش آن اثر می‌گذارد.",
+          "en": "Show fallback on air controls the programme output. Designer and PVW keep showing the chosen plate background."
         }
       ],
       "planned": [

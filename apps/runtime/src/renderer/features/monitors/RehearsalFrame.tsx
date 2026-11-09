@@ -431,6 +431,7 @@ export function RehearsalFrame({
       ref={frameRef}
       aria-label={`${rowName} rehearsal preview`}
       data-rehearsal-frame={itemId}
+      data-cg-pvw="1"
       srcDoc={html}
       onLoad={() => {
         // `D-165` — PVW is silent: mute the page's own sound BEFORE the frame reports ready,

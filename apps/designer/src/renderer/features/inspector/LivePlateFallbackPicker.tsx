@@ -72,10 +72,10 @@ export function LivePlateFallbackPicker({
   return (
     <>
       <CheckRow
-        label="Show fallback"
+        label="Show fallback on air"
         checked={allVisible}
         indeterminate={someVisible && !allVisible}
-        title="Show the selected background when the input is empty or leaves space in the plate."
+        title="Show the selected background on air when the input is empty or leaves space in the plate."
         onChange={(show) => onCommit({ showFallback: show ? undefined : false })}
       />
       <ImageChoicePicker

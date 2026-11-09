@@ -1787,6 +1787,13 @@ function smpteBarsGradient(): string {
  */
 export { SMPTE_BARS, smpteBarsGradient };
 
+/** The host marks only its same-origin, byte-identical retained-page rehearsal frame. */
+function isPvwRehearsal(doc: Document): boolean {
+  return (
+    doc.URL === 'about:srcdoc' && doc.defaultView?.frameElement?.getAttribute('data-cg-pvw') === '1'
+  );
+}
+
 /**
  * D-137 — render a **Live Source**: the region CasparCG composites a live input
  * behind (C-015).
@@ -1797,7 +1804,8 @@ export { SMPTE_BARS, smpteBarsGradient };
  *
  * - `'output'` (both exporters) — R-105 paints the selected fallback on the graphics
  *   bed BELOW the live producer. The producer covers it while it has picture; a
- *   transparent/empty upstream reveals it without a template re-take.
+ *   transparent/empty upstream reveals it without a template re-take when enabled.
+ *   A CG Control rehearsal shows the selected fallback in its own marked iframe.
  *   ⭐ **AMENDED (owner, 2026-08-10; `live-source-multibox` design.md §9a.1) — an
  *   authored `stroke` DOES paint, in BOTH modes, and that is not an exception to
  *   the rule above.** It is rendered as a CSS `outline`, which is painted outside the
@@ -1806,8 +1814,8 @@ export { SMPTE_BARS, smpteBarsGradient };
  *   preflight compares — under any box model and any scale. See the note in
  *   {@link buildLiveSource} for why `border` was measured and rejected.
  *
- * - `'author'` (canvas + Preview modal) — procedural SMPTE bars with the source id
- *   overlaid, or the poster image when one is set. Never an unmarked black box:
+ * - `'author'` (canvas + Preview modal) — the selected fallback with the source id
+ *   overlaid, regardless of the on-air setting. Never an unmarked black box:
  *   with several holes on one frame, an unlabelled black rectangle tells the author
  *   nothing about WHICH source lands where.
  *
@@ -1864,7 +1872,7 @@ function buildLiveSource(element: VideoPlaceholderElement, ctx: BuildCtx): HTMLE
   }
 
   el.style.overflow = 'hidden';
-  if (element.showFallback !== false) {
+  if (element.showFallback !== false || ctx.mode === 'author' || isPvwRehearsal(ctx.doc)) {
     const fallback = buildLiveFallback(element, ctx.doc);
     if (element.liveMask !== undefined) clipPlateFallback(fallback, element.liveMask, ctx.doc);
     el.appendChild(fallback);

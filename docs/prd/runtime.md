@@ -4845,16 +4845,16 @@ operator had to fail over before seeing whether its programme picture and sound 
 - WHEN B is requested THEN CG Bridge authorizes the logical channel, maps it to B's physical channel, uses B's
   core programme port and B engine's own meter session, and never exposes another channel or token
 
-## [~] R-105 — A healthy but empty live source shows its authored fallback on air ⟨priority: high — the owner, 2026-11-02; clarified 2026-11-08⟩ — `openspec/changes/black-empty-live-plate/`
+## [~] R-105 — A healthy but empty live source shows its authored fallback on air ⟨priority: high — the owner, 2026-11-02; clarified 2026-11-08 and 2026-11-10⟩ — `openspec/changes/black-empty-live-plate/`
 
 **What:** Keep the geometry of an assigned, healthy Live Source visible when its upstream currently has no picture, such as an ended playlist. The Designer fallback picker offers Bars, solid colour and project/shared pictures for one or more plates. New plates start with Bars and older plates retain their previous fallback.
 **Why:** A transparent/missing plate makes a multi-box layout collapse visually even though the source assignment itself is valid.
 **Acceptance:**
 
-- WHEN Show fallback is checked THEN a valid plate paints its chosen background across the plate.
+- WHEN Show fallback on air is checked THEN a valid plate paints its chosen background in PGM.
   An empty source exposes the background and a contained source exposes it in the uncovered space.
-- WHEN Show fallback is unchecked in Designer THEN the empty and uncovered regions are transparent.
-  Re-enabling restores the selected Bars, colour or picture.
+- WHEN Show fallback on air is unchecked THEN the empty and uncovered regions in PGM are transparent.
+  The selected Bars, colour or picture remains visible in Designer and PVW, and the choice stays saved.
 - WHEN an author creates a new plate THEN it starts with Bars selected
 - WHEN Bars is selected THEN actual SMPTE Bars are rendered on air and their thumbnail is visible in the Designer picker
 - WHEN a solid colour or picture is selected THEN it becomes the fallback; black is one available colour

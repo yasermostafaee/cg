@@ -1551,7 +1551,7 @@ export const VideoPlaceholderElementSchema = ElementBaseSchema.extend({
    */
   fallbackKind: z.enum(['bars', 'color', 'image']).optional(),
   fallbackColor: HexColorSchema.optional(),
-  /** Whether the authored background paints under the live picture. Defaults to visible. */
+  /** Whether the background paints beneath the live picture on air. Defaults to visible. */
   showFallback: z.boolean().optional(),
   posterAssetId: IdSchema.optional(),
   /**

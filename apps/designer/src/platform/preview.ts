@@ -722,13 +722,13 @@ export class Preview {
               // D-137 §9 — this ONE document serves BOTH authoring surfaces: the
               // editor canvas (authoring=true) and the Preview modal
               // (broadcast=true). Both are 'author': the modal previews what the
-              // AUTHOR is building, not what the exporter will emit, so a Live
-              // Source shows its bars in both and an invisible box in neither.
+              // AUTHOR is building, so a Live Source shows its selected fallback
+              // in both, regardless of the on-air setting.
               // The exports name 'output' at their own boot sites.
               //
               // B-134 — the two surfaces do NOT agree about the editor backdrop, which
               // is why that is its own option below rather than another render-mode
-              // value: the modal needs 'author' (bars) and no backdrop at once.
+              // value: the modal needs 'author' (live fallbacks) and no backdrop at once.
               mode: 'author',
               // B-134 — canvas paints the editor backdrop; the Preview modal does not.
               paintEditorBackdrop: PAINT_EDITOR_BACKDROP,

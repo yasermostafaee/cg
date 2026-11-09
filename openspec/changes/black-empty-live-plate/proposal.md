@@ -5,6 +5,7 @@ A valid source can temporarily carry no picture. Its transparent output makes th
 ## What Changes
 
 - Paint the Designer-selected Bars/solid-colour/picture fallback beneath a valid live plate.
+- Keep the chosen background visible in Designer and PVW. Apply Show fallback on air only in PGM.
 - Use Bars for new plates and legacy plates without a choice. Show a Bars thumbnail in the picker.
 - Keep the fallback on the Bridge-resolved visible fit of the producer.
 - Preserve refusal behavior for invalid/unavailable sources.

@@ -320,9 +320,7 @@ test('D-178 — practice crop Draft and Update survive OFF PVW and ON PVW', asyn
   await expect(page.locator('[data-pan-crop-state="practice-saved"]')).toHaveCount(1);
 });
 
-test('B-424 — PVW shows the authored solid fallback beside Bars and labels Crop edges', async ({
-  app,
-}) => {
+test('B-424 — PVW keeps the authored fallback when on-air fallback is off', async ({ app }) => {
   const date = '2026-11-09T00:00:00.000Z';
   const scene: Scene = {
     schemaVersion: 1,
@@ -358,7 +356,12 @@ test('B-424 — PVW shows the authored solid fallback beside Bars and labels Cro
             rotation: 0,
           },
           ...(index === 0
-            ? { fallbackKind: 'color', fallbackColor: '#21405F', fitMode: 'cover' }
+            ? {
+                fallbackKind: 'color',
+                fallbackColor: '#21405F',
+                fitMode: 'cover',
+                showFallback: false,
+              }
             : { fallbackKind: 'bars' }),
         })),
       },
@@ -390,18 +393,29 @@ test('B-424 — PVW shows the authored solid fallback beside Bars and labels Cro
     fontsCss: '',
     assets: { get: () => Promise.resolve(null), bytes: () => Promise.resolve(null) },
   }).produce(scene);
+  const solidFallback = '[data-cg-live-fallback="el-guest-1"]';
+  const barsFallback = '[data-cg-live-fallback="el-guest-2"]';
+  const air = await page.context().newPage();
+  try {
+    await air.setContent(html);
+    await air.waitForFunction(
+      () => typeof (window as unknown as { play?: unknown }).play === 'function',
+    );
+    await air.evaluate(() => (window as unknown as { play: () => void }).play());
+    await expect(air.locator(barsFallback)).toBeVisible();
+    await expect(air.locator(solidFallback)).toBeHidden();
+  } finally {
+    await air.close();
+  }
   await stubRetainedPage(page, html);
   await rehearseRow(page, layer);
   await pvwTransport(page, 'PLAY').click();
 
   const frame = page.frameLocator('iframe[data-rehearsal-frame]');
-  const solid = frame.locator('[data-cg-live-fallback="el-guest-1"]');
+  const solid = frame.locator(solidFallback);
   await expect(solid).toBeVisible();
   await expect(solid).toHaveCSS('background-color', 'rgb(33, 64, 95)');
-  await expect(frame.locator('[data-cg-live-fallback="el-guest-2"]')).toHaveCSS(
-    'background-image',
-    /linear-gradient/,
-  );
+  await expect(frame.locator(barsFallback)).toHaveCSS('background-image', /linear-gradient/);
   for (const id of Object.keys(HOLES)) {
     await expect(marker(page, id)).toHaveCSS('background-image', 'none');
     await expect(marker(page, id)).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');

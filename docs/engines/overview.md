@@ -222,6 +222,10 @@ For PVW Pan, the console holds normalized focus in the row draft. Inspector Upda
 batch to CG Bridge. Bridge validates each target with the Take seating plan, stores the matching crop
 with the row state and uses it in the first FILL before reveal.
 
+The retained page uses the same output renderer in PVW and PGM. The PVW host frame identifies
+rehearsal without changing the HTML. The renderer shows the chosen Live Source background in
+Designer and that frame, and applies the authored Show fallback on air setting in the programme page.
+
 **Countdown steps (`D-141`, `DELTA-RUN-NEXT-VERSION-01-A` … `-F`) are compiled by the runtime, from
 the scene.** A countdown flips one attribute on its scope root per step crossing; `step-css.ts` turns
 the steps' changes into one stylesheet of inherited custom properties at boot, and `step-effects.ts`

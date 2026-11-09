@@ -184,15 +184,43 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await picker.getByRole('button', { name: 'Solid colour', exact: true }).click();
     await expect(fallback).toHaveCSS('background-color', 'rgb(0, 0, 0)');
     const showFallback = app.inspector.getByRole('checkbox', {
-      name: 'Show fallback',
+      name: 'Show fallback on air',
       exact: true,
     });
     await expect(showFallback).toBeChecked();
     await showFallback.uncheck();
-    await expect(fallback).toHaveCount(0);
+    await expect(fallback).toHaveCSS('background-color', 'rgb(0, 0, 0)');
     await expect(label(app)).toHaveText('guest-1');
     const { html: hiddenFallback } = await app.exportHtml();
     expect(hiddenFallback).toContain('"showFallback":false');
+    const output = await app.page.context().newPage();
+    try {
+      await output.setContent(hiddenFallback);
+      const outputPlate = output.locator('[data-cg-live-source="guest-1"]');
+      await expect(outputPlate).toHaveCount(1);
+      await expect(outputPlate.locator('[data-cg-live-fallback]')).toHaveCount(0);
+    } finally {
+      await output.close();
+    }
+
+    const transport = app.page.getByLabel('Playback transport');
+    const rehearse = transport.getByRole('button', { name: 'Rehearse preview' });
+    await rehearse.click();
+    await transport.getByRole('button', { name: 'Play', exact: true }).click();
+    await expect(fallback).toBeVisible();
+    await expect(fallback).toHaveCSS('background-color', 'rgb(0, 0, 0)');
+    await transport.getByRole('button', { name: 'Stop', exact: true }).click();
+    await rehearse.click();
+
+    await app.openPreviewModal();
+    await app.play();
+    const previewFallback = app.previewFrame.locator('[data-cg-live-fallback]');
+    await expect(previewFallback).toBeVisible();
+    await expect(previewFallback).toHaveCSS('background-color', 'rgb(0, 0, 0)');
+    await app.previewDialog.getByRole('button', { name: 'Close' }).click();
+
+    const [plateId] = await app.timelineRowIds();
+    await app.selectElementById(plateId!);
     await showFallback.check();
     await expect(fallback).toHaveCSS('background-color', 'rgb(0, 0, 0)');
     await app.inspector.getByRole('button', { name: 'fallback', exact: true }).click();
@@ -200,15 +228,6 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await expect
       .poll(() => fallback.evaluate((el) => getComputedStyle(el).backgroundImage))
       .toContain('gradient');
-
-    await app.openPreviewModal();
-    await app.play();
-    const previewFallback = app.previewFrame.locator('[data-cg-live-fallback]');
-    await expect(previewFallback).toHaveCount(1);
-    await expect
-      .poll(() => previewFallback.evaluate((el) => getComputedStyle(el).backgroundImage))
-      .toContain('gradient');
-    await app.previewDialog.getByRole('button', { name: 'Close' }).click();
 
     // EXPORT carries the same fallback choice. The authoring label is drawn only in Preview.
     const { html } = await app.exportHtml();

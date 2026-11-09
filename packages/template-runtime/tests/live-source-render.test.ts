@@ -79,13 +79,34 @@ const fallback = (root: HTMLElement, id = 'live-a'): HTMLElement =>
   node(root, id).querySelector<HTMLElement>('[data-cg-live-fallback]') as HTMLElement;
 
 describe("D-137 — 'author' mode paints the bars", () => {
-  it('R-105 — turning the fallback off keeps the guide and leaves both render passes transparent', () => {
-    const scene = sceneWith([liveSource({ showFallback: false, fallbackKind: 'color' })]);
+  it('R-105 — turning the fallback off affects output while authoring still draws the colour', () => {
+    const scene = sceneWith([
+      liveSource({ showFallback: false, fallbackKind: 'color', fallbackColor: '#21345f' }),
+    ]);
     const author = build(scene, 'author').root;
     const output = build(scene, 'output').root;
     expect(node(author).querySelector('[data-cg-live-source-label]')?.textContent).toBe('guest-1');
-    expect(node(author).querySelector('[data-cg-live-fallback]')).toBeNull();
+    expect(fallback(author).style.background).toBe('#21345f');
     expect(node(output).querySelector('[data-cg-live-fallback]')).toBeNull();
+  });
+
+  it('R-105 — only the marked srcdoc rehearsal draws a disabled output poster', () => {
+    const scene = sceneWith([liveSource({ showFallback: false, posterAssetId: 'poster' })]);
+    const render = (url: string, marked: boolean): HTMLElement => {
+      const window = new Window({ url });
+      const frame = window.document.createElement('iframe');
+      if (marked) frame.setAttribute('data-cg-pvw', '1');
+      Object.defineProperty(window, 'frameElement', { value: frame });
+      return buildScene(scene, window.document as unknown as Document, 'output').container;
+    };
+
+    const preview = render('about:srcdoc', true);
+    expect(fallback(preview).querySelector('img')?.getAttribute('data-cg-asset-id')).toBe('poster');
+    expect(node(preview).querySelector('[data-cg-live-source-label]')).toBeNull();
+    expect(node(render('about:srcdoc', false)).querySelector('[data-cg-live-fallback]')).toBeNull();
+    expect(
+      node(render('http://localhost/template/test', true)).querySelector('[data-cg-live-fallback]'),
+    ).toBeNull();
   });
 
   it('renders SMPTE bars with the id label overlaid', () => {

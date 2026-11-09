@@ -2,8 +2,8 @@
 
 ### Requirement: A valid Live Source plate SHALL show its authored fallback while its upstream has no picture
 
-When Show fallback is enabled, the graphics bed SHALL paint the selected Bars/solid-colour/picture
-behind the entire plate. A valid empty producer exposes the background, and a contained input
+When Show fallback on air is enabled, the graphics bed SHALL paint the selected Bars/solid-colour/picture
+behind the entire plate in PGM. Designer and PVW SHALL display the selected background in either state. A valid empty producer exposes the background, and a contained input
 exposes it in the unfilled part of the plate. Bars SHALL be the default for a new plate and for a
 legacy plate without a fallback or poster. A resumed picture SHALL cover the area it fills without
 a template re-take. An invalid or unavailable source SHALL still be refused before on-air state changes.
@@ -15,9 +15,10 @@ a template re-take. An invalid or unavailable source SHALL still be refused befo
 
 #### Scenario: The author turns off the background
 
-- **WHEN** Show fallback is unchecked in Designer **THEN** the empty and uncovered portions of the
-  plate are transparent in the exported page, with the chosen fallback settings preserved
-- **WHEN** it is checked again **THEN** the previous Bars, colour or picture paints behind the plate
+- **WHEN** Show fallback on air is unchecked **THEN** the empty and uncovered portions of the plate
+  are transparent in PGM
+- **AND** Designer and PVW keep showing the chosen Bars, colour or picture
+- **WHEN** it is checked again **THEN** the previously selected background paints behind the plate in PGM
 
 #### Scenario: A new plate starts with Bars
 

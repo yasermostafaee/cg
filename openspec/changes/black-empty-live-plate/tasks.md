@@ -27,7 +27,7 @@
 - [x] 4.1 Add Show fallback to the shared Designer control and preserve the selected background.
 - [x] 4.2 Let the selected background fill the uncovered region around a contained picture. Leave it
       transparent when disabled and preserve the Bridge's picture FILL/CLIP and input assignments.
-- [x] 4.3 Chromium verified toggling off, transparent export and restoring the chosen colour.
+- [x] 4.3 Chromium verified transparent on-air export when disabled and preservation of the chosen colour.
       All 29 focused template-runtime tests and 22 Designer Inspector tests passed.
 - [x] 4.4 Verify on local CasparCG 2.5.0. Sampled the full fallback before the first frame, the
       uncovered margin, loss and recovery without a new take, and transparent margins with the
@@ -37,3 +37,9 @@
       new producer has no first frame. Local CasparCG can keep the outgoing picture in this case.
 - [x] 4.6 The full pre-push gate and [carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42582556024/job/129044614984)
       passed on `0a553a24`.
+
+## 5. Scope the fallback toggle to PGM
+
+- [x] 5.1 Keep the authored fallback in Designer and PVW with Show fallback on air off.
+- [x] 5.2 Chromium verified Canvas, Rehearse, Preview and the same retained page played in PVW and output.
+- [ ] 5.3 Record carrying Linux E2E and verify on the target station.

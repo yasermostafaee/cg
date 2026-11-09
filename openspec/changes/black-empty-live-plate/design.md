@@ -26,6 +26,9 @@ This changes on-air page pixels and the Bridge control payload, so it still requ
 
 ## PVW
 
-The retained template page supplies the plate's fallback. The PVW marker adds a transparent outline
-and labels. Its border marks assignment state, and its Crop edges label resolves the same per-channel
-override and active-look fit as the Bridge. Older pages with no fallback still show the marker.
+Designer shows the selected background even if Show fallback on air is off. The retained template
+page supplies the plate's fallback in PVW. CG Control identifies its local rehearsal frame so the
+page draws the background there and applies the saved flag in the programme output. PVW retains the
+normal output render mode. A rebuilt retained page adopts the behavior when its source package is
+available. The PVW overlay adds a transparent outline and labels using the per-channel override and
+active-look fit.
