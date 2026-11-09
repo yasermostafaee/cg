@@ -54,6 +54,12 @@ const HOLES = {
   'guest-1': { x: 120, y: 140, width: 640, height: 360 },
   'guest-2': { x: 1000, y: 560, width: 480, height: 270 },
 } as const;
+type PlateRects = Readonly<Record<string, { x: number; y: number; width: number; height: number }>>;
+
+const PAN_HOLES = {
+  portrait: { x: 200, y: 160, width: 350, height: 540 },
+  wide: { x: 720, y: 590, width: 920, height: 260 },
+} as const;
 
 /**
  * A stand-in for the served self-contained page: a full-frame `.cg-stage` with a
@@ -62,8 +68,8 @@ const HOLES = {
  * The boxes paint NOTHING (this is what the real export does), but they are laid
  * out, so `getBoundingClientRect()` reports where the page believes the hole is.
  */
-function pageWithHoles(): string {
-  const boxes = Object.entries(HOLES)
+function pageWithHoles(holes: PlateRects = HOLES): string {
+  const boxes = Object.entries(holes)
     .map(
       ([id, r]) =>
         `<div data-hole="${id}" style="position:absolute;left:${String(r.x)}px;top:${String(r.y)}px;` +
@@ -99,9 +105,13 @@ async function stubRetainedPage(page: Page, html = pageWithHoles()): Promise<voi
 }
 
 /** Register a template declaring the two holes above, as an import would leave it. */
-async function registerTwoBox(page: Page): Promise<void> {
+async function registerTwoBox(
+  page: Page,
+  holes: PlateRects = HOLES,
+  cropEdges = false,
+): Promise<void> {
   await page.evaluate(
-    async ({ templateId, holes }) => {
+    async ({ templateId, holes, cropEdges }) => {
       const w = window as unknown as {
         cg: {
           templates: { import: (req: { template: unknown; html: string }) => Promise<unknown> };
@@ -126,13 +136,14 @@ async function registerTwoBox(page: Page): Promise<void> {
               sourceId,
               rect,
               dynamic: false,
+              ...(cropEdges && { fitMode: 'cover' }),
             })),
           },
         },
         html: '<!doctype html><html><body>two-box</body></html>',
       });
     },
-    { templateId: TWO_BOX, holes: HOLES },
+    { templateId: TWO_BOX, holes, cropEdges },
   );
 }
 
@@ -168,7 +179,7 @@ test.beforeEach(async ({ app }) => {
   await app.showMonitors();
 });
 
-test('D-178 — both monitors show Pan, and idle Preview can practice without selecting an on-air row', async ({
+test('D-178 — both monitors show Pan and Preview requires a visible Crop edges plate', async ({
   app,
 }) => {
   const { page } = app;
@@ -176,39 +187,102 @@ test('D-178 — both monitors show Pan, and idle Preview can practice without se
   await expect(programme).toBeVisible();
   await expect(programme).toBeDisabled();
   await expect(programme).toHaveAttribute('title', 'Select an on-air row to pan its input');
+  const preview = page.getByRole('button', { name: 'Pan preview input', exact: true });
+  await expect(preview).toBeVisible();
+  await expect(preview).toBeDisabled();
+  await expect(preview).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('[data-pan-practice-picture]')).toHaveCount(0);
+
+  await registerTwoBox(page);
+  await stubRetainedPage(page);
+  const layer = await app.loadTemplate(TWO_BOX);
+  await rehearseRow(page, layer);
+  await pvwTransport(page, 'PLAY').click();
+  await expect(marker(page, 'guest-1')).toBeVisible();
+  await expect(preview).toBeDisabled();
+  await expect(page.locator('[data-pan-practice-picture]')).toHaveCount(0);
+});
+
+test('D-178 — practice keeps the full source and each plate aspect across both crop axes', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await registerTwoBox(page, PAN_HOLES, true);
+  await stubRetainedPage(page, pageWithHoles(PAN_HOLES));
+  const layer = await app.loadTemplate(TWO_BOX);
+  await rehearseRow(page, layer);
+  const preview = page.getByRole('button', { name: 'Pan preview input', exact: true });
+  await expect(preview).toBeDisabled();
+  await pvwTransport(page, 'PLAY').click();
+  await expect(preview).toBeEnabled();
+  await preview.click();
+  await expect(preview).toHaveAttribute('aria-pressed', 'true');
+  await expect(preview).toHaveClass(/\bis-on\b/);
   const airCount = page.locator('[data-monitor-air-count]');
   const initialAirCount = await airCount.innerText();
 
-  const preview = page.getByRole('button', { name: 'Pan preview input', exact: true });
-  await expect(preview).toBeVisible();
-  await preview.click();
-  await expect(preview).toHaveAttribute('aria-pressed', 'true');
-  const practice = page.getByRole('button', { name: 'Pan practice image', exact: true });
-  const frame = practice.locator('..');
-  const picture = practice.locator('[data-pan-practice-picture]');
-  const crop = practice.locator('[data-pan-practice-crop]');
-  const transform = () => crop.evaluate((frame) => getComputedStyle(frame).transform);
-  await expect(picture).toHaveCSS('background-size', '100% 100%');
-  const centered = await transform();
-  const plate = await frame.boundingBox();
-  if (plate === null) throw new Error('Missing practice plate');
-  await page.mouse.move(plate.x + plate.width / 2, plate.y + plate.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(plate.x + (plate.width * 5) / 8, plate.y + plate.height / 2);
-  await expect.poll(transform).not.toBe(centered);
-  const intermediate = await transform();
-  await page.mouse.move(plate.x + (plate.width * 3) / 4, plate.y + plate.height / 2);
-  await expect.poll(transform).not.toBe(intermediate);
-  await page.mouse.up();
-  expect(await frame.boundingBox()).toEqual(plate);
-  await expect(airCount).toHaveText(initialAirCount);
-  await page.getByRole('button', { name: 'Center preview crop', exact: true }).click();
-  await expect.poll(transform).toBe(centered);
+  for (const [plateId, axis] of [
+    ['portrait', 'horizontal'],
+    ['wide', 'vertical'],
+  ] as const) {
+    const practice = page.getByRole('button', {
+      name: `Pan practice image in ${plateId}`,
+      exact: true,
+    });
+    const picture = practice.locator('[data-pan-practice-picture]');
+    const crop = practice.locator('[data-pan-practice-crop]');
+    await expect(practice).toHaveAttribute('data-pan-practice-axis', axis);
+    const [plate, full, window] = await Promise.all([
+      marker(page, plateId).boundingBox(),
+      picture.boundingBox(),
+      crop.boundingBox(),
+    ]);
+    if (plate === null || full === null || window === null)
+      throw new Error('Missing practice geometry');
+    expect(await practice.boundingBox()).toEqual(plate);
+    expect(full.width / full.height).toBeCloseTo(16 / 9, 2);
+    expect(window.width / window.height).toBeCloseTo(plate.width / plate.height, 2);
 
+    const x = window.x + window.width / 2;
+    const y = window.y + window.height / 2;
+    const shiftX = axis === 'horizontal' ? (full.width - window.width) / 4 : full.width / 4;
+    const shiftY = axis === 'vertical' ? (full.height - window.height) / 4 : full.height / 4;
+    const activeKey = axis === 'horizontal' ? 'x' : 'y';
+    const fixedKey = axis === 'horizontal' ? 'y' : 'x';
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + shiftX, y + shiftY);
+    await expect
+      .poll(async () => (await crop.boundingBox())?.[activeKey])
+      .toBeGreaterThan(window[activeKey] + 1);
+    await page.mouse.up();
+    const moved = await crop.boundingBox();
+    expect(moved?.[fixedKey]).toBeCloseTo(window[fixedKey], 2);
+    expect(moved?.width).toBeCloseTo(window.width, 2);
+    expect(moved?.height).toBeCloseTo(window.height, 2);
+    expect(await picture.boundingBox()).toEqual(full);
+
+    await practice
+      .locator('..')
+      .getByRole('button', { name: 'Center preview crop', exact: true })
+      .click();
+    await expect
+      .poll(async () => (await crop.boundingBox())?.[activeKey])
+      .toBeCloseTo(window[activeKey], 2);
+  }
+  await expect(airCount).toHaveText(initialAirCount);
   await preview.click();
-  await expect(practice).toHaveCount(0);
+  await expect(preview).toHaveAttribute('aria-pressed', 'false');
+  await expect(preview).not.toHaveClass(/\bis-on\b/);
+  await expect(page.locator('[data-pan-practice-picture]')).toHaveCount(0);
   await preview.click();
-  await expect.poll(transform).toBe(centered);
+  await pvwTransport(page, 'STOP').click();
+  await expect(preview).toBeDisabled();
+  await expect(page.locator('[data-pan-practice-picture]')).toHaveCount(0);
+  await pvwTransport(page, 'PLAY').click();
+  await expect(preview).toBeEnabled();
+  await expect(preview).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('B-424 — PVW shows the authored solid fallback beside Bars and labels Crop edges', async ({

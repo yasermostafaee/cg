@@ -187,12 +187,12 @@
       },
       "features": [
         {
-          "fa": "ابزار Pan در هدر PVW و PGM دیده می‌شود. در PVW می‌توان رفتار درگ را با تصویر تمرینی داخل قاب آزمایش کرد.",
-          "en": "Pan is visible in both monitor headers. PVW offers a practice picture inside the plate for trying the drag gesture."
+          "fa": "دکمهٔ Pan در PVW و PGM هنگام فعال بودن روشن می‌ماند. تمرین PVW فقط روی قاب قابل‌مشاهدهٔ دارای Crop edges فعال است.",
+          "en": "The Pan toggle stays highlighted while active in PVW and PGM. PVW practice is available on a visible Crop edges plate."
         },
         {
-          "fa": "در ابزار Pan، محدودهٔ کراپ همراه ماوس حرکت می‌کند و با Center به وسط برمی‌گردد. نقشهٔ دقیق PGM با Bridge به‌روز در دسترس است.",
-          "en": "Pan moves the crop guide with the pointer and offers Center. The accurate PGM crop map uses geometry from the updated Bridge."
+          "fa": "کادر برش در ابزار Pan با توجه به نسبت تصویر منبع و قاب، افقی یا عمودی حرکت می‌کند و با Center به وسط برمی‌گردد. نقشهٔ دقیق برش PGM با Bridge به‌روز در دسترس است.",
+          "en": "Pan moves the crop guide horizontally or vertically, depending on the source and plate aspect ratios. Center restores the middle of the crop. The accurate PGM crop map uses geometry from the updated Bridge."
         },
         {
           "fa": "بررسی تصویر و شنود یک ورودی زنده در Look inputs، پنجرهٔ تغییر ورودی قاب و بخش Live sources تنظیمات در دسترس است.",
@@ -203,7 +203,12 @@
           "en": "Move a mask rectangle directly in Designer or drag a corner to resize it."
         }
       ],
-      "fixes": [],
+      "fixes": [
+        {
+          "fa": "Pan با دکمه‌های هدر مانیتور هم‌پوشانی ندارد و گزینه‌های لایه و Inspector در حالت ماکزیمم دیده می‌شوند.",
+          "en": "Pan no longer overlaps monitor header controls. Layer and Inspector controls stay visible on a maximized monitor."
+        }
+      ],
       "planned": [
         {
           "fa": "روی خروجی PGM ایستگاه Playout، نمایش عنوان و شکل روی قاب، حفظ اتصال ورودی هنگام تغییر پریست، ماسک و Revert، جابه‌جایی تصویر با درگ و پس‌زمینهٔ قاب بررسی شوند.",

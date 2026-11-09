@@ -39,10 +39,12 @@ current on-air plate.
 #### Scenario: The Pan controls are discoverable before an input can be edited
 
 - **WHEN** the operator opens the monitors **THEN** both headers show Pan
+- **WHEN** the operator enables or closes Pan **THEN** its pressed appearance follows the active tool state
 - **WHEN** PGM has no selected on-air row or the active engine's return is unavailable **THEN**
   its Pan action is disabled and no Bridge edit is requested
-- **WHEN** the operator opens Pan in PVW **THEN** a clearly labelled practice image can be dragged
-  inside the existing Crop edges plate's footprint, or inside a sample plate when none is present
+- **WHEN** the operator opens Pan in PVW with a visible Crop edges plate **THEN** a clearly labelled
+  practice image can be dragged inside that plate's footprint
+- **WHEN** the preset has no visible Crop edges plate **THEN** no practice plate appears
 - **WHEN** the practice image moves or the operator closes it **THEN** the authored plate, source,
   staged focus and programme output stay as they were
 
@@ -53,3 +55,10 @@ current on-air plate.
 - **WHEN** the operator drags the guide **THEN** it follows the pointer locally and the console sends at most one scoped PGM crop command on release
 - **WHEN** the operator presses `Center` **THEN** the supported axes return to the centred crop, with the same plate, clip, source and sound
 - **WHEN** source pixels outside the programme clip are unavailable **THEN** the map identifies itself as geometry
+
+#### Scenario: Source and plate have different ratios
+
+- **WHEN** a 4:3 source is cropped into a 16:9 plate **THEN** the crop uses the source width and can move vertically
+- **WHEN** a wider source is cropped into a narrower plate **THEN** the crop uses the source height and can move horizontally
+- **THEN** the source and crop guide keep their respective ratios throughout the gesture
+- **WHEN** both ratios match **THEN** the whole image is visible and there is no panning range

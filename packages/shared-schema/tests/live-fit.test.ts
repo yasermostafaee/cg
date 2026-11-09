@@ -97,6 +97,18 @@ describe('C-028 — fitPictureToBox: the ONE fit', () => {
       expectRect(right.visible, BOX);
     });
 
+    it('D-178 — a 16:9 crop on a 4:3 source pans vertically without stretching', () => {
+      const box = { x: 0, y: 0, width: 16, height: 9 };
+      const sourceAspect = 4 / 3;
+      const initial = fitPictureToBox(box, sourceAspect, 'cover');
+      expectRect(initial.picture, { x: 0, y: -1.5, width: 16, height: 12 });
+      const focus = liveCropFocusAfterShift(box, initial.picture, { x: 9, y: -1.5 });
+      const moved = fitPictureToBox(box, sourceAspect, 'cover', focus);
+      expectRect(moved.picture, { x: 0, y: -3, width: 16, height: 12 });
+      expectRect(moved.visible, box);
+      close(moved.visible.height / moved.picture.height, 0.75);
+    });
+
     it('D-178 — absent focus is byte-identical to explicit centre', () => {
       expect(fitPictureToBox(BOX, WIDE, 'cover')).toEqual(
         fitPictureToBox(BOX, WIDE, 'cover', { x: 0.5, y: 0.5 }),

@@ -6042,13 +6042,16 @@ Existing saved focus values remain readable. Absent focus centres a cover crop.
 
 **Implementation:** PGM pans through the scoped Bridge command and existing FILL/CLIP geometry.
 Both monitor headers expose Pan even when a programme edit is unavailable. PVW offers a labelled
-practice image for reviewing the gesture. It uses the visible Crop edges plate's footprint when
-available and a sample when idle. Practice movement stays in the browser and is discarded on close.
+practice image for reviewing the gesture on a visible Crop edges plate. A preset without a
+visible Crop edges plate shows no practice image. Practice movement stays in the browser and
+is discarded on close.
 
 **Crop workspace:** show the whole practice source in PVW and a proportional source map in PGM.
 Outline the portion shown by the plate, move the outline continuously during a drag and offer
 Centre. PGM applies the selected position on release through the existing scoped Bridge operation.
 The exact PGM map and Centre require current geometry from Bridge.
+The source image and crop window retain their own aspect ratios. A 16:9 crop on a 4:3 source
+uses the source width and moves vertically. Sources matching the plate ratio use the full picture.
 
 **Remaining dependency:** The C-023 check supplies a single live input preview, and Playout must
 identify its active picture rectangle and pixel aspect ratio before PVW can stage accurate focus.

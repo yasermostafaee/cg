@@ -377,9 +377,10 @@ export function MonitorPanel({
         <>
           <Button
             variant="ghost"
+            active={activeCrop !== null}
             aria-label="Pan live input"
             aria-pressed={activeCrop !== null}
-            data-toggle-on={activeCrop !== null ? '' : undefined}
+            data-monitor-pan=""
             disabled={cropKey === null}
             title={
               cropItemId === null

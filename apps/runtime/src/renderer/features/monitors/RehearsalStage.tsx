@@ -263,11 +263,14 @@ interface Props {
    * Publishes the local transport upward so a persistent controls row can drive it, and
    * `null` on unmount so that row can disable itself rather than hold a stale handle.
    */
-  onTransport?:
-    | ((
-        t: { drive: (v: 'play' | 'next' | 'stop') => void; ready: boolean; count: number } | null,
-      ) => void)
-    | undefined;
+  onTransport?: ((transport: RehearsalTransport | null) => void) | undefined;
+}
+
+export interface RehearsalTransport {
+  drive: (verb: 'play' | 'next' | 'stop') => void;
+  ready: boolean;
+  count: number;
+  panAvailable: boolean;
 }
 
 const REHEARSAL_CAVEATS =
@@ -410,7 +413,17 @@ export function RehearsalStage({
     [renderable, raster],
   );
   const showLiveSourceNote = playing && anyRegionTooSmallForCaveat(placements, fit);
-  const practicePlates = panPractice ? placements.filter((plate) => plate.cropEdges === true) : [];
+  const practicePlates = placements.filter(
+    (plate) =>
+      plate.cropEdges === true &&
+      plate.width > 0 &&
+      plate.height > 0 &&
+      plate.x < raster.width &&
+      plate.y < raster.height &&
+      plate.x + plate.width > 0 &&
+      plate.y + plate.height > 0,
+  );
+  const panAvailable = playing && practicePlates.length > 0;
 
   // The FIT scale — preview only. Measured rather than assumed, so the rehearsal
   // stays whole at any panel width, including mid divider-drag.
@@ -478,11 +491,11 @@ export function RehearsalStage({
     out a closure over the ref, not the ref.
   */
   useEffect(() => {
-    onTransport?.({ drive: driveAll, ready: allReady, count: renderable.length });
+    onTransport?.({ drive: driveAll, ready: allReady, count: renderable.length, panAvailable });
     return () => {
       onTransport?.(null);
     };
-  }, [onTransport, driveAll, allReady, renderable.length]);
+  }, [onTransport, driveAll, allReady, renderable.length, panAvailable]);
 
   if (renderable.length === 0) {
     // Nothing to draw: the one line per row that has no page, or — while the pages are still being
@@ -490,7 +503,6 @@ export function RehearsalStage({
     return (
       <div style={styles.missing} data-pvw-no-page>
         {missingLines}
-        {panPractice && <PreviewPanDraft />}
       </div>
     );
   }
@@ -570,32 +582,31 @@ export function RehearsalStage({
             zIndex={overlayZIndex(renderable.length)}
           />
         )}
-        {panPractice &&
-          (practicePlates.length === 0 ? (
-            <div className="cg-pan-draft-sample-layer">
-              <PreviewPanDraft />
-            </div>
-          ) : (
-            <div
-              className="cg-pan-draft-layer"
-              style={{ ...frameBox(raster, fit), zIndex: overlayZIndex(renderable.length) + 1 }}
-            >
-              {practicePlates.map((plate) => (
-                <div
-                  key={plate.elementId}
-                  style={{
-                    position: 'absolute',
-                    left: plate.x,
-                    top: plate.y,
-                    width: plate.width,
-                    height: plate.height,
-                  }}
-                >
-                  <PreviewPanDraft plateId={plate.plateId} />
-                </div>
-              ))}
-            </div>
-          ))}
+        {panPractice && panAvailable && (
+          <div
+            className="cg-pan-draft-layer"
+            style={{ ...frameBox(raster, fit), zIndex: overlayZIndex(renderable.length) + 1 }}
+          >
+            {practicePlates.map((plate) => (
+              <div
+                key={plate.elementId}
+                style={{
+                  position: 'absolute',
+                  left: plate.x,
+                  top: plate.y,
+                  width: plate.width,
+                  height: plate.height,
+                }}
+              >
+                <PreviewPanDraft
+                  plateId={plate.plateId}
+                  width={plate.width}
+                  height={plate.height}
+                />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </>
   );

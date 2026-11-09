@@ -350,6 +350,7 @@
   padding: var(--r-monitor-head-pad);
   gap: var(--r-monitor-head-gap);
   background: var(--r-monitor-head-bg);
+  flex-wrap: wrap;
 }
 .cg-panel-header.cg-panel-header--monitor .cg-btn {
   min-height: var(--r-monitor-head-btn);
@@ -358,6 +359,22 @@
   min-width: var(--r-monitor-head-btn);
   padding: var(--r-monitor-head-btn-pad);
   border-radius: var(--r-monitor-head-btn-radius);
+}
+.cg-panel-header.cg-panel-header--monitor .cg-btn[data-monitor-pan] {
+  width: auto;
+  padding-inline: var(--r-space-2);
+  white-space: nowrap;
+}
+.cg-panel-header--monitor .cg-panel-actions {
+  max-width: 100%;
+  margin-inline-start: auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.cg-panel-header--monitor [data-monitor-companion-controls] {
+  display: flex;
+  align-items: center;
+  gap: var(--r-space-1);
 }
 
 /* ── 🔴 CONSOLE-MATCH-03 §1 — THE MONITOR HEADS ─────────────────────────────
@@ -417,6 +434,7 @@
   align-items: center;
   gap: var(--r-space-2);
   min-width: 0;
+  flex-wrap: wrap;
 }
 /* The head's neutral facts — `Output unknown`, the playlist's state — in the reference's `.tag`. */
 .cg-setup-tag.cg-monitor-tag {
@@ -472,27 +490,13 @@
 }
 
 /* D-178 · show the full practice source behind its movable crop. */
-.cg-pan-draft-layer,
-.cg-pan-draft-sample-layer {
+.cg-pan-draft-layer {
   pointer-events: none;
-}
-.cg-pan-draft-sample-layer {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  z-index: 61;
 }
 .cg-pan-draft {
   position: relative;
   width: 100%;
   height: 100%;
-}
-.cg-pan-draft--sample {
-  width: min(16rem, 66%);
-  height: min(8rem, 100%);
-  flex: 0 1 auto;
-  min-height: 0;
 }
 .cg-pan-draft .cg-pan-draft__handle {
   position: relative;
@@ -502,20 +506,26 @@
   padding: 0;
   overflow: hidden;
   isolation: isolate;
-  border-color: var(--r-accent);
-  cursor: ew-resize;
+  border: 0;
+  box-shadow: inset 0 0 0 1px var(--r-accent);
   touch-action: none;
   pointer-events: auto;
 }
+.cg-pan-draft__handle[data-pan-practice-axis='horizontal'] {
+  cursor: ew-resize;
+}
+.cg-pan-draft__handle[data-pan-practice-axis='vertical'] {
+  cursor: ns-resize;
+}
 .cg-pan-draft__picture {
   position: absolute;
-  inset: 0;
   z-index: -1;
+  overflow: hidden;
   background-size: 100% 100%;
 }
 .cg-pan-draft__crop {
   position: absolute;
-  inset: 0 auto 0 0;
+  box-sizing: border-box;
   border: 2px solid var(--r-accent);
   box-shadow: 0 0 0 100vmax rgb(0 0 0 / 55%);
   pointer-events: none;

@@ -48,3 +48,14 @@
       Focused shared-schema, IPC, Bridge and Chromium checks passed.
 - [ ] 4.4 Show the actual uncropped live source in PGM once Playout exposes it safely.
 - [ ] 4.5 Record carrying Linux E2E and verify the overview on the station's updated Bridge.
+
+## 5. Aspect and eligibility review
+
+- [x] 5.1 Disable the PVW practice action when the current picture has no visible Crop edges plate.
+- [x] 5.2 Keep the full practice source proportional and move the plate-shaped crop only along
+      the overflowing axis. Focused Chromium cases passed for wide and portrait plates, and
+      the shared fit test passed for a 4:3 source in a 16:9 plate.
+- [x] 5.3 Show an accent-filled, pressed Pan toggle in both monitor headers while editing.
+- [x] 5.4 Verify vertical PGM dragging on the return and crop map with a 4:3 source in a 16:9
+      plate. Chromium and Bridge tests passed, including edge clamping, Center, and unchanged
+      horizontal placement, clip and volume.

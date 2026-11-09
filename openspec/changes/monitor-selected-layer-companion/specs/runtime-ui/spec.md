@@ -4,7 +4,8 @@
 
 When PROGRAM or PREVIEW is maximized with a selected layer, CG Control SHALL offer monitor-only,
 selected-layer and selected-layer-plus-Inspector layouts. Layout changes SHALL preserve the selection.
-No companion choice or empty companion surface SHALL appear without a selected layer.
+Without a selected layer the companion layout controls SHALL remain visible and disabled.
+The monitor SHALL retain all available space.
 The selected layer and Inspector SHALL occupy allocated layout space and SHALL NOT overlay or obscure
 the maximized monitor picture.
 
@@ -25,8 +26,8 @@ the maximized monitor picture.
 
 #### Scenario: No layer is selected
 
-- **WHEN** a monitor is maximized without a selected layer **THEN** the companion controls and
-  companion surfaces are absent
+- **WHEN** a monitor is maximized without a selected layer **THEN** the layer and Inspector controls
+  are visible and disabled and no companion panel opens
 
 #### Scenario: Companions are visible at wide and narrow widths
 
@@ -42,3 +43,8 @@ the maximized monitor picture.
 - **THEN** the app header and status footer are hidden, while the panel's own controls and
   applicable alerts remain available
 - **AND** exiting the maximized panel restores both bars
+
+#### Scenario: Narrow monitor headers keep each action accessible
+
+- **WHEN** the monitor header is narrow and Pan and companion layout controls are present
+- **THEN** each control has its own visible hitbox

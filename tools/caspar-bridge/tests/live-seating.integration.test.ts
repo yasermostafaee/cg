@@ -512,6 +512,49 @@ it('D-178 — PGM map geometry uses the output raster instead of the template as
   });
 });
 
+it('D-178 — a 4:3 source in a wide PGM plate pans vertically and stops at either edge', async () => {
+  const box = { x: 0.25, y: 0.25, width: 0.5, height: 0.5 };
+  const r = await boot({
+    template: template([{ id: 'guest-1', rect: BOX, fitMode: 'cover' }]),
+    catalog: catalog({
+      sources: [
+        { id: 'src-a', name: '4:3 source', format: 'PAL', producer: { kind: 'route', channel: 2 } },
+      ],
+    }),
+  });
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  const initial = (await r.pgmPlateCrop('item-1')).targets[0]!;
+  expect(initial).toMatchObject({
+    horizontal: false,
+    vertical: true,
+    areas: [box],
+    geometry: { box, sourceAspect: 4 / 3 },
+  });
+  expect(initial.geometry?.picture.y).toBeCloseTo(1 / 6, 8);
+
+  const before = (await recvLines()).length;
+  const down = await r.pgmPlateCrop('item-1', { token: initial.token, dx: 0.3, dy: 0.2 });
+  expect(down.ok).toBe(true);
+  expect(down.targets[0]?.geometry?.picture.y).toBeCloseTo(0.25, 8);
+  const up = await r.pgmPlateCrop('item-1', { token: down.targets[0]!.token, dx: -0.3, dy: -0.3 });
+  expect(up.ok).toBe(true);
+  expect(up.targets[0]?.geometry?.picture.y).toBeCloseTo(1 / 12, 8);
+
+  const center = await r.pgmPlateCrop('item-1', { token: up.targets[0]!.token, center: true });
+  expect(center).toMatchObject({ ok: true, targets: [{ geometry: initial.geometry }] });
+  expect((await recvLines()).slice(before)).toEqual([
+    'MIXER 1-30 FILL 0.25 0.25 0.5 0.666667 DEFER',
+    'MIXER 1-30 CLIP 0.25 0.25 0.5 0.5 DEFER',
+    'MIXER 1 COMMIT',
+    'MIXER 1-30 FILL 0.25 0.083333 0.5 0.666667 DEFER',
+    'MIXER 1-30 CLIP 0.25 0.25 0.5 0.5 DEFER',
+    'MIXER 1 COMMIT',
+    'MIXER 1-30 FILL 0.25 0.166667 0.5 0.666667 DEFER',
+    'MIXER 1-30 CLIP 0.25 0.25 0.5 0.5 DEFER',
+    'MIXER 1 COMMIT',
+  ]);
+});
+
 it('D-202 — multiple reveals are refused atomically when only one extra seat fits', async () => {
   const r = await boot({
     template: template([

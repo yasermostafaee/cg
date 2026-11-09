@@ -78,7 +78,10 @@ async function startFeed(): Promise<FakePgmFeed> {
  * A real bridge (auth off: the relay reads server A's host) and the console on its own origin,
  * served with no relay — the picture can only come from the bridge's control port.
  */
-async function startStation(enginePorts?: { amcpPort: number; oscPort: number }): Promise<string> {
+async function startStation(
+  enginePorts?: { amcpPort: number; oscPort: number },
+  sourceFormat: 'PAL' | '1080i5000' = '1080i5000',
+): Promise<string> {
   bridge = await createBridge({
     port: 0,
     connection: {
@@ -95,7 +98,7 @@ async function startStation(enginePorts?: { amcpPort: number; oscPort: number })
           {
             id: 'input-2',
             name: 'Input 2',
-            format: '1080i5000',
+            format: sourceFormat,
             producer: { kind: 'route' as const, channel: 2 },
           },
         ],
@@ -248,9 +251,8 @@ test.describe('C-016 — the PROGRAM monitor shows the programme return', () => 
     await expect.poll(() => f.openCount(), { timeout: 6000 }).toBe(0);
   });
 
-  test('D-178 — dragging the picture on PGM pans only the selected cover input', async ({
-    page,
-  }) => {
+  async function openPanFixture(page: Page, axis: 'horizontal' | 'vertical'): Promise<MockHandle> {
+    const vertical = axis === 'vertical';
     await startFeed();
     const oscPort = await new Promise<number>((resolve, reject) => {
       const socket = createSocket('udp4');
@@ -268,7 +270,10 @@ test.describe('C-016 — the PROGRAM monitor shows the programme return', () => 
       channels: 2,
       oscHz: 20,
     });
-    const url = await startStation({ amcpPort: engine.amcpPort, oscPort });
+    const url = await startStation(
+      { amcpPort: engine.amcpPort, oscPort },
+      vertical ? 'PAL' : '1080i5000',
+    );
     const runtime = (bridge as BridgeHandle | null)?.runtime;
     if (runtime === undefined) throw new Error('Station did not start');
     await runtime.whenServerHealthy(15_000);
@@ -287,7 +292,9 @@ test.describe('C-016 — the PROGRAM monitor shows the programme return', () => 
               sourceId: 'plate-1',
               dynamic: false,
               fitMode: 'cover',
-              rect: { x: 720, y: 270, width: 480, height: 540 },
+              rect: vertical
+                ? { x: 480, y: 270, width: 960, height: 540 }
+                : { x: 720, y: 270, width: 480, height: 540 },
             },
           ],
         },
@@ -302,11 +309,31 @@ test.describe('C-016 — the PROGRAM monitor shows the programme return', () => 
     await page.getByRole('region', { name: 'Layers' }).locator('[data-layer="59"]').click();
     await page.getByRole('button', { name: 'Show monitors' }).click();
     await expect(strip(page)).toHaveAttribute('data-pgm-signal', 'live', { timeout: 10_000 });
-    await page.getByRole('button', { name: 'Pan live input' }).click();
+    return engine;
+  }
+
+  test('D-178 — dragging the picture on PGM pans only the selected cover input', async ({
+    page,
+  }) => {
+    const engine = await openPanFixture(page, 'horizontal');
+    const pan = page.getByRole('button', { name: 'Pan live input' });
+    await expect(pan).not.toHaveClass(/\bis-on\b/);
+    await pan.click();
+    await expect(pan).toHaveAttribute('aria-pressed', 'true');
+    await expect(pan).toHaveClass(/\bis-on\b/);
+    await page.mouse.move(0, 0);
+    await expect(pan).toHaveCSS(
+      'background-color',
+      await pan.evaluate((element) => {
+        const probe = document.createElement('span');
+        probe.style.color = 'var(--r-accent)';
+        element.append(probe);
+        const accent = getComputedStyle(probe).color;
+        probe.remove();
+        return accent;
+      }),
+    );
     const hit = page.getByRole('button', { name: 'Pan Plate 1', exact: true });
-    await expect(hit).toBeVisible();
-    const box = await hit.boundingBox();
-    if (box === null) throw new Error('Crop target has no screen bounds');
     const slot = { channel: 1, layer: 60 };
     const before = engine.layerState(slot);
     expect(before?.fill?.x).toBeCloseTo(0.25);
@@ -315,7 +342,9 @@ test.describe('C-016 — the PROGRAM monitor shows the programme return', () => 
     const sourceX = () => cropWindow.evaluate((element) => Number.parseFloat(element.style.left));
     await expect(cropMap).toHaveAttribute('data-pgm-crop-map', 'current');
     expect(await sourceX()).toBeCloseTo(25);
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await hit.hover();
+    const box = await hit.boundingBox();
+    if (box === null) throw new Error('Crop target has no screen bounds');
     await page.mouse.down();
     await page.mouse.move(box.x + box.width * 0.7, box.y + box.height / 2, { steps: 5 });
     await expect(cropMap).toHaveAttribute('data-pgm-crop-map', 'draft');
@@ -330,9 +359,12 @@ test.describe('C-016 — the PROGRAM monitor shows the programme return', () => 
     await expect.poll(sourceX).toBeCloseTo(25);
 
     const cropHandle = page.getByRole('button', { name: 'Move crop window for Plate 1' });
+    await cropHandle.hover();
     const mapBox = await cropMap.boundingBox();
     const handleBox = await cropHandle.boundingBox();
     if (mapBox === null || handleBox === null) throw new Error('Missing draggable crop map');
+    expect(mapBox.width / mapBox.height).toBeCloseTo(16 / 9, 1);
+    expect(handleBox.width / handleBox.height).toBeCloseTo(480 / 540, 1);
     const centerX = handleBox.x + handleBox.width / 2;
     const centerY = handleBox.y + handleBox.height / 2;
     await page.mouse.move(centerX, centerY);
@@ -348,5 +380,67 @@ test.describe('C-016 — the PROGRAM monitor shows the programme return', () => 
 
     expect(engine.layerState(slot)?.clip).toEqual(before?.clip);
     expect(engine.layerState(slot)?.volume).toBe(before?.volume);
+    await pan.click();
+    await expect(pan).toHaveAttribute('aria-pressed', 'false');
+    await expect(pan).not.toHaveClass(/\bis-on\b/);
+    await expect(cropMap).toHaveCount(0);
+  });
+
+  test('D-178 — a 4:3 PGM input can pan vertically in a 16:9 plate', async ({ page }) => {
+    const engine = await openPanFixture(page, 'vertical');
+    const slot = { channel: 1, layer: 60 };
+    const before = engine.layerState(slot);
+    expect(before?.fill?.y).toBeCloseTo(1 / 6);
+
+    await page.getByRole('button', { name: 'Pan live input' }).click();
+    const hit = page.getByRole('button', { name: 'Pan Plate 1', exact: true });
+    const cropMap = page.locator('[data-pgm-crop-map]');
+    const cropHandle = page.getByRole('button', { name: 'Move crop window for Plate 1' });
+    const sourceY = () =>
+      cropMap.locator('[data-pgm-crop-window]').evaluate((el) => Number.parseFloat(el.style.top));
+    await expect(cropHandle).toHaveAttribute('data-crop-axis', 'vertical');
+    await expect(hit).toHaveCSS('cursor', 'ns-resize');
+    await expect.poll(sourceY).toBeCloseTo(12.5);
+    await hit.hover();
+    const box = await hit.boundingBox();
+    if (box === null) throw new Error('Crop target has no screen bounds');
+    const x = box.x + box.width * 0.65;
+    await page.mouse.down();
+    await page.mouse.move(x, box.y + box.height * 0.5);
+    await expect(cropMap).toHaveAttribute('data-pgm-crop-map', 'current');
+    await page.mouse.move(x, box.y + box.height * 0.6, { steps: 5 });
+    await expect(cropMap).toHaveAttribute('data-pgm-crop-map', 'draft');
+    await expect.poll(sourceY).toBeCloseTo(5, 0);
+    expect(engine.layerState(slot)).toEqual(before);
+    await page.mouse.up();
+    await expect.poll(() => engine.layerState(slot)?.fill?.y).toBeCloseTo(1 / 6 + 0.05, 2);
+    await expect(cropMap).toHaveAttribute('data-pgm-crop-map', 'current');
+
+    await page.getByRole('button', { name: 'Center crop for Plate 1' }).click();
+    await expect.poll(sourceY).toBeCloseTo(12.5);
+    await cropHandle.hover();
+    const mapBox = await cropMap.boundingBox();
+    const handleBox = await cropHandle.boundingBox();
+    if (mapBox === null || handleBox === null) throw new Error('Missing draggable crop map');
+    expect(mapBox.width / mapBox.height).toBeCloseTo(4 / 3, 1);
+    expect(handleBox.width / handleBox.height).toBeCloseTo(16 / 9, 1);
+    await page.mouse.down();
+    await page.mouse.move(
+      handleBox.x + handleBox.width / 2,
+      handleBox.y + handleBox.height / 2 + mapBox.height * 0.06,
+      { steps: 5 },
+    );
+    await expect(cropMap).toHaveAttribute('data-pgm-crop-map', 'draft');
+    await expect.poll(sourceY).toBeCloseTo(18.5, 0);
+    await page.mouse.up();
+    await expect.poll(() => engine.layerState(slot)?.fill?.y).toBeCloseTo(1 / 6 - 0.04, 2);
+    const after = engine.layerState(slot);
+    expect(after?.fill).toMatchObject({
+      x: before?.fill?.x,
+      width: before?.fill?.width,
+      height: before?.fill?.height,
+    });
+    expect(after?.clip).toEqual(before?.clip);
+    expect(after?.volume).toBe(before?.volume);
   });
 });

@@ -4959,13 +4959,14 @@ anti-interference rule prevents.
 offers three session-only layouts: monitor only, monitor plus the selected layer, or monitor plus the
 selected layer and its Inspector. The compact layer companion shows only the selected row. Switching
 between these layouts never clears the selection, and clicking that already-selected compact row does
-not toggle it off. With no selected layer, no companion controls or empty companion surface appear.
+not toggle it off. With no selected layer the companion icons stay visible and disabled. The
+monitor retains all available space.
 **Why:** Operators need the larger confidence-monitor picture without losing the row state and fields
 they are actively checking; fullscreen should change presentation, not silently change editing context.
 **Acceptance:**
 
-- WHEN PGM or PVW is maximized with no selected layer THEN it remains monitor-only and offers no
-  layer/Inspector companion choices
+- WHEN PGM or PVW is maximized with no selected layer THEN it remains monitor-only, with the
+  layer and Inspector icons visible and disabled
 - WHEN a layer is already selected THEN the maximized monitor offers monitor-only, selected-layer and
   selected-layer-plus-Inspector layouts, defaulting to monitor-only
 - WHEN the operator switches to monitor-only and later restores either companion layout THEN the same
@@ -4978,6 +4979,7 @@ they are actively checking; fullscreen should change presentation, not silently 
 - WHEN the Inspector is included THEN its separate right column spans the workspace height
 - WHEN any panel is maximized THEN hide the app header and status footer, keep the panel's own
   controls and applicable alerts, and restore the bars on exit
+- WHEN the monitor header is narrow THEN Pan and the layout controls retain distinct hitboxes
 
 ## [~] R-112 — Distinguish Live layouts in the Layers table ⟨priority: medium — the owner, 2026-11-09⟩ — `openspec/changes/distinguish-live-layout-rows/`
 

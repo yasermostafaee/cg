@@ -38,10 +38,10 @@ Both headers keep Pan visible. PGM disables its action without a selected on-air
 return from the active engine. It continues to obtain eligible plates and apply focus through the
 existing scoped Bridge operation.
 
-The PVW action opens a practice-only picture made of colour bars. If a rehearsing template has
-Crop edges plates, each practice target follows its existing raster footprint. Otherwise a sample
-plate is available. The whole practice picture stays visible behind the shaded crop guide. Drag
-or arrow keys move the guide, and Centre restores its starting position. The practice state
+The PVW action opens a practice-only picture on a visible Crop edges plate. A preset with no
+such plate has no practice surface. The whole practice source retains its aspect ratio within
+the available footprint. The shaded crop guide has the authored plate ratio. Drag or arrow keys
+move it along the overflowing axis, and Center restores its starting position. The practice state
 belongs to the rendered control and is discarded when it closes. It starts no input check, performs
 no Bridge writes and cannot become an Inspector draft or reach Take. The real PVW gesture still
 requires the active source rectangle and sample aspect ratio from Playout.
@@ -58,3 +58,7 @@ An older Bridge can still receive relative drags through the existing path.
 The PGM return cannot supply pixels outside the on-air clip. The overview explicitly presents
 geometry until the Playout supplies an authenticated read of the already-open source before
 FILL, CLIP and the final programme mix. The browser never opens or routes that producer.
+
+The source and box use a shared raster when deriving the crop. A wider source overflows
+horizontally. A narrower source overflows vertically. A matching aspect uses the whole picture
+even when the source raster has fewer pixels than the plate.

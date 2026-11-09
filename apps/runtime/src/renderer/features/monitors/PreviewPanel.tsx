@@ -36,8 +36,7 @@ import {
   sourcesVersion,
   subscribeSources,
 } from '../sources/sourceStore.js';
-import { RehearsalStage } from './RehearsalStage.js';
-import { PreviewPanDraft } from './PreviewPanDraft.js';
+import { RehearsalStage, type RehearsalTransport } from './RehearsalStage.js';
 import { templateName } from '../../ui/operatorNaming.js';
 import type { PvwPage } from '../../../shared/pvwPage.js';
 import { rowNameFor, subjectsFor, type RehearsalSubject } from './rehearsalFrames.js';
@@ -130,7 +129,6 @@ export function PreviewPanel({ companionActions }: { companionActions?: ReactNod
   // `MULTI-CHANNEL-01` — the SELECTED channel's bank: PREVIEW is the channel on screen.
   const { bank, viewChannel } = useChannelBankState();
   const [panChannel, setPanChannel] = useState<number | null | undefined>(undefined);
-  const panPractice = panChannel === viewChannel;
   const slots = useFixedSlots();
   // `RELEASE-091-01` §1 — each rehearsing row's page: the bridge's first, this browser's copy only
   // when the bridge cannot be reached, or why there is none (`templates.page`).
@@ -399,11 +397,12 @@ export function PreviewPanel({ companionActions }: { companionActions?: ReactNod
     `transport` is `null` whenever no stage is mounted — nothing rehearsing, or no local page
     for what is — and the three buttons read that as "disabled" rather than as an error.
   */
-  const [transport, setTransport] = useState<{
-    drive: (v: 'play' | 'next' | 'stop') => void;
-    ready: boolean;
-    count: number;
-  } | null>(null);
+  const [transport, setTransport] = useState<RehearsalTransport | null>(null);
+  const panAvailable = subjects.length > 0 && transport?.panAvailable === true;
+  const panPractice = panAvailable && panChannel === viewChannel;
+  useEffect(() => {
+    if (!panAvailable) setPanChannel(undefined);
+  }, [panAvailable]);
 
   /*
     How many rehearsing rows this browser can actually DRAW. The same arithmetic the stage
@@ -448,10 +447,16 @@ export function PreviewPanel({ companionActions }: { companionActions?: ReactNod
           </MonitorHeadFact>
           <Button
             variant="ghost"
+            active={panPractice}
             aria-label="Pan preview input"
             aria-pressed={panPractice}
-            data-toggle-on={panPractice ? '' : undefined}
-            title="Practice panning an input in Preview"
+            data-monitor-pan=""
+            disabled={!panAvailable}
+            title={
+              panAvailable
+                ? 'Practice panning a cropped input in Preview'
+                : 'Show a Crop edges plate in Preview to practice panning'
+            }
             onClick={() => setPanChannel(panPractice ? undefined : viewChannel)}
           >
             <Icon icon={Move} size={13} />
@@ -519,11 +524,7 @@ export function PreviewPanel({ companionActions }: { companionActions?: ReactNod
         <CheckInput channel={viewChannel} />
       </div>
       <div className="cg-pvw-stage">
-        {subjects.length === 0 && panPractice ? (
-          <div style={styles.screen}>
-            <PreviewPanDraft />
-          </div>
-        ) : subjects.length === 0 ? (
+        {subjects.length === 0 ? (
           <div
             style={styles.screen}
             role="img"

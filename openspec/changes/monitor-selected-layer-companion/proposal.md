@@ -8,7 +8,9 @@ internally, but the operator cannot see the row or edit it until leaving fullscr
 - Offer monitor-only, selected-layer and selected-layer-plus-Inspector layouts in a maximized monitor.
 - Show only the selected row in the layer companion.
 - Preserve selection while changing layouts and when the compact selected row is clicked again.
-- Hide every companion control and surface when there is no selected layer.
+- Keep the companion choices visible while a monitor is maximized. Disable the layer and
+  Inspector choices with no selected layer and leave the picture full-size.
+- Keep Pan's icon and label together and wrap the monitor actions when space is limited.
 - Place the compact selected row below the picture and the optional Inspector in its own right column.
 - Give any maximized panel the space from the app header and footer.
 

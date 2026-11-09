@@ -114,8 +114,9 @@ export function MonitorStrip({
     showPgm && audioAvailable ? viewChannel : null,
     monitorPreferences.audioEngine,
   );
+  const effectiveCompanionMode = hasSelectedLayer ? companionMode : 'monitor';
   const companionActions =
-    hasSelectedLayer && (focus === 'pgm' || focus === 'pvw') ? (
+    focus === 'pgm' || focus === 'pvw' ? (
       <div role="group" aria-label="Maximized monitor layout" data-monitor-companion-controls="">
         {(
           [
@@ -123,20 +124,24 @@ export function MonitorStrip({
             ['layer', PanelRight, 'Monitor and selected layer'],
             ['layer-inspector', Columns3, 'Monitor, selected layer and Inspector'],
           ] as const
-        ).map(([mode, glyph, label]) => (
-          <Button
-            key={mode}
-            variant="ghost"
-            active={companionMode === mode}
-            aria-label={label}
-            aria-pressed={companionMode === mode}
-            data-monitor-companion-mode={mode}
-            title={label}
-            onClick={() => onCompanionModeChange(mode)}
-          >
-            <Icon icon={glyph} size={13} />
-          </Button>
-        ))}
+        ).map(([mode, glyph, label]) => {
+          const unavailable = mode !== 'monitor' && !hasSelectedLayer;
+          return (
+            <Button
+              key={mode}
+              variant="ghost"
+              active={effectiveCompanionMode === mode}
+              aria-label={label}
+              aria-pressed={effectiveCompanionMode === mode}
+              data-monitor-companion-mode={mode}
+              disabled={unavailable}
+              title={unavailable ? 'Restore the workspace and select a layer' : label}
+              onClick={() => onCompanionModeChange(mode)}
+            >
+              <Icon icon={glyph} size={13} />
+            </Button>
+          );
+        })}
       </div>
     ) : undefined;
 

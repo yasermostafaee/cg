@@ -278,10 +278,23 @@ describe('in PVW ↔ monitors shown', () => {
 });
 
 describe('selected ↔ maximized monitor companion', () => {
-  it('offers no empty companion surface when no layer is selected', async () => {
+  it('shows unavailable companion modes without mounting an empty companion', async () => {
     await click(document.querySelector('button[aria-label="Show PROGRAM (PGM) fullscreen"]'));
-    expect(document.querySelector('[data-monitor-companion-controls]')).toBeNull();
+    expect(
+      document
+        .querySelector('[data-monitor-companion-mode="monitor"]')
+        ?.getAttribute('aria-pressed'),
+    ).toBe('true');
+    expect(
+      document.querySelector('[data-monitor-companion-mode="layer"]')?.hasAttribute('disabled'),
+    ).toBe(true);
+    expect(
+      document
+        .querySelector('[data-monitor-companion-mode="layer-inspector"]')
+        ?.hasAttribute('disabled'),
+    ).toBe(true);
     expect(document.querySelector('[data-monitor-layer-companion]')).toBeNull();
+    expect(document.querySelector('[data-monitor-inspector-companion]')).toBeNull();
   });
 
   it('keeps the row selected across all three layouts and a repeated compact-row click', async () => {
