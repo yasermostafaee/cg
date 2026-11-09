@@ -1318,6 +1318,10 @@ See [the adopted Playout contract](../integration/playout/PLAYOUT-CG-RESPONSE-LI
 and the change's tasks for station acceptance. The station advertises the lease API on 2.18.15.
 A fresh Preview frame or meter does not determine physical source signal availability.
 
+The 2.18.16 follow-up confirms the same one-input lease. Concurrent source views, clean Playlist
+and D11 pictures, measured picture mapping, decoded-frame availability and channel Playlist
+master gain remain Playout contract work. See the follow-up in the adopted contract record.
+
 **Acceptance:**
 
 - WHEN an eligible source is checked from PVW or Source defaults THEN one PVW card shows its current

@@ -53,3 +53,5 @@
       supplies read-only per-source pictures and signal state.
 - [x] 4.6 [Carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42676776212/job/129360266303)
       passed on `40974e03` for the added source surfaces.
+- [x] 4.7 Record the 2.18.16 follow-up confirming the same v1 lease, single independent input,
+      and the absence of measured geometry, decoded-frame signal status and Playlist master gain.

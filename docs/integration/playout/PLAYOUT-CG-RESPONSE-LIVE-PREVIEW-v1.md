@@ -22,6 +22,30 @@ paths. The capability request still returned 401 without a bearer. OpenAPI lists
 `POST /api/v1/settings/live-inputs/probe` with a `LiveProbeInput` body, but does not document a
 read-only signal status for a saved input or a programme Playlist gain operation.
 
+## Follow-up from the 2.18.16 team
+
+The team supplied `CG-LIVE-PREVIEW-RESPONSE-2.18.16.zip` and the matching report on
+2026-11-09. The archive SHA-256 is `1083d41c7b1b5ef10551aa771f39fac654d3c9878babd1e29e9a3d50d39bc0ab`.
+This is a follow-up to lease v1. Its standalone OpenAPI still has six paths and
+eight operations. The team ran 158 tests against the published 2.18.16 DLLs and separately
+exercised a loopback native core. These results do not establish acceptance on a deployed station.
+
+- A program channel still has one independent saved-input check. Multiple readers share the
+  same input. Clean Playlist output and D11 media are outside the lease.
+- A Preview JPEG is in the Preview output raster. The engine reports no measured source raster,
+  sample aspect ratio, active rectangle, rotation or source-to-JPEG transform. Catalog format and
+  aspect can size the CG crop guide, but cannot map returned JPEG pixels to the source.
+- The UDP fixture retained its last frame after the sender stopped. It could return a fresh meter
+  and report `sourceFreshness: unknown` and `hasSignal: null` at the same time. A valid black
+  frame looked like the frame returned before the sender existed. Neither image colour nor meter
+  freshness establishes upstream signal status.
+- 2.18.16 supplies no public channel Playlist master gain operation. The existing synthetic
+  Playlist route is still a muted CG copy. Per-item gain and local monitor volume are separate.
+
+The [revised Playout request](CG-CONTROL-REQUEST-LIVE-INPUT-PREVIEW-2026-10-26.md) asks for
+an additive contract for the outstanding capabilities. The station still reported 2.18.15 in the
+read-only check after receipt of this follow-up.
+
 ## Requests used by Bridge
 
 Bridge uses the verified socket operator's exact CG bearer for every call, including cleanup.
