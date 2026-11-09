@@ -4,7 +4,7 @@
 
 While the rehearsal is playing, PVW SHALL mark each live plate with a transparent outline and a
 label. The retained page SHALL paint the authored Bars, colour or picture. The label SHALL show
-Crop edges below the plate name when its resolved fit is `cover`.
+Crop edges in a distinct colour below the plate name when its resolved fit is `cover`.
 
 #### Scenario: Authored solid colour is visible beside Bars
 

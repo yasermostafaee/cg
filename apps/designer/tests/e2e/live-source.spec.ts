@@ -611,12 +611,15 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await expect(app.liveSourceFitModeSelect.locator('option:checked')).toHaveText(
       /whole picture/i,
     );
+    const cropLabel = label(app).getByText('Crop edges', { exact: true });
+    await expect(cropLabel).toHaveCount(0);
 
     // Scenario: "The fit mode is chosen in the Inspector" — both modes are offered.
     await expect(app.liveSourceFitModeSelect.locator('option')).toHaveCount(2);
     await app.setLiveSourceFitMode('cover');
     await expect(app.liveSourceFitModeSelect).toHaveValue('cover');
     await expect(app.liveSourceFitModeSelect.locator('option:checked')).toHaveText(/crop/i);
+    await expect(cropLabel).toBeVisible();
 
     // Choosing a fit is not a geometry change, so nothing is a preflight error.
     await expect(errorPill(app)).toHaveCount(0);
@@ -630,6 +633,8 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await expect(app.liveSourceFitModeSelect).toHaveCount(0);
     await app.selectElementById(elementId as string);
     await expect(app.liveSourceFitModeSelect).toHaveValue('cover');
+    await app.setLiveSourceFitMode('contain');
+    await expect(cropLabel).toHaveCount(0);
   });
 
   test('MULTIPLE independent Live Sources each get their own id', async ({ app }) => {

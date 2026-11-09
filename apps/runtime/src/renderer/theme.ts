@@ -2590,6 +2590,7 @@ export const cssVars = {
   '--r-checker-b': '#5B6075',
   '--r-plate-chip-bg': 'rgba(0, 0, 0, 0.78)',
   '--r-plate-ink': '#FFFFFF',
+  '--r-plate-fit': '#84ebe9',
   /*
     `RUN-NEXT-VERSION-03` 1.1 — PVW'S PLACEHOLDER for a book picture neither this console nor CG Bridge
     holds: a hatched frame with a crossed-out picture mark and no words (`pagePictures.ts` draws it as

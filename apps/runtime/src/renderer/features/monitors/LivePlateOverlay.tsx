@@ -56,7 +56,7 @@ const styles = {
     color: cssVars['--r-plate-ink'],
   },
   source: { fontSize: '12px', color: cssVars['--r-plate-ink'] },
-  fit: { fontSize: '10px', fontWeight: 600, color: cssVars['--r-plate-ink-dim'] },
+  fit: { fontSize: '11px', fontWeight: 700, color: cssVars['--r-plate-fit'] },
   unassigned: { fontSize: '12px', fontWeight: 700, color: colors.pending },
   audio: {
     fontSize: '10px',

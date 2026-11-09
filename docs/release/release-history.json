@@ -122,8 +122,8 @@
           "en": "Deleting a lower plate clears its dependent masks. Designer also repairs dangling masks when opening older projects."
         },
         {
-          "fa": "PVW پس‌زمینهٔ انتخاب‌شدهٔ هر قاب را نشان می‌دهد. در حالت برش، عبارت Crop edges زیر نام قاب می‌آید.",
-          "en": "PVW preserves each plate’s chosen background and shows Crop edges below the plate name when cover fit is active."
+          "fa": "PVW پس‌زمینهٔ انتخاب‌شدهٔ هر قاب را نشان می‌دهد. در حالت برش، عبارت Crop edges زیر نام قاب در Designer و PVW دیده می‌شود. رنگ آن در CG Control از نام قاب متمایز است.",
+          "en": "PVW preserves each plate’s chosen background. Designer and PVW show Crop edges below the plate name when cover fit is active. CG Control gives that label a distinct color."
         },
         {
           "fa": "با دابل‌کلیک روی متن متحرک در Designer، کادر ویرایش در موقعیت همان فریم باز می‌شود.",

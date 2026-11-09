@@ -1926,6 +1926,15 @@ function buildLiveSource(element: VideoPlaceholderElement, ctx: BuildCtx): HTMLE
   // The id is ASCII by schema (`LiveSourceIdSchema`), so it is pinned LTR: a Persian
   // scene must not flip `guest-1` to `1-guest` around the surrounding RTL context.
   label.style.direction = 'ltr';
+  if (element.fitMode === 'cover') {
+    label.style.fontSize = 'max(32px, calc(12px * var(--cg-author-guide-scale, 1)))';
+    const fitLabel = ctx.doc.createElement('div');
+    fitLabel.textContent = 'Crop edges';
+    fitLabel.style.color = '#a5f6ff';
+    fitLabel.style.fontSize = 'max(20px, calc(11px * var(--cg-author-guide-scale, 1)))';
+    fitLabel.style.fontWeight = '700';
+    label.appendChild(fitLabel);
+  }
   el.appendChild(label);
   return el;
 }

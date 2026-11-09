@@ -254,7 +254,9 @@ test('B-424 — PVW shows the authored solid fallback beside Bars and labels Cro
     await expect(marker(page, id)).toHaveCSS('background-image', 'none');
     await expect(marker(page, id)).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   }
-  await expect(marker(page, 'guest-1').getByText('Crop edges', { exact: true })).toBeVisible();
+  const cropLabel = marker(page, 'guest-1').getByText('Crop edges', { exact: true });
+  await expect(cropLabel).toBeVisible();
+  await expect(cropLabel).toHaveCSS('color', 'rgb(132, 235, 233)');
   await expect(marker(page, 'guest-2').getByText('Crop edges', { exact: true })).toHaveCount(0);
 });
 
