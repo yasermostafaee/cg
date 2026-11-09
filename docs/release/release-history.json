@@ -185,7 +185,20 @@
         "fa": "آزمون‌های باقی‌مانده و قابلیت‌های در دست پیگیری در این بخش ثبت می‌شوند.",
         "en": "This section tracks outstanding acceptance checks and features still in progress."
       },
-      "features": [],
+      "features": [
+        {
+          "fa": "ابزار Pan در هدر PVW و PGM دیده می‌شود. در PVW می‌توان رفتار درگ را با تصویر تمرینی داخل قاب آزمایش کرد.",
+          "en": "Pan is visible in both monitor headers. PVW offers a practice picture inside the plate for trying the drag gesture."
+        },
+        {
+          "fa": "بررسی تصویر و شنود یک ورودی زنده در Look inputs، پنجرهٔ تغییر ورودی قاب و بخش Live sources تنظیمات در دسترس است.",
+          "en": "Check the picture and optional sound of one live input from Look inputs, the plate source swap and Live sources in Settings."
+        },
+        {
+          "fa": "کادر ماسک را در Designer از بدنه جابه‌جا کنید یا اندازه‌اش را با کشیدن گوشه‌ها تغییر دهید.",
+          "en": "Move a mask rectangle directly in Designer or drag a corner to resize it."
+        }
+      ],
       "fixes": [],
       "planned": [
         {
@@ -199,6 +212,10 @@
         {
           "fa": "درگ تصویر داخل قاب در PVW به اطلاعات محدودهٔ فعال و نسبت پیکسل تصویر ورودی از Playout نیاز دارد.",
           "en": "Dragging a live picture inside a plate in PVW depends on the active picture rectangle and pixel aspect ratio from Playout."
+        },
+        {
+          "fa": "نمایش هم‌زمان تصویر ورودی‌های اختصاص‌یافته در قاب‌های PVW و بندانگشتی ورودی‌ها به فیدهای مستقل و وضعیت سیگنال از Playout نیاز دارد.",
+          "en": "Showing the assigned pictures together in PVW plates and source thumbnails in pickers requires independent Playout feeds and signal status."
         },
         {
           "fa": "کنترل سطح صدای خروجی اصلی Playlist و تشخیص خودکار ورودی بدون سیگنال به قراردادهای مربوط از Playout نیاز دارند.",
