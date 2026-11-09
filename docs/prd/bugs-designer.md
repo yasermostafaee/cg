@@ -4898,3 +4898,10 @@ shared-library separator references distinct.
 The picture chooser's grid assigns each thumbnail a fixed row, while its image used intrinsic
 sizing inside a centered grid item. Tall or high-resolution images could exceed that row and
 get clipped. Give the thumbnail a definite padded box and fit the entire image in it.
+
+## [~] B-419 — Inline text editing opens at the starting position of an animated text layer ⟨priority: medium — the owner, 2026-11-09⟩ — `openspec/changes/position-inline-editor-at-rendered-frame/`
+
+Keyframe a text layer's Y position, move the playhead to a frame where the text has moved,
+and double-click it on the Canvas. The pointer hits the animated text, but the edit box uses
+the saved base transform. Use the same evaluated pose for hit testing and the inline editor.
+The edited text is then visible on that element across the animation.

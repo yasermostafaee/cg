@@ -4336,3 +4336,12 @@ The previous allocation and a heading search confirmed both identifiers were fre
 The previous allocation and a heading search confirmed B-418 was free.
 
 ⇒ **Next free after this entry is `B-419`**, **`D-207`**, **`P-078`**, **`R-113`** and **`C-049`**.
+
+### 2026-11-09 — Inline animated-text editing takes `B-419`
+
+- `B-419` — open the inline text editor at the layer's position in the displayed frame —
+  [bugs-designer.md](bugs-designer.md).
+
+The previous allocation and a heading search confirmed B-419 was free.
+
+⇒ **Next free after this entry is `B-420`**, **`D-207`**, **`P-078`**, **`R-113`** and **`C-049`**.

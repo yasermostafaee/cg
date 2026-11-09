@@ -1,5 +1,50 @@
 import { expect, test, type DesignerApp } from './fixtures/designer.js';
 
+test('B-419 — inline text editing opens at the painted keyframed position', async ({ app }) => {
+  await app.newProject('Animated text editing');
+  const canvas = await app.canvas.boundingBox();
+  if (canvas === null) throw new Error('Canvas is missing');
+  await app.addTextElement({
+    x: Math.round(canvas.width * 0.27),
+    y: Math.round(canvas.height * 0.2),
+  });
+  const id = (await app.timelineRowIds())[0]!;
+  const paintedText = app.canvasFrame.locator(`[data-cg-element-id="${id}"]`);
+  const initial = await paintedText.boundingBox();
+  if (initial === null) throw new Error('Text is missing from the canvas');
+
+  await app.toggleInspectorKeyframe('position.y');
+  await app.scrubToFrame(40);
+  const y = app.inspector.getByLabel('Y position', { exact: true });
+  await y.fill('760');
+  await y.press('Enter');
+
+  await app.selectTool('Select');
+  let previousTop = initial.y;
+  for (const frame of [18, 35]) {
+    await app.scrubToFrame(frame);
+    await expect
+      .poll(async () => (await paintedText.boundingBox())?.y ?? 0)
+      .toBeGreaterThan(previousTop + 20);
+    const painted = await paintedText.boundingBox();
+    if (painted === null) throw new Error('Animated text is missing from the canvas');
+
+    await app.page.mouse.dblclick(painted.x + 12, painted.y + 8);
+    const editor = app.page.locator('[contenteditable="true"]');
+    await expect(editor).toBeFocused();
+    const editing = await editor.boundingBox();
+    if (editing === null) throw new Error('Inline text editor is missing');
+    expect(Math.abs(editing.x - painted.x)).toBeLessThan(1);
+    expect(Math.abs(editing.y - painted.y)).toBeLessThan(1);
+
+    await editor.fill('متن ویرایش‌شده');
+    await editor.press('Enter');
+    await expect(editor).toHaveCount(0);
+    await expect(paintedText).toHaveText('متن ویرایش‌شده');
+    previousTop = painted.y;
+  }
+});
+
 async function finiteFastTicker(app: DesignerApp): Promise<void> {
   await app.addTicker({ x: 120, y: 260 });
   await app.inspector.getByRole('combobox', { name: 'repeat' }).selectOption('count');

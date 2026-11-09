@@ -6,7 +6,6 @@ import type {
   LottieElement,
   LottiePhases,
   Scene,
-  TextElement,
 } from '@cg/shared-schema';
 import type { AssetMeta, ExportIssue } from '@cg/shared-ipc';
 import { ErrorMarkOverlay } from './ErrorMarkOverlay.js';
@@ -426,8 +425,9 @@ export function CanvasOverlay({
     selection.size === 1 ? (allElements.find((e) => selection.has(e.id)) ?? null) : null;
   // D-041 — the selected elements for the multi-selection gizmo (size > 1).
   const selectedEls = selection.size > 1 ? allElements.filter((e) => selection.has(e.id)) : [];
+  // Inline editing follows the same painted pose as the double-click target.
   const editingEl = editingTextId
-    ? (allElements.find((e) => e.id === editingTextId) ?? null)
+    ? (allElementsAtFrame.find((e) => e.id === editingTextId) ?? null)
     : null;
 
   useEffect(() => {
@@ -1027,7 +1027,7 @@ export function CanvasOverlay({
         )}
         {editingEl !== null && editingEl.type === 'text' && (
           <TextEditor
-            element={editingEl as TextElement}
+            element={editingEl}
             scale={scale}
             onCommit={() => designerStore.setEditingText(null)}
           />
