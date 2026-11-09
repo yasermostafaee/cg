@@ -21,3 +21,8 @@
 - [x] 3.3 [Carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42568697446/job/129000870086)
       passed on `665668e4`. The Windows installer run on `4b3bb243` produced a standalone HTML
       artifact identical to the repository page.
+- [x] 3.4 Verify the `1.1.0` package and bilingual history. The
+      [Windows build and acceptance](https://github.com/yasermostafaee/cg/actions/runs/42662909793)
+      passed on `623f6d43` and its three installer hashes matched the local copy.
+      [Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42670891955/job/129347143905)
+      passed on `e3aa2014`, which adds test fixes to the same product source.
