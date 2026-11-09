@@ -2,6 +2,8 @@
 
 - [x] 1.1 Allocate P-077 and record the release-history contract in the PRD
 - [x] 1.2 Add a structured history containing the prepared 1.0.0 release and accepted next-version work
+- [x] 1.3 Record the owner's customer-delivery confirmation and version increment before a new build.
+      Keep pending changes under `next` until a numbered customer version is prepared.
 
 ## 2. Generator and delivery
 

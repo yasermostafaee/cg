@@ -565,6 +565,13 @@ count does not reset on its own.
   (`gh workflow run Desktop --ref dev`), or a push whose **head commit message contains
   `[installers]`** — nothing else. An ordinary push starts the Desktop workflow and skips all of
   it. The owner asks for installers in words ("build the installers").
+  - **Confirm customer delivery before starting an installer build.** Ask whether the preceding
+    version was delivered to a customer if the owner has not already answered for this build.
+    If it was delivered, set a higher product version with
+    `node tools/release/src/release-version.mjs --set <version>` before triggering Desktop.
+    Internal test builds may reuse a version the owner confirms is still internal. Keep accepted
+    changes in `docs/release/release-history.json` under `next` until the customer version is
+    prepared, then move the shipped changes into its numbered entry and regenerate the HTML.
   - 🔴 **An EMPTY commit carrying the marker builds NOTHING — measured, not assumed.** The
     workflow's `paths-ignore` judges the PUSH's whole diff, and a push that changes no file (or
     only docs) never starts the Desktop workflow at all, so the marker is never read: the empty
@@ -581,8 +588,9 @@ count does not reset on its own.
   - **A change only the Windows pipeline can exercise** — under `apps/*/src-tauri/**`, `Cargo.*`,
     `tools/bridge-installer/**`, `tools/release/**`,
     `tools/caspar-bridge/scripts/stage-bridge.mjs` or `.github/workflows/desktop.yml` — carries
-    `[installers]` on its **final** commit even unasked (`OWNER CHOICE`; the owner may delete this
-    line), pushed together with the code it exercises. Everything else never carries it unless
+    `[installers]` on its **final** commit after confirming customer delivery as above, even when
+    the code task does not separately request a build (`OWNER CHOICE`; the owner may delete this
+    line). Push it together with the code it exercises. Everything else never carries it unless
     he asks.
   - A manual run also runs `guide-shots` (2.5 runner-minutes on run 38160390947); the marker
     does not. A dispatch

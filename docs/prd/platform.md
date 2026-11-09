@@ -4320,6 +4320,9 @@ per-version surface that can receive hosted files later.
 - WHEN a host base URL is supplied THEN all five cards bind to that version's files
 - WHEN installers are built THEN their version must already have a tracked history entry, otherwise the
   build stops before packaging
+- WHEN the next installer build is requested THEN confirm whether the preceding version reached a
+  customer. If it did, increase the product version before building. Keep accepted changes under
+  `next` until they move into the numbered customer version and its regenerated HTML.
 
 ## [~] P-078 — Animate startup for the duration of actual bootstrap ⟨priority: medium — the owner, 2026-11-09⟩ — `openspec/changes/animate-startup-while-loading/`
 

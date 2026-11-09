@@ -28,6 +28,14 @@ base URL is configured, those file cards SHALL remain visibly disabled rather th
 - **WHEN** the Desktop workflow builds installers for a version absent from the release-history source
   **THEN** it stops before packaging and asks for that version's changes to be recorded
 
+#### Scenario: Customer delivery determines the next product version
+
+- **WHEN** the installer build is requested **THEN** confirm with the owner whether the preceding
+  version was delivered to a customer
+- **IF** it was delivered **THEN** increase the product version before starting the build
+- **WHEN** preparing the numbered customer version **THEN** move its shipped changes from `next`
+  into that version's entry and regenerate the HTML, retaining pending items under `next`
+
 #### Scenario: Existing release assets stay exact
 
 - **WHEN** the Desktop workflow generates the release-history page **THEN** it uploads that page as a
