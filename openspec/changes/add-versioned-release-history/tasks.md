@@ -4,6 +4,8 @@
 - [x] 1.2 Add a structured history containing the prepared 1.0.0 release and accepted next-version work
 - [x] 1.3 Record the owner's customer-delivery confirmation and version increment before a new build.
       Keep pending changes under `next` until a numbered customer version is prepared.
+- [x] 1.4 After the owner confirmed that `1.0.0` reached a customer, prepare `1.1.0` for station testing.
+      Record the included changes in both languages and retain open station checks under `next`.
 
 ## 2. Generator and delivery
 

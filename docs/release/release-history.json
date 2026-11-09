@@ -3,21 +3,21 @@
   "product": "APASAI CG",
   "releases": [
     {
-      "version": "next",
+      "version": "1.1.0",
       "title": {
-        "fa": "نسخهٔ بعدی",
-        "en": "Next release"
+        "fa": "نسخهٔ آزمایشی برای ایستگاه Playout",
+        "en": "Playout station test release"
       },
       "date": "2026-11-09",
       "status": "development",
       "summary": {
-        "fa": "اصلاحات و قابلیت‌های پذیرفته‌شده پس از نسخهٔ ۱.۰.۰ در این بخش ثبت می‌شوند تا پیش از انتشار از قلم نیفتند.",
-        "en": "Features and fixes accepted since the first 1.0.0 build are recorded here for the next release."
+        "fa": "این نسخه قابلیت‌ها و رفع باگ‌های پس از ۱.۰.۰ را برای آزمون داخلی آماده می‌کند. آزمون ورودی زنده و خروجی PGM روی ایستگاه Playout در دست پیگیری است.",
+        "en": "This build includes the features and fixes since 1.0.0 for internal testing. Live input and PGM acceptance on the Playout station are pending."
       },
       "features": [
         {
-          "fa": "در CG Control، گزینهٔ Check input در PVW و Source defaults تصویر یک ورودی زندهٔ Playout را با سطح صدا و شنود اختیاری نشان می‌دهد.",
-          "en": "Check input in PVW and Source defaults shows one live Playout input with its own audio meter and optional sound."
+          "fa": "در CG Control، گزینهٔ Check input در PVW و Source defaults با API پیش‌نمایش سازگار Playout تصویر یک ورودی زنده را با متر صدا و شنود اختیاری نشان می‌دهد.",
+          "en": "Check input in PVW and Source defaults uses a compatible Playout Preview API to show one live input with its own audio meter and optional sound."
         },
         {
           "fa": "در CG Control با انتخاب لایهٔ on air و ابزار Pan live input در PGM می‌توان تصویر داخل قابِ Crop edges را با درگ جابه‌جا کرد.",
@@ -170,22 +170,39 @@
           "en": "Individual Reload can replace a package with a new identity in the same catalogue entry after operator confirmation."
         }
       ],
+      "planned": [],
+      "downloadBaseUrl": null
+    },
+    {
+      "version": "next",
+      "title": {
+        "fa": "نسخهٔ بعدی",
+        "en": "Next release"
+      },
+      "date": "2026-11-09",
+      "status": "development",
+      "summary": {
+        "fa": "آزمون‌های باقی‌مانده و قابلیت‌های در دست پیگیری در این بخش ثبت می‌شوند.",
+        "en": "This section tracks outstanding acceptance checks and features still in progress."
+      },
+      "features": [],
+      "fixes": [],
       "planned": [
         {
-          "fa": "آزمون جابه‌جایی قاب همراه عنوان و نمایش عنوان روی ورودی در ایستگاه Playout، با حفظ ورودی‌های انتخاب‌شده.",
-          "en": "On the target Playout station, verify that a live frame moves with its title, the title stays above the input, and the input assignment is preserved."
+          "fa": "روی خروجی PGM ایستگاه Playout، نمایش عنوان و شکل روی قاب، حفظ اتصال ورودی هنگام تغییر پریست، ماسک و Revert، جابه‌جایی تصویر با درگ و پس‌زمینهٔ قاب بررسی شوند.",
+          "en": "On the target Playout PGM output, verify titles and shapes over live plates, preserved input assignments across presets, Mask and Revert, drag to pan, and plate fallback."
         },
         {
-          "fa": "نمایش تصویر و صدا در PVW و انتخاب‌گر ورودی پس از تکمیل قرارداد Preview توسط تیم Playout.",
-          "en": "Show live input picture and sound in PVW and the source picker once the Playout Preview contract is available."
+          "fa": "تصویر، متر و شنود ورودی زنده در PVW و انتخاب‌گر ورودی روی ایستگاه Playout آزموده شوند. تغییر یا بستن پیش‌نمایش باید مستقل از PGM و Playlist بماند.",
+          "en": "Verify live picture, meter and optional sound in PVW and the source picker on the target station. Switching or closing a check must leave PGM and Playlist independent."
         },
         {
-          "fa": "افزودن جابه‌جایی تصویر داخل قاب با درگ روی PVW پس از اتصال فید زندهٔ Playout.",
-          "en": "Add dragging the picture inside a plate on PVW once the Playout live feed is connected."
+          "fa": "درگ تصویر داخل قاب در PVW به اطلاعات محدودهٔ فعال و نسبت پیکسل تصویر ورودی از Playout نیاز دارد.",
+          "en": "Dragging a live picture inside a plate in PVW depends on the active picture rectangle and pixel aspect ratio from Playout."
         },
         {
-          "fa": "آزمون ماسک‌های قاب در ایستگاه Playout و افزودن کنترل صدای خروجی اصلی Playlist پس از دریافت قرارداد gain.",
-          "en": "Verify frame masks on the target Playout station and add programme Playlist audio control once the gain contract is available."
+          "fa": "کنترل سطح صدای خروجی اصلی Playlist و تشخیص خودکار ورودی بدون سیگنال به قراردادهای مربوط از Playout نیاز دارند.",
+          "en": "Programme Playlist gain and automatic detection of inputs with no signal depend on the corresponding Playout contracts."
         }
       ],
       "downloadBaseUrl": null

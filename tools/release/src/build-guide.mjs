@@ -52,6 +52,7 @@ h1 { font-size: 16pt; font-weight: 700; margin: 0 0 1mm; color: #0b2a44; }
 h1 + p { margin: 0 0 3mm; color: #4a5566; }
 h2 { font-size: 11.2pt; font-weight: 700; margin: 4mm 0 1.2mm; color: #0b2a44;
      border-bottom: 0.4mm solid #d9e2ec; padding-bottom: 0.6mm; break-after: avoid; }
+h3 { break-after: avoid; }
 p { margin: 0 0 1.9mm; }
 ul, ol { margin: 0 0 2mm; padding-inline-start: 6mm; }
 ol { list-style-type: persian; }
