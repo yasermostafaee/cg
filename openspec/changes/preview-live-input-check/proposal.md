@@ -36,6 +36,8 @@ describes the final programme mix. Re-labelling that meter as an input meter wou
   The Playout programme channel, programme layers and PGM relay are never mutated by this feature.
 - Surface `connecting`, `live`, `stalled`, `unavailable`, `conflict`, `replaced` and `expired` honestly; never leave a
   frozen frame looking live.
+- With a compatible read-only Playout capability, show each visible eligible input's live thumbnail in the source
+  list on open and replace its Check icon. The explicit one-input check stays available on earlier stations.
 
 ## Capabilities
 

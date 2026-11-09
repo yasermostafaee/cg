@@ -49,8 +49,9 @@
       The expanded local Chromium live-input-check scenario passed.
 - [ ] 4.4 Composite the actual assigned inputs in PVW, including clean Playlist and D11 media.
       Await the Playout contract for concurrent safe reads and active-picture mapping.
-- [ ] 4.5 Show independent thumbnails and confirmed signal state in the input lists when the Playout
-      supplies read-only per-source pictures and signal state.
+- [ ] 4.5 Replace the per-row Check icon on compatible stations with independently refreshing thumbnails.
+      Start on open for visible inputs. Cover correct frame identity, source status, selection, filtering and
+      cleanup with at least two simultaneous feeds. Await the read-only per-source Playout capability.
 - [x] 4.6 [Carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42676776212/job/129360266303)
       passed on `40974e03` for the added source surfaces.
 - [x] 4.7 Record the 2.18.16 follow-up confirming the same v1 lease, single independent input,

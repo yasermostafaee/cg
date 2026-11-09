@@ -4,9 +4,8 @@
 
 An operator can check one saved Playout input before using it. The check has its own picture,
 optional speaker and `PVW INPUT` meter. The retained-page rehearsal, its live placeholders,
-programme output and PGM meter keep their own data paths. Per-input thumbnails, automatic scanning,
-multiple simultaneous sources on the same programme channel and direct producer-health monitoring
-are outside this design.
+programme output and PGM meter keep their own data paths. The explicit lease is separate from the
+planned read-only source thumbnails. Thumbnail delivery requires a separate Playout capability.
 
 ## Playout authority
 
@@ -54,13 +53,23 @@ swap, and the Live sources section of Station setup. Opening a check is distinct
 the source. Leaving its scope releases its lease. While the check waits for a decodable frame
 or reports a terminal state, the card keeps an empty picture frame with the appropriate state.
 
-The requested true plate composite and picker thumbnails remain a Playout contract dependency.
+## Live source thumbnails
+
+When the station supports read-only pictures per source, open the thumbnail feed for the eligible
+rows visible in a source list and show the pictures in place of their Check icons. Use bounded,
+low-resolution updates and reuse subscriptions when the same inputs remain visible. Stop demand
+on close, filter, scroll out of view, channel change or loss of access. Match each accepted frame
+to its source, generation and freshness before painting. Show an empty tile for a source whose
+frame is absent or stale. Distinguish verified loss of signal from unknown status, and preserve
+valid black frames. Thumbnails are silent. They use neither the explicit Check lease nor a new
+receiver. Earlier stations keep the row's Check action.
+
 The current programme-channel lease can provide one distinct saved D10 input at a time.
 The station's Playlist output and D11 clip are not valid input IDs for that lease. The two-viewer
 limit permits two connections to the same picture. A missing frame reports the preview transport's
 condition. A source-level `No signal` label requires an authoritative signal state. The
 [Playout follow-up](../../../docs/integration/playout/CG-CONTROL-REQUEST-LIVE-INPUT-PREVIEW-2026-10-26.md)
-records the requested batch snapshots, live pictures and active-picture mapping.
+records the requested batch snapshots, live pictures and active-picture mapping for PVW plates.
 
 The card shows a live picture only after the browser decodes a frame, and clears it when frames
 stall or the check ends. The speaker starts off on each check. The meter's label identifies the

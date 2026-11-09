@@ -2,8 +2,9 @@
 
 ### Requirement: PVW SHALL let the operator check one live input without changing rehearsal or air
 
-CG Control SHALL offer `Check input` for one Playout live source from the PVW workflow, Source defaults,
-Look inputs, the row's live-source swap and Station setup → Live sources. The actions SHALL target one input
+CG Control SHALL offer `Check input` for one Playout live source from the PVW workflow and from Source defaults,
+Look inputs, the row's live-source swap and Station setup → Live sources on stations without the thumbnail
+capability. The actions SHALL target one input
 card labelled with the source's canonical name and channel. The card SHALL appear on the source surface that
 started it. It SHALL leave that surface open and SHALL NOT select, save or apply the source, alter any dirty
 draft, or change the rehearsing row. Closing the source surface or leaving its channel SHALL release its check.
@@ -31,6 +32,28 @@ picture into a plate, change the retained page, trigger Play/Take/Update, or imp
 - **THEN** the live card displays that source on the initiating surface
 - **AND** the existing input selection, assignments, row overrides, rehearsal and PGM are preserved
 - **AND** leaving the surface clears the card and releases its lease
+
+### Requirement: A supported source list SHALL show independently refreshed live thumbnails
+
+CG Control SHALL show a thumbnail in place of the Check icon for each visible eligible input when Playout
+exposes authenticated read-only pictures per source. This applies to Source defaults, Look inputs, the live-source
+swap and Station setup → Live sources. The view SHALL acquire bounded video-only demand on open without a click or hover. Viewing a
+thumbnail SHALL leave selection, drafts, rehearsal, PGM, Playlist and the active Check lease intact. The console
+SHALL release demand as rows become hidden or inaccessible.
+
+#### Scenario: Two sources can be compared at a glance
+
+- **GIVEN** two eligible inputs are visible and Playout supports the read-only thumbnail capability
+- **WHEN** the operator opens the input list
+- **THEN** both sources show their own refreshing picture simultaneously
+- **AND** the operator can still select either input through the existing row action
+
+#### Scenario: A thumbnail frame stops arriving
+
+- **WHEN** an input stops delivering fresh frames
+- **THEN** the list clears that tile's image and shows the reported signal state or an unknown state
+- **AND** fresh black frames still display as valid pictures
+- **AND** closing or filtering the list releases the affected demand and ignores its late frames
 
 ### Requirement: A live-input check SHALL be honest about its lifecycle and SHALL never leave a frozen picture
 

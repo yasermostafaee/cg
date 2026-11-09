@@ -1288,7 +1288,7 @@ capability.
 
 ## [~] C-023 — check one live input with picture and optional sound in PVW ⟨priority: high⟩ — **LEASE CONTRACT ADOPTED / STATION ACCEPTANCE OPEN** · `openspec/changes/preview-live-input-check/`
 
-**Owner decision, 2026-10-26 — this supersedes the periodic-thumbnail proposal in full.** The
+**Owner decision, 2026-10-26 — lease v1 uses an explicit check.** The
 operator chooses one Playout live input and checks its current moving picture before it is needed.
 The same action is available in the normal PVW workflow and beside a source in the Source defaults
 dialog. Source defaults stays open and nothing is selected, saved or applied by checking.
@@ -1344,12 +1344,16 @@ live-source swap and Station setup → Live sources as well as Source defaults. 
 draft and output must remain intact. If a picture is absent or stale, show the empty picture frame
 and the check state. Use the signal label only when the source itself reports signal presence.
 
-The owner also requested simultaneous real pictures inside the assigned rehearsal plates and
-picture thumbnails wherever inputs can be selected. Track those as station acceptance beyond the
-single v1 lease, including clean Playlist picture, the assigned D11 clip, source signal state
-and mapping into the plate's raster. The [Playout follow-up](../integration/playout/CG-CONTROL-REQUEST-LIVE-INPUT-PREVIEW-2026-10-26.md)
-records the evidence and required contract. Arbitrary inputs outside the station catalogue and
-background scanning remain out of scope.
+**Live source thumbnails.** When a source picker opens, each visible eligible input row should
+show its own continuously refreshed thumbnail in place of the Check icon. This applies to Source
+defaults, Look inputs, the live-source swap and Station setup → Live sources. Viewing the list
+does not require selecting an input. The thumbnails are silent and leave source selection,
+rehearsal and any active check intact. An unavailable picture has an empty tile and an accurate
+status. Older stations keep the explicit Check action in the input list.
+
+Simultaneous rehearsal plates separately need clean Playlist and D11 pictures and mapping into
+the plate raster. The [Playout follow-up](../integration/playout/CG-CONTROL-REQUEST-LIVE-INPUT-PREVIEW-2026-10-26.md)
+records the evidence and the read-only per-source contract needed for both workflows.
 
 ## [~] C-024 — the bridge advertises a HARDCODED LAN address, and only an uncommitted hack makes testing possible ⟨priority: high⟩ — the CURE that [[P-035]] merely NETS — **CLI half LANDED 2026-08-23 by [[B-162]]; PERSISTED + PANEL half LANDED 2026-08-24 (`serve-host-from-app`); HACK DELETED + never-stage entry DROPPED + warning sentence completed 2026-09-04 (`LAN-DEV-ACCESS-01`) — every Acceptance bullet now met; awaiting archive of `serve-host-from-app`**
 
