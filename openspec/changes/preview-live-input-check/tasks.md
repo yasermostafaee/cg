@@ -47,8 +47,9 @@
 - [x] 4.2 Give the check an empty picture frame while connecting or after losing the picture.
 - [x] 4.3 Verify scoped picture, lease cleanup and unchanged source values in all source surfaces.
       The expanded local Chromium live-input-check scenario passed.
-- [ ] 4.6 Record carrying Linux E2E for the new source surfaces.
 - [ ] 4.4 Composite the actual assigned inputs in PVW, including clean Playlist and D11 media.
       Await the Playout contract for concurrent safe reads and active-picture mapping.
 - [ ] 4.5 Show independent thumbnails and confirmed signal state in the input lists when the Playout
       supplies read-only per-source pictures and signal state.
+- [x] 4.6 [Carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42676776212/job/129360266303)
+      passed on `40974e03` for the added source surfaces.

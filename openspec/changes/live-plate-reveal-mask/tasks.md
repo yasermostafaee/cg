@@ -50,6 +50,7 @@
 
 - [x] 6.1 Move and resize a selected own-plate or linked reveal window on the Canvas.
 - [x] 6.2 Verify bounds, cancellation, Undo and independent windows in the two focused local Chromium cases.
-- [ ] 6.3 Record the carrying Linux E2E result.
+- [x] 6.3 [Carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42676776212/job/129360266303)
+      passed on `40974e03`, including Add and direct editing without a Redraw tool.
 - [x] 6.4 Default to editing the selected mask and verify pressed styling, Add, Escape and Canvas selection. All 24 Designer Live Source cases passed in local Chromium.
 - [x] 6.5 Use Add for new windows and direct editing for existing windows. Both focused Chromium cases passed, covering both mask groups, cancellation and Undo.
