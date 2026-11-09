@@ -92,7 +92,7 @@ describe('D-137 — the poster picker', () => {
   it('🔴 offers "bars" and the PICTURES — the project’s and the shared library’s, never a font', async () => {
     seedPlate();
     const trigger = posterButton(await render());
-    expect(trigger?.textContent).toContain('Bars');
+    expect(trigger?.textContent).toContain('Solid colour');
     if (trigger === null) throw new Error('no poster picker');
     click(trigger);
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
@@ -144,7 +144,7 @@ describe('D-137 — the poster picker', () => {
   });
 
   it('a stored poster that resolves to neither list is shown as itself, missing', async () => {
-    seedPlate({ posterAssetId: 'gone' });
+    seedPlate({ fallbackKind: undefined, posterAssetId: 'gone' });
     const trigger = posterButton(await render());
     expect(trigger?.textContent).toContain('gone (missing)');
     if (trigger === null) throw new Error('no poster picker');

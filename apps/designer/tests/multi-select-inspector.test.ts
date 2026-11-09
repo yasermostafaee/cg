@@ -167,7 +167,7 @@ describe('MultiSelectSection — single-inspector parity (D-049)', () => {
       c.querySelector('button[aria-label="Keep aspect while resizing selected plates"]'),
     ).not.toBeNull();
     expect(select(c, 'fit')).not.toBeNull();
-    expect(c.querySelector('button[aria-label="poster"]')).not.toBeNull();
+    expect(c.querySelector('button[aria-label="fallback"]')).not.toBeNull();
     expect(input(c, 'stroke width')).not.toBeNull();
     expect(c.querySelector('input[aria-label="stroke hex value"]')).not.toBeNull();
 
@@ -178,7 +178,7 @@ describe('MultiSelectSection — single-inspector parity (D-049)', () => {
     );
     expect(select(c, 'aspect')).toBeNull();
     expect(select(c, 'fit')).toBeNull();
-    expect(c.querySelector('button[aria-label="poster"]')).toBeNull();
+    expect(c.querySelector('button[aria-label="fallback"]')).toBeNull();
   });
 
   it('D-167 — a mixed fit is inert until chosen, then updates all plates in one undo entry', () => {
@@ -207,6 +207,36 @@ describe('MultiSelectSection — single-inspector parity (D-049)', () => {
       'contain',
       'cover',
     ]);
+  });
+
+  it('R-105 — choosing Bars applies the same fallback to all selected plates in one undo', () => {
+    const { scene } = new ProjectStore(new MemoryWorkspace(), new MemoryKv()).newScene(
+      'fallbacks',
+      'lower-third',
+    );
+    designerStore.setScene(scene, null);
+    designerStore.addElement(defaultLiveSource('live-a', 0, 0));
+    designerStore.addElement(defaultLiveSource('live-b', 640, 0));
+    const children = () =>
+      editSceneOf(designerStore.get().scene, designerStore.get().activeCompositionId)!.layers[0]!
+        .children;
+    const c = render(children());
+    const trigger = c.querySelector<HTMLButtonElement>('button[aria-label="fallback"]');
+    if (trigger === null) throw new Error('Missing fallback picker');
+    act(() => trigger.click());
+    const bars = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
+      (button) => button.textContent?.trim() === 'Bars',
+    );
+    expect(bars?.querySelector('img')).not.toBeNull();
+    if (bars === undefined) throw new Error('Missing Bars choice');
+    act(() => bars.click());
+    const kinds = () =>
+      children().map((element) =>
+        element.type === 'video-placeholder' ? element.fallbackKind : undefined,
+      );
+    expect(kinds()).toEqual(['bars', 'bars']);
+    designerStore.undo();
+    expect(kinds()).toEqual(['color', 'color']);
   });
 
   it('D-167 — stroke width preserves each colour and repairs each plate to its own aspect', () => {

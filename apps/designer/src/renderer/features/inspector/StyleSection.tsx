@@ -101,9 +101,7 @@ import { deriveLookSources } from '@cg/shared-schema';
 import { contentStartDefaultFrom } from './content-start-default.js';
 import * as lottieAssetCache from '../assets/lottieAssetCache.js';
 import { useAssetUrl, useAssets } from '../assets/useAssets.js';
-import { ImageChoicePicker } from '../fields/ImageChoicePicker.js';
-import { useImageAssetUrls } from '../fields/useImageAssetUrls.js';
-import { useSharedImages } from '../sharedLibrary/useSharedImages.js';
+import { LivePlateFallbackPicker } from './LivePlateFallbackPicker.js';
 import { VideoPoster } from '../assets/VideoPoster.js';
 import { posterTimeMs } from '../assets/video-convert-args.js';
 import * as lt from './LottieTiming.css.js';
@@ -889,7 +887,10 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
         <FitModeRow element={element} />
         <CropFocusRows element={element} />
         <RevealMaskRows element={element} />
-        <LivePosterRow element={element} />
+        <LivePlateFallbackPicker
+          plates={[element]}
+          onCommit={(patch) => designerStore.updateElement(element.id, patch)}
+        />
         {/*
           ⭐ `DESIGNER-FIX-0905` — the paragraph that stood here is gone, and its sentences
           went three ways. Its CONSTRAINTS ("rotating would slide the picture out", "opacity
@@ -1351,103 +1352,6 @@ function RevealMaskRows({ element }: { element: VideoPlaceholderElement }): JSX.
  * field forces an author who has never seen the feed into a guess that can refuse a
  * take on air. Absent means no comparison and no refusal.
  */
-const LIVE_FALLBACK_COLOR_CHOICE = '__cg-live-fallback-color__';
-const svgThumbnail = (body: string): string =>
-  `data:image/svg+xml,${encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 80">${body}</svg>`,
-  )}`;
-const LIVE_BARS_THUMBNAIL = svgThumbnail(
-  ['#c0c0c0', '#c0c000', '#00c0c0', '#00c000', '#c000c0', '#c00000', '#0000c0']
-    .map(
-      (color, index) =>
-        `<path fill="${color}" d="M${String(index * 20)} 0h20v80H${String(index * 20)}z"/>`,
-    )
-    .join(''),
-);
-
-/**
- * D-137 + R-105 — the ONE visual picker for both the authoring poster and the bed painted under
- * the real live producer. Bars is the default and gets a real thumbnail; a solid colour (including
- * black) and project/shared pictures are alternatives in this same control.
- */
-function LivePosterRow({ element }: { element: VideoPlaceholderElement }): JSX.Element {
-  const project = useAssets().filter((a) => a.kind === 'image');
-  const shared = useSharedImages();
-  const imageUrls = useImageAssetUrls();
-  const fallbackColor = element.fallbackColor ?? '#000000';
-  const choices = [
-    {
-      value: LIVE_FALLBACK_COLOR_CHOICE,
-      label: 'Solid colour',
-      thumbnailUrl: svgThumbnail(`<rect width="140" height="80" fill="${fallbackColor}"/>`),
-    },
-    ...project.map((asset) => ({
-      value: asset.assetId,
-      label: `${stripExtension(asset.filename)} (project)`,
-      ...(imageUrls[asset.assetId] === undefined ? {} : { thumbnailUrl: imageUrls[asset.assetId] }),
-    })),
-    ...shared.map((asset) => ({
-      value: asset.assetId,
-      label: `${stripExtension(asset.filename)} (shared)`,
-      ...(imageUrls[asset.assetId] === undefined ? {} : { thumbnailUrl: imageUrls[asset.assetId] }),
-    })),
-  ];
-  const kind = element.fallbackKind ?? (element.posterAssetId === undefined ? 'bars' : 'image');
-  const current =
-    kind === 'color'
-      ? LIVE_FALLBACK_COLOR_CHOICE
-      : kind === 'image'
-        ? (element.posterAssetId ?? '')
-        : '';
-  return (
-    <>
-      <ImageChoicePicker
-        label="fallback"
-        value={current}
-        choices={choices}
-        emptyLabel="Bars"
-        emptyThumbnailUrl={LIVE_BARS_THUMBNAIL}
-        currentLabel={`${current} (missing)`}
-        currentThumbnailUrl={imageUrls[current]}
-        onChange={(value) => {
-          if (value === '') {
-            designerStore.updateElement(element.id, {
-              fallbackKind: 'bars',
-              posterAssetId: undefined,
-            } as Partial<Element>);
-            return;
-          }
-          if (value === LIVE_FALLBACK_COLOR_CHOICE) {
-            designerStore.updateElement(element.id, {
-              fallbackKind: 'color',
-              fallbackColor,
-              posterAssetId: undefined,
-            } as Partial<Element>);
-            return;
-          }
-          designerStore.updateElement(element.id, {
-            fallbackKind: 'image',
-            posterAssetId: value,
-          } as Partial<Element>);
-        }}
-      />
-      {kind === 'color' && (
-        <ColorField
-          label="fallback"
-          value={fallbackColor}
-          onCommit={(fallbackColor) =>
-            designerStore.updateElement(element.id, { fallbackColor } as Partial<Element>)
-          }
-        />
-      )}
-    </>
-  );
-}
-
-function stripExtension(filename: string): string {
-  const dot = filename.lastIndexOf('.');
-  return dot === -1 ? filename : filename.slice(0, dot);
-}
 
 function AspectRow({ element }: { element: VideoPlaceholderElement }): JSX.Element {
   const id = element.id;

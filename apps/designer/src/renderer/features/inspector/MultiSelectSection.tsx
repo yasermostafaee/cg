@@ -42,10 +42,7 @@ import {
   presetKeyFor,
   presetValueFor,
 } from './aspect-presets.js';
-import { useAssets } from '../assets/useAssets.js';
-import { ImageChoicePicker } from '../fields/ImageChoicePicker.js';
-import { useImageAssetUrls } from '../fields/useImageAssetUrls.js';
-import { useSharedImages } from '../sharedLibrary/useSharedImages.js';
+import { LivePlateFallbackPicker } from './LivePlateFallbackPicker.js';
 import * as s from './InspectorPanel.css.js';
 import * as ms from './MultiSelectSection.css.js';
 import * as tx from './TransformSection.css.js';
@@ -64,11 +61,6 @@ const MIXED = '__cg_mixed__';
 
 function allSame<T>(values: readonly T[]): boolean {
   return values.length > 0 && values.every((value) => Object.is(value, values[0]));
-}
-
-function nameWithoutExtension(filename: string): string {
-  const dot = filename.lastIndexOf('.');
-  return dot === -1 ? filename : filename.slice(0, dot);
 }
 
 /**
@@ -444,9 +436,6 @@ function LiveSourceAppearanceSections({
   resolution: { readonly width: number; readonly height: number } | null;
   onCommitBoundary: () => void;
 }): JSX.Element {
-  const projectPosters = useAssets().filter((asset) => asset.kind === 'image');
-  const sharedPosters = useSharedImages();
-  const imageUrls = useImageAssetUrls();
   const owner = elements.map((element) => element.id).join('|');
   const [aspectPick, setAspectPick] = useState<string | null>(null);
   const [aspectPickOwner, setAspectPickOwner] = useState(owner);
@@ -517,21 +506,6 @@ function LiveSourceAppearanceSections({
   const selectedFitMode: LiveFitMode | typeof MIXED = allSame(fitModes)
     ? (fitModes[0] ?? DEFAULT_LIVE_FIT_MODE)
     : MIXED;
-
-  const posterChoices = [
-    ...projectPosters.map((asset) => ({
-      value: asset.assetId,
-      label: `${nameWithoutExtension(asset.filename)} (project)`,
-      ...(imageUrls[asset.assetId] === undefined ? {} : { thumbnailUrl: imageUrls[asset.assetId] }),
-    })),
-    ...sharedPosters.map((asset) => ({
-      value: asset.assetId,
-      label: `${nameWithoutExtension(asset.filename)} (shared)`,
-      ...(imageUrls[asset.assetId] === undefined ? {} : { thumbnailUrl: imageUrls[asset.assetId] }),
-    })),
-  ];
-  const selectedPosters = elements.map((element) => element.posterAssetId ?? '');
-  const selectedPoster = allSame(selectedPosters) ? (selectedPosters[0] ?? '') : MIXED;
 
   const strokeColors = elements.map((element) => element.stroke?.color ?? '#ffffff');
   const strokeWidths = elements.map((element) => element.stroke?.width ?? 0);
@@ -618,20 +592,7 @@ function LiveSourceAppearanceSections({
             updateAll(() => ({ fitMode: fitMode as LiveFitMode }));
           }}
         />
-        <ImageChoicePicker
-          label="poster"
-          value={selectedPoster}
-          choices={posterChoices}
-          emptyLabel="Bars"
-          currentLabel={selectedPoster === MIXED ? '— mixed —' : `${selectedPoster} (missing)`}
-          currentThumbnailUrl={imageUrls[selectedPoster]}
-          onChange={(posterAssetId) => {
-            if (posterAssetId === MIXED) return;
-            updateAll(() => ({
-              posterAssetId: posterAssetId === '' ? undefined : posterAssetId,
-            }));
-          }}
-        />
+        <LivePlateFallbackPicker plates={elements} onCommit={(patch) => updateAll(() => patch)} />
         <div className={fieldCss.row}>
           <span className={fieldCss.label} />
           <Button

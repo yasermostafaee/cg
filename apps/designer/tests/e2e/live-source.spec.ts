@@ -11,7 +11,7 @@ import type { DesignerApp } from './fixtures/designer.js';
  *   - "The element carries its id and is placeable" + "The scene never declares a
  *     key source"
  *   - "A device reference is refused as a source id" (the authoring half)
- *   - "Bars on the authoring surfaces, nothing in the exports"
+ *   - "A selectable fallback on the authoring surfaces and in the export"
  *   - "An off-frame Live Source blocks rather than vanishes"
  *   - "The affordances that cannot reach air are absent" + "The author is told why,
  *     once"
@@ -165,58 +165,44 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await expect(app.page.getByText(/is not a Plate id/)).toBeVisible();
   });
 
-  test('bars on the canvas and in the Preview modal; NOTHING in the export', async ({ app }) => {
+  test('a new live plate is black until Bars is chosen from its thumbnail', async ({ app }) => {
     await app.newProject('LiveSourceBars');
     await app.addLiveSource({ x: 200, y: 160 });
     await app.setLiveSourceId('guest-1');
 
-    // CANVAS — procedural bars (a gradient, never a bundled bitmap) + the id label.
-    // The label lands with the same re-render as the bars, so waiting on it first
-    // removes the race; the background is then POLLED rather than read once, because
-    // a single `evaluate` can catch the iframe between builds and read an empty
-    // string that means "not yet", not "no bars".
     await expect(label(app)).toHaveText('guest-1');
+    const fallback = holes(app).first().locator('[data-cg-live-fallback]');
+    await expect(fallback).toHaveCSS('background-color', 'rgb(0, 0, 0)');
+    await app.inspector.getByRole('button', { name: 'fallback', exact: true }).click();
+    const picker = app.page.getByRole('dialog', { name: 'Choose picture for fallback' });
+    const bars = picker.getByRole('button', { name: 'Bars', exact: true });
+    const thumbnail = bars.locator('img');
+    await expect(thumbnail).toBeVisible();
     await expect
-      .poll(() =>
-        holes(app)
-          .first()
-          .evaluate((el) => getComputedStyle(el).backgroundImage),
-      )
+      .poll(() => thumbnail.evaluate((node) => (node as HTMLImageElement).naturalWidth))
+      .toBeGreaterThan(0);
+    await bars.click();
+    await expect
+      .poll(() => fallback.evaluate((el) => getComputedStyle(el).backgroundImage))
       .toContain('gradient');
 
-    // PREVIEW MODAL — also an authoring surface, so also bars. (Play is not needed:
-    // the element is static furniture, and the modal renders the same built scene.)
     await app.openPreviewModal();
-    const previewHole = app.previewFrame.locator('[data-cg-placeholder-for="video-placeholder"]');
-    await expect(previewHole).toHaveCount(1);
+    await app.play();
+    const previewFallback = app.previewFrame.locator('[data-cg-live-fallback]');
+    await expect(previewFallback).toHaveCount(1);
     await expect
-      .poll(() => previewHole.first().evaluate((el) => getComputedStyle(el).backgroundImage))
+      .poll(() => previewFallback.evaluate((el) => getComputedStyle(el).backgroundImage))
       .toContain('gradient');
     await app.previewDialog.getByRole('button', { name: 'Close' }).click();
 
-    // EXPORT — the element is still THERE (it is a contract with the runtime), and it
-    // paints nothing: no gradient anywhere in the emitted document, and the boot call
-    // names 'output'.
+    // EXPORT carries the same fallback choice. The authoring label is drawn only in Preview.
     const { html } = await app.exportHtml();
     expect(html).toContain('"type":"video-placeholder"');
     expect(html).toContain('"routeKey":"guest-1"');
+    expect(html).toContain('"fallbackKind":"bars"');
     expect(html).toContain("mode: 'output'");
-    // No STATIC markup for the bars ships: the DOM is built at boot, so a label node
-    // or an authoring style baked into the document would mean the bars had leaked
-    // out of the mode branch and into the artifact.
+    // The exported page has no static authoring label.
     expect(html).not.toContain('data-cg-live-source-label');
-    expect(html).not.toContain('linear-gradient(to right, #c0c0c0');
-    /*
-      DELIBERATELY NOT asserted here: that the SMPTE colour strings are absent from
-      the file. They ARE present — the bundled `cg.js` carries the `SMPTE_BARS`
-      constant, as it carries every other code path it does not take. Their presence
-      says nothing about what paints; `mode: 'output'` is what decides that, and the
-      zero-painted-pixels property is pinned where it can actually be observed —
-      `packages/template-runtime/tests/live-source-render.test.ts` builds the same
-      scene in both modes and asserts the output box has no background and no
-      children. An assertion that "the string is absent" would have looked like proof
-      and been about the bundler.
-    */
   });
 
   test('an OFF-FRAME Live Source blocks the export instead of vanishing', async ({ app }) => {
@@ -393,7 +379,29 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await exportBtn.click();
     const issues = app.page.getByRole('dialog', { name: 'Issues' });
     await expect(issues).toBeVisible();
-    await expect(issues.getByText(`Plate "${offender}" overlaps`, { exact: false })).toBeVisible();
+    const message = issues.getByText(`Plate "${offender}" overlaps`, { exact: false });
+    await expect(message).toBeVisible();
+    await expect(message).toHaveCSS('user-select', 'text');
+    const selected = await message.evaluate((node) => {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      document.addEventListener(
+        'copy',
+        (event) => {
+          node.setAttribute('data-copied-issue', window.getSelection()?.toString() ?? '');
+          event.preventDefault();
+        },
+        { once: true },
+      );
+      return selection?.toString() ?? '';
+    });
+    expect(selected).toContain('overlaps');
+    await app.page.keyboard.press('Control+c');
+    await expect(message).toHaveAttribute('data-copied-issue', selected);
+    await expect(issues).toBeVisible();
   });
 
   test('D-157 — the POSITIVE CONTROL: a clean composition marks nothing and Export is live', async ({

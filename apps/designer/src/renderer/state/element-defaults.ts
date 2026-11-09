@@ -337,6 +337,8 @@ export function defaultLiveSource(id: string, x: number, y: number): VideoPlaceh
     zIndex: 0,
     transform: baseTransform(x, y, 640, 360),
     expectedAspect: 16 / 9,
+    fallbackKind: 'color',
+    fallbackColor: '#000000',
   };
 }
 

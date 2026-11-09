@@ -8,9 +8,14 @@ For every valid assigned Live Source, the graphics bed SHALL preserve the select
 
 - **WHEN** an assigned playlist output remains valid but its current item ends with no next picture **THEN** the plate shows its selected fallback at the producer's visible fitted geometry
 
-#### Scenario: Bars is the default
+#### Scenario: A new plate starts with a black fallback
 
-- **WHEN** the author has not selected a solid colour or picture **THEN** the Designer picker shows a Bars thumbnail and the on-air fallback is SMPTE Bars
+- **WHEN** the author creates a Live Source plate **THEN** its default fallback is solid black
+- **AND** choosing Bars from the same picker stores SMPTE Bars and shows its thumbnail
+
+#### Scenario: An older plate retains its Bars fallback
+
+- **WHEN** an older scene has neither an explicit fallback nor a poster **THEN** its fallback is SMPTE Bars
 
 #### Scenario: Picture resumes
 
