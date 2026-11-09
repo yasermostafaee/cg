@@ -7,7 +7,18 @@ Bars, and the Bars choice includes its thumbnail. Existing plates keep their aut
 Legacy `posterAssetId` scenes keep their picture, and an older plate without a fallback or poster
 resolves to Bars.
 
-The page cannot resolve the installed source aspect. The Bridge sends the already-resolved `{aspect, mode}` facts on take, look switch, binding update and swap; the page uses them only to size the fallback's visible rectangle. Live-picture `MIXER FILL`/`CLIP`, source availability/refusal and layer ownership remain Bridge-owned.
+The fallback covers the authored plate bounds. The Bridge sends the resolved `{aspect, mode}` facts
+on take, look switch, binding update and swap. It owns live-picture `MIXER FILL`/`CLIP`, source
+availability and the layer lifecycle.
+
+Local CasparCG 2.5.0 showed the solid fallback when a routed layer had no frame, the margin around
+a contained source, and the fallback on a preset whose distinct producer was a UDP input without a
+sender. Resuming the routed input covered the fallback without retaking the graphic.
+
+An emergency replacement on the same layer can receive `202 PLAY OK` before the new input has
+its first frame. The engine's transition producer can keep drawing the outgoing picture in that
+case. Reliable detection needs an input signal/first-frame report. A black picture can be valid.
+[CasparCG 2.5.0 transition producer](https://github.com/CasparCG/server/blob/v2.5.0-stable/src/core/producer/transition/transition_producer.cpp)
 
 ## Risk
 

@@ -168,20 +168,20 @@
       ],
       "planned": [
         {
-          "fa": "آزمون جابه‌جایی قاب همراه عنوان و نمایش عنوان روی ورودی واقعی، بدون تغییر ورودی‌های انتخاب‌شده.",
-          "en": "Verify that a live frame moves with its title and that titles appear above real inputs while preserving input assignments."
+          "fa": "آزمون جابه‌جایی قاب همراه عنوان و نمایش عنوان روی ورودی در ایستگاه Playout، با حفظ ورودی‌های انتخاب‌شده.",
+          "en": "On the target Playout station, verify that a live frame moves with its title, the title stays above the input, and the input assignment is preserved."
         },
         {
           "fa": "نمایش تصویر و صدا در PVW و انتخاب‌گر ورودی پس از تکمیل قرارداد Preview توسط تیم Playout.",
           "en": "Show live input picture and sound in PVW and the source picker once the Playout Preview contract is available."
         },
         {
-          "fa": "جابه‌جایی تصویر واقعی داخل قاب در CG Control با درگ روی PGM و PVW. بخش PVW به دریافت تصویر زنده از Playout نیاز دارد.",
-          "en": "Drag the actual input within its plate in CG Control on PGM and PVW. The PVW interaction needs the Playout live preview feed."
+          "fa": "افزودن جابه‌جایی تصویر داخل قاب با درگ روی PVW پس از اتصال فید زندهٔ Playout.",
+          "en": "Add dragging the picture inside a plate on PVW once the Playout live feed is connected."
         },
         {
-          "fa": "آزمون ماسک‌های قاب و کنترل مستقل صدای Playlist با Playout واقعی.",
-          "en": "Verify frame masks and independent Playlist audio with real Playout inputs."
+          "fa": "آزمون ماسک‌های قاب در ایستگاه Playout و افزودن کنترل صدای خروجی اصلی Playlist پس از دریافت قرارداد gain.",
+          "en": "Verify frame masks on the target Playout station and add programme Playlist audio control once the gain contract is available."
         }
       ],
       "downloadBaseUrl": null

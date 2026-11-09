@@ -29,4 +29,11 @@
       transparent when disabled and preserve the Bridge's picture FILL/CLIP and input assignments.
 - [x] 4.3 Chromium verified toggling off, transparent export and restoring the chosen colour.
       All 29 focused template-runtime tests and 22 Designer Inspector tests passed.
-- [ ] 4.4 Record the full gate and Linux E2E. Verify the uncovered region on Playout.
+- [x] 4.4 Verify on local CasparCG 2.5.0. Sampled the full fallback before the first frame, the
+      uncovered margin, loss and recovery without a new take, and transparent margins with the
+      option off. A preset with an unfed UDP input showed the selected solid fallback and switching
+      back restored the prior picture.
+- [ ] 4.5 Verify on the target Playout. Confirm signal reporting for an in-place source swap whose
+      new producer has no first frame. Local CasparCG can keep the outgoing picture in this case.
+- [x] 4.6 The full pre-push gate and [carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42582556024/job/129044614984)
+      passed on `0a553a24`.

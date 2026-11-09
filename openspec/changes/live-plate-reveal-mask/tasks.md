@@ -40,5 +40,8 @@
 - [x] 5.4 Read hidden-seat replies by their unique seat identity during a look switch
 - [x] 5.5 Verify the authoring, export and Bridge paths with local CasparCG 2.5.0 and Chromium.
       Checked Mask, Revert and full-frame recovery by sampling output pixels, plus the reported
-      linked reveal on preset 1 of the owner's package.
-- [ ] 5.6 Confirm the new mask on the target Playout and record the carrying Linux E2E job
+      linked reveal on preset 1 of the owner's package. Opened `ghab-test.cgproj` in Designer and
+      exported both preset 1 and the main composition with all three presets.
+- [ ] 5.6 Confirm the new mask on the target Playout.
+- [x] 5.7 The full pre-push gate and [carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42582556024/job/129044614984)
+      passed on `0a553a24`.

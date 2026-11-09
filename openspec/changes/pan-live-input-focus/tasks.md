@@ -24,3 +24,8 @@
       passed on `665668e4`.
 - [x] 3.5 Verify the PGM drag gesture against the ticketed MJPEG return and scoped mixer update in
       Chromium, with the clip, producer and volume preserved.
+- [x] 3.6 Verify the same crop on local CasparCG 2.5.0 with a two-colour picture. The sampled pixel
+      inside the plate changed from green to red after the pan. The outside pixel and clip were
+      unchanged.
+- [x] 3.7 The full pre-push gate and [carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42582556024/job/129044614984)
+      passed on `0a553a24`, including the PGM drag in the built CG Control.

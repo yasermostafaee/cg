@@ -16,3 +16,5 @@
 - [x] 3.2 Focused package checks and the full pre-push gate passed on `d6383de0`.
 - [x] 3.3 Chromium reproduced 24 stray rows before Play. The same test passes with the repair,
       and both complete weather-starter cycles pass through their final pages and automatic exit.
+- [x] 3.4 [Carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42582556024/job/129044614984)
+      passed on `0a553a24`, including the first painted weather page.

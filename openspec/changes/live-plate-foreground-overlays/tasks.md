@@ -23,3 +23,5 @@
 - [x] 3.6 Infer visual foreground in the same template and preset, with manual overrides
 - [x] 3.7 Verify the reported package with automatic titles, an unmarked circle and look swaps on
       local CasparCG 2.5.0. Sampled the foreground pixels on preset 2 before and after the switch.
+- [x] 3.8 The full pre-push gate and [carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42582556024/job/129044614984)
+      passed on `0a553a24`.

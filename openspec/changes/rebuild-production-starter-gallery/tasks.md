@@ -396,5 +396,6 @@ type remain required; compact degree adjacency is now a targeted correction acro
 - [x] 18.3 All ten gallery Chromium checks and seven focused DOM tests passed. In the local
       Windows executable, reduced motion kept the poster static. Opt-in decoded 56 frames,
       pointer leave paused and reset the clip, and reopening the page kept the choice.
-- [ ] 18.4 Record the full gate and Linux E2E result. Exercise the installed-app smoke on the
-      next requested Windows installer build.
+- [x] 18.4 The full pre-push gate and [carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42582556024/job/129044614984)
+      passed on `0a553a24`, including all 12 clip decodes and reduced-motion opt-in.
+- [ ] 18.5 Exercise the installed-app smoke on the next requested Windows installer build.

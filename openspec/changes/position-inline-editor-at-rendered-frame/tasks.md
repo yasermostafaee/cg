@@ -6,4 +6,5 @@
       after the fix the editor aligned within 1 px and the edited text rendered at both frames.
 - [x] 2.2 The pre-push gate on `7cfe2b65` passed 103 uncached tasks and 165 strict OpenSpec
       checks (`gate-20261109T004904Z-20004.log`). Chromium passed the built-app regression.
-- [ ] 2.3 Read the carrying commit's Linux E2E result.
+- [x] 2.3 The inline text edit passed in the [carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42582556024/job/129044614984)
+      on `0a553a24`.
