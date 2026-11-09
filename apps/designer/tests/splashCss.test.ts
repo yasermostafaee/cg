@@ -244,7 +244,7 @@ describe('reduced motion renders the COMPLETE composition, not a half-built fram
   it('stops every animation and the raster sweep', () => {
     expect(reduced, 'no reduced-motion block in the splash CSS').not.toBe('');
     expect(reduced).toMatch(/\.cg-splash \*[\s\S]{0,80}animation:\s*none\s*!important/);
-    expect(reduced).toMatch(/\.cg-splash__scan\s*\{\s*display:\s*none/);
+    expect(reduced).toMatch(/\.cg-splash__scan,\s*\.cg-splash__rail::after\s*\{\s*display:\s*none/);
   });
 
   it('draws the path fully, places all four keyframes, and assembles the lower third', () => {

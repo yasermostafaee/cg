@@ -377,7 +377,7 @@ describe('reduced motion renders a freeze-frame that still tells the story', () 
   it('stops every animation and the raster sweep', () => {
     expect(reduced, 'no reduced-motion block in the splash CSS').not.toBe('');
     expect(reduced).toMatch(/animation:\s*none\s*!important/);
-    expect(reduced).toMatch(/\.cg-splash__scan\s*\{\s*display:\s*none/);
+    expect(reduced).toMatch(/\.cg-splash__scan,\s*\.cg-splash__rail::after\s*\{\s*display:\s*none/);
   });
 
   it('holds the FULL PACKAGE on air — NOT a blank scene and not a half-built one', () => {

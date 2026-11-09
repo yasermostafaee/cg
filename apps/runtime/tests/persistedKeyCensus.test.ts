@@ -163,7 +163,8 @@ const BEFORE_AND_AFTER = {
     */
     'cg.runtime.station.v1',
   ],
-  realSessionStorage: ['CG_RUNTIME_SESSION', 'cg.runtime.testMode'],
+  // P-078 removed the splash's cold/warm marker. Old tabs may still carry it until closed.
+  realSessionStorage: ['cg.runtime.testMode'],
   mockLocalStorage: [
     /*
       `PLAYOUT-SOURCES-01` — NEW, and mock-only (the offline console): the media items this console

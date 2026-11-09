@@ -15,11 +15,9 @@ where those two live so there is exactly one of each:
 
 ## What is deliberately NOT here
 
-The **floors, the session key and the phase labels** stay in each app. They are genuinely
-different — the Runtime holds a warm reload for 600 ms because it only needs to stop a flash, the
-Designer for 3000 ms because the owner wants the brand moment on every load — and pretending
-otherwise would mean one app reading the other's number. Each app passes its own to the functions
-here.
+The **phase labels** stay in each app. Designer reports storage startup and CG Control reports
+bridge selection. Both dismiss when their real startup work completes or the shared backstop
+expires. The inline scripts can paint and animate before either bundle is available.
 
 So does each app's **`declare global`** for `window.__CG_SPLASH__`: the phase key union is the
 app's own list, and typing it here would let either app report a phase the other one has.

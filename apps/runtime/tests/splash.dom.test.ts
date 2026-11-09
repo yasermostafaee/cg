@@ -4,12 +4,9 @@ import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   SPLASH_CEILING_MS,
-  SPLASH_COLD_FLOOR_MS,
   SPLASH_FADE_MS,
+  SPLASH_LABEL_FADE_MS,
   SPLASH_PHASES,
-  SPLASH_SESSION_KEY,
-  SPLASH_TICK_MS,
-  SPLASH_WARM_FLOOR_MS,
   splashDismissAt,
   splashProgress,
   splashProgressPercent,
@@ -80,7 +77,6 @@ beforeEach(() => {
   vi.clearAllTimers();
   vi.setSystemTime(new Date('2026-08-01T12:00:00.000Z'));
   document.body.innerHTML = bodyMarkup;
-  window.sessionStorage.clear();
   delete (window as unknown as { __CG_SPLASH__?: unknown }).__CG_SPLASH__;
   delete (window as unknown as { __CG_SPLASH_DISABLED__?: unknown }).__CG_SPLASH_DISABLED__;
 });
@@ -103,232 +99,93 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('the inline clock mirrors splashTiming.ts', () => {
-  it('declares the same floors, ceiling, fade and tick', () => {
-    expect(inlineNumber('COLD_FLOOR_MS')).toBe(SPLASH_COLD_FLOOR_MS);
-    expect(inlineNumber('WARM_FLOOR_MS')).toBe(SPLASH_WARM_FLOOR_MS);
+const shownPct = (): string | null => document.getElementById('cg-splash-pct')?.textContent ?? null;
+const phaseLabel = (): string | null =>
+  document.getElementById('cg-splash-phase')?.textContent ?? null;
+
+describe('the inline splash mirrors the startup timing contract', () => {
+  it('uses the same ceiling, fade and phase list', () => {
     expect(inlineNumber('CEILING_MS')).toBe(SPLASH_CEILING_MS);
     expect(inlineNumber('FADE_MS')).toBe(SPLASH_FADE_MS);
-    expect(inlineNumber('TICK_MS')).toBe(SPLASH_TICK_MS);
-  });
-
-  it('uses the same session marker and the same phase list', () => {
-    expect(inlineScript).toContain(`var SESSION_KEY = '${SPLASH_SESSION_KEY}';`);
-    const phases = /var PHASES = \[([\s\S]*?)\];/.exec(inlineScript);
-    expect(phases, 'inline script no longer declares PHASES').not.toBeNull();
-    const listed = [...(phases?.[1] ?? '').matchAll(/'([^']+)'/g)].map((m) => m[1]);
+    const listed = /var PHASES = \[([^\]]+)\]/
+      .exec(inlineScript)?.[1]
+      ?.split(',')
+      .map((part) => part.trim().replaceAll("'", ''));
     expect(listed).toEqual([...SPLASH_PHASES]);
-  });
-});
-
-describe('the phase readout', () => {
-  /** The percentage the inline script is currently showing. */
-  function shownPct(): string | undefined {
-    return document.getElementById('cg-splash-pct')?.textContent ?? undefined;
-  }
-
-  /**
-   * The rail, read back as a percentage — it is SCALED rather than widened (an animated
-   * width would cost layout on every one of the ~50 ticks of a cold hold), and it must be
-   * the SAME number as the readout, which is the whole point of one definition.
-   */
-  function railPct(): string | undefined {
-    const transform = document.getElementById('cg-splash-fill')?.style.transform ?? '';
-    const scale = /scaleX\(([\d.]+)\)/.exec(transform);
-    return scale === null ? undefined : `${Math.round(Number(scale[1]) * 100)}%`;
-  }
-
-  /** What the pure module says the readout should show. The oracle, never a typed literal. */
-  function expected(elapsedMs: number, completedSteps: number): string {
-    return `${splashProgressPercent(
-      splashProgress({
-        elapsedMs,
-        floorMs: SPLASH_COLD_FLOOR_MS,
-        completedSteps,
-        totalSteps: SPLASH_PHASES.length,
-      }),
-    )}%`;
-  }
-
-  it('starts at 0% — on the first frame nothing has finished yet', () => {
-    runSplashScript();
-    expect(document.getElementById('cg-splash-phase')?.textContent).toBe('INITIALIZING');
-    expect(shownPct()).toBe(expected(0, 0));
-    expect(shownPct()).toBe('0%');
-    expect(railPct()).toBe('0%');
-  });
-
-  it('the readout is a PERCENTAGE and the rail is the same number', () => {
-    runSplashScript();
-    // A step is finished when the NEXT one begins, so entering step 2 puts one behind us.
-    // The clock is at 0 here, so the `min` pins both readings to the clock's 0.
-    splash().phase('CONNECTING');
-    expect(shownPct()).toBe(expected(0, 1));
-    expect(railPct()).toBe(shownPct());
-
-    // Let the floor run out; now the gate is the STEP count, not the clock.
-    vi.advanceTimersByTime(SPLASH_COLD_FLOOR_MS);
-    expect(shownPct()).toBe(expected(SPLASH_COLD_FLOOR_MS, 1));
-    expect(shownPct()).toBe('33%');
-
-    splash().phase('STARTING INTERFACE');
-    expect(shownPct()).toBe('66%');
-    expect(railPct()).toBe(shownPct());
-    // NOT 100 — the last label is on screen, so the last step is still RUNNING.
-    expect(shownPct()).not.toBe('100%');
-  });
-
-  it('the number ticks on its own while the hold runs, without a phase call', () => {
-    // The left side goes empty after boot-done and the percentage carries the rest of the
-    // hold alone; that only works if something advances it between events.
-    runSplashScript();
-    splash().done();
-    const early = shownPct();
-    vi.advanceTimersByTime(SPLASH_COLD_FLOOR_MS / 2);
-    expect(shownPct()).not.toBe(early);
-    expect(shownPct()).toBe(expected(SPLASH_COLD_FLOOR_MS / 2, SPLASH_PHASES.length));
-  });
-
-  it('reaches 100% exactly when the splash may dismiss, and not before', () => {
-    runSplashScript();
-    splash().done();
-    vi.advanceTimersByTime(SPLASH_COLD_FLOOR_MS - SPLASH_TICK_MS);
-    expect(shownPct()).not.toBe('100%');
-
-    vi.advanceTimersByTime(SPLASH_TICK_MS);
-    expect(shownPct()).toBe('100%');
-    expect(railPct()).toBe('100%');
-  });
-
-  it('the ceiling dismisses with the percentage HONESTLY below 100', () => {
-    // The boot never finishes. Pretending the number got there would invent the one thing
-    // this readout refuses to invent.
-    runSplashScript();
-    splash().phase('CONNECTING');
-    vi.advanceTimersByTime(SPLASH_CEILING_MS);
-    expect(splashEl()?.getAttribute('data-dismissing')).toBe('true');
-    expect(shownPct()).toBe('33%');
-  });
-
-  it('ignores a phase key it does not know rather than corrupting the readout', () => {
-    runSplashScript();
-    splash().phase('LOADING SNAPSHOTS');
-    expect(document.getElementById('cg-splash-phase')?.textContent).toBe('INITIALIZING');
-    expect(shownPct()).toBe('0%');
-  });
-
-  it('THE LABEL LEAVES on boot-done — it never settles on a terminal word', () => {
-    // A fast cold boot is done about a second in while the door stays shut until 5 s, so
-    // a "READY" label would be on screen for most of the splash at exactly the moment the
-    // operator still cannot use the app. The label fades; the percentage carries the rest.
-    runSplashScript();
-    splash().phase('STARTING INTERFACE');
-    expect(document.getElementById('cg-splash-readout')?.getAttribute('data-done')).toBeNull();
-
-    splash().done();
-    expect(document.getElementById('cg-splash-readout')?.getAttribute('data-done')).toBe('true');
-    // The PERCENTAGE stays — it carries the remaining hold once the label is gone.
-    expect(shownPct()).toBeDefined();
-  });
-
-  it('says READY nowhere — not in the markup, the CSS, or the script', () => {
-    // Comments are stripped first: the document DOCUMENTS the rejected label on purpose
-    // (so nobody reintroduces it), and a test that trips on its own rationale is a test
-    // people delete. Word-bounded so "already" neither satisfies nor breaks it, and
-    // case-insensitive so a lower-case reintroduction is caught too.
-    const withoutComments = html
-      .replace(/<!--[\s\S]*?-->/g, ' ')
-      .replace(/\/\*[\s\S]*?\*\//g, ' ')
-      .replace(/^\s*\/\/.*$/gm, ' ');
-    expect(withoutComments, 'the terminal READY label is back in index.html').not.toMatch(
-      /\bready\b/i,
+    expect(html).toContain(
+      `#cg-splash-phase {\n        transition: opacity ${String(SPLASH_LABEL_FADE_MS / 1000)}s ease;`,
     );
-    expect([...SPLASH_PHASES]).toHaveLength(3);
-  });
-});
-
-describe('the hold', () => {
-  it('a cold start holds the full five seconds even when boot finishes at once', () => {
-    const t0 = Date.now();
-    runSplashScript();
-    splash().done();
-
-    // The oracle is the pure module, not a number typed twice.
-    const expectedAt = splashDismissAt({ firstPaintAt: t0, bootDoneAt: t0, coldStart: true });
-    expect(expectedAt - t0).toBe(SPLASH_COLD_FLOOR_MS);
-
-    vi.advanceTimersByTime(expectedAt - t0 - 1);
-    expect(splashEl()?.getAttribute('data-dismissing')).toBeNull();
-
-    vi.advanceTimersByTime(1);
-    expect(splashEl()?.getAttribute('data-dismissing')).toBe('true');
-
-    // …and it REMOVES itself. A full-screen overlay left in the DOM swallows clicks.
-    vi.advanceTimersByTime(SPLASH_FADE_MS);
-    expect(splashEl()).toBeNull();
   });
 
-  it('a warm reload — the session marker already set — dismisses at the short floor', () => {
-    window.sessionStorage.setItem(SPLASH_SESSION_KEY, '1');
-    const t0 = Date.now();
+  it('shows the fraction of completed phases on both the rail and the readout', () => {
     runSplashScript();
-    splash().done();
-
-    const expectedAt = splashDismissAt({ firstPaintAt: t0, bootDoneAt: t0, coldStart: false });
-    expect(expectedAt - t0).toBe(SPLASH_WARM_FLOOR_MS);
-
-    vi.advanceTimersByTime(SPLASH_WARM_FLOOR_MS - 1);
-    expect(splashEl()?.getAttribute('data-dismissing')).toBeNull();
-    vi.advanceTimersByTime(1);
-    expect(splashEl()?.getAttribute('data-dismissing')).toBe('true');
-  });
-
-  it('writes the session marker on a cold start, so the next reload is warm', () => {
-    expect(window.sessionStorage.getItem(SPLASH_SESSION_KEY)).toBeNull();
-    runSplashScript();
-    expect(window.sessionStorage.getItem(SPLASH_SESSION_KEY)).toBe('1');
-  });
-
-  it('a boot slower than the floor extends the hold to boot', () => {
-    runSplashScript();
+    expect(shownPct()).toBe('0%');
+    for (const [completedSteps, phase] of SPLASH_PHASES.entries()) {
+      splash().phase(phase);
+      const progress = splashProgressPercent(
+        splashProgress({ completedSteps, totalSteps: SPLASH_PHASES.length }),
+      );
+      expect(shownPct()).toBe(`${String(progress)}%`);
+      expect(document.getElementById('cg-splash-fill')?.style.transform).toBe(
+        `scaleX(${String(progress / 100)})`,
+      );
+      expect(phaseLabel()).toBe(phase);
+    }
     vi.advanceTimersByTime(9000);
-    expect(splashEl()?.getAttribute('data-dismissing')).toBeNull();
-
-    splash().done();
-    vi.advanceTimersByTime(1);
-    expect(splashEl()?.getAttribute('data-dismissing')).toBe('true');
+    expect(shownPct()).toBe('66%');
+    splash().phase('UNKNOWN');
+    splash().phase(SPLASH_PHASES[0]);
+    expect(shownPct()).toBe('66%');
+    expect(phaseLabel()).toBe(SPLASH_PHASES[2]);
+    expect(inlineScript).not.toMatch(/sessionStorage|setInterval/);
   });
 
-  it('the ceiling dismisses a boot that never completes', () => {
+  it.each([0, 120, 9000])('dismisses immediately when boot finishes at %i ms', (bootMs) => {
+    const firstPaintAt = Date.now();
     runSplashScript();
-    // `done()` is never called — the app is stuck. The splash still has to go: without
-    // it the operator has no door into the application at all.
+    vi.advanceTimersByTime(bootMs);
+    const bootDoneAt = Date.now();
+    expect(splashDismissAt({ firstPaintAt, bootDoneAt })).toBe(bootDoneAt);
+    expect(splashEl()?.hasAttribute('data-dismissing')).toBe(false);
+    splash().done();
+    expect(shownPct()).toBe('100%');
+    expect(splashEl()?.getAttribute('data-dismissing')).toBe('true');
+    expect(splashEl()?.getAttribute('aria-hidden')).toBe('true');
+    expect(document.getElementById('cg-splash-readout')?.getAttribute('data-done')).toBe('true');
+    expect(phaseLabel()).not.toMatch(/ready/i);
+    vi.advanceTimersByTime(SPLASH_FADE_MS - 1);
+    expect(splashEl()).not.toBeNull();
+    vi.advanceTimersByTime(1);
+    expect(splashEl()).toBeNull();
+  });
+
+  it('the ceiling dismisses a stuck boot without claiming 100%', () => {
+    runSplashScript();
+    splash().phase(SPLASH_PHASES[1]);
     vi.advanceTimersByTime(SPLASH_CEILING_MS - 1);
-    expect(splashEl()?.getAttribute('data-dismissing')).toBeNull();
-
+    expect(splashEl()?.hasAttribute('data-dismissing')).toBe(false);
     vi.advanceTimersByTime(1);
     expect(splashEl()?.getAttribute('data-dismissing')).toBe('true');
+    expect(shownPct()).toBe('33%');
+    splash().done();
+    expect(shownPct()).toBe('33%');
     vi.advanceTimersByTime(SPLASH_FADE_MS);
     expect(splashEl()).toBeNull();
   });
 
-  it('done() twice schedules the hold once', () => {
+  it('schedules the fade removal once even if boot completion is reported repeatedly', () => {
     runSplashScript();
-    splash().done();
-    const armed = vi.getTimerCount();
-
-    // StrictMode re-runs mount effects in development, so this happens every dev boot.
-    splash().done();
-    expect(vi.getTimerCount()).toBe(armed);
-
-    vi.advanceTimersByTime(SPLASH_COLD_FLOOR_MS);
-    expect(splashEl()?.getAttribute('data-dismissing')).toBe('true');
-    vi.advanceTimersByTime(SPLASH_FADE_MS);
-    expect(splashEl()).toBeNull();
-
-    // A third signal after dismissal must not resurrect a timer either.
-    splash().done();
-    expect(vi.getTimerCount()).toBe(0);
+    const scheduled = vi.spyOn(globalThis, 'setTimeout');
+    try {
+      splash().done();
+      splash().done();
+      vi.advanceTimersByTime(SPLASH_FADE_MS);
+      splash().done();
+      expect(scheduled).toHaveBeenCalledTimes(1);
+      expect(splashEl()).toBeNull();
+    } finally {
+      scheduled.mockRestore();
+    }
   });
 });
 
@@ -353,9 +210,6 @@ describe('the test-suite door', () => {
      * assertion cannot pass by simply failing to observe.
      */
     const scheduled = vi.spyOn(globalThis, 'setTimeout');
-    // The readout's 100 ms ticker is an INTERVAL, so the bypass's "no timers" promise is
-    // only checked if the spy covers that too — a repeating timer left running under a
-    // disabled splash would be the worse of the two leaks.
     const repeated = vi.spyOn(globalThis, 'setInterval');
     runSplashScript();
 
@@ -364,7 +218,7 @@ describe('the test-suite door', () => {
       (window as unknown as { __CG_SPLASH__?: unknown }).__CG_SPLASH__,
       'a disabled splash must not install a control surface',
     ).toBeUndefined();
-    // A SYNCHRONOUS no-op: `el.remove()` and return. Not even the ~450 ms fade may be
+    // A SYNCHRONOUS no-op: `el.remove()` and return. Not even the fade may be
     // scheduled — that fade in every E2E is the exact cost the bypass exists to avoid.
     expect(
       scheduled,

@@ -1,16 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-/**
- * R-035 — the startup splash, in a real browser.
- *
- * `test` comes from `@playwright/test` DIRECTLY and not from `./fixtures/runtime.js`,
- * and that is the whole opt-in mechanism: the shared harness arms
- * `__CG_SPLASH_DISABLED__` for every other spec so none of them pays the 5 s cold floor.
- * These specs want the splash, so they simply do not use that harness.
- *
- * A fresh Playwright context has empty `sessionStorage`, so every test here starts COLD
- * by construction — which is exactly the signal the splash reads.
- */
+/** Browser coverage for the pre-bundle splash, with the bootstrap held only where needed. */
 
 /** The splash element. It REMOVES itself when dismissed, so "gone" is a count of zero. */
 function splash(page: Page) {
@@ -30,101 +20,65 @@ async function armMockBoot(page: Page): Promise<void> {
   });
 }
 
-/**
- * Record every distinct percentage the readout shows, IN THE PAGE, from first paint until
- * the splash removes itself.
- *
- * Sampled here rather than asserted with `toHaveText('100%')`, and the difference matters:
- * the splash shows 100% only for the ~450 ms fade before it deletes itself, so an assertion
- * that depends on Playwright's polling cadence landing inside that window passes on an idle
- * machine and fails on a loaded one. It did exactly that — polls landed at 40 %, 42 %, 44 %
- * and then the element was gone. A 40 ms in-page sampler cannot miss it, and it gives the
- * whole climb to assert over instead of one instant.
- */
-async function recordPercentages(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    const log: string[] = [];
-    (window as unknown as { __CG_PCT_LOG__: string[] }).__CG_PCT_LOG__ = log;
-    let seen = false;
-    const tick = setInterval(() => {
-      const el = document.getElementById('cg-splash-pct');
-      if (el === null) {
-        // Only STOP once the element has existed and then gone: this init script runs
-        // before the document is parsed, so a null on the first ticks is "not yet".
-        if (seen) clearInterval(tick);
-        return;
-      }
-      seen = true;
-      const text = el.textContent ?? '';
-      if (log[log.length - 1] !== text) log.push(text);
-    }, 40);
+const ENTRY_SCRIPT = '**/assets/index-*.js';
+
+async function openSplashWithoutBoot(page: Page): Promise<void> {
+  await page.route(ENTRY_SCRIPT, (route) => route.abort());
+  await page.goto('/');
+}
+
+test('startup animates while loading and dismissal begins in the actual boot callback', async ({
+  page,
+}) => {
+  await armMockBoot(page);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
   });
-}
-
-/** The recorded climb, as numbers. */
-async function recordedPercentages(page: Page): Promise<number[]> {
-  const log = await page.evaluate(
-    () => (window as unknown as { __CG_PCT_LOG__?: string[] }).__CG_PCT_LOG__ ?? [],
+  await page.route(ENTRY_SCRIPT, async (route) => {
+    await pending;
+    await route.continue();
+  });
+  try {
+    await page.goto('/', { waitUntil: 'commit' });
+    await expect(splash(page)).toBeVisible();
+    const sweep = await splash(page)
+      .locator('.cg-splash__rail')
+      .evaluate(async (node) => {
+        const before = getComputedStyle(node, '::after').transform;
+        for (let frame = 0; frame < 4; frame += 1) await new Promise(requestAnimationFrame);
+        const style = getComputedStyle(node, '::after');
+        return { before, after: style.transform, animation: style.animationName };
+      });
+    expect(sweep.animation).toBe('cg-load-sweep');
+    expect(sweep.after).not.toBe(sweep.before);
+    await expect(splash(page).locator('#cg-splash-pct')).toHaveText('0%');
+    await page.evaluate(() => {
+      const api = window.__CG_SPLASH__;
+      if (api === undefined) throw new Error('No startup splash callback');
+      const done = api.done;
+      api.done = () => {
+        done();
+        const node = document.getElementById('cg-splash');
+        const readout = document.getElementById('cg-splash-readout');
+        document.documentElement.dataset['splashAtBoot'] = JSON.stringify({
+          dismissing: node?.dataset['dismissing'],
+          pointerEvents: node === null ? undefined : getComputedStyle(node).pointerEvents,
+          progress: document.getElementById('cg-splash-pct')?.textContent,
+          done: readout?.dataset['done'],
+        });
+      };
+    });
+  } finally {
+    release();
+  }
+  await expect(page.locator('html')).toHaveAttribute(
+    'data-splash-at-boot',
+    JSON.stringify({ dismissing: 'true', pointerEvents: 'none', progress: '100%', done: 'true' }),
   );
-  return log.map((value) => Number(value.replace('%', '')));
-}
-
-test('a cold start holds the splash for at least eight seconds; a reload in the same tab is shorter', async ({
-  page,
-}) => {
-  await armMockBoot(page);
-
-  // COLD — nothing in this context's session storage.
-  const coldStartedAt = Date.now();
-  await page.goto('/');
-  await expect(splash(page)).toBeVisible();
-  await expect(splash(page)).toHaveCount(0, { timeout: 25_000 });
-  const coldHeldMs = Date.now() - coldStartedAt;
-  expect(coldHeldMs).toBeGreaterThanOrEqual(8000);
-
-  // WARM — same tab, so the session marker the first boot wrote is still there. Three
-  // seconds is a brand moment on every load rather than a padded one, so the claim is that
-  // it is honoured AND that it is visibly shorter than a cold start; an upper bound in
-  // milliseconds would just be measuring this machine's navigation time.
-  const warmStartedAt = Date.now();
-  await page.reload();
-  await expect(splash(page)).toHaveCount(0, { timeout: 25_000 });
-  const warmHeldMs = Date.now() - warmStartedAt;
-  expect(warmHeldMs).toBeGreaterThanOrEqual(3000);
-  expect(warmHeldMs).toBeLessThan(coldHeldMs);
-
-  // Gone means GONE — a full-screen overlay left in the DOM swallows clicks. `Layers` is
-  // this branch's operator surface (it replaced the old `Stack` region); it is also what
-  // `fixtures/runtime.ts` uses as its own post-boot barrier.
+  await expect(splash(page)).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Layers' })).toBeVisible();
-});
-
-test('the phase label LEAVES on boot-done — the percentage carries the rest of the hold', async ({
-  page,
-}) => {
-  await armMockBoot(page);
-  await recordPercentages(page);
-  await page.goto('/');
-
-  const readout = splash(page).locator('#cg-splash-readout');
-  const label = readout.locator('#cg-splash-phase');
-
-  // The boot steps are real and fast against the mock, so by the time this runs the app
-  // has committed and `done()` has fired — the label is on its way out. No terminal word
-  // settles in its place.
-  await expect(readout).toHaveAttribute('data-done', 'true');
-  await expect(label).toHaveCSS('opacity', '0');
-  await expect(splash(page)).not.toContainText(/\bready\b/i);
-
-  await expect(splash(page)).toHaveCount(0, { timeout: 15_000 });
-
-  // The percentage carried the hold on its own: it CLIMBED, it never went backwards, and it
-  // arrived at exactly 100 — which is the moment the door opens and not a moment earlier.
-  const climb = await recordedPercentages(page);
-  expect(climb.length, 'the readout never moved').toBeGreaterThan(3);
-  expect(climb).toEqual([...climb].sort((a, b) => a - b));
-  expect(climb[0]).toBeLessThan(100);
-  expect(climb.at(-1)).toBe(100);
 });
 
 test('a refused bridge still dismisses the splash — the app shows its own NOT CONNECTED surface', async ({
@@ -147,7 +101,7 @@ test('a refused bridge still dismisses the splash — the app shows its own NOT 
 
 test('the foot carries a build stamp that identifies the running build', async ({ page }) => {
   await armMockBoot(page);
-  await page.goto('/');
+  await openSplashWithoutBoot(page);
 
   // P-074/P-076 — the exact release identity is visible and explicitly labelled before boot.
   const stamp = (await splash(page).locator('#cg-splash-version').textContent())?.trim();
@@ -163,7 +117,7 @@ test.describe('reduced motion', () => {
     // Before `goto`, so the very first paint is already the reduced one.
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await armMockBoot(page);
-    await page.goto('/');
+    await openSplashWithoutBoot(page);
     await expect(splash(page)).toBeVisible();
 
     const settled = await page.evaluate(() => {
@@ -201,7 +155,7 @@ test.describe('reduced motion', () => {
   }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await armMockBoot(page);
-    await page.goto('/');
+    await openSplashWithoutBoot(page);
     await expect(splash(page)).toBeVisible();
 
     const frame = await page.evaluate(() => {
@@ -285,7 +239,7 @@ test.describe('CENTRAL-BRIDGE-01 — the splash CG Control shows first', () => {
       };
     });
     await armMockBoot(page);
-    await page.goto('/');
+    await openSplashWithoutBoot(page);
     await expect(splash(page)).toBeVisible();
     await expect(splash(page)).not.toHaveAttribute('data-continued', /.*/);
     const played = await entrances(page);
@@ -299,7 +253,7 @@ test.describe('CENTRAL-BRIDGE-01 — the splash CG Control shows first', () => {
     page,
   }) => {
     await armMockBoot(page);
-    await page.goto('/');
+    await openSplashWithoutBoot(page);
     await expect(splash(page)).toBeVisible();
     await expect(splash(page)).not.toHaveAttribute('data-continued', /.*/);
     const wordmark = (await entrances(page)).wordmark;

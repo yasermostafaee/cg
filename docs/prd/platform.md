@@ -4318,3 +4318,18 @@ per-version surface that can receive hosted files later.
 - WHEN a host base URL is supplied THEN all five cards bind to that version's files
 - WHEN installers are built THEN their version must already have a tracked history entry, otherwise the
   build stops before packaging
+
+## [~] P-078 — Animate startup for the duration of actual bootstrap ⟨priority: medium — the owner, 2026-11-09⟩ — `openspec/changes/animate-startup-while-loading/`
+
+**What:** both installed and browser startup pages start motion before the application bundle loads.
+Completed phases drive the readout. Boot completion starts a short nonblocking dismissal immediately.
+The absolute 20-second backstop and reduced-motion preference remain in force.
+
+**Acceptance:**
+
+- WHEN the bundle is still loading and motion is allowed THEN the inline splash visibly animates
+- WHEN the platform resolves and the shell commits THEN the splash begins dismissing immediately
+  on both first launch and reload
+- WHEN progress stalls THEN the percentage stays on the completed phase
+- WHEN the bootstrap is stuck for 20 seconds THEN the splash yields to the app's error surface
+- WHEN reduced motion is requested THEN the complete splash composition is still
