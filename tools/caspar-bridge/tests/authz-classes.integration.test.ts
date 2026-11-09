@@ -297,11 +297,12 @@ describe('C-038 — the census: every route, classified', () => {
       'sources.assignments',
       'sources.config',
       /*
-        `PLAYOUT-SOURCES-01` §4 — the picker's two reads. `media-search` answers a VIEWER (D11 is
+        `PLAYOUT-SOURCES-01` §4 — media search and thumbnails answer a VIEWER (D11 is
         readable by every CG role, and the picker is a read); `refresh` asks for a D10 read no sooner
         than 5 s after the last, and changes nothing a read would not.
       */
       'sources.media-search',
+      'sources.media-thumbnail',
       'sources.refresh',
       // `CENTRAL-BRIDGE-01` (`B-294`) — the restore's standing report, read by every console.
       'stack.restore-report',

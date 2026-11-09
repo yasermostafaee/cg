@@ -355,8 +355,9 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         'sharedFiles.get',
         'sources.assignments',
         'sources.config',
-        // `PLAYOUT-SOURCES-01` — the picker's reads: a media search and a D10 refresh change nothing.
+        // `PLAYOUT-SOURCES-01` — the picker's media search, thumbnail and D10 refresh are reads.
         'sources.media-search',
+        'sources.media-thumbnail',
         'sources.refresh',
         // `CENTRAL-BRIDGE-01` (`B-294`) — the restore's REPORT, a read; `stack.restore` itself is
         // gone (the bridge restores its own stack at start), and its dismissal is refused locked.
