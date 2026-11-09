@@ -26,6 +26,7 @@ import {
   readCgControl,
   sequenceStepsByOperator,
   stripCgControl,
+  type CgLiveFallback,
   type CgPage,
   type Look,
   type SequenceElement,
@@ -109,6 +110,7 @@ import {
   buildScene,
   buildSequenceCompositionItem,
   buildSequenceImageItem,
+  isPvwRehearsal,
   repeaterItemValues,
 } from './scene-builder.js';
 import {
@@ -570,6 +572,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const stepPlan = stepPlanOf(scene);
 
   const outputPass = mode === 'output' ? (options.outputPass ?? 'full') : 'full';
+  const holdsLiveFallback =
+    mode === 'output' && outputPass !== 'foreground' && !isPvwRehearsal(doc);
   const built = buildScene(
     scene,
     doc,
@@ -2873,13 +2877,43 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // background outro until resume(), so the graphic does not close while paused.
   let paused = false;
   let pendingExitOutro = false;
-  const exitSetTimeout =
+  const scheduleTimeout =
     options.clock?.setTimeout ?? ((cb: () => void, ms: number): unknown => setTimeout(cb, ms));
-  const exitClearTimeout =
+  const cancelTimeout =
     options.clock?.clearTimeout ??
     ((h: unknown): void => {
       clearTimeout(h as never);
     });
+
+  // The normal release follows the mixer commit. A missing release must never leave
+  // the author's fallback hidden for an ongoing signal loss or an empty plate.
+  const LIVE_FALLBACK_WATCHDOG_MS = 2000;
+  let lastFallbackPhaseId: string | null = null;
+  let fallbackHold: { id: string; nodes: HTMLElement[]; timer: unknown } | undefined;
+  function releaseLiveFallback(id?: string): void {
+    if (fallbackHold === undefined || (id !== undefined && fallbackHold.id !== id)) return;
+    cancelTimeout(fallbackHold.timer);
+    for (const node of fallbackHold.nodes) node.hidden = false;
+    fallbackHold = undefined;
+  }
+  function holdLiveFallback({ id, plateIds }: Extract<CgLiveFallback, { phase: 'hold' }>): void {
+    releaseLiveFallback();
+    lastFallbackPhaseId = id;
+    const affected = new Set(plateIds);
+    const nodes = Array.from(
+      built.container.querySelectorAll<HTMLElement>('[data-cg-live-fallback]'),
+    ).filter(
+      (node) => !node.hidden && affected.has(node.parentElement?.dataset['cgLiveSource'] ?? ''),
+    );
+    if (nodes.length === 0) return;
+    for (const node of nodes) node.hidden = true;
+    fallbackHold = {
+      id,
+      nodes,
+      timer: scheduleTimeout(() => releaseLiveFallback(id), LIVE_FALLBACK_WATCHDOG_MS),
+    };
+  }
+
   const contentRoots = (): HTMLElement[] =>
     Array.from(built.container.querySelectorAll<HTMLElement>('[data-cg-content]'));
   /**
@@ -3009,14 +3043,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     const watchdog = {
       pause(): void {
         if (timer === null) return;
-        exitClearTimeout(timer);
+        cancelTimeout(timer);
         timer = null;
         remaining = Math.max(0, remaining - Math.max(0, now() - startedAt));
       },
       resume(): void {
         if (finished || timer !== null) return;
         startedAt = now();
-        timer = exitSetTimeout(() => {
+        timer = scheduleTimeout(() => {
           timer = null;
           finished = true;
           expire('timeout');
@@ -3055,7 +3089,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       n.style.opacity = '0';
     }
     return new Promise<void>((res) => {
-      exitSetTimeout(res, ms);
+      scheduleTimeout(res, ms);
     });
   };
   const hideContentNow = (): void => {
@@ -3146,6 +3180,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         throw new Error('Runtime removed; play() unavailable');
       }
       await ready;
+      releaseLiveFallback();
+      lastFallbackPhaseId = null;
       // The stopped Canvas may expose an expired clock for editing. A Take is always real:
       // restore deadline/Step evaluation before applying fields or priming any nested cues.
       editCountdowns = false;
@@ -3439,8 +3475,21 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         can only be seen if it goes wrong. When the payload names no look, or names one this
         template does not have, the ordinary re-punch is what happens, exactly as before.
       */
-      if (control?.look === undefined || !enterLook(control.look)) {
+      const phase = holdsLiveFallback ? control?.liveFallback : undefined;
+      // A late rollback also carries a look. Ignore it once another cut or take owns the page.
+      const staleRelease = phase?.phase === 'release' && lastFallbackPhaseId !== phase.id;
+      const previousLook = currentLookId;
+      const enteredLook = !staleRelease && control?.look !== undefined && enterLook(control.look);
+      if (!enteredLook) {
         repunch(arrangementView);
+      }
+      if (phase?.phase === 'hold' && (control?.look === undefined || enteredLook)) {
+        holdLiveFallback(phase);
+      } else if (phase?.phase === 'release') {
+        releaseLiveFallback(phase.id);
+      } else if (enteredLook && currentLookId !== previousLook) {
+        releaseLiveFallback();
+        lastFallbackPhaseId = null;
       }
       /*
         🔴 `TIMING-WIRE-22` (b) — THE ROW'S LIVE PASS TIMING, applied to the RUNNING controller.
@@ -3626,6 +3675,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
 
     remove(): void {
       if (machine.state === 'removed') return;
+      releaseLiveFallback();
       for (const watchdog of outroWatchdogs) watchdog.cancel();
       // D-125 §D6.4.4 — remove() is the PANIC path and stays a SYNCHRONOUS hard kill: it
       // awaits NO element outro. `destroy()` tears the Lottie players down immediately

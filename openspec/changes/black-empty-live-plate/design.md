@@ -39,6 +39,24 @@ A separate local CasparCG 2.5.0 fixture at 1080i5000 reproduced Bars in row 963 
 commands. With the aligned commands, that row contained only the source colour, and row 964
 still contained the scene outside the plate.
 
+## Preset switch
+
+The programme page enters the next Look before Bridge commits the external producer geometry.
+An affected plate's opaque background could therefore appear in its entering position while
+its picture was still in its outgoing position. A local CasparCG 2.5.0 fixture sampled both
+positions and reproduced the newly exposed fallback colour at that boundary.
+
+The per-look carrier lists plates whose fallback paints on air. When the fitted coverage
+changes, the normal look update also holds the affected fallback pixels. After a confirmed
+primary mixer commit and an output tick, Bridge releases that hold. The release carries the
+same identity so a late release cannot undo a newer switch. The page has a bounded recovery
+timer. Unchanged plate geometry and older carriers keep the ordinary switch path.
+
+The hold only affects fallback children on the programme page. Foreground, rehearsal and
+other authored artwork keep their existing behavior. When a settled producer is genuinely
+empty, the chosen fallback is visible again. A current page rebuild or template reload
+supplies the updated carrier for existing packages.
+
 ## Risk
 
 This changes on-air page pixels and the Bridge control payload, so it still requires a real CasparCG/Playout pass in addition to mocks.

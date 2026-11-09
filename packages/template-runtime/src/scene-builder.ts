@@ -1788,7 +1788,7 @@ function smpteBarsGradient(): string {
 export { SMPTE_BARS, smpteBarsGradient };
 
 /** The host marks only its same-origin, byte-identical retained-page rehearsal frame. */
-function isPvwRehearsal(doc: Document): boolean {
+export function isPvwRehearsal(doc: Document): boolean {
   return (
     doc.URL === 'about:srcdoc' && doc.defaultView?.frameElement?.getAttribute('data-cg-pvw') === '1'
   );

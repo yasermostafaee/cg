@@ -32,6 +32,14 @@ a template re-take. An invalid or unavailable source SHALL still be refused befo
 - **WHEN** the author creates a Live Source plate **THEN** its default fallback is SMPTE Bars
 - **AND** the picker shows a Bars thumbnail and still offers solid colour or image choices
 
+#### Scenario: A preset moves a fallback-enabled plate with a live picture
+
+- **GIVEN** a playing template with an enabled fallback and a live picture
+- **WHEN** the next look changes the plate's fitted coverage or source
+- **THEN** the incoming fallback stays out of the programme during the mixer handoff
+- **AND** the fallback returns to normal behavior after the mixer transition
+- **AND** a missing picture reveals the authored fallback after the transition
+
 #### Scenario: An older plate retains its Bars fallback
 
 - **WHEN** an older scene has neither an explicit fallback nor a poster **THEN** its fallback is SMPTE Bars

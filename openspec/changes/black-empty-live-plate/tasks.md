@@ -51,3 +51,16 @@
 - [x] 6.2 Verify full-fit raster edge alignment, true contain margins and unchanged crop identity.
 - [x] 6.3 The aligned local native commands replaced row 963's Bars with the live picture and kept row 964 outside the plate.
 - [ ] 6.4 Verify on the target station with an updated Bridge.
+- [x] 6.5 [Carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42713157816/job/129487812167)
+      passed on `e134f56b` for the half-pixel edge correction.
+
+## 7. Preset switch fallback flash
+
+- [x] 7.1 Reproduce page-first exposure in isolated CasparCG 2.5.0. The incoming fallback pixel
+      appeared before the live picture moved. Holding that fallback hid it until the switch,
+      and clearing the source after release exposed the same authored colour.
+- [x] 7.2 Chromium sampled the foreground, held fallback, released fallback and a missing
+      picture in the exported page. The Bridge wire tests covered the output tick, rollback
+      and a refused mixer commit.
+- [ ] 7.3 Verify the carrying Linux browser job.
+- [ ] 7.4 Verify the switch on the target station with an updated Bridge and retained page.

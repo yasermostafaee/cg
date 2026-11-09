@@ -148,6 +148,11 @@ is read back from the live layout. With no facts received (a Designer preview, a
 before its first take) the mask falls back to the scene's own `expectedAspect` / `fitMode`,
 and an absent aspect means no fit at all.
 
+On a PGM look switch, `CgControl.liveFallback` can hold the affected plate backgrounds
+until Bridge's mixer commit lands. The runtime hides the fallback child of each named
+route and matches a release to the hold ID. A bounded timer restores the authored
+fallback if the release is lost. Rehearsal and foreground passes ignore the hold.
+
 That constraint is why the plate's optional `stroke` renders as a CSS **`outline`**
 rather than the `border` every other box kind gets. An outline is painted outside the
 box and takes **no layout**, so the hole stays exactly `transform` under any box model

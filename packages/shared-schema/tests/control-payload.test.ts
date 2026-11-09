@@ -27,6 +27,22 @@ describe('the round trip — the bridge writes, the page reads', () => {
     expect(readCgControl(received)?.look).toBe('solo');
   });
 
+  it('round-trips the named hold and release without exposing them to authored fields', () => {
+    const phases = [
+      { phase: 'hold', id: 'preset-cut-1', plateIds: ['guest-1', 'guest-2'] },
+      { phase: 'release', id: 'preset-cut-1' },
+    ] as const;
+    for (const phase of phases) {
+      const liveFallback =
+        phase.phase === 'hold' ? { ...phase, plateIds: [...phase.plateIds] } : phase;
+      const payload = JSON.parse(
+        JSON.stringify(withCgControl({ headline: 'Tehran' }, { look: 'solo', liveFallback })),
+      ) as Record<string, unknown>;
+      expect(readCgControl(payload)).toEqual({ look: 'solo', liveFallback });
+      expect(stripCgControl(payload)).toEqual({ headline: 'Tehran' });
+    }
+  });
+
   it('carries only valid live-plate fit facts through the wire payload', () => {
     const payload = withCgControl({} as FieldValues, {
       plates: {
@@ -94,6 +110,19 @@ describe('readCgControl — defensive, because this arrives over AMCP', () => {
     expect(readCgControl({ [CG_CONTROL_KEY]: { look: 42 } })).toEqual({});
     expect(readCgControl({ [CG_CONTROL_KEY]: { look: '' } })).toEqual({});
     expect(readCgControl({ [CG_CONTROL_KEY]: { other: 'x' } })).toEqual({});
+  });
+
+  it.each([
+    { phase: 'hold', id: '', plateIds: ['guest-1'] },
+    { phase: 'hold', id: 'cut', plateIds: [] },
+    { phase: 'hold', id: 'cut', plateIds: Array.from({ length: 65 }, () => 'plate') },
+    { phase: 'hold', id: 'cut', plateIds: ['guest-1', 42] },
+    { phase: 'release', id: 42 },
+    { phase: 'replace', id: 'cut', plateIds: ['guest-1'] },
+  ])('drops malformed fallback phase %o without losing the look', (liveFallback) => {
+    expect(readCgControl({ [CG_CONTROL_KEY]: { look: 'solo', liveFallback } })).toEqual({
+      look: 'solo',
+    });
   });
 
   it('drops malformed plate fits one entry at a time', () => {

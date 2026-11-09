@@ -115,6 +115,8 @@ export const TemplateLookSchema = z.object({
   /** D-202 — upper routeKey → lower source plus normalized reveal window. */
   reveals: z.record(z.string(), LiveRevealMaskSchema).optional(),
   masks: z.record(z.string(), LivePlateMaskSchema).optional(),
+  /** Plates whose authored fallback paints in this look's programme page. */
+  fallbacks: z.array(z.string().min(1)).optional(),
 });
 export type TemplateLook = z.infer<typeof TemplateLookSchema>;
 

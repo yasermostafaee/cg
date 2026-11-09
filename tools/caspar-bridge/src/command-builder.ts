@@ -3,6 +3,7 @@ import { redactUrlCredentials, type SourceProducer } from '@cg/shared-ipc';
 import {
   withCgControl,
   type CgControl,
+  type CgLiveFallback,
   type CgPlateFit,
   type CgPage,
   type CgPageAdvance,
@@ -173,6 +174,7 @@ export class CommandBuilder {
     lookId: string,
     fields: FieldValues = {},
     plates?: Readonly<Record<string, CgPlateFit>>,
+    liveFallback?: CgLiveFallback,
   ): string {
     /*
       🔴 **`single-clock-look-switch` — the old mask-oriented `from` argument is GONE.**
@@ -189,6 +191,7 @@ export class CommandBuilder {
     const control: CgControl = {
       look: lookId,
       ...(plates !== undefined && Object.keys(plates).length > 0 && { plates: { ...plates } }),
+      ...(liveFallback !== undefined && { liveFallback }),
     };
     return `CG ${target(slot)} UPDATE ${String(FLASH_LAYER)} ${quote(
       serialize(withCgControl(fields, control)),

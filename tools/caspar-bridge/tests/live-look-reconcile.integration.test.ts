@@ -1297,6 +1297,116 @@ it('🔴 the switch tells the PAGE which look — the payload carries the id, be
   ).toBeLessThan(firstFill);
 });
 
+function fallbackSwitchTemplate(): TemplateInfo {
+  const fallbacks = ['live-1', 'live-2'];
+  return sixBoxTemplate({
+    looks: [
+      { ...look('six', GRID), fallbacks },
+      { ...look('moved', MOVED), fallbacks },
+      { ...look('same-geometry', MOVED), fallbacks },
+      look('legacy', GRID),
+    ],
+    defaultLookId: 'six',
+  });
+}
+
+it('holds only moving fallback plates and releases them one output tick after the mixer commit', async () => {
+  const r = await boot({ template: fallbackSwitchTemplate() });
+  await onAir(r);
+  const m = mock;
+  if (m === null) throw new Error('no mock');
+  const before = m.receivedCommands().length;
+  expect(await r.setActiveLook('item-1', 'moved')).toEqual({ ok: true });
+  const lines = m.receivedCommands().slice(before);
+  const updates = lines.filter(({ line }) => /^CG 1-\d+ UPDATE /.test(line));
+  expect(updates).toHaveLength(2);
+  const [enter, release] = updates;
+  if (enter === undefined || release === undefined) throw new Error('missing update');
+  const held = readCgControl(dataArgOf(enter.line, 'UPDATE'));
+  expect(held).toMatchObject({
+    look: 'moved',
+    liveFallback: { phase: 'hold', id: expect.any(String), plateIds: ['live-1'] },
+  });
+  expect(readCgControl(dataArgOf(release.line, 'UPDATE'))).toEqual({
+    liveFallback: { phase: 'release', id: held?.liveFallback?.id },
+  });
+  const fill = lines.findIndex(({ line }) => /^MIXER 1-\d+ FILL /.test(line));
+  const commit = lines.findIndex(({ line }) => line === 'MIXER 1 COMMIT');
+  expect(fill).toBeGreaterThan(lines.indexOf(enter));
+  expect(commit).toBeGreaterThan(fill);
+  expect(lines.indexOf(release)).toBeGreaterThan(commit);
+  // The fixture reports 1080i5000 (40 ms a frame). A small tolerance covers timer rounding.
+  expect(release.at - (lines[commit]?.at ?? release.at)).toBeGreaterThanOrEqual(38);
+
+  const after = (await recvLines()).length;
+  expect(await r.setActiveLook('item-1', 'same-geometry')).toEqual({ ok: true });
+  const same = await since(after);
+  const sameUpdates = same.filter((line) => /^CG 1-\d+ UPDATE /.test(line));
+  expect(sameUpdates).toHaveLength(1);
+  expect(
+    readCgControl(dataArgOf(sameUpdates[0] as string, 'UPDATE'))?.liveFallback,
+  ).toBeUndefined();
+  expect(same).not.toContain('MIXER 1 COMMIT');
+
+  const legacyBefore = (await recvLines()).length;
+  expect(await r.setActiveLook('item-1', 'legacy')).toEqual({ ok: true });
+  const legacy = await since(legacyBefore);
+  const legacyUpdates = legacy.filter((line) => /^CG 1-\d+ UPDATE /.test(line));
+  expect(legacyUpdates).toHaveLength(1);
+  expect(
+    readCgControl(dataArgOf(legacyUpdates[0] as string, 'UPDATE'))?.liveFallback,
+  ).toBeUndefined();
+  expect(legacy).toContain('MIXER 1 COMMIT');
+});
+
+it('cleans the fallback hold in the previous-look rollback when a fill is refused', async () => {
+  const r = await boot({ template: fallbackSwitchTemplate() });
+  await onAir(r);
+  const honest = defaultHandlers().get('MIXER');
+  if (mock === null || honest === undefined) throw new Error('missing mixer fixture');
+  mock.setHandler('MIXER', (request, context) =>
+    request.raw.includes(' FILL ') && request.raw.endsWith(' DEFER')
+      ? { kind: 'err', code: 501, verb: 'MIXER' }
+      : honest(request, context),
+  );
+  const before = (await recvLines()).length;
+  expect(await r.setActiveLook('item-1', 'moved')).toMatchObject({ ok: false });
+  const controls = (await since(before))
+    .filter((line) => /^CG 1-\d+ UPDATE /.test(line))
+    .map((line) => readCgControl(dataArgOf(line, 'UPDATE')));
+  expect(controls).toHaveLength(2);
+  expect(controls[0]).toMatchObject({
+    look: 'moved',
+    liveFallback: { phase: 'hold', id: expect.any(String), plateIds: ['live-1'] },
+  });
+  expect(controls[1]).toMatchObject({
+    look: 'six',
+    liveFallback: { phase: 'release', id: controls[0]?.liveFallback?.id },
+  });
+  expect(r.activeLookId('item-1')).toBe('six');
+});
+
+it('does not explicitly release a fallback when the primary refuses the geometry commit', async () => {
+  const r = await boot({ template: fallbackSwitchTemplate() });
+  await onAir(r);
+  const honest = defaultHandlers().get('MIXER');
+  if (mock === null || honest === undefined) throw new Error('missing mixer fixture');
+  mock.setHandler('MIXER', (request, context) =>
+    request.raw.endsWith(' COMMIT')
+      ? { kind: 'err', code: 501, verb: 'MIXER' }
+      : honest(request, context),
+  );
+  const before = (await recvLines()).length;
+  await r.setActiveLook('item-1', 'moved');
+  const lines = await since(before);
+  expect(lines).toContain('MIXER 1 COMMIT');
+  const controls = lines
+    .filter((line) => /^CG 1-\d+ UPDATE /.test(line))
+    .map((line) => readCgControl(dataArgOf(line, 'UPDATE')));
+  expect(controls).toHaveLength(1);
+  expect(controls[0]?.liveFallback).toMatchObject({ phase: 'hold', plateIds: ['live-1'] });
+});
+
 /**
  * ⭐ **`B-178` — THE OWNER'S REPRO, AT THE WIRE.**
  *

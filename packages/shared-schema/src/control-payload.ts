@@ -165,6 +165,11 @@ export interface CgPlateFit {
   mode: LiveFitMode;
 }
 
+/** A look switch temporarily holds the authored fallback below the external picture. */
+export type CgLiveFallback =
+  | { phase: 'hold'; id: string; plateIds: string[] }
+  | { phase: 'release'; id: string };
+
 /** Bridge→page control data. Every member optional: a payload may carry any subset. */
 export interface CgControl {
   /**
@@ -183,6 +188,7 @@ export interface CgControl {
    * changes nothing.
    */
   look?: string;
+  liveFallback?: CgLiveFallback;
   /**
    * 🔴 `TIMING-WIRE-22` (a) — THE ROW'S LIVE PASS TIMING, carried to the page.
    *
@@ -290,12 +296,28 @@ export function readCgControl(payload: unknown): CgControl | undefined {
       also discard a perfectly good count.
     */
     ...(typeof take === 'string' && take !== '' ? { take } : {}),
+    ...readLiveFallback((raw as Record<string, unknown>)['liveFallback']),
     ...readPlateFits((raw as Record<string, unknown>)['plates']),
     ...readPassTiming((raw as Record<string, unknown>)['timing']),
     ...readPage((raw as Record<string, unknown>)['page']),
     ...readPageAdvance((raw as Record<string, unknown>)['pageAdvance']),
     ...readSound((raw as Record<string, unknown>)['sound']),
   };
+}
+
+function readLiveFallback(raw: unknown): { liveFallback?: CgLiveFallback } {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {};
+  const { phase, id, plateIds } = raw as Record<string, unknown>;
+  if (typeof id !== 'string' || id.length === 0 || id.length > 256) return {};
+  if (phase === 'release') return { liveFallback: { phase, id } };
+  if (phase !== 'hold' || !Array.isArray(plateIds) || plateIds.length < 1 || plateIds.length > 64)
+    return {};
+  const keys: string[] = [];
+  for (const plateId of plateIds) {
+    if (typeof plateId !== 'string' || plateId.length === 0 || plateId.length > 256) return {};
+    keys.push(plateId);
+  }
+  return { liveFallback: { phase, id, plateIds: keys } };
 }
 
 function readPlateFits(raw: unknown): { plates?: Record<string, CgPlateFit> } {

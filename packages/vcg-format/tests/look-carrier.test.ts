@@ -4,6 +4,7 @@ import {
   type Element,
   type LiveRevealMask,
   type Scene,
+  type VideoPlaceholderElement,
 } from '@cg/shared-schema';
 import { buildTemplateLiveSources, collectLookCarrier } from '../src/live-sources.js';
 
@@ -45,7 +46,7 @@ const plate = (
   cropFocus?: { x: number; y: number },
   /** D-202 — an intentional upper → lower reveal relation. */
   revealMask?: LiveRevealMask,
-): Element =>
+): VideoPlaceholderElement =>
   ({
     ...baseElProps,
     id,
@@ -57,7 +58,7 @@ const plate = (
     ...(expectedAspect !== undefined ? { expectedAspect } : {}),
     ...(cropFocus !== undefined ? { cropFocus } : {}),
     ...(revealMask !== undefined ? { revealMask } : {}),
-  }) as unknown as Element;
+  }) as unknown as VideoPlaceholderElement;
 
 const comp = (id: string, children: Element[]) => ({
   id,
@@ -258,6 +259,19 @@ function twoLookScene(
 }
 
 describe('the source-keyed declaration list', () => {
+  it('records programme fallbacks per look and keeps opted-out plates out of the list', () => {
+    const s = twoLookScene({
+      compA: [
+        { ...plate('a-1', 'guest-1', 0, 0, 640, 360), showFallback: false },
+        plate('a-2', 'guest-2', 960, 0, 640, 360),
+      ],
+    });
+    const looks = collectLookCarrier(s)?.looks;
+    expect(looks?.find((entry) => entry.id === 'look-a')?.fallbacks).toEqual(['guest-2']);
+    expect(looks?.find((entry) => entry.id === 'look-solo')?.fallbacks).toEqual(['guest-1']);
+    expect(looks?.find((entry) => entry.id === 'look-empty')?.fallbacks).toBeUndefined();
+  });
+
   it('🔴 DEDUPED — guest-1 referenced in TWO looks is ONE declaration (the double-seat fix)', () => {
     const carrier = collectLookCarrier(twoLookScene());
     expect(carrier?.sources.map((s) => s.sourceId)).toEqual(['guest-1', 'guest-2']);

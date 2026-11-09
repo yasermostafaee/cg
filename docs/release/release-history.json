@@ -247,6 +247,10 @@
         {
           "fa": "متن راهنمای پایین جدول Layers حذف شد تا جدول فضای بیشتری داشته باشد.",
           "en": "Remove the footer hint from the Layers table."
+        },
+        {
+          "fa": "هنگام تغییر پریست در PGM، پس‌زمینهٔ قابِ در حال جابه‌جایی تا رسیدن تصویر نمایش داده نمی‌شود. پس از تعویض، قابِ واقعاً بی‌تصویر پس‌زمینهٔ انتخابی را نشان می‌دهد.",
+          "en": "During a PGM preset change, hold the incoming fallback until the picture placement changes. A source without a picture still reveals the authored fallback after the switch."
         }
       ],
       "planned": [

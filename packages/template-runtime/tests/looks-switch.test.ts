@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Window } from 'happy-dom';
 import { CG_CONTROL_KEY, withCgControl, type Element, type Scene } from '@cg/shared-schema';
 import { createRuntime } from '../src/runtime.js';
+import type { RuntimeBootOptions } from '../src/types.js';
 
 /**
  * `multibox-layout-switch` §14 (LOOKS) phase 1D — **the 6-box fixture: the switch is a
@@ -132,15 +133,23 @@ function scene(): Scene {
   } as unknown as Scene;
 }
 
-function boot(sceneOverride?: Scene): {
+function boot(
+  sceneOverride?: Scene,
+  { pvw = false, ...options }: Omit<RuntimeBootOptions, 'root'> & { pvw?: boolean } = {},
+): {
   runtime: ReturnType<typeof createRuntime>;
   root: HTMLElement;
 } {
-  const window = new Window();
+  const window = pvw ? new Window({ url: 'about:srcdoc' }) : new Window();
   const doc = window.document as unknown as Document;
+  if (pvw) {
+    const frame = doc.createElement('iframe');
+    frame.setAttribute('data-cg-pvw', '1');
+    Object.defineProperty(window, 'frameElement', { value: frame });
+  }
   const host = doc.createElement('div');
   doc.body.appendChild(host);
-  const runtime = createRuntime(sceneOverride ?? scene(), { root: host });
+  const runtime = createRuntime(sceneOverride ?? scene(), { ...options, root: host });
   return { runtime, root: host.querySelector('.cg-stage') as HTMLElement };
 }
 
@@ -436,6 +445,114 @@ describe('🔴 the PLAY path honours the control payload too — the re-take sea
 
     expect(runtime.activeLookId(), 'and the look survives a later empty update').toBe('look-solo');
     expect(root.innerHTML).not.toContain(CG_CONTROL_KEY);
+  });
+});
+
+describe('PGM fallback during a preset cut', () => {
+  const fallback = (root: HTMLElement, id: string): HTMLElement => {
+    const node = root.querySelector<HTMLElement>(`[data-cg-live-fallback="${id}"]`);
+    if (node === null) throw new Error(`Missing fallback for ${id}`);
+    return node;
+  };
+
+  it('holds only the named fallback while the look and its other graphics change', async () => {
+    const { runtime, root } = boot();
+    await runtime.update(
+      withCgControl(
+        {},
+        {
+          look: 'look-pair',
+          liveFallback: { phase: 'hold', id: 'first', plateIds: ['guest-1'] },
+        },
+      ),
+    );
+    expect(runtime.activeLookId()).toBe('look-pair');
+    expect(displayOf(root, 'inst-pair')).not.toBe('none');
+    expect(displayOf(root, 'pair-p1')).not.toBe('none');
+    expect(displayOf(root, 'backdrop')).not.toBe('none');
+    expect(fallback(root, 'pair-p1').hidden).toBe(true);
+    expect(fallback(root, 'six-p2').hidden).toBe(false);
+
+    // A regular data update and a redundant look tell leave the mixer handshake in force.
+    await runtime.update({});
+    await runtime.update(withCgControl({}, { look: 'look-pair' }));
+    expect(fallback(root, 'pair-p1').hidden).toBe(true);
+
+    await runtime.update(
+      withCgControl(
+        {},
+        {
+          look: 'look-six',
+          liveFallback: { phase: 'hold', id: 'second', plateIds: ['guest-2'] },
+        },
+      ),
+    );
+    await runtime.update(
+      withCgControl({}, { look: 'look-pair', liveFallback: { phase: 'release', id: 'first' } }),
+    );
+    expect(runtime.activeLookId()).toBe('look-six');
+    expect(fallback(root, 'six-p1').hidden).toBe(false);
+    expect(fallback(root, 'six-p2').hidden).toBe(true);
+    await runtime.update(withCgControl({}, { liveFallback: { phase: 'release', id: 'second' } }));
+    expect(fallback(root, 'six-p2').hidden).toBe(false);
+    await runtime.update(
+      withCgControl({}, { look: 'look-pair', liveFallback: { phase: 'release', id: 'first' } }),
+    );
+    expect(runtime.activeLookId()).toBe('look-six');
+  });
+
+  it('recovers on a missing release and clears a pending hold on play and remove', async () => {
+    vi.useFakeTimers();
+    try {
+      const { runtime, root } = boot(undefined, { skipFontLoad: true });
+      const node = fallback(root, 'six-p1');
+      const hold = (id: string) =>
+        runtime.update(
+          withCgControl({}, { liveFallback: { phase: 'hold', id, plateIds: ['guest-1'] } }),
+        );
+      await hold('timeout');
+      vi.advanceTimersByTime(1999);
+      expect(node.hidden).toBe(true);
+      vi.advanceTimersByTime(1);
+      expect(node.hidden).toBe(false);
+      await hold('retake');
+      await runtime.play({});
+      expect(node.hidden).toBe(false);
+      await hold('remove');
+      runtime.remove();
+      expect(node.hidden).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([{ mode: 'author' as const }, { pvw: true }])(
+    'continues to show the fallback on the preview surface %o',
+    async (options) => {
+      const { runtime, root } = boot(undefined, options);
+      await runtime.update(
+        withCgControl(
+          {},
+          {
+            look: 'look-pair',
+            liveFallback: { phase: 'hold', id: 'cut', plateIds: ['guest-1'] },
+          },
+        ),
+      );
+      expect(runtime.activeLookId()).toBe('look-pair');
+      expect(fallback(root, 'pair-p1').hidden).toBe(false);
+    },
+  );
+
+  it('keeps the paired foreground look independent of fallback releases', async () => {
+    const { runtime } = boot(undefined, { outputPass: 'foreground' });
+    await runtime.update(
+      withCgControl(
+        {},
+        { look: 'look-pair', liveFallback: { phase: 'release', id: 'background-cut' } },
+      ),
+    );
+    expect(runtime.activeLookId()).toBe('look-pair');
   });
 });
 

@@ -33,6 +33,7 @@ import {
 import type {
   AuditEntry,
   CgControl,
+  CgLiveFallback,
   CgPlateFit,
   CgPassTiming,
   FieldValues,
@@ -687,6 +688,8 @@ function isSeatUnchanged(
 /** What one live-plate apply answered — and, when refused, the seat it stopped on. */
 interface LivePlateApplyResult {
   readonly ok: boolean;
+  /** The final geometry batch, excluding any pre-seat or recovery commit, landed on the primary. */
+  readonly mixerCommitted?: boolean;
   readonly errorCode?: string;
   readonly message?: string;
   /** The refused AMCP line, as `#send` summarised it (`B-209`) — for the record, not the sentence. */
@@ -9369,6 +9372,7 @@ export class CasparRuntime {
     slot: CommandSlot,
     lookId: string,
     plateFits: Readonly<Record<string, CgPlateFit>> | undefined = this.#plateFits.get(itemId),
+    liveFallback?: CgLiveFallback,
   ): Promise<{ ok: boolean; errorCode?: string }> {
     /*
       🔴 **`single-clock-look-switch` — ONE ARGUMENT NOW, and that is the whole of what a page
@@ -9386,7 +9390,7 @@ export class CasparRuntime {
       because nothing composited over a picture depends on when it arrives.
     */
     const told = await this.#send(
-      this.#builder.updateLook(slot, lookId, {}, plateFits),
+      this.#builder.updateLook(slot, lookId, {}, plateFits, liveFallback),
       this.#nextSeq(),
       'urgent',
     );
@@ -9394,6 +9398,28 @@ export class CasparRuntime {
       return { ok: false, ...(told.errorCode !== undefined && { errorCode: told.errorCode }) };
     this.#recordActiveLook(itemId, lookId);
     return { ok: true };
+  }
+
+  /** Hold only authored fallbacks whose arriving picture still has a mixer change to land. */
+  #lookFallbacksToHold(itemId: string, look: TemplateLook, plan: LivePlateApplyPlan): string[] {
+    if (look.fallbacks === undefined || look.fallbacks.length === 0) return [];
+    const enabled = new Set(look.fallbacks);
+    const previous = new Map(
+      (this.#liveLayers.get(itemId) ?? []).map((record) => [liveSeatId(record), record]),
+    );
+    const affected = new Set<string>();
+    for (const placement of plan.placements) {
+      if (placement.held || !enabled.has(placement.plateId)) continue;
+      const prior = previous.get(placement.seatId);
+      if (
+        !isSeatUnchanged('switch', prior, placement) ||
+        prior.held === true ||
+        !sameMixerRect(prior.fill, placement.fit.fill) ||
+        !sameMixerRect(prior.clip, placement.fit.clip)
+      )
+        affected.add(placement.plateId);
+    }
+    return [...affected];
   }
 
   /** R-105 — refresh only the under-plate fallback geometry after a live source swap. */
@@ -9871,6 +9897,17 @@ export class CasparRuntime {
     */
       const previousLookId = this.activeLookId(itemId);
       let pageTold = false;
+      const fallback: {
+        release?: Extract<CgLiveFallback, { phase: 'release' }>;
+        take?: string | undefined;
+        primary?: ServerLabel;
+      } = {};
+      const sameFallbackPage = (): boolean =>
+        this.#slots.get(itemId) === slot &&
+        this.#loaded.has(itemId) &&
+        this.#takeTokens.get(itemId) === fallback.take &&
+        this.#adapter.currentPrimary === fallback.primary &&
+        this.activeLookId(itemId) === lookId;
       /*
       🔴 **GOLDEN RULE 7 — ONE READING OF `#loaded` DECIDES BOTH THE TELL AND THE RECORD.**
 
@@ -9890,7 +9927,16 @@ export class CasparRuntime {
         beforeApply: async (plan) => {
           pageLoaded = this.#loaded.has(itemId);
           if (!pageLoaded) return { ok: true };
-          const told = await this.#tellPageLook(itemId, slot, lookId, plan.plateFits);
+          const plateIds = this.#lookFallbacksToHold(itemId, look, plan);
+          let hold: CgLiveFallback | undefined;
+          if (plateIds.length > 0) {
+            const id = randomBytes(16).toString('hex');
+            hold = { phase: 'hold', id, plateIds };
+            fallback.release = { phase: 'release', id };
+            fallback.take = this.#takeTokens.get(itemId);
+            fallback.primary = this.#adapter.currentPrimary;
+          }
+          const told = await this.#tellPageLook(itemId, slot, lookId, plan.plateFits, hold);
           if (!told.ok) {
             return {
               ok: false,
@@ -9944,6 +9990,23 @@ export class CasparRuntime {
       });
       if (reconciled.ok) {
         if (!pageLoaded) this.#recordActiveLook(itemId, lookId);
+        if (fallback.release !== undefined && reconciled.mixerCommitted === true) {
+          // A primary ACK confirms the batch, then one output frame allows it to paint.
+          await sleepMs(Math.ceil(this.#channelFrameMsFor(slot.channel)));
+          const item = this.#reconciler.get(itemId);
+          if (
+            sameFallbackPage() &&
+            item !== null &&
+            item.status !== 'exiting' &&
+            this.#ownsLiveSeats(itemId)
+          ) {
+            await this.#send(
+              this.#builder.update(slot, withCgControl({}, { liveFallback: fallback.release })),
+              this.#nextSeq(),
+              'urgent',
+            );
+          }
+        }
         // `LOOK-SWITCH-01` — a switch that LANDED withdraws the line a refused one left.
         this.#retireTakeRefusal(itemId);
         return { ok: true };
@@ -9988,7 +10051,8 @@ export class CasparRuntime {
       which the next take re-plans from anyway.
     */
       if (reconciled.errorCode === 'not-live') {
-        if (previousLookId !== undefined) await this.#tellPageLook(itemId, slot, previousLookId);
+        if (previousLookId !== undefined && (fallback.release === undefined || sameFallbackPage()))
+          await this.#tellPageLook(itemId, slot, previousLookId, undefined, fallback.release);
         return {
           ok: false,
           reason: 'not-live',
@@ -10005,9 +10069,9 @@ export class CasparRuntime {
       put back must punch with.
     */
       const reverted =
-        previousLookId === undefined
+        previousLookId === undefined || (fallback.release !== undefined && !sameFallbackPage())
           ? { ok: false as const }
-          : await this.#tellPageLook(itemId, slot, previousLookId);
+          : await this.#tellPageLook(itemId, slot, previousLookId, undefined, fallback.release);
       return {
         ok: false,
         ...(reconciled.errorCode === undefined ? {} : { reason: reconciled.errorCode }),
@@ -10187,6 +10251,7 @@ export class CasparRuntime {
     },
   ): Promise<{
     ok: boolean;
+    mixerCommitted?: boolean;
     errorCode?: string;
     message?: string;
     /** `B-209` — the refused line; and `LOOK-SWITCH-01` — the plate and source it named. */
@@ -12109,6 +12174,8 @@ export class CasparRuntime {
       below, because that sweep's `MIXER … CLEAR` is sent un-deferred and applies at once: a
       commit after it would re-apply a staged `FILL` onto a layer it had just reset.
     */
+    const stagedGeometry =
+      this.#stagedMixerChannel === (placements[0] ?? parked[0] ?? previous[0])?.slot.channel;
     const committed = await this.#commitStagedMixer();
     if (cropRowLeft())
       return { ok: false, errorCode: 'not-live', message: ROW_LEFT_AIR_MID_SWITCH };
@@ -12167,7 +12234,10 @@ export class CasparRuntime {
     // Announced AFTER the wire and the ledger agree, so a subscriber that reads the ledger
     // on this event sees the state the sentence describes.
     for (const release of releases) this.livePlateReleased.emit(release);
-    return { ok: true };
+    return {
+      ok: true,
+      ...(mode === 'switch' && { mixerCommitted: stagedGeometry && committed.landed }),
+    };
   }
 
   /**

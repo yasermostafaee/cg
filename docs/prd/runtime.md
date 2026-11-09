@@ -4864,6 +4864,9 @@ operator had to fail over before seeing whether its programme picture and sound 
 - WHEN a full-picture fit meets a raster edge near a pixel centre THEN the live producer covers
   the same last output pixel as the fallback. Preserve ordinary fractional edges, contain
   margins and mask windows.
+- WHEN the operator switches presets and a fallback-enabled plate's source or fitted coverage
+  changes THEN the incoming fallback waits for the mixer transition. Restore the authored
+  fallback after the transition so a missing source or contain margin is still visible.
 - WHEN the source is invalid or unavailable THEN the existing refusal still prevents the take or update
 
 ## [x] R-106 — PVW Live Source markers follow Play and the Safe Area control is removed ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/pvw-plate-lifecycle/`

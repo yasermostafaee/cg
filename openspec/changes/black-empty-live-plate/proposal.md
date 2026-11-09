@@ -8,6 +8,7 @@ A valid source can temporarily carry no picture. Its transparent output makes th
 - Keep the chosen background visible in Designer and PVW. Apply Show fallback on air only in PGM.
 - Use Bars for new plates and legacy plates without a choice. Show a Bars thumbnail in the picker.
 - Align the full-picture output fit with rasterized fallback edges while preserving contain margins and mask windows.
+- Suppress the incoming plate fallback during the page-to-mixer handoff of a preset change.
 - Preserve refusal behavior for invalid/unavailable sources.
 
 ## Capabilities

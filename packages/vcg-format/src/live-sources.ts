@@ -288,6 +288,7 @@ export interface TemplateLookCarrier {
   /** D-202 — intentional upper/lower reveal relationships for this look. */
   reveals: Record<string, LiveRevealMask>;
   masks?: Record<string, LivePlateMask> | undefined;
+  fallbacks?: string[] | undefined;
 }
 
 /**
@@ -375,6 +376,7 @@ export function collectLookCarrier(scene: Scene): {
     group.looks.map((l) => [l.id, {}]),
   );
   const masksByLook = new Map<string, Record<string, LivePlateMask>>();
+  const fallbacksByLook = new Map<string, string[]>();
   const firstPlateFor = new Map<string, string>();
   /**
    * ⭐ `B-179` — **the AUTHOR's `expectedAspect` and the FILL-binding flag, per source, from
@@ -450,6 +452,11 @@ export function collectLookCarrier(scene: Scene): {
         masks[routeKey] = el.liveMask;
         masksByLook.set(look.id, masks);
       }
+      if (el.showFallback !== false) {
+        const fallbacks = fallbacksByLook.get(look.id) ?? [];
+        fallbacks.push(routeKey);
+        fallbacksByLook.set(look.id, fallbacks);
+      }
     }
   }
 
@@ -501,6 +508,7 @@ export function collectLookCarrier(scene: Scene): {
       focuses: focusesByLook.get(l.id) ?? {},
       reveals: revealsByLook.get(l.id) ?? {},
       ...(masksByLook.has(l.id) && { masks: masksByLook.get(l.id) }),
+      ...(fallbacksByLook.has(l.id) && { fallbacks: fallbacksByLook.get(l.id) }),
     })),
     ...(group.defaultLookId !== undefined ? { defaultLookId: group.defaultLookId } : {}),
   };
