@@ -241,8 +241,10 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await app.inspector.getByLabel('reveal lower plate').selectOption('lower');
     const upper = holes(app).filter({ hasText: 'upper' });
     const masks = upper.locator('[data-cg-live-reveal-mask]');
+    const edit = app.inspector.getByRole('button', { name: 'Edit reveal mask on Canvas' });
     await expect(masks).toHaveCount(1);
     await expect(errorPill(app)).toHaveCount(0);
+    await expect(edit).toHaveAttribute('aria-pressed', 'true');
 
     const dragMask = async (top: number, bottom: number): Promise<void> => {
       const bounds = await upper.boundingBox();
@@ -255,6 +257,7 @@ test.describe('Live Source (D-137 phase 1)', () => {
     };
 
     await app.inspector.getByRole('button', { name: 'Add reveal mask' }).click();
+    await expect(edit).toHaveAttribute('aria-pressed', 'false');
     await dragMask(0.1, 0.3);
     await expect(masks).toHaveCount(2);
     await expect(masks).toHaveText(['Mask 1', 'Mask 2']);
@@ -265,8 +268,10 @@ test.describe('Live Source (D-137 phase 1)', () => {
     const selector = app.inspector.getByLabel('reveal mask', { exact: true });
     await expect(selector).toHaveValue('1');
     await app.inspector.getByRole('button', { name: 'Redraw reveal mask' }).click();
+    await expect(edit).toHaveAttribute('aria-pressed', 'false');
     await dragMask(0.2, 0.4);
     await expect(masks).toHaveCount(2);
+    await expect(edit).toHaveAttribute('aria-pressed', 'true');
     await expect
       .poll(() =>
         masks.nth(1).evaluate((node) => Number.parseFloat((node as HTMLElement).style.top)),
@@ -276,6 +281,26 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await app.setInspectorNumber('reveal height', 15);
     await expect(masks.nth(1)).toHaveAttribute('style', /left: 25%;.*height: 15%/);
     await expect(masks.nth(0)).toHaveAttribute('style', /left: 5%; top: 70%/);
+
+    const editor = app.page.getByTestId('mask-editor');
+    const beforeMove = await editor.boundingBox();
+    if (beforeMove === null) throw new Error('The linked mask editor is not visible');
+    await app.page.mouse.move(
+      beforeMove.x + beforeMove.width / 2,
+      beforeMove.y + beforeMove.height / 2,
+    );
+    await app.page.mouse.down();
+    await app.page.mouse.move(
+      beforeMove.x + beforeMove.width / 2 + 15,
+      beforeMove.y + beforeMove.height / 2,
+      { steps: 5 },
+    );
+    await app.page.mouse.up();
+    await expect(masks.nth(1)).not.toHaveAttribute('style', /left: 25%;/);
+    await expect(masks.nth(0)).toHaveAttribute('style', /left: 5%; top: 70%/);
+    await app.page.keyboard.press('Escape');
+    await expect(edit).toHaveAttribute('aria-pressed', 'false');
+    await app.setInspectorNumber('reveal X', 25);
 
     const { html } = await app.exportHtml();
     expect(html).toContain('"additionalRects":[{"x":0.25');
@@ -308,6 +333,7 @@ test.describe('Live Source (D-137 phase 1)', () => {
     const { x, y, width, height } = bounds;
     const maskControls = app.inspector.getByRole('group', { name: 'Plate mask', exact: true });
     const guides = plate.locator('[data-cg-live-plate-mask]');
+    const edit = maskControls.getByRole('button', { name: 'Edit plate mask on Canvas' });
     for (const top of [0.15, 0.6]) {
       await maskControls.getByRole('button', { name: 'Add plate mask' }).click();
       await app.page.mouse.move(x + width * 0.2, y + height * top);
@@ -316,6 +342,66 @@ test.describe('Live Source (D-137 phase 1)', () => {
       await app.page.mouse.up();
     }
     await expect(guides).toHaveText(['Mask 1', 'Mask 2']);
+    await expect(edit).toHaveAttribute('aria-pressed', 'true');
+    await expect(edit).toHaveCSS('background-color', 'rgb(58, 63, 89)');
+    const selector = maskControls.getByLabel('plate mask', { exact: true });
+    await selector.selectOption('0');
+    const sibling = await guides.nth(1).getAttribute('style');
+    const editor = app.page.getByTestId('mask-editor');
+    const beforeMove = await editor.boundingBox();
+    if (beforeMove === null || sibling === null)
+      throw new Error('The mask windows are not visible');
+    const centerX = beforeMove.x + beforeMove.width / 2;
+    const centerY = beforeMove.y + beforeMove.height / 2;
+    await app.page.mouse.move(centerX, centerY);
+    await app.page.mouse.down();
+    await app.page.mouse.move(centerX + width * 0.1, centerY + height * 0.1, { steps: 5 });
+    await app.page.mouse.up();
+    const editedRect = () =>
+      guides.first().evaluate((node) => {
+        const { left, top, width, height } = (node as HTMLElement).style;
+        return [left, top, width, height].map(Number.parseFloat);
+      });
+    await expect.poll(async () => (await editedRect())[0]).toBeCloseTo(30, -1);
+    await expect.poll(async () => (await editedRect())[1]).toBeCloseTo(25, -1);
+    const moved = await editedRect();
+    await expect(guides.nth(1)).toHaveAttribute('style', sibling);
+
+    const corner = app.page.getByTestId('mask-resize-bottom-right');
+    const grip = await corner.boundingBox();
+    if (grip === null) throw new Error('The resize handle is not visible');
+    const gripX = grip.x + grip.width / 2;
+    const gripY = grip.y + grip.height / 2;
+    await app.page.mouse.move(gripX, gripY);
+    await app.page.mouse.down();
+    await app.page.mouse.move(x + width * 1.3, gripY + height * 0.1, { steps: 5 });
+    await app.page.keyboard.press('Escape');
+    await app.page.mouse.up();
+    await expect(editor).toHaveCount(0);
+    await expect(edit).toHaveAttribute('aria-pressed', 'false');
+    await expect(edit).not.toHaveCSS('background-color', 'rgb(58, 63, 89)');
+    expect(await editedRect()).toEqual(moved);
+
+    await edit.click();
+    await expect(corner).toBeVisible();
+    await app.page.mouse.move(gripX, gripY);
+    await app.page.mouse.down();
+    await app.page.mouse.move(x + width * 1.3, gripY + height * 0.1, { steps: 5 });
+    await app.page.mouse.up();
+    await expect.poll(async () => (await editedRect())[2]).toBeCloseTo(70, -1);
+    await expect.poll(async () => (await editedRect())[3]).toBeCloseTo(30, -1);
+    await expect(guides.nth(1)).toHaveAttribute('style', sibling);
+    await app.undo();
+    await expect.poll(editedRect).toEqual(moved);
+    const [plateId] = await app.timelineRowIds();
+    if (plateId === undefined) throw new Error('The plate row is missing');
+    await app.selectElementById(plateId);
+    await expect(edit).toHaveAttribute('aria-pressed', 'true');
+    await app.canvas.click({ position: { x: 20, y: 20 } });
+    await expect(editor).toHaveCount(0);
+    await expect(maskControls).toHaveCount(0);
+    await app.selectElementById(plateId);
+    await expect(edit).toHaveAttribute('aria-pressed', 'true');
     await expect(guides.first()).toHaveAttribute('data-cg-live-plate-mask', 'inside');
     const fallback = plate.locator('[data-cg-live-fallback]');
     await expect(fallback.locator('clipPath rect')).toHaveCount(2);

@@ -52,3 +52,11 @@ The Inspector offers target and mask selection, numeric percentages and per-mask
 drag adds a new rectangle or replaces the selected one. Removing the final mask clears the relation.
 Mask names use a screen-sized label while Canvas zoom changes. The Inspector groups add, redraw and
 remove as icon actions beside the mask controls.
+
+Direct editing starts with the first mask of a newly selected plate, with a mask picked in the
+Inspector, or after Add/Redraw completes. When the plate has both kinds, its own mask opens first.
+The Inspector applies the shared selected icon treatment while the editor is active. Its body and
+corner handles live on the Designer Canvas overlay, above the preview guides. A drag previews
+normalized coordinates clamped to the plate. Release updates only the selected window as one undo
+entry. Escape or pointer cancellation discards the draft. Escape or a click outside the editor
+leaves it, and that click follows the normal Canvas selection path. Both kinds share the editor.

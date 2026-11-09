@@ -35,6 +35,7 @@ export type DesignerTool =
   // D-202 — contextual tool launched from a selected upper Plate's Inspector.
   | 'live-reveal'
   | 'live-mask'
+  | 'live-mask-edit'
   | 'hand';
 
 export type DesignerView = 'landing' | 'studio';
@@ -100,6 +101,7 @@ export interface DesignerStoreState {
   view: DesignerView;
   tool: DesignerTool;
   liveRevealDrawIndex: number | null;
+  liveMaskEdit: { plateId: string; linked: boolean; index: number } | null;
   /** Element IDs currently selected. */
   selection: ReadonlySet<string>;
   /** When set, the canvas shows an inline TextEditor for this element. */
@@ -273,6 +275,7 @@ export const initialState: DesignerStoreState = {
   view: 'landing',
   tool: 'cursor',
   liveRevealDrawIndex: null,
+  liveMaskEdit: null,
   selection: new Set<string>(),
   editingTextId: null,
   editingPathId: null,

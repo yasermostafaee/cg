@@ -31,6 +31,24 @@ export const toolHint = style({
   letterSpacing: '0.05em',
 });
 
+export const maskEditor = style({
+  position: 'absolute',
+  zIndex: 7,
+  border: `1px solid ${colors.accent}`,
+  boxShadow: '0 0 0 1px rgba(0, 0, 0, 0.65)',
+  cursor: 'move',
+  touchAction: 'none',
+});
+
+export const maskEditorHandle = style({
+  position: 'absolute',
+  width: '10px',
+  height: '10px',
+  transform: 'translate(-50%, -50%)',
+  border: `1px solid ${colors.accent}`,
+  background: colors.onAccent,
+});
+
 // Snap guide lines. Their position (left/top) and orientation extent are
 // per-guide and applied inline; this holds the shared chrome.
 export const snapGuide = style({

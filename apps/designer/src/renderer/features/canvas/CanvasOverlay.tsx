@@ -4,6 +4,7 @@ import type {
   AnchorPoint,
   Element,
   FieldBinding,
+  LiveRevealRect,
   LottieElement,
   LottiePhases,
   Scene,
@@ -75,6 +76,7 @@ import {
 } from './geometry.js';
 import { Gizmo, MultiGizmo, lockCursor, type ElementFrameResolver } from './Gizmo.js';
 import { TextEditor } from './TextEditor.js';
+import { MaskEditorOverlay } from './MaskEditorOverlay.js';
 import * as s from './CanvasOverlay.css.js';
 import { hasNoActiveCell, renderedTransformAt } from '../../state/slices/arrangements.js';
 import { nextAutoSourceId } from '../../state/auto-source-id.js';
@@ -350,6 +352,7 @@ export function CanvasOverlay({
   // D-124 — the path in point-edit mode (anchors/handles shown, gizmo hidden).
   // Self-subscribed (like TransformSection's currentFrame) rather than drilled.
   const editingPathId = useDesignerSelector((s) => s.editingPathId);
+  const maskEdit = useDesignerSelector((s) => s.liveMaskEdit);
   // (A′'s cell-overlay subscription sat here; the mount is disabled — owner, 2026-08-19.)
   // LOOKS phase 2 (§14) — which look the canvas is showing, resolved the same way the
   // preview resolves it (session pick, else the group's default). Self-subscribed like
@@ -424,6 +427,68 @@ export function CanvasOverlay({
   });
   const selectedEl =
     selection.size === 1 ? (allElements.find((e) => selection.has(e.id)) ?? null) : null;
+  const defaultMaskPlate =
+    selectedEl?.type === 'video-placeholder' &&
+    selectedEl.visible &&
+    !selectedEl.locked &&
+    (selectedEl.liveMask !== undefined || selectedEl.revealMask !== undefined)
+      ? selectedEl
+      : null;
+  const defaultMaskPlateId = defaultMaskPlate?.id ?? null;
+  const defaultMaskLinked = defaultMaskPlate !== null && defaultMaskPlate.liveMask === undefined;
+  const previousMaskPlate = useRef<string | null>(null);
+  const maskPlate =
+    maskEdit !== null &&
+    selectedEl?.type === 'video-placeholder' &&
+    selectedEl.id === maskEdit.plateId &&
+    selectedEl.visible &&
+    !selectedEl.locked
+      ? selectedEl
+      : null;
+  const maskRect =
+    maskEdit === null || maskPlate === null
+      ? undefined
+      : maskEdit.linked
+        ? maskPlate.revealMask === undefined
+          ? undefined
+          : liveRevealRects(maskPlate.revealMask)[maskEdit.index]
+        : maskPlate.liveMask?.rects[maskEdit.index];
+  const maskBounds =
+    maskPlate === null
+      ? null
+      : frameAabb(
+          {
+            ...maskPlate,
+            transform: renderedTransformAt(maskPlate, frameForElement(maskPlate.id)),
+          },
+          [],
+        );
+  const maskBox =
+    maskBounds === null || maskBounds.maxX <= maskBounds.minX || maskBounds.maxY <= maskBounds.minY
+      ? null
+      : {
+          x: maskBounds.minX,
+          y: maskBounds.minY,
+          width: maskBounds.maxX - maskBounds.minX,
+          height: maskBounds.maxY - maskBounds.minY,
+        };
+  const maskEditAvailable = maskRect !== undefined && maskBox !== null && bindModeFieldId === null;
+  useEffect(() => {
+    // Default once per selection, so Escape and the cursor tool can leave the editor.
+    const changedPlate = previousMaskPlate.current !== defaultMaskPlateId;
+    previousMaskPlate.current = defaultMaskPlateId;
+    const lostEdit = tool === 'live-mask-edit' && !maskEditAvailable;
+    if (
+      changedPlate &&
+      defaultMaskPlateId !== null &&
+      bindModeFieldId === null &&
+      (tool === 'cursor' || lostEdit)
+    ) {
+      designerStore.editLiveMask(defaultMaskPlateId, defaultMaskLinked, 0);
+    } else if (lostEdit) {
+      designerStore.setTool('cursor');
+    }
+  }, [defaultMaskPlateId, defaultMaskLinked, tool, maskEditAvailable, bindModeFieldId]);
   // D-041 — the selected elements for the multi-selection gizmo (size > 1).
   const selectedEls = selection.size > 1 ? allElements.filter((e) => selection.has(e.id)) : [];
   // Inline editing follows the same painted pose as the double-click target.
@@ -494,7 +559,10 @@ export function CanvasOverlay({
         }
         return;
       }
-      if ((tool === 'live-reveal' || tool === 'live-mask') && e.key === 'Escape') {
+      if (
+        (tool === 'live-reveal' || tool === 'live-mask' || tool === 'live-mask-edit') &&
+        e.key === 'Escape'
+      ) {
         e.preventDefault();
         setRevealDraft(null);
         designerStore.setTool('cursor');
@@ -600,7 +668,8 @@ export function CanvasOverlay({
       ) {
         const x = (left - box.minX) / (box.maxX - box.minX);
         const y = (top - box.minY) / (box.maxY - box.minY);
-        rects[index ?? rects.length] = {
+        const savedIndex = index ?? rects.length;
+        rects[savedIndex] = {
           x,
           y,
           width: Math.min(1 - x, width / (box.maxX - box.minX)),
@@ -611,11 +680,43 @@ export function CanvasOverlay({
             ? { revealMask: liveRevealMaskFromRects(reveal.targetSourceId, rects) }
             : { liveMask: { mode: ownMask?.mode ?? 'inside', rects } as const };
         designerStore.updateElement(plate.id, maskPatch as Partial<Element>);
+        designerStore.editLiveMask(plate.id, drawTool === 'live-reveal', savedIndex);
       }
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onCancel);
+  }
+
+  function commitMaskEdit(rect: LiveRevealRect): void {
+    const state = designerStore.get();
+    if (
+      maskEdit === null ||
+      maskPlate === null ||
+      state.liveMaskEdit !== maskEdit ||
+      state.selection.size !== 1 ||
+      !state.selection.has(maskPlate.id) ||
+      state.scene === null
+    )
+      return;
+    const found = locate(state.scene, maskPlate.id);
+    const plate = found?.layer.children[found.elIdx];
+    if (plate?.type !== 'video-placeholder' || plate.locked || !plate.visible) return;
+    if (maskEdit.linked) {
+      const reveal = plate.revealMask;
+      if (reveal === undefined || reveal !== maskPlate.revealMask) return;
+      const rects = liveRevealRects(reveal);
+      rects[maskEdit.index] = rect;
+      designerStore.updateElement(plate.id, {
+        revealMask: liveRevealMaskFromRects(reveal.targetSourceId, rects),
+      });
+    } else {
+      const own = plate.liveMask;
+      if (own === undefined || own !== maskPlate.liveMask) return;
+      const rects = [...own.rects];
+      rects[maskEdit.index] = rect;
+      designerStore.updateElement(plate.id, { liveMask: { ...own, rects } });
+    }
   }
 
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>): void {
@@ -646,6 +747,9 @@ export function CanvasOverlay({
       designerStore.setBindMode(null);
       return;
     }
+    if (tool === 'live-mask-edit') {
+      designerStore.setTool('cursor');
+    }
     if (tool === 'live-reveal' || tool === 'live-mask') {
       if (
         selectedEl?.type === 'video-placeholder' &&
@@ -659,7 +763,7 @@ export function CanvasOverlay({
       }
       return;
     }
-    if (tool === 'cursor') {
+    if (tool === 'cursor' || tool === 'live-mask-edit') {
       // D-041 — shift / ctrl(+meta) build a multi-selection.
       const modifier = e.shiftKey || e.ctrlKey || e.metaKey;
       const hit = topmostHit(allElementsAtFrame, scenePoint);
@@ -842,6 +946,7 @@ export function CanvasOverlay({
   }
 
   function onDoubleClick(e: React.MouseEvent<HTMLDivElement>): void {
+    if (tool === 'live-mask-edit') return;
     // D-109 — a double-click finishes an in-progress pen path (open).
     if (isPenDrawing()) {
       finishPen(false);
@@ -1011,6 +1116,7 @@ export function CanvasOverlay({
           tool !== 'pen' &&
           tool !== 'live-reveal' &&
           tool !== 'live-mask' &&
+          tool !== 'live-mask-edit' &&
           editingPathId === null &&
           editingEl === null &&
           bindModeFieldId === null && (
@@ -1053,6 +1159,19 @@ export function CanvasOverlay({
             }}
           />
         )}
+        {tool === 'live-mask-edit' &&
+          bindModeFieldId === null &&
+          maskEdit !== null &&
+          maskBox !== null &&
+          maskRect !== undefined && (
+            <MaskEditorOverlay
+              key={`${maskEdit.plateId}:${String(maskEdit.linked)}:${String(maskEdit.index)}`}
+              rect={maskRect}
+              box={maskBox}
+              scale={scale}
+              onCommit={commitMaskEdit}
+            />
+          )}
         {editingEl !== null && editingEl.type === 'text' && (
           <TextEditor
             element={editingEl}
@@ -1068,6 +1187,9 @@ export function CanvasOverlay({
         <div className={s.toolHint}>
           {tool === 'live-mask' ? 'DRAG MASK WINDOW' : 'DRAG REVEAL WINDOW'} · Esc to cancel
         </div>
+      )}
+      {tool === 'live-mask-edit' && (
+        <div className={s.toolHint}>EDIT MASK WINDOW · Esc to exit</div>
       )}
       {/* D-071 Phase B — the snap/alignment guides moved to CanvasArea so they span
           the full visible canvas (the pasteboard), not just this frame-bound stage. */}

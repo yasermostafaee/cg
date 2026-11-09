@@ -4,6 +4,7 @@ import {
   ChevronRight,
   Crop,
   Maximize,
+  Move,
   Plus,
   Scan,
   Square,
@@ -1206,6 +1207,12 @@ function PlateMaskRows({
   linked?: boolean;
 }): JSX.Element {
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const editIndex = useDesignerSelector(({ liveMaskEdit }) =>
+    liveMaskEdit?.plateId === element.id && liveMaskEdit.linked === linked
+      ? liveMaskEdit.index
+      : null,
+  );
+  const editing = editIndex !== null;
   const scene = designerStore.get().scene;
   const plates: VideoPlaceholderElement[] = [];
   const collect = (children: readonly Element[]): void => {
@@ -1231,7 +1238,7 @@ function PlateMaskRows({
     : (element.liveMask?.rects ?? []);
   const kind = linked ? 'reveal mask' : 'plate mask';
   const heading = linked ? 'Reveal masks' : 'Plate mask';
-  const activeIndex = Math.min(selectedIndex, rects.length - 1);
+  const activeIndex = Math.min(editIndex ?? selectedIndex, rects.length - 1);
   const rect = rects[activeIndex];
   const writeRects = (nextRects: LiveRevealRect[]): void => {
     const latest = currentPlate(element);
@@ -1266,8 +1273,13 @@ function PlateMaskRows({
   };
   const remove = (): void => {
     const remaining = rects.filter((_, index) => index !== activeIndex);
+    const nextIndex = Math.max(0, Math.min(activeIndex, remaining.length - 1));
     writeRects(remaining);
-    setSelectedIndex(Math.max(0, Math.min(activeIndex, remaining.length - 1)));
+    setSelectedIndex(nextIndex);
+    if (editing) {
+      if (remaining.length > 0) designerStore.editLiveMask(element.id, linked, nextIndex);
+      else designerStore.setTool('cursor');
+    }
   };
   return (
     <div className={fieldCss.revealSection} role="group" aria-label={heading}>
@@ -1286,6 +1298,20 @@ function PlateMaskRows({
             title={`Drag a new window on this Plate (up to ${LIVE_REVEAL_MAX_RECTS} masks).`}
           >
             <Icon icon={Plus} size={14} />
+          </Control>
+          <Control
+            size="sm"
+            disabled={element.locked || rect === undefined}
+            aria-label={'Edit ' + kind + ' on Canvas'}
+            aria-pressed={editing}
+            selected={editing}
+            onClick={() => {
+              if (editing) designerStore.setTool('cursor');
+              else designerStore.editLiveMask(element.id, linked, activeIndex);
+            }}
+            title="Drag the mask to move it or drag a corner to resize it."
+          >
+            <Icon icon={Move} size={14} />
           </Control>
           <Control
             size="sm"
@@ -1329,6 +1355,9 @@ function PlateMaskRows({
                     ? { targetSourceId, rect: { x: 0.05, y: 0.7, width: 0.9, height: 0.25 } }
                     : { ...current, targetSourceId },
             } as Partial<Element>);
+            if (targetSourceId !== '' && current === undefined) {
+              designerStore.editLiveMask(element.id, true, 0);
+            }
           }}
         />
       )}
@@ -1354,7 +1383,10 @@ function PlateMaskRows({
             value={String(activeIndex)}
             options={rects.map((_, index) => String(index))}
             labels={rects.map((_, index) => `Mask ${index + 1}`)}
-            onCommit={(index) => setSelectedIndex(Number(index))}
+            onCommit={(index) => {
+              setSelectedIndex(Number(index));
+              if (!element.locked) designerStore.editLiveMask(element.id, linked, Number(index));
+            }}
           />
           <NumberField
             label={linked ? 'reveal X' : 'mask X'}

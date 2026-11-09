@@ -45,3 +45,10 @@
 - [ ] 5.6 Confirm the new mask on the target Playout.
 - [x] 5.7 The full pre-push gate and [carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42582556024/job/129044614984)
       passed on `0a553a24`.
+
+## 6. Direct Canvas editing
+
+- [x] 6.1 Move and resize a selected own-plate or linked reveal window on the Canvas.
+- [x] 6.2 Verify bounds, cancellation, Undo and independent windows in the two focused local Chromium cases.
+- [ ] 6.3 Record the carrying Linux E2E result.
+- [x] 6.4 Default to editing the selected mask and verify pressed styling, Add/Redraw, Escape and Canvas selection. All 24 Designer Live Source cases passed in local Chromium.

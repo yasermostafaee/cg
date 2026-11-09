@@ -22,6 +22,11 @@ next section.
 
 ## Single source of render — the editor overlays the runtime
 
+The mask editor is a contextual Canvas overlay for one plate window. The runtime preview continues
+to paint the authored window and its guide. `MaskEditorOverlay` tracks a normalized pointer draft
+and submits one rectangle to `CanvasOverlay` on release. The overlay checks the current mask and
+selection before passing the edit to the store.
+
 ```
 CanvasArea  ── host: zoom / pan / rulers / guides ────────────────────────┐
   ├─ <iframe srcDoc=…>   the LIVE @cg/template-runtime preview (the render) │

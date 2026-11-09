@@ -58,7 +58,15 @@ export function isAspectLocked(
  */
 export const viewSlice = {
   setTool(tool: DesignerTool, liveRevealDrawIndex: number | null = null): void {
-    set({ tool, liveRevealDrawIndex });
+    set({ tool, liveRevealDrawIndex, liveMaskEdit: null });
+  },
+
+  editLiveMask(plateId: string, linked: boolean, index: number): void {
+    set({
+      tool: 'live-mask-edit',
+      liveRevealDrawIndex: null,
+      liveMaskEdit: { plateId, linked, index },
+    });
   },
 
   /** View menu — toggle the canvas pixel rulers. */

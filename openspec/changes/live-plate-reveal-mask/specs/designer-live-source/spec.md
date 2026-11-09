@@ -6,6 +6,21 @@ The Designer SHALL let the author draw, edit and remove up to eight rectangles o
 plate. In Mask mode the visible region SHALL be the union of the windows. In Revert it SHALL be
 the complement of that union inside the plate. The same rule SHALL clip the plate's fallback.
 
+#### Scenario: Move and resize an existing mask on the Canvas
+
+- **GIVEN** the author selects a mask or finishes drawing one
+- **WHEN** the author drags its body or a corner and releases
+- **THEN** the window moves or resizes within the plate as one undoable edit
+- **AND** the other windows keep their geometry
+- **AND** cancellation before release preserves the previous window
+
+#### Scenario: Mask editing is visibly active by default
+
+- **WHEN** the author selects a plate with masks or picks another mask in the Inspector
+- **THEN** the active mask shows its drag and resize handles and the edit icon is pressed
+- **AND** Add and Redraw switch to drawing until that gesture finishes
+- **AND** clicking outside the editor leaves it and follows ordinary Canvas selection
+
 #### Scenario: Mask a burned-in caption
 
 - **GIVEN** one live plate
@@ -39,7 +54,7 @@ Missing targets, self-links, cycles and unrelated third-party overlap SHALL rema
 #### Scenario: Each mask can be edited or removed
 
 - **GIVEN** an upper plate with two masks for the same lower plate
-- **WHEN** the author redraws, edits the percentages of or removes one mask
+- **WHEN** the author moves, resizes, redraws, edits the percentages of or removes one mask
 - **THEN** the other mask keeps its geometry
 - **AND** removing the final mask restores ordinary overlap validation
 
