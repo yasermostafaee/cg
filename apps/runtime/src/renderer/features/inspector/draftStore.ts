@@ -1,5 +1,6 @@
 import {
   isFieldNamespace,
+  sameLiveCropFocus,
   type FieldValue,
   type FieldValues,
   type LiveCropFocus,
@@ -177,10 +178,6 @@ export function appliedPracticeCropOf(itemId: string, key: string): LiveCropFocu
   return appliedPracticeCrops.get(itemId)?.get(key);
 }
 
-function sameCropFocus(a: LiveCropFocus, b: LiveCropFocus): boolean {
-  return a.x === b.x && a.y === b.y;
-}
-
 export function stagePreviewCrop(
   itemId: string,
   draft: PreviewCropDraft,
@@ -189,8 +186,8 @@ export function stagePreviewCrop(
   const item = previewCropDrafts.get(itemId) ?? new Map<string, PreviewCropDraft>();
   const applying = applyingPreviewCrops.get(itemId)?.get(draft.key);
   if (
-    sameCropFocus(draft.focus, appliedFocus) &&
-    (applying === undefined || sameCropFocus(draft.focus, applying.focus))
+    sameLiveCropFocus(draft.focus, appliedFocus) &&
+    (applying === undefined || sameLiveCropFocus(draft.focus, applying.focus))
   ) {
     if (!item.delete(draft.key)) return;
     if (item.size === 0) previewCropDrafts.delete(itemId);

@@ -2,8 +2,8 @@
 
 ### Requirement: A live plate's picture is FITTED into its box by a selectable mode, and is never cut under the default
 
-A `cover` fit SHALL accept an optional normalized crop focus and keep that source point inside the
-plate. The Bridge SHALL obtain focus from the active look and pass it to the same shared function that
+A `cover` fit SHALL accept an optional normalized crop focus and optional uniform magnification.
+The Bridge SHALL obtain framing from the active look and pass it to the same shared function that
 already produces `MIXER FILL` and `MIXER CLIP`. The clip SHALL remain the authored plate. Absence SHALL
 be byte-identical to a centred focus, and `contain` SHALL ignore focus.
 
@@ -24,8 +24,8 @@ be byte-identical to a centred focus, and `contain` SHALL ignore focus.
 
 ### Requirement: Operators can review the Pan interaction in PVW
 
-CG Control SHALL show the Pan tool in PVW. The gesture SHALL move only the overflowing
-axis and preserve the plate's boundaries and input assignment. PGM SHALL show its programme
+CG Control SHALL show the Pan tool in PVW. The gesture SHALL move only on axes with crop travel
+and preserve the plate's boundaries and input assignment. PGM SHALL show its programme
 return without Pan controls or crop guides.
 
 #### Scenario: The Pan controls are discoverable before an input can be edited
@@ -43,14 +43,22 @@ return without Pan controls or crop guides.
 
 - **WHEN** the operator opens Pan in PVW **THEN** the complete available source picture or Bars guide and current crop are visible inside the plate
 - **WHEN** the operator drags the guide **THEN** it follows the pointer locally without a Bridge command
-- **WHEN** the operator presses `Center` **THEN** the crop guide returns to the centre of the source picture or Bars guide
+- **WHEN** the operator presses `Center` **THEN** the crop guide returns to the centre of the source picture or Bars guide at its current size
 
 #### Scenario: Source and plate have different ratios
 
 - **WHEN** a 4:3 source is cropped into a 16:9 plate **THEN** the crop uses the source width and can move vertically
 - **WHEN** a wider source is cropped into a narrower plate **THEN** the crop uses the source height and can move horizontally
 - **THEN** the source and crop guide keep their respective ratios throughout the gesture
-- **WHEN** both ratios match **THEN** the whole image is visible and there is no panning range
+- **WHEN** both ratios match at the largest crop size **THEN** the whole image is visible and there is no panning range
+
+#### Scenario: The operator resizes the crop window
+
+- **WHEN** the operator moves a crop corner in PVW
+- **THEN** the crop resizes proportionally around the opposite corner, limited to the source bounds
+- **AND** the largest crop is the existing cover window, including the full image for matching aspects
+- **AND** a smaller crop can move on both axes while the plate and the source assignment stay fixed
+- **AND** the resized crop becomes an Inspector draft with its position and size
 
 ### Requirement: Measured source pictures agree with the Take fit before Pan displays them
 
@@ -93,7 +101,7 @@ require leaving PVW before Take.
 #### Scenario: A staged crop is the first fit applied on air
 
 - **GIVEN** the active look has a visible Crop edges plate with known source geometry
-- **WHEN** the operator drags the crop or presses Center **THEN** the focus becomes an Inspector draft
+- **WHEN** the operator moves, resizes or centres the crop **THEN** its framing becomes an Inspector draft
 - **AND** the draft survives turning ON PVW off and back on
 - **WHEN** the operator discards the draft **THEN** the last applied crop is restored
 - **WHEN** the operator clicks Update on the off-air row **THEN** Bridge validates and saves its crop drafts together without a mixer or producer command
@@ -109,3 +117,5 @@ require leaving PVW before Take.
 
 - **WHEN** Bridge capabilities omit the optional PVW crop channel **THEN** the console offers practice, with the reason shown in Pan
 - **AND** the absent optional channel sends no crop request and does not raise the global Bridge compatibility warning
+- **WHEN** a Bridge supports saving position but does not advertise resize for a verified target
+- **THEN** the verified guide keeps positional Pan without sending a resize edit

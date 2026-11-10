@@ -519,6 +519,9 @@
 .cg-pan-draft__handle[data-pan-practice-axis='vertical'] {
   cursor: ns-resize;
 }
+.cg-pan-draft__handle[data-pan-practice-axis='both'] {
+  cursor: move;
+}
 .cg-pan-draft__picture {
   position: absolute;
   z-index: -1;
@@ -534,6 +537,39 @@
     0 0 0 1px var(--r-video-ground),
     0 0 0 100vmax var(--r-preview-crop-shade);
   pointer-events: none;
+}
+.cg-pan-draft__corner {
+  position: absolute;
+  z-index: 1;
+}
+.cg-pan-draft .cg-pan-draft__resize {
+  position: absolute;
+  inset: -12px auto auto -12px;
+  inline-size: 24px;
+  block-size: 24px;
+  min-inline-size: 0;
+  min-block-size: 0;
+  padding: 0;
+  border: 0;
+  scale: var(--cg-pan-ui-scale, 1);
+  touch-action: none;
+  pointer-events: auto;
+  cursor: nwse-resize;
+}
+.cg-pan-draft__resize:is(
+  [data-pan-resize-corner='top right'],
+  [data-pan-resize-corner='bottom left']
+) {
+  cursor: nesw-resize;
+}
+.cg-pan-draft__resize::after {
+  content: '';
+  display: block;
+  inline-size: 8px;
+  block-size: 8px;
+  border-radius: 2px;
+  background: var(--r-accent);
+  box-shadow: 0 0 0 1px var(--r-video-ground);
 }
 .cg-pan-draft .cg-pan-draft__center {
   position: absolute;

@@ -506,6 +506,7 @@ const PreviewPlateCropTargetSchema = z.object({
   token: z.string().regex(/^[0-9a-f]{64}$/),
   sourceAspect: z.number().positive(),
   focus: LiveCropFocusSchema,
+  resizable: z.literal(true).optional(),
   staged: z.boolean().optional(),
 });
 export type PreviewPlateCropTarget = z.infer<typeof PreviewPlateCropTargetSchema>;

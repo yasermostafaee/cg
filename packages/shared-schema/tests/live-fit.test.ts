@@ -3,6 +3,7 @@ import {
   DEFAULT_LIVE_FIT_MODE,
   LiveCropFocusSchema,
   fitPictureToBox,
+  liveCropWindow,
   type FitRect,
   type LiveFitMode,
 } from '../src/live-fit.js';
@@ -102,10 +103,28 @@ describe('C-028 — fitPictureToBox: the ONE fit', () => {
         fitPictureToBox(BOX, WIDE, 'cover', { x: 0.5, y: 0.5 }),
       );
     });
+
+    it('D-178 — a matching-aspect source keeps its full fit at zoom 1 and clips a smaller window at zoom 2', () => {
+      const box = { x: 120, y: 70, width: 160, height: 90 };
+      expectRect(liveCropWindow(WIDE, WIDE), { x: 0, y: 0, width: 1, height: 1 });
+      expect(fitPictureToBox(box, WIDE, 'cover', { x: 0.5, y: 0.5, zoom: 1 })).toEqual(
+        fitPictureToBox(box, WIDE, 'cover'),
+      );
+      const focus = { x: 0.25, y: 0.75, zoom: 2 };
+      expectRect(liveCropWindow(WIDE, WIDE, focus), {
+        x: 0.125,
+        y: 0.375,
+        width: 0.5,
+        height: 0.5,
+      });
+      const fitted = fitPictureToBox(box, WIDE, 'cover', focus);
+      expectRect(fitted.picture, { x: 80, y: 2.5, width: 320, height: 180 });
+      expectRect(fitted.visible, box);
+    });
   });
 
   it('D-178 — contain ignores focus because no source edge is cropped', () => {
-    expect(fitPictureToBox(BOX, WIDE, 'contain', { x: 0, y: 1 })).toEqual(
+    expect(fitPictureToBox(BOX, WIDE, 'contain', { x: 0, y: 1, zoom: 4 })).toEqual(
       fitPictureToBox(BOX, WIDE, 'contain', { x: 1, y: 0 }),
     );
   });
@@ -114,6 +133,8 @@ describe('C-028 — fitPictureToBox: the ONE fit', () => {
     expect(LiveCropFocusSchema.safeParse({ x: 0, y: 1 }).success).toBe(true);
     expect(LiveCropFocusSchema.safeParse({ x: -0.01, y: 0.5 }).success).toBe(false);
     expect(LiveCropFocusSchema.safeParse({ x: 0.5, y: 1.01 }).success).toBe(false);
+    expect(LiveCropFocusSchema.safeParse({ x: 0.5, y: 0.5, zoom: 0.99 }).success).toBe(false);
+    expect(LiveCropFocusSchema.safeParse({ x: 0.5, y: 0.5, zoom: 8.01 }).success).toBe(false);
   });
 
   /**

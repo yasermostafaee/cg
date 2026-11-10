@@ -82,3 +82,13 @@
 - [x] 8.3 [Carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42727985027/job/129538550944)
       passed on `e5474cc1` for measured source pictures in Pan.
 - [ ] 8.4 Verify the same source and crop in PVW and first Take on the target station.
+
+## 9. Resize the PVW crop
+
+- [x] 9.1 Add backwards-compatible framing magnification, deriving the editor window and FILL from one fit.
+- [x] 9.2 Resize proportionally from each corner, keep the source in bounds, and preserve size on Center.
+- [x] 9.3 Save size with position through Inspector Update and use it in the first hidden FILL.
+- [x] 9.4 Verify matching-aspect sources, clamp, draft/restore and the retained crop in Chromium and Bridge tests.
+      The browser verified a proportional resize and reopening the applied crop. The wire test
+      verified no AMCP on Update and the matching hidden FILL with the original CLIP on first Take.
+- [ ] 9.5 Verify the carrying Linux E2E and a resized crop on first Take on the target station.

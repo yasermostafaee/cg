@@ -622,6 +622,49 @@ it('stages PVW framing without AMCP and restores it into the first hidden Take g
   expect(r.previewPlateCrop(itemId, edit)).toMatchObject({ ok: false, targets: [] });
 });
 
+it('saves a resized matching-aspect PVW crop and uses it for the first hidden FILL', async () => {
+  const itemId = 'item-1';
+  const rect = { x: 720, y: 270, width: 480, height: 270 };
+  const r = await boot({ template: template([{ id: 'guest-1', rect, fitMode: 'cover' }]) });
+  expect(await r.load(itemId, 'lower-third', {})).toMatchObject({ accepted: true });
+  const [target] = r.previewPlateCrop(itemId).targets;
+  expect(target).toMatchObject({
+    sourceAspect: 16 / 9,
+    resizable: true,
+    focus: { x: 0.5, y: 0.5 },
+  });
+  const token = target!.token;
+  const beforeUpdate = (await recvLines()).length;
+  const edit = { token, focus: { x: 0.25, y: 0.75, zoom: 2 } };
+  expect(r.previewPlateCrop(itemId, undefined, [edit])).toMatchObject({
+    ok: true,
+    applied: [token],
+  });
+  expect((await recvLines()).slice(beforeUpdate)).toEqual([]);
+
+  const retained = RetainedStackItemSchema.parse(retainedFromStackItem(r.stackSnapshot()[0]!));
+  expect(retained.previewPlateCrops).toEqual([edit]);
+  expect(await r.remove(itemId)).toMatchObject({ accepted: true });
+  expect(await r.restore([retained])).toMatchObject({ restored: 1 });
+  expect(r.previewPlateCrop(itemId).targets).toMatchObject([{ ...target, focus: edit.focus }]);
+  // A legacy position-only update must not discard the stored resize.
+  expect(
+    r.previewPlateCrop(itemId, undefined, [{ token, focus: { x: 0.5, y: 0.75 } }]),
+  ).toMatchObject({
+    ok: true,
+    targets: [{ focus: { x: 0.5, y: 0.75, zoom: 2 } }],
+  });
+
+  const beforeTake = (await recvLines()).length;
+  expect(await r.take(itemId)).toMatchObject({ accepted: true });
+  const lines = (await recvLines()).slice(beforeTake);
+  const fill = at(lines, 'MIXER 1-30 FILL 0.25 0.0625 0.5 0.5 DEFER');
+  const clip = at(lines, 'MIXER 1-30 CLIP 0.375 0.25 0.25 0.25 DEFER');
+  expect(fill).toBeGreaterThan(at(lines, 'MIXER 1-30 OPACITY 0'));
+  expect(clip).toBeGreaterThan(fill);
+  expect(at(lines, 'PLAY 1-30 ')).toBeGreaterThan(clip);
+});
+
 it('scopes a staged PVW crop to the active look, source and row', async () => {
   const rect = { x: 720, y: 270, width: 480, height: 540 };
   const info = template([{ id: 'guest-1', rect, fitMode: 'cover' }]);
@@ -940,13 +983,14 @@ it('an UNASSIGNED plate refuses the take by name, and NOTHING reaches the wire',
   expect(r.liveLayers().has('item-1')).toBe(false);
 });
 
-it('an aspect the assigned source contradicts refuses a `cover` take, with the wire untouched', async () => {
+it('an operator-only `cover` override with a conflicting aspect still refuses before the wire', async () => {
   const r = await boot({
-    // The author designed for 4:3; `src-a` is a 16:9 format — 33% apart.
-    // 🔴 `C-028` — the mode is now STATED. Cropping is what this refusal guards
-    // against, so the refusal belongs to `cover` and the fixture must say so; left
-    // implicit it would fall to the `contain` default and stop testing a refusal at all.
-    template: template([{ id: 'guest-1', rect: BOX, expectedAspect: 4 / 3, fitMode: 'cover' }]),
+    template: template([{ id: 'guest-1', rect: BOX, expectedAspect: 4 / 3 }]),
+    assignments: {
+      assignments: [
+        { templateId: 'lower-third', plateId: 'guest-1', sourceId: 'src-a', fitMode: 'cover' },
+      ],
+    },
   });
   await r.load('item-1', 'lower-third', {});
   const before = (await recvLines()).length;
@@ -956,6 +1000,75 @@ it('an aspect the assigned source contradicts refuses a `cover` take, with the w
   expect(verdict.accepted).toBe(false);
   expect(verdict.errorCode).toBe('live-source-aspect-mismatch');
   expect((await recvLines()).slice(before)).toEqual([]);
+});
+
+it('B-426 — two authored 4:3 Crop edges plates Pan 16:9 inputs and keep that framing on Take', async () => {
+  const itemId = 'item-1';
+  const rects = {
+    'guest-1': { x: 160, y: 300, width: 640, height: 480 },
+    'guest-2': { x: 1120, y: 300, width: 640, height: 480 },
+  };
+  const info = template(
+    Object.entries(rects).map(([id, rect]) => ({ id, rect, expectedAspect: 4 / 3 })),
+  );
+  const r = await boot({
+    template: {
+      ...info,
+      liveSources: {
+        ...info.liveSources!,
+        defaultLookId: 'single',
+        looks: [
+          { id: 'single', name: 'Single', entered: { mode: 'cut' }, rects: { 'guest-1': BOX } },
+          {
+            id: 'pair',
+            name: 'Pair',
+            entered: { mode: 'cut' },
+            rects,
+            fits: { 'guest-1': 'cover', 'guest-2': 'cover' },
+          },
+        ],
+      },
+    },
+    assignments: assign([
+      ['guest-1', 'src-a'],
+      ['guest-2', 'src-b'],
+    ]),
+  });
+  expect(await r.load(itemId, 'lower-third', {})).toMatchObject({ accepted: true });
+  expect(await r.enterRehearse(itemId)).toMatchObject({ ok: true });
+  expect(await r.setActiveLook(itemId, 'pair')).toMatchObject({ ok: true });
+  const { targets } = r.previewPlateCrop(itemId);
+  expect(targets).toMatchObject([
+    { plateId: 'guest-1', sourceId: 'src-a', sourceAspect: 16 / 9 },
+    { plateId: 'guest-2', sourceId: 'src-b', sourceAspect: 16 / 9 },
+  ]);
+  const [first, second] = targets;
+  expect(r.previewPlateCrop(itemId, { token: first!.token, focus: { x: 1, y: 0.5 } }).ok).toBe(
+    true,
+  );
+  expect(r.previewPlateCrop(itemId, { token: second!.token, focus: { x: 0, y: 0.5 } }).ok).toBe(
+    true,
+  );
+  expect(await r.exitRehearse(itemId)).toMatchObject({ ok: true });
+
+  const beforeTake = (await recvLines()).length;
+  expect(await r.take(itemId)).toMatchObject({ accepted: true });
+  const sent = (await recvLines()).slice(beforeTake);
+  const coverWidth = rects['guest-1'].height * (16 / 9);
+  for (const [index, rect] of Object.values(rects).entries()) {
+    const layer = BAND.start + index;
+    const fill = sent.find((line) => line.startsWith(`MIXER 1-${String(layer)} FILL `));
+    const clip = sent.find((line) => line.startsWith(`MIXER 1-${String(layer)} CLIP `));
+    expect(fill).toBeDefined();
+    expect(clip).toBeDefined();
+    expect(Number(fill!.split(' ')[3])).toBeCloseTo(
+      (rect.x - (index === 0 ? coverWidth - rect.width : 0)) / SCENE.width,
+      5,
+    );
+    expect(Number(fill!.split(' ')[5])).toBeCloseTo(coverWidth / SCENE.width, 5);
+    expect(Number(clip!.split(' ')[3])).toBeCloseTo(rect.x / SCENE.width, 5);
+    expect(Number(clip!.split(' ')[5])).toBeCloseTo(rect.width / SCENE.width, 5);
+  }
 });
 
 it('⭐ C-028 — the SAME contradiction under `contain` takes, and puts a FITTED picture up', async () => {

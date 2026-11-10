@@ -15,6 +15,8 @@ which part of the live input stays visible while the plate and picture proportio
 - Use the saved crop in the normal Take before revealing the source. Keep the PVW safety interlock.
 - Defer the PGM operator control until an in-place editor can show the uncropped source.
 - Show the actual source in the PVW editor when Playout supplies the source picture mapping.
+- Let the operator resize the crop from any corner while preserving its aspect and plate.
+  Stage size with position through the same Inspector Update and Take.
 
 ## Capabilities
 

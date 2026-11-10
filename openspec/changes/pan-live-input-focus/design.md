@@ -2,9 +2,11 @@
 
 ## One value, one geometry function
 
-`cropFocus = {x,y}` is normalized to `0..1`; absence resolves to `{0.5,0.5}`. For `cover`, the fitted
-picture origin is `box.origin + (box.size - picture.size) * focus`. Only an overflowing axis changes.
-`contain` remains centred because it crops no source edge.
+`cropFocus = {x,y,zoom?}` stores each position normalized to `0..1` and an optional magnification
+from `1` (the largest cover crop) to `8`. Absence resolves to centred, unzoomed cover. For `cover`,
+the magnification uniformly scales the picture and its origin remains
+`box.origin + (box.size - picture.size) * focus`. `contain` ignores the whole framing value.
+The editor derives its source window from the same fit that computes FILL. CLIP stays fixed.
 
 The value lives on the plate element without a look group and beside each look's rect/fit maps when a
 look group exists. The Bridge resolves the active look and passes the value into `fitPictureToBox` via
@@ -18,8 +20,9 @@ focus produces exactly the old centred crop. Schema bounds reject values outside
 ## Operator surface
 
 The Designer Inspector has no crop-focus editor. Previously authored values remain readable in the
-scene and on export. The CG Control gesture targets a visible `cover` plate. Movement is clamped to
-the overflowing axis and keeps the authored plate fixed.
+scene and on export. The CG Control gesture targets a visible `cover` plate. Movement is clamped
+to axes with crop travel and keeps the authored plate fixed. Drag a corner to resize the window
+around the opposite corner. At the picture bounds the window shifts only as far as needed to fit.
 
 PVW can save normalized focus for a source whose aspect and fit Bridge has resolved. Programme
 writes begin on the existing Take path after the operator exits rehearsal.
@@ -43,8 +46,8 @@ mapping. Acceptance with a real input on the target station is still open.
 
 Without a usable JPEG mapping, Pan shows proportional Bars. With no visible Crop edges plate it
 has no editing surface. The shaded crop guide has the authored plate ratio and a blue outline
-with a dark contrast edge. Drag or arrow keys
-move it along the overflowing axis, and Center restores the centre. Drag and Center stage an
+with a dark contrast edge. Drag or arrow keys move it along the axes with travel. Center restores
+the centre at the current size. Drag, resize and Center stage an
 Inspector draft that survives toggling PVW. With no eligible Bridge target, Update applies practice
 framing in the current browser session. Discard restores the last applied position. Practice starts
 no input check and performs no Bridge writes.
@@ -63,7 +66,8 @@ guide in local practice.
 The row's existing interlock still requires OFF PVW before PLAY. A saved Center is explicit centred
 focus for that crop, including on a plate with a different authored default.
 
-The console treats the staging route as an optional capability. An older Bridge keeps the practice
+The console treats the staging route as an optional capability. The target also advertises support
+for saving resize edits. A target without it still supports positional Pan. An older Bridge without the route keeps the practice
 guide available and explains inside Pan that Update keeps the position for local practice. Required routes still use the
 global compatibility check.
 
@@ -77,5 +81,6 @@ An equivalent PGM editor would need an authenticated read of the already-open so
 CLIP and the final programme mix. The programme return carries only the on-air composite.
 
 The source and box use a shared raster when deriving the crop. A wider source overflows
-horizontally. A narrower source overflows vertically. A matching aspect uses the whole picture
-even when the source raster has fewer pixels than the plate.
+horizontally at the largest crop. A narrower source overflows vertically. A matching aspect uses
+the whole picture at that size, even when the source raster has fewer pixels than the plate.
+Resizing inward creates travel on both axes, including for a matching aspect.

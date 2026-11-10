@@ -109,9 +109,10 @@ async function registerTwoBox(
   page: Page,
   holes: PlateRects = HOLES,
   cropEdges = false,
+  expectedAspect?: number,
 ): Promise<void> {
   await page.evaluate(
-    async ({ templateId, holes, cropEdges }) => {
+    async ({ templateId, holes, cropEdges, expectedAspect }) => {
       const w = window as unknown as {
         cg: {
           templates: { import: (req: { template: unknown; html: string }) => Promise<unknown> };
@@ -137,13 +138,14 @@ async function registerTwoBox(
               rect,
               dynamic: false,
               ...(cropEdges && { fitMode: 'cover' }),
+              ...(expectedAspect !== undefined && { expectedAspect }),
             })),
           },
         },
         html: '<!doctype html><html><body>two-box</body></html>',
       });
     },
-    { templateId: TWO_BOX, holes, cropEdges },
+    { templateId: TWO_BOX, holes, cropEdges, expectedAspect },
   );
 }
 
@@ -323,11 +325,98 @@ test('D-178 — practice crop Draft and Update survive OFF PVW and ON PVW', asyn
   await expect(page.locator('[data-pan-crop-state="practice-saved"]')).toHaveCount(1);
 });
 
-test('D-178 — measured JPEG crop clips delivery padding and cancels only stale gestures', async ({
+test('D-178 — corner resize preserves a matching-aspect plate and is saved through Update', async ({
   app,
 }) => {
   const { page } = app;
-  await registerTwoBox(page, PAN_HOLES, true);
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await registerTwoBox(page, HOLES, true);
+  await stubRetainedPage(page);
+  const layer = await app.loadTemplate(TWO_BOX);
+  await app.selectLayerRow(layer);
+  await app.setTemplateDefault('guest-1', 'Studio 1');
+  await page.evaluate(() => {
+    const token = 'd'.repeat(64);
+    let saved: { x: number; y: number; zoom?: number | undefined } = { x: 0.5, y: 0.5 };
+    window.cg.stack.previewPlateCrop = async ({ edits }) => {
+      if (edits?.[0]?.token === token) {
+        saved = edits[0].focus;
+        Object.assign(window, { resizedCropSaved: saved });
+      }
+      return {
+        ok: true,
+        targets: [
+          {
+            plateId: 'guest-1',
+            token,
+            sourceAspect: 16 / 9,
+            resizable: true,
+            focus: saved,
+            staged: saved.zoom !== undefined,
+          },
+        ],
+        ...(edits !== undefined && { applied: [token] }),
+      };
+    };
+  });
+  const row = page.locator(`[data-layer="${String(layer)}"]`);
+  const pan = page.getByRole('button', { name: 'Pan preview input', exact: true });
+  const handle = page.getByRole('button', { name: 'Pan crop guide in guest-1', exact: true });
+  const crop = handle.locator('[data-pan-practice-crop]');
+  const corner = page.getByRole('button', {
+    name: 'Resize bottom right crop corner in guest-1',
+    exact: true,
+  });
+  const enter = async (): Promise<void> => {
+    await rehearseRow(page, layer);
+    await pvwTransport(page, 'PLAY').click();
+    await pan.click();
+    await expect(corner).toBeVisible();
+  };
+  await enter();
+  const original = await crop.boundingBox();
+  const grip = await corner.boundingBox();
+  if (original === null || grip === null) throw new Error('Missing crop and corner geometry');
+  await expect(handle).not.toHaveAttribute('data-pan-practice-axis');
+  const x = grip.x + grip.width / 2;
+  const y = grip.y + grip.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x - original.width / 4, y - original.height / 4);
+  await page.mouse.up();
+  const resized = await crop.boundingBox();
+  if (resized === null) throw new Error('Missing resized crop');
+  expect(resized.width / original.width).toBeCloseTo(0.75, 1);
+  expect(resized.width / resized.height).toBeCloseTo(16 / 9, 2);
+  expect(resized.x).toBeCloseTo(original.x, 1);
+  expect(resized.y).toBeCloseTo(original.y, 1);
+  await expect(handle).toHaveAttribute('data-pan-practice-axis', 'both');
+  await expect(handle.locator('..')).toHaveAttribute('data-pan-crop-state', 'draft');
+
+  await handle.locator('..').getByRole('button', { name: 'Center preview crop' }).click();
+  const centered = await crop.boundingBox();
+  expect(centered?.width).toBeCloseTo(resized.width, 1);
+  expect(centered?.x).toBeGreaterThan(resized.x);
+  await row.getByRole('button', { name: 'OFF PVW', exact: true }).click();
+  await app.inspector.getByRole('button', { name: 'Apply staged edits', exact: true }).click();
+  const saved = await page.evaluate(
+    () =>
+      (window as typeof window & { resizedCropSaved?: { x: number; y: number; zoom?: number } })
+        .resizedCropSaved,
+  );
+  expect(saved).toMatchObject({ x: 0.5, y: 0.5 });
+  expect(saved?.zoom).toBeCloseTo(4 / 3, 1);
+  await enter();
+  await expect(handle.locator('..')).toHaveAttribute('data-pan-crop-state', 'saved');
+  expect((await crop.boundingBox())?.width).toBeCloseTo(resized.width, 1);
+  await expect(row.getByRole('button', { name: 'OFF PVW', exact: true })).toBeVisible();
+});
+
+test('D-178 / B-426 — measured JPEG crop uses the assigned aspect and cancels only stale gestures', async ({
+  app,
+}) => {
+  const { page } = app;
+  await registerTwoBox(page, PAN_HOLES, true, 4 / 3);
   await stubRetainedPage(page, pageWithHoles(PAN_HOLES));
   const layer = await app.loadTemplate(TWO_BOX);
   await app.selectLayerRow(layer);

@@ -7922,16 +7922,15 @@ export class CasparRuntime {
         Per FRAME is now load-bearing rather than merely consistent: `frame.lookId` is what
         selects the box, and the mode describes how the picture sits in THAT box.
       */
-      const fitMode = resolvePlateFitMode(
-        fitOverrides.get(frame.plateId),
-        lookPlateFits(carrier, frame.lookId)[frame.plateId],
-      );
+      const authoredFitMode = lookPlateFits(carrier, frame.lookId)[frame.plateId];
+      const fitMode = resolvePlateFitMode(fitOverrides.get(frame.plateId), authoredFitMode);
       const aspect = resolvePlateAspect({
         plateId: frame.plateId,
         plateLabel: plateLabel(carrier.sources, frame.plateId),
         source: frame.source,
         expectedAspect: frame.declaration.expectedAspect,
         fitMode: fitMode.mode,
+        authoredFitMode,
       });
       if (!aspect.ok) {
         /*
@@ -8033,26 +8032,23 @@ export class CasparRuntime {
       const stagedCrop = this.#previewPlateCrops.get(itemId)?.find((crop) => crop.token === token);
       const liveCrop = this.#liveCropFocuses.get(itemId)?.get(cropKey(frame.lookId, frame.plateId));
       const landedFocus = liveCrop?.producer === seat.producerArg ? liveCrop.focus : undefined;
+      const savedFocus =
+        stagedCrop?.focus ?? lookPlateFocuses(carrier, frame.lookId)[frame.plateId];
+      const currentFocus =
+        landedFocus === undefined ? savedFocus : { ...savedFocus, ...landedFocus };
       const cropFocus =
         frame.lookId === lookId && proposedCrop?.plateId === frame.plateId
-          ? proposedCrop.focus
-          : (landedFocus ??
-            stagedCrop?.focus ??
-            lookPlateFocuses(carrier, frame.lookId)[frame.plateId]);
+          ? { ...currentFocus, ...proposedCrop.focus }
+          : currentFocus;
       const continuousFit = this.liveSourceFitFor({ ...fitInput, cropFocus });
-      if (
-        token !== undefined &&
-        cropAspect !== null &&
-        box !== undefined &&
-        (continuousFit.fill.width - box.fill.width > 1e-6 ||
-          continuousFit.fill.height - box.fill.height > 1e-6)
-      ) {
+      if (token !== undefined && cropAspect !== null && aspect.aspect !== null) {
         previewCropTargets.push({
           plateId: frame.plateId,
           sourceId: frame.source.id,
           token,
           sourceAspect: cropAspect,
           focus: cropFocus ?? DEFAULT_LIVE_CROP_FOCUS,
+          resizable: true,
           ...(stagedCrop !== undefined && landedFocus === undefined && { staged: true }),
         });
       }
@@ -9135,7 +9131,12 @@ export class CasparRuntime {
           message: 'The preview plate changed. Frame its current input.',
         };
       }
-      accepted.set(draft.token, { lookId, plateId: target.plateId, focus: draft.focus });
+      // Older consoles send position only. Keep the size unless the edit explicitly changes it.
+      accepted.set(draft.token, {
+        lookId,
+        plateId: target.plateId,
+        focus: { ...target.focus, ...draft.focus },
+      });
     }
 
     // All tokens refer to this row's current inputs and geometry. Commit the batch in one write.

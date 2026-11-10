@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type ComponentProps } from 'react';
 import { Move, RotateCcw } from 'lucide-react';
 import {
   DEFAULT_LIVE_CROP_FOCUS,
   fitPictureToBox,
+  liveCropWindow,
+  sameLiveCropFocus,
   type LiveCropFocus,
   type StackItemState,
 } from '@cg/shared-schema';
@@ -18,6 +20,7 @@ import {
   subscribeDrafts,
 } from '../inspector/draftStore.js';
 import type { PlatePlacement } from './livePlateGeometry.js';
+import { PAN_CORNERS, clampCropFraction, resizePanCrop, type PanCorner } from './previewPanCrop.js';
 import { fullJpegRect } from './pvwPlatePictures.js';
 
 const PRACTICE_SOURCE_ASPECT = 16 / 9;
@@ -169,6 +172,7 @@ export function PreviewPanRow({
               blocked={targets === null}
               cropMessage={cropMessage}
               guide={target !== undefined}
+              resizable={target === undefined || target.resizable === true}
               sourcePicture={sourcePicture}
               compactCenter={
                 plate.width * fit < 80 || (plate.width * fit < 144 && plate.height * fit < 56)
@@ -197,10 +201,6 @@ export function PreviewPanRow({
   );
 }
 
-function clamp(value: number): number {
-  return Math.max(0, Math.min(1, value));
-}
-
 interface PointerOrigin {
   pointerId: number;
   x: number;
@@ -208,22 +208,11 @@ interface PointerOrigin {
   focus: LiveCropFocus;
   travelX: number;
   travelY: number;
+  screen: { width: number; height: number };
+  corner: PanCorner | undefined;
 }
 
-function pointerFocus(origin: PointerOrigin, x: number, y: number): LiveCropFocus {
-  return {
-    x:
-      origin.travelX === 0
-        ? origin.focus.x
-        : clamp(origin.focus.x + (x - origin.x) / origin.travelX),
-    y:
-      origin.travelY === 0
-        ? origin.focus.y
-        : clamp(origin.focus.y + (y - origin.y) / origin.travelY),
-  };
-}
-
-/** Draw the full guide or practice source, keeping movement local until release. */
+/** Draw the full guide or practice source, keeping movement and resizing local until release. */
 function PreviewPanDraft({
   plateId,
   width,
@@ -233,6 +222,7 @@ function PreviewPanDraft({
   blocked,
   cropMessage,
   guide,
+  resizable,
   sourcePicture,
   compactCenter,
   stagedFocus,
@@ -246,6 +236,7 @@ function PreviewPanDraft({
   blocked: boolean;
   cropMessage: string | undefined;
   guide: boolean;
+  resizable: boolean;
   sourcePicture: SourcePicture | undefined;
   compactCenter: boolean;
   stagedFocus: LiveCropFocus;
@@ -254,7 +245,7 @@ function PreviewPanDraft({
   const [dragFocus, setDragFocus] = useState<LiveCropFocus | null>(null);
   const focus = dragFocus ?? stagedFocus;
   const commitFocus = (next: LiveCropFocus): void => {
-    if (!blocked && (next.x !== stagedFocus.x || next.y !== stagedFocus.y)) onFocusChange(next);
+    if (!blocked && !sameLiveCropFocus(next, stagedFocus)) onFocusChange(next);
   };
   const source = useRef<HTMLSpanElement>(null);
   const start = useRef<PointerOrigin | null>(null);
@@ -268,21 +259,91 @@ function PreviewPanDraft({
     sourcePicture === undefined
       ? undefined
       : fullJpegRect({ ...picture, x: 0, y: 0 }, sourcePicture.geometry.activeRect);
-  const crop = fitPictureToBox(picture, width / height, 'contain').picture;
-  const cropWidth = crop.width / picture.width;
-  const cropHeight = crop.height / picture.height;
-  const travelX = Math.max(0, 1 - cropWidth);
-  const travelY = Math.max(0, 1 - cropHeight);
+  const plateAspect = width / height;
+  const crop = liveCropWindow(plateAspect, sourceAspect, focus);
+  const travelX = Math.max(0, 1 - crop.width);
+  const travelY = Math.max(0, 1 - crop.height);
   const horizontal = travelX > 1e-6;
   const vertical = travelY > 1e-6;
-  const instructions = horizontal
-    ? 'Drag or use the left and right arrows.'
-    : vertical
-      ? 'Drag or use the up and down arrows.'
-      : 'The image fits this plate.';
+  const instructions =
+    horizontal && vertical
+      ? 'Drag or use the arrow keys.'
+      : horizontal
+        ? 'Drag or use the left and right arrows.'
+        : vertical
+          ? 'Drag or use the up and down arrows.'
+          : 'The image fits this plate.';
+  const resizeHint = resizable ? ' Drag a corner to resize.' : '';
   const description = guide
-    ? `${instructions} ${sourcePicture === undefined ? 'The guide uses bars.' : 'This is the decoded source picture.'} Press Update to save this crop for Take.`
-    : `${instructions} Press Update to keep this practice crop in this console. ${cropMessage ?? 'Practice changes stay in Preview.'}`;
+    ? `${instructions}${resizeHint} ${sourcePicture === undefined ? 'The guide uses bars.' : 'This is the decoded source picture.'} Press Update to save this crop for Take.`
+    : `${instructions}${resizeHint} Press Update to keep this practice crop in this console. ${cropMessage ?? 'Practice changes stay in Preview.'}`;
+
+  function pointerFocus(origin: PointerOrigin, x: number, y: number): LiveCropFocus {
+    const dx = x - origin.x;
+    const dy = y - origin.y;
+    if (origin.corner !== undefined)
+      return resizePanCrop(
+        origin.focus,
+        plateAspect,
+        sourceAspect,
+        origin.corner,
+        origin.screen,
+        dx,
+        dy,
+      );
+    return {
+      ...origin.focus,
+      x:
+        origin.travelX === 0
+          ? origin.focus.x
+          : clampCropFraction(origin.focus.x + dx / origin.travelX),
+      y:
+        origin.travelY === 0
+          ? origin.focus.y
+          : clampCropFraction(origin.focus.y + dy / origin.travelY),
+    };
+  }
+
+  function gestureProps(
+    corner?: PanCorner,
+  ): Pick<
+    ComponentProps<typeof Button>,
+    'onPointerDown' | 'onPointerMove' | 'onPointerUp' | 'onPointerCancel' | 'onLostPointerCapture'
+  > {
+    return {
+      onPointerDown: (event) => {
+        if (blocked || event.button !== 0 || start.current !== null) return;
+        if (corner === undefined && !horizontal && !vertical) return;
+        const rect = source.current?.getBoundingClientRect();
+        if (rect === undefined || rect.width <= 0 || rect.height <= 0) return;
+        event.currentTarget.setPointerCapture(event.pointerId);
+        start.current = {
+          pointerId: event.pointerId,
+          x: event.clientX,
+          y: event.clientY,
+          focus,
+          travelX: horizontal ? travelX * rect.width : 0,
+          travelY: vertical ? travelY * rect.height : 0,
+          screen: { width: rect.width, height: rect.height },
+          corner,
+        };
+      },
+      onPointerMove: (event) => {
+        const origin = start.current;
+        if (origin?.pointerId !== event.pointerId) return;
+        setDragFocus(pointerFocus(origin, event.clientX, event.clientY));
+      },
+      onPointerUp: (event) => {
+        const origin = start.current;
+        if (origin?.pointerId !== event.pointerId) return;
+        start.current = null;
+        setDragFocus(null);
+        commitFocus(pointerFocus(origin, event.clientX, event.clientY));
+      },
+      onPointerCancel: (event) => cancelDrag(event.pointerId),
+      onLostPointerCapture: (event) => cancelDrag(event.pointerId),
+    };
+  }
   return (
     <div className="cg-pan-draft" data-pan-crop-state={state}>
       <Button
@@ -290,37 +351,18 @@ function PreviewPanDraft({
         className="cg-pan-draft__handle"
         aria-label={`Pan ${sourcePicture !== undefined ? 'source picture' : guide ? 'crop guide' : 'practice image'} in ${plateId}`}
         aria-disabled={blocked || (!horizontal && !vertical)}
-        data-pan-practice-axis={horizontal ? 'horizontal' : vertical ? 'vertical' : undefined}
-        disabled={!horizontal && !vertical}
+        data-pan-practice-axis={
+          horizontal && vertical
+            ? 'both'
+            : horizontal
+              ? 'horizontal'
+              : vertical
+                ? 'vertical'
+                : undefined
+        }
+        disabled={!horizontal && !vertical && !resizable}
         title={description}
-        onPointerDown={(event) => {
-          if (blocked || event.button !== 0 || start.current !== null) return;
-          const rect = source.current?.getBoundingClientRect();
-          if (rect === undefined || rect.width <= 0 || rect.height <= 0) return;
-          event.currentTarget.setPointerCapture(event.pointerId);
-          start.current = {
-            pointerId: event.pointerId,
-            x: event.clientX,
-            y: event.clientY,
-            focus,
-            travelX: horizontal ? travelX * rect.width : 0,
-            travelY: vertical ? travelY * rect.height : 0,
-          };
-        }}
-        onPointerMove={(event) => {
-          const origin = start.current;
-          if (origin?.pointerId !== event.pointerId) return;
-          setDragFocus(pointerFocus(origin, event.clientX, event.clientY));
-        }}
-        onPointerUp={(event) => {
-          const origin = start.current;
-          if (origin?.pointerId !== event.pointerId) return;
-          start.current = null;
-          setDragFocus(null);
-          commitFocus(pointerFocus(origin, event.clientX, event.clientY));
-        }}
-        onPointerCancel={(event) => cancelDrag(event.pointerId)}
-        onLostPointerCapture={(event) => cancelDrag(event.pointerId)}
+        {...gestureProps()}
         onKeyDown={(event) => {
           const dx = horizontal
             ? event.key === 'ArrowLeft'
@@ -339,7 +381,11 @@ function PreviewPanDraft({
           if (dx === 0 && dy === 0) return;
           event.preventDefault();
           if (start.current === null) {
-            commitFocus({ x: clamp(focus.x + dx), y: clamp(focus.y + dy) });
+            commitFocus({
+              ...focus,
+              x: clampCropFraction(focus.x + dx),
+              y: clampCropFraction(focus.y + dy),
+            });
           }
         }}
       >
@@ -368,14 +414,57 @@ function PreviewPanDraft({
             className="cg-pan-draft__crop"
             data-pan-practice-crop=""
             style={{
-              left: `${travelX * focus.x * 100}%`,
-              top: `${travelY * focus.y * 100}%`,
-              width: `${cropWidth * 100}%`,
-              height: `${cropHeight * 100}%`,
+              left: `${crop.x * 100}%`,
+              top: `${crop.y * 100}%`,
+              width: `${crop.width * 100}%`,
+              height: `${crop.height * 100}%`,
             }}
           />
         </span>
       </Button>
+      {resizable &&
+        !blocked &&
+        PAN_CORNERS.map((corner) => (
+          <span
+            key={corner.name}
+            className="cg-pan-draft__corner"
+            style={{
+              left: `${((picture.x + picture.width * (crop.x + crop.width * corner.x)) / width) * 100}%`,
+              top: `${((picture.y + picture.height * (crop.y + crop.height * corner.y)) / height) * 100}%`,
+            }}
+          >
+            <Button
+              variant="ghost"
+              className="cg-pan-draft__resize"
+              data-pan-resize-corner={corner.name}
+              aria-label={`Resize ${corner.name} crop corner in ${plateId}`}
+              title="Resize crop"
+              {...gestureProps(corner)}
+              onKeyDown={(event) => {
+                const rect = source.current?.getBoundingClientRect();
+                if (rect === undefined || start.current !== null) return;
+                const dx =
+                  event.key === 'ArrowLeft' ? -0.05 : event.key === 'ArrowRight' ? 0.05 : 0;
+                const dy = event.key === 'ArrowUp' ? -0.05 : event.key === 'ArrowDown' ? 0.05 : 0;
+                if (dx === 0 && dy === 0) return;
+                event.preventDefault();
+                commitFocus(
+                  resizePanCrop(
+                    focus,
+                    plateAspect,
+                    sourceAspect,
+                    corner,
+                    rect,
+                    dx * rect.width,
+                    dy * rect.height,
+                  ),
+                );
+              }}
+            >
+              {null}
+            </Button>
+          </span>
+        ))}
       <span className="cg-pan-draft__label">
         <Icon icon={Move} size={13} />
         <span role="status">
@@ -390,7 +479,7 @@ function PreviewPanDraft({
         title="Center crop"
         aria-disabled={blocked || (!horizontal && !vertical)}
         disabled={!horizontal && !vertical}
-        onClick={() => commitFocus(DEFAULT_LIVE_CROP_FOCUS)}
+        onClick={() => commitFocus({ ...focus, ...DEFAULT_LIVE_CROP_FOCUS })}
       >
         <Icon icon={RotateCcw} size={14} />
         {!compactCenter && 'Center'}

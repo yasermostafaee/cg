@@ -49,13 +49,21 @@ export const LIVE_FIT_MODES = ['contain', 'cover'] as const;
 export const LiveFitModeSchema = z.enum(LIVE_FIT_MODES);
 export type LiveFitMode = z.infer<typeof LiveFitModeSchema>;
 
-/** D-178 — source point kept inside a cropped (`cover`) plate, in 0..1 fractions. */
+/** D-178 — the smallest crop shows 1/8 of the largest cover window in each dimension. */
+export const MAX_LIVE_CROP_ZOOM = 8;
+
+/** D-178 — travel fractions and optional uniform magnification for a cropped (`cover`) plate. */
 export const LiveCropFocusSchema = z.object({
   x: z.number().min(0).max(1),
   y: z.number().min(0).max(1),
+  zoom: z.number().min(1).max(MAX_LIVE_CROP_ZOOM).optional(),
 });
 export type LiveCropFocus = z.infer<typeof LiveCropFocusSchema>;
 export const DEFAULT_LIVE_CROP_FOCUS: LiveCropFocus = { x: 0.5, y: 0.5 };
+
+export function sameLiveCropFocus(a: LiveCropFocus, b: LiveCropFocus): boolean {
+  return a.x === b.x && a.y === b.y && (a.zoom ?? 1) === (b.zoom ?? 1);
+}
 
 /**
  * `C-028` — the DEFAULT, and it is `contain` rather than today's `cover`.
@@ -163,7 +171,7 @@ export function fitPictureToBox(
   // between the two modes. Everything else — the centring, the intersection, the null
   // case — is shared, which is what stops the modes drifting into two implementations.
   const ratios = [box.width / sourceAspect, box.height];
-  const k = mode === 'cover' ? Math.max(...ratios) : Math.min(...ratios);
+  const k = mode === 'cover' ? Math.max(...ratios) * (focus.zoom ?? 1) : Math.min(...ratios);
   const width = k * sourceAspect;
   const height = k;
   const picture: FitRect = {
@@ -176,6 +184,22 @@ export function fitPictureToBox(
     height,
   };
   return { picture, visible: intersect(picture, box) };
+}
+
+/** The same cover fit seen from the source, as a normalized crop rectangle. */
+export function liveCropWindow(
+  boxAspect: number,
+  sourceAspect: number,
+  focus: LiveCropFocus = DEFAULT_LIVE_CROP_FOCUS,
+): FitRect {
+  const box = { x: 0, y: 0, width: boxAspect, height: 1 };
+  const { picture } = fitPictureToBox(box, sourceAspect, 'cover', focus);
+  return {
+    x: -picture.x / picture.width,
+    y: -picture.y / picture.height,
+    width: box.width / picture.width,
+    height: box.height / picture.height,
+  };
 }
 
 /**

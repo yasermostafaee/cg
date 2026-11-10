@@ -71,6 +71,8 @@ export interface PlateAspectInput {
    * sites, which is the one thing that cannot be forgotten.
    */
   readonly fitMode: LiveFitMode;
+  /** The template's explicit fit for this plate and look, before any operator override. */
+  readonly authoredFitMode?: LiveFitMode | undefined;
 }
 
 export type PlateAspectOutcome =
@@ -93,8 +95,7 @@ export type PlateAspectOutcome =
        */
       readonly assumed: boolean;
       /**
-       * ⭐ `C-028` — **the mismatch that DID happen and was not refused, because the mode
-       * is `contain` and nothing is cropped.**
+       * An accepted aspect mismatch under contain or an author-selected crop.
        *
        * 🔴 **The reason travels with the outcome in BOTH arms.** This carries the SAME
        * `errorCode` and the SAME `message` the refusal would have — the mode decides the
@@ -173,9 +174,8 @@ export function resolvePlateAspect(input: PlateAspectInput): PlateAspectOutcome 
    *
    * `expectedAspect` is the AUTHOR'S ASSERTION — "this window is designed for a
    * 16:9 feed" — and the bridge's job is to check the assigned source against it and
-   * REFUSE rather than silently crop something the author never anticipated. It
-   * appearing at step 3 of the fit chain is a fallback for an undescribed source,
-   * not a promotion to fit input.
+   * warn about a mismatch, or refuse a crop that only an operator override requested.
+   * The authored aspect at step 3 is a fallback for an undescribed source.
    *
    * Both must be present for a disagreement to exist: an absent `expectedAspect` is
    * "I am not asserting anything" (D-147's third state), not a claim of 0.
@@ -184,26 +184,9 @@ export function resolvePlateAspect(input: PlateAspectInput): PlateAspectOutcome 
   if (stated !== null && expected !== undefined) {
     const relative = Math.abs(stated - expected) / expected;
     if (relative > ASPECT_MATCH_TOLERANCE) {
-      /*
-        ⭐ `C-028` — ONE CONDITION, ONE STATEMENT OF FACT, TWO DISPOSITIONS.
-
-        🔴 The disagreement is detected identically in both modes and the FACTS are
-        written once: the plate, the author's number and the source's. That half is what
-        "the reason travels with the outcome" means, and building it above the branch is
-        what stops the warning drifting into saying something the refusal does not.
-
-        ⚠ **The CONSEQUENCE clause differs, and it must.** The shipped sentence —
-        _"Cropping it would cut a part of the picture the author never saw"_ — is FALSE
-        under `contain`, where nothing is cropped. Repeating it verbatim would hand the
-        operator a reason that does not apply to what they are looking at, which is a way
-        of losing the reason rather than keeping it. So `cover` keeps its wording
-        untouched and `contain` states its own true consequence: the picture will not
-        fill the box the author drew.
-
-        Under `contain` the harm this refusal guards against cannot occur, and a take
-        blocked on air for an impossible harm is a refusal that teaches operators to stop
-        stating the field at all. Under `cover` the harm is real and the refusal stands.
-      */
+      // B-426: an authored Crop edges is explicit permission to crop the assigned picture.
+      // An operator-only override still needs a compatible source aspect.
+      const refuseCrop = input.fitMode === 'cover' && input.authoredFitMode !== 'cover';
       const detail = {
         errorCode: LIVE_PLATE_ASPECT_MISMATCH,
         // NAMES the plate and BOTH numbers. A bare "aspect mismatch" sends the
@@ -212,13 +195,15 @@ export function resolvePlateAspect(input: PlateAspectInput): PlateAspectOutcome 
         message:
           `${input.plateLabel ?? 'This plate'} is designed for a ${fmt(expected)} feed, but the ` +
           `assigned source “${isolateText(input.source.name)}” delivers ${fmt(stated)}. ` +
-          (input.fitMode === 'cover'
+          (refuseCrop
             ? `Cropping it would cut a part of the picture the author never saw — ` +
               `re-assign the plate, or correct the source's format.`
-            : `Nothing is cropped — the picture is fitted whole and the margin shows the ` +
-              `template — but it will not fill the box the author drew.`),
+            : input.fitMode === 'cover'
+              ? 'Crop edges uses the assigned picture shape. Check the framing in PVW.'
+              : `Nothing is cropped — the picture is fitted whole and the margin shows the ` +
+                `template — but it will not fill the box the author drew.`),
       } as const;
-      if (input.fitMode === 'cover') return { ok: false, ...detail };
+      if (refuseCrop) return { ok: false, ...detail };
       warning = detail;
     }
   }
