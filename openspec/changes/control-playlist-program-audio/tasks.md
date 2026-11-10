@@ -14,10 +14,11 @@
 
 ## 3. Verification
 
-- [ ] 3.1 Run focused contract/DOM/integration tests and the full gate.
+- [x] 3.1 Focused contract/DOM/integration tests and the full gate passed on `c58750ec`.
       Fifty focused Bridge tests passed, including an authenticated WebSocket round trip to the
       simulated Engine and the station-fence, permission and lock censuses.
       Both package typechecks and scoped lint passed. Seven Runtime DOM and parity tests passed.
       Chromium on a fresh build verified the no-frame control, numeric bounds, staging unity,
       a single explicit Apply, pending-to-applied acknowledgement and the backup sign-in refusal.
 - [ ] 3.2 Verify gain and duplicate-path behaviour with the real Playout plant.
+- [ ] 3.3 Verify the carrying [Linux run](https://github.com/yasermostafaee/cg/actions/runs/42732260602).

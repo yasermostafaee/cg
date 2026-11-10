@@ -60,7 +60,8 @@
 - [x] 6.2 Persist accepted edits for the matching look, plate and input, and preserve the rehearsal interlock.
 - [x] 6.3 Draw and save the proportional guide when known geometry is available. Keep practice for unknown geometry or older Bridges.
 - [x] 6.4 Chromium and Bridge checks passed for restoring the guide, isolating stale scopes, and applying the crop in the first FILL before reveal on Take.
-- [ ] 6.5 Record carrying Linux E2E and verify the workflow on an updated target Bridge.
+- [x] 6.5 [Carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42727985027/job/129538550944)
+      passed on `e5474cc1` for the PVW crop workflow.
 - [x] 6.6 Verify an older compatible Bridge keeps Pan in practice mode without a crop request or a global warning for that optional capability.
 
 ## 7. Apply the crop through Inspector
@@ -78,5 +79,6 @@
       matches the canonical Take target. Preserve guide-only operation and stable crop draft identity.
 - [x] 8.2 The focused authenticated Bridge and fresh Chromium tests verified the measured JPEG
       bounds, stable same-revision samples, stale-gesture cancellation and Bars fallback.
-- [ ] 8.3 Record carrying Linux E2E and verify the same source and crop on PVW and first Take
-      on the target station.
+- [x] 8.3 [Carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42727985027/job/129538550944)
+      passed on `e5474cc1` for measured source pictures in Pan.
+- [ ] 8.4 Verify the same source and crop in PVW and first Take on the target station.

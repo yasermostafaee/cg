@@ -76,6 +76,7 @@
 - [x] 6.4 Signed Bridge-to-Engine loopback verified distinct live and Playlist frames, channel
       grants, absence handling, exact lease cleanup and no AMCP writes.
 - [ ] 6.5 Confirm authenticated PVW and thumbnail pictures on the target station with a compatible Bridge.
-- [ ] 6.6 Verify the carrying Linux browser job.
+- [x] 6.6 [Carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42727985027/job/129538550944)
+      passed on `e5474cc1` for composite PVW and source thumbnails.
 - [x] 6.7 Chromium verified distinct PVW pictures, foreground and mask pixels, applied source
       changes, removal of a stale image on signal loss, and visible-only thumbnail demand.

@@ -62,5 +62,6 @@
 - [x] 7.2 Chromium sampled the foreground, held fallback, released fallback and a missing
       picture in the exported page. The Bridge wire tests covered the output tick, rollback
       and a refused mixer commit.
-- [ ] 7.3 Verify the carrying Linux browser job.
+- [x] 7.3 [Carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42727985027/job/129538550944)
+      passed on `e5474cc1` for the exported preset-switch handoff.
 - [ ] 7.4 Verify the switch on the target station with an updated Bridge and retained page.

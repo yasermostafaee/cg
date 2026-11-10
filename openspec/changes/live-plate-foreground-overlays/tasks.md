@@ -30,3 +30,4 @@
 
 - [x] 4.1 On 2026-11-10, read CH 1 on 21.32. `chan-ghab` was on air on Bed 58 with the background HTML and its two sources on 60/61. Layer 78 was empty. Its authored text belongs to the foreground pass.
 - [ ] 4.2 Identify why the foreground producer was lost from the last Take and core logs. Reproduce a surviving background with a missing foreground and cover recovery without changing live source or Playlist state.
+- [x] 4.3 The owner confirmed that text was visible again on the target PGM.

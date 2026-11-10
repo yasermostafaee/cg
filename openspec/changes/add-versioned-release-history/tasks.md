@@ -26,3 +26,8 @@
       passed on `623f6d43` and its three installer hashes matched the local copy.
       [Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42670891955/job/129347143905)
       passed on `e3aa2014`, which adds test fixes to the same product source.
+- [x] 3.5 The approved `1.1.0` internal test rebuild `e5474cc1` passed
+      [Windows build and acceptance](https://github.com/yasermostafaee/cg/actions/runs/42727984581)
+      and [Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42727985027/job/129538550944).
+      The downloaded installers match their CI hashes, all three contain the same verified
+      Persian guide, and the separately downloaded history identifies the preview updates.
