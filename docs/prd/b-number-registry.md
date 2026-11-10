@@ -4368,3 +4368,9 @@ The previous allocation and a heading search confirmed B-420 was free.
 - `B-424` — keep the retained Bars, colour or picture visible under the plate marker — [bugs-runtime.md](bugs-runtime.md).
 
 ⇒ **Next free after this entry is `B-425`**, **`D-207`**, **`P-078`**, **`R-113`** and **`C-049`**.
+
+### 2026-11-10 — Customer station and authoring follow-up
+
+Claims: B-425 (UNC path), B-426 (intentional crop), B-427 (Layers filters), B-428 (Rehearse checkerboard), B-429 (installed website link), B-430 (Space transport), B-431 (text and Follow-video Outro), B-432 (Play indicator); D-207 through D-209 and D-211; R-114 and R-116. D-210 and R-115 were not used. R-108 was reopened.
+
+Next free after these entries: B-433, D-210, R-115, P-079 and C-049.

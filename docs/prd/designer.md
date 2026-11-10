@@ -6035,8 +6035,8 @@ Playout; the client must not invent a vendor-specific capture endpoint.
 
 ## [~] D-178 — Pan a live input inside a differently shaped plate ⟨priority: high — clarified by the owner, 2026-11-09⟩ — `openspec/changes/pan-live-input-focus/`
 
-**What:** In CG Control, choose the visible region of an input inside its plate in PVW. Move only
-the overflowing source axis and preserve the plate, its title and the source assignment. Drag and
+**What:** In CG Control, choose the visible region of an input inside its plate in PVW. Move the crop within the source and resize it from its corners to select a smaller region.
+Preserve the authored plate, its aspect ratio, title and input assignment. Drag and
 Center stage a draft for the same row, look, plate and input. The draft survives OFF PVW. Update
 saves it for Take, including when PVW is off. Discard restores the last applied position. Take
 applies the saved position before the first on-air frame. Absent focus centres a cover crop.
@@ -6056,7 +6056,9 @@ Show the whole source picture or guide inside its plate in PVW. Outline the port
 shown by the plate in blue with a dark edge for contrast, move the outline continuously during a
 drag and offer Centre at a readable screen size independent of the monitor fit.
 The source image and crop window retain their own aspect ratios. A 16:9 crop on a 4:3 source
-uses the source width and moves vertically. Sources matching the plate ratio use the full picture.
+uses the source width and moves vertically at the default crop. Corner handles keep the plate ratio
+and resize around the opposite corner, bounded by the full picture and a supported maximum zoom.
+A smaller crop can move on both axes, including when the source and plate initially match.
 Successive JPEGs with the same geometry preserve the gesture. A change of source, producer or
 geometry cancels the active drag and preserves drafts for their valid Take targets.
 
@@ -6064,7 +6066,7 @@ geometry cancels the active drag and preserves drafts for their valid Take targe
 
 The [2.18.17 handoff](../integration/playout/source-previews-2.18.17-adoption.md) supplies the
 separate source JPEG and its active rectangle, transform and measured sample aspect ratio. Verify
-the full PVW picture, saved crop and first on-air fit on the target station. The legacy C-023 MJPEG
+the full PVW picture, saved position and crop size and the first on-air fit on the target station. The legacy C-023 MJPEG
 does not have this mapping.
 If PGM Pan is revisited, an equivalent in-place editor needs a read of the already-running source
 before the programme mix and crop, without opening a second receiver.
@@ -6798,3 +6800,43 @@ separate off-screen gap between passes.
 The author can select issue text and copy it with the operating system's clipboard shortcut.
 Clicking or selecting text keeps the Issues dialog open. A separate control selects the
 affected element when available and can be activated with the keyboard.
+
+## [~] D-207 — Replace a Sequence’s existing picture pages ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/replace-designer-sequence-images/`
+
+**What:** Add explicit Replace actions for selected images and for a folder in the Designer Sequence inspector.
+
+**Why:** Owner workflow confirmed on 2026-11-10.
+
+**Acceptance:**
+
+- WHEN Replace imports successfully THEN the new sorted picture pages replace the old pictures in one undoable edit, preserving text and composition pages. WHEN the picker is cancelled or no pictures are readable THEN preserve the old pages.
+
+## [~] D-208 — Set defaults for new projects ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/new-project-defaults/`
+
+**What:** Provide Designer settings for the initial New project choices, including frame rate, format, duration and other supported defaults.
+
+**Why:** Owner workflow confirmed on 2026-11-10.
+
+**Acceptance:**
+
+- WHEN defaults are changed THEN a later New project dialog starts from them, including after restart. Per-project changes do not change the defaults or existing projects.
+
+## [~] D-209 — Author clock separators and count display ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/author-clock-display/`
+
+**What:** Add independent spacing and vertical placement for clock colons, one-click countdown display as total minutes or hours and minutes, and a countup start and optional ceiling.
+
+**Why:** Owner workflow confirmed on 2026-11-10.
+
+**Acceptance:**
+
+- WHEN the countdown is 90 minutes THEN the author can choose 90 or 01:30. WHEN a countup range is authored THEN it starts at that value on Play and holds at the ceiling; absent settings preserve existing clocks. WHEN colon offsets change THEN the same offsets render in Designer, Preview and exported output.
+
+## [~] D-211 — Export renamed VCG files as independent templates ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/export-named-template-variants/`
+
+**What:** A deliberate change to the proposed .vcg filename makes an independent named template in CG Control.
+
+**Why:** Owner workflow confirmed on 2026-11-10.
+
+**Acceptance:**
+
+- WHEN the suggested filename is used THEN the existing composition package id is preserved. WHEN the author chooses another filename THEN that name gets a stable, separate package identity; re-exporting the same variant updates it.

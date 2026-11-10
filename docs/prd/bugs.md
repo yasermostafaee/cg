@@ -1418,3 +1418,9 @@ the desktop (all users and this user) with its icon and AppUserModelID, and the 
 would have failed. The judgement is `app-identity.mjs`, unit-tested (`installerAppIdentity.test.ts`,
 where the `0.9.0` reading fails exactly the controls); the Windows read was proven on this host against
 another app before CI ran it.
+
+## [~] B-429 — APASAI website link does not open in installed apps ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/open-company-site-in-desktop/`
+
+**Repro / Actual:** Click the APASAI website link in an installed Designer or CG Control. No external browser opens.
+
+**Expected / regression:** WHEN the APASAI link is activated in an installed app THEN open the fixed official HTTPS address in the system browser; preserve the browser edition link.

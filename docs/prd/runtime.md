@@ -4890,7 +4890,7 @@ calendar selector rather than a station-wide correction.
 **Acceptance:** WHEN an operator opens station settings THEN the rail and card identify a Lunar Hijri
 correction, explain when it is needed, and say that zero/**As calculated** needs no change.
 
-## [x] R-108 — Imported templates reload from their original file, singly or together, without silently choosing the row-data authority ⟨priority: high — the owner, 2026-11-08⟩ — `openspec/changes/reload-imported-template-sources/`
+## [~] R-108 — Imported templates reload from their original file, singly or together, without silently choosing the row-data authority ⟨priority: high — the owner, 2026-11-08⟩ — `openspec/changes/reload-imported-template-sources/`
 
 **What:** a direct **Templates** button in the main CG Control header opens the current channel's
 catalogue without requiring an empty layer and without inventing a Load destination. When CG Control
@@ -4925,6 +4925,8 @@ it unclear whether current CG Control text/images or the edited file should win.
   Reload is disabled with a reason; importing it through the chooser establishes the source
 - WHEN another CG Control opens the same channel THEN it does not inherit an unusable workstation
   path; source handles are local to each console while the template catalogue remains Bridge-owned
+
+**2026-11-10 owner follow-up:** Reload must also refresh layers already assigned to that template, without removal and re-addition. Keep row identity and explicit field authority. A live producer may finish its current run without interruption; verify that the next Take uses the refreshed template.
 
 ## [~] R-109 — Live-frame audio state is visible on both the frame and its layer-row icon ⟨priority: high — the owner, 2026-11-08⟩ — `openspec/changes/show-live-plate-audio-state/`
 
@@ -5008,3 +5010,23 @@ and the station's layer assignments.
 shared groups remain visible. If the catalogue lacks ownership metadata, use a coherent
 Look map from the same channel's retained template page. Keep all fields accessible when there
 is no verified ownership map.
+
+## [~] R-114 — Rename text file delimiters ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/rename-text-delimiters/`
+
+**What:** Allow administrators to rename the built-in and custom delimiter labels in Station setup.
+
+**Why:** Owner workflow confirmed on 2026-11-10.
+
+**Acceptance:**
+
+- WHEN a label changes THEN the delimiter keeps its stable id and split value, including existing field assignments.
+
+## [~] R-116 — Read Word documents as text file sources ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/read-word-text-sources/`
+
+**What:** Offer .doc and .docx alongside plain-text inputs in file-source selectors for ticker and compatible fields; remove JSON from new picks.
+
+**Why:** Owner workflow confirmed on 2026-11-10.
+
+**Acceptance:**
+
+- WHEN a supported Word document is selected THEN read its visible text as plain text and preserve Persian and paragraph boundaries. WHEN an existing JSON assignment is reopened THEN it still loads; removing the picker option does not delete existing data.

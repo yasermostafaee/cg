@@ -4919,3 +4919,21 @@ Deleting Plate 3 left a reveal mask on Plate 2 that still targeted its source. R
 when the last Plate declaring their lower source is deleted. Undo restores both the Plate and its
 masks. On open, repair already-dangling masks in memory, show a notice and mark the project unsaved.
 The valid mask from Plate 1 to Plate 2 in the reported project survives.
+
+## [~] B-428 — Rehearse Stop hides the Designer checkerboard ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/keep-rehearse-checkerboard/`
+
+**Repro / Actual:** Enter Designer Canvas Rehearse, play a graphic on a transparent stage, then Stop. The checkerboard disappears with the graphic.
+
+**Expected / regression:** WHEN the Outro finishes THEN the graphic is hidden and the checkerboard remains visible; Play is still available.
+
+## [~] B-430 — Space does not reliably Play the Designer timeline ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/designer-space-transport/`
+
+**Repro / Actual:** Press Space with focus outside inputs in normal Canvas editing and in Rehearse. The active transport is not consistently started.
+
+**Expected / regression:** WHEN Space is pressed in either mode THEN invoke that mode’s Play behavior while preserving input, native button and dialog handling.
+
+## [~] B-431 — A Follow video closes before a plain text Outro starts ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/coordinate-follow-video-with-outro/`
+
+**Repro / Actual:** Open text-and-videoBackground.cgproj, play and Stop. The composition-following video plays its tail before the plain Text layer’s 510–539 opacity fade.
+
+**Expected / regression:** WHEN Stop begins the authored Outro THEN plain text keyframes and composition-following media share the authored time. Allow the author to place the text fade before the video tail. Cover a frame during the fade and the settled end.

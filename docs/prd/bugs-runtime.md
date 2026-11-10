@@ -14070,3 +14070,27 @@ verify both the retained row data and the replacement draft.
 In a retained template with a solid-colour or picture fallback, PVW's live-source marker paints its
 own Bars over the plate. Draw the border and chip over the retained background. Use an amber
 outline for missing assignments. Show Crop edges below the plate name when the active fit is `cover`.
+
+## [~] B-425 — Network shared folder failure breaks the Station setup form ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/diagnose-network-shared-folder/`
+
+**Repro / Actual:** On the customer station save a UNC path in Shared files. Bridge reports ENOENT and the field collapses beside the overflowing error. The company station can read its own share. In the failing topology, Bridge and Playout Engine are on server A; Playout client, Designer and CG Control are on server B.
+
+**Expected / regression:** WHEN the Bridge service can read a valid UNC share THEN save it. WHEN it cannot THEN preserve the previous root and show a legible reason without disturbing the input layout; verify service identity and share access on the target station.
+
+## [~] B-426 — An intentional Crop edges assignment refuses a mismatched source ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/allow-intentional-live-plate-crop/`
+
+**Repro / Actual:** Load ghab-test.vcg, assign a 16:9 source to a 4:3 Crop edges plate and switch to preset-2. The mismatch refusal blocks the switch even though the preset explicitly requests cropping.
+
+**Expected / regression:** WHEN the template author explicitly selects Crop edges for the plate THEN frame using the actual source aspect and allow PVW Pan and Take; preserve refusal for missing or unusable sources and unchanged Contain behavior.
+
+## [~] B-427 — Layers filters reset when a panel is maximized and restored ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/preserve-layer-filters-on-resize/`
+
+**Repro / Actual:** Set Search and Hide empty in CG Control Layers, maximize a panel and restore it. Both filters reset.
+
+**Expected / regression:** WHEN a layout change remounts Layers THEN preserve the current console session’s search and Hide empty selection and keep filtering the same rows.
+
+## [~] B-432 — Play loses its green state while the graphic stays on air ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/reconcile-play-indicator-after-take/`
+
+**Repro / Actual:** Intermittently after pressing layer Play, a warning appears briefly and the button loses green even though the graphic remains on air. The warning disappears too quickly to identify and the report is intermittent; correlate the next occurrence with row/channel, build, Bridge audit and Core events.
+
+**Expected / regression:** WHEN a Take succeeds and the owned producer is still on air THEN the row reflects the confirmed state. WHEN confirmation or output is lost THEN show the evidenced state and retain a diagnosable reason. Reproduce the exact warning and state transition before changing on-air logic.
