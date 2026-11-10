@@ -21,8 +21,8 @@ import { DesignerApp } from './fixtures/designer.js';
 
 const png = (name: string): Buffer => Buffer.concat([DesignerApp.PNG_1X1, Buffer.from(name)]);
 
-async function boot(page: Page): Promise<DesignerApp> {
-  await page.addInitScript(() => {
+async function boot(page: Page, chosenNames = ['telavat.vcg']): Promise<DesignerApp> {
+  await page.addInitScript((names) => {
     (window as unknown as { __CG_SPLASH_DISABLED__: boolean }).__CG_SPLASH_DISABLED__ = true;
     const w = window as unknown as {
       __picks: number;
@@ -37,13 +37,14 @@ async function boot(page: Page): Promise<DesignerApp> {
       w.__suggestedNames.push(options?.suggestedName ?? '');
       const root = await navigator.storage.getDirectory();
       const dir = await root.getDirectoryHandle('saved-by-dialog', { create: true });
-      const handle = await dir.getFileHandle('telavat.vcg', { create: true });
+      const name = names[w.__picks - 1] ?? options?.suggestedName ?? 'telavat.vcg';
+      const handle = await dir.getFileHandle(name, { create: true });
       const empty = await handle.createWritable();
       await empty.truncate(0);
       await empty.close();
       return handle;
     };
-  });
+  }, chosenNames);
   page.on('dialog', (d) => void d.dismiss());
   const app = new DesignerApp(page);
   await app.goto();
@@ -138,6 +139,27 @@ test.describe('BOOK-EXPORT-01 — a book exports, and every export is answered',
     const { manifest } = await unpack(vcg);
     // Every page travels: three pictures, each its own asset.
     expect(manifest.assetIndex.filter((e) => e.kind === 'image')).toHaveLength(3);
+  });
+
+  test('a changed save name exports a stable template beside the default', async ({ page }) => {
+    const app = await boot(page, ['telavat.vcg', 'Alternate.vcg', 'Alternate.vcg']);
+    await bookFromFolder(app, ['p1.png', 'p2.png']);
+
+    const readExport = async (filename: string) => {
+      await exportVcg(page).click();
+      await expect(exportVcg(page)).toBeEnabled();
+      await expect(page.getByRole('status')).toContainText('Exported ' + filename);
+      const bytes = await savedFile(page, filename);
+      expect(bytes).not.toBeNull();
+      return (await unpack(new Uint8Array(bytes ?? []))).manifest;
+    };
+
+    const original = await readExport('telavat.vcg');
+    const alternate = await readExport('Alternate.vcg');
+    const repeated = await readExport('Alternate.vcg');
+    expect(alternate.name).toBe('Alternate');
+    expect(alternate.id).not.toBe(original.id);
+    expect(repeated.id).toBe(alternate.id);
   });
 
   test('🔴 a page that cannot be read: the sentence names it, stays, and the empty file is REMOVED', async ({

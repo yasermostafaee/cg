@@ -16,8 +16,21 @@ import { sha256Hex } from './integrity.js';
  * project id), gets another.
  */
 export function compositionPackageId(projectId: string, compositionId: string): string {
-  // JSON, not a separator: two ids joined by any character could collide with two other ids.
-  const hex = sha256Hex(JSON.stringify(['cg-package', projectId, compositionId]));
+  return packageUuid(['cg-package', projectId, compositionId]);
+}
+
+/** A named export is independent of the base composition and stable across re-exports. */
+export function namedPackageId(basePackageId: string, filenameStem: string): string {
+  return packageUuid([
+    'cg-package-variant',
+    basePackageId,
+    filenameStem.normalize('NFC').toLowerCase(),
+  ]);
+}
+
+function packageUuid(parts: readonly string[]): string {
+  // JSON avoids delimiter collisions between neighboring components.
+  const hex = sha256Hex(JSON.stringify(parts));
   const variant = ((parseInt(hex.charAt(16), 16) & 0x3) | 0x8).toString(16);
   return [
     hex.slice(0, 8),

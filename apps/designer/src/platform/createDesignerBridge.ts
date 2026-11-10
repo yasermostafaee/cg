@@ -1,5 +1,10 @@
 import { PROJECT_PACKAGE_EXT, type Scene } from '@cg/shared-schema';
-import { packProject, readProjectDocument, type ProjectDocument } from '@cg/vcg-format';
+import {
+  namedPackageId,
+  packProject,
+  readProjectDocument,
+  type ProjectDocument,
+} from '@cg/vcg-format';
 import { getStarter } from '@cg/starter-templates';
 import { closeGuardDoor, type ShellInvoke } from '@cg/gesture';
 import type { AppInfo, DesignerBridge } from '../shared/designer-bridge.js';
@@ -714,7 +719,16 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
         }
         const chosen = handle;
         try {
-          const { vcg } = await exporter.produce(scene);
+          const chosenStem = chosen.name
+            .replace(/\.vcg$/i, '')
+            .trim()
+            .normalize('NFC');
+          const suggestedStem = filename.slice(0, -4).normalize('NFC');
+          const exportScene =
+            chosenStem !== '' && chosenStem.toLowerCase() !== suggestedStem.toLowerCase()
+              ? { ...scene, id: namedPackageId(scene.id, chosenStem), name: chosenStem }
+              : scene;
+          const { vcg } = await exporter.produce(exportScene);
           // The write is the last tenth: a chunk at a time, so it shows (and holds no second copy).
           await writeInChunks(chosen, vcg, (share) =>
             exporter.progress.emit({ step: 'write', progress: 0.9 + 0.1 * share }),
