@@ -1727,6 +1727,8 @@ export const VideoPhasesSchema = z
     introEnd: z.number().nonnegative().optional(),
     /** Start of the manual OUT phase (ms). Ignored under composition-owned Follow. */
     outroStart: z.number().nonnegative().optional(),
+    /** Optional delay from the composition Out point, in composition frames (Follow only). */
+    outroDelayFrames: z.number().int().nonnegative().optional(),
     /** Optional manual hold segment. Ignored under Follow. */
     idle: z
       .object({ start: z.number().nonnegative(), end: z.number().nonnegative() })

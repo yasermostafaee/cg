@@ -178,6 +178,80 @@ async function createFollowProject(app: DesignerApp, name: string): Promise<void
   await app.dragContentStartMarkerToFraction(0);
 }
 
+test('B-431 — a Follow video holds its closing frame while plain text finishes fading', async ({
+  app,
+}) => {
+  test.setTimeout(55_000);
+  await createFollowProject(app, 'DelayedVideoOutro');
+  const outPointText = await app.inspector
+    .getByText('Outro start', { exact: true })
+    .locator('..')
+    .textContent();
+  const outPoint = Number(/frame\s+(\d+)/i.exec(outPointText ?? '')?.[1] ?? '0');
+  expect(outPoint).toBeGreaterThan(0);
+  expect(outPoint + 30).toBeLessThan(150);
+  await app.setPlayoutTiming('manual');
+  await app.addTextElement();
+  const textId = (await app.timelineRowIds())[0]!;
+  await app.scrubToFrame(outPoint);
+  await app.toggleInspectorKeyframe('opacity');
+  await app.scrubToFrame(outPoint + 12);
+  await app.setInspectorNumber('Opacity', 0);
+
+  await importAndPlaceVideo(app);
+  await app.inspector.getByRole('button', { name: 'Follow composition' }).click();
+  const delay = app.inspector.getByRole('spinbutton', { name: 'outro delay' });
+  await delay.fill('30');
+  await delay.press('Enter');
+  await expect(delay).toHaveValue('30');
+  const transport = app.page.getByLabel('Playback transport');
+  await transport.getByRole('button', { name: 'Rehearse preview' }).click();
+  await transport.getByRole('button', { name: 'Play', exact: true }).click();
+  await expect(app.page.getByRole('slider', { name: 'Frame ruler' })).toHaveAttribute(
+    'aria-valuenow',
+    String(outPoint),
+  );
+  const video = app.canvasFrame.locator('video[data-cg-element-id]').first();
+  await expect.poll(() => video.evaluate((node) => (node as HTMLVideoElement).paused)).toBe(true);
+
+  const text = app.canvasFrame.locator(`[data-cg-element-id="${textId}"]`);
+  interface Sample {
+    opacity: number;
+    paused: boolean;
+    time: number;
+  }
+  await text.evaluate((node) => {
+    const media = node.ownerDocument.querySelector<HTMLVideoElement>('video[data-cg-element-id]');
+    if (media === null) throw new Error('The Follow video is missing');
+    const samples: Sample[] = [];
+    Object.assign(window, { __cgFollowOutroSamples: samples });
+    const sample = () => {
+      if (node.ownerDocument.body.classList.contains('cg-rehearse-cleared')) return;
+      samples.push({
+        opacity: Number(getComputedStyle(node).opacity),
+        paused: media.paused,
+        time: media.currentTime,
+      });
+      requestAnimationFrame(sample);
+    };
+    sample();
+  });
+  await transport.getByRole('button', { name: 'Stop', exact: true }).click();
+  await expect(app.canvasFrame.locator('body')).toHaveClass(/cg-rehearse-cleared/);
+  const samples = await text.evaluate(
+    () => (window as unknown as { __cgFollowOutroSamples: Sample[] }).__cgFollowOutroSamples,
+  );
+  expect(samples[0]?.opacity).toBe(1);
+  expect(samples.some(({ opacity, paused }) => opacity > 0 && opacity < 1 && paused)).toBe(true);
+  const textGone = samples.findIndex(({ opacity, paused }) => opacity === 0 && paused);
+  const videoMoves = samples.findIndex(
+    ({ paused, time }) => !paused && time > (samples[0]?.time ?? 0) + 0.02,
+  );
+  expect(textGone).toBeGreaterThan(0);
+  expect(videoMoves).toBeGreaterThan(textGone);
+  expect(samples[videoMoves]?.opacity).toBe(0);
+});
+
 test.describe('D-176 — one clear Follow composition path', () => {
   test('D-186 — Follow Lottie scrubs continuously and freezes the real Canvas and Preview picture at Out', async ({
     app,

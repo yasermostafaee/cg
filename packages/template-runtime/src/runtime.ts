@@ -187,6 +187,12 @@ function sequenceHasAuthoredFrameOutro(source: LifecycleSource, element: Sequenc
 }
 
 /** D-026 — a node in the controller tree paralleling the field-scope tree. */
+interface FollowVideoOutro {
+  readonly driver: VideoDriver;
+  readonly startFrame: number;
+  readonly delayed: boolean;
+}
+
 interface ScopeNode {
   controller: PlayoutController;
   /** Wiring-tree children: nested composition instances AND stamped repeater rows (the cascade walks these). */
@@ -223,6 +229,8 @@ interface ScopeNode {
   // D-128 — holds BOTH Lottie and Video outro drivers (the shared element-outro
   // seam); typed to the common `ElementOutroDriver` so ONE ledger serves both.
   outroLotties: readonly ElementOutroDriver[];
+  /** Videos started by this composition's Outro frames, outside the independent pre-exit gate. */
+  followVideoOutros: readonly FollowVideoOutro[];
   /**
    * B-031 — resolves when THIS scope's controller SETTLES (after its own outro). A
    * content-driven parent waits on a nested CONTENT-DRIVEN (coordinator) child's settle,
@@ -1485,6 +1493,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // D-128 — this scope's Video drivers (all, for the cascades) + the opted-in
       // subset that gates the hold (mirrors scopeLotties / holdLotties).
       const scopeVideos: VideoDriver[] = [];
+      const scopeFollowVideoOutros: FollowVideoOutro[] = [];
       const holdVideos: VideoDriver[] = [];
       // D-186 — every Freeze reports the composition Out point. A visible Follow media
       // element can still own an asynchronous composition-timed Outro gate: observe that
@@ -1718,8 +1727,22 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         // `holdAt` values) are intentionally absent from this call: entrance duration maps
         // to the clip head, OUT duration maps backward from the clip end, and the remainder
         // is the optional looping middle.
+        const holdBehaviorEff =
+          (effPlayout.holdBehavior ?? 'freeze') === 'freeze'
+            ? 'freeze'
+            : elementLoopsOnHold(effPlayout, el.id)
+              ? 'loop'
+              : 'continue';
+        // Sequence items and repeater rows have their own transition owners outside the
+        // composition lifecycle cascade. Keep their existing element-outro policy.
+        const followsScopeOutro = isRootSubtree && holdBehaviorEff !== 'continue';
         const vw =
-          followsV && followAnchors !== null ? followWindowMs(followAnchors, { durationMs }) : null;
+          followsV && followAnchors !== null
+            ? followWindowMs(followAnchors, {
+                durationMs,
+                outroDelayFrames: followsScopeOutro ? el.phases?.outroDelayFrames : undefined,
+              })
+            : null;
         const phasesEffV = followsV ? undefined : el.phases;
         const hasPhases = phasesEffV !== undefined;
         // Absent phases (decision (b)): the whole clip is the intro, the hold loops
@@ -1737,12 +1760,6 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           vw !== null ? vw.holdMs : idle ? idle.start : hasPhases ? introEndMs : 0;
         const loopEndMs =
           vw !== null ? vw.outroStartMs : idle ? idle.end : hasPhases ? outroStartMs : durationMs;
-        const holdBehaviorEff =
-          (effPlayout.holdBehavior ?? 'freeze') === 'freeze'
-            ? 'freeze'
-            : elementLoopsOnHold(effPlayout, el.id)
-              ? 'loop'
-              : 'continue';
         // Composition-owned Freeze parks a Follow Video on the same derived boundary from which
         // its Outro will later continue. Manual/non-Follow Video keeps the driver's intro-end
         // default, and Loop/Continue do not consume a Freeze target.
@@ -1887,6 +1904,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           freezeTargetMs,
           outroStartMs,
           outroEndMs,
+          outroDelayMs: vw?.outroDelayMs,
           loopStartMs,
           loopEndMs,
           holdBehavior: holdBehaviorEff,
@@ -1894,7 +1912,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         });
         scopeVideos.push(driver);
         videos.push(driver);
-        if (el.visible !== false && vw !== null) {
+        const followsOutro = vw !== null && hasOutro && followsScopeOutro;
+        if (el.visible !== false && vw !== null && !followsOutro) {
           noteFollowObserver(vw.hasOutro);
         }
         /*
@@ -1942,7 +1961,15 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
             drivesHold,
             whenComplete: () => driver.whenComplete(),
           });
-          if (hasOutro) scopeOutroLotties.push(driver);
+          if (followsOutro) {
+            scopeFollowVideoOutros.push({
+              driver,
+              startFrame: outPoint + Math.round((vw.outroDelayMs * scene.frameRate) / 1000),
+              delayed: vw.outroDelayMs > 0,
+            });
+          } else if (hasOutro) {
+            scopeOutroLotties.push(driver);
+          }
         }
       }
 
@@ -2395,6 +2422,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           // with onCycleRestart's own-scope re-arm below).
           return playElementOutrosOnce(finalExit ? collectSubtreeOutros(node) : scopeOutroLotties);
         },
+        duringOutro: (finalExit) => prepareFollowVideoOutros(node, finalExit),
         onCycleRestart: (): void => {
           // D-125 §D6.2b — loop-cycle boundary: the ledger forgets THIS scope's OWN
           // drivers (the next cycle's exit owns a fresh outro — exactly once per
@@ -2405,6 +2433,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           // non-final gate's reach above: descendants were not exited at the
           // boundary, so there is nothing of theirs to re-arm.
           for (const d of scopeOutroLotties) outroLedger.delete(d);
+          for (const { driver } of scopeFollowVideoOutros) outroLedger.delete(driver);
           restartOwnMedia();
           // `B-150` — CONTENT-START CALLER 2 of 3: a loop-cycle boundary re-arms this scope's
           // own media, which un-pauses whatever the park had frozen.
@@ -2426,6 +2455,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         instanceChildren,
         // D-125 §D7 — already B-034-gated at build (hidden Lotties never enter this list).
         outroLotties: scopeOutroLotties,
+        followVideoOutros: scopeFollowVideoOutros,
         whenSettled: () => settled,
         resetSettled,
         // B-034 — default visible; the parent overrides each child from its FieldScopeChild (below),
@@ -3019,6 +3049,46 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     return Promise.all(waits).then(() => undefined);
   };
   /**
+   * The composition's existing Outro driver starts its Follow videos at their authored frames.
+   * A final parent exit also waits for descendant scopes with Follow video, so it cannot clear
+   * their media while their own Outro is still playing.
+   */
+  const prepareFollowVideoOutros = (node: ScopeNode, finalExit: boolean) => {
+    if (!isEffectivelyVisible(node)) return null;
+    const waits: Promise<void>[] = [];
+    if (finalExit) {
+      const startDescendant = (child: ScopeNode): void => {
+        if (!child.visible) return;
+        if (child.followVideoOutros.length > 0 && !child.controller.isSettled()) {
+          child.controller.stop();
+          if (!child.controller.isSettled()) waits.push(child.whenSettled());
+          return;
+        }
+        for (const next of child.children) startDescendant(next);
+      };
+      for (const child of node.children) startDescendant(child);
+    }
+    const pending = new Set(node.followVideoOutros);
+    if (pending.size === 0 && waits.length === 0) return null;
+    for (const entry of pending) {
+      if (entry.delayed) entry.driver.parkBeforeOutro();
+    }
+    return {
+      ...(pending.size > 0 && {
+        applyFrame: (frame: number): void => {
+          for (const entry of pending) {
+            if (frame < entry.startFrame) continue;
+            pending.delete(entry);
+            const wait = playElementOutrosOnce([entry.driver]);
+            if (wait !== null) waits.push(wait);
+          }
+        },
+      }),
+      whenComplete: (): Promise<void> | null =>
+        waits.length === 0 ? null : Promise.all(waits).then(() => undefined),
+    };
+  };
+  /**
    * Session Z — THE LEDGER'S OWN BACKSTOP, and the reason it is LOUD. Every driver bounds
    * its own outro (§D6.4.1), so this must never fire. If it does, some driver's
    * never-strand invariant is broken, and the consequence is severe AND silent: the
@@ -3137,6 +3207,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     const rearm = (n: ScopeNode): void => {
       n.resetSettled();
       for (const d of n.outroLotties) outroLedger.delete(d);
+      for (const { driver } of n.followVideoOutros) outroLedger.delete(driver);
       n.restartOwnMedia();
       for (const child of n.children) rearm(child);
     };

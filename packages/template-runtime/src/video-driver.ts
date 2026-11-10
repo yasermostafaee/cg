@@ -149,6 +149,8 @@ export interface VideoDriverOptions {
   freezeTargetMs?: number | undefined;
   /** Start of the outro (ms). `>= outroEnd` ⇒ NO outro (degenerate). */
   outroStartMs: number;
+  /** Composition-side delay before a Follow clip's Outro begins. Used by authoring positioning. */
+  outroDelayMs?: number | undefined;
   /**
    * media-phases-follow-composition — where the OUTRO WINDOW ends (ms). Defaults to
    * `durationMs` (the shipped behaviour). A FOLLOW-source clip's outro is
@@ -232,6 +234,7 @@ export class VideoDriver implements ElementOutroDriver {
     introEndMs: number;
     freezeTargetMs: number;
     outroStartMs: number;
+    outroDelayMs: number;
     outroEndMs: number;
     loopStartMs: number;
     loopEndMs: number;
@@ -279,6 +282,7 @@ export class VideoDriver implements ElementOutroDriver {
       introEndMs: options.introEndMs,
       freezeTargetMs: options.freezeTargetMs ?? options.introEndMs,
       outroStartMs: options.outroStartMs,
+      outroDelayMs: options.outroDelayMs ?? 0,
       outroEndMs: options.outroEndMs ?? options.durationMs,
       loopStartMs: options.loopStartMs,
       loopEndMs: options.loopEndMs,
@@ -405,6 +409,17 @@ export class VideoDriver implements ElementOutroDriver {
    */
   whenComplete(): Promise<void> {
     return this.complete;
+  }
+
+  /** Hold the closing segment's first frame until the composition cursor starts the Outro. */
+  parkBeforeOutro(): void {
+    if (this.destroyed) return;
+    this.pause();
+    this.recoverIfDead(true);
+    this.settledHold = true;
+    if (Math.abs(this.handle.currentTime() * 1000 - this.o.outroStartMs) > 1) {
+      this.seekMs(this.o.outroStartMs);
+    }
   }
 
   /**
@@ -540,7 +555,7 @@ export class VideoDriver implements ElementOutroDriver {
     const ms =
       outroElapsedMs === null || !hasOutro
         ? this.positionedClipMs(introElapsedMs)
-        : this.expectedClipMs(outroElapsedMs, 'outro');
+        : this.expectedClipMs(outroElapsedMs - this.o.outroDelayMs, 'outro');
     this.handle.seek(ms / 1000);
   }
 

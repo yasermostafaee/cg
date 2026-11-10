@@ -30,6 +30,17 @@ describe('followWindowMs — composition-owned intro, middle and outro', () => {
     expect(w.outroStartMs).toBeGreaterThan(w.holdMs);
   });
 
+  it('leaves the first 29 OUT frames for the text fade while keeping the video tail end-anchored', () => {
+    const w = followWindowMs(
+      { activeIn: 0, contentStart: 261, outPoint: 510, activeOut: 716, fps: 50 },
+      { durationMs: 14_320, outroDelayFrames: 29 },
+    );
+    expect(w.outroDelayMs).toBe(580);
+    expect(w.outroStartMs).toBe(10_780);
+    expect(w.outroEndMs).toBe(14_320);
+    expect(w.outSpanMs).toBe(4_120);
+  });
+
   it('ignores legacy media phase properties even when a caller supplies them at runtime', () => {
     const legacy = {
       durationMs: 5000,

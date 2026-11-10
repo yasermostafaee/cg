@@ -175,6 +175,147 @@ function bgShape(id: string): Element {
   } as unknown as Element;
 }
 
+function ownerText(): Element {
+  return {
+    ...bgShape('plain-text'),
+    type: 'text',
+    text: 'Sample',
+    font: { family: 'sans-serif', size: 48, weight: 400 },
+    animation: {
+      tracks: {
+        opacity: {
+          keyframes: [
+            { frame: 261, value: 0, easing: 'linear' },
+            { frame: 302, value: 1, easing: 'linear' },
+            { frame: 510, value: 1, easing: 'linear' },
+            { frame: 539, value: 0, easing: 'linear' },
+          ],
+        },
+      },
+    },
+  } as unknown as Element;
+}
+
+describe('B-431 — plain text and a Follow video share the authored Outro', () => {
+  it('waits for a nested Follow video after its parent Outro finishes', async () => {
+    const clock = makeClock();
+    const child = scene([followVideo('nested-background')], { id: 'nested' });
+    const instance = {
+      ...bgShape('instance'),
+      type: 'composition',
+      compositionId: child.id,
+      opacity: 1,
+    } as Element;
+    const runtime = createRuntime(
+      scene([instance], {
+        frameRange: { in: 0, out: 130 },
+        activeRange: { in: 0, out: 130 },
+        lifecycle: { outPoint: 100 },
+        compositions: [child],
+      }),
+      { skipFontLoad: true, installGlobals: false, clock },
+    );
+    const time = [...spyVideoTimes(clock).values()][0]!;
+    await runtime.play({});
+    await run(clock, 2_200);
+    const stopping = runtime.stop();
+    await run(clock, 900);
+    expect(time()).toBeCloseTo(4.34, 2);
+    expect(onAir()).toBe(true);
+    await run(clock, 800);
+    await stopping;
+    expect(time()).toBeCloseTo(5, 2);
+    expect(onAir()).toBe(false);
+    runtime.remove();
+  });
+
+  it('parks an undilated timeline scrub at the same delayed boundary', () => {
+    const runtime = createRuntime(
+      scene(
+        [
+          {
+            ...followVideo('background'),
+            durationMs: 14320,
+            phases: { source: 'composition', outroDelayFrames: 30 },
+          } as Element,
+        ],
+        {
+          frameRange: { in: 0, out: 716 },
+          activeRange: { in: 0, out: 716 },
+          lifecycle: { outPoint: 510, contentStart: 261 },
+        },
+      ),
+      { skipFontLoad: true, installGlobals: false },
+    );
+    const time = spyVideoTimes({ now: () => 0 }).get('background')!;
+    runtime.tick(510);
+    expect(time()).toBeCloseTo(10.8, 3);
+    runtime.tick(539);
+    expect(time()).toBeCloseTo(10.8, 3);
+    runtime.tick(541);
+    expect(time()).toBeCloseTo(10.82, 3);
+    runtime.tick(716);
+    expect(time()).toBeCloseTo(14.32, 3);
+    runtime.remove();
+  });
+
+  it.each([0, 30])('honors the 510–539 fade with a %i-frame video delay', async (delay) => {
+    const video = {
+      ...followVideo('background'),
+      durationMs: 14320,
+      phases: { source: 'composition', ...(delay > 0 && { outroDelayFrames: delay }) },
+    } as Element;
+    const clock = makeClock();
+    const frames: number[] = [];
+    // Extend the active end by the delay to preserve the original 206-frame video tail.
+    const activeRange = { in: 0, out: 716 + delay };
+    const runtime = createRuntime(
+      scene([ownerText(), video], {
+        frameRange: activeRange,
+        activeRange,
+        lifecycle: { outPoint: 510, contentStart: 261 },
+      }),
+      {
+        skipFontLoad: true,
+        installGlobals: false,
+        clock,
+        onRootFrame: (frame) => frames.push(frame),
+      },
+    );
+    const time = spyVideoTimes(clock).get('background')!;
+    const text = document.querySelector<HTMLElement>('[data-cg-element-id="plain-text"]')!;
+    await runtime.play({});
+    await run(clock, 10_400);
+    expect(Number(text.style.opacity)).toBe(1);
+    expect(time()).toBeCloseTo(10.2, 2);
+
+    const stopping = runtime.stop();
+    await run(clock, 300);
+    expect(Number(text.style.opacity)).toBeCloseTo(14 / 29, 2);
+    expect(time()).toBeCloseTo(delay > 0 ? 10.2 : 10.5, 1);
+    expect(frames.at(-1)).toBe(525);
+    expect(onAir()).toBe(true);
+    if (delay > 0) {
+      await run(clock, 299);
+      expect(frames.at(-1)).toBe(539);
+      expect(Number(text.style.opacity)).toBe(0);
+      expect(time()).toBeCloseTo(10.2, 2);
+      runtime.pause();
+      await run(clock, 500);
+      expect(time()).toBeCloseTo(10.2, 2);
+      runtime.resume();
+      await run(clock, 100);
+      expect(time()).toBeGreaterThan(10.2);
+    }
+    await run(clock, 4_600);
+    await stopping;
+    expect(time()).toBeCloseTo(14.32, 2);
+    expect(frames.at(-1)).toBe(activeRange.out);
+    expect(onAir()).toBe(false);
+    runtime.remove();
+  });
+});
+
 /** Owner's composition: out at 72 of 150 @ 50 fps — the OUT segment is 1.56 s of room. */
 function scene(children: Element[], over: Record<string, unknown> = {}): Scene {
   return {
@@ -751,9 +892,9 @@ describe('session Y — THE CORRECTED RULE: a follower’s outro is the CLIP’S
     expect(times.get('v')!()).toBeCloseTo(5.6, 2);
 
     const outP = r.out();
-    await run(clock, 200);
-    // The outro ENTRY is the clip's own outro start — the jump from the held static look
-    // to the build-off's first frame (deliberately accepted; static middle ⇒ no visible pop).
+    await run(clock, 440);
+    // After the 400 ms content fade, the composition and Follow video enter Outro together.
+    // The video jumps from the held static look to the build-off's first frame.
     expect(times.get('v')!()).toBeGreaterThanOrEqual(10.4);
     await run(clock, 4200); // the 3.92 s build-off completes
     await outP;

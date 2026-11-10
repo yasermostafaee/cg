@@ -157,6 +157,13 @@ export interface PlayoutControllerOptions {
    * stay symmetric.
    */
   beforeOutro?: ((finalExit: boolean) => Promise<void> | null) | undefined;
+  /** Composition-owned media starts at its authored frame and may finish after the final paint. */
+  duringOutro?:
+    | ((finalExit: boolean) => {
+        applyFrame?: ((frame: number) => void) | undefined;
+        whenComplete: () => Promise<void> | null;
+      } | null)
+    | undefined;
   /**
    * D-125 §D6.2b — fired at each loop-cycle BOUNDARY (between one cycle's outro end and
    * the next cycle's intro), NOT on the first `play()`. The runtime re-arms the scope's
@@ -768,22 +775,36 @@ export class PlayoutController {
     // (empty when there is no marker, today's behavior).
     const from = this.o.playout.mode === 'static' ? this.o.active.out : this.outPoint();
     const tailGate = this.holdTailDone;
-    const finishLeg = (): void => {
-      if (tailGate === null) {
-        this.onOutroEnd();
-        return;
-      }
-      const token = this.exitToken;
-      void tailGate.then(() => {
-        if (token === this.exitToken && this.phase === 'outro') this.onOutroEnd();
-      });
-    };
     const playLeg = (gateWasObserved = false): void => {
+      const companion = this.o.duringOutro?.(finalExit) ?? null;
+      const finishLeg = (): void => {
+        const mediaGate = companion?.whenComplete() ?? null;
+        if (tailGate === null && mediaGate === null) {
+          this.onOutroEnd();
+          return;
+        }
+        const token = this.exitToken;
+        void Promise.all([tailGate, mediaGate]).then(() => {
+          if (token !== this.exitToken || this.phase !== 'outro') return;
+          if (this.paused) this.pendingOutroLeg = () => this.onOutroEnd();
+          else this.onOutroEnd();
+        });
+      };
       // An observer-only Follow-media Outro already reported this range while the visible media
       // played. Do not report the same range a second time when the background leg is visually
       // static and collapses. A genuinely frame-dependent background still owns its later pass.
-      const observeBackground = !(gateWasObserved && !this.frameDependent(from, this.o.active.out));
-      this.playRange(from, this.o.active.out, finishLeg, false, observeBackground, true);
+      const drivesMedia = companion?.applyFrame !== undefined;
+      const observeBackground =
+        drivesMedia || !(gateWasObserved && !this.frameDependent(from, this.o.active.out));
+      this.playRange(
+        from,
+        this.o.active.out,
+        finishLeg,
+        drivesMedia,
+        observeBackground,
+        true,
+        companion?.applyFrame,
+      );
     };
     // D-125 §D6.2b — element outros BEFORE the background leg, on EVERY exit path (this
     // is the single convergence point — see PlayoutControllerOptions.beforeOutro). A
@@ -965,6 +986,7 @@ export class PlayoutController {
     mustConsumeDuration = false,
     observe = true,
     outro = false,
+    companionFrame?: (frame: number) => void,
   ): void {
     this.stopDriver();
     const frameDependent = outro
@@ -976,6 +998,7 @@ export class PlayoutController {
     // delaying content-start, hold or outro callbacks relative to on-air output.
     const applyLifecycleFrame = (frame: number): void => {
       (outro ? (this.o.applyOutroFrame ?? this.o.applyFrame) : this.o.applyFrame)(frame);
+      companionFrame?.(frame);
       if (observe) this.o.observeFrame?.(frame);
     };
     if (outF <= inF || (!frameDependent && !mustConsumeDuration)) {

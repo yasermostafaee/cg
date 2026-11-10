@@ -125,8 +125,9 @@ coordinates therefore feed both a standalone ticker and one inside a hidden or s
   parks both Follow Lottie and Video at the derived source Outro start, independently of
   entrance duration; native furniture and root telemetry share the composition Out point,
 - lets an **element own its own exit** — the D-125 element-outro seam: `out()` /
-  `stop()` route every owning driver through a ONE-SHOT ledger and await it before the
-  background closes. That await is **bounded at the ledger entry** (session Z): a driver
+  `stop()` route independent exits through a ONE-SHOT ledger before the background closes.
+  Composition-following Video uses the same ledger but starts on its composition's Outro frame
+  and completes alongside its native keyframes. That await is **bounded at the ledger entry** (session Z): a driver
   whose `playOutro()` never settles would otherwise strand the exit — and, because
   `stop()`/`out()` are guarded on the lifecycle state, take every later operator command
   with it — so the bound fires an `error` event and lets the exit proceed. The guard has a

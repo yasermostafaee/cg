@@ -846,6 +846,12 @@ directly (ms-native, no unit adapter). Legacy element-level Hold values remain p
 decide runtime behaviour; the resolved composition policy is passed to the driver as
 `freeze` / `loop` / `continue`.
 
+For Freeze and checked Loop-middle followers, the composition's existing Outro frame driver starts
+the Video tail and paints the other elements' keyframes in the same leg. A Video may hold its
+derived tail-start picture for an authored number of Outro frames. The remaining span ends at the
+clip's own last frame, and authoring scrub uses the same window. The one-shot ledger still waits
+for the media at settle. Manual and unchecked Continue Video keep their independent exit policy.
+
 **THE SEEK POLICY (2026-07-25 — the fragile-alpha-seek root cause):** on
 VP8+alpha WebM whose alpha side-stream keyframes misalign with the main
 stream's (assets converted before revision `2026-07-25.5`), a seek can be a

@@ -7,7 +7,7 @@
  * phase values and legacy `holdAt` values are intentionally outside this API:
  *
  * - the first `entranceSpan` of the clip is the intro;
- * - the last `outSpan` of the clip is the outro;
+ * - the clip's last frames cover the composition Outro time remaining after an optional delay;
  * - the remainder between them is the middle, which the element may freeze or loop while the
  *   composition holds.
  *
@@ -39,6 +39,8 @@ export interface FollowAnchors {
 export interface FollowClip {
   /** Clip length in ms (video `durationMs`; Lottie `(op − ip) / (fr × speed) × 1000`). */
   durationMs: number;
+  /** Composition-relative delay for a Follow video, before its tail starts. */
+  outroDelayFrames?: number | undefined;
 }
 
 /** The derived window, clip ms. Every clamp is FLAGGED for the existing hint machinery. */
@@ -55,7 +57,9 @@ export interface FollowWindow {
    * Compatibility field. Composition-owned Follow starts the intro at `active.in`, so this is 0.
    */
   introDelayMs: number;
-  /** Where the outro begins (clip ms): `max(0, clipEnd − outSpan)`. */
+  /** Offset from the composition's OUT point before the clip starts moving. */
+  outroDelayMs: number;
+  /** Where the outro begins in the clip, anchored to its end. */
   outroStartMs: number;
   /** Where the outro ends: the CLIP END, always — the ending is the clip's own. */
   outroEndMs: number;
@@ -107,9 +111,14 @@ export function followWindowMs(anchors: FollowAnchors, clip: FollowClip): Follow
   const introDelayMs = 0;
 
   // THE OUTRO — the clip's own ending, end-anchored to the composition OUT span.
-  const outroStartMs = Math.max(0, durationMs - outSpanMs);
+  const outroDelayMs = Math.min(
+    Math.max(0, outSpanMs - frameMs),
+    Math.max(0, clip.outroDelayFrames ?? 0) * frameMs,
+  );
+  const tailSpanMs = outSpanMs - outroDelayMs;
+  const outroStartMs = Math.max(0, durationMs - tailSpanMs);
   const outroEndMs = durationMs;
-  const hasOutro = outSpanMs > 0 && outroStartMs < outroEndMs;
+  const hasOutro = tailSpanMs > 0 && outroStartMs < outroEndMs;
 
   return {
     entranceSpanMs,
@@ -117,6 +126,7 @@ export function followWindowMs(anchors: FollowAnchors, clip: FollowClip): Follow
     holdMs,
     introStartMs,
     introDelayMs,
+    outroDelayMs,
     outroStartMs,
     outroEndMs,
     hasOutro,
@@ -125,7 +135,7 @@ export function followWindowMs(anchors: FollowAnchors, clip: FollowClip): Follow
       introShort: holdMs < entranceSpanMs,
       holdPastEnd: holdRaw > durationMs,
       noOutSegment: outSpanMs <= 0,
-      wholeClipOutro: durationMs > 0 && outSpanMs >= durationMs,
+      wholeClipOutro: durationMs > 0 && tailSpanMs >= durationMs,
       outroCutByRemoval: false,
       lateSettle: false,
       holdJump: hasOutro && outroStartMs !== holdMs,

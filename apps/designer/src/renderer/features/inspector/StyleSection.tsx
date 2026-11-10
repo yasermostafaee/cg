@@ -2166,7 +2166,10 @@ function VideoFollowPanel({
   if (phases === undefined) return null;
   if (anchors === null) return <FollowNoAnchors elementId={id} phases={phases} />;
   const duration = element.durationMs;
-  const w = followWindowMs(anchors, { durationMs: duration });
+  const w = followWindowMs(anchors, {
+    durationMs: duration,
+    outroDelayFrames: holdBehavior === 'continue' ? undefined : phases.outroDelayFrames,
+  });
   const s = (ms: number): string => `${(ms / 1000).toFixed(2)} s`;
   const entranceFrames = Math.round(anchors.contentStart - anchors.activeIn);
   const outFrames = Math.round(anchors.activeOut - anchors.outPoint);
@@ -2208,9 +2211,9 @@ function VideoFollowPanel({
                   : `Freeze holds at the derived Outro start, ${s(effectiveHoldMs)}, then exit continues forward from the same frame.`}
             </p>
             <p>
-              Outro uses the last {outFrames} composition frames: clip [{s(w.outroStartMs)} →{' '}
-              {s(w.outroEndMs)}]. Internal media markers are ignored while Follow composition is
-              active.
+              Outro waits {s(w.outroDelayMs)} from the composition Out point, then plays clip [
+              {s(w.outroStartMs)} → {s(w.outroEndMs)}]. Internal media markers are ignored while
+              Follow composition is active.
             </p>
           </InfoTip>
         }
@@ -2218,6 +2221,20 @@ function VideoFollowPanel({
         Hold {s(effectiveHoldMs)}
         {holdFrame === null ? '' : ` · frame ${String(holdFrame)}`} · {holdLabel}
       </StateLine>
+      {holdBehavior !== 'continue' && outFrames > 1 && (
+        <NumberField
+          label="outro delay"
+          value={Math.round((w.outroDelayMs * anchors.fps) / 1000)}
+          min={0}
+          max={outFrames - 1}
+          suffix="fr"
+          onCommit={(frames) =>
+            designerStore.updateElement(id, {
+              phases: { ...phases, outroDelayFrames: Math.round(frames) || undefined },
+            } as Partial<Element>)
+          }
+        />
+      )}
       <Button
         variant="secondary"
         onClick={() => {
@@ -2227,6 +2244,7 @@ function VideoFollowPanel({
             ...phases,
             introEnd: Math.round(w.holdMs),
             outroStart: Math.round(w.outroStartMs),
+            outroDelayFrames: undefined,
             source: 'manual' as const,
           };
           designerStore.updateElement(id, { phases: nextPhases } as Partial<Element>);
@@ -2382,7 +2400,12 @@ function VideoSections({
   const holdBehavior = useElementHoldBehavior(id);
   const follows = followsComposition(phases);
   const followTiming =
-    follows && anchors !== null ? followWindowMs(anchors, { durationMs: duration }) : null;
+    follows && anchors !== null
+      ? followWindowMs(anchors, {
+          durationMs: duration,
+          outroDelayFrames: holdBehavior === 'continue' ? undefined : phases?.outroDelayFrames,
+        })
+      : null;
   // Imported Video is conformed to the project channel rate, so the derived held source-time can
   // be shown as a composition-rate frame without consulting the picked file's native rate.
   const compositionFps = anchors?.fps ?? null;
