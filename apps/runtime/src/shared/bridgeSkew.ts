@@ -57,6 +57,11 @@ export function isBridgeSkewMessage(raw: string): boolean {
   return SKEW_SHAPES.test(raw.trim());
 }
 
+/** An older bridge explicitly said the channel does not exist. */
+export function isUnknownBridgeChannel(raw: string): boolean {
+  return /^unknown channel\b/i.test(raw.trim());
+}
+
 /**
  * The operator's sentence for a skew failure. **The channel name is deliberately NOT in it.**
  *
@@ -83,7 +88,10 @@ export class BridgeSkewError extends Error {
   /** The IPC channel that was refused. For logs and tests — never for display. */
   readonly channel: string;
 
-  constructor(channel: string) {
+  constructor(
+    channel: string,
+    readonly unknownChannel = false,
+  ) {
     super(BRIDGE_SKEW_MESSAGE);
     this.name = 'BridgeSkewError';
     this.channel = channel;
@@ -100,6 +108,7 @@ export class BridgeSkewError extends Error {
  */
 export function bridgeErrorFrom(rawMessage: string): Error {
   const channel = skewChannelOf(rawMessage);
-  if (channel !== undefined) return new BridgeSkewError(channel);
+  if (channel !== undefined)
+    return new BridgeSkewError(channel, isUnknownBridgeChannel(rawMessage));
   return new Error(rawMessage);
 }

@@ -16,13 +16,29 @@ import {
 
 import { bridgeHostPort, bridgeUrlForStation } from './bridgeUrl.js';
 import type { SetupCheckAnswer } from '../shared/runtime-bridge.js';
+import { isUnknownBridgeChannel } from '../shared/bridgeSkew.js';
 import {
   STANDALONE_BRIDGE_ADDRESS_ERROR,
+  standaloneBridgeAddress,
   type PlayoutStationAddress,
   type StandaloneStationAddress,
 } from '../shared/station-address.js';
 
-type BridgeCapabilities = ChannelResponse<typeof BridgeCapabilitiesChannel>;
+export type BridgeCapabilities = ChannelResponse<typeof BridgeCapabilitiesChannel>;
+
+/** Only a local authority can belong to the installed No Playout service. */
+export function couldBeStandaloneBridge(url: string): boolean {
+  try {
+    // Match the browser's authority, including legacy IPv4 shorthand such as 127.1.
+    return standaloneBridgeAddress(new URL(url).hostname) !== null;
+  } catch {
+    return false;
+  }
+}
+
+function standaloneInstead(address: string): string {
+  return `CG Bridge at ${address} is set up for No Playout. Choose No Playout to connect.`;
+}
 
 /**
  * 🔴 `B-317` (`RELEASE-0114-01` A3/A4) — **THE CHECK RUNS WHERE `Connect` WILL GO.**
@@ -321,16 +337,29 @@ export async function checkOnItsOwnSocket(options: {
     options.connectMs ?? CONNECTION_CHECK_CONNECT_MS,
   );
   try {
-    if (options.token !== null) {
+    const readCapabilities = async () => {
+      let caps: BridgeCapabilities;
+      try {
+        caps = await capabilitiesOn(socket, options.waitMs);
+      } catch (err) {
+        if (err instanceof BridgeNotAnsweringError) throw err;
+        return {
+          caps: null,
+          canSendToken: err instanceof Error && isUnknownBridgeChannel(err.message),
+        };
+      }
+      if (caps.stationMode === 'standalone') throw new Error(standaloneInstead(address));
+      return { caps, canSendToken: true };
+    };
+    const local =
+      options.token !== null && couldBeStandaloneBridge(url) ? await readCapabilities() : null;
+    if (options.token !== null && (local === null || local.canSendToken)) {
       // A refused token only narrows the check; it never stops it.
       await socket
         .ask({ type: 'auth', token: options.token }, options.waitMs)
         .catch(() => undefined);
     }
-    const capabilities = await capabilitiesOn(socket, options.waitMs).catch((err: unknown) => {
-      if (err instanceof BridgeNotAnsweringError) throw err;
-      return null;
-    });
+    const { caps: capabilities } = local ?? (await readCapabilities());
     // `B-317` / `B-321` — asked by CG Bridge's name for its Playout, answered in the name given.
     const result = await checkByBridgeName(
       options.request,
@@ -372,7 +401,7 @@ export async function bridgeAnswersAt(
     try {
       const caps = await capabilitiesOn(socket, connectMs);
       if (caps.stationMode === 'standalone') {
-        return `CG Bridge at ${address} is set up for No Playout. Choose No Playout to connect.`;
+        return standaloneInstead(address);
       }
       return null;
     } finally {

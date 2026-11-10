@@ -209,8 +209,10 @@ import {
   checkByBridgeName,
   checkOnItsOwnSocket,
   checkStandaloneAt,
+  couldBeStandaloneBridge,
   hostOfBridgeUrl,
   isStandaloneBridge,
+  type BridgeCapabilities,
 } from './checkAt.js';
 import { loadStationAddress, saveStationAddress, type StationAddress } from './stationAddress.js';
 import { STANDALONE_BRIDGE_ADDRESS_ERROR } from '../shared/station-address.js';
@@ -720,9 +722,31 @@ export class WebSocketRuntime implements RuntimeBridge {
         connect path is a guard that takes the station off air. The waiting is done by the
         frames that would otherwise be refused, not by the connect handler.
       */
-      this.#authHandshake = this.#session === null ? null : this.#presentToken();
+      // A local Playout record may predate an installer switch to No Playout.
+      // Read the socket's mode before presenting a cached credential there.
+      this.#authHandshake = null;
+      const localCapabilities =
+        this.#session !== null && couldBeStandaloneBridge(this.#url)
+          ? this.#invoke(ipcChannels.BridgeCapabilitiesChannel, {})
+          : null;
+      if (localCapabilities !== null) {
+        this.#authHandshake = localCapabilities.then(
+          (caps) => {
+            if (this.#ws === ws && caps.stationMode !== 'standalone') return this.#presentToken();
+            return undefined;
+          },
+          (err: unknown) => {
+            if (this.#ws === ws && err instanceof BridgeSkewError && err.unknownChannel) {
+              return this.#presentToken();
+            }
+            return undefined;
+          },
+        );
+      } else if (this.#session !== null) {
+        this.#authHandshake = this.#presentToken();
+      }
       // `DELTA-MULTI-CHANNEL-01-A` A3 — recorded, not awaited here (B-153): the resync waits on it.
-      this.#capsHandshake = this.#checkSkew();
+      this.#capsHandshake = this.#checkSkew(localCapabilities);
       // On EVERY connect: read the bridge's standing restore report and its strays; on a
       // RECONNECT also re-pull the stack/health/lock snapshots (first-connect snapshots come from
       // the renderer's `useBridgeSnapshot`). `CENTRAL-BRIDGE-01` — nothing is delivered.
@@ -1045,11 +1069,17 @@ export class WebSocketRuntime implements RuntimeBridge {
    * Never throws: a guard that can break the connect path is a guard that takes the station
    * off air. Anything unexpected resolves to "no skew known".
    */
-  async #checkSkew(): Promise<ReadonlySet<string> | null> {
+  async #checkSkew(
+    localCapabilities: Promise<BridgeCapabilities> | null,
+  ): Promise<ReadonlySet<string> | null> {
     const ws = this.#ws;
+    const authHandshake = this.#authHandshake;
     try {
-      const caps = await this.#invoke(ipcChannels.BridgeCapabilitiesChannel, {});
-      if (this.#standalone && this.#ws !== ws) return null;
+      const caps = await (localCapabilities ??
+        this.#invoke(ipcChannels.BridgeCapabilitiesChannel, {}));
+      // Keep auth state and snapshots behind the token answer on ordinary Playout sockets.
+      if (localCapabilities !== null) await authHandshake;
+      if ((this.#standalone || localCapabilities !== null) && this.#ws !== ws) return null;
       if (this.#standalone ? !isStandaloneBridge(caps) : caps.stationMode === 'standalone') {
         ws?.close();
         return null;
@@ -1097,7 +1127,9 @@ export class WebSocketRuntime implements RuntimeBridge {
       );
       return routed;
     } catch (err) {
-      if (this.#standalone && this.#ws === ws) ws?.close();
+      const legacy = err instanceof BridgeSkewError && err.unknownChannel;
+      if (this.#ws === ws && (this.#standalone || (localCapabilities !== null && !legacy)))
+        ws?.close();
       if (err instanceof BridgeSkewError) {
         // The bridge predates the handshake itself. It cannot tell us WHICH channels it
         // lacks, so the honest answer names the channel that proved it rather than

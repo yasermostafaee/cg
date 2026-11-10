@@ -390,8 +390,8 @@ function stubPlayout(body: Record<string, unknown>): void {
 let storage: Storage;
 const runtimes: WebSocketRuntime[] = [];
 
-function start(bridge: FakeBridge): WebSocketRuntime {
-  const runtime = new WebSocketRuntime('ws://fake-bridge', { createWebSocket: bridge.connect });
+function start(bridge: FakeBridge, url = 'ws://fake-bridge'): WebSocketRuntime {
+  const runtime = new WebSocketRuntime(url, { createWebSocket: bridge.connect });
   runtimes.push(runtime);
   return runtime;
 }
@@ -434,6 +434,51 @@ describe('R-066 — the `auth` frame is the FIRST thing on a connected socket', 
     );
     expect(authTokensOn(bridge.socket())).toEqual(['jwt-held-by-this-console']);
     expect(runtime.auth.state()).toEqual({ kind: 'signed-in', principal, permittedChannels: [1] });
+  });
+
+  it('R-098 checks a cached local Playout endpoint before presenting its token on reconnect', async () => {
+    seedSession(storage, 'jwt-from-local-playout');
+    const bridge = new FakeBridge();
+    bridge.capabilities = playoutCapabilities();
+    const principal = principalNamed('Local operator');
+    bridge.authAnswer = { kind: 'accept', principal };
+    const runtime = start(bridge, 'ws://127.1:5280');
+    bridge.socket(0).open();
+    await settle();
+    expect(wireOf(bridge).slice(0, 2)).toEqual([ipc.BridgeCapabilitiesChannel.name, 'auth']);
+    expect(runtime.auth.state()).toMatchObject({ kind: 'signed-in', principal });
+
+    bridge.socket(0).drop();
+    bridge.capabilities = { channels: [], auth: 'off', stationMode: 'standalone' };
+    await vi.advanceTimersByTimeAsync(RECONNECT_DELAY_MS);
+    bridge.socket(1).open();
+    await settle();
+    expect(wireOf(bridge)).toEqual([ipc.BridgeCapabilitiesChannel.name]);
+    expect(bridge.socket(1).closeCalls).toBe(1);
+    expect(storage.getItem(SESSION_KEY)).toContain('jwt-from-local-playout');
+  });
+
+  it('R-098 keeps local auth available after an older Bridge explicitly lacks capabilities', async () => {
+    seedSession(storage, 'jwt-from-old-playout');
+    const bridge = new FakeBridge();
+    bridge.authAnswer = { kind: 'accept', principal: principalNamed('Local operator') };
+    start(bridge, 'ws://localhost:5280');
+    bridge.socket().open();
+    await settle();
+    bridge.refuseLate(ipc.BridgeCapabilitiesChannel.name, 'unknown channel: bridge.capabilities');
+    await settle();
+    expect(wireOf(bridge).slice(0, 2)).toEqual([ipc.BridgeCapabilitiesChannel.name, 'auth']);
+    expect(authTokensOn(bridge.socket())).toEqual(['jwt-from-old-playout']);
+  });
+
+  it('R-098 closes a local endpoint that cannot confirm its mode within the request bound', async () => {
+    seedSession(storage, 'jwt-not-verified');
+    const bridge = new FakeBridge();
+    start(bridge, 'ws://127.0.0.1:5280');
+    bridge.socket().open();
+    await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+    expect(wireOf(bridge)).toEqual([ipc.BridgeCapabilitiesChannel.name]);
+    expect(bridge.socket().closeCalls).toBe(1);
   });
 
   it('with NO session in storage writes no `auth` frame — and still asks the handshake', async () => {
@@ -658,6 +703,7 @@ describe('R-066 — the MODE comes from `bridge.capabilities`, and `unknown` is 
       bridgeVersion: caps.bridgeVersion ?? null,
       // `DELTA-RUN-NEXT-VERSION-01-C` — this fake names no machine clock: read as null.
       bridgeClock: caps.clock ?? null,
+      independentPreview: true,
     });
     expect(runtime.auth.state()).toEqual({ kind: 'signed-in', principal, permittedChannels: [1] });
   });
@@ -685,6 +731,7 @@ describe('R-066 — the MODE comes from `bridge.capabilities`, and `unknown` is 
       bridgeVersion: __CG_BUILD__.version,
       // `DELTA-RUN-NEXT-VERSION-01-C` — no clock in the answer: the console states no zone.
       bridgeClock: null,
+      independentPreview: true,
     });
     expect(runtime.auth.state()).toEqual({ kind: 'off' });
   });

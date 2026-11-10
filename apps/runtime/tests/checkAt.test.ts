@@ -82,6 +82,38 @@ function bridgeThatAnswers(signInUrl: string | null) {
 }
 
 describe('B-317 — a check on CG Bridge’s own socket', () => {
+  it('R-098 the Playout address gate directs a standalone answer to No Playout', async () => {
+    const socket = new FakeSocket(
+      'ws://127.0.0.1:5280',
+      () => ({ channels: [], auth: 'off', stationMode: 'standalone' }),
+      true,
+    );
+    await expect(
+      bridgeAnswersAt(socket.url, '127.0.0.1:5280', () => socket, 500),
+    ).resolves.toContain('Choose No Playout to connect.');
+    expect(socket.sent).toEqual([{ type: 'request', channel: 'bridge.capabilities', payload: {} }]);
+  });
+
+  it('R-098 a Playout check refuses a local standalone endpoint before sending a stored token', async () => {
+    const socket = new FakeSocket(
+      'ws://127.0.0.1:5280',
+      () => ({ channels: [], auth: 'off', stationMode: 'standalone' }),
+      true,
+    );
+    await expect(
+      checkOnItsOwnSocket({
+        url: socket.url,
+        address: '127.0.0.1:5280',
+        request: { playoutAddress: 'http://127.0.0.1:8080', origin: 'http://tauri.localhost' },
+        createSocket: () => socket,
+        token: 'jwt-from-local-playout',
+        waitMs: 500,
+      }),
+    ).rejects.toThrow('Choose No Playout to connect.');
+    expect(socket.sent).toEqual([{ type: 'request', channel: 'bridge.capabilities', payload: {} }]);
+    expect(socket.closed).toBe(true);
+  });
+
   it('nothing opens there: the operator’s sentence naming WHERE, never the console’s refusal of a command', async () => {
     const sockets: FakeSocket[] = [];
     const err = await checkOnItsOwnSocket({
