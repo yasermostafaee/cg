@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { ClockElementSchema } from '../src/elements.js';
 import {
   CG_RUNTIME_VERSION,
+  requiredRuntimeVersionForScene,
   compareSemver,
   parseSemver,
   runtimeShortfall,
@@ -100,15 +102,58 @@ describe('runtimeShortfallMessage', () => {
 });
 
 describe('CG_RUNTIME_VERSION', () => {
-  it('declares the 30 fps rendering contract floor', () => {
-    expect(CG_RUNTIME_VERSION).toBe('1.1.0');
-    expect(runtimeShortfall(CG_RUNTIME_VERSION, '1.0.0')).toEqual({
-      required: '1.1.0',
-      available: '1.0.0',
+  it('requires the newer renderer only for authored clock and Follow-video behavior', () => {
+    const clock = ClockElementSchema.parse({
+      id: 'clock',
+      name: 'Clock',
+      type: 'clock',
+      transform: {
+        position: { x: 0, y: 0 },
+        size: { w: 120, h: 30 },
+        scale: { x: 1, y: 1 },
+        rotation: 0,
+        anchor: { x: 0.5, y: 0.5 },
+      },
+      opacity: 1,
+      visible: true,
+      locked: false,
+      zIndex: 0,
+      font: {
+        family: 'Vazirmatn',
+        weight: 400,
+        style: 'normal',
+        size: 24,
+        lineHeight: 1,
+        letterSpacing: 0,
+      },
+      color: '#FFFFFF',
+      mode: 'countup',
+    });
+    const versionForClock = (el: typeof clock) =>
+      requiredRuntimeVersionForScene({
+        layers: [
+          {
+            id: 'layer',
+            name: 'Layer',
+            visible: true,
+            locked: false,
+            blendMode: 'normal',
+            children: [el],
+          },
+        ],
+      });
+    expect(versionForClock(clock)).toBe('1.1.0');
+    expect(versionForClock({ ...clock, countupStartSeconds: 7 })).toBe('1.2.0');
+    expect(versionForClock({ ...clock, separatorOffsetYPx: 6 })).toBe('1.2.0');
+    expect(requiredRuntimeVersionForScene({ layers: [] })).toBe('1.1.0');
+    expect(CG_RUNTIME_VERSION).toBe('1.2.0');
+    expect(runtimeShortfall(CG_RUNTIME_VERSION, '1.1.0')).toEqual({
+      required: '1.2.0',
+      available: '1.1.0',
     });
   });
 
-  it('is a readable semver — the constant the exporter writes into every package', () => {
+  it('is a readable semver', () => {
     expect(parseSemver(CG_RUNTIME_VERSION)).not.toBeNull();
   });
 

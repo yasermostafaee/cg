@@ -1,3 +1,6 @@
+import type { Element } from './elements.js';
+import type { Scene } from './scene.js';
+
 /**
  * 🔴 **`B-196` — THE RUNTIME CONTRACT VERSION, and the ONE comparison anybody makes with it.**
  *
@@ -45,12 +48,34 @@
 /**
  * The rendering contract this build implements. See the header for when to bump it.
  *
- * `1.1.0` adds the standard 30 fps scene/manifest value and the structured Repeater
- * data/animation contract. A 1.0 Runtime cannot honor those authored values, so
- * packages must declare the newer floor instead of failing later or playing
- * differently from the Designer.
+ * 1.2.0 adds authored clock separator styling, a countup range, and delayed Follow
+ * video Outros. Older runtimes ignore those optional properties.
  */
-export const CG_RUNTIME_VERSION = '1.1.0';
+export const CG_RUNTIME_VERSION = '1.2.0';
+
+/** Keep unchanged templates importable on 1.1 while guarding new authored rendering. */
+export function requiredRuntimeVersionForScene(
+  scene: Pick<Scene, 'layers' | 'compositions'>,
+): string {
+  const requiresCurrent = (element: Element): boolean => {
+    if (element.type === 'container') return element.children.some(requiresCurrent);
+    if (element.type === 'video') {
+      return element.phases?.source === 'composition' && (element.phases.outroDelayFrames ?? 0) > 0;
+    }
+    if (element.type !== 'clock') return false;
+    return (
+      (element.separatorSpacingPx ?? 0) !== 0 ||
+      (element.separatorOffsetYPx ?? 0) !== 0 ||
+      (element.mode === 'countup' &&
+        ((element.countupStartSeconds ?? 0) > 0 || element.countupLimitSeconds !== undefined))
+    );
+  };
+  return [scene, ...(scene.compositions ?? [])].some((composition) =>
+    composition.layers.some((layer) => layer.children.some(requiresCurrent)),
+  )
+    ? CG_RUNTIME_VERSION
+    : '1.1.0';
+}
 
 /** A parsed `major.minor.patch`. Pre-release and build metadata are not modelled. */
 export interface Semver {

@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import {
-  CG_RUNTIME_VERSION,
+  requiredRuntimeVersionForScene,
   SceneSchema,
   withPageLists,
   type Manifest,
@@ -134,7 +134,7 @@ export async function preparePack(options: PrepareOptions): Promise<PreparedPack
           ...(inputs.brandKit.author === undefined ? {} : { author: inputs.brandKit.author }),
         },
         compatibility: {
-          minRuntimeVersion: CG_RUNTIME_VERSION,
+          minRuntimeVersion: requiredRuntimeVersionForScene(scene),
           minCasparCGVersion: '2.3.0',
         },
         fontDeps: scene.fonts,
