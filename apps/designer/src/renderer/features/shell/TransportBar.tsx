@@ -320,7 +320,7 @@ export function TransportBar({ scene }: Props): JSX.Element {
     designerStore.setCurrentFrame(frame);
   }
 
-  // J / K / L transport (video-editor convention): L = play forward, J = play
+  // Space starts the active transport. J / K / L remain authoring-only: L = play forward, J = play
   // backward, K = stop. Holding K turns L/J into single-frame steps
   // (K+L = next frame, K+J = previous frame). Ignored while typing.
   useEffect(() => {
@@ -330,8 +330,30 @@ export function TransportBar({ scene }: Props): JSX.Element {
       return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable;
     }
     function onKeyDown(e: KeyboardEvent): void {
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
       if (isEditable(e.target)) return;
+      if (e.code === 'Space') {
+        if (e.shiftKey || e.isComposing) return;
+        if (
+          (e.target instanceof Element &&
+            e.target.closest('button, [role="button"], [role="menuitem"], summary, a[href]') !==
+              null) ||
+          document.querySelector(
+            '[role="dialog"][aria-modal="true"], [role="menu"], [data-cg-popover]',
+          ) !== null
+        ) {
+          return;
+        }
+        e.preventDefault();
+        if (e.repeat) return;
+        const state = designerStore.get();
+        if (playoutPreviewRef.current) {
+          if (state.timelinePlaybackMode !== 'lifecycle') playPlayout();
+        } else if (!state.timelinePlaying) {
+          playDir(1);
+        }
+        return;
+      }
       // D-199 — hidden authoring controls have no secret keyboard route in Rehearse preview.
       if (playoutPreviewRef.current) return;
       // Match the physical key (e.code) so J/K/L work on non-English layouts.
@@ -365,7 +387,7 @@ export function TransportBar({ scene }: Props): JSX.Element {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
-  }, []);
+  }, [frameIn]);
 
   function btnClass(id: string, active = false): string {
     return cx(s.button, hovered === id && !active && s.buttonHover, active && s.buttonActive);
@@ -499,7 +521,12 @@ export function TransportBar({ scene }: Props): JSX.Element {
           variant="bare"
           className={btnClass('playout', playoutPreview)}
           {...hoverProps('playout')}
-          onClick={togglePlayoutPreview}
+          onClick={(event) => {
+            togglePlayoutPreview();
+            // Pointer users can press the transport shortcut immediately after choosing its mode.
+            // Keyboard users keep focus on the toggle for its native activation and tab order.
+            if (event.detail > 0) event.currentTarget.blur();
+          }}
           aria-pressed={playoutPreview}
           aria-label="Rehearse preview"
           title="Rehearse preview"

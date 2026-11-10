@@ -20,6 +20,7 @@ const SHORTCUTS: readonly { keys: string; label: string }[] = [
   { keys: `${MOD} + Z`, label: 'Undo' },
   { keys: `${MOD} + Shift + Z`, label: 'Redo' },
   { keys: `${MOD} + Y`, label: 'Redo (alternate)' },
+  { keys: 'Space', label: 'Play timeline or rehearsal' },
   { keys: 'L', label: 'Play animation forward' },
   { keys: 'J', label: 'Play animation backward' },
   { keys: 'K', label: 'Stop animation' },
