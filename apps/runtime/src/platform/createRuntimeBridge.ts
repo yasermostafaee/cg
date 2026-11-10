@@ -369,6 +369,7 @@ export function createMockBridge(): RuntimeBridge {
       simulation is not CG Control, so the Playout address cannot be changed from here.
     */
     setup: {
+      standalone: () => null,
       // `B-317` — test mode has no CG Bridge: no lines, and nowhere the check ran.
       check: () => Promise.resolve({ lines: [], localAddress: null, bridge: null }),
       bridgeAddressFor: () => null,

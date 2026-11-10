@@ -119,6 +119,7 @@ const BRIDGE_SURFACE: {
     auth: ['capabilities', 'onCapabilitiesChanged', 'state', 'onStateChanged', 'signIn', 'signOut'],
     // `DESKTOP-APPS-01` — first-run. The mock answers empty and has no desktop door.
     setup: [
+      'standalone',
       'check',
       // `B-317` — the one CG Bridge address Set up's fields resolve to (the mock: none).
       'bridgeAddressFor',
