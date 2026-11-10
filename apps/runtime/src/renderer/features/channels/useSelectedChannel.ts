@@ -38,6 +38,8 @@ export function useSelectedChannel(): {
    * station that does not have it.
    */
   operable: readonly number[];
+  /** Running CasparCG channels, when the standalone Bridge has verified them. */
+  standaloneCoreChannels: readonly number[] | undefined;
   /** Whether the CURRENTLY SELECTED channel is one this principal may act on. */
   canOperateSelected: boolean;
   /**
@@ -68,7 +70,8 @@ export function useSelectedChannel(): {
   const discovered = discovery.ready ? discovery.value : null;
 
   const channels = channelIds(banks, settings, auth, discovered);
-  const operable = operableChannels(channels, auth);
+  const standaloneCoreChannels = discovered?.standaloneCoreChannels;
+  const operable = operableChannels(channels, auth, standaloneCoreChannels);
   // The first declared channel is where the console opens (`channelStore`: A13, known over
   // remembered) — the lowest-numbered, the order every bank list is in.
   const selected = resolveSelectedChannel(channels, choice, firstBank(banks)?.channel ?? null);
@@ -77,6 +80,7 @@ export function useSelectedChannel(): {
     channels,
     selected,
     operable,
+    standaloneCoreChannels,
     canOperateSelected: operable.includes(selected),
     names: channelNames(discovered),
     air: channelAirs(discovered),

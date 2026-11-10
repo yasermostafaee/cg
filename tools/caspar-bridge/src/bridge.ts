@@ -1436,7 +1436,9 @@ export function authStateFor(
       has stopped holding must not go on advertising channels.
     */
     permittedChannels: standalone
-      ? [...runtime.declaredChannels()]
+      ? runtime
+          .declaredChannels()
+          .filter((channel) => runtime.standaloneChannelRefusal(channel) === null)
       : principal === null || status !== 'signed-in'
         ? []
         : [
@@ -1524,6 +1526,7 @@ export function stationChannelsFor(
   for (const bank of runtime.fixedLayerBanks()) note(bank.channel, 'bank');
   for (const s of runtime.channelSettingsState().settings) note(s.channel, 'channel-settings');
 
+  const standaloneCoreChannels = standalone ? runtime.standaloneCoreChannels() : null;
   return {
     channels: [...entries.entries()].map(([channel, entry]) => ({
       channel,
@@ -1531,7 +1534,11 @@ export function stationChannelsFor(
       ...airOf(entry.air),
       declared: runtime.isDeclaredChannel(channel),
       ...(standalone
-        ? { permitted: runtime.isDeclaredChannel(channel) }
+        ? {
+            permitted:
+              runtime.isDeclaredChannel(channel) &&
+              runtime.standaloneChannelRefusal(channel) === null,
+          }
         : mode === 'off'
           ? {}
           : {
@@ -1542,6 +1549,7 @@ export function stationChannelsFor(
             }),
       sources: entry.sources,
     })),
+    ...(standaloneCoreChannels !== null && { standaloneCoreChannels: [...standaloneCoreChannels] }),
   };
 }
 
@@ -1822,8 +1830,10 @@ export const CHANNEL_DECLARING_ROUTES: ReadonlySet<string> = new Set([
 export function stationRefusal(route: Route, req: unknown, runtime: CasparRuntime): string | null {
   if (CHANNEL_DECLARING_ROUTES.has(route.channel.name)) return null;
   const channel = explicitChannel(req);
-  if (channel === undefined || runtime.isDeclaredChannel(channel)) return null;
-  return channelNotDeclaredRefusal(channel);
+  if (channel === undefined) return null;
+  return runtime.isDeclaredChannel(channel)
+    ? runtime.standaloneChannelRefusal(channel)
+    : channelNotDeclaredRefusal(channel);
 }
 
 /**
@@ -2402,6 +2412,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       : {}),
     // `DESKTOP-APPS-01-D` j — an installed station in first-run declares nothing until its bank.
     declaresNothingWithoutBank: options.firstRun === true,
+    standalone,
     /*
       🔴 `PLATE-BAND-01` — LINKED TO THE PLAYOUT is the auth config naming one (`C-037`: an address or
       an issuer, flags > file). Such a station's layers are the contract's, so with no band declared
@@ -3556,6 +3567,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       runtime.fixedConfigChanged.subscribe(pushStationChannels),
       runtime.channelSettingsChanged.subscribe(pushStationChannels),
       runtime.configChanged.subscribe(pushStationChannels),
+      ...(standalone ? [runtime.healthChanged.subscribe(pushStationChannels)] : []),
       ...(playoutCatalogue !== null ? [playoutCatalogue.onChanged(pushStationChannels)] : []),
       /*
         `C-016` — the programme return's state, behind the SAME delivery gate as every other push.

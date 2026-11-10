@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   channelIds,
   channelNames,
+  operableChannels,
   resolveSelectedChannel,
 } from '../src/renderer/features/channels/channelList.js';
 
@@ -107,6 +108,18 @@ describe('channelIds — the discovery answer first, declared channels only', ()
   it('an answer that declares nothing falls back to the bank and settings, as before', () => {
     expect(channelIds(bank, settings, { kind: 'off' }, { channels: [] })).toEqual([2]);
     expect(channelIds(bank, settings, { kind: 'off' }, null)).toEqual([2]);
+  });
+
+  it('standalone can inspect an absent configured channel without operating it', () => {
+    const auth = { kind: 'off' } as const;
+    const coreChannels = [1];
+    const channels = channelIds(bank, settings, auth, {
+      ...discovered,
+      standaloneCoreChannels: coreChannels,
+    });
+    expect(channels).toEqual([2]);
+    expect(operableChannels(channels, auth, coreChannels)).toEqual([]);
+    expect(operableChannels(channels, auth)).toEqual([2]);
   });
 
   it('channelNames names only DECLARED channels — control: the declared one is named', () => {

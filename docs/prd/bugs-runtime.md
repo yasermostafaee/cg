@@ -14100,3 +14100,9 @@ outline for missing assignments. Show Crop edges below the plate name when the a
 **Repro / Actual:** Open PVW Pan for a live Crop edges plate. The operator cannot readily distinguish the selected source region from the excluded picture. Drag or resize and press Update on air. The crop is treated as browser practice or skipped, so programme framing remains unchanged.
 
 **Expected / regression:** WHEN the operator edits a crop THEN the chosen source pixels remain clear and the checkerboard marks the outside. WHEN Update on air commits a verified crop THEN the same seated source reframes inside its current plate. Verify this in Chromium and on the AMCP wire, including no write during dragging and no on-air write from off-air Update.
+
+## [~] B-434 — No Playout offers a channel absent from CasparCG ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/servers-simplify/`
+
+**Repro / Actual:** The installed standalone station offered channel 2 and failed Take on layer 98 with `add-mute-failed`. Read-only queries on the connected CasparCG 2.5.0 listed channel 1 only. `MIXER 1-98 VOLUME` answered 201 and `MIXER 2-98 VOLUME` answered 400. Channel 1 reports a Screen consumer and no running DeckLink consumer.
+
+**Expected / regression:** WHEN a standalone bank names a channel absent from verified AMCP `INFO` THEN the console excludes it from operation and a stale Take is refused before AMCP writes with the channel-specific reason. WHEN a configured channel exists on CasparCG THEN it remains operable independently of the DeckLink and return-monitor diagnostics. Playout channel policy is unchanged.

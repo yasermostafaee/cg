@@ -24,8 +24,8 @@ import { useLockCoverage } from './useLock.js';
  *
  * `off` and `unknown` answer TRUE.
  *
- *   · **`off`** is the byte-identical path: a station that does not federate identity must see
- *     exactly the console it saw before this change.
+ *   · **`off`** has no principal restriction. A standalone channel still needs to exist on
+ *     the connected CasparCG engine once Bridge has verified its channel list.
  *   · **`unknown`** is the bridge not having answered `bridge.capabilities` yet. A console that
  *     stripped its controls while waiting would be asserting a restriction the system has not
  *     stated — `B-153`'s defect mirrored — and it would flicker every reconnect. Nothing is
@@ -51,7 +51,7 @@ export function useCanOperate(): boolean {
   switch (auth.kind) {
     case 'off':
     case 'unknown':
-      return true;
+      return canOperateSelected;
     case 'signed-out':
     case 'expired':
       return false;

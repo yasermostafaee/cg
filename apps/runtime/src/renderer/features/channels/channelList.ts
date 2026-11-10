@@ -78,6 +78,13 @@ export function channelIds(
   // bank is declared at all, the surface still belongs to SOME channel.
   if (declared.size === 0) declared.add(1);
 
+  const standaloneCoreChannels = discovered?.standaloneCoreChannels;
+  if (standaloneCoreChannels !== undefined) {
+    const available = [...declared].filter((channel) => standaloneCoreChannels.includes(channel));
+    // Keep a configured surface for inspecting or repairing the station if nothing matches.
+    if (available.length > 0) return available.sort((a, b) => a - b);
+  }
+
   /*
     🔴 `C-038` / `R-066` bullet 3 — **THE PRINCIPAL NARROWS THE LIST, AND THE BANK'S CHANNEL
     SURVIVES THE NARROWING.**
@@ -215,7 +222,12 @@ export function resolveSelectedChannel(
 export function operableChannels(
   channels: readonly number[],
   auth: AuthSessionState,
+  standaloneCoreChannels?: readonly number[],
 ): readonly number[] {
+  const available =
+    standaloneCoreChannels === undefined
+      ? channels
+      : channels.filter((channel) => standaloneCoreChannels.includes(channel));
   const permitted = permittedSet(auth);
-  return permitted === null ? channels : channels.filter((c) => permitted.has(c));
+  return permitted === null ? available : available.filter((c) => permitted.has(c));
 }

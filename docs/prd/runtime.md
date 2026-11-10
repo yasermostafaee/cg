@@ -4680,6 +4680,7 @@ not build).
 
 - WHEN the installer is explicitly set to No Playout THEN the installed Bridge connects to local or remote CasparCG using the configured AMCP port. Only the local machine can reach the unauthenticated control socket.
 - WHEN CG Control verifies an installed No Playout Bridge on loopback THEN it connects and can Take a template without Playout sign-in or licence discovery. Missing or incompatible Bridge leaves the existing station record untouched.
+- WHEN the standalone Bridge verifies the running CasparCG channel list THEN CG Control operates only matching configured channels. Missing channels remain configured for repair or recovery and Take is refused before sending a mixer command to them.
 - WHEN a No Playout Bridge's configured CasparCG is checked THEN it reports its actual AMCP result and does not probe or request Playout authentication. Host and port edits survive restart.
 - WHEN an existing or new Playout station is installed, opened or upgraded without choosing No Playout THEN its address, sign-in, channel grants, licence gates and on-air behavior stay in force.
 - WHEN remote CasparCG fetches a graphics page THEN it can reach the configured graphics HTTP address without gaining access to the control socket.

@@ -1,4 +1,4 @@
-import { createMock } from '@cg/amcp-mock';
+import { createMock, defaultHandlers } from '@cg/amcp-mock';
 import { createBridge } from '@cg/caspar-bridge';
 import { defaultFixedLayerBank } from '@cg/shared-ipc';
 import { expect, test } from '@playwright/test';
@@ -21,19 +21,42 @@ function freeOscPort(): Promise<number> {
   });
 }
 
-test('R-098 connects to raw CasparCG, repairs server A and plays without a Playout session', async ({
+test('R-098 / B-434 repairs server A and takes on the reported channel without Playout', async ({
   page,
 }) => {
   test.setTimeout(60_000);
   const missing = await deadPort(HOST);
   const oscPort = await freeOscPort();
   const caspar = await createMock({ amcpPort: 0, oscPort });
+  const bank = defaultFixedLayerBank();
   let bridge: Awaited<ReturnType<typeof createBridge>> | undefined;
   try {
+    const info = defaultHandlers().get('INFO');
+    if (info === undefined) throw new Error('Missing CasparCG INFO fixture');
+    caspar.setHandler('INFO', (request, context, connection) => {
+      switch (request.args[0]?.toUpperCase()) {
+        case 'CONFIG':
+          return {
+            kind: 'ok-line',
+            code: 201,
+            verb: 'INFO',
+            data: '<configuration><channels><channel><consumers><screen/><decklink><device>1</device></decklink></consumers></channel></channels></configuration>',
+          };
+        case '1':
+          return {
+            kind: 'ok-line',
+            code: 201,
+            verb: 'INFO',
+            data: '<channel><format>1080p5000</format><output><port><port_600><consumer>screen</consumer></port_600></port></output></channel>',
+          };
+        default:
+          return info(request, context, connection);
+      }
+    });
     bridge = await createBridge({
       port: 0,
       stationMode: 'standalone',
-      fixedLayers: defaultFixedLayerBank(),
+      fixedLayers: [bank, { ...bank, channel: 2 }],
       connection: {
         servers: { A: { host: HOST, amcpPort: missing, oscPort } },
         strategy: 'mirror-sync',
@@ -111,6 +134,11 @@ test('R-098 connects to raw CasparCG, repairs server A and plays without a Playo
     await settings.getByRole('button', { name: 'Close', exact: true }).click();
 
     await bridge.runtime.whenServerHealthy();
+    await expect(page.getByRole('tab', { name: /CHANNEL 1/ })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /CHANNEL 2/ })).toHaveCount(0);
+    await expect(page.getByRole('alert', { name: 'Program output missing' })).toContainText(
+      'CHANNEL 1 HAS NO DECKLINK OUTPUT',
+    );
     await page.evaluate(async () => {
       const { cg } = window as unknown as { cg: RuntimeBridge };
       const templateId = 'tpl-standalone-check';

@@ -48,12 +48,16 @@ export interface ServerSessionOptions {
   /**
    * 🔴 `CENTRAL-BRIDGE-01` (`C-047`) — **READS THE OWNER WANTS BEFORE THIS CONNECTION IS DECLARED
    * HEALTHY.** Called at the end of every handshake (after the subscribe) with a `read` that sends one
-   * line on THIS connection and resolves with its reply. Nothing but the handshake is on the
+   * line on THIS connection and resolves with its reply, plus the global INFO response already
+   * received by the handshake. Nothing but the handshake is on the
    * connection yet, so what it learns cannot be overtaken by a command sent meanwhile — which is
    * the whole reason it lives here rather than after `healthy`. A throw is swallowed: the reads are
    * the owner's question, never a reason to fail the connection.
    */
-  onHandshake?: (read: (line: string) => Promise<ParsedAmcpResponse>) => Promise<void>;
+  onHandshake?: (
+    read: (line: string) => Promise<ParsedAmcpResponse>,
+    info: ParsedAmcpResponse,
+  ) => Promise<void>;
 
   /** Backoff config (Phase 5 §2: 250 → 500 → 1000 → 2000 → cap 4000). */
   initialBackoffMs?: number;
@@ -163,9 +167,7 @@ export class ServerSession extends EventEmitter<ServerSessionEvents> {
   private readonly oscPort: number;
   private readonly oscBindHost: string;
   private readonly oscSubscribe: boolean;
-  private readonly onHandshake:
-    | ((read: (line: string) => Promise<ParsedAmcpResponse>) => Promise<void>)
-    | undefined;
+  private readonly onHandshake: ServerSessionOptions['onHandshake'];
   private readonly oscDegradedAfterMs: number;
   private readonly oscDownAfterMs: number;
   private readonly watcherIntervalMs: number;
@@ -396,7 +398,7 @@ export class ServerSession extends EventEmitter<ServerSessionEvents> {
             timeoutMs: this.infoTimeoutMs,
           });
           return reply.response;
-        });
+        }, info.response);
       } catch {
         /* the owner's reads never fail the handshake */
       }

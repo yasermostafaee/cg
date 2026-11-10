@@ -1,4 +1,5 @@
 import { FIRST_ALLOCATABLE_LAYER, LAYER_BANDS } from '@cg/shared-ipc';
+import { STANDALONE_CHANNEL_UNAVAILABLE } from './standalone-core-channels.js';
 
 /**
  * 🔴 `ROUTE-PLATES-01` §1.E — **THE ONE QUESTION ASKED OF EVERY AMCP LINE BEFORE IT IS WRITTEN: may
@@ -41,6 +42,8 @@ import { FIRST_ALLOCATABLE_LAYER, LAYER_BANDS } from '@cg/shared-ipc';
 export interface AmcpGuardContext {
   /** `#isDeclaredChannel` — the ONE answer to "does this station operate channel N". */
   readonly isDeclaredChannel: (channel: number) => boolean;
+  /** A configured channel known to be absent from the directly connected core. */
+  readonly standaloneChannelRefusal?: (channel: number) => string | null;
   /** Does the ledger hold a seated plate on this coordinate right now? */
   readonly seatedPlateOn: (channel: number, layer: number) => boolean;
   /**
@@ -179,6 +182,10 @@ export function amcpLineRefusal(line: string, context: AmcpGuardContext): AmcpGu
       code: 'amcp-guard-channel',
       reason: `channel ${String(target.channel)} is not a declared programme channel`,
     };
+  }
+  const unavailable = context.standaloneChannelRefusal?.(target.channel);
+  if (unavailable != null) {
+    return { code: STANDALONE_CHANNEL_UNAVAILABLE, reason: unavailable };
   }
   if (verb === 'CLEAR' && target.layer === undefined) {
     return {

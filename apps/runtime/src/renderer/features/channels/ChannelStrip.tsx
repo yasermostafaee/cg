@@ -36,7 +36,7 @@ export function ChannelStrip({
    */
   signals?: ReadonlyMap<number, ChannelSignal>;
 } = {}): JSX.Element {
-  const { channels, selected, operable, names, air } = useSelectedChannel();
+  const { channels, selected, operable, standaloneCoreChannels, names, air } = useSelectedChannel();
   const license = useLicense();
   const coverage = useLockCoverage();
   const locked = coverage.kind === 'partial' ? coverage.channels : [];
@@ -93,11 +93,18 @@ export function ChannelStrip({
   */
   const tabs: TabSpec[] = channels.map((channel) => {
     const unlicensedCg = cgUnlicensedReason(license, air.get(channel)?.cgLicensed, channel);
+    const missing = standaloneCoreChannels?.includes(channel) === false;
+    const access = locked.includes(channel)
+      ? ' · LOCKED'
+      : operable.includes(channel)
+        ? ''
+        : ' · READ ONLY';
     const suffix =
-      (locked.includes(channel) ? ' · LOCKED' : operable.includes(channel) ? '' : ' · READ ONLY') +
-      (unlicensedCg === null ? '' : ' · NO CG LICENSE');
-    const reasonTitle =
-      unlicensedCg === null ? {} : { title: `Channel ${String(channel)} · ${unlicensedCg}` };
+      (missing ? ' · NOT IN CASPARCG' : access) + (unlicensedCg === null ? '' : ' · NO CG LICENSE');
+    const reason = missing
+      ? 'The connected CasparCG does not report this channel. Check the engine address or its channel configuration.'
+      : unlicensedCg;
+    const reasonTitle = reason === null ? {} : { title: `Channel ${String(channel)} · ${reason}` };
     const name = names.get(channel);
     const signal = signals.get(channel);
     const mark =

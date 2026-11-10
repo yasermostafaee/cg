@@ -333,6 +333,10 @@
         {
           "fa": "پس‌زمینهٔ شطرنجی بوم Designer پس از پایان Stop در Rehearse دیده می‌ماند.",
           "en": "The Designer canvas checkerboard stays visible after Rehearse Stop completes."
+        },
+        {
+          "fa": "در حالت No Playout، کانال‌های قابل پخش از روی فهرست واقعی CasparCG مشخص می‌شوند. اگر کانالی روی سرور وجود نداشته باشد، دلیل رد Take همان‌جا نمایش داده می‌شود.",
+          "en": "No Playout checks configured channels against the running CasparCG channel list and explains why a Take to a missing channel is refused."
         }
       ],
       "planned": [

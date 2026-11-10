@@ -273,6 +273,10 @@ import {
   resolvePlateAssignments,
 } from './live-plate-assignment.js';
 import { amcpLineRefusal } from './amcp-guard.js';
+import {
+  parseStandaloneCoreChannels,
+  STANDALONE_CHANNEL_UNAVAILABLE,
+} from './standalone-core-channels.js';
 import { type BackupClip, type BackupRefusalReason } from './backup-media.js';
 
 /** `PLAYOUT-FEATURES-01` A (`B-286`) — a clip's `PLAY` refused because server B, the primary now, has no copy. */
@@ -1908,6 +1912,8 @@ export class CasparRuntime {
    * bridge (CG Bridge's configuration, `CENTRAL-BRIDGE-01`; `--set-playout-address` in a dev station).
    */
   readonly #playoutLinked: boolean;
+  readonly #standalone: boolean;
+  #standaloneCoreChannels: readonly number[] | null = null;
 
   /**
    * 🔴 `DESKTOP-APPS-01-D` j — **ITEMS OF OURS ON A CHANNEL THIS STATION DOES NOT DECLARE**, keyed
@@ -2444,6 +2450,8 @@ export class CasparRuntime {
        * one or none, exactly as before.
        */
       playoutLinked?: boolean;
+      /** An explicitly installed No Playout station with a direct CasparCG connection. */
+      standalone?: boolean;
       /**
        * 🔴 `FIELD-FIXES-01-A` — every AMCP command a session settles, with its reply line and the
        * server it went to: the bridge's AMCP log (`amcp-log.ts`) is the one consumer.
@@ -2486,6 +2494,7 @@ export class CasparRuntime {
   ) {
     this.#declaresNothingWithoutBank = options.declaresNothingWithoutBank === true;
     this.#playoutLinked = options.playoutLinked === true;
+    this.#standalone = options.standalone === true;
     this.#reservedLayers = options.reservedLayers ?? [];
     this.#reservedSet = new Set(this.#reservedLayers);
     this.#layers = new LayerManager({
@@ -2655,7 +2664,7 @@ export class CasparRuntime {
         */
         oscSubscribe: true,
         // `CENTRAL-BRIDGE-01` (`C-047`) — the start check's `INFO` reads, before `healthy`.
-        onHandshake: (read) => this.#startCheckRead(name, read),
+        onHandshake: (read, info) => this.#startCheckRead(name, read, info),
         resyncDurationMs: RESYNC_MS,
         // TEST-ONLY (B-100): empty in production, so ServerSession defaults hold.
         ...this.#sessionTuning,
@@ -2882,11 +2891,18 @@ export class CasparRuntime {
   async #startCheckRead(
     label: ServerLabel,
     read: (line: string) => Promise<ParsedAmcpResponse>,
+    info: ParsedAmcpResponse,
   ): Promise<void> {
-    if (this.#startChecked || this.#adapter.currentPrimary !== label) return;
+    if (this.#adapter.currentPrimary !== label) return;
+    if (this.#standalone && label === 'A') {
+      const channels = parseStandaloneCoreChannels(info);
+      if (channels !== null) this.#standaloneCoreChannels = channels;
+    }
+    if (this.#startChecked) return;
     this.#startChecked = true;
     const byKey = new Map<string, string>();
     for (const channel of this.#declaredChannels()) {
+      if (this.standaloneChannelRefusal(channel) !== null) continue;
       // `B-316` — on server B, the station's channel is asked at B's own number; none — no picture at all.
       const onCore = label === 'A' ? channel : this.#backupChannels.channelOnB(channel);
       if (onCore === null) return;
@@ -5293,6 +5309,14 @@ export class CasparRuntime {
      * mutate nothing, and retiring a parked restore is a mutation.
      */
     if (this.#isLegacyRehearsal(itemId)) return { accepted: false, errorCode: 'rehearsing' };
+    if (this.standaloneCoreChannels() !== null) {
+      for (const channel of this.channelsForItem(itemId)) {
+        const message = this.standaloneChannelRefusal(channel);
+        if (message === null) continue;
+        this.#recordTakeRefusal(itemId, { code: STANDALONE_CHANNEL_UNAVAILABLE, message });
+        return { accepted: false, errorCode: STANDALONE_CHANNEL_UNAVAILABLE, message };
+      }
+    }
     /*
       🔴 `CENTRAL-BRIDGE-01` (D12, the Playout team's rule 11) — AN UNLICENSED CHANNEL. The Playout
       clears it every minute (`CLEAR <ch>`), ours with it, so a take there puts a graphic on air for
@@ -6233,6 +6257,7 @@ export class CasparRuntime {
    */
   async #reassertDeclaredVolumes(): Promise<void> {
     for (const slot of fixedBanksSlots(this.#fixedBanks)) {
+      if (this.standaloneChannelRefusal(slot.channel) !== null) continue;
       // `normal`, not `urgent`: this is startup housekeeping across the whole
       // bank, and it must never sit ahead of an operator's take in the queue.
       await this.#send(this.#builder.mixerVolume(slot, INTENDED_VOLUME), this.#nextSeq(), 'normal');
@@ -14497,6 +14522,7 @@ export class CasparRuntime {
         void this.#readServerConfig(primaryLabel);
       }
       for (const channel of this.#declaredChannels()) {
+        if (this.standaloneChannelRefusal(channel) !== null) continue;
         if (this.#modeReadFrom.get(channel) === this.#adapter.currentPrimary) continue;
         void this.#readChannelMode(channel);
       }
@@ -14507,7 +14533,10 @@ export class CasparRuntime {
       const lastRead = this.#outputReadAt.get(primaryLabel);
       if (lastRead !== undefined && Date.now() - lastRead >= this.#outputRecheckMs) {
         this.#outputReadAt.set(primaryLabel, Date.now());
-        for (const channel of this.#declaredChannels()) void this.#readChannelOutputs(channel);
+        for (const channel of this.#declaredChannels()) {
+          if (this.standaloneChannelRefusal(channel) === null)
+            void this.#readChannelOutputs(channel);
+        }
       }
       // R-022 — re-assert every declared row's intended volume, once, as soon as a
       // server is first reachable. A bridge that died mid-rehearse left a MUTED
@@ -15515,6 +15544,12 @@ export class CasparRuntime {
     //    about the new one — so a later Take heals via adopt-CLEAR + re-ADD
     //    (B-039 / reconnect-reconciliation semantics). OSC interest is
     //    re-registered for every retained slot on the NEW sessions.
+    if (
+      this.#config.servers.A.host !== next.servers.A.host ||
+      this.#config.servers.A.amcpPort !== next.servers.A.amcpPort
+    ) {
+      this.#standaloneCoreChannels = null;
+    }
     this.#config = next;
     this.#sessions = sessions;
     this.#adapter = new RedundancyAdapter({
@@ -17095,6 +17130,20 @@ export class CasparRuntime {
     return this.#declaredChannels().includes(channel);
   }
 
+  /** Positive global INFO evidence for the direct primary. Banks stay configured independently. */
+  standaloneCoreChannels(): readonly number[] | null {
+    return this.#adapter.currentPrimary === 'A' ? this.#standaloneCoreChannels : null;
+  }
+
+  standaloneChannelRefusal(channel: number): string | null {
+    const channels = this.standaloneCoreChannels();
+    if (channels === null || channels.includes(channel)) return null;
+    return (
+      `CasparCG is not running channel ${String(channel)}. ` +
+      'Check the No Playout connection and station channel settings.'
+    );
+  }
+
   /**
    * 🔴 `CENTRAL-BRIDGE-01` rule 7 — **DOES THIS BRIDGE TAKE IN `channel`'S OSC?** A declared channel,
    * or any channel while none is declared (first-run asks about a channel before it declares it).
@@ -17913,6 +17962,9 @@ export class CasparRuntime {
         : amcpLineRefusal(line, {
             isDeclaredChannel: (channel) =>
               this.#isDeclaredChannel(channel) || channel === options.strayTarget?.channel,
+            ...(this.#standalone && {
+              standaloneChannelRefusal: (channel) => this.standaloneChannelRefusal(channel),
+            }),
             seatedPlateOn: (channel, layer) => this.#holdsSeatedPlate({ channel, layer }),
             isOwnLayer: (channel, layer) =>
               this.#isOwnConfiguredLayer(channel, layer) ||

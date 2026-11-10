@@ -2,7 +2,7 @@ import * as dgram from 'node:dgram';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { createMock } from '@cg/amcp-mock';
+import { createMock, defaultHandlers } from '@cg/amcp-mock';
 import {
   AUTH_REQUIRED_REFUSAL,
   channelNotDeclaredRefusal,
@@ -96,6 +96,7 @@ it('R-098 — serves only trusted local control and takes on raw CasparCG with n
   });
   expect((await client.ask('channels', 'channels.list')).payload).toMatchObject({
     channels: [{ channel: 1, declared: true, permitted: true }],
+    standaloneCoreChannels: [1, 2],
   });
   expect(await client.ask('check', 'setup.check-standalone', {})).toMatchObject({
     payload: { lines: [{ id: 'amcp', status: 'pass' }], localAddress: null },
@@ -170,6 +171,165 @@ it('R-098 — serves only trusted local control and takes on raw CasparCG with n
   expect(wire.some((line) => line.startsWith(`CG 1-${String(row.layer)} ADD `))).toBe(true);
   expect(wire.some((line) => /^CG 2-\d+\s/.test(line))).toBe(false);
 }, 40_000);
+
+it('uses the direct core channel list without rewriting the configured banks', async () => {
+  const oscPort = await freeOscPort();
+  const core = track(await createMock({ amcpPort: 0, oscPort, oscHz: 40 }), (mock) => mock.stop());
+  const info = defaultHandlers().get('INFO');
+  if (info === undefined) throw new Error('no INFO fixture');
+  let channelLines = ['unrecognized INFO response'];
+  core.setHandler('INFO', (request, context, connection) =>
+    request.args.length === 0
+      ? { kind: 'ok-multi', code: 200, verb: 'INFO', lines: channelLines }
+      : info(request, context, connection),
+  );
+  const bank = defaultFixedLayerBank();
+  const banks = [bank, { ...bank, channel: 2 }];
+  const bridge = track(
+    await createBridge({
+      stationMode: 'standalone',
+      fixedLayers: banks,
+      connection: {
+        servers: { A: { host: '127.0.0.1', amcpPort: core.amcpPort, oscPort } },
+        strategy: 'mirror-sync',
+        autoFailoverEnabled: false,
+      },
+      port: 0,
+    }),
+    (handle) => handle.close(),
+  );
+  await bridge.runtime.whenServerHealthy(HEALTH_MS);
+  const client = await openClient(bridge);
+  const initial = (await client.ask('unknown-core', 'channels.list')).payload;
+  expect(initial).not.toHaveProperty('standaloneCoreChannels');
+  expect(initial).toMatchObject({
+    channels: [
+      { channel: 1, declared: true, permitted: true },
+      { channel: 2, declared: true, permitted: true },
+    ],
+  });
+  bridge.runtime.templateImport(
+    { templateId: 'local-template', templateType: 'lower-third', fields: [] },
+    '<!doctype html><html><body>On air</body></html>',
+  );
+  const row = { layer: bank.start, templateId: 'local-template', fields: {} };
+  expect(
+    await client.ask('load-before-info', 'fixedLayers.load', {
+      ...row,
+      channel: 2,
+      itemId: 'old-channel-two',
+    }),
+  ).toMatchObject({ payload: { accepted: true } });
+
+  channelLines = ['1 1080p5000 PLAYING'];
+  core.closeAllAmcpConnections();
+  const discoveredPushes = () =>
+    client
+      .publishes()
+      .filter((frame) => frame.type === 'publish' && frame.channel === 'channels.changed');
+  await expect.poll(discoveredPushes, { timeout: HEALTH_MS }).toMatchObject([
+    {
+      payload: {
+        standaloneCoreChannels: [1],
+        channels: [
+          { channel: 1, declared: true, permitted: true },
+          { channel: 2, declared: true, permitted: false },
+        ],
+      },
+    },
+  ]);
+  await bridge.runtime.whenServerHealthy(HEALTH_MS);
+  expect(bridge.runtime.fixedLayerBanks()).toEqual(banks);
+  expect((await client.ask('grants', 'auth.state')).payload).toMatchObject({
+    permittedChannels: [1],
+  });
+  const before = core.receivedCommands().length;
+  expect(
+    (
+      await client.ask('load-absent', 'fixedLayers.load', {
+        ...row,
+        channel: 2,
+        itemId: 'missing-channel',
+      })
+    ).error,
+  ).toContain('CasparCG is not running channel 2.');
+  expect(
+    await client.ask('take-absent', 'stack.take', { itemId: 'old-channel-two' }),
+  ).toMatchObject({
+    payload: {
+      accepted: false,
+      errorCode: 'caspar-channel-unavailable',
+      message: expect.stringContaining('CasparCG is not running channel 2.'),
+    },
+  });
+  expect(
+    core
+      .receivedCommands()
+      .slice(before)
+      .map(({ line }) => line),
+  ).not.toContain(`MIXER 2-${String(row.layer)} VOLUME 0`);
+
+  // A malformed response from the same endpoint does not erase the last trustworthy list.
+  channelLines = ['1 1080p5000 PLAYING', 'incomplete channel data'];
+  const globalInfoCount = () =>
+    core.receivedCommands().filter(({ line }) => line === 'INFO').length;
+  const seen = globalInfoCount();
+  core.closeAllAmcpConnections();
+  await expect.poll(globalInfoCount, { timeout: HEALTH_MS }).toBeGreaterThan(seen);
+  await bridge.runtime.whenServerHealthy(HEALTH_MS);
+  expect(bridge.runtime.standaloneCoreChannels()).toEqual([1]);
+  expect(discoveredPushes()).toHaveLength(1);
+
+  expect(
+    await client.ask('load-running', 'fixedLayers.load', {
+      ...row,
+      channel: 1,
+      itemId: 'channel-one',
+    }),
+  ).toMatchObject({ payload: { accepted: true } });
+  expect(await client.ask('take-running', 'stack.take', { itemId: 'channel-one' })).toMatchObject({
+    payload: { accepted: true },
+  });
+  expect(core.receivedCommands().map(({ line }) => line)).toContain(
+    `MIXER 1-${String(row.layer)} VOLUME 0`,
+  );
+  expect(core.lastCgAdd({ channel: 1, layer: row.layer })).toBeDefined();
+
+  expect(await client.ask('clear-running', 'stack.out', { itemId: 'channel-one' })).toMatchObject({
+    payload: { accepted: true },
+  });
+  const replacementOsc = await freeOscPort();
+  const replacement = track(
+    await createMock({ amcpPort: 0, oscPort: replacementOsc, oscHz: 40, channels: 2 }),
+    (mock) => mock.stop(),
+  );
+  replacement.setHandler('INFO', (request, context, connection) =>
+    request.args.length === 0
+      ? { kind: 'ok-multi', code: 200, verb: 'INFO', lines: ['unknown INFO dialect'] }
+      : info(request, context, connection),
+  );
+  expect(
+    await client.ask('endpoint-change', 'connections.set-config', {
+      servers: {
+        A: { host: '127.0.0.1', amcpPort: replacement.amcpPort, oscPort: replacementOsc },
+      },
+      strategy: 'mirror-sync',
+      autoFailoverEnabled: false,
+    }),
+  ).toMatchObject({ payload: { ok: true } });
+  await bridge.runtime.whenServerHealthy(HEALTH_MS);
+  expect(bridge.runtime.standaloneCoreChannels()).toBeNull();
+  expect(bridge.runtime.fixedLayerBanks()).toEqual(banks);
+  await expect.poll(discoveredPushes, { timeout: HEALTH_MS }).toHaveLength(2);
+  expect(discoveredPushes()[1]).toMatchObject({
+    payload: {
+      channels: [
+        { channel: 1, declared: true, permitted: true },
+        { channel: 2, declared: true, permitted: true },
+      ],
+    },
+  });
+}, 30_000);
 
 it('R-098 — an explicit standalone service rejects network control before binding', async () => {
   await expect(

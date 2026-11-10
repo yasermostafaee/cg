@@ -53,6 +53,13 @@ A Bridge installed in No Playout mode SHALL listen for control only on IPv4 loop
 - **WHEN** a local console connects to an installed No Playout Bridge with a reachable CasparCG engine
 - **THEN** the configured channel can Take a template over AMCP without Playout auth or licence calls
 
+#### Scenario: A standalone bank names a channel absent from CasparCG
+
+- **WHEN** a verified primary AMCP `INFO` list omits a configured standalone channel
+- **THEN** Bridge publishes the actual channel list separately from the configured banks
+- **AND** a stale Take on the missing channel is refused with the channel reason before any AMCP write
+- **AND** configured channels reported by CasparCG still support Take regardless of their consumer diagnostics
+
 #### Scenario: Standalone check is restricted
 
 - **WHEN** a console requests the standalone check

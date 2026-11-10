@@ -142,6 +142,12 @@ Installed CG Control SHALL offer No Playout in station setup. It SHALL persist a
 - **WHEN** an older Bridge, a Playout Bridge or a remote Bridge address is entered for No Playout
 - **THEN** CG Control refuses the choice and does not replace the previous station settings
 
+#### Scenario: CasparCG reports fewer channels than the standalone station configured
+
+- **WHEN** the standalone Bridge reports its verified running CasparCG channels
+- **THEN** the workspace switcher offers the configured channels that are running
+- **AND** if no configured channel is running, a configured channel remains visible as unavailable for diagnosis and repair
+
 #### Scenario: Reopen an existing Playout station
 
 - **WHEN** an existing station record has a Playout address and no mode

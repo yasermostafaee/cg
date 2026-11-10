@@ -156,6 +156,8 @@ export type StationChannel = z.infer<typeof StationChannelSchema>;
  */
 export const StationChannelsSchema = z.object({
   channels: z.array(StationChannelSchema),
+  /** Verified primary AMCP channels on a standalone station. Omitted while unverified. */
+  standaloneCoreChannels: z.array(z.number().int().positive()).optional(),
 });
 export type StationChannels = z.infer<typeof StationChannelsSchema>;
 
