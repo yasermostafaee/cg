@@ -1,3 +1,4 @@
+import type { Locator } from '@playwright/test';
 import { test, expect } from './fixtures/designer.js';
 
 /**
@@ -9,6 +10,16 @@ import { test, expect } from './fixtures/designer.js';
  */
 
 const PERSIAN_TIME = /[۰-۹]{2}:[۰-۹]{2}:[۰-۹]{2}/;
+
+async function expectStyledHyphens(time: Locator): Promise<void> {
+  const separators = time.locator('[data-cg-clock-separator]');
+  await expect(separators).toHaveText(['-', '-']);
+  for (const separator of [separators.first(), separators.last()]) {
+    await expect(separator).toHaveCSS('margin-left', '5px');
+    await expect(separator).toHaveCSS('margin-right', '5px');
+    await expect(separator).toHaveCSS('top', '8px');
+  }
+}
 
 test.describe('Clock element (D-027)', () => {
   test('author a wall clock → canvas shows Persian-digit time → it ticks in the preview', async ({
@@ -120,7 +131,9 @@ test.describe('Clock element (D-027)', () => {
     await app.stop();
   });
 
-  test('authors a 90-minute count display and moves the colon independently', async ({ app }) => {
+  test('authors a 90-minute count display and moves the separators independently', async ({
+    app,
+  }) => {
     await app.newProject('Clock Format');
     await app.addClock();
     await app.setClockCountdown(5400);
@@ -133,18 +146,41 @@ test.describe('Clock element (D-027)', () => {
     await display.selectOption('hours and minutes');
     await expect(time).toHaveText('۰۱:۳۰');
 
-    const spacing = app.inspector.getByLabel('colon spacing', { exact: true });
+    const spacing = app.inspector.getByLabel('separator spacing', { exact: true });
     await spacing.fill('5');
     await spacing.press('Enter');
-    const offset = app.inspector.getByLabel('colon vertical offset', { exact: true });
+    const offset = app.inspector.getByLabel('separator vertical offset', { exact: true });
     await offset.fill('8');
     await offset.press('Enter');
     const colon = canvas.locator('[data-cg-clock-colon]');
     await expect(colon).toHaveCSS('margin-left', '5px');
     await expect(colon).toHaveCSS('top', '8px');
+
+    const format = app.inspector.getByRole('textbox', { name: 'format', exact: true });
+    await format.fill('HH-mm-ss');
+    await format.press('Enter');
+    await expect(time).toHaveText('۰۱-۳۰-۰۰');
+    await expectStyledHyphens(time);
+
     const { html } = await app.exportHtml();
+    expect(html).toContain('"format":"HH-mm-ss"');
     expect(html).toContain('"separatorOffsetYPx":8');
     expect(html).toContain('"separatorSpacingPx":5');
+
+    const exported = await app.page.context().newPage();
+    await exported.setContent(html);
+    const exportedTime = exported.locator('[data-cg-clock-time]');
+    await expect(exportedTime).toHaveText('۰۱-۳۰-۰۰');
+    await expectStyledHyphens(exportedTime);
+    await exported.close();
+
+    await app.openPreviewModal();
+    const previewTime = app.previewFrame.locator('[data-cg-clock-time]');
+    await expect(previewTime).toHaveText('۰۱-۳۰-۰۰');
+    await app.play();
+    await expect(previewTime).not.toHaveText('۰۱-۳۰-۰۰', { timeout: 3000 });
+    await expectStyledHyphens(previewTime);
+    await app.stop();
   });
 
   test('the exported single-file HTML carries the clock with an unchanged GDD', async ({ app }) => {

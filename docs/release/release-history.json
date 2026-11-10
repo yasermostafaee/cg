@@ -325,6 +325,10 @@
         {
           "fa": "در Pan، بخش انتخاب‌شده واضح است و شطرنجی بیرون کادر قرار می‌گیرد. Update on air برش را روی همان ورودیِ در حال پخش اعمال می‌کند.",
           "en": "Pan keeps the selected pixels clear and marks the excluded area with checkerboard. Update on air applies the crop to the playing input."
+        },
+        {
+          "fa": "فاصله و جابه‌جایی عمودی جداکنندهٔ ساعت در قالب‌های سفارشی مثل HH-mm-ss هم اعمال می‌شود.",
+          "en": "Clock separator spacing and vertical offset also apply to custom formats such as HH-mm-ss."
         }
       ],
       "planned": [

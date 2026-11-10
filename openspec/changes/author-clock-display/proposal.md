@@ -6,7 +6,7 @@ A clock author needs fine control over separators and the choice of a minute-onl
 
 ## What Changes
 
-- Expose colon spacing and vertical offset.
+- Expose spacing and vertical offset for separators in default and custom formats.
 - Expose countdown minute and hour-minute formats.
 - Allow countup to begin at a configured number of seconds and hold at an optional ceiling.
 

@@ -103,8 +103,8 @@ export interface ClockDriverOptions {
   utcOffsetMinutes?: number | undefined;
   /**
    * D-103 — when true, the colon separator(s) blink: the formatted time is rendered as
-   * segment spans and ONLY the colon spans' opacity toggles (no reflow). Off ⇒ the prior
-   * single-`textContent` render. Applies to all modes.
+   * segment spans and ONLY the colon spans' opacity toggles (no reflow).
+   * Applies to all modes.
    */
   blinkColon?: boolean | undefined;
   /** D-103 — colon blink half-period in ms (phase = `floor(now / period) % 2`). Absent ⇒ 1000. */
@@ -352,14 +352,17 @@ export function renderClockText(
   const doc = node.ownerDocument;
   node.textContent = '';
   const colons: HTMLElement[] = [];
-  for (const part of text.split(/(:)/)) {
+  const spacing = style.separatorSpacingPx ?? 0;
+  const offsetY = style.separatorOffsetYPx ?? 0;
+  // An interior literal run separates two displayed numbers in any digit script.
+  // Keep standalone colons identifiable as well for existing blink formats.
+  const parts = text.split(/((?<=\p{Decimal_Number})\P{Decimal_Number}+(?=\p{Decimal_Number})|:)/u);
+  for (const [index, part] of parts.entries()) {
     if (part === '') continue;
     const span = doc.createElement('span');
-    span.textContent = part;
-    if (part === ':') {
-      span.dataset['cgClockColon'] = '1';
-      const spacing = style.separatorSpacingPx ?? 0;
-      const offsetY = style.separatorOffsetYPx ?? 0;
+    const separator = index % 2 === 1;
+    if (separator) {
+      span.dataset['cgClockSeparator'] = '1';
       if (spacing !== 0) {
         span.style.marginLeft = `${String(spacing)}px`;
         span.style.marginRight = `${String(spacing)}px`;
@@ -368,10 +371,28 @@ export function renderClockText(
         span.style.position = 'relative';
         span.style.top = `${String(offsetY)}px`;
       }
+    }
+    if (part === ':') {
+      span.textContent = part;
       colons.push(span);
+    } else if (separator && part.includes(':')) {
+      // When a separator contains extra characters, only its actual colons blink.
+      for (const fragment of part.split(/(:)/)) {
+        if (fragment === ':') {
+          const colon = doc.createElement('span');
+          colon.textContent = fragment;
+          span.appendChild(colon);
+          colons.push(colon);
+        } else if (fragment !== '') {
+          span.append(fragment);
+        }
+      }
+    } else {
+      span.textContent = part;
     }
     node.appendChild(span);
   }
+  for (const colon of colons) colon.dataset['cgClockColon'] = '1';
   return colons;
 }
 
@@ -560,8 +581,7 @@ export class ClockDriver {
     // Clear the published step: a fresh run must re-enter at the step its OWN remaining time
     // selects, never inherit the last run's.
     this.clearStep();
-    // D-103 — back to a steady single-`textContent` value; the run's first paint re-segments
-    // for the blink if `blinkColon` is on.
+    // D-103 — back to a steady value. The run's first paint restores the blink if enabled.
     this.blinkBuilt = false;
     this.colonSpans = [];
     this.lastColonVisible = null;

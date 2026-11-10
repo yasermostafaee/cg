@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { ClockDriver, clockInitialText, type ClockDriverOptions } from '../src/clock-driver.js';
+import {
+  ClockDriver,
+  clockInitialText,
+  renderClockText,
+  type ClockDriverOptions,
+} from '../src/clock-driver.js';
 
 /** Fake rAF + timer clock (same shape as the playout/ticker suites). */
 function makeClock() {
@@ -325,6 +330,45 @@ describe('ClockDriver (D-027)', () => {
         12 * 60 * 60_000,
       ),
     ).toBe('00:00');
+  });
+});
+
+describe('Clock separator styling (D-209)', () => {
+  it('styles separator runs between digits while preserving the sign, suffix and text', () => {
+    const node = document.createElement('span');
+    const text = '−۰۱ - ۳۰٫۰۰ PM';
+    renderClockText(node, text, { separatorSpacingPx: 5, separatorOffsetYPx: -8 });
+
+    expect(node.textContent).toBe(text);
+    const separators = [...node.querySelectorAll<HTMLElement>('[data-cg-clock-separator]')];
+    expect(separators.map(({ textContent }) => textContent)).toEqual([' - ', '٫']);
+    for (const { style } of separators) {
+      expect(style.marginLeft).toBe('5px');
+      expect(style.marginRight).toBe('5px');
+      expect(style.top).toBe('-8px');
+    }
+  });
+
+  it('keeps literal spaces and hyphens visible when a colon blinks in a mixed format', () => {
+    const h = make({
+      mode: 'countup',
+      format: 'HH : mm-ss',
+      digits: 'arabic-indic',
+      blinkColon: true,
+      blinkPeriodMs: 500,
+      separatorOffsetYPx: 4,
+    });
+    h.driver.start();
+    const separators = [...h.node.querySelectorAll<HTMLElement>('[data-cg-clock-separator]')];
+    expect(separators.map(({ textContent }) => textContent)).toEqual([' : ', '-']);
+    expect(separators.map(({ style }) => style.top)).toEqual(['4px', '4px']);
+    const colon = h.node.querySelector<HTMLElement>('[data-cg-clock-colon]');
+    expect(colon?.style.opacity).toBe('1');
+    h.clock.advance(500);
+    expect(colon?.style.opacity).toBe('0');
+    expect(separators.map(({ style }) => style.opacity)).toEqual(['', '']);
+    expect(h.node.textContent).toBe('٠٠ : ٠٠-٠٠');
+    h.driver.stop();
   });
 });
 

@@ -2875,7 +2875,7 @@ function ClockSections({
           />
         )}
         <NumberField
-          label="colon spacing"
+          label="separator spacing"
           value={element.separatorSpacingPx ?? 0}
           min={-32}
           max={128}
@@ -2885,7 +2885,7 @@ function ClockSections({
           }
         />
         <NumberField
-          label="colon vertical offset"
+          label="separator vertical offset"
           value={element.separatorOffsetYPx ?? 0}
           min={-128}
           max={128}

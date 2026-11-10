@@ -2,11 +2,11 @@
 
 ### Requirement: Clock presentation and countup range are authorable
 
-Designer SHALL expose independent horizontal spacing and vertical positioning for colon separators and apply the same styling in the canvas, Preview and export. It SHALL expose total-minute and hours-and-minutes choices while retaining the custom format. A countup SHALL optionally begin at a nonnegative whole-second value and hold at a ceiling at or above that value; absent settings SHALL retain the existing zero-based uncapped countup.
+Designer SHALL expose independent horizontal spacing and vertical positioning for clock separators in default and custom formats and apply the same styling in the canvas, Preview and export. It SHALL expose total-minute and hours-and-minutes choices while retaining the custom format. A countup SHALL optionally begin at a nonnegative whole-second value and hold at a ceiling at or above that value. Absent settings SHALL retain the existing zero-based uncapped countup.
 
 #### Scenario: Author positions the separator
 
-- **WHEN** the author changes colon spacing and vertical offset
+- **WHEN** the author changes separator spacing and vertical offset in a default format or a custom format such as `HH-mm-ss`
 - **THEN** the separators move without moving the digits vertically, including when blink is enabled
 
 #### Scenario: Show ninety minutes either way

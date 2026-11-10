@@ -6825,13 +6825,14 @@ affected element when available and can be activated with the keyboard.
 
 ## [~] D-209 — Author clock separators and count display ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/author-clock-display/`
 
-**What:** Add independent spacing and vertical placement for clock colons, one-click countdown display as total minutes or hours and minutes, and a countup start and optional ceiling.
+**What:** Add independent spacing and vertical placement for clock separators, including custom formats like `HH-mm-ss`, one-click countdown display as total minutes or hours and minutes, and a countup start and optional ceiling.
 
 **Why:** Owner workflow confirmed on 2026-11-10.
 
 **Acceptance:**
 
-- WHEN the countdown is 90 minutes THEN the author can choose 90 or 01:30. WHEN a countup range is authored THEN it starts at that value on Play and holds at the ceiling; absent settings preserve existing clocks. WHEN colon offsets change THEN the same offsets render in Designer, Preview and exported output.
+- WHEN the countdown is 90 minutes THEN the author can choose 90 or 01:30. WHEN a countup range is authored THEN it starts at that value on Play and holds at the ceiling. Absent settings preserve existing clocks.
+- WHEN separator spacing or vertical offset changes THEN the separators in the default and custom formats move consistently in Designer, Preview and exported output. The digits keep their vertical position.
 
 ## [~] D-211 — Export renamed VCG files as independent templates ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/export-named-template-variants/`
 
