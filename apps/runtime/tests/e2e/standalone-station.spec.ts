@@ -129,7 +129,7 @@ test('R-098 connects to raw CasparCG, repairs server A and plays without a Playo
     });
     const row = page.locator('[data-item-id="standalone-check"]');
     await row.getByRole('button', { name: 'PLAY', exact: true }).click();
-    await expect(row).toHaveAttribute('data-row-state', 'onair');
+    await expect(row).toHaveAttribute('aria-label', /ON AIR$/);
     expect(outgoing.filter((frame) => frame.channel === 'setup.check-standalone')).toHaveLength(2);
     expect(outgoing.some((frame) => frame.type === 'auth' || frame.channel === 'setup.check')).toBe(
       false,
