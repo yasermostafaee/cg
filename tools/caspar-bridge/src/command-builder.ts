@@ -611,7 +611,10 @@ export class CommandBuilder {
    * applies the lot. See {@link deferMixer} for the measurement that settled the open question
    * this comment used to record.
    */
-  mixerFit(slot: CommandSlot, fit: { fill: NormalizedRect; clip: NormalizedRect }): string[] {
+  mixerFit(
+    slot: CommandSlot,
+    fit: { fill: NormalizedRect; clip: NormalizedRect },
+  ): [fill: string, clip: string] {
     return [
       `MIXER ${target(slot)} FILL ${rect(fit.fill)}`,
       `MIXER ${target(slot)} CLIP ${rect(fit.clip)}`,

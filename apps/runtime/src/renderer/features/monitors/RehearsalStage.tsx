@@ -482,7 +482,8 @@ export function RehearsalStage({
           const key = JSON.stringify([
             subject.itemId,
             scope,
-            subject.previewCropLocked === true,
+            subject.previewCropOnAir === true,
+            subject.previewCropPending === true,
             plates.map(({ plateId, sourceId, catalogAspect, x, y, width, height }) => [
               plateId,
               sourceId,
@@ -677,7 +678,8 @@ export function RehearsalStage({
                 scope={scope}
                 lookId={lookId}
                 appliedCrops={subject.previewPlateCrops}
-                practiceOnly={subject.previewCropLocked === true}
+                onAir={subject.previewCropOnAir === true}
+                pending={subject.previewCropPending === true}
                 plates={plates}
                 sourceFrames={sourceFrames}
                 fit={fit}

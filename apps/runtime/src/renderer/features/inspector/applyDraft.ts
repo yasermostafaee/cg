@@ -1,5 +1,5 @@
 import {
-  ownsLiveSeats,
+  isOnAirStatus,
   type FieldValue,
   type FieldValues,
   type StackItemState,
@@ -137,8 +137,8 @@ export function applyDraft(
     PLATES FIRST, and it is not arbitrary: the assignment reaches NOTHING on air (it is read at
     the next take), while `stack.update` reaches the graphic on the channel now. Doing the
     harmless halves first means a refused one cannot leave a half-applied on-air change behind
-    it. The crop batch comes after accepted fields, so it validates against the updated bindings
-    and changes no on-air layer.
+    it. The crop batch comes after accepted fields, so it validates against the updated bindings.
+    Only the on-air action can reframe a live seat.
 
     EVERY half runs regardless, and the verdict is the AND of them: a refused assignment must
     not silently discard a field edit the operator also staged, and a refused field update must
@@ -175,8 +175,6 @@ async function applyPreviewCropDrafts(
   crop: NonNullable<ReturnType<typeof beginPreviewCropApply>>,
 ): Promise<boolean> {
   crop.accept('practice');
-  // Keep guide drafts for an off-air Update while ordinary edits can reach the current output.
-  if (ownsLiveSeats(item, false)) return true;
   const edits = crop.drafts.flatMap((draft) =>
     draft.kind === 'guide'
       ? [
@@ -190,7 +188,11 @@ async function applyPreviewCropDrafts(
   );
   if (edits.length === 0) return true;
   try {
-    const result = await window.cg.stack.previewPlateCrop({ itemId: item.itemId, edits });
+    const result = await window.cg.stack.previewPlateCrop({
+      itemId: item.itemId,
+      edits,
+      ...(isOnAirStatus(item) && { allowOnAir: true }),
+    });
     if (
       result.ok &&
       result.applied?.length === edits.length &&

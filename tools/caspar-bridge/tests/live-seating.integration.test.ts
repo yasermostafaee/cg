@@ -816,6 +816,99 @@ it('updates PVW crop drafts atomically across presets after leaving Preview', as
   });
 });
 
+it('applies a PVW crop batch to the already seated plates only on Inspector Update', async () => {
+  const itemId = 'item-1';
+  const r = await boot({
+    template: template([
+      { id: 'guest-1', rect: { x: 720, y: 270, width: 480, height: 270 }, fitMode: 'cover' },
+      { id: 'guest-2', rect: { x: 1200, y: 540, width: 480, height: 270 }, fitMode: 'cover' },
+    ]),
+    assignments: assign([
+      ['guest-1', 'src-a'],
+      ['guest-2', 'src-b'],
+    ]),
+  });
+  expect(await r.load(itemId, 'lower-third', {})).toMatchObject({ accepted: true });
+  expect(r.enterPreview(itemId)).toEqual({ ok: true });
+  const [first, second] = r.previewPlateCrop(itemId).targets;
+  expect(first?.plateId).toBe('guest-1');
+  expect(second?.plateId).toBe('guest-2');
+  const edits = [
+    { token: first!.token, focus: { x: 0.25, y: 0.75, zoom: 2 } },
+    { token: second!.token, focus: { x: 0.75, y: 0.25, zoom: 2 } },
+  ];
+  expect(await r.take(itemId)).toMatchObject({ accepted: true });
+  const before = (await recvLines()).length;
+
+  expect(r.previewPlateCrop(itemId, undefined, edits)).toMatchObject({ ok: false, targets: [] });
+  expect(await r.previewPlateCropOnAir(itemId)).toEqual({ ok: true, targets: [first, second] });
+  expect(
+    await r.previewPlateCropOnAir(itemId, [edits[0]!, { ...edits[1]!, token: 'stale' }]),
+  ).toMatchObject({ ok: false });
+  expect(r.stackSnapshot()[0]?.previewPlateCrops).toBeUndefined();
+  expect((await recvLines()).slice(before)).toEqual([]);
+
+  expect(await r.previewPlateCropOnAir(itemId, edits)).toMatchObject({
+    ok: true,
+    applied: edits.map(({ token }) => token),
+  });
+  expect((await recvLines()).slice(before)).toEqual([
+    'MIXER 1-30 FILL 0.3125 0.0625 0.5 0.5',
+    'MIXER 1-31 FILL 0.4375 0.4375 0.5 0.5',
+  ]);
+  expect(mock?.layerState({ channel: 1, layer: 30 })?.fill).toEqual({
+    x: 0.3125,
+    y: 0.0625,
+    width: 0.5,
+    height: 0.5,
+  });
+  expect(r.stackSnapshot()[0]?.previewPlateCrops).toEqual(edits);
+
+  expect(await r.stopItem(itemId)).toMatchObject({ accepted: true });
+  const stopped = (await recvLines()).length;
+  expect(await r.previewPlateCropOnAir(itemId, edits)).toMatchObject({ ok: false, targets: [] });
+  expect((await recvLines()).slice(stopped)).toEqual([]);
+});
+
+it('does not save a new on-air crop when the engine refuses the mixer edit', async () => {
+  const itemId = 'item-1';
+  const r = await boot({
+    template: template([
+      { id: 'guest-1', rect: { x: 720, y: 270, width: 480, height: 270 }, fitMode: 'cover' },
+      { id: 'guest-2', rect: { x: 1200, y: 540, width: 480, height: 270 }, fitMode: 'cover' },
+    ]),
+    assignments: assign([
+      ['guest-1', 'src-a'],
+      ['guest-2', 'src-b'],
+    ]),
+  });
+  expect(await loadAndTake(r, itemId)).toMatchObject({ accepted: true });
+  const { targets } = await r.previewPlateCropOnAir(itemId);
+  expect(targets).toHaveLength(2);
+  const prior = mock?.layerState({ channel: 1, layer: 30 })?.fill;
+  const mixer = defaultHandlers().get('MIXER');
+  if (mock === null || mixer === undefined || prior === undefined)
+    throw new Error('no mixer fixture');
+  let refused = false;
+  mock.setHandler('MIXER', (request, context, connection) => {
+    if (!refused && request.raw.startsWith('MIXER 1-31 FILL ')) {
+      refused = true;
+      return { kind: 'err', code: 502, verb: 'MIXER' };
+    }
+    return mixer(request, context, connection);
+  });
+
+  expect(
+    await r.previewPlateCropOnAir(
+      itemId,
+      targets.map(({ token }) => ({ token, focus: { x: 1, y: 0.5, zoom: 2 } })),
+    ),
+  ).toMatchObject({ ok: false, targets });
+  expect(refused).toBe(true);
+  expect(r.stackSnapshot()[0]?.previewPlateCrops).toBeUndefined();
+  expect(mock.layerState({ channel: 1, layer: 30 })?.fill).toEqual(prior);
+});
+
 it('D-202 — multiple reveals are refused atomically when only one extra seat fits', async () => {
   const r = await boot({
     template: template([

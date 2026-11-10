@@ -24,8 +24,9 @@ scene and on export. The CG Control gesture targets a visible `cover` plate. Mov
 to axes with crop travel and keeps the authored plate fixed. Drag a corner to resize the window
 around the opposite corner. At the picture bounds the window shifts only as far as needed to fit.
 
-PVW can save normalized focus for a source whose aspect and fit Bridge has resolved. Programme
-writes begin on the existing Take path after the operator exits rehearsal.
+PVW can draft normalized focus for a source whose aspect and fit Bridge has resolved. Dragging
+and resizing affect the browser preview immediately. Off-air Update saves framing for Take.
+Update on air applies framing to the verified seated source.
 
 ## Picture and guide geometry
 
@@ -45,8 +46,9 @@ Draft identity continues to come from the existing Take token. The legacy MJPEG 
 mapping. Acceptance with a real input on the target station is still open.
 
 Without a usable JPEG mapping, Pan shows proportional Bars. With no visible Crop edges plate it
-has no editing surface. The shaded crop guide has the authored plate ratio and a blue outline
-with a dark contrast edge. Drag or arrow keys move it along the axes with travel. Center restores
+has no editing surface. The crop guide keeps its selected pixels clear, with checkerboard over the
+excluded source area. It has the authored plate ratio and a blue outline with a dark contrast edge.
+Drag or arrow keys move it along the axes with travel. Center restores
 the centre at the current size. Drag, resize and Center stage an
 Inspector draft that survives toggling PVW. With no eligible Bridge target, Update applies practice
 framing in the current browser session. Discard restores the last applied position. Practice starts
@@ -63,15 +65,26 @@ crop applies to the first seating plan of the matching Take. A stale target refu
 Missing or mismatched JPEG geometry retains the Bars guide. An unresolved Take target keeps the
 guide in local practice.
 
-The row's existing interlock still requires OFF PVW before PLAY. A saved Center is explicit centred
-focus for that crop, including on a plate with a different authored default.
+Legacy rehearsal requires OFF PVW before PLAY. Independent PVW can stay open during Take. A saved
+Center is explicit centred focus for that crop, including on a plate with a different authored default.
 
-The console treats the staging route as an optional capability. The target also advertises support
+The console treats the crop route as an optional capability. The target also advertises support
 for saving resize edits. A target without it still supports positional Pan. An older Bridge without the route keeps the practice
 guide available and explains inside Pan that Update keeps the position for local practice. Required routes still use the
 global compatibility check.
 
-## PGM deferred
+## Apply a PVW crop to programme
+
+Update on air opts into applying the verified crop on the live row. Bridge rechecks the crop token,
+look, input, geometry and owned seats under the row's seat lock. It computes the new FILL from the
+same fit and sends FILL directly to the already seated source. The clip, producer and volume stay
+in place. Direct FILL avoids committing another operation's staged mixer commands. Bridge validates
+the full batch before sending and records it only after primary acknowledgements. On refusal it
+attempts to restore the touched fills that still belong to the row, and the draft remains available.
+Pan rechecks the target after a Take settles while the preview remains open. A normal off-air Update
+only records framing for Take.
+
+## In-place PGM editor deferred
 
 The owner approved the in-plate PVW editor and deferred the PGM control. CG Control does not show
 a Pan button or crop overlay in PGM. The relative crop operation remains available to existing

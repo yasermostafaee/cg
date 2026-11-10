@@ -236,7 +236,7 @@ test('🔴 a template imported in profile A is rehearsed in a fresh profile B, f
   await c.context().close();
 });
 
-test('D-178 — PVW crop stays a draft until Update and reaches the first Take FILL', async ({
+test('D-178 / B-433 — PVW crop reaches the first Take and Update on air reframes the existing seat', async ({
   page,
 }) => {
   const handle = await boot(true);
@@ -332,7 +332,6 @@ test('D-178 — PVW crop stays a draft until Update and reaches the first Take F
     .map(({ line }) => line);
   expect(staged.some((line) => /(?:^| )(?:MIXER 1-60|PLAY 1-60) /.test(line))).toBe(false);
 
-  await leavePreview();
   await take.click();
   const slot = { channel: 1, layer: 60 };
   await expect.poll(() => engine.layerState(slot)?.fill?.x).toBeCloseTo(0.1875, 2);
@@ -349,6 +348,44 @@ test('D-178 — PVW crop stays a draft until Update and reaches the first Take F
   expect(Number(xSent)).toBeCloseTo(0.1875, 2);
   expect(play).toBeGreaterThan(fill);
   expect(reveal).toBeGreaterThan(play);
+
+  await expect(plateRow).toHaveAttribute('aria-label', /ON AIR$/);
+  await expect(pvw.getByRole('button', { name: 'Pan crop guide in guest' })).toBeVisible();
+  const before = engine.layerState(slot);
+  if (before?.fill === undefined || before.clip === undefined)
+    throw new Error('Missing on-air plate geometry');
+  const beforeFill = { ...before.fill };
+  const beforeClip = { ...before.clip };
+  const beforeResize = engine.receivedCommands().length;
+  await pvw
+    .getByRole('button', { name: 'Resize top left crop corner in guest' })
+    .press('ArrowRight');
+  await expect(draft).toBeVisible();
+  expect(engine.layerState(slot)?.fill).toEqual(beforeFill);
+  expect(
+    engine
+      .receivedCommands()
+      .slice(beforeResize)
+      .some(({ line }) => /MIXER 1-60 FILL /.test(line)),
+  ).toBe(false);
+
+  await page.getByRole('button', { name: 'Apply staged edits to the on-air row' }).click();
+  await expect
+    .poll(() => engine.layerState(slot)?.fill?.width ?? 0)
+    .toBeGreaterThan(beforeFill.width);
+  await expect(saved).toBeVisible();
+  expect(engine.layerState(slot)?.clip).toEqual(beforeClip);
+  expect(engine.layerState(slot)?.opacity).toBe(1);
+  const onAirUpdate = engine
+    .receivedCommands()
+    .slice(beforeResize)
+    .map(({ line }) => line);
+  expect(onAirUpdate.some((line) => /MIXER 1-60 FILL /.test(line))).toBe(true);
+  expect(
+    onAirUpdate.some((line) =>
+      /(?:^| )(?:PLAY|LOADBG|STOP|CLEAR) 1-60\b|MIXER 1-60 (?:VOLUME|OPACITY)\b/.test(line),
+    ),
+  ).toBe(false);
 });
 
 test('R-117 previews draft fields while Play and Update control the same programme row', async ({

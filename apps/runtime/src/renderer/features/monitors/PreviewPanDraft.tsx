@@ -74,7 +74,8 @@ export function PreviewPanRow({
   scope,
   lookId,
   appliedCrops,
-  practiceOnly = false,
+  onAir = false,
+  pending = false,
   plates,
   sourceFrames,
   fit,
@@ -83,15 +84,16 @@ export function PreviewPanRow({
   scope: string;
   lookId: string | undefined;
   appliedCrops: StackItemState['previewPlateCrops'];
-  practiceOnly?: boolean;
+  onAir?: boolean;
+  pending?: boolean;
   plates: readonly PreviewPanPlacement[];
   sourceFrames: ReadonlyMap<string, SourcePreviewFrame>;
   fit: number;
 }): JSX.Element {
   const hasSource = plates.some((plate) => plate.sourceId !== null);
-  const canCheck = hasSource && !practiceOnly;
+  const canCheck = hasSource && !pending;
   const [targets, setTargets] = useState<readonly PreviewPlateCropTarget[] | null>(
-    canCheck ? null : [],
+    hasSource ? null : [],
   );
   const [cropMessage, setCropMessage] = useState<string>();
   useSyncExternalStore(subscribeDrafts, draftsVersion, draftsVersion);
@@ -101,7 +103,10 @@ export function PreviewPanRow({
     if (canCheck) {
       void (async () => {
         try {
-          const result = await window.cg.stack.previewPlateCrop({ itemId });
+          const result = await window.cg.stack.previewPlateCrop({
+            itemId,
+            ...(onAir && { allowOnAir: true }),
+          });
           if (current) {
             setTargets(result.ok ? result.targets : []);
             setCropMessage(result.ok ? undefined : result.message);
@@ -115,7 +120,7 @@ export function PreviewPanRow({
     return () => {
       current = false;
     };
-  }, [canCheck, itemId]);
+  }, [canCheck, itemId, onAir]);
 
   return (
     <>
@@ -175,6 +180,7 @@ export function PreviewPanRow({
               blocked={targets === null}
               cropMessage={cropMessage}
               guide={target !== undefined}
+              onAir={onAir}
               resizable={target === undefined || target.resizable === true}
               sourcePicture={sourcePicture}
               compactCenter={
@@ -225,6 +231,7 @@ function PreviewPanDraft({
   blocked,
   cropMessage,
   guide,
+  onAir,
   resizable,
   sourcePicture,
   compactCenter,
@@ -239,6 +246,7 @@ function PreviewPanDraft({
   blocked: boolean;
   cropMessage: string | undefined;
   guide: boolean;
+  onAir: boolean;
   resizable: boolean;
   sourcePicture: SourcePicture | undefined;
   compactCenter: boolean;
@@ -264,6 +272,10 @@ function PreviewPanDraft({
       : fullJpegRect({ ...picture, x: 0, y: 0 }, sourcePicture.geometry.activeRect);
   const plateAspect = width / height;
   const crop = liveCropWindow(plateAspect, sourceAspect, focus);
+  const cropLeft = `${crop.x * 100}%`;
+  const cropTop = `${crop.y * 100}%`;
+  const cropRight = `${(crop.x + crop.width) * 100}%`;
+  const cropBottom = `${(crop.y + crop.height) * 100}%`;
   const travelX = Math.max(0, 1 - crop.width);
   const travelY = Math.max(0, 1 - crop.height);
   const horizontal = travelX > 1e-6;
@@ -277,8 +289,12 @@ function PreviewPanDraft({
           ? 'Drag or use the up and down arrows.'
           : 'The image fits this plate.';
   const resizeHint = resizable ? ' Drag a corner to resize.' : '';
+  const updateHint = onAir
+    ? 'Press Update on air to apply this crop.'
+    : 'Press Update to save this crop for Take.';
+  const label = state === 'saved' && onAir ? 'Crop applied' : CROP_LABEL[state];
   const description = guide
-    ? `${instructions}${resizeHint} ${sourcePicture === undefined ? 'The guide uses bars.' : 'This is the decoded source picture.'} Press Update to save this crop for Take.`
+    ? `${instructions}${resizeHint} ${sourcePicture === undefined ? 'The guide uses bars.' : 'This is the decoded source picture.'} ${updateHint}`
     : `${instructions}${resizeHint} Press Update to keep this practice crop in this console. ${cropMessage ?? 'Practice changes stay in Preview.'}`;
 
   function pointerFocus(origin: PointerOrigin, x: number, y: number): LiveCropFocus {
@@ -414,11 +430,20 @@ function PreviewPanDraft({
           }}
         >
           <span
+            className="cg-pan-draft__excluded"
+            style={{
+              clipPath: `polygon(evenodd,
+                0 0, 100% 0, 100% 100%, 0 100%, 0 0,
+                ${cropLeft} ${cropTop}, ${cropRight} ${cropTop}, ${cropRight} ${cropBottom},
+                ${cropLeft} ${cropBottom}, ${cropLeft} ${cropTop})`,
+            }}
+          />
+          <span
             className="cg-pan-draft__crop"
             data-pan-practice-crop=""
             style={{
-              left: `${crop.x * 100}%`,
-              top: `${crop.y * 100}%`,
+              left: cropLeft,
+              top: cropTop,
               width: `${crop.width * 100}%`,
               height: `${crop.height * 100}%`,
             }}
@@ -471,7 +496,7 @@ function PreviewPanDraft({
       <span className="cg-pan-draft__label">
         <Icon icon={Move} size={13} />
         <span role="status">
-          {sourcePicture !== undefined && state === 'ready' ? 'Source picture' : CROP_LABEL[state]}
+          {sourcePicture !== undefined && state === 'ready' ? 'Source picture' : label}
         </span>
         <bdi>{plateId}</bdi>
       </span>

@@ -321,7 +321,12 @@
         "en": "This section tracks outstanding acceptance checks and features still in progress."
       },
       "features": [],
-      "fixes": [],
+      "fixes": [
+        {
+          "fa": "در Pan، بخش انتخاب‌شده واضح است و شطرنجی بیرون کادر قرار می‌گیرد. Update on air برش را روی همان ورودیِ در حال پخش اعمال می‌کند.",
+          "en": "Pan keeps the selected pixels clear and marks the excluded area with checkerboard. Update on air applies the crop to the playing input."
+        }
+      ],
       "planned": [
         {
           "fa": "روی خروجی PGM ایستگاه Playout، نمایش عنوان و شکل روی قاب، حفظ اتصال ورودی هنگام تغییر پریست، ماسک و Revert و پس‌زمینهٔ قاب بررسی شوند.",

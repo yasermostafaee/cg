@@ -517,11 +517,12 @@ const PreviewPlateCropEditSchema = PreviewPlateCropTargetSchema.pick({
 }).extend({ lookId: z.string().min(1).optional() });
 export type PreviewPlateCropEdit = z.infer<typeof PreviewPlateCropEditSchema>;
 
-/** Inspect the next Take's crop targets, or save an atomic Inspector batch without sending AMCP. */
+/** Inspect and save an Inspector crop batch. The on-air action is opt-in. */
 export const StackPreviewPlateCropChannel = defineChannel(
   'stack.preview-plate-crop',
   z.object({
     itemId: IdSchema,
+    allowOnAir: z.literal(true).optional(),
     edit: PreviewPlateCropTargetSchema.pick({ token: true, focus: true }).optional(),
     edits: z.array(PreviewPlateCropEditSchema).min(1).max(MAX_PREVIEW_PLATE_CROPS).optional(),
   }),

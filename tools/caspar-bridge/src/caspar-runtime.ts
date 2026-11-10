@@ -428,6 +428,19 @@ interface PgmCropCandidate {
   box: NormalizedRect;
 }
 
+interface PreviewPlateCropResult {
+  ok: boolean;
+  targets: PreviewPlateCropTarget[];
+  applied?: string[];
+  message?: string;
+}
+
+interface SavedCropEdit {
+  lookId: string | undefined;
+  plateId: string;
+  focus: LiveCropFocus;
+}
+
 function cropKey(lookId: string | undefined, plateId: string): string {
   return (lookId ?? '') + '\u001f' + plateId;
 }
@@ -682,6 +695,21 @@ function isSeatUnchanged(
     adoptionKey(prior.slot) === adoptionKey(placement.slot) &&
     liveSeatId(prior) === placement.seatId &&
     prior.producer === placement.producerArg
+  );
+}
+
+function isSameVisibleCropSeat(
+  before: LiveLayerRecord | undefined,
+  next: LivePlatePlacement,
+): before is LiveLayerRecord {
+  return (
+    isSeatUnchanged('switch', before, next) &&
+    before.sourceId === next.plateId &&
+    before.held !== true &&
+    !next.held &&
+    before.revealOverlay === next.revealOverlay &&
+    before.epoch === next.epoch &&
+    sameMixerRect(before.clip, next.fit.clip, 1e-8)
   );
 }
 
@@ -7770,7 +7798,7 @@ export class CasparRuntime {
      * is a parameter of its own rather than read off `scope`.
      */
     levelTwo: LevelTwoSource,
-    proposedCrop?: { plateId: string; focus: LiveCropFocus },
+    proposedCrops?: ReadonlyMap<string, LiveCropFocus>,
   ): LiveSeatingPlan {
     const templateId = this.#reconciler.get(itemId)?.templateId ?? itemId;
     // `CHANNEL-TEMPLATES-01` — the carrier of the version the row's channel lists.
@@ -8094,10 +8122,9 @@ export class CasparRuntime {
         stagedCrop?.focus ?? lookPlateFocuses(carrier, frame.lookId)[frame.plateId];
       const currentFocus =
         landedFocus === undefined ? savedFocus : { ...savedFocus, ...landedFocus };
+      const proposedFocus = frame.lookId === lookId ? proposedCrops?.get(frame.plateId) : undefined;
       const cropFocus =
-        frame.lookId === lookId && proposedCrop?.plateId === frame.plateId
-          ? { ...currentFocus, ...proposedCrop.focus }
-          : currentFocus;
+        proposedFocus === undefined ? currentFocus : { ...currentFocus, ...proposedFocus };
       const continuousFit = this.liveSourceFitFor({ ...fitInput, cropFocus });
       if (token !== undefined && cropAspect !== null && aspect.aspect !== null) {
         previewCropTargets.push({
@@ -8110,9 +8137,9 @@ export class CasparRuntime {
           ...(stagedCrop !== undefined && landedFocus === undefined && { staged: true }),
         });
       }
-      // The legacy on-air drag must keep every seated clip, including a pre-upgrade one.
+      // An on-air crop must keep every seated clip, including a pre-upgrade one.
       const prior =
-        proposedCrop === undefined
+        proposedCrops === undefined
           ? undefined
           : currentSeats.find((record) => liveSeatId(record) === seat.producerArg);
       const keepContinuous =
@@ -9134,7 +9161,7 @@ export class CasparRuntime {
     itemId: string,
     edit?: Pick<PreviewPlateCropEdit, 'token' | 'focus'>,
     edits?: readonly PreviewPlateCropEdit[],
-  ): { ok: boolean; targets: PreviewPlateCropTarget[]; applied?: string[]; message?: string } {
+  ): PreviewPlateCropResult {
     const item = this.#reconciler.get(itemId);
     const slot = this.#slots.get(itemId);
     if (item == null || slot === undefined) {
@@ -9174,10 +9201,7 @@ export class CasparRuntime {
     }
     const looks = this.#templates.getOn(slot.channel, item.templateId)?.liveSources?.looks;
     const plans = new Map([[activeLookId, activePlan]]);
-    const accepted = new Map<
-      string,
-      { lookId: string | undefined; plateId: string; focus: LiveCropFocus }
-    >();
+    const accepted = new Map<string, SavedCropEdit>();
     for (const draft of drafts) {
       const lookId = draft.lookId ?? activeLookId;
       if (draft.lookId !== undefined && !looks?.some(({ id }) => id === lookId)) {
@@ -9203,26 +9227,244 @@ export class CasparRuntime {
       });
     }
 
-    // All tokens refer to this row's current inputs and geometry. Commit the batch in one write.
+    const saved = this.#savePreviewPlateCrops(itemId, targets, accepted);
+    return edits === undefined ? saved : { ...saved, applied: [...accepted.keys()] };
+  }
+
+  #savePreviewPlateCrops(
+    itemId: string,
+    targets: readonly PreviewPlateCropTarget[],
+    accepted: ReadonlyMap<string, SavedCropEdit>,
+  ): PreviewPlateCropResult {
     const prior = this.#previewPlateCrops.get(itemId) ?? [];
     const crops = [
       ...prior.filter(({ token }) => !accepted.has(token)),
       ...Array.from(accepted, ([token, { focus }]) => ({ token, focus })),
     ];
     this.#previewPlateCrops.set(itemId, crops.slice(-MAX_PREVIEW_PLATE_CROPS));
-    // A saved off-air crop supersedes an older PGM pan from a previous take of that plate.
+    // A saved Inspector crop supersedes an older relative PGM pan for the same plate.
     const liveCrops = this.#liveCropFocuses.get(itemId);
     for (const { lookId, plateId } of accepted.values())
       liveCrops?.delete(cropKey(lookId, plateId));
     this.#markDirty(itemId);
     return {
       ok: true,
-      ...(edits !== undefined && { applied: [...accepted.keys()] }),
       targets: targets.map((entry) => {
         const crop = accepted.get(entry.token);
         return crop === undefined ? entry : { ...entry, focus: crop.focus, staged: true };
       }),
     };
+  }
+
+  #liveCropRecords(itemId: string): readonly LiveLayerRecord[] | undefined {
+    const item = this.#reconciler.get(itemId);
+    if (
+      item === null ||
+      item.pending ||
+      item.status === 'exiting' ||
+      !isOnAirStatus(item) ||
+      this.#pendingRestore.has(itemId) ||
+      this.#restoreBlocked.has(itemId) ||
+      this.#adapter.primarySession.state !== 'healthy'
+    ) {
+      return undefined;
+    }
+    return this.#liveLayers.get(itemId);
+  }
+
+  #isVerifiedCropSlot(slot: CommandSlot): boolean {
+    const key = adoptionKey(slot);
+    return !this.#unverifiedLive.has(key) && !this.#emptiedLayers.has(key);
+  }
+
+  #livePreviewCropRow(itemId: string) {
+    const slot = this.#slots.get(itemId);
+    const records = this.#liveCropRecords(itemId);
+    if (slot === undefined || records === undefined) return undefined;
+    const lookId = this.activeLookId(itemId);
+    const plan = this.#planLiveSeating(itemId, slot, lookId, 'already-live', 'pinned', new Map());
+    if (!plan.ok) return undefined;
+    const targets = plan.previewCropTargets.filter(({ plateId, sourceId }) => {
+      const visible = records.filter((record) => record.sourceId === plateId && !record.held);
+      const placements = plan.placements.filter((placement) => placement.plateId === plateId);
+      return (
+        placements.some(
+          (placement) => placement.source.id === sourceId && !placement.revealOverlay,
+        ) &&
+        placements.length === visible.length &&
+        placements.every((placement) => {
+          const before = visible.find((record) => liveSeatId(record) === placement.seatId);
+          return (
+            isSameVisibleCropSeat(before, placement) &&
+            this.#isVerifiedCropSlot(before.slot) &&
+            sameMixerRect(before.fill, placement.fit.fill, 1e-8)
+          );
+        })
+      );
+    });
+    return { slot, records, lookId, targets };
+  }
+
+  async previewPlateCropOnAir(
+    itemId: string,
+    edits?: readonly PreviewPlateCropEdit[],
+  ): Promise<PreviewPlateCropResult> {
+    if (edits === undefined) {
+      const row = this.#livePreviewCropRow(itemId);
+      return row === undefined
+        ? { ok: false, targets: [], message: 'This row is not ready for on-air framing.' }
+        : { ok: true, targets: row.targets };
+    }
+
+    const result = await this.#audited<
+      Omit<PreviewPlateCropResult, 'ok'> & {
+        accepted: boolean;
+        errorCode?: string;
+        command?: string;
+      }
+    >('pan-live-plate', this.#itemDetail(itemId), () =>
+      this.#withLiveSeatLock(itemId, async () => {
+        const row = this.#livePreviewCropRow(itemId);
+        const targets = row?.targets ?? [];
+        const stale = {
+          accepted: false,
+          errorCode: 'stale-plate-crop',
+          targets,
+          message: 'The on-air plate changed. Frame its current input on Preview.',
+        };
+        if (row === undefined) return stale;
+        if (edits.length === 0 || edits.length > MAX_PREVIEW_PLATE_CROPS) {
+          return {
+            ...stale,
+            message: 'The Inspector crop update has an invalid size.',
+          };
+        }
+        const accepted = new Map<string, SavedCropEdit>();
+        const focuses = new Map<string, LiveCropFocus>();
+        for (const edit of edits) {
+          const target = targets.find(({ token }) => token === edit.token);
+          if (
+            target === undefined ||
+            (edit.lookId !== undefined && edit.lookId !== row.lookId) ||
+            accepted.has(edit.token)
+          )
+            return stale;
+          const focus = { ...target.focus, ...edit.focus };
+          accepted.set(edit.token, { lookId: row.lookId, plateId: target.plateId, focus });
+          focuses.set(target.plateId, focus);
+        }
+        const plan = this.#planLiveSeating(
+          itemId,
+          row.slot,
+          row.lookId,
+          'already-live',
+          'pinned',
+          focuses,
+        );
+        if (!plan.ok) return stale;
+        const placements = plan.placements.filter(({ plateId }) => focuses.has(plateId));
+        const visible = row.records.filter(({ sourceId, held }) => focuses.has(sourceId) && !held);
+        if (placements.length !== visible.length) return stale;
+        const applied = await this.#applySeatedCropGeometry(itemId, placements, row.records);
+        if (!applied.ok) {
+          return {
+            accepted: false,
+            errorCode: applied.errorCode ?? 'amcp-error',
+            ...(applied.command !== undefined && { command: applied.command }),
+            targets,
+            message: applied.message ?? 'CasparCG could not apply the crop.',
+          };
+        }
+        const saved = this.#savePreviewPlateCrops(itemId, targets, accepted);
+        return { accepted: true, targets: saved.targets, applied: [...accepted.keys()] };
+      }),
+    );
+    return {
+      ok: result.accepted,
+      targets: result.targets,
+      ...(result.applied !== undefined && { applied: result.applied }),
+      ...(result.message !== undefined && { message: result.message }),
+    };
+  }
+
+  async #applySeatedCropGeometry(
+    itemId: string,
+    placements: readonly LivePlatePlacement[],
+    baseline: readonly LiveLayerRecord[],
+  ): Promise<LivePlateApplyResult> {
+    const primary = this.#adapter.currentPrimary;
+    const generation = this.#amcpGeneration;
+    const sameEngine = () =>
+      this.#adapter.currentPrimary === primary && this.#amcpGeneration === generation;
+    const stillSeated = () =>
+      sameEngine() &&
+      this.#liveCropRecords(itemId) === baseline &&
+      placements.every(({ slot }) => this.#isVerifiedCropSlot(slot));
+    const rowLeft = { ok: false, errorCode: 'not-live', message: ROW_LEFT_AIR_MID_SWITCH };
+    const priorBySeat = new Map(baseline.map((record) => [liveSeatId(record), record]));
+    const changed = new Map<LiveLayerRecord, NormalizedRect>();
+    for (const placement of placements) {
+      const before = priorBySeat.get(placement.seatId);
+      if (!isSameVisibleCropSeat(before, placement)) return rowLeft;
+      if (!sameMixerRect(before.fill, placement.fit.fill, 1e-8))
+        changed.set(before, placement.fit.fill);
+    }
+
+    // Every existing clip was checked above. Only FILL moves, so this operation
+    // stays out of the channel's shared DEFER buffer and leaves other verbs alone.
+    const touched: LiveLayerRecord[] = [];
+    let landed = false;
+    try {
+      for (const [before, fill] of changed) {
+        if (!stillSeated()) return rowLeft;
+        const [line] = this.#builder.mixerFit(before.slot, { fill, clip: before.clip });
+        touched.push(before);
+        const sent = await this.#send(line, this.#nextSeq(), 'urgent');
+        if (!sent.ok || !sent.onPrimary) {
+          return {
+            ok: false,
+            errorCode: sent.errorCode ?? 'amcp-error',
+            ...(sent.command !== undefined && { command: sent.command }),
+          };
+        }
+      }
+      if (!stillSeated()) return rowLeft;
+      if (changed.size > 0) {
+        this.#liveLayers.set(
+          itemId,
+          baseline.map((record) => {
+            const fill = changed.get(record);
+            return fill === undefined ? record : { ...record, fill };
+          }),
+        );
+        this.#publishLiveLayers();
+      }
+      landed = true;
+      return { ok: true };
+    } finally {
+      if (!landed) {
+        for (const before of touched) {
+          if (!sameEngine()) break;
+          const current = this.#liveLayers
+            .get(itemId)
+            ?.find((record) => adoptionKey(record.slot) === adoptionKey(before.slot));
+          if (
+            current === undefined ||
+            !this.#isVerifiedCropSlot(current.slot) ||
+            current.held === true ||
+            current.producer !== before.producer ||
+            current.sourceId !== before.sourceId ||
+            current.epoch !== before.epoch ||
+            liveSeatId(current) !== liveSeatId(before) ||
+            !sameMixerRect(before.clip, current.clip) ||
+            !sameMixerRect(before.fill, current.fill)
+          )
+            continue;
+          const [line] = this.#builder.mixerFit(current.slot, current);
+          await this.#send(line, this.#nextSeq(), 'urgent');
+        }
+      }
+    }
   }
 
   async pgmPlateCrop(
@@ -9273,10 +9515,14 @@ export class CasparRuntime {
         };
         const lookId = this.activeLookId(itemId);
         const plateId = record.sourceId;
-        const plan = this.#planLiveSeating(itemId, slot, lookId, 'already-live', 'pinned', {
-          plateId,
-          focus,
-        });
+        const plan = this.#planLiveSeating(
+          itemId,
+          slot,
+          lookId,
+          'already-live',
+          'pinned',
+          new Map([[plateId, focus]]),
+        );
         if (!plan.ok) return stale;
         const placements = [...plan.placements, ...plan.parked];
         const priorBySeat = new Map(records.map((seat) => [liveSeatId(seat), seat]));

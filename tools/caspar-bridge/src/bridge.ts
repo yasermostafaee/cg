@@ -5163,8 +5163,19 @@ export function buildRoutes(
       StackPreviewPlateCropChannel,
       'operator',
       'operator',
-      (r: ChannelRequest<typeof StackPreviewPlateCropChannel>) =>
-        b.previewPlateCrop(r.itemId, r.edit, r.edits),
+      (r: ChannelRequest<typeof StackPreviewPlateCropChannel>) => {
+        if (r.allowOnAir === true) {
+          if (r.edit !== undefined) {
+            return {
+              ok: false,
+              targets: [],
+              message: 'Use Inspector Update to apply this crop on air.',
+            };
+          }
+          return b.previewPlateCropOnAir(r.itemId, r.edits);
+        }
+        return b.previewPlateCrop(r.itemId, r.edit, r.edits);
+      },
     ),
     /*
       `MEDIA-PLATES-01` §1.D — Play/Pause and Restart for one media plate of an on-air row. It names

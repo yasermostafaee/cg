@@ -5,4 +5,5 @@ preview-only fact; it never mutes or restores the CasparCG layer and does not ga
 and its mute/interlock remain available for older clients. Keep local rendering, pending Inspector
 state, and the Bridge's applied row data separate. The Take path uses applied data. Keep preview
 through Play, Stop and Clear while the row remains bound. Preserve on-air eligibility and ownership
-rules, including the off-air save requirement for a Pan crop.
+rules. Off-air Update saves a Pan crop for Take. The explicit Update on air path can apply a
+verified crop to an existing seat under the Pan routing contract.

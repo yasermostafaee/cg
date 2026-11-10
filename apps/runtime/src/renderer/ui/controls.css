@@ -528,14 +528,27 @@
   overflow: hidden;
   background-size: 100% 100%;
 }
+.cg-pan-draft__excluded {
+  position: absolute;
+  inset: 0;
+  --cg-pan-checker-size: calc(12px * var(--cg-pan-ui-scale, 1));
+  --cg-pan-checker-light: color-mix(in srgb, var(--r-text-muted) 42%, transparent);
+  background: conic-gradient(
+      var(--r-preview-crop-shade) 25%,
+      var(--cg-pan-checker-light) 0 50%,
+      var(--r-preview-crop-shade) 0 75%,
+      var(--cg-pan-checker-light) 0
+    )
+    0 0 / var(--cg-pan-checker-size) var(--cg-pan-checker-size);
+  pointer-events: none;
+}
 .cg-pan-draft__crop {
   position: absolute;
   box-sizing: border-box;
   border: 3px solid var(--r-accent);
   box-shadow:
     inset 0 0 0 1px var(--r-video-ground),
-    0 0 0 1px var(--r-video-ground),
-    0 0 0 100vmax var(--r-preview-crop-shade);
+    0 0 0 1px var(--r-video-ground);
   pointer-events: none;
 }
 .cg-pan-draft__corner {

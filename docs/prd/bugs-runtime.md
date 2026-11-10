@@ -14094,3 +14094,9 @@ outline for missing assignments. Show Crop edges below the plate name when the a
 **Repro / Actual:** Intermittently after pressing layer Play, a warning appears briefly and the button loses green even though the graphic remains on air. The warning disappears too quickly to identify and the report is intermittent; correlate the next occurrence with row/channel, build, Bridge audit and Core events.
 
 **Expected / regression:** WHEN a Take succeeds and the owned producer is still on air THEN the row reflects the confirmed state. WHEN confirmation or output is lost THEN show the evidenced state and retain a diagnosable reason. Reproduce the exact warning and state transition before changing on-air logic.
+
+## [~] B-433 — Pan obscures the selection and Update on air leaves PGM unchanged ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/pan-live-input-focus/`
+
+**Repro / Actual:** Open PVW Pan for a live Crop edges plate. The operator cannot readily distinguish the selected source region from the excluded picture. Drag or resize and press Update on air. The crop is treated as browser practice or skipped, so programme framing remains unchanged.
+
+**Expected / regression:** WHEN the operator edits a crop THEN the chosen source pixels remain clear and the checkerboard marks the outside. WHEN Update on air commits a verified crop THEN the same seated source reframes inside its current plate. Verify this in Chromium and on the AMCP wire, including no write during dragging and no on-air write from off-air Update.

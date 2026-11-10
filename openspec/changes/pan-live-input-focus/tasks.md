@@ -93,3 +93,12 @@
       verified no AMCP on Update and the matching hidden FILL with the original CLIP on first Take.
 - [x] 9.5 Verify the carrying [Linux Playwright E2E](https://github.com/yasermostafaee/cg/actions/runs/42873144431/job/130029489197) on `c560f8cd`.
 - [ ] 9.6 Verify a resized crop on first Take on the target station.
+
+## 10. Pan selection and Update on air (B-433)
+
+- [x] 10.1 Keep the selected source clear and draw checkerboard outside the crop. Chromium verified
+      the selected and excluded JPEG pixels.
+- [x] 10.2 Apply a verified crop from Update on air to the existing seat. Chromium and Bridge
+      verified the first Take, the live FILL, the retained clip and transport, and refusal rollback.
+- [ ] 10.3 Record the carrying Linux Playwright run.
+- [ ] 10.4 Verify the crop on the target station.

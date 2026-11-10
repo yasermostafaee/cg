@@ -58,16 +58,22 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it('R-117 commits on-air fields and retains the guide crop for an off-air Update', async () => {
+it('B-433 commits on-air fields and explicitly applies the guide crop to the live row', async () => {
   const { update, previewPlateCrop } = bridge();
+  previewPlateCrop.mockResolvedValue({ ok: true, targets: [], applied: [guide.token] });
   stageField(itemId, ['title'], 'after');
   stagePreviewCrop(itemId, guide, baseline);
   stagePreviewCrop(itemId, practice, baseline);
 
   await expect(applyDraft({ ...row, status: 'on-air' })).resolves.toMatchObject({ accepted: true });
   expect(update).toHaveBeenCalledWith({ itemId, fields: { title: 'after' }, mergeMode: 'merge' });
-  expect(previewPlateCrop).not.toHaveBeenCalled();
-  expect(previewCropDraftOf(itemId, guide.key)).toEqual(guide);
+  expect(previewPlateCrop).toHaveBeenCalledTimes(1);
+  expect(previewPlateCrop).toHaveBeenCalledWith({
+    itemId,
+    allowOnAir: true,
+    edits: [{ token: guide.token, focus: guide.focus, lookId: guide.lookId }],
+  });
+  expect(previewCropDraftOf(itemId, guide.key)).toBeUndefined();
   expect(appliedPracticeCropOf(itemId, practice.key)).toEqual(practice.focus);
 });
 

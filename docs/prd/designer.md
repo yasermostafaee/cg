@@ -6037,9 +6037,10 @@ Playout; the client must not invent a vendor-specific capture endpoint.
 
 **What:** In CG Control, choose the visible region of an input inside its plate in PVW. Move the crop within the source and resize it from its corners to select a smaller region.
 Preserve the authored plate, its aspect ratio, title and input assignment. Drag and
-Center stage a draft for the same row, look, plate and input. The draft survives OFF PVW. Update
-saves it for Take, including when PVW is off. Discard restores the last applied position. Take
-applies the saved position before the first on-air frame. Absent focus centres a cover crop.
+Center stage a draft for the same row, look, plate and input. The draft survives OFF PVW. Off-air
+Update saves it for Take, including when PVW is off. Update on air applies it to the current verified
+plate without restarting its source. Discard restores the last applied position. Take applies a saved
+crop before the first on-air frame. Absent focus centres a cover crop.
 
 **Implementation**
 
@@ -6052,9 +6053,10 @@ or crop overlays.
 
 **Crop workspace**
 
-Show the whole source picture or guide inside its plate in PVW. Outline the portion
-shown by the plate in blue with a dark edge for contrast, move the outline continuously during a
-drag and offer Centre at a readable screen size independent of the monitor fit.
+Show the whole source picture or guide inside its plate in PVW. Keep the selected picture clear,
+place the checkerboard outside the selection and outline the crop in blue with a dark edge for
+contrast. Move the outline continuously during a drag and offer Centre at a readable screen size
+independent of the monitor fit.
 The source image and crop window retain their own aspect ratios. A 16:9 crop on a 4:3 source
 uses the source width and moves vertically at the default crop. Corner handles keep the plate ratio
 and resize around the opposite corner, bounded by the full picture and a supported maximum zoom.
@@ -6066,8 +6068,8 @@ geometry cancels the active drag and preserves drafts for their valid Take targe
 
 The [2.18.17 handoff](../integration/playout/source-previews-2.18.17-adoption.md) supplies the
 separate source JPEG and its active rectangle, transform and measured sample aspect ratio. Verify
-the full PVW picture, saved position and crop size and the first on-air fit on the target station. The legacy C-023 MJPEG
-does not have this mapping.
+the PVW selection, saved position and size, the first on-air fit, and in-place Update on air on the
+target station. The legacy C-023 MJPEG does not have this mapping.
 If PGM Pan is revisited, an equivalent in-place editor needs a read of the already-running source
 before the programme mix and crop, without opening a second receiver.
 

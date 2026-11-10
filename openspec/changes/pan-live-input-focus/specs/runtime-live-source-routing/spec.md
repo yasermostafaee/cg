@@ -42,6 +42,7 @@ return without Pan controls or crop guides.
 #### Scenario: The crop guide moves smoothly over the source
 
 - **WHEN** the operator opens Pan in PVW **THEN** the complete available source picture or Bars guide and current crop are visible inside the plate
+- **AND** the selected source pixels remain clear while checkerboard marks the excluded area
 - **WHEN** the operator drags the guide **THEN** it follows the pointer locally without a Bridge command
 - **WHEN** the operator presses `Center` **THEN** the crop guide returns to the centre of the source picture or Bars guide at its current size
 
@@ -91,11 +92,11 @@ Bars SHALL remain available when those checks do not pass.
 - **THEN** Pan shows Bars for that plate
 - **AND** a verified Take target can still accept normalized framing from the guide
 
-### Requirement: A verified PVW crop reaches the matching Take
+### Requirement: A verified PVW crop applies to the matching source
 
-CG Control SHALL allow staging a normalized crop for an off-air rehearsing row with a visible
-cover-fit plate and known source geometry. Bridge SHALL persist it with the row, matching its
-look, plate, source and geometry before applying it. A legacy rehearsal requires leaving PVW before Take. Independent browser-only PVW may stay open; only an off-air Update saves a Pan crop for Take.
+CG Control SHALL allow staging a normalized crop for a row on PVW with a visible cover-fit plate
+and known source geometry. Bridge SHALL match its look, plate, source and geometry before applying
+it. A legacy rehearsal requires leaving PVW before Take. Independent browser-only PVW may stay open.
 
 #### Scenario: A staged crop is the first fit applied on air
 
@@ -105,6 +106,15 @@ look, plate, source and geometry before applying it. A legacy rehearsal requires
 - **WHEN** the operator discards the draft **THEN** the last applied crop is restored
 - **WHEN** the operator clicks Update on the off-air row **THEN** Bridge validates and saves its crop drafts together without a mixer or producer command
 - **WHEN** the operator leaves PVW and takes the row **THEN** the first hidden FILL uses the saved crop before the producer becomes visible
+
+#### Scenario: Update on air applies the staged crop to programme
+
+- **GIVEN** the PVW row also owns the verified live cover-fit plate in PGM
+- **WHEN** the operator drags or resizes the crop **THEN** it becomes an Inspector draft without changing the programme
+- **WHEN** the operator presses Update on air **THEN** the seated source is reframed inside its existing clip without a producer restart or volume change
+- **AND** the Inspector clears the crop draft only after Bridge confirms it
+- **WHEN** the row, preset, input or seat has changed or the engine refuses the crop **THEN** Bridge reports the refusal and CG Control keeps the draft
+- **WHEN** Pan stays open across a Take **THEN** it checks the seated source as soon as the row settles
 
 #### Scenario: An unavailable or stale crop cannot affect another input
 

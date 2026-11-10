@@ -248,7 +248,16 @@ test('D-178 — practice keeps the full source and each plate aspect across both
     const shiftX = axis === 'horizontal' ? (full.width - window.width) / 4 : full.width / 4;
     const shiftY = axis === 'vertical' ? (full.height - window.height) / 4 : full.height / 4;
     const activeKey = axis === 'horizontal' ? 'x' : 'y';
-    const fixedKey = axis === 'horizontal' ? 'y' : 'x';
+    const activeSide = axis === 'horizontal' ? 'left' : 'top';
+    const fixedSide = axis === 'horizontal' ? 'top' : 'left';
+    const readCrop = () =>
+      crop.evaluate(({ style }) => ({
+        left: style.left,
+        top: style.top,
+        width: style.width,
+        height: style.height,
+      }));
+    const initialCrop = await readCrop();
     await page.mouse.move(x, y);
     await page.mouse.down();
     await page.mouse.move(x + shiftX, y + shiftY);
@@ -256,10 +265,11 @@ test('D-178 — practice keeps the full source and each plate aspect across both
       .poll(async () => (await crop.boundingBox())?.[activeKey])
       .toBeGreaterThan(window[activeKey] + 1);
     await page.mouse.up();
-    const moved = await crop.boundingBox();
-    expect(moved?.[fixedKey]).toBeCloseTo(window[fixedKey], 2);
-    expect(moved?.width).toBeCloseTo(window.width, 2);
-    expect(moved?.height).toBeCloseTo(window.height, 2);
+    expect(await readCrop()).toMatchObject({
+      [fixedSide]: initialCrop[fixedSide],
+      width: initialCrop.width,
+      height: initialCrop.height,
+    });
     expect(await picture.boundingBox()).toEqual(full);
 
     const center = practice
@@ -269,9 +279,7 @@ test('D-178 — practice keeps the full source and each plate aspect across both
     expect(centerBox?.height).toBeGreaterThanOrEqual(23.9);
     expect(centerBox?.width).toBeGreaterThanOrEqual(28);
     await center.click();
-    await expect
-      .poll(async () => (await crop.boundingBox())?.[activeKey])
-      .toBeCloseTo(window[activeKey], 2);
+    await expect.poll(async () => (await readCrop())[activeSide]).toBe(initialCrop[activeSide]);
   }
   await expect(airCount).toHaveText(initialAirCount);
   await preview.click();
@@ -486,6 +494,36 @@ test('D-178 / B-426 — measured JPEG crop uses the assigned aspect and cancels 
   await expect(picture).toBeVisible();
   await expect(picture).toHaveCSS('background-size', '350px 350px');
   await expect(picture).toHaveCSS('background-position', '0px -76.5625px');
+  const crop = handle.locator('[data-pan-practice-crop]');
+  const [pictureBox, cropBox] = await Promise.all([picture.boundingBox(), crop.boundingBox()]);
+  if (pictureBox === null || cropBox === null) throw new Error('The source or crop is missing');
+  const screenshot = await picture.screenshot({ scale: 'css' });
+  const { selected, excluded } = await page.evaluate(
+    async ({ png, y, selectedX, excludedEnd }) => {
+      const image = new Image();
+      image.src = `data:image/png;base64,${png}`;
+      await image.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(image, 0, 0);
+      const red = (x: number) => ctx.getImageData(x, y, 1, 1).data[0]!;
+      return {
+        selected: red(selectedX),
+        excluded: Array.from({ length: excludedEnd - 4 }, (_, i) => red(4 + i)),
+      };
+    },
+    {
+      png: screenshot.toString('base64'),
+      y: Math.floor(cropBox.y - pictureBox.y + cropBox.height / 2),
+      selectedX: Math.floor(cropBox.x - pictureBox.x + cropBox.width / 2),
+      excludedEnd: Math.floor(cropBox.x - pictureBox.x) - 4,
+    },
+  );
+  expect(selected).toBeGreaterThan(245);
+  expect(Math.max(...excluded)).toBeLessThan(selected - 30);
+  expect(Math.max(...excluded) - Math.min(...excluded)).toBeGreaterThan(25);
   const original = await picture.evaluate((el) => {
     el.dataset['probe'] = 'same-gesture';
     return el.style.backgroundImage;
