@@ -481,6 +481,51 @@ describe('R-066 — the `auth` frame is the FIRST thing on a connected socket', 
     expect(bridge.socket().closeCalls).toBe(1);
   });
 
+  it('R-098 a Playout sign-in completing during reconnect cannot send its token before local mode is verified', async () => {
+    const bridge = new FakeBridge();
+    bridge.capabilities = playoutCapabilities();
+    const runtime = start(bridge, 'ws://127.0.0.1:5280');
+    bridge.socket(0).open();
+    await settle();
+
+    const pending: { answer?: (response: Response) => void } = {};
+    globalThis.fetch = () =>
+      new Promise((resolve) => {
+        pending.answer = resolve;
+      });
+    const signingIn = runtime.auth.signIn('operator', 'test-password');
+    await settle();
+    expect(pending.answer).toBeDefined();
+
+    bridge.socket(0).drop();
+    bridge.capabilities = null;
+    await vi.advanceTimersByTimeAsync(RECONNECT_DELAY_MS);
+    bridge.socket(1).open();
+    await settle();
+    pending.answer?.(
+      new Response(
+        JSON.stringify({
+          access_token: 'jwt-just-issued',
+          refresh_token: 'new-refresh-token',
+          expires_in: TOKEN_LIFE_MS / 1000,
+        }),
+      ),
+    );
+    await settle();
+    expect(storage.getItem(SESSION_KEY)).toContain('jwt-just-issued');
+    expect(wireOf(bridge)).toEqual([ipc.BridgeCapabilitiesChannel.name]);
+
+    bridge.answerLate(ipc.BridgeCapabilitiesChannel.name, {
+      channels: [],
+      auth: 'off',
+      stationMode: 'standalone',
+    });
+    await settle();
+    await signingIn;
+    expect(wireOf(bridge)).toEqual([ipc.BridgeCapabilitiesChannel.name]);
+    expect(bridge.socket(1).closeCalls).toBe(1);
+  });
+
   it('with NO session in storage writes no `auth` frame — and still asks the handshake', async () => {
     /*
       The control for the spec above. Without the second half it would pass against a runtime

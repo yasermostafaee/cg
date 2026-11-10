@@ -394,6 +394,8 @@ export class WebSocketRuntime implements RuntimeBridge {
    */
   #advertisedSignInUrl: string | null = null;
   #ws: WebSocketLike | null = null;
+  /** This socket may receive Playout credentials. Local sockets must identify their mode first. */
+  #tokenSocket: WebSocketLike | null = null;
   #status: BridgeLinkStatus = 'disconnected';
   #everOpened = false;
   #disposed = false;
@@ -725,22 +727,24 @@ export class WebSocketRuntime implements RuntimeBridge {
       // A local Playout record may predate an installer switch to No Playout.
       // Read the socket's mode before presenting a cached credential there.
       this.#authHandshake = null;
+      const local = couldBeStandaloneBridge(this.#url);
+      this.#tokenSocket = local || this.#standalone ? null : ws;
       const localCapabilities =
-        this.#session !== null && couldBeStandaloneBridge(this.#url)
+        this.#session !== null && local
           ? this.#invoke(ipcChannels.BridgeCapabilitiesChannel, {})
           : null;
       if (localCapabilities !== null) {
+        const presentOnThisSocket = (): Promise<void> | undefined => {
+          if (this.#ws !== ws) return undefined;
+          this.#tokenSocket = ws;
+          return this.#presentToken();
+        };
         this.#authHandshake = localCapabilities.then(
-          (caps) => {
-            if (this.#ws === ws && caps.stationMode !== 'standalone') return this.#presentToken();
-            return undefined;
-          },
-          (err: unknown) => {
-            if (this.#ws === ws && err instanceof BridgeSkewError && err.unknownChannel) {
-              return this.#presentToken();
-            }
-            return undefined;
-          },
+          (caps) => (caps.stationMode === 'standalone' ? undefined : presentOnThisSocket()),
+          (err: unknown) =>
+            err instanceof BridgeSkewError && err.unknownChannel
+              ? presentOnThisSocket()
+              : undefined,
         );
       } else if (this.#session !== null) {
         this.#authHandshake = this.#presentToken();
@@ -1079,12 +1083,13 @@ export class WebSocketRuntime implements RuntimeBridge {
         this.#invoke(ipcChannels.BridgeCapabilitiesChannel, {}));
       // Keep auth state and snapshots behind the token answer on ordinary Playout sockets.
       if (localCapabilities !== null) await authHandshake;
-      if ((this.#standalone || localCapabilities !== null) && this.#ws !== ws) return null;
+      if (this.#ws !== ws) return null;
       if (this.#standalone ? !isStandaloneBridge(caps) : caps.stationMode === 'standalone') {
         ws?.close();
         return null;
       }
       this.#standaloneVerified = this.#standalone;
+      this.#tokenSocket = this.#standalone ? null : ws;
       const { channels } = caps;
       const routed = new Set(channels);
       /*
@@ -1225,7 +1230,12 @@ export class WebSocketRuntime implements RuntimeBridge {
    * there is no second correlation scheme to keep in step.
    */
   #sendAuthFrame(token: string): Promise<ipcChannels.AuthState> {
-    if (this.#status !== 'live' || this.#ws === null || this.#ws.readyState !== WS_OPEN) {
+    if (
+      this.#status !== 'live' ||
+      this.#ws === null ||
+      this.#ws !== this.#tokenSocket ||
+      this.#ws.readyState !== WS_OPEN
+    ) {
       return Promise.reject(new BridgeDisconnectedError());
     }
     const id = String(++this.#nextId);
