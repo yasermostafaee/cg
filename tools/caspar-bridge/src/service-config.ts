@@ -22,8 +22,10 @@ const port = z.number().int().min(1).max(65535);
 
 export const ServiceConfigSchema = z
   .object({
+    /** Absent is the existing authenticated Playout service. */
+    mode: z.enum(['playout', 'standalone']).optional(),
     /** The Playout this bridge belongs to — every console signs in there, and so does the bridge. */
-    playoutAddress: z.string().min(1),
+    playoutAddress: z.string().min(1).optional(),
     /** The CasparCG core's AMCP host. `127.0.0.1` for the core on this machine (rule 4: IPv4, never `::1`). */
     amcpHost: z.string().min(1).optional(),
     amcpPort: port.optional(),
@@ -41,7 +43,23 @@ export const ServiceConfigSchema = z
     /** Root of live UTF-8 field sources. Relative paths in templates resolve only below this. */
     textSourceRoot: z.string().min(1).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((config, ctx) => {
+    if (config.mode === 'standalone' && config.playoutAddress !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['playoutAddress'],
+        message: 'A standalone station does not have a Playout address.',
+      });
+    }
+    if (config.mode !== 'standalone' && config.playoutAddress === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['playoutAddress'],
+        message: 'A Playout station needs a Playout address.',
+      });
+    }
+  });
 
 export type ServiceConfig = z.infer<typeof ServiceConfigSchema>;
 
@@ -77,7 +95,7 @@ export function loadServiceConfig(file: string): LoadedServiceConfig {
       (err as NodeJS.ErrnoException).code === 'ENOENT' ? 'it does not exist' : describe(err);
     throw new ServiceConfigError(
       `CG Bridge cannot start: its configuration file ${absolute} cannot be read (${reason}). ` +
-        'Reinstall CG Bridge, or write the file with at least {"playoutAddress": "http://<playout>:8080"}.',
+        'Reinstall CG Bridge, or specify the Playout address or the standalone mode.',
     );
   }
   let raw: unknown;
@@ -104,25 +122,30 @@ export function loadServiceConfig(file: string): LoadedServiceConfig {
 
 /**
  * The command-line flags the file stands for, as the CLI spells them — with the service's fixed
- * choices: auth always on against the Playout (D3), the control socket on the network (consoles are
- * on other machines), and the bridge's own Playout session in the state home (rule 8).
+ * choices: authenticated network control for a Playout station and loopback-only control for an
+ * explicit standalone station.
  */
 export function serviceFlags(loaded: LoadedServiceConfig): Record<string, string | true> {
   const c = loaded.config;
-  return {
+  const common = {
     'state-home': loaded.stateHome,
-    auth: 'playout',
-    'playout-address': c.playoutAddress,
     'caspar-host': c.amcpHost ?? SERVICE_DEFAULTS.amcpHost,
     'amcp-port': String(c.amcpPort ?? SERVICE_DEFAULTS.amcpPort),
     'osc-port': String(c.oscPort ?? SERVICE_DEFAULTS.oscPort),
-    host: '0.0.0.0',
     port: String(c.controlPort ?? SERVICE_DEFAULTS.controlPort),
     'template-serve-port': String(c.templatePort ?? SERVICE_DEFAULTS.templatePort),
     ...(c.bridgeAddress !== undefined ? { 'template-serve-host': c.bridgeAddress } : {}),
     'text-source-root': c.textSourceRoot ?? path.join(loaded.stateHome, 'text-sources'),
+  };
+  if (c.mode === 'standalone') return { ...common, auth: 'off', host: '127.0.0.1' };
+  if (c.playoutAddress === undefined) throw new ServiceConfigError('Missing Playout address.');
+  return {
+    ...common,
+    auth: 'playout',
+    'playout-address': c.playoutAddress,
+    host: '0.0.0.0',
     'bridge-session-path': path.join(loaded.stateHome, '.cg-runtime', 'bridge-session.json'),
-    // A fresh CG Bridge declares no channel until a station admin picks them from a console.
+    // A fresh Playout station declares no channel until a station admin picks one.
     'first-run': true,
   };
 }
@@ -138,7 +161,9 @@ export function writeServiceConfig(file: string, updates: Partial<ServiceConfig>
   const absolute = path.resolve(file);
   let existing: Partial<ServiceConfig> = {};
   if (fs.existsSync(absolute)) existing = loadServiceConfig(absolute).config;
-  const merged: unknown = { ...existing, ...updates };
+  const merged = { ...existing, ...updates };
+  if (updates.mode === 'standalone' && updates.playoutAddress === undefined)
+    delete merged.playoutAddress;
   const parsed = ServiceConfigSchema.safeParse(merged);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];

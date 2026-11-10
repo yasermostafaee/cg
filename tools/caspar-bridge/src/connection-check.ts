@@ -889,8 +889,8 @@ function amcpLineFor(
 }
 
 /** What AMCP did, said plainly — an answer passes, and anything else is a failure in its words. */
-function amcpLine(host: string, outcome: AmcpOutcome): ConnectionCheckLine {
-  const port = String(AMCP_PORT);
+function amcpLine(host: string, outcome: AmcpOutcome, amcpPort = AMCP_PORT): ConnectionCheckLine {
+  const port = String(amcpPort);
   switch (outcome.kind) {
     case 'answered':
       return {
@@ -919,6 +919,32 @@ function amcpLine(host: string, outcome: AmcpOutcome): ConnectionCheckLine {
         text: `${host} cannot be reached on port ${port} (${outcome.code}).`,
       };
   }
+}
+
+/** R-098 — one bounded VERSION probe of the configured raw CasparCG endpoint. */
+export async function checkStandaloneCaspar(
+  server: { host: string; amcpPort: number },
+  probes: Pick<CheckProbes, 'ipv4' | 'amcp'>,
+  options: CheckOptions = {},
+): Promise<ConnectionCheckResult> {
+  const timeout = options.amcpTimeoutMs ?? AMCP_PROBE_TIMEOUT_MS;
+  const { host, amcpPort } = server;
+  const line = await within(
+    (async (): Promise<ConnectionCheckLine> => {
+      const ip = await within(
+        probes.ipv4(host),
+        options.connectMs ?? CONNECTION_CHECK_CONNECT_MS,
+        () => null,
+      );
+      if (ip === null)
+        return amcpLine(host, { kind: 'unreachable', code: 'no IPv4 address' }, amcpPort);
+      const outcome = await probes.amcp(ip, amcpPort, timeout);
+      return amcpLine(host, outcome, amcpPort);
+    })(),
+    options.lineMs ?? CONNECTION_CHECK_LINE_MS,
+    () => amcpLine(host, { kind: 'timeout' }, amcpPort),
+  );
+  return { lines: [line], localAddress: null };
 }
 
 /** `R-084` — the version line when the Playout does not answer it (unreachable, `404`, no version). */

@@ -43,7 +43,11 @@ const routedNames = (): string[] => {
     {},
     { layerPolicy: TEST_LAYER_POLICY },
   );
-  return [...buildRoutes(runtime).keys()].sort();
+  return [
+    ...buildRoutes(runtime, {
+      standaloneCheck: async () => ({ lines: [], localAddress: null }),
+    }).keys(),
+  ].sort();
 };
 
 describe('bridge route coverage (B-074)', () => {

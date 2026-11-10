@@ -189,6 +189,7 @@ if (args['write-service-config'] !== undefined) {
   const asPort = (flag) => (given(flag) === undefined ? undefined : Number(given(flag)));
   const updates = Object.fromEntries(
     Object.entries({
+      mode: given('mode'),
       playoutAddress: given('playout-address'),
       amcpHost: given('caspar-host'),
       amcpPort: asPort('amcp-port'),
@@ -200,6 +201,7 @@ if (args['write-service-config'] !== undefined) {
     }).filter(([, value]) => value !== undefined),
   );
   try {
+    if (args.mode === true) throw new Error('--mode needs standalone or playout.');
     const written = writeServiceConfig(args['write-service-config'], updates);
     console.error(
       `[caspar-bridge] configuration written to ${args['write-service-config']}: ${JSON.stringify(written)}`,
@@ -227,6 +229,26 @@ if (args['service-config'] !== undefined) {
   }
   Object.assign(args, withServiceFlags(args, serviceConfig));
   console.error(`[caspar-bridge] service configuration: ${serviceConfig.file}`);
+}
+
+const standalone = serviceConfig?.config.mode === 'standalone';
+if (args.mode !== undefined) {
+  console.error('[caspar-bridge] Set --mode through --write-service-config before starting.');
+  process.exit(1);
+}
+if (
+  standalone &&
+  (args.host !== '127.0.0.1' ||
+    args.auth !== 'off' ||
+    args['first-run'] !== undefined ||
+    Object.keys(args).some(
+      (flag) => flag.startsWith('playout-') || flag === 'backup-playout-address',
+    ))
+) {
+  console.error(
+    '[caspar-bridge] A standalone service requires local control and no Playout flags.',
+  );
+  process.exit(1);
 }
 
 /*
@@ -839,8 +861,11 @@ const bridgeOptions = {
   ...(typeof args['state-home'] === 'string'
     ? { logsDir: path.join(args['state-home'], 'logs') }
     : {}),
-  // `CENTRAL-BRIDGE-01` (D3) — CG Bridge the service never answers a socket with auth off.
-  ...(serviceConfig !== null ? { requireAuth: true } : {}),
+  ...(standalone
+    ? { stationMode: 'standalone', standaloneServiceConfigPath: serviceConfig.file }
+    : serviceConfig !== null
+      ? { requireAuth: true }
+      : {}),
 };
 
 /*

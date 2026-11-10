@@ -77,7 +77,11 @@ function schemaOf(name: string, table: 'publish' | 'route'): z.ZodTypeAny {
 
 describe('CENTRAL-BRIDGE-01 (D4) — every route and every push is classified', () => {
   it('ROUTE_SCOPE names exactly the routes the bridge builds — none missing, none stale', () => {
-    const routes = [...buildRoutes(runtime()).keys()].sort();
+    const routes = [
+      ...buildRoutes(runtime(), {
+        standaloneCheck: async () => ({ lines: [], localAddress: null }),
+      }).keys(),
+    ].sort();
     // Positive control: the enumeration is looking at the real set.
     expect(routes.length).toBeGreaterThan(60);
     expect(routes).toContain('stack.take');
@@ -93,7 +97,9 @@ describe('CENTRAL-BRIDGE-01 (D4) — every route and every push is classified', 
   it('a read route is never classified as an intent, and an intent is never a read', () => {
     // The table's own honesty check, against the gate's policy: a `read` answer that were marked
     // an intent would reach a scoped console unprojected.
-    for (const [name, route] of buildRoutes(runtime())) {
+    for (const [name, route] of buildRoutes(runtime(), {
+      standaloneCheck: async () => ({ lines: [], localAddress: null }),
+    })) {
       const entry = ROUTE_SCOPE[name];
       if (route.lock === 'read') expect(entry?.kind, name).not.toBe('intent');
       else expect(entry?.kind, name).toBe('intent');

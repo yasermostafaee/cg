@@ -10,6 +10,7 @@ import {
   loadServiceConfig,
   serviceFlags,
   withServiceFlags,
+  writeServiceConfig,
 } from '../src/service-config.js';
 
 /**
@@ -33,6 +34,41 @@ function configFile(body: string): string {
 }
 
 describe('the file', () => {
+  it('starts an explicit standalone service with loopback control and no Playout flags', () => {
+    const file = configFile('{"mode":"standalone","amcpHost":"192.0.2.10","amcpPort":5257}');
+    const flags = serviceFlags(loadServiceConfig(file));
+    expect(flags).toMatchObject({
+      auth: 'off',
+      host: '127.0.0.1',
+      'caspar-host': '192.0.2.10',
+      'amcp-port': '5257',
+    });
+    expect(flags).not.toHaveProperty('playout-address');
+    expect(flags).not.toHaveProperty('bridge-session-path');
+    expect(flags).not.toHaveProperty('first-run');
+  });
+
+  it('converts explicitly, preserves the mode on upgrade, and requires an address to switch back', () => {
+    const file = configFile('{"playoutAddress":"http://192.0.2.10:8080","amcpPort":5257}');
+    expect(writeServiceConfig(file, { mode: 'standalone' })).toEqual({
+      mode: 'standalone',
+      amcpPort: 5257,
+    });
+    expect(writeServiceConfig(file, { oscPort: 6300 })).toMatchObject({
+      mode: 'standalone',
+      oscPort: 6300,
+    });
+    expect(() => writeServiceConfig(file, { mode: 'playout' })).toThrow(/"playoutAddress"/);
+    expect(
+      writeServiceConfig(file, { mode: 'playout', playoutAddress: 'http://192.0.2.20:8080' }),
+    ).toMatchObject({ mode: 'playout', playoutAddress: 'http://192.0.2.20:8080' });
+    expect(serviceFlags(loadServiceConfig(file))).toMatchObject({
+      auth: 'playout',
+      host: '0.0.0.0',
+      'first-run': true,
+    });
+  });
+
   it('the minimum is the Playout address: every other value is the service default', () => {
     const file = configFile('{"playoutAddress":"http://127.0.0.1:8080"}');
     const loaded = loadServiceConfig(file);

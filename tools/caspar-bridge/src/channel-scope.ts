@@ -326,6 +326,7 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'lock.state': STATION_WIDE,
   'setup.channel-occupancy': STATION_WIDE,
   'setup.check': STATION_WIDE,
+  'setup.check-standalone': STATION_WIDE,
   'setup.route-address': STATION_WIDE,
   'sharedFiles.get': STATION_WIDE,
   'sources.assignments': STATION_WIDE,

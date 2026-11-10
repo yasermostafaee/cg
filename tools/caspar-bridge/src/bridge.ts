@@ -29,6 +29,7 @@ import {
   CHECK_BEFORE_SIGN_IN_REFUSAL,
   normalisePlayoutAddress,
   SetupCheckChannel,
+  SetupCheckStandaloneChannel,
   SetupRouteAddressChannel,
   SetupChannelOccupancyChannel,
   StationStraysChannel,
@@ -301,6 +302,7 @@ import { AuthSession } from './auth-session.js';
 import {
   AMCP_PROBE_TIMEOUT_MS,
   AMCP_TRUST_WINDOW_MS,
+  checkStandaloneCaspar,
   portHolderOf,
   probeRoute,
   realProbes,
@@ -338,6 +340,7 @@ import {
 } from './backup-channels-store.js';
 import type { BackupChannelMap } from './server-b-line.js';
 import { readTextSource } from './text-source-reader.js';
+import { ServiceConfigSchema, writeServiceConfig } from './service-config.js';
 import {
   airOf,
   casparJoinOf,
@@ -606,6 +609,10 @@ export interface BridgeOptions {
    * anyone. Absent (the dev bridge, every test) = auth follows the configuration, as before.
    */
   requireAuth?: boolean;
+  /** R-098 — explicit local-only station, independent of development auth-off bridges. */
+  stationMode?: 'standalone';
+  /** Persist accepted Server A edits in a standalone service's protected config. */
+  standaloneServiceConfigPath?: string;
   /**
    * `CENTRAL-BRIDGE-01` rule 12 (D11) — once listening, read Windows' reserved port ranges and say
    * any of this bridge's ports inside one (log and `/health`). The CLI sets it; absent, no `netsh`
@@ -1408,6 +1415,7 @@ export function authStateFor(
   status: AuthGateState,
   mode: AuthMode,
   runtime: CasparRuntime,
+  standalone = false,
 ): AuthState {
   const principal = session?.token?.principal ?? null;
   return {
@@ -1426,8 +1434,9 @@ export function authStateFor(
       expiry and revocation on purpose (see `AuthStateSchema.principal`), and a session that
       has stopped holding must not go on advertising channels.
     */
-    permittedChannels:
-      principal === null || status !== 'signed-in'
+    permittedChannels: standalone
+      ? [...runtime.declaredChannels()]
+      : principal === null || status !== 'signed-in'
         ? []
         : [
             ...grantedChannels(
@@ -1472,6 +1481,7 @@ export function stationChannelsFor(
   mode: AuthMode,
   runtime: CasparRuntime,
   catalogue: readonly CatalogueRow[] | null,
+  standalone = false,
 ): StationChannels {
   const hosts = configuredCasparHosts(runtime.config());
   const principal = session?.token?.principal ?? null;
@@ -1519,14 +1529,16 @@ export function stationChannelsFor(
       named: entry.named,
       ...airOf(entry.air),
       declared: runtime.isDeclaredChannel(channel),
-      ...(mode === 'off'
-        ? {}
-        : {
-            permitted:
-              principal !== null &&
-              status === 'signed-in' &&
-              grantsChannel(principal.channels, hosts, channel),
-          }),
+      ...(standalone
+        ? { permitted: runtime.isDeclaredChannel(channel) }
+        : mode === 'off'
+          ? {}
+          : {
+              permitted:
+                principal !== null &&
+                status === 'signed-in' &&
+                grantsChannel(principal.channels, hosts, channel),
+            }),
       sources: entry.sources,
     })),
   };
@@ -2029,14 +2041,33 @@ function validateDeclaredBank(
   }
 }
 
+const STANDALONE_HOST = '127.0.0.1';
+const STANDALONE_ORIGINS = new Set([
+  'http://tauri.localhost',
+  'https://tauri.localhost',
+  'tauri://localhost',
+]);
+
+function standaloneControlAllowed(request: http.IncomingMessage): boolean {
+  const port = request.socket.localPort;
+  const host = request.headers.host?.toLowerCase();
+  const origin = request.headers.origin;
+  return (
+    request.socket.remoteAddress === STANDALONE_HOST &&
+    port !== undefined &&
+    (host === `127.0.0.1:${String(port)}` ||
+      host === `localhost:${String(port)}` ||
+      (port === 80 && (host === '127.0.0.1' || host === 'localhost'))) &&
+    (origin === undefined || STANDALONE_ORIGINS.has(origin))
+  );
+}
+
 /**
  * Start the localhost CasparCG bridge (C-001).
  *
  * A single `ws` WebSocket server speaks the existing `@cg/shared-ipc`
  * request/response + publish contract as JSON frames (see `ws-frame.ts`),
- * backed by the real `@cg/caspar-client` stack (`CasparRuntime`). It binds
- * loopback by default, **enforced at the socket bind** via
- * `new WebSocketServer({ host, port })`.
+ * backed by the real `@cg/caspar-client` stack (`CasparRuntime`).
  *
  * The CasparCG session is started in the background — `createBridge` resolves as
  * soon as the WebSocket is listening, so the bridge serves even while the server
@@ -2046,7 +2077,17 @@ function validateDeclaredBank(
 export async function createBridge(options: BridgeOptions = {}): Promise<BridgeHandle> {
   // `CENTRAL-BRIDGE-01` (D10) — `/health`'s `startedAt`.
   const startedAtMs = Date.now();
-  const host = options.host ?? DEFAULT_BRIDGE_HOST;
+  const standalone = options.stationMode === 'standalone';
+  const host = options.host ?? (standalone ? STANDALONE_HOST : DEFAULT_BRIDGE_HOST);
+  if (
+    standalone &&
+    (host !== STANDALONE_HOST ||
+      options.requireAuth === true ||
+      options.firstRun === true ||
+      options.playout?.auth === 'playout')
+  ) {
+    throw new Error('A standalone station requires local control and no Playout authentication.');
+  }
   const requestedPort = options.port ?? DEFAULT_BRIDGE_PORT;
   /*
     🔴 `C-037` — THE PLAYOUT LINK, RESOLVED BEFORE ANYTHING BINDS.
@@ -2056,13 +2097,15 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     anything. Same doctrine as the fixed bank and the source catalog: present-but-unusable
     throws BEFORE the port is listening, so a failed boot leaves nothing serving.
   */
-  const auth = resolvePlayoutSettings(
-    options.playout ?? {},
-    options.playoutConfigPath !== undefined ? loadPlayoutFile(options.playoutConfigPath) : null,
-    (message) =>
-      process.stderr.write(`${message}
+  const auth = standalone
+    ? AUTH_OFF
+    : resolvePlayoutSettings(
+        options.playout ?? {},
+        options.playoutConfigPath !== undefined ? loadPlayoutFile(options.playoutConfigPath) : null,
+        (message) =>
+          process.stderr.write(`${message}
 `),
-  );
+      );
   const playoutConfigPath = options.playoutConfigPath;
   // `CENTRAL-BRIDGE-01` (`R-068`) — the release this bridge is: given, or its own package's.
   const bridgeVersion = options.version ?? ownPackageVersion();
@@ -2845,7 +2888,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     `fixedLayers.set-config`, and the phase must end the moment it is.
   */
   const setupPhase = (): SetupPhase | null => {
-    if (options.firstRun !== true) return null;
+    if (standalone || options.firstRun !== true) return null;
     if (auth.mode === 'off') return 'target';
     return runtime.fixedLayerBanks().length === 0 ? 'channel' : null;
   };
@@ -3193,6 +3236,20 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     pgmReturnStatus: programmeReturnStatus,
     backupPgmChannel: (channel) => backupChannels.channelOnB(channel),
     connectionCheck,
+    ...(standalone && {
+      standaloneCheck: async () => {
+        const result = await checkStandaloneCaspar(
+          runtime.config().servers.A,
+          options.connectionCheckProbes ?? realProbes(),
+          options.connectionCheckOptions,
+        );
+        const own = ownPortProblems().filter(
+          (p) => p.code === 'port-refused' || p.code === 'reserved-port',
+        );
+        return own.length === 0 ? result : { ...result, bridgeProblems: own };
+      },
+      standaloneServiceConfigPath: options.standaloneServiceConfigPath,
+    }),
     // 🔴 `B-327` — does server A join the Playout's? Through the same `hostIsOurs` the meters read.
     casparJoin: () =>
       casparJoinOf(
@@ -3223,6 +3280,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
         auth.mode,
         runtime,
         playoutCatalogue?.rows() ?? null,
+        standalone,
       ),
   });
 
@@ -3243,6 +3301,10 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   */
   let healthNow: (() => BridgeHealth) | null = null;
   const controlHttp = http.createServer((req, res) => {
+    if (standalone && !standaloneControlAllowed(req)) {
+      res.writeHead(403).end();
+      return;
+    }
     const url = new URL(req.url ?? '/', 'http://cg-bridge');
     const pathname = url.pathname;
     if (req.method === 'GET' && pathname.startsWith(LIVE_PREVIEW_HTTP_PREFIX)) {
@@ -3382,7 +3444,13 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     res.writeHead(426, { 'content-type': 'text/plain', 'content-length': Buffer.byteLength(body) });
     res.end(body);
   });
-  const wss = new WebSocketServer({ server: controlHttp, maxPayload: WS_MAX_PAYLOAD_BYTES });
+  const wss = new WebSocketServer({
+    server: controlHttp,
+    maxPayload: WS_MAX_PAYLOAD_BYTES,
+    ...(standalone && {
+      verifyClient: ({ req }: { req: http.IncomingMessage }) => standaloneControlAllowed(req),
+    }),
+  });
 
   await new Promise<void>((resolve, reject) => {
     controlHttp.once('listening', resolve);
@@ -3454,7 +3522,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       // `CENTRAL-BRIDGE-01` (`R-068`) — an expired or revoked session is told nothing either.
       () => mayBeTold(authGateState(session, playoutAuth)),
       // § 3(a) — THIS socket's principal, through the one composition `auth.state` answers with.
-      () => authStateFor(session, authGateState(session, playoutAuth), auth.mode, runtime),
+      () =>
+        authStateFor(session, authGateState(session, playoutAuth), auth.mode, runtime, standalone),
       scopeOfSocket,
     );
     /*
@@ -3479,6 +3548,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
           auth.mode,
           runtime,
           playoutCatalogue?.rows() ?? null,
+          standalone,
         ),
     );
     unsubscribers.push(
@@ -4575,6 +4645,8 @@ export function buildRoutes(
   b: CasparRuntime,
   paths: {
     persistPath?: string;
+    standaloneCheck?: () => Promise<ConnectionCheckResult>;
+    standaloneServiceConfigPath?: string | undefined;
     /** `CENTRAL-BRIDGE-01` — this machine's OSC port over every applied config ({@link withBridgeOscPort}). */
     oscPort?: number;
     /** `CENTRAL-BRIDGE-01` — the release this bridge is, for `bridge.capabilities` (`0.10.0`). */
@@ -4897,7 +4969,13 @@ export function buildRoutes(
         same question from two places is the drift this file has already paid for once.
       */
       const session = currentAuthSession();
-      return authStateFor(session, authState(session), authMode, b);
+      return authStateFor(
+        session,
+        authState(session),
+        authMode,
+        b,
+        paths.standaloneCheck !== undefined,
+      );
     }),
     /*
       🔴 `DELTA-MULTI-CHANNEL-01-B` B3 — the Playout's own answer to a failed sign-in, into this
@@ -5253,8 +5331,29 @@ export function buildRoutes(
     route(ConnectionsSetConfigChannel, 'operator', 'station-admin', async (r: ConnectionConfig) => {
       // `CENTRAL-BRIDGE-01` — this machine's OSC port stands over whatever the panel sent.
       const applied = withBridgeOscPort(r, paths.oscPort);
+      const servicePath = paths.standaloneServiceConfigPath;
+      const primary = applied.servers.A;
+      const serviceEndpoint = {
+        amcpHost: primary.host,
+        amcpPort: primary.amcpPort,
+        oscPort: primary.oscPort,
+      };
+      // An installed service must be able to reopen the same ports after restart.
+      if (
+        servicePath !== undefined &&
+        !ServiceConfigSchema.safeParse({ mode: 'standalone', ...serviceEndpoint }).success
+      ) {
+        return {
+          ok: false,
+          reason: 'apply-failed' as const,
+          message: 'CasparCG A AMCP and OSC ports must be between 1 and 65535 on this service.',
+        };
+      }
       const result = await b.setConfig(applied);
-      if (result.ok && persistPath !== undefined) savePersistedConnection(persistPath, applied);
+      if (result.ok) {
+        if (servicePath !== undefined) writeServiceConfig(servicePath, serviceEndpoint);
+        if (persistPath !== undefined) savePersistedConnection(persistPath, applied);
+      }
       return result;
     }),
     /*
@@ -5685,6 +5784,8 @@ export function buildRoutes(
       narrowing applies to every socket without a valid principal.
     */
     route(SetupCheckChannel, 'read', 'read', async (r: ConnectionCheckRequest) => {
+      if (paths.standaloneCheck !== undefined)
+        throw new Error('Use the standalone CasparCG connection check for this station.');
       // The narrowing before a sign-in — unchanged (`DELTA-MULTI-CHANNEL-01-B` B1).
       if (!mayBeTold(authState(currentAuthSession())) && !checksThisStation(r)) {
         throw new Error(CHECK_BEFORE_SIGN_IN_REFUSAL);
@@ -5837,6 +5938,8 @@ export function buildRoutes(
     ),
   ];
 
+  if (paths.standaloneCheck !== undefined)
+    entries.push(route(SetupCheckStandaloneChannel, 'read', 'read', paths.standaloneCheck));
   const routes = new Map(entries.map((e) => [e.channel.name, e]));
   /*
     🔴 `B-153` — THE CAPABILITY HANDSHAKE, ANSWERED FROM THE MAP ITSELF.
@@ -5865,6 +5968,7 @@ export function buildRoutes(
       with "not for this station" and never find out why.
     */
     auth: authMode,
+    ...(paths.standaloneCheck !== undefined && { stationMode: 'standalone' as const }),
     ...(playoutUrls !== null
       ? {
           signInUrl: playoutUrls.tokenUrl,
