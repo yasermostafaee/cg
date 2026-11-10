@@ -636,6 +636,9 @@ it('saves a resized matching-aspect PVW crop and uses it for the first hidden FI
   const token = target!.token;
   const beforeUpdate = (await recvLines()).length;
   const edit = { token, focus: { x: 0.25, y: 0.75, zoom: 2 } };
+  expect(r.enterPreview(itemId)).toEqual({ ok: true });
+  expect(r.previewPlateCrop(itemId, edit)).toMatchObject({ ok: false });
+  expect(r.stackSnapshot()[0]?.previewPlateCrops).toBeUndefined();
   expect(r.previewPlateCrop(itemId, undefined, [edit])).toMatchObject({
     ok: true,
     applied: [token],
@@ -656,7 +659,10 @@ it('saves a resized matching-aspect PVW crop and uses it for the first hidden FI
   });
 
   const beforeTake = (await recvLines()).length;
+  expect(r.enterPreview(itemId)).toEqual({ ok: true });
   expect(await r.take(itemId)).toMatchObject({ accepted: true });
+  expect(r.rehearseState()).toEqual([expect.objectContaining({ itemId, previewOnly: true })]);
+  expect(r.previewPlateCrop(itemId, undefined, [edit])).toMatchObject({ ok: false, targets: [] });
   const lines = (await recvLines()).slice(beforeTake);
   const fill = at(lines, 'MIXER 1-30 FILL 0.25 0.0625 0.5 0.5 DEFER');
   const clip = at(lines, 'MIXER 1-30 CLIP 0.375 0.25 0.25 0.25 DEFER');

@@ -2125,7 +2125,10 @@ export class CasparRuntime {
    * never reaches the wire — {@link rehearseState} projects the `Rehearsal`
    * shape the contract declares.
    */
-  readonly #rehearsing = new Map<string, Rehearsal & { muted: boolean }>();
+  readonly #rehearsing = new Map<
+    string,
+    Rehearsal & ({ previewOnly: true; muted: false } | { previewOnly?: never; muted: boolean })
+  >();
   /**
    * R-022 — items whose rehearse transition (mute or un-mute) is in flight. See
    * {@link BUSY_MESSAGE} for the interleaving this prevents; it is a correctness
@@ -4194,6 +4197,7 @@ export class CasparRuntime {
   #forgetWithoutWire(itemId: string): void {
     const slot = this.#slots.get(itemId);
     this.#reconciler.applyIntent({ kind: 'remove', itemId }, this.#nextSeq());
+    this.#dropIndependentPreview(itemId);
     this.#loaded.delete(itemId);
     this.#foregroundPages.delete(itemId);
     this.#positions.delete(itemId);
@@ -5241,7 +5245,7 @@ export class CasparRuntime {
 
   async #takeImpl(itemId: string): Promise<TakeVerdict> {
     /**
-     * R-022 — THE INTERLOCK. A rehearsing item cannot be taken to air, and the
+     * R-022 — THE LEGACY INTERLOCK. An interlocked rehearsal cannot be taken to air, and the
      * refusal lives HERE rather than only in a disabled button.
      *
      * This is the whole point of making rehearse a mode instead of a preview
@@ -5260,7 +5264,7 @@ export class CasparRuntime {
      * FIRST in the method, before `#retirePendingRestore`: a refused take must
      * mutate nothing, and retiring a parked restore is a mutation.
      */
-    if (this.#rehearsing.has(itemId)) return { accepted: false, errorCode: 'rehearsing' };
+    if (this.#isLegacyRehearsal(itemId)) return { accepted: false, errorCode: 'rehearsing' };
     /*
       🔴 `CENTRAL-BRIDGE-01` (D12, the Playout team's rule 11) — AN UNLICENSED CHANNEL. The Playout
       clears it every minute (`CLEAR <ch>`), ours with it, so a take there puts a graphic on air for
@@ -5479,7 +5483,7 @@ export class CasparRuntime {
       const cropsBefore = this.#previewPlateCrops.get(itemId);
       const confirmed = await this.#ensureRouteEpoch();
       // The read is an await: re-ask what the take's first lines asked before it.
-      if (this.#rehearsing.has(itemId)) return { accepted: false, errorCode: 'rehearsing' };
+      if (this.#isLegacyRehearsal(itemId)) return { accepted: false, errorCode: 'rehearsing' };
       if (this.#ownsLiveSeats(itemId)) return { accepted: false, errorCode: TAKE_ON_AIR_CODE };
       if (!confirmed) return this.#refuseRouteWaiting(itemId, routeSeat);
       if (
@@ -5929,7 +5933,15 @@ export class CasparRuntime {
       return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
     }
     if (this.#rehearseBusy.has(itemId)) return { ok: false, reason: 'busy', message: BUSY_MESSAGE };
-    if (this.#rehearsing.has(itemId)) return { ok: true };
+    const rehearsal = this.#rehearsing.get(itemId);
+    if (rehearsal !== undefined)
+      return rehearsal.previewOnly === true
+        ? {
+            ok: false,
+            reason: 'busy',
+            message: 'Turn off Preview before starting interlocked rehearsal.',
+          }
+        : { ok: true };
     const item = this.#reconciler.get(itemId);
     if (item === null || item === undefined) {
       return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
@@ -6016,6 +6028,43 @@ export class CasparRuntime {
     }
   }
 
+  /** R-022 — independent PVW records only a browser render; it owns no CasparCG layer. */
+  enterPreview(itemId: string): { ok: boolean; reason?: RehearseEnterReason; message?: string } {
+    const slot = this.#slots.get(itemId);
+    if (slot === undefined || this.#reconciler.get(itemId) == null)
+      return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
+    if (this.#rehearseBusy.has(itemId)) return { ok: false, reason: 'busy', message: BUSY_MESSAGE };
+    const rehearsal = this.#rehearsing.get(itemId);
+    if (rehearsal !== undefined)
+      return rehearsal.previewOnly === true
+        ? { ok: true }
+        : {
+            ok: false,
+            reason: 'busy',
+            message: 'Turn off interlocked rehearsal before starting Preview.',
+          };
+    this.#rehearsing.set(itemId, {
+      itemId,
+      channel: slot.channel,
+      layer: slot.layer,
+      previewOnly: true,
+      muted: false,
+    });
+    this.rehearseChanged.emit(this.rehearseState());
+    return { ok: true };
+  }
+
+  #isLegacyRehearsal(itemId: string): boolean {
+    const rehearsal = this.#rehearsing.get(itemId);
+    return rehearsal !== undefined && rehearsal.previewOnly !== true;
+  }
+
+  #dropIndependentPreview(itemId: string): void {
+    if (this.#rehearsing.get(itemId)?.previewOnly !== true) return;
+    this.#rehearsing.delete(itemId);
+    this.rehearseChanged.emit(this.rehearseState());
+  }
+
   /**
    * R-022 — leave REHEARSE and restore the layer's intended volume.
    *
@@ -6082,11 +6131,16 @@ export class CasparRuntime {
   rehearseState(): Rehearsal[] {
     return [...this.#rehearsing.values()]
       .sort((a, b) => a.channel - b.channel || a.layer - b.layer)
-      .map(({ itemId, channel, layer }) => ({ itemId, channel, layer }));
+      .map(({ itemId, channel, layer, previewOnly }) => ({
+        itemId,
+        channel,
+        layer,
+        ...(previewOnly === true && { previewOnly }),
+      }));
   }
 
   /**
-   * R-022 — REHEARSE IS A CLAIM ABOUT OUR INTENT, NOT A GUARANTEE ABOUT THE
+   * R-022 — LEGACY REHEARSE IS A CLAIM ABOUT OUR INTENT, NOT A GUARANTEE ABOUT THE
    * CHANNEL. If the layer goes live by ANY route while a row is rehearsing —
    * another operator on another browser, the playout system driving AMCP
    * directly, anything — the honest response to being wrong is to stop claiming
@@ -6101,8 +6155,12 @@ export class CasparRuntime {
    * thing that distinguishes them.
    */
   #abortRehearsalsThatWentLive(): void {
-    for (const itemId of [...this.#rehearsing.keys()]) {
+    for (const [itemId, rehearsal] of this.#rehearsing) {
       const item = this.#reconciler.get(itemId);
+      if (rehearsal.previewOnly === true) {
+        if (item == null) this.#dropIndependentPreview(itemId);
+        continue;
+      }
       // An item that has VANISHED (removed from the stack) is also no longer
       // ours to interlock. Its volume still has to be restored — the producer may
       // be gone but the mixer setting is not.
@@ -9100,8 +9158,14 @@ export class CasparRuntime {
     if (edit !== undefined && edits !== undefined) {
       return { ok: false, targets, message: 'Send one crop edit or one Inspector update.' };
     }
-    if (edit !== undefined && !this.#rehearsing.has(itemId)) {
-      return { ok: false, targets, message: 'Put this row on Preview before framing it.' };
+    if (edit !== undefined && !this.#isLegacyRehearsal(itemId)) {
+      return {
+        ok: false,
+        targets,
+        message: this.#rehearsing.has(itemId)
+          ? 'Use Inspector Update to save this preview framing.'
+          : 'Put this row on Preview before framing it.',
+      };
     }
 
     const drafts: readonly PreviewPlateCropEdit[] = edits ?? (edit === undefined ? [] : [edit]);
@@ -15037,6 +15101,7 @@ export class CasparRuntime {
     // Drop it from the stack immediately (UI responsiveness), then best-effort
     // clear the slot on the server.
     this.#reconciler.applyIntent({ kind: 'remove', itemId }, this.#nextSeq());
+    this.#dropIndependentPreview(itemId);
     this.#loaded.delete(itemId);
     // R-011 — the override dies with the ITEM (a re-used itemId starts clean).
     this.#positions.delete(itemId);

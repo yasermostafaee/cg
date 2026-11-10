@@ -120,6 +120,8 @@ export const RehearsalSchema = z.object({
   itemId: z.string().min(1),
   channel: z.number().int().positive(),
   layer: z.number().int().nonnegative(),
+  /** Browser-only PVW; does not mute the layer or interlock Take. Absent is legacy rehearsal. */
+  previewOnly: z.literal(true).optional(),
 });
 export type Rehearsal = z.infer<typeof RehearsalSchema>;
 
@@ -138,6 +140,16 @@ export const RehearseEnterChannel = defineChannel(
     reason: z.enum(REHEARSE_ENTER_REASONS).optional(),
     message: z.string().optional(),
   }),
+);
+
+/**
+ * Enable the same preview render without changing the CasparCG layer or blocking Take.
+ * Old bridges do not advertise this route and continue to use the legacy interlock.
+ */
+export const RehearseEnterPreviewChannel = defineChannel(
+  'rehearse.enter-preview',
+  RehearseEnterChannel.request,
+  RehearseEnterChannel.response,
 );
 
 /**
@@ -167,15 +179,12 @@ export const RehearseStateChangedChannel = definePublishChannel(
   z.array(RehearsalSchema),
 );
 
-/**
- * THE canonical predicate: is this item rehearsing?
- *
- * One exported function rather than an `.some()` at each call site, because it
- * gates a DESTRUCTIVE-adjacent decision on both sides — the bridge refuses PLAY
- * on it, and the renderer disables PLAY for it. If those two ever disagreed about
- * what "rehearsing" means, one of them would offer a take the other refuses, or
- * worse, allow one the other thought was interlocked off.
- */
+/** Is the item present in PVW, regardless of which entry mode created the record? */
 export function isRehearsing(rehearsals: readonly Rehearsal[], itemId: string): boolean {
   return rehearsals.some((r) => r.itemId === itemId);
+}
+
+/** A legacy rehearsal can mute the CasparCG layer; browser-only PVW never interlocks Take. */
+export function isRehearsalInterlocked(rehearsals: readonly Rehearsal[], itemId: string): boolean {
+  return rehearsals.some((r) => r.itemId === itemId && r.previewOnly !== true);
 }

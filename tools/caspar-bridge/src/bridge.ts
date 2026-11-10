@@ -191,6 +191,7 @@ import {
   ChannelSettingsGetChannel,
   ChannelSettingsSetChannel,
   RehearseEnterChannel,
+  RehearseEnterPreviewChannel,
   RehearseExitChannel,
   RehearseStateChangedChannel,
   RehearseStateChannel,
@@ -5932,6 +5933,9 @@ export function buildRoutes(
     route(RehearseStateChannel, 'read', 'read', () => b.rehearseState()),
     route(RehearseEnterChannel, 'operator', 'operator', (r: { itemId: string }) =>
       b.enterRehearse(r.itemId),
+    ),
+    route(RehearseEnterPreviewChannel, 'operator', 'operator', (r: { itemId: string }) =>
+      b.enterPreview(r.itemId),
     ),
     route(RehearseExitChannel, 'operator', 'operator', (r: { itemId: string }) =>
       b.exitRehearse(r.itemId),

@@ -171,6 +171,61 @@ it('refuses rehearse ON AIR, and fails closed on an UNSETTLED item', async () =>
   expect(runtime!.rehearseState()).toEqual([]);
 }, 30000);
 
+it('keeps browser Preview independent of applied fields, volume and program transport', async () => {
+  await boot();
+  runtime!.templateImport(
+    {
+      ...TEMPLATE,
+      fields: [{ id: 'title', label: 'Title', type: 'text', required: false, default: '' }],
+    },
+    HTML,
+  );
+  expect((await runtime!.load('item1', 'lower-third', { title: 'applied' })).accepted).toBe(true);
+  const programCommands = () =>
+    mock!
+      .receivedCommands()
+      .map(({ line }) => line)
+      .filter((line) => /^(?:CG|MIXER) /.test(line));
+  const preview = [{ itemId: 'item1', ...SLOT, previewOnly: true }];
+
+  const beforePreview = programCommands();
+  const beforeVolume = volume();
+  expect(runtime!.enterPreview('missing')).toMatchObject({ ok: false, reason: 'unknown-item' });
+  expect(runtime!.enterPreview('item1')).toEqual({ ok: true });
+  expect(runtime!.rehearseState()).toEqual(preview);
+  expect(await runtime!.enterRehearse('item1')).toMatchObject({ ok: false, reason: 'busy' });
+  expect(await runtime!.exitRehearse('item1')).toEqual({ ok: true });
+  expect(runtime!.enterPreview('item1')).toEqual({ ok: true });
+  expect(programCommands()).toEqual(beforePreview);
+  expect(volume()).toBe(beforeVolume);
+
+  expect((await runtime!.take('item1')).accepted).toBe(true);
+  await expect.poll(() => runtime!.stackSnapshot()[0]?.status).toBe('on-air');
+  expect(mock!.layerState(SLOT)?.onAir).toBe(true);
+  expect(runtime!.rehearseState()).toEqual(preview);
+  expect(runtime!.stackSnapshot()[0]?.fields).toEqual({ title: 'applied' });
+
+  const onAirCommands = programCommands();
+  expect(await runtime!.exitRehearse('item1')).toEqual({ ok: true });
+  expect(runtime!.rehearseState()).toEqual([]);
+  expect(runtime!.enterPreview('item1')).toEqual({ ok: true });
+  expect(runtime!.rehearseState()).toEqual(preview);
+  expect(programCommands()).toEqual(onAirCommands);
+  expect(volume()).toBe(1);
+
+  expect((await runtime!.update('item1', { title: 'updated' }, 'merge')).accepted).toBe(true);
+  expect(programCommands().slice(onAirCommands.length)).toEqual([
+    expect.stringMatching(/^CG 1-10 UPDATE .*updated/),
+  ]);
+  expect(runtime!.stackSnapshot()[0]?.fields).toEqual({ title: 'updated' });
+  expect((await runtime!.stopItem('item1')).accepted).toBe(true);
+  expect(runtime!.rehearseState()).toEqual(preview);
+  expect((await runtime!.out('item1')).accepted).toBe(true);
+  expect(runtime!.rehearseState()).toEqual(preview);
+  expect((await runtime!.remove('item1')).accepted).toBe(true);
+  expect(runtime!.rehearseState()).toEqual([]);
+}, 30000);
+
 it('refuses rehearse for an item that is not on the stack at all', async () => {
   await boot();
   const refused = await runtime!.enterRehearse('ghost');

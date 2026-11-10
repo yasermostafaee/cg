@@ -1007,7 +1007,7 @@ local preview catches wrong values and broken layouts before air.
   rendering may differ from programme output and live plates are labelled placeholders
 - WHEN the rehearsal has a live plate too narrow to show its placeholder label THEN the canvas
   displays the live-source note. Other rehearsals leave the picture clear of a general stamp
-- WHEN previewing THEN nothing is ever sent to CasparCG
+- WHEN using the local preview THEN preview actions do not send anything to CasparCG. Separate, explicit Play and Update on air actions follow [[R-117]].
 
 **Notes:** deliberately NOT a server-side PVW channel — that would require solving [[C-016]]'s
 return problem twice; a server-true preview can be a later item if ever needed. Implementation
@@ -5037,3 +5037,16 @@ is no verified ownership map.
 **Acceptance:**
 
 - WHEN a supported Word document is selected THEN read its visible text as plain text and preserve Persian and paragraph boundaries. WHEN an existing JSON assignment is reopened THEN it still loads; removing the picker option does not delete existing data.
+
+## [~] R-117 — ON PVW and Play are independent on each layer ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/independent-pvw-and-program/`
+
+**What:** Keep ON PVW and Play available together on a loaded layer. Inspector edits appear immediately in the browser preview and reach PGM only after the operator presses Update on air. An off-air Update stores the values for the next Take.
+
+**Why:** Operators need to check changes while the same row is on air, without switching off the preview or applying a draft to PGM.
+
+**Acceptance:**
+
+- WHEN a bound row is already playing THEN ON PVW is available and does not mute, reload, start or stop any CasparCG producer.
+- WHEN a row is on PVW and Play is pressed THEN Take uses the applied values; PVW and its draft stay available.
+- WHEN the operator edits the Inspector THEN PVW reflects the draft without sending it to air. Update on air commits it; Update on an off-air row stores it without a playout command.
+- WHEN an older Bridge does not advertise independent PVW THEN its existing rehearsal protections remain in force.

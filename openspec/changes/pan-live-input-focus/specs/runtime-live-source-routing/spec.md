@@ -95,8 +95,7 @@ Bars SHALL remain available when those checks do not pass.
 
 CG Control SHALL allow staging a normalized crop for an off-air rehearsing row with a visible
 cover-fit plate and known source geometry. Bridge SHALL persist it with the row, matching its
-look, plate, source and geometry before applying it. The existing rehearsal interlock SHALL
-require leaving PVW before Take.
+look, plate, source and geometry before applying it. A legacy rehearsal requires leaving PVW before Take. Independent browser-only PVW may stay open; only an off-air Update saves a Pan crop for Take.
 
 #### Scenario: A staged crop is the first fit applied on air
 

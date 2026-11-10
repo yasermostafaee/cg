@@ -377,6 +377,7 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'lock.release': INTENT,
   'playoutLayers.clear': INTENT,
   'rehearse.enter': INTENT,
+  'rehearse.enter-preview': INTENT,
   'rehearse.exit': INTENT,
   'sources.set-assignments': INTENT,
   'sources.set-config': INTENT,
