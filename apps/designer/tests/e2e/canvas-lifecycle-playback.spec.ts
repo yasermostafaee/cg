@@ -243,6 +243,13 @@ test.describe('D-199 — main Canvas separates timeline playback from Rehearse p
     await expect(app.canvasFrame.locator('body')).toHaveClass(/cg-rehearse-cleared/);
     await expect(transport.getByRole('button', { name: 'Play', exact: true })).toBeEnabled();
 
+    // B-428 — clearing the artwork keeps the editor's checkerboard frame visible.
+    const stage = app.canvasFrame.locator('.cg-stage');
+    await expect(graphic).toBeHidden();
+    await expect(stage).toHaveCSS('visibility', 'visible');
+    await expect(stage).toHaveCSS('opacity', '1');
+    await expect(stage).toHaveCSS('background-image', /linear-gradient/);
+
     await transport.getByRole('button', { name: 'Rehearse preview' }).click();
     await expect(app.canvasFrame.locator('body')).not.toHaveClass(/cg-rehearse-cleared/);
     await expect(graphic).toBeVisible();

@@ -1,0 +1,1 @@
+The checkerboard is the background of the canvas iframe's stage. Runtime Stop marks that stage pending, which hides it and its contents. The Designer iframe's cleared-rehearsal state makes the stage visible while hiding its children. Exported playout, the dedicated Preview, and the authored Outro retain their existing lifecycle.

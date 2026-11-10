@@ -195,10 +195,10 @@ export class Preview {
     <style>${this.#fontsCss}</style>
     <style>${this.#cgCss}</style>
     <style>
-      /* D-199 — the editing canvas normally reveals the hydrated authoring frame.
-         Rehearse Stop deliberately opts back into Preview's cleared picture until Play or an
-         explicit return to authoring. */
-      .cg-rehearse-cleared .cg-stage { visibility: hidden !important; }
+      /* B-428 — the cleared rehearsal picture keeps the stage's editor backdrop. Runtime's
+         pending state hides the stage, so restore only that frame and hide its artwork. */
+      .cg-rehearse-cleared .cg-stage { visibility: visible !important; opacity: 1 !important; }
+      .cg-rehearse-cleared .cg-stage > * { display: none !important; }
       /* The 'scene-replace' path calls runtime.remove() then
          createRuntime(newScene). remove() leaves body marked
          cg-removed, which the baseline CSS turns into
