@@ -350,3 +350,29 @@ test('D-178 — PVW crop stays a draft until Update and reaches the first Take F
   expect(play).toBeGreaterThan(fill);
   expect(reveal).toBeGreaterThan(play);
 });
+
+test('R-108 — a reloaded package refreshes the already-bound row in PVW', async ({ page }) => {
+  const handle = await boot();
+  await openConsole(page, handle.url);
+  const itemId = 'item-pvw-reload';
+  const register = (html: string) =>
+    page.evaluate(
+      ({ template, html }) => window.cg.templates.import({ template, html, channel: 1 }),
+      { template: TEMPLATE, html },
+    );
+  await register(HTML);
+  await page.evaluate(
+    ({ itemId, layer, templateId }) =>
+      window.cg.fixedLayers.load({ channel: 1, layer, itemId, templateId, fields: {} }),
+    { itemId, layer: ROW, templateId: TEMPLATE.templateId },
+  );
+  await expect(row(page)).toHaveAttribute('data-item-id', itemId);
+  await showMonitors(page);
+  await row(page).getByRole('button', { name: 'ON PVW', exact: true }).click();
+  const stage = page.frameLocator('iframe[data-rehearsal-frame]').locator('.cg-stage');
+  await expect(stage).toHaveAttribute('data-mark', MARK);
+
+  await register(HTML.replace(MARK, 'reloaded-v2'));
+  await expect(stage).toHaveAttribute('data-mark', 'reloaded-v2');
+  await expect(row(page)).toHaveAttribute('data-item-id', itemId);
+});

@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { createMock, type MockHandle } from '@cg/amcp-mock';
+import { createMock, defaultHandlers, type MockHandle } from '@cg/amcp-mock';
 import {
   TAKE_ON_AIR_CODE,
   type ConnectionConfig,
@@ -290,6 +290,40 @@ it('D-201 — an authored foreground pass is paired above every live input and r
   expect(backgroundPlayAt).toBeGreaterThan(platePlayAt);
   expect(revealAt).toBeGreaterThan(backgroundPlayAt);
   expect(foregroundLayer).toBeGreaterThan(BAND.start);
+});
+
+it('R-108 — a retake after Reload prepares the matching foreground and background pages', async () => {
+  const info = template([{ id: 'guest-1', rect: BOX }], true);
+  const r = await boot({ template: info });
+  expect((await loadAndTake(r)).accepted).toBe(true);
+  expect((await r.stopItem('item-1')).accepted).toBe(true);
+  expect(
+    r.templateImport(info, '<!doctype html><html><body>new page</body></html>').registered,
+  ).toBe(true);
+  const newUrl = r.templateServeUrl(info.templateId, 1);
+  const cg = defaultHandlers().get('CG');
+  if (mock === null || cg === undefined || newUrl === null) throw new Error('no CG fixture');
+  mock.setHandler('CG', (request, context, connection) => {
+    // The background URL is already pinned. A second console can reload at this instant.
+    if (request.raw.includes(' ADD 0 ') && request.raw.includes('cgpass=background')) {
+      r.templateImport(info, '<!doctype html><html><body>concurrent reload</body></html>');
+    }
+    return cg(request, context, connection);
+  });
+  const before = (await recvLines()).length;
+
+  expect((await r.take('item-1')).accepted).toBe(true);
+  expect(r.templateServeUrl(info.templateId, 1)).not.toBe(newUrl);
+  const lines = (await recvLines()).slice(before);
+  const adds = lines.filter((line) => line.includes(' ADD 0 ') && line.includes(newUrl));
+  expect(adds).toHaveLength(2);
+  expect(adds[0]).toContain('cgpass=background');
+  expect(adds[1]).toContain('cgpass=foreground');
+  const foregroundHide = at(lines, `MIXER 1-${String(BAND.end)} OPACITY 0`);
+  const foregroundAdd = lines.indexOf(adds[1] ?? '');
+  expect(foregroundHide).toBeGreaterThanOrEqual(0);
+  expect(foregroundAdd).toBeGreaterThan(foregroundHide);
+  expect(at(lines, `MIXER 1-${String(BAND.end)} OPACITY 1`)).toBeGreaterThan(foregroundAdd);
 });
 
 it('D-201 — the extra foreground layer is admitted atomically before any take wire', async () => {

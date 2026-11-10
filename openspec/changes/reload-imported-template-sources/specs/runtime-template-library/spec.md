@@ -78,6 +78,27 @@ the normal stack Update path.
 - **THEN** the package updates
 - **AND** every current-channel row holding it is replaced with the reloaded package defaults
 
+### Requirement: A reloaded page reaches an already-bound row
+
+CG Control SHALL refresh the listed page of an already-bound row in PVW after the template is
+reloaded. The next explicit Take of that off-air row SHALL prepare the updated page, including any
+foreground pass, with the row's applied data. Registering the reloaded template SHALL leave the
+producer of a row currently on air in place until the operator stops and takes that row again.
+
+#### Scenario: Reload a template already loaded on a layer
+
+- **GIVEN** the operator previously loaded a template on a layer
+- **WHEN** the operator reloads a newer package into the same catalogue entry
+- **THEN** PVW can play the updated page of the same bound row
+- **AND** the next Take uses the updated page with the chosen row data policy
+
+#### Scenario: Reload while the template is on air
+
+- **GIVEN** a row is playing the old page
+- **WHEN** the operator reloads the same catalogue entry and keeps current data
+- **THEN** the row keeps playing the same page until the operator stops it
+- **AND** its next Take seats the updated page on the same layer
+
 ### Requirement: Reload all SHALL include every remembered source in the current list
 
 The Templates dialog SHALL offer Reload all when at least one visible template has a source

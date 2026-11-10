@@ -32,6 +32,7 @@ import {
   standardBank,
   twoChannelRig,
   waitUntil,
+  writes,
   type TwoChannelRig,
 } from './support/two-channel-rig.js';
 
@@ -290,6 +291,36 @@ describe('CHANNEL-TEMPLATES-01 — one stored version, per-channel lists', () =>
     expect(rt.templateHtml('news', 1)).toBe(NEWS_V2);
     expect(await get(onAirUrl)).toEqual({ status: 200, body: NEWS_V1 });
     expect(rt.templateServeUrl('news', 1)).not.toBe(onAirUrl);
+  }, 30_000);
+
+  it('R-108: a reloaded template reaches the same row at its next Take', async () => {
+    const s = await station();
+    const rt = s.handle.runtime;
+    const originalUrl = await newsOnAirOnChannelOne(s);
+    const beforeReload = (await s.rig.lines()).length;
+    rt.templateImport(NEWS, NEWS_V2, 1);
+    expect(writes((await s.rig.lines()).slice(beforeReload))).toEqual([]);
+    expect(await get(originalUrl)).toEqual({ status: 200, body: NEWS_V1 });
+
+    expect((await rt.stopItem('row-ch1')).accepted).toBe(true);
+    await waitUntil(
+      () => rt.stackSnapshot(1).find((item) => item.itemId === 'row-ch1')?.status === 'loaded',
+      'the same row to stop',
+    );
+    const beforeTake = (await s.rig.lines()).length;
+    expect((await rt.take('row-ch1')).accepted).toBe(true);
+    const add = s.rig.mock.lastCgAdd({ channel: 1, layer: 99 });
+    const updatedUrl = add?.template.split('?')[0] ?? '';
+    expect(updatedUrl).not.toBe(originalUrl);
+    expect(await get(updatedUrl)).toEqual({ status: 200, body: NEWS_V2 });
+    const take = (await s.rig.lines()).slice(beforeTake);
+    const addIndex = take.findIndex((line) => line.startsWith('CG 1-99 ADD 0 '));
+    expect(addIndex).toBeGreaterThanOrEqual(0);
+    expect(take.indexOf('CG 1-99 PLAY 0')).toBeGreaterThan(addIndex);
+    expect(rt.stackSnapshot(1).find((item) => item.itemId === 'row-ch1')).toMatchObject({
+      templateId: 'news',
+      slot: { channel: 1, layer: 99 },
+    });
   }, 30_000);
 });
 

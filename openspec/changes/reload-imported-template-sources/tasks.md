@@ -25,3 +25,12 @@
 - [x] 3.3 Chromium verified a real persisted test file handle, bulk refusal, individual cancel and
       replacement under the original catalogue id, and reload of the accepted identity. The four
       focused Runtime suites pass 15 tests. The owner's package was inspected read-only.
+
+## 4. Already-bound rows
+
+- [x] 4.1 Refresh the loaded row's PVW page when its listed template changes.
+- [x] 4.2 On the next Take, use the latest listed page with the row's applied data.
+- [x] 4.3 Chromium verified that the same bound row shows the reloaded page. Bridge integration
+      verified no write on package import, then an updated page before Play. A concurrent import
+      between the two ADDs no longer mixes foreground and background versions.
+- [ ] 4.4 Record the carrying Linux E2E and verify on the target CasparCG.

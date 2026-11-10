@@ -5181,6 +5181,7 @@ export class CasparRuntime {
     slot: CommandSlot,
     templateId: string,
     fields: FieldValues,
+    replaceResident = false,
   ): Promise<{ ok: boolean; errorCode?: string; command?: string }> {
     const existing = this.#foregroundPages.get(itemId);
     if (
@@ -5201,7 +5202,7 @@ export class CasparRuntime {
       };
     }
 
-    if (resident === undefined) {
+    if (resident === undefined || replaceResident) {
       const added = await this.#sendAdd(
         itemId,
         slot,
@@ -5524,6 +5525,7 @@ export class CasparRuntime {
     // describe a resolution the payload did not carry.
     this.#reportPlateFits(itemId, plan.fitProvenance);
 
+    const itemBeforeTake = this.#reconciler.get(itemId);
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'take', itemId }, seq);
 
@@ -5540,7 +5542,7 @@ export class CasparRuntime {
     const oursBeforeTake = this.#liveLayerKeys();
     /*
       🔴 `DONGLE-RECOVER-01` — **`#loaded` IS A BELIEF, AND THE CORE IS ASKED BEFORE IT IS TRUSTED.**
-      A STOPPED row keeps its page resident (C-012), and the take below resumes it with no re-load. But
+      A STOPPED row keeps its page resident (C-012), and the take below resumes an unchanged page. But
       a layer can be emptied while nobody holds it on air — the Playout's own license rule clears the
       whole channel (`CLEAR <ch>`, LICENSE §4), stopped pages included — and `B-292`'s silence question
       watches only the layers held ON AIR. On `.32` (2026-10-11T06:37:24Z) the next Play of a stopped
@@ -5557,7 +5559,20 @@ export class CasparRuntime {
       ⚠ `LOGO-LOOP-01`'s rule stands: a failed tell does not REFUSE the take. A `403` does not refuse it
       either — it re-routes it. Any other failure is still reported, not acted on.
     */
-    let resident = this.#loaded.has(itemId);
+    const heldVersion = this.#templates.heldVersion(itemId);
+    const listedVersion = this.#templates.versionOn(
+      slot.channel,
+      itemBeforeTake?.templateId ?? itemId,
+    );
+    // R-108 — a Reload only moves the catalogue pointer. The next off-air Take must
+    // prepare the newer page. Replace a resident producer only when its prior state
+    // confirms it is off air, since an unverified or errored row can still be visible.
+    const pageVersionChanged =
+      (itemBeforeTake?.status === 'loaded' || itemBeforeTake?.status === 'idle') &&
+      heldVersion !== undefined &&
+      listedVersion !== null &&
+      heldVersion !== listedVersion;
+    let resident = this.#loaded.has(itemId) && !pageVersionChanged;
     if (resident) {
       /*
         🔴 **`B-191` — THE OTHER HALF OF THE RE-ADD, AND THE ONLY PLACE BOTH ROUTES INTO AIR
@@ -5725,6 +5740,7 @@ export class CasparRuntime {
             plan.foregroundSlot,
             itemForForeground?.templateId ?? itemId,
             itemForForeground?.fields ?? {},
+            addedPage,
           );
     if (!foreground.ok) {
       if (addedPage) await this.#removeUnplayedPage(itemId, slot);
@@ -15731,7 +15747,8 @@ export class CasparRuntime {
    * rebuild back until the row was cleared, so one stopped row kept every row and channel on the old
    * page. Nothing a swap does reaches that layer: the row HOLDS its version (`hold`), which stays
    * stored and served at its old path while it does, and its resident page plays on as it is. The
-   * rebuilt page reaches that row at its next `CG ADD` — after a Clear, or a reload.
+   * rebuilt page reaches that row at its next `CG ADD` — the next explicit Take refreshes an
+   * off-air row if it still holds an older page (R-108).
    */
   #mayBeOnALayer(versionId: string): boolean {
     if (this.#templates.isPinned(versionId)) return true;
@@ -17740,7 +17757,11 @@ export class CasparRuntime {
       stack (the hold, persisted). A refused ADD moves no hold: whatever is on the layer is what
       the row held before.
     */
-    const versionId = this.#templates.versionOn(slot.channel, templateId);
+    // The foreground is paired to the background already loaded for this row. A
+    // concurrent Reload can move the catalogue pointer between the two ADDs.
+    const backgroundVersion =
+      outputPass === 'foreground' ? this.#templates.heldVersion(itemId) : undefined;
+    const versionId = backgroundVersion ?? this.#templates.versionOn(slot.channel, templateId);
     const serveKey = versionId === null ? null : this.#templates.serveKeyOf(versionId);
     if (versionId === null || serveKey === null) {
       this.#reconciler.applyAck(seq, false, 'unknown-template');

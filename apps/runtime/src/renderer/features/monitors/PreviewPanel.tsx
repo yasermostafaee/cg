@@ -384,7 +384,8 @@ export function PreviewPanel({ companionActions }: { companionActions?: ReactNod
     return () => {
       cancelled = true;
     };
-  }, [pageKeysJson]);
+    // R-108 — the index refreshes on catalogue pushes, including when the id is unchanged.
+  }, [pageKeysJson, templates]);
 
   // R-030 — the CHANNEL's real raster, so the rehearsals place themselves in the
   // frame that will actually air. Falls back to the reference raster before the
