@@ -225,6 +225,10 @@
         {
           "fa": "وقتی هندسهٔ تصویر ورودی با Take تطبیق دارد، Pan در PVW تصویر کامل ورودی را برای انتخاب برش نشان می‌دهد.",
           "en": "PVW Pan shows the full source picture for crop selection when its measured geometry agrees with Take."
+        },
+        {
+          "fa": "اپراتور مجاز می‌تواند از Live plates سطح صدای خروجی اصلی Playlist را تنظیم کند، حتی وقتی هیچ قابی on air نیست. صدای کپی Playlist داخل قاب روی صفر می‌ماند.",
+          "en": "An authorized operator can adjust the original Playlist programme gain from Live plates, including when no frame is on air. The duplicated Playlist frame route stays muted."
         }
       ],
       "fixes": [
@@ -275,8 +279,8 @@
           "en": "Verify simultaneous live, Playlist and Media pictures in PVW and source pickers on 21.32 with an operator account."
         },
         {
-          "fa": "کنترل سطح صدای خروجی اصلی Playlist با قرارداد Playout 2.18.17 در CG Control تکمیل و روی ایستگاه آزموده شود.",
-          "en": "Complete Playlist programme gain in CG Control using the Playout 2.18.17 contract and verify it on the station."
+          "fa": "تنظیم بهرهٔ خروجی اصلی Playlist و بی‌صدابودن کپی آن در قاب روی ایستگاه آزموده شوند.",
+          "en": "Verify original Playlist gain and muted frame copies on the target station."
         }
       ],
       "downloadBaseUrl": null

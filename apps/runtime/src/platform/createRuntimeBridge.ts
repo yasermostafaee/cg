@@ -500,6 +500,11 @@ export function createMockBridge(): RuntimeBridge {
       thumbnails: () => Promise.resolve({ frames: [] }),
     },
 
+    playlistGain: {
+      get: () => Promise.resolve({ ok: false, reason: 'unavailable' }),
+      set: () => Promise.resolve({ ok: false, reason: 'unavailable' }),
+    },
+
     // R-021 stage 2a — fixed-bank parity (offline: occupancy honestly unknown).
     fixedLayers: {
       config: () => Promise.resolve(mock.fixedLayersConfig()),

@@ -1655,6 +1655,17 @@ class FakePlayoutServer implements FakePlayout {
           await options.sourcePreviews(req, res);
           return;
         }
+        if (
+          options.programmeGain !== undefined &&
+          /^\/api\/v1\/channels\/[^/]+\/programme-gain$/.test(req.url ?? '')
+        ) {
+          if (!(await this.#ownBearer(req))) {
+            sendError(res, 'invalid_token');
+            return;
+          }
+          await options.programmeGain(req, res);
+          return;
+        }
         await this.#route(req, res);
       };
       void route().catch((err: unknown) => {
@@ -2701,6 +2712,7 @@ export interface FakePlayoutOptions {
   readonly livePreview?: (req: http.IncomingMessage, res: http.ServerResponse) => Promise<void>;
   /** C-023 independent silent source observations, after this fake verifies the CG bearer. */
   readonly sourcePreviews?: (req: http.IncomingMessage, res: http.ServerResponse) => Promise<void>;
+  readonly programmeGain?: (req: http.IncomingMessage, res: http.ServerResponse) => Promise<void>;
   /** D11's existing poster fixture, reached after this fake verifies the CG bearer. */
   readonly mediaThumbnail?: (req: http.IncomingMessage, res: http.ServerResponse) => void;
 }

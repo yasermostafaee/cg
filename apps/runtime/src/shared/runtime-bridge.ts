@@ -65,6 +65,8 @@ import type {
   LivePreviewStartChannel,
   SourcePreviewPvwChannel,
   SourcePreviewThumbnailsChannel,
+  PlaylistGainGetChannel,
+  PlaylistGainSetChannel,
   LivePreviewStatus,
   LivePreviewStream,
   LockEngageChannel,
@@ -817,6 +819,15 @@ export interface RuntimeBridge {
     thumbnails(
       req: ChannelRequest<typeof SourcePreviewThumbnailsChannel>,
     ): Promise<ChannelResponse<typeof SourcePreviewThumbnailsChannel>>;
+  };
+
+  playlistGain: {
+    get(
+      req: ChannelRequest<typeof PlaylistGainGetChannel>,
+    ): Promise<ChannelResponse<typeof PlaylistGainGetChannel>>;
+    set(
+      req: ChannelRequest<typeof PlaylistGainSetChannel>,
+    ): Promise<ChannelResponse<typeof PlaylistGainSetChannel>>;
   };
 
   lock: {

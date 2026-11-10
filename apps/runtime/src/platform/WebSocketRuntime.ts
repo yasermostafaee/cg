@@ -216,6 +216,8 @@ const OPTIONAL_CHANNELS = new Set([
   SourcesMediaThumbnailChannel.name,
   ipcChannels.SourcePreviewPvwChannel.name,
   ipcChannels.SourcePreviewThumbnailsChannel.name,
+  ipcChannels.PlaylistGainGetChannel.name,
+  ipcChannels.PlaylistGainSetChannel.name,
 ]);
 /** `R-100` — one picture of a book may be 4 MB; see `pages.put`. */
 const PAGE_PUT_TIMEOUT_MS = 30_000;
@@ -2282,6 +2284,18 @@ export class WebSocketRuntime implements RuntimeBridge {
       (await this.#optionalChannelMissing(ipcChannels.SourcePreviewThumbnailsChannel.name))
         ? { frames: [] }
         : this.#invoke(ipcChannels.SourcePreviewThumbnailsChannel, req),
+  };
+
+  readonly playlistGain: RuntimeBridge['playlistGain'] = {
+    get: async (req) =>
+      (await this.#optionalChannelMissing(ipcChannels.PlaylistGainGetChannel.name)) ||
+      (await this.#optionalChannelMissing(ipcChannels.PlaylistGainSetChannel.name))
+        ? { ok: false, reason: 'unavailable' }
+        : this.#invoke(ipcChannels.PlaylistGainGetChannel, req),
+    set: async (req) =>
+      (await this.#optionalChannelMissing(ipcChannels.PlaylistGainSetChannel.name))
+        ? { ok: false, reason: 'unavailable' }
+        : this.#invoke(ipcChannels.PlaylistGainSetChannel, req),
   };
 
   // R-021 stage 2a — the fixed-bank wire contract (facts only; verb

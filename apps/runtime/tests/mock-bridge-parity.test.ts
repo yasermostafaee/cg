@@ -283,6 +283,7 @@ const BRIDGE_SURFACE: {
     pgmReturn: ['feedUrl', 'audioUrl', 'status', 'onStatusChanged'],
     livePreview: ['start', 'status', 'stop', 'url'],
     sourcePreviews: ['pvw', 'thumbnails'],
+    playlistGain: ['get', 'set'],
     // R-028 part B — `fixedLayers` was MISSING from this guard (recorded as a
     // part-A seam): `tests/**` is not typechecked, so the mapped type above
     // never caught the omission and any mock↔bridge divergence in the fixed

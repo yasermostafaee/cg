@@ -93,6 +93,8 @@ import {
   LivePreviewStopChannel,
   SourcePreviewPvwChannel,
   SourcePreviewThumbnailsChannel,
+  PlaylistGainGetChannel,
+  PlaylistGainSetChannel,
   playoutInputIdOf,
   playoutMediaIdOf,
   sourceSeatable,
@@ -314,6 +316,7 @@ import { PgmReturnRelay, type PgmReturnTuning } from './pgm-return.js';
 import { PgmAudioRelay } from './pgm-audio.js';
 import { LivePreviewService, type LivePreviewTarget } from './live-preview.js';
 import { SourcePreviewService } from './source-preview-service.js';
+import { PlaylistGainService, playlistFrameUsage } from './playlist-gain-service.js';
 import { PlayoutMetersReader, type PlayoutMetersTuning } from './playout-meters.js';
 import { PlayoutAuth, type PlayoutAuthOptions, type VerifiedToken } from './playout-auth.js';
 import { PlayoutLicenseReader, type PlayoutLicenseReaderOptions } from './playout-license.js';
@@ -3091,10 +3094,83 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     const inputId = playoutInputIdOf(source.id);
     return inputId === null ? null : { kind: 'live', inputId };
   });
+  const playlistGainOrigin =
+    primaryEngineAddress === null ? null : new URL(primaryEngineAddress).origin;
+  const playlistGain = new PlaylistGainService(
+    (owner, channel) => {
+      const token = owner.token;
+      const lock = runtime.lockState();
+      if (
+        token === null ||
+        authGateState(owner, playoutAuth) !== 'signed-in' ||
+        !holdsPermissionClass(token.principal.roles, 'operator') ||
+        !runtime.isDeclaredChannel(channel) ||
+        (lock.engaged && (lock.channels === undefined || lock.channels.includes(channel)))
+      ) {
+        return { ok: false, reason: 'forbidden' };
+      }
+      const health = runtime.health();
+      // B's current station session is for catalogue/AMCP work. It is not the acting operator.
+      if (health.currentPrimary === 'B') return { ok: false, reason: 'backup-sign-in' };
+      const server = runtime.config().servers.A;
+      const rows = playoutCatalogue?.rows();
+      const lastRead = playoutCatalogue?.lastGoodReadAtMs();
+      if (
+        playlistGainOrigin === null ||
+        rows == null ||
+        lastRead == null ||
+        Date.now() - lastRead > 30_000
+      ) {
+        return { ok: false, reason: 'unavailable' };
+      }
+      const matches = rows.filter(
+        (row) => row.casparChannel === channel && hostJoinsStation(row.casparHost, [server.host]),
+      );
+      const row = matches.length === 1 ? matches[0] : undefined;
+      if (row === undefined || row.pendingRestart === true) {
+        return { ok: false, reason: 'unavailable' };
+      }
+      if (
+        row.cgLicensed === false ||
+        !grantsChannel(token.principal.channels, [row.casparHost], row.casparChannel)
+      ) {
+        return { ok: false, reason: 'forbidden' };
+      }
+      return {
+        ok: true,
+        target: {
+          origin: playlistGainOrigin,
+          code: row.id,
+          casparChannel: row.casparChannel,
+          bearer: token.rawToken,
+          generation: JSON.stringify([server, health.lastFailover?.at]),
+        },
+      };
+    },
+    (channel) => {
+      const reachable = isServerReachable(runtime.health().primary.state);
+      const unverified = new Set(
+        runtime
+          .liveLayersState()
+          .flatMap((record) =>
+            !reachable || record.unverified
+              ? [`${String(record.channel)}-${String(record.layer)}`]
+              : [],
+          ),
+      );
+      return playlistFrameUsage(
+        runtime.sourceCatalog(),
+        runtime.liveLayers().values(),
+        unverified,
+        channel,
+      );
+    },
+  );
   const routes = buildRoutes(runtime, {
     issueTicket: (grant) => tickets.issue(grant),
     livePreview,
     sourcePreviews,
+    playlistGain,
     logsAvailable: options.logsDir !== undefined,
     setupPhase,
     // `CENTRAL-BRIDGE-01` — this bridge's release, told to every console at connect.
@@ -3556,6 +3632,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     const dropSocket = (): void => {
       livePreview.disconnect(session);
       void sourcePreviews.drop(session);
+      playlistGain.drop(session);
       for (const off of unsubscribers) off();
       /*
         ⚠ A CLOSED TAB IS A SIGN-OUT THE OPERATOR NEVER PRESSED. Without this the bridge keeps
@@ -4609,6 +4686,7 @@ export function buildRoutes(
     issueTicket?: (grant: TicketGrant) => string;
     livePreview?: LivePreviewService;
     sourcePreviews?: SourcePreviewService;
+    playlistGain?: PlaylistGainService;
     /** Does this bridge keep a log folder to download? */
     logsAvailable?: boolean;
   } = {},
@@ -4841,6 +4919,7 @@ export function buildRoutes(
       if (session !== null) {
         paths.livePreview?.drop(session);
         void paths.sourcePreviews?.drop(session);
+        paths.playlistGain?.drop(session);
       }
       const leaving = session?.token?.principal ?? null;
       // The bridge must stop calling the Playout with a token whose operator has left.
@@ -5274,6 +5353,26 @@ export function buildRoutes(
       'operator',
       (req: ChannelRequest<typeof SourcePreviewThumbnailsChannel>) =>
         paths.sourcePreviews?.thumbnails(currentAuthSession(), req) ?? { frames: [] },
+    ),
+    route(
+      PlaylistGainGetChannel,
+      'operator',
+      'operator',
+      (req: ChannelRequest<typeof PlaylistGainGetChannel>) =>
+        paths.playlistGain?.get(currentAuthSession(), req.channel) ?? {
+          ok: false as const,
+          reason: 'unavailable' as const,
+        },
+    ),
+    route(
+      PlaylistGainSetChannel,
+      'operator',
+      'operator',
+      (req: ChannelRequest<typeof PlaylistGainSetChannel>) =>
+        paths.playlistGain?.set(currentAuthSession(), req) ?? {
+          ok: false as const,
+          reason: 'unavailable' as const,
+        },
     ),
     /*
       🔴 `CENTRAL-BRIDGE-01` (D9) — the picture is fetched by the console's `<img>`, which carries no

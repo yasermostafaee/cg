@@ -2068,6 +2068,7 @@ export function LayersPanel({
             }}
             onPanic={panic}
             panicChannel={scopeChannel}
+            playlistChannel={defaultsChannel}
           />
         ) : (
           <StationLayersPanel layers={playoutOnScreen} orphans={orphansOnScreen} />

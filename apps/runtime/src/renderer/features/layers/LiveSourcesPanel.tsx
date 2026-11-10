@@ -21,6 +21,7 @@ import {
   type LiveLayerRowView,
 } from './liveLayerRows.js';
 import { PlateAudioStrip } from './PlateAudioStrip.js';
+import { PlaylistGainControl } from './PlaylistGainControl.js';
 import { refusedAudioSentence } from './plateAudio.js';
 import { nothingToSilence, readPanicReport, type PanicReport } from './panicReport.js';
 
@@ -100,6 +101,7 @@ interface Props {
    * on screen; it is not a narrowing of the every-channel door, which still takes nothing.
    */
   panicChannel: number | null;
+  playlistChannel?: number | undefined;
 }
 
 const styles = {
@@ -251,6 +253,7 @@ export function LiveSourcesPanel({
   onOpenAudio,
   onPanic,
   panicChannel,
+  playlistChannel,
 }: Props): JSX.Element {
   /*
     🔴 `C-038` — **THE ROLE, NOT THE CHANNEL**, and the distinction is load-bearing here.
@@ -539,6 +542,13 @@ export function LiveSourcesPanel({
         <span className="cg-plate-help" title={SCOPE_NOTE} aria-label={SCOPE_NOTE} role="img">
           <Icon icon={Info} size={16} />
         </span>
+        {playlistChannel !== undefined && canOperateChannel && (
+          <PlaylistGainControl
+            key={playlistChannel}
+            channel={playlistChannel}
+            linkDown={linkDown}
+          />
+        )}
         {/*
           PANIC AT THE HEAD, not per row: it is the only control here whose scope is EVERY
           row, and a control that acts on the whole list belongs above the list rather than

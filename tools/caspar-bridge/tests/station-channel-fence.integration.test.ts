@@ -651,6 +651,8 @@ describe('the census: every route that names a channel, classified', () => {
       'livePreview.ticket': ['req.channel'],
       'sourcePreviews.pvw': ['req.channel'],
       'sourcePreviews.thumbnails': ['req.channel'],
+      'playlistGain.get': ['req.channel'],
+      'playlistGain.set': ['req.channel'],
       /*
         `CENTRAL-BRIDGE-01` (D9) — a ticket for ONE channel's programme return names it at the top
         level, so the fence refuses a channel this station does not declare (and the handler refuses
@@ -728,6 +730,8 @@ describe('the census: every route that names a channel, classified', () => {
       'livePreview.ticket',
       // `CENTRAL-BRIDGE-01` (D9) — a programme-return ticket for one channel.
       'pgmReturn.ticket',
+      'playlistGain.get',
+      'playlistGain.set',
       'playoutLayers.clear',
       'sourcePreviews.pvw',
       'sourcePreviews.thumbnails',

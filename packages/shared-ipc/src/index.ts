@@ -53,6 +53,7 @@ export * from './channels/auth.js';
 export * from './channels/stationChannels.js';
 export * from './channels/livePreview.js';
 export * from './channels/sourcePreviews.js';
+export * from './channels/playlistGain.js';
 export * from './channels/stationStrays.js';
 // `DESKTOP-APPS-01` — first-run: the phase, the connection check, the unjoined catalogue.
 export * from './channels/setup.js';
