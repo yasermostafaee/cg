@@ -601,7 +601,8 @@ export function StationSetupDialog({
   // `DESKTOP-APPS-01` — the Playout this station trusts, as the bridge advertises it.
   const capabilities = useAuthCapabilities();
   const playoutOrigin = playoutOriginOf(capabilities?.signInUrl);
-  const standaloneSetup = window.cg.setup.standalone?.() ?? null;
+  const standaloneSetup =
+    capabilities?.stationMode === 'standalone' ? (window.cg.setup.standalone?.() ?? null) : null;
   /*
     🔴 `SERVERS-SIMPLIFY-01` (T2) — **A PLAYOUT STATION**: one whose CG Bridge advertises `auth: playout`. There
     CasparCG is where the Playout is and the Playout names it (`casparHost`, the contract's join key), so server A
