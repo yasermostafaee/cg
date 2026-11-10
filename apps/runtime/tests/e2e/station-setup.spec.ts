@@ -181,6 +181,39 @@ test('B-357 — Shared files shows and saves the path on the CG Control server',
     .toBe(String.raw`\\NEWS\CG Shared`);
 });
 
+test('B-425 — a rejected UNC save keeps the path input at its usual width', async ({ app }) => {
+  const page = app.page;
+  const refusal =
+    'CG Bridge could not find this network folder. Check the server name, share name and folder from the CG Bridge server.';
+  await page.evaluate((message) => {
+    const { cg } = window as unknown as {
+      cg: {
+        sharedFiles: {
+          get: () => Promise<{ path: string }>;
+          set: () => Promise<{ ok: boolean; message: string }>;
+        };
+      };
+    };
+    cg.sharedFiles.get = () => Promise.resolve({ path: 'D:\\Shared' });
+    cg.sharedFiles.set = () => Promise.resolve({ ok: false, message });
+  }, refusal);
+  await page.getByRole('button', { name: 'Open Station setup', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Station setup' });
+  await dialog.getByRole('tab', { name: 'Shared files' }).click();
+
+  const input = dialog.getByLabel('Path on CG Control server');
+  const candidate = String.raw`\\NEWS\CG Shared` + '\\';
+  await input.fill(candidate);
+  const before = await input.boundingBox();
+  expect(before).not.toBeNull();
+  await dialog.getByRole('button', { name: 'Save path' }).click();
+  await expect(dialog.getByText(refusal, { exact: true })).toHaveCount(1);
+  await expect(dialog.locator('.cg-shared-files-fields')).not.toContainText(refusal);
+  await expect(input).toHaveValue(candidate);
+  await expect(input).toBeEditable();
+  expect((await input.boundingBox())?.width).toBe(before?.width);
+});
+
 test('🔴 the refusal stays with its own section, and the rail says which one is blocked', async ({
   app,
 }) => {

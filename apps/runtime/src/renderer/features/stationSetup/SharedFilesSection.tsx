@@ -44,12 +44,10 @@ export function SharedFilesSection({
       setStored(result.path);
       setDraft(result.path);
       report(result.message === undefined ? null : { role: 'notice', text: result.message });
-    } else {
-      report({ role: 'refusal', text: result.message ?? 'The shared-files path was not changed.' });
     }
     return {
       accepted: result.ok,
-      ...(result.message !== undefined ? { message: result.message } : {}),
+      ...(result.ok ? {} : { message: result.message ?? 'The shared-files path was not changed.' }),
     };
   };
 
@@ -76,6 +74,7 @@ export function SharedFilesSection({
                 variant="primary"
                 disabled={draft.trim() === '' || draft.trim() === stored}
                 run={save}
+                onError={(message) => report({ role: 'refusal', text: message })}
               >
                 Save path
               </AsyncButton>
