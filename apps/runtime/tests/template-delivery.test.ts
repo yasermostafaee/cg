@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { pack, sha256Hex } from '@cg/vcg-format';
-import { CG_RUNTIME_VERSION } from '@cg/shared-schema';
+import { CG_RUNTIME_VERSION, requiredRuntimeVersionForScene } from '@cg/shared-schema';
 import type { AssetEntry, FontReference, Manifest, Scene } from '@cg/shared-schema';
 import { WS_MAX_FRAME_BYTES } from '@cg/shared-ipc';
 import {
@@ -309,7 +309,7 @@ describe('produceTemplateDelivery — B-196 the runtime-contract guard', () => {
     const bytes = await buildVcgWithImage(
       'tpl-thirty-fps',
       '30 fps lower third',
-      CG_RUNTIME_VERSION,
+      requiredRuntimeVersionForScene(scene),
       PNG_1X1,
       scene,
     );

@@ -41,7 +41,9 @@ const SCENE: Scene = {
 
 const AUTHORING_OVERRIDE = '.cg-pending { opacity: 1 !important; }';
 const AUTHORING_STAGE_OVERRIDE = '.cg-pending .cg-stage { visibility: visible !important; }';
-const REHEARSE_CLEAR_OVERRIDE = '.cg-rehearse-cleared .cg-stage { visibility: hidden !important; }';
+const REHEARSE_CLEAR_OVERRIDE =
+  '.cg-rehearse-cleared .cg-stage { visibility: visible !important; opacity: 1 !important; }';
+const REHEARSE_CLEARED_ARTWORK = '.cg-rehearse-cleared .cg-stage > * { display: none !important; }';
 
 describe('Preview — D-087 blank until play (broadcast flag)', () => {
   let preview: Preview;
@@ -66,6 +68,7 @@ describe('Preview — D-087 blank until play (broadcast flag)', () => {
     const build = html.slice(html.indexOf('async function applyScene'), html.indexOf(reveal));
     expect(build).toContain('applyShownSequenceItem();');
     expect(html).toContain(REHEARSE_CLEAR_OVERRIDE);
+    expect(html).toContain(REHEARSE_CLEARED_ARTWORK);
     expect(html).toContain("msg.action === 'authoring-restore'");
   });
 
