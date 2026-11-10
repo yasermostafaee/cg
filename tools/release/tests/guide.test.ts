@@ -205,8 +205,13 @@ const LABELS: readonly { shown: string; text?: string; file: string }[] = [
   },
   {
     shown: 'Playout',
-    text: '<span className="cg-card__title">Playout</span>',
+    text: "standaloneSetup === null ? 'Playout' : 'No Playout'",
     file: 'apps/runtime/src/renderer/features/stationSetup/StationSetupDialog.tsx',
+  },
+  { shown: 'No Playout', file: 'tools/setup-ui/src/server.rs' },
+  {
+    shown: 'No Playout',
+    file: 'apps/runtime/src/renderer/features/firstRun/PlayoutAddressGate.tsx',
   },
   {
     shown: 'Check',

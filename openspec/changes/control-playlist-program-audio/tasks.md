@@ -21,4 +21,4 @@
       Chromium on a fresh build verified the no-frame control, numeric bounds, staging unity,
       a single explicit Apply, pending-to-applied acknowledgement and the backup sign-in refusal.
 - [ ] 3.2 Verify gain and duplicate-path behaviour with the real Playout plant.
-- [ ] 3.3 Verify the carrying [Linux run](https://github.com/yasermostafaee/cg/actions/runs/42732260602).
+- [x] 3.3 The carrying [Linux Playwright job](https://github.com/yasermostafaee/cg/actions/runs/42732260602/job/129553014124) on `c58750ec` completed successfully, including its actual `E2E` step. The real plant remains open in 3.2.

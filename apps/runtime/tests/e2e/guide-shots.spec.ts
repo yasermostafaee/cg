@@ -13,6 +13,7 @@ import {
   type FakePlayout,
 } from '../../../../tools/caspar-bridge/tests/support/fake-playout.js';
 import { stopChild } from './fixtures/child-process.js';
+import { APP, asCgControl } from './fixtures/cg-control.js';
 
 /**
  * 🔴 `CLIENT-TEST-RELEASE-01` B3 — **THE INSTALL GUIDE'S SCREENSHOTS OF CG CONTROL, TAKEN FROM THE REAL
@@ -44,8 +45,6 @@ test.use({ deviceScaleFactor: 2 });
 const here = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(here, '../../../..');
 const BRIDGE_CLI = path.join(REPO, 'tools/caspar-bridge/bin/caspar-bridge.mjs');
-/** CG Control's own origin: the page it bundles its console on. */
-const APP = 'http://tauri.localhost';
 /** A documentation address (RFC 5737): what the picture shows typed, never a real Playout's. */
 const EXAMPLE_PLAYOUT = '192.0.2.20';
 
@@ -124,29 +123,16 @@ test('B3 — CG Control’s first question: the Playout’s address, typed', asy
   const out = OUT as string;
   fs.mkdirSync(out, { recursive: true });
   await page.setViewportSize({ width: 1280, height: 860 });
-  const base = test.info().project.use.baseURL as string;
-  await page.route(`${APP}/**`, async (route) => {
-    const url = new URL(route.request().url());
-    try {
-      const response = await route.fetch({ url: `${base}${url.pathname}${url.search}` });
-      await route.fulfill({ response });
-    } catch (err) {
-      // The page closed with this request in flight — the test is over. Anything else is real.
-      if (!/has been closed/.test(String(err))) throw err;
-    }
-  });
-  // Nothing is dialled from this page: no socket, and no request to the example address.
-  await page.routeWebSocket(/.*/, (ws) => ws.close());
-  await page.route(/^https?:\/\/192\.0\.2\.20[:/]/, (route) => route.abort('connectionrefused'));
-  await page.addInitScript(() => {
-    (window as unknown as { __CG_SPLASH_DISABLED__: boolean }).__CG_SPLASH_DISABLED__ = true;
-  });
+  await asCgControl(page, null);
   await page.goto(`${APP}/`);
   const gate = page.locator('[data-playout-address-gate]');
+  const mode = gate.getByLabel('Station mode');
+  await expect(mode).toHaveValue('playout');
+  await expect(mode.locator('option')).toHaveText(['With Playout', 'No Playout']);
   // `SERVERS-SIMPLIFY-01` (T1) — the Playout's host field (its port is left to its placeholder).
   await gate.getByLabel('Playout host', { exact: true }).fill(EXAMPLE_PLAYOUT);
   await expect(gate.getByRole('button', { name: 'Connect' })).toBeEnabled();
-  // The card alone: its title, the field and Connect.
+  // The card alone, with the default station mode, the address fields and Connect.
   await gate
     .getByRole('dialog', { name: 'Set up CG Control' })
     .screenshot({ path: path.join(out, '1-playout-address.png') });

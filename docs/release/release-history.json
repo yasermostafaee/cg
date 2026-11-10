@@ -74,6 +74,14 @@
         {
           "fa": "نام متفاوت در پنجرهٔ اکسپورت یک قالب VCG مستقل می‌سازد؛ اکسپورت دوباره با همان نام آن نسخه را به‌روزرسانی می‌کند.",
           "en": "Changing the VCG name in the export dialog creates a separate template. Exporting that name again updates the variant."
+        },
+        {
+          "fa": "با گزینهٔ No Playout، CG Bridge و CG Control روی یک دستگاه بدون ورود به Playout به CasparCG محلی یا شبکه‌ای وصل می‌شوند.",
+          "en": "No Playout connects CG Control through a local CG Bridge to local or remote CasparCG without Playout sign-in."
+        },
+        {
+          "fa": "ON PVW و Play می‌توانند هم‌زمان روی یک لایه روشن باشند. پیش‌نویس Inspector همان لحظه در PVW دیده می‌شود؛ تغییر PGM با Update on air اعمال می‌شود.",
+          "en": "ON PVW and Play can both be active on a layer. Inspector drafts appear immediately in PVW; Update on air applies them to PGM."
         }
       ],
       "fixes": [
