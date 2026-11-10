@@ -605,6 +605,10 @@ export const ClockElementSchema = ElementBaseSchema.extend({
    * `HH`/`H` and `A`/`a` render empty (meridiem is wall-only).
    */
   format: z.string().min(1).default('HH:mm:ss'),
+  separatorSpacingPx: z.number().min(-32).max(128).optional(),
+  separatorOffsetYPx: z.number().min(-128).max(128).optional(),
+  countupStartSeconds: z.number().int().min(0).max(2_147_483_647).optional(),
+  countupLimitSeconds: z.number().int().min(0).max(2_147_483_647).optional(),
   /** Digit script, mapped via @cg/text-shaping AFTER formatting. */
   digits: z.enum(['latin', 'persian', 'arabic-indic']).default('persian'),
   /** Countdown target; ignored by `wall`/`countup`. */
@@ -681,6 +685,17 @@ export const ClockElementSchema = ElementBaseSchema.extend({
         code: z.ZodIssueCode.custom,
         path: ['utcOffsetMinutes'],
         message: 'timezone and utcOffsetMinutes are mutually exclusive wall-clock sources',
+      });
+    }
+    if (
+      el.mode === 'countup' &&
+      el.countupLimitSeconds !== undefined &&
+      el.countupLimitSeconds < (el.countupStartSeconds ?? 0)
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['countupLimitSeconds'],
+        message: 'The countup ceiling must be at or above its start.',
       });
     }
     // D-141 — zones ride on a countdown's remaining time, which `wall`/`countup`

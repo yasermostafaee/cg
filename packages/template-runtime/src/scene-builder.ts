@@ -36,7 +36,7 @@ import type {
   VideoPlaceholderElement,
 } from '@cg/shared-schema';
 import type { BuildSceneResult, FieldScope, LifecycleSource, RenderMode } from './types.js';
-import { clockInitialText } from './clock-driver.js';
+import { clockInitialText, renderClockText } from './clock-driver.js';
 import { makeSequenceItemNode } from './sequence-driver.js';
 import { TEXT_NODE_DATASET } from './text-render-node.js';
 import { markTextFit } from './text-fit.js';
@@ -880,7 +880,7 @@ function buildClock(element: ClockElement, ctx: BuildCtx): HTMLElement {
   span.style.fontVariantNumeric = 'tabular-nums';
   span.style.whiteSpace = 'pre';
   if (isGradientFill(element.colorFill)) applyGradientGlyph(span, element.colorFill);
-  span.textContent = clockInitialText(
+  const initialText = clockInitialText(
     {
       mode: element.mode,
       format: element.format,
@@ -888,10 +888,12 @@ function buildClock(element: ClockElement, ctx: BuildCtx): HTMLElement {
       target: element.target,
       timezone: element.timezone,
       utcOffsetMinutes: element.utcOffsetMinutes,
+      countupStartSeconds: element.countupStartSeconds,
       afterZero: element.mode === 'countdown' ? element.afterZero : undefined,
     },
     Date.now(),
   );
+  renderClockText(span, initialText, element);
   el.appendChild(span);
   ctx.scope.clocks.push({ element, node: span });
   return el;

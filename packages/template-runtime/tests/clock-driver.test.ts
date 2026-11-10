@@ -132,6 +132,25 @@ describe('ClockDriver (D-027)', () => {
     expect(h.node.textContent).toBe('00:00');
   });
 
+  it('starts a countup from its configured value and holds its ceiling without completing', async () => {
+    const h = make({
+      mode: 'countup',
+      format: 's',
+      countupStartSeconds: 7,
+      countupLimitSeconds: 10,
+    });
+    const done = completionFlag(h.driver);
+    h.driver.reset();
+    expect(h.node.textContent).toBe('7');
+    h.driver.start();
+    h.clock.advance(1000);
+    expect(h.node.textContent).toBe('8');
+    h.clock.advance(8000);
+    expect(h.node.textContent).toBe('10');
+    await flush();
+    expect(done.done).toBe(false);
+  });
+
   it('countup counts ACTIVE time: pause freezes, resume continues with no jump', () => {
     const h = make({ mode: 'countup', format: 'ss' });
     h.driver.start();

@@ -2828,6 +2828,90 @@ function ClockSections({
           Tokens: HH H hh h mm m ss s A a — other characters render literally; the largest unit
           absorbs the overflow (mm:ss shows 90:00 for a 90-minute count).
         </p>
+        {element.mode === 'countdown' && (
+          <SelectField
+            label="countdown display"
+            value={
+              element.format === 'm'
+                ? 'total minutes'
+                : element.format === 'HH:mm'
+                  ? 'hours and minutes'
+                  : 'custom'
+            }
+            options={['total minutes', 'hours and minutes', 'custom'] as const}
+            onCommit={(display) =>
+              designerStore.updateElement(id, {
+                format:
+                  display === 'total minutes'
+                    ? 'm'
+                    : display === 'hours and minutes'
+                      ? 'HH:mm'
+                      : 'HH:mm:ss',
+              } as Partial<Element>)
+            }
+          />
+        )}
+        <NumberField
+          label="colon spacing"
+          value={element.separatorSpacingPx ?? 0}
+          min={-32}
+          max={128}
+          suffix="px"
+          onCommit={(separatorSpacingPx) =>
+            designerStore.updateElement(id, { separatorSpacingPx } as Partial<Element>)
+          }
+        />
+        <NumberField
+          label="colon vertical offset"
+          value={element.separatorOffsetYPx ?? 0}
+          min={-128}
+          max={128}
+          suffix="px"
+          onCommit={(separatorOffsetYPx) =>
+            designerStore.updateElement(id, { separatorOffsetYPx } as Partial<Element>)
+          }
+        />
+        {element.mode === 'countup' && (
+          <>
+            <NumberField
+              label="start at"
+              value={element.countupStartSeconds ?? 0}
+              min={0}
+              max={element.countupLimitSeconds ?? 2_147_483_647}
+              suffix="s"
+              onCommit={(seconds) =>
+                designerStore.updateElement(id, {
+                  countupStartSeconds: Math.round(seconds),
+                } as Partial<Element>)
+              }
+            />
+            <SelectField
+              label="countup limit"
+              value={element.countupLimitSeconds === undefined ? 'off' : 'on'}
+              options={['off', 'on'] as const}
+              onCommit={(limit) =>
+                designerStore.updateElement(id, {
+                  countupLimitSeconds:
+                    limit === 'on' ? Math.max(60, element.countupStartSeconds ?? 0) : undefined,
+                } as Partial<Element>)
+              }
+            />
+            {element.countupLimitSeconds !== undefined && (
+              <NumberField
+                label="ceiling"
+                value={element.countupLimitSeconds}
+                min={element.countupStartSeconds ?? 0}
+                max={2_147_483_647}
+                suffix="s"
+                onCommit={(seconds) =>
+                  designerStore.updateElement(id, {
+                    countupLimitSeconds: Math.round(seconds),
+                  } as Partial<Element>)
+                }
+              />
+            )}
+          </>
+        )}
         {/* TEXT-DIGITS-01 — the one Digits control (the clock's own, now with the owner's words). */}
         <DigitsField
           value={element.digits}

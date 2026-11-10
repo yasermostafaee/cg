@@ -109,6 +109,10 @@ export interface ClockDriverOptions {
   blinkColon?: boolean | undefined;
   /** D-103 — colon blink half-period in ms (phase = `floor(now / period) % 2`). Absent ⇒ 1000. */
   blinkPeriodMs?: number | undefined;
+  separatorSpacingPx?: number | undefined;
+  separatorOffsetYPx?: number | undefined;
+  countupStartSeconds?: number | undefined;
+  countupLimitSeconds?: number | undefined;
   /**
    * `DELTA-RUN-NEXT-VERSION-01-A` — the countdown's STEPS. Honoured ONLY for `mode: 'countdown'`
    * (the schema also refuses them elsewhere — two layers, so a hand-edited package degrades to the
@@ -292,7 +296,14 @@ interface NormalizedDriverClock {
 export function clockInitialText(
   opts: Pick<
     ClockDriverOptions,
-    'mode' | 'format' | 'digits' | 'target' | 'timezone' | 'utcOffsetMinutes' | 'afterZero'
+    | 'mode'
+    | 'format'
+    | 'digits'
+    | 'target'
+    | 'timezone'
+    | 'utcOffsetMinutes'
+    | 'afterZero'
+    | 'countupStartSeconds'
   >,
   nowMs: number,
 ): string {
@@ -304,7 +315,8 @@ export function clockInitialText(
       opts.timezone,
       opts.utcOffsetMinutes,
     );
-  if (opts.mode === 'countup') return formatCountClock(0, opts.format, opts.digits);
+  if (opts.mode === 'countup')
+    return formatCountClock(opts.countupStartSeconds ?? 0, opts.format, opts.digits);
   const t = opts.target;
   // D-141 — a `timeofday` resolves against `nowMs` here for the same reason a
   // `datetime` recomputes: an absolute deadline keeps approaching, so the static
@@ -318,6 +330,49 @@ export function clockInitialText(
   // DELTA-RUN-NEXT-VERSION-01-D — a target already past shows the author's after-zero choice from
   // the first paint, not a `00:00` that changes on the run's first frame.
   return countdownText(remaining, opts.format, opts.digits, opts.afterZero);
+}
+
+type SeparatorStyle = Pick<ClockDriverOptions, 'separatorSpacingPx' | 'separatorOffsetYPx'>;
+
+function hasSeparatorStyle(style: SeparatorStyle): boolean {
+  return (style.separatorSpacingPx ?? 0) !== 0 || (style.separatorOffsetYPx ?? 0) !== 0;
+}
+
+/** Paint the same separator boxes in the canvas snapshot and the running clock. */
+export function renderClockText(
+  node: HTMLElement,
+  text: string,
+  style: SeparatorStyle,
+  split = hasSeparatorStyle(style),
+): HTMLElement[] {
+  if (!split) {
+    node.textContent = text;
+    return [];
+  }
+  const doc = node.ownerDocument;
+  node.textContent = '';
+  const colons: HTMLElement[] = [];
+  for (const part of text.split(/(:)/)) {
+    if (part === '') continue;
+    const span = doc.createElement('span');
+    span.textContent = part;
+    if (part === ':') {
+      span.dataset['cgClockColon'] = '1';
+      const spacing = style.separatorSpacingPx ?? 0;
+      const offsetY = style.separatorOffsetYPx ?? 0;
+      if (spacing !== 0) {
+        span.style.marginLeft = `${String(spacing)}px`;
+        span.style.marginRight = `${String(spacing)}px`;
+      }
+      if (offsetY !== 0) {
+        span.style.position = 'relative';
+        span.style.top = `${String(offsetY)}px`;
+      }
+      colons.push(span);
+    }
+    node.appendChild(span);
+  }
+  return colons;
 }
 
 export class ClockDriver {
@@ -500,7 +555,7 @@ export class ClockDriver {
     const now = this.clock.now();
     this.pinnedDeadlineMs = absoluteDeadlineMs(this.o.target, now);
     const text = clockInitialText({ ...this.o, afterZero: this.effectiveAfterZero() }, now);
-    this.o.node.textContent = text;
+    renderClockText(this.o.node, text, this.o);
     this.lastText = text;
     // Clear the published step: a fresh run must re-enter at the step its OWN remaining time
     // selects, never inherit the last run's.
@@ -614,7 +669,12 @@ export class ClockDriver {
         o.utcOffsetMinutes,
       );
     if (o.mode === 'countup') {
-      return formatCountClock(Math.floor(this.activeElapsedMs() / 1000), o.format, o.digits);
+      const seconds = (o.countupStartSeconds ?? 0) + Math.floor(this.activeElapsedMs() / 1000);
+      return formatCountClock(
+        Math.min(seconds, o.countupLimitSeconds ?? Infinity),
+        o.format,
+        o.digits,
+      );
     }
     // Countdown displays ceil(remaining): it shows the full value at start and
     // hits 00:00 exactly when the remaining time does — then the author's after-zero choice.
@@ -640,7 +700,7 @@ export class ClockDriver {
     if (this.o.blinkColon === true) {
       this.paintBlink(next);
     } else if (next !== this.lastText) {
-      this.o.node.textContent = next;
+      renderClockText(this.o.node, next, this.o);
       this.lastText = next;
     }
     this.paintStep();
@@ -751,7 +811,7 @@ export class ClockDriver {
    */
   private paintBlink(next: string): void {
     if (!this.blinkBuilt || next !== this.lastText) {
-      this.renderColonSegments(next);
+      this.colonSpans = renderClockText(this.o.node, next, this.o, true);
       this.lastText = next;
       this.blinkBuilt = true;
       this.lastColonVisible = null; // force the opacity (re)apply below
@@ -760,33 +820,6 @@ export class ClockDriver {
     if (visible !== this.lastColonVisible) {
       for (const span of this.colonSpans) span.style.opacity = visible ? '1' : '0';
       this.lastColonVisible = visible;
-    }
-  }
-
-  /**
-   * Split `text` into runs of `:` (colon spans — the ones that blink) and non-`:` (digit
-   * spans), all inside the time node. The colon char is never a mapped digit, so this works
-   * for Persian/Arabic-Indic output unchanged. Only the OPACITY of the colon spans toggles, so
-   * the digit boxes never reflow.
-   */
-  private renderColonSegments(text: string): void {
-    const node = this.o.node;
-    const doc = node.ownerDocument;
-    node.textContent = '';
-    this.colonSpans = [];
-    let i = 0;
-    while (i < text.length) {
-      const isColon = text[i] === ':';
-      let j = i + 1;
-      while (j < text.length && (text[j] === ':') === isColon) j += 1;
-      const span = doc.createElement('span');
-      span.textContent = text.slice(i, j);
-      if (isColon) {
-        span.dataset['cgClockColon'] = '1';
-        this.colonSpans.push(span);
-      }
-      node.appendChild(span);
-      i = j;
     }
   }
 

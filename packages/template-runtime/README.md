@@ -683,6 +683,10 @@ carries its own `holdOverrides`, applied at its level.
 
 ### ClockDriver — the time-text driver (D-027)
 
+The scene builder and driver share the separator renderer. It preserves the clock's digit shaping
+while spacing or shifting the colons, including when their opacity blinks. Countup applies an
+optional authored starting value and saturates at an optional ceiling without completing a hold.
+
 One driver per clock element, instantiated by `createRuntime` per scope, on
 the ticker's self-wire pattern (lifecycle surface
 `start`/`pause`/`resume`/`stop`/`reset`/`destroy`/`whenComplete`, injectable

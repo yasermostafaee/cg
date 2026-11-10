@@ -120,6 +120,33 @@ test.describe('Clock element (D-027)', () => {
     await app.stop();
   });
 
+  test('authors a 90-minute count display and moves the colon independently', async ({ app }) => {
+    await app.newProject('Clock Format');
+    await app.addClock();
+    await app.setClockCountdown(5400);
+    const canvas = app.page.frameLocator('iframe[title="cgpreview"]');
+    const time = canvas.locator('[data-cg-clock-time]');
+    const display = app.inspector.getByRole('combobox', { name: 'countdown display' });
+
+    await display.selectOption('total minutes');
+    await expect(time).toHaveText('۹۰');
+    await display.selectOption('hours and minutes');
+    await expect(time).toHaveText('۰۱:۳۰');
+
+    const spacing = app.inspector.getByLabel('colon spacing', { exact: true });
+    await spacing.fill('5');
+    await spacing.press('Enter');
+    const offset = app.inspector.getByLabel('colon vertical offset', { exact: true });
+    await offset.fill('8');
+    await offset.press('Enter');
+    const colon = canvas.locator('[data-cg-clock-colon]');
+    await expect(colon).toHaveCSS('margin-left', '5px');
+    await expect(colon).toHaveCSS('top', '8px');
+    const { html } = await app.exportHtml();
+    expect(html).toContain('"separatorOffsetYPx":8');
+    expect(html).toContain('"separatorSpacingPx":5');
+  });
+
   test('the exported single-file HTML carries the clock with an unchanged GDD', async ({ app }) => {
     await app.newProject('ClockExport');
     await app.addClock();
