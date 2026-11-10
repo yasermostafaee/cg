@@ -49,7 +49,7 @@ CG Bridge در یکی از این دو جا نصب می‌شود:
 4. روی سرورِ جداگانه: همان گامِ ۳، ولی در صفحهٔ `Playout` گزینهٔ `CG Bridge runs on a separate server (not on the Playout machine)` را تیک بزنید. در `PLAYOUT ADDRESS` آدرس Playout را بنویسید (IP آن کافی است؛ با موتورِ پشتیبان، آدرسِ موتورِ **اصلی**). `CASPARCG (AMCP) HOST` همان را می‌گیرد؛ آن را فقط اگر CasparCG روی رایانهٔ دیگری است عوض کنید. زیرِ `THIS SERVER'S ADDRESS`، IP ثابتِ همین سرور را انتخاب کنید. برای فایل‌های مشترک نیز `SHARED FILES FOLDER` را روی مسیر همین سرور تنظیم کنید؛ این مسیر در هر سرور جداگانه انتخاب می‌شود و داخل برنامه ثابت نیست. پس از نصب، مدیر Playout این سرور را یک بار «تأیید» می‌کند (بخشِ ۵، گامِ ۵).
 5. وارسی: در صفحهٔ آخرِ نصب، `Open CG Bridge status` تیک دارد. با `Finish` صفحهٔ `http://127.0.0.1:5280/health` باز می‌شود؛ باید `cg-bridge` و `1.2.0` را ببینید.
 
-![صفحهٔ نخستِ نصبِ CG Bridge](../1.1.0/img/1-bridge-welcome.png "47%")
+![صفحهٔ نخستِ نصبِ CG Bridge](img/1-bridge-welcome.png "47%")
 ![سرورِ جداگانه — با آدرس‌های نمونه](../1.0.0/img/2-bridge-separate-server.png "47%")
 
 ## ۴. نصب CG Control
@@ -58,7 +58,7 @@ CG Bridge در یکی از این دو جا نصب می‌شود:
 2. اجازهٔ مدیر لازم ندارد و درگاهی باز نمی‌کند. در صفحهٔ `Install CG Control?` دکمهٔ `Next` و سپس `Install` را بزنید. در صفحهٔ آخر، `Launch when ready` تیک دارد؛ `Finish` برنامه را باز می‌کند.
 3. روی هر رایانهٔ اپراتور همین کار را بکنید.
 
-![صفحهٔ نخستِ ارتقای CG Control](../1.1.0/img/3-control-welcome.png "62%")
+![صفحهٔ نخستِ ارتقای CG Control](img/3-control-welcome.png "62%")
 
 ## ۵. اجرای نخست
 
@@ -73,7 +73,7 @@ CG Bridge در یکی از این دو جا نصب می‌شود:
 9. برای آزمودنِ دوبارهٔ اتصال، بالای پنجره `SETTINGS` را بزنید و زبانهٔ `Connection` را باز کنید. زیرِ `Playout` آدرسِ Playout و آدرسِ CG Bridge نوشته شده‌اند، و کنارِ CG Bridge یکی از `On the Playout machine` یا `Separate server`. آزمون خودش اجرا می‌شود؛ دکمهٔ `Check` آن را دوباره اجرا می‌کند.
 10. برای تغییرِ یک آدرس، کنارِ آن `Change` را بزنید و `Host` و `Port` را بنویسید. تا `Connect` را نزنید چیزی تغییر نمی‌کند و `Not connected yet` دیده می‌شود. `Connect` آدرسِ تازه را فقط وقتی نگه می‌دارد که CG Bridge در آن پاسخ دهد.
 
-![آدرس Playout — یک نمونه](../1.1.0/img/4-playout-address.png "40%")
+![آدرس Playout — یک نمونه](img/4-playout-address.png "40%")
 ![ورود با `cg-admin`](../1.0.0/img/5-sign-in.png "32%")
 ![انتخاب کانال](../1.0.0/img/6-channel.png "28%")
 
