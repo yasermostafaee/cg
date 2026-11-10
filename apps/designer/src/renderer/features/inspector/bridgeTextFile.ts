@@ -3,7 +3,7 @@ import { MAX_TEXT_SOURCE_BYTES, readTextSourceFile } from '@cg/storage';
 
 export { MAX_TEXT_SOURCE_BYTES as MAX_BRIDGE_TEXT_SOURCE_BYTES } from '@cg/storage';
 
-const TEXT_EXTENSIONS = new Set(['txt', 'text', 'csv', 'tsv', 'doc', 'docx', 'log']);
+const TEXT_EXTENSIONS = new Set(['txt', 'text', 'csv', 'tsv', 'doc', 'docx', 'json', 'log']);
 const NATURAL = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
 export interface BridgeTextSourceFile {

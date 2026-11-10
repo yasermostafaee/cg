@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::State;
@@ -31,33 +32,38 @@ impl SelectedTextSources {
     }
 }
 
-fn read_text_source(path: &Path) -> Result<String, String> {
-    let metadata =
-        std::fs::metadata(path).map_err(|err| format!("Could not read the file: {err}"))?;
-    if metadata.len() > MAX_TEXT_SOURCE_BYTES {
+fn read_text_source(path: &Path) -> Result<Vec<u8>, String> {
+    let file =
+        std::fs::File::open(path).map_err(|err| format!("Could not read the file: {err}"))?;
+    let mut bytes = Vec::new();
+    file.take(MAX_TEXT_SOURCE_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|err| format!("Could not read the file: {err}"))?;
+    if bytes.len() as u64 > MAX_TEXT_SOURCE_BYTES {
         return Err("Choose a supported text file of 1 MiB or smaller.".to_owned());
     }
-    let bytes = std::fs::read(path).map_err(|err| format!("Could not read the file: {err}"))?;
-    String::from_utf8(bytes).map_err(|_| "The selected file is not valid UTF-8 text.".to_owned())
+    Ok(bytes)
 }
 
 /// Pick and read a small text file natively. Chromium intentionally hides a file input's absolute
 /// path; the native dialog is what lets the author verify the Windows/UNC share they selected.
 #[tauri::command]
 pub fn pick_text_source_file(
+    include_json: Option<bool>,
     selected_sources: State<'_, SelectedTextSources>,
-) -> Result<Option<(String, String, String, String)>, String> {
+) -> Result<Option<(String, String, String, Vec<u8>)>, String> {
     #[cfg(not(windows))]
     {
-        let _ = selected_sources;
+        let _ = (selected_sources, include_json);
         return Err("The native text-file picker is available in the Windows app only.".to_owned());
     }
 
     #[cfg(windows)]
     {
         let mut path_buffer = vec![0_u16; 32_768];
+        let include_json = include_json.unwrap_or(false);
         let filter: Vec<u16> =
-            "Text and data files\0*.txt;*.text;*.csv;*.tsv;*.json;*.log\0All files\0*.*\0\0"
+            "Text and Word files\0*.txt;*.text;*.csv;*.tsv;*.doc;*.docx;*.log\0All files\0*.*\0\0"
                 .encode_utf16()
                 .collect();
         let title: Vec<u16> = "Choose shared text file\0".encode_utf16().collect();
@@ -92,15 +98,12 @@ pub fn pick_text_source_file(
             .map(|value| {
                 matches!(
                     value.to_ascii_lowercase().as_str(),
-                    "txt" | "text" | "csv" | "tsv" | "json" | "log"
-                )
+                    "txt" | "text" | "csv" | "tsv" | "doc" | "docx" | "log"
+                ) || (include_json && value.eq_ignore_ascii_case("json"))
             })
             .unwrap_or(false);
         if !supported {
-            return Err(
-                "Choose a supported text/data file (.txt, .text, .csv, .tsv, .json or .log)."
-                    .to_owned(),
-            );
+            return Err("Choose a supported text, Word or structured data file.".to_owned());
         }
         let canonical = std::fs::canonicalize(&path)
             .map_err(|err| format!("Could not resolve the selected file: {err}"))?;
@@ -123,7 +126,7 @@ pub fn pick_text_source_file(
 pub fn reload_text_source_file(
     source_path: String,
     selected_sources: State<'_, SelectedTextSources>,
-) -> Result<String, String> {
+) -> Result<Vec<u8>, String> {
     #[cfg(not(windows))]
     {
         let _ = source_path;

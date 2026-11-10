@@ -178,9 +178,7 @@ export async function pickTextFileSource(
             'text/plain': ['.txt', '.text', '.log'],
             'text/csv': ['.csv'],
             'text/tab-separated-values': ['.tsv'],
-            ...(options.includeExcel === true
-              ? { 'application/json': ['.json'] }
-              : WORD_TEXT_FILE_TYPES),
+            ...(options.includeExcel === true ? {} : WORD_TEXT_FILE_TYPES),
             ...(options.includeExcel === true
               ? {
                   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],

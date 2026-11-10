@@ -147,7 +147,7 @@ export interface DesignerBridge {
 
   textSources: {
     /** Native on desktop so the Designer can show the chosen Windows/UNC path. */
-    pick(): Promise<DesignerTextSourceFile | null>;
+    pick(includeJson?: boolean): Promise<DesignerTextSourceFile | null>;
     /** Re-read the same session-selected file after another application saves it. */
     reload(sourcePath: string): Promise<string>;
     /** Legacy picker retained for compatibility; new Sequence UI generates its own exact file. */

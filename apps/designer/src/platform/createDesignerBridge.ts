@@ -1,3 +1,4 @@
+import { decodeTextSource } from '@cg/storage';
 import { PROJECT_PACKAGE_EXT, type Scene } from '@cg/shared-schema';
 import {
   namedPackageId,
@@ -201,25 +202,32 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
     },
 
     textSources: {
-      pick: async () => {
+      pick: async (includeJson = false) => {
         const invoke = shellInvoke();
         if (invoke !== null) {
-          const selected = await invoke('pick_text_source_file');
+          const selected = await invoke('pick_text_source_file', { includeJson });
           if (selected === null) return null;
           if (
             !Array.isArray(selected) ||
             selected.length !== 4 ||
-            selected.some((part) => typeof part !== 'string')
+            selected.slice(0, 3).some((part) => typeof part !== 'string') ||
+            !Array.isArray(selected[3]) ||
+            selected[3].some((part) => typeof part !== 'number')
           ) {
             throw new Error('The native text-file picker returned an invalid result.');
           }
-          const [name, bridgePath, sourcePath, content] = selected as [
+          const [name, bridgePath, sourcePath, bytes] = selected as [
             string,
             string,
             string,
-            string,
+            number[],
           ];
-          return { name, bridgePath, sourcePath, content };
+          return {
+            name,
+            bridgePath,
+            sourcePath,
+            content: await decodeTextSource(name, Uint8Array.from(bytes)),
+          };
         }
         return browserTextSources.pick();
       },
@@ -227,10 +235,10 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
         const invoke = shellInvoke();
         if (invoke !== null) {
           const content = await invoke('reload_text_source_file', { sourcePath });
-          if (typeof content !== 'string') {
+          if (!Array.isArray(content) || content.some((part) => typeof part !== 'number')) {
             throw new Error('The native text-file reload returned invalid content.');
           }
-          return content;
+          return decodeTextSource(sourcePath, Uint8Array.from(content as number[]));
         }
         return browserTextSources.reload(sourcePath);
       },

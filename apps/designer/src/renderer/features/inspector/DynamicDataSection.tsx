@@ -946,8 +946,9 @@ function PatternField({
  */
 async function pickSharedTextSource(
   bridge: DesignerBridge,
+  includeJson = false,
 ): Promise<DesignerTextSourceFile | null> {
-  if (bridge.textSources?.pick !== undefined) return bridge.textSources.pick();
+  if (bridge.textSources?.pick !== undefined) return bridge.textSources.pick(includeJson);
 
   // Browser/test fallback. The desktop bridge always takes the native branch above so its
   // absolute Windows/UNC path remains visible.
@@ -1040,7 +1041,7 @@ function FileSourceRow({
     // than merging those two unrelated ambient globals.
     const bridge = (window as unknown as { cg: DesignerBridge }).cg;
     try {
-      const selected = await pickSharedTextSource(bridge);
+      const selected = await pickSharedTextSource(bridge, policy?.format === 'json');
       if (selected === null) return;
       setBrowseError(null);
       patchPolicy({ ...policy, bridgePath: selected.bridgePath });
@@ -1184,8 +1185,12 @@ function FileSourceRow({
             <SelectField
               label="file format"
               value={effectiveFormat}
-              options={['text', 'json', 'csv'] as const}
-              labels={['Text / delimiter', 'JSON rows', 'CSV rows']}
+              options={effectiveFormat === 'json' ? ['text', 'json', 'csv'] : ['text', 'csv']}
+              labels={
+                effectiveFormat === 'json'
+                  ? ['Text / delimiter', 'Existing structured data', 'CSV rows']
+                  : ['Text / delimiter', 'CSV rows']
+              }
               onCommit={commitFormat}
             />
           )}

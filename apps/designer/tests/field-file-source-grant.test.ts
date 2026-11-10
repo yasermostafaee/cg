@@ -609,13 +609,27 @@ describe('R-102 — file-only and locked Bridge file authoring', () => {
     });
   });
 
-  it('authors JSON row mode and previews structured list values', async () => {
+  it('previews existing structured rows without offering JSON as a file format', async () => {
     freshScene();
     designerStore.addElement(defaultTicker('k1', 0, 0));
     designerStore.setElementDataKey('k1', 'weather');
     designerStore.setElementFieldMeta('k1', { allowFileSource: true });
     mount();
     render('k1');
+    const format = () =>
+      container?.querySelector<HTMLSelectElement>('select[aria-label="file format"]');
+    expect(Array.from(format()?.options ?? []).map((option) => option.value)).toEqual([
+      'text',
+      'csv',
+    ]);
+    act(() =>
+      designerStore.setElementFieldMeta('k1', {
+        allowFileSource: true,
+        fileSource: { format: 'json' },
+      }),
+    );
+    render('k1');
+    expect(format()?.textContent).not.toMatch(/JSON/i);
 
     const content = '[{"city":"Tehran","temperature":18}]';
     const picked = new File([content], 'weather.json', { type: 'application/json' });
@@ -629,14 +643,6 @@ describe('R-102 — file-only and locked Bridge file authoring', () => {
       },
     });
 
-    const format = container?.querySelector<HTMLSelectElement>('select[aria-label="file format"]');
-    act(() => {
-      if (format !== null && format !== undefined) {
-        format.value = 'json';
-        format.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-    });
-    render('k1');
     const browse = [...(container?.querySelectorAll('button') ?? [])].find((button) =>
       button.textContent?.includes('Browse shared file'),
     );

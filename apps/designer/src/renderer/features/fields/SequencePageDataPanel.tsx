@@ -336,7 +336,7 @@ function SequencePageSection({
     if (format === 'csv') {
       if (layout === null) {
         throw new Error(
-          'Excel/CSV is available when every page uses the same flat Repeater. Save the matching JSON sample for this Sequence instead.',
+          'Excel/CSV is available when every page uses the same flat Repeater. Create a matching data file for this Sequence.',
         );
       }
       applyBulkRows(parseSequenceRowsCsv(content, layout.field), bridgePath);
@@ -427,7 +427,7 @@ function SequencePageSection({
       connectSavedFile(saved, 'json');
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
-      setError(`Could not save and connect the JSON file: ${message}`);
+      setError(`Could not save and connect the data file: ${message}`);
       setNotice(null);
     }
   };
@@ -584,7 +584,7 @@ function SequencePageSection({
               onClick={() => void (layout === null ? saveAndConnectJson() : saveAndConnectExcel())}
             >
               Save and connect {!connected ? '' : 'another '}
-              {layout === null ? 'JSON' : 'Excel'} file…
+              {layout === null ? 'Data' : 'Excel'} file…
             </Button>
             {connected && (
               <>
@@ -653,7 +653,7 @@ function SequencePageSection({
           )}
           <p className={s.bulkHint}>
             {layout === null
-              ? "The connected JSON file is generated from this Sequence's exact fields and nested groups."
+              ? "The connected data file is generated from this Sequence's exact fields and nested groups."
               : `The connected Excel file is generated from this template. One row is one city/item; page breaks are automatic every ${String(layout.maxItems)} rows.`}
           </p>
           {layout !== null && (
