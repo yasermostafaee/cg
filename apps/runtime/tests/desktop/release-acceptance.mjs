@@ -829,7 +829,8 @@ async function phaseStandalone() {
         'the installed WebView2 connects to the loopback Bridge without Playout credentials',
         connected &&
           facts.station?.mode === 'standalone' &&
-          facts.station.bridgeAddress === '127.0.0.1:5280' &&
+          // The default port is implied when both address fields are left blank.
+          facts.station.bridgeAddress === '127.0.0.1' &&
           !facts.hasSession,
         JSON.stringify(facts),
       )
