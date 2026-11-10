@@ -134,6 +134,9 @@ pub fn preview(args: &[String]) -> u32 {
                 m
             };
             shots.push(("server".into(), on_server(false), None));
+            let mut standalone = on_server(false);
+            standalone.server.toggle_standalone();
+            shots.push(("server-no-playout".into(), standalone, None));
             let mut filled = on_server(true);
             filled.server.playout.set("192.0.2.10");
             filled.server.playout_changed();

@@ -99,6 +99,8 @@ pub enum StepState {
 /// The rail: CG Control's and CG Designer's four steps; CG Bridge has a fifth, `Playout`.
 pub const STEPS: [&str; 4] = ["Welcome", "Location", "Installing", "Done"];
 pub const BRIDGE_STEPS: [&str; 5] = ["Welcome", "Location", "Playout", "Installing", "Done"];
+const BRIDGE_STANDALONE_STEPS: [&str; 5] =
+    ["Welcome", "Location", "CasparCG", "Installing", "Done"];
 /// The most steps a rail has (the window keeps one tick animation per step).
 pub const MAX_STEPS: usize = 5;
 
@@ -191,7 +193,9 @@ impl Model {
 
     /// The rail's steps, for this product.
     pub fn step_labels(&self) -> &'static [&'static str] {
-        if self.has_server_page() {
+        if self.has_server_page() && self.server.standalone {
+            &BRIDGE_STANDALONE_STEPS
+        } else if self.has_server_page() {
             &BRIDGE_STEPS
         } else {
             &STEPS
@@ -243,7 +247,14 @@ impl Model {
         let (current, failed) = match self.page {
             Page::Welcome => (at("Welcome"), false),
             Page::Location => (at("Location"), false),
-            Page::Server => (at("Playout"), false),
+            Page::Server => (
+                at(if self.server.standalone {
+                    "CasparCG"
+                } else {
+                    "Playout"
+                }),
+                false,
+            ),
             Page::Installing => (at("Installing"), false),
             Page::Done => (labels.len(), false),
             Page::Failed => (at("Installing"), true),
@@ -269,6 +280,7 @@ impl Model {
                 Kind::Fresh | Kind::Replace { .. } => format!("Install {name}?"),
             },
             Page::Location => "Location".into(),
+            Page::Server if self.server.standalone => "CasparCG".into(),
             Page::Server => "Playout".into(),
             Page::Installing if update => format!("Updating {name}"),
             Page::Installing => format!("Installing {name}"),

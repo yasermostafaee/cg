@@ -7,7 +7,8 @@
 ;   %ProgramData%\CG Bridge\      cg-bridge.json (the configuration), .cg-runtime\ (the state),
 ;                                 logs\ (the service's output, amcp.log, install.log)
 ;
-; Silent:     CG-Bridge_<v>_x64-setup.exe /S [/PLAYOUT=http://host:8080] [/AMCPHOST=127.0.0.1]
+; Silent:     CG-Bridge_<v>_x64-setup.exe /S [/MODE=standalone|playout] [/PLAYOUT=http://host:8080]
+;               [/AMCPHOST=127.0.0.1]
 ;               [/AMCPPORT=5250] [/OSCPORT=6251] [/CONTROLPORT=5280] [/TEMPLATEPORT=7911]
 ;               [/BRIDGEADDRESS=<ip>] [/TEXTSOURCEROOT=<local-or-UNC-folder>]
 ;             A value runs to the next space; a value in double quotes may hold one.
@@ -73,6 +74,7 @@ Var ExitCode
 Var Output
 Var Args
 Var Playout
+Var Mode
 Var AmcpHost
 Var AmcpPort
 Var OscPort
@@ -146,6 +148,7 @@ Function .onInit
   ; address to the configuration (run 36703284775). Spelled " /PLAYOUT=" over " $Args", the value
   ; runs to the next SPACE: an address, a host and a port never hold one, and a quoted value may.
   ${GetOptions} " $Args" " /PLAYOUT=" $Playout
+  ${GetOptions} " $Args" " /MODE=" $Mode
   ${GetOptions} " $Args" " /AMCPHOST=" $AmcpHost
   ${GetOptions} " $Args" " /AMCPPORT=" $AmcpPort
   ${GetOptions} " $Args" " /OSCPORT=" $OscPort
@@ -187,12 +190,14 @@ Section "CG Bridge" SecMain
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
   ; 3 - the configuration, written by the bridge through its own schema. A first install with no
-  ;     /PLAYOUT= takes the Playout on this machine; an upgrade keeps every value it was not given.
+  ;     /PLAYOUT= takes the Playout on this machine unless standalone was chosen.
+  ;     An upgrade keeps every value it was not given, including its mode.
   ${IfNot} ${FileExists} "$DataDir\cg-bridge.json"
   ${AndIf} $Playout == ""
+  ${AndIf} $Mode != "standalone"
     StrCpy $Playout "${DEFAULT_PLAYOUT}"
   ${EndIf}
-  !insertmacro RUN "writing the configuration" `"$INSTDIR\cg-bridge.exe" "$INSTDIR\bridge\caspar-bridge.mjs" --write-service-config "$DataDir\cg-bridge.json" --playout-address "$Playout" --caspar-host "$AmcpHost" --amcp-port "$AmcpPort" --osc-port "$OscPort" --port "$ControlPort" --template-serve-port "$TemplatePort" --template-serve-host "$BridgeAddress" --text-source-root "$TextSourceRoot"`
+  !insertmacro RUN "writing the configuration" `"$INSTDIR\cg-bridge.exe" "$INSTDIR\bridge\caspar-bridge.mjs" --write-service-config "$DataDir\cg-bridge.json" --mode "$Mode" --playout-address "$Playout" --caspar-host "$AmcpHost" --amcp-port "$AmcpPort" --osc-port "$OscPort" --port "$ControlPort" --template-serve-port "$TemplatePort" --template-serve-host "$BridgeAddress" --text-source-root "$TextSourceRoot"`
   ${If} $ExitCode != 0
     MessageBox MB_ICONSTOP "CG Bridge's configuration was not written:$\r$\n$Output" /SD IDOK
     Abort "CG Bridge's configuration was not written (see $Log)."

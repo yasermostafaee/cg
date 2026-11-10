@@ -107,6 +107,10 @@ fn automation_id(id: WidgetId) -> String {
         WidgetId::AddressOtherField => "address-other-field",
         WidgetId::TextSourceField => "shared-text-folder",
         WidgetId::TextSourceBrowse => "shared-text-folder-browse",
+        WidgetId::NoPlayout => "no-playout",
+        WidgetId::StandaloneHostField => "standalone-amcp-host",
+        WidgetId::AmcpPortField => "amcp-port",
+        WidgetId::OscPortField => "osc-port",
     }
     .to_string()
 }

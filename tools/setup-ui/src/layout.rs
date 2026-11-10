@@ -10,8 +10,9 @@ use crate::model::{format_bytes, Model, Page, StepState};
 use crate::palette::{self, Rgb};
 use crate::product::{ProductId, PUBLISHER, WEBVIEW2_LINE};
 use crate::server::{
-    AddressChoice, ADDRESS_LABEL, AMCP_LABEL, OTHER_LABEL, PLAYOUT_LABEL, PLAYOUT_PLACEHOLDER,
-    SEPARATE_LABEL, TEXT_SOURCE_LABEL, TEXT_SOURCE_PLACEHOLDER,
+    AddressChoice, ADDRESS_LABEL, AMCP_LABEL, AMCP_ON_THIS_MACHINE, AMCP_PORT_DEFAULT,
+    AMCP_PORT_LABEL, NO_PLAYOUT_LABEL, OSC_PORT_DEFAULT, OSC_PORT_LABEL, OTHER_LABEL,
+    PLAYOUT_LABEL, PLAYOUT_PLACEHOLDER, SEPARATE_LABEL, TEXT_SOURCE_LABEL, TEXT_SOURCE_PLACEHOLDER,
 };
 
 pub const WIN_W: f32 = 800.0;
@@ -154,6 +155,10 @@ pub enum WidgetId {
     AddressOtherField,
     TextSourceField,
     TextSourceBrowse,
+    NoPlayout,
+    StandaloneHostField,
+    AmcpPortField,
+    OscPortField,
 }
 
 impl WidgetId {
@@ -165,6 +170,9 @@ impl WidgetId {
                 | WidgetId::AmcpField
                 | WidgetId::AddressOtherField
                 | WidgetId::TextSourceField
+                | WidgetId::StandaloneHostField
+                | WidgetId::AmcpPortField
+                | WidgetId::OscPortField
         )
     }
 }
@@ -414,14 +422,32 @@ fn refusal(b: &mut Builder, y: f32, text: Option<&str>) {
 fn server_page(b: &mut Builder, m: &Model) {
     let s = &m.server;
     b.heading(Rect::new(X0, 54.0, CONTENT_W, 34.0), m.title());
-    let (lw, _) = b.m.measure(SEPARATE_LABEL, Style::Body, CONTENT_W);
+    let (mode_w, _) = b.m.measure(NO_PLAYOUT_LABEL, Style::Body, CONTENT_W);
+    let mode_w = 28.0 + mode_w.ceil();
     b.widgets.push(Widget::new(
-        WidgetId::Separate,
-        WidgetKind::Checkbox(s.separate),
-        Rect::new(X0, 108.0, (28.0 + lw.ceil()).min(CONTENT_W), 24.0),
-        SEPARATE_LABEL,
+        WidgetId::NoPlayout,
+        WidgetKind::Checkbox(s.standalone),
+        Rect::new(X1 - mode_w, 58.0, mode_w, 24.0),
+        NO_PLAYOUT_LABEL,
         true,
     ));
+    if s.standalone {
+        b.text(
+            Rect::new(X0, 108.0, CONTENT_W, 24.0),
+            "Run CG Control on this machine.",
+            Style::Body,
+            palette::TEXT,
+        );
+    } else {
+        let (lw, _) = b.m.measure(SEPARATE_LABEL, Style::Body, CONTENT_W);
+        b.widgets.push(Widget::new(
+            WidgetId::Separate,
+            WidgetKind::Checkbox(s.separate),
+            Rect::new(X0, 108.0, (28.0 + lw.ceil()).min(CONTENT_W), 24.0),
+            SEPARATE_LABEL,
+            true,
+        ));
+    }
     let text_y = 140.0;
     b.label(text_y, TEXT_SOURCE_LABEL);
     b.widgets.push(field_widget(
@@ -440,6 +466,47 @@ fn server_page(b: &mut Builder, m: &Model) {
         true,
     ));
     refusal(b, text_y + 56.0, s.shown.text_source);
+
+    if s.standalone {
+        for (y, id, label, field, placeholder, shown) in [
+            (
+                212.0,
+                WidgetId::StandaloneHostField,
+                AMCP_LABEL,
+                &s.standalone_host,
+                AMCP_ON_THIS_MACHINE,
+                s.shown.amcp,
+            ),
+            (
+                288.0,
+                WidgetId::AmcpPortField,
+                AMCP_PORT_LABEL,
+                &s.amcp_port,
+                AMCP_PORT_DEFAULT,
+                s.shown.amcp_port,
+            ),
+            (
+                364.0,
+                WidgetId::OscPortField,
+                OSC_PORT_LABEL,
+                &s.osc_port,
+                OSC_PORT_DEFAULT,
+                s.shown.osc_port,
+            ),
+        ] {
+            b.label(y, label);
+            b.widgets.push(field_widget(
+                id,
+                Rect::new(X0, y + 20.0, CONTENT_W, 32.0),
+                label,
+                field,
+                placeholder,
+                shown.is_some(),
+            ));
+            refusal(b, y + 56.0, shown);
+        }
+        return;
+    }
 
     if !s.separate {
         let stored = m
@@ -1218,6 +1285,7 @@ mod tests {
         assert_eq!(
             tab,
             vec![
+                WidgetId::NoPlayout,
                 WidgetId::Separate,
                 WidgetId::TextSourceField,
                 WidgetId::TextSourceBrowse,
@@ -1251,6 +1319,36 @@ mod tests {
         assert!(build(&m, &Fake)
             .widget(WidgetId::AddressOtherField)
             .is_some());
+    }
+
+    #[test]
+    fn standalone_selects_raw_host_and_ports_without_playout_fields() {
+        let mut m = bridge_on_server_page();
+        m.server.toggle_standalone();
+        let s = build(&m, &Fake);
+        assert_eq!(s.texts()[0], "CasparCG");
+        assert_eq!(m.steps()[2], StepState::Current);
+        assert_eq!(
+            s.widget(WidgetId::NoPlayout).unwrap().kind,
+            WidgetKind::Checkbox(true)
+        );
+        for absent in [
+            WidgetId::Separate,
+            WidgetId::PlayoutField,
+            WidgetId::AddressOther,
+        ] {
+            assert!(s.widget(absent).is_none());
+        }
+        for (id, placeholder) in [
+            (WidgetId::StandaloneHostField, AMCP_ON_THIS_MACHINE),
+            (WidgetId::AmcpPortField, AMCP_PORT_DEFAULT),
+            (WidgetId::OscPortField, OSC_PORT_DEFAULT),
+        ] {
+            let field = s.widget(id).unwrap();
+            assert_eq!(field.placeholder, placeholder);
+            assert!(field.rect.bottom() <= FOOT_Y, "{id:?} reaches the foot");
+        }
+        assert!(s.widget(WidgetId::TextSourceField).is_some());
     }
 
     #[test]

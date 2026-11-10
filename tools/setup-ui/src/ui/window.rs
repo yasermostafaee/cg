@@ -21,7 +21,10 @@ use crate::layout::{
 use crate::model::{Facts, Model, Outcome, Page, Space, StepState, MAX_STEPS};
 use crate::observe::{self, AppSignals, Progress};
 use crate::product::{product, Home, ProductId, BRIDGE_DATA, BRIDGE_SERVICE};
-use crate::server::{AddressChoice, ServerSetup, StoredBridge, OPTIONS};
+use crate::server::{
+    AddressChoice, BridgeMode, ServerSetup, StoredBridge, AMCP_PORT_OPTION, MODE_OPTION, OPTIONS,
+    OSC_PORT_OPTION,
+};
 use crate::win;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -109,7 +112,7 @@ pub fn widget_from_code(code: usize) -> Option<WidgetId> {
     ALL_WIDGETS.get(code).copied()
 }
 const ADDRESS_CODE: usize = 100;
-const ALL_WIDGETS: [WidgetId; 19] = [
+const ALL_WIDGETS: [WidgetId; 23] = [
     WidgetId::Next,
     WidgetId::Back,
     WidgetId::Cancel,
@@ -129,6 +132,10 @@ const ALL_WIDGETS: [WidgetId; 19] = [
     WidgetId::AddressOtherField,
     WidgetId::TextSourceField,
     WidgetId::TextSourceBrowse,
+    WidgetId::NoPlayout,
+    WidgetId::StandaloneHostField,
+    WidgetId::AmcpPortField,
+    WidgetId::OscPortField,
 ];
 
 /// What must run after the window's state is released (each may re-enter the window procedure).
@@ -256,8 +263,13 @@ fn detect(payload: &Payload) -> Facts {
 /// `RELEASE-0111-01` Part A — the three separate-server options on this installer's own command line.
 fn given_server(rest: &str) -> StoredBridge {
     StoredBridge {
+        mode: cmdline::option_value(rest, MODE_OPTION)
+            .as_deref()
+            .and_then(BridgeMode::parse),
         playout: cmdline::option_value(rest, OPTIONS[0]),
         amcp_host: cmdline::option_value(rest, OPTIONS[1]),
+        amcp_port: cmdline::option_value(rest, AMCP_PORT_OPTION),
+        osc_port: cmdline::option_value(rest, OSC_PORT_OPTION),
         bridge_address: cmdline::option_value(rest, OPTIONS[2]),
         text_source_root: cmdline::option_value(rest, OPTIONS[3]),
     }
@@ -626,7 +638,10 @@ fn run_effect(hwnd: HWND, e: Effect) {
                             if let Some(app) = g.as_mut() {
                                 app.model.server.text_source.set(&chosen);
                                 app.model.server.text_source_changed();
-                                log_line(&app.log, &format!("shared files folder chosen: {chosen}"));
+                                log_line(
+                                    &app.log,
+                                    &format!("shared files folder chosen: {chosen}"),
+                                );
                                 app.rebuild();
                             }
                         }
@@ -1227,6 +1242,9 @@ impl App {
             let field = match id {
                 WidgetId::PlayoutField => &mut server.playout,
                 WidgetId::AmcpField => &mut server.amcp,
+                WidgetId::StandaloneHostField => &mut server.standalone_host,
+                WidgetId::AmcpPortField => &mut server.amcp_port,
+                WidgetId::OscPortField => &mut server.osc_port,
                 WidgetId::AddressOtherField => &mut server.other,
                 WidgetId::TextSourceField => &mut server.text_source,
                 _ => return,
@@ -1239,6 +1257,9 @@ impl App {
             match id {
                 WidgetId::PlayoutField => server.playout_changed(),
                 WidgetId::AmcpField => server.amcp_changed(),
+                WidgetId::StandaloneHostField => server.shown.amcp = None,
+                WidgetId::AmcpPortField => server.shown.amcp_port = None,
+                WidgetId::OscPortField => server.shown.osc_port = None,
                 WidgetId::TextSourceField => server.text_source_changed(),
                 _ => server.address_changed(),
             }
@@ -1252,7 +1273,15 @@ impl App {
         if s.shown.playout.is_some() {
             Some(WidgetId::PlayoutField)
         } else if s.shown.amcp.is_some() {
-            Some(WidgetId::AmcpField)
+            Some(if s.standalone {
+                WidgetId::StandaloneHostField
+            } else {
+                WidgetId::AmcpField
+            })
+        } else if s.shown.amcp_port.is_some() {
+            Some(WidgetId::AmcpPortField)
+        } else if s.shown.osc_port.is_some() {
+            Some(WidgetId::OscPortField)
         } else if s.shown.address.is_some() {
             Some(match s.choice {
                 AddressChoice::Other => WidgetId::AddressOtherField,
@@ -1370,8 +1399,15 @@ impl App {
                     self.focus = Some(WidgetId::PlayoutField);
                 }
             }
+            WidgetId::NoPlayout => {
+                self.model.server.toggle_standalone();
+                self.rebuild();
+            }
             WidgetId::PlayoutField
             | WidgetId::AmcpField
+            | WidgetId::StandaloneHostField
+            | WidgetId::AmcpPortField
+            | WidgetId::OscPortField
             | WidgetId::AddressOtherField
             | WidgetId::TextSourceField => {
                 self.focus = Some(id);
@@ -1542,7 +1578,7 @@ impl App {
             Some(options) => format!(
                 "{} {}",
                 options.join(" "),
-                cmdline::without_options(&self.parsed.rest, &OPTIONS)
+                cmdline::without_options(&self.parsed.rest, m.server.replaced_options())
             ),
             None => self.parsed.rest.clone(),
         };

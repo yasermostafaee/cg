@@ -27,12 +27,15 @@
  *      /BRIDGEADDRESS=…` writes; the service runs and `/health` names that Playout.
  *   G. (`--previous`) an upgrade from the `0.11.0` installer, installed as a separate server by command
  *      line: the page opens ticked and filled from the stored configuration, and the values are kept.
+ *   H. (`R-098`) No Playout installs with direct AMCP, keeps unauthenticated control on loopback,
+ *      and retains its mode and custom endpoint on a silent upgrade with no options.
  *
  * Usage (elevated): node tools/bridge-installer/setup-smoke.mjs --installer <setup.exe> --engine <engine.exe>
  *   --version <x.y.z> --out <dir> [--previous <CG-Bridge_0.11.0_x64-setup.exe> --previous-version 0.11.0]
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import net from 'node:net';
 import path from 'node:path';
 import {
   checks,
@@ -137,6 +140,34 @@ function edgeAt(url) {
   } catch {
     return false;
   }
+}
+
+/** What a local console can read before any authentication. */
+function localCapabilities() {
+  return new Promise((resolve) => {
+    const ws = new WebSocket('ws://127.0.0.1:5280');
+    const finish = (payload) => {
+      clearTimeout(timer);
+      ws.close();
+      resolve(payload);
+    };
+    const timer = setTimeout(() => finish(null), 10_000);
+    ws.addEventListener('open', () => {
+      ws.send(
+        JSON.stringify({
+          type: 'request',
+          id: 'caps',
+          channel: 'bridge.capabilities',
+          payload: {},
+        }),
+      );
+    });
+    ws.addEventListener('message', (event) => {
+      const frame = JSON.parse(String(event.data));
+      if (frame.type === 'response' && frame.id === 'caps') finish(frame.payload ?? null);
+    });
+    ws.addEventListener('error', () => finish(null));
+  });
 }
 
 /** What `/S` alone writes on a first install — the baseline an unticked Playout page must equal. */
@@ -583,6 +614,122 @@ if (args.previous !== undefined && serverIp !== null) {
   );
 } else if (args.previous !== undefined) {
   check('G. an upgrade from the previous release: F found this server’s address first', false);
+}
+
+// ── H. No Playout, using a raw AMCP peer and no Playout API ──────────────────────────────────────
+{
+  fresh();
+  const sockets = new Set();
+  let amcpTraffic = '';
+  const amcp = net.createServer((socket) => {
+    sockets.add(socket);
+    socket.on('data', (chunk) => {
+      amcpTraffic = (amcpTraffic + String(chunk)).slice(-4096);
+    });
+    socket.on('error', () => undefined);
+    socket.on('close', () => sockets.delete(socket));
+  });
+  await new Promise((resolve, reject) => {
+    amcp.once('error', reject);
+    amcp.listen(0, '127.0.0.1', resolve);
+  });
+  try {
+    const amcpPort = amcp.address().port;
+    const oscPort = 16251;
+    const r = launch(args.installer);
+    check('H. the setup window opens', uia(TITLE, 'wait', '', 90).ok);
+    let pg = toServerPage();
+    check('No Playout is off by default', pg.byId['no-playout']?.state === 'Off');
+    uia(TITLE, 'toggle', 'no-playout');
+    pg = until(TITLE, 'CasparCG', 20);
+    check(
+      'No Playout shows direct host and ports and hides the Playout controls',
+      pg.byId['no-playout']?.state === 'On' &&
+        pg.byId['standalone-amcp-host'] !== undefined &&
+        pg.byId['amcp-port'] !== undefined &&
+        pg.byId['osc-port'] !== undefined &&
+        pg.byId['separate-server'] === undefined &&
+        pg.byId['playout-address'] === undefined,
+      pg.names.join(' | '),
+    );
+    uia(TITLE, 'set', 'standalone-amcp-host=127.0.0.1');
+    uia(TITLE, 'set', `amcp-port=${String(amcpPort)}`);
+    uia(TITLE, 'set', 'osc-port=6250');
+    uia(TITLE, 'invoke', 'install');
+    pg = until(TITLE, '6250 is reserved', 20);
+    check('No Playout refuses reserved OSC port 6250 on the page', pg.ok, pg.names.join(' | '));
+    uia(TITLE, 'set', `osc-port=${String(oscPort)}`);
+    shot(TITLE, path.join(OUT, 'bridge-server-no-playout.png'));
+    uia(TITLE, 'invoke', 'install');
+    pg = until(TITLE, 'is installed', 300);
+    check('No Playout installs the service', pg.byId.title?.name === 'CG Bridge is installed');
+    uia(TITLE, 'toggle', 'launch');
+    uia(TITLE, 'invoke', 'finish');
+    check('No Playout Finish exits 0', (await exitCode(r, 30_000)) === 0);
+    const before = configOrNull();
+    check(
+      'the installed config stores standalone mode and the raw endpoint',
+      before?.mode === 'standalone' &&
+        !Object.hasOwn(before, 'playoutAddress') &&
+        before.amcpHost === '127.0.0.1' &&
+        before.amcpPort === amcpPort &&
+        before.oscPort === oscPort,
+      JSON.stringify(before),
+    );
+    const h = await health();
+    const server = h?.casparcg?.servers?.find((row) => row.label === 'A');
+    check(
+      '/health shows Playout off and A with the configured direct AMCP endpoint',
+      h?.playout?.address === null &&
+        h.playout.session === 'off' &&
+        server?.host === '127.0.0.1' &&
+        server.amcpPort === amcpPort &&
+        JSON.stringify(h.casparcg.channels) === '[1]',
+      JSON.stringify(h),
+    );
+    const amcpDeadline = Date.now() + 15_000;
+    while (amcpTraffic.length === 0 && Date.now() < amcpDeadline) await sleep(200);
+    check(
+      'the service sends AMCP directly to the configured TCP peer',
+      /\r\n/.test(amcpTraffic),
+      amcpTraffic.trim(),
+    );
+    const caps = await localCapabilities();
+    check(
+      'a local console without a token sees standalone capabilities',
+      caps?.stationMode === 'standalone' && caps.auth === 'off',
+      JSON.stringify(caps),
+    );
+    const listenerProbe = spawnSync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-Command',
+        'Get-NetTCPConnection -State Listen -LocalPort 5280 | Select-Object -ExpandProperty LocalAddress',
+      ],
+      { encoding: 'utf8', windowsHide: true },
+    );
+    const listeners = (listenerProbe.stdout ?? '').trim().split(/\s+/).filter(Boolean);
+    check(
+      'standalone control HTTP and WebSocket are served only on loopback',
+      listenerProbe.status === 0 &&
+        listeners.length > 0 &&
+        listeners.every((address) => address === '127.0.0.1'),
+      listeners.join(', ') || listenerProbe.stderr,
+    );
+    const upgraded = code(args.installer, ['/S']);
+    const after = configOrNull();
+    check(
+      'a silent upgrade without /MODE keeps the standalone configuration',
+      upgraded === 0 &&
+        sameFields(before, after).same &&
+        (await health())?.playout?.session === 'off',
+      `exit ${String(upgraded)} · before ${JSON.stringify(before)} · after ${JSON.stringify(after)}`,
+    );
+  } finally {
+    for (const socket of sockets) socket.destroy();
+    await new Promise((resolve) => amcp.close(resolve));
+  }
 }
 
 process.exit(save('results-setup.json') ? 0 : 1);
