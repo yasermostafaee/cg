@@ -329,6 +329,10 @@
         {
           "fa": "فاصله و جابه‌جایی عمودی جداکنندهٔ ساعت در قالب‌های سفارشی مثل HH-mm-ss هم اعمال می‌شود.",
           "en": "Clock separator spacing and vertical offset also apply to custom formats such as HH-mm-ss."
+        },
+        {
+          "fa": "پس‌زمینهٔ شطرنجی بوم Designer پس از پایان Stop در Rehearse دیده می‌ماند.",
+          "en": "The Designer canvas checkerboard stays visible after Rehearse Stop completes."
         }
       ],
       "planned": [

@@ -41,6 +41,7 @@ const SCENE: Scene = {
 
 const AUTHORING_OVERRIDE = '.cg-pending { opacity: 1 !important; }';
 const AUTHORING_STAGE_OVERRIDE = '.cg-pending .cg-stage { visibility: visible !important; }';
+const REHEARSE_CLEAR_BODY = 'body.cg-pending.cg-rehearse-cleared { opacity: 1; }';
 const REHEARSE_CLEAR_OVERRIDE =
   '.cg-rehearse-cleared .cg-stage { visibility: visible !important; opacity: 1 !important; }';
 const REHEARSE_CLEARED_ARTWORK = '.cg-rehearse-cleared .cg-stage > * { display: none !important; }';
@@ -59,7 +60,7 @@ describe('Preview — D-087 blank until play (broadcast flag)', () => {
   });
 
   it('authoring reveals frame 0 after the selected page has been applied', () => {
-    const { html } = preview.load(SCENE);
+    const { html } = preview.load(SCENE, false, true);
     expect(html).not.toContain(AUTHORING_OVERRIDE);
     expect(html).not.toContain(AUTHORING_STAGE_OVERRIDE);
     expect(html).toContain('const REVEAL_ON_LOAD = true;');
@@ -67,6 +68,7 @@ describe('Preview — D-087 blank until play (broadcast flag)', () => {
     expect(html).toContain(reveal);
     const build = html.slice(html.indexOf('async function applyScene'), html.indexOf(reveal));
     expect(build).toContain('applyShownSequenceItem();');
+    expect(html).toContain(REHEARSE_CLEAR_BODY);
     expect(html).toContain(REHEARSE_CLEAR_OVERRIDE);
     expect(html).toContain(REHEARSE_CLEARED_ARTWORK);
     expect(html).toContain("msg.action === 'authoring-restore'");
@@ -78,6 +80,7 @@ describe('Preview — D-087 blank until play (broadcast flag)', () => {
     // `.cg-pending .cg-stage { visibility: hidden }` (in the baseline cgCss).
     expect(html).not.toContain(AUTHORING_OVERRIDE);
     expect(html).not.toContain(AUTHORING_STAGE_OVERRIDE);
+    expect(html).not.toContain(REHEARSE_CLEAR_BODY);
     // …and applyScene does NOT clear cg-pending on load, so it survives until play().
     expect(html).toContain('const REVEAL_ON_LOAD = false;');
     // The omitted-override slot carries the D-087 marker comment.

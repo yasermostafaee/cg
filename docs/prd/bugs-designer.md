@@ -4926,6 +4926,8 @@ The valid mask from Plate 1 to Plate 2 in the reported project survives.
 
 **Expected / regression:** WHEN the Outro finishes THEN the graphic is hidden and the checkerboard remains visible; Play is still available.
 
+**Follow-up:** The shared runtime CSS also hides the preview document body when pending. Restoring the stage alone leaves the entire frame transparent. The cleared Canvas restores body opacity and verifies both checker colors in the rendered frame.
+
 ## [~] B-430 — Space does not reliably Play the Designer timeline ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/designer-space-transport/`
 
 **Repro / Actual:** Press Space with focus outside inputs in normal Canvas editing and in Rehearse. The active transport is not consistently started.

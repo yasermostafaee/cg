@@ -243,12 +243,31 @@ test.describe('D-199 — main Canvas separates timeline playback from Rehearse p
     await expect(app.canvasFrame.locator('body')).toHaveClass(/cg-rehearse-cleared/);
     await expect(transport.getByRole('button', { name: 'Play', exact: true })).toBeEnabled();
 
-    // B-428 — clearing the artwork keeps the editor's checkerboard frame visible.
+    // B-428 — clearing the artwork keeps both checker tones painted on screen. Reading the
+    // stage's own style misses an ancestor that makes the entire frame transparent.
     const stage = app.canvasFrame.locator('.cg-stage');
     await expect(graphic).toBeHidden();
-    await expect(stage).toHaveCSS('visibility', 'visible');
-    await expect(stage).toHaveCSS('opacity', '1');
-    await expect(stage).toHaveCSS('background-image', /linear-gradient/);
+    const screenshot = await stage.screenshot({ scale: 'css' });
+    const checkerColors = await app.page.evaluate(async (png) => {
+      const image = new Image();
+      image.src = 'data:image/png;base64,' + png;
+      await image.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const context = canvas.getContext('2d')!;
+      context.drawImage(image, 0, 0);
+      const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+      let dark = false;
+      let light = false;
+      for (let i = 0; i < data.length; i += 4) {
+        dark ||= data[i] === 61 && data[i + 1] === 66 && data[i + 2] === 83;
+        light ||= data[i] === 91 && data[i + 1] === 96 && data[i + 2] === 117;
+        if (dark && light) break;
+      }
+      return { dark, light };
+    }, screenshot.toString('base64'));
+    expect(checkerColors).toEqual({ dark: true, light: true });
 
     await transport.getByRole('button', { name: 'Rehearse preview' }).click();
     await expect(app.canvasFrame.locator('body')).not.toHaveClass(/cg-rehearse-cleared/);

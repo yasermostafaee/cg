@@ -154,6 +154,9 @@ export class Preview {
            shape — on-frame shapes over the page paint on top and stay visible;
            off-frame shapes over the #161927 surround likewise (clip lifted). */
       html, body { background: #161927 !important; }
+      /* B-428 — the bundled .cg-pending rule hides the body. Restore the cleared
+         Canvas so the visible stage can paint its checker. */
+      body.cg-pending.cg-rehearse-cleared { opacity: 1; }
       .cg-stage {
         position: absolute !important;
         /* D-071 — the frame inset is a CSS VARIABLE on :root (which createRuntime never
