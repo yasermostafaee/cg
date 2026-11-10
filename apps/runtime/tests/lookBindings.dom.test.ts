@@ -102,7 +102,7 @@ afterEach(() => {
 
 async function render(
   over: Parameters<typeof itemWith>[1] = {},
-  props: { rehearsing?: boolean } = {},
+  props: { rehearsing?: boolean; previewOnly?: boolean } = {},
 ): Promise<HTMLElement> {
   initSources({
     sources: {
@@ -424,4 +424,14 @@ it('🔴 B-156 — a REHEARSING row says PVW, the distinction session BL shipped
     badge naming the mode is a state INDICATOR in the same category as that mark.
   */
   expect((badge as HTMLElement | null)?.style.color).toBe(asRendered(colors.rehearsing));
+});
+
+it.each([
+  ['on-air', 'ON AIR NOW', 'on-air'],
+  ['loaded', 'SHOWING IN PVW', 'rehearsing'],
+] as const)('R-117 — independent PVW on a %s row shows %s', async (status, label, tone) => {
+  const el = await render({ status }, { rehearsing: true, previewOnly: true });
+  const badge = el.querySelector('[data-look-live="two"]');
+  expect(badge?.textContent).toContain(label);
+  expect(badge?.getAttribute('data-look-badge')).toBe(tone);
 });

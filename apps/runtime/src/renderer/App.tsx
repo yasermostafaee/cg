@@ -69,7 +69,7 @@ import { useOwnedOccupancy } from './hooks/useOwnedOccupancy.js';
 import { useEmptiedAir } from './hooks/useEmptiedAir.js';
 import { useStack } from './hooks/useStack.js';
 import { useRehearse } from './hooks/useRehearse.js';
-import { isRehearsing } from '@cg/shared-ipc';
+import { isRehearsalInterlocked, isRehearsing } from '@cg/shared-ipc';
 import { appShell } from './layout.js';
 
 declare global {
@@ -377,12 +377,14 @@ export function App(): JSX.Element {
     />
   );
 
+  const selectedOnPvw = selected !== null && isRehearsing(rehearsals, selected.itemId);
   const renderInspector = (onClose: () => void): JSX.Element => (
     <Inspector
       onClose={onClose}
       item={selected}
       // B-156 — ONE derivation of "is this row rehearsing", shared with the row picker.
-      rehearsing={selected !== null && isRehearsing(rehearsals, selected.itemId)}
+      rehearsing={selectedOnPvw}
+      previewOnly={selectedOnPvw && !isRehearsalInterlocked(rehearsals, selected.itemId)}
       onApply={(id) => {
         const target = items.find((i) => i.itemId === id);
         return target !== undefined ? applyItem(target) : Promise.resolve({ accepted: false });

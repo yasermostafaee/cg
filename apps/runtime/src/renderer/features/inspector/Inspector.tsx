@@ -174,6 +174,7 @@ interface Props {
    * agree until they do not.
    */
   rehearsing?: boolean | undefined;
+  previewOnly?: boolean | undefined;
 }
 
 const styles = {
@@ -398,7 +399,14 @@ function MetaChip({
  * registry doesn't know the template we fall back to type inference so the
  * inspector is never empty.
  */
-export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Props): JSX.Element {
+export function Inspector({
+  item,
+  onApply,
+  onDiscard,
+  onClose,
+  rehearsing,
+  previewOnly,
+}: Props): JSX.Element {
   const [lookup, setLookup] = useState<{
     templateId: string;
     channel: number | undefined;
@@ -861,6 +869,7 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
           item={item}
           info={resolvedInfo}
           rehearsing={rehearsing}
+          previewOnly={previewOnly}
           channel={itemChannel}
           editingLook={editingLook}
           onEditLook={(lookId) => setPinnedLook({ itemId, lookId })}

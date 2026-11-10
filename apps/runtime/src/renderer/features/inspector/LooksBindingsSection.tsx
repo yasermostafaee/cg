@@ -225,7 +225,8 @@ const styles = {
  * this section never learned it — the `B-151` shape, one surface knowing a state and its
  * neighbour not. Re-deriving either here would be the defect, not the fix.
  *
- * R-117 — the active preset remains on air while PVW is open on the same row.
+ * R-117 — independent PVW preserves the on-air badge when both are active. Legacy
+ * rehearsal retains its PVW precedence across briefly overlapping snapshots.
  *
  * 🔴 **SESSION BP — IT NOW RETURNS THE COLOUR TOO, and that is the point of returning it at
  * all.** The words, the machine-readable `tone` and the hue are three readings of ONE
@@ -237,10 +238,11 @@ const styles = {
 export function badgeFor(
   onAir: boolean,
   rehearsing: boolean,
+  previewOnly = false,
 ): { text: string | null; tone: 'on-air' | 'rehearsing' | 'not-on-air'; color: string } {
-  if (onAir) return { text: 'ON AIR NOW', tone: 'on-air', color: styles.live.color };
-  if (rehearsing)
+  if (rehearsing && (!previewOnly || !onAir))
     return { text: 'SHOWING IN PVW', tone: 'rehearsing', color: styles.rehearsing.color };
+  if (onAir) return { text: 'ON AIR NOW', tone: 'on-air', color: styles.live.color };
   // The pressed tab already carries selection. Repeating it as a long sentence made the
   // selected preset resize the whole row and added no operational fact (owner, B-401).
   return { text: null, tone: 'not-on-air', color: styles.selected.color };
@@ -277,6 +279,7 @@ export function LooksBindingsSection({
   item,
   info,
   rehearsing = false,
+  previewOnly = false,
   channel,
   editingLook,
   onEditLook,
@@ -301,6 +304,7 @@ export function LooksBindingsSection({
    * the bridge, which is what made it untestable the first time this was tried.
    */
   rehearsing?: boolean | undefined;
+  previewOnly?: boolean | undefined;
 }): JSX.Element | null {
   useSyncExternalStore(subscribeSources, sourcesVersion);
   useSyncExternalStore(subscribeDrafts, draftsVersion);
@@ -314,7 +318,7 @@ export function LooksBindingsSection({
   if (carrier === undefined || editingLook === undefined) return null;
 
   const liveLookId = activeLookOf(carrier, item.activeLookId)?.id;
-  const badge = badgeFor(claimsAir(item), rehearsing);
+  const badge = badgeFor(claimsAir(item), rehearsing, previewOnly);
   const defaults = appliedPlateSources(item.templateId, carrier.sources ?? [], channel);
   const patches = item.sourceOverride ?? {};
   /*
