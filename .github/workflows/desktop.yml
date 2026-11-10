@@ -656,6 +656,67 @@ jobs:
           path: acceptance/
           retention-days: 30
 
+  # R-098 — a separate clean runner, using the release installers and the real WebView2 transport.
+  # CasparCG's AMCP stand-in runs inside the drive phase; there is no Playout fixture or socket relay.
+  acceptance-standalone:
+    name: Release acceptance — No Playout (clean Windows)
+    needs: installers
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies and build CasparCG's stand-in
+        run: |
+          pnpm install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm --filter @cg/amcp-mock build
+
+      - name: Download the installers
+        uses: actions/download-artifact@v8
+        with:
+          pattern: CG-*-installer
+          path: installers
+          merge-multiple: true
+
+      - name: Install standalone CG Bridge (elevated)
+        shell: pwsh
+        run: |
+          $bridge = (Get-ChildItem installers -Filter 'CG-Bridge_*-setup.exe').FullName
+          $installed = Start-Process $bridge -ArgumentList '/S', '/MODE=standalone' -WindowStyle Hidden -PassThru -Wait
+          exit $installed.ExitCode
+
+      - name: Install and drive CG Control against standalone CG Bridge (unelevated)
+        shell: pwsh
+        run: |
+          winget install --id gerardog.gsudo --exact --accept-source-agreements --accept-package-agreements --disable-interactivity
+          $env:Path += ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+          $gsudo = (Get-Command gsudo -ErrorAction Stop).Source
+          Copy-Item (Get-ChildItem installers -Filter 'CG Control_*-setup.exe').FullName installers\cg-control-setup.exe
+          $control = (Resolve-Path installers\cg-control-setup.exe).Path
+          icacls "$env:GITHUB_WORKSPACE" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
+          & $gsudo --integrity Medium node apps/runtime/tests/desktop/release-acceptance.mjs --phase standalone --control $control --version ${{ needs.installers.outputs.version }} --out standalone
+          exit $LASTEXITCODE
+
+      - name: Upload the standalone acceptance evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: acceptance-standalone
+          path: standalone/
+          retention-days: 30
+
   # RELEASE-0110-01 §3 — THE REAL UPGRADE: the classic NSIS `0.10.0` the owner holds, from the `v0.10.0`
   # draft's own installers, a take left ON AIR through it, then each `0.11.0` installer over it — its
   # Welcome ("Update from 0.10.0 to …"), then `/S` — and CG Bridge's service, configuration and session,
@@ -1541,6 +1602,7 @@ jobs:
         bridge-smoke,
         setup-window,
         acceptance-fresh,
+        acceptance-standalone,
         acceptance-upgrade,
         acceptance-upgrade-0110,
         acceptance-upgrade-0111,

@@ -16,6 +16,8 @@
  *   install-classic (elevated) the `--from` draft's own three installers, silently
  *   drive           (medium)   CG Control end to end; `--mode fresh` clears what it took, `--mode
  *                              classic` leaves it on air for the upgrade
+ *   standalone      (medium)   separately installed standalone Bridge and CG Control, no Playout
+ *                              fixture, a real WebView2 connection and a take on raw AMCP
  *   upgrade         (elevated) each of this release's installers over `--from`: its Welcome, then `/S`; the
  *                              service, the settings and CG Bridge's session kept; no `CLEAR`
  *                              (`--apps-open yes`: CG Control's and CG Designer's `/S` left to the next)
@@ -39,7 +41,7 @@
  */
 /* global process, fetch, WebSocket, AbortSignal, Buffer, setTimeout */
 // The page probes run INSIDE the installed CG Control (serialised through DevTools), not in Node.
-/* global window, document, location, localStorage */
+/* global window, document, location, localStorage, Event, URL */
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -748,6 +750,129 @@ async function phaseDrive() {
   } finally {
     page.close();
     closeControl();
+  }
+}
+
+/** R-098 on a clean runner: real WebView2, loopback Bridge, CasparCG's stand-in, no Playout. */
+async function phaseStandalone() {
+  const groups = run('whoami', ['/groups', '/fo', 'csv', '/nh']);
+  check('CG Control runs at medium integrity', groups.includes('S-1-16-8192'));
+  check('CG Control installs silently', codeOf(args.control, ['/S']) === 0);
+  check(
+    'the installed CG Control matches this release',
+    displayVersion('HKCU', 'CG Control') === VERSION,
+    String(displayVersion('HKCU', 'CG Control')),
+  );
+  const { createMock } = await import(
+    new URL('../../../../tools/amcp-mock/dist/index.js', import.meta.url).href
+  );
+  const caspar = await createMock({
+    amcpPort: 5250,
+    oscPort: 0,
+    tracePath: path.join(OUT, 'standalone-amcp-trace.ndjson'),
+  });
+  let page;
+  try {
+    const bridge = await until(
+      'the standalone Bridge to connect to raw AMCP',
+      async () => {
+        const h = await health();
+        return h?.casparcg?.servers?.some((s) => s.label === 'A' && s.amcp === 'up') ? h : null;
+      },
+      60_000,
+    );
+    check(
+      'the installed Bridge has no Playout and drives channel 1',
+      bridge.version === VERSION &&
+        bridge.playout.address === null &&
+        bridge.playout.session === 'off' &&
+        JSON.stringify(bridge.casparcg.channels) === '[1]',
+      JSON.stringify(bridge),
+    );
+    page = await openControl(9321);
+    if (page === null) return;
+    const gate = '[data-playout-address-gate]';
+    const selected = await until(
+      'the first-run station mode selector',
+      () =>
+        page.evaluate((scope) => {
+          const select = document.querySelector(`${scope} select`);
+          if (select?.value !== 'playout') return false;
+          select.value = 'standalone';
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+          return true;
+        }, gate),
+      60_000,
+    );
+    check('a fresh CG Control can select No Playout', selected);
+    await page.screenshot('standalone-1-setup.png');
+    await until('the No Playout Connect button', () => press(page, gate, 'Connect'), 15_000);
+    const connected = await until(
+      'the layers console without a sign-in',
+      () =>
+        page.evaluate(
+          (scope) =>
+            document.querySelector(scope) === null &&
+            document.querySelector('[aria-label="Layers"]') !== null,
+          gate,
+        ),
+      30_000,
+    ).catch(() => false);
+    if (!connected) await page.screenshot('standalone-2-connection-failed.png');
+    const facts = await page.evaluate(() => ({
+      station: JSON.parse(localStorage.getItem('cg.runtime.station.v1') ?? 'null'),
+      hasSession: localStorage.getItem('cg.runtime.playoutSession') !== null,
+      error: document.getElementById('cg-playout-address-error')?.textContent ?? '',
+    }));
+    if (
+      !check(
+        'the installed WebView2 connects to the loopback Bridge without Playout credentials',
+        connected &&
+          facts.station?.mode === 'standalone' &&
+          facts.station.bridgeAddress === '127.0.0.1:5280' &&
+          !facts.hasSession,
+        JSON.stringify(facts),
+      )
+    )
+      return;
+
+    const channel = 1;
+    const layer = 99;
+    const taken = await page.evaluate(
+      async ({ template, html, channel, layer, itemId }) => {
+        const imported = await window.cg.templates.import({ template, html, channel });
+        if (!imported.registered) return { imported };
+        const loaded = await window.cg.fixedLayers.load({
+          channel,
+          layer,
+          itemId,
+          templateId: template.templateId,
+          fields: {},
+        });
+        if (!loaded.accepted) return { imported, loaded };
+        return { imported, loaded, taken: await window.cg.stack.take({ itemId }) };
+      },
+      { template: TEMPLATE, html: TEMPLATE_HTML, channel, layer, itemId: ITEM },
+    );
+    check(
+      'the connected console accepts TAKE',
+      taken.taken?.accepted === true,
+      JSON.stringify(taken),
+    );
+    const onAir = await until(
+      'the row to read ON AIR',
+      async () => ((await rowText(page, layer)) ?? '').includes('ON AIR'),
+      30_000,
+    ).catch(() => false);
+    check(
+      'the console shows ON AIR and CasparCG holds the layer',
+      onAir && caspar.layerState({ channel, layer }) != null,
+    );
+    await page.screenshot('standalone-3-on-air.png');
+  } finally {
+    page?.close();
+    closeControl();
+    await caspar.stop();
   }
 }
 
@@ -1506,6 +1631,7 @@ const PHASES = {
   install: phaseInstall,
   'install-classic': phaseInstallClassic,
   drive: phaseDrive,
+  standalone: phaseStandalone,
   upgrade: phaseUpgrade,
   'upgrade-apps-open': phaseUpgradeAppsOpen,
   'drive-upgraded': phaseDriveUpgraded,
