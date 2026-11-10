@@ -2,7 +2,7 @@
 
 ### Requirement: Compatible Word documents are text sources
 
-Compatible text-backed fields SHALL offer .doc, .docx and the established plain-text formats, excluding JSON in new file pick filters. Reading a supported Word document SHALL extract the body text without running macros, resolving remote links or emitting markup. Re-reading SHALL use the same parser and existing source permissions. Existing JSON bindings SHALL remain readable.
+Compatible text-backed fields SHALL offer .doc, .docx and the established plain-text formats. The UI SHALL hide JSON from new format choices and file pick filters. Reading a supported Word document SHALL extract the body text without running macros, resolving remote links or emitting markup. Re-reading SHALL use the same parser and existing source permissions. Existing JSON bindings SHALL remain readable.
 
 #### Scenario: Read and reload Word copy
 
