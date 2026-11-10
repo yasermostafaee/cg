@@ -48,6 +48,7 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
   const [hoverNav, setHoverNav] = useState<string | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [delimitersOpen, setDelimitersOpen] = useState(false);
+  const [projectDefaultsOpen, setProjectDefaultsOpen] = useState(false);
   // `D-161` — Help → About.
   const [aboutOpen, setAboutOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -420,6 +421,13 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
               />
               <div className={s.dropdownDivider} aria-hidden />
               <FileMenuItem
+                label="Project defaults…"
+                onClick={() => {
+                  setOpenMenu(null);
+                  setProjectDefaultsOpen(true);
+                }}
+              />
+              <FileMenuItem
                 label="Manage delimiters…"
                 onClick={() => {
                   setOpenMenu(null);
@@ -568,6 +576,9 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
       {aboutOpen && <AboutModal onClose={() => setAboutOpen(false)} />}
       {historyOpen && <VersionHistoryModal onClose={() => setHistoryOpen(false)} />}
       {newModalOpen && <NewProjectModal onClose={() => setNewModalOpen(false)} />}
+      {projectDefaultsOpen && (
+        <NewProjectModal defaultsOnly onClose={() => setProjectDefaultsOpen(false)} />
+      )}
       {pendingSwitch !== null && scene !== null && (
         <SaveBeforeSwitchModal
           scene={scene}

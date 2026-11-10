@@ -11,16 +11,22 @@ import {
   projectSecondsFromFrames,
 } from './new-project-duration.js';
 import {
-  DEFAULT_PROJECT_RESOLUTION_PRESET,
   PROJECT_FRAME_RATES,
   PROJECT_RESOLUTION_PRESETS,
   projectResolution,
   type ProjectResolutionPresetKey,
 } from './new-project-options.js';
+import {
+  readNewProjectDefaults,
+  saveNewProjectDefaults,
+  type NewProjectDefaults,
+} from '../settings/new-project-defaults.js';
 import * as s from './NewProjectModal.css.js';
 
 interface Props {
   onClose: () => void;
+  defaultsOnly?: boolean;
+  onDefaultsSaved?: (defaults: NewProjectDefaults) => void;
 }
 
 // Template choice was removed from the modal — `projects.create` still
@@ -34,23 +40,40 @@ const DEFAULT_TEMPLATE_TYPE: TemplateType = 'custom';
  * type, then calls `projects.create` with the overrides and switches
  * to the Studio view.
  */
-export function NewProjectModal({ onClose }: Props): JSX.Element {
-  const [name, setName] = useState('Untitled');
-  const [presetKey, setPresetKey] = useState<ProjectResolutionPresetKey>(
-    DEFAULT_PROJECT_RESOLUTION_PRESET,
-  );
-  const [customW, setCustomW] = useState(1920);
-  const [customH, setCustomH] = useState(1080);
-  const [frameRate, setFrameRate] = useState<FrameRate>(50);
-  const [durationFrames, setDurationFrames] = useState(50);
+export function NewProjectModal({
+  onClose,
+  defaultsOnly = false,
+  onDefaultsSaved,
+}: Props): JSX.Element {
+  const [form, setForm] = useState(readNewProjectDefaults);
+  const [showDefaults, setShowDefaults] = useState(false);
+  const { name, presetKey, customW, customH, frameRate, durationFrames } = form;
   const isCustom = presetKey === 'custom';
 
+  function update(patch: Partial<NewProjectDefaults>): void {
+    setForm((previous) => ({ ...previous, ...patch }));
+  }
+
   async function confirm(): Promise<void> {
-    const resolution = projectResolution(presetKey, customW, customH);
+    const projectName = name.trim() || 'Untitled';
+    if (defaultsOnly) {
+      const custom = projectResolution('custom', customW, customH);
+      const saved = {
+        ...form,
+        name: projectName,
+        customW: custom.width,
+        customH: custom.height,
+        durationFrames: normalizeProjectFrames(durationFrames),
+      };
+      saveNewProjectDefaults(saved);
+      onDefaultsSaved?.(saved);
+      onClose();
+      return;
+    }
     const result = await window.cg.projects.create({
-      name: name.trim().length > 0 ? name.trim() : 'Untitled',
+      name: projectName,
       templateType: DEFAULT_TEMPLATE_TYPE,
-      resolution,
+      resolution: projectResolution(presetKey, customW, customH),
       frameRate,
       durationFrames: normalizeProjectFrames(durationFrames),
     });
@@ -58,15 +81,28 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
     onClose();
   }
 
+  if (showDefaults) {
+    return (
+      <NewProjectModal
+        defaultsOnly
+        onClose={() => setShowDefaults(false)}
+        onDefaultsSaved={setForm}
+      />
+    );
+  }
+
   return (
     <Modal
-      title="New project"
+      title={defaultsOnly ? 'Project defaults' : 'New project'}
       onClose={onClose}
       footer={
         <>
+          {!defaultsOnly && (
+            <ModalButton onClick={() => setShowDefaults(true)}>Project defaults…</ModalButton>
+          )}
           <ModalButton onClick={onClose}>Cancel</ModalButton>
           <ModalButton variant="primary" onClick={() => void confirm()}>
-            Create
+            {defaultsOnly ? 'Save defaults' : 'Create'}
           </ModalButton>
         </>
       }
@@ -76,7 +112,7 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
         <input
           className={s.input}
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => update({ name: e.target.value })}
           autoFocus
           aria-label="Project name"
         />
@@ -87,7 +123,7 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
         <Select
           className={s.input}
           value={presetKey}
-          onChange={(e) => setPresetKey(e.target.value as ProjectResolutionPresetKey)}
+          onChange={(e) => update({ presetKey: e.target.value as ProjectResolutionPresetKey })}
           aria-label="Resolution preset"
         >
           {PROJECT_RESOLUTION_PRESETS.map((p) => (
@@ -107,7 +143,7 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
               min={1}
               step={1}
               value={customW}
-              onCommit={setCustomW}
+              onCommit={(value) => update({ customW: value })}
               ariaLabel="Width"
             />
             <span style={{ color: colors.textMuted }}>×</span>
@@ -116,7 +152,7 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
               min={1}
               step={1}
               value={customH}
-              onCommit={setCustomH}
+              onCommit={(value) => update({ customH: value })}
               ariaLabel="Height"
             />
           </div>
@@ -128,7 +164,7 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
         <Select
           className={s.input}
           value={String(frameRate)}
-          onChange={(e) => setFrameRate(Number(e.target.value) as FrameRate)}
+          onChange={(e) => update({ frameRate: Number(e.target.value) as FrameRate })}
           aria-label="Frame rate"
         >
           {PROJECT_FRAME_RATES.map((f) => (
@@ -147,7 +183,7 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
           min={1}
           step={1}
           value={durationFrames}
-          onCommit={(frames) => setDurationFrames(normalizeProjectFrames(frames))}
+          onCommit={(frames) => update({ durationFrames: normalizeProjectFrames(frames) })}
         />
       </div>
 
@@ -159,7 +195,9 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
           min={1 / frameRate}
           step={0.1}
           value={projectSecondsFromFrames(durationFrames, frameRate)}
-          onCommit={(seconds) => setDurationFrames(projectFramesFromSeconds(seconds, frameRate))}
+          onCommit={(seconds) =>
+            update({ durationFrames: projectFramesFromSeconds(seconds, frameRate) })
+          }
           suffix="s"
         />
       </div>
