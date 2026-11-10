@@ -10,6 +10,12 @@ export { DirectoryWorkspace } from './directory-workspace.js';
 export { MemoryWorkspace } from './memory-workspace.js';
 
 export { LocalStorageKv, MemoryKv } from './kv.js';
+export {
+  decodeTextSource,
+  MAX_TEXT_SOURCE_BYTES,
+  readTextSourceFile,
+  WORD_TEXT_FILE_TYPES,
+} from './document-text.js';
 
 export {
   isFileSystemAccessSupported,

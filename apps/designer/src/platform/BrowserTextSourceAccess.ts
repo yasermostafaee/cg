@@ -1,13 +1,13 @@
+import { MAX_TEXT_SOURCE_BYTES, readTextSourceFile, WORD_TEXT_FILE_TYPES } from '@cg/storage';
 import type {
   DesignerStructuredRowsFile,
   DesignerTextSourceFile,
 } from '../shared/designer-bridge.js';
 import { pickFiles } from './pickFiles.js';
 
-const MAX_TEXT_SOURCE_BYTES = 1024 * 1024;
 const MAX_STRUCTURED_ROWS_BYTES = 10 * 1024 * 1024;
 const TEXT_SOURCE_ACCEPT =
-  '.txt,.text,.csv,.tsv,.json,.log,text/plain,text/csv,application/json,text/tab-separated-values';
+  '.txt,.text,.csv,.tsv,.doc,.docx,.log,text/plain,text/csv,text/tab-separated-values';
 const STRUCTURED_ROWS_ACCEPT =
   '.csv,.json,.xlsx,text/csv,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
@@ -56,7 +56,7 @@ export class BrowserTextSourceAccess {
               accept: {
                 'text/plain': ['.txt', '.text', '.log'],
                 'text/csv': ['.csv'],
-                'application/json': ['.json'],
+                ...WORD_TEXT_FILE_TYPES,
                 'text/tab-separated-values': ['.tsv'],
               },
             },
@@ -71,9 +71,10 @@ export class BrowserTextSourceAccess {
       const file = await handle.getFile();
       this.#assertSize(file);
       const sourcePath = file.name;
+      const selection = await this.#selection(file, sourcePath);
       this.#handles.set(sourcePath, handle);
       this.#files.delete(sourcePath);
-      return this.#selection(file, sourcePath);
+      return selection;
     }
 
     const picked = await pickFiles(undefined, {
@@ -85,8 +86,9 @@ export class BrowserTextSourceAccess {
     this.#assertSize(file);
     const sourcePath =
       ((file as File & { path?: string }).path ?? file.webkitRelativePath) || file.name;
+    const selection = await this.#selection(file, sourcePath);
     this.#files.set(sourcePath, file);
-    return this.#selection(file, sourcePath);
+    return selection;
   }
 
   async reload(sourcePath: string): Promise<string> {
@@ -94,14 +96,15 @@ export class BrowserTextSourceAccess {
     if (handle !== undefined) {
       const file = await handle.getFile();
       this.#assertSize(file, 'The selected text file is now larger than 1 MiB.');
-      return file.text();
+      return readTextSourceFile(file);
     }
 
     const file = this.#files.get(sourcePath);
     if (file === undefined) throw new Error('Choose this file again before reloading it.');
     try {
-      return await file.text();
-    } catch {
+      return await readTextSourceFile(file);
+    } catch (cause) {
+      if (!(cause instanceof DOMException)) throw cause;
       throw new Error(
         'The browser released access to this file. Choose the shared file again to restore Reload access.',
       );
@@ -186,7 +189,7 @@ export class BrowserTextSourceAccess {
       name: file.name,
       bridgePath: file.name,
       sourcePath,
-      content: await file.text(),
+      content: await readTextSourceFile(file),
     };
   }
 

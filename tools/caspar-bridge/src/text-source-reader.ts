@@ -1,9 +1,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { BridgeTextSourcePathSchema } from '@cg/shared-schema';
+import { decodeTextSource, MAX_TEXT_SOURCE_BYTES } from '@cg/storage';
 
-/** Large enough for newsroom copy; small enough to keep a control frame predictable. */
-export const MAX_TEXT_SOURCE_BYTES = 1024 * 1024;
+export { MAX_TEXT_SOURCE_BYTES } from '@cg/storage';
 
 export interface TextSourceReadResult {
   readonly name: string;
@@ -71,7 +71,7 @@ export async function readTextSource(
     }
     // WHATWG UTF-8 decoding matches `File.text()` and removes a UTF-8 BOM,
     // preventing an invisible first character from reaching a crawl/headline.
-    const content = new TextDecoder('utf-8').decode(bytes.subarray(0, used));
+    const content = await decodeTextSource(parsed.data, bytes.subarray(0, used));
     return {
       name: parsed.data,
       sourcePath: realTarget,

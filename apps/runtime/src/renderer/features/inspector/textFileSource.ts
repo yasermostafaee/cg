@@ -1,3 +1,5 @@
+import { readTextSourceFile, WORD_TEXT_FILE_TYPES } from '@cg/storage';
+
 /**
  * R-018 — a replaceable text-file source for field values.
  *
@@ -117,7 +119,7 @@ export function fsaTextFileSource(handle: FileSystemFileHandle): TextFileSource 
     displayPath: handle.name,
     read: async (): Promise<string> => {
       const file = await handle.getFile();
-      return file.text();
+      return readTextSourceFile(file);
     },
     readBytes: async (): Promise<Uint8Array> => {
       const file = await handle.getFile();
@@ -175,7 +177,10 @@ export async function pickTextFileSource(
           accept: {
             'text/plain': ['.txt', '.text', '.log'],
             'text/csv': ['.csv'],
-            'application/json': ['.json'],
+            'text/tab-separated-values': ['.tsv'],
+            ...(options.includeExcel === true
+              ? { 'application/json': ['.json'] }
+              : WORD_TEXT_FILE_TYPES),
             ...(options.includeExcel === true
               ? {
                   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],

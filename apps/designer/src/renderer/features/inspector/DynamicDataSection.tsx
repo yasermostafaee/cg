@@ -952,8 +952,7 @@ async function pickSharedTextSource(
   // Browser/test fallback. The desktop bridge always takes the native branch above so its
   // absolute Windows/UNC path remains visible.
   const picked = await bridge.assets.pick(undefined, {
-    accept:
-      '.txt,.text,.csv,.tsv,.json,.log,text/plain,text/csv,application/json,text/tab-separated-values',
+    accept: '.txt,.text,.csv,.tsv,.doc,.docx,.log,text/plain,text/csv,text/tab-separated-values',
     multiple: false,
   });
   const candidate = bridgeTextSourceFiles(picked)[0];

@@ -1,9 +1,9 @@
 import { isSafeBridgeTextSourcePath } from '@cg/shared-schema';
+import { MAX_TEXT_SOURCE_BYTES, readTextSourceFile } from '@cg/storage';
 
-/** Keep Designer preview and CG Bridge's bounded UTF-8 reader on the same ceiling. */
-export const MAX_BRIDGE_TEXT_SOURCE_BYTES = 1024 * 1024;
+export { MAX_TEXT_SOURCE_BYTES as MAX_BRIDGE_TEXT_SOURCE_BYTES } from '@cg/storage';
 
-const TEXT_EXTENSIONS = new Set(['txt', 'text', 'csv', 'tsv', 'json', 'log']);
+const TEXT_EXTENSIONS = new Set(['txt', 'text', 'csv', 'tsv', 'doc', 'docx', 'log']);
 const NATURAL = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
 export interface BridgeTextSourceFile {
@@ -28,7 +28,7 @@ function isTextFile(file: File): boolean {
 export function bridgeTextSourceFiles(files: readonly File[]): BridgeTextSourceFile[] {
   const result: BridgeTextSourceFile[] = [];
   for (const file of files) {
-    if (!isTextFile(file) || file.size > MAX_BRIDGE_TEXT_SOURCE_BYTES) continue;
+    if (!isTextFile(file) || file.size > MAX_TEXT_SOURCE_BYTES) continue;
     const relative = file.name;
     if (!isSafeBridgeTextSourcePath(relative)) continue;
     result.push({ file, path: relative });
@@ -38,10 +38,10 @@ export function bridgeTextSourceFiles(files: readonly File[]): BridgeTextSourceF
 
 /** Read the author's current bytes for preview; no bytes are embedded in the template. */
 export async function readBridgeTextPreview(file: File): Promise<string> {
-  if (file.size > MAX_BRIDGE_TEXT_SOURCE_BYTES) {
+  if (file.size > MAX_TEXT_SOURCE_BYTES) {
     throw new Error('Text files must be 1 MiB or smaller.');
   }
-  return file.text();
+  return readTextSourceFile(file);
 }
 
 /** Browsers expose only a name/relative hint; the installed Windows shell returns a drive/UNC path. */
