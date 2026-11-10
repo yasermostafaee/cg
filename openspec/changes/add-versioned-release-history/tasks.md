@@ -31,3 +31,5 @@
       and [Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42727985027/job/129538550944).
       The downloaded installers match their CI hashes, all three contain the same verified
       Persian guide, and the separately downloaded history identifies the preview updates.
+- [x] 3.6 The owner confirmed that 1.1.0 reached the customer. Prepare product version 1.2.0 and its bilingual history and installation guide; keep target-station checks in the next section.
+- [ ] 3.7 Read the 1.2.0 Windows installer and Linux Playwright runs before handoff.

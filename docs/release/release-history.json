@@ -3,6 +3,133 @@
   "product": "APASAI CG",
   "releases": [
     {
+      "version": "1.2.0",
+      "title": {
+        "fa": "نسخهٔ ۱.۲.۰",
+        "en": "Release 1.2.0"
+      },
+      "date": "2026-11-10",
+      "status": "prepared",
+      "summary": {
+        "fa": "ساخت آزمایشی برای تأیید تغییرات Designer، CG Control و Bridge پیش از تحویل.",
+        "en": "Test candidate for Designer, CG Control and Bridge before customer delivery."
+      },
+      "features": [
+        {
+          "fa": "دکمهٔ Pan در PVW هنگام فعال بودن روشن می‌ماند و خط آبی دور قاب واضح‌تر است. تمرین Pan روی قاب قابل‌مشاهدهٔ دارای Crop edges فعال است.",
+          "en": "The PVW Pan toggle stays highlighted while active, with a clearer blue crop outline. Pan practice is available on a visible Crop edges plate."
+        },
+        {
+          "fa": "در PVW جابه‌جایی کادر برش پیش‌نویس می‌شود و با خاموش و روشن کردن ON PVW باقی می‌ماند. با Update روی Bridge سازگار، Take همان برش را پیش از نمایش اولین فریم اعمال می‌کند.",
+          "en": "PVW Pan drafts survive turning ON PVW off and back on. With a compatible Bridge, Inspector Update saves the crop for Take before the first visible frame."
+        },
+        {
+          "fa": "بررسی تصویر و شنود یک ورودی زنده در Look inputs، پنجرهٔ تغییر ورودی قاب و بخش Live sources تنظیمات در دسترس است.",
+          "en": "Check the picture and optional sound of one live input from Look inputs, the plate source swap and Live sources in Settings."
+        },
+        {
+          "fa": "در فهرست‌های ورودی کادر No signal دیده می‌شود. این کادر در بخش Live sources تنظیمات بزرگ‌تر است و برای ورودی‌های قابل‌بررسی، پنجرهٔ بررسی ورودی را باز می‌کند.",
+          "en": "Input lists reserve No signal thumbnails. Live sources in Settings uses larger thumbnails, and eligible tiles open the existing input check."
+        },
+        {
+          "fa": "کادر ماسک را در Designer از بدنه جابه‌جا کنید یا اندازه‌اش را با کشیدن گوشه‌ها تغییر دهید.",
+          "en": "Move a mask rectangle directly in Designer or drag a corner to resize it."
+        },
+        {
+          "fa": "Inspector در CG Control فیلدهای داینامیک پریست انتخاب‌شده و فیلدهای مشترک را نشان می‌دهد. تغییر پریست، پیش‌نویس‌ها را حفظ می‌کند.",
+          "en": "CG Control Inspector shows the selected preset's dynamic fields alongside shared fields. Switching presets keeps drafts."
+        },
+        {
+          "fa": "فهرست Media در انتخاب‌گر ورودی، پوستر هر فایل را از کتابخانهٔ Playout نشان می‌دهد. فایل‌های بدون پوستر همچنان قابل انتخاب‌اند.",
+          "en": "The source picker's Media tab shows each file's Playout library poster when available. Items without a poster remain selectable."
+        },
+        {
+          "fa": "با Bridge سازگار و Playout 2.18.17، تصویرهای مستقل و بی‌صدای ورودی‌های سازگار در قاب‌های PVW و بندانگشتی انتخاب‌گر نمایش داده می‌شوند. Check input همچنان برای شنود یک ورودی در دسترس است.",
+          "en": "With a compatible Bridge and Playout 2.18.17, PVW plates and visible source rows show independent, silent snapshots of supported sources. Check input remains available for listening to one input."
+        },
+        {
+          "fa": "وقتی هندسهٔ تصویر ورودی با Take تطبیق دارد، Pan در PVW تصویر کامل ورودی را برای انتخاب برش نشان می‌دهد.",
+          "en": "PVW Pan shows the full source picture for crop selection when its measured geometry agrees with Take."
+        },
+        {
+          "fa": "اپراتور مجاز می‌تواند از Live plates سطح صدای خروجی اصلی Playlist را تنظیم کند، حتی وقتی هیچ قابی on air نیست. صدای کپی Playlist داخل قاب روی صفر می‌ماند.",
+          "en": "An authorized operator can adjust the original Playlist programme gain from Live plates, including when no frame is on air. The duplicated Playlist frame route stays muted."
+        },
+        {
+          "fa": "در PVW گوشه‌های کادر Pan را برای تغییر اندازهٔ برش بکشید. نسبت قاب ثابت می‌ماند و Take از اندازه و موقعیت ذخیره‌شده استفاده می‌کند.",
+          "en": "Resize the PVW Pan crop from its corners without changing the plate ratio. Take applies the saved size and position."
+        },
+        {
+          "fa": "در Designer می‌توان تصاویر Sequence را با یک پوشه یا چند تصویر جایگزین کرد و پیش‌فرض‌های پروژهٔ جدید را تنظیم کرد.",
+          "en": "Designer can replace Sequence pictures from a folder or files, and save defaults for new projects."
+        },
+        {
+          "fa": "ساعت، فاصله و ارتفاع جداکننده، شمارش معکوس برحسب دقیقهٔ کل و شروع و سقف شمارش رو به بالا را پشتیبانی می‌کند.",
+          "en": "Clock authoring supports separator spacing and offset, total-minute countdowns, and countup start and ceiling."
+        },
+        {
+          "fa": "منابع متنی مانند تیکر می‌توانند متن فایل‌های DOC و DOCX را بخوانند و برچسب جداکننده‌ها در CG Control قابل تغییر است.",
+          "en": "Text sources such as tickers can read DOC and DOCX. CG Control can rename delimiter labels."
+        },
+        {
+          "fa": "نام متفاوت در پنجرهٔ اکسپورت یک قالب VCG مستقل می‌سازد؛ اکسپورت دوباره با همان نام آن نسخه را به‌روزرسانی می‌کند.",
+          "en": "Changing the VCG name in the export dialog creates a separate template. Exporting that name again updates the variant."
+        }
+      ],
+      "fixes": [
+        {
+          "fa": "Pan با دکمه‌های هدر مانیتور هم‌پوشانی ندارد و گزینه‌های لایه و Inspector در حالت ماکزیمم دیده می‌شوند.",
+          "en": "Pan no longer overlaps monitor header controls. Layer and Inspector controls stay visible on a maximized monitor."
+        },
+        {
+          "fa": "خاموش کردن Show fallback on air پس‌زمینهٔ انتخاب‌شده را در Designer و PVW حفظ می‌کند و فقط در خروجی PGM روی نمایش آن اثر می‌گذارد.",
+          "en": "Show fallback on air controls the programme output. Designer and PVW keep showing the chosen plate background."
+        },
+        {
+          "fa": "دکمهٔ Center در PVW هنگام کوچک‌شدن مانیتور خوانا می‌ماند. فیلتر فیلدهای پریست در تمپلیت‌های قبلاً ایمپورت‌شده از صفحهٔ معتبر همان کانال استفاده می‌کند.",
+          "en": "PVW's Center button stays readable in smaller monitors. Preset field filtering can use the retained channel page for previously imported templates."
+        },
+        {
+          "fa": "وقتی تصویر ورودی تمام قاب را پر می‌کند، هم‌ترازی لبه‌ها نوار باریک پس‌زمینهٔ قاب را در PGM برطرف می‌کند.",
+          "en": "Align full-picture live plates to output pixels to remove thin fallback seams in PGM."
+        },
+        {
+          "fa": "متن راهنمای پایین جدول Layers حذف شد تا جدول فضای بیشتری داشته باشد.",
+          "en": "Remove the footer hint from the Layers table."
+        },
+        {
+          "fa": "هنگام تغییر پریست در PGM، پس‌زمینهٔ قابِ در حال جابه‌جایی تا رسیدن تصویر نمایش داده نمی‌شود. پس از تعویض، قابِ واقعاً بی‌تصویر پس‌زمینهٔ انتخابی را نشان می‌دهد.",
+          "en": "During a PGM preset change, hold the incoming fallback until the picture placement changes. A source without a picture still reveals the authored fallback after the switch."
+        },
+        {
+          "fa": "در Shared files پیام خطا کنار فیلد جا را نمی‌گیرد و دسترسی مسیر با هویت Bridge بررسی می‌شود.",
+          "en": "Shared-files validation reads the directory as Bridge and keeps the path input usable when a check fails."
+        },
+        {
+          "fa": "قابی که طراح برایش Crop edges انتخاب کرده، با نسبت واقعی ورودی برش می‌خورد؛ حتی اگر نسبت با مقدار مورد انتظار فرق داشته باشد.",
+          "en": "An authored Crop edges plate uses the assigned source aspect even when it differs from the expected ratio."
+        },
+        {
+          "fa": "فیلترهای Layers هنگام ماکزیمم و بازگرداندن پنل حفظ می‌شوند. Reload Templates در Take بعدی قالب تازه را روی همان لایه پخش می‌کند.",
+          "en": "Layers filters survive layout changes. Reloaded templates use the new page on the next Take without removing the row."
+        },
+        {
+          "fa": "Space در Designer پخش را شروع می‌کند و شطرنجی پس از Stop در Rehearse باقی می‌ماند.",
+          "en": "Space starts Designer playback. The checkerboard stays visible after Rehearse Stop."
+        },
+        {
+          "fa": "در نسخهٔ نصبی، لینک APASAI در مرورگر پیش‌فرض باز می‌شود.",
+          "en": "Installed apps send the APASAI link to the default browser."
+        },
+        {
+          "fa": "کی‌فریم‌های Outro متن با زمان‌بندی ویدئوی Follow هماهنگ‌اند و شروع Outro ویدئو قابل تأخیر است.",
+          "en": "Text Outro keyframes and Follow video share the exit timing. Authors can delay the video Outro."
+        }
+      ],
+      "planned": [],
+      "downloadBaseUrl": null
+    },
+    {
       "version": "1.1.0",
       "title": {
         "fa": "نسخهٔ آزمایشی برای ایستگاه Playout",
@@ -179,88 +306,14 @@
         "fa": "نسخهٔ بعدی",
         "en": "Next release"
       },
-      "date": "2026-11-09",
+      "date": "2026-11-10",
       "status": "development",
       "summary": {
         "fa": "آزمون‌های باقی‌مانده و قابلیت‌های در دست پیگیری در این بخش ثبت می‌شوند.",
         "en": "This section tracks outstanding acceptance checks and features still in progress."
       },
-      "features": [
-        {
-          "fa": "دکمهٔ Pan در PVW هنگام فعال بودن روشن می‌ماند و خط آبی دور قاب واضح‌تر است. تمرین Pan روی قاب قابل‌مشاهدهٔ دارای Crop edges فعال است.",
-          "en": "The PVW Pan toggle stays highlighted while active, with a clearer blue crop outline. Pan practice is available on a visible Crop edges plate."
-        },
-        {
-          "fa": "کادر برش در تمرین Pan با توجه به نسبت تصویر و قاب، افقی یا عمودی حرکت می‌کند و با Center به وسط برمی‌گردد.",
-          "en": "PVW practice moves the crop guide horizontally or vertically, depending on the source and plate aspect ratios. Center restores the middle of the crop."
-        },
-        {
-          "fa": "در PVW جابه‌جایی کادر برش پیش‌نویس می‌شود و با خاموش و روشن کردن ON PVW باقی می‌ماند. با Update روی Bridge سازگار، Take همان برش را پیش از نمایش اولین فریم اعمال می‌کند.",
-          "en": "PVW Pan drafts survive turning ON PVW off and back on. With a compatible Bridge, Inspector Update saves the crop for Take before the first visible frame."
-        },
-        {
-          "fa": "بررسی تصویر و شنود یک ورودی زنده در Look inputs، پنجرهٔ تغییر ورودی قاب و بخش Live sources تنظیمات در دسترس است.",
-          "en": "Check the picture and optional sound of one live input from Look inputs, the plate source swap and Live sources in Settings."
-        },
-        {
-          "fa": "در فهرست‌های ورودی کادر No signal دیده می‌شود. این کادر در بخش Live sources تنظیمات بزرگ‌تر است و برای ورودی‌های قابل‌بررسی، پنجرهٔ بررسی ورودی را باز می‌کند.",
-          "en": "Input lists reserve No signal thumbnails. Live sources in Settings uses larger thumbnails, and eligible tiles open the existing input check."
-        },
-        {
-          "fa": "کادر ماسک را در Designer از بدنه جابه‌جا کنید یا اندازه‌اش را با کشیدن گوشه‌ها تغییر دهید.",
-          "en": "Move a mask rectangle directly in Designer or drag a corner to resize it."
-        },
-        {
-          "fa": "Inspector در CG Control فیلدهای داینامیک پریست انتخاب‌شده و فیلدهای مشترک را نشان می‌دهد. تغییر پریست، پیش‌نویس‌ها را حفظ می‌کند.",
-          "en": "CG Control Inspector shows the selected preset's dynamic fields alongside shared fields. Switching presets keeps drafts."
-        },
-        {
-          "fa": "فهرست Media در انتخاب‌گر ورودی، پوستر هر فایل را از کتابخانهٔ Playout نشان می‌دهد. فایل‌های بدون پوستر همچنان قابل انتخاب‌اند.",
-          "en": "The source picker's Media tab shows each file's Playout library poster when available. Items without a poster remain selectable."
-        },
-        {
-          "fa": "با Bridge سازگار و Playout 2.18.17، تصویرهای مستقل و بی‌صدای ورودی‌های سازگار در قاب‌های PVW و بندانگشتی انتخاب‌گر نمایش داده می‌شوند. Check input همچنان برای شنود یک ورودی در دسترس است.",
-          "en": "With a compatible Bridge and Playout 2.18.17, PVW plates and visible source rows show independent, silent snapshots of supported sources. Check input remains available for listening to one input."
-        },
-        {
-          "fa": "وقتی هندسهٔ تصویر ورودی با Take تطبیق دارد، Pan در PVW تصویر کامل ورودی را برای انتخاب برش نشان می‌دهد.",
-          "en": "PVW Pan shows the full source picture for crop selection when its measured geometry agrees with Take."
-        },
-        {
-          "fa": "اپراتور مجاز می‌تواند از Live plates سطح صدای خروجی اصلی Playlist را تنظیم کند، حتی وقتی هیچ قابی on air نیست. صدای کپی Playlist داخل قاب روی صفر می‌ماند.",
-          "en": "An authorized operator can adjust the original Playlist programme gain from Live plates, including when no frame is on air. The duplicated Playlist frame route stays muted."
-        }
-      ],
-      "fixes": [
-        {
-          "fa": "Pan با دکمه‌های هدر مانیتور هم‌پوشانی ندارد و گزینه‌های لایه و Inspector در حالت ماکزیمم دیده می‌شوند.",
-          "en": "Pan no longer overlaps monitor header controls. Layer and Inspector controls stay visible on a maximized monitor."
-        },
-        {
-          "fa": "ابزار Pan فعلاً از PGM برداشته شده است. تمرین آن از PVW در دسترس است.",
-          "en": "Pan is currently available in PVW practice. The PGM operator control is deferred."
-        },
-        {
-          "fa": "خاموش کردن Show fallback on air پس‌زمینهٔ انتخاب‌شده را در Designer و PVW حفظ می‌کند و فقط در خروجی PGM روی نمایش آن اثر می‌گذارد.",
-          "en": "Show fallback on air controls the programme output. Designer and PVW keep showing the chosen plate background."
-        },
-        {
-          "fa": "دکمهٔ Center در PVW هنگام کوچک‌شدن مانیتور خوانا می‌ماند. فیلتر فیلدهای پریست در تمپلیت‌های قبلاً ایمپورت‌شده از صفحهٔ معتبر همان کانال استفاده می‌کند.",
-          "en": "PVW's Center button stays readable in smaller monitors. Preset field filtering can use the retained channel page for previously imported templates."
-        },
-        {
-          "fa": "وقتی تصویر ورودی تمام قاب را پر می‌کند، هم‌ترازی لبه‌ها نوار باریک پس‌زمینهٔ قاب را در PGM برطرف می‌کند.",
-          "en": "Align full-picture live plates to output pixels to remove thin fallback seams in PGM."
-        },
-        {
-          "fa": "متن راهنمای پایین جدول Layers حذف شد تا جدول فضای بیشتری داشته باشد.",
-          "en": "Remove the footer hint from the Layers table."
-        },
-        {
-          "fa": "هنگام تغییر پریست در PGM، پس‌زمینهٔ قابِ در حال جابه‌جایی تا رسیدن تصویر نمایش داده نمی‌شود. پس از تعویض، قابِ واقعاً بی‌تصویر پس‌زمینهٔ انتخابی را نشان می‌دهد.",
-          "en": "During a PGM preset change, hold the incoming fallback until the picture placement changes. A source without a picture still reveals the authored fallback after the switch."
-        }
-      ],
+      "features": [],
+      "fixes": [],
       "planned": [
         {
           "fa": "روی خروجی PGM ایستگاه Playout، نمایش عنوان و شکل روی قاب، حفظ اتصال ورودی هنگام تغییر پریست، ماسک و Revert و پس‌زمینهٔ قاب بررسی شوند.",
@@ -281,6 +334,14 @@
         {
           "fa": "تنظیم بهرهٔ خروجی اصلی Playlist و بی‌صدابودن کپی آن در قاب روی ایستگاه آزموده شوند.",
           "en": "Verify original Playlist gain and muted frame copies on the target station."
+        },
+        {
+          "fa": "مسیر Share را در چیدمان دو سروری با هویت سرویس Bridge و قاب‌های Crop edges را در PGM سرور هدف بررسی کنید.",
+          "en": "Verify the UNC share under the Bridge service identity and Crop edges in PGM on the target two-server station."
+        },
+        {
+          "fa": "اگر وضعیت دکمهٔ Play دوباره با خروجی فرق داشت، لاگ Bridge و وضعیت لایه را در همان زمان ثبت کنید.",
+          "en": "If the Play indication differs from the output again, capture the contemporaneous Bridge log and layer state."
         }
       ],
       "downloadBaseUrl": null
