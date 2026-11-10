@@ -1,10 +1,11 @@
 import { useState, useSyncExternalStore } from 'react';
-import { Plus, Settings2, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Settings2, Trash2 } from 'lucide-react';
 import { STATION_SETUP_PX } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import type { ModalMessage } from '../../ui/Modal.js';
 import { DialogField, RecordDialog } from '../../ui/RecordDialog.js';
+import { TextInput } from '../../ui/TextInput.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { useHoldsStationAdmin } from '../../hooks/useCanOperate.js';
 import { parseDelimiter, splitContent } from './fromFileContent.js';
@@ -13,8 +14,10 @@ import {
   delimitersVersion,
   listDelimiters,
   removeDelimiter,
+  renameDelimiter,
   resetDelimiters,
   subscribeDelimiters,
+  type DelimiterOption,
 } from './delimiterStore.js';
 
 /**
@@ -104,13 +107,13 @@ export function DelimitersSection({
 }): JSX.Element {
   useSyncExternalStore(subscribeDelimiters, delimitersVersion);
   const delimiters = listDelimiters();
-  /** §6 — is the one small second dialog open? One flag, because there is one dialog. */
   const [adding, setAdding] = useState(false);
+  const [renaming, setRenaming] = useState<DelimiterOption | null>(null);
   /** `SETTINGS-MATCH-02` §8d — the question asked before a delimiter is dropped. */
   const { confirm, confirmDialog } = useConfirm();
   /*
     🔴 `MULTI-CHANNEL-01` §2 I — the list is `delimiters.set`, a `station-admin` route. For anyone
-    else it is the list IN FORCE, as values: no Add, no Remove, no Reset — absent, not greyed.
+    else it is the list IN FORCE, as values: no Add, Rename, Remove or Reset.
   */
   const admin = useHoldsStationAdmin();
 
@@ -220,17 +223,27 @@ export function DelimitersSection({
                   </td>
                   {admin && (
                     <td className="cg-table__actions">
-                      {/* §3 — QUIET at rest, red on intent. It was a permanently
-                          red-bordered bin on every row. */}
-                      <Button
-                        variant="quiet"
-                        className="cg-list-remove"
-                        aria-label={`Remove delimiter ${d.label}`}
-                        title="Remove this delimiter — asks first"
-                        onClick={() => void removeOne(d.id, d.label)}
-                      >
-                        <Icon icon={Trash2} size={15} />
-                      </Button>
+                      <span className="cg-table__actions-group">
+                        <Button
+                          variant="quiet"
+                          aria-label={`Rename delimiter ${d.label}`}
+                          title="Rename delimiter"
+                          onClick={() => setRenaming(d)}
+                        >
+                          <Icon icon={Pencil} size={15} />
+                        </Button>
+                        {/* §3 — QUIET at rest, red on intent. It was a permanently
+                            red-bordered bin on every row. */}
+                        <Button
+                          variant="quiet"
+                          className="cg-list-remove"
+                          aria-label={`Remove delimiter ${d.label}`}
+                          title="Remove this delimiter — asks first"
+                          onClick={() => void removeOne(d.id, d.label)}
+                        >
+                          <Icon icon={Trash2} size={15} />
+                        </Button>
+                      </span>
                     </td>
                   )}
                 </tr>
@@ -268,9 +281,72 @@ export function DelimitersSection({
       )}
 
       {adding && <AddDelimiterDialog onClose={() => setAdding(false)} onReport={say} />}
+      {admin && renaming !== null && (
+        <RenameDelimiterDialog
+          delimiter={renaming}
+          onClose={() => setRenaming(null)}
+          onSaved={() => say(null)}
+        />
+      )}
       {/* §8d — the question, portalled above this dialog like every other second-level one. */}
       {confirmDialog}
     </>
+  );
+}
+
+function RenameDelimiterDialog({
+  delimiter,
+  onClose,
+  onSaved,
+}: {
+  delimiter: DelimiterOption;
+  onClose: () => void;
+  onSaved: () => void;
+}): JSX.Element {
+  const [label, setLabel] = useState(delimiter.label);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <RecordDialog
+      title="Rename delimiter"
+      confirmLabel="Save name"
+      confirmDisabled={saving}
+      onCancel={() => {
+        if (!saving) onClose();
+      }}
+      onSubmit={() => {
+        if (saving) return null;
+        if (label.trim() === '')
+          return 'Give the delimiter a name — that is what the picker shows.';
+        setSaving(true);
+        setError(null);
+        void renameDelimiter(delimiter.id, label).then((refusal) => {
+          setSaving(false);
+          if (refusal === null) {
+            onSaved();
+            onClose();
+          } else {
+            setError(refusal);
+          }
+        });
+        return null;
+      }}
+    >
+      <DialogField label="Name" id="rename-delimiter-name" error={error}>
+        <TextInput
+          dir="auto"
+          value={label}
+          disabled={saving}
+          invalid={error !== null}
+          onChange={(next) => {
+            setLabel(next);
+            setError(null);
+          }}
+          data={{ 'data-modal-autofocus': '' }}
+        />
+      </DialogField>
+    </RecordDialog>
   );
 }
 
@@ -422,7 +498,7 @@ export function ManageDelimitersButton({ onOpen }: { onOpen: () => void }): JSX.
     <Button
       variant="ghost"
       aria-label="Manage delimiters"
-      title="Add or remove delimiters (Station setup)"
+      title="Manage delimiters (Station setup)"
       onClick={onOpen}
     >
       <Icon icon={Settings2} />

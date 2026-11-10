@@ -110,6 +110,16 @@ export async function addDelimiter(label: string, value: string): Promise<string
   return commit([...cache, { id, label: trimmedLabel, value }]);
 }
 
+/** Rename a station choice without changing the value already stored in fields. */
+export async function renameDelimiter(id: string, label: string): Promise<string | null> {
+  const trimmedLabel = label.trim();
+  if (trimmedLabel === '') return 'Give the delimiter a name — that is what the picker shows.';
+  const current = cache.find((d) => d.id === id);
+  if (current === undefined) return 'This delimiter is no longer available.';
+  if (current.label === trimmedLabel) return null;
+  return commit(cache.map((d) => (d.id === id ? { ...d, label: trimmedLabel } : d)));
+}
+
 /**
  * Remove a delimiter. Refuses to remove the LAST one — the picker is the only
  * way a delimiter enters the product, so an empty list is a dead end reachable

@@ -174,18 +174,20 @@ describe('Live sources', () => {
 });
 
 describe('Text file delimiters', () => {
-  it('🔴 an operator sees the list — no Add, no Remove, no Reset', async () => {
+  it('🔴 an operator sees the list — no Add, Rename, Remove or Reset', async () => {
     const { pane } = await open('delimiters', { auth: OPERATOR });
     expect(pane.querySelectorAll('[data-delimiter-id]').length, 'the values').toBeGreaterThan(0);
     expect(buttonNamed(pane, 'Add delimiter')).toBeUndefined();
+    expect(buttonNamed(pane, /^Rename delimiter /)).toBeUndefined();
     expect(buttonNamed(pane, /^Remove delimiter /)).toBeUndefined();
     expect(buttonNamed(pane, 'Reset delimiters to defaults')).toBeUndefined();
     expect(contract(pane)).toEqual(READ_ONLY);
   });
 
-  it('CONTROL — a station-admin sees Add, Remove and Reset', async () => {
+  it('CONTROL — a station-admin sees Add, Rename, Remove and Reset', async () => {
     const { pane } = await open('delimiters', { auth: ADMIN });
     expect(buttonNamed(pane, 'Add delimiter')).toBeDefined();
+    expect(buttonNamed(pane, /^Rename delimiter /)).toBeDefined();
     expect(buttonNamed(pane, /^Remove delimiter /)).toBeDefined();
     expect(buttonNamed(pane, 'Reset delimiters to defaults')).toBeDefined();
   });
