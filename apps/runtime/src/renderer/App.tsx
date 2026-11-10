@@ -29,6 +29,7 @@ import { OrphanLayersBanner, orphanWarningChannels } from './features/layers/Orp
 import { useForeignDismissals } from './features/layers/foreignNotice.js';
 import { EmptiedAirNotice, emptiedAirChannels } from './features/layers/EmptiedAirNotice.js';
 import { LayersPanel } from './features/layers/LayersPanel.js';
+import { NO_FILTER, type LayerFilter } from './features/layers/layerFilter.js';
 import { ChannelScope } from './features/channels/ChannelScope.js';
 import { useChannelBankState } from './features/channels/useSelectedChannel.js';
 import { onChannel } from './features/stack/onAir.js';
@@ -155,6 +156,8 @@ export function App(): JSX.Element {
   const ownedOccupancy = useOwnedOccupancy();
   const emptiedAir = useEmptiedAir();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // B-427 — a fullscreen panel can unmount LayersPanel without ending the console session.
+  const [layerFilter, setLayerFilter] = useState<LayerFilter>(NO_FILTER);
   // R-028 part B — the operator's own workspace geometry (persisted per browser).
   const layout = useShellLayout();
   // R-111 — presentation only. Fullscreen changes what surrounds the monitor, never selection.
@@ -362,6 +365,8 @@ export function App(): JSX.Element {
       selectedId={selectedId}
       layout={layout}
       selectedOnly={companion}
+      filter={layerFilter}
+      onFilterChange={setLayerFilter}
       inspectorOpen={inspectorOpen}
       onToggleInspector={closeInspector}
       onUpdate={(id) => {

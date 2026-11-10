@@ -142,6 +142,9 @@ interface Props {
   orphans?: readonly OrphanLayer[];
   /** R-111 — the maximized-monitor companion renders only the row already selected. */
   selectedOnly?: boolean;
+  /** The workspace owns these session filters across panel mounts. */
+  filter?: LayerFilter;
+  onFilterChange?: (filter: LayerFilter) => void;
 }
 
 /** A stable empty default, so the memo below does not see a new array every render. */
@@ -311,6 +314,8 @@ export function LayersPanel({
   emptiedAirRows = NO_EMPTIED_AIR_ROWS,
   orphans = NO_ORPHANS,
   selectedOnly = false,
+  filter = NO_FILTER,
+  onFilterChange,
 }: Props): JSX.Element {
   /**
    * §3 — THE LIST AND WHETHER IT HAS ARRIVED, never the list alone.
@@ -648,20 +653,6 @@ export function LayersPanel({
   );
   /** How many rows do not yet know what they carry. Zero hides the notice. */
   const awaitingRows = rowBindings.filter((r) => r.binding.kind === 'awaiting').length;
-
-  /*
-   * 🔴 `AUDIT-CLOSE-01` B2 — THE SUB-BAR'S FILTER.
-   *
-   * The reference's `Find row or template…` and `Hide empty`, which `design.md` §1.1 row 72
-   * recorded as already built and which did not exist. The PREDICATE lives in `layerFilter.ts`
-   * with its own argument and its own tests; what lives here is the state and the projection
-   * from a row onto the four facts the predicate needs.
-   *
-   * ⚠ Component state, deliberately: it is not a preference, it is a thing the operator is
-   * doing right now, and a search that survived a reload would leave a narrowed list in front
-   * of the next person to sit down. No persisted key (the change adds none).
-   */
-  const [filter, setFilter] = useState<LayerFilter>(NO_FILTER);
 
   /**
    * One row's four facts, read from the SAME binding the table renders.
@@ -1887,7 +1878,7 @@ export function LayersPanel({
                     placeholder="Find row or template…"
                     value={filter.query}
                     data-layers-search=""
-                    onChange={(e) => setFilter((f) => ({ ...f, query: e.target.value }))}
+                    onChange={(e) => onFilterChange?.({ ...filter, query: e.target.value })}
                   />
                 </span>
                 <label className="cg-layers-subbar__toggle">
@@ -1895,7 +1886,7 @@ export function LayersPanel({
                     type="checkbox"
                     checked={filter.hideEmpty}
                     data-layers-hide-empty=""
-                    onChange={(e) => setFilter((f) => ({ ...f, hideEmpty: e.target.checked }))}
+                    onChange={(e) => onFilterChange?.({ ...filter, hideEmpty: e.target.checked })}
                   />
                   Hide empty
                 </label>
