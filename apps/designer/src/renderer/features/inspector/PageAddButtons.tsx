@@ -33,13 +33,14 @@ export function PageAddButtons({
   size?: ButtonSize;
   /**
    * Beside the item editor, whose own `Add item` and kind picker already add text and composition
-   * items: only the two picture buttons, so no surface offers the same act twice.
+   * items: only the picture buttons, so no surface offers the same act twice.
    */
   picturesOnly?: boolean;
   /** A text or composition item was added (the Inspector card puts the focus in its text box). */
   onAdded?: (item: SequenceItem) => void;
 }): JSX.Element {
   const { busy, add } = useAddPictures(elementId);
+  const hasPictures = items.some((item) => item.kind === 'image');
   const append = (item: SequenceItem): void => {
     designerStore.runAsSingleHistoryEntry(() =>
       designerStore.setSequenceItems(elementId, [...items, item]),
@@ -67,6 +68,28 @@ export function PageAddButtons({
       >
         Add folder…
       </Button>
+      {hasPictures && (
+        <>
+          <Button
+            variant="secondary"
+            size={size}
+            disabled={busy !== null}
+            title="Replace picture pages with selected files, keeping text and composition items"
+            onClick={() => void add(false, true)}
+          >
+            Replace with pictures…
+          </Button>
+          <Button
+            variant="secondary"
+            size={size}
+            disabled={busy !== null}
+            title="Replace picture pages with a folder, keeping text and composition items"
+            onClick={() => void add(true, true)}
+          >
+            Replace with folder…
+          </Button>
+        </>
+      )}
       {!picturesOnly && (
         <>
           <Button

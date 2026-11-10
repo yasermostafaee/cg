@@ -16,11 +16,11 @@ function orderName(file: File): string {
  */
 export function useAddPictures(elementId: string): {
   busy: { done: number; total: number } | null;
-  add: (folder: boolean) => Promise<void>;
+  add: (folder: boolean, replace?: boolean) => Promise<void>;
 } {
   const [busy, setBusy] = useState<{ done: number; total: number } | null>(null);
 
-  async function add(folder: boolean): Promise<void> {
+  async function add(folder: boolean, replace = false): Promise<void> {
     const files = await window.cg.assets.pick('image', { folder });
     if (files.length === 0) return;
     const { valid, rejected } = partitionSupported('image', files);
@@ -48,9 +48,14 @@ export function useAddPictures(elementId: string): {
     if (failed.length > 0) {
       const shown = failed.slice(0, 3).join(', ');
       const more = failed.length > 3 ? `, +${String(failed.length - 3)} more` : '';
-      designerStore.showNotice(`Could not add ${String(failed.length)} pictures: ${shown}${more}`);
+      designerStore.showNotice(
+        replace
+          ? `Pictures were kept. Could not import ${String(failed.length)}: ${shown}${more}`
+          : `Could not add ${String(failed.length)} pictures: ${shown}${more}`,
+      );
+      if (replace) return;
     }
-    designerStore.addSequencePictures(elementId, pictures);
+    designerStore.addSequencePictures(elementId, pictures, replace);
   }
 
   return { busy, add };

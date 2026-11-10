@@ -11,6 +11,73 @@ import { DesignerApp, test, expect } from './fixtures/designer.js';
 const png = (name: string): Buffer => Buffer.concat([DesignerApp.PNG_1X1, Buffer.from(name)]);
 
 test.describe('D-163 — Add pictures / Add folder on a sequence', () => {
+  test('D-207 — replace files or a folder, keeping the authored text page', async ({ app }) => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-replacement-'));
+    const replacementNames = ['new10.png', 'new2.png', 'new1.png'];
+    try {
+      for (const name of replacementNames) {
+        fs.writeFileSync(path.join(directory, name), png(name));
+      }
+      await app.newProject('Replace book images');
+      await app.addSequence({ x: 200, y: 200 });
+      const sequenceId = (await app.timelineRowIds())[0]!;
+      const firstPick = app.page.waitForEvent('filechooser');
+      await app.inspector.getByRole('button', { name: 'Add pictures…', exact: true }).click();
+      await (
+        await firstPick
+      ).setFiles(
+        ['old1.png', 'old2.png'].map((name) => ({
+          name,
+          mimeType: 'image/png',
+          buffer: png(name),
+        })),
+      );
+      await expect(app.inspector.getByTestId('sequence-page-count')).toHaveText('2 pages');
+      await app.inspector.getByRole('button', { name: 'Add text', exact: true }).click();
+      await app.inspector.getByRole('button', { name: 'Manage pages…', exact: true }).click();
+
+      const manager = app.page.getByRole('dialog', { name: /^Pages — / });
+      const textPage = manager.getByRole('textbox', { name: 'Item 3 text', exact: true });
+      await textPage.fill('سرخط خبر');
+      await textPage.press('Tab');
+      await manager.getByRole('button', { name: 'Move item 3 earlier', exact: true }).click();
+
+      const folderPick = app.page.waitForEvent('filechooser');
+      await manager.getByRole('button', { name: 'Replace with folder…', exact: true }).click();
+      await (await folderPick).setFiles(directory);
+      const names = manager.locator('[data-page-name]');
+      await expect(names).toHaveText(['new1.png', 'Text', 'new2.png', 'new10.png']);
+      await expect(manager.getByRole('textbox', { name: 'Item 2 text', exact: true })).toHaveValue(
+        'سرخط خبر',
+      );
+      await manager.getByRole('button', { name: 'Done', exact: true }).click();
+
+      const filePick = app.page.waitForEvent('filechooser');
+      await app.inspector
+        .getByRole('button', { name: 'Replace with pictures…', exact: true })
+        .click();
+      await (
+        await filePick
+      ).setFiles([{ name: 'only.png', mimeType: 'image/png', buffer: png('only.png') }]);
+      await expect(app.inspector.getByTestId('sequence-page-count')).toHaveText('2 pages');
+      await app.inspector.getByRole('button', { name: 'Manage pages…', exact: true }).click();
+      await expect(names).toHaveText(['only.png', 'Text']);
+      await expect(manager.getByRole('textbox', { name: 'Item 2 text', exact: true })).toHaveValue(
+        'سرخط خبر',
+      );
+      await manager.getByRole('button', { name: 'Done', exact: true }).click();
+
+      await app.page.keyboard.press('Control+z');
+      await app.selectElementById(sequenceId);
+      await expect(app.inspector.getByTestId('sequence-page-count')).toHaveText('4 pages');
+      await app.inspector.getByRole('button', { name: 'Manage pages…', exact: true }).click();
+      await expect(names).toHaveText(['new1.png', 'Text', 'new2.png', 'new10.png']);
+    } finally {
+      for (const name of replacementNames) fs.rmSync(path.join(directory, name), { force: true });
+      fs.rmdirSync(directory);
+    }
+  });
+
   test('🔴 twelve files picked out of order become twelve pages in natural order, as a book', async ({
     app,
   }) => {

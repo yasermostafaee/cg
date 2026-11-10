@@ -15,6 +15,7 @@ import {
   type ListItem,
   type Scene,
   type SequenceElement,
+  type SequenceItem,
 } from '@cg/shared-schema';
 import { parseLocalizedNumber } from '@cg/text-shaping';
 import { current, set } from '../store-core.js';
@@ -1094,6 +1095,7 @@ export const fieldsSlice = {
   addSequencePictures(
     elementId: string,
     pictures: readonly { assetId: string; name: string }[],
+    replace = false,
   ): number {
     if (current.scene === null || pictures.length === 0) return 0;
     const found = locate(current.scene, elementId);
@@ -1120,16 +1122,31 @@ export const fieldsSlice = {
       assetId: p.assetId,
       name: p.name,
     }));
-    if (firstPictures) {
-      designerStore.updateElement(elementId, {
-        transitionIn: 'fade',
-        transitionOut: 'fade',
-        transitionTiming: 'simultaneous',
-        advance: 'manual',
-        repeat: 1,
-      } as Partial<Element>);
+    let next = 0;
+    const items: SequenceItem[] = [];
+    for (const item of kept) {
+      if (replace && item.kind === 'image') {
+        const replacement = added[next];
+        if (replacement !== undefined) {
+          items.push(replacement);
+          next += 1;
+        }
+      } else {
+        items.push(item);
+      }
     }
-    designerStore.setSequenceItems(elementId, [...kept, ...added] as ListItem[]);
+    designerStore.runAsSingleHistoryEntry(() => {
+      if (firstPictures) {
+        designerStore.updateElement(elementId, {
+          transitionIn: 'fade',
+          transitionOut: 'fade',
+          transitionTiming: 'simultaneous',
+          advance: 'manual',
+          repeat: 1,
+        } as Partial<Element>);
+      }
+      designerStore.setSequenceItems(elementId, [...items, ...added.slice(next)] as ListItem[]);
+    });
     return added.length;
   },
 
