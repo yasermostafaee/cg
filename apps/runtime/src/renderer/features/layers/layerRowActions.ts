@@ -211,12 +211,12 @@ export interface LayerRowActionDeps {
   /**
    * R-022 — is this row in REHEARSE? Bridge-owned, so every browser agrees.
    *
-   * It gates PLAY here as a COURTESY, never as the guarantee: the bridge refuses
-   * `stack.take` for a rehearsing item, which is what actually makes the interlock
-   * hold against a stale client. A disabled button that were the only barrier
-   * would make rehearse "a preview pane we hope nobody plays from".
+   * The bridge enforces the legacy rehearsal interlock. Independent preview
+   * tracks the same visible state without claiming the output.
    */
   rehearsing: boolean;
+  previewOnly?: boolean;
+  independentPreview?: boolean;
   /**
    * `FIELD-FIXES-01-A` Decision 2 — does the bridge's published live-layers ledger hold a seat for
    * this row's item? The second half of `ownsLiveSeats`, the question the bridge asks before it
@@ -775,15 +775,16 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
       ...act(
         'play',
         'PLAY',
-        // R-022 — a rehearsing row cannot be taken to air. THE INTERLOCK, and the
-        // reason rehearse is a mode rather than a pane. This disabled state is the
-        // courtesy; the bridge's own refusal (`errorCode: 'rehearsing'`) is the
-        // guarantee, and it is what holds when a second browser's snapshot is stale.
+        // The bridge enforces the interlock for legacy rehearsal, including stale clients.
         // `blocked` is the load-bearing one here: a take on a blocked row issues
         // `CG ADD` + PLAY onto a layer carrying somebody else's producer, which
         // replaces it — the destructive act d1 says may only ever happen through
         // the operator's own explicit CLEAR.
-        empty || takeRefused || deps.rehearsing || blocked || needsCaspar,
+        empty ||
+          takeRefused ||
+          (deps.rehearsing && deps.previewOnly !== true) ||
+          blocked ||
+          needsCaspar,
         async () => {
           if (item === null) return noop();
           const res = await deps.play(item.itemId);
@@ -823,18 +824,9 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
      * the operator's finger gets mis-clicked, and at 2 a.m. that is a wrong
      * graphic on air.
      *
-     * Enabled only for a row with an item that is NOT on air, which mirrors the
-     * bridge's guard rather than restating it loosely: the bridge refuses `on-air`
-     * (rehearse mutes the layer, and muting a live graphic is not on offer).
-     *
-     * It does NOT gate on the layer carrying a resident producer, and that is now
-     * the whole of the agreement rather than a gap in it: the bridge's precondition
-     * is the BINDING. This gate was already the correct one — before the decouple
-     * it left the button enabled on a CLEARed row that the bridge then refused
-     * `not-loaded`, which is the mismatch the operator actually hit.
-     *
-     * While rehearsing, the toggle stays enabled — leaving is always available,
-     * and it is the ONLY way back to a playable row.
+     * A bound row can open independent PVW while it is on air or blocked from
+     * Take. Legacy rehearsal can mute the layer, so its entry retains both guards.
+     * The toggle can always leave an active preview.
      *
      * ENGAGED, IT IS THE ONE ROW VERB THAT WEARS A COLOUR (`active`), filled in the
      * same violet the row's REHEARSING mark uses. The verbs are otherwise neutral
@@ -854,11 +846,7 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
         // feature are R-022's rehearse, and renaming the identity to match a
         // label would be renaming the thing to match its caption.
         deps.rehearsing ? 'OFF PVW' : 'ON PVW',
-        // Blocked holds ENTRY only: rehearse MUTES the layer, and muting a layer
-        // that is carrying another system's live feed is the same trespass PLAY
-        // would be. Leaving is never held — it is the only way back to a playable
-        // row, and it commands nothing.
-        empty || (!deps.rehearsing && (onAir || blocked)),
+        empty || (!deps.rehearsing && deps.independentPreview !== true && (onAir || blocked)),
         () => (item === null ? noop() : deps.toggleRehearse(item.itemId)),
         MonitorPlay,
       ),

@@ -27,6 +27,8 @@ export interface RehearsalSubject {
   /** Applied fields with any staged edits layered on. */
   fields: FieldValues;
   previewPlateCrops?: StackItemState['previewPlateCrops'];
+  /** An on-air subject can use Pan for browser practice. */
+  previewCropLocked?: boolean;
   /**
    * R-049 — the template's Live Source carrier, when this browser's registry
    * holds one. `undefined` covers BOTH "this template declares none" and "the

@@ -140,6 +140,35 @@ function fakeBridge(
 }
 
 describe('B-153 — the bridge is asked what it can do, at connect', () => {
+  it.each([true, false])(
+    'R-117 negotiates preview-only PVW when advertised (%s)',
+    async (advertised) => {
+      const preview = ipc.RehearseEnterPreviewChannel.name;
+      const legacy = ipc.RehearseEnterChannel.name;
+      const channels = ipc
+        .runtimeRequestChannelNames(ipc)
+        .filter((name) => advertised || name !== preview);
+      const entered: string[] = [];
+      runtime = new WebSocketRuntime('ws://fake', {
+        consoleVersion: '1.2.0',
+        createWebSocket: () =>
+          fakeBridge((channel) => {
+            if (channel === ipc.BridgeCapabilitiesChannel.name)
+              return { channels, bridgeVersion: '1.2.0' };
+            if (channel !== preview && channel !== legacy) return 'unknown-channel';
+            entered.push(channel);
+            return { ok: true };
+          }),
+      });
+
+      await runtime.whenReady();
+      await expect(runtime.rehearse.enter({ itemId: 'item' })).resolves.toMatchObject({ ok: true });
+      expect(entered).toEqual([advertised ? preview : legacy]);
+      expect(runtime.auth.capabilities()?.independentPreview === true).toBe(advertised);
+      expect(runtime.link.skew()).toBeNull();
+    },
+  );
+
   it('🔴 4.4 — a bridge missing channels is named at CONNECT, before any button is pressed', async () => {
     const all = ipc.runtimeRequestChannelNames(ipc);
     const withheld = ['stack.set-active-look', 'stack.swap-live-source'];

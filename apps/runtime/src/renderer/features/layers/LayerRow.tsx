@@ -125,6 +125,8 @@ interface Props {
    * one snapshot for the whole table keeps thirty rows agreeing by construction.
    */
   rehearsing: boolean;
+  previewOnly?: boolean;
+  independentPreview?: boolean;
   /**
    * `add-multibox-audio` — the LIVE PLATES this row's item actually owns, resolved by the
    * PANEL from the bridge's ledger for `rehearsing`'s reason: one snapshot for the whole
@@ -322,6 +324,8 @@ export function LayerRow({
   emptiedAir = false,
   dirty,
   rehearsing,
+  previewOnly = false,
+  independentPreview = false,
   seatedPlates = [],
   audioLockedOf,
   holdsLiveSeats = false,
@@ -352,6 +356,7 @@ export function LayerRow({
    * the binding and not this value is what gets passed to it.
    */
   const item: StackItemState | null = binding.kind === 'bound' ? binding.item : null;
+  const legacyPreview = rehearsing && !previewOnly;
 
   const layerName = `${String(slot.channel)}-${String(slot.layer)}`;
   /**
@@ -523,6 +528,8 @@ export function LayerRow({
     casparReach,
     dirty,
     rehearsing,
+    previewOnly,
+    independentPreview,
     restoreBlocked,
     holdsLiveSeats,
     // R-022 — one toggle, both directions. The bridge answers
@@ -1295,15 +1302,9 @@ export function LayerRow({
           looks={looks}
           activeId={item.activeLookId}
           /*
-            🔴 `B-151` — DISABLED ONLY WHEN THE TARGET IS AIR.
-
-            `casparRefusalReason` exists because an ON-AIR switch cannot leave the browser
-            with the link down, so an enabled control would be the appearance of a
-            capability. A REHEARSING row is off air: the bridge records the look and sends
-            nothing, so the server's reachability has no bearing on whether the press can be
-            done. Disabling it there would refuse a rehearsal for a reason that belongs to
-            air — and rehearsing with the plant unreachable is precisely when a preview is
-            most useful.
+            B-151 / R-117 — the legacy preview look writes the off-air row only.
+            Independent PVW can run beside programme. Its immediate look picker
+            retains the air target and the corresponding connection gate.
           */
           /*
             🔴 DELTA 11 — the ROW's own rendered tone, not a second derivation of "on air".
@@ -1312,10 +1313,10 @@ export function LayerRow({
             unconfirmable claim down to `attention`.
           */
           onAir={state.tone === 'onair'}
-          refusal={rehearsing ? undefined : lookRefusal}
+          refusal={legacyPreview ? undefined : lookRefusal}
           rowName={rowName}
           // The row's own state decides what the press changes, and says so on the control.
-          target={rehearsing ? 'preview' : 'air'}
+          target={legacyPreview ? 'preview' : 'air'}
           onPick={(lookId) => {
             void switchLook(item.itemId, lookId);
           }}

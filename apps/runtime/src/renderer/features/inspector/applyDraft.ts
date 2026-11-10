@@ -1,4 +1,9 @@
-import type { FieldValue, FieldValues, StackItemState } from '@cg/shared-schema';
+import {
+  ownsLiveSeats,
+  type FieldValue,
+  type FieldValues,
+  type StackItemState,
+} from '@cg/shared-schema';
 import { withChannelDefaults, type TemplateInfo } from '@cg/shared-ipc';
 import { timingPatchToSend } from './timingToSend.js';
 import { reportCommandError } from '../status/commandFeedback.js';
@@ -159,17 +164,19 @@ export function applyDraft(
     .then(async (ok) => {
       const res = await fields();
       if (!res.accepted) return res;
-      const cropsAccepted = await applyPreviewCropDrafts(item.itemId, crop);
+      const cropsAccepted = await applyPreviewCropDrafts(item, crop);
       return ok && cropsAccepted ? res : { ...res, accepted: false };
     })
     .finally(crop.finish);
 }
 
 async function applyPreviewCropDrafts(
-  itemId: string,
+  item: StackItemState,
   crop: NonNullable<ReturnType<typeof beginPreviewCropApply>>,
 ): Promise<boolean> {
   crop.accept('practice');
+  // Keep guide drafts for an off-air Update while ordinary edits can reach the current output.
+  if (ownsLiveSeats(item, false)) return true;
   const edits = crop.drafts.flatMap((draft) =>
     draft.kind === 'guide'
       ? [
@@ -183,7 +190,7 @@ async function applyPreviewCropDrafts(
   );
   if (edits.length === 0) return true;
   try {
-    const result = await window.cg.stack.previewPlateCrop({ itemId, edits });
+    const result = await window.cg.stack.previewPlateCrop({ itemId: item.itemId, edits });
     if (
       result.ok &&
       result.applied?.length === edits.length &&

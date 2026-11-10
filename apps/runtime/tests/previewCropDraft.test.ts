@@ -58,6 +58,19 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+it('R-117 commits on-air fields and retains the guide crop for an off-air Update', async () => {
+  const { update, previewPlateCrop } = bridge();
+  stageField(itemId, ['title'], 'after');
+  stagePreviewCrop(itemId, guide, baseline);
+  stagePreviewCrop(itemId, practice, baseline);
+
+  await expect(applyDraft({ ...row, status: 'on-air' })).resolves.toMatchObject({ accepted: true });
+  expect(update).toHaveBeenCalledWith({ itemId, fields: { title: 'after' }, mergeMode: 'merge' });
+  expect(previewPlateCrop).not.toHaveBeenCalled();
+  expect(previewCropDraftOf(itemId, guide.key)).toEqual(guide);
+  expect(appliedPracticeCropOf(itemId, practice.key)).toEqual(practice.focus);
+});
+
 it('stages framing locally, clears a return to the applied focus and includes framing in Discard', () => {
   const { previewPlateCrop } = bridge();
   stagePreviewCrop(itemId, guide, baseline);

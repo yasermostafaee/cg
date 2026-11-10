@@ -216,7 +216,7 @@ const styles = {
  * | row state | what is true of this look |
  * | --- | --- |
  * | on air | it is what the programme is showing |
- * | rehearsing | it is what PVW is showing — `R-022` keeps the row off air |
+ * | rehearsing off air | it is what PVW is showing |
  * | loaded / idle | it is what a TAKE would show. Not air. |
  *
  * ⚠ **Both predicates are IMPORTED.** `claimsAir` is the row's own ON AIR claim (the section above
@@ -225,11 +225,7 @@ const styles = {
  * this section never learned it — the `B-151` shape, one surface knowing a state and its
  * neighbour not. Re-deriving either here would be the defect, not the fix.
  *
- * ⚠ **REHEARSING is checked FIRST, and the order is safe rather than lucky.** A row cannot be
- * rehearsing AND on air: `R-022`'s interlock refuses a rehearse for an on-air row and a take
- * for a rehearsing one, which `live-look-reconcile.integration.test.ts` pins on the wire
- * rather than assuming. If that interlock ever went, this order would decide an ambiguity
- * instead of reporting one — so the interlock is asserted beside this, not trusted.
+ * R-117 — the active preset remains on air while PVW is open on the same row.
  *
  * 🔴 **SESSION BP — IT NOW RETURNS THE COLOUR TOO, and that is the point of returning it at
  * all.** The words, the machine-readable `tone` and the hue are three readings of ONE
@@ -242,9 +238,9 @@ export function badgeFor(
   onAir: boolean,
   rehearsing: boolean,
 ): { text: string | null; tone: 'on-air' | 'rehearsing' | 'not-on-air'; color: string } {
+  if (onAir) return { text: 'ON AIR NOW', tone: 'on-air', color: styles.live.color };
   if (rehearsing)
     return { text: 'SHOWING IN PVW', tone: 'rehearsing', color: styles.rehearsing.color };
-  if (onAir) return { text: 'ON AIR NOW', tone: 'on-air', color: styles.live.color };
   // The pressed tab already carries selection. Repeating it as a long sentence made the
   // selected preset resize the whole row and added no operational fact (owner, B-401).
   return { text: null, tone: 'not-on-air', color: styles.selected.color };

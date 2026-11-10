@@ -74,6 +74,7 @@ export function PreviewPanRow({
   scope,
   lookId,
   appliedCrops,
+  practiceOnly = false,
   plates,
   sourceFrames,
   fit,
@@ -82,20 +83,22 @@ export function PreviewPanRow({
   scope: string;
   lookId: string | undefined;
   appliedCrops: StackItemState['previewPlateCrops'];
+  practiceOnly?: boolean;
   plates: readonly PreviewPanPlacement[];
   sourceFrames: ReadonlyMap<string, SourcePreviewFrame>;
   fit: number;
 }): JSX.Element {
   const hasSource = plates.some((plate) => plate.sourceId !== null);
+  const canCheck = hasSource && !practiceOnly;
   const [targets, setTargets] = useState<readonly PreviewPlateCropTarget[] | null>(
-    hasSource ? null : [],
+    canCheck ? null : [],
   );
   const [cropMessage, setCropMessage] = useState<string>();
   useSyncExternalStore(subscribeDrafts, draftsVersion, draftsVersion);
 
   useEffect(() => {
     let current = true;
-    if (hasSource) {
+    if (canCheck) {
       void (async () => {
         try {
           const result = await window.cg.stack.previewPlateCrop({ itemId });
@@ -112,7 +115,7 @@ export function PreviewPanRow({
     return () => {
       current = false;
     };
-  }, [hasSource, itemId]);
+  }, [canCheck, itemId]);
 
   return (
     <>

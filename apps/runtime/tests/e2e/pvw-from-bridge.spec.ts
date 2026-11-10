@@ -286,7 +286,7 @@ test('D-178 — PVW crop stays a draft until Update and reaches the first Take F
   };
   const leavePreview = () => plateRow.getByRole('button', { name: 'OFF PVW', exact: true }).click();
   await startPan();
-  await expect(take).toBeDisabled();
+  await expect(take).toBeEnabled();
   const crop = pvw.locator('[data-pan-practice-crop]');
   const source = pvw.locator('[data-pan-practice-picture]');
   const draft = pvw.locator('[data-pan-crop-state="draft"]');
@@ -349,6 +349,95 @@ test('D-178 — PVW crop stays a draft until Update and reaches the first Take F
   expect(Number(xSent)).toBeCloseTo(0.1875, 2);
   expect(play).toBeGreaterThan(fill);
   expect(reveal).toBeGreaterThan(play);
+});
+
+test('R-117 previews draft fields while Play and Update control the same programme row', async ({
+  page,
+}) => {
+  const handle = await boot();
+  const engine = mock;
+  if (engine === null) throw new Error('Test engine is unavailable');
+  await handle.runtime.whenServerHealthy(15_000);
+  const itemId = 'independent-pvw-item';
+  const templateId = 'tpl-independent-pvw';
+  handle.runtime.templateImport(
+    {
+      ...TEMPLATE,
+      templateId,
+      name: 'Independent PVW',
+      fields: [{ id: 'headline', label: 'Headline', type: 'text', required: false, default: '' }],
+    },
+    '<!doctype html><html><body><div id="headline"></div><script>' +
+      'window.play=function(){};window.stop=function(){};window.next=function(){};' +
+      'window.update=function(json){document.querySelector("#headline").textContent=JSON.parse(json).headline;};' +
+      '</script></body></html>',
+    1,
+  );
+  expect(
+    await handle.runtime.loadFixed({ channel: 1, layer: ROW }, itemId, templateId, {
+      headline: 'Applied headline',
+    }),
+  ).toMatchObject({ accepted: true });
+  await openConsole(page, handle.url);
+  await showMonitors(page);
+  const layer = row(page);
+  const play = layer.getByRole('button', { name: 'PLAY', exact: true });
+  const onPvw = layer.getByRole('button', { name: 'ON PVW', exact: true });
+  const offPvw = layer.getByRole('button', { name: 'OFF PVW', exact: true });
+  const pvw = page.getByRole('region', { name: 'PREVIEW (PVW)' });
+  const rendered = pvw.frameLocator('iframe[data-rehearsal-frame]').locator('#headline');
+  const commands = () =>
+    engine
+      .receivedCommands()
+      .map(({ line }) => line)
+      .filter((line) => new RegExp(`(?:CG|MIXER|CLEAR) 1-${String(ROW)}(?: |$)`).test(line));
+
+  await layer.locator('[data-row-body]').click();
+  const field = page
+    .getByRole('complementary', { name: 'Inspector' })
+    .getByRole('textbox', { name: /^headline$/i });
+  await expect(field).toHaveValue('Applied headline');
+  const beforePvw = commands();
+  await onPvw.click();
+  await pvw.getByRole('button', { name: 'PLAY', exact: true }).click();
+  await field.fill('Draft headline');
+  await expect(rendered).toHaveText('Draft headline');
+  expect(commands()).toEqual(beforePvw);
+  await expect(play).toBeEnabled();
+
+  await play.click();
+  await expect(layer).toHaveAttribute('aria-label', /ON AIR$/);
+  await expect(offPvw).toBeVisible();
+  await expect(rendered).toHaveText('Draft headline');
+  const take = commands().slice(beforePvw.length);
+  expect(take.some((line) => line.includes('Applied headline'))).toBe(true);
+  expect(take.some((line) => line.includes('Draft headline'))).toBe(false);
+
+  const beforeToggle = commands();
+  await offPvw.click();
+  await expect(onPvw).toBeEnabled();
+  await onPvw.click();
+  await pvw.getByRole('button', { name: 'PLAY', exact: true }).click();
+  await expect(rendered).toHaveText('Draft headline');
+  await expect(layer).toHaveAttribute('aria-label', /ON AIR$/);
+  await field.fill('Second draft');
+  await expect(rendered).toHaveText('Second draft');
+  expect(commands()).toEqual(beforeToggle);
+
+  await page
+    .getByRole('button', { name: 'Apply staged edits to the on-air row', exact: true })
+    .click();
+  await expect
+    .poll(() =>
+      commands()
+        .slice(beforeToggle.length)
+        .some((line) => line.includes('Second draft')),
+    )
+    .toBe(true);
+  await layer.getByRole('button', { name: 'STOP', exact: true }).click();
+  await expect(layer).not.toHaveAttribute('aria-label', /ON AIR$/);
+  await expect(offPvw).toBeVisible();
+  await expect(rendered).toHaveText('Second draft');
 });
 
 test('R-108 — a reloaded package refreshes the already-bound row in PVW', async ({ page }) => {

@@ -221,6 +221,7 @@ const WS_OPEN = 1;
 const REQUEST_TIMEOUT_MS = 8000;
 // Same-release Bridges can omit these features without affecting standard playout.
 const OPTIONAL_CHANNELS = new Set([
+  ipcChannels.RehearseEnterPreviewChannel.name,
   StackPreviewPlateCropChannel.name,
   SourcesMediaThumbnailChannel.name,
   ipcChannels.SourcePreviewPvwChannel.name,
@@ -1080,6 +1081,9 @@ export class WebSocketRuntime implements RuntimeBridge {
         bridgeVersion: caps.bridgeVersion ?? null,
         // `DELTA-RUN-NEXT-VERSION-01-C` — CG Bridge's machine clock; an older bridge says nothing.
         bridgeClock: caps.clock ?? null,
+        ...(routed.has(ipcChannels.RehearseEnterPreviewChannel.name)
+          ? { independentPreview: true }
+          : {}),
       });
       const missing = ipcChannels
         .runtimeRequestChannelNames(ipcChannels)
@@ -2608,8 +2612,13 @@ export class WebSocketRuntime implements RuntimeBridge {
   /** R-022 — REHEARSE. Bridge-owned; the PLAY interlock is enforced bridge-side. */
   readonly rehearse = {
     state: () => this.#invoke(RehearseStateChannel, undefined),
-    enter: (req: ChannelRequest<typeof RehearseEnterChannel>) =>
-      this.#invoke(RehearseEnterChannel, req),
+    enter: async (req: ChannelRequest<typeof RehearseEnterChannel>) => {
+      const routed = await this.#capsHandshake;
+      const channel = routed?.has(ipcChannels.RehearseEnterPreviewChannel.name)
+        ? ipcChannels.RehearseEnterPreviewChannel
+        : RehearseEnterChannel;
+      return this.#invoke(channel, req);
+    },
     exit: (req: ChannelRequest<typeof RehearseExitChannel>) =>
       this.#invoke(RehearseExitChannel, req),
     onStateChanged: (handler: (rehearsals: Rehearsal[]) => void) => this.#rehearseSubs.add(handler),

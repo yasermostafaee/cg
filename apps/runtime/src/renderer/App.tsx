@@ -363,6 +363,7 @@ export function App(): JSX.Element {
       orphans={orphans}
       onSelectionChange={setSelectedId}
       selectedId={selectedId}
+      independentPreview={capabilities?.independentPreview === true}
       layout={layout}
       selectedOnly={companion}
       filter={layerFilter}

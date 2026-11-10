@@ -80,7 +80,13 @@ import { useLiveLayers } from '../../hooks/useLiveLayers.js';
 import { usePlateReleases } from '../../hooks/usePlateReleases.js';
 import { useStackDeliveryPending } from '../../hooks/useStackDeliveryPending.js';
 import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
-import { defaultLayerAlias, isLayerVisible, isLowBankLayer, isRehearsing } from '@cg/shared-ipc';
+import {
+  defaultLayerAlias,
+  isLayerVisible,
+  isLowBankLayer,
+  isRehearsalInterlocked,
+  isRehearsing,
+} from '@cg/shared-ipc';
 import { useRehearse } from '../../hooks/useRehearse.js';
 import { airTally, isOnAir, onChannel } from '../stack/onAir.js';
 import { draftsVersion, isItemDirty, subscribeDrafts } from '../inspector/draftStore.js';
@@ -113,6 +119,7 @@ interface Props {
   onSelectionChange: (itemId: string | null) => void;
   selectedId: string | null;
   onUpdate: (itemId: string) => Promise<{ accepted: boolean; errorCode?: string | undefined }>;
+  independentPreview?: boolean;
   /** R-028 part B — the operator's workspace geometry (see `useShellLayout`). */
   layout: ShellLayout;
   /** Narrow screens only: is the Inspector overlay showing? */
@@ -308,6 +315,7 @@ export function LayersPanel({
   onSelectionChange,
   selectedId,
   onUpdate,
+  independentPreview = false,
   layout,
   inspectorOpen,
   onToggleInspector,
@@ -1331,12 +1339,13 @@ export function LayersPanel({
                 item.timingOverride,
               )
             }
-            // R-022 — read through the canonical `isRehearsing`, never a
-            // local `.some()`: the bridge refuses PLAY on the same
-            // predicate, and if the two ever disagreed the UI would offer a
-            // take the bridge rejects — or worse, allow one it thought was
-            // interlocked off.
             rehearsing={item !== null && isRehearsing(rehearsals, item.itemId)}
+            previewOnly={
+              item !== null &&
+              isRehearsing(rehearsals, item.itemId) &&
+              !isRehearsalInterlocked(rehearsals, item.itemId)
+            }
+            independentPreview={independentPreview}
             /*
               `add-multibox-audio` — the plates this row's item actually OWNS, for
               the read-only audio summary.

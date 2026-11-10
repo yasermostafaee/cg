@@ -7,6 +7,7 @@ import {
   SquareDashed,
 } from 'lucide-react';
 import { REFERENCE_RASTER, sourceAspect } from '@cg/shared-ipc';
+import { ownsLiveSeats } from '@cg/shared-schema';
 import { Panel } from '../../ui/Panel.js';
 import { effectiveTimingFor } from '../inspector/timingToSend.js';
 import { Button } from '../../ui/Button.js';
@@ -222,6 +223,10 @@ export function PreviewPanel({ companionActions }: { companionActions?: ReactNod
             // would send.
             fields,
             previewPlateCrops: item.previewPlateCrops,
+            previewCropLocked: ownsLiveSeats(
+              item,
+              liveLayers.some((layer) => layer.itemId === item.itemId),
+            ),
             // `RUN-NEXT-VERSION-03` 1.1 / 1.3 — the page a take of these values would show.
             book: bookPageOf(info, item, fields) ?? undefined,
             liveSources: live,

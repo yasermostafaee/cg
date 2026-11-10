@@ -204,6 +204,8 @@ export interface AuthCapabilities {
    * absent — not read yet.
    */
   readonly bridgeClock?: BridgeClock | null;
+  /** The bridge advertises browser-only PVW for a row that may also be on air. */
+  readonly independentPreview?: true;
 }
 
 /**
