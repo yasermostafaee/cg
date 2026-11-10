@@ -91,4 +91,5 @@
 - [x] 9.4 Verify matching-aspect sources, clamp, draft/restore and the retained crop in Chromium and Bridge tests.
       The browser verified a proportional resize and reopening the applied crop. The wire test
       verified no AMCP on Update and the matching hidden FILL with the original CLIP on first Take.
-- [ ] 9.5 Verify the carrying Linux E2E and a resized crop on first Take on the target station.
+- [x] 9.5 Verify the carrying [Linux Playwright E2E](https://github.com/yasermostafaee/cg/actions/runs/42873144431/job/130029489197) on `c560f8cd`.
+- [ ] 9.6 Verify a resized crop on first Take on the target station.

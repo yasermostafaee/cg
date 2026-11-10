@@ -33,4 +33,5 @@
 - [x] 4.3 Chromium verified that the same bound row shows the reloaded page. Bridge integration
       verified no write on package import, then an updated page before Play. A concurrent import
       between the two ADDs no longer mixes foreground and background versions.
-- [ ] 4.4 Record the carrying Linux E2E and verify on the target CasparCG.
+- [x] 4.4 The carrying [Linux Playwright E2E](https://github.com/yasermostafaee/cg/actions/runs/42873144431/job/130029489197) passed on `c560f8cd`.
+- [ ] 4.5 Verify on the target CasparCG.

@@ -5,4 +5,4 @@
 - [x] 1.3 Both Tauri crates passed `cargo check`. The two capability tests passed. Windows Chromium
       verified both apps use a regular browser tab or call the shell bridge when available.
 - [ ] 1.4 Verify the click in both packaged Windows apps.
-- [ ] 1.5 Record carrying Linux E2E.
+- [x] 1.5 Record carrying Linux E2E. The [Linux Playwright E2E](https://github.com/yasermostafaee/cg/actions/runs/42873144431/job/130029489197) step passed on `c560f8cd`.

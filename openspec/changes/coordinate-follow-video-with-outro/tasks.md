@@ -8,4 +8,4 @@
       nested exit and existing Sequence-item transitions.
 - [x] Windows Chromium verified the authored delay in Designer Rehearse with real video playback.
       The text faded while the video was held, reached zero, and then the video advanced.
-- [ ] Record carrying Linux E2E.
+- [x] Record carrying Linux E2E. The [Linux Playwright E2E](https://github.com/yasermostafaee/cg/actions/runs/42873144431/job/130029489197) step passed on `c560f8cd`.

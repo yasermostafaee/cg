@@ -130,7 +130,9 @@ never relaxed.
 - [x] D.3 Add CG Control onboarding and Connection settings. Verify the local Bridge before saving the station. Never present a remembered Playout token to a standalone Bridge.
 - [x] D.4 Add Windows Setup and unattended installer mode selection, preserving older service configurations and the current Playout default. Rust Setup tests and NSIS compile passed locally; installed verification belongs to D.6.
 - [x] D.5 Bridge integration covers first Take with no credentials, installed-origin and Host validation, rejection of a LAN listener, configuration persistence and the legacy auth route census. Runtime tests cover address and record handling and old Playout onboarding; native end-to-end coverage belongs to D.6.
-- [ ] D.6 Run the full gate, Runtime Chromium, the carrying Linux E2E and installed Windows acceptance.
+- [x] D.6 The full local gate, focused Chromium and the carrying [Linux Playwright E2E](https://github.com/yasermostafaee/cg/actions/runs/42873144431/job/130029489197) passed on `c560f8cd`.
+- [x] D.7 In [clean Windows acceptance](https://github.com/yasermostafaee/cg/actions/runs/42873144144/job/130039694031) on `c560f8cd`, installed Bridge reached raw AMCP/OSC and installed CG Control opened Layers and saved the standalone address with no Playout session. The assertion incorrectly expected the explicit default port.
+- [ ] D.8 Rerun the installed Windows acceptance through Take after correcting the assertion. Raw AMCP Take passed in Bridge integration and the carrying Playwright run.
 
 ## E. Report
 

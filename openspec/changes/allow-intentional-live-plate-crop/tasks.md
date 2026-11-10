@@ -6,4 +6,4 @@
 - [x] 1.4 Fresh Windows Chromium verified the measured PVW picture follows the assigned 16:9
       geometry on a plate authored for 4:3.
 - [ ] 1.5 Verify PVW crop and first Take on the customer station with the two-frame preset.
-- [ ] 1.6 Record carrying Linux E2E.
+- [x] 1.6 Record carrying Linux E2E. The [Linux Playwright E2E](https://github.com/yasermostafaee/cg/actions/runs/42873144431/job/130029489197) step passed on `c560f8cd`.
