@@ -1,4 +1,6 @@
 import { DEFAULT_BRIDGE_HOST, DEFAULT_BRIDGE_PORT, splitHostPort } from '@cg/shared-ipc';
+import { standaloneBridgeAddress } from '../shared/station-address.js';
+import { insideCgControl } from './desktop.js';
 import { loadStationAddress, type StationAddress } from './stationAddress.js';
 
 /**
@@ -59,6 +61,14 @@ export function bridgeUrlFor(location: PageLocation | undefined): string {
  */
 export function bridgeUrlForStation(station: StationAddress): string | null {
   try {
+    if ('mode' in station) {
+      const address = standaloneBridgeAddress(station.bridgeAddress);
+      if (address === null) return null;
+      const parts = splitHostPort(address);
+      return parts === null
+        ? null
+        : `ws://${parts.host}:${String(parts.port ?? DEFAULT_BRIDGE_PORT)}`;
+    }
     if (station.bridgeAddress !== undefined) {
       // The port from the TEXT (`splitHostPort`): the URL parser would drop `ws://host:80`'s port.
       const parts = splitHostPort(station.bridgeAddress);
@@ -145,10 +155,13 @@ function isAppPage(location: PageLocation): boolean {
  * address before it connects anywhere.
  */
 export function resolveBridgeUrl(): string | null {
+  const station = loadStationAddress();
+  if (station !== null && 'mode' in station && insideCgControl()) {
+    return bridgeUrlForStation(station);
+  }
   const override = (globalThis as { __CG_BRIDGE_URL__?: unknown }).__CG_BRIDGE_URL__;
   if (typeof override === 'string' && override.length > 0) return override;
-  const station = loadStationAddress();
-  if (station !== null) {
+  if (station !== null && !('mode' in station)) {
     const fromStation = bridgeUrlForStation(station);
     if (fromStation !== null) return fromStation;
   }

@@ -10,7 +10,8 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App.js';
 import { createRuntimeBridge } from '../platform/createRuntimeBridge.js';
 import { saveStationAddress } from '../platform/stationAddress.js';
-import { stationBridgeAnswers } from '../platform/checkAt.js';
+import { checkStandaloneAt, stationBridgeAnswers } from '../platform/checkAt.js';
+import { insideCgControl } from '../platform/desktop.js';
 import { PlayoutAddressGate } from './features/firstRun/PlayoutAddressGate.js';
 import { startKeyboardLanguage } from './keyboardLanguage.js';
 import { applyThemeVars } from './theme.js';
@@ -94,7 +95,11 @@ async function boot(): Promise<void> {
     root.render(
       <StrictMode>
         <BootComplete>
-          <PlayoutAddressGate save={saveStationAddress} answers={stationBridgeAnswers} />
+          <PlayoutAddressGate
+            save={saveStationAddress}
+            answers={stationBridgeAnswers}
+            checkStandalone={insideCgControl() ? checkStandaloneAt : undefined}
+          />
         </BootComplete>
       </StrictMode>,
     );

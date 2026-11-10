@@ -154,7 +154,7 @@ export async function relay(page: Page, host: string, target: string): Promise<v
  */
 export async function asCgControl(
   page: Page,
-  station: { readonly playoutAddress: string; readonly bridgeAddress?: string },
+  station: { readonly playoutAddress: string; readonly bridgeAddress?: string } | null,
   options: { readonly signIn?: boolean } = {},
 ): Promise<void> {
   const base = test.info().project.use.baseURL;
@@ -207,10 +207,10 @@ export async function asCgControl(
       };
       if (sessionStorage.getItem('e2e.seeded') === null) {
         sessionStorage.setItem('e2e.seeded', '1');
-        localStorage.setItem(key, record);
+        if (record !== null) localStorage.setItem(key, record);
       }
     },
-    { key: STATION_KEY, record: JSON.stringify(station) },
+    { key: STATION_KEY, record: station === null ? null : JSON.stringify(station) },
   );
 }
 

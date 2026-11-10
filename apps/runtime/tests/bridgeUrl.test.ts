@@ -6,7 +6,7 @@ import {
   bridgeUrlForStation,
   resolveBridgeUrl,
 } from '../src/platform/bridgeUrl.js';
-import { saveStationAddress } from '../src/platform/stationAddress.js';
+import { loadStationAddress, saveStationAddress } from '../src/platform/stationAddress.js';
 import { installMemoryStorage } from './support/localStorage.js';
 
 /**
@@ -18,10 +18,15 @@ import { installMemoryStorage } from './support/localStorage.js';
  * sits DISCONNECTED with nothing wrong anywhere it can see.
  */
 
-const globals = globalThis as { __CG_BRIDGE_URL__?: unknown; location?: unknown };
+const globals = globalThis as {
+  __CG_BRIDGE_URL__?: unknown;
+  __TAURI_INTERNALS__?: unknown;
+  location?: unknown;
+};
 
 afterEach(() => {
   delete globals.__CG_BRIDGE_URL__;
+  delete globals.__TAURI_INTERNALS__;
   delete globals.location;
 });
 
@@ -114,6 +119,27 @@ describe('CENTRAL-BRIDGE-01 — this console’s station record', () => {
   });
 
   const APP_PAGE = { protocol: 'http:', hostname: 'tauri.localhost' };
+
+  it('R-098 loads a validated standalone record only in CG Control', () => {
+    expect(saveStationAddress({ mode: 'standalone', bridgeAddress: 'LOCALHOST:80' })).toBe(true);
+    expect(loadStationAddress()).toEqual({ mode: 'standalone', bridgeAddress: '127.0.0.1:80' });
+    globals.location = { protocol: 'http:', hostname: '192.0.2.20' };
+    expect(resolveBridgeUrl()).toBe(`ws://192.0.2.20:${String(DEFAULT_BRIDGE_PORT)}`);
+    globals.location = APP_PAGE;
+    globals.__TAURI_INTERNALS__ = { invoke: () => Promise.resolve(null) };
+    expect(resolveBridgeUrl()).toBe('ws://127.0.0.1:80');
+  });
+
+  it('R-098 rejects remote standalone records at load and save', () => {
+    const remote = { mode: 'standalone', bridgeAddress: '192.0.2.20' } as const;
+    expect(saveStationAddress(remote)).toBe(false);
+    expect(bridgeUrlForStation(remote)).toBeNull();
+    localStorage.setItem('cg.runtime.station.v1', JSON.stringify(remote));
+    expect(loadStationAddress()).toBeNull();
+    globals.location = APP_PAGE;
+    globals.__TAURI_INTERNALS__ = { invoke: () => Promise.resolve(null) };
+    expect(resolveBridgeUrl()).toBeNull();
+  });
 
   it('🔴 CG Bridge on the Playout host, port 5280 — the operator types only the Playout address', () => {
     saveStationAddress({ playoutAddress: 'http://192.0.2.10:8080' });

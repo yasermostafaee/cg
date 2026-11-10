@@ -6,6 +6,8 @@ import {
   parseWsFrame,
   serializeWsFrame,
   SetupCheckChannel,
+  SetupCheckStandaloneChannel,
+  SETUP_CHECK_WAIT_MS,
   splitHostPort,
   type ChannelResponse,
   type ConnectionCheckRequest,
@@ -13,6 +15,12 @@ import {
 } from '@cg/shared-ipc';
 
 import { bridgeHostPort, bridgeUrlForStation } from './bridgeUrl.js';
+import type { SetupCheckAnswer } from '../shared/runtime-bridge.js';
+import {
+  STANDALONE_BRIDGE_ADDRESS_ERROR,
+  type PlayoutStationAddress,
+  type StandaloneStationAddress,
+} from '../shared/station-address.js';
 
 type BridgeCapabilities = ChannelResponse<typeof BridgeCapabilitiesChannel>;
 
@@ -256,6 +264,43 @@ const capabilitiesOn = (socket: OwnSocket, waitMs: number): Promise<BridgeCapabi
     .ask({ type: 'request', channel: BridgeCapabilitiesChannel.name, payload: {} }, waitMs)
     .then((raw) => BridgeCapabilitiesChannel.response.parse(raw));
 
+/** Only the explicitly configured service may be used without signing in. */
+export function isStandaloneBridge(caps: BridgeCapabilities): boolean {
+  return caps.stationMode === 'standalone' && caps.auth === 'off';
+}
+
+export async function checkStandaloneAt(
+  station: StandaloneStationAddress,
+  createSocket: (url: string) => CheckSocket = (u) => new WebSocket(u) as unknown as CheckSocket,
+): Promise<SetupCheckAnswer> {
+  const url = bridgeUrlForStation(station);
+  if (url === null) throw new Error(STANDALONE_BRIDGE_ADDRESS_ERROR);
+  const address = bridgeHostPort(url);
+  const socket = await openOwnSocket(url, address, createSocket, CONNECTION_CHECK_CONNECT_MS);
+  try {
+    const capabilities = await capabilitiesOn(socket, CONNECTION_CHECK_CONNECT_MS);
+    if (!isStandaloneBridge(capabilities)) {
+      throw new Error(`CG Bridge at ${address} is not set up for No Playout.`);
+    }
+    const result = SetupCheckStandaloneChannel.response.parse(
+      await socket.ask(
+        { type: 'request', channel: SetupCheckStandaloneChannel.name, payload: {} },
+        SETUP_CHECK_WAIT_MS,
+      ),
+    );
+    return {
+      ...result,
+      bridge: {
+        address,
+        version: capabilities.bridgeVersion ?? null,
+        problems: result.bridgeProblems ?? [],
+      },
+    };
+  } finally {
+    socket.close();
+  }
+}
+
 export async function checkOnItsOwnSocket(options: {
   readonly url: string;
   /** `host:port`, as the not-answering sentence names it. */
@@ -325,7 +370,10 @@ export async function bridgeAnswersAt(
   try {
     const socket = await openOwnSocket(bridgeUrl, address, createSocket, connectMs);
     try {
-      await capabilitiesOn(socket, connectMs);
+      const caps = await capabilitiesOn(socket, connectMs);
+      if (caps.stationMode === 'standalone') {
+        return `CG Bridge at ${address} is set up for No Playout. Choose No Playout to connect.`;
+      }
       return null;
     } finally {
       socket.close();
@@ -336,10 +384,7 @@ export async function bridgeAnswersAt(
 }
 
 /** {@link bridgeAnswersAt} for a station record, resolved by the one rule Connect connects by. */
-export function stationBridgeAnswers(station: {
-  readonly playoutAddress: string;
-  readonly bridgeAddress?: string;
-}): Promise<string | null> {
+export function stationBridgeAnswers(station: PlayoutStationAddress): Promise<string | null> {
   const url = bridgeUrlForStation(station);
   return url === null
     ? Promise.resolve(NOT_A_PLAYOUT_ADDRESS)

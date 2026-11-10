@@ -1,4 +1,8 @@
 import {
+  STANDALONE_BRIDGE_HOST,
+  standaloneBridgeAddress,
+} from '../../../shared/station-address.js';
+import {
   DEFAULT_BRIDGE_PORT,
   PLAYOUT_API_PORT,
   normaliseBridgeAddress,
@@ -156,6 +160,12 @@ export function bridgeAddressOf(f: HostPort, playoutHost: string | null): string
   return normaliseBridgeAddress(
     read.port === '' || read.port === BRIDGE_PORT_DEFAULT ? read.host : `${read.host}:${read.port}`,
   );
+}
+
+export function standaloneBridgeAddressOf(fields: HostPort): string | null {
+  const address = bridgeAddressOf(fields, STANDALONE_BRIDGE_HOST);
+  if (address === null) return null;
+  return standaloneBridgeAddress(address === '' ? STANDALONE_BRIDGE_HOST : address);
 }
 
 /**

@@ -13,12 +13,14 @@ import {
   shellKeyboardLanguage,
   shellOpenCompanySite,
   shellReportsKeyboardLanguage,
+  insideCgControl,
 } from './desktop.js';
 import { WebSocketRuntime } from './WebSocketRuntime.js';
 import { LibraryStore } from './library/LibraryStore.js';
 import { initRuntimeWorkspace } from './library/workspace.js';
 import { StackRetentionStore } from './stack/StackRetentionStore.js';
 import { isTestMode } from './testMode.js';
+import { loadStationAddress } from './stationAddress.js';
 
 const APP_INFO: AppInfo = { name: 'cg Runtime', version: '0.0.0', platform: 'browser' };
 
@@ -53,6 +55,7 @@ export async function createRuntimeBridge(): Promise<RuntimeBridge | null> {
   // `CENTRAL-BRIDGE-01` (D8) — CG Control with no Playout address yet: nowhere to connect, and the
   // console asks for it (`main.tsx`) rather than guessing a bridge.
   if (url === null) return null;
+  const station = insideCgControl() ? loadStationAddress() : null;
   // B-085 / B-092 — this console's DISPLAY copies of the library and the stack, hydrated BEFORE
   // the runtime is returned so the first `templates.list()` and `stack.snapshot()` have something
   // to show with CG Bridge unreachable. `CENTRAL-BRIDGE-01` (`B-294`): never sent — the bridge
@@ -61,7 +64,11 @@ export async function createRuntimeBridge(): Promise<RuntimeBridge | null> {
   const library = new LibraryStore(workspace);
   const stackRetention = new StackRetentionStore(workspace);
   await Promise.all([library.hydrate(), stackRetention.hydrate()]);
-  const ws = new WebSocketRuntime(url, { library, stackRetention });
+  const ws = new WebSocketRuntime(url, {
+    library,
+    stackRetention,
+    standalone: station !== null && 'mode' in station,
+  });
   try {
     await withTimeout(ws.whenReady(), PROBE_TIMEOUT_MS);
   } catch {

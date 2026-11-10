@@ -64,6 +64,8 @@ export const BridgeCapabilitiesChannel = defineChannel(
      * sign-in by the refusal itself.
      */
     auth: AuthModeSchema.optional(),
+    /** Explicit installed No Playout mode; absent for older bridges, Playout, and bare development bridges. */
+    stationMode: z.literal('standalone').optional(),
     /**
      * Where the BROWSER posts its credentials — the Playout's D1 endpoint
      * (`POST /api/cg/auth/token`), absolute, as configured on this bridge.

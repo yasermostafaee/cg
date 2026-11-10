@@ -4670,12 +4670,19 @@ and grants are dropped. Say so in the status bar as a fact, beside the server it
 never opens Station setup still learns it. **Not built in `SERVERS-SIMPLIFY-01`** (the owner's instruction: file, do
 not build).
 
-## [ ] R-098 — A station with no Playout is an explicit choice ⟨priority: medium⟩ — FILED 2026-10-11 by `SERVERS-SIMPLIFY-01` (T4) · `openspec/changes/servers-simplify/`
+## [~] R-098 — A station can connect to CasparCG without Playout ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/servers-simplify/`
 
-**What:** Set up offers a plain `No Playout` choice; the station record then holds CG Bridge's address alone. The
-Connection card reads `No Playout`, the CasparCG card is editable — `Host` (placeholder `127.0.0.1`), `AMCP port`
-(`5250`), `OSC port` (`6251`) — and CG Bridge has `Host` and `Port`. The persisted record (`cg.runtime.station.v1`)
-keeps every old record valid, and the persisted-key census is updated.
+**What:** Offer an explicit No Playout mode in CG Bridge Setup and in CG Control on the same machine. The Bridge connects to CasparCG over AMCP without Playout authentication, using an editable host, AMCP port and OSC port. CG Control stores only the mode and local Bridge address for that station.
+
+**Why:** A standalone CasparCG station must be able to run CG templates without installing the Playout Engine or Client.
+
+**Acceptance:**
+
+- WHEN the installer is explicitly set to No Playout THEN the installed Bridge connects to local or remote CasparCG using the configured AMCP port. Only the local machine can reach the unauthenticated control socket.
+- WHEN CG Control verifies an installed No Playout Bridge on loopback THEN it connects and can Take a template without Playout sign-in or licence discovery. Missing or incompatible Bridge leaves the existing station record untouched.
+- WHEN a No Playout Bridge's configured CasparCG is checked THEN it reports its actual AMCP result and does not probe or request Playout authentication. Host and port edits survive restart.
+- WHEN an existing or new Playout station is installed, opened or upgraded without choosing No Playout THEN its address, sign-in, channel grants, licence gates and on-air behavior stay in force.
+- WHEN remote CasparCG fetches a graphics page THEN it can reach the configured graphics HTTP address without gaining access to the control socket.
 
 ## [~] R-099 — An outage documents itself: one log line per change of the license the bridge holds ⟨priority: medium⟩ — FILED 2026-10-12 by `DONGLE-RECOVER-01` A2 · `openspec/changes/dongle-recover/`
 

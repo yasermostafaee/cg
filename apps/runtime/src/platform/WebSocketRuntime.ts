@@ -163,6 +163,7 @@ import type {
   BridgeLinkStatus,
   RuntimeBridge,
   SetupCheckAnswer,
+  StandaloneSetup,
   Unsubscribe,
 } from '../shared/runtime-bridge.js';
 import * as ipcChannels from '@cg/shared-ipc';
@@ -204,8 +205,15 @@ import {
   bridgeUrlForStation,
   rebaseLoopback,
 } from './bridgeUrl.js';
-import { checkByBridgeName, checkOnItsOwnSocket, hostOfBridgeUrl } from './checkAt.js';
+import {
+  checkByBridgeName,
+  checkOnItsOwnSocket,
+  checkStandaloneAt,
+  hostOfBridgeUrl,
+  isStandaloneBridge,
+} from './checkAt.js';
 import { loadStationAddress, saveStationAddress, type StationAddress } from './stationAddress.js';
+import { STANDALONE_BRIDGE_ADDRESS_ERROR } from '../shared/station-address.js';
 
 const APP_INFO: AppInfo = { name: 'cg Runtime', version: '0.0.0', platform: 'browser' };
 
@@ -219,6 +227,7 @@ const OPTIONAL_CHANNELS = new Set([
   ipcChannels.SourcePreviewThumbnailsChannel.name,
   ipcChannels.PlaylistGainGetChannel.name,
   ipcChannels.PlaylistGainSetChannel.name,
+  ipcChannels.SetupCheckStandaloneChannel.name,
 ]);
 /** `R-100` — one picture of a book may be 4 MB; see `pages.put`. */
 const PAGE_PUT_TIMEOUT_MS = 30_000;
@@ -260,6 +269,8 @@ export type WebSocketFactory = (url: string) => WebSocketLike;
 export interface WebSocketRuntimeOptions {
   /** Inject a WebSocket implementation (default: the global `WebSocket`). */
   createWebSocket?: WebSocketFactory;
+  /** The installed console explicitly selected the local No Playout service. */
+  standalone?: boolean;
   /**
    * `CENTRAL-BRIDGE-01` — this console's release version, compared with CG Bridge's by release line
    * at connect. Defaults to the build stamp's (`__CG_BUILD__`, the number `tools/release` stamps);
@@ -455,7 +466,9 @@ export class WebSocketRuntime implements RuntimeBridge {
    * then refuses. One judgement, made where the facts are.
    */
   #permittedChannels: readonly number[] = [];
-  #session: StoredSession | null = loadPlayoutSession();
+  #session: StoredSession | null;
+  readonly #standalone: boolean;
+  #standaloneVerified = false;
   #refreshTimer: ReturnType<typeof setTimeout> | null = null;
   /** Fires AT `exp`, so a session that lapses on an idle page is noticed without an event. */
   #expiryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -606,6 +619,8 @@ export class WebSocketRuntime implements RuntimeBridge {
 
   constructor(url: string, options: WebSocketRuntimeOptions = {}) {
     this.#url = url;
+    this.#standalone = options.standalone === true;
+    this.#session = this.#standalone ? null : loadPlayoutSession();
     this.#createWs =
       options.createWebSocket ?? ((u) => new WebSocket(u) as unknown as WebSocketLike);
     this.#consoleVersion = options.consoleVersion ?? __CG_BUILD__.version;
@@ -656,6 +671,7 @@ export class WebSocketRuntime implements RuntimeBridge {
 
   // ── connection lifecycle ────────────────────────────────────────────
   #connect(): void {
+    this.#standaloneVerified = false;
     const ws = this.#createWs(this.#url);
     this.#ws = ws;
     ws.addEventListener('open', () => {
@@ -1029,8 +1045,15 @@ export class WebSocketRuntime implements RuntimeBridge {
    * off air. Anything unexpected resolves to "no skew known".
    */
   async #checkSkew(): Promise<ReadonlySet<string> | null> {
+    const ws = this.#ws;
     try {
       const caps = await this.#invoke(ipcChannels.BridgeCapabilitiesChannel, {});
+      if (this.#standalone && this.#ws !== ws) return null;
+      if (this.#standalone ? !isStandaloneBridge(caps) : caps.stationMode === 'standalone') {
+        ws?.close();
+        return null;
+      }
+      this.#standaloneVerified = this.#standalone;
       const { channels } = caps;
       const routed = new Set(channels);
       /*
@@ -1047,6 +1070,7 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#advertisedSignInUrl = caps.signInUrl ?? null;
       this.#setAuthCaps({
         mode: ipcChannels.capabilitiesAuthMode(caps),
+        ...(caps.stationMode === undefined ? {} : { stationMode: caps.stationMode }),
         signInUrl: rebaseLoopback(caps.signInUrl ?? null, bridgeHost),
         refreshUrl: rebaseLoopback(caps.refreshUrl ?? null, bridgeHost),
         contractVersion: caps.authContractVersion ?? null,
@@ -1069,6 +1093,7 @@ export class WebSocketRuntime implements RuntimeBridge {
       );
       return routed;
     } catch (err) {
+      if (this.#standalone && this.#ws === ws) ws?.close();
       if (err instanceof BridgeSkewError) {
         // The bridge predates the handshake itself. It cannot tell us WHICH channels it
         // lacks, so the honest answer names the channel that proved it rather than
@@ -1645,6 +1670,13 @@ export class WebSocketRuntime implements RuntimeBridge {
       channel.name === ipcChannels.BridgeCapabilitiesChannel.name ||
       channel.name.startsWith('auth.');
     if (!mayPutItRight && this.#capsHandshake !== null) await this.#capsHandshake;
+    if (
+      this.#standalone &&
+      channel.name !== ipcChannels.BridgeCapabilitiesChannel.name &&
+      !this.#standaloneVerified
+    ) {
+      throw new BridgeDisconnectedError();
+    }
     if (this.#versionMismatch !== null && !mayPutItRight) {
       throw new Error(this.#versionMismatch);
     }
@@ -1815,6 +1847,7 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#scheduleRefresh();
     },
     signOut: async (): Promise<void> => {
+      if (this.#standalone) return;
       // Bumped FIRST, so a refresh already in flight discards itself rather than writing the
       // session back after the sign-out has cleared it.
       this.#authGeneration += 1;
@@ -2002,9 +2035,26 @@ export class WebSocketRuntime implements RuntimeBridge {
     );
   }
 
+  readonly #standaloneSetup: StandaloneSetup = {
+    address: () => this.bridgeAddress(),
+    check: (bridgeAddress) =>
+      checkStandaloneAt({ mode: 'standalone', bridgeAddress }, this.#createWs),
+    connect: async (bridgeAddress) => {
+      const station: StationAddress = { mode: 'standalone', bridgeAddress };
+      const url = bridgeUrlForStation(station);
+      if (url === null) throw new Error(STANDALONE_BRIDGE_ADDRESS_ERROR);
+      await this.#standaloneSetup.check(bridgeAddress);
+      if (!saveStationAddress(station)) {
+        throw new Error('This console could not save the CG Bridge address.');
+      }
+      this.retarget(url);
+    },
+  };
+
   // `DESKTOP-APPS-01` — first-run and the station's own check. The Playout address goes through
   // CG Control's IPC (`desktop.ts`), never through `#invoke`: auth config is not the socket's.
   readonly setup = {
+    standalone: (): StandaloneSetup | null => (this.#standalone ? this.#standaloneSetup : null),
     // `DESKTOP-APPS-01-C` C2 — waits longer than the check's slowest line, from the one constant;
     // `DELTA-MULTI-CHANNEL-01-A` A2 — and a check that holds its AMCP line, the window on top.
     /*
@@ -2113,6 +2163,11 @@ export class WebSocketRuntime implements RuntimeBridge {
       back on the Playout's host; `host` / `host:port` is a separate server's (an admin's override).
     */
     setPlayoutAddress: (address: string, bridgeAddress?: string): Promise<string> => {
+      if (this.#standalone) {
+        return Promise.reject(
+          new Error('Use the No Playout connection settings for this console.'),
+        );
+      }
       const playoutAddress = ipcChannels.normalisePlayoutAddress(address);
       if (playoutAddress === null) {
         return Promise.reject(new Error(ipcChannels.NOT_A_PLAYOUT_ADDRESS));

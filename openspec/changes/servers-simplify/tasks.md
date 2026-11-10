@@ -125,13 +125,12 @@ never relaxed.
 
 ## D. A station with no Playout (`R-098`; T4)
 
-- [ ] D.1 Not built — stopped after Part C, as the prompt directs when T4 reaches more places than expected. Beyond
-      `cg.runtime.station.v1`, a record with no Playout reaches the check's request schema
-      (`ConnectionCheckRequest.playoutAddress` is required, and CG Bridge keys its own Playout on it — a second CG
-      Bridge release change with an older-bridge skew), CG Setup (`tools/setup-ui/src/server.rs` reads
-      `playoutAddress`), the console's boot gate (`loadStationAddress`), the bridge URL's derivation
-      (`bridgeUrlForStation`, `bridgeAddressFor` on the `window.cg` contract), and the desktop acceptance. Already in
-      place: with no Playout, CasparCG A is typed and its ports' defaults are placeholders.
+- [x] D.1 Define an optional positive standalone capability and separate check request so old Playout clients and services keep their existing contracts.
+- [x] D.2 Add an explicit service mode, localhost-only control, direct AMCP check, configured channel bank and restart-safe connection settings.
+- [x] D.3 Add CG Control onboarding and Connection settings. Verify the local Bridge before saving the station. Never present a remembered Playout token to a standalone Bridge.
+- [x] D.4 Add Windows Setup and unattended installer mode selection, preserving older service configurations and the current Playout default. Rust Setup tests and NSIS compile passed locally; installed verification belongs to D.6.
+- [x] D.5 Bridge integration covers first Take with no credentials, installed-origin and Host validation, rejection of a LAN listener, configuration persistence and the legacy auth route census. Runtime tests cover address and record handling and old Playout onboarding; native end-to-end coverage belongs to D.6.
+- [ ] D.6 Run the full gate, Runtime Chromium, the carrying Linux E2E and installed Windows acceptance.
 
 ## E. Report
 

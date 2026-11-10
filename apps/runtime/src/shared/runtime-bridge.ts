@@ -180,6 +180,8 @@ export type Unsubscribe = () => void;
  */
 export interface AuthCapabilities {
   readonly mode: AuthMode;
+  /** Present only on an installed No Playout service. */
+  readonly stationMode?: 'standalone';
   /** D1, absolute, as the bridge advertises it. `null` when the mode is `off`. */
   readonly signInUrl: string | null;
   /** D2, absolute. `null` when the mode is `off`. */
@@ -221,6 +223,12 @@ export interface SetupCheckAnswer extends ChannelResponse<typeof SetupCheckChann
      */
     readonly problems: readonly { readonly code: string; readonly message: string }[];
   } | null;
+}
+
+export interface StandaloneSetup {
+  address(): string;
+  check(bridgeAddress: string): Promise<SetupCheckAnswer>;
+  connect(bridgeAddress: string): Promise<void>;
 }
 
 /**
@@ -1037,6 +1045,8 @@ export interface RuntimeBridge {
    * as first-run needs them, and — inside CG Control only — the Playout address.
    */
   setup: {
+    /** The local service that an installed console explicitly selected at setup. */
+    standalone?(): StandaloneSetup | null;
     /**
      * §2F — the connection check, one line per link. Reads; changes nothing.
      *

@@ -126,3 +126,23 @@ grants are dropped.` **AND** `Use the Playout's` sets server A to `127.0.0.1` **
 
 - **WHEN** anything is on air **THEN** `Use the Playout's` is unavailable **AND** a backup added in the draft reads
   `Not applied` **AND** nothing is sent
+
+### Requirement: CG Control offers an explicit No Playout station
+
+Installed CG Control SHALL offer No Playout in station setup. It SHALL persist an explicit standalone station record with a loopback Bridge address after the Bridge identifies itself as standalone and answers its dedicated check. It SHALL enter without Playout sign-in and SHALL NOT send a stored Playout token. The Connection tab SHALL show No Playout and editable CasparCG A Host, AMCP port and OSC port. The default Playout flow SHALL preserve the existing station record and authentication behavior.
+
+#### Scenario: Connect to a No Playout Bridge
+
+- **WHEN** the operator chooses No Playout and a local Bridge positively confirms its standalone mode
+- **THEN** CG Control saves the loopback address and opens without Playout sign-in
+- **AND** it does not present any stored Playout token
+
+#### Scenario: The Bridge does not support No Playout
+
+- **WHEN** an older Bridge, a Playout Bridge or a remote Bridge address is entered for No Playout
+- **THEN** CG Control refuses the choice and does not replace the previous station settings
+
+#### Scenario: Reopen an existing Playout station
+
+- **WHEN** an existing station record has a Playout address and no mode
+- **THEN** CG Control uses its saved Playout and Bridge settings with the existing sign-in and permission flow

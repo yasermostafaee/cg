@@ -44,7 +44,7 @@ server`), each with `Change`. An address is edited as a `Host` and a `Port`, eve
   card whose fields differ from what is in force reads `Not applied`. The console sends server A with the check and
   asks by the name CG Bridge advertises; the route keeps the station's lines when a CasparCG host is named.
   `R-097` (a status-bar fact while readings are dropped) is filed only.
-- **Part D — a station with no Playout (`R-098`; T4).** Not yet built.
+- **Part D — a station with no Playout (`R-098`; T4).** The installer and CG Control expose an explicit mode. It uses a local Bridge with no Playout session, a direct AMCP connection and a separate check of its configured CasparCG host. Existing stations remain in Playout mode unless deliberately changed.
 
 ## Decisions
 

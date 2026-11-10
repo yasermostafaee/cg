@@ -70,12 +70,18 @@ import { Tag } from '../../ui/Tag.js';
 import { useHoldsStationAdmin } from '../../hooks/useCanOperate.js';
 import { useAuthCapabilities } from '../../hooks/useAuthCapabilities.js';
 import { PlayoutConnection, type ConnectionDraft } from '../firstRun/PlayoutConnection.js';
+import { StandaloneConnection } from '../firstRun/StandaloneConnection.js';
 import {
   AMCP_PORT as STANDARD_AMCP_PORT,
   playoutOriginOf,
   type ShownCheckLine,
 } from '../firstRun/firstRunStation.js';
-import { stationFieldsChanged } from '../firstRun/stationFields.js';
+import {
+  NO_HOST_PORT,
+  bridgeFieldsOf,
+  standaloneBridgeAddressOf,
+  stationFieldsChanged,
+} from '../firstRun/stationFields.js';
 import { serverStateWord } from '../status/StatusBar.js';
 
 /**
@@ -595,6 +601,7 @@ export function StationSetupDialog({
   // `DESKTOP-APPS-01` — the Playout this station trusts, as the bridge advertises it.
   const capabilities = useAuthCapabilities();
   const playoutOrigin = playoutOriginOf(capabilities?.signInUrl);
+  const standaloneSetup = window.cg.setup.standalone?.() ?? null;
   /*
     🔴 `SERVERS-SIMPLIFY-01` (T2) — **A PLAYOUT STATION**: one whose CG Bridge advertises `auth: playout`. There
     CasparCG is where the Playout is and the Playout names it (`casparHost`, the contract's join key), so server A
@@ -623,9 +630,18 @@ export function StationSetupDialog({
     and by `Revert` with the rest. `null` — nothing open.
   */
   const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft | null>(null);
+  const savedStandaloneFields = bridgeFieldsOf(standaloneSetup?.address());
+  const standaloneFields = connectionDraft?.fields.bridge ?? savedStandaloneFields;
   const connectionDirty =
     connectionDraft !== null &&
-    stationFieldsChanged(connectionDraft.fields, playoutOrigin, window.cg.setup.bridgeOverride());
+    (standaloneSetup === null
+      ? stationFieldsChanged(
+          connectionDraft.fields,
+          playoutOrigin,
+          window.cg.setup.bridgeOverride(),
+        )
+      : standaloneBridgeAddressOf(standaloneFields) !==
+        standaloneBridgeAddressOf(savedStandaloneFields));
   /*
     🔴 `B-325` — **WHICH CG BRIDGE THE DRAFT CAME FROM.** The dialog stays mounted while the console is re-pointed
     at another CG Bridge, and a reconnect re-reads the stack, the health and the lock, never the configuration.
@@ -1609,37 +1625,59 @@ export function StationSetupDialog({
                   reachable after first-run. CHANGE exists only inside CG Control and only for a
                   station admin; it writes through the app, never over the control socket.
               */}
-              <section className="cg-card" aria-label="Playout">
+              <section
+                className="cg-card"
+                aria-label={standaloneSetup === null ? 'Playout' : 'No Playout'}
+              >
                 <div className="cg-card__head">
-                  <span className="cg-card__title">Playout</span>
+                  <span className="cg-card__title">
+                    {standaloneSetup === null ? 'Playout' : 'No Playout'}
+                  </span>
                 </div>
                 <div className="cg-card__body">
-                  <PlayoutConnection
-                    origin={playoutOrigin}
-                    startEditing={playoutOrigin === null}
-                    mayChange={holdsStationAdmin}
-                    // 🔴 `B-324` — the open edit outlives the tab: held by the dialog, discarded on close.
-                    draft={connectionDraft}
-                    onDraft={setConnectionDraft}
-                    // `CENTRAL-BRIDGE-01` (D8) — where this console reaches CG Bridge, and an admin's override.
-                    showBridge
-                    /*
+                  {standaloneSetup !== null ? (
+                    <StandaloneConnection
+                      key={standaloneSetup.address()}
+                      setup={standaloneSetup}
+                      fields={standaloneFields}
+                      onFields={(bridge) =>
+                        setConnectionDraft({
+                          editing: 'bridge',
+                          fields: { playout: NO_HOST_PORT, bridge },
+                        })
+                      }
+                      changed={connectionDirty}
+                      extraLines={graphicsLines}
+                      lineActions={graphicsActions}
+                    />
+                  ) : (
+                    <PlayoutConnection
+                      origin={playoutOrigin}
+                      startEditing={playoutOrigin === null}
+                      mayChange={holdsStationAdmin}
+                      // 🔴 `B-324` — the open edit outlives the tab: held by the dialog, discarded on close.
+                      draft={connectionDraft}
+                      onDraft={setConnectionDraft}
+                      // `CENTRAL-BRIDGE-01` (D8) — where this console reaches CG Bridge, and an admin's override.
+                      showBridge
+                      /*
                       🔴 `R-081` — **FIRST-RUN'S CHECK, RUN AGAIN HERE.** The same four groups, and for a
                       station admin it RUNS when this pane opens, so the check is on screen without
                       looking for it: the owner could not find it again after his first install. CHECK
                       runs it again; anyone else presses CHECK, as before.
                     */
-                    grouped
-                    // `B-327` — once server A is read, so the first check names the host CG Bridge drives.
-                    checkOnOpen={holdsStationAdmin && loaded !== null}
-                    // 🔴 `B-327` — the configured CasparCG host rides the check, so the AMCP line judges it.
-                    casparHost={loaded?.servers.A.host}
-                    onAnswer={(answer) => setCasparJoin(answer?.casparJoin ?? null)}
-                    recheck={recheck}
-                    // 🔴 `B-327` / `B-326` — the join, and where CasparCG fetches graphics.
-                    extraLines={[...joinLines, ...graphicsLines]}
-                    lineActions={graphicsActions}
-                  />
+                      grouped
+                      // `B-327` — once server A is read, so the first check names the host CG Bridge drives.
+                      checkOnOpen={holdsStationAdmin && loaded !== null}
+                      // 🔴 `B-327` — the configured CasparCG host rides the check, so the AMCP line judges it.
+                      casparHost={loaded?.servers.A.host}
+                      onAnswer={(answer) => setCasparJoin(answer?.casparJoin ?? null)}
+                      recheck={recheck}
+                      // 🔴 `B-327` / `B-326` — the join, and where CasparCG fetches graphics.
+                      extraLines={[...joinLines, ...graphicsLines]}
+                      lineActions={graphicsActions}
+                    />
+                  )}
                 </div>
               </section>
 

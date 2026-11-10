@@ -13,17 +13,11 @@
  * `NOT_A_BRIDGE_ADDRESS`) live in `@cg/shared-ipc`, beside the normalisations that decide them.
  */
 
-const STATION_KEY = 'cg.runtime.station.v1';
+import { standaloneBridgeAddress, type StationAddress } from '../shared/station-address.js';
 
-export interface StationAddress {
-  /** The Playout address the operator typed (`http://host:8080`, normalised). */
-  readonly playoutAddress: string;
-  /**
-   * CG Bridge's `host` or `host:port` (`normaliseBridgeAddress`), when it is NOT on the Playout's
-   * host — a separate server. Absent: CG Bridge is on the Playout's host, at its port.
-   */
-  readonly bridgeAddress?: string;
-}
+export type { StationAddress } from '../shared/station-address.js';
+
+const STATION_KEY = 'cg.runtime.station.v1';
 
 export function loadStationAddress(): StationAddress | null {
   let raw: string | null;
@@ -36,7 +30,12 @@ export function loadStationAddress(): StationAddress | null {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== 'object' || parsed === null) return null;
-    const { playoutAddress, bridgeAddress } = parsed as Record<string, unknown>;
+    const { mode, playoutAddress, bridgeAddress } = parsed as Record<string, unknown>;
+    if (mode === 'standalone') {
+      const address =
+        typeof bridgeAddress === 'string' ? standaloneBridgeAddress(bridgeAddress) : null;
+      return address === null ? null : { mode, bridgeAddress: address };
+    }
     if (typeof playoutAddress !== 'string' || playoutAddress.trim() === '') return null;
     return {
       playoutAddress,
@@ -53,7 +52,11 @@ export function loadStationAddress(): StationAddress | null {
 export function saveStationAddress(station: StationAddress | null): boolean {
   try {
     if (station === null) localStorage.removeItem(STATION_KEY);
-    else localStorage.setItem(STATION_KEY, JSON.stringify(station));
+    else if ('mode' in station) {
+      const bridgeAddress = standaloneBridgeAddress(station.bridgeAddress);
+      if (bridgeAddress === null) return false;
+      localStorage.setItem(STATION_KEY, JSON.stringify({ mode: station.mode, bridgeAddress }));
+    } else localStorage.setItem(STATION_KEY, JSON.stringify(station));
     return true;
   } catch {
     return false;

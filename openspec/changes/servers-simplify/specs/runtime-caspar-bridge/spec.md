@@ -43,3 +43,28 @@ unchanged. The join itself SHALL NOT be relaxed.
 #### Scenario: Before a sign-in
 
 - **WHEN** an unsigned console checks the station's own Playout **THEN** the answer carries no `casparJoin`
+
+### Requirement: An explicitly standalone Bridge serves local control for CasparCG
+
+A Bridge installed in No Playout mode SHALL listen for control only on IPv4 loopback. It SHALL accept the installed app and local native clients; it SHALL reject unknown web origins and a foreign Host on its control port. It SHALL not contact Playout to authenticate, obtain licences or list channels. It SHALL apply normal Take and channel ownership rules through AMCP. It MAY separately serve template graphics on the interface a remote CasparCG engine needs.
+
+#### Scenario: Standalone basic Take
+
+- **WHEN** a local console connects to an installed No Playout Bridge with a reachable CasparCG engine
+- **THEN** the configured channel can Take a template over AMCP without Playout auth or licence calls
+
+#### Scenario: Standalone check is restricted
+
+- **WHEN** a console requests the standalone check
+- **THEN** only an explicitly standalone Bridge answers it and it probes only the Bridge's configured CasparCG A host and AMCP port
+
+#### Scenario: A remote website or socket attempts control
+
+- **WHEN** a nonlocal peer, an untrusted web origin or a foreign Host attempts to connect
+- **THEN** the standalone control listener does not accept the request
+- **AND** an allowed remote CasparCG may still fetch its template on the separate graphics port
+
+#### Scenario: The existing service remains a Playout service
+
+- **WHEN** a service configuration already has a Playout address and no explicit mode
+- **THEN** it starts with the same Playout authentication, first-run, licensing and channel rules

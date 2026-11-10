@@ -1,4 +1,5 @@
 import type { KeyboardEvent, ReactNode } from 'react';
+import { STANDALONE_BRIDGE_HOST } from '../../../shared/station-address.js';
 import { hostValue } from '../../ui/fieldValue.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { TextInput } from '../../ui/TextInput.js';
@@ -143,6 +144,7 @@ export function StationAddressFields({
   onEnter,
   hint = false,
   statusId,
+  standalone = false,
 }: {
   value: StationFields;
   onChange: (next: StationFields) => void;
@@ -155,6 +157,7 @@ export function StationAddressFields({
   hint?: boolean | undefined;
   /** The id of the surface's own status line, which describes every field (the Set up page's). */
   statusId?: string | undefined;
+  standalone?: boolean | undefined;
 }): JSX.Element {
   // CG Bridge is on the Playout's host unless a person says otherwise: so that host IS its placeholder.
   const playoutHost = playoutHostOf(playoutAddressOf(value.playout));
@@ -166,7 +169,7 @@ export function StationAddressFields({
         };
   return (
     <div className="cg-station-fields" data-station-fields="">
-      {show.playout && (
+      {show.playout && !standalone && (
         <div className="cg-station-fields__group" role="group" aria-label="Playout address">
           <span className="cg-station-fields__name" aria-hidden="true">
             Playout address
@@ -195,7 +198,9 @@ export function StationAddressFields({
             idRoot="cg-bridge"
             value={value.bridge}
             onChange={(bridge) => onChange({ ...value, bridge })}
-            hostPlaceholder={playoutHost ?? BRIDGE_ADDRESS_PLACEHOLDER}
+            hostPlaceholder={
+              standalone ? STANDALONE_BRIDGE_HOST : (playoutHost ?? BRIDGE_ADDRESS_PLACEHOLDER)
+            }
             portPlaceholder={BRIDGE_PORT_DEFAULT}
             disabled={disabled}
             onKeyDown={onKeyDown}

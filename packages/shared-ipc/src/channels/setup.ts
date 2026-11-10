@@ -389,6 +389,13 @@ export const SetupCheckChannel = defineChannel(
   ConnectionCheckResultSchema,
 );
 
+/** No Playout: check the installed Bridge's configured CasparCG A, never a supplied network target. */
+export const SetupCheckStandaloneChannel = defineChannel(
+  'setup.check-standalone',
+  z.object({}).strict(),
+  ConnectionCheckResultSchema,
+);
+
 /**
  * §2E — this machine's address on the route to a host: the template serve host CasparCG fetches
  * from, AUTO-DETECTED rather than typed, and shown so it can be edited. `null` when no route.

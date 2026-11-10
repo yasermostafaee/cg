@@ -20,3 +20,17 @@ An empty field SHALL be saved as its default, and a whole address pasted into a 
 #### Scenario: A port alone for CG Bridge
 
 - **WHEN** only CG Bridge's `Port` is typed, `5281` **THEN** CG Bridge is saved as the Playout's host on `5281`
+
+### Requirement: Windows Setup can install a No Playout Bridge
+
+Bridge Setup SHALL offer No Playout alongside the current Playout setup. No Playout SHALL configure CasparCG host and ports with defaults 127.0.0.1, 5250 and 6251, a local control port, and the existing graphics and shared-files settings. Mode changes SHALL require an explicit installer choice. An unattended upgrade without a mode flag SHALL preserve the installed mode.
+
+#### Scenario: Fresh No Playout installation
+
+- **WHEN** an administrator selects No Playout in Setup and enters a CasparCG address
+- **THEN** the Bridge service stores that mode and host and listens for control only on loopback
+
+#### Scenario: Preserve the installed mode on upgrade
+
+- **WHEN** an upgrade is run without an explicit mode
+- **THEN** a legacy Playout service stays in Playout mode and a standalone service stays standalone
