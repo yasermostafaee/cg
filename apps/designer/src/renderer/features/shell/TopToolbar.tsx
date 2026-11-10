@@ -18,6 +18,7 @@ import { NewProjectModal } from './NewProjectModal.js';
 import { SaveBeforeSwitchModal } from './SaveBeforeSwitchModal.js';
 import { ShortcutsModal } from './ShortcutsModal.js';
 import { VersionHistoryModal } from './VersionHistoryModal.js';
+import { openCompanySite } from './companySite.js';
 import { openProjectFromDisk } from './open-project.js';
 import * as s from './TopToolbar.css.js';
 
@@ -498,7 +499,7 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
                 label="APASAI website"
                 onClick={() => {
                   setOpenMenu(null);
-                  window.open('https://apasai.com/', '_blank', 'noopener,noreferrer');
+                  openCompanySite();
                 }}
               />
               <FileMenuItem

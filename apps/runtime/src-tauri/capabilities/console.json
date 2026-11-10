@@ -5,6 +5,7 @@
   "permissions": [
     "allow-playout-post",
     "allow-keyboard-language",
+    "allow-open-company-site",
     "allow-local-bridge-state",
     "allow-local-bridge-act",
     "allow-close-guard",

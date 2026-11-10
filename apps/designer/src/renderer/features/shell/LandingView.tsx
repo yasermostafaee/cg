@@ -13,6 +13,7 @@ import { APP_BUILD, APP_VERSION } from '../../appVersion.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { SaveBeforeSwitchModal } from './SaveBeforeSwitchModal.js';
 import { VersionHistoryModal } from './VersionHistoryModal.js';
+import { COMPANY_SITE, followCompanySite } from './companySite.js';
 import { openProjectFromDisk } from './open-project.js';
 import { playoutBadge } from './playout-badge.js';
 import * as s from './LandingView.css.js';
@@ -150,7 +151,8 @@ export function LandingView(): JSX.Element {
       <div>
         <a
           className={s.brandLockup}
-          href="https://apasai.com/"
+          href={COMPANY_SITE}
+          onClick={followCompanySite}
           target="_blank"
           rel="noreferrer"
           data-testid="apasai-brand"

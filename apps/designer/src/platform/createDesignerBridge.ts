@@ -188,6 +188,13 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
   return {
     getAppInfo: () => Promise.resolve(APP_INFO),
 
+    openCompanySite: () => {
+      const invoke = shellInvoke();
+      if (invoke === null) return false;
+      void invoke('open_company_site').catch((error: unknown) => console.warn(error));
+      return true;
+    },
+
     keyboard: {
       reportsLanguage: () => shellInvoke() !== null,
       language: () => shellInvoke()?.('keyboard_language') ?? Promise.resolve('unknown'),

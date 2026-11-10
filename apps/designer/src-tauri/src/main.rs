@@ -10,6 +10,7 @@
 // Both files are shared with CG Control's shell, which includes them with `#[path]`.
 mod close_guard;
 mod close_window;
+mod company_site;
 // `TEXT-DIGITS-01` — the one read-only command: which keyboard language the window types in.
 mod keyboard_language;
 mod text_source_file;
@@ -22,6 +23,7 @@ fn main() {
         // Only paths selected by the native text-source picker may be re-read by Reload.
         .manage(text_source_file::SelectedTextSources::default())
         .invoke_handler(tauri::generate_handler![
+            company_site::open_company_site,
             keyboard_language::keyboard_language,
             close_window::close_guard,
             close_window::close_request_seen,

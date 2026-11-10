@@ -3,11 +3,12 @@
 //! The window holds the console itself, bundled with the app (`http://tauri.localhost`). There is
 //! no bridge here any more: CG Bridge is ONE service on the Playout machine, and every console
 //! connects to it over the network (`ws://<Playout host>:5280`, or the address a station admin set).
-//! So this shell runs no bridge and opens no port. It keeps five jobs:
+//! So this shell runs no bridge and opens no port. It keeps these jobs:
 //!
 //!   - one window (a second launch focuses the first);
 //!   - the Playout sign-in, natively, with no `Origin` (`playout::playout_post`, rule 8);
 //!   - the keyboard language the window types in (`TEXT-DIGITS-01`);
+//!   - open the APASAI website in the system browser (`B-429`);
 //!   - `R-091`: when CG Bridge's address is THIS machine and nothing answers, what Windows says about
 //!     it, and the two steps a person may ask for — start its service, free its port from a holder
 //!     of OURS — each as its own administrator step (`local_bridge`);
@@ -32,6 +33,8 @@ mod keyboard_language;
 mod close_guard;
 #[path = "../../../designer/src-tauri/src/close_window.rs"]
 mod close_window;
+#[path = "../../../designer/src-tauri/src/company_site.rs"]
+mod company_site;
 
 use tauri::webview::PageLoadEvent;
 use tauri::Manager;
@@ -79,6 +82,7 @@ fn main() {
         // then — the address question, a page that failed to load — a close goes through).
         .manage(close_guard::Guard::default())
         .invoke_handler(tauri::generate_handler![
+            company_site::open_company_site,
             playout::playout_post,
             keyboard_language::keyboard_language,
             local_bridge_state,

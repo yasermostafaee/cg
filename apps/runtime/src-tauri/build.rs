@@ -13,6 +13,7 @@ fn main() {
         tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(&[
             "playout_post",
             "keyboard_language",
+            "open_company_site",
             "local_bridge_state",
             "local_bridge_act",
             "close_guard",

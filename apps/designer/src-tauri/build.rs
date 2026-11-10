@@ -14,6 +14,7 @@ fn main() {
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "keyboard_language",
+            "open_company_site",
             "close_guard",
             "close_request_seen",
             "close_window_now",

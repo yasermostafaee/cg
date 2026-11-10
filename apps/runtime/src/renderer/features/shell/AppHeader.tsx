@@ -72,6 +72,9 @@ export function AppHeader({
       <a
         className="cg-app-brand"
         href="https://apasai.com/"
+        onClick={(event) => {
+          if (window.cg?.openCompanySite?.()) event.preventDefault();
+        }}
         target="_blank"
         rel="noreferrer"
         aria-label="APASAI website"

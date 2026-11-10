@@ -92,7 +92,7 @@ const BRIDGE_SURFACE: {
   readonly methods: readonly BridgeMethodName[];
   readonly groups: { readonly [G in BridgeGroupName]: readonly (keyof RuntimeBridge[G])[] };
 } = {
-  methods: ['getAppInfo'],
+  methods: ['getAppInfo', 'openCompanySite'],
   groups: {
     // `TEXT-DIGITS-01` — the shell's keyboard language (both ask the same shell door).
     keyboard: ['language', 'reportsLanguage'],

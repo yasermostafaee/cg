@@ -2,6 +2,7 @@ import { APP_BUILD_REF, APP_VERSION } from '../../appVersion.js';
 import { Tag } from '../../ui/Tag.js';
 import * as s from './AboutModal.css.js';
 import { Modal } from './Modal.js';
+import { COMPANY_SITE, followCompanySite } from './companySite.js';
 
 interface Props {
   onClose: () => void;
@@ -28,7 +29,8 @@ export function AboutModal({
       <div className={s.facts}>
         <a
           className={s.brand}
-          href="https://apasai.com/"
+          href={COMPANY_SITE}
+          onClick={followCompanySite}
           target="_blank"
           rel="noreferrer"
           aria-label="APASAI website"

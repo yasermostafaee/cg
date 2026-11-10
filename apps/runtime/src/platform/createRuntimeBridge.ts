@@ -8,7 +8,12 @@ import {
 import type { AppInfo, BridgeLinkStatus, RuntimeBridge } from '../shared/runtime-bridge.js';
 import { MockRuntime } from './MockRuntime.js';
 import { resolveBridgeUrl } from './bridgeUrl.js';
-import { shellCloseGuard, shellKeyboardLanguage, shellReportsKeyboardLanguage } from './desktop.js';
+import {
+  shellCloseGuard,
+  shellKeyboardLanguage,
+  shellOpenCompanySite,
+  shellReportsKeyboardLanguage,
+} from './desktop.js';
 import { WebSocketRuntime } from './WebSocketRuntime.js';
 import { LibraryStore } from './library/LibraryStore.js';
 import { initRuntimeWorkspace } from './library/workspace.js';
@@ -204,6 +209,7 @@ export function createMockBridge(): RuntimeBridge {
 
   return {
     getAppInfo: () => Promise.resolve(APP_INFO),
+    openCompanySite: shellOpenCompanySite,
 
     // `TEXT-DIGITS-01` — the shell is not the bridge: test mode asks the same (absent) shell.
     keyboard: {

@@ -51,6 +51,13 @@ export function shellKeyboardLanguage(): Promise<unknown> {
   return door === null ? Promise.resolve('unknown') : door.invoke('keyboard_language');
 }
 
+export function shellOpenCompanySite(): boolean {
+  const door = tauri();
+  if (door === null) return false;
+  void door.invoke('open_company_site').catch((error: unknown) => console.warn(error));
+  return true;
+}
+
 /**
  * 🔴 `R-091` — CG Bridge on `host` when that is THIS machine, as CG Control's shell reads Windows
  * (`local_bridge_state`). `null` outside CG Control, or when the shell could not answer.

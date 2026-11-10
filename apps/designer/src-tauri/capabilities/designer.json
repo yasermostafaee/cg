@@ -4,6 +4,7 @@
   "windows": ["main"],
   "permissions": [
     "allow-keyboard-language",
+    "allow-open-company-site",
     "allow-close-guard",
     "allow-close-request-seen",
     "allow-close-window-now",

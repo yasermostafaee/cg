@@ -195,6 +195,7 @@ import {
   nativePlayoutFetch,
   shellCloseGuard,
   shellKeyboardLanguage,
+  shellOpenCompanySite,
   shellReportsKeyboardLanguage,
 } from './desktop.js';
 import {
@@ -1710,6 +1711,8 @@ export class WebSocketRuntime implements RuntimeBridge {
   }
 
   // ── RuntimeBridge surface ───────────────────────────────────────────
+  readonly openCompanySite = shellOpenCompanySite;
+
   getAppInfo(): Promise<AppInfo> {
     return Promise.resolve(APP_INFO);
   }

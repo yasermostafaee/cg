@@ -328,6 +328,8 @@ export type BridgeLinkStatus = 'live' | 'offline-mock' | 'disconnected';
 
 export interface RuntimeBridge {
   getAppInfo(): Promise<AppInfo>;
+  /** Open the fixed company site through the installed shell. Returns false in a browser. */
+  openCompanySite(): boolean;
 
   /**
    * `TEXT-DIGITS-01` — the keyboard language CG Control's window types in, from its shell's one

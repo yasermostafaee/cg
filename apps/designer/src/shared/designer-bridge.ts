@@ -130,6 +130,8 @@ export interface StorageState {
 }
 
 export interface DesignerBridge {
+  /** Open the fixed company site through the installed shell. Returns false in a browser. */
+  openCompanySite(): boolean;
   getAppInfo(): Promise<AppInfo>;
 
   /**
