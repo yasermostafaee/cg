@@ -1,0 +1,5 @@
+The Audio menu stores assets in the library. The existing canvas drop handler places the sound and sets it to start at the entrance. It now calls the same duration guard used by Video and Lottie. The guard compares the stored duration to the active range in seconds and extends the range to the next whole frame that contains the sound. Extending and inserting take one undo step. Sound placement offers two actions because the sound has its own start control in the Inspector.
+
+The Timeline row displays the sound duration in seconds from the same element value that the Sound Inspector reads. Entrance, timed and exit playback continue to use their authored start settings. Existing scenes may contain a sound longer than the active range. A later edit to the duration or timing can also leave a sound longer than the range.
+
+A pending duration prompt belongs to the project and composition where it opened. Confirmation after opening a different project or composition dismisses the prompt. Extend checks the current active range and project frame rate. If the sound now fits, the guard inserts it without resizing the range.

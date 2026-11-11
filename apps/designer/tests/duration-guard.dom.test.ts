@@ -4,6 +4,7 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { Composition, Element, LottieElement, Scene, VideoElement } from '@cg/shared-schema';
 import { activeRangeOf } from '@cg/shared-schema';
+import { defaultAudio } from '../src/renderer/state/element-defaults.js';
 
 /**
  * add-time-duration-guard (D-151) — at the moment content is ADDED to a composition, content
@@ -167,6 +168,39 @@ const dialogButton = (re: RegExp): HTMLButtonElement | null =>
     ? null
     : ([...dialog()!.querySelectorAll('button')].find((b) => re.test(b.textContent ?? '')) ?? null);
 const click = (b: HTMLButtonElement): void => act(() => b.click());
+
+describe('pending sound placement', () => {
+  const sound = () => defaultAudio('sound-1', 'asset-a', 3140);
+
+  it('cancels a pending Extend if another project opens', () => {
+    act(() => guard.guardedAddAudio(sound()));
+    act(() => designerStore.setScene(scene({ id: 'other-project' }), 'other.cgproj'));
+    const next = designerStore.get().scene;
+    click(dialogButton(/extend/i)!);
+    expect(dialog()).toBeNull();
+    expect(designerStore.get().scene).toBe(next);
+    expect(children()).toHaveLength(0);
+  });
+
+  it('fits the sound at the active project frame rate when Extend is pressed', () => {
+    act(() => guard.guardedAddAudio(sound()));
+    act(() => designerStore.updateScene({ frameRate: 50 }));
+    click(dialogButton(/extend/i)!);
+    expect(hostFrames()).toBe(157);
+    expect(children()).toHaveLength(1);
+  });
+
+  it('keeps a longer active range when it has grown while the prompt is open', () => {
+    act(() => guard.guardedAddAudio(sound()));
+    act(() => {
+      designerStore.setSceneDurationFrames(100);
+      designerStore.setSceneActiveOut(90);
+    });
+    click(dialogButton(/extend/i)!);
+    expect(hostFrames()).toBe(90);
+    expect(children()).toHaveLength(1);
+  });
+});
 
 describe('the guard decision — video (adapter: durationMs)', () => {
   it('a 5 s clip into a 2 s composition raises the dialog naming BOTH durations, adding nothing yet', () => {
@@ -337,6 +371,24 @@ describe('composition-into-composition — the firm TWO-choice form', () => {
     const text = dialog()!.textContent ?? '';
     expect(text).toContain('6.0 s'); // 150 frames at 25 fps
     expect(text).toContain('2.0 s');
+  });
+
+  it('discards a pending backdrop if a different composition becomes active', () => {
+    act(() => guard.guardedAddVideo(videoEl(5000)));
+    act(() => designerStore.setActiveComposition('short'));
+    const next = designerStore.get().scene;
+    click(dialogButton(/backdrop/i)!);
+    expect(dialog()).toBeNull();
+    expect(designerStore.get().scene).toBe(next);
+    expect(children()).toHaveLength(0);
+  });
+
+  it('fits a nested composition by frame count when the project rate changes', () => {
+    act(() => guard.guardedAddCompositionInstance('long'));
+    act(() => designerStore.updateScene({ frameRate: 50 }));
+    click(dialogButton(/extend/i)!);
+    expect(hostFrames()).toBe(150);
+    expect(children()).toHaveLength(1);
   });
 
   it('EXTEND grows the host to the child length and inserts the instance, one undo step', () => {

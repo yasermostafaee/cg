@@ -18,6 +18,7 @@ import {
   markersToSegments,
 } from '@cg/lottie-bridge';
 import {
+  guardedAddAudio,
   guardedAddCompositionInstance,
   guardedAddLottie,
   guardedAddVideo,
@@ -264,8 +265,7 @@ export async function insertAudioFromAsset(assetId: string): Promise<void> {
   const id = `el-${String(Date.now())}`;
   const dot = meta.filename.lastIndexOf('.');
   const name = dot === -1 ? meta.filename : meta.filename.slice(0, dot);
-  designerStore.addElement(defaultAudio(id, assetId, durationMs, name));
-  designerStore.setSelection([id]);
+  guardedAddAudio(defaultAudio(id, assetId, durationMs, name));
 }
 
 export async function insertVideoFromAsset(

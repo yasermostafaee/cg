@@ -20,9 +20,8 @@ import {
  * primary + autoFocus action (the item's headline offer, the `SizingAutoConfirmModal`
  * precedent of focusing the primary).
  *
- * Media get the settled THREE choices (sharpened Candidate A — the third button CONFIGURES the
- * deliberate backdrop pattern, it dismisses nothing); a composition insert gets the firm TWO
- * (an instance has no `phases` and cannot follow). The backdrop choice is offered even when the
+ * Video and Lottie can be added as a backdrop. Sounds and composition inserts
+ * offer Extend and Cancel. The backdrop choice is offered even when the
  * host has no lifecycle — a control that appears and disappears by host state is harder to
  * learn than one that explains itself (the added follower behaves marker-less until an
  * out-point exists, and the Inspector says why).
@@ -35,7 +34,8 @@ export function DurationGuardDialog(): JSX.Element | null {
   );
   if (pending === null) return null;
   const secs = (ms: number): string => `${(ms / 1000).toFixed(1)} s`;
-  const noun = pending.kind === 'composition' ? 'composition' : 'clip';
+  const noun =
+    pending.kind === 'composition' ? 'composition' : pending.kind === 'audio' ? 'sound' : 'clip';
   return (
     <Modal
       title={`This ${noun} is longer than the composition`}

@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures/designer.js';
+import { toneWav } from './fixtures/sound.js';
 
 /**
  * 🔴 `DELTA-RUN-NEXT-VERSION-01-G` — **THE TIMELINE'S PLAY IS HEARD.** The owner placed a sound
@@ -14,36 +15,13 @@ import { expect, test } from './fixtures/designer.js';
  * the system Chrome locally start with Chrome's own policy.
  */
 
-/** A mono 48 kHz WAV of `seconds` of a 440 Hz tone. */
-function wav(seconds: number): Buffer {
-  const rate = 48000;
-  const n = Math.round(seconds * rate);
-  const data = Buffer.alloc(n * 2);
-  for (let i = 0; i < n; i++) {
-    data.writeInt16LE(Math.round(Math.sin((2 * Math.PI * 440 * i) / rate) * 16000), i * 2);
-  }
-  const h = Buffer.alloc(44);
-  h.write('RIFF', 0);
-  h.writeUInt32LE(36 + data.length, 4);
-  h.write('WAVE', 8);
-  h.write('fmt ', 12);
-  h.writeUInt32LE(16, 16);
-  h.writeUInt16LE(1, 20);
-  h.writeUInt16LE(1, 22);
-  h.writeUInt32LE(rate, 24);
-  h.writeUInt32LE(rate * 2, 28);
-  h.writeUInt16LE(2, 32);
-  h.writeUInt16LE(16, 34);
-  h.write('data', 36);
-  h.writeUInt32LE(data.length, 40);
-  return Buffer.concat([h, data]);
-}
-
 async function placeSound(page: Page): Promise<void> {
   const chooser = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: 'Add asset' }).dispatchEvent('pointerdown');
   await page.getByRole('menuitem', { name: 'Audio…', exact: true }).click();
-  await (await chooser).setFiles([{ name: 'bubbly.wav', mimeType: 'audio/wav', buffer: wav(3) }]);
+  await (
+    await chooser
+  ).setFiles([{ name: 'bubbly.wav', mimeType: 'audio/wav', buffer: toneWav(3) }]);
   await expect
     .poll(
       async () =>
@@ -83,10 +61,12 @@ test.describe('🔴 DELTA-G — a sound is heard on the timeline’s Play', () =
   }) => {
     test.setTimeout(120_000);
     await app.newProject('TimelineSound');
-    await app.setSceneDuration(50); // 1 s at 50 fps — shorter than the 3 s sound, as the owner's
+    await app.setSceneDuration(150);
     await page.getByRole('button', { name: 'Project assets' }).click();
     await placeSound(page);
     await expect(app.inspector.getByTestId('audio-length')).toContainText(' s');
+    // Shortening the composition can still leave a 3 s sound on a 1 s timeline.
+    await app.setSceneDuration(50);
 
     // Positive control: the canvas page is up and carries the sound, paused — so a silent result
     // below is the timeline's, never a page that failed to load.
@@ -119,7 +99,7 @@ test.describe('🔴 DELTA-G — a sound is heard on the timeline’s Play', () =
   }) => {
     test.setTimeout(120_000);
     await app.newProject('SharedSound');
-    await app.setSceneDuration(50);
+    await app.setSceneDuration(150);
     await page.getByRole('button', { name: 'Project assets' }).click();
     await placeSound(page);
 

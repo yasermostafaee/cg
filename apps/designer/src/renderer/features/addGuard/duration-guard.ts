@@ -1,4 +1,4 @@
-import type { Element, LottieElement, VideoElement } from '@cg/shared-schema';
+import type { AudioElement, Element, LottieElement, Scene, VideoElement } from '@cg/shared-schema';
 import { activeRangeOf, followsComposition } from '@cg/shared-schema';
 import type { LottieClipMeta } from '@cg/lottie-bridge';
 import { designerStore } from '../../state/store.js';
@@ -8,8 +8,8 @@ import { lottieFollowAttachPhases, videoFollowAttachPhases } from '../../state/f
 /**
  * add-time-duration-guard (D-151) — THE chokepoint for adding content to a composition. At the
  * moment content is ADDED (never at asset import), content whose intrinsic duration exceeds the
- * host's raises ONE dialog: Extend / Add as backdrop (media only — the owner's settled sharpened
- * Candidate A) / Cancel. A fitting add commits immediately and is byte-identical to today.
+ * host's raises one dialog with Extend and Cancel. Video and Lottie can also be added
+ * as a backdrop. A fitting add commits immediately.
  *
  * ONE decision function (`requestGuardedAdd`) holds the pending state and the fits/overflows
  * decision; the exported kind adapters derive the intrinsic facts at the unit edge and hand a
@@ -23,22 +23,27 @@ import { lottieFollowAttachPhases, videoFollowAttachPhases } from '../../state/f
  * history or the persisted scene, and Cancel must leave the scene OBJECT IDENTICAL (pinned by
  * test). `DurationGuardDialog` subscribes via `useSyncExternalStore` and mounts once in App.
  */
-export interface DurationGuardPending {
-  kind: 'video' | 'lottie' | 'composition';
+interface DurationGuardRequest {
+  kind: 'video' | 'lottie' | 'audio' | 'composition';
   /** What the dialog calls the content ("This clip" / the composition's quoted name). */
   contentLabel: string;
   /** The content's intrinsic duration, ms. */
   contentMs: number;
-  /** The host's active-range length, ms. */
-  hostMs: number;
-  /** ceil-to-frame active length that EXACTLY fits the content. */
-  neededFrames: number;
-  /** Media can follow the composition; an instance has no `phases` and cannot. */
+  /** A nested composition shares the project's frame rate. */
+  contentFrames?: number;
+  /** Video and Lottie can follow the composition. */
   canFollow: boolean;
   /** Insert exactly as the door would have (used by Extend, after growing the host). */
   commit: () => void;
   /** Insert with `phases.source: 'composition'` (media only). */
   commitBackdrop: (() => void) | null;
+}
+
+export interface DurationGuardPending extends DurationGuardRequest {
+  hostMs: number;
+  sceneId: string;
+  projectPath: string | null;
+  compositionId: string | null;
 }
 
 let pending: DurationGuardPending | null = null;
@@ -63,34 +68,37 @@ export function _resetDurationGuard(): void {
   emit();
 }
 
-/**
- * The host's playable length: `activeRangeOf(activeDocOf(scene))` — the verified single
- * authority for the play/export window, reused, never re-derived.
- */
-function hostState(): { hostMs: number; fps: number } | null {
-  const scene = designerStore.get().scene;
-  if (scene === null) return null;
-  const fps = scene.frameRate;
-  if (!(fps > 0)) return null;
-  const r = activeRangeOf(activeDocOf(scene));
-  return { hostMs: ((r.out - r.in) * 1000) / fps, fps };
-}
-
 /** The ONE decision: fits ⇒ commit now (silent, exactly as today); overflows ⇒ pend the dialog. */
-function requestGuardedAdd(p: Omit<DurationGuardPending, 'hostMs' | 'neededFrames'>): void {
-  const host = hostState();
-  if (host === null) return; // no scene — nothing to add into
-  if (!(p.contentMs > host.hostMs)) {
+function requestGuardedAdd(request: DurationGuardRequest): void {
+  const { scene, projectPath, activeCompositionId } = designerStore.get();
+  if (scene === null || !(scene.frameRate > 0)) return;
+  const active = activeRangeOf(activeDocOf(scene));
+  const hostMs = ((active.out - active.in) * 1000) / scene.frameRate;
+  if (!(request.contentMs > hostMs)) {
     // Strictly greater-than: an exact fit is silent.
-    p.commit();
+    request.commit();
     return;
   }
   pending = {
-    ...p,
-    hostMs: host.hostMs,
-    neededFrames: Math.ceil((p.contentMs * host.fps) / 1000),
+    ...request,
+    hostMs,
+    sceneId: scene.id,
+    projectPath,
+    compositionId: activeCompositionId,
   };
   emit();
+}
+
+/** New sounds start at the composition's entrance. */
+export function guardedAddAudio(element: AudioElement): void {
+  requestGuardedAdd({
+    kind: 'audio',
+    contentLabel: 'This sound',
+    contentMs: element.durationMs,
+    canFollow: false,
+    commit: () => designerStore.addElement(element),
+    commitBackdrop: null,
+  });
 }
 
 /** Door adapter — video: the intrinsic duration is the schema's `durationMs` (captured at conversion). */
@@ -162,18 +170,34 @@ export function guardedAddCompositionInstance(
   // Refuse what the cycle guard would refuse BEFORE raising a dialog about it — a dialog whose
   // Extend then silently no-ops would be worse than no dialog.
   if (!designerStore.canNestCompositionInActive(childId)) return;
-  const host = hostState();
-  if (host === null) return;
   const r = activeRangeOf(child);
-  const contentMs = ((r.out - r.in) * 1000) / host.fps;
+  const contentFrames = r.out - r.in;
   requestGuardedAdd({
     kind: 'composition',
     contentLabel: `“${child.name}”`,
-    contentMs,
+    contentMs: (contentFrames * 1000) / scene.frameRate,
+    contentFrames,
     canFollow: false,
     commit: () => void designerStore.addCompositionInstance(childId, at),
     commitBackdrop: null,
   });
+}
+
+/** Global shortcuts can open a different document while the dialog is pending. */
+function takePendingForCurrentDocument(): { request: DurationGuardPending; scene: Scene } | null {
+  const request = pending;
+  if (request === null) return null;
+  resolveDurationGuardCancel();
+  const { scene, projectPath, activeCompositionId } = designerStore.get();
+  if (
+    scene === null ||
+    scene.id !== request.sceneId ||
+    projectPath !== request.projectPath ||
+    activeCompositionId !== request.compositionId
+  ) {
+    return null;
+  }
+  return { request, scene };
 }
 
 /**
@@ -185,30 +209,30 @@ export function guardedAddCompositionInstance(
  * element together.
  */
 export function resolveDurationGuardExtend(): void {
-  const p = pending;
-  if (p === null) return;
-  pending = null;
-  emit();
-  const scene = designerStore.get().scene;
-  if (scene === null) return;
+  const target = takePendingForCurrentDocument();
+  if (target === null || !(target.scene.frameRate > 0)) return;
+  const { request, scene } = target;
   const doc = activeDocOf(scene);
   const active = activeRangeOf(doc);
-  const newActiveOut = active.in + p.neededFrames;
+  const neededFrames =
+    request.contentFrames ?? Math.ceil((request.contentMs * scene.frameRate) / 1000);
+  const newActiveOut = active.in + neededFrames;
+  if (newActiveOut <= active.out) {
+    request.commit();
+    return;
+  }
   const newTotalFrames = Math.max(doc.frameRange.out, newActiveOut) - doc.frameRange.in;
   designerStore.runAsSingleHistoryEntry(() => {
     designerStore.setSceneDurationFrames(newTotalFrames);
     if (doc.activeRange !== undefined) designerStore.setSceneActiveOut(newActiveOut);
-    p.commit();
+    request.commit();
   });
 }
 
 /** Add as backdrop — follow the composition-owned intro/middle/outro timing (media only). */
 export function resolveDurationGuardBackdrop(): void {
-  const p = pending;
-  if (p === null || p.commitBackdrop === null) return;
-  pending = null;
-  emit();
-  p.commitBackdrop();
+  if (pending?.commitBackdrop == null) return;
+  takePendingForCurrentDocument()?.request.commitBackdrop?.();
 }
 
 /** Cancel — the element is NOT added; the scene is left EXACTLY as it was. */

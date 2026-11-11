@@ -68,6 +68,13 @@ export const nameText = style({
   minWidth: 0,
 });
 
+export const soundDuration = style({
+  flexShrink: 0,
+  whiteSpace: 'nowrap',
+  color: colors.textMuted,
+  fontVariantNumeric: 'tabular-nums',
+});
+
 export const nameLook = style({ color: '#bcc2e0', fontWeight: 650 });
 /** Selection remains the strongest state even for the distinct violet Look subtype. */
 export const nameLookSelected = style({ color: colors.accent, fontWeight: 700 });

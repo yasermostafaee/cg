@@ -41,6 +41,7 @@ import { Icon } from '../../ui/Icon.js';
 import { Tag } from '../../ui/Tag.js';
 import { colors } from '../../theme.js';
 import * as s from './ElementRow.css.js';
+import { formatSeconds } from '../assets/wav-stats.js';
 import { elementParticipatesInSteps } from '../inspector/countdown-steps.js';
 
 export { ELEMENT_ROW_HEIGHT } from './metrics.js';
@@ -238,6 +239,15 @@ function ElementRowLabel(props: Props): JSX.Element {
         >
           {element.name}
         </span>
+        {element.type === 'audio' && (
+          <span
+            className={s.soundDuration}
+            title="Sound duration"
+            data-testid="timeline-audio-duration"
+          >
+            {formatSeconds(element.durationMs)}
+          </span>
+        )}
         {/* DELTA-RUN-NEXT-VERSION-01-F — a fact, not a toggle: it waits hidden for a step's cue. */}
         {element.type === 'composition' && element.startsHidden === true && (
           <Tag data-testid="layer-starts-hidden" title="Shown only when a countdown step shows it">
