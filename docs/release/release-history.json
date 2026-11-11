@@ -399,8 +399,22 @@
         "fa": "آزمون‌های باقی‌مانده و قابلیت‌های در دست پیگیری در این بخش ثبت می‌شوند.",
         "en": "This section tracks outstanding acceptance checks and features still in progress."
       },
-      "features": [],
-      "fixes": [],
+      "features": [
+        {
+          "fa": "تنظیم تاریخ و زمان شمارش معکوس در پنجره‌ای جدا باز می‌شود و می‌توان زمان دلخواهی از اکنون تعیین کرد.",
+          "en": "Countdown targets open in a dialog with date and time controls and a custom duration from now."
+        }
+      ],
+      "fixes": [
+        {
+          "fa": "پس از خاموش‌کردن Pan، تصویر PVW همان کراپ ذخیره‌شده را نشان می‌دهد.",
+          "en": "PVW keeps the applied crop after Pan is closed."
+        },
+        {
+          "fa": "Timing در Inspector جمع می‌شود. وضعیت باز یا بستهٔ مشخصات لایه، Position و Timing با تعویض لایه حفظ می‌شود.",
+          "en": "Timing can collapse in the Inspector. Layer details, Position and Timing keep their disclosure state when changing layers."
+        }
+      ],
       "planned": [
         {
           "fa": "روی خروجی PGM ایستگاه Playout، نمایش عنوان و شکل روی قاب، حفظ اتصال ورودی هنگام تغییر پریست، ماسک و Revert و پس‌زمینهٔ قاب بررسی شوند.",
