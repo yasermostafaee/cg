@@ -39,15 +39,19 @@ source, producer and geometry determine a stable revision independent of sample 
 
 The verified axis-aligned transform makes positions normalized within the active JPEG rectangle
 equivalent to positions normalized within the visible source. The browser clips delivery padding
-and draws the active picture at its display aspect. Pan uses that picture only when the active
-Bridge target matches its source and aspect. A producer or geometry change cancels the in-progress
+and draws the active picture at its display aspect. Pan can also show the assigned PVW JPEG as a
+visual guide when that mapping is unavailable or its aspect differs from the Bridge target. Fit
+that JPEG without stretching and continue to derive the crop from the Bridge target when present.
+A producer or geometry change cancels the in-progress
 gesture. A new sample at the same revision updates the JPEG without reinitializing the gesture.
 Draft identity continues to come from the existing Take token. The legacy MJPEG is outside this
 mapping. Acceptance with a real input on the target station is still open.
 
-Without a usable JPEG mapping, Pan shows proportional Bars. With no visible Crop edges plate it
-has no editing surface. The crop guide keeps its selected pixels clear, with checkerboard over the
-excluded source area. It has the authored plate ratio and a blue outline with a dark contrast edge.
+Without a usable assigned JPEG, Pan shows proportional Bars. With no visible Crop edges plate it
+has no editing surface. Show the full fitted image so the operator can see where to move the crop.
+Paint unused plate margins with opaque checkerboard. During drag and resize, darken the image
+outside the selection with a matte and clear it when the gesture ends. The crop has the authored
+plate ratio and a blue outline with a dark contrast edge.
 Drag or arrow keys move it along the axes with travel. Center restores
 the centre at the current size. Drag, resize and Center stage an
 Inspector draft that survives toggling PVW. With no eligible Bridge target, Update applies practice

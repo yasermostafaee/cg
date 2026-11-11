@@ -11,7 +11,8 @@ which part of the live input stays visible while the plate and picture proportio
 - Carry it per look and use the one shared fit calculation for the authoring poster and Bridge geometry.
 - Keep existing files byte-for-byte centred when the field is absent; ignore focus under `contain`.
 - Keep Pan in PVW with a proportional guide on the active Crop edges plate and offer Centre.
-- Keep selected pixels clear in Pan, with checkerboard over the excluded source area.
+- Show the fitted assigned preview picture in Pan. Fill unused plate margins with opaque checkerboard
+  and dim the image outside the selection while moving or resizing the crop.
 - Draft crop changes in PVW and apply them with Inspector Update for the matching row, look, plate and input.
 - Save off-air drafts for the first Take. Apply a verified on-air draft to the existing seat on Update on air.
 - Defer the PGM operator control until an in-place editor can show the uncropped source.

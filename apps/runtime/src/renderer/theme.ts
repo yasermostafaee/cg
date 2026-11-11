@@ -2574,7 +2574,6 @@ export const cssVars = {
   /** Dark translucent backing for labels painted directly over the programme picture. */
   '--r-monitor-label-bg': '#040a12c7',
   '--r-video-ground': '#000',
-  '--r-preview-crop-shade': 'rgba(0, 0, 0, 0.55)',
   '--r-checker-a': '#3D4253',
   '--r-checker-b': '#5B6075',
   '--r-plate-chip-bg': 'rgba(0, 0, 0, 0.78)',

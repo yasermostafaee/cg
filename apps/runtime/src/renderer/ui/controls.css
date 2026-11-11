@@ -489,7 +489,7 @@
   flex: 1;
 }
 
-/* D-178 · show the full guide or practice image behind its movable crop. */
+/* D-178 · show the input across the source bounds and dim around an active crop. */
 .cg-pan-draft-layer {
   pointer-events: none;
 }
@@ -499,6 +499,16 @@
   height: 100%;
 }
 .cg-pan-draft .cg-pan-draft__handle {
+  --cg-pan-checker-size: calc(12px * var(--cg-pan-ui-scale, 1));
+  --cg-pan-checker-light: color-mix(in srgb, var(--r-text-muted) 62%, var(--r-video-ground));
+  --cg-pan-checker-dark: color-mix(in srgb, var(--r-text-muted) 22%, var(--r-video-ground));
+  --cg-pan-hit-ground: conic-gradient(
+      var(--cg-pan-checker-dark) 25%,
+      var(--cg-pan-checker-light) 0 50%,
+      var(--cg-pan-checker-dark) 0 75%,
+      var(--cg-pan-checker-light) 0
+    )
+    0 0 / var(--cg-pan-checker-size) var(--cg-pan-checker-size);
   position: relative;
   width: 100%;
   height: 100%;
@@ -507,11 +517,15 @@
   overflow: hidden;
   isolation: isolate;
   border: 0;
+  background: var(--cg-pan-hit-ground);
   box-shadow:
     inset 0 0 0 2px var(--r-accent),
     inset 0 0 0 3px var(--r-video-ground);
   touch-action: none;
   pointer-events: auto;
+}
+.cg-pan-draft .cg-pan-draft__handle:disabled {
+  opacity: 1;
 }
 .cg-pan-draft__handle[data-pan-practice-axis='horizontal'] {
   cursor: ew-resize;
@@ -526,21 +540,22 @@
   position: absolute;
   z-index: -1;
   overflow: hidden;
-  background-size: 100% 100%;
+  background: var(--r-video-ground);
+  pointer-events: none;
 }
-.cg-pan-draft__excluded {
+.cg-pan-draft__matte {
   position: absolute;
   inset: 0;
-  --cg-pan-checker-size: calc(12px * var(--cg-pan-ui-scale, 1));
-  --cg-pan-checker-light: color-mix(in srgb, var(--r-text-muted) 42%, transparent);
-  background: conic-gradient(
-      var(--r-preview-crop-shade) 25%,
-      var(--cg-pan-checker-light) 0 50%,
-      var(--r-preview-crop-shade) 0 75%,
-      var(--cg-pan-checker-light) 0
-    )
-    0 0 / var(--cg-pan-checker-size) var(--cg-pan-checker-size);
-  pointer-events: none;
+  background: var(--r-video-ground);
+  opacity: 0;
+}
+.cg-pan-draft[data-pan-adjusting] .cg-pan-draft__matte {
+  opacity: 0.62;
+}
+.cg-pan-draft__source {
+  position: absolute;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
 }
 .cg-pan-draft__crop {
   position: absolute;
@@ -577,7 +592,7 @@
 }
 /* Pan buttons are hit surfaces. Keep the source and checkerboard paint stable under the pointer. */
 .cg-pan-draft :is(.cg-pan-draft__handle, .cg-pan-draft__resize):is(:hover, :active):not(:disabled) {
-  background: transparent;
+  background: var(--cg-pan-hit-ground, transparent);
   filter: none;
   transform: none;
 }

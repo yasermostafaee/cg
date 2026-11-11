@@ -104,3 +104,8 @@
 - [x] 10.4 The owner verified that resizing updates PGM on the target station.
 - [x] 10.5 Windows Chromium verified that the source and checkerboard pixels remain stable over the plate and corner, including a stationary press. All six focused Pan scenarios passed.
 - [ ] 10.6 Repeat the PVW visual check on the target station and record carrying Linux E2E.
+- [x] 10.7 Show the assigned PVW input across the fitted source area, including when exact JPEG geometry
+      is unavailable. Paint checkerboard in unused plate margins and dim the surrounding source during drag and resize.
+- [x] 10.8 In Chromium, verify that refreshed input fills the source area, checkerboard stays in unused
+      margins, both gestures dim only the image outside the crop, and hover and release restore the idle paint.
+- [ ] 10.9 Verify the corrected Pan presentation with the assigned inputs on the target station.

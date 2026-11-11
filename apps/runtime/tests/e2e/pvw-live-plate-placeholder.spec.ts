@@ -446,6 +446,7 @@ test('D-178 / B-426 — measured JPEG crop uses the assigned aspect and cancels 
       sourceId: '',
       index: 0,
       sourceAspect: 16 / 9,
+      measured: true,
       revision: 'a'.repeat(64),
       jpegs: [sourceImage('#C04028'), sourceImage('#00FF00')],
     };
@@ -461,11 +462,13 @@ test('D-178 / B-426 — measured JPEG crop uses the assigned aspect and cancels 
               jpegBase64: state.jpegs[state.index],
               width: 160,
               height: 160,
-              geometry: {
-                sourceAspect: state.sourceAspect,
-                revision: state.revision,
-                activeRect: { x: 0, y: 35 / 160, width: 1, height: 90 / 160 },
-              },
+              ...(state.measured && {
+                geometry: {
+                  sourceAspect: state.sourceAspect,
+                  revision: state.revision,
+                  activeRect: { x: 0, y: 35 / 160, width: 1, height: 90 / 160 },
+                },
+              }),
             })),
           };
         },
@@ -493,21 +496,31 @@ test('D-178 / B-426 — measured JPEG crop uses the assigned aspect and cancels 
   await page.getByRole('button', { name: 'Pan preview input', exact: true }).click();
   const handle = page.getByRole('button', { name: 'Pan source picture in portrait', exact: true });
   const draft = handle.locator('..');
-  const picture = handle.locator('[data-pan-source-revision]');
+  const picture = handle.locator('[data-pan-practice-picture]');
+  const input = picture.locator('.cg-pan-draft__source');
   await expect(picture).toBeVisible();
-  await expect(picture).toHaveCSS('background-size', '350px 350px');
-  await expect(picture).toHaveCSS('background-position', '0px -76.5625px');
+  await expect(input).toHaveCSS('background-size', '350px 350px');
+  await expect(input).toHaveCSS('background-position', '0px -76.5625px');
   const crop = handle.locator('[data-pan-practice-crop]');
-  const [pictureBox, cropBox] = await Promise.all([picture.boundingBox(), crop.boundingBox()]);
-  if (pictureBox === null || cropBox === null) throw new Error('The source or crop is missing');
+  const [plateBox, pictureBox, cropBox] = await Promise.all([
+    handle.boundingBox(),
+    picture.boundingBox(),
+    crop.boundingBox(),
+  ]);
+  if (plateBox === null || pictureBox === null || cropBox === null)
+    throw new Error('The plate, source or crop is missing');
   await test.step('B-433 — Pan crop stays clear over the picture and resize handle', async () => {
-    const y = Math.floor(cropBox.y - pictureBox.y + cropBox.height / 2);
-    const selectedX = Math.floor(cropBox.x - pictureBox.x + cropBox.width / 2);
-    const excludedEnd = Math.floor(cropBox.x - pictureBox.x) - 4;
+    const y = Math.floor(cropBox.y - plateBox.y + cropBox.height / 2);
+    const selectedX = Math.floor(cropBox.x - plateBox.x + cropBox.width / 2);
+    const outsideX = Math.floor((cropBox.x + pictureBox.x) / 2 - plateBox.x);
+    const marginY = Math.ceil(pictureBox.y + pictureBox.height - plateBox.y) + 6;
+    const label = await draft.getByRole('status').boundingBox();
+    if (label === null) throw new Error('The Pan label is missing');
+    expect(plateBox.y + marginY).toBeLessThan(label.y);
     const samplePicture = async () => {
-      const screenshot = await picture.screenshot({ scale: 'css', animations: 'disabled' });
+      const screenshot = await handle.screenshot({ scale: 'css', animations: 'disabled' });
       return page.evaluate(
-        async ({ png, y, selectedX, excludedEnd }) => {
+        async ({ png, y, selectedX, outsideX, marginY }) => {
           const image = new Image();
           image.src = `data:image/png;base64,${png}`;
           await image.decode();
@@ -516,13 +529,15 @@ test('D-178 / B-426 — measured JPEG crop uses the assigned aspect and cancels 
           canvas.height = image.height;
           const ctx = canvas.getContext('2d')!;
           ctx.drawImage(image, 0, 0);
-          const red = (x: number) => ctx.getImageData(x, y, 1, 1).data[0]!;
+          const rgb = (x: number, sampleY: number) =>
+            Array.from(ctx.getImageData(x, sampleY, 1, 1).data.slice(0, 3));
           return {
-            selected: Array.from(ctx.getImageData(selectedX, y, 1, 1).data.slice(0, 3)),
-            excluded: Array.from({ length: excludedEnd - 4 }, (_, i) => red(4 + i)),
+            selected: rgb(selectedX, y),
+            excluded: rgb(outsideX, y),
+            margin: Array.from({ length: 24 }, (_, i) => rgb(12 + i, marginY)),
           };
         },
-        { png: screenshot.toString('base64'), y, selectedX, excludedEnd },
+        { png: screenshot.toString('base64'), y, selectedX, outsideX, marginY },
       );
     };
     expect(await handle.evaluate((node) => node.matches(':hover'))).toBe(false);
@@ -530,8 +545,9 @@ test('D-178 / B-426 — measured JPEG crop uses the assigned aspect and cancels 
     const selectedRed = baseline.selected[0]!;
     expect(selectedRed).toBeGreaterThan(175);
     expect(selectedRed).toBeLessThan(205);
-    expect(Math.max(...baseline.excluded)).toBeLessThan(selectedRed - 12);
-    expect(Math.max(...baseline.excluded) - Math.min(...baseline.excluded)).toBeGreaterThan(25);
+    expect(baseline.excluded).toEqual(baseline.selected);
+    const checkerRed = baseline.margin.map(([red]) => red!);
+    expect(Math.max(...checkerRed) - Math.min(...checkerRed)).toBeGreaterThan(25);
 
     async function checkPress(button: Locator): Promise<void> {
       const box = await button.boundingBox();
@@ -547,9 +563,9 @@ test('D-178 / B-426 — measured JPEG crop uses the assigned aspect and cancels 
 
     for (const [name, x] of [
       ['inside the crop', selectedX],
-      ['outside the crop', Math.floor(excludedEnd / 2)],
+      ['outside the crop', outsideX],
     ] as const) {
-      await page.mouse.move(pictureBox.x + x, pictureBox.y + y);
+      await page.mouse.move(plateBox.x + x, plateBox.y + y);
       expect(await handle.evaluate((node) => node.matches(':hover')), name).toBe(true);
       expect(await samplePicture(), name).toEqual(baseline);
     }
@@ -564,16 +580,45 @@ test('D-178 / B-426 — measured JPEG crop uses the assigned aspect and cancels 
     expect(await samplePicture(), 'over the resize handle').toEqual(baseline);
     await checkPress(corner);
     await expect(draft).toHaveAttribute('data-pan-crop-state', 'ready');
+    const original = await input.evaluate((el) => {
+      el.dataset['probe'] = 'same-gesture';
+      return (el as HTMLElement).style.backgroundImage;
+    });
+    await page.evaluate(() => {
+      (window as unknown as { measuredPan: { index: number } }).measuredPan.index = 1;
+    });
+    await expect
+      .poll(() => input.evaluate((el) => (el as HTMLElement).style.backgroundImage))
+      .not.toBe(original);
+    await expect(input).toHaveAttribute('data-probe', 'same-gesture');
+    await expect.poll(async () => (await samplePicture()).selected[1]).toBeGreaterThan(230);
+    const refreshed = await samplePicture();
+    expect(refreshed.excluded).toEqual(refreshed.selected);
+    expect(refreshed.margin).toEqual(baseline.margin);
+
+    for (const button of [handle, corner]) {
+      const box = await button.boundingBox();
+      if (box === null) throw new Error('The Pan control is missing');
+      const x = box.x + box.width / 2;
+      const y = box.y + box.height / 2;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      try {
+        await page.mouse.move(x + 7, y + 4);
+        await expect(draft).toHaveAttribute('data-pan-adjusting', '');
+        const adjusting = await samplePicture();
+        expect(adjusting.excluded[1]).toBeLessThan(130);
+        expect(adjusting.excluded[1]).toBeGreaterThan(60);
+        expect(adjusting.margin).toEqual(refreshed.margin);
+        expect(adjusting.selected).toEqual(refreshed.selected);
+        await page.mouse.move(x, y);
+      } finally {
+        await page.mouse.up();
+      }
+      await expect(draft).not.toHaveAttribute('data-pan-adjusting');
+      expect(await samplePicture()).toEqual(refreshed);
+    }
   });
-  const original = await picture.evaluate((el) => {
-    el.dataset['probe'] = 'same-gesture';
-    return el.style.backgroundImage;
-  });
-  await page.evaluate(() => {
-    (window as unknown as { measuredPan: { index: number } }).measuredPan.index = 1;
-  });
-  await expect.poll(() => picture.evaluate((el) => el.style.backgroundImage)).not.toBe(original);
-  await expect(picture).toHaveAttribute('data-probe', 'same-gesture');
 
   const rect = await picture.boundingBox();
   if (rect === null) throw new Error('The source picture is missing');
@@ -591,16 +636,20 @@ test('D-178 / B-426 — measured JPEG crop uses the assigned aspect and cancels 
   await handle.press('ArrowRight');
   await expect(page.locator('[data-pan-crop-state="draft"]')).toHaveCount(1);
 
+  await handle.blur();
+  await page.mouse.move(0, 0);
   await page.evaluate(() => {
     (window as unknown as { measuredPan: { sourceAspect: number } }).measuredPan.sourceAspect =
       4 / 3;
   });
-  await expect(handle).toHaveCount(0);
-  const bars = page.getByRole('button', { name: 'Pan crop guide in portrait', exact: true });
-  await expect(bars.locator('[data-pan-practice-picture]')).toHaveCSS(
-    'background-image',
-    /linear-gradient/,
-  );
+  await expect(handle).toHaveAttribute('title', /available preview picture/);
+  await expect(input).toHaveCSS('background-image', /url\("data:image\/jpeg;base64,/);
+  await page.evaluate(() => {
+    (window as unknown as { measuredPan: { measured: boolean } }).measuredPan.measured = false;
+  });
+  await expect(picture).not.toHaveAttribute('data-pan-source-revision');
+  await expect(input).toHaveCSS('background-image', /url\("data:image\/jpeg;base64,/);
+  await expect(input).toHaveCSS('background-position', '0px 0px');
   await expect(page.locator('[data-pan-crop-state="draft"]')).toHaveCount(1);
 });
 

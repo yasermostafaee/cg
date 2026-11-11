@@ -41,10 +41,12 @@ return without Pan controls or crop guides.
 
 #### Scenario: The crop guide moves smoothly over the source
 
-- **WHEN** the operator opens Pan in PVW **THEN** the complete available source picture or Bars guide and current crop are visible inside the plate
-- **AND** the selected source pixels remain clear while checkerboard marks the excluded area
+- **WHEN** the operator opens Pan in PVW **THEN** the available input picture or Bars guide fills its fitted source area, including around the crop
+- **AND** the unused plate margins are opaque checkerboard
 - **WHEN** the pointer moves across the source or onto a resize handle **THEN** the picture and checkerboard colors stay the same
 - **WHEN** the operator drags the guide **THEN** it follows the pointer locally without a Bridge command
+- **WHEN** the operator drags or resizes the crop **THEN** a matte dims the image outside the crop while the selected picture stays clear
+- **WHEN** the gesture ends or is canceled **THEN** the matte clears
 - **WHEN** the operator presses `Center` **THEN** the crop guide returns to the centre of the source picture or Bars guide at its current size
 
 #### Scenario: Source and plate have different ratios
@@ -62,15 +64,16 @@ return without Pan controls or crop guides.
 - **AND** a smaller crop can move on both axes while the plate and the source assignment stay fixed
 - **AND** the resized crop becomes an Inspector draft with its position and size
 
-### Requirement: Measured source pictures agree with the Take fit before Pan displays them
+### Requirement: Pan displays available pictures from the assigned source
 
 Bridge SHALL pair each measured source JPEG with normalized active bounds, display aspect and a
 stable source, producer and geometry revision. It SHALL only supply that mapping when the source
 SAR is known, the decoded visible source is fully covered, source and applied rotation are zero,
 and the visible source transformed into the JPEG agrees with the delivered active rectangle.
-CG Control SHALL only display that image in Pan if its source and display aspect match the resolved
-Take target. It SHALL remove the JPEG delivery padding and preserve the measured display aspect.
-Bars SHALL remain available when those checks do not pass.
+CG Control SHALL display the picture of the assigned input and preserve its aspect. When active
+bounds are available it SHALL clip the JPEG delivery padding. A JPEG with unavailable or unmatched
+geometry SHALL be labelled as a preview picture when the crop is ready. Bars SHALL remain available
+when the assigned input has no usable JPEG.
 
 #### Scenario: A compatible active rectangle fills the Pan source picture
 
@@ -87,11 +90,12 @@ Bars SHALL remain available when those checks do not pass.
 - **THEN** the gesture ends without staging its old coordinates
 - **AND** existing drafts retain their Take-token identity
 
-#### Scenario: Unmatched image geometry keeps the guide available
+#### Scenario: The assigned preview picture is available without exact Take geometry
 
-- **WHEN** measured geometry is unavailable or its source or display aspect disagrees with Take
-- **THEN** Pan shows Bars for that plate
-- **AND** a verified Take target can still accept normalized framing from the guide
+- **WHEN** the assigned JPEG is available and measured geometry is unavailable or its display aspect disagrees with Take
+- **THEN** Pan shows the assigned preview picture fitted to the guide without stretching
+- **AND** a verified Take target remains required to save framing to the station
+- **WHEN** the assigned JPEG is unavailable **THEN** Pan shows Bars across the source area
 
 ### Requirement: A verified PVW crop applies to the matching source
 

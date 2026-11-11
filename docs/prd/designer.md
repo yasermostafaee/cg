@@ -6050,18 +6050,17 @@ crop before the first on-air frame. Absent focus centres a cover crop.
 
 **Implementation**
 
-A compatible Bridge supplies eligible crops and their source aspect. Pan shows the complete decoded
-source picture when the measured active rectangle and display aspect agree with the same input's
-Take fit. Delivery padding is clipped. When picture geometry is unavailable or disagrees, Pan uses
-the proportional Bars guide. A verified Take target can still save its crop from that guide. Generic
-practice keeps framing in the current browser session. The programme monitor has no Pan controls
-or crop overlays.
+A compatible Bridge supplies eligible crops and their source aspect. Pan displays the assigned
+preview picture and clips delivery padding when measured active bounds are available. A preview JPEG
+can still guide the operator without exact Take geometry. Use proportional Bars when the input has no
+usable JPEG. A verified Take target governs station crop saves. Generic practice keeps framing in the
+current browser session. The programme monitor has no Pan controls or crop overlays.
 
 **Crop workspace**
 
-Show the whole source picture or guide inside its plate in PVW. Keep the selected picture clear,
-place the checkerboard outside the selection and outline the crop in blue with a dark edge for
-contrast. Hovering the plate or a corner keeps that same picture and checkerboard. Move the outline
+Show the fitted source picture or guide in PVW. Fill the unused plate margins with opaque checkerboard
+and outline the crop in blue with a dark edge for contrast. Hovering the plate or a corner keeps the
+same picture and checkerboard. Dim the image outside the crop while moving or resizing it. Move the outline
 continuously during a drag and offer Centre at a readable screen size independent of the monitor fit.
 The source image and crop window retain their own aspect ratios. A 16:9 crop on a 4:3 source
 uses the source width and moves vertically at the default crop. Corner handles keep the plate ratio

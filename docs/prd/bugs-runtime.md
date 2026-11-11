@@ -14101,7 +14101,9 @@ outline for missing assignments. Show Crop edges below the plate name when the a
 
 **Owner recheck (2026-11-11):** Resizing applies to PGM. In PVW, hovering the plate changes the image and checkerboard, and moving to a corner restores the prior picture.
 
-**Expected / regression:** WHEN the operator edits a crop THEN the chosen source pixels remain clear and the checkerboard marks the outside. Hovering the plate or a corner, and holding the pointer down, keep the same source and checkerboard colors. WHEN Update on air commits a verified crop THEN the same seated source reframes inside its current plate. Verify this in Chromium and on the AMCP wire, including no write during dragging and no on-air write from off-air Update.
+**Owner recheck of the hover fix (2026-11-11):** The real preview image still showed in the plate margins while Bars or black occupied the selection. Replace the checkerboard in the source area with the assigned input picture. Dim the surrounding source while dragging or resizing.
+
+**Expected / regression:** Pan shows the assigned preview picture across the source area and opaque checkerboard in unused plate margins. Hover and a stationary press leave both stable. While dragging or resizing, dim the source outside the crop and keep the selected pixels clear. Restore the source brightness when the gesture ends. WHEN Update on air commits a verified crop THEN the same seated source reframes inside its current plate. Verify in Chromium and on the AMCP wire, including no write during dragging and no on-air write from off-air Update.
 
 ## [~] B-434 — No Playout offers a channel absent from CasparCG ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/servers-simplify/`
 

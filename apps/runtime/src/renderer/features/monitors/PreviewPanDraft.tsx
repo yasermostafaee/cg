@@ -31,22 +31,18 @@ interface PreviewPanPlacement extends PlatePlacement {
 
 interface SourcePicture {
   jpegBase64: string;
-  geometry: NonNullable<SourcePreviewFrame['geometry']>;
+  aspect: number;
+  geometry: SourcePreviewFrame['geometry'];
 }
 
-function matchingPicture(
+function previewPicture(
   frame: SourcePreviewFrame | undefined,
-  target: PreviewPlateCropTarget | undefined,
+  sourceId: string | null,
 ): SourcePicture | undefined {
-  if (
-    frame?.jpegBase64 === undefined ||
-    frame.geometry === undefined ||
-    target === undefined ||
-    frame.sourceId !== target.sourceId ||
-    Math.abs(frame.geometry.sourceAspect / target.sourceAspect - 1) >= 1e-6
-  )
-    return undefined;
-  return { jpegBase64: frame.jpegBase64, geometry: frame.geometry };
+  if (frame?.jpegBase64 === undefined || frame.sourceId !== sourceId) return undefined;
+  const aspect = frame.geometry?.sourceAspect ?? (frame.width ?? 0) / (frame.height ?? 0);
+  if (!Number.isFinite(aspect) || aspect <= 0) return undefined;
+  return { jpegBase64: frame.jpegBase64, aspect, geometry: frame.geometry };
 }
 
 type CropState =
@@ -147,7 +143,7 @@ export function PreviewPanRow({
           ]);
         const draft = previewCropDraftOf(itemId, key);
         const frame = sourceFrames.get(plate.sourceId ?? '');
-        const sourcePicture = matchingPicture(frame, target);
+        const sourcePicture = previewPicture(frame, plate.sourceId);
         const saved =
           target === undefined
             ? appliedPracticeCropOf(itemId, key)
@@ -171,11 +167,16 @@ export function PreviewPanRow({
           >
             <PreviewPanDraft
               // JPEG refreshes preserve the current gesture. New producer geometry does not.
-              key={JSON.stringify([key, frame?.geometry?.revision, sourcePicture !== undefined])}
+              key={JSON.stringify([key, sourcePicture?.geometry?.revision, sourcePicture?.aspect])}
               plateId={plate.plateId}
               width={plate.width}
               height={plate.height}
-              sourceAspect={target?.sourceAspect ?? plate.catalogAspect ?? PRACTICE_SOURCE_ASPECT}
+              sourceAspect={
+                target?.sourceAspect ??
+                sourcePicture?.aspect ??
+                plate.catalogAspect ??
+                PRACTICE_SOURCE_ASPECT
+              }
               state={state}
               blocked={targets === null}
               cropMessage={cropMessage}
@@ -266,10 +267,15 @@ function PreviewPanDraft({
     setDragFocus(null);
   };
   const picture = fitPictureToBox({ x: 0, y: 0, width, height }, sourceAspect, 'contain').picture;
-  const jpeg =
+  const preview =
     sourcePicture === undefined
       ? undefined
-      : fullJpegRect({ ...picture, x: 0, y: 0 }, sourcePicture.geometry.activeRect);
+      : fitPictureToBox({ ...picture, x: 0, y: 0 }, sourcePicture.aspect, 'contain').picture;
+  const activeRect = sourcePicture?.geometry?.activeRect;
+  const jpeg =
+    preview === undefined || activeRect === undefined
+      ? preview && { ...preview, x: 0, y: 0 }
+      : fullJpegRect({ ...preview, x: 0, y: 0 }, activeRect);
   const plateAspect = width / height;
   const crop = liveCropWindow(plateAspect, sourceAspect, focus);
   const cropLeft = `${crop.x * 100}%`;
@@ -293,8 +299,17 @@ function PreviewPanDraft({
     ? 'Press Update on air to apply this crop.'
     : 'Press Update to save this crop for Take.';
   const label = state === 'saved' && onAir ? 'Crop applied' : CROP_LABEL[state];
+  const measured =
+    sourcePicture?.geometry !== undefined &&
+    Math.abs(sourcePicture.aspect / sourceAspect - 1) < 1e-6;
+  const pictureHint =
+    sourcePicture === undefined
+      ? 'The guide uses bars.'
+      : measured
+        ? 'This is the measured source picture.'
+        : 'This is the available preview picture.';
   const description = guide
-    ? `${instructions}${resizeHint} ${sourcePicture === undefined ? 'The guide uses bars.' : 'This is the decoded source picture.'} ${updateHint}`
+    ? `${instructions}${resizeHint} ${pictureHint} ${updateHint}`
     : `${instructions}${resizeHint} Press Update to keep this practice crop in this console. ${cropMessage ?? 'Practice changes stay in Preview.'}`;
 
   function pointerFocus(origin: PointerOrigin, x: number, y: number): LiveCropFocus {
@@ -350,6 +365,7 @@ function PreviewPanDraft({
       onPointerMove: (event) => {
         const origin = start.current;
         if (origin?.pointerId !== event.pointerId) return;
+        if (dragFocus === null && event.clientX === origin.x && event.clientY === origin.y) return;
         setDragFocus(pointerFocus(origin, event.clientX, event.clientY));
       },
       onPointerUp: (event) => {
@@ -364,7 +380,11 @@ function PreviewPanDraft({
     };
   }
   return (
-    <div className="cg-pan-draft" data-pan-crop-state={state}>
+    <div
+      className="cg-pan-draft"
+      data-pan-crop-state={state}
+      data-pan-adjusting={dragFocus === null ? undefined : ''}
+    >
       <Button
         variant="ghost"
         className="cg-pan-draft__handle"
@@ -413,16 +433,8 @@ function PreviewPanDraft({
           aria-hidden="true"
           className="cg-pan-draft__picture"
           data-pan-practice-picture=""
-          data-pan-source-revision={sourcePicture?.geometry.revision}
+          data-pan-source-revision={sourcePicture?.geometry?.revision}
           style={{
-            ...(jpeg === undefined || sourcePicture === undefined
-              ? { backgroundImage: smpteBarsGradient() }
-              : {
-                  backgroundImage: `url(data:image/jpeg;base64,${sourcePicture.jpegBase64})`,
-                  backgroundSize: `${jpeg.width}px ${jpeg.height}px`,
-                  backgroundPosition: `${jpeg.x}px ${jpeg.y}px`,
-                  backgroundRepeat: 'no-repeat',
-                }),
             left: `${(picture.x / width) * 100}%`,
             top: `${(picture.y / height) * 100}%`,
             width: `${(picture.width / width) * 100}%`,
@@ -430,7 +442,23 @@ function PreviewPanDraft({
           }}
         >
           <span
-            className="cg-pan-draft__excluded"
+            className="cg-pan-draft__source"
+            style={{
+              ...(jpeg === undefined || preview === undefined || sourcePicture === undefined
+                ? { inset: 0, backgroundImage: smpteBarsGradient() }
+                : {
+                    left: preview.x,
+                    top: preview.y,
+                    width: preview.width,
+                    height: preview.height,
+                    backgroundImage: `url(data:image/jpeg;base64,${sourcePicture.jpegBase64})`,
+                    backgroundSize: `${jpeg.width}px ${jpeg.height}px`,
+                    backgroundPosition: `${jpeg.x}px ${jpeg.y}px`,
+                  }),
+            }}
+          />
+          <span
+            className="cg-pan-draft__matte"
             style={{
               clipPath: `polygon(evenodd,
                 0 0, 100% 0, 100% 100%, 0 100%, 0 0,
@@ -496,7 +524,11 @@ function PreviewPanDraft({
       <span className="cg-pan-draft__label">
         <Icon icon={Move} size={13} />
         <span role="status">
-          {sourcePicture !== undefined && state === 'ready' ? 'Source picture' : label}
+          {sourcePicture !== undefined && state === 'ready'
+            ? measured
+              ? 'Source picture'
+              : 'Preview picture'
+            : label}
         </span>
         <bdi>{plateId}</bdi>
       </span>
