@@ -88,6 +88,7 @@ it('🔴 §5.4 — the mock shim forwards EVERY field of stack.update', () => {
     fields: { probe: sentinel('fields') },
     mergeMode: sentinel('mergeMode') as 'merge',
     lookBindings: { look: { plate: sentinel('lookBindings') } },
+    position: { anchor: sentinel('position') as 'center', offset: { x: 0, y: 0 } },
   });
 
   expect(spy).toHaveBeenCalledTimes(1);

@@ -214,6 +214,19 @@ const LABELS: readonly { shown: string; text?: string; file: string }[] = [
     file: 'apps/runtime/src/shared/station-address.ts',
   },
   {
+    shown: 'Station mode',
+    file: 'apps/runtime/src/renderer/features/firstRun/PlayoutAddressGate.tsx',
+  },
+  {
+    shown: 'APASAI Playout',
+    text: '<option value="playout">APASAI Playout</option>',
+    file: 'apps/runtime/src/renderer/features/firstRun/PlayoutAddressGate.tsx',
+  },
+  {
+    shown: 'Where CasparCG fetches graphics',
+    file: 'apps/runtime/src/renderer/features/stationSetup/StationSetupDialog.tsx',
+  },
+  {
     shown: 'Check',
     text: "'Checking…' : 'Check'",
     file: 'apps/runtime/src/renderer/features/firstRun/PlayoutConnection.tsx',
@@ -299,7 +312,7 @@ const LABELS: readonly { shown: string; text?: string; file: string }[] = [
     file: 'tools/setup-ui/src/server.rs',
   },
   {
-    shown: `Update from 0.10.0 to ${VERSION}. Your settings are kept.`,
+    shown: `Update from 1.2.0 to ${VERSION}. Your settings are kept.`,
     text: 'Update from {from} to {v}. Your settings are kept.',
     file: 'tools/setup-ui/src/model.rs',
   },
@@ -539,11 +552,10 @@ describe('CLIENT-TEST-RELEASE-01 B3 — the guide’s source', () => {
   });
 
   it('`RELEASE-0111-01` §D2 — a picture that shows the version is this build’s, never a past release’s file', () => {
-    // The Welcome pages and CG Control's first question print `Version x.y.z`. A guide is started
-    // from the last one's, pictures included, so a picture not captured again would show the old
-    // version to the client — byte for byte the earlier release's file. The other pictures may
-    // legitimately carry over.
-    const SHOWS_VERSION = ['img/1-bridge-welcome.png', 'img/3-control-welcome.png', 'img/4-playout-address.png'];
+    // The Welcome pages and CG Control's first question print `Version x.y.z`.
+    // Reject older versions of those pictures even when they are copied or renamed.
+    // Version-neutral examples can be linked directly from the preceding guides.
+    const showsVersion = /^\d+-(bridge-welcome|control-welcome|playout-address)\.png$/u;
     const sha = (file: string): string =>
       createHash('sha256').update(fs.readFileSync(file)).digest('hex');
     const releases = path.join(REPO, 'docs', 'release');
@@ -551,12 +563,13 @@ describe('CLIENT-TEST-RELEASE-01 B3 — the guide’s source', () => {
     for (const release of fs.readdirSync(releases)) {
       const img = path.join(releases, release, 'img');
       if (release === VERSION || !fs.existsSync(img)) continue;
-      for (const file of fs.readdirSync(img)) earlier.set(sha(path.join(img, file)), `${release}/img/${file}`);
+      for (const file of fs.readdirSync(img)) {
+        if (showsVersion.test(file)) earlier.set(sha(path.join(img, file)), `${release}/img/${file}`);
+      }
     }
     // Positive control: there ARE earlier pictures to compare with.
     expect(earlier.size).toBeGreaterThan(0);
-    for (const src of SHOWS_VERSION) {
-      expect(PICTURES, `the guide embeds ${src}`).toContain(src);
+    for (const src of PICTURES) {
       const was = earlier.get(sha(path.resolve(path.dirname(GUIDE), src)));
       expect(was, `${src} is ${was ?? ''}, an earlier release's picture`).toBeUndefined();
     }
