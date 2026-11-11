@@ -45,9 +45,8 @@ what the core team measured:
   backup is declared. Every other plate mirrors as before.
 - **The gate is removed (§1.G), last.** `routeInputGate()` and `ROUTE_NOT_SUPPORTED_YET` are gone; a route
   with a layer is an ordinary bindable input.
-- **Playlist-first picker order (owner follow-up, 2026-10-26).** Every `playlistOf` row leads the Inputs
-  list. The picker uses a stable partition: playlist rows keep their D10 order, all remaining inputs keep
-  theirs, and `None`, Media, availability and compatible-channel behaviour do not move or change.
+- **Playlist-first Inputs order (owner follow-ups, 2026-10-26 and 2026-11-12).** The source picker
+  and Station setup both list Playlist outputs before ordinary inputs. Each group keeps its D10 order.
 - **Raised SourcePicker surface (owner follow-up, 2026-10-26).** The anchored panel shared by Inputs and
   Media opts into a `raised` visual variant made only from existing tokens: the raised surface, strong
   border and menu shadow. It adds no scrim and changes no geometry, source behaviour or keyboard contract.

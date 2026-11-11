@@ -120,14 +120,11 @@ The report's §5 left eight decisions to the owner. Those he took, and what beca
 
 ## Target activation UI follow-ups (2026-10-26)
 
-**Playlist output first in Inputs.** Ordering is presentation-only and belongs at the shared
-`SourcePicker` boundary, after media and departed rows have been excluded. The picker stable-partitions
-the remaining rows by whether `playlistOf` is present: every Playlist output comes first, Playlist outputs
-keep their D10 order among themselves, and every ordinary input keeps its D10 order among the remainder.
-The source catalogue itself is not reordered, so no other consumer silently inherits a presentation
-choice. An unavailable Playlist output stays first and disabled with the same reason; `None`, the Media
-tab and the existing availability and compatible-channel decisions are unchanged. The explicit order is
-pinned in `sourcePicker.dom.test.ts` and on the rendered picker in `playlist-output.spec.ts`.
+**Playlist output first in Inputs.** A shared renderer selector excludes media and departed rows,
+then stable-partitions the remaining inputs by `playlistOf`. The source picker and Station setup →
+Live sources both read that order from the selector. The underlying catalogue keeps its D10 order.
+An unavailable Playlist output keeps its rank and its status. Playwright checks both surfaces in
+`playlist-output.spec.ts`.
 
 **SourcePicker raised above its host.** Inputs and Media are two tabs of the same anchored panel, so the
 visual distinction belongs to an opt-in `raised` variant on the shared `Popover`, selected only by

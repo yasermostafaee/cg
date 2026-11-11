@@ -39,6 +39,7 @@ import {
 import { SourceLabel, formatMediaDuration, labelledSource } from './SourceLabel.js';
 import {
   currentSourceCatalog,
+  playoutInputsForDisplay,
   refreshPlayoutSources,
   searchPlayoutMedia,
   sourcesVersion,
@@ -319,14 +320,7 @@ function PickerPanel({
   const [tab, setTab] = useState<Tab>(initialTab);
   const media = useMediaSearch();
   const loadThumbnail = useMemo(createMediaThumbnailLoader, []);
-  const catalog = currentSourceCatalog();
-  const catalogInputs = catalog.sources.filter(
-    (source) => source.origin !== 'media' && source.departed !== true,
-  );
-  const inputs = [
-    ...catalogInputs.filter(isPlaylistOutput),
-    ...catalogInputs.filter((source) => !isPlaylistOutput(source)),
-  ];
+  const inputs = playoutInputsForDisplay(currentSourceCatalog().sources);
   const tabs = [
     { id: 'inputs', label: `Inputs ${String(inputs.length)}` },
     {

@@ -118,6 +118,9 @@
       partition that preserves D10 order within the Playlist and ordinary groups; leave `None`, Media,
       unavailable/disabled and channel-compatibility behaviour unchanged. Update
       `sourcePicker.dom.test.ts` and add a Playwright assertion in `playlist-output.spec.ts`
+  - 2026-11-12: reuse the ordering in Station setup → Live sources. The regression reproduced
+    both Playlist rows below the other inputs before the change. Windows Chromium passed all seven
+    focused cases afterward, including the order and availability label in Settings.
 - [x] 6.6h Record the owner's SourcePicker surface decision in the PRD, proposal, design and
       `runtime-playout-sources` delta: Inputs and Media opt into a token-only `raised` Popover variant
       (`--r-surface-raised`, `--r-border-strong`, `--r-shadow-menu`), with no scrim, geometry, source behaviour or

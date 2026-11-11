@@ -15,6 +15,7 @@ import {
   commitSourceBand,
   currentPlateBand,
   currentSourceCatalog,
+  playoutInputsForDisplay,
   sourcesVersion,
   subscribeSources,
 } from './sourceStore.js';
@@ -28,8 +29,8 @@ import {
  * dialog behind them went with §1.F. What is left is what an operator setting a station up needs to
  * see and cannot see anywhere else:
  *
- *   - the Playout's INPUTS, read-only, in its own order — the NAME its operators gave each cable or
- *     feed, its KIND (`SDI`, `NDI`, `Stream` — the one place the kind is shown) and its format;
+ *   - the Playout's read-only INPUTS, with playlist outputs first — the NAME its operators gave
+ *     each cable or feed, its KIND (`SDI`, `NDI`, `Stream` — the one place the kind is shown) and its format;
  *     `Unusable` marked, with the reason on hover; NEVER an address (§1.E);
  *   - WHEN the list was last read successfully — the list stays in force through an outage, so the
  *     time is what says how old it is;
@@ -68,9 +69,7 @@ export function SourcesSection({
   useSyncExternalStore(subscribeSources, sourcesVersion);
   const { surface, inputCheck } = useInputCheckSurface(channel);
   const catalog = currentSourceCatalog();
-  // The Playout's list as it stands: its inputs, in its order. Media and the inputs it no longer
-  // lists are not the list.
-  const inputs = catalog.sources.filter((s) => s.origin !== 'media' && s.departed !== true);
+  const inputs = playoutInputsForDisplay(catalog.sources);
   const [bandStart, setBandStart] = useState('');
   const [bandEnd, setBandEnd] = useState('');
   /*

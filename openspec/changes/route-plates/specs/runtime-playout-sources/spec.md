@@ -70,6 +70,7 @@ the channels its `compatibleChannels` names, by the one predicate the picker and
 Inside the Inputs tab, every row carrying `playlistOf` SHALL precede every row without it. The partition
 SHALL be stable: Playlist rows SHALL keep their D10 order among themselves, and all remaining inputs SHALL
 keep their D10 order. An unavailable Playlist row SHALL remain first but disabled with its existing reason.
+Station setup → Live sources SHALL display its read-only Inputs list in the same order.
 The separate `None` choice, Media tab, availability and compatible-channel behaviour SHALL NOT change.
 
 The anchored SourcePicker panel shared by the Inputs and Media tabs SHALL opt into the Popover's `raised`
@@ -92,6 +93,7 @@ contracts.
 - **AND** multiple Playlist outputs keep their D10 order
 - **AND** every remaining input keeps its prior relative order
 - **AND** an unavailable Playlist output remains first and disabled with its reason
+- **AND** the read-only Inputs list in Station setup shows the same order and marks unavailable outputs
 
 #### Scenario: Inputs and Media are visibly raised without becoming modal
 

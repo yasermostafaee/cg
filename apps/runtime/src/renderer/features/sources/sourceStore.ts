@@ -1,6 +1,7 @@
 import {
   EMPTY_SOURCE_ASSIGNMENTS,
   EMPTY_SOURCE_CATALOG,
+  isPlaylistOutput,
   publishedPlateBand,
   unassignedPlateIds,
   type ChannelRequest,
@@ -10,6 +11,7 @@ import {
   type LiveSourceLayerRange,
   type PlateBandInForce,
   type SourceAssignments,
+  type SourceDefinition,
   type SourcesMediaSearchChannel,
 } from '@cg/shared-ipc';
 
@@ -76,6 +78,15 @@ function bump(): void {
 /** The catalog in force, as the bridge last stated it. */
 export function currentSourceCatalog(): ConsoleSourceCatalog {
   return catalog;
+}
+
+/** Keep the Playout's order within the playlist outputs and the other visible inputs. */
+export function playoutInputsForDisplay(sources: readonly SourceDefinition[]): SourceDefinition[] {
+  const inputs = sources.filter((source) => source.origin !== 'media' && source.departed !== true);
+  return [
+    ...inputs.filter(isPlaylistOutput),
+    ...inputs.filter((source) => !isPlaylistOutput(source)),
+  ];
 }
 
 /**

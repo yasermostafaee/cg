@@ -1,3 +1,4 @@
+import { PlayoutInputSchema } from '@cg/shared-ipc';
 import { E2E_PLAYOUT, expect, test } from './fixtures/runtime.js';
 
 /**
@@ -23,11 +24,38 @@ const PLAYLIST = {
   playlistOf: { casparHost: '127.0.0.1', casparChannel: 1 },
 } as const;
 
+const UNAVAILABLE_PLAYLIST = {
+  ...PLAYLIST,
+  id: 'pl-second',
+  name: 'Playlist 2',
+  producer: { ...PLAYLIST.producer, channel: 2 },
+  available: false,
+  reason: 'not-running',
+  playlistOf: { ...PLAYLIST.playlistOf, casparChannel: 2 },
+} as const;
+
 test.use({
   playoutSources: {
     ...E2E_PLAYOUT,
-    inputs: { ...E2E_PLAYOUT.inputs, inputs: [...E2E_PLAYOUT.inputs.inputs, PLAYLIST] },
+    inputs: {
+      ...E2E_PLAYOUT.inputs,
+      inputs: [...E2E_PLAYOUT.inputs.inputs, PLAYLIST, UNAVAILABLE_PLAYLIST],
+    },
   },
+});
+
+test('Station setup lists playlist outputs before other inputs', async ({ app }) => {
+  await app.openStationSetupAt('Live sources');
+  const dialog = app.page.getByRole('dialog', { name: 'Station setup' });
+  const rows = dialog
+    .getByRole('region', { name: 'Inputs from the Playout' })
+    .locator('[data-source-input]');
+  await expect(rows.locator('.cg-resource__name')).toHaveText([
+    PLAYLIST.name,
+    UNAVAILABLE_PLAYLIST.name,
+    ...E2E_PLAYOUT.inputs.inputs.map((input) => PlayoutInputSchema.parse(input).name),
+  ]);
+  await expect(rows.nth(1).getByText('Unavailable', { exact: true })).toBeVisible();
 });
 
 const REASON = 'Programme sound is already on air';

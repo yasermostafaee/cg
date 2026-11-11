@@ -4263,7 +4263,8 @@ on `.111`, where both channels' L is 5.
 
 **Owner follow-up (2026-10-26; built by `route-plates` §6.6g).** WHEN the Inputs tab contains one or
 more D10 rows carrying `playlistOf` THEN those rows are the first rows inside the Inputs list, even when
-unavailable. Their D10 order, and the D10 order of every remaining input, is preserved. The separate
+unavailable. Station setup → Live sources uses the same order (owner follow-up, 2026-11-12).
+Their D10 order, and the D10 order of every remaining input, is preserved. The separate
 `None` choice, Media tab, availability reasons and compatible-channel rules are unchanged.
 
 **Owner follow-up (2026-10-26; specified by `route-plates` §6.6h).** WHEN the shared SourcePicker opens
