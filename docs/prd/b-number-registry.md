@@ -4374,3 +4374,9 @@ The previous allocation and a heading search confirmed B-420 was free.
 Claims: B-425 (UNC path), B-426 (intentional crop), B-427 (Layers filters), B-428 (Rehearse checkerboard), B-429 (installed website link), B-430 (Space transport), B-431 (text and Follow-video Outro), B-432 (Play indicator); D-207 through D-209 and D-211; R-114 and R-116. D-210 and R-115 were not used. R-108 was reopened.
 
 Next free after these entries: B-433, D-210, R-115, P-079 and C-049.
+
+### 2026-11-12 — Designer project-title editing takes B-438
+
+- `B-438` — keep the inline project-title field usable when cleared — [bugs-designer.md](bugs-designer.md).
+
+B-433 through B-437 are already present in the tracked bug headings. The next free bug number is B-439.

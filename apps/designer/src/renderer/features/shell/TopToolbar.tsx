@@ -525,8 +525,7 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
       <div className={s.centerCluster}>
         {scene !== null && (
           // D-127 — double-click the name to rename the project in place. The span stays
-          // mounted while renaming (hidden, sized by the DRAFT) and the input sits over it,
-          // so the swap doesn't shift the cluster.
+          // mounted while renaming to size the overlaid input from the draft.
           <span className={s.nameSlot}>
             <span
               className={cx(s.projectName, renaming && s.projectNameSizing)}

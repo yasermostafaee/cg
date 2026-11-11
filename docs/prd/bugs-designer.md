@@ -4959,3 +4959,9 @@ The valid mask from Plate 1 to Plate 2 in the reported project survives.
 **Repro / Actual:** A Static composition with a retained Loop choice can repeat an unmarked video during Rehearse or Preview. Playback hides the Hold selector without an Outro marker. The supplied project stores Loop on a 50-frame composition at 25 fps and contains a 40.04-second video asset without a placed layer.
 
 **Expected / regression:** Show the composition-owned Freeze and Loop media choices for Static compositions containing visible Video or Lottie. The media checklist appears for Loop and lets the author opt clips out of repeats. A Follow layer's Inspector shows its effective timing; composition Playback owns its Hold behavior.
+
+## [~] B-438 — Clearing the project title shrinks the rename field ⟨priority: low — owner, 2026-11-12⟩ — `openspec/changes/keep-project-rename-field-usable/`
+
+**Repro / Actual:** Double-click the project title in the Designer toolbar and delete the selected text. The inline field shrinks.
+
+**Expected / regression:** While the empty draft is focused, the field stays large enough to enter a replacement and clears the adjacent Save control. Measure the field and confirm a new Persian title in Chromium.

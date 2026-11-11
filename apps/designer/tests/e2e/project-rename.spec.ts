@@ -49,6 +49,28 @@ test('double-click the project name → edit, type, Enter → renamed, dirty, ta
   await expect(name(app)).toHaveText('Before');
 });
 
+test('B-438 — clearing the draft keeps the rename field usable', async ({ app }) => {
+  await app.newProject('Before');
+  await name(app).dblclick();
+
+  const input = nameInput(app);
+  await input.press('Backspace');
+  await expect(input).toHaveValue('');
+  await expect(input).toBeFocused();
+
+  const field = await input.boundingBox();
+  const save = await saveBtn(app).boundingBox();
+  if (field === null || save === null) throw new Error('Missing rename field or Save button');
+  expect(field.width).toBeGreaterThanOrEqual(128);
+  expect(field.height).toBeGreaterThanOrEqual(20);
+  expect(field.x + field.width).toBeLessThanOrEqual(save.x);
+
+  const replacement = 'خبر فوری';
+  await app.page.keyboard.insertText(replacement);
+  await input.press('Enter');
+  await expect(name(app)).toHaveText(replacement);
+});
+
 test('Escape cancels the rename — the previous name is kept', async ({ app }) => {
   await app.newProject('Keep');
 

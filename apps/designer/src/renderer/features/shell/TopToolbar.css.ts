@@ -27,9 +27,8 @@ export const centerCluster = style({
 });
 
 // D-127 — the rename slot. The name span stays mounted while renaming (hidden,
-// holding the DRAFT text) and the input is laid over it, so the slot's width is
-// always the text's width: swapping in and out of edit mode never shifts the
-// cluster, and the box grows with what's typed.
+// holding the draft text) and the input is laid over it. The slot follows
+// the text as it grows, with a minimum editing area for short or empty drafts.
 export const nameSlot = style({
   position: 'relative',
   display: 'inline-flex',
@@ -48,9 +47,10 @@ export const projectName = style({
   cursor: 'text',
 });
 
-/** The name span while its input is up: keeps the slot's width, shows nothing. */
 export const projectNameSizing = style({
   visibility: 'hidden',
+  minInlineSize: '8rem',
+  minBlockSize: '1lh',
 });
 
 // The inset/padding pair is deliberate: the box is pulled OUT by exactly the
