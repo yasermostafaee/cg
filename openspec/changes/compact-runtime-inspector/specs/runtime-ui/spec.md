@@ -26,3 +26,16 @@ Inspector SHALL keep Update and Discard in the footer and retain the existing fi
 - **THEN** simple field labels and values share compact rows where space permits
 - **AND** complex and grouped editors retain their labels, content and controls
 - **AND** the selected row's fields still use the existing staged Update and Discard workflow
+
+#### Scenario: Edit Fields in the narrow Inspector beside a maximized monitor
+
+- **WHEN** the operator opens the Inspector companion beside a maximized monitor
+- **THEN** field labels stack above their controls where the two-column layout would make the inputs
+  too narrow to edit comfortably
+- **AND** fields remain editable while the monitor stays visible
+
+#### Scenario: Turn and load pages in a Sequence field
+
+- **WHEN** the selected template has a Sequence field with page navigation and load actions
+- **THEN** the page strip and controls use the full width below the field name
+- **AND** the navigation and load actions fit on their respective rows at the normal Inspector width

@@ -560,14 +560,23 @@ export class RuntimeApp {
     item: 'Pictures…' | 'Folder…',
     book: string | RegExp = /^Load pages for /,
   ): Promise<FileChooser> {
-    const chooser = this.page.waitForEvent('filechooser');
     const name = typeof book === 'string' ? `Load pages for ${book}` : book;
     const load = this.inspector.getByRole('button', { name });
-    // In view FIRST: the menu closes on any scroll (`ContextMenu`), and a click's own scroll-into-view of
-    // a button below the Inspector's fold can land just after the menu opens.
+    // Focus can scroll the Inspector and dismiss a menu opened during the same frame.
     await load.scrollIntoViewIfNeeded();
-    await load.click();
-    await this.page.getByRole('menuitem', { name: item, exact: true }).click();
+    await load.evaluate((button) => (button as HTMLElement).focus({ preventScroll: true }));
+    const option = this.page
+      .getByRole('menu', { name })
+      .getByRole('menuitem', { name: item, exact: true });
+    let chooser: FileChooser | undefined;
+    await expect(async () => {
+      if (!(await option.isVisible())) await load.press('Enter', { timeout: 2_000 });
+      [chooser] = await Promise.all([
+        this.page.waitForEvent('filechooser', { timeout: 2_000 }),
+        option.click({ force: true, timeout: 1_000 }),
+      ]);
+    }).toPass({ timeout: 10_000 });
+    if (chooser === undefined) throw new Error('The book file picker did not open');
     return chooser;
   }
 

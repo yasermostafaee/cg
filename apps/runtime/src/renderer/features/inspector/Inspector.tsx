@@ -1190,6 +1190,7 @@ function FieldEditor({
   return (
     <div
       className={needsWideEditor(kind, field) ? 'cg-field-row cg-field-row--wide' : 'cg-field-row'}
+      data-field-editor={isBook ? 'book' : undefined}
     >
       {/*
         🔴 THE AUTHORED NAME IS THE HEADING; THE BINDING KEY IS ITS TOOLTIP (`RUN-NEXT-VERSION-03`

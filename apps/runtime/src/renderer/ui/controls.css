@@ -2402,7 +2402,13 @@ textarea.cg-field--autogrow {
   align-self: start;
 }
 
-/* The book strip, list tools and date/time pickers need the full width of a narrow panel. */
+/* A book's strip and controls use the full width below its label. */
+.cg-field-row[data-field-editor='book'] {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--r-space-1);
+}
+
+/* List tools and date/time pickers need the full width of a narrow panel. */
 @container inspector (max-width: 22rem) {
   .cg-field-row--wide {
     grid-template-columns: minmax(0, 1fr);
@@ -2410,7 +2416,8 @@ textarea.cg-field--autogrow {
   }
 }
 
-@container inspector (max-width: 15rem) {
+/* Keep full-width inputs in the narrow Inspector beside a maximized monitor. */
+@container inspector (max-width: 19rem) {
   .cg-inspector-fields__columns {
     display: none;
   }
