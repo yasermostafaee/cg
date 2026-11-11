@@ -4293,6 +4293,10 @@ only in a narrower browser. Tests: `pgm-audio.test.ts`, `playout-meters.integrat
 `pgmAudioPlayer.test.ts`, `meterScale.test.ts`, `programMeter.dom.test.ts`, e2e `programme-sound.spec.ts`.
 **Owed:** `2.9.2` on `.111` (the meters endpoint), and a listen on the plant.
 
+**Monitor volume** — `openspec/changes/local-program-monitor-volume/`. Set the local speaker
+level from the PGM strip and remember it on this console. A volume change keeps the stream connected
+and leaves the engine's meter readings and programme signal intact.
+
 **IDM — recorded, nothing to change (`RELEASE-0111-01-A` A5; `PLAYOUT-CG-RESPONSE-0110-111-v1.md` §1).** Their client
 `2.9.3` reads the core's `/audio`, not `/audio.wav`; the core itself is unchanged and serves any path that
 carries `/audio` (measured on `.111`: `GET http://127.0.0.1:9250/audio` → `200`, `RIFF`/`WAVE`). CG Bridge's relay

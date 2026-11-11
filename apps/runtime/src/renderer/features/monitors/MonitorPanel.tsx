@@ -1,10 +1,18 @@
-import { useLayoutEffect, useRef, type CSSProperties, type ReactNode } from 'react';
-import { Columns2, MonitorOff, Rows2, Volume2, VolumeX } from 'lucide-react';
+import {
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
+import { Columns2, MonitorOff, Rows2, SlidersHorizontal, Volume2, VolumeX } from 'lucide-react';
 import type { PgmEngine } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { Panel } from '../../ui/Panel.js';
+import { Popover } from '../../ui/Popover.js';
 import { MonitorHead, MonitorHeadFact, MonitorSignalStrip } from '../../ui/MonitorHead.js';
 import type { PanelId } from '../../hooks/useShellLayout.js';
 import type { ProgramReturn, ProgramSignal } from '../../hooks/useProgramReturn.js';
@@ -187,6 +195,53 @@ export function programHeadTags(air: ChannelAir): string[] {
   ];
 }
 
+function ProgramVolume({ sound }: { sound: PgmAudio }): JSX.Element {
+  const anchor = useRef<HTMLButtonElement>(null);
+  const id = useId();
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button
+        ref={anchor}
+        variant="ghost"
+        aria-label="Monitor volume"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={open ? id : undefined}
+        title={`Monitor volume ${String(sound.volume)}% · this console only`}
+        onClick={() => setOpen(!open)}
+      >
+        <Icon icon={SlidersHorizontal} size={13} />
+      </Button>
+      {open && (
+        <Popover
+          anchor={anchor}
+          onClose={() => setOpen(false)}
+          id={id}
+          aria-label="Monitor volume"
+          minWidth={192}
+          maxHeight={100}
+          initialFocusSelector="input"
+        >
+          <label className="cg-pgm-volume">
+            <span>
+              Volume <output>{String(sound.volume)}%</output>
+            </span>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={sound.volume}
+              aria-label="Volume"
+              onChange={(event) => sound.setVolume(event.currentTarget.valueAsNumber)}
+            />
+          </label>
+        </Popover>
+      )}
+    </>
+  );
+}
+
 export function MonitorPanel({
   id,
   title,
@@ -272,6 +327,7 @@ export function MonitorPanel({
       >
         <Icon icon={programSound.on ? Volume2 : VolumeX} size={13} />
       </Button>
+      <ProgramVolume sound={programSound} />
     </div>
   );
   const meterChannel = monitorPreferences.audioEngine === 'A' || backupAvailable ? channel : null;

@@ -6,7 +6,13 @@ import type { ProgramMonitorPreferences } from '../../src/renderer/features/moni
  * (off, the default), and the one bridge surface its meter reads (`window.cg.meters`, with no readings —
  * the meter sits at the floor). A pane test that sets up no bridge at all gets exactly this much.
  */
-export const SOUND_OFF: PgmAudio = { on: false, status: 'off', toggle: () => undefined };
+export const SOUND_OFF: PgmAudio = {
+  on: false,
+  status: 'off',
+  volume: 100,
+  toggle: () => undefined,
+  setVolume: () => undefined,
+};
 
 export const PRIMARY_MONITOR_PREFERENCES: ProgramMonitorPreferences = {
   display: 'A',

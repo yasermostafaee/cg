@@ -60,6 +60,8 @@ export interface PgmAudioPlayerOptions {
   /** A fresh URL (a fresh ticket) for each connection, or `null`: there is no sound to read. */
   readonly url: () => Promise<string | null>;
   readonly out: PcmOut;
+  /** Local speaker gain node. Buffer timing and signal meters still use their existing clocks. */
+  readonly destination?: unknown;
   readonly fetchImpl?: typeof fetch;
   /** Wall clock for the underrun window. `performance.now` by default. */
   readonly now?: () => number;
@@ -70,6 +72,7 @@ export interface PgmAudioPlayerOptions {
 export class PgmAudioPlayer {
   readonly #url: () => Promise<string | null>;
   readonly #out: PcmOut;
+  readonly #destination: unknown;
   readonly #fetch: typeof fetch;
   readonly #now: () => number;
   readonly #onState: (state: PgmAudioState) => void;
@@ -92,6 +95,7 @@ export class PgmAudioPlayer {
   constructor(options: PgmAudioPlayerOptions) {
     this.#url = options.url;
     this.#out = options.out;
+    this.#destination = options.destination ?? options.out.destination;
     this.#fetch = options.fetchImpl ?? ((input, init) => fetch(input, init));
     this.#now = options.now ?? ((): number => performance.now());
     this.#onState = options.onState ?? ((): void => undefined);
@@ -160,7 +164,7 @@ export class PgmAudioPlayer {
     }
     const source = out.createBufferSource();
     source.buffer = buffer;
-    source.connect(out.destination as never);
+    source.connect(this.#destination as never);
     source.start(this.#nextT);
     this.#nextT += frames / PGM_AUDIO_SAMPLE_RATE;
     this.#scheduledAny = true;

@@ -176,6 +176,19 @@ test('E — the Playout’s levels beside PROGRAM in its own look; the badge’s
   );
   await shot(page.locator('[data-monitor-pgm-strip]'), 'e-3-strip-speaker-on');
 
+  const volumeButton = page.getByRole('button', { name: 'Monitor volume', exact: true });
+  await volumeButton.click();
+  const volume = page.getByRole('dialog', { name: 'Monitor volume' });
+  const volumeSlider = volume.getByRole('slider', { name: 'Volume', exact: true });
+  await expect(volumeSlider).toHaveValue('100');
+  await volumeSlider.press('Home');
+  await volumeSlider.press('ArrowRight');
+  await expect(volume.getByText('1%')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(volume).toHaveCount(0);
+  await expect(speaker(page)).toHaveAttribute('data-pgm-audio', 'playing');
+  expect((feed as FakePgmFeed).audioConnections).toHaveLength(1);
+
   // Off: the core's reader is released.
   await speaker(page).click();
   await expect(speaker(page)).toHaveAttribute('data-pgm-audio', 'off');
@@ -190,7 +203,7 @@ test('E — the Playout’s levels beside PROGRAM in its own look; the badge’s
   const show = page.getByRole('button', { name: 'Show monitors' });
   await expect(show).toBeVisible({ timeout: 20_000 });
   expect(await page.evaluate(() => localStorage.getItem('cg.runtime.pgm-audio.v1'))).toBe(
-    '{"on":true}',
+    '{"on":true,"volume":1}',
   );
   // Showing the monitors IS the press the browser wants: the remembered speaker starts with it.
   const readersBefore = (feed as FakePgmFeed).audioConnections.length;
@@ -198,6 +211,7 @@ test('E — the Playout’s levels beside PROGRAM in its own look; the badge’s
   await expect(speaker(page)).toHaveAttribute('aria-pressed', 'true', { timeout: 20_000 });
   await expect(speaker(page)).toHaveAttribute('data-pgm-audio', 'playing', { timeout: 15_000 });
   expect((feed as FakePgmFeed).audioConnections.length).toBeGreaterThanOrEqual(readersBefore);
+  await expect(volumeButton).toHaveAttribute('title', 'Monitor volume 1% · this console only');
 
   /*
     THE SMALLEST DESKTOP WINDOW (1100 × 700): the picture is bound by the panel's HEIGHT, so eight bars fit

@@ -30,23 +30,30 @@ export type PgmAudioStatus = 'off' | 'waiting' | PgmAudioState;
 export interface PgmAudio {
   readonly on: boolean;
   readonly status: PgmAudioStatus;
+  readonly volume: number;
   toggle(): void;
+  setVolume(value: number): void;
 }
 
-function readOn(): boolean {
+function readPreference(): { on: boolean; volume: number } {
   try {
-    const raw = globalThis.localStorage?.getItem(STORAGE_KEY);
-    if (raw === null || raw === undefined) return false;
-    return (JSON.parse(raw) as { on?: unknown }).on === true;
+    const value = JSON.parse(globalThis.localStorage?.getItem(STORAGE_KEY) ?? '{}') as {
+      on?: unknown;
+      volume?: unknown;
+    };
+    const volume = value.volume;
+    return {
+      on: value.on === true,
+      volume: typeof volume === 'number' && volume >= 0 && volume <= 100 ? volume : 100,
+    };
   } catch {
-    // An unreadable value reads as absent: OFF, the quiet side.
-    return false;
+    return { on: false, volume: 100 };
   }
 }
 
-function writeOn(on: boolean): void {
+function writePreference(on: boolean, volume: number): void {
   try {
-    globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify({ on }));
+    globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify({ on, volume }));
   } catch {
     // A browser that will not store it still plays; it simply forgets at the next reload.
   }
@@ -61,10 +68,12 @@ function audioContextCtor(): AudioContextCtor | null {
 
 export function usePgmAudio(channel: number | null, engine: PgmEngine = 'A'): PgmAudio {
   const live = useLink() === 'live';
-  const [on, setOn] = useState(readOn);
+  const [preference, setPreference] = useState(readPreference);
+  const { on, volume } = preference;
   const [state, setState] = useState<PgmAudioState>('stopped');
   const [running, setRunning] = useState(false);
   const context = useRef<AudioContext | null>(null);
+  const gain = useRef<GainNode | null>(null);
 
   /** The one context, created on demand — inside the press when there is one. */
   const ensureContext = useCallback((): AudioContext | null => {
@@ -72,6 +81,11 @@ export function usePgmAudio(channel: number | null, engine: PgmEngine = 'A'): Pg
       const Ctor = audioContextCtor();
       if (Ctor === null) return null;
       context.current = new Ctor({ sampleRate: PGM_AUDIO_SAMPLE_RATE, latencyHint: 'interactive' });
+      if (typeof context.current.createGain === 'function') {
+        gain.current = context.current.createGain();
+        gain.current.gain.value = volume / 100;
+        gain.current.connect(context.current.destination);
+      }
       context.current.onstatechange = () => {
         setRunning(context.current?.state === 'running');
       };
@@ -84,15 +98,23 @@ export function usePgmAudio(channel: number | null, engine: PgmEngine = 'A'): Pg
       () => undefined,
     );
     return ctx;
-  }, []);
+  }, [volume]);
 
   const toggle = useCallback(() => {
     const next = !on;
-    writeOn(next);
+    writePreference(next, volume);
     // The press IS the gesture: the context is made (or resumed) inside it.
     if (next) ensureContext();
-    setOn(next);
-  }, [on, ensureContext]);
+    setPreference({ on: next, volume });
+  }, [on, volume, ensureContext]);
+
+  const setVolume = (value: number): void => {
+    if (!Number.isFinite(value)) return;
+    const next = Math.min(100, Math.max(0, value));
+    if (gain.current !== null) gain.current.gain.value = next / 100;
+    writePreference(on, next);
+    setPreference({ on, volume: next });
+  };
 
   /*
     Remembered ON after a reload: the browser starts sound only after a press on the page. If the page has
@@ -121,6 +143,7 @@ export function usePgmAudio(channel: number | null, engine: PgmEngine = 'A'): Pg
     const player = new PgmAudioPlayer({
       url: () => window.cg.pgmReturn.audioUrl(channel, engine),
       out: ctx as unknown as PcmOut,
+      destination: gain.current,
       onState: setState,
     });
     player.start();
@@ -133,10 +156,11 @@ export function usePgmAudio(channel: number | null, engine: PgmEngine = 'A'): Pg
     () => () => {
       void context.current?.close();
       context.current = null;
+      gain.current = null;
     },
     [],
   );
 
   const status: PgmAudioStatus = !on ? 'off' : !running ? 'waiting' : state;
-  return { on, status, toggle };
+  return { on, status, volume, toggle, setVolume };
 }

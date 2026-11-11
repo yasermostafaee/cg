@@ -774,6 +774,22 @@
   min-width: var(--r-pgm-strip-toggle);
 }
 
+.cg-pgm-volume {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.625rem;
+}
+
+.cg-pgm-volume > span {
+  display: flex;
+  justify-content: space-between;
+}
+
+.cg-pgm-volume input {
+  width: 100%;
+  margin: 0;
+}
+
 .cg-pgm-audio-select {
   height: var(--r-pgm-strip-toggle);
   min-width: 4.25rem;
