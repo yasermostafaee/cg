@@ -3,6 +3,53 @@
   "product": "APASAI CG",
   "releases": [
     {
+      "version": "1.2.2",
+      "title": {
+        "fa": "نسخهٔ ۱.۲.۲",
+        "en": "Release 1.2.2"
+      },
+      "date": "2026-11-11",
+      "status": "prepared",
+      "summary": {
+        "fa": "بستهٔ آزمایشی ویندوز برای بررسی CG Control، CG Bridge و CG Designer.",
+        "en": "Windows test package for CG Control, CG Bridge and CG Designer."
+      },
+      "features": [
+        {
+          "fa": "تنظیم تاریخ و زمان شمارش معکوس در پنجره‌ای جدا باز می‌شود و می‌توان زمان دلخواهی از اکنون تعیین کرد.",
+          "en": "Countdown targets open in a dialog with date and time controls and a custom duration from now."
+        },
+        {
+          "fa": "میان‌برهای Play، Stop و Clear برای هر لایه در تنظیمات Layers قابل تعریف‌اند.",
+          "en": "Set Play, Stop and Clear shortcuts for individual layers in Layers settings."
+        },
+        {
+          "fa": "پروفایل لایه‌ها چینش، شناسهٔ تمپلیت، داده‌ها و موقعیت را در فایل JSON ذخیره می‌کند.",
+          "en": "Layer profiles save layer assignments, template IDs, field values and positions to JSON."
+        },
+        {
+          "fa": "از Templates می‌توان فایل‌های VCG و زیرپوشه‌های مسیر Shared files را دید و بستهٔ دلخواه را وارد کرد.",
+          "en": "Browse VCG packages under the Bridge Shared files path from Templates and import a selected package."
+        },
+        {
+          "fa": "ولوم شنود PGM در هر CG Control جداگانه تنظیم می‌شود.",
+          "en": "Each CG Control console can adjust its own PGM monitor volume."
+        }
+      ],
+      "fixes": [
+        {
+          "fa": "پس از خاموش‌کردن Pan، تصویر PVW همان کراپ ذخیره‌شده را نشان می‌دهد.",
+          "en": "PVW keeps the applied crop after Pan is closed."
+        },
+        {
+          "fa": "Timing در Inspector جمع می‌شود. وضعیت باز یا بستهٔ مشخصات لایه، Position و Timing با تعویض لایه حفظ می‌شود.",
+          "en": "Timing can collapse in the Inspector. Layer details, Position and Timing keep their disclosure state when changing layers."
+        }
+      ],
+      "planned": [],
+      "downloadBaseUrl": null
+    },
+    {
       "version": "1.2.1",
       "title": {
         "fa": "نسخهٔ ۱.۲.۱",
@@ -399,22 +446,8 @@
         "fa": "آزمون‌های باقی‌مانده و قابلیت‌های در دست پیگیری در این بخش ثبت می‌شوند.",
         "en": "This section tracks outstanding acceptance checks and features still in progress."
       },
-      "features": [
-        {
-          "fa": "تنظیم تاریخ و زمان شمارش معکوس در پنجره‌ای جدا باز می‌شود و می‌توان زمان دلخواهی از اکنون تعیین کرد.",
-          "en": "Countdown targets open in a dialog with date and time controls and a custom duration from now."
-        }
-      ],
-      "fixes": [
-        {
-          "fa": "پس از خاموش‌کردن Pan، تصویر PVW همان کراپ ذخیره‌شده را نشان می‌دهد.",
-          "en": "PVW keeps the applied crop after Pan is closed."
-        },
-        {
-          "fa": "Timing در Inspector جمع می‌شود. وضعیت باز یا بستهٔ مشخصات لایه، Position و Timing با تعویض لایه حفظ می‌شود.",
-          "en": "Timing can collapse in the Inspector. Layer details, Position and Timing keep their disclosure state when changing layers."
-        }
-      ],
+      "features": [],
+      "fixes": [],
       "planned": [
         {
           "fa": "روی خروجی PGM ایستگاه Playout، نمایش عنوان و شکل روی قاب، حفظ اتصال ورودی هنگام تغییر پریست، ماسک و Revert و پس‌زمینهٔ قاب بررسی شوند.",
@@ -443,6 +476,10 @@
         {
           "fa": "اگر وضعیت دکمهٔ Play دوباره با خروجی فرق داشت، لاگ Bridge و وضعیت لایه را در همان زمان ثبت کنید.",
           "en": "If the Play indication differs from the output again, capture the contemporaneous Bridge log and layer state."
+        },
+        {
+          "fa": "جابه‌جایی و تغییر اندازهٔ خود قاب در PVW پس از هماهنگ‌کردن تصویر، عنوان، ماسک و fallback در طراحی و خروجی.",
+          "en": "Moving and resizing authored frames in PVW, with aligned input, title, mask and fallback geometry."
         }
       ],
       "downloadBaseUrl": null
