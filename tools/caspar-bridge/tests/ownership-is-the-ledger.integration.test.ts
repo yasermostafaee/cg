@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createMock, type MockHandle } from '@cg/amcp-mock';
+import { createMock, defaultHandlers, type MockHandle } from '@cg/amcp-mock';
 import type {
   ConnectionConfig,
   SourceAssignments,
@@ -273,9 +273,29 @@ describe('UPDATE-INFORCE-02 §1 — a REHEARSING row owns NO seats; only the LED
       layers". A rehearsing, never-taken row owns none.
     */
     const beforeUpdate = (await recvLines()).length;
-    expect((await r.update('item-1', { title: 'after' }, 'merge', NEW_BINDING)).accepted).toBe(
-      true,
-    );
+    let releaseUpdate: () => void = () => undefined;
+    const holdUpdate = new Promise<void>((resolve) => {
+      releaseUpdate = resolve;
+    });
+    const cg = defaultHandlers().get('CG')!;
+    mock!.setHandler('CG', async (req, ctx) => {
+      if (req.args[1] === 'UPDATE') await holdUpdate;
+      return cg(req, ctx);
+    });
+    const update = r.update('item-1', { title: 'after' }, 'merge', NEW_BINDING);
+    try {
+      await expect
+        .poll(() => r.stackSnapshot().find((item) => item.itemId === 'item-1')?.pending)
+        .toBe(true);
+      // This unrelated producer is observed only by the occupancy sweep. Its orphan verdict
+      // proves the same tick tested the rehearsal before the UPDATE's reply was released.
+      mock!.emitOsc('/channel/1/stage/layer/77/foreground/producer', ['html']);
+      await expect.poll(() => r.orphans().some(({ layer }) => layer === 77)).toBe(true);
+      expect(r.rehearseState().map(({ itemId }) => itemId)).toEqual(['item-1']);
+    } finally {
+      releaseUpdate();
+    }
+    expect((await update).accepted).toBe(true);
     expect(reaching(await since(beforeUpdate)), 'UPDATE on a rehearsing row').toEqual(NOTHING);
 
     const beforeSwap = (await recvLines()).length;

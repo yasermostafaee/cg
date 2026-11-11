@@ -30,6 +30,10 @@
           "en": "Space toggles Play and Pause in the Designer timeline. In Rehearse, it switches between Play and Stop."
         },
         {
+          "fa": "در حالت Rehearse قدیمی CG Control، Update در انتظار پاسخ پیش‌نمایش را نمی‌بندد و صدای لایه را باز نمی‌کند.",
+          "en": "In CG Control’s legacy rehearsal, a pending Update keeps the preview open and the layer muted."
+        },
+        {
           "fa": "در Layers، ستون On PVW پیش از Play قرار دارد و حذف هر آیتم از دکمهٔ همان ردیف انجام می‌شود.",
           "en": "Layers places ON PVW before Play and offers Remove on individual rows."
         },

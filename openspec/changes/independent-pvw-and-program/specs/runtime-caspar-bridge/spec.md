@@ -13,6 +13,7 @@ The independent preview entry and exit SHALL change only preview records. They S
 
 - **WHEN** a legacy client enters the original rehearsal mode
 - **THEN** the existing interlock and its volume behavior remain in force
+- **WHEN** a field Update on that rehearsing row is pending **THEN** Bridge retains the rehearsal and leaves its volume unchanged
 
 ### Requirement: A verified resident page can move on air
 

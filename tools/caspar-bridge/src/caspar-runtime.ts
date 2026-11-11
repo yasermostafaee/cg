@@ -6230,7 +6230,10 @@ export class CasparRuntime {
       // An item that has VANISHED (removed from the stack) is also no longer
       // ours to interlock. Its volume still has to be restored — the producer may
       // be gone but the mixer setting is not.
-      const live = item == null || isOnAirStatus(item);
+      // An off-air field update can be pending while its muted producer stays loaded.
+      // Only play evidence can end the interlock; a pending update must not restore volume.
+      const live =
+        item == null || item.status === 'on-air' || (item.status === 'playing' && !item.pending);
       if (!live) continue;
       process.stderr.write(
         `[caspar-bridge] rehearse on ${String(itemId)} ended: the layer went live by another ` +

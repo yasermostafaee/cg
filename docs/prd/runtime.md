@@ -5051,6 +5051,6 @@ is no verified ownership map.
 - WHEN a bound row is already playing THEN ON PVW is available and does not mute, reload, start or stop any CasparCG producer.
 - WHEN a row is on PVW and Play is pressed THEN Take uses the applied values; PVW and its draft stay available.
 - WHEN the operator edits the Inspector THEN PVW reflects the draft without sending it to air. Update on air commits it; Update on an off-air row stores it without a playout command.
-- WHEN an older Bridge does not advertise independent PVW THEN its existing rehearsal protections remain in force.
+- WHEN an older Bridge does not advertise independent PVW THEN its existing rehearsal protections remain in force. An off-air Update waiting for its reply does not end legacy rehearsal or restore its layer volume.
 - WHEN Layers shows a bound row THEN the ON PVW column precedes Play, and the toolbar offers Stop All and Clear All. Row Remove remains available under its existing guard.
 - WHEN a row is confirmed on air on a single-primary station with a supported resident page and no Live Source plates THEN its Position anchor and offsets can be drafted in PVW. Update on air carries them with the field update and moves the resident page in place. Unsupported pages, rows with Live Source plates and stations with a configured backup keep their on-air Position lock.
