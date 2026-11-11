@@ -111,19 +111,43 @@ function handedOn(): ImageSequenceSource {
   return call[0];
 }
 
+function selectResize(): void {
+  const select = document.querySelector<HTMLSelectElement>('select[aria-label="Frame sizes"]')!;
+  act(() => {
+    select.value = 'resize';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+}
+
+function dimension(label: string): HTMLInputElement {
+  return document.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
+}
+
+function typeDimension(label: string, value: string): void {
+  const input = dimension(label);
+  act(() => {
+    input.focus();
+    const setVal = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    setVal.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+
 describe('D-164 — the image-sequence step', () => {
   it('🔴 a gap and a frame of another size are NAMED before converting; Continue holds both', async () => {
     // f3 is missing; f4 is 32×32 against the sequence's 64×64.
     await open([png('f5.png'), png('f1.png'), png('f4.png', 32, 32), png('f2.png')]);
     expect(text('sequence-missing')).toContain('f3.png');
     expect(text('sequence-size')).toContain('f4.png (32×32)');
-    expect(text('sequence-size')).toContain('Not 64×64');
+    expect(text('sequence-size')).toContain('3 of 4 readable frames match 64×64');
+    expect(text('sequence-size')).toContain('Different sizes (1)');
     expect(text('sequence-summary')).toContain('64×64');
 
     await act(async () => {
       button('Continue').click();
     });
     const source = handedOn();
+    expect(source.normalization).toBeUndefined();
     // One frame per number 1…5: the gap (3) and the odd frame (4) both hold f2.
     expect(source.frames.map((f) => f.name)).toEqual([
       'f1.png',
@@ -140,6 +164,63 @@ describe('D-164 — the image-sequence step', () => {
       lastFile: 'f5.png',
       assetName: 'f.webm',
     });
+  });
+
+  it('defaults resize to the first readable frame, keeps every readable picture and holds gaps', async () => {
+    await open([
+      png('f5.png'),
+      new File([new Uint8Array(24)], 'f1.png'),
+      png('f2.png', 48, 32),
+      png('f4.png'),
+      png('f6.png'),
+    ]);
+    expect(text('sequence-size')).toContain('3 of 4 readable frames match 64×64');
+    selectResize();
+    expect(dimension('Output width').value).toBe('48');
+    expect(dimension('Output height').value).toBe('32');
+    typeDimension('Output width', '80');
+    typeDimension('Output height', '96');
+    expect(text('sequence-summary')).toContain('80×96');
+    act(() => button('Continue').click());
+    const source = handedOn();
+    expect(source.normalization).toEqual({ width: 80, height: 96, fit: 'contain' });
+    expect(source.frames.map((file) => file.name)).toEqual([
+      'f2.png',
+      'f2.png',
+      'f2.png',
+      'f4.png',
+      'f5.png',
+      'f6.png',
+    ]);
+  });
+
+  it('refuses output plans over budget even though each normalized frame fits', async () => {
+    const files = Array.from({ length: 200 }, (_, index) => png(`f${String(index + 1)}.png`));
+    files[0] = png('f1.png', 48, 32);
+    await open(files);
+    selectResize();
+    typeDimension('Output width', '7680');
+    typeDimension('Output height', '4320');
+    expect(text('sequence-too-large')).toContain('200 frames of 7680×4320');
+    expect(button('Continue').disabled).toBe(true);
+    act(() => button('Continue').click());
+    expect(onContinue).not.toHaveBeenCalled();
+  });
+
+  it('refuses an oversized source before opening the converter in Resize mode', async () => {
+    await open([png('f1.png'), png('f2.png', 7000, 5000), png('f3.png')]);
+    expect(button('Continue').disabled).toBe(false);
+    selectResize();
+    expect(text('sequence-too-large')).toContain('f2.png exceeds the 8K UHD frame pixel limit');
+    expect(button('Continue').disabled).toBe(true);
+  });
+
+  it('rejects a target dimension beyond the VP8 limit even for a narrow output', async () => {
+    await open([png('f1.png'), png('f2.png', 32, 32)]);
+    selectResize();
+    typeDimension('Output width', '20000');
+    expect(text('sequence-too-large')).toContain('16383 px per side');
+    expect(button('Continue').disabled).toBe(true);
   });
 
   it('a whole sequence reports no problem at all (the control)', async () => {

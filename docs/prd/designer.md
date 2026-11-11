@@ -5784,9 +5784,14 @@ copied), 58–130 s for 300 frames on an i5-10400, and a white alpha ramp decode
 white. **Acceptance:** WHEN `f1 … f300` (or `f۱ … f۳۰۰`) are picked THEN one video of 300 frames in natural order;
 WHEN `f7` is missing or `f12` is 1280 × 720 among 1920 × 1080 THEN the modal names it before converting and the author
 continues or cancels; WHEN a folder holds `a_*` and `b_*` THEN the modal lists both and converts the one picked; WHEN
-the same folder is imported twice with the same rate and crop THEN the second skips the encode; WHEN the author cancels
+the same folder is imported twice with the same rate, crop and size options THEN the second skips the encode; WHEN the author cancels
 THEN the project is unchanged; WHEN the imported element is on the timeline THEN it behaves as any video (phases, hold,
 scrub); WHEN its alpha ramp is shown over black and over white THEN no fringe.
+
+**Mixed frame sizes** (`openspec/changes/normalize-image-sequence-size/`): show how many images match the
+sequence size and how many differ. The author can keep the matching images and hold their frames at mismatches,
+or resize all readable frames to one editable width and height, initialized from the first readable frame in
+sequence order. Resize preserves the aspect ratio of each picture and fills unused space with transparent pixels.
 
 ## [x] D-165 — sound effects that play with a template's entrance and exit ⟨priority: high — the owner, 2026-10-14⟩ — FILED 2026-10-14 by `AUDIO-ELEMENT-01` · `openspec/changes/archive/2026-10-21-add-audio-element/`
 

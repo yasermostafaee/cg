@@ -9,6 +9,7 @@ import {
   findDuplicateVideoAsset,
   isImageSequence,
   matchesConversionParams,
+  parseProbeLog,
   sequenceFrameName,
   sequenceInput,
   sourceByteSize,
@@ -37,6 +38,7 @@ const seq = (fps = 25): ImageSequenceSource => ({
   firstFile: 'f_1.png',
   lastFile: 'f_10.png',
 });
+const normalization = { width: 320, height: 180, fit: 'contain' } as const;
 
 describe('D-164 — the image2 input', () => {
   it('frames are mounted 000001.png … in the order they arrive', () => {
@@ -93,6 +95,70 @@ describe('D-164 — the image2 input', () => {
       'image2',
       '/poster.png',
     ]);
+  });
+
+  it('normalizes frames before any crop or alpha correction and uses the same canvas for the poster', () => {
+    const { inputPath, inputOptions } = sequenceInput({ ...seq(), normalization }, '/mnt');
+    expect(inputOptions).toContain('-reinit_filter');
+    expect(inputOptions[inputOptions.indexOf('-reinit_filter') + 1]).toBe('0');
+    expect(inputOptions).toContain('-max_pixels');
+    const args = buildConvertArgs({
+      inputPath,
+      inputOptions,
+      outputPath: '/out.webm',
+      targetFps: 25,
+      sequenceNormalization: normalization,
+      crop: { x: 4, y: 6, width: 120, height: 80 },
+      alphaBleed: true,
+    });
+    const posterArgs = buildPosterArgs(
+      inputPath,
+      '/poster.png',
+      0.04,
+      inputOptions,
+      undefined,
+      'standard',
+      normalization,
+    );
+    const posterFilter = posterArgs[posterArgs.indexOf('-vf') + 1];
+    expect(posterFilter).toContain(
+      'format=rgba,pad=320:180:(ow-iw)/2:(oh-ih)/2:color=black@0:eval=frame',
+    );
+    expect(args[args.indexOf('-filter_complex') + 1]).toContain(
+      `${posterFilter},crop=120:80:4:6,format=rgba,split=3`,
+    );
+    expect(args).toContain('-xerror');
+    expect(args).toContain('yuva420p');
+  });
+
+  it('checks the target raster and the full normalized pixel budget', () => {
+    expect(() =>
+      sequenceInput(
+        {
+          ...seq(),
+          normalization: { ...normalization, width: 16384, height: 1 },
+        },
+        '/mnt',
+      ),
+    ).toThrow('resize limits');
+    expect(() =>
+      sequenceInput(
+        {
+          ...seq(),
+          frames: Array<File>(200).fill(frame('f_1.png', 100)),
+          normalization: { ...normalization, width: 7680, height: 4320 },
+        },
+        '/mnt',
+      ),
+    ).toThrow('resize limits');
+  });
+
+  it('probes source sizes with a single-digit axis', () => {
+    expect(parseProbeLog(['Stream #0:0: Video: png, rgba(pc), 5x64, 25 fps'])).toMatchObject({
+      width: 5,
+      height: 64,
+      fps: 25,
+    });
   });
 
   it("progress in FRAMES is read from ffmpeg's own line", () => {
@@ -181,5 +247,26 @@ describe('D-164 — dedupe and provenance', () => {
     const old = buildProvenance({ sourceFilename: 'intro.avi', probe, targetFps: 50 });
     expect('sequence' in old).toBe(false);
     expect(VideoProvenanceSchema.safeParse(old).success).toBe(true);
+  });
+
+  it('matches the exact normalized target and keeps legacy sequence dedupe distinct', () => {
+    const storedSequence = sourceSequenceProvenance({ ...seq(), normalization });
+    expect(storedSequence?.normalization).toEqual(normalization);
+    const normalized = { ...p, sequence: storedSequence };
+    expect(VideoProvenanceSchema.parse(normalized).sequence?.normalization).toEqual(normalization);
+    const match = { targetFps: 50, crop: undefined, sequenceFps: 25 };
+    expect(
+      matchesConversionParams(normalized, { ...match, sequenceNormalization: normalization }),
+    ).toBe(true);
+    expect(matchesConversionParams(normalized, match)).toBe(false);
+    expect(matchesConversionParams(p, { ...match, sequenceNormalization: normalization })).toBe(
+      false,
+    );
+    expect(
+      matchesConversionParams(normalized, {
+        ...match,
+        sequenceNormalization: { ...normalization, height: 200 },
+      }),
+    ).toBe(false);
   });
 });

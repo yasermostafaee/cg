@@ -135,6 +135,13 @@ export const VideoProvenanceSchema = z.object({
       lastFile: z.string().min(1),
       frameCount: z.number().int().positive(),
       fps: z.number().positive(),
+      normalization: z
+        .object({
+          width: z.number().int().positive(),
+          height: z.number().int().positive(),
+          fit: z.literal('contain'),
+        })
+        .optional(),
     })
     .optional(),
 });

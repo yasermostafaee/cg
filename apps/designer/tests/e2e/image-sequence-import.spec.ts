@@ -41,28 +41,18 @@ function chunk(type: string, data: Buffer): Buffer {
 /** The ramp's alpha at column `x`: 255 at the left edge, 0 at the right. */
 const rampAlpha = (x: number): number => Math.round(255 * (1 - x / (SIZE - 1)));
 
-/**
- * A 64×64 RGBA PNG: the white ramp, plus (when `mark` is given) an opaque black 4×4 square in the
- * bottom rows at `x = mark * 4`, so each frame is its own picture.
- */
-function rampPng(mark?: number): Buffer {
+type Pixel = readonly [number, number, number, number];
+
+function rgbaPng(width: number, height: number, pixel: (x: number, y: number) => Pixel): Buffer {
   const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(SIZE, 0);
-  ihdr.writeUInt32BE(SIZE, 4);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
   ihdr.writeUInt8(8, 8); // bit depth
   ihdr.writeUInt8(6, 9); // RGBA
-  const raw = Buffer.alloc(SIZE * (1 + SIZE * 4));
-  for (let y = 0; y < SIZE; y++) {
-    const row = y * (1 + SIZE * 4);
-    raw[row] = 0; // filter: none
-    for (let x = 0; x < SIZE; x++) {
-      const at = row + 1 + x * 4;
-      const inMark = mark !== undefined && y >= SIZE - 4 && x >= mark * 4 && x < mark * 4 + 4;
-      raw[at] = inMark ? 0 : 255;
-      raw[at + 1] = inMark ? 0 : 255;
-      raw[at + 2] = inMark ? 0 : 255;
-      raw[at + 3] = inMark ? 255 : rampAlpha(x);
-    }
+  const rowBytes = 1 + width * 4;
+  const raw = Buffer.alloc(height * rowBytes); // row filter bytes stay 0
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) raw.set(pixel(x, y), y * rowBytes + 1 + x * 4);
   }
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
@@ -70,6 +60,14 @@ function rampPng(mark?: number): Buffer {
     chunk('IDAT', deflateSync(raw)),
     chunk('IEND', Buffer.alloc(0)),
   ]);
+}
+
+/** A white alpha ramp, with a distinct opaque black mark on each numbered frame. */
+function rampPng(mark?: number): Buffer {
+  return rgbaPng(SIZE, SIZE, (x, y) => {
+    const inMark = mark !== undefined && y >= SIZE - 4 && x >= mark * 4 && x < mark * 4 + 4;
+    return inMark ? [0, 0, 0, 255] : [255, 255, 255, rampAlpha(x)];
+  });
 }
 
 async function openAddMenu(page: Page, item: string): Promise<void> {
@@ -203,6 +201,113 @@ test.describe('D-164 — a numbered image sequence imports as ONE video layer', 
       await expect(
         page.frameLocator('iframe[title="cgpreview"]').locator('video[data-cg-asset-id]'),
       ).toBeAttached({ timeout: 15_000 });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('a mixed-size PNG sequence fits into the selected output with alpha and keeps each picture in order', async ({
+    app,
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const files = [
+      { name: 'mixed_01.png', buffer: rgbaPng(64, 32, () => [240, 24, 24, 255]) },
+      { name: 'mixed_02.png', buffer: rgbaPng(32, 64, () => [24, 240, 24, 255]) },
+      { name: 'mixed_03.png', buffer: rgbaPng(64, 64, () => [24, 24, 240, 128]) },
+    ].map((file) => ({ ...file, mimeType: 'image/png' }));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-pngseq-mixed-'));
+    try {
+      for (const file of files) fs.writeFileSync(path.join(dir, file.name), file.buffer);
+      await app.newProject('Mixed PNG sequence');
+      await app.setSceneDuration(250);
+      await page.getByRole('button', { name: 'Project assets' }).click();
+
+      const step = page.getByRole('dialog', { name: 'Image sequence', exact: true });
+      const convert = page.getByRole('dialog', { name: 'Import image sequence', exact: true });
+      const width = step.getByRole('spinbutton', { name: 'Output width' });
+      const height = step.getByRole('spinbutton', { name: 'Output height' });
+      async function chooseOutput(outputWidth: number): Promise<void> {
+        await expect(step.getByTestId('sequence-size')).toContainText(
+          '1 of 3 readable frames match 64×32. Different sizes (2)',
+        );
+        await step.getByRole('combobox', { name: 'Frame sizes' }).selectOption('resize');
+        await expect(width).toHaveValue('64');
+        await expect(height).toHaveValue('32');
+        await width.fill(String(outputWidth));
+        await height.fill('80');
+        await step.getByRole('spinbutton', { name: 'Frame rate' }).fill('2');
+        await step.getByRole('button', { name: 'Continue', exact: true }).click();
+        await expect(convert.getByTestId('video-probe-meta')).toContainText(`${outputWidth}×80`);
+        await convert.getByRole('button', { name: 'Convert & import' }).click();
+      }
+
+      let chooser = page.waitForEvent('filechooser');
+      await openAddMenu(page, 'Image sequence folder…');
+      await (await chooser).setFiles(dir);
+      await chooseOutput(80);
+      await convert.getByRole('button', { name: 'Place element' }).click({ timeout: 30_000 });
+      await expect(convert).not.toBeAttached();
+
+      const video = app.canvasFrame.locator('video[data-cg-element-id]');
+      const readPixels = () =>
+        video.evaluate((media: HTMLVideoElement) => {
+          if (media.readyState < 2 || media.seeking) return null;
+          const canvas = document.createElement('canvas');
+          canvas.width = media.videoWidth;
+          canvas.height = media.videoHeight;
+          const context = canvas.getContext('2d')!;
+          context.drawImage(media, 0, 0);
+          function sample(x: number, y: number): string {
+            const [r = 0, g = 0, b = 0, a = 0] = context.getImageData(x, y, 1, 1).data;
+            if (a < 8) return 'transparent';
+            if (r > 160 && g < 64 && b < 64 && a > 245) return 'red';
+            if (g > 160 && r < 64 && b < 64 && a > 245) return 'green';
+            if (b > 160 && r < 64 && g < 64 && a > 116 && a < 140) return 'half-blue';
+            return [r, g, b, a].join(',');
+          }
+          return {
+            size: [media.videoWidth, media.videoHeight],
+            center: sample(40, 40),
+            top: sample(40, 8),
+            left: sample(8, 40),
+          };
+        });
+      for (const sample of [
+        { frame: 12, center: 'red', top: 'transparent', left: 'red' },
+        { frame: 37, center: 'green', top: 'green', left: 'transparent' },
+        { frame: 62, center: 'half-blue', top: 'half-blue', left: 'half-blue' },
+      ]) {
+        const { frame, ...pixels } = sample;
+        await app.scrubToFrame(frame);
+        await expect.poll(readPixels).toEqual({ size: [80, 80], ...pixels });
+      }
+
+      // Selecting the files directly uses the same size settings in the duplicate key.
+      chooser = page.waitForEvent('filechooser');
+      await openAddMenu(page, 'Image sequence…');
+      await (await chooser).setFiles(files);
+      await chooseOutput(80);
+      await expect(convert.getByRole('button', { name: 'Use existing' })).toBeVisible();
+      await convert.getByRole('button', { name: 'Use existing' }).click();
+      await expect(convert).not.toBeAttached();
+
+      chooser = page.waitForEvent('filechooser');
+      await openAddMenu(page, 'Image sequence…');
+      await (await chooser).setFiles(files);
+      await chooseOutput(96);
+      await convert.getByRole('button', { name: 'Place element' }).click({ timeout: 30_000 });
+      await expect(convert).not.toBeAttached();
+      const settings = await page.evaluate(async () =>
+        (await window.cg.assets.list())
+          .filter((asset) => asset.kind === 'video')
+          .map((asset) => asset.provenance?.sequence?.normalization)
+          .sort((a, b) => (a?.width ?? 0) - (b?.width ?? 0)),
+      );
+      expect(settings).toEqual([
+        { width: 80, height: 80, fit: 'contain' },
+        { width: 96, height: 80, fit: 'contain' },
+      ]);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

@@ -64,6 +64,7 @@ import {
   posterTimeMs,
   sequenceFrameName,
   sequenceInput,
+  sequenceNormalizationFilter,
   type CropRect,
   type PixelAspectMode,
   type SourceProbe,
@@ -226,6 +227,7 @@ async function mountSource(
   }
   const workerfs = 'WORKERFS' as Parameters<FFmpeg['mount']>[0];
   if (isImageSequence(source)) {
+    const input = sequenceInput(source, MOUNT_DIR);
     await ff.mount(
       workerfs,
       {
@@ -236,7 +238,7 @@ async function mountSource(
       },
       MOUNT_DIR,
     );
-    return sequenceInput(source, MOUNT_DIR);
+    return input;
   }
   await ff.mount(workerfs, { files: [source] }, MOUNT_DIR);
   return { inputPath: `${MOUNT_DIR}/${source.name}`, inputOptions: [] };
@@ -297,13 +299,25 @@ export async function probeSource(
       // "no-stream" — blaming a perfectly good file for our own crash.
       await withLogCapture(ff, lines, () => ff.exec([...inputOptions, '-i', input]));
       throwIfAborted(signal);
-      const probe = parseProbeLog(lines);
-      if (probe === null) {
+      const sourceProbe = parseProbeLog(lines);
+      if (sourceProbe === null) {
         // No parseable video stream — and quite possibly a hard ffmpeg abort
         // that tainted the wasm runtime. Never cache a maybe-dead worker.
         dropWorker(ff);
         return { ok: false as const, reason: 'no-stream' as const, logTail: lines.slice(-8) };
       }
+      const sequence = isImageSequence(file) ? file : undefined;
+      const normalization = sequence?.normalization;
+      const probe: SourceProbe =
+        sequence !== undefined && normalization !== undefined
+          ? {
+              ...sourceProbe,
+              width: normalization.width,
+              height: normalization.height,
+              durationMs: (sequence.frames.length * 1000) / sequence.fps,
+              sampleAspectRatio: undefined,
+            }
+          : sourceProbe;
       let posterUrl: string | null = null;
       const posterPath = '/poster.png';
       const posterLines: string[] = [];
@@ -313,7 +327,15 @@ export async function probeSource(
       const posterSec = probe.durationMs > 0 ? posterTimeMs(probe.durationMs) / 1000 : undefined;
       const posterCode = await withLogCapture(ff, posterLines, () =>
         ff.exec(
-          buildPosterArgs(input, posterPath, posterSec, inputOptions, probe.sampleAspectRatio),
+          buildPosterArgs(
+            input,
+            posterPath,
+            posterSec,
+            inputOptions,
+            probe.sampleAspectRatio,
+            'standard',
+            normalization,
+          ),
         ),
       );
       if (posterCode === 0) {
@@ -418,7 +440,7 @@ export interface AlphaStats {
   semiSampled: number;
 }
 
-function statsOfRgba(buffers: readonly Uint8Array[]): AlphaStats {
+function rgbaSampler() {
   let maxA = 0;
   let sum = 0;
   let nonTransparent = 0;
@@ -426,7 +448,7 @@ function statsOfRgba(buffers: readonly Uint8Array[]): AlphaStats {
   let n = 0;
   let semi = 0;
   let straightEvidence = 0;
-  for (const buf of buffers) {
+  const add = (buf: Uint8Array): void => {
     for (let i = 3; i < buf.length; i += 4) {
       const a = buf[i] as number;
       n++;
@@ -442,15 +464,21 @@ function statsOfRgba(buffers: readonly Uint8Array[]): AlphaStats {
         if (r > a + 2 || g > a + 2 || b > a + 2) straightEvidence++;
       }
     }
-  }
+  };
   return {
-    maxA,
-    meanA: n > 0 ? sum / n : 0,
-    nonTransparentFrac: n > 0 ? nonTransparent / n : 0,
-    opaqueFrac: n > 0 ? opaque / n : 0,
-    sampled: n,
-    straightEvidenceFrac: semi > 0 ? straightEvidence / semi : 1,
-    semiSampled: semi,
+    add,
+    result: (): AlphaStats | null =>
+      n === 0
+        ? null
+        : {
+            maxA,
+            meanA: sum / n,
+            nonTransparentFrac: nonTransparent / n,
+            opaqueFrac: opaque / n,
+            sampled: n,
+            straightEvidenceFrac: semi > 0 ? straightEvidence / semi : 1,
+            semiSampled: semi,
+          },
   };
 }
 
@@ -491,7 +519,11 @@ export async function sampleSourceAlpha(
       held = await ensureLoaded();
       const ff = held;
       const { inputPath: input, inputOptions } = await mountSource(ff, file);
-      const buffers: Uint8Array[] = [];
+      // Count each decoded frame immediately so large source/target canvases
+      // only require one RGBA sample buffer at a time.
+      const samples = rgbaSampler();
+      const normalization = isImageSequence(file) ? file.normalization : undefined;
+      const filter = normalization ? ['-vf', sequenceNormalizationFilter(normalization)] : [];
       const times =
         durationMs > 0 ? ALPHA_SAMPLE_FRACTIONS.map((f) => f * (durationMs / 1000)) : [0];
       for (const t of times) {
@@ -503,6 +535,7 @@ export async function sampleSourceAlpha(
           ...seek,
           '-i',
           input,
+          ...filter,
           '-frames:v',
           '1',
           '-f',
@@ -514,7 +547,7 @@ export async function sampleSourceAlpha(
         if (code === 0) {
           const data = await ff.readFile(out);
           await ff.deleteFile(out).catch(() => undefined);
-          if (typeof data !== 'string') buffers.push(data);
+          if (typeof data !== 'string') samples.add(data);
         }
       }
       try {
@@ -522,7 +555,7 @@ export async function sampleSourceAlpha(
       } catch {
         /* nothing mounted */
       }
-      return buffers.length > 0 ? statsOfRgba(buffers) : null;
+      return samples.result();
     } catch (err) {
       console.warn('[video-convert] source alpha sampling failed (non-fatal):', err);
       if (held !== null) dropWorker(held);
@@ -570,7 +603,7 @@ export function sampleOutputAlphaStats(bytes: Uint8Array): Promise<AlphaStats | 
             return;
           }
           const dur = Number.isFinite(v.duration) ? v.duration : 0;
-          const buffers: Uint8Array[] = [];
+          const samples = rgbaSampler();
           // The SHARED fraction set — the source profiler reads the same points,
           // so the source/output comparison is frame-honest (see the const's doc).
           for (const frac of ALPHA_SAMPLE_FRACTIONS) {
@@ -587,11 +620,11 @@ export function sampleOutputAlphaStats(bytes: Uint8Array): Promise<AlphaStats | 
             }
             ctx.clearRect(0, 0, c.width, c.height);
             ctx.drawImage(v, 0, 0, c.width, c.height);
-            buffers.push(new Uint8Array(ctx.getImageData(0, 0, c.width, c.height).data.buffer));
+            samples.add(new Uint8Array(ctx.getImageData(0, 0, c.width, c.height).data.buffer));
             if (dur <= 0) break;
           }
           clearTimeout(timer);
-          finish(buffers.length > 0 ? statsOfRgba(buffers) : null);
+          finish(samples.result());
         } catch {
           clearTimeout(timer);
           finish(null);
@@ -827,6 +860,9 @@ export async function convertToWebm(opts: {
               colorInterpretation: opts.colorInterpretation,
               premultipliedAlpha: opts.premultipliedAlpha,
               alphaBleed: opts.alphaBleed,
+              sequenceNormalization: isImageSequence(opts.file)
+                ? opts.file.normalization
+                : undefined,
             }),
           ),
         );

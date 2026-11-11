@@ -134,6 +134,7 @@ export function VideoImportModal(props: {
   const sequence = isImageSequence(props.file) ? props.file : null;
   const sourceName = sourceDisplayName(props.file);
   const sequenceFps = sourceSequenceFps(props.file);
+  const sequenceNormalization = sequence?.normalization;
   const [phase, setPhase] = useState<Phase>({ kind: 'probing' });
   // `D-164` — frames encoded so far (ffmpeg's own count), for a sequence's progress in frames.
   const [encodedFrames, setEncodedFrames] = useState(0);
@@ -289,6 +290,7 @@ export function VideoImportModal(props: {
           premultipliedAlpha,
           alphaBleed,
           sequenceFps,
+          sequenceNormalization,
         })
       : null;
   useEffect(() => {
@@ -402,6 +404,7 @@ export function VideoImportModal(props: {
           premultipliedAlpha,
           alphaBleed,
           sequenceFps,
+          sequenceNormalization,
         }),
     );
     if (!duplicatePossible) {
@@ -440,6 +443,7 @@ export function VideoImportModal(props: {
       premultipliedAlpha,
       alphaBleed,
       sequenceFps,
+      sequenceNormalization,
     });
     if (existing !== null) {
       // The specific matching asset is recomputed LIVE in render (Bug 4) — carry

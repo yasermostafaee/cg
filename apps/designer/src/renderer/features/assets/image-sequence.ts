@@ -95,6 +95,24 @@ export const MAX_SEQUENCE_FRAMES = 30_000;
  */
 export const MAX_SEQUENCE_PIXELS = 3_000 * 1920 * 1080;
 
+/** Bound each decoded or normalized frame to the pixel area of 8K UHD. */
+export const MAX_NORMALIZATION_FRAME_PIXELS = 7680 * 4320;
+
+/** VP8 stores each output dimension in 14 bits. */
+export const MAX_NORMALIZATION_DIMENSION = 16_383;
+
+export function validNormalizationSize(width: number, height: number): boolean {
+  return (
+    Number.isSafeInteger(width) &&
+    Number.isSafeInteger(height) &&
+    width > 0 &&
+    height > 0 &&
+    width <= MAX_NORMALIZATION_DIMENSION &&
+    height <= MAX_NORMALIZATION_DIMENSION &&
+    width * height <= MAX_NORMALIZATION_FRAME_PIXELS
+  );
+}
+
 /** Whether converting `frames` frames of `width` × `height` is over {@link MAX_SEQUENCE_PIXELS}. */
 export function overConvertBudget(frames: number, width: number, height: number): boolean {
   return frames * width * height > MAX_SEQUENCE_PIXELS;

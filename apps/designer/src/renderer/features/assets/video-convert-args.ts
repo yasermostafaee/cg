@@ -6,6 +6,11 @@
  */
 
 import type { VideoProvenance } from '@cg/shared-ipc';
+import {
+  MAX_NORMALIZATION_FRAME_PIXELS,
+  overConvertBudget,
+  validNormalizationSize,
+} from './image-sequence.js';
 
 /** A crop rect in SOURCE pixels (the modal's opt-in crop). */
 export interface CropRect {
@@ -189,10 +194,13 @@ function geometryStages(
   sampleAspectRatio: SourceProbe['sampleAspectRatio'],
   pixelAspectMode: PixelAspectMode = 'source',
   colorInterpretation: VideoColorInterpretation = 'standard',
+  normalization?: SequenceNormalization,
 ): string[] {
   const stages: string[] = [];
+  if (normalization !== undefined) stages.push(sequenceNormalizationFilter(normalization));
   if (crop !== undefined) stages.push(`crop=${crop.width}:${crop.height}:${crop.x}:${crop.y}`);
   if (
+    normalization === undefined &&
     sampleAspectRatio !== undefined &&
     sampleAspectRatio.numerator !== sampleAspectRatio.denominator
   ) {
@@ -215,14 +223,11 @@ function geometryStages(
 }
 
 function buildAlphaGraph(
-  crop: CropRect | undefined,
+  geometryChain: string,
   premultiplied: boolean,
-  sampleAspectRatio: SourceProbe['sampleAspectRatio'],
-  pixelAspectMode: PixelAspectMode,
   colorInterpretation: VideoColorInterpretation,
 ): string {
-  const geometry = geometryStages(crop, sampleAspectRatio, pixelAspectMode, colorInterpretation);
-  const geometryStage = geometry.length > 0 ? `${geometry.join(',')},` : '';
+  const geometryStage = geometryChain !== '' ? `${geometryChain},` : '';
   const bleedBranch = premultiplied
     ? `[fb]boxblur=12:2,${GEQ_BLED_OPAQUE}[bled]`
     : `[fb]${GEQ_PREMULT},boxblur=12:2,${GEQ_BLED_OPAQUE}[bled]`;
@@ -273,6 +278,7 @@ export function buildConvertArgs(opts: {
   colorInterpretation?: VideoColorInterpretation | undefined;
   premultipliedAlpha?: boolean | undefined;
   alphaBleed?: boolean | undefined;
+  sequenceNormalization?: SequenceNormalization | undefined;
 }): string[] {
   const premultiplied = opts.premultipliedAlpha === true;
   const bleed = opts.alphaBleed === true;
@@ -283,17 +289,12 @@ export function buildConvertArgs(opts: {
     opts.sampleAspectRatio,
     pixelAspectMode,
     colorInterpretation,
+    opts.sequenceNormalization,
   ).join(',');
   const filterArgs: string[] = bleed
     ? [
         '-filter_complex',
-        buildAlphaGraph(
-          opts.crop,
-          premultiplied,
-          opts.sampleAspectRatio,
-          pixelAspectMode,
-          colorInterpretation,
-        ),
+        buildAlphaGraph(geometryChain, premultiplied, colorInterpretation),
         '-map',
         '[out]',
       ]
@@ -308,6 +309,9 @@ export function buildConvertArgs(opts: {
   const mapArgs = bleed ? [] : ['-map', '0:v:0'];
   return [
     '-y',
+    // A frame whose header looked valid can still fail to decode. Do not produce a
+    // shortened normalized clip after silently dropping that frame.
+    ...(opts.sequenceNormalization !== undefined ? ['-xerror'] : []),
     ...(opts.inputOptions ?? []),
     '-i',
     opts.inputPath,
@@ -343,6 +347,25 @@ export interface ImageSequenceSource {
   /** The sequence's first and last file names, as picked — for provenance. */
   readonly firstFile: string;
   readonly lastFile: string;
+  /** Opt-in: fit each decoded frame inside this transparent canvas before cropping. */
+  readonly normalization?: SequenceNormalization;
+}
+
+export type SequenceNormalization = NonNullable<
+  NonNullable<VideoProvenance['sequence']>['normalization']
+>;
+
+export function sequenceNormalizationFilter({ width, height }: SequenceNormalization): string {
+  // Scale and pad evaluate with the current frame's dimensions. Pin RGBA between
+  // them so even an opaque first frame gets transparent padding, and so changes
+  // between RGB and RGBA inputs do not reach the rest of the filter graph.
+  const factor = `min(${String(width)}/iw\\,${String(height)}/ih)`;
+  return [
+    `scale=w=max(1\\,round(${factor}*iw)):h=max(1\\,round(${factor}*ih)):eval=frame`,
+    'format=rgba',
+    `pad=${String(width)}:${String(height)}:(ow-iw)/2:(oh-ih)/2:color=black@0:eval=frame`,
+    'setsar=1',
+  ].join(',');
 }
 
 /** What the converter takes: a picked clip, or (`D-164`) a numbered image sequence. */
@@ -362,12 +385,25 @@ export function sequenceFrameName(index: number, ext: ImageSequenceSource['ext']
  * — its rate (`-framerate`, not `-r`, which would RE-time the input) and where its numbering starts.
  */
 export function sequenceInput(
-  seq: Pick<ImageSequenceSource, 'ext' | 'fps'>,
+  seq: ImageSequenceSource,
   dir: string,
 ): { inputPath: string; inputOptions: string[] } {
+  const inputOptions = ['-framerate', String(seq.fps), '-start_number', '1'];
+  if (seq.normalization !== undefined) {
+    const { width, height } = seq.normalization;
+    if (
+      !validNormalizationSize(width, height) ||
+      overConvertBudget(seq.frames.length, width, height)
+    ) {
+      throw new Error('Image sequence exceeds the resize limits.');
+    }
+    // FFmpeg otherwise restarts the entire graph on a dimension or pixel-format
+    // change and can discard frames already queued downstream of scale/pad.
+    inputOptions.push('-reinit_filter', '0', '-max_pixels', String(MAX_NORMALIZATION_FRAME_PIXELS));
+  }
   return {
     inputPath: `${dir}/%06d.${seq.ext}`,
-    inputOptions: ['-framerate', String(seq.fps), '-start_number', '1'],
+    inputOptions,
   };
 }
 
@@ -406,6 +442,7 @@ export function sourceSequenceProvenance(
     lastFile: source.lastFile,
     frameCount: source.frames.length,
     fps: source.fps,
+    ...(source.normalization !== undefined ? { normalization: source.normalization } : {}),
   };
 }
 
@@ -425,9 +462,16 @@ export function buildPosterArgs(
   inputOptions: readonly string[] = [],
   sampleAspectRatio?: SourceProbe['sampleAspectRatio'],
   colorInterpretation: VideoColorInterpretation = 'standard',
+  normalization?: SequenceNormalization,
 ): string[] {
   const seek = atSec !== undefined && atSec > 0 ? ['-ss', atSec.toFixed(3)] : [];
-  const geometry = geometryStages(undefined, sampleAspectRatio, 'source', colorInterpretation);
+  const geometry = geometryStages(
+    undefined,
+    sampleAspectRatio,
+    'source',
+    colorInterpretation,
+    normalization,
+  );
   return [
     '-y',
     ...inputOptions,
@@ -539,7 +583,7 @@ export function parseProbeLog(lines: readonly string[]): SourceProbe | null {
         codec = stream[1];
         pixelFormat = stream[2];
       }
-      const dims = /,\s*(\d{2,5})x(\d{2,5})(?:\s*\[|,|\s*$)/.exec(line);
+      const dims = /,\s*(\d{1,5})x(\d{1,5})(?:\s*\[|,|\s*$)/.exec(line);
       if (dims !== null) {
         width = Number(dims[1]);
         height = Number(dims[2]);
@@ -678,8 +722,11 @@ export function matchesConversionParams(
      * frames at 25 and at 50 are two different clips, and a clip never matches a sequence.
      */
     sequenceFps?: number | undefined;
+    sequenceNormalization?: SequenceNormalization | undefined;
   },
 ): boolean {
+  const storedNormalization = p.sequence?.normalization;
+  const normalization = match.sequenceNormalization;
   return (
     p.converterRevision === CONVERTER_REVISION &&
     p.targetFps === match.targetFps &&
@@ -688,7 +735,10 @@ export function matchesConversionParams(
     (p.colorInterpretation ?? 'standard') === (match.colorInterpretation ?? 'standard') &&
     (p.premultipliedAlpha === true) === (match.premultipliedAlpha === true) &&
     (p.alphaBleed === true) === (match.alphaBleed === true) &&
-    (p.sequence?.fps ?? null) === (match.sequenceFps ?? null)
+    (p.sequence?.fps ?? null) === (match.sequenceFps ?? null) &&
+    storedNormalization?.width === normalization?.width &&
+    storedNormalization?.height === normalization?.height &&
+    storedNormalization?.fit === normalization?.fit
   );
 }
 
@@ -705,6 +755,7 @@ export function findDuplicateVideoAsset<
     premultipliedAlpha?: boolean;
     alphaBleed?: boolean;
     sequenceFps?: number | undefined;
+    sequenceNormalization?: SequenceNormalization | undefined;
   },
 ): A | null {
   for (const a of assets) {

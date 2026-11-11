@@ -1,0 +1,5 @@
+The first import step reads frame headers in numbered order. The default keeps the most common dimensions and repeats a matching frame at numbers left out. The modal shows how many readable frames match, followed by the count and names of the files with different dimensions.
+
+Choosing Resize retains every readable picture. Width and height start at the first readable frame's dimensions, even when another size occurs more often. The author can enter a different output size. Each picture keeps its aspect ratio and is centered in the output frame. Transparent padding fills the unused area. The output budget counts every frame slot, including held gaps. Each source and target frame in Resize mode is limited to the pixel area of 8K UHD. The target also obeys VP8's dimension limit.
+
+The converter receives the ordered frame plan and the optional output dimensions. For Resize, it evaluates scale and padding per frame in the existing image2 stream and keeps the filter graph across dimension changes. The poster and encoded video use the same geometry before crop. Asset matching includes the requested normalization so different output sizes produce separate assets.
