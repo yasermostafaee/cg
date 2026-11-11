@@ -94,8 +94,8 @@ const BRIDGE_SURFACE: {
 } = {
   methods: ['getAppInfo', 'openCompanySite'],
   groups: {
-    // `TEXT-DIGITS-01` — the shell's keyboard language (both ask the same shell door).
-    keyboard: ['language', 'reportsLanguage'],
+    // Both backends use the same shell keyboard controls.
+    keyboard: ['language', 'reportsLanguage', 'setLayerAltF4Armed'],
     // `R-094` — the window's close, held by the shell (both hold through the same shell door).
     closeGuard: ['closeNow', 'held', 'hold'],
     // §4 — `resyncing` says whether an EMPTY stack is an answer or a not-yet.

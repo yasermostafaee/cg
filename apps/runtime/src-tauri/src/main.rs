@@ -18,6 +18,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod layer_shortcuts;
 mod local_bridge;
 mod playout;
 mod shell_log;
@@ -81,10 +82,21 @@ fn main() {
         // `R-094` — whether the console holds the window's close (it arms once it can ask; until
         // then — the address question, a page that failed to load — a close goes through).
         .manage(close_guard::Guard::default())
+        .manage(layer_shortcuts::LayerAltF4::default())
+        .setup(|app| {
+            #[cfg(windows)]
+            if let Some(window) = app.get_webview_window("main") {
+                if let Err(error) = layer_shortcuts::install(&window) {
+                    shell_log::log(&format!("could not route layer shortcut keys: {error}"));
+                }
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             company_site::open_company_site,
             playout::playout_post,
             keyboard_language::keyboard_language,
+            layer_shortcuts::set_layer_alt_f4,
             local_bridge_state,
             local_bridge_act,
             close_window::close_guard,
@@ -101,6 +113,9 @@ fn main() {
         .on_page_load(|webview, payload| {
             // `R-094` — a page that starts to load lets go of what the last one held.
             close_window::on_page_load(webview, payload);
+            if webview.label() == "main" && payload.event() == PageLoadEvent::Started {
+                webview.state::<layer_shortcuts::LayerAltF4>().set(false);
+            }
             if payload.event() == PageLoadEvent::Finished {
                 shell_log::log(&format!("page loaded: {}", payload.url()));
             }

@@ -1,10 +1,10 @@
+import { effectiveLayerShortcutBindings } from '../fixedLayers/layer-shortcuts.js';
 import { useEngineName } from '../../ui/engineWording.js';
 import { Fragment, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { silenceHasTarget } from './panicReport.js';
 import { isOnAirStatus, type StackItemState } from '@cg/shared-schema';
 import {
   isPlaylistOutput,
-  layerShortcutBindings,
   resolvePlateSourcesForLook,
   type EmptiedAirRow,
   type OrphanLayer,
@@ -1347,7 +1347,10 @@ export function LayersPanel({
 
   const renderHiddenShortcutRows = (): JSX.Element | null => {
     if (!selectedHeld || !listReady || bank === null) return null;
-    const shortcutsByLayer = layerShortcutBindings(bank);
+    const shortcutsByLayer = effectiveLayerShortcutBindings(
+      bank,
+      capabilities?.fixedLayerNextShortcut === true,
+    );
     const visible =
       shortcutsOnly || (!selectedOnly && activeTab !== 'layers') ? [] : shownRowBindings;
     const visibleLayers = new Set(visible.map(({ slot }) => slot.layer));

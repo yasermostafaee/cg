@@ -4,6 +4,7 @@ fn main() {
     // bundles and to nothing else:
     //   - `playout_post` (`CENTRAL-BRIDGE-01` rule 8): the console's D1/D2, natively, with no `Origin`;
     //   - `keyboard_language` (`TEXT-DIGITS-01`): read-only;
+    //   - `set_layer_alt_f4`: use Alt+F4 in the console when its layer binding is active;
     //   - `local_bridge_state` / `local_bridge_act` (`R-091`): CG Bridge on this machine — its service
     //     and port holder read, and the two administrator steps (start it; free its port of OURS);
     //   - `close_guard`, `close_request_seen`, `close_window_now` (`R-094`): the window's close,
@@ -13,6 +14,7 @@ fn main() {
         tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(&[
             "playout_post",
             "keyboard_language",
+            "set_layer_alt_f4",
             "open_company_site",
             "local_bridge_state",
             "local_bridge_act",

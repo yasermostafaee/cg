@@ -357,6 +357,8 @@ export interface RuntimeBridge {
     reportsLanguage(): boolean;
     /** `persian`, `arabic`, `latin` or `unknown` — the shell's reply, checked by the detector. */
     language(): Promise<unknown>;
+    /** Reserve Alt+F4 for a layer binding or the recorder in the installed console. */
+    setLayerAltF4Armed?(armed: boolean): void;
   };
 
   /**

@@ -51,6 +51,12 @@ export function shellKeyboardLanguage(): Promise<unknown> {
   return door === null ? Promise.resolve('unknown') : door.invoke('keyboard_language');
 }
 
+export function shellSetLayerAltF4Armed(armed: boolean): void {
+  const door = tauri();
+  if (door === null) return;
+  void door.invoke('set_layer_alt_f4', { armed }).catch((error: unknown) => console.warn(error));
+}
+
 export function shellOpenCompanySite(): boolean {
   const door = tauri();
   if (door === null) return false;

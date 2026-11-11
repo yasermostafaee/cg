@@ -11,6 +11,7 @@ import { resolveBridgeUrl } from './bridgeUrl.js';
 import {
   shellCloseGuard,
   shellKeyboardLanguage,
+  shellSetLayerAltF4Armed,
   shellOpenCompanySite,
   shellReportsKeyboardLanguage,
   insideCgControl,
@@ -222,6 +223,7 @@ export function createMockBridge(): RuntimeBridge {
     keyboard: {
       reportsLanguage: () => shellReportsKeyboardLanguage(),
       language: () => shellKeyboardLanguage(),
+      setLayerAltF4Armed: shellSetLayerAltF4Armed,
     },
 
     // `R-094` — nor is the window's close: the same shell door the live console uses.

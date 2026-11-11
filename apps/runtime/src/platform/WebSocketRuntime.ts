@@ -196,6 +196,7 @@ import {
   nativePlayoutFetch,
   shellCloseGuard,
   shellKeyboardLanguage,
+  shellSetLayerAltF4Armed,
   shellOpenCompanySite,
   shellReportsKeyboardLanguage,
 } from './desktop.js';
@@ -2628,6 +2629,7 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly keyboard = {
     reportsLanguage: (): boolean => shellReportsKeyboardLanguage(),
     language: (): Promise<unknown> => shellKeyboardLanguage(),
+    setLayerAltF4Armed: shellSetLayerAltF4Armed,
   };
 
   /**

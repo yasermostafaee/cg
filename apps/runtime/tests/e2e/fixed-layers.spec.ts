@@ -267,6 +267,8 @@ test('R-023 — fixed layer shortcuts follow the guarded actions in filtered and
   const page = app.page;
   const row = app.layerRow(80);
   await app.openStationSetupAt('Layers');
+  const rowName = page.getByRole('textbox', { name: /^Name for layer 80 / });
+  await rowName.fill('Unapplied row name');
   await page.getByRole('button', { name: 'Layer shortcuts…' }).click();
   const dialog = page.getByRole('dialog', { name: 'Layer shortcuts', exact: true });
   const assign = async (verb: string, chord: string, layer = 80) => {
@@ -278,27 +280,82 @@ test('R-023 — fixed layer shortcuts follow the guarded actions in filtered and
     await button.press(chord);
     return button;
   };
-  await expect(await assign('Play', 'F9')).toHaveText('F9');
-  const nextBinding = await assign('Next', 'F9', 82);
-  await expect(dialog.getByRole('alert')).toHaveText('F9 is assigned to Play on layer 80.');
-  await nextBinding.press('F8');
-  await expect(nextBinding).toHaveText('F8');
-  await expect(await assign('Stop', 'F10')).toHaveText('F10');
-  await expect(await assign('Clear', 'Shift+F9')).toHaveText('Shift+F9');
-  await dialog.getByRole('button', { name: 'Done', exact: true }).click();
-  await page.getByRole('button', { name: 'Apply layers', exact: true }).click();
+  const cell = (verb: string, layer: number) =>
+    dialog.getByRole('button', {
+      name: `${verb} shortcut for layer ${String(layer)}`,
+      exact: true,
+    });
+  for (let layer = 99; layer >= 88; layer--) {
+    const key = `F${String(100 - layer)}`;
+    await expect(cell('Play', layer)).toHaveText(key);
+    await expect(cell('Stop', layer)).toHaveText(`Ctrl+${key}`);
+    await expect(cell('Clear', layer)).toHaveText(`Shift+${key}`);
+    await expect(cell('Next', layer)).toHaveText(`Alt+${key}`);
+  }
+  for (const layer of [87, 59]) {
+    for (const verb of ['Play', 'Next', 'Stop', 'Clear']) {
+      await expect(cell(verb, layer)).toHaveText('Assign');
+    }
+  }
+  const apply = dialog.getByRole('button', { name: 'Apply', exact: true });
+  const revert = dialog.getByRole('button', { name: 'Revert', exact: true });
+  await expect(apply).toBeDisabled();
+  await expect(revert).toBeDisabled();
+  await expect(await assign('Play', 'Alt+Shift+F1')).toHaveText('Alt+Shift+F1');
+  await revert.click();
+  await expect(cell('Play', 80)).toHaveText('Assign');
+  await expect(apply).toBeDisabled();
+  await expect(await assign('Play', 'Alt+Shift+F1')).toHaveText('Alt+Shift+F1');
+  const nextBinding = await assign('Next', 'Alt+Shift+F1', 82);
+  await expect(dialog.getByRole('alert')).toHaveText(
+    'Alt+Shift+F1 is assigned to Play on layer 80.',
+  );
+  await nextBinding.press('Alt+Shift+F6');
+  await expect(nextBinding).toHaveText('Alt+Shift+F6');
+  await expect(await assign('Stop', 'Alt+Shift+F2')).toHaveText('Alt+Shift+F2');
+  await expect(await assign('Clear', 'Alt+Shift+F3')).toHaveText('Alt+Shift+F3');
+  await apply.click();
+  await expect(dialog.getByText('Layer shortcuts applied.')).toBeVisible();
+  await expect(apply).toBeDisabled();
+  await expect(revert).toBeDisabled();
+  await expect(await assign('Play', 'Alt+Shift+F8', 81)).toHaveText('Alt+Shift+F8');
+  expect(
+    await page.evaluate(async () => {
+      const [bank] = await window.cg.fixedLayers.banks();
+      if (bank === undefined) throw new Error('Expected a fixed layer bank');
+      const result = await window.cg.fixedLayers.setConfig({
+        ...bank,
+        shortcuts: { ...bank.shortcuts, '86': { play: 'Alt+Shift+F9' } },
+      });
+      return result.ok;
+    }),
+  ).toBe(true);
+  await expect(cell('Play', 86)).toHaveText('Alt+Shift+F9');
+  await expect(cell('Play', 81)).toHaveText('Alt+Shift+F8');
+  await revert.click();
+  await expect(cell('Play', 81)).toHaveText('Assign');
+  await expect(cell('Play', 86)).toHaveText('Alt+Shift+F9');
+  await expect(apply).toBeDisabled();
   await expect
     .poll(() =>
       page.evaluate(async () => (await window.cg.fixedLayers.banks())[0]?.shortcuts?.['80']),
     )
     .toEqual({
-      play: 'F9',
-      stop: 'F10',
-      clear: 'Shift+F9',
+      play: 'Alt+Shift+F1',
+      stop: 'Alt+Shift+F2',
+      clear: 'Alt+Shift+F3',
     });
   await expect
-    .poll(() => page.evaluate(async () => (await window.cg.fixedLayers.banks())[0]?.nextShortcuts))
-    .toEqual({ '82': 'F8' });
+    .poll(() =>
+      page.evaluate(async () => (await window.cg.fixedLayers.banks())[0]?.nextShortcuts?.['82']),
+    )
+    .toBe('Alt+Shift+F6');
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(rowName).toHaveValue('Unapplied row name');
+  expect(
+    await page.evaluate(async () => (await window.cg.fixedLayers.banks())[0]?.aliases?.['80']),
+  ).not.toBe('Unapplied row name');
+  await page.getByRole('button', { name: 'Revert candidate layer edits' }).click();
   await app.closeStationSetup();
 
   const templateId = 'tpl-shortcut-book';
@@ -320,8 +377,8 @@ test('R-023 — fixed layer shortcuts follow the guarded actions in filtered and
   await search.fill('no rows match this');
   await expect(row).toBeHidden();
   await expect(bookRow).toBeHidden();
-  await page.keyboard.press('Shift+F9');
-  await page.keyboard.press('F8');
+  await page.keyboard.press('Alt+Shift+F3');
+  await page.keyboard.press('Alt+Shift+F6');
   await expect(confirm).toHaveCount(0);
   await search.evaluate((input) => (input as HTMLInputElement).blur());
   const pageOfBook = () =>
@@ -332,11 +389,11 @@ test('R-023 — fixed layer shortcuts follow the guarded actions in filtered and
       templateId,
     );
   expect(await pageOfBook()).toBe(0);
-  await page.keyboard.press('F8');
+  await page.keyboard.press('Alt+Shift+F6');
   await expect.poll(pageOfBook).toBe(1);
-  await page.keyboard.press('F8');
+  await page.keyboard.press('Alt+Shift+F6');
   expect(await pageOfBook()).toBe(1);
-  await page.keyboard.press('Shift+F9');
+  await page.keyboard.press('Alt+Shift+F3');
   await expect(confirm).toBeVisible();
   await confirm.getByRole('button', { name: 'Clear layer', exact: true }).click();
   await search.clear();
@@ -349,9 +406,9 @@ test('R-023 — fixed layer shortcuts follow the guarded actions in filtered and
       async () =>
         (await window.cg.stack.snapshot()).find((item) => item.slot?.layer === 80)?.status,
     );
-  await page.keyboard.press('F9');
+  await page.keyboard.press('Alt+Shift+F1');
   await expect.poll(readStatus).toBe('on-air');
-  await page.keyboard.press('F10');
+  await page.keyboard.press('Alt+Shift+F2');
   await expect.poll(readStatus).toMatch(/^(idle|loaded)$/);
 });
 

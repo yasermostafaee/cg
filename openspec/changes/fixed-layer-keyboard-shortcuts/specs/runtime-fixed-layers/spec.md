@@ -14,6 +14,21 @@ the Bridge advertises support for its storage.
 - **THEN** reopening the Layers settings shows the assignment on that layer
 - **AND** assigning the same combination to another action in that channel shows a conflict
 
+#### Scenario: Start with the function-key defaults
+
+- **WHEN** a bank has no saved shortcut configuration and the Bridge supports Next
+- **THEN** declared layers 99 through 88 use F1 through F12 for Play, Ctrl plus the same key for
+  Stop, Shift plus the key for Clear, and Alt plus the key for Next
+- **AND** other declared layers have no default bindings
+- **AND** a saved configuration, including an empty one, takes precedence
+
+#### Scenario: Apply or revert changes in the shortcut dialog
+
+- **WHEN** an admin applies a shortcut draft from the dialog
+- **THEN** it is saved independently of pending names and visibility changes
+- **AND** shortcuts edited elsewhere are preserved when their cells are unedited here
+- **AND** Revert restores the most recently saved assignments
+
 ### Requirement: Layer shortcuts use the guarded row actions
 
 A shortcut SHALL target the exact layer of the selected channel. It SHALL invoke the existing row

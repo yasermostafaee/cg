@@ -1,7 +1,12 @@
-import { useEffect } from 'react';
-import { LAYER_SHORTCUT_VERBS, layerShortcutBindings, type FixedLayerBank } from '@cg/shared-ipc';
+import { useEffect, useMemo } from 'react';
+import { LAYER_SHORTCUT_VERBS, type LayerShortcutBindings } from '@cg/shared-ipc';
+import { useAuthCapabilities } from '../../hooks/useAuthCapabilities.js';
+import { useLayerAltF4 } from '../fixedLayers/useLayerAltF4.js';
 import { useSelectedChannel } from '../channels/useSelectedChannel.js';
-import { layerShortcutChord } from '../fixedLayers/layer-shortcuts.js';
+import {
+  effectiveLayerShortcutBindings,
+  layerShortcutChord,
+} from '../fixedLayers/layer-shortcuts.js';
 
 const editor = 'input, textarea, select, [role="textbox"], [role="combobox"], [role="spinbutton"]';
 
@@ -13,7 +18,8 @@ function isEditing(target: EventTarget | null): boolean {
 
 export function dispatchLayerShortcut(
   event: KeyboardEvent,
-  bank: Pick<FixedLayerBank, 'channel' | 'shortcuts' | 'nextShortcuts'>,
+  channel: number,
+  bindings: LayerShortcutBindings,
   root: Document,
 ): void {
   if (
@@ -29,11 +35,11 @@ export function dispatchLayerShortcut(
   const chord = layerShortcutChord(event);
   if (chord === null) return;
 
-  for (const [layer, shortcuts] of Object.entries(layerShortcutBindings(bank))) {
+  for (const [layer, shortcuts] of Object.entries(bindings)) {
     const verb = LAYER_SHORTCUT_VERBS.find((action) => shortcuts[action] === chord);
     if (verb === undefined) continue;
     const buttons = root.querySelectorAll<HTMLButtonElement>(
-      `[data-shortcut-row="${String(bank.channel)}:${layer}"] [data-verb-block] > button[data-verb-tone="${verb}"]`,
+      `[data-shortcut-row="${String(channel)}:${layer}"] [data-verb-block] > button[data-verb-tone="${verb}"]`,
     );
     const button = buttons[0];
     if (buttons.length !== 1 || button === undefined || button.disabled) return;
@@ -47,11 +53,24 @@ export function dispatchLayerShortcut(
 
 export function useLayerShortcuts(): void {
   const { bank, canOperateSelected } = useSelectedChannel();
+  const supportsNext = useAuthCapabilities()?.fixedLayerNextShortcut === true;
+  const bindings = useMemo(
+    () =>
+      bank === null || !canOperateSelected
+        ? null
+        : effectiveLayerShortcutBindings(bank, supportsNext),
+    [bank, canOperateSelected, supportsNext],
+  );
+  useLayerAltF4(
+    bindings !== null &&
+      Object.values(bindings).some((row) => Object.values(row).includes('Alt+F4')),
+  );
+  const channel = bank?.channel;
   useEffect(() => {
-    if (bank === null || !canOperateSelected) return;
-    if (bank.shortcuts === undefined && bank.nextShortcuts === undefined) return;
-    const onKeyDown = (event: KeyboardEvent): void => dispatchLayerShortcut(event, bank, document);
+    if (bindings === null || channel === undefined) return;
+    const onKeyDown = (event: KeyboardEvent): void =>
+      dispatchLayerShortcut(event, channel, bindings, document);
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [bank, canOperateSelected]);
+  }, [bindings, channel]);
 }

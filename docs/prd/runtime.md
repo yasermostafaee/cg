@@ -1044,6 +1044,11 @@ a row — this is the Cinegy operating rhythm the fixed layers exist for.
   a book page, including when the row is filtered out.
 - WHEN a combo is assigned THEN conflicts are prevented at assignment time — a combo can bind
   once
+- WHEN a channel has no saved assignments THEN layers 99 through 88 default to F1 through F12
+  for Play, Ctrl+F1 through Ctrl+F12 for Stop, Shift+F1 through Shift+F12 for Clear, and
+  Alt+F1 through Alt+F12 for Next. Other layers start unassigned.
+- WHEN an admin presses Apply in Layer shortcuts THEN its draft is saved immediately. Revert
+  restores the last applied assignments. Pending visibility and name edits are independent.
 - WHEN focus is in any text input THEN shortcuts are inert
 - WHEN the app restarts THEN combos survive (config-persisted)
 - WHEN the modal lists layers THEN it shows aliases, not bare numbers

@@ -7,11 +7,9 @@ import {
   fixedBankEnd,
   isLayerVisible,
   isLowBankLayer,
-  LAYER_SHORTCUT_VERBS,
   lowBankEnd,
   type FixedLayerBank,
   type FixedSlotState,
-  layerShortcutBindings,
   type LayerShortcutBindings,
   type LayerShortcuts,
 } from '@cg/shared-ipc';
@@ -39,6 +37,7 @@ import { useLink } from '../../hooks/useLink.js';
 import { useAuthCapabilities } from '../../hooks/useAuthCapabilities.js';
 import { Tag } from '../../ui/Tag.js';
 import { LayerShortcutsDialog } from './LayerShortcutsDialog.js';
+import { effectiveLayerShortcutBindings } from './layer-shortcuts.js';
 
 /**
  * R-021 stage 2b / R-028 — the candidate-layer bank's configuration: per-layer VISIBILITY
@@ -172,8 +171,8 @@ export function CandidateLayersSection({
     );
   }
   if (bank === null) return <NoBank />;
-  // Re-keyed on the bank the bridge publishes, so an accepted apply — or another console's
-  // change — replaces the draft with what is now in force rather than leaving stale edits.
+  // Published layer names and visibility replace this editor's draft. Shortcut updates have
+  // their own editor and preserve the outer draft.
   return (
     <BankEditor
       key={bankKey(bank)}
@@ -190,7 +189,8 @@ export function CandidateLayersSection({
 }
 
 function bankKey(bank: FixedLayerBank): string {
-  return JSON.stringify(bank);
+  const { shortcuts: _shortcuts, nextShortcuts: _nextShortcuts, ...layers } = bank;
+  return JSON.stringify(layers);
 }
 
 /**
@@ -345,9 +345,6 @@ function BankEditor({
   };
   const [aliases, setAliases] = useState<Record<string, string>>(initialAliases);
   const [visible, setVisible] = useState<Record<string, boolean>>(initialVisible);
-  const [shortcuts, setShortcuts] = useState<LayerShortcutBindings>(() =>
-    layerShortcutBindings(bank),
-  );
   const [editingShortcuts, setEditingShortcuts] = useState(false);
   const [busy, setBusy] = useState(false);
   /** `SETTINGS-MATCH-02` — the filter bar's two controls. Draft-local; nothing is persisted. */
@@ -384,24 +381,16 @@ function BankEditor({
   const dirtyLayers = ((): ReadonlySet<string> => {
     const beforeAliases = initialAliases();
     const beforeVisible = initialVisible();
-    const beforeShortcuts = layerShortcutBindings(bank);
     const keys = new Set([
       ...Object.keys(beforeAliases),
       ...Object.keys(aliases),
       ...Object.keys(beforeVisible),
       ...Object.keys(visible),
-      ...Object.keys(beforeShortcuts),
-      ...Object.keys(shortcuts),
     ]);
     const changed = new Set<string>();
     for (const key of keys) {
       if ((beforeAliases[key] ?? '') !== (aliases[key] ?? '')) changed.add(key);
       if ((beforeVisible[key] ?? true) !== (visible[key] ?? true)) changed.add(key);
-      if (
-        LAYER_SHORTCUT_VERBS.some((verb) => beforeShortcuts[key]?.[verb] !== shortcuts[key]?.[verb])
-      ) {
-        changed.add(key);
-      }
     }
     return changed;
   })();
@@ -430,7 +419,6 @@ function BankEditor({
   function revert(): void {
     setAliases(initialAliases());
     setVisible(initialVisible());
-    setShortcuts(layerShortcutBindings(bank));
     report(null);
   }
 
@@ -459,43 +447,20 @@ function BankEditor({
     for (const [key, isVisible] of Object.entries(visible)) {
       if (isLowBankLayer(bank, Number(key)) && !isVisible) bedHidden[key] = false;
     }
-    const legacyShortcuts: LayerShortcuts = {};
-    const nextShortcuts: Record<string, string> = {};
-    for (const [layer, { next, ...legacy }] of Object.entries(shortcuts)) {
-      if (Object.keys(legacy).length > 0) legacyShortcuts[layer] = legacy;
-      if (next !== undefined) nextShortcuts[layer] = next;
-    }
     setBusy(true);
+    const { aliases: _aliases, visibility: _visibility, ...fixedBank } = bank;
     const next: FixedLayerBank = {
-      channel: bank.channel,
-      start: bank.start,
-      count: bank.count,
+      ...fixedBank,
       ...(Object.keys(cleaned).length > 0 ? { aliases: cleaned } : {}),
       ...(Object.keys(hidden).length > 0 ? { visibility: hidden } : {}),
-      ...(Object.keys(legacyShortcuts).length > 0 ? { shortcuts: legacyShortcuts } : {}),
       low: {
         start: bank.low.start,
         count: bank.low.count,
         ...(Object.keys(bedAliases).length > 0 ? { aliases: bedAliases } : {}),
         ...(Object.keys(bedHidden).length > 0 ? { visibility: bedHidden } : {}),
       },
-      ...(canAssignNext &&
-      (bank.nextShortcuts !== undefined || Object.keys(nextShortcuts).length > 0)
-        ? { nextShortcuts }
-        : {}),
     };
-    /*
-      🔴 `MULTI-CHANNEL-01` — THIS channel's bank, and every other channel's left exactly as it
-      is. On a one-channel station that is the one bank, sent through `set-config` as it always
-      was; with two or more, `set-config` would make the SET this one bank, so the plural door
-      carries the whole set with only this channel's entry replaced.
-    */
-    (multiChannel
-      ? window.cg.fixedLayers.setBanks({
-          banks: banks.map((b) => (b.channel === next.channel ? next : b)),
-        })
-      : window.cg.fixedLayers.setConfig(next)
-    ).then(
+    saveBank(next).then(
       (res) => {
         setBusy(false);
         if (res.ok) {
@@ -511,10 +476,7 @@ function BankEditor({
         */
         report({
           role: 'refusal',
-          text:
-            fixedLayersReasonMessage(res.reason, { layer: res.layer }) ??
-            res.message ??
-            'Not accepted.',
+          text: bankRefusal(res),
         });
       },
       (err: unknown) => {
@@ -525,6 +487,38 @@ function BankEditor({
         });
       },
     );
+  }
+
+  function saveBank(next: FixedLayerBank) {
+    // The plural route keeps the other channels declared when saving this one.
+    return multiChannel
+      ? window.cg.fixedLayers.setBanks({
+          banks: banks.map((candidate) => (candidate.channel === next.channel ? next : candidate)),
+        })
+      : window.cg.fixedLayers.setConfig(next);
+  }
+
+  function bankRefusal(result: Awaited<ReturnType<typeof saveBank>>): string {
+    return (
+      fixedLayersReasonMessage(result.reason, { layer: result.layer }) ??
+      result.message ??
+      'Not accepted.'
+    );
+  }
+
+  async function applyShortcuts(bindings: LayerShortcutBindings): Promise<string | null> {
+    const legacyShortcuts: LayerShortcuts = {};
+    const nextShortcuts: Record<string, string> = {};
+    for (const [layer, { next, ...legacy }] of Object.entries(bindings)) {
+      if (Object.keys(legacy).length > 0) legacyShortcuts[layer] = legacy;
+      if (next !== undefined) nextShortcuts[layer] = next;
+    }
+    const result = await saveBank({
+      ...bank,
+      shortcuts: legacyShortcuts,
+      ...(canAssignNext ? { nextShortcuts } : {}),
+    });
+    return result.ok ? null : bankRefusal(result);
   }
 
   /** This section's own commit controls — rendered into the dialog's footer, see below. */
@@ -541,7 +535,7 @@ function BankEditor({
       <Button
         variant="primary"
         aria-label="Apply layers"
-        title="Applies visibility, names and shortcuts"
+        title="Applies visibility and names"
         disabled={busy}
         onClick={apply}
       >
@@ -894,7 +888,7 @@ function BankEditor({
           {String(shown)} of {String(total)} rows
         </span>
         {canEditShortcuts && (
-          <Button variant="neutral" onClick={() => setEditingShortcuts(true)}>
+          <Button variant="neutral" disabled={busy} onClick={() => setEditingShortcuts(true)}>
             Layer shortcuts…
           </Button>
         )}
@@ -944,13 +938,10 @@ function BankEditor({
             layer,
             name: name.trim() || placeholder,
           }))}
-          shortcuts={shortcuts}
+          shortcuts={effectiveLayerShortcutBindings(bank, canAssignNext)}
           canAssignNext={canAssignNext}
           onClose={() => setEditingShortcuts(false)}
-          onDone={(next) => {
-            setShortcuts(next);
-            setEditingShortcuts(false);
-          }}
+          onApply={applyShortcuts}
         />
       )}
     </>
