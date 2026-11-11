@@ -178,6 +178,53 @@ async function createFollowProject(app: DesignerApp, name: string): Promise<void
   await app.dragContentStartMarkerToFraction(0);
 }
 
+test('Static video Hold can repeat or play once without adding an Outro marker', async ({
+  app,
+}) => {
+  await app.newProject('Static logo playback');
+  await app.setSceneDuration(100);
+  await importAndPlaceVideo(app);
+  await app.inspector.getByRole('button', { name: 'Follow composition', exact: true }).click();
+  await expect(app.inspector.getByTestId('follow-no-anchors')).toBeVisible();
+  await expect(app.inspector.getByRole('combobox', { name: 'On hold' })).toHaveCount(0);
+  await app.deselect();
+
+  const onHold = app.inspector.getByRole('combobox', { name: 'On hold' });
+  await expect(onHold).toHaveValue('freeze');
+  await onHold.selectOption({ label: 'Loop media' });
+  const repeats = app.inspector.getByRole('checkbox', { name: 'Video repeats during Hold' });
+  await expect(repeats).toBeChecked();
+
+  const video = app.canvasFrame.locator('video[data-cg-element-id]').first();
+  const transport = app.page.getByLabel('Playback transport');
+  const play = transport.getByRole('button', { name: 'Play', exact: true });
+  const stop = transport.getByRole('button', { name: 'Stop', exact: true });
+  await transport.getByRole('button', { name: 'Rehearse preview' }).click();
+  await play.click();
+  await expect
+    .poll(() => video.evaluate((node) => (node as HTMLVideoElement).currentTime))
+    .toBeGreaterThan(0.9);
+  await expect
+    .poll(() => video.evaluate((node) => (node as HTMLVideoElement).currentTime))
+    .toBeLessThan(0.6);
+  await stop.click();
+
+  await repeats.uncheck();
+  await play.click();
+  await expect
+    .poll(() =>
+      video.evaluate((node) => {
+        const media = node as HTMLVideoElement;
+        return media.paused && media.currentTime >= media.duration - 0.08;
+      }),
+    )
+    .toBe(true);
+  await stop.click();
+
+  await onHold.selectOption('freeze');
+  await expect(repeats).toHaveCount(0);
+});
+
 test('B-431 — a Follow video holds its closing frame while plain text finishes fading', async ({
   app,
 }) => {

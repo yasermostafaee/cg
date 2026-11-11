@@ -179,6 +179,10 @@ interface HoldLoopItem {
   type: Element['type'];
 }
 
+function isHoldMedia(item: HoldLoopItem): boolean {
+  return item.type === 'video' || item.type === 'lottie';
+}
+
 /** D-187 — visible elements whose picture can change during the composition Middle. */
 export function holdLoopElementsOf(scene: Scene): HoldLoopItem[] {
   const out: HoldLoopItem[] = [];
@@ -678,14 +682,21 @@ function ContentHoldChecklist({ scene }: { scene: Scene }): JSX.Element {
 }
 
 /** D-187 — choose which frame/media elements follow the wrapping Middle cursor. */
-function HoldLoopChecklist({ scene }: { scene: Scene }): JSX.Element | null {
-  const items = holdLoopElementsOf(scene);
+function HoldLoopChecklist({
+  scene,
+  mediaOnly,
+}: {
+  scene: Scene;
+  mediaOnly: boolean;
+}): JSX.Element | null {
+  const allItems = holdLoopElementsOf(scene);
+  const items = mediaOnly ? allItems.filter(isHoldMedia) : allItems;
   if (items.length === 0) return null;
   const playout = playoutOf(scene);
   const labels = disambiguate(items.map((item) => item.name));
-  const checkedIds = new Set(playout.holdLoopElementIds ?? items.map((item) => item.id));
+  const checkedIds = new Set(playout.holdLoopElementIds ?? allItems.map((item) => item.id));
   const toggle = (id: string, checked: boolean): void => {
-    const next = new Set(playout.holdLoopElementIds ?? items.map((item) => item.id));
+    const next = new Set(checkedIds);
     if (checked) next.add(id);
     else next.delete(id);
     designerStore.setPlayout({ holdLoopElementIds: [...next] });
@@ -695,7 +706,11 @@ function HoldLoopChecklist({ scene }: { scene: Scene }): JSX.Element | null {
       <StateLine
         tip={
           <InfoTip title="Repeat during Hold">
-            <p>Checked elements repeat with the Middle cursor.</p>
+            <p>
+              {mediaOnly
+                ? 'Checked media replay their loop range. An unmarked video repeats the full clip.'
+                : 'Checked elements repeat with the Middle cursor.'}
+            </p>
             <p>Unchecked elements play forward once to their end and never rewind at a wrap.</p>
           </InfoTip>
         }
@@ -828,6 +843,8 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
   const playout = playoutOf(scene);
   const mode = playout.mode;
   const lifecycle = scene.lifecycle;
+  const staticMediaHold =
+    lifecycle === undefined && mode === 'static' && holdLoopElementsOf(scene).some(isHoldMedia);
   // D-189 — Hold source is an authored choice, so keep it reachable before the
   // author adds a driver and after the last driver is disabled/deleted. Static
   // and Manual have no executable hold-source leg, so they still omit the row.
@@ -958,8 +975,8 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
         </InfoTip>
       </div>
 
-      {lifecycle !== undefined && (
-        <div className={s.row}>
+      {(lifecycle !== undefined || staticMediaHold) && (
+        <div className={staticMediaHold ? cls.infoRow : s.row}>
           <span className={s.label}>on hold</span>
           <Select
             style={selectStyle}
@@ -971,16 +988,31 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
           >
             {(Object.keys(HOLD_BEHAVIOR_LABELS) as HoldBehavior[]).map((behavior) => (
               <option key={behavior} value={behavior}>
-                {HOLD_BEHAVIOR_LABELS[behavior]}
+                {staticMediaHold && behavior === 'loop'
+                  ? 'Loop media'
+                  : HOLD_BEHAVIOR_LABELS[behavior]}
               </option>
             ))}
           </Select>
+          {staticMediaHold && (
+            <InfoTip title="Static media playback">
+              <p>
+                Freeze holds the media at the end of its intro. For an unmarked video, that is its
+                last frame. Loop media repeats the selected media’s loop ranges.
+              </p>
+              <p>
+                These settings apply in Rehearse, Preview and on air. Preview loop controls the
+                editor playhead.
+              </p>
+            </InfoTip>
+          )}
         </div>
       )}
 
-      {lifecycle !== undefined && (playout.holdBehavior ?? 'freeze') === 'loop' && (
-        <HoldLoopChecklist scene={scene} />
-      )}
+      {(lifecycle !== undefined || staticMediaHold) &&
+        (playout.holdBehavior ?? 'freeze') === 'loop' && (
+          <HoldLoopChecklist scene={scene} mediaOnly={staticMediaHold} />
+        )}
 
       {holdCapable && (
         <div className={cls.infoRow}>
