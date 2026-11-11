@@ -4286,6 +4286,10 @@ guide is visually inspected at readable line spacing; all three installer files 
 - WHEN the guide is read THEN headings, steps, warnings and screenshots have comfortable spacing and concise Persian wording
 - WHEN a guide is built THEN the Playout version is supplied explicitly (current delivery: `2.17.1`) rather than copied from stale prose
 
+**2026-11-11 test package:** `1.2.1` has a two-page Persian PDF covering installation, connection,
+and first-template verification. The versioned Markdown and bundled Persian font generate the PDF
+offline. The HTML delivery and its build-time version parameter remain in this item.
+
 ## [~] P-076 — Label the startup build identity in operator language ⟨priority: medium — the owner, 2026-11-02⟩ — `openspec/changes/readable-splash-build-stamp/`
 
 **What:** Replace the unexplained compact splash stamp with explicit Version and Build date labels on both products; keep Revision only in diagnostic metadata.

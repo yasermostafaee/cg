@@ -69,11 +69,67 @@ mark.confirm { background: #fff1c2; color: #5c4400; border-radius: 1mm; padding:
 figure { margin: 1.5mm 0 3mm; break-inside: avoid; }
 figure img { display: block; width: 100%; border: 0.3mm solid #c9d3df; border-radius: 1.2mm; }
 figcaption { font-size: 8.2pt; color: #4a5566; margin-top: 0.8mm; }
+
+.quick-guide {
+  color: #203148;
+  font-size: 11pt;
+  line-height: 1.68;
+}
+.quick-guide > h1 {
+  margin: 0;
+  padding: 7mm 8mm 1mm;
+  border-radius: 3mm 3mm 0 0;
+  background: #102942;
+  color: #fff;
+  font-size: 25pt;
+  line-height: 1.3;
+}
+.quick-guide > h1 + p {
+  padding: 2mm 8mm 5mm;
+  border-bottom: 1.15mm solid #1da8bd;
+  border-radius: 0 0 3mm 3mm;
+  background: #102942;
+  color: #e3f4fb;
+  font-size: 10pt;
+}
+.quick-guide > h1 + p .ui {
+  margin-inline-end: 1mm;
+  background: #234662;
+  border-color: #52758d;
+  color: #fff;
+}
+.quick-guide > h2 {
+  margin: 6mm 0 3mm;
+  padding: 2.4mm 3.2mm;
+  border: 0;
+  border-inline-start: 1.25mm solid #168496;
+  background: #e7f2f6;
+  color: #12334c;
+  font-size: 17pt;
+}
+.quick-guide > h3 {
+  margin: 4mm 0 1.1mm;
+  color: #105b6a;
+  font-size: 12pt;
+}
+.quick-guide p { margin-bottom: 2.6mm; }
+.quick-guide li { margin-bottom: 1.65mm; break-inside: avoid; }
+.quick-guide li::marker { color: #146d7b; font-weight: 700; }
+.quick-guide .ui { border-color: #d9e4ec; background: #f1f6fa; }
+.quick-guide figure { margin: 3mm auto 2mm; }
+.quick-guide figure img { border-color: #c1d2df; }
+.quick-guide figcaption { text-align: center; }
+.quick-guide h3 + ul { margin-bottom: 2.6mm; }
+@media print {
+  .quick-guide > h2:nth-of-type(2) { break-before: page; margin-top: 0; }
+}
 `;
 
 /** The whole page: RTL, Persian, the fonts and the pictures inlined. */
 export function guideHtml(markdownFile) {
-  const markdown = fs.readFileSync(markdownFile, 'utf8');
+  const source = fs.readFileSync(markdownFile, 'utf8');
+  const quickGuide = /^<!-- install-quick-guide -->\r?\n/;
+  const markdown = source.replace(quickGuide, '');
   const dir = path.dirname(markdownFile);
   const body = markdownToHtml(markdown, (src) => {
     const file = path.resolve(dir, src);
@@ -83,10 +139,11 @@ export function guideHtml(markdownFile) {
     return dataUri(file, mime);
   });
   const title = /^#\s+(.*)$/m.exec(markdown)?.[1] ?? 'APASAI CG';
+  const content = quickGuide.test(source) ? `<main class="quick-guide">${body}</main>` : body;
   return (
     `<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8">` +
     `<title>${title.replaceAll('<', '&lt;')}</title><style>${fontFaces()}\n${STYLE}</style></head>` +
-    `<body>${body}</body></html>`
+    `<body>${content}</body></html>`
   );
 }
 
