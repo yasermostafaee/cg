@@ -123,7 +123,10 @@ test('a fullscreen PREVIEW keeps its own EXIT control on screen', async ({ app }
   await app.layerRow(layer).getByRole('button', { name: 'ON PVW', exact: true }).click();
   await expect(previewTransport(page)).toBeVisible();
 
-  await page.getByRole('button', { name: 'Show PREVIEW (PVW) fullscreen' }).click();
+  const expand = page.getByRole('button', { name: 'Show PREVIEW (PVW) fullscreen' });
+  const neutralFill = await expand.evaluate((button) => getComputedStyle(button).backgroundColor);
+  await expand.click();
+  await page.mouse.move(0, 0);
 
   // THE TRAP THIS CLOSES: fullscreen unmounts the Layers panel, so the layout
   // RESET control goes with it, and the focus is persisted to localStorage — so a
@@ -131,6 +134,11 @@ test('a fullscreen PREVIEW keeps its own EXIT control on screen', async ({ app }
   // only way back, and it must therefore be ON SCREEN.
   const exit = page.getByRole('button', { name: 'Exit fullscreen PREVIEW (PVW)' });
   await expect(exit).toBeVisible();
+  await expect(exit).toHaveAttribute('aria-pressed', 'true');
+  await expect(exit).not.toHaveClass(/\bis-on\b/);
+  await expect
+    .poll(() => exit.evaluate((button) => getComputedStyle(button).backgroundColor))
+    .toBe(neutralFill);
   const box = await exit.boundingBox();
   expect(box).not.toBeNull();
   expect(box!.x + box!.width).toBeLessThanOrEqual(1400);

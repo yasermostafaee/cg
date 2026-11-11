@@ -1647,27 +1647,7 @@
   color: var(--r-ink-on-verb);
 }
 
-/*
- * …and a PANEL-HEADER toggle takes the interactive accent, not the rehearse violet.
- *
- * The owner's ask: when a panel is FULLSCREEN, its minimize control must look
- * different, so the operator can tell at a glance that what he is looking at is one
- * panel blown up rather than the whole workspace. The icon already flips
- * (Maximize2 → Minimize2) and `aria-pressed` already says so, but neither survives
- * a glance across a gallery — which is the whole reason this console puts state in
- * colour.
- *
- * IT MAY NOT BE THE VIOLET. `.is-on`'s base fill is `--r-rehearsing-strong`, and
- * that hue is R-022's REHEARSING state: it means "this row is on PVW and cannot
- * reach air". A violet chip in a panel header would be that claim in a place it
- * cannot be true, which is precisely the one-hue-one-meaning rule the rest of this
- * file is built on.
- *
- * Sky is the right one BECAUSE it is the interactive accent and has never been a
- * state colour — nothing else on this surface is competing for it, and a lit
- * control here is a statement about the CHROME (a panel is maximised), never about
- * a graphic. Scoped to `.cg-panel-actions` so it cannot leak onto a row verb.
- */
+/* Engaged panel-header tools such as Pan use the interactive accent. */
 .cg-panel-actions .cg-btn.is-on {
   background: var(--r-accent);
   border-color: var(--r-accent);
@@ -1678,17 +1658,7 @@
 .cg-btn--verb.is-on:hover:not(:disabled),
 .cg-btn--neutral.is-on:hover:not(:disabled),
 .cg-btn--icon.is-on:hover:not(:disabled) {
-  /* Lift the fill rather than swapping to the neutral hover, which would make an
-     engaged toggle look like it had switched off under the pointer.
-
-     🔴 R-055 — THESE ARE THE REHEARSING WEIGHTS, and they belong ONLY to a toggle
-     whose base fill is `--r-rehearsing-strong`. They are written as tokens now
-     rather than as the three literals `#8b5cf6` / the rehearse violet / `#6d28d9` that used
-     to sit here, because the middle one IS `--r-rehearsing` and nothing said so:
-     the maximised panel's sky toggle inherited this rule at higher specificity
-     and wore the PVW hue on hover, in a place where "this row is on PVW" cannot
-     be true — the exact claim the `.cg-panel-actions` block above spends ten
-     lines forbidding. The panel's own hover is scoped below. */
+  /* Lift the fill so the engaged rehearsal toggle remains visible on hover. */
   background: var(--r-rehearsing-mid);
   border-color: var(--r-rehearsing);
   box-shadow: var(--r-shadow-1);
@@ -1699,11 +1669,7 @@
   background: var(--r-rehearsing-deep);
   box-shadow: none;
 }
-/* R-055 — the maximised-panel toggle's OWN hover and active, in its own hue.
-   Scoped exactly like its base fill above, and at a higher specificity than the
-   unscoped `.is-on` rules, so the sky toggle can never inherit the violet again.
-   It LIFTS on hover (`--r-accent-lift`) and DEEPENS on press
-   (`--r-accent-strong`), which is the same direction the violet family uses. */
+/* Engaged panel-header tools keep their accent family on hover and press. */
 .cg-panel-actions .cg-btn.is-on:hover:not(:disabled) {
   background: var(--r-accent-lift);
   border-color: var(--r-accent-lift);

@@ -3036,9 +3036,10 @@ apps/runtime/src apps/runtime/tests docs` → 0 hits), so it is not an existing 
 
 **Acceptance:**
 
-- WHEN the maximised-panel toggle is hovered or pressed THEN it stays on the sky accent and never
-  paints the PVW violet, and the unscoped `.is-on` hover/active rules no longer hand those hues to
-  any control that has not asked for them
+- WHEN the operator maximizes or restores a panel THEN both fullscreen icons use the neutral icon
+  treatment. The icon and its accessible state indicate whether the workspace is maximized.
+  Engaged panel-header tools such as Pan keep their accent.
+  See `openspec/changes/neutral-panel-restore/` for the 2026-11-11 follow-up.
 - WHEN the FAILOVER button is at rest THEN it carries no role colour, matching its SERVERS /
   SOURCES / LOG neighbours, and the amber in that bar means only a fault
 - WHEN the reserved-layers tab is labelled THEN its name says whose layers it lists, and every site
