@@ -26,7 +26,7 @@ import { fullJpegRect } from './pvwPlatePictures.js';
 
 const PRACTICE_SOURCE_ASPECT = 16 / 9;
 
-interface PreviewPanPlacement extends PlatePlacement {
+export interface PreviewPanPlacement extends PlatePlacement {
   catalogAspect: number | null;
 }
 
@@ -65,14 +65,80 @@ const CROP_LABEL = {
   saved: 'Saved for Take',
 } as const satisfies Record<CropState, string>;
 
-/** One request per rehearsing row. The stage remounts this row when its crop context changes. */
+export interface PreviewCropRead {
+  panSession: number;
+  targets: readonly PreviewPlateCropTarget[];
+  message?: string | undefined;
+}
+
+export function previewCropTarget(
+  plate: PreviewPanPlacement,
+  read: PreviewCropRead | undefined,
+): PreviewPlateCropTarget | undefined {
+  if (plate.sourceId === null) return undefined;
+  return read?.targets.find(
+    (target) =>
+      target.plateId === plate.plateId &&
+      (target.sourceId === undefined || target.sourceId === plate.sourceId) &&
+      (plate.catalogAspect === null ||
+        Math.abs(target.sourceAspect / plate.catalogAspect - 1) < 1e-6),
+  );
+}
+
+/** One read per row and crop context, shared by the Pan controls and the preview picture. */
+export function PreviewCropReader({
+  itemId,
+  scopeKey,
+  enabled,
+  onAir,
+  panSession,
+  appliedTokens,
+  onRead,
+}: {
+  itemId: string;
+  scopeKey: string;
+  enabled: boolean;
+  onAir: boolean;
+  panSession: number;
+  appliedTokens: string;
+  onRead: (key: string, read: PreviewCropRead | undefined) => void;
+}): null {
+  useEffect(() => () => onRead(scopeKey, undefined), [onRead, scopeKey]);
+  useEffect(() => {
+    if (!enabled) return;
+    let current = true;
+    void (async () => {
+      try {
+        const result = await window.cg.stack.previewPlateCrop({
+          itemId,
+          ...(onAir && { allowOnAir: true }),
+        });
+        if (current) {
+          onRead(scopeKey, {
+            panSession,
+            targets: result.ok ? result.targets : [],
+            message: result.ok ? undefined : result.message,
+          });
+        }
+      } catch {
+        // An older Bridge or unavailable channel still supports local practice.
+        if (current) onRead(scopeKey, { panSession, targets: [] });
+      }
+    })();
+    return () => {
+      current = false;
+    };
+  }, [appliedTokens, enabled, itemId, onAir, onRead, panSession, scopeKey]);
+  return null;
+}
+
 export function PreviewPanRow({
   itemId,
   scope,
   lookId,
   appliedCrops,
   onAir = false,
-  pending = false,
+  cropRead,
   plates,
   sourceFrames,
   fit,
@@ -82,57 +148,19 @@ export function PreviewPanRow({
   lookId: string | undefined;
   appliedCrops: StackItemState['previewPlateCrops'];
   onAir?: boolean;
-  pending?: boolean;
+  cropRead: PreviewCropRead | undefined;
   plates: readonly PreviewPanPlacement[];
   sourceFrames: ReadonlyMap<string, SourcePreviewFrame>;
   fit: number;
 }): JSX.Element {
   const engineName = useEngineName();
-  const hasSource = plates.some((plate) => plate.sourceId !== null);
-  const canCheck = hasSource && !pending;
-  const [targets, setTargets] = useState<readonly PreviewPlateCropTarget[] | null>(
-    hasSource ? null : [],
-  );
-  const [cropMessage, setCropMessage] = useState<string>();
+  const checking = cropRead === undefined && plates.some((plate) => plate.sourceId !== null);
   useSyncExternalStore(subscribeDrafts, draftsVersion, draftsVersion);
-
-  useEffect(() => {
-    let current = true;
-    if (canCheck) {
-      void (async () => {
-        try {
-          const result = await window.cg.stack.previewPlateCrop({
-            itemId,
-            ...(onAir && { allowOnAir: true }),
-          });
-          if (current) {
-            setTargets(result.ok ? result.targets : []);
-            setCropMessage(result.ok ? undefined : result.message);
-          }
-        } catch {
-          // An older Bridge or unavailable channel still supports local practice.
-          if (current) setTargets([]);
-        }
-      })();
-    }
-    return () => {
-      current = false;
-    };
-  }, [canCheck, itemId, onAir]);
 
   return (
     <>
       {plates.map((plate) => {
-        const target =
-          plate.sourceId === null
-            ? undefined
-            : targets?.find(
-                (entry) =>
-                  entry.plateId === plate.plateId &&
-                  (entry.sourceId === undefined || entry.sourceId === plate.sourceId) &&
-                  (plate.catalogAspect === null ||
-                    Math.abs(entry.sourceAspect / plate.catalogAspect - 1) < 1e-6),
-              );
+        const target = previewCropTarget(plate, cropRead);
         const key =
           target?.token ??
           JSON.stringify([
@@ -151,7 +179,7 @@ export function PreviewPanRow({
             ? appliedPracticeCropOf(itemId, key)
             : appliedCrops?.find((crop) => crop.token === target.token)?.focus;
         const appliedFocus = saved ?? target?.focus ?? DEFAULT_LIVE_CROP_FOCUS;
-        let state: CropState = targets === null ? 'loading' : 'practice';
+        let state: CropState = checking ? 'loading' : 'practice';
         if (target !== undefined)
           state = saved !== undefined || target.staged === true ? 'saved' : 'ready';
         else if (saved !== undefined) state = 'practice-saved';
@@ -180,11 +208,11 @@ export function PreviewPanRow({
                 PRACTICE_SOURCE_ASPECT
               }
               state={state}
-              blocked={targets === null}
+              blocked={checking}
               cropMessage={
-                cropMessage === undefined
+                cropRead?.message === undefined
                   ? undefined
-                  : playoutEngineWording(cropMessage, engineName)
+                  : playoutEngineWording(cropRead.message, engineName)
               }
               guide={target !== undefined}
               onAir={onAir}

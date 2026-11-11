@@ -109,3 +109,10 @@
 - [x] 10.8 In Chromium, verify that refreshed input fills the source area, checkerboard stays in unused
       margins, both gestures dim only the image outside the crop, and hover and release restore the idle paint.
 - [ ] 10.9 Verify the corrected Pan presentation with the assigned inputs on the target station.
+
+## 11. Render the applied crop with Pan closed
+
+- [x] Use the saved crop for the current verified plate, source and look in normal PVW.
+- [x] Windows Chromium verified the saved off-air crop and matched the updated on-air FILL
+      to the PVW picture after closing Pan, without additional playout commands.
+- [ ] Record the carrying Linux Playwright run.

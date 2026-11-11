@@ -266,15 +266,52 @@ test('D-178 / B-433 — PVW crop reaches the first Take and Update on air refram
         ],
       },
     },
-    HTML,
+    HTML.replace(
+      '</body>',
+      '<div data-cg-live-source="guest" style="position:absolute;left:720px;top:270px;width:480px;height:540px"></div></body>',
+    ),
     1,
   );
   expect(
     await handle.runtime.loadFixed({ channel: 1, layer: 59 }, cropItem, 'tpl-pvw-crop', {}),
   ).toMatchObject({ accepted: true });
   await openConsole(page, handle.url);
+  await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 160;
+    canvas.height = 90;
+    const context = canvas.getContext('2d');
+    if (context === null) throw new Error('Missing source picture canvas');
+    context.fillStyle = '#f22';
+    context.fillRect(0, 0, 80, 90);
+    context.fillStyle = '#2e2';
+    context.fillRect(80, 0, 80, 90);
+    const jpegBase64 = canvas.toDataURL('image/jpeg').split(',')[1];
+    Object.assign(window.cg, {
+      sourcePreviews: {
+        pvw: async ({ sourceIds }: { sourceIds: string[] }) => ({
+          frames: sourceIds.map((sourceId) => ({
+            sourceId,
+            signal: 'present',
+            jpegBase64,
+            width: 160,
+            height: 90,
+          })),
+        }),
+      },
+    });
+  });
   await showMonitors(page);
   const pvw = page.getByRole('region', { name: 'PREVIEW (PVW)' });
+  const pan = pvw.getByRole('button', { name: 'Pan preview input', exact: true });
+  const pvwPicture = pvw
+    .frameLocator('iframe[data-rehearsal-frame]')
+    .locator('[data-cg-live-source="guest"] [data-cg-pvw-picture-part] img');
+  const readPicture = () =>
+    pvwPicture.evaluate((image) => {
+      const { x, y, width, height } = image.getBoundingClientRect();
+      return { x, y, width, height };
+    });
   const plateRow = page.getByRole('region', { name: 'Layers' }).locator('[data-layer="59"]');
   const take = plateRow.getByRole('button', { name: 'PLAY', exact: true });
   await plateRow.locator('[data-row-body]').click();
@@ -283,12 +320,14 @@ test('D-178 / B-433 — PVW crop reaches the first Take and Update on air refram
   const startPan = async () => {
     await plateRow.getByRole('button', { name: 'ON PVW', exact: true }).click();
     await pvw.getByRole('button', { name: 'PLAY', exact: true }).click();
-    await pvw.getByRole('button', { name: 'Pan preview input', exact: true }).click();
-    await expect(pvw.getByRole('button', { name: 'Pan crop guide in guest' })).toBeVisible();
+    await pan.click();
+    await expect(pvw.getByRole('button', { name: 'Pan source picture in guest' })).toBeEnabled();
   };
   const leavePreview = () => plateRow.getByRole('button', { name: 'OFF PVW', exact: true }).click();
   await startPan();
   await expect(take).toBeEnabled();
+  await expect(pvwPicture).toBeVisible();
+  const centeredPicture = await readPicture();
   const crop = pvw.locator('[data-pan-practice-crop]');
   const source = pvw.locator('[data-pan-practice-picture]');
   const draft = pvw.locator('[data-pan-crop-state="draft"]');
@@ -328,6 +367,11 @@ test('D-178 / B-433 — PVW crop reaches the first Take and Update on air refram
   await startPan();
   await expect(saved).toBeVisible();
   await expect.poll(readLeft).toBeCloseTo(37.5, 0);
+  await pan.click();
+  await expect(crop).toHaveCount(0);
+  await expect.poll(async () => (await readPicture()).x).toBeLessThan(centeredPicture.x - 100);
+  await pan.click();
+  await expect(saved).toBeVisible();
   const staged = engine
     .receivedCommands()
     .slice(wireStart)
@@ -352,7 +396,7 @@ test('D-178 / B-433 — PVW crop reaches the first Take and Update on air refram
   expect(reveal).toBeGreaterThan(play);
 
   await expect(plateRow).toHaveAttribute('aria-label', /ON AIR$/);
-  await expect(pvw.getByRole('button', { name: 'Pan crop guide in guest' })).toBeVisible();
+  await expect(pvw.getByRole('button', { name: 'Pan source picture in guest' })).toBeEnabled();
   const before = engine.layerState(slot);
   if (before?.fill === undefined || before.clip === undefined)
     throw new Error('Missing on-air plate geometry');
@@ -387,6 +431,30 @@ test('D-178 / B-433 — PVW crop reaches the first Take and Update on air refram
     onAirUpdate.some((line) =>
       /(?:^| )(?:PLAY|LOADBG|STOP|CLEAR) 1-60\b|MIXER 1-60 (?:VOLUME|OPACITY)\b/.test(line),
     ),
+  ).toBe(false);
+
+  const appliedFill = engine.layerState(slot)?.fill;
+  if (appliedFill === undefined) throw new Error('Missing applied on-air crop');
+  const wireBeforeClosing = engine.receivedCommands().length;
+  await pan.click();
+  await expect(crop).toHaveCount(0);
+  await expect(pvwPicture).toBeVisible();
+  await expect
+    .poll(async () => {
+      const picture = await readPicture();
+      return Math.max(
+        Math.abs(picture.x - appliedFill.x * 1920),
+        Math.abs(picture.y - appliedFill.y * 1080),
+        Math.abs(picture.width - appliedFill.width * 1920),
+        Math.abs(picture.height - appliedFill.height * 1080),
+      );
+    })
+    .toBeLessThan(2);
+  expect(
+    engine
+      .receivedCommands()
+      .slice(wireBeforeClosing)
+      .some(({ line }) => /(?:^| )(?:MIXER|PLAY|STOP|CLEAR) 1-60\b/.test(line)),
   ).toBe(false);
 });
 

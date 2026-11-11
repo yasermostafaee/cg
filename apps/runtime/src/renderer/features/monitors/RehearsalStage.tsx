@@ -17,7 +17,12 @@ import { activeLookOf, type ChannelRaster } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 import { LivePlateOverlay, anyRegionTooSmallForCaveat } from './LivePlateOverlay.js';
 import { platePlacements, type PlatePlacement } from './livePlateGeometry.js';
-import { PreviewPanRow } from './PreviewPanDraft.js';
+import {
+  PreviewCropReader,
+  PreviewPanRow,
+  previewCropTarget,
+  type PreviewCropRead,
+} from './PreviewPanDraft.js';
 import {
   RehearsalFrame,
   type RehearsalFrameBounds,
@@ -266,6 +271,7 @@ interface Props {
   /** The channel's real raster (R-030). Every iframe is sized to it. */
   raster: ChannelRaster;
   panOpen?: boolean;
+  panSession?: number;
   panSourceAspects?: ReadonlyMap<string, number | null>;
   /**
    * Publishes the local transport upward so a persistent controls row can drive it, and
@@ -351,6 +357,7 @@ export function RehearsalStage({
   templateNames,
   raster,
   panOpen = false,
+  panSession = 0,
   panSourceAspects,
   onTransport,
   onSelectItem,
@@ -494,46 +501,73 @@ export function RehearsalStage({
     (plate) => plate.cropEdges === true && plateInRaster(plate, raster),
   );
   const panAvailable = playing && panPlates.length > 0;
-  const panRows =
-    panOpen && panAvailable
-      ? renderable.flatMap(({ subject }) => {
-          const plates = panPlates
-            .filter((plate) => plate.itemId === subject.itemId)
-            .map((plate) => ({
-              ...plate,
-              catalogAspect: panSourceAspects?.get(plate.sourceId ?? '') ?? null,
-            }));
-          if (plates.length === 0) return [];
-          const look =
-            subject.liveSources === undefined
+  const panRows = panAvailable
+    ? renderable.flatMap(({ subject }) => {
+        const plates = panPlates
+          .filter((plate) => plate.itemId === subject.itemId)
+          .map((plate) => ({
+            ...plate,
+            catalogAspect: panSourceAspects?.get(plate.sourceId ?? '') ?? null,
+          }));
+        if (plates.length === 0) return [];
+        const look =
+          subject.liveSources === undefined
+            ? undefined
+            : activeLookOf(subject.liveSources, subject.activeLookId);
+        // A changed look, binding or footprint must unmount old crop tokens immediately.
+        const scope = JSON.stringify([
+          subject.channel,
+          subject.plateSources.templateId,
+          look?.id,
+          raster.width,
+          raster.height,
+        ]);
+        const key = JSON.stringify([
+          subject.itemId,
+          scope,
+          subject.previewCropOnAir === true,
+          plates.map(({ plateId, sourceId, catalogAspect, x, y, width, height }) => [
+            plateId,
+            sourceId,
+            catalogAspect,
+            x,
+            y,
+            width,
+            height,
+          ]),
+        ]);
+        return [{ subject, plates, key, scope, lookId: look?.id }];
+      })
+    : [];
+  const [cropReads, setCropReads] = useState<ReadonlyMap<string, PreviewCropRead>>(() => new Map());
+  const rememberCropRead = useCallback((key: string, read: PreviewCropRead | undefined) => {
+    setCropReads((prior) => {
+      if (read === undefined && !prior.has(key)) return prior;
+      const next = new Map(prior);
+      if (read === undefined) next.delete(key);
+      else next.set(key, read);
+      return next;
+    });
+  }, []);
+  const appliedFocusesByItem = new Map(
+    panRows.map(({ subject, plates, key }) => [
+      subject.itemId,
+      new Map(
+        plates.flatMap((plate) => {
+          const target = previewCropTarget(plate, cropReads.get(key));
+          const saved =
+            target === undefined
               ? undefined
-              : activeLookOf(subject.liveSources, subject.activeLookId);
-          // A changed look, binding or footprint must unmount old crop tokens immediately.
-          const scope = JSON.stringify([
-            subject.channel,
-            subject.plateSources.templateId,
-            look?.id,
-            raster.width,
-            raster.height,
-          ]);
-          const key = JSON.stringify([
-            subject.itemId,
-            scope,
-            subject.previewCropOnAir === true,
-            subject.previewCropPending === true,
-            plates.map(({ plateId, sourceId, catalogAspect, x, y, width, height }) => [
-              plateId,
-              sourceId,
-              catalogAspect,
-              x,
-              y,
-              width,
-              height,
-            ]),
-          ]);
-          return [{ subject, plates, key, scope, lookId: look?.id }];
-        })
-      : [];
+              : subject.previewPlateCrops?.find((crop) => crop.token === target.token);
+          return saved === undefined ? [] : ([[plate.elementId, saved.focus]] as const);
+        }),
+      ),
+    ]),
+  );
+  const picturePlacements = placements.map((plate) => {
+    const focus = appliedFocusesByItem.get(plate.itemId)?.get(plate.elementId);
+    return focus === undefined ? plate : { ...plate, focus };
+  });
 
   // The FIT scale — preview only. Measured rather than assumed, so the rehearsal
   // stays whole at any panel width, including mid divider-drag.
@@ -670,7 +704,7 @@ export function RehearsalStage({
             activeLookId={subject.activeLookId}
             timing={subject.timing}
             book={subject.book}
-            livePlates={placements.filter(
+            livePlates={picturePlacements.filter(
               (plate) => plate.channel === channel && plate.itemId === subject.itemId,
             )}
             sourceFrames={sourceFrames}
@@ -710,7 +744,23 @@ export function RehearsalStage({
           interactive={!panOpen}
           onSelectItem={onSelectItem}
         />
-        {panRows.length > 0 && (
+        {panRows.map(({ subject, plates, key }) => (
+          <PreviewCropReader
+            key={key}
+            itemId={subject.itemId}
+            scopeKey={key}
+            enabled={
+              subject.previewCropPending !== true &&
+              (panOpen || (subject.previewPlateCrops?.length ?? 0) > 0) &&
+              plates.some((plate) => plate.sourceId !== null)
+            }
+            onAir={subject.previewCropOnAir === true}
+            panSession={panSession}
+            appliedTokens={subject.previewPlateCrops?.map(({ token }) => token).join(',') ?? ''}
+            onRead={rememberCropRead}
+          />
+        ))}
+        {panOpen && panRows.length > 0 && (
           <div
             className="cg-pan-draft-layer"
             style={
@@ -721,20 +771,27 @@ export function RehearsalStage({
               } as CSSProperties
             }
           >
-            {panRows.map(({ subject, plates, key, scope, lookId }) => (
-              <PreviewPanRow
-                key={key}
-                itemId={subject.itemId}
-                scope={scope}
-                lookId={lookId}
-                appliedCrops={subject.previewPlateCrops}
-                onAir={subject.previewCropOnAir === true}
-                pending={subject.previewCropPending === true}
-                plates={plates}
-                sourceFrames={sourceFrames}
-                fit={fit}
-              />
-            ))}
+            {panRows.map(({ subject, plates, key, scope, lookId }) => {
+              const read = cropReads.get(key);
+              return (
+                <PreviewPanRow
+                  key={JSON.stringify([key, subject.previewCropPending === true])}
+                  itemId={subject.itemId}
+                  scope={scope}
+                  lookId={lookId}
+                  appliedCrops={subject.previewPlateCrops}
+                  onAir={subject.previewCropOnAir === true}
+                  cropRead={
+                    subject.previewCropPending !== true && read?.panSession === panSession
+                      ? read
+                      : undefined
+                  }
+                  plates={plates}
+                  sourceFrames={sourceFrames}
+                  fit={fit}
+                />
+              );
+            })}
           </div>
         )}
       </div>

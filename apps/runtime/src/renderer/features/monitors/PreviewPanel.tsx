@@ -142,6 +142,7 @@ export function PreviewPanel({
   // `MULTI-CHANNEL-01` — the SELECTED channel's bank: PREVIEW is the channel on screen.
   const { bank, viewChannel } = useChannelBankState();
   const [panChannel, setPanChannel] = useState<number | null | undefined>(undefined);
+  const [panSession, setPanSession] = useState(0);
   const slots = useFixedSlots();
   // `RELEASE-091-01` §1 — each rehearsing row's page: the bridge's first, this browser's copy only
   // when the bridge cannot be reached, or why there is none (`templates.page`).
@@ -488,7 +489,10 @@ export function PreviewPanel({
                 ? 'Frame a cropped input in Preview'
                 : 'Show a Crop edges plate in Preview to use Pan'
             }
-            onClick={() => setPanChannel(panOpen ? undefined : viewChannel)}
+            onClick={() => {
+              setPanChannel(panOpen ? undefined : viewChannel);
+              if (!panOpen) setPanSession((session) => session + 1);
+            }}
           >
             <Icon icon={Move} size={13} />
             Pan
@@ -585,6 +589,7 @@ export function PreviewPanel({
             onTransport={setTransport}
             onSelectItem={onSelectItem}
             panOpen={panOpen}
+            panSession={panSession}
             panSourceAspects={panSourceAspects}
           />
         )}

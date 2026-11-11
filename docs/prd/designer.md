@@ -6046,7 +6046,8 @@ Preserve the authored plate, its aspect ratio, title and input assignment. Drag 
 Center stage a draft for the same row, look, plate and input. The draft survives OFF PVW. Off-air
 Update saves it for Take, including when PVW is off. Update on air applies it to the current verified
 plate without restarting its source. Discard restores the last applied position. Take applies a saved
-crop before the first on-air frame. Absent focus centres a cover crop.
+crop before the first on-air frame. With Pan closed, PVW shows the applied crop for the current
+verified plate, look and source. Absent focus centres a cover crop.
 
 **Implementation**
 

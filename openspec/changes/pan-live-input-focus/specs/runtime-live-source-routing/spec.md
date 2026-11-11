@@ -133,3 +133,9 @@ it. A legacy rehearsal requires leaving PVW before Take. Independent browser-onl
 - **AND** the absent optional channel sends no crop request and does not raise the global Bridge compatibility warning
 - **WHEN** a Bridge supports saving position but does not advertise resize for a verified target
 - **THEN** the verified guide keeps positional Pan without sending a resize edit
+
+#### Scenario: Preview keeps the saved framing with Pan closed
+
+- **WHEN** the operator applies a crop and closes Pan
+- **THEN** normal PVW renders the saved framing for the current verified plate, source and look
+- **AND** closing Pan sends no playout command
