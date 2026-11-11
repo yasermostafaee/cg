@@ -126,13 +126,12 @@ test('B3 — CG Control’s first question: the Playout’s address, typed', asy
   await asCgControl(page, null);
   await page.goto(`${APP}/`);
   const gate = page.locator('[data-playout-address-gate]');
-  const mode = gate.getByLabel('Station mode');
-  await expect(mode).toHaveValue('playout');
-  await expect(mode.locator('option')).toHaveText(['APASAI Playout', 'Direct to CasparCG']);
-  // `SERVERS-SIMPLIFY-01` (T1) — the Playout's host field (its port is left to its placeholder).
+  await expect(gate.getByLabel('Station mode')).toHaveCount(0);
+  await expect(gate.getByRole('group', { name: 'APASAI Playout Engine address' })).toBeVisible();
   await gate.getByLabel('Playout host', { exact: true }).fill(EXAMPLE_PLAYOUT);
   await expect(gate.getByRole('button', { name: 'Connect' })).toBeEnabled();
-  // The card alone, with the default station mode, the address fields and Connect.
+
+  // The card alone, with the address fields and Connect.
   await gate
     .getByRole('dialog', { name: 'Set up CG Control' })
     .screenshot({ path: path.join(out, '1-playout-address.png') });

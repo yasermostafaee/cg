@@ -17,8 +17,8 @@
 /// `@cg/shared-ipc`'s `PLAYOUT_API_PORT`: an `http://` Playout address with no port has it.
 pub const PLAYOUT_API_PORT: u16 = 8080;
 
-/// `@cg/shared-ipc`'s `NOT_A_PLAYOUT_ADDRESS` — CG Control's first question refuses with the same words.
-pub const NOT_A_PLAYOUT_ADDRESS: &str = "That is not a Playout address.";
+/// The Setup refusal for an invalid Playout Engine address.
+pub const NOT_A_PLAYOUT_ADDRESS: &str = "That is not an APASAI Playout Engine address.";
 
 /// The Playout address the engine is given (`/PLAYOUT=`) for what was typed, or `None`.
 ///

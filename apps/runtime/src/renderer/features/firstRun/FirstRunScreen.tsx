@@ -1,3 +1,4 @@
+import { PLAYOUT_ENGINE_NAME, playoutEngineWording } from '../../ui/engineWording.js';
 import { useEffect, useRef, useState } from 'react';
 import type { CatalogueChannel, SetupPhase } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
@@ -609,7 +610,7 @@ export function ChannelStep({
         )}
         {catalogue.state === 'refused' && (
           <div style={styles.error} role="status">
-            {catalogue.message}
+            {playoutEngineWording(catalogue.message)}
           </div>
         )}
         {catalogue.state === 'rows' && catalogue.rows.length === 0 && (
@@ -664,7 +665,7 @@ export function ChannelStep({
           <>
             <div style={styles.row}>
               <label htmlFor="cg-first-run-host" style={styles.label}>
-                CasparCG host
+                {PLAYOUT_ENGINE_NAME} host
               </label>
               <div style={styles.grow}>
                 <TextInput
@@ -727,7 +728,7 @@ export function ChannelStep({
         ))}
       {error !== null && (
         <div style={styles.error} role="status">
-          {error}
+          {playoutEngineWording(error)}
         </div>
       )}
       <div style={styles.row}>

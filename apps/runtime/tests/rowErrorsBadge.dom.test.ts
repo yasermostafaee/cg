@@ -5,6 +5,7 @@ import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { StackItemState } from '@cg/shared-schema';
 import { RowErrorsBadge } from '../src/renderer/features/layers/RowErrorsBadge.js';
+import { EngineNameContext } from '../src/renderer/ui/engineWording.js';
 import { clearPortals } from './support/dialog.js';
 
 /**
@@ -44,7 +45,10 @@ const row = (itemId: string, over: Partial<StackItemState> = {}): StackItemState
   ...over,
 });
 
-async function render(items: readonly StackItemState[]): Promise<{
+async function render(
+  items: readonly StackItemState[],
+  engineName = 'CasparCG',
+): Promise<{
   el: HTMLElement;
   dismiss: ReturnType<typeof vi.fn>;
 }> {
@@ -59,14 +63,18 @@ async function render(items: readonly StackItemState[]): Promise<{
       createElement(
         StrictMode,
         null,
-        createElement(RowErrorsBadge, {
-          items,
-          nameOf: (item: StackItemState) => ({
-            names: [item.itemId === 'bed' ? 'Bed 59' : 'Layer 90', '2ghab'],
-            layer: item.slot === undefined ? null : `1-${String(item.slot.layer)}`,
-            title: item.itemId,
+        createElement(
+          EngineNameContext.Provider,
+          { value: engineName },
+          createElement(RowErrorsBadge, {
+            items,
+            nameOf: (item: StackItemState) => ({
+              names: [item.itemId === 'bed' ? 'Bed 59' : 'Layer 90', '2ghab'],
+              layer: item.slot === undefined ? null : `1-${String(item.slot.layer)}`,
+              title: item.itemId,
+            }),
           }),
-        }),
+        ),
       ),
     );
   });
@@ -89,6 +97,26 @@ describe('B-301 — the Layers badge', () => {
   it('CONTROL — with no row in error the badge is absent', async () => {
     const { el } = await render([row('leftover', { slot: undefined })]);
     expect(el.querySelector('[data-layers-tally-error]')).toBeNull();
+  });
+
+  it('names APASAI Playout Engine in both row-error paths', async () => {
+    const { el } = await render(
+      [
+        row('bed', { errorCode: 'amcp-send-failed' }),
+        row('take', { takeRefusal: { code: 'amcp-timeout' } }),
+      ],
+      'APASAI Playout Engine',
+    );
+    await act(async () => {
+      el.querySelector<HTMLButtonElement>('[data-layers-tally-error]')?.click();
+    });
+    const reasons = [...document.querySelectorAll('[data-row-error-why]')].map(
+      (reason) => reason.textContent,
+    );
+    expect(reasons).toEqual([
+      expect.stringContaining('never reached APASAI Playout Engine'),
+      expect.stringContaining('APASAI Playout Engine did not answer'),
+    ]);
   });
 
   it('pressed, it lists each row by its name and LAYER with the reason in words — and Dismiss asks the bridge for THAT row', async () => {

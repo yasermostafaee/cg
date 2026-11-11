@@ -1,3 +1,4 @@
+import { PLAYOUT_ENGINE_NAME, playoutEngineWording } from '../../ui/engineWording.js';
 import {
   Check,
   CircleDashed,
@@ -138,8 +139,10 @@ export function ConnectionCheckList({
   lines,
   grouped = false,
   actions,
+  engineName = PLAYOUT_ENGINE_NAME,
 }: {
   lines: readonly ShownCheckLine[];
+  engineName?: string;
   grouped?: boolean | undefined;
   /**
    * 🔴 `SERVERS-SIMPLIFY-01` (`B-326`) — the ONE act a line offers, under its sentence, keyed by the line's
@@ -149,6 +152,10 @@ export function ConnectionCheckList({
 }): JSX.Element {
   const still = usePrefersReducedMotion();
   const [showAll, setShowAll] = useState(readShowAll);
+  const operatorLines = lines.map((line) => ({
+    ...line,
+    text: playoutEngineWording(line.text, engineName),
+  }));
   const checking = lines.some((l) => l.status === 'checking');
   if (grouped) {
     const anyPass = lines.some((l) => l.status === 'pass');
@@ -157,7 +164,7 @@ export function ConnectionCheckList({
         {CONNECTION_CHECK_GROUPS.map((group) => {
           // In the group's own order, whatever order the lines arrived in.
           const mine = (group.lines as readonly string[]).flatMap((id) =>
-            lines.filter((l) => l.id === id),
+            operatorLines.filter((l) => l.id === id),
           );
           if (mine.length === 0) return null;
           /*
@@ -215,7 +222,7 @@ export function ConnectionCheckList({
   }
   return (
     <ul style={styles.list} aria-label="Connection check" aria-busy={checking}>
-      <CheckLineItems lines={lines} still={still} actions={actions} />
+      <CheckLineItems lines={operatorLines} still={still} actions={actions} />
     </ul>
   );
 }

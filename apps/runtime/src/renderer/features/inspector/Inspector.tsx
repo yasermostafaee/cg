@@ -1,3 +1,4 @@
+import { useEngineName } from '../../ui/engineWording.js';
 import { useEffect, useId, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useCasparReach } from '../../hooks/useCasparReachable.js';
 import { useLink } from '../../hooks/useLink.js';
@@ -434,7 +435,8 @@ export function Inspector({
    * DEAD BRIDGE looks like from here, so the one control the operator reaches for
    * after typing an edit sent him to the wrong machine.
    */
-  const applyRefusal = casparRefusalReason(linkDown, casparReach);
+  const engineName = useEngineName();
+  const applyRefusal = casparRefusalReason(linkDown, casparReach, engineName);
   /**
    * `RUNTIME-REDESIGN-01` Phase 6 (`R-061` (a)) — golden rule 11: the heading names the ROW in
    * the operator's words. Through the one composition (`operatorRowName`, fed by the bank and
@@ -839,6 +841,7 @@ export function Inspector({
                   (s) => s.id === item.takeRefusal?.sourceId,
                 ),
                 channel: rowSlot?.channel,
+                engineName,
               })}
             />
           </p>

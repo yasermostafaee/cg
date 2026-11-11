@@ -1,3 +1,4 @@
+import { useEngineName } from '../../ui/engineWording.js';
 import { Fragment, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { silenceHasTarget } from './panicReport.js';
 import { isOnAirStatus, type StackItemState } from '@cg/shared-schema';
@@ -452,7 +453,9 @@ export function LayersPanel({
   // …and says which hop, and whether we KNOW it is down or have merely not heard
   // yet. One shared resolution, so the header cannot word a refusal differently
   // from the row verbs refusing for the identical reason.
-  const needsCasparReason = casparRefusalReason(linkDown, casparReach) ?? BRIDGE_DOWN_REASON;
+  const engine = useEngineName();
+  const needsCasparReason =
+    casparRefusalReason(linkDown, casparReach, engine) ?? BRIDGE_DOWN_REASON;
   const [activeTab, setActiveTab] = useState('layers');
   const { confirm, confirmDialog } = useConfirm();
   /**
@@ -1839,8 +1842,8 @@ export function LayersPanel({
                     aria-label={`${String(tally.onAir)} items on air`}
                     title={
                       tallyUnverifiable
-                        ? `${String(tally.onAir)} on air — what this console believes is on air. CasparCG cannot be reached, so nothing is confirming it right now.`
-                        : `${String(tally.onAir)} on air — rows this console believes are on air or unsettled: a play CasparCG accepted, or one still waiting for its answer. A refused row is counted separately.`
+                        ? `${String(tally.onAir)} on air — what this console believes is on air. ${engine} cannot be reached, so nothing is confirming it right now.`
+                        : `${String(tally.onAir)} on air — rows this console believes are on air or unsettled: a play ${engine} accepted, or one still waiting for its answer. A refused row is counted separately.`
                     }
                   >
                     {tally.onAir} on air

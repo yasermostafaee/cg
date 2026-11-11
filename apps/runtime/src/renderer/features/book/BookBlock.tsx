@@ -11,6 +11,7 @@ import { REFERENCE_RASTER } from '@cg/shared-ipc';
 import type { FieldValue, ImageFit } from '@cg/shared-schema';
 import { parseLocalizedNumber } from '@cg/text-shaping';
 import { Button } from '../../ui/Button.js';
+import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { Icon } from '../../ui/Icon.js';
 import { Notice } from '../../ui/Notice.js';
 import { Tag } from '../../ui/Tag.js';
@@ -439,6 +440,7 @@ function BookTurn({
   book: RowBook;
   onAir: boolean;
 }): JSX.Element {
+  const engineName = useEngineName();
   const [typed, setTyped] = useState<string | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -545,7 +547,9 @@ function BookTurn({
           Go
         </Button>
       </div>
-      {refusal !== null && <Notice noticeRole="refusal" text={refusal} />}
+      {refusal !== null && (
+        <Notice noticeRole="refusal" text={playoutEngineWording(refusal, engineName)} />
+      )}
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 // The raster type comes from `@cg/shared-ipc` (`ChannelRaster`), not from
@@ -337,6 +338,7 @@ export function RehearsalStage({
   panSourceAspects,
   onTransport,
 }: Props): JSX.Element {
+  const engine = useEngineName();
   const fitRef = useRef<HTMLDivElement | null>(null);
   const [fit, setFit] = useState(1);
 
@@ -601,7 +603,7 @@ export function RehearsalStage({
         style={styles.fitBox}
         role="group"
         aria-label="Local preview"
-        aria-description={REHEARSAL_CAVEATS}
+        aria-description={playoutEngineWording(REHEARSAL_CAVEATS, engine)}
       >
         {/*
           Sized to the frame AS DISPLAYED (raster × fit) rather than scaled with

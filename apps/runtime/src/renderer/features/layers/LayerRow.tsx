@@ -1,3 +1,4 @@
+import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useState } from 'react';
 import { useCanOperate } from '../../hooks/useCanOperate.js';
 import type { FixedSlotState, TemplateInfo } from '@cg/shared-ipc';
@@ -341,7 +342,8 @@ export function LayerRow({
   // wait it is, not as a fault nothing has reported (see `reachWording`).
   const casparReach = useCasparReach();
   const { confirm, confirmDialog } = useConfirm();
-  const { pickTemplate, pickerDialog } = useTemplatePicker();
+  const engine = useEngineName();
+  const { pickTemplate, pickerDialog } = useTemplatePicker(engine);
   const { menu, open, openAt, close } = useContextMenu<number>();
   const spec = densitySpec(density);
 
@@ -381,7 +383,7 @@ export function LayerRow({
   // The SAME helper every other AMCP-emitting verb on this row uses. Not a look-specific
   // rule: with either hop down the switch cannot leave the browser, so an enabled picker
   // would be the appearance of a capability rather than one (see `lookSwitch.ts`).
-  const lookRefusal = casparRefusalReason(linkDown, casparReach);
+  const lookRefusal = casparRefusalReason(linkDown, casparReach, engine);
   /**
    * Send the switch, and report a refusal where the operator is looking.
    *
@@ -428,6 +430,7 @@ export function LayerRow({
           plateLabel: plateLabelOf(template, item.takeRefusal.plateId),
           entry: currentSourceCatalog().sources.find((s) => s.id === item.takeRefusal?.sourceId),
           channel: slot.channel,
+          engineName: engine,
         })
       : null;
   // `ROUTE-PLATES-01` C4 — the backup carries this row without its live boxes: one line, here.
@@ -653,7 +656,11 @@ export function LayerRow({
     // sentence that needs it. Composed once here, never a second time inside the actions.
     rowName,
     layerName,
-  }).map((action) => {
+  }).map((entry) => {
+    const action =
+      entry.title === undefined
+        ? entry
+        : { ...entry, title: playoutEngineWording(entry.title, engine) };
     // Confirm gates attached at DECLARATION time, so button and menu share them.
     // CLEAR destroys a live producer; REMOVE additionally takes the item off the
     // row. Both name the row and say what reaches air.
@@ -687,10 +694,10 @@ export function LayerRow({
        */
       const occupancySentence =
         slot.observed.kind === 'unknown'
-          ? `CasparCG is not reporting layer ${layerName} right now, so the console CANNOT tell you what is on it — this clears it anyway, whatever it is.`
+          ? `${engine} is not reporting layer ${layerName} right now, so the console CANNOT tell you what is on it — this clears it anyway, whatever it is.`
           : slot.observed.kind === 'producer'
-            ? `CasparCG reports a ${slot.observed.producer} producer on layer ${layerName}; it leaves air immediately, with no outro.`
-            : `CasparCG reports layer ${layerName} as empty, so this should have nothing to destroy.`;
+            ? `${engine} reports a ${slot.observed.producer} producer on layer ${layerName}; it leaves air immediately, with no outro.`
+            : `${engine} reports layer ${layerName} as empty, so this should have nothing to destroy.`;
       return withConfirm(action, () =>
         confirm(
           item !== null
@@ -801,6 +808,7 @@ export function LayerRow({
     oscBlind,
     rehearsing,
     restoreBlocked,
+    engineName: engine,
     // R-058 Part A — the bridge's reason for an `error`, which was published on the item all
     // along and read by nothing. See the title note in `rowState`.
     ...(item?.errorCode !== undefined ? { errorCode: item.errorCode } : {}),
@@ -843,7 +851,7 @@ export function LayerRow({
    */
   // `DESKTOP-APPS-01-D` h — no `Row N` any more: `#` IS the layer, and saying it twice would be
   // noise at best and, for a custom name, a second number to reconcile.
-  const rowTitle = `${rowName} · CasparCG layer ${layerName}`;
+  const rowTitle = `${rowName} · ${engine} layer ${layerName}`;
 
   return (
     <div

@@ -1,3 +1,4 @@
+import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { mismatchedChannels, rasterVerdict } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 import { useChannelSettings } from '../../hooks/useChannelSettings.js';
@@ -70,6 +71,7 @@ export function RasterMismatchBanner({
    */
   scope?: number | null;
 }): JSX.Element | null {
+  const engine = useEngineName();
   const state = useChannelSettings();
   const mismatched = inScope(mismatchedChannels(state), (entry) => entry.channel, scope);
   if (mismatched.length === 0) return null;
@@ -113,7 +115,8 @@ export function RasterMismatchBanner({
           The server owns this value — the console adopts the channel’s real raster when it reads
           one, but never while anything is on air, because that would move a live graphic. This
           clears once air is empty and the bridge reads the channel again. If the SERVER is the one
-          that is wrong, fix the channel’s video mode in casparcg.config.
+          that is wrong, fix the channel’s video mode in{' '}
+          {playoutEngineWording('casparcg.config', engine)}.
         </span>
       </span>
     </div>

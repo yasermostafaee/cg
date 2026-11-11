@@ -1,3 +1,4 @@
+import { useEngineName } from '../../ui/engineWording.js';
 import type { EmptiedAirNotice as Notice, EmptiedAirRefusal } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
@@ -141,7 +142,7 @@ export function EmptiedAirNotice({ notice, scope = null }: Props): JSX.Element |
   */
   const linkDown = useLink() === 'disconnected';
   const casparReach = useCasparReach();
-  const refusal = casparRefusalReason(linkDown, casparReach);
+  const refusal = casparRefusalReason(linkDown, casparReach, useEngineName());
   // `B-232` — above the early return with the rest of the hooks; an empty list when there
   // is no notice, which is what the strip is doing every second it is not needed.
   const nameOf = useOperatorNames(rows);

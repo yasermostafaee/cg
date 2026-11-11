@@ -82,7 +82,7 @@ function bridgeThatAnswers(signInUrl: string | null) {
 }
 
 describe('B-317 — a check on CG Bridge’s own socket', () => {
-  it('R-098 the Playout address gate directs a standalone answer to No Playout', async () => {
+  it('R-098 the Playout address gate refuses a standalone Bridge', async () => {
     const socket = new FakeSocket(
       'ws://127.0.0.1:5280',
       () => ({ channels: [], auth: 'off', stationMode: 'standalone' }),
@@ -90,7 +90,7 @@ describe('B-317 — a check on CG Bridge’s own socket', () => {
     );
     await expect(
       bridgeAnswersAt(socket.url, '127.0.0.1:5280', () => socket, 500),
-    ).resolves.toContain('uses Direct to CasparCG. Choose that mode to connect.');
+    ).resolves.toContain('does not have an APASAI Playout Engine connection.');
     expect(socket.sent).toEqual([{ type: 'request', channel: 'bridge.capabilities', payload: {} }]);
   });
 
@@ -109,7 +109,7 @@ describe('B-317 — a check on CG Bridge’s own socket', () => {
         token: 'jwt-from-local-playout',
         waitMs: 500,
       }),
-    ).rejects.toThrow('uses Direct to CasparCG. Choose that mode to connect.');
+    ).rejects.toThrow('does not have an APASAI Playout Engine connection.');
     expect(socket.sent).toEqual([{ type: 'request', channel: 'bridge.capabilities', payload: {} }]);
     expect(socket.closed).toBe(true);
   });
@@ -417,7 +417,7 @@ describe('B-317 — the address gate asks CG Bridge over a socket (never loopbac
 
   it('a record that names no Playout is refused before anything is dialled', async () => {
     expect(await stationBridgeAnswers({ playoutAddress: 'http://' })).toBe(
-      'That is not a Playout address.',
+      'That is not an APASAI Playout Engine address.',
     );
   });
 });

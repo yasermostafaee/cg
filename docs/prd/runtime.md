@@ -4653,15 +4653,15 @@ test. The Set up page asks with the same fields (one component, one rule). **Acc
 (split, paste, empty = default, the comparison); Chromium for the card and the Set up page, the port on its host's
 row; a Linux `e2e` run.
 
-## [~] R-096 — CasparCG is derived in a Playout station, and the cards say `CasparCG` ⟨priority: high — the owner read `Primary server` as "where the bridge is"⟩ — FILED 2026-10-11 by `SERVERS-SIMPLIFY-01` Part B (T2, T3) · `openspec/changes/servers-simplify/`
+## [~] R-096 — Playout stations derive their engine and display `APASAI Playout Engine` ⟨priority: high — the owner read `Primary server` as "where the bridge is"⟩ — FILED 2026-10-11 by `SERVERS-SIMPLIFY-01` Part B (T2, T3) · `openspec/changes/servers-simplify/`
 
-**What:** a Playout station is one whose CG Bridge advertises `auth: playout`. There, server A is not typed: a
-fact row reads `On the Playout machine`, its host as stored, its ports and its health. The cards are `CasparCG A`
-and `CasparCG B · backup`, the rail's foot `CasparCG`; the status bar and the subtitle keep `Primary A` (the
-redundancy role). B stays addable and editable, the Add dialog's ports placeholders. The graphics address sits
-behind `Advanced` (collapsed in a Playout station), titled `Where CasparCG fetches graphics`, `Host` and `Port`
-with `Detect automatically` / `Assign automatically`; no sentence calls CG Bridge's machine "this machine", and the
-candidates are labelled as CG Bridge's machine's addresses.
+**What:** in a station whose CG Bridge advertises `auth: playout`, the console calls the engine
+`APASAI Playout Engine` in setup, checks and operator diagnostics. The `APASAI Playout Engine A` card shows
+`On the Playout machine`, its stored host, ports and health as facts. `APASAI Playout Engine B · backup`
+stays addable and editable with the default ports as placeholders. The status bar and subtitle keep the
+redundancy role (`Primary A`). The graphics address sits behind `Advanced` with the title
+`Where APASAI Playout Engine fetches graphics` and automatic Host and Port defaults. Its candidate
+addresses belong to the CG Bridge machine. Saved standalone stations use `CasparCG` for the engine.
 
 ## [ ] R-097 — A status-bar fact while the Playout's readings are dropped ⟨priority: low — filed only⟩ — FILED 2026-10-11 by `SERVERS-SIMPLIFY-01` (T6) · `openspec/changes/servers-simplify/`
 
@@ -4670,21 +4670,26 @@ and grants are dropped. Say so in the status bar as a fact, beside the server it
 never opens Station setup still learns it. **Not built in `SERVERS-SIMPLIFY-01`** (the owner's instruction: file, do
 not build).
 
-## [~] R-098 — A station can connect to CasparCG without Playout ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/servers-simplify/`
+## [~] R-098 — Preserve existing standalone CasparCG stations and present Playout enrollment ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/servers-simplify/`
 
-**What:** Offer **Direct to CasparCG** in CG Bridge Setup and in CG Control on the same machine, alongside **APASAI Playout**. The Bridge connects to CasparCG over AMCP without Playout authentication, using an editable host, AMCP port and OSC port. CG Control stores only the mode and local Bridge address for that station.
+**What:** Fresh interactive CG Bridge Setup and CG Control present the APASAI Playout Engine connection.
+Existing standalone installations keep their direct CasparCG connection and editable host, AMCP port and
+OSC port. CG Control continues to read the saved standalone mode and local Bridge address. Connection
+uses `CG Bridge` for the saved standalone connection. Explicit unattended installer mode flags remain available.
 
-**Why:** A standalone CasparCG station must be able to run CG templates without installing the Playout Engine or Client.
+**Why:** Existing standalone CasparCG stations need to remain usable after an upgrade. Fresh setup presents
+the APASAI Playout Engine workflow.
 
 **Acceptance:**
 
-- WHEN the installer is explicitly set to No Playout THEN the installed Bridge connects to local or remote CasparCG using the configured AMCP port. Only the local machine can reach the unauthenticated control socket.
-- WHEN CG Control verifies an installed No Playout Bridge on loopback THEN it connects and can Take a template without Playout sign-in or licence discovery. Missing or incompatible Bridge leaves the existing station record untouched.
+- WHEN an administrator runs the unattended installer with `/MODE=standalone` THEN the installed Bridge connects to local or remote CasparCG using the configured AMCP port. Only the local machine can reach the unauthenticated control socket.
+- WHEN CG Control opens a saved standalone station and verifies its local Bridge THEN it can Take a template without Playout sign-in or licence discovery. Reading the saved record preserves its mode and address. Missing or incompatible Bridge leaves that record intact.
 - WHEN the standalone Bridge verifies the running CasparCG channel list THEN CG Control operates only matching configured channels. Missing channels remain configured for repair or recovery and Take is refused before sending a mixer command to them.
-- WHEN a No Playout Bridge's configured CasparCG is checked THEN it reports its actual AMCP result and does not probe or request Playout authentication. Host and port edits survive restart.
-- WHEN an existing or new Playout station is installed, opened or upgraded without choosing No Playout THEN its address, sign-in, channel grants, licence gates and on-air behavior stay in force.
+- WHEN a standalone Bridge's configured CasparCG is checked THEN it reports its actual AMCP result. Host and port edits survive restart. Connection shows the saved standalone connection under `CG Bridge`.
+- WHEN Setup opens on an installed standalone service without a mode argument THEN it shows the CasparCG maintenance page and preserves the installed mode. The page names CasparCG 2.5.0 Stable as tested.
+- WHEN fresh interactive Setup or CG Control enrollment opens THEN it presents the APASAI Playout Engine connection. Existing Playout addresses, sign-in, channel grants, licence gates and on-air behavior stay in force.
 - WHEN remote CasparCG fetches a graphics page THEN it can reach the configured graphics HTTP address without gaining access to the control socket.
-- WHEN the operator selects **Direct to CasparCG** THEN setup explains the local Bridge and names CasparCG 2.5.0 Stable as tested. To return to **APASAI Playout**, the operator can use **Set up again** in CG Control. If reusing the same Bridge, they first run CG Bridge Setup and select Playout mode there.
+- WHEN an administrator deliberately switches the same Bridge to Playout THEN the unattended installer accepts `/MODE=playout`. `Set up again` in CG Control opens the ordinary Playout address setup.
 
 ## [~] R-099 — An outage documents itself: one log line per change of the license the bridge holds ⟨priority: medium⟩ — FILED 2026-10-12 by `DONGLE-RECOVER-01` A2 · `openspec/changes/dongle-recover/`
 

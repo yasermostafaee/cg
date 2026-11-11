@@ -1,5 +1,5 @@
-//! `RELEASE-0111-01` Part A (`P-065`) — **"CG Bridge runs on a separate server (not on the Playout
-//! machine)"**: the page CG Bridge's setup asks it on, and what that page hands the engine.
+//! `RELEASE-0111-01` Part A (`P-065`) — the CG Bridge Setup page for the Playout Engine, and
+//! what that page hands the installer engine.
 //!
 //! The engine (CG Bridge's NSIS installer) takes everything a separate server needs on
 //! its command line — `/PLAYOUT=`, `/AMCPHOST=`, `/BRIDGEADDRESS=`, `/TEXTSOURCEROOT=` — and writes them to
@@ -15,7 +15,8 @@
 //! - **On an upgrade** the checkbox and the fields start from the stored configuration (or from the
 //!   command line, which wins, as it does for the engine); values left as they were are passed as they
 //!   were, which keeps them.
-//! - **Direct to CasparCG** (`R-098`) gives the engine the standalone mode and the AMCP endpoint.
+//! - **Standalone** (`R-098`) comes from an explicit installer argument or an existing
+//!   configuration. The page preserves and edits that station's AMCP endpoint.
 
 use crate::address::{
     bare_host, host_of_address, is_loopback, normalise_playout_address, NOT_A_PLAYOUT_ADDRESS,
@@ -49,10 +50,11 @@ const STANDALONE_OPTIONS: [&str; 6] = [
 ];
 
 // ── The page's words. The checkbox's is the owner's own (RELEASE-0111-01 §A1). ────────────────
-pub const SEPARATE_LABEL: &str = "CG Bridge runs on a separate server (not on the Playout machine)";
-pub const NO_PLAYOUT_LABEL: &str = "Direct to CasparCG";
-pub const PLAYOUT_LABEL: &str = "Playout address";
-pub const AMCP_LABEL: &str = "CasparCG (AMCP) host";
+pub const PLAYOUT_ENGINE_NAME: &str = "APASAI Playout Engine";
+pub const SEPARATE_LABEL: &str = "CG Bridge and APASAI Playout Engine run on separate servers";
+pub const PLAYOUT_LABEL: &str = "APASAI Playout Engine address";
+pub const PLAYOUT_AMCP_LABEL: &str = "APASAI Playout Engine (AMCP) host";
+pub const STANDALONE_AMCP_LABEL: &str = "CasparCG (AMCP) host";
 pub const AMCP_PORT_LABEL: &str = "AMCP port";
 pub const OSC_PORT_LABEL: &str = "OSC port";
 pub const AMCP_PORT_DEFAULT: &str = "5250";
@@ -64,13 +66,16 @@ pub const OTHER_LABEL: &str = "Other";
 /// The Playout field's placeholder: what to type, in the form CG Control's first question takes.
 pub const PLAYOUT_PLACEHOLDER: &str = "IP or name · :port if not 8080";
 
-pub const TYPE_THE_PLAYOUT: &str = "Type the Playout's address.";
-pub const NOT_THE_PLAYOUT: &str = "That is this server. Type the Playout machine's address.";
-pub const TYPE_A_HOST: &str = "Type CasparCG's host.";
+pub const TYPE_THE_PLAYOUT: &str = "Type the APASAI Playout Engine address.";
+pub const NOT_THE_PLAYOUT: &str = "That is this server. Type the APASAI Playout Engine address.";
+pub const TYPE_PLAYOUT_AMCP_HOST: &str = "Type the APASAI Playout Engine AMCP host.";
+pub const NOT_PLAYOUT_AMCP_HOST: &str =
+    "That is this server. Type the APASAI Playout Engine AMCP host.";
 pub const NOT_A_HOST: &str = "That is not a host. Type an IPv4 address or a name, with no port.";
 pub const CHOOSE_AN_ADDRESS: &str = "Choose this server's address.";
 pub const NOT_AN_ADDRESS: &str = "That is not an address. Type an IPv4 address or a name.";
-pub const NOT_LOOPBACK: &str = "The Playout cannot reach this server on a loopback address.";
+pub const NOT_LOOPBACK: &str =
+    "APASAI Playout Engine cannot reach this server on a loopback address.";
 pub const NOT_A_TEXT_SOURCE: &str = "Choose an existing folder this server can read.";
 pub const NOT_A_PORT: &str = "Enter a port from 1 to 65535.";
 pub const RESERVED_OSC_PORT: &str = "6250 is reserved. Choose another OSC port.";
@@ -218,15 +223,21 @@ impl ServerSetup {
         let pick = |g: &Option<String>, s: Option<&Option<String>>| {
             g.clone().or_else(|| s.and_then(Clone::clone))
         };
-        let playout = pick(&given.playout, stored.map(|s| &s.playout));
-        let amcp = pick(&given.amcp_host, stored.map(|s| &s.amcp_host));
         let mode = given.mode.or_else(|| stored.and_then(|s| s.mode));
         let standalone = mode == Some(BridgeMode::Standalone);
-        let was_standalone =
-            standalone || stored.is_some_and(|s| s.mode == Some(BridgeMode::Standalone));
+        let stored_standalone = stored.is_some_and(|s| s.mode == Some(BridgeMode::Standalone));
+        let was_standalone = standalone || stored_standalone;
+        // An explicit return to Playout starts from its own endpoints. The previously
+        // installed standalone host does not identify a separate Playout Engine.
+        let stored_endpoints = stored.filter(|_| standalone || !stored_standalone);
+        let playout = pick(&given.playout, stored_endpoints.map(|s| &s.playout));
+        let amcp = pick(&given.amcp_host, stored_endpoints.map(|s| &s.amcp_host));
         let amcp_port = pick(&given.amcp_port, stored.map(|s| &s.amcp_port));
         let osc_port = pick(&given.osc_port, stored.map(|s| &s.osc_port));
-        let address = pick(&given.bridge_address, stored.map(|s| &s.bridge_address));
+        let address = pick(
+            &given.bridge_address,
+            stored_endpoints.map(|s| &s.bridge_address),
+        );
         let text_source = pick(&given.text_source_root, stored.map(|s| &s.text_source_root));
         let effective = StoredBridge {
             playout: playout.clone(),
@@ -321,11 +332,6 @@ impl ServerSetup {
         self.shown = Refusals::default();
     }
 
-    pub fn toggle_standalone(&mut self) {
-        self.standalone = !self.standalone;
-        self.shown = Refusals::default();
-    }
-
     /// This server's address as chosen or typed (trimmed), or `None`.
     pub fn bridge_address(&self) -> Option<String> {
         match self.choice {
@@ -380,11 +386,11 @@ impl ServerSetup {
             }
         };
         let amcp = if self.amcp.text().trim().is_empty() {
-            Some(TYPE_A_HOST)
+            Some(TYPE_PLAYOUT_AMCP_HOST)
         } else {
             match bare_host(self.amcp.text()) {
                 None => Some(NOT_A_HOST),
-                Some(h) if is_loopback(&h) => Some(NOT_THE_PLAYOUT),
+                Some(h) if is_loopback(&h) => Some(NOT_PLAYOUT_AMCP_HOST),
                 Some(_) => None,
             }
         };
@@ -541,7 +547,7 @@ mod tests {
             s.judge(),
             Refusals {
                 playout: Some(TYPE_THE_PLAYOUT),
-                amcp: Some(TYPE_A_HOST),
+                amcp: Some(TYPE_PLAYOUT_AMCP_HOST),
                 address: Some(CHOOSE_AN_ADDRESS),
                 ..Refusals::default()
             }
@@ -562,7 +568,7 @@ mod tests {
         s.playout.set("127.0.0.1:8080");
         s.amcp.set("localhost");
         assert_eq!(s.judge().playout, Some(NOT_THE_PLAYOUT));
-        assert_eq!(s.judge().amcp, Some(NOT_THE_PLAYOUT));
+        assert_eq!(s.judge().amcp, Some(NOT_PLAYOUT_AMCP_HOST));
     }
 
     #[test]
@@ -664,12 +670,16 @@ mod tests {
     }
 
     #[test]
-    fn no_playout_is_opt_in_and_uses_local_caspar_defaults() {
-        let mut s = ServerSetup::new(None, &StoredBridge::default(), ips());
+    fn standalone_requires_an_explicit_mode_and_uses_local_caspar_defaults() {
+        let s = ServerSetup::new(None, &StoredBridge::default(), ips());
         assert!(!s.standalone);
         assert_eq!(s.engine_options(), None);
         assert!(!s.replaced_options().contains(&MODE_OPTION));
-        s.toggle_standalone();
+        let given = StoredBridge {
+            mode: Some(BridgeMode::Standalone),
+            ..StoredBridge::default()
+        };
+        let s = ServerSetup::new(None, &given, ips());
         assert!(s.judge().none());
         assert_eq!(
             s.engine_options().unwrap(),
@@ -685,8 +695,11 @@ mod tests {
 
     #[test]
     fn standalone_setup_refuses_invalid_raw_host_ports_and_reserved_osc() {
-        let mut s = ServerSetup::new(None, &StoredBridge::default(), ips());
-        s.toggle_standalone();
+        let given = StoredBridge {
+            mode: Some(BridgeMode::Standalone),
+            ..StoredBridge::default()
+        };
+        let mut s = ServerSetup::new(None, &given, ips());
         s.standalone_host.set("host.example:5250");
         s.amcp_port.set("65536");
         s.osc_port.set("6250");
@@ -707,7 +720,7 @@ mod tests {
             br#"{"mode":"standalone","amcpHost":"192.0.2.55","amcpPort":5260,"oscPort":6261}"#,
         )
         .unwrap();
-        let mut s = ServerSetup::new(Some(&stored), &StoredBridge::default(), ips());
+        let s = ServerSetup::new(Some(&stored), &StoredBridge::default(), ips());
         assert!(s.standalone);
         assert_eq!(
             s.engine_options().unwrap(),
@@ -718,7 +731,11 @@ mod tests {
                 "/OSCPORT=6261"
             ]
         );
-        s.toggle_standalone();
+        let given = StoredBridge {
+            mode: Some(BridgeMode::Playout),
+            ..StoredBridge::default()
+        };
+        let s = ServerSetup::new(Some(&stored), &given, ips());
         assert!(s.judge().none());
         assert_eq!(
             s.engine_options().unwrap(),

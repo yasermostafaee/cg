@@ -166,7 +166,11 @@ const shown = (): { id: string | null; status: string | null; text: string | nul
   }));
 
 const asShown = (result: ConnectionCheckResult): ReturnType<typeof shown> =>
-  result.lines.map((l) => ({ id: l.id, status: l.status, text: l.text }));
+  result.lines.map((l) => ({
+    id: l.id,
+    status: l.status,
+    text: l.text.replace(/^CasparCG on /, 'APASAI Playout Engine on '),
+  }));
 
 /** The ✓ and ✗ marks, as lucide draws them. */
 const verdictMarks = (): number => el().querySelectorAll('svg.lucide-check, svg.lucide-x').length;
@@ -191,7 +195,7 @@ describe('CHECK-RERUN-01 A — a (re-)check starts clean', () => {
     for (const l of during) expect(l.status, l.id ?? '').toBe('checking');
     expect(verdictMarks()).toBe(0);
     // Each line is its subject with no verdict — none of the last run's words survive.
-    expect(during.find((l) => l.id === 'amcp')?.text).toBe('CasparCG on 127.0.0.1');
+    expect(during.find((l) => l.id === 'amcp')?.text).toBe('APASAI Playout Engine on 127.0.0.1');
     expect(during.find((l) => l.id === 'api')?.text).toBe('The Playout on port 8080');
     expect(during.find((l) => l.id === 'cors')?.text).toBe('Sign-in from this console');
     for (const l of PLAYOUT_OFF.lines) expect(el().textContent).not.toContain(l.text);
@@ -316,7 +320,7 @@ describe('DELTA-MULTI-CHANNEL-01-A A2 — a check runs when Check is pressed; by
     for (const l of shown()) {
       expect(l.status, l.id ?? '').toBe(l.id === 'amcp' ? 'checking' : 'pass');
     }
-    expect(lineOf('amcp')?.text).toBe('CasparCG on 127.0.0.1');
+    expect(lineOf('amcp')?.text).toBe('APASAI Playout Engine on 127.0.0.1');
     expect(verdictMarks()).toBe(PLAYOUT_ON.lines.length - 1);
 
     await answer(1, PLAYOUT_ON);

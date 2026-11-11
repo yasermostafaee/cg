@@ -27,7 +27,7 @@
  *      /BRIDGEADDRESS=…` writes; the service runs and `/health` names that Playout.
  *   G. (`--previous`) an upgrade from the `0.11.0` installer, installed as a separate server by command
  *      line: the page opens ticked and filled from the stored configuration, and the values are kept.
- *   H. (`R-098`) Direct to CasparCG installs with direct AMCP and keeps control on loopback,
+ *   H. (`R-098`) Explicit unattended standalone installs with direct AMCP and loopback control,
  *      and retains its mode and custom endpoint on a silent upgrade with no options.
  *
  * Usage (elevated): node tools/bridge-installer/setup-smoke.mjs --installer <setup.exe> --engine <engine.exe>
@@ -118,12 +118,13 @@ async function health(ms = 90_000) {
   return null;
 }
 /** Welcome → Location → the Playout page (`RELEASE-0111-01` Part A). */
-function toServerPage() {
+function toServerPage(marker = 'separate server') {
   uia(TITLE, 'invoke', 'next');
   until(TITLE, 'PROGRAM', 20);
   uia(TITLE, 'invoke', 'next');
-  return until(TITLE, 'separate server', 20);
+  return until(TITLE, marker, 20);
 }
+const PLAYOUT_ENGINE = 'APASAI Playout Engine';
 const PLAYOUT_DOC = '192.0.2.10';
 function edgeAt(url) {
   try {
@@ -267,15 +268,19 @@ async function captureInstalling(file) {
   uia(TITLE, 'invoke', 'next');
   pg = until(TITLE, 'separate server', 20);
   check(
-    'Playout: the page, its rail step current',
-    pg.byId.title?.name === 'Playout' && pg.byId['step-3']?.status === 'current',
+    'APASAI Playout Engine: the page, its rail step current',
+    pg.byId.title?.name === PLAYOUT_ENGINE &&
+      pg.byId['step-3']?.name === PLAYOUT_ENGINE &&
+      pg.byId['step-3']?.status === 'current',
     `${String(pg.byId.title?.name)} ${String(pg.byId['step-3']?.status)}`,
   );
   check(
-    '…"CG Bridge runs on a separate server (not on the Playout machine)", unticked by default',
+    'the separate-server option is unticked and a fresh Setup exposes no standalone switch',
     pg.byId['separate-server']?.name ===
-      'CG Bridge runs on a separate server (not on the Playout machine)' &&
-      pg.byId['separate-server']?.state === 'Off',
+      'CG Bridge and APASAI Playout Engine run on separate servers' &&
+      pg.byId['separate-server']?.state === 'Off' &&
+      pg.byId['no-playout'] === undefined &&
+      pg.byId['standalone-amcp-host'] === undefined,
     JSON.stringify(pg.byId['separate-server']),
   );
   check(
@@ -413,19 +418,21 @@ async function captureInstalling(file) {
     ticked.state === 'On',
     JSON.stringify(ticked),
   );
-  let pg = until(TITLE, 'PLAYOUT ADDRESS', 20);
+  let pg = until(TITLE, 'APASAI PLAYOUT ENGINE ADDRESS', 20);
   check(
-    '…and asks for the Playout address, CasparCG’s host and this server’s address',
+    '…and asks for the Playout Engine address and AMCP host, plus this server’s address',
     pg.byId['playout-address']?.type === 'Edit' &&
       pg.byId['amcp-host']?.type === 'Edit' &&
+      pg.byId['amcp-host']?.name === 'APASAI Playout Engine (AMCP) host' &&
       pg.byId['address-other']?.type === 'RadioButton',
     pg.elements.map((e) => `${String(e.id)}:${String(e.type)}`).join(' | '),
   );
   uia(TITLE, 'invoke', 'install');
-  pg = until(TITLE, "Type the Playout's address.", 20);
+  pg = until(TITLE, 'Type the APASAI Playout Engine address.', 20);
   check(
     'an EMPTY Playout address is refused on the page, in words',
-    pg.names.includes("Type the Playout's address.") && pg.byId.title?.name === 'Playout',
+    pg.names.includes('Type the APASAI Playout Engine address.') &&
+      pg.byId.title?.name === PLAYOUT_ENGINE,
     pg.names.join(' | '),
   );
   const typed = uia(TITLE, 'set', 'playout-address=ftp://192.0.2.10');
@@ -435,10 +442,11 @@ async function captureInstalling(file) {
     JSON.stringify(typed),
   );
   uia(TITLE, 'invoke', 'install');
-  pg = until(TITLE, 'That is not a Playout address.', 20);
+  pg = until(TITLE, 'That is not an APASAI Playout Engine address.', 20);
   check(
     'an address the engine’s rules refuse is refused on the page, in CG Control’s own words',
-    pg.names.includes('That is not a Playout address.') && pg.byId.title?.name === 'Playout',
+    pg.names.includes('That is not an APASAI Playout Engine address.') &&
+      pg.byId.title?.name === PLAYOUT_ENGINE,
     pg.names.join(' | '),
   );
   shot(TITLE, path.join(OUT, 'bridge-server-refused.png'));
@@ -479,7 +487,7 @@ let serverIp = null;
   uia(TITLE, 'set', `playout-address=${PLAYOUT_DOC}`);
   let pg = page(TITLE);
   check(
-    'CasparCG’s host follows the Playout address',
+    'the AMCP host follows the Playout Engine address',
     pg.byId['amcp-host']?.value === PLAYOUT_DOC,
     JSON.stringify(pg.byId['amcp-host']),
   );
@@ -572,7 +580,7 @@ if (args.previous !== undefined && serverIp !== null) {
     JSON.stringify(pg.byId['separate-server']),
   );
   check(
-    '…the Playout address and CasparCG’s host filled in',
+    '…the Playout Engine address and AMCP host filled in',
     pg.byId['playout-address']?.value === `http://${PLAYOUT_DOC}:8080` &&
       pg.byId['amcp-host']?.value === PLAYOUT_DOC,
     `${JSON.stringify(pg.byId['playout-address'])} ${JSON.stringify(pg.byId['amcp-host'])}`,
@@ -616,7 +624,7 @@ if (args.previous !== undefined && serverIp !== null) {
   check('G. an upgrade from the previous release: F found this server’s address first', false);
 }
 
-// ── H. Direct to CasparCG, using a raw AMCP peer ─────────────────────────────────────────────────
+// ── H. Explicit unattended standalone, using a raw AMCP peer ────────────────────────────────────
 {
   fresh();
   const sockets = new Set();
@@ -636,40 +644,40 @@ if (args.previous !== undefined && serverIp !== null) {
   try {
     const amcpPort = amcp.address().port;
     const oscPort = 16251;
+    const installed = code(args.installer, [
+      '/S',
+      '/MODE=standalone',
+      '/AMCPHOST=127.0.0.1',
+      `/AMCPPORT=${String(amcpPort)}`,
+      `/OSCPORT=${String(oscPort)}`,
+    ]);
+    check('H. the explicit unattended standalone install exits 0', installed === 0);
+    const before = configOrNull();
     const r = launch(args.installer);
-    check('H. the setup window opens', uia(TITLE, 'wait', '', 90).ok);
-    let pg = toServerPage();
+    check('interactive maintenance opens Setup', uia(TITLE, 'wait', '', 90).ok);
+    let pg = toServerPage('AMCP PORT');
     check(
-      'Direct to CasparCG is off by default',
-      pg.byId['no-playout']?.name === 'Direct to CasparCG' &&
-        pg.byId['no-playout']?.state === 'Off',
-    );
-    uia(TITLE, 'toggle', 'no-playout');
-    pg = until(TITLE, 'CasparCG', 20);
-    check(
-      'Direct to CasparCG shows direct host and ports and hides the Playout controls',
-      pg.byId['no-playout']?.state === 'On' &&
-        pg.byId['standalone-amcp-host'] !== undefined &&
-        pg.byId['amcp-port'] !== undefined &&
-        pg.byId['osc-port'] !== undefined &&
+      'an installed standalone station shows its endpoint without a mode switch',
+      pg.byId.title?.name === 'CasparCG' &&
+        pg.byId['no-playout'] === undefined &&
+        pg.byId['standalone-amcp-host']?.value === '127.0.0.1' &&
+        pg.byId['amcp-port']?.value === String(amcpPort) &&
+        pg.byId['osc-port']?.value === String(oscPort) &&
         pg.byId['separate-server'] === undefined &&
         pg.byId['playout-address'] === undefined,
       pg.names.join(' | '),
     );
-    uia(TITLE, 'set', 'standalone-amcp-host=127.0.0.1');
-    uia(TITLE, 'set', `amcp-port=${String(amcpPort)}`);
     uia(TITLE, 'set', 'osc-port=6250');
     uia(TITLE, 'invoke', 'install');
     pg = until(TITLE, '6250 is reserved', 20);
     check(
-      'Direct to CasparCG describes the local connection and switching to APASAI Playout',
+      'standalone maintenance describes the local connection and tested CasparCG version',
       pg.names.includes('Run CG Control on the same PC as CG Bridge.') &&
-        pg.names.includes('Tested with CasparCG 2.5.0 Stable.') &&
-        pg.names.includes('For APASAI Playout, rerun Setup and clear this option.'),
+        pg.names.includes('Tested with CasparCG 2.5.0 Stable.'),
       pg.names.join(' | '),
     );
     check(
-      'Direct to CasparCG refuses reserved OSC port 6250 on the page',
+      'standalone maintenance refuses reserved OSC port 6250 on the page',
       pg.ok,
       pg.names.join(' | '),
     );
@@ -678,21 +686,22 @@ if (args.previous !== undefined && serverIp !== null) {
     uia(TITLE, 'invoke', 'install');
     pg = until(TITLE, 'is installed', 300);
     check(
-      'Direct to CasparCG installs the service',
+      'standalone maintenance reinstalls the service',
       pg.byId.title?.name === 'CG Bridge is installed',
     );
     uia(TITLE, 'toggle', 'launch');
     uia(TITLE, 'invoke', 'finish');
-    check('Direct to CasparCG Finish exits 0', (await exitCode(r, 30_000)) === 0);
-    const before = configOrNull();
+    check('standalone maintenance Finish exits 0', (await exitCode(r, 30_000)) === 0);
+    const maintained = configOrNull();
     check(
       'the installed config stores standalone mode and the raw endpoint',
       before?.mode === 'standalone' &&
         !Object.hasOwn(before, 'playoutAddress') &&
         before.amcpHost === '127.0.0.1' &&
         before.amcpPort === amcpPort &&
-        before.oscPort === oscPort,
-      JSON.stringify(before),
+        before.oscPort === oscPort &&
+        sameFields(before, maintained).same,
+      `before ${JSON.stringify(before)} · maintained ${JSON.stringify(maintained)}`,
     );
     const h = await health();
     const server = h?.casparcg?.servers?.find((row) => row.label === 'A');

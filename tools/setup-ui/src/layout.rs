@@ -10,9 +10,10 @@ use crate::model::{format_bytes, Model, Page, StepState};
 use crate::palette::{self, Rgb};
 use crate::product::{ProductId, PUBLISHER, WEBVIEW2_LINE};
 use crate::server::{
-    AddressChoice, ADDRESS_LABEL, AMCP_LABEL, AMCP_ON_THIS_MACHINE, AMCP_PORT_DEFAULT,
-    AMCP_PORT_LABEL, NO_PLAYOUT_LABEL, OSC_PORT_DEFAULT, OSC_PORT_LABEL, OTHER_LABEL,
-    PLAYOUT_LABEL, PLAYOUT_PLACEHOLDER, SEPARATE_LABEL, TEXT_SOURCE_LABEL, TEXT_SOURCE_PLACEHOLDER,
+    AddressChoice, ADDRESS_LABEL, AMCP_ON_THIS_MACHINE, AMCP_PORT_DEFAULT, AMCP_PORT_LABEL,
+    OSC_PORT_DEFAULT, OSC_PORT_LABEL, OTHER_LABEL, PLAYOUT_AMCP_LABEL, PLAYOUT_LABEL,
+    PLAYOUT_PLACEHOLDER, SEPARATE_LABEL, STANDALONE_AMCP_LABEL, TEXT_SOURCE_LABEL,
+    TEXT_SOURCE_PLACEHOLDER,
 };
 
 pub const WIN_W: f32 = 800.0;
@@ -155,7 +156,6 @@ pub enum WidgetId {
     AddressOtherField,
     TextSourceField,
     TextSourceBrowse,
-    NoPlayout,
     StandaloneHostField,
     AmcpPortField,
     OscPortField,
@@ -416,29 +416,15 @@ fn refusal(b: &mut Builder, y: f32, text: Option<&str>) {
     }
 }
 
-/// 🔴 `RELEASE-0111-01` Part A (`P-065`) — **CG BRIDGE'S PLAYOUT PAGE.** The checkbox — unticked, the
-/// Playout CG Bridge will use, as one fact — and, ticked, the three addresses the engine needs, each
-/// with its refusal said under it. Labels and values only; the Playout field alone has a placeholder.
+/// CG Bridge's server page. The separate-server checkbox opens the three Playout addresses.
+/// A configured standalone station keeps its CasparCG endpoint fields.
 fn server_page(b: &mut Builder, m: &Model) {
     let s = &m.server;
     b.heading(Rect::new(X0, 54.0, CONTENT_W, 34.0), m.title());
-    let (mode_w, _) = b.m.measure(NO_PLAYOUT_LABEL, Style::Body, CONTENT_W);
-    let mode_w = 28.0 + mode_w.ceil();
-    b.widgets.push(Widget::new(
-        WidgetId::NoPlayout,
-        WidgetKind::Checkbox(s.standalone),
-        Rect::new(X1 - mode_w, 58.0, mode_w, 24.0),
-        NO_PLAYOUT_LABEL,
-        true,
-    ));
     if s.standalone {
         for (y, hint) in [
             (91.0, "Run CG Control on the same PC as CG Bridge."),
             (107.0, "Tested with CasparCG 2.5.0 Stable."),
-            (
-                123.0,
-                "For APASAI Playout, rerun Setup and clear this option.",
-            ),
         ] {
             b.text(
                 Rect::new(X0, y, CONTENT_W, 16.0),
@@ -481,7 +467,7 @@ fn server_page(b: &mut Builder, m: &Model) {
             (
                 212.0,
                 WidgetId::StandaloneHostField,
-                AMCP_LABEL,
+                STANDALONE_AMCP_LABEL,
                 &s.standalone_host,
                 AMCP_ON_THIS_MACHINE,
                 s.shown.amcp,
@@ -551,11 +537,11 @@ fn server_page(b: &mut Builder, m: &Model) {
     ));
     refusal(b, y + 56.0, shown.playout);
     y += 84.0;
-    b.label(y, AMCP_LABEL);
+    b.label(y, PLAYOUT_AMCP_LABEL);
     b.widgets.push(field_widget(
         WidgetId::AmcpField,
         Rect::new(X0, y + 20.0, CONTENT_W, 32.0),
-        AMCP_LABEL,
+        PLAYOUT_AMCP_LABEL,
         &s.amcp,
         "",
         shown.amcp.is_some(),
@@ -1236,7 +1222,13 @@ mod tests {
         assert!(s.widget(WidgetId::Install).is_none());
         assert_eq!(
             s.rail.iter().map(|r| r.label).collect::<Vec<_>>(),
-            vec!["Welcome", "Location", "Playout", "Installing", "Done"]
+            vec![
+                "Welcome",
+                "Location",
+                "APASAI Playout Engine",
+                "Installing",
+                "Done"
+            ]
         );
         // Control: CG Control's Location installs, and its rail is the four steps it always had.
         let mut c = model(&CONTROL, Facts::default());
@@ -1250,7 +1242,7 @@ mod tests {
     fn unticked_the_page_is_the_checkbox_and_the_playout_on_this_machine() {
         let m = bridge_on_server_page();
         let s = build(&m, &Fake);
-        assert_eq!(s.texts()[0], "Playout");
+        assert_eq!(s.texts()[0], "APASAI Playout Engine");
         let separate = s.widget(WidgetId::Separate).unwrap();
         assert_eq!(
             (separate.label.as_str(), separate.kind),
@@ -1263,6 +1255,15 @@ mod tests {
         assert!(s.widget(WidgetId::TextSourceField).is_some());
         assert!(s.widget(WidgetId::TextSourceBrowse).is_some());
         assert!(s.widget(WidgetId::PlayoutField).is_none());
+        assert!(s.widget(WidgetId::StandaloneHostField).is_none());
+        assert_eq!(
+            s.widgets
+                .iter()
+                .filter(|w| matches!(w.kind, WidgetKind::Checkbox(_)))
+                .map(|w| w.id)
+                .collect::<Vec<_>>(),
+            vec![WidgetId::Separate]
+        );
         assert_eq!(s.primary, Some(WidgetId::Install));
         assert_eq!(s.escape, Some(WidgetId::Cancel));
         assert_eq!(
@@ -1282,8 +1283,8 @@ mod tests {
         let mut m = bridge_on_server_page();
         m.server.toggle();
         let s = build(&m, &Fake);
-        assert!(s.texts().contains(&"PLAYOUT ADDRESS"));
-        assert!(s.texts().contains(&"CASPARCG (AMCP) HOST"));
+        assert!(s.texts().contains(&"APASAI PLAYOUT ENGINE ADDRESS"));
+        assert!(s.texts().contains(&"APASAI PLAYOUT ENGINE (AMCP) HOST"));
         assert!(s.texts().contains(&"THIS SERVER'S ADDRESS"));
         let tab: Vec<WidgetId> = s
             .widgets
@@ -1294,7 +1295,6 @@ mod tests {
         assert_eq!(
             tab,
             vec![
-                WidgetId::NoPlayout,
                 WidgetId::Separate,
                 WidgetId::TextSourceField,
                 WidgetId::TextSourceBrowse,
@@ -1331,24 +1331,28 @@ mod tests {
     }
 
     #[test]
-    fn standalone_selects_raw_host_and_ports_without_playout_fields() {
+    fn stored_standalone_shows_raw_host_and_ports_without_a_mode_switch() {
         let mut m = bridge_on_server_page();
-        m.server.toggle_standalone();
+        let stored = crate::server::StoredBridge::from_json(
+            br#"{"mode":"standalone","amcpHost":"192.0.2.55","amcpPort":5260,"oscPort":6261}"#,
+        )
+        .unwrap();
+        m.server = crate::server::ServerSetup::new(
+            Some(&stored),
+            &crate::server::StoredBridge::default(),
+            m.facts.ipv4.clone(),
+        );
         let s = build(&m, &Fake);
         assert_eq!(s.texts()[0], "CasparCG");
+        assert!(s.texts().contains(&"CASPARCG (AMCP) HOST"));
         assert_eq!(m.steps()[2], StepState::Current);
-        assert_eq!(
-            s.widget(WidgetId::NoPlayout).unwrap().kind,
-            WidgetKind::Checkbox(true)
-        );
-        assert_eq!(
-            s.widget(WidgetId::NoPlayout).unwrap().label,
-            "Direct to CasparCG"
-        );
+        assert!(!s
+            .widgets
+            .iter()
+            .any(|w| matches!(w.kind, WidgetKind::Checkbox(_))));
         for hint in [
             "Run CG Control on the same PC as CG Bridge.",
             "Tested with CasparCG 2.5.0 Stable.",
-            "For APASAI Playout, rerun Setup and clear this option.",
         ] {
             assert!(s.texts().contains(&hint));
         }

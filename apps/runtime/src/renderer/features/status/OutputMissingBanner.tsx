@@ -1,3 +1,4 @@
+import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import {
   checksLosingAir,
   isAirOutputKind,
@@ -129,6 +130,8 @@ export function OutputMissingStrip({
   server: ServerHealth;
   scope?: number | null;
 }): JSX.Element | null {
+  const engine = useEngineName();
+  const configuration = playoutEngineWording('casparcg.config', engine);
   const verdict = outputVerdictOf(server);
   if (verdict.kind === 'ok' || verdict.kind === 'unknown') return null;
 
@@ -148,11 +151,12 @@ export function OutputMissingStrip({
     return (
       <div role="alert" aria-label="Program output unverified" style={styles.banner}>
         <span style={styles.text}>
-          PROGRAM OUTPUT UNVERIFIED — CASPARCG ON SERVER {server.label} IS UNREACHABLE, AND THE LAST
-          CHECK FOUND CHANNEL {channels} WITHOUT ITS {kinds} OUTPUT.
+          PROGRAM OUTPUT UNVERIFIED — {engine === 'CasparCG' ? 'CASPARCG' : engine} ON SERVER{' '}
+          {server.label} IS UNREACHABLE, AND THE LAST CHECK FOUND CHANNEL {channels} WITHOUT ITS{' '}
+          {kinds} OUTPUT.
           <span style={styles.detail}>
             Last seen missing at {formatTime(verdict.lastObservedAt)}; this stays until the bridge
-            can reach CasparCG and check again. {OUTPUT_DETAIL_POINTER}
+            can reach {engine} and check again. {OUTPUT_DETAIL_POINTER}
           </span>
         </span>
       </div>
@@ -166,8 +170,8 @@ export function OutputMissingStrip({
         REACHES AIR.
         {losing.map((check) => (
           <span key={check.channel} style={styles.detail}>
-            Channel {String(check.channel)} on server {server.label}: casparcg.config declares{' '}
-            {missingWords(check.missing.filter((m) => isAirOutputKind(m.kind)))} and CasparCG is not
+            Channel {String(check.channel)} on server {server.label}: {configuration} declares{' '}
+            {missingWords(check.missing.filter((m) => isAirOutputKind(m.kind)))} and {engine} is not
             running it. The fix is on the playout machine, not here. {OUTPUT_DETAIL_POINTER}
           </span>
         ))}

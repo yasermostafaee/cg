@@ -1,3 +1,4 @@
+import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useEffect, useRef, useState, useSyncExternalStore, type ComponentProps } from 'react';
 import { Move, RotateCcw } from 'lucide-react';
 import {
@@ -86,6 +87,7 @@ export function PreviewPanRow({
   sourceFrames: ReadonlyMap<string, SourcePreviewFrame>;
   fit: number;
 }): JSX.Element {
+  const engineName = useEngineName();
   const hasSource = plates.some((plate) => plate.sourceId !== null);
   const canCheck = hasSource && !pending;
   const [targets, setTargets] = useState<readonly PreviewPlateCropTarget[] | null>(
@@ -179,7 +181,11 @@ export function PreviewPanRow({
               }
               state={state}
               blocked={targets === null}
-              cropMessage={cropMessage}
+              cropMessage={
+                cropMessage === undefined
+                  ? undefined
+                  : playoutEngineWording(cropMessage, engineName)
+              }
               guide={target !== undefined}
               onAir={onAir}
               resizable={target === undefined || target.resizable === true}

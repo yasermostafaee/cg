@@ -2,8 +2,8 @@
 
 ### Requirement: Station setup shows the Playout and its connection check
 
-Station setup SHALL show, on its Connection tab, the Playout's address as a fact (`host : port`) with a CHECK that
-runs the connection check, and where this console reaches CG Bridge as a fact with where it is — `On the Playout
+Station setup SHALL show, on its Connection tab, the APASAI Playout Engine address as a fact (`host : port`)
+with a CHECK that runs the connection check, and where this console reaches CG Bridge as a fact with where it is — `On the Playout
 machine` or `Separate server`. Each address SHALL have a CHANGE that exists only inside CG Control and only for a
 station admin. An address SHALL be edited as a `Host` and a `Port` whose defaults are their placeholders — the
 Playout's port `8080`, CG Bridge's host the Playout's and its port `5280` — an empty field SHALL mean the default,
@@ -61,19 +61,21 @@ changed meanwhile.
 
 - **WHEN** the link drops and comes back to the same CG Bridge **THEN** the draft being typed stands
 
-### Requirement: Station setup SHALL name the CasparCG engines, and in a Playout station SHALL show CasparCG A as a fact
+### Requirement: Station setup SHALL name each engine for its station mode
 
-Station setup's server cards SHALL be named `CasparCG A` and `CasparCG B · backup`, and the rail's foot SHALL name
-`CasparCG`; the redundancy role (`Primary A`) SHALL stay in the status bar and the dialog's subtitle. In a Playout
-station — one whose CG Bridge advertises `auth: playout` — CasparCG A SHALL NOT be typed by anyone: its card SHALL
-read `On the Playout machine`, its host as stored, its ports and its state, as facts. CasparCG B SHALL stay addable
-and editable by a station admin. Every port's default SHALL be its field's placeholder — AMCP `5250`, OSC `6251` for
-A and `6252` for B, in the Add backup dialog too — and an empty port field SHALL be applied as its default.
+In a Playout station whose CG Bridge advertises `auth: playout`, the engine cards SHALL be named
+`APASAI Playout Engine A` and `APASAI Playout Engine B · backup`. First-run engine fields, the rail's foot,
+connection checks and operator diagnostics that name the engine SHALL use `APASAI Playout Engine`. An existing
+standalone station SHALL name its engine `CasparCG`. The redundancy role (`Primary A`) SHALL stay in the status
+bar and the dialog's subtitle. In a Playout station, A's placement, stored host, ports and state SHALL appear as
+read-only facts. B SHALL stay addable and editable by a station admin. Every port's default SHALL be its field's
+placeholder, including in the Add backup dialog. AMCP defaults to `5250`, OSC to `6251` for A and `6252` for B.
+An empty port field SHALL apply its default.
 
 #### Scenario: A Playout station
 
-- **WHEN** a station admin opens the Connection tab of a Playout station **THEN** `CasparCG A` reads `On the
-Playout machine`, `127.0.0.1`, `5250`, `6251` and its state, with nothing to type **AND** `Add backup` is offered
+- **WHEN** a station admin opens the Connection tab of a Playout station **THEN** `APASAI Playout Engine A`
+  reads `On the Playout machine`, `127.0.0.1`, `5250`, `6251` and its state as facts **AND** `Add backup` is offered
 
 #### Scenario: Defaults as placeholders
 
@@ -82,40 +84,42 @@ Playout machine`, `127.0.0.1`, `5250`, `6251` and its state, with nothing to typ
 
 ### Requirement: The graphics address SHALL sit behind Advanced, named for what it is
 
-Station setup SHALL show the address CasparCG fetches graphics from under `Advanced` — collapsed in a Playout
-station, open otherwise — titled `Where CasparCG fetches graphics`, as a `Host` and a `Port` with the placeholders
-`Detect automatically` and `Assign automatically`. The candidate addresses SHALL be labelled as CG Bridge's
-machine's, none marked as the answer, and no sentence on the tab SHALL call CG Bridge's machine "this machine".
+Station setup SHALL show the graphics address under `Advanced`, collapsed in a Playout station and open
+otherwise. Its title SHALL be `Where APASAI Playout Engine fetches graphics` in a Playout station and
+`Where CasparCG fetches graphics` in a standalone station. The address SHALL show a `Host` and a `Port` with
+the placeholders `Detect automatically` and `Assign automatically`. The candidate addresses SHALL be labelled
+as CG Bridge's machine's, none marked as the answer, and no sentence on the tab SHALL call CG Bridge's machine
+"this machine".
 When CG Bridge reports that the graphics host in force names another machine, the connection check SHALL carry a
 failed line naming that host, and for a station admin SHALL offer `Detect automatically`, which clears the field
 and opens `Advanced`; `Apply servers` commits it, as every edit on the tab.
 
 #### Scenario: The owner's `.32` serving from `.93`
 
-- **WHEN** CG Bridge reports the graphics host `192.168.21.93` as another machine **THEN** the check reads `CasparCG
-would fetch graphics from 192.168.21.93, another machine than CG Bridge's.` as a failure **AND** `Detect
-automatically` empties the field and opens `Advanced`
+- **WHEN** CG Bridge reports the graphics host `192.168.21.93` as another machine on a Playout station **THEN**
+  the failed check names the APASAI Playout Engine and the other machine's address **AND**
+  `Detect automatically` empties the field and opens `Advanced`
 
 #### Scenario: Collapsed in a Playout station
 
 - **WHEN** the Connection tab of a Playout station opens **THEN** `Advanced` is collapsed **AND** with no Playout it
   is open
 
-### Requirement: Station setup SHALL say whether CasparCG A joins the Playout's, and offer the derived host
+### Requirement: Station setup SHALL report whether engine A joins the Playout's, and offer the derived host
 
 Station setup's check of the station's own Playout SHALL send the configured server A host as `casparHost`, once
 the configuration is read. When CG Bridge answers whether server A joins the Playout's, the check SHALL carry an
 `After sign-in` line: a pass naming the host, or a failure naming both hosts and the cost (`meters, sources and
-grants are dropped.`). While it fails, the CasparCG A card SHALL offer a station admin `Use the Playout's`, which
-writes the host CG Bridge derived through `connections.set-config` and asks the check again; it SHALL be unavailable
-while anything is on air, as `Apply servers` is. A CasparCG card whose fields differ from what is in force SHALL
+grants are dropped.`). While it fails, the `APASAI Playout Engine A` card SHALL offer a station admin
+`Use the Playout's`, which writes the host CG Bridge derived through `connections.set-config` and asks the check again; it SHALL be unavailable
+while anything is on air, as `Apply servers` is. An engine card whose fields differ from what is in force SHALL
 read `Not applied`.
 
 #### Scenario: The owner's state
 
 - **WHEN** server A is `192.168.21.93` and the Playout names `127.0.0.1` on a CG Bridge on the Playout's machine
-  **THEN** the line fails reading `CasparCG A is 192.168.21.93; the Playout names 127.0.0.1: meters, sources and
-grants are dropped.` **AND** `Use the Playout's` sets server A to `127.0.0.1` **AND** the meter returns
+  **THEN** the failed check names APASAI Playout Engine A, both hosts and the loss of meters, sources and grants
+  **AND** `Use the Playout's` sets server A to `127.0.0.1` **AND** the meter returns
 
 #### Scenario: A separate server
 
@@ -127,20 +131,32 @@ grants are dropped.` **AND** `Use the Playout's` sets server A to `127.0.0.1` **
 - **WHEN** anything is on air **THEN** `Use the Playout's` is unavailable **AND** a backup added in the draft reads
   `Not applied` **AND** nothing is sent
 
-### Requirement: CG Control offers an explicit No Playout station
+### Requirement: CG Control enrolls Playout stations and maintains saved standalone stations
 
-Installed CG Control SHALL label its station modes **APASAI Playout** and **Direct to CasparCG**. Selecting **Direct to CasparCG** SHALL explain that it uses a local CG Bridge and name CasparCG 2.5.0 Stable as tested. It SHALL persist an explicit standalone station record with a loopback Bridge address after the Bridge identifies itself as standalone and answers its dedicated check. It SHALL enter without Playout sign-in and SHALL NOT send a stored Playout token. The Connection tab SHALL show **Direct to CasparCG** and editable CasparCG A Host, AMCP port and OSC port. It SHALL offer **Set up again** and explain how to return to APASAI Playout when reusing the same Bridge. The default Playout flow SHALL preserve the existing station record and authentication behavior.
+Fresh installed CG Control setup SHALL present only the APASAI Playout Engine address and its CG Bridge connection
+fields. A saved standalone station record SHALL continue to open using its loopback Bridge address, verify the
+Bridge's standalone capability and connect without Playout sign-in or a Playout token. Reading
+that record SHALL preserve its stored mode and address. Connection SHALL label the existing standalone
+connection `CG Bridge` and retain local Bridge address editing and the editable CasparCG A host, AMCP port and OSC
+port. It SHALL save a local Bridge address edit after the Bridge confirms standalone capability and answers the
+dedicated check. The check SHALL report the configured CasparCG endpoint's AMCP status independently.
 
-#### Scenario: Connect to a No Playout Bridge
+#### Scenario: First setup with no saved station
 
-- **WHEN** the operator chooses No Playout and a local Bridge positively confirms its standalone mode
-- **THEN** CG Control saves the loopback address and opens without Playout sign-in
-- **AND** it does not present any stored Playout token
+- **WHEN** CG Control opens with no saved station record
+- **THEN** the address gate offers the APASAI Playout Engine connection as its only enrollment flow
 
-#### Scenario: The Bridge does not support No Playout
+#### Scenario: Reopen a saved standalone station
 
-- **WHEN** an older Bridge, a Playout Bridge or a remote Bridge address is entered for No Playout
-- **THEN** CG Control refuses the choice and does not replace the previous station settings
+- **WHEN** a saved standalone station's local Bridge positively confirms its standalone mode
+- **THEN** CG Control opens the saved station without Playout sign-in or credentials
+- **AND** Connection shows `CG Bridge` with the local connection and the CasparCG endpoint available for maintenance
+
+#### Scenario: A standalone address edit fails validation
+
+- **WHEN** a standalone station's address edit names a remote Bridge, or the local Bridge lacks the required
+  capability or cannot answer the dedicated check
+- **THEN** the saved mode and address remain in force
 
 #### Scenario: CasparCG reports fewer channels than the standalone station configured
 
@@ -148,10 +164,10 @@ Installed CG Control SHALL label its station modes **APASAI Playout** and **Dire
 - **THEN** the workspace switcher offers the configured channels that are running
 - **AND** if no configured channel is running, a configured channel remains visible as unavailable for diagnosis and repair
 
-#### Scenario: Return to APASAI Playout
+#### Scenario: Explicitly set up again
 
-- **WHEN** an operator connected in **Direct to CasparCG** chooses **Set up again** in Connection
-- **THEN** the console returns to the mode picker with **APASAI Playout** selected
+- **WHEN** an operator connected to a saved standalone station chooses `Set up again` in Connection
+- **THEN** the console returns to ordinary APASAI Playout Engine enrollment
 
 #### Scenario: Reopen an existing Playout station
 

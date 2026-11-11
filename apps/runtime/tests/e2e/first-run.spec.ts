@@ -174,7 +174,7 @@ test('first-run: the Playout checked, a station-admin sign-in, the channel — a
     3/3 on the dev host, one CI flake. The Sign in section now names a blocker only once there is a
     verdict, and this reads the one list either way.
   */
-  const check = firstRun.getByRole('region', { name: 'Playout' });
+  const check = firstRun.getByRole('region', { name: 'Playout', exact: true });
   await expect(check.locator('[data-check="api"]')).toHaveAttribute('data-status', 'pass', {
     timeout: 20_000,
   });
@@ -184,7 +184,7 @@ test('first-run: the Playout checked, a station-admin sign-in, the channel — a
   // B2 — before any station admin has signed in, AMCP is not judged: it waits, neutral.
   const amcpLine = check.locator('[data-check="amcp"]');
   await expect(amcpLine).toHaveAttribute('data-status', 'wait');
-  await expect(amcpLine).toHaveText('CasparCG on 127.0.0.1: waiting for sign-in.');
+  await expect(amcpLine).toHaveText('APASAI Playout Engine on 127.0.0.1: waiting for sign-in.');
   // …and it really was refused — the mock turned this machine away (the instrument is live).
   expect(amcp?.refusedConnections ?? 0).toBeGreaterThan(0);
   /*
@@ -319,7 +319,7 @@ test('first-run: the Playout checked, a station-admin sign-in, the channel — a
   await page.getByRole('button', { name: 'Open Station setup' }).click();
   const setup = page.getByRole('dialog', { name: /Station setup/ });
   await setup.getByRole('tab', { name: /Connection/ }).click();
-  const again = setup.getByRole('region', { name: 'Playout' });
+  const again = setup.getByRole('region', { name: 'Playout', exact: true });
   await expect(again.locator('[data-check-group]')).toHaveCount(4, { timeout: 20_000 });
   await expect(again.locator('[data-check="api"]')).toHaveAttribute('data-status', 'pass', {
     timeout: 20_000,
@@ -395,7 +395,7 @@ test('CHECK-RERUN-01: the Playout off — said once, CORS not checked, AMCP its 
     stops a sign-in, in the check's own words (`DELTA-MULTI-CHANNEL-01-B` B2), which is not the
     check saying it twice.
   */
-  const check = firstRun.getByRole('region', { name: 'Playout' });
+  const check = firstRun.getByRole('region', { name: 'Playout', exact: true });
   const lines = check.locator('[data-check]');
   const apiLine = check.locator('[data-check="api"]');
   const corsLine = check.locator('[data-check="cors"]');
@@ -492,7 +492,7 @@ test('first-run on channel 2: the Layers tab is operable at once, with no reload
   const firstRun = page.getByRole('dialog', { name: 'Set up CG Control' });
   await expect(firstRun).toHaveAttribute('data-first-run', 'channel', { timeout: 20_000 });
   // `B-304` — the check, where it lives.
-  const playoutCheck = firstRun.getByRole('region', { name: 'Playout' });
+  const playoutCheck = firstRun.getByRole('region', { name: 'Playout', exact: true });
   await expect(playoutCheck.locator('[data-check="cors"]')).toHaveAttribute('data-status', 'pass', {
     timeout: 20_000,
   });
@@ -643,7 +643,7 @@ test('FIELD-FIXES-01 I — first-run on two channels shows five rows per band on
   const firstRun = page.getByRole('dialog', { name: 'Set up CG Control' });
   await expect(firstRun).toHaveAttribute('data-first-run', 'channel', { timeout: 20_000 });
   // `B-304` — the check, where it lives.
-  const playoutCheck = firstRun.getByRole('region', { name: 'Playout' });
+  const playoutCheck = firstRun.getByRole('region', { name: 'Playout', exact: true });
   await expect(playoutCheck.locator('[data-check="cors"]')).toHaveAttribute('data-status', 'pass', {
     timeout: 20_000,
   });

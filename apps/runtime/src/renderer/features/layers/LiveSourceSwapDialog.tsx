@@ -1,3 +1,4 @@
+import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useState, useSyncExternalStore } from 'react';
 import { assignedSourceId, plateLabel, type TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
@@ -89,6 +90,7 @@ export function LiveSourceSwapDialog({
   onSwap,
   onClose,
 }: LiveSourceSwapDialogProps): React.JSX.Element {
+  const engineName = useEngineName();
   useSyncExternalStore(subscribeSources, sourcesVersion);
   const { surface, inputCheck } = useInputCheckSurface(channel);
   const [refusal, setRefusal] = useState<string | null>(null);
@@ -113,7 +115,9 @@ export function LiveSourceSwapDialog({
       title="Live source for this row"
       onClose={onClose}
       size="wide"
-      {...(refusal !== null && { message: { role: 'refusal' as const, text: refusal } })}
+      {...(refusal !== null && {
+        message: { role: 'refusal' as const, text: playoutEngineWording(refusal, engineName) },
+      })}
       footer={
         <ModalAction actionRole="cancel" onClick={onClose}>
           Close

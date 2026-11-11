@@ -1,3 +1,4 @@
+import { useEngineName } from '../../ui/engineWording.js';
 import { LayoutTemplate, Monitor, MonitorOff, ScrollText, Settings } from 'lucide-react';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
@@ -65,6 +66,7 @@ export function AppHeader({
   onOpenTemplates,
   channelSignals,
 }: Props): JSX.Element {
+  const engine = useEngineName();
   const rehearsals = useRehearse();
 
   return (
@@ -106,7 +108,7 @@ export function AppHeader({
         <span
           className="cg-app-header__pvw"
           data-app-header-pvw=""
-          title={`${String(rehearsals.length)} row(s) are rehearsing in this browser — nothing is sent to CasparCG`}
+          title={`${String(rehearsals.length)} row(s) are rehearsing in this browser — nothing is sent to ${engine}`}
         >
           PVW · {rehearsals.length}
         </span>

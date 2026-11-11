@@ -274,7 +274,7 @@ describe('B-317 — one address: Connect saves only where CG Bridge answered; th
     await h.type('#cg-playout-address', '127.0.0.1');
     await h.press(/^Check$/);
     expect(h.lineText('bridge-ports')).toBe(
-      'CG Bridge on 127.0.0.1 cannot open UDP 6251 (OSC from CasparCG): held by casparcg.exe (PID 4321).',
+      'CG Bridge on 127.0.0.1 cannot open UDP 6251 (OSC from APASAI Playout Engine): held by APASAI Playout Engine (PID 4321).',
     );
     expect(h.lineStatus('bridge-ports')).toBe('fail');
   });

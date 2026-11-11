@@ -1,3 +1,4 @@
+import { playoutEngineWording } from '../../ui/engineWording.js';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { orderCheckLines, type CheckLineId } from '@cg/shared-ipc';
 import { APP_VERSION } from '../../appVersion.js';
@@ -664,7 +665,7 @@ export function PlayoutConnection({
       )}
       {error !== null && (
         <div style={styles.error} role="status">
-          {error}
+          {playoutEngineWording(error)}
         </div>
       )}
     </div>

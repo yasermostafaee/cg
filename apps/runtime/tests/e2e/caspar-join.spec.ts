@@ -92,13 +92,13 @@ test('🔴 B-327 — the owner’s state: the meter silent, the join line fails 
     .getByRole('tablist', { name: 'Station setup sections' })
     .getByRole('tab', { name: /^Connection/ })
     .click();
-  const card = setup.getByRole('region', { name: 'Playout' });
+  const card = setup.getByRole('region', { name: 'Playout', exact: true });
   const line = card.locator('[data-check="caspar-join"]');
   await expect(line).toHaveAttribute('data-status', 'fail', { timeout: 30_000 });
   await expect(line).toContainText(
-    'CasparCG A is 127.0.0.9; the Playout names 127.0.0.1: meters, sources and grants are dropped.',
+    'APASAI Playout Engine A is 127.0.0.9; the Playout names 127.0.0.1: meters, sources and grants are dropped.',
   );
-  const a = setup.getByRole('region', { name: 'CasparCG A' });
+  const a = setup.getByRole('region', { name: 'APASAI Playout Engine A' });
   await shotOf(card, 'SERVERS-SIMPLIFY-01-after-6-join-line.png');
   await shotOf(a, 'SERVERS-SIMPLIFY-01-after-7-use-the-playouts.png');
 
@@ -108,7 +108,7 @@ test('🔴 B-327 — the owner’s state: the meter silent, the join line fails 
     timeout: 30_000,
   });
   await expect(line).toHaveAttribute('data-status', 'pass', { timeout: 30_000 });
-  await expect(line).toContainText("CasparCG A is the Playout's: 127.0.0.1.");
+  await expect(line).toContainText("APASAI Playout Engine A is the Playout's: 127.0.0.1.");
   await expect(a.locator('[data-use-playouts]')).toHaveCount(0);
 
   // After: the meter returns.

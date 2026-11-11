@@ -1,3 +1,4 @@
+import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import type { OrphanLayer, PlayoutLayerState } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
@@ -192,7 +193,8 @@ export function StationLayersPanel({ layers, orphans }: Props): JSX.Element {
    * in `layerRow.dom.test.ts`. One residual cost, recorded rather than resolved: the
    * menu's LENGTH varies by row, so `menuLast` keeps REMOVE last in both shapes.
    */
-  const clearRefusal = casparRefusalReason(linkDown, casparReach);
+  const engine = useEngineName();
+  const clearRefusal = casparRefusalReason(linkDown, casparReach, engine);
 
   /**
    * Clear ONE playout layer.
@@ -324,7 +326,7 @@ export function StationLayersPanel({ layers, orphans }: Props): JSX.Element {
               <span style={styles.layerNumber}>{String(layer.layer)}</span>
               <div style={styles.body}>
                 <span style={{ ...styles.occupant, color: state.tone }}>{state.occupant}</span>
-                <span style={styles.reason}>{state.detail}</span>
+                <span style={styles.reason}>{playoutEngineWording(state.detail, engine)}</span>
               </div>
               {state.clearable ? (
                 <AsyncButton

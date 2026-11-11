@@ -1,3 +1,5 @@
+import { playoutEngineWording } from './engineWording.js';
+
 /**
  * WHY a CasparCG-bound verb is refused, in the words the operator reads — and
  * the THREE-VALUED answer those words come from.
@@ -71,9 +73,13 @@ export const CASPAR_CONNECTING_REASON =
  * Returns `undefined` when the verb is not refused for a reachability reason at
  * all, so a caller can spread it and leave its own tooltip in place.
  */
-export function casparRefusalReason(linkDown: boolean, reach: CasparReach): string | undefined {
+export function casparRefusalReason(
+  linkDown: boolean,
+  reach: CasparReach,
+  engine = 'CasparCG',
+): string | undefined {
   if (linkDown) return BRIDGE_DOWN_REASON;
-  if (reach === 'unreachable') return CASPAR_UNREACHABLE_REASON;
-  if (reach === 'connecting') return CASPAR_CONNECTING_REASON;
+  if (reach === 'unreachable') return playoutEngineWording(CASPAR_UNREACHABLE_REASON, engine);
+  if (reach === 'connecting') return playoutEngineWording(CASPAR_CONNECTING_REASON, engine);
   return undefined;
 }

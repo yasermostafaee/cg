@@ -9,7 +9,7 @@ use crate::layout::{build, WidgetId};
 use crate::model::{Facts, Model, Outcome, Page, Space};
 use crate::observe;
 use crate::product::{product, Config, MainFile, ProductId};
-use crate::server::{AddressChoice, ServerSetup, StoredBridge};
+use crate::server::{AddressChoice, BridgeMode, ServerSetup, StoredBridge};
 use crate::ui::gfx::Gfx;
 use crate::ui::preview::{render, Shot};
 use std::path::Path;
@@ -135,7 +135,14 @@ pub fn preview(args: &[String]) -> u32 {
             };
             shots.push(("server".into(), on_server(false), None));
             let mut standalone = on_server(false);
-            standalone.server.toggle_standalone();
+            standalone.server = ServerSetup::new(
+                None,
+                &StoredBridge {
+                    mode: Some(BridgeMode::Standalone),
+                    ..StoredBridge::default()
+                },
+                standalone.facts.ipv4.clone(),
+            );
             shots.push(("server-no-playout".into(), standalone, None));
             let mut filled = on_server(true);
             filled.server.playout.set("192.0.2.10");

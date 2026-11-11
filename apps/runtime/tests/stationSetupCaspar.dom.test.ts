@@ -73,10 +73,10 @@ describe('T2 — the cards say CasparCG', () => {
     expect(dialog.textContent).not.toContain('Backup server');
   });
 
-  it('🔴 a Playout station: CasparCG A is a fact — on the Playout machine, its state, nothing typed', async () => {
+  it('🔴 a Playout station: APASAI Playout Engine A is a fact — on the Playout machine, its state, nothing typed', async () => {
     stationSetupStub({ auth: ADMIN, health: HEALTH });
     const dialog = await renderStationSetup({ section: 'servers' });
-    const a = dialog.querySelector('section[aria-label="CasparCG A"]');
+    const a = dialog.querySelector('section[aria-label="APASAI Playout Engine A"]');
     expect(a?.querySelector('input'), 'nothing to type').toBeNull();
     expect(a?.querySelector('[data-caspar-placement]')?.textContent).toBe('On the Playout machine');
     expect(a?.querySelector('[data-caspar-health]')?.textContent).toBe('HEALTHY');
@@ -203,7 +203,7 @@ describe('B-326 — a graphics host on another machine is the check’s failed l
     const line = dialog.querySelector('[data-check="graphics"]');
     expect(line?.getAttribute('data-status')).toBe('fail');
     expect(line?.textContent).toContain(
-      "CasparCG would fetch graphics from 192.168.21.93, another machine than CG Bridge's.",
+      "APASAI Playout Engine would fetch graphics from 192.168.21.93, another machine than CG Bridge's.",
     );
     // Collapsed in a Playout station — the remedy opens it, so the cleared field is in view.
     expect(dialog.querySelector<HTMLDetailsElement>('[data-setup-advanced]')?.open).toBe(false);
@@ -274,7 +274,7 @@ describe('B-327 — whether CasparCG A joins the Playout’s', () => {
     const line = dialog.querySelector('[data-check="caspar-join"]');
     expect(line?.getAttribute('data-status')).toBe('fail');
     expect(line?.textContent).toContain(
-      'CasparCG A is 192.168.21.93; the Playout names 127.0.0.1: meters, sources and grants are dropped.',
+      'APASAI Playout Engine A is 192.168.21.93; the Playout names 127.0.0.1: meters, sources and grants are dropped.',
     );
     const use = dialog.querySelector<HTMLButtonElement>('[data-use-playouts]');
     expect(use?.textContent).toBe('Use the Playout’s'.replace('’', "'"));
@@ -311,7 +311,7 @@ describe('B-327 — whether CasparCG A joins the Playout’s', () => {
     const dialog = await renderStationSetup({ section: 'servers' });
     const line = dialog.querySelector('[data-check="caspar-join"]');
     expect(line?.getAttribute('data-status')).toBe('pass');
-    expect(line?.textContent).toContain("CasparCG A is the Playout's: 127.0.0.1.");
+    expect(line?.textContent).toContain("APASAI Playout Engine A is the Playout's: 127.0.0.1.");
     expect(dialog.querySelector('[data-use-playouts]')).toBeNull();
   });
 
@@ -327,7 +327,7 @@ describe('B-327 — whether CasparCG A joins the Playout’s', () => {
     expect(use?.disabled).toBe(true);
     expect(use?.getAttribute('title')).toBe('Refused while anything is on air.');
     // A backup typed during the show is a draft, and the card says so as a fact.
-    const b = dialog.querySelector('section[aria-label="CasparCG B"]');
+    const b = dialog.querySelector('section[aria-label="APASAI Playout Engine B"]');
     expect(b?.querySelector('[data-not-applied]')).toBeNull();
     await press(dialog.querySelector('button[aria-label="Add backup"]'));
     const sub = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].at(-1);

@@ -46,11 +46,11 @@ unchanged. The join itself SHALL NOT be relaxed.
 
 ### Requirement: An explicitly standalone Bridge serves local control for CasparCG
 
-A Bridge installed in No Playout mode SHALL listen for control only on IPv4 loopback. It SHALL accept the installed app and local native clients; it SHALL reject unknown web origins and a foreign Host on its control port. It SHALL not contact Playout to authenticate, obtain licences or list channels. It SHALL apply normal Take and channel ownership rules through AMCP. It MAY separately serve template graphics on the interface a remote CasparCG engine needs.
+A Bridge configured in standalone mode SHALL listen for control only on IPv4 loopback. It SHALL accept the installed app and local native clients; it SHALL reject unknown web origins and a foreign Host on its control port. It SHALL not contact Playout to authenticate, obtain licences or list channels. It SHALL apply normal Take and channel ownership rules through AMCP. It MAY separately serve template graphics on the interface a remote CasparCG engine needs.
 
 #### Scenario: Standalone basic Take
 
-- **WHEN** a local console connects to an installed No Playout Bridge with a reachable CasparCG engine
+- **WHEN** a local console connects to an installed standalone Bridge with a reachable CasparCG engine
 - **THEN** the configured channel can Take a template over AMCP without Playout auth or licence calls
 
 #### Scenario: A standalone bank names a channel absent from CasparCG

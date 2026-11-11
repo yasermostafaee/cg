@@ -144,3 +144,13 @@ never relaxed.
 
 - [x] E.1 `Claude outputs/REPORT-SERVERS-SIMPLIFY-01-v1-2026-10-11.md`, with before/after pictures and the owner's
       one check (H1).
+
+## F. Playout Engine branding and standalone maintenance (`R-096`, `R-098`)
+
+The interactive enrollment and display rules below supersede the earlier D.12–D.13 UI. Their completed
+tasks and recorded evidence describe the builds on which those checks ran.
+
+- [x] F.1 Windows native previews and focused Chromium verified fresh Setup and enrollment, engine labels and the absence of the standalone selector.
+- [x] F.2 Chromium verified a saved standalone console opens, repairs its local address in the `CG Bridge` card and takes a template. Rust tests and native preview verified the existing standalone setup path.
+- [ ] F.3 Verify both explicit unattended mode flags, and verify the existing Playout install, upgrade and sign-in paths.
+- [ ] F.4 Record the carrying Linux E2E and installed Windows Setup smoke for this follow-up.

@@ -12,9 +12,9 @@ export interface StandaloneStationAddress {
 
 export type StationAddress = PlayoutStationAddress | StandaloneStationAddress;
 
-export const DIRECT_CASPAR_MODE_LABEL = 'Direct to CasparCG';
 export const STANDALONE_BRIDGE_HOST = '127.0.0.1';
-export const STANDALONE_BRIDGE_ADDRESS_ERROR = `${DIRECT_CASPAR_MODE_LABEL} requires CG Bridge on this computer. Use 127.0.0.1 or localhost and a valid port.`;
+export const STANDALONE_BRIDGE_ADDRESS_ERROR =
+  'Use 127.0.0.1 or localhost and a valid port for CG Bridge on this computer.';
 
 /** The installed standalone service listens only on IPv4 loopback. */
 export function standaloneBridgeAddress(address: string): string | null {

@@ -30,7 +30,7 @@ import {
 import { DEFAULT_OSC_PORT, type ConnectionConfig, type TemplateServeInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { isLoopbackHost } from '../../../shared/loopback.js';
-import { DIRECT_CASPAR_MODE_LABEL } from '../../../shared/station-address.js';
+import { engineNameForMode, playoutEngineWording } from '../../ui/engineWording.js';
 import { useConnections } from '../../hooks/useConnections.js';
 import { useLink } from '../../hooks/useLink.js';
 import { useStack } from '../../hooks/useStack.js';
@@ -610,6 +610,8 @@ export function StationSetupDialog({
     is not the operator's to type: it is a fact.
   */
   const playoutStation = capabilities?.mode === 'playout';
+  const engineName = engineNameForMode(capabilities?.mode);
+  const graphicsAddressLabel = `Where ${engineName} fetches graphics`;
   /** `T3` — `Advanced` (the graphics address and the redundancy): `null` — as the station has it. */
   const [advancedOpen, setAdvancedOpen] = useState<boolean | null>(null);
   const advancedShown = advancedOpen ?? !playoutStation;
@@ -949,7 +951,7 @@ export function StationSetupDialog({
           {
             id: 'graphics',
             status: 'fail',
-            text: `CasparCG would fetch graphics from ${serveInfo.serveHost}, another machine than CG Bridge's.`,
+            text: `${engineName} would fetch graphics from ${serveInfo.serveHost}, another machine than CG Bridge's.`,
           },
         ]
       : [];
@@ -983,13 +985,13 @@ export function StationSetupDialog({
             ? {
                 id: 'caspar-join',
                 status: 'pass',
-                text: `CasparCG A is the Playout's: ${casparJoin.casparHost}.`,
+                text: `${engineName} A is the Playout's: ${casparJoin.casparHost}.`,
               }
             : {
                 id: 'caspar-join',
                 status: 'fail',
                 text:
-                  `CasparCG A is ${casparJoin.casparHost}; the Playout names ` +
+                  `${engineName} A is ${casparJoin.casparHost}; the Playout names ` +
                   `${casparJoin.playoutCasparHost}: meters, sources and grants are dropped.`,
               },
         ];
@@ -1137,7 +1139,13 @@ export function StationSetupDialog({
 
   // `MULTI-CHANNEL-01` §2 M — the footer states the contract as it is for THIS principal.
   const activeSpec = sectionSpecFor(active, holdsStationAdmin);
-  const activeMessages = messagesFor(active);
+  const activeMessages = messagesFor(active).map((message) => ({
+    ...message,
+    text: playoutEngineWording(message.text, engineName),
+    ...(message.detail === undefined
+      ? {}
+      : { detail: playoutEngineWording(message.detail, engineName) }),
+  }));
   /** The footer's standing sentence goes amber when THIS section's commit is refused. */
   const footerBlocked = isBlocked(active);
 
@@ -1377,7 +1385,7 @@ export function StationSetupDialog({
             <RailStationCard
               label={health?.currentPrimary ?? 'A'}
               // T2 — the engine by its name; its chip still says which one, A or B.
-              name="CasparCG"
+              name={engineName}
               host={
                 loaded === null
                   ? null
@@ -1525,7 +1533,7 @@ export function StationSetupDialog({
                     */
                     setRefusal(
                       result.templateServe?.elsewhere === true
-                        ? `Applied, but CasparCG would fetch graphics from ${result.templateServe.serveHost}, ` +
+                        ? `Applied, but ${engineName} would fetch graphics from ${result.templateServe.serveHost}, ` +
                             `another machine than CG Bridge's: ${unreachable.join(', ')} will show live ` +
                             `sources with NO TEMPLATE — no background, no text — and their CG ADD will ` +
                             `still report success. Press Detect automatically, then Apply again — CG ` +
@@ -1629,11 +1637,11 @@ export function StationSetupDialog({
               */}
               <section
                 className="cg-card"
-                aria-label={standaloneSetup === null ? 'Playout' : DIRECT_CASPAR_MODE_LABEL}
+                aria-label={standaloneSetup === null ? 'Playout' : 'CG Bridge'}
               >
                 <div className="cg-card__head">
                   <span className="cg-card__title">
-                    {standaloneSetup === null ? 'Playout' : DIRECT_CASPAR_MODE_LABEL}
+                    {standaloneSetup === null ? 'Playout' : 'CG Bridge'}
                   </span>
                 </div>
                 <div className="cg-card__body">
@@ -1691,12 +1699,12 @@ export function StationSetupDialog({
                   names it, so nothing here is typed: its values are facts, beside where it is and how
                   it is.
                 */}
-              <section className="cg-card" aria-label="CasparCG A">
+              <section className="cg-card" aria-label={`${engineName} A`}>
                 <div className="cg-card__head">
                   <Tag className="cg-setup-server-chip" aria-hidden="true">
                     A
                   </Tag>
-                  <span className="cg-card__title">CasparCG A</span>
+                  <span className="cg-card__title">{engineName} A</span>
                   <span className="cg-card__spacer" />
                   {aNotApplied && (
                     <Tag className="cg-setup-card-tag" data-not-applied="">
@@ -1734,7 +1742,7 @@ export function StationSetupDialog({
                         title={
                           onAirCount > 0
                             ? 'Refused while anything is on air.'
-                            : `Sets CasparCG A to ${casparJoin.playoutCasparHost}.`
+                            : `Sets ${engineName} A to ${casparJoin.playoutCasparHost}.`
                         }
                         run={async () => {
                           const host = casparJoin.playoutCasparHost;
@@ -1751,7 +1759,7 @@ export function StationSetupDialog({
                             );
                             return { accepted: false, errorCode: result.reason ?? 'refused' };
                           }
-                          setStatus(`Applied. CasparCG A is ${host}.`);
+                          setStatus(`Applied. ${engineName} A is ${host}.`);
                           // The line says what is now in force: the check runs again.
                           setRecheck((n) => n + 1);
                           return { accepted: true };
@@ -1767,12 +1775,12 @@ export function StationSetupDialog({
               </section>
 
               {/* T2 — `CasparCG B · backup`: the engine, and its role, in the operator's words. */}
-              <section className="cg-card" aria-label="CasparCG B">
+              <section className="cg-card" aria-label={`${engineName} B`}>
                 <div className="cg-card__head">
                   <Tag className="cg-setup-server-chip" aria-hidden="true">
                     B
                   </Tag>
-                  <span className="cg-card__title">CasparCG B · backup</span>
+                  <span className="cg-card__title">{engineName} B · backup</span>
                   {/*
                       The reference's `.tag` on this head, and it says something TRUE that the
                       card otherwise only implies: a station may run on one server, so the
@@ -1869,12 +1877,9 @@ export function StationSetupDialog({
                 <div className="cg-card__body">
                   {/* ⚠ This copy deliberately does not say "NO TEMPLATE" — that phrase is the
                         ALARM, asserted ABSENT on a healthy apply, and ambient copy would drain it. */}
-                  <section
-                    className="cg-station-fields__group"
-                    aria-label="Where CasparCG fetches graphics"
-                  >
+                  <section className="cg-station-fields__group" aria-label={graphicsAddressLabel}>
                     <span className="cg-station-fields__name" aria-hidden="true">
-                      Where CasparCG fetches graphics
+                      {graphicsAddressLabel}
                     </span>
                     <div className="cg-setup-fields">
                       {/* Both genuinely derive when left empty, which is why blank is legal on both
@@ -2064,7 +2069,7 @@ export function StationSetupDialog({
                     <Icon icon={Info} size={STATION_SETUP_PX.helpIcon} />
                     <span>
                       Remote server ({remoteHosts.join(', ')}): the template server and OSC listener
-                      will use a LAN address so CasparCG can reach CG Bridge&apos;s machine. The
+                      will use a LAN address so {engineName} can reach CG Bridge&apos;s machine. The
                       control connection stays on 127.0.0.1.
                     </span>
                   </p>

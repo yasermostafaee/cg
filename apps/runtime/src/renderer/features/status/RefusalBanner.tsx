@@ -1,3 +1,4 @@
+import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useEffect, useSyncExternalStore } from 'react';
 import { Notice } from '../../ui/Notice.js';
 import { reportCommandSuccess } from './commandFeedback.js';
@@ -74,6 +75,7 @@ export function RefusalBanner({
    */
   scope?: number | null;
 }): JSX.Element | null {
+  const engine = useEngineName();
   const refusal = useSyncExternalStore(onRefusal, getRefusal, getRefusal);
   useEffect(armE2ESeam, []);
   if (refusal === null) return null;
@@ -101,8 +103,10 @@ export function RefusalBanner({
       */}
       <Notice
         noticeRole="refusal"
-        text={text}
-        {...(refusal.detail !== null ? { detail: refusal.detail } : {})}
+        text={playoutEngineWording(text, engine)}
+        {...(refusal.detail !== null
+          ? { detail: playoutEngineWording(refusal.detail, engine) }
+          : {})}
         onDismiss={clearRefusal}
         dismissLabel="Dismiss this refusal"
       />

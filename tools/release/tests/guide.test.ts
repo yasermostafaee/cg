@@ -38,7 +38,8 @@ const LABELS: readonly { shown: string; text?: string; file: string }[] = [
   // `CENTRAL-BRIDGE-01` (D8) — CG Control's first question, and where a separate server goes.
   // `SERVERS-SIMPLIFY-01` (T1) — each a `Host` and a `Port`, in the fields Set up and Station setup share.
   {
-    shown: 'Playout address',
+    shown: 'APASAI Playout Engine address',
+    text: '{PLAYOUT_ENGINE_NAME} address',
     file: 'apps/runtime/src/renderer/features/firstRun/StationAddressFields.tsx',
   },
   {
@@ -205,25 +206,7 @@ const LABELS: readonly { shown: string; text?: string; file: string }[] = [
   },
   {
     shown: 'Playout',
-    text: "standaloneSetup === null ? 'Playout' : DIRECT_CASPAR_MODE_LABEL",
-    file: 'apps/runtime/src/renderer/features/stationSetup/StationSetupDialog.tsx',
-  },
-  { shown: 'Direct to CasparCG', file: 'tools/setup-ui/src/server.rs' },
-  {
-    shown: 'Direct to CasparCG',
-    file: 'apps/runtime/src/shared/station-address.ts',
-  },
-  {
-    shown: 'Station mode',
-    file: 'apps/runtime/src/renderer/features/firstRun/PlayoutAddressGate.tsx',
-  },
-  {
-    shown: 'APASAI Playout',
-    text: '<option value="playout">APASAI Playout</option>',
-    file: 'apps/runtime/src/renderer/features/firstRun/PlayoutAddressGate.tsx',
-  },
-  {
-    shown: 'Where CasparCG fetches graphics',
+    text: "standaloneSetup === null ? 'Playout' : 'CG Bridge'",
     file: 'apps/runtime/src/renderer/features/stationSetup/StationSetupDialog.tsx',
   },
   {
@@ -260,13 +243,13 @@ const LABELS: readonly { shown: string; text?: string; file: string }[] = [
   },
   // `SERVERS-SIMPLIFY-01` C (`B-327`) — the join line of the check, and its one remedy on CasparCG A's card.
   {
-    shown: 'CasparCG A is',
-    text: '`CasparCG A is ${casparJoin.casparHost}; the Playout names ` +',
+    shown: 'APASAI Playout Engine A is',
+    text: '`${engineName} A is ${casparJoin.casparHost}; the Playout names ` +',
     file: 'apps/runtime/src/renderer/features/stationSetup/StationSetupDialog.tsx',
   },
   {
     shown: 'the Playout names',
-    text: '`CasparCG A is ${casparJoin.casparHost}; the Playout names ` +',
+    text: '`${engineName} A is ${casparJoin.casparHost}; the Playout names ` +',
     file: 'apps/runtime/src/renderer/features/stationSetup/StationSetupDialog.tsx',
   },
   {
@@ -275,8 +258,8 @@ const LABELS: readonly { shown: string; text?: string; file: string }[] = [
     file: 'apps/runtime/src/renderer/features/stationSetup/StationSetupDialog.tsx',
   },
   {
-    shown: 'CasparCG A',
-    text: '<span className="cg-card__title">CasparCG A</span>',
+    shown: 'APASAI Playout Engine A',
+    text: '<span className="cg-card__title">{engineName} A</span>',
     file: 'apps/runtime/src/renderer/features/stationSetup/StationSetupDialog.tsx',
   },
   {
@@ -295,15 +278,23 @@ const LABELS: readonly { shown: string; text?: string; file: string }[] = [
   { shown: 'Open CG Bridge status', file: 'tools/setup-ui/src/product.rs' },
   // `RELEASE-0111-01` Part A (`P-065`) — CG Bridge's Playout page: the checkbox and its three fields.
   // The window draws a field's label in capitals; `server.rs` spells it in sentence case.
-  { shown: 'Playout', text: 'Page::Server => "Playout".into()', file: 'tools/setup-ui/src/model.rs' },
   {
-    shown: 'CG Bridge runs on a separate server (not on the Playout machine)',
+    shown: 'APASAI Playout Engine',
+    text: 'PLAYOUT_ENGINE_NAME: &str = "APASAI Playout Engine"',
     file: 'tools/setup-ui/src/server.rs',
   },
-  { shown: 'PLAYOUT ADDRESS', text: '"Playout address"', file: 'tools/setup-ui/src/server.rs' },
   {
-    shown: 'CASPARCG (AMCP) HOST',
-    text: '"CasparCG (AMCP) host"',
+    shown: 'CG Bridge and APASAI Playout Engine run on separate servers',
+    file: 'tools/setup-ui/src/server.rs',
+  },
+  {
+    shown: 'APASAI PLAYOUT ENGINE ADDRESS',
+    text: '"APASAI Playout Engine address"',
+    file: 'tools/setup-ui/src/server.rs',
+  },
+  {
+    shown: 'APASAI PLAYOUT ENGINE (AMCP) HOST',
+    text: '"APASAI Playout Engine (AMCP) host"',
     file: 'tools/setup-ui/src/server.rs',
   },
   {
@@ -378,8 +369,8 @@ const LABELS: readonly { shown: string; text?: string; file: string }[] = [
   // sign-in, and the status bar's words beside `BACKUP B`.
   // `SERVERS-SIMPLIFY-01` (T2) — the card was `Backup server`.
   {
-    shown: 'CasparCG B · backup',
-    text: '<span className="cg-card__title">CasparCG B · backup</span>',
+    shown: 'APASAI Playout Engine B · backup',
+    text: '<span className="cg-card__title">{engineName} B · backup</span>',
     file: 'apps/runtime/src/renderer/features/stationSetup/StationSetupDialog.tsx',
   },
   {
@@ -703,7 +694,8 @@ describe('CLIENT-TEST-RELEASE-01 B3 — the guide’s source', () => {
     // `0.11.0`'s step 4 handed the client a command line; the page replaced it. Pinned as an ABSENCE.
     expect(source).not.toContain('/BRIDGEADDRESS=');
     expect(source).not.toContain('PowerShell');
-    expect(source).toContain('`CG Bridge runs on a separate server (not on the Playout machine)`');
+    expect(source).toContain('`CG Bridge and APASAI Playout Engine run on separate servers`');
+    expect(source).not.toMatch(/CasparCG|Station mode/i);
   });
 });
 

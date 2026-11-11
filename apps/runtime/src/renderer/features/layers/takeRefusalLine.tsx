@@ -1,3 +1,4 @@
+import { playoutEngineWording } from '../../ui/engineWording.js';
 import {
   CG_UNLICENSED_CODE,
   notShowableWords,
@@ -157,8 +158,10 @@ export function takeRefusalLine(
     readonly entry?: SourceDefinition | undefined;
     /** `ROUTE-PLATES-01` — the row's channel, for a source that may not be shown on it. */
     readonly channel?: number | undefined;
+    readonly engineName?: string | undefined;
   } = {},
 ): TakeRefusalLine {
+  const engineName = context.engineName ?? 'CasparCG';
   if (refusal.code === NOT_SHOWABLE_CODE && context.channel !== undefined) {
     // `“ورودی ۴” can't be shown on CH 2.` — the bridge's own clause (`notShowableWords`).
     const words = notShowableWords(
@@ -197,13 +200,14 @@ export function takeRefusalLine(
   }
   if (refusal.code === CG_UNLICENSED_CODE && refusal.message !== undefined) {
     // `PLAYOUT-FEATURES-01` D — CG is not licensed on the row's channel: the Playout's own words.
+    const playoutWords = playoutEngineWording(refusal.message, engineName);
     return {
       row: rowName,
       source: null,
       input: null,
-      clause: refusal.message,
-      text: `${rowName}: ${refusal.message}`,
-      playoutWords: refusal.message,
+      clause: playoutWords,
+      text: `${rowName}: ${playoutWords}`,
+      playoutWords,
     };
   }
   if (refusal.code === NO_BAND_CODE) {
@@ -237,7 +241,9 @@ export function takeRefusalLine(
       status: unavailable ? 'unavailable' : 'unusable',
       ...(still && entry.departed === true ? { departed: true as const } : {}),
       ...(!still && unavailable ? { departed: true as const } : {}),
-      ...(still && entry.reason !== undefined ? { reason: entry.reason } : {}),
+      ...(still && entry.reason !== undefined
+        ? { reason: playoutEngineWording(entry.reason, engineName) }
+        : {}),
     });
     const plate = context.plateLabel ?? null;
     const who = plate === null ? rowName : `${rowName} · ${plate}`;
@@ -253,7 +259,11 @@ export function takeRefusalLine(
   }
   const words = amcpRefusalWords(refusal.code, refusal.command);
   const clause =
-    words?.clause ?? lowerFirst(errorCodeMessage(refusal.code) ?? 'the take was refused.');
+    words?.clause ??
+    playoutEngineWording(
+      lowerFirst(errorCodeMessage(refusal.code) ?? 'the take was refused.'),
+      engineName,
+    );
   const deck = amcpCommandFacts(refusal.command).decklink;
   const source = refusal.sourceName ?? null;
   const input = source !== null && deck !== null ? `DeckLink ${String(deck)}` : null;
@@ -328,7 +338,8 @@ export function TakeRefusalText({ line }: { line: TakeRefusalLine }): JSX.Elemen
           {line.input !== null && ` (${line.input})`}
         </>
       )}
-      {`: ${line.clause}`}
+      {': '}
+      {line.clause}
     </>
   );
 }

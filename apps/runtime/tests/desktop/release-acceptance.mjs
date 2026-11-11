@@ -41,7 +41,7 @@
  */
 /* global process, fetch, WebSocket, AbortSignal, Buffer, setTimeout */
 // The page probes run INSIDE the installed CG Control (serialised through DevTools), not in Node.
-/* global window, document, location, localStorage, Event, URL */
+/* global window, document, location, localStorage, URL */
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -792,21 +792,28 @@ async function phaseStandalone() {
     page = await openControl(9321);
     if (page === null) return;
     const gate = '[data-playout-address-gate]';
-    const selected = await until(
-      'the first-run station mode selector',
+    const playoutOnly = await until(
+      'the first-run APASAI Playout Engine address',
       () =>
         page.evaluate((scope) => {
-          const select = document.querySelector(`${scope} select`);
-          if (select?.value !== 'playout') return false;
-          select.value = 'standalone';
-          select.dispatchEvent(new Event('change', { bubbles: true }));
-          return true;
+          const card = document.querySelector(scope);
+          return (
+            card?.textContent?.includes('APASAI Playout Engine address') &&
+            card.querySelector('select') === null
+          );
         }, gate),
       60_000,
     );
-    check('a fresh CG Control can select No Playout', selected);
+    check('a fresh CG Control offers APASAI Playout Engine only', playoutOnly);
     await page.screenshot('standalone-1-setup.png');
-    await until('the No Playout Connect button', () => press(page, gate, 'Connect'), 15_000);
+    // Simulate upgrading a console with an existing standalone station record.
+    await page.evaluate(() => {
+      localStorage.setItem(
+        'cg.runtime.station.v1',
+        JSON.stringify({ mode: 'standalone', bridgeAddress: '127.0.0.1' }),
+      );
+    });
+    await page.evaluate(() => location.reload()).catch(() => undefined);
     const connected = await until(
       'the layers console without a sign-in',
       () =>

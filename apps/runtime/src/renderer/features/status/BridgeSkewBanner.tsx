@@ -1,3 +1,4 @@
+import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useEffect, useState } from 'react';
 import { TriangleAlert } from 'lucide-react';
 import { Icon } from '../../ui/Icon.js';
@@ -80,6 +81,7 @@ function detailFor(missing: readonly string[]): string {
 }
 
 export function BridgeSkewBanner(): JSX.Element | null {
+  const engine = useEngineName();
   const [missing, setMissing] = useState<readonly string[] | null>(() => window.cg.link.skew());
   const [mismatch, setMismatch] = useState<string | null>(() => window.cg.link.versionMismatch());
 
@@ -120,7 +122,7 @@ export function BridgeSkewBanner(): JSX.Element | null {
       <span style={styles.text}>
         <span style={styles.headline}>BRIDGE IS OUT OF DATE</span>
         <span style={styles.detail} title={[...missing].slice(0, NAMED).join(', ')}>
-          {detailFor(missing)}
+          {playoutEngineWording(detailFor(missing), engine)}
         </span>
       </span>
     </div>

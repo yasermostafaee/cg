@@ -1,3 +1,4 @@
+import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useState } from 'react';
 import { useHoldsOperatorRole } from '../../hooks/useCanOperate.js';
 import { ArrowLeftRight, Lock, TriangleAlert } from 'lucide-react';
@@ -352,6 +353,7 @@ export function StatusBar({
    */
   backupChannels?: BackupChannelsState | null;
 }): JSX.Element {
+  const engine = useEngineName();
   const health = useConnections();
   // `C-038` — the lock and FAILOVER are both `operator` class and both UNSCOPED, so they
   // ask the ROLE and never the channel. See `useHoldsOperatorRole`.
@@ -586,7 +588,7 @@ export function StatusBar({
           {primaryDeaf && (
             <Tag
               className="cg-pill"
-              title={noOscTitle(health.primary.label)}
+              title={playoutEngineWording(noOscTitle(health.primary.label), engine)}
               aria-label={`No OSC from server ${health.primary.label}`}
             >
               <span style={styles.noOsc}>
@@ -597,7 +599,7 @@ export function StatusBar({
           {backupDeaf && health.backup !== undefined && (
             <Tag
               className="cg-pill"
-              title={noOscTitle(health.backup.label)}
+              title={playoutEngineWording(noOscTitle(health.backup.label), engine)}
               aria-label={`No OSC from server ${health.backup.label}`}
             >
               <span style={styles.noOsc}>
@@ -623,7 +625,10 @@ export function StatusBar({
           {primaryDead.length > 0 && (
             <Tag
               className="cg-pill"
-              title={deadChannelTitle(health.primary.label, primaryDead)}
+              title={playoutEngineWording(
+                deadChannelTitle(health.primary.label, primaryDead),
+                engine,
+              )}
               aria-label={`Server ${health.primary.label} is not producing frames on ${
                 primaryDead.length === 1 ? 'channel' : 'channels'
               } ${primaryDead.join(', ')}`}
@@ -636,7 +641,10 @@ export function StatusBar({
           {backupDead.length > 0 && health.backup !== undefined && (
             <Tag
               className="cg-pill"
-              title={deadChannelTitle(health.backup.label, backupDead)}
+              title={playoutEngineWording(
+                deadChannelTitle(health.backup.label, backupDead),
+                engine,
+              )}
               aria-label={`Server ${health.backup.label} is not producing frames on ${
                 backupDead.length === 1 ? 'channel' : 'channels'
               } ${backupDead.join(', ')}`}

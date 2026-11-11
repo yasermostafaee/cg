@@ -1,3 +1,4 @@
+import type { StationAddress } from '../../../src/shared/station-address.js';
 import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import net from 'node:net';
@@ -154,7 +155,7 @@ export async function relay(page: Page, host: string, target: string): Promise<v
  */
 export async function asCgControl(
   page: Page,
-  station: { readonly playoutAddress: string; readonly bridgeAddress?: string } | null,
+  station: StationAddress | null,
   options: { readonly signIn?: boolean } = {},
 ): Promise<void> {
   const base = test.info().project.use.baseURL;

@@ -1,3 +1,4 @@
+import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useLink } from '../../hooks/useLink.js';
 import { colors, cssVars } from '../../theme.js';
 import type { BridgeLinkStatus } from '../../../shared/runtime-bridge.js';
@@ -72,7 +73,7 @@ function visual(status: BridgeLinkStatus, reach: CasparReach): Visual {
           // BRIDGE LIVE, never a bare LIVE. The subject is the thing that is live.
           text: 'BRIDGE LIVE',
           title:
-            'Connected to the CasparCG bridge, and the bridge reports it can reach CasparCG. Commands go through.',
+            'Connected to CG Bridge, and the bridge reports it can reach CasparCG. Commands go through.',
         };
       }
       if (reach === 'connecting') {
@@ -81,8 +82,7 @@ function visual(status: BridgeLinkStatus, reach: CasparReach): Visual {
           // No green: the second hop is still unknown, and the LED is reserved for
           // the state where BOTH are good. Same reasoning as `caspar-down` below.
           text: 'BRIDGE LIVE — CHECKING CASPARCG',
-          title:
-            'Connected to the CasparCG bridge. It has not yet said whether it can reach CasparCG.',
+          title: 'Connected to CG Bridge. It has not yet said whether it can reach CasparCG.',
         };
       }
       return {
@@ -104,7 +104,7 @@ function visual(status: BridgeLinkStatus, reach: CasparReach): Visual {
         */
         text: 'BRIDGE ONLY — NO CASPARCG',
         title:
-          'Connected to the CasparCG bridge, but the bridge cannot reach CasparCG — nothing reaches air. The server pill says which one is down.',
+          'Connected to CG Bridge, but the bridge cannot reach CasparCG — nothing reaches air. The server pill says which one is down.',
       };
     case 'disconnected':
       return {
@@ -160,9 +160,15 @@ export function LinkIndicator({
   reach: CasparReach;
 }): JSX.Element {
   const status = useLink();
+  const engine = useEngineName();
   const v = visual(status, reach);
   return (
-    <Tag className="cg-pill" role="status" aria-label="Bridge link" title={v.title}>
+    <Tag
+      className="cg-pill"
+      role="status"
+      aria-label="Bridge link"
+      title={playoutEngineWording(v.title, engine)}
+    >
       {/*
         THE DOT MAY CARRY A HUE THE LABEL MAY NOT (owner: «فقط دایره کنار bridge
         live … رو سبز کن»). A green WORD in the footer is what could be glanced at
@@ -185,7 +191,7 @@ export function LinkIndicator({
         every other fault state, where one value clears both.
       */}
       <span style={{ color: v.dotColor ?? v.color }}>●</span>
-      <span style={{ color: v.color }}>{v.text}</span>
+      <span style={{ color: v.color }}>{playoutEngineWording(v.text, engine)}</span>
     </Tag>
   );
 }

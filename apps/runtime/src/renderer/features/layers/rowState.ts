@@ -1,3 +1,4 @@
+import { playoutEngineWording } from '../../ui/engineWording.js';
 import {
   CircleDashed,
   CircleDot,
@@ -230,6 +231,7 @@ export interface RowStateInput {
    * one. It says more than the code — the source and the input — so it wins over it.
    */
   errorLine?: string | undefined;
+  engineName?: string | undefined;
   /**
    * R-022 — this row is in REHEARSE: the graphic renders locally in PVW and PLAY
    * to air is interlocked off. Bridge-owned, so it is the same for every browser.
@@ -264,10 +266,10 @@ export interface RowStateInput {
  * — so the column and the tooltip cannot come to say different things about the
  * same layer.
  */
-function withWire(explanation: string | undefined, wire: string): string {
+function withWire(explanation: string | undefined, wire: string, engineName: string): string {
   return explanation === undefined
-    ? `CasparCG reports: ${wire}.`
-    : `${explanation} CasparCG reports: ${wire}.`;
+    ? `${engineName} reports: ${wire}.`
+    : `${explanation} ${engineName} reports: ${wire}.`;
 }
 
 /**
@@ -329,6 +331,7 @@ export function rowState({
   restoreBlocked,
   errorCode,
   errorLine,
+  engineName = 'CasparCG',
 }: RowStateInput): RowStateVisual {
   const wire = occupancyLabel(observed, linkDown);
   /**
@@ -370,7 +373,7 @@ export function rowState({
       tone: 'idle',
       title:
         'Nothing is loaded on this row. LOAD binds a template to it; PLAY puts that ' +
-        'template on the CasparCG layer.',
+        `template on the ${engineName} layer.`,
     };
   }
 
@@ -447,6 +450,7 @@ export function rowState({
           'put on air. It stays here waiting. CLEAR the layer and then PLAY when you are sure ' +
           'the layer is yours to take — or it clears itself the moment that producer leaves.',
         wire,
+        engineName,
       ),
     };
   }
@@ -500,6 +504,7 @@ export function rowState({
         'On PVW: rendering in PREVIEW inside this browser. PLAY to air is refused while it is, ' +
           'and the layer is held ready and muted.',
         wire,
+        engineName,
       ),
     };
   }
@@ -572,14 +577,19 @@ export function rowState({
       `casparcg.config` and must never imply that it can.
     */
     title: withWire(
-      status === 'unverified'
-        ? unverifiedTitle(oscBlind, linkDown)
-        : status === 'error'
-          ? (errorLine ??
-            errorCodeMessage(errorCode) ??
-            'CasparCG did not accept this row, and reported no reason.')
-          : readyDetail(status),
+      status === 'error' && errorLine !== undefined
+        ? errorLine
+        : playoutEngineWording(
+            status === 'unverified'
+              ? unverifiedTitle(oscBlind, linkDown)
+              : status === 'error'
+                ? (errorCodeMessage(errorCode) ??
+                  'CasparCG did not accept this row, and reported no reason.')
+                : (readyDetail(status) ?? ''),
+            engineName,
+          ) || undefined,
       wire,
+      engineName,
     ),
     ...(tone === 'transient' ? { transient: true } : {}),
   };

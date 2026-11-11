@@ -1,3 +1,4 @@
+import { playoutEngineWording, useEngineName } from './engineWording.js';
 import type { StackItemStatus } from '@cg/shared-schema';
 import { airStateVisual, badgeTone } from '../theme.js';
 import { unverifiedTitle } from './airStateWording.js';
@@ -65,7 +66,11 @@ export function StatusBadge({
   // state cell. This is safety text (it names which link dropped, and for the
   // blind-tap case tells the operator NOT to go restarting a working playout
   // box); two copies is how one of them ends up saying the wrong thing.
-  const title = status === 'unverified' ? unverifiedTitle(oscBlind, bridgeDown) : undefined;
+  const engine = useEngineName();
+  const title =
+    status === 'unverified'
+      ? playoutEngineWording(unverifiedTitle(oscBlind, bridgeDown), engine)
+      : undefined;
 
   return (
     <Tag className={`cg-badge cg-badge--${shownTone}`} aria-label={`status ${label}`} title={title}>

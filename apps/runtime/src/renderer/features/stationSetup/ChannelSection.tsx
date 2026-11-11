@@ -1,3 +1,4 @@
+import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { rasterVerdict, type ChannelSettingsState, type ConnectionHealth } from '@cg/shared-ipc';
 import { useChannelSettings } from '../../hooks/useChannelSettings.js';
 import { useHoldsStationAdmin } from '../../hooks/useCanOperate.js';
@@ -130,6 +131,7 @@ function channelToken(channel: number): string {
 }
 
 export function ChannelSection({ health }: { health: ConnectionHealth | null }): JSX.Element {
+  const engine = useEngineName();
   const state = useChannelSettings();
   const { selected: channel } = useSelectedChannel();
   const stationAdmin = useHoldsStationAdmin();
@@ -223,7 +225,7 @@ export function ChannelSection({ health }: { health: ConnectionHealth | null }):
         <dl className="cg-video-metrics">
           <div className="cg-video-metric">
             <dt>Declared by</dt>
-            <dd>{declaredBy(state, channel)}</dd>
+            <dd>{playoutEngineWording(declaredBy(state, channel), engine)}</dd>
           </div>
           <div className="cg-video-metric">
             <dt>Check</dt>

@@ -96,7 +96,7 @@ describe('§3(b) — Station setup below station-admin', () => {
     expect(facts.length).toBeGreaterThan(0);
     for (const fact of facts) {
       expect(
-        fact.closest('section[aria-label="CasparCG A"]'),
+        fact.closest('section[aria-label="APASAI Playout Engine A"]'),
         'a value outside CasparCG A',
       ).not.toBeNull();
     }

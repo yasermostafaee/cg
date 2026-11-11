@@ -1,13 +1,7 @@
 import { useState } from 'react';
 import { NOT_A_BRIDGE_ADDRESS, NOT_A_PLAYOUT_ADDRESS } from '@cg/shared-ipc';
-import type { SetupCheckAnswer } from '../../../shared/runtime-bridge.js';
-import {
-  DIRECT_CASPAR_MODE_LABEL,
-  STANDALONE_BRIDGE_ADDRESS_ERROR,
-  type PlayoutStationAddress,
-  type StandaloneStationAddress,
-  type StationAddress,
-} from '../../../shared/station-address.js';
+import type { PlayoutStationAddress } from '../../../shared/station-address.js';
+import { playoutEngineWording } from '../../ui/engineWording.js';
 import { cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { SignInCard } from '../../ui/SignInCard.js';
@@ -17,7 +11,6 @@ import {
   bridgeAddressOf,
   playoutAddressOf,
   playoutHostOf,
-  standaloneBridgeAddressOf,
   type StationFields,
 } from './stationFields.js';
 
@@ -60,12 +53,11 @@ const styles = {
 } as const;
 
 /** What the gate saves: this console's station record. */
-export type GateStation = StationAddress;
+export type GateStation = PlayoutStationAddress;
 
 export function PlayoutAddressGate({
   save,
   answers = () => Promise.resolve(null),
-  checkStandalone,
   reload = () => globalThis.location.reload(),
 }: {
   /** Save this console's station record; `false` when the store refused (`main.tsx` hands it in). */
@@ -75,8 +67,6 @@ export function PlayoutAddressGate({
    * else the sentence that says where nothing answered (`main.tsx` hands in the platform's).
    */
   answers?: (station: PlayoutStationAddress) => Promise<string | null>;
-  /** Only the installed app can verify and select an explicit local No Playout service. */
-  checkStandalone?: ((station: StandaloneStationAddress) => Promise<SetupCheckAnswer>) | undefined;
   /** Start the console again once the address is saved (a test passes its own). */
   reload?: () => void;
 }): JSX.Element {
@@ -86,18 +76,11 @@ export function PlayoutAddressGate({
   });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [standalone, setStandalone] = useState(false);
-  const [localBridge, setLocalBridge] = useState(NO_HOST_PORT);
-  const [checkedOfflineAddress, setCheckedOfflineAddress] = useState<string | null>(null);
-  const nothingTyped = !standalone && fields.playout.host.trim() === '';
+  const nothingTyped = fields.playout.host.trim() === '';
 
   const finish = (station: GateStation): void => {
     if (!save(station)) {
-      setError(
-        'mode' in station
-          ? 'This console could not save the CG Bridge address.'
-          : 'This console could not save the Playout address.',
-      );
+      setError('This console could not save the Playout address.');
       return;
     }
     reload();
@@ -105,37 +88,6 @@ export function PlayoutAddressGate({
 
   const connect = async (): Promise<void> => {
     if (busy) return;
-    if (standalone && checkStandalone !== undefined) {
-      const bridgeAddress = standaloneBridgeAddressOf(localBridge);
-      if (bridgeAddress === null) {
-        setError(STANDALONE_BRIDGE_ADDRESS_ERROR);
-        return;
-      }
-      const station: StandaloneStationAddress = { mode: 'standalone', bridgeAddress };
-      if (checkedOfflineAddress === bridgeAddress) {
-        finish(station);
-        return;
-      }
-      setBusy(true);
-      setError(null);
-      try {
-        const result = await checkStandalone(station);
-        const amcp = result.lines.find((line) => line.id === 'amcp');
-        if (amcp === undefined) {
-          setError('CG Bridge did not report a CasparCG A connection check.');
-        } else if (amcp.status === 'pass') {
-          finish(station);
-        } else {
-          setCheckedOfflineAddress(bridgeAddress);
-          setError(`${amcp.text} You can correct the CasparCG A address in Settings → Connection.`);
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        setBusy(false);
-      }
-      return;
-    }
     const playoutAddress = playoutAddressOf(fields.playout);
     if (playoutAddress === null) {
       setError(NOT_A_PLAYOUT_ADDRESS);
@@ -178,39 +130,10 @@ export function PlayoutAddressGate({
       groundData={{ 'data-playout-address-gate': '' }}
       footer={
         <Button variant="primary" disabled={nothingTyped || busy} onClick={() => void connect()}>
-          {busy
-            ? 'Connecting…'
-            : checkedOfflineAddress === null
-              ? 'Connect'
-              : 'Continue to CG Control'}
+          {busy ? 'Connecting…' : 'Connect'}
         </Button>
       }
     >
-      {checkStandalone !== undefined && (
-        <label className="cg-setup-field">
-          <span className="cg-setup-field__label">Station mode</span>
-          <select
-            className="cg-field"
-            aria-describedby={standalone ? 'cg-direct-caspar-hint' : undefined}
-            disabled={busy}
-            value={standalone ? 'standalone' : 'playout'}
-            onChange={(event) => {
-              setStandalone(event.target.value === 'standalone');
-              setCheckedOfflineAddress(null);
-              setError(null);
-            }}
-          >
-            <option value="playout">APASAI Playout</option>
-            <option value="standalone">{DIRECT_CASPAR_MODE_LABEL}</option>
-          </select>
-        </label>
-      )}
-      {standalone && (
-        <p id="cg-direct-caspar-hint" className="cg-setup-field__hint">
-          Uses CG Bridge on this computer to reach CasparCG without APASAI Playout. Choose the same
-          mode in CG Bridge Setup. Tested with CasparCG 2.5.0 Stable.
-        </p>
-      )}
       {/*
           🔴 `R-080` — **EMPTY IS THE ANSWER FOR MOST STATIONS, AND THE FIELDS SAY SO.** The owner's run of
           `0.10.0` (2026-09-30): nothing told him CG Bridge's address may be left empty — CG Bridge is found
@@ -218,23 +141,19 @@ export function PlayoutAddressGate({
           typed, `5280`), and ONE hint line (`CONSOLE-POLISH-01` §5) says when to type anything.
         */}
       <StationAddressFields
-        value={standalone ? { ...fields, bridge: localBridge } : fields}
+        value={fields}
         onChange={(next) => {
-          if (standalone) setLocalBridge(next.bridge);
-          else setFields(next);
-          setCheckedOfflineAddress(null);
+          setFields(next);
           setError(null);
         }}
-        standalone={standalone}
-        disabled={standalone && busy}
-        hint={!standalone}
+        hint
         statusId="cg-playout-address-error"
         onEnter={() => {
           if (!nothingTyped) void connect();
         }}
       />
       <div id="cg-playout-address-error" style={styles.error} role="status">
-        {error}
+        {error === null ? null : playoutEngineWording(error)}
       </div>
     </SignInCard>
   );

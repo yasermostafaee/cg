@@ -1,3 +1,4 @@
+import { playoutEngineWording, useEngineName } from './engineWording.js';
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { buttonClass, type ButtonVariant } from './Button.js';
@@ -88,6 +89,7 @@ export function AsyncButton({
 }: Props): JSX.Element {
   const [view, setView] = useState<AsyncView>(INITIAL);
   const reduced = usePrefersReducedMotion();
+  const engineName = useEngineName();
   // Hold the latest onError so the long-lived controller always calls the current handler.
   // Read via the ref (not the prop) inside the once-only effect so it stays a known-stable
   // dependency, exactly like `setView` — the routing decision is stable per button.
@@ -156,7 +158,7 @@ export function AsyncButton({
       </button>
       {view.errorMessage !== null && (
         <span className="cg-btn-error" role="alert">
-          {view.errorMessage}
+          {playoutEngineWording(view.errorMessage, engineName)}
         </span>
       )}
     </>

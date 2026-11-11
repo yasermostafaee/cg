@@ -3,7 +3,7 @@
 
 use crate::observe::{compare_versions, Progress};
 use crate::product::{Config, Home, Product, ProductId};
-use crate::server::{ServerSetup, StoredBridge};
+use crate::server::{ServerSetup, StoredBridge, PLAYOUT_ENGINE_NAME};
 use std::cmp::Ordering;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,9 +96,15 @@ pub enum StepState {
     Failed,
 }
 
-/// The rail: CG Control's and CG Designer's four steps; CG Bridge has a fifth, `Playout`.
+/// The rail: CG Control's and CG Designer's four steps; CG Bridge adds a server page.
 pub const STEPS: [&str; 4] = ["Welcome", "Location", "Installing", "Done"];
-pub const BRIDGE_STEPS: [&str; 5] = ["Welcome", "Location", "Playout", "Installing", "Done"];
+pub const BRIDGE_STEPS: [&str; 5] = [
+    "Welcome",
+    "Location",
+    PLAYOUT_ENGINE_NAME,
+    "Installing",
+    "Done",
+];
 const BRIDGE_STANDALONE_STEPS: [&str; 5] =
     ["Welcome", "Location", "CasparCG", "Installing", "Done"];
 /// The most steps a rail has (the window keeps one tick animation per step).
@@ -251,7 +257,7 @@ impl Model {
                 at(if self.server.standalone {
                     "CasparCG"
                 } else {
-                    "Playout"
+                    PLAYOUT_ENGINE_NAME
                 }),
                 false,
             ),
@@ -281,7 +287,7 @@ impl Model {
             },
             Page::Location => "Location".into(),
             Page::Server if self.server.standalone => "CasparCG".into(),
-            Page::Server => "Playout".into(),
+            Page::Server => PLAYOUT_ENGINE_NAME.into(),
             Page::Installing if update => format!("Updating {name}"),
             Page::Installing => format!("Installing {name}"),
             Page::Done if update => format!("{name} is updated"),

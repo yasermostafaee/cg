@@ -1,3 +1,4 @@
+import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useRef, useState } from 'react';
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
@@ -159,9 +160,11 @@ export function SignInOverlay({
     with a sentence about a token they presented ten seconds ago would be answering the wrong
     question. And neither is a field's fault unless it is a wrong username or password (B2).
   */
+  const engineName = useEngineName();
   const bridgeReason = auth.kind === 'signed-out' ? auth.reason : undefined;
   const message =
     error ?? (bridgeReason !== undefined ? { text: bridgeReason, marksField: false } : null);
+  const messageText = message === null ? null : playoutEngineWording(message.text, engineName);
 
   /*
     The trap arms and disarms WITH the gate, exactly as `LockOverlay`'s does with the lock:
@@ -324,7 +327,7 @@ export function SignInOverlay({
         role="status"
         dir={message?.fromPlayout === true ? directionOf(message.text) : undefined}
       >
-        {message?.fromPlayout === true ? <bdi>{message.text}</bdi> : message?.text}
+        {message?.fromPlayout === true ? <bdi>{messageText}</bdi> : messageText}
       </div>
     </SignInCard>
   );

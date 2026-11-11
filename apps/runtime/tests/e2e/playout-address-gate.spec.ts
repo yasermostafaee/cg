@@ -265,7 +265,9 @@ test('CONTROL — an address that is not a Playout’s is refused in one line: n
 
   await gate.getByLabel('Playout host', { exact: true }).fill(`ftp://${EXAMPLE}`);
   await gate.getByRole('button', { name: 'Connect' }).click();
-  await expect(gate.getByRole('status')).toHaveText('That is not a Playout address.');
+  await expect(gate.getByRole('status')).toHaveText(
+    'That is not an APASAI Playout Engine address.',
+  );
   // Still the gate, the same page: nothing saved, and no socket opened.
   await expect(gate).toBeVisible();
   expect(await page.evaluate((key) => localStorage.getItem(key), STATION_KEY)).toBeNull();

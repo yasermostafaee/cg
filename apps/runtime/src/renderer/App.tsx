@@ -1,3 +1,4 @@
+import { EngineNameContext, engineNameForMode } from './ui/engineWording.js';
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { mismatchedChannels, type TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
@@ -139,6 +140,7 @@ export function App(): JSX.Element {
   const lock = useLock();
   // `DESKTOP-APPS-01` — an installed station still in first-run says so at connect.
   const capabilities = useAuthCapabilities();
+  const engineName = engineNameForMode(capabilities?.mode ?? 'playout');
   const setupPhase = capabilities?.setupPhase ?? null;
   // `B-257` — the lock screen covers the console only when the lock covers ALL of it. A partly
   // covered console keeps its other channels; the strip names the covered ones.
@@ -163,7 +165,8 @@ export function App(): JSX.Element {
   // R-111 — presentation only. Fullscreen changes what surrounds the monitor, never selection.
   const [monitorCompanionMode, setMonitorCompanionMode] = useState<MonitorCompanionMode>('monitor');
   // R-108 — a shell-level catalogue door, independent of whether any layer is empty.
-  const { openTemplateLibrary, pickerDialog: templateLibraryDialog } = useTemplatePicker();
+  const { openTemplateLibrary, pickerDialog: templateLibraryDialog } =
+    useTemplatePicker(engineName);
   const [auditOpen, setAuditOpen] = useState(false);
   // `STATION-SETUP-02` — ONE settings dialog, opened at a section from five surfaces; the
   // request lives in a module store so the Inspector and the Layers panel can raise it too.
@@ -718,7 +721,7 @@ export function App(): JSX.Element {
       pvwVisible={monitorsVisible && layout.focus !== 'pgm'}
       locked={lockCovers}
     >
-      {shell}
+      <EngineNameContext.Provider value={engineName}>{shell}</EngineNameContext.Provider>
     </LiveInputCheckProvider>
   );
 }

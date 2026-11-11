@@ -61,6 +61,17 @@ describe('the line', () => {
     );
   });
 
+  it('brands the refusal while preserving row and source names', () => {
+    const line = takeRefusalLine(
+      'CasparCG show',
+      { code: 'amcp-timeout', sourceName: 'CasparCG camera' },
+      { engineName: 'APASAI Playout Engine' },
+    );
+    expect(line.text).toMatch(
+      /^CasparCG show · CasparCG camera: APASAI Playout Engine did not answer/,
+    );
+  });
+
   it('🔴 never says "AMCP" or the number', () => {
     expect(takeRefusalLine('Bed 59', OWNERS_CASE).text).not.toMatch(/AMCP|403/);
   });

@@ -1,3 +1,4 @@
+import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import {
   Cable,
   CircleCheck,
@@ -89,7 +90,12 @@ export const FAILED_AT_START_WORDS =
   'answering — do not power-cycle it over this.';
 
 /** `C-030` — the addressing reading plus its counter-example, for one declared device. */
-function addressingLine(check: ChannelOutputCheck, kind: string, device: string): string {
+function addressingLine(
+  check: ChannelOutputCheck,
+  kind: string,
+  device: string,
+  engineName: string,
+): string {
   const addressing = describeDeviceAddressing(device);
   const counter =
     addressing.form === 'persistent-id'
@@ -97,7 +103,7 @@ function addressingLine(check: ChannelOutputCheck, kind: string, device: string)
       : addressing.form === 'slot-index'
         ? ' (a hardware persistent ID would be a long number such as 23487013)'
         : '';
-  return `Channel ${String(check.channel)}: the ${kind} is declared as ${addressing.words}${counter}. ${DEVICE_ADDRESSING_RULE}`;
+  return `Channel ${String(check.channel)}: the ${kind} is declared as ${addressing.words}${counter}. ${playoutEngineWording(DEVICE_ADDRESSING_RULE, engineName)}`;
 }
 
 /** The glyph a consumer KIND wears in the table — decorative; the kind's own word sits beside it. */
@@ -219,6 +225,7 @@ function ChannelRows({
   server: ServerHealth;
   check: ChannelOutputCheck;
 }): JSX.Element {
+  const engine = useEngineName();
   const reachable = isServerReachable(server.state);
   const air = check.missing.filter((m) => isAirOutputKind(m.kind));
   const local = check.missing.filter((m) => !isAirOutputKind(m.kind));
@@ -231,7 +238,7 @@ function ChannelRows({
           Channel {String(check.channel)} on server {server.label} —{' '}
           {reachable
             ? `checked ${formatClock(check.observedAt)}`
-            : `last checked ${formatClock(check.observedAt)}; CasparCG is unreachable, so this cannot be re-checked`}
+            : `last checked ${formatClock(check.observedAt)}; ${engine} is unreachable, so this cannot be re-checked`}
         </span>
         {check.declared !== null && (
           <Tag className="cg-setup-tag" data-output-count="">
@@ -260,12 +267,16 @@ function ChannelRows({
         {air.flatMap((m) =>
           m.devices.map((device) => (
             <span key={`${m.kind}:${device}`} style={styles.detail}>
-              {addressingLine(check, m.kind, device)}
+              {addressingLine(check, m.kind, device, engine)}
             </span>
           )),
         )}
-        {air.length > 0 && <span style={styles.detail}>{FAILED_AT_START_WORDS}</span>}
-        {air.length > 0 && <span style={styles.detail}>{DEVICE_NUMBER_RECIPE}</span>}
+        {air.length > 0 && (
+          <span style={styles.detail}>{playoutEngineWording(FAILED_AT_START_WORDS, engine)}</span>
+        )}
+        {air.length > 0 && (
+          <span style={styles.detail}>{playoutEngineWording(DEVICE_NUMBER_RECIPE, engine)}</span>
+        )}
         {local.map((m) => (
           <span key={m.kind} style={styles.local} data-severity="local">
             {m.kind === 'screen' ? 'Preview' : 'Local monitor'} — {missingWords([m])} is declared
@@ -288,6 +299,7 @@ function ServerBlock({
   server: ServerHealth;
   channel: number | undefined;
 }): JSX.Element {
+  const engine = useEngineName();
   const checks = [...(server.outputs ?? [])]
     .filter((c) => channel === undefined || c.channel === channel)
     .sort((a, b) => a.channel - b.channel);
@@ -296,7 +308,7 @@ function ServerBlock({
       <span style={styles.status}>
         Server {server.label}: no output check has completed yet
         {channel === undefined ? '' : ` for channel ${String(channel)}`}
-        {isServerReachable(server.state) ? '' : ' (CasparCG is unreachable)'}.
+        {isServerReachable(server.state) ? '' : ` (${engine} is unreachable)`}.
       </span>
     );
   }
@@ -325,6 +337,7 @@ export function OutputsSection({
   health: ConnectionHealth | null;
   channel?: number;
 }): JSX.Element {
+  const engine = useEngineName();
   return (
     <section className="cg-output-block" aria-label="Program outputs">
       <div className="cg-output-head">
@@ -344,11 +357,11 @@ export function OutputsSection({
       <details className="cg-setup-details">
         <summary>How are outputs identified?</summary>
         <p>
-          What <code>casparcg.config</code> declares versus what is running, read over AMCP: INFO
-          CONFIG for the declaration, INFO &lt;channel&gt; for the running set, re-read every
-          minute. A program output (decklink, bluefish, ndi, ffmpeg, artnet) that is declared and
-          not running is the operator alarm; a preview window or the local sound device is noted
-          here only.
+          What {playoutEngineWording('casparcg.config', engine)} declares versus what is running,
+          read over AMCP: INFO CONFIG for the declaration, INFO &lt;channel&gt; for the running set,
+          re-read every minute. A program output (decklink, bluefish, ndi, ffmpeg, artnet) that is
+          declared and not running is the operator alarm; a preview window or the local sound device
+          is noted here only.
         </p>
       </details>
     </section>

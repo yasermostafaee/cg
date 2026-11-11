@@ -1,3 +1,4 @@
+import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useEffect, useState } from 'react';
 import { KeyRound, TriangleAlert } from 'lucide-react';
 import {
@@ -78,6 +79,7 @@ function backupNeedsAdmin(engines: EngineSessions | null): boolean {
 }
 
 export function BridgeSessionBanner(): JSX.Element | null {
+  const engineName = useEngineName();
   const auth = useAuthSession();
   const engines = useEngineSessions();
   const [session, setSession] = useState<BridgeSessionState | null>(null);
@@ -125,7 +127,7 @@ export function BridgeSessionBanner(): JSX.Element | null {
       <span style={styles.text}>
         {session?.state === 'refused' ? (
           <>
-            CG Bridge: <bdi>{session.message}</bdi>
+            CG Bridge: <bdi>{playoutEngineWording(session.message ?? '', engineName)}</bdi>
           </>
         ) : primaryNeeds ? (
           BRIDGE_NEEDS_ADMIN_LINE
@@ -207,6 +209,7 @@ function BridgeSignInDialog({
   startOn: Engine;
   onClose: () => void;
 }): JSX.Element {
+  const engineName = useEngineName();
   const lines: readonly EngineLine[] =
     engines === null ? [] : [engines.primary, ...(engines.backup !== null ? [engines.backup] : [])];
   const [engine, setEngine] = useState<Engine>(
@@ -270,7 +273,14 @@ function BridgeSignInDialog({
       title="Sign in CG Bridge"
       emblem={KeyRound}
       onClose={onClose}
-      {...(error !== null ? { message: { role: 'refusal' as const, text: error.text } } : {})}
+      {...(error !== null
+        ? {
+            message: {
+              role: 'refusal' as const,
+              text: playoutEngineWording(error.text, engineName),
+            },
+          }
+        : {})}
       footer={
         <>
           <ModalAction actionRole="cancel" onClick={onClose}>

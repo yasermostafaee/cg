@@ -1,3 +1,4 @@
+import { useEngineName } from '../../ui/engineWording.js';
 import { useMemo } from 'react';
 import {
   CLEARED_BY_PLAYOUT_LICENSE,
@@ -187,7 +188,7 @@ export function OrphanLayersBanner({
    */
   const linkDown = useLink() === 'disconnected';
   const casparReach = useCasparReach();
-  const clearRefusal = casparRefusalReason(linkDown, casparReach);
+  const clearRefusal = casparRefusalReason(linkDown, casparReach, useEngineName());
   const dismissals = useForeignDismissals();
 
   /*

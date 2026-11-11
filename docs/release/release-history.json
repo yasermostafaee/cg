@@ -22,8 +22,8 @@
       ],
       "fixes": [
         {
-          "fa": "در Pan، تصویر انتخاب‌شده و شطرنجی بیرون کادر با حرکت موس روی قاب یا دستگیره‌ها ثابت می‌مانند. Update on air برش را روی همان ورودیِ در حال پخش اعمال می‌کند.",
-          "en": "Pan keeps the selected picture clear and the checkerboard outside the crop when the pointer moves over the plate or its handles. Update on air applies the crop to the playing input."
+          "fa": "در Pan، تصویر ورودی در محدودهٔ منبع دیده می‌شود. هنگام جابه‌جایی یا تغییر اندازه، تصویرِ اطراف کادر تیره می‌شود. Update on air برش را روی همان ورودیِ در حال پخش اعمال می‌کند.",
+          "en": "Pan shows the input across the source area and dims the picture outside the crop during a move or resize. Update on air applies the crop to the playing input."
         },
         {
           "fa": "Space در تایملاین Designer بین Play و Pause جابه‌جا می‌شود. در Rehearse همان کلید Play و Stop را اجرا می‌کند.",
@@ -50,12 +50,12 @@
           "en": "The Designer canvas checkerboard stays visible after Rehearse Stop completes."
         },
         {
-          "fa": "حالت اتصال بدون APASAI Playout با نام Direct to CasparCG دیده می‌شود. راهنما نسخهٔ آزموده‌شدهٔ CasparCG و مسیر برگشت به APASAI Playout را نشان می‌دهد.",
-          "en": "Setup names the standalone connection Direct to CasparCG, identifies the tested CasparCG version, and shows how to return to APASAI Playout."
+          "fa": "نصب و تنظیمات ایستگاه متصل نام APASAI Playout Engine را نمایش می‌دهند. ایستگاه‌های مستقلِ ثبت‌شده قابل استفاده‌اند.",
+          "en": "Setup and connected station settings use the APASAI Playout Engine name. Existing standalone stations remain usable."
         },
         {
-          "fa": "در حالت Direct to CasparCG، کانال‌های قابل پخش از روی فهرست واقعی CasparCG مشخص می‌شوند. اگر کانالی روی سرور وجود نداشته باشد، دلیل رد Take همان‌جا نمایش داده می‌شود.",
-          "en": "Direct to CasparCG checks configured channels against the running CasparCG channel list and explains why a Take to a missing channel is refused."
+          "fa": "در ایستگاه‌های مستقلِ موجود، کانال‌های قابل پخش از فهرست واقعی سرور مشخص می‌شوند. اگر کانالی روی سرور وجود نداشته باشد، دلیل رد Take نمایش داده می‌شود.",
+          "en": "Existing standalone stations check configured channels against the running server and explain why a Take to a missing channel is refused."
         },
         {
           "fa": "Normalize روی همان لایهٔ صدا اعمال می‌شود. مقدار Gain و امکان برداشتن آن در Inspector دیده می‌شود.",
@@ -147,8 +147,8 @@
           "en": "Changing the VCG name in the export dialog creates a separate template. Exporting that name again updates the variant."
         },
         {
-          "fa": "با گزینهٔ No Playout، CG Bridge و CG Control روی یک دستگاه بدون ورود به Playout به CasparCG محلی یا شبکه‌ای وصل می‌شوند.",
-          "en": "No Playout connects CG Control through a local CG Bridge to local or remote CasparCG without Playout sign-in."
+          "fa": "گزینهٔ No Playout در این نسخه اتصال مستقیم به موتور محلی یا شبکه‌ای را از طریق CG Bridge محلی فراهم کرد.",
+          "en": "This release introduced the No Playout connection through a local CG Bridge to a local or remote engine."
         },
         {
           "fa": "ON PVW و Play می‌توانند هم‌زمان روی یک لایه روشن باشند. پیش‌نویس Inspector همان لحظه در PVW دیده می‌شود؛ تغییر PGM با Update on air اعمال می‌شود.",

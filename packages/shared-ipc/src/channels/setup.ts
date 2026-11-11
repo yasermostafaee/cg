@@ -85,7 +85,7 @@ const WhatwgUrl = (
 ).URL;
 
 /** `CENTRAL-BRIDGE-01` (D8) — the one refusal of a Playout address a console cannot find CG Bridge from. */
-export const NOT_A_PLAYOUT_ADDRESS = 'That is not a Playout address.';
+export const NOT_A_PLAYOUT_ADDRESS = 'That is not an APASAI Playout Engine address.';
 
 /** `CENTRAL-BRIDGE-01` (D8) — the one refusal of a CG Bridge address that is not `host` or `host:port`. */
 export const NOT_A_BRIDGE_ADDRESS = 'That is not a CG Bridge address.';

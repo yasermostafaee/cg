@@ -1,3 +1,4 @@
+import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import {
   ArrowRightFromLine,
@@ -124,6 +125,7 @@ const PVW_TRANSPORT_TITLE = {
 } as const;
 
 export function PreviewPanel({ companionActions }: { companionActions?: ReactNode }): JSX.Element {
+  const engine = useEngineName();
   const rehearsals = useRehearse();
   const items = useStack();
   const channelSettings = useChannelSettings();
@@ -510,7 +512,7 @@ export function PreviewPanel({ companionActions }: { companionActions?: ReactNod
                   ? verb.toUpperCase()
                   : `${verb.toUpperCase()} ${verb === 'next' ? 'on all' : 'all'} ${String(transport.count)} rehearsing`
               }
-              title={PVW_TRANSPORT_TITLE[verb]}
+              title={playoutEngineWording(PVW_TRANSPORT_TITLE[verb], engine)}
               onClick={() => {
                 transport?.drive(verb);
               }}
@@ -551,7 +553,7 @@ export function PreviewPanel({ companionActions }: { companionActions?: ReactNod
             <span style={styles.label}>No layers on preview</span>
             <span style={styles.detail}>
               Use ON PVW on one or more loaded rows and their graphics render here, in this browser,
-              with the field values you have typed. Nothing is sent to CasparCG.
+              with the field values you have typed. Nothing is sent to {engine}.
             </span>
           </div>
         ) : (

@@ -91,7 +91,7 @@ describe('CENTRAL-BRIDGE-01 — the Playout-address gate', () => {
     );
     expect(
       [...c.querySelectorAll('[role="group"]')].map((g) => g.getAttribute('aria-label')),
-    ).toEqual(['Playout address', 'CG Bridge address']);
+    ).toEqual(['APASAI Playout Engine address', 'CG Bridge address']);
     expect([...c.querySelectorAll('input')].map((i) => i.getAttribute('aria-label'))).toEqual([
       'Playout host',
       'Playout port',

@@ -1,3 +1,4 @@
+import { useEngineName } from '../../ui/engineWording.js';
 import { useRef } from 'react';
 import { useCanOperate, useHoldsOperatorRole } from '../../hooks/useCanOperate.js';
 import { ChevronRight, Info } from 'lucide-react';
@@ -287,7 +288,7 @@ export function LiveSourcesPanel({
    * the reason — an enabled button whose command cannot leave the browser is not a
    * capability, it is the appearance of one.
    */
-  const releaseRefusal = casparRefusalReason(linkDown, casparReach);
+  const releaseRefusal = casparRefusalReason(linkDown, casparReach, useEngineName());
 
   /**
    * 🔴 **THE AUDIO CONTROLS ASK A NARROWER QUESTION THAN RELEASE DOES — the BRIDGE hop only,

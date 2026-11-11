@@ -1,3 +1,4 @@
+import { PLAYOUT_ENGINE_NAME } from '../../ui/engineWording.js';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { STANDALONE_BRIDGE_HOST } from '../../../shared/station-address.js';
 import { hostValue } from '../../ui/fieldValue.js';
@@ -170,9 +171,13 @@ export function StationAddressFields({
   return (
     <div className="cg-station-fields" data-station-fields="">
       {show.playout && !standalone && (
-        <div className="cg-station-fields__group" role="group" aria-label="Playout address">
+        <div
+          className="cg-station-fields__group"
+          role="group"
+          aria-label={`${PLAYOUT_ENGINE_NAME} address`}
+        >
           <span className="cg-station-fields__name" aria-hidden="true">
-            Playout address
+            {PLAYOUT_ENGINE_NAME} address
           </span>
           <HostPortFields
             name="Playout"

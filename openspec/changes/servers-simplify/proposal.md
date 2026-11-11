@@ -30,13 +30,12 @@ server`), each with `Change`. An address is edited as a `Host` and a `Port`, eve
   The open edit is held by Station setup, survives a tab switch, marks the rail and is discarded on close. A
   reconnect while the dialog is open reads the configuration again, and a draft never crosses to another CG Bridge.
   The Set up page asks with the same fields (`StationAddressFields`, `stationFields.ts`): one set, one rule.
-- **Part B — CasparCG, derived (`R-096`, `B-326`; T2, T3).** The cards are `CasparCG A` and `CasparCG B · backup`;
-  in a Playout station (its CG Bridge advertises `auth: playout`) A is a fact — `On the Playout machine`, its host,
-  ports and state — and B stays addable, every port's default its placeholder. The graphics address sits behind
-  `Advanced` (collapsed in a Playout station) as `Where CasparCG fetches graphics`, and nothing calls CG Bridge's
-  machine "this machine". CG Bridge's one predicate of who cannot fetch graphics now also judges a host that names
-  ANOTHER machine (`servesFromAnotherMachine`, against its own addresses), and says so as `elsewhere`; the console
-  shows it as the check's failed line with `Detect automatically`.
+- **Part B — the engine, derived (`R-096`, `B-326`; T2, T3).** In a Playout station (its CG Bridge advertises
+  `auth: playout`), the operator-facing engine name is `APASAI Playout Engine`. A is a fact with its placement,
+  host, ports and state. B stays addable, and the default of each port is its placeholder. A saved standalone
+  station uses `CasparCG` for its engine. The graphics address sits under `Advanced` and names the engine that
+  fetches graphics. CG Bridge reports an advertised host on another machine as `elsewhere`, and the console
+  shows that failed check with `Detect automatically`.
 - **Part C — a wrong CasparCG host never fails in silence (`B-327`; T6).** CG Bridge says, with its check's answer,
   whether server A joins the Playout's — through the same `hostIsOurs` its meters, sources and grants read, built
   once (`hostIsOursFor`) — and Station setup shows it as an `After sign-in` line naming both hosts and the cost.
@@ -44,7 +43,11 @@ server`), each with `Change`. An address is edited as a `Host` and a `Port`, eve
   card whose fields differ from what is in force reads `Not applied`. The console sends server A with the check and
   asks by the name CG Bridge advertises; the route keeps the station's lines when a CasparCG host is named.
   `R-097` (a status-bar fact while readings are dropped) is filed only.
-- **Part D — a station with no Playout (`R-098`; T4).** The installer and CG Control expose an explicit mode. It uses a local Bridge with no Playout session, a direct AMCP connection and a separate check of its configured CasparCG host. Existing stations remain in Playout mode unless deliberately changed.
+- **Part D — existing standalone stations and new enrollment (`R-098`; T4).** Fresh interactive setup presents
+  the APASAI Playout Engine connection. An existing standalone station uses its saved local CG Bridge with
+  direct AMCP and a separate check of the configured CasparCG host. Its Connection card is `CG Bridge`.
+  Bridge Setup opens stored standalone endpoints for maintenance. Explicit unattended installer mode flags
+  remain available, and upgrades without a mode flag preserve the installed mode.
 
 ## Decisions
 

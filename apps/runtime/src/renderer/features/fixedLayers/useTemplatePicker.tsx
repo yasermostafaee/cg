@@ -1,3 +1,4 @@
+import { playoutEngineWording } from '../../ui/engineWording.js';
 import {
   useCallback,
   useEffect,
@@ -396,7 +397,7 @@ interface PickRequest {
  */
 export type TemplateChoice = TemplateInfo | null;
 
-export function useTemplatePicker(): {
+export function useTemplatePicker(engine = 'CasparCG'): {
   pickTemplate: (
     title: string,
     accepts: 'low' | 'high',
@@ -903,7 +904,7 @@ export function useTemplatePicker(): {
    */
   const removeReference = useCallback(
     async (reference: TemplateReference): Promise<void> => {
-      const place = describeReferencePlace(reference, bank);
+      const place = playoutEngineWording(describeReferencePlace(reference, bank), engine);
       const ok = await confirm({
         title: 'Remove that item?',
         body:
@@ -949,7 +950,7 @@ export function useTemplatePicker(): {
         });
       }
     },
-    [bank, channel, confirm, readUsage],
+    [bank, channel, confirm, engine, readUsage],
   );
 
   /*
@@ -1233,7 +1234,7 @@ export function useTemplatePicker(): {
       : references.map((reference) => {
           const rowName = referenceRowName(reference, bank);
           const slot = reference.slot;
-          const place = describeReferencePlace(reference, bank);
+          const place = playoutEngineWording(describeReferencePlace(reference, bank), engine);
           if (rowName === null || slot === undefined) {
             return (
               <Button
@@ -1290,7 +1291,16 @@ export function useTemplatePicker(): {
         busy={importBusy}
         onClose={() => settle(null)}
         {...(message !== null
-          ? { message: remedies === null ? message : { ...message, remedies } }
+          ? {
+              message: {
+                ...message,
+                text: playoutEngineWording(message.text, engine),
+                ...(message.detail === undefined
+                  ? {}
+                  : { detail: playoutEngineWording(message.detail, engine) }),
+                ...(remedies === null ? {} : { remedies }),
+              },
+            }
           : {})}
         footer={
           <>

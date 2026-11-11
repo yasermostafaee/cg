@@ -60,7 +60,7 @@ async function openConnection(
     .getByRole('tablist', { name: 'Station setup sections' })
     .getByRole('tab', { name: /^Connection/ });
   await tab.click();
-  return { setup, card: setup.getByRole('region', { name: 'Playout' }), tab };
+  return { setup, card: setup.getByRole('region', { name: 'Playout', exact: true }), tab };
 }
 
 async function record(page: Page): Promise<unknown> {
@@ -172,9 +172,9 @@ test('🔴 B-325 — re-pointed at another CG Bridge with Station setup open: th
   await signIn(page);
 
   const { card, tab, setup } = await openConnection(page);
-  // T2 — a Playout station: CasparCG A is a fact, read off the CG Bridge the console is on.
+  // T2 — a Playout station: APASAI Playout Engine A is a fact, read off the CG Bridge the console is on.
   const a = setup
-    .getByRole('region', { name: 'CasparCG A' })
+    .getByRole('region', { name: 'APASAI Playout Engine A' })
     .locator('[data-setup-readonly]')
     .first();
   await expect(a).toHaveText('127.0.0.9', { timeout: 30_000 });
@@ -204,7 +204,7 @@ test('🔴 B-325 — re-pointed at another CG Bridge with Station setup open: th
   await expect(setup.getByLabel('Graphics host', { exact: true })).toHaveValue('');
 });
 
-test('🔴 T2 + T3 + B-326 — CasparCG A is a fact, Advanced is collapsed, and a graphics host on another machine is the check’s failed line', async ({
+test('🔴 T2 + T3 + B-326 — APASAI Playout Engine A is a fact, Advanced is collapsed, and a graphics host on another machine is the check’s failed line', async ({
   page,
 }) => {
   test.setTimeout(120_000);
@@ -221,9 +221,13 @@ test('🔴 T2 + T3 + B-326 — CasparCG A is a fact, Advanced is collapsed, and 
   await page.goto(`${APP}/`);
   await signIn(page);
   const { setup, card } = await openConnection(page);
+  await expect(page.getByRole('status', { name: 'Bridge link' })).toContainText(
+    'APASAI Playout Engine',
+  );
+  await expect(setup).not.toContainText(/casparcg/i);
 
-  // T2 — CasparCG A in a Playout station: where it is, its values as facts, nothing to type.
-  const a = setup.getByRole('region', { name: 'CasparCG A' });
+  // T2 — APASAI Playout Engine A in a Playout station: where it is, its values as facts, nothing to type.
+  const a = setup.getByRole('region', { name: 'APASAI Playout Engine A' });
   await expect(a.locator('[data-caspar-placement]')).toHaveText('On the Playout machine');
   await expect(a.locator('input')).toHaveCount(0);
   await expect(a.locator('[data-setup-readonly]').first()).toHaveText('127.0.0.1');
@@ -232,11 +236,11 @@ test('🔴 T2 + T3 + B-326 — CasparCG A is a fact, Advanced is collapsed, and 
   // T3 — the graphics address is behind Advanced, collapsed in a Playout station.
   const advanced = setup.locator('[data-setup-advanced]');
   await expect(
-    advanced.getByRole('region', { name: 'Where CasparCG fetches graphics' }),
+    advanced.getByRole('region', { name: 'Where APASAI Playout Engine fetches graphics' }),
   ).toBeHidden();
   await advanced.locator('summary').click();
   await expect(
-    advanced.getByRole('region', { name: 'Where CasparCG fetches graphics' }),
+    advanced.getByRole('region', { name: 'Where APASAI Playout Engine fetches graphics' }),
   ).toBeVisible();
   await expect(setup.getByText(/this machine/i)).toHaveCount(0);
   await shotOf(advanced, 'SERVERS-SIMPLIFY-01-after-4-advanced.png');
@@ -247,7 +251,7 @@ test('🔴 T2 + T3 + B-326 — CasparCG A is a fact, Advanced is collapsed, and 
   const line = card.locator('[data-check="graphics"]');
   await expect(line).toHaveAttribute('data-status', 'fail', { timeout: 30_000 });
   await expect(line).toContainText(
-    "CasparCG would fetch graphics from 192.0.2.93, another machine than CG Bridge's.",
+    "APASAI Playout Engine would fetch graphics from 192.0.2.93, another machine than CG Bridge's.",
   );
   await shotOf(card, 'SERVERS-SIMPLIFY-01-after-5-graphics-line.png');
 

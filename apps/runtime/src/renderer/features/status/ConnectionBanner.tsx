@@ -1,3 +1,4 @@
+import { useEngineName } from '../../ui/engineWording.js';
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { useLink } from '../../hooks/useLink.js';
@@ -85,6 +86,7 @@ export function ConnectionBanner({
    */
   reload?: () => void;
 }): JSX.Element | null {
+  const engine = useEngineName();
   const link = useLink();
   // `CENTRAL-BRIDGE-01` §1 C — WHERE CG Bridge was looked for.
   const address = window.cg.link.bridgeAddress?.() ?? null;
@@ -101,7 +103,7 @@ export function ConnectionBanner({
         <span style={styles.text}>
           TEST MODE — SIMULATION ONLY. NOTHING IS ON AIR.
           <span style={styles.detail}>
-            No command reaches CasparCG. Every status below is simulated, not real air.
+            No command reaches {engine}. Every status below is simulated, not real air.
           </span>
         </span>
         <Button variant="secondary" onClick={() => setTestMode(false)}>

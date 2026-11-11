@@ -1,3 +1,4 @@
+import { useEngineName } from '../../ui/engineWording.js';
 import type { CSSProperties } from 'react';
 import { cssVars } from '../../theme.js';
 import {
@@ -145,12 +146,13 @@ const styles = {
 } as const satisfies Record<string, CSSProperties>;
 
 export function LayerTableHeader({ density }: { density: Density }): JSX.Element {
+  const engine = useEngineName();
   const spec = densitySpec(density);
   return (
     <div style={{ ...styles.header, gridTemplateColumns: gridTemplateColumns(density) }} role="row">
       <span
         style={styles.cell}
-        title="The row’s position, counting down from the top — the highest CasparCG layer is 1, because it draws over the others. It is also the row’s default name, and it is fixed to the layer: hiding a row never renumbers the rest."
+        title={`The row’s position, counting down from the top — the highest ${engine} layer is 1, because it draws over the others. It is also the row’s default name, and it is fixed to the layer: hiding a row never renumbers the rest.`}
       >
         #
       </span>

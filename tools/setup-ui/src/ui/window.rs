@@ -112,7 +112,7 @@ pub fn widget_from_code(code: usize) -> Option<WidgetId> {
     ALL_WIDGETS.get(code).copied()
 }
 const ADDRESS_CODE: usize = 100;
-const ALL_WIDGETS: [WidgetId; 23] = [
+const ALL_WIDGETS: [WidgetId; 22] = [
     WidgetId::Next,
     WidgetId::Back,
     WidgetId::Cancel,
@@ -132,7 +132,6 @@ const ALL_WIDGETS: [WidgetId; 23] = [
     WidgetId::AddressOtherField,
     WidgetId::TextSourceField,
     WidgetId::TextSourceBrowse,
-    WidgetId::NoPlayout,
     WidgetId::StandaloneHostField,
     WidgetId::AmcpPortField,
     WidgetId::OscPortField,
@@ -1398,10 +1397,6 @@ impl App {
                 if self.model.server.separate {
                     self.focus = Some(WidgetId::PlayoutField);
                 }
-            }
-            WidgetId::NoPlayout => {
-                self.model.server.toggle_standalone();
-                self.rebuild();
             }
             WidgetId::PlayoutField
             | WidgetId::AmcpField
