@@ -53,6 +53,7 @@ import {
 } from './layerTable.js';
 
 interface Props {
+  sharedFolderAvailable?: boolean;
   slot: FixedSlotState;
   /**
    * WHAT THIS ROW CARRIES, as the three-way fact — see `RowBinding`. THE ROW'S ONE
@@ -327,6 +328,7 @@ export function LayerRow({
   rehearsing,
   previewOnly = false,
   independentPreview = false,
+  sharedFolderAvailable = false,
   seatedPlates = [],
   audioLockedOf,
   holdsLiveSeats = false,
@@ -343,7 +345,7 @@ export function LayerRow({
   const casparReach = useCasparReach();
   const { confirm, confirmDialog } = useConfirm();
   const engine = useEngineName();
-  const { pickTemplate, pickerDialog } = useTemplatePicker(engine);
+  const { pickTemplate, pickerDialog } = useTemplatePicker(engine, sharedFolderAvailable);
   const { menu, open, openAt, close } = useContextMenu<number>();
   const spec = densitySpec(density);
 

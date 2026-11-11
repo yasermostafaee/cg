@@ -35,7 +35,6 @@ import { Icon } from '../../ui/Icon.js';
 import { Modal, ModalAction, type ModalMessage } from '../../ui/Modal.js';
 import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
 import { useConfirm } from '../../ui/useDialog.js';
-import { useAuthCapabilities } from '../../hooks/useAuthCapabilities.js';
 import { SharedTemplateFolder } from '../library/SharedTemplateFolder.js';
 import { pickFile } from '../../ui/pickFile.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
@@ -400,7 +399,10 @@ interface PickRequest {
  */
 export type TemplateChoice = TemplateInfo | null;
 
-export function useTemplatePicker(engine = 'CasparCG'): {
+export function useTemplatePicker(
+  engine = 'CasparCG',
+  sharedFolderAvailable = false,
+): {
   pickTemplate: (
     title: string,
     accepts: 'low' | 'high',
@@ -413,7 +415,6 @@ export function useTemplatePicker(engine = 'CasparCG'): {
   const [request, setRequest] = useState<PickRequest | null>(null);
   const resolver = useRef<((choice: TemplateChoice) => void) | null>(null);
   const { confirm, confirmDialog } = useConfirm();
-  const sharedFolderAvailable = useAuthCapabilities()?.sharedTemplateFolder === true;
   const [sharedFolderOpen, setSharedFolderOpen] = useState(false);
   /**
    * A9 — the dialog's OWN message region. A refusal reported to the command

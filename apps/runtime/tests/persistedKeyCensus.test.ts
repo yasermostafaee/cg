@@ -141,7 +141,7 @@ const BEFORE_AND_AFTER = {
     'cg.runtime.foreign-notice.dismissed.v1',
     /*
       🔴 `PLAYOUT-FEATURES-01` E (`R-076`) — NEW: whether THIS console plays the programme's sound
-      (`usePgmAudio.ts`), `{ on }`. A per-console preference, like the shell layout: what one operator
+      (`usePgmAudio.ts`), `{ on, volume? }`. A missing volume is 100%. A per-console preference, like the shell layout: what one operator
       hears is a fact about that chair. No migration is owed: ABSENT means OFF, the default the letter
       asks for, and an unreadable value reads as absent.
     */
@@ -153,6 +153,8 @@ const BEFORE_AND_AFTER = {
     */
     'cg.runtime.pgm-monitor.v1',
     'cg.runtime.playoutSession',
+    // A per-console relative folder within the Bridge share. Absence opens the root.
+    'cg.runtime.shared-template-folder.v1',
     'cg.runtime.shell-layout.v1',
     /*
       🔴 `CENTRAL-BRIDGE-01` (D8) — NEW: where THIS console finds CG Bridge — the Playout address the

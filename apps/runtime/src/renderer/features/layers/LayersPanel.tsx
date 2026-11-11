@@ -329,7 +329,7 @@ export function LayersPanel({
   // `C-038` — may this principal act on the channel this console is scoped to? The ONE
   // console-side answer; every operator control in this panel reads it (golden rule 6).
   const canOperate = useCanOperate();
-  const layerProfilesAvailable = useAuthCapabilities()?.layerProfiles === true;
+  const capabilities = useAuthCapabilities();
   /*
     `MULTI-CHANNEL-01` — the SELECTED channel's bank: the table is that channel's rows.
 
@@ -1223,6 +1223,7 @@ export function LayersPanel({
             slot={slot}
             binding={binding}
             template={template}
+            sharedFolderAvailable={capabilities?.sharedTemplateFolder === true}
             // 🔴 `DESKTOP-APPS-01-D` h — `#` IS THE AMCP LAYER. A search, a tick or
             // a filter can never renumber it, because it is not a position at all.
             displayPosition={slot.layer}
@@ -1428,7 +1429,7 @@ export function LayersPanel({
       }
       actions={
         <>
-          {canOperate && layerProfilesAvailable && listReady && bank !== null && (
+          {canOperate && capabilities?.layerProfiles === true && listReady && bank !== null && (
             <LayerProfiles key={bank.channel} bank={bank} snapshot={items} />
           )}
           {/*

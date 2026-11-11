@@ -177,8 +177,10 @@ export function App(): JSX.Element {
   // R-111 — presentation only. Fullscreen changes what surrounds the monitor, never selection.
   const [monitorCompanionMode, setMonitorCompanionMode] = useState<MonitorCompanionMode>('monitor');
   // R-108 — a shell-level catalogue door, independent of whether any layer is empty.
-  const { openTemplateLibrary, pickerDialog: templateLibraryDialog } =
-    useTemplatePicker(engineName);
+  const { openTemplateLibrary, pickerDialog: templateLibraryDialog } = useTemplatePicker(
+    engineName,
+    capabilities?.sharedTemplateFolder === true,
+  );
   const [auditOpen, setAuditOpen] = useState(false);
   // `STATION-SETUP-02` — ONE settings dialog, opened at a section from five surfaces; the
   // request lives in a module store so the Inspector and the Layers panel can raise it too.
