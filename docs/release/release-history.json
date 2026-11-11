@@ -320,7 +320,12 @@
         "fa": "آزمون‌های باقی‌مانده و قابلیت‌های در دست پیگیری در این بخش ثبت می‌شوند.",
         "en": "This section tracks outstanding acceptance checks and features still in progress."
       },
-      "features": [],
+      "features": [
+        {
+          "fa": "Image Sequence می‌تواند تصاویر با اندازه‌های متفاوت را در یک قاب مشترک به یک کلیپ تبدیل کند. اندازهٔ تصویر اول پیش‌فرض است و می‌توان آن را تغییر داد.",
+          "en": "Image Sequence can fit different-size images into a common frame to create one clip. The first image sets the editable output size."
+        }
+      ],
       "fixes": [
         {
           "fa": "در Pan، بخش انتخاب‌شده واضح است و شطرنجی بیرون کادر قرار می‌گیرد. Update on air برش را روی همان ورودیِ در حال پخش اعمال می‌کند.",
@@ -335,8 +340,12 @@
           "en": "The Designer canvas checkerboard stays visible after Rehearse Stop completes."
         },
         {
-          "fa": "در حالت No Playout، کانال‌های قابل پخش از روی فهرست واقعی CasparCG مشخص می‌شوند. اگر کانالی روی سرور وجود نداشته باشد، دلیل رد Take همان‌جا نمایش داده می‌شود.",
-          "en": "No Playout checks configured channels against the running CasparCG channel list and explains why a Take to a missing channel is refused."
+          "fa": "حالت اتصال بدون APASAI Playout با نام Direct to CasparCG دیده می‌شود. راهنما نسخهٔ آزموده‌شدهٔ CasparCG و مسیر برگشت به APASAI Playout را نشان می‌دهد.",
+          "en": "Setup names the standalone connection Direct to CasparCG, identifies the tested CasparCG version, and shows how to return to APASAI Playout."
+        },
+        {
+          "fa": "در حالت Direct to CasparCG، کانال‌های قابل پخش از روی فهرست واقعی CasparCG مشخص می‌شوند. اگر کانالی روی سرور وجود نداشته باشد، دلیل رد Take همان‌جا نمایش داده می‌شود.",
+          "en": "Direct to CasparCG checks configured channels against the running CasparCG channel list and explains why a Take to a missing channel is refused."
         },
         {
           "fa": "Normalize روی همان لایهٔ صدا اعمال می‌شود. مقدار Gain و امکان برداشتن آن در Inspector دیده می‌شود.",
