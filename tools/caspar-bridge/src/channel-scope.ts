@@ -329,6 +329,8 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'setup.check-standalone': STATION_WIDE,
   'setup.route-address': STATION_WIDE,
   'sharedFiles.get': STATION_WIDE,
+  'sharedFiles.template-folder': STATION_WIDE,
+  'sharedFiles.template-read': STATION_WIDE,
   'sources.assignments': STATION_WIDE,
   'sources.config': STATION_WIDE,
   'sources.media-search': STATION_WIDE,
@@ -387,6 +389,7 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'stack.dismiss-error': INTENT,
   'stack.dismiss-restore-report': INTENT,
   'stack.load': INTENT,
+  'stack.load-profile': INTENT,
   'stack.media-plate-transport': INTENT,
   'stack.next': INTENT,
   // `R-100` — a page turn is a playout verb on the row's own channel, like NEXT.

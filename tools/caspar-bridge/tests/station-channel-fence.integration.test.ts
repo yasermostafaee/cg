@@ -609,7 +609,7 @@ describe('the census: every route that names a channel, classified', () => {
       { fixedBank: BANK },
     );
 
-  it('twenty-eight routes carry a channel key; twenty-three carry it at the top level, where the fence reads', () => {
+  it('every route carrying a channel key declares where the fence can read it', () => {
     const table = buildRoutes(runtime());
     expect(table.size, 'the census is looking at the real table').toBeGreaterThan(50);
     const found = Object.fromEntries(
@@ -679,6 +679,7 @@ describe('the census: every route that names a channel, classified', () => {
         a bulk verb scoped to a channel this station does not declare is refused by the fence.
       */
       'stack.clear-all': ['req.channel'],
+      'stack.load-profile': ['req.channel'],
       'stack.remove-all': ['req.channel'],
       // (`stack.restore` is gone — `CENTRAL-BRIDGE-01`: the bridge restores its own stack at start.)
       // `CENTRAL-BRIDGE-01` — dismissing the restore report for the channel on screen names it.
@@ -739,6 +740,7 @@ describe('the census: every route that names a channel, classified', () => {
       'stack.clear-all',
       // `CENTRAL-BRIDGE-01` — a restore-report dismissal for the channel on screen.
       'stack.dismiss-restore-report',
+      'stack.load-profile',
       'stack.remove-all',
       // `MULTI-CHANNEL-01` §2 C — PANIC for one channel.
       'stack.silence-channel-live-plates',

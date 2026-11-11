@@ -353,6 +353,8 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         'setup.check',
         'setup.route-address',
         'sharedFiles.get',
+        'sharedFiles.template-folder',
+        'sharedFiles.template-read',
         'sources.assignments',
         'sources.config',
         // `PLAYOUT-SOURCES-01` — the picker's media search, thumbnail and D10 refresh are reads.

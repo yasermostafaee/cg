@@ -749,6 +749,8 @@ describe('R-066 — the MODE comes from `bridge.capabilities`, and `unknown` is 
       // `DELTA-RUN-NEXT-VERSION-01-C` — this fake names no machine clock: read as null.
       bridgeClock: caps.clock ?? null,
       independentPreview: true,
+      layerProfiles: true,
+      sharedTemplateFolder: true,
     });
     expect(runtime.auth.state()).toEqual({ kind: 'signed-in', principal, permittedChannels: [1] });
   });
@@ -777,6 +779,8 @@ describe('R-066 — the MODE comes from `bridge.capabilities`, and `unknown` is 
       // `DELTA-RUN-NEXT-VERSION-01-C` — no clock in the answer: the console states no zone.
       bridgeClock: null,
       independentPreview: true,
+      layerProfiles: true,
+      sharedTemplateFolder: true,
     });
     expect(runtime.auth.state()).toEqual({ kind: 'off' });
   });
