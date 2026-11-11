@@ -1,5 +1,6 @@
 import { useEngineName } from '../../ui/engineWording.js';
 import { useEffect, useId, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useCasparReach } from '../../hooks/useCasparReachable.js';
 import { useLink } from '../../hooks/useLink.js';
 import { useFixedSlots } from '../../hooks/useFixedLayers.js';
@@ -33,6 +34,7 @@ import { AsyncButton } from '../../ui/AsyncButton.js';
 import { AutoGrowTextarea } from '../../ui/AutoGrowTextarea.js';
 import { Button } from '../../ui/Button.js';
 import { DraftChip } from '../../ui/DraftChip.js';
+import { Icon } from '../../ui/Icon.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { Panel } from '../../ui/Panel.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
@@ -143,18 +145,14 @@ function templateIdStub(templateId: string): string {
   return templateId.slice(0, ID_STUB_LENGTH);
 }
 
-/**
- * Which field kinds need the panel's FULL width, with their label stacked above.
- *
- * Text-carrying kinds do; scalar kinds (boolean, number, colour, select) have a small
- * intrinsic width and stay in the compact two-column row, which is denser and easier
- * to scan. The split is by KIND rather than by width alone because it is right at
- * EVERY width — a 160px value column was never enough for a Persian headline, no
- * matter how wide the screen it sat on. `controls.css` adds a container query on top
- * of this, collapsing even the compact rows once the panel itself runs out of room.
- */
-function isWideKind(kind: DynamicField['type'] | 'unknown'): boolean {
-  return kind === 'text' || kind === 'multiline' || kind === 'list' || kind === 'image';
+/** Rich editors get the entire row when the Inspector's value column is too narrow. */
+function needsWideEditor(kind: DynamicField['type'] | 'unknown', field: DynamicField | null) {
+  return (
+    kind === 'multiline' ||
+    kind === 'list' ||
+    kind === 'image' ||
+    (field?.type === 'text' && field.countdown !== undefined)
+  );
 }
 
 interface Props {
@@ -199,35 +197,12 @@ const styles = {
     overflowY: 'auto' as const,
   },
   empty: { color: colors.textMuted, fontSize: 'var(--r-text-md)' },
-  title: {
-    fontSize: '15px',
-    fontWeight: 600,
-    lineHeight: 1.35,
-    margin: '0 0 var(--r-space-1)',
-    overflowWrap: 'anywhere' as const,
-  },
-  /**
-   * `RUNTIME-REDESIGN-01` Phase 6 (`R-061` (a)) — the TEMPLATE's line, under the row's name.
-   * The name the heading used to carry, one rank down: what the row CARRIES, not what it IS.
-   */
-  templateLine: {
-    color: colors.textSecondary,
-    fontSize: 'var(--r-text-md)',
-    margin: '0 0 var(--r-space-3)',
-    overflowWrap: 'anywhere' as const,
-  },
   /**
    * The id stub that separates two same-named templates. Muted and lighter than
    * the name: it is a DISAMBIGUATOR, not part of what the template is called,
    * and rendering it at the name's weight would read as a longer name.
    */
   titleStub: { color: colors.textMuted, fontWeight: 400 },
-  /** The item's own headline, under the template name — content, not metadata. */
-  contentTitle: {
-    color: colors.text,
-    fontSize: 'var(--r-text-md)',
-    margin: '0 0 var(--r-space-3)',
-  },
   /*
    * NO `max-width` HERE, AND NONE IS TO BE ADDED. Owner instruction, recorded
    * because a cap looks like an improvement to anyone who meets this panel cold:
@@ -307,7 +282,7 @@ const styles = {
   fieldName: { color: colors.text, fontWeight: 500, fontSize: '13px' },
   // B-067 — a nested composition's fields, indented under the instance's label.
   group: {
-    marginTop: 'var(--r-space-3)',
+    marginTop: 'var(--r-space-2)',
     paddingInlineStart: 'var(--r-space-2)',
     borderInlineStart: `2px solid ${colors.border}`,
   },
@@ -408,6 +383,8 @@ export function Inspector({
   rehearsing,
   previewOnly,
 }: Props): JSX.Element {
+  const [layerDetailsOpen, setLayerDetailsOpen] = useState(true);
+  const layerDetailsId = useId();
   const [lookup, setLookup] = useState<{
     templateId: string;
     channel: number | undefined;
@@ -727,104 +704,70 @@ export function Inspector({
         field the operator could ever see — and the Phase 5 field-box rules scope to it.
       */}
       <div className="cg-inspector-body" style={styles.scroll}>
-        {/*
-          `RUNTIME-REDESIGN-01` Phase 6 (`R-061` (a)) — THE ROW'S NAME IS THE HEADING, in its own
-          `<bdi>` (a Persian alias beside Latin chrome), with every id the row has on `title`.
-          Golden rule 11: now that drafts are per-row and survive a round trip, the risk of
-          editing the wrong row's draft is real, and the heading is what the operator reads.
-        */}
-        <h3 style={styles.title} title={rowName.title} data-inspector-heading="">
-          {/*
-            `MODAL-CHROME-10` ADDENDUM B, through the one component. The `<bdi>` was already
-            INLINE here and therefore already correct; what `IsolatedName` adds is the
-            explicit `dir="ltr"` on the box, which is what makes the pattern immune to an
-            ancestor that ever resolves RTL — and it puts this surface on the SAME
-            implementation as the four that had to be repaired, so a future change reaches
-            all of them. The isolation itself is never removed (see `OperatorNames.tsx`).
-          */}
-          <IsolatedName>{heading}</IsolatedName>
-          {/* A row with no place in the bank is headed by its template; the stub stays with it. */}
-          {heading === label && ambiguous && (
-            <span style={styles.titleStub} data-template-stub={templateIdStub(item.templateId)}>
-              {' '}
-              · {templateIdStub(item.templateId)}
-            </span>
-          )}
-        </h3>
-        {/*
-          The TEMPLATE, one rank down — what the row carries. R-004's rule stands: the id is a
-          correlation key, tooltip only; `templateIdStub` appears only when another template
-          answers to the same name. Omitted when the heading already IS the template name (a
-          row with no slot), so nothing is said twice.
-        */}
-        {heading !== label && (
-          <div style={styles.templateLine} title={item.templateId} data-inspector-template="">
-            <IsolatedName>{label}</IsolatedName>
-            {ambiguous && (
-              <span style={styles.titleStub} data-template-stub={templateIdStub(item.templateId)}>
-                {' '}
-                · {templateIdStub(item.templateId)}
-              </span>
+        <div className="cg-inspector-identity">
+          <div className="cg-inspector-identity__summary">
+            <button
+              type="button"
+              className="cg-inspector-disclosure"
+              aria-label="Layer details"
+              aria-controls={layerDetailsId}
+              aria-expanded={layerDetailsOpen}
+              onClick={() => setLayerDetailsOpen((open) => !open)}
+            >
+              <Icon icon={layerDetailsOpen ? ChevronDown : ChevronRight} size={14} flipRtl />
+            </button>
+            <div className="cg-inspector-identity__names">
+              <h3 title={rowName.title} data-inspector-heading="">
+                <IsolatedName>{heading}</IsolatedName>
+                {heading === label && ambiguous && (
+                  <span
+                    style={styles.titleStub}
+                    data-template-stub={templateIdStub(item.templateId)}
+                  >
+                    {' '}
+                    · {templateIdStub(item.templateId)}
+                  </span>
+                )}
+              </h3>
+              {heading !== label && (
+                <div title={item.templateId} data-inspector-template="">
+                  <IsolatedName>{label}</IsolatedName>
+                  {ambiguous && (
+                    <span
+                      style={styles.titleStub}
+                      data-template-stub={templateIdStub(item.templateId)}
+                    >
+                      {' '}
+                      · {templateIdStub(item.templateId)}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+            <MetaChip value={stateWord} dotColor={stateColor} />
+          </div>
+          <div
+            id={layerDetailsId}
+            className="cg-inspector-identity__details"
+            hidden={!layerDetailsOpen}
+          >
+            {contentTitle !== '' && (
+              <div className="cg-inspector-identity__content-title">
+                <IsolatedName>{contentTitle}</IsolatedName>
+              </div>
             )}
+            <div className="cg-meta-chips">
+              {item.slot === undefined ? (
+                <MetaChip value={layerDetail(undefined)} />
+              ) : (
+                <>
+                  <MetaChip label="layer" value={String(item.slot.layer)} />
+                  <MetaChip label="channel" value={String(item.slot.channel)} />
+                  <MetaChip value={item.slot.server} />
+                </>
+              )}
+            </div>
           </div>
-        )}
-        {/*
-          🔴 §2(c) — THE SIXTH SURFACE, CAUGHT BEFORE IT SHIPPED. This is the item's own
-          `title` FIELD: operator-typed content, in this station overwhelmingly Persian, and
-          it was rendered as a bare text node with no isolation of any kind. A headline
-          mixing a Persian phrase with a Latin name or a digit run reorders around its own
-          neutrals with nothing to stop it — the `B-232` defect exactly, on a surface the
-          sweep for `<bdi>` could not find precisely BECAUSE it had none.
-        */}
-        {contentTitle !== '' && (
-          <div style={styles.contentTitle}>
-            <IsolatedName>{contentTitle}</IsolatedName>
-          </div>
-        )}
-        {/* ALWAYS SHOWN, including the no-layer case: "no layer" is not an absence of
-          information, it is the answer to "why is this not on air?". The old line rendered
-          only when a slot existed, so it went blank exactly when the operator was trying to
-          diagnose that — and the chips keep that property. The words are `layerDetail`'s
-          own; only the shape changes. */}
-        <div className="cg-meta-chips">
-          {/* The status word names itself, so it carries no label — only the dot
-              that marks it as the state among the coordinates. */}
-          {/*
-            🔴 THE ROW'S OWN VOCABULARY — `INSPECTOR-DELTA` §2.
-
-            This printed the RAW WIRE STATUS: `playing`, `loaded`, `idle`, `on-air`,
-            `unverified`, with a ` (pending)` suffix bolted on. Those are the words of
-            `StackItemState['status']`, which is a transport enum — they are not on the
-            operator's screen anywhere else, and the layers table two panels away was
-            already calling the very same row `ON AIR`, `READY`, `TAKING`. One row, two
-            vocabularies, and the operator has to learn that `playing` and `ON AIR` are the
-            same thing (golden rule 11: the operator's words, and they are the words
-            already on screen).
-
-            ⚠ `airStateVisual` was ALREADY BEING CALLED HERE — for the dot's colour — and
-            its `.label` was dropped on the floor. So this is not a new derivation; it is
-            the other half of a value already in hand, read ONCE and used for both, which
-            is why the word and the hue can never describe different states.
-
-            ⚠ THE ` (pending)` SUFFIX IS GONE because the word now carries it:
-            `playing` + pending IS `TAKING` (`airStateVisual`), and `badgeTone` consults
-            `pending` for no other status. `TAKING (pending)` would say it twice.
-
-            ⚠ REHEARSE through the ONE predicate (`rehearseOwnsStateWord`), never a local
-            re-spelling of its precedence: the rule that an AIR claim beats a rehearse
-            badge is `rowState`'s, and two copies of it would agree by luck.
-          */}
-          <MetaChip value={stateWord} dotColor={stateColor} />
-          {item.slot === undefined ? (
-            <MetaChip value={layerDetail(undefined)} />
-          ) : (
-            <>
-              <MetaChip label="layer" value={String(item.slot.layer)} />
-              <MetaChip label="channel" value={String(item.slot.channel)} />
-              {/* The server name names itself too. */}
-              <MetaChip value={item.slot.server} />
-            </>
-          )}
         </div>
         {/*
           🔴 `FIELD-FIXES-01` B — A REFUSED TAKE, IN THE ROW'S OWN LINE: the same composition the
@@ -881,24 +824,16 @@ export function Inspector({
             operator's passes/gap as controls. Renders nothing for a template imported before
             `TemplateInfo.playout` existed, rather than guessing what it does. */}
         <TimingSection item={item} info={resolvedInfo} />
-        {/* `cg-inspector-section` carries the shared rhythm — the heading's rule,
-            its tracking, and the largest gap in the gradient beneath it. Same
-            class as POSITION, so the two sections cannot drift apart. */}
-        <div className="cg-inspector-section">
-          {/*
-            §31.4 / §2(b) — SENTENCE CASE IN THE SOURCE; the CAPS are the STYLESHEET's
-            (`.cg-inspector-section > h2 { text-transform: uppercase }`). Nothing on screen moves.
-            What moves is the ACCESSIBLE NAME, which is computed from the text node and not from
-            the transform: a screen reader was being handed `FIELDS` and now gets `Fields`. The
-            reference does exactly this — measured in Chromium at 1280 × 800 on
-            `05-row-inspector.html`, its `.inspector-section h3` sources read `Position` and
-            `Fields` and compute `text-transform: uppercase`.
-          */}
+        <div className="cg-inspector-section cg-inspector-fields">
           <h2>Fields</h2>
           {isEmpty ? (
             <p style={styles.empty}>No fields.</p>
           ) : (
             <>
+              <div className="cg-inspector-fields__columns" aria-hidden="true">
+                <span>Field</span>
+                <span>Value</span>
+              </div>
               {rootFields.map((row) => (
                 // Key by item+path so switching stack items remounts the controls
                 // (each re-seeds from the new item's draft-or-applied value) — no
@@ -1253,7 +1188,9 @@ function FieldEditor({
       />
     );
   return (
-    <div className={isWideKind(kind) ? 'cg-field-row--wide' : 'cg-field-row'}>
+    <div
+      className={needsWideEditor(kind, field) ? 'cg-field-row cg-field-row--wide' : 'cg-field-row'}
+    >
       {/*
         🔴 THE AUTHORED NAME IS THE HEADING; THE BINDING KEY IS ITS TOOLTIP (`RUN-NEXT-VERSION-03`
         1.4, golden rule 11). The key used to be printed beside the name whenever the two differed
@@ -1276,9 +1213,7 @@ function FieldEditor({
           </span>
         )}
       </span>
-      <div
-        style={{ display: 'flex', flexDirection: 'column', gap: 'var(--r-space-2)', minWidth: 0 }}
-      >
+      <div className="cg-field-row__control">
         {isBook && field !== null && field.type === 'list' ? (
           // `RUN-NEXT-VERSION-03` 1.4 — a BOOK: one block — where its pages come from, whether they are
           // on the row, the pages around the current one, turning and loading.

@@ -285,12 +285,18 @@ tell a command is in flight, and a rejection is easy to miss.
   Keeps the dark broadcast-console look and the sacred air-state colors.
   Cross-refs: R-003 (dirty/Discard affordances), B-044 (UNCONFIRMED badge).
 
-## [ ] R-008 — Runtime field sizing + spacing pass ⟨priority: medium⟩
+## [~] R-008 — Runtime field sizing and compact Inspector ⟨priority: medium⟩ — `openspec/changes/compact-runtime-inspector/`
 
 **What:** Revisit the dimensions of the Runtime's input controls — text fields,
 the number field, and the ticker item textareas — plus their min-heights and the
 overall Inspector/Library density, now that the shared control primitives are in
 place (R-007).
+
+**Approved Inspector design:** Make Layer details and Position collapsible. Keep the row name,
+template and current status visible. A collapsed Position shows the effective anchor and offsets
+and still marks unapplied changes. Align the labels and values of simple Fields in compact rows.
+Keep space for text areas, item editors and grouped fields. The footer stays at the bottom.
+
 **Why:** After the R-007 design-system rollout the controls read well
 stylistically, but the operator finds the inputs still too small / cramped
 (final-pass feedback, 2026-07-08). This is a focused sizing-and-spacing
@@ -302,6 +308,10 @@ follow-up, not a restyle.
 - WHEN the sizing changes land THEN they build on R-007's `.cg-field` /
   `--r-space-*` tokens (adjust the shared tokens/class, not per-component inline
   styles) and no interaction state or R-003 input behavior regresses
+- WHEN the operator collapses Layer details or Position THEN the current row and its state remain
+  visible, and staged edits stay available through the existing Update or Discard controls.
+- WHEN the operator edits complex Fields THEN their editors and grouped content remain available
+  in the compact form, including on narrow panels.
   **Notes:** Builds directly on R-007 (`.cg-field`, the `--r-*` spacing/type
   scale). Symptom-level for now; measure comfortable field metrics during the
   change.

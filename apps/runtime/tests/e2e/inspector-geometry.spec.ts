@@ -58,6 +58,97 @@ async function expectFootPinned(app: { inspector: Locator }, label: string): Pro
   await expect(app.inspector.getByRole('button', { name: 'Apply staged edits' })).toBeInViewport();
 }
 
+test('R-008 — a compact Inspector keeps Ready state, staged placement and complex fields', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize(WIDE);
+  const templateId = 'tpl-compact-inspector';
+  await app.importVcg('compact.vcg', await buildListFieldVcg(templateId));
+  await app.selectStackRow(templateId);
+
+  const inspector = app.inspector;
+  const details = inspector.getByRole('button', { name: 'Layer details', exact: true });
+  const position = inspector.getByRole('button', { name: 'Position', exact: true });
+  const x = inspector.getByLabel('Position offset X');
+  const dirtyPosition = inspector.getByLabel('Position has unapplied changes');
+  const title = inspector.getByRole('textbox', { name: 'anchor', exact: true });
+  const item = inspector.getByRole('textbox', { name: '_tickerTexts item 1' });
+  const readApplied = () =>
+    page.evaluate(
+      async (id) => (await window.cg.stack.snapshot()).find((row) => row.templateId === id),
+      templateId,
+    );
+  const controlled = async (button: Locator) => {
+    const id = await button.getAttribute('aria-controls');
+    if (id === null) throw new Error('The disclosure does not name its controlled content');
+    return inspector.locator(`[id=${JSON.stringify(id)}]`);
+  };
+
+  await expect(details).toHaveAttribute('aria-expanded', 'true');
+  await expect(position).toHaveAttribute('aria-expanded', 'true');
+  const detailsContent = await controlled(details);
+  const positionContent = await controlled(position);
+  const heading = inspector.locator('[data-inspector-heading]');
+  const template = inspector.locator('[data-inspector-template]');
+  await expect(heading).toBeVisible();
+  await expect(template).toContainText('compact');
+  await expect(inspector.getByText('READY', { exact: true })).toBeVisible();
+  const original = await readApplied();
+  if (original === undefined) throw new Error('The selected row was not loaded');
+
+  await details.press('Enter');
+  await expect(details).toHaveAttribute('aria-expanded', 'false');
+  await expect(detailsContent).toBeHidden();
+  await expect(position).toHaveAttribute('aria-expanded', 'true');
+  await expect(heading).toBeVisible();
+  await expect(template).toBeVisible();
+  await expect(inspector.getByText('READY', { exact: true })).toBeVisible();
+
+  await inspector.getByRole('button', { name: 'Anchor top-left', exact: true }).click();
+  await x.fill('42');
+  await position.press('Space');
+  await expect(position).toHaveAttribute('aria-expanded', 'false');
+  await expect(positionContent).toBeHidden();
+  await expect(x).toBeHidden();
+  await expect(dirtyPosition).toBeVisible();
+  await expect(inspector.getByText('top left · 42, 0', { exact: true })).toBeVisible();
+  await expect(inspector.getByRole('button', { name: 'Discard staged edits' })).toBeEnabled();
+  await expectFootPinned(app, 'both sections collapsed');
+
+  const label = await box(inspector.locator('[data-field-heading="anchor"]'));
+  const field = await box(title);
+  expect(label.x + label.width).toBeLessThanOrEqual(field.x);
+  expect(Math.min(label.y + label.height, field.y + field.height)).toBeGreaterThan(
+    Math.max(label.y, field.y),
+  );
+  await expect(
+    inspector.getByRole('button', { name: 'Reorder _tickerTexts item 1' }),
+  ).toBeVisible();
+  await item.fill('خبر تازه\nخط دوم');
+  await expect(item).toHaveValue('خبر تازه\nخط دوم');
+  expect((await readApplied())?.position).toEqual(original.position);
+  expect((await readApplied())?.fields).toEqual(original.fields);
+
+  await position.press('Enter');
+  await expect(position).toHaveAttribute('aria-expanded', 'true');
+  await expect(x).toHaveValue('42');
+  await expect(item).toHaveValue('خبر تازه\nخط دوم');
+  await expect(details).toHaveAttribute('aria-expanded', 'false');
+  await position.press('Space');
+  await app.applyEdits();
+  await expect.poll(readApplied).toMatchObject({
+    position: { anchor: 'top-left', offset: { x: 42 } },
+    fields: {
+      _tickerTexts: expect.arrayContaining([expect.objectContaining({ text: 'خبر تازه\nخط دوم' })]),
+    },
+  });
+  await expect(dirtyPosition).toHaveCount(0);
+  await expect(position).toHaveAttribute('aria-expanded', 'false');
+  await details.press('Space');
+  await expect(detailsContent).toBeVisible();
+});
+
 test('the Update button stays pinned at the foot of the panel at every panel height, short content and long', async ({
   app,
 }) => {

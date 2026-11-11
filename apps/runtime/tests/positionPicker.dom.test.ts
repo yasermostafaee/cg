@@ -124,14 +124,15 @@ describe('PositionPicker — R-011', () => {
     });
   });
 
-  it('locks — all controls disabled with the reason visible — while on air/unsettled', async () => {
+  it('locks placement controls while on air or unsettled and leaves the section disclosure available', async () => {
     stubBridge();
     for (const status of ['playing', 'on-air', 'updating', 'exiting', 'unconfirmed'] as const) {
       const el = await render(item(status));
       expect(el.textContent).toContain('locked while on air');
-      const buttons = el.querySelectorAll<HTMLButtonElement>('button');
-      expect(buttons.length).toBeGreaterThan(0);
-      for (const b of buttons) expect(b.disabled).toBe(true);
+      const anchors = el.querySelectorAll<HTMLButtonElement>('button[aria-label^="Anchor "]');
+      expect(anchors).toHaveLength(9);
+      for (const anchor of anchors) expect(anchor.disabled).toBe(true);
+      expect(el.querySelector<HTMLButtonElement>('button[aria-expanded]')?.disabled).toBe(false);
       for (const i of el.querySelectorAll<HTMLInputElement>('input')) {
         expect(i.disabled).toBe(true);
       }

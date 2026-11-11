@@ -1,8 +1,10 @@
-import { useSyncExternalStore } from 'react';
+import { useId, useState, useSyncExternalStore } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { isOnAirStatus } from '@cg/shared-schema';
 import type { PositionAnchor, StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
+import { Icon } from '../../ui/Icon.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { defaultPositionOf } from '../stack/defaultPositionStore.js';
 import {
@@ -215,6 +217,8 @@ export function isPositionLocked(item: StackItemState): boolean {
  * correct on-air position with the default.
  */
 export function PositionPicker({ item }: { item: StackItemState }): JSX.Element {
+  const [open, setOpen] = useState(true);
+  const controlsId = useId();
   // B-072 — seed from the APPLIED override the bridge publishes, falling back
   // to the manifest default only when the item has none. Same precedence as
   // the on-air boot (override → manifest default → centered), so the picker
@@ -269,20 +273,32 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
     offsetNumber(dy) !== seed.offset.y;
 
   return (
-    <div className="cg-inspector-section" aria-label="On-air position">
-      {/* Sentence case in the source; the CAPS are the stylesheet's — see `Inspector.tsx`. */}
+    <div className="cg-inspector-section cg-inspector-position" aria-label="On-air position">
       <h2>
-        Position
-        {/* The SAME mark a dirty field carries, from the same class — so "not
-            applied yet" looks identical wherever it appears in this panel. */}
-        {dirty && (
-          <span className="cg-dirty-dot" aria-label="Position has unapplied changes">
-            ●
-          </span>
-        )}
+        <span className="cg-inspector-position__heading">
+          <button
+            type="button"
+            className="cg-inspector-disclosure"
+            aria-controls={controlsId}
+            aria-expanded={open}
+            onClick={() => setOpen((expanded) => !expanded)}
+          >
+            <Icon icon={open ? ChevronDown : ChevronRight} size={14} flipRtl />
+            Position
+          </button>
+          {dirty && (
+            <span className="cg-dirty-dot" aria-label="Position has unapplied changes">
+              ●
+            </span>
+          )}
+        </span>
+        <span className="cg-inspector-position__summary">
+          {anchor.replace('-', ' ')} · {offsetNumber(dx)}, {offsetNumber(dy)}
+        </span>
       </h2>
-      <div style={styles.placement}>
-        {/*
+      <div id={controlsId} className="cg-inspector-position__controls" hidden={!open}>
+        <div style={styles.placement}>
+          {/*
           A GRID, not nine loose dots. It used to render as nine free-floating
           glyphs in a bare `display: grid`, which communicated "here are nine
           things" and never "pick a corner" — the shape of the control has to say
@@ -294,31 +310,31 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
           painting moves to `controls.css`, where a selected fill and a hover can
           actually be expressed.
         */}
-        <div
-          className="cg-anchor-grid"
-          style={styles.anchorCell}
-          role="group"
-          aria-label="Position anchor"
-        >
-          {ANCHOR_GRID.flat().map((a) => (
-            <Button
-              key={a}
-              variant="default"
-              className="cg-anchor-cell"
-              aria-label={`Anchor ${a}`}
-              aria-pressed={a === anchor}
-              disabled={locked}
-              title={a}
-              onClick={() => setAnchor(a)}
-            >
-              {/* The anchor POINT inside its cell. The cell's border draws the
+          <div
+            className="cg-anchor-grid"
+            style={styles.anchorCell}
+            role="group"
+            aria-label="Position anchor"
+          >
+            {ANCHOR_GRID.flat().map((a) => (
+              <Button
+                key={a}
+                variant="default"
+                className="cg-anchor-cell"
+                aria-label={`Anchor ${a}`}
+                aria-pressed={a === anchor}
+                disabled={locked}
+                title={a}
+                onClick={() => setAnchor(a)}
+              >
+                {/* The anchor POINT inside its cell. The cell's border draws the
                   frame; this marks where in the frame the graphic is pinned. */}
-              <span className="cg-anchor-cell__dot" aria-hidden="true" />
-            </Button>
-          ))}
-        </div>
-        <div className="cg-position-row" style={styles.offsets}>
-          {/* `scrub` — the offsets are PIXEL magnitudes, which is exactly the value
+                <span className="cg-anchor-cell__dot" aria-hidden="true" />
+              </Button>
+            ))}
+          </div>
+          <div className="cg-position-row" style={styles.offsets}>
+            {/* `scrub` — the offsets are PIXEL magnitudes, which is exactly the value
               kind a horizontal drag suits: the operator nudges a graphic and watches
               the number move, rather than selecting text and retyping. Arrow keys give
               the same adjustment a keyboard, and Shift/Ctrl give fine and coarse steps.
@@ -328,39 +344,39 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
               because the same primitive serves the lock PIN, so it travels with the
               drag cursor and the keyboard steps — a narrower box must not quietly
               drop it, because an invisible gesture is one nobody uses. */}
-          {/* A plain wrapper, NOT a `<label>`. These inputs are named by
+            {/* A plain wrapper, NOT a `<label>`. These inputs are named by
               `aria-label` ("Position offset X"), which OUTRANKS a wrapping label —
               so a `<label>` would leave the visible text ("dx") different from the
               accessible name, the WCAG 2.5.3 mismatch, while adding no association
               that was missing. The a11y contract here is unchanged by this pass;
               only the stacking of the visible text is new. */}
-          <div style={styles.offsetField}>
-            <NumericInput
-              className="cg-field"
-              style={styles.offsetInput}
-              decimal
-              scrub={{ step: 1 }}
-              value={dx}
-              disabled={locked}
-              onValueChange={setDx}
-              aria-label="Position offset X"
-            />
-            <span style={styles.offsetLabel}>dx</span>
-          </div>
-          <div style={styles.offsetField}>
-            <NumericInput
-              className="cg-field"
-              style={styles.offsetInput}
-              decimal
-              scrub={{ step: 1 }}
-              value={dy}
-              disabled={locked}
-              onValueChange={setDy}
-              aria-label="Position offset Y"
-            />
-            <span style={styles.offsetLabel}>dy</span>
-          </div>
-          {/*
+            <div style={styles.offsetField}>
+              <NumericInput
+                className="cg-field"
+                style={styles.offsetInput}
+                decimal
+                scrub={{ step: 1 }}
+                value={dx}
+                disabled={locked}
+                onValueChange={setDx}
+                aria-label="Position offset X"
+              />
+              <span style={styles.offsetLabel}>dx</span>
+            </div>
+            <div style={styles.offsetField}>
+              <NumericInput
+                className="cg-field"
+                style={styles.offsetInput}
+                decimal
+                scrub={{ step: 1 }}
+                value={dy}
+                disabled={locked}
+                onValueChange={setDy}
+                aria-label="Position offset Y"
+              />
+              <span style={styles.offsetLabel}>dy</span>
+            </div>
+            {/*
             🔴 `Apply position` IS GONE — the owner, 2026-09-14: «دکمه apply position فقط یه
             مرحله اضافیه و همون دکمه update باید پوزیشن رو هم اعمال کنه و همچنین discard هم
             روش کار کنه.»
@@ -375,12 +391,13 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
             staged, the dot says WHICH SECTION it is in, and on a panel that scrolls the
             second question is the one the operator is actually asking.
           */}
+          </div>
         </div>
-      </div>
-      {/* BELOW the row, not inside it: it is a note about why the controls above are
+        {/* BELOW the row, not inside it: it is a note about why the controls above are
           inert, and a note that sits in the control row changes the row's height as
           it appears and disappears. */}
-      {locked && <span style={styles.lock}>Position locked while on air for this layer</span>}
+        {locked && <span style={styles.lock}>Position locked while on air for this layer</span>}
+      </div>
     </div>
   );
 }

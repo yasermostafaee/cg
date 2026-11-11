@@ -2341,56 +2341,62 @@ textarea.cg-field--autogrow {
   min-height: var(--r-insp-field-h);
 }
 
-/*
- * A COMPACT field: label beside its control. Right for a checkbox, a number, a
- * colour swatch or a select — controls with an intrinsic, small width.
- *
- * `minmax(0, …)` on BOTH tracks, not `120px 1fr`: a grid track's default `min-width:
- * auto` refuses to shrink below its content, which is how a long label or a wide
- * control pushed the row past the panel and forced horizontal overflow.
- */
-.cg-field-row {
-  display: grid;
-  grid-template-columns: minmax(0, 120px) minmax(0, 1fr);
-  gap: var(--r-space-2);
-  /* Same field→field step as the wide rows, so a panel mixing the two kinds
-     keeps ONE rhythm rather than two competing ones. */
-  padding: 0 0 var(--r-space-6);
-  font-size: var(--r-text-md);
-  align-items: center;
+.cg-inspector-fields {
+  --cg-inspector-label-width: clamp(5rem, 28cqi, 7.5rem);
 }
 
-/*
- * A WIDE field — text, multiline, list, image — stacks its label ABOVE the control.
- *
- * This is the real fix for the unusable list editors, and it is a LAYOUT fix rather
- * than a width setting. At the default 320px panel the two-column row left roughly
- * 160px for the control; the list editor then spent ~95px of that on its own reorder
- * and delete buttons, leaving an ~80px textarea in which Persian text broke mid-word
- * across three lines. Widening the value column could not fix that — the label
- * column and the buttons were both taking from the same 288px. Giving the control
- * the panel's FULL width, and moving the buttons off its line (see
- * `.cg-list-item`), is what actually gives the text room.
- */
-.cg-field-row--wide {
-  display: flex;
-  flex-direction: column;
-  /* LABEL→CONTROL is the smallest step in the gradient — they are one object. */
+.cg-inspector-fields__columns,
+.cg-field-row {
+  display: grid;
+  grid-template-columns: var(--cg-inspector-label-width) minmax(0, 1fr);
   gap: var(--r-space-2);
-  /* …and FIELD→FIELD is two steps up, so the boundary between two fields is
-     unmistakably wider than the gap inside one. That difference is what removes
-     the need for a divider line between every field. */
-  padding: 0 0 var(--r-space-6);
-  font-size: var(--r-text-md);
+  padding-block: var(--r-space-1);
+  border-bottom: 1px solid var(--r-border);
   min-width: 0;
 }
 
-/* Below this, even a compact row has no room for two tracks — the overlay on a
-   phone, or a column dragged to its minimum. Everything stacks. */
+.cg-inspector-fields__columns {
+  color: var(--r-text-muted);
+  font-size: var(--r-text-xs);
+}
+
+.cg-field-row {
+  align-items: center;
+  font-size: var(--r-text-md);
+}
+
+.cg-field-row--wide {
+  align-items: start;
+}
+
+.cg-field-row__control {
+  display: flex;
+  flex-direction: column;
+  gap: var(--r-space-1);
+  min-width: 0;
+}
+
+.cg-field-row__control > input[type='checkbox'],
+.cg-field-row__control > input[type='color'] {
+  align-self: start;
+}
+
+/* The book strip, list tools and date/time pickers need the full width of a narrow panel. */
+@container inspector (max-width: 22rem) {
+  .cg-field-row--wide {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--r-space-1);
+  }
+}
+
 @container inspector (max-width: 15rem) {
+  .cg-inspector-fields__columns {
+    display: none;
+  }
+
   .cg-field-row {
     grid-template-columns: minmax(0, 1fr);
-    gap: 0.2rem;
+    gap: var(--r-space-1);
   }
 }
 
@@ -2494,19 +2500,10 @@ textarea.cg-field--autogrow {
   box-shadow: inset 0 0 0 var(--r-focus-ring) var(--r-accent);
 }
 
-/* ── Inspector rhythm — the spacing GRADIENT does the grouping ──────────────
- *
- * One scale (`--r-space-*`: 4/8/12/16/24/32) and nothing in this panel outside
- * it. What makes it work is the ORDERING, not the values: label→control is the
- * smallest step, control→control one up, field→field larger, section→section
- * largest. Read down the panel, the gaps say what belongs to what — which is why
- * this needs no divider line between every pair of things. Half the visual noise
- * the owner was reacting to came from every gap being a different arbitrary
- * number, so a rule per relationship replaces a number per element.
- */
+/* ── Inspector sections ──────────────────────────────────────────────────── */
 
 .cg-inspector-section {
-  margin: 0 0 var(--r-space-8);
+  margin: 0 0 var(--r-space-3);
 }
 
 /*
@@ -2536,8 +2533,8 @@ textarea.cg-field--autogrow {
  */
 .cg-inspector-section > h2,
 .cg-inspector-section > .cg-section-caption {
-  margin: 0 0 var(--r-space-4);
-  padding-bottom: var(--r-space-2);
+  margin: 0 0 var(--r-space-1);
+  padding-bottom: var(--r-space-1);
   border-bottom: 1px solid var(--r-border);
 }
 
@@ -2564,6 +2561,70 @@ textarea.cg-field--autogrow {
   border: none;
   flex: 1;
   min-width: 0;
+}
+
+.cg-inspector-fields > h2 {
+  border: 0;
+  margin: 0;
+}
+
+.cg-inspector-disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--r-space-1);
+  min-inline-size: 24px;
+  min-block-size: 24px;
+  border: 0;
+  border-radius: var(--r-radius-sm);
+  padding: 0 var(--r-space-1);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.cg-inspector-disclosure:hover {
+  background: var(--r-surface-raised);
+  color: var(--r-text);
+}
+
+.cg-inspector-disclosure:focus-visible {
+  outline: 2px solid var(--r-accent-strong);
+  outline-offset: 1px;
+}
+
+.cg-inspector-position {
+  border-block: 1px solid var(--r-border);
+  margin-block: var(--r-space-1) var(--r-space-3);
+}
+
+.cg-inspector-position > h2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0 var(--r-space-2);
+  margin: 0;
+  padding-block: var(--r-space-1);
+  border: 0;
+}
+
+.cg-inspector-position__heading {
+  display: flex;
+  align-items: center;
+}
+
+.cg-inspector-position__summary {
+  color: var(--r-text-muted);
+  font-size: var(--r-text-xs);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.cg-inspector-position__controls {
+  padding-block-end: var(--r-space-2);
 }
 
 /* ── Inspector control heights — a ROW decides, not the variants in it ──────
@@ -2895,38 +2956,63 @@ input.cg-field.cg-book-page {
   min-height: 28px;
   text-align: center;
 }
-/* ── Inspector metadata chips (status / layer / channel / server) ───────────
- *
- * These were two loose prose lines under the item's title. Two sentences read as
- * an afterthought; a wrapping row of pills reads as a STATUS LINE, which is what
- * they are — the line an operator comes to the Inspector to reconcile against
- * what CasparCG reports.
- *
- * The LABEL is dim and the VALUE is primary and semibold, because the label is
- * the same four words every time and the value is the only part that changes.
- * The words themselves are unchanged (`dev-offline-polish` owns wording).
- */
+/* ── Inspector identity and metadata ──────────────────────────────────────── */
 
-/*
- * THE CHIP ROW BELONGS TO THE TITLE ABOVE IT, NOT TO THE SECTION BELOW.
- *
- * The scale was applied to the FIELDS in the first pass and not to the panel's
- * HEAD, so the title, the chips and the POSITION heading sat almost flush — the
- * owner's report. The gap inside the head (title → chips) is a small step because
- * they are one block: the chips are metadata ABOUT that title. The gap out of it
- * (chips → the first section heading) is the largest step in the scale, because
- * that is a SECTION boundary and must read as one.
- *
- * The ordering is the whole mechanism: small inside a group, large between
- * groups. It is what lets this panel group things without a divider line between
- * every pair.
- */
+.cg-inspector-identity {
+  padding-block-end: var(--r-space-1);
+}
+
+.cg-inspector-identity__summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--r-space-1);
+  color: var(--r-text-secondary);
+}
+
+.cg-inspector-identity__summary > .cg-meta-chip {
+  align-self: start;
+}
+
+.cg-inspector-identity__names {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 var(--r-space-2);
+  min-width: 0;
+  padding-block: 3px;
+  overflow-wrap: anywhere;
+  font-size: var(--r-text-sm);
+}
+
+.cg-inspector-identity__names h3 {
+  color: var(--r-text);
+  font-size: 15px;
+  line-height: 1.25;
+  font-weight: var(--r-weight-semibold);
+  margin: 0;
+}
+
+.cg-inspector-identity__details {
+  padding-inline-start: calc(24px + var(--r-space-1));
+  font-size: var(--r-text-sm);
+}
+
+.cg-inspector-identity__content-title {
+  overflow-wrap: anywhere;
+}
+
 .cg-meta-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--r-space-1) var(--r-space-2);
+  gap: 0 var(--r-space-2);
   align-items: center;
-  margin: 0 0 var(--r-space-8);
+}
+
+.cg-inspector-identity__details .cg-meta-chip {
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .cg-meta-chip {
