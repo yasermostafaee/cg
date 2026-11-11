@@ -6061,8 +6061,8 @@ or crop overlays.
 
 Show the whole source picture or guide inside its plate in PVW. Keep the selected picture clear,
 place the checkerboard outside the selection and outline the crop in blue with a dark edge for
-contrast. Move the outline continuously during a drag and offer Centre at a readable screen size
-independent of the monitor fit.
+contrast. Hovering the plate or a corner keeps that same picture and checkerboard. Move the outline
+continuously during a drag and offer Centre at a readable screen size independent of the monitor fit.
 The source image and crop window retain their own aspect ratios. A 16:9 crop on a 4:3 source
 uses the source width and moves vertically at the default crop. Corner handles keep the plate ratio
 and resize around the opposite corner, bounded by the full picture and a supported maximum zoom.

@@ -575,6 +575,12 @@
 ) {
   cursor: nesw-resize;
 }
+/* Pan buttons are hit surfaces. Keep the source and checkerboard paint stable under the pointer. */
+.cg-pan-draft :is(.cg-pan-draft__handle, .cg-pan-draft__resize):is(:hover, :active):not(:disabled) {
+  background: transparent;
+  filter: none;
+  transform: none;
+}
 .cg-pan-draft__resize::after {
   content: '';
   display: block;

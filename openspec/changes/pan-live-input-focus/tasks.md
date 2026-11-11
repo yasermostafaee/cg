@@ -100,5 +100,7 @@
       the selected and excluded JPEG pixels.
 - [x] 10.2 Apply a verified crop from Update on air to the existing seat. Chromium and Bridge
       verified the first Take, the live FILL, the retained clip and transport, and refusal rollback.
-- [ ] 10.3 Record the carrying Linux Playwright run.
-- [ ] 10.4 Verify the crop on the target station.
+- [x] 10.3 The carrying [Linux Playwright E2E](https://github.com/yasermostafaee/cg/actions/runs/42940842882/job/130262075512) passed on `f071406b`.
+- [x] 10.4 The owner verified that resizing updates PGM on the target station.
+- [x] 10.5 Windows Chromium verified that the source and checkerboard pixels remain stable over the plate and corner, including a stationary press. All six focused Pan scenarios passed.
+- [ ] 10.6 Repeat the PVW visual check on the target station and record carrying Linux E2E.

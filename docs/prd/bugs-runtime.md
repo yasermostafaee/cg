@@ -14099,7 +14099,9 @@ outline for missing assignments. Show Crop edges below the plate name when the a
 
 **Repro / Actual:** Open PVW Pan for a live Crop edges plate. The operator cannot readily distinguish the selected source region from the excluded picture. Drag or resize and press Update on air. The crop is treated as browser practice or skipped, so programme framing remains unchanged.
 
-**Expected / regression:** WHEN the operator edits a crop THEN the chosen source pixels remain clear and the checkerboard marks the outside. WHEN Update on air commits a verified crop THEN the same seated source reframes inside its current plate. Verify this in Chromium and on the AMCP wire, including no write during dragging and no on-air write from off-air Update.
+**Owner recheck (2026-11-11):** Resizing applies to PGM. In PVW, hovering the plate changes the image and checkerboard, and moving to a corner restores the prior picture.
+
+**Expected / regression:** WHEN the operator edits a crop THEN the chosen source pixels remain clear and the checkerboard marks the outside. Hovering the plate or a corner, and holding the pointer down, keep the same source and checkerboard colors. WHEN Update on air commits a verified crop THEN the same seated source reframes inside its current plate. Verify this in Chromium and on the AMCP wire, including no write during dragging and no on-air write from off-air Update.
 
 ## [~] B-434 — No Playout offers a channel absent from CasparCG ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/servers-simplify/`
 

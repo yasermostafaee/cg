@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import type { Scene } from '@cg/shared-schema';
 import {
   buildVcgIndexHtml,
@@ -424,6 +424,7 @@ test('D-178 / B-426 — measured JPEG crop uses the assigned aspect and cancels 
   app,
 }) => {
   const { page } = app;
+  await page.setViewportSize({ width: 1600, height: 900 });
   await registerTwoBox(page, PAN_HOLES, true, 4 / 3);
   await stubRetainedPage(page, pageWithHoles(PAN_HOLES));
   const layer = await app.loadTemplate(TWO_BOX);
@@ -446,7 +447,7 @@ test('D-178 / B-426 — measured JPEG crop uses the assigned aspect and cancels 
       index: 0,
       sourceAspect: 16 / 9,
       revision: 'a'.repeat(64),
-      jpegs: [sourceImage('#FF0000'), sourceImage('#00FF00')],
+      jpegs: [sourceImage('#C04028'), sourceImage('#00FF00')],
     };
     Object.assign(window, { measuredPan: state });
     Object.assign(window.cg, {
@@ -478,6 +479,7 @@ test('D-178 / B-426 — measured JPEG crop uses the assigned aspect and cancels 
           sourceId: state.sourceId,
           token: 'b'.repeat(64),
           sourceAspect: 16 / 9,
+          resizable: true,
           focus: { x: 0.5, y: 0.5 },
         },
       ],
@@ -490,6 +492,7 @@ test('D-178 / B-426 — measured JPEG crop uses the assigned aspect and cancels 
   );
   await page.getByRole('button', { name: 'Pan preview input', exact: true }).click();
   const handle = page.getByRole('button', { name: 'Pan source picture in portrait', exact: true });
+  const draft = handle.locator('..');
   const picture = handle.locator('[data-pan-source-revision]');
   await expect(picture).toBeVisible();
   await expect(picture).toHaveCSS('background-size', '350px 350px');
@@ -497,33 +500,71 @@ test('D-178 / B-426 — measured JPEG crop uses the assigned aspect and cancels 
   const crop = handle.locator('[data-pan-practice-crop]');
   const [pictureBox, cropBox] = await Promise.all([picture.boundingBox(), crop.boundingBox()]);
   if (pictureBox === null || cropBox === null) throw new Error('The source or crop is missing');
-  const screenshot = await picture.screenshot({ scale: 'css' });
-  const { selected, excluded } = await page.evaluate(
-    async ({ png, y, selectedX, excludedEnd }) => {
-      const image = new Image();
-      image.src = `data:image/png;base64,${png}`;
-      await image.decode();
-      const canvas = document.createElement('canvas');
-      canvas.width = image.width;
-      canvas.height = image.height;
-      const ctx = canvas.getContext('2d')!;
-      ctx.drawImage(image, 0, 0);
-      const red = (x: number) => ctx.getImageData(x, y, 1, 1).data[0]!;
-      return {
-        selected: red(selectedX),
-        excluded: Array.from({ length: excludedEnd - 4 }, (_, i) => red(4 + i)),
-      };
-    },
-    {
-      png: screenshot.toString('base64'),
-      y: Math.floor(cropBox.y - pictureBox.y + cropBox.height / 2),
-      selectedX: Math.floor(cropBox.x - pictureBox.x + cropBox.width / 2),
-      excludedEnd: Math.floor(cropBox.x - pictureBox.x) - 4,
-    },
-  );
-  expect(selected).toBeGreaterThan(245);
-  expect(Math.max(...excluded)).toBeLessThan(selected - 30);
-  expect(Math.max(...excluded) - Math.min(...excluded)).toBeGreaterThan(25);
+  await test.step('B-433 — Pan crop stays clear over the picture and resize handle', async () => {
+    const y = Math.floor(cropBox.y - pictureBox.y + cropBox.height / 2);
+    const selectedX = Math.floor(cropBox.x - pictureBox.x + cropBox.width / 2);
+    const excludedEnd = Math.floor(cropBox.x - pictureBox.x) - 4;
+    const samplePicture = async () => {
+      const screenshot = await picture.screenshot({ scale: 'css', animations: 'disabled' });
+      return page.evaluate(
+        async ({ png, y, selectedX, excludedEnd }) => {
+          const image = new Image();
+          image.src = `data:image/png;base64,${png}`;
+          await image.decode();
+          const canvas = document.createElement('canvas');
+          canvas.width = image.width;
+          canvas.height = image.height;
+          const ctx = canvas.getContext('2d')!;
+          ctx.drawImage(image, 0, 0);
+          const red = (x: number) => ctx.getImageData(x, y, 1, 1).data[0]!;
+          return {
+            selected: Array.from(ctx.getImageData(selectedX, y, 1, 1).data.slice(0, 3)),
+            excluded: Array.from({ length: excludedEnd - 4 }, (_, i) => red(4 + i)),
+          };
+        },
+        { png: screenshot.toString('base64'), y, selectedX, excludedEnd },
+      );
+    };
+    expect(await handle.evaluate((node) => node.matches(':hover'))).toBe(false);
+    const baseline = await samplePicture();
+    const selectedRed = baseline.selected[0]!;
+    expect(selectedRed).toBeGreaterThan(175);
+    expect(selectedRed).toBeLessThan(205);
+    expect(Math.max(...baseline.excluded)).toBeLessThan(selectedRed - 12);
+    expect(Math.max(...baseline.excluded) - Math.min(...baseline.excluded)).toBeGreaterThan(25);
+
+    async function checkPress(button: Locator): Promise<void> {
+      const box = await button.boundingBox();
+      await page.mouse.down();
+      try {
+        expect(await button.evaluate((node) => node.matches(':active'))).toBe(true);
+        expect(await samplePicture(), 'while pressing without moving').toEqual(baseline);
+        expect(await button.boundingBox()).toEqual(box);
+      } finally {
+        await page.mouse.up();
+      }
+    }
+
+    for (const [name, x] of [
+      ['inside the crop', selectedX],
+      ['outside the crop', Math.floor(excludedEnd / 2)],
+    ] as const) {
+      await page.mouse.move(pictureBox.x + x, pictureBox.y + y);
+      expect(await handle.evaluate((node) => node.matches(':hover')), name).toBe(true);
+      expect(await samplePicture(), name).toEqual(baseline);
+    }
+    await checkPress(handle);
+    const corner = draft.getByRole('button', {
+      name: 'Resize top left crop corner in portrait',
+      exact: true,
+    });
+    await corner.hover();
+    expect(await corner.evaluate((node) => node.matches(':hover'))).toBe(true);
+    expect(await handle.evaluate((node) => node.matches(':hover'))).toBe(false);
+    expect(await samplePicture(), 'over the resize handle').toEqual(baseline);
+    await checkPress(corner);
+    await expect(draft).toHaveAttribute('data-pan-crop-state', 'ready');
+  });
   const original = await picture.evaluate((el) => {
     el.dataset['probe'] = 'same-gesture';
     return el.style.backgroundImage;

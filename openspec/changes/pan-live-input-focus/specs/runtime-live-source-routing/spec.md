@@ -43,6 +43,7 @@ return without Pan controls or crop guides.
 
 - **WHEN** the operator opens Pan in PVW **THEN** the complete available source picture or Bars guide and current crop are visible inside the plate
 - **AND** the selected source pixels remain clear while checkerboard marks the excluded area
+- **WHEN** the pointer moves across the source or onto a resize handle **THEN** the picture and checkerboard colors stay the same
 - **WHEN** the operator drags the guide **THEN** it follows the pointer locally without a Bridge command
 - **WHEN** the operator presses `Center` **THEN** the crop guide returns to the centre of the source picture or Bars guide at its current size
 
