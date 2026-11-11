@@ -219,6 +219,8 @@ import {
   TextSourcesReadChannel,
   SharedFilesGetChannel,
   SharedFilesSetChannel,
+  SharedTemplateFolderChannel,
+  SharedTemplateReadChannel,
   type PageBuild,
   TEMPLATE_REDELIVERY_REFUSAL,
   UpdateCancelChannel,
@@ -343,6 +345,7 @@ import {
 } from './backup-channels-store.js';
 import type { BackupChannelMap } from './server-b-line.js';
 import { readTextSource } from './text-source-reader.js';
+import { listSharedTemplateFolder, readSharedTemplatePackage } from './shared-template-folder.js';
 import { ServiceConfigSchema, writeServiceConfig } from './service-config.js';
 import {
   airOf,
@@ -4962,6 +4965,19 @@ export function buildRoutes(
     route(SharedFilesGetChannel, 'read', 'read', () => ({
       path: paths.sharedFiles?.getPath() ?? paths.textSourceRoot ?? 'text-sources',
     })),
+    route(SharedTemplateFolderChannel, 'read', 'read', (r: { folder: string }) =>
+      listSharedTemplateFolder(
+        paths.sharedFiles?.getPath() ?? paths.textSourceRoot ?? 'text-sources',
+        r.folder,
+      ),
+    ),
+    route(SharedTemplateReadChannel, 'read', 'read', (r: { folder: string; name: string }) =>
+      readSharedTemplatePackage(
+        paths.sharedFiles?.getPath() ?? paths.textSourceRoot ?? 'text-sources',
+        r.folder,
+        r.name,
+      ),
+    ),
     route(SharedFilesSetChannel, 'operator', 'station-admin', (r: { path: string }) => {
       if (paths.sharedFiles === undefined) {
         return {

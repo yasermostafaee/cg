@@ -4925,6 +4925,10 @@ correction, explain when it is needed, and say that zero/**As calculated** needs
 
 ## [~] R-108 — Imported templates reload from their original file, singly or together, without silently choosing the row-data authority ⟨priority: high — the owner, 2026-11-08⟩ — `openspec/changes/reload-imported-template-sources/`
 
+**Shared template folder** — `openspec/changes/shared-template-folder/`. The template picker can
+browse the path configured under Station setup → Shared files and its subfolders, list `.vcg`
+packages, and import the selected package into the active channel through the usual import flow.
+
 **What:** a direct **Templates** button in the main CG Control header opens the current channel's
 catalogue without requiring an empty layer and without inventing a Load destination. When CG Control
 imports a `.vcg` through the Windows chooser, it remembers that file for the template on the current

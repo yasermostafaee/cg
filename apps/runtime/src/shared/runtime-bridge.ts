@@ -124,6 +124,8 @@ import type {
   TextSourcesReadChannel,
   SharedFilesGetChannel,
   SharedFilesSetChannel,
+  SharedTemplateFolderChannel,
+  SharedTemplateReadChannel,
   DelimitersListChannel,
   DelimitersSetChannel,
   DelimiterOption,
@@ -208,6 +210,7 @@ export interface AuthCapabilities {
   /** The bridge advertises browser-only PVW for a row that may also be on air. */
   readonly independentPreview?: true;
   readonly layerProfiles?: true;
+  readonly sharedTemplateFolder?: true;
 }
 
 /**
@@ -1429,5 +1432,11 @@ export interface RuntimeBridge {
     set(
       req: ChannelRequest<typeof SharedFilesSetChannel>,
     ): Promise<ChannelResponse<typeof SharedFilesSetChannel>>;
+    templateFolder(
+      req: ChannelRequest<typeof SharedTemplateFolderChannel>,
+    ): Promise<ChannelResponse<typeof SharedTemplateFolderChannel>>;
+    templateRead(
+      req: ChannelRequest<typeof SharedTemplateReadChannel>,
+    ): Promise<ChannelResponse<typeof SharedTemplateReadChannel>>;
   };
 }

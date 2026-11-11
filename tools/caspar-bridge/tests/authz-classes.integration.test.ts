@@ -294,6 +294,8 @@ describe('C-038 — the census: every route, classified', () => {
       'setup.check',
       'setup.route-address',
       'sharedFiles.get',
+      'sharedFiles.template-folder',
+      'sharedFiles.template-read',
       'sources.assignments',
       'sources.config',
       /*

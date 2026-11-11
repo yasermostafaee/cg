@@ -1,12 +1,14 @@
 import * as dgram from 'node:dgram';
-import { readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { Browser, Page } from '@playwright/test';
 import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { LayerProfileSchema, type ConnectionConfig, type FixedLayerBank } from '@cg/shared-ipc';
 import { cgCss, cgJsIife, ExporterSingleFile } from '@cg/single-file-export';
 import { buildTemplateLiveSources, unpack } from '@cg/vcg-format';
-import { buildPositionedVcg, expect, test } from './fixtures/runtime.js';
+import { buildPositionedVcg, buildValidVcg, expect, test } from './fixtures/runtime.js';
 
 /**
  * 🔴 `RELEASE-091-01` §1 (`B-288`) — **PVW RENDERS THE PAGE THE BRIDGE SERVES CASPARCG, IN A BROWSER
@@ -68,7 +70,7 @@ function freeUdpPort(): Promise<number> {
   });
 }
 
-async function boot(withCropSource = false): Promise<BridgeHandle> {
+async function boot(withCropSource = false, textSourceRoot?: string): Promise<BridgeHandle> {
   const oscPort = await freeUdpPort();
   mock = await createMock({
     amcpPort: 0,
@@ -86,6 +88,7 @@ async function boot(withCropSource = false): Promise<BridgeHandle> {
     port: 0,
     connection,
     fixedLayers: BANK,
+    ...(textSourceRoot === undefined ? {} : { textSourceRoot }),
     ...(withCropSource && {
       sourceCatalog: {
         layerRange: { start: 60, end: 79 },
@@ -542,6 +545,44 @@ test('R-024 saves and reloads prepared layers and refuses to replace an on-air r
     itemId: loaded.itemId,
     status: 'on-air',
   });
+});
+
+test('shared folder lists Bridge packages and imports through the template catalogue', async ({
+  page,
+}) => {
+  const shared = await mkdtemp(join(tmpdir(), 'cg-shared-vcg-'));
+  try {
+    await mkdir(join(shared, 'خبر'));
+    const packageId = 'tpl-shared-folder';
+    await writeFile(join(shared, 'خبر', 'خبر.vcg'), await buildValidVcg(packageId));
+    await writeFile(join(shared, 'خبر', 'notes.txt'), 'not a template package');
+    const handle = await boot(false, shared);
+    await openConsole(page, handle.url);
+    await page.getByRole('button', { name: 'Open templates', exact: true }).click();
+    await page.getByRole('button', { name: 'Shared folder…', exact: true }).click();
+    const folder = page.getByRole('dialog', { name: 'Shared template folder', exact: true });
+    await folder.getByRole('button', { name: 'خبر', exact: true }).click();
+    await folder.getByRole('button', { name: 'خبر.vcg', exact: true }).click();
+    await expect(folder.getByText('notes.txt')).toHaveCount(0);
+    await folder.getByRole('button', { name: 'Import package', exact: true }).click();
+    await expect(folder).toHaveCount(0);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          async (id) =>
+            (await window.cg.templates.list({ channel: 1 })).some(
+              (template) => template.templateId === id,
+            ),
+          packageId,
+        ),
+      )
+      .toBe(true);
+    expect(handle.runtime.stackSnapshot(1)).toHaveLength(0);
+    await page.getByRole('button', { name: 'Shared folder…', exact: true }).click();
+    await expect(folder.getByRole('button', { name: 'خبر.vcg', exact: true })).toBeVisible();
+  } finally {
+    await rm(shared, { recursive: true, force: true });
+  }
 });
 
 test('R-117 previews draft fields while Play and Update control the same programme row', async ({

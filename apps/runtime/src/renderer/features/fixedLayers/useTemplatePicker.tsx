@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   FileUp,
+  FolderOpen,
   Layers,
   LayoutTemplate,
   RefreshCw,
@@ -34,6 +35,8 @@ import { Icon } from '../../ui/Icon.js';
 import { Modal, ModalAction, type ModalMessage } from '../../ui/Modal.js';
 import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
 import { useConfirm } from '../../ui/useDialog.js';
+import { useAuthCapabilities } from '../../hooks/useAuthCapabilities.js';
+import { SharedTemplateFolder } from '../library/SharedTemplateFolder.js';
 import { pickFile } from '../../ui/pickFile.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { importVcgToStation } from './fixedSlotLoad.js';
@@ -410,6 +413,8 @@ export function useTemplatePicker(engine = 'CasparCG'): {
   const [request, setRequest] = useState<PickRequest | null>(null);
   const resolver = useRef<((choice: TemplateChoice) => void) | null>(null);
   const { confirm, confirmDialog } = useConfirm();
+  const sharedFolderAvailable = useAuthCapabilities()?.sharedTemplateFolder === true;
+  const [sharedFolderOpen, setSharedFolderOpen] = useState(false);
   /**
    * A9 — the dialog's OWN message region. A refusal reported to the command
    * toast is rendered under this modal's backdrop and never read; this is where
@@ -821,6 +826,7 @@ export function useTemplatePicker(engine = 'CasparCG'): {
 
   const cancelPackageQuestion = useRef<(() => void) | null>(null);
   const settle = useCallback((choice: TemplateChoice): void => {
+    setSharedFolderOpen(false);
     setRequest(null);
     setMessage(null);
     setReferences([]);
@@ -1435,6 +1441,15 @@ export function useTemplatePicker(engine = 'CasparCG'): {
               (`UI-POLISH-01` C — `Manage` itself is retired; delete is on each row.)
             */}
                 <ImportDoor onImport={openImport} busy={importBusy} />
+                {sharedFolderAvailable && (
+                  <Button
+                    variant="neutral"
+                    disabled={importBusy}
+                    onClick={() => setSharedFolderOpen(true)}
+                  >
+                    <Icon icon={FolderOpen} size={14} /> Shared folder…
+                  </Button>
+                )}
                 <Button
                   variant="neutral"
                   data-template-reload-all=""
@@ -1635,6 +1650,15 @@ export function useTemplatePicker(engine = 'CasparCG'): {
           aria-hidden="true"
         />
         {confirmDialog}
+        {sharedFolderAvailable && sharedFolderOpen && (
+          <SharedTemplateFolder
+            onClose={() => setSharedFolderOpen(false)}
+            onImport={(file) => {
+              setSharedFolderOpen(false);
+              void runImport(() => Promise.resolve({ file }));
+            }}
+          />
+        )}
       </Modal>
     );
 

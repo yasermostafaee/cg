@@ -584,6 +584,8 @@ export function createMockBridge(): RuntimeBridge {
 
     // Test mode has no Bridge service or service config. Keep the shape honest and refuse writes.
     sharedFiles: {
+      templateFolder: () => Promise.reject(new Error('Shared template folders require CG Bridge.')),
+      templateRead: () => Promise.reject(new Error('Shared template folders require CG Bridge.')),
       get: () => Promise.resolve({ path: 'text-sources' }),
       set: () =>
         Promise.resolve({

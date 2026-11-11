@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { BridgeTextSourcePathSchema } from '@cg/shared-schema';
 import { defineChannel } from '../channel.js';
 
 /**
@@ -25,4 +26,23 @@ export const SharedFilesSetChannel = defineChannel(
     path: z.string().min(1).optional(),
     message: z.string().optional(),
   }),
+);
+
+const SharedTemplateFolderPath = z.union([z.literal(''), BridgeTextSourcePathSchema]);
+const SharedTemplateName = z.string().regex(/^[^/\\]+\.vcg$/i);
+
+export const SharedTemplateFolderChannel = defineChannel(
+  'sharedFiles.template-folder',
+  z.object({ folder: SharedTemplateFolderPath }),
+  z.object({
+    root: z.string(),
+    folder: z.string(),
+    entries: z.array(z.object({ name: z.string(), kind: z.enum(['folder', 'package']) })),
+  }),
+);
+
+export const SharedTemplateReadChannel = defineChannel(
+  'sharedFiles.template-read',
+  z.object({ folder: SharedTemplateFolderPath, name: SharedTemplateName }),
+  z.object({ name: SharedTemplateName, base64: z.string() }),
 );

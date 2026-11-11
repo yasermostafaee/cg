@@ -225,6 +225,8 @@ const REQUEST_TIMEOUT_MS = 8000;
 const OPTIONAL_CHANNELS = new Set([
   ipcChannels.RehearseEnterPreviewChannel.name,
   ipcChannels.StackLoadProfileChannel.name,
+  ipcChannels.SharedTemplateFolderChannel.name,
+  ipcChannels.SharedTemplateReadChannel.name,
   StackPreviewPlateCropChannel.name,
   SourcesMediaThumbnailChannel.name,
   ipcChannels.SourcePreviewPvwChannel.name,
@@ -1118,6 +1120,10 @@ export class WebSocketRuntime implements RuntimeBridge {
         // `DELTA-RUN-NEXT-VERSION-01-C` — CG Bridge's machine clock; an older bridge says nothing.
         bridgeClock: caps.clock ?? null,
         ...(routed.has(ipcChannels.StackLoadProfileChannel.name) ? { layerProfiles: true } : {}),
+        ...(routed.has(ipcChannels.SharedTemplateFolderChannel.name) &&
+        routed.has(ipcChannels.SharedTemplateReadChannel.name)
+          ? { sharedTemplateFolder: true }
+          : {}),
         ...(routed.has(ipcChannels.RehearseEnterPreviewChannel.name)
           ? { independentPreview: true }
           : {}),
@@ -2713,6 +2719,10 @@ export class WebSocketRuntime implements RuntimeBridge {
 
   /** The station path CG Bridge itself resolves shared-file names below. */
   readonly sharedFiles = {
+    templateFolder: (req: ChannelRequest<typeof ipcChannels.SharedTemplateFolderChannel>) =>
+      this.#invoke(ipcChannels.SharedTemplateFolderChannel, req),
+    templateRead: (req: ChannelRequest<typeof ipcChannels.SharedTemplateReadChannel>) =>
+      this.#invoke(ipcChannels.SharedTemplateReadChannel, req),
     get: () => this.#invoke(SharedFilesGetChannel, undefined),
     set: (req: ChannelRequest<typeof SharedFilesSetChannel>) =>
       this.#invoke(SharedFilesSetChannel, req),
