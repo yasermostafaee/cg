@@ -53,7 +53,10 @@ function readPreference(): { on: boolean; volume: number } {
 
 function writePreference(on: boolean, volume: number): void {
   try {
-    globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify({ on, volume }));
+    globalThis.localStorage?.setItem(
+      STORAGE_KEY,
+      JSON.stringify(volume === 100 ? { on } : { on, volume }),
+    );
   } catch {
     // A browser that will not store it still plays; it simply forgets at the next reload.
   }
