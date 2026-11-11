@@ -129,7 +129,7 @@ grants are dropped.` **AND** `Use the Playout's` sets server A to `127.0.0.1` **
 
 ### Requirement: CG Control offers an explicit No Playout station
 
-Installed CG Control SHALL offer No Playout in station setup. It SHALL persist an explicit standalone station record with a loopback Bridge address after the Bridge identifies itself as standalone and answers its dedicated check. It SHALL enter without Playout sign-in and SHALL NOT send a stored Playout token. The Connection tab SHALL show No Playout and editable CasparCG A Host, AMCP port and OSC port. The default Playout flow SHALL preserve the existing station record and authentication behavior.
+Installed CG Control SHALL label its station modes **APASAI Playout** and **Direct to CasparCG**. Selecting **Direct to CasparCG** SHALL explain that it uses a local CG Bridge and name CasparCG 2.5.0 Stable as tested. It SHALL persist an explicit standalone station record with a loopback Bridge address after the Bridge identifies itself as standalone and answers its dedicated check. It SHALL enter without Playout sign-in and SHALL NOT send a stored Playout token. The Connection tab SHALL show **Direct to CasparCG** and editable CasparCG A Host, AMCP port and OSC port. It SHALL offer **Set up again** and explain how to return to APASAI Playout when reusing the same Bridge. The default Playout flow SHALL preserve the existing station record and authentication behavior.
 
 #### Scenario: Connect to a No Playout Bridge
 
@@ -147,6 +147,11 @@ Installed CG Control SHALL offer No Playout in station setup. It SHALL persist a
 - **WHEN** the standalone Bridge reports its verified running CasparCG channels
 - **THEN** the workspace switcher offers the configured channels that are running
 - **AND** if no configured channel is running, a configured channel remains visible as unavailable for diagnosis and repair
+
+#### Scenario: Return to APASAI Playout
+
+- **WHEN** an operator connected in **Direct to CasparCG** chooses **Set up again** in Connection
+- **THEN** the console returns to the mode picker with **APASAI Playout** selected
 
 #### Scenario: Reopen an existing Playout station
 

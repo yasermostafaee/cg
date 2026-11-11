@@ -4672,7 +4672,7 @@ not build).
 
 ## [~] R-098 — A station can connect to CasparCG without Playout ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/servers-simplify/`
 
-**What:** Offer an explicit No Playout mode in CG Bridge Setup and in CG Control on the same machine. The Bridge connects to CasparCG over AMCP without Playout authentication, using an editable host, AMCP port and OSC port. CG Control stores only the mode and local Bridge address for that station.
+**What:** Offer **Direct to CasparCG** in CG Bridge Setup and in CG Control on the same machine, alongside **APASAI Playout**. The Bridge connects to CasparCG over AMCP without Playout authentication, using an editable host, AMCP port and OSC port. CG Control stores only the mode and local Bridge address for that station.
 
 **Why:** A standalone CasparCG station must be able to run CG templates without installing the Playout Engine or Client.
 
@@ -4684,6 +4684,7 @@ not build).
 - WHEN a No Playout Bridge's configured CasparCG is checked THEN it reports its actual AMCP result and does not probe or request Playout authentication. Host and port edits survive restart.
 - WHEN an existing or new Playout station is installed, opened or upgraded without choosing No Playout THEN its address, sign-in, channel grants, licence gates and on-air behavior stay in force.
 - WHEN remote CasparCG fetches a graphics page THEN it can reach the configured graphics HTTP address without gaining access to the control socket.
+- WHEN the operator selects **Direct to CasparCG** THEN setup explains the local Bridge and names CasparCG 2.5.0 Stable as tested. To return to **APASAI Playout**, the operator can use **Set up again** in CG Control. If reusing the same Bridge, they first run CG Bridge Setup and select Playout mode there.
 
 ## [~] R-099 — An outage documents itself: one log line per change of the license the bridge holds ⟨priority: medium⟩ — FILED 2026-10-12 by `DONGLE-RECOVER-01` A2 · `openspec/changes/dongle-recover/`
 

@@ -17140,7 +17140,7 @@ export class CasparRuntime {
     if (channels === null || channels.includes(channel)) return null;
     return (
       `CasparCG is not running channel ${String(channel)}. ` +
-      'Check the No Playout connection and station channel settings.'
+      'Check the CasparCG A connection and station channel settings.'
     );
   }
 

@@ -30,6 +30,7 @@ import {
 import { DEFAULT_OSC_PORT, type ConnectionConfig, type TemplateServeInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { isLoopbackHost } from '../../../shared/loopback.js';
+import { DIRECT_CASPAR_MODE_LABEL } from '../../../shared/station-address.js';
 import { useConnections } from '../../hooks/useConnections.js';
 import { useLink } from '../../hooks/useLink.js';
 import { useStack } from '../../hooks/useStack.js';
@@ -1628,11 +1629,11 @@ export function StationSetupDialog({
               */}
               <section
                 className="cg-card"
-                aria-label={standaloneSetup === null ? 'Playout' : 'No Playout'}
+                aria-label={standaloneSetup === null ? 'Playout' : DIRECT_CASPAR_MODE_LABEL}
               >
                 <div className="cg-card__head">
                   <span className="cg-card__title">
-                    {standaloneSetup === null ? 'Playout' : 'No Playout'}
+                    {standaloneSetup === null ? 'Playout' : DIRECT_CASPAR_MODE_LABEL}
                   </span>
                 </div>
                 <div className="cg-card__body">

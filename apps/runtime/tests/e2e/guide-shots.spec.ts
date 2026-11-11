@@ -128,7 +128,7 @@ test('B3 — CG Control’s first question: the Playout’s address, typed', asy
   const gate = page.locator('[data-playout-address-gate]');
   const mode = gate.getByLabel('Station mode');
   await expect(mode).toHaveValue('playout');
-  await expect(mode.locator('option')).toHaveText(['With Playout', 'No Playout']);
+  await expect(mode.locator('option')).toHaveText(['APASAI Playout', 'Direct to CasparCG']);
   // `SERVERS-SIMPLIFY-01` (T1) — the Playout's host field (its port is left to its placeholder).
   await gate.getByLabel('Playout host', { exact: true }).fill(EXAMPLE_PLAYOUT);
   await expect(gate.getByRole('button', { name: 'Connect' })).toBeEnabled();

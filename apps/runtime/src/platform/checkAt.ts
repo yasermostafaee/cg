@@ -18,6 +18,7 @@ import { bridgeHostPort, bridgeUrlForStation } from './bridgeUrl.js';
 import type { SetupCheckAnswer } from '../shared/runtime-bridge.js';
 import { isUnknownBridgeChannel } from '../shared/bridgeSkew.js';
 import {
+  DIRECT_CASPAR_MODE_LABEL,
   STANDALONE_BRIDGE_ADDRESS_ERROR,
   standaloneBridgeAddress,
   type PlayoutStationAddress,
@@ -37,7 +38,7 @@ export function couldBeStandaloneBridge(url: string): boolean {
 }
 
 function standaloneInstead(address: string): string {
-  return `CG Bridge at ${address} is set up for No Playout. Choose No Playout to connect.`;
+  return `CG Bridge at ${address} uses ${DIRECT_CASPAR_MODE_LABEL}. Choose that mode to connect.`;
 }
 
 /**
@@ -296,7 +297,7 @@ export async function checkStandaloneAt(
   try {
     const capabilities = await capabilitiesOn(socket, CONNECTION_CHECK_CONNECT_MS);
     if (!isStandaloneBridge(capabilities)) {
-      throw new Error(`CG Bridge at ${address} is not set up for No Playout.`);
+      throw new Error(`CG Bridge at ${address} is not set up for ${DIRECT_CASPAR_MODE_LABEL}.`);
     }
     const result = SetupCheckStandaloneChannel.response.parse(
       await socket.ask(

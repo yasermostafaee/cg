@@ -95,7 +95,8 @@ test('R-098 / B-434 repairs server A and takes on the reported channel without P
     await page.goto(`${APP}/`);
     const gate = page.getByRole('dialog', { name: 'Set up CG Control' });
     await expect(gate.getByLabel('Station mode')).toHaveValue('playout');
-    await gate.getByLabel('Station mode').selectOption('standalone');
+    await gate.getByLabel('Station mode').selectOption({ label: 'Direct to CasparCG' });
+    await expect(gate.getByText(/Tested with CasparCG 2\.5\.0 Stable/)).toBeVisible();
     await expect(gate.getByLabel('Playout host')).toHaveCount(0);
     await expect(gate.getByLabel('CG Bridge host')).toHaveAttribute('placeholder', HOST);
     await gate.getByLabel('CG Bridge host').fill('localhost');
@@ -118,7 +119,7 @@ test('R-098 / B-434 repairs server A and takes on the reported channel without P
     await page.getByRole('button', { name: 'Open Station setup', exact: true }).click();
     const settings = page.getByRole('dialog', { name: 'Station setup' });
     await settings.getByRole('tab', { name: 'Connection' }).click();
-    const standalone = settings.getByRole('region', { name: 'No Playout', exact: true });
+    const standalone = settings.getByRole('region', { name: 'Direct to CasparCG', exact: true });
     await expect(standalone.getByLabel('CG Bridge host')).toHaveValue(HOST);
     await expect(standalone.getByLabel('CG Bridge port')).toHaveValue(String(bridge.port));
     await expect(settings.getByLabel('Primary host')).toHaveValue(HOST);
@@ -165,6 +166,14 @@ test('R-098 / B-434 repairs server A and takes on the reported channel without P
     expect(await page.evaluate((key) => localStorage.getItem(key), SESSION_KEY)).toContain(
       'old-playout-token',
     );
+
+    await page.getByRole('button', { name: 'Open Station setup', exact: true }).click();
+    await settings.getByRole('tab', { name: 'Connection' }).click();
+    await standalone.getByRole('button', { name: 'Set up again', exact: true }).click();
+    await expect(gate.getByLabel('Station mode').locator('option:checked')).toHaveText(
+      'APASAI Playout',
+    );
+    await expect(gate.getByLabel('Playout host')).toBeVisible();
   } finally {
     await bridge?.close();
     await caspar.stop();
@@ -194,7 +203,7 @@ test('R-098 refuses a remote Bridge address and ordinary auth-off Bridge', async
   expect(outgoing).toEqual([]);
   await host.clear();
   await connect.click();
-  await expect(gate.getByRole('status')).toContainText('is not set up for No Playout');
+  await expect(gate.getByRole('status')).toContainText('is not set up for Direct to CasparCG');
   expect(outgoing).toEqual(['bridge.capabilities']);
   expect(await page.evaluate((key) => localStorage.getItem(key), STATION_KEY)).toBeNull();
 });

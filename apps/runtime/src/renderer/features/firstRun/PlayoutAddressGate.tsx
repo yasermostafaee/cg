@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { NOT_A_BRIDGE_ADDRESS, NOT_A_PLAYOUT_ADDRESS } from '@cg/shared-ipc';
 import type { SetupCheckAnswer } from '../../../shared/runtime-bridge.js';
 import {
+  DIRECT_CASPAR_MODE_LABEL,
   STANDALONE_BRIDGE_ADDRESS_ERROR,
   type PlayoutStationAddress,
   type StandaloneStationAddress,
@@ -190,6 +191,7 @@ export function PlayoutAddressGate({
           <span className="cg-setup-field__label">Station mode</span>
           <select
             className="cg-field"
+            aria-describedby={standalone ? 'cg-direct-caspar-hint' : undefined}
             disabled={busy}
             value={standalone ? 'standalone' : 'playout'}
             onChange={(event) => {
@@ -198,10 +200,16 @@ export function PlayoutAddressGate({
               setError(null);
             }}
           >
-            <option value="playout">With Playout</option>
-            <option value="standalone">No Playout</option>
+            <option value="playout">APASAI Playout</option>
+            <option value="standalone">{DIRECT_CASPAR_MODE_LABEL}</option>
           </select>
         </label>
+      )}
+      {standalone && (
+        <p id="cg-direct-caspar-hint" className="cg-setup-field__hint">
+          Uses CG Bridge on this computer to reach CasparCG without APASAI Playout. Choose the same
+          mode in CG Bridge Setup. Tested with CasparCG 2.5.0 Stable.
+        </p>
       )}
       {/*
           🔴 `R-080` — **EMPTY IS THE ANSWER FOR MOST STATIONS, AND THE FIELDS SAY SO.** The owner's run of

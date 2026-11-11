@@ -136,6 +136,9 @@ never relaxed.
 - [x] D.9 B-434. Bridge tests verified a stale CH2 Take was refused before AMCP and its bank was retained. Chromium verified CH2 was excluded and CH1 reached ON AIR while the missing DeckLink banner remained.
 - [ ] D.10 Record the carrying Linux E2E.
 - [ ] D.11 Repeat installed Take on the real standalone CasparCG station.
+- [x] D.12 Label the standalone mode **Direct to CasparCG** in CG Control and Bridge Setup, and show the tested CasparCG version. Native Setup tests and visual preview passed.
+- [x] D.13 Show the return path to APASAI Playout. Chromium verified Connection returns to the default Playout setup and existing Playout onboarding still works.
+- [ ] D.14 Record the carrying Windows Setup smoke and Linux E2E for the connection labels and return path.
 
 ## E. Report
 

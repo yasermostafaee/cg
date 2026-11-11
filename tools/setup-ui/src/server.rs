@@ -15,7 +15,7 @@
 //! - **On an upgrade** the checkbox and the fields start from the stored configuration (or from the
 //!   command line, which wins, as it does for the engine); values left as they were are passed as they
 //!   were, which keeps them.
-//! - **No Playout** (`R-098`) gives the engine the standalone mode and the raw CasparCG endpoint.
+//! - **Direct to CasparCG** (`R-098`) gives the engine the standalone mode and the AMCP endpoint.
 
 use crate::address::{
     bare_host, host_of_address, is_loopback, normalise_playout_address, NOT_A_PLAYOUT_ADDRESS,
@@ -50,7 +50,7 @@ const STANDALONE_OPTIONS: [&str; 6] = [
 
 // ── The page's words. The checkbox's is the owner's own (RELEASE-0111-01 §A1). ────────────────
 pub const SEPARATE_LABEL: &str = "CG Bridge runs on a separate server (not on the Playout machine)";
-pub const NO_PLAYOUT_LABEL: &str = "No Playout";
+pub const NO_PLAYOUT_LABEL: &str = "Direct to CasparCG";
 pub const PLAYOUT_LABEL: &str = "Playout address";
 pub const AMCP_LABEL: &str = "CasparCG (AMCP) host";
 pub const AMCP_PORT_LABEL: &str = "AMCP port";

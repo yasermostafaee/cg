@@ -23,7 +23,7 @@ An empty field SHALL be saved as its default, and a whole address pasted into a 
 
 ### Requirement: Windows Setup can install a No Playout Bridge
 
-Bridge Setup SHALL offer No Playout alongside the current Playout setup. No Playout SHALL configure CasparCG host and ports with defaults 127.0.0.1, 5250 and 6251, a local control port, and the existing graphics and shared-files settings. Mode changes SHALL require an explicit installer choice. An unattended upgrade without a mode flag SHALL preserve the installed mode.
+Bridge Setup SHALL label its standalone choice **Direct to CasparCG**. It SHALL explain that this uses the local Bridge without APASAI Playout, name CasparCG 2.5.0 Stable as tested and explain how to return to APASAI Playout in Setup. No Playout SHALL configure CasparCG host and ports with defaults 127.0.0.1, 5250 and 6251, a local control port, and the existing graphics and shared-files settings. Mode changes SHALL require an explicit installer choice. An unattended upgrade without a mode flag SHALL preserve the installed mode.
 
 #### Scenario: Fresh No Playout installation
 

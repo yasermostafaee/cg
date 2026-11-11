@@ -90,7 +90,7 @@ describe('B-317 — a check on CG Bridge’s own socket', () => {
     );
     await expect(
       bridgeAnswersAt(socket.url, '127.0.0.1:5280', () => socket, 500),
-    ).resolves.toContain('Choose No Playout to connect.');
+    ).resolves.toContain('uses Direct to CasparCG. Choose that mode to connect.');
     expect(socket.sent).toEqual([{ type: 'request', channel: 'bridge.capabilities', payload: {} }]);
   });
 
@@ -109,7 +109,7 @@ describe('B-317 — a check on CG Bridge’s own socket', () => {
         token: 'jwt-from-local-playout',
         waitMs: 500,
       }),
-    ).rejects.toThrow('Choose No Playout to connect.');
+    ).rejects.toThrow('uses Direct to CasparCG. Choose that mode to connect.');
     expect(socket.sent).toEqual([{ type: 'request', channel: 'bridge.capabilities', payload: {} }]);
     expect(socket.closed).toBe(true);
   });

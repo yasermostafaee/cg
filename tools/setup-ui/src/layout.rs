@@ -432,12 +432,21 @@ fn server_page(b: &mut Builder, m: &Model) {
         true,
     ));
     if s.standalone {
-        b.text(
-            Rect::new(X0, 108.0, CONTENT_W, 24.0),
-            "Run CG Control on this machine.",
-            Style::Body,
-            palette::TEXT,
-        );
+        for (y, hint) in [
+            (91.0, "Run CG Control on the same PC as CG Bridge."),
+            (107.0, "Tested with CasparCG 2.5.0 Stable."),
+            (
+                123.0,
+                "For APASAI Playout, rerun Setup and clear this option.",
+            ),
+        ] {
+            b.text(
+                Rect::new(X0, y, CONTENT_W, 16.0),
+                hint,
+                Style::Body,
+                palette::TEXT,
+            );
+        }
     } else {
         let (lw, _) = b.m.measure(SEPARATE_LABEL, Style::Body, CONTENT_W);
         b.widgets.push(Widget::new(
@@ -1332,6 +1341,17 @@ mod tests {
             s.widget(WidgetId::NoPlayout).unwrap().kind,
             WidgetKind::Checkbox(true)
         );
+        assert_eq!(
+            s.widget(WidgetId::NoPlayout).unwrap().label,
+            "Direct to CasparCG"
+        );
+        for hint in [
+            "Run CG Control on the same PC as CG Bridge.",
+            "Tested with CasparCG 2.5.0 Stable.",
+            "For APASAI Playout, rerun Setup and clear this option.",
+        ] {
+            assert!(s.texts().contains(&hint));
+        }
         for absent in [
             WidgetId::Separate,
             WidgetId::PlayoutField,

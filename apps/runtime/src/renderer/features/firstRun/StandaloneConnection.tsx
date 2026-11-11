@@ -3,6 +3,7 @@ import type { SetupCheckAnswer, StandaloneSetup } from '../../../shared/runtime-
 import { STANDALONE_BRIDGE_ADDRESS_ERROR } from '../../../shared/station-address.js';
 import { cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
+import { SetUpAgain } from '../shell/SetUpAgain.js';
 import { ConnectionCheckList } from './ConnectionCheckList.js';
 import { StationAddressFields } from './StationAddressFields.js';
 import { type ShownCheckLine, inSetupWords } from './firstRunStation.js';
@@ -91,6 +92,11 @@ export function StandaloneConnection({
       {(lines.length > 0 || extraLines.length > 0) && (
         <ConnectionCheckList grouped actions={lineActions} lines={[...lines, ...extraLines]} />
       )}
+      <p className="cg-setup-field__hint">
+        To use APASAI Playout, select Set up again. If you are keeping this CG Bridge, change its
+        mode in CG Bridge Setup first.
+      </p>
+      <SetUpAgain />
     </>
   );
 }

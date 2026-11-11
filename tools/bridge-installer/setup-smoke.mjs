@@ -27,7 +27,7 @@
  *      /BRIDGEADDRESS=…` writes; the service runs and `/health` names that Playout.
  *   G. (`--previous`) an upgrade from the `0.11.0` installer, installed as a separate server by command
  *      line: the page opens ticked and filled from the stored configuration, and the values are kept.
- *   H. (`R-098`) No Playout installs with direct AMCP, keeps unauthenticated control on loopback,
+ *   H. (`R-098`) Direct to CasparCG installs with direct AMCP and keeps control on loopback,
  *      and retains its mode and custom endpoint on a silent upgrade with no options.
  *
  * Usage (elevated): node tools/bridge-installer/setup-smoke.mjs --installer <setup.exe> --engine <engine.exe>
@@ -616,7 +616,7 @@ if (args.previous !== undefined && serverIp !== null) {
   check('G. an upgrade from the previous release: F found this server’s address first', false);
 }
 
-// ── H. No Playout, using a raw AMCP peer and no Playout API ──────────────────────────────────────
+// ── H. Direct to CasparCG, using a raw AMCP peer ─────────────────────────────────────────────────
 {
   fresh();
   const sockets = new Set();
@@ -639,11 +639,15 @@ if (args.previous !== undefined && serverIp !== null) {
     const r = launch(args.installer);
     check('H. the setup window opens', uia(TITLE, 'wait', '', 90).ok);
     let pg = toServerPage();
-    check('No Playout is off by default', pg.byId['no-playout']?.state === 'Off');
+    check(
+      'Direct to CasparCG is off by default',
+      pg.byId['no-playout']?.name === 'Direct to CasparCG' &&
+        pg.byId['no-playout']?.state === 'Off',
+    );
     uia(TITLE, 'toggle', 'no-playout');
     pg = until(TITLE, 'CasparCG', 20);
     check(
-      'No Playout shows direct host and ports and hides the Playout controls',
+      'Direct to CasparCG shows direct host and ports and hides the Playout controls',
       pg.byId['no-playout']?.state === 'On' &&
         pg.byId['standalone-amcp-host'] !== undefined &&
         pg.byId['amcp-port'] !== undefined &&
@@ -657,15 +661,29 @@ if (args.previous !== undefined && serverIp !== null) {
     uia(TITLE, 'set', 'osc-port=6250');
     uia(TITLE, 'invoke', 'install');
     pg = until(TITLE, '6250 is reserved', 20);
-    check('No Playout refuses reserved OSC port 6250 on the page', pg.ok, pg.names.join(' | '));
+    check(
+      'Direct to CasparCG describes the local connection and switching to APASAI Playout',
+      pg.names.includes('Run CG Control on the same PC as CG Bridge.') &&
+        pg.names.includes('Tested with CasparCG 2.5.0 Stable.') &&
+        pg.names.includes('For APASAI Playout, rerun Setup and clear this option.'),
+      pg.names.join(' | '),
+    );
+    check(
+      'Direct to CasparCG refuses reserved OSC port 6250 on the page',
+      pg.ok,
+      pg.names.join(' | '),
+    );
     uia(TITLE, 'set', `osc-port=${String(oscPort)}`);
     shot(TITLE, path.join(OUT, 'bridge-server-no-playout.png'));
     uia(TITLE, 'invoke', 'install');
     pg = until(TITLE, 'is installed', 300);
-    check('No Playout installs the service', pg.byId.title?.name === 'CG Bridge is installed');
+    check(
+      'Direct to CasparCG installs the service',
+      pg.byId.title?.name === 'CG Bridge is installed',
+    );
     uia(TITLE, 'toggle', 'launch');
     uia(TITLE, 'invoke', 'finish');
-    check('No Playout Finish exits 0', (await exitCode(r, 30_000)) === 0);
+    check('Direct to CasparCG Finish exits 0', (await exitCode(r, 30_000)) === 0);
     const before = configOrNull();
     check(
       'the installed config stores standalone mode and the raw endpoint',

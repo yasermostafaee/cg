@@ -215,7 +215,10 @@ import {
   type BridgeCapabilities,
 } from './checkAt.js';
 import { loadStationAddress, saveStationAddress, type StationAddress } from './stationAddress.js';
-import { STANDALONE_BRIDGE_ADDRESS_ERROR } from '../shared/station-address.js';
+import {
+  DIRECT_CASPAR_MODE_LABEL,
+  STANDALONE_BRIDGE_ADDRESS_ERROR,
+} from '../shared/station-address.js';
 
 const APP_INFO: AppInfo = { name: 'cg Runtime', version: '0.0.0', platform: 'browser' };
 
@@ -2211,7 +2214,7 @@ export class WebSocketRuntime implements RuntimeBridge {
     setPlayoutAddress: (address: string, bridgeAddress?: string): Promise<string> => {
       if (this.#standalone) {
         return Promise.reject(
-          new Error('Use the No Playout connection settings for this console.'),
+          new Error(`Use the ${DIRECT_CASPAR_MODE_LABEL} connection settings for this console.`),
         );
       }
       const playoutAddress = ipcChannels.normalisePlayoutAddress(address);

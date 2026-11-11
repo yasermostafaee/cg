@@ -205,13 +205,13 @@ const LABELS: readonly { shown: string; text?: string; file: string }[] = [
   },
   {
     shown: 'Playout',
-    text: "standaloneSetup === null ? 'Playout' : 'No Playout'",
+    text: "standaloneSetup === null ? 'Playout' : DIRECT_CASPAR_MODE_LABEL",
     file: 'apps/runtime/src/renderer/features/stationSetup/StationSetupDialog.tsx',
   },
-  { shown: 'No Playout', file: 'tools/setup-ui/src/server.rs' },
+  { shown: 'Direct to CasparCG', file: 'tools/setup-ui/src/server.rs' },
   {
-    shown: 'No Playout',
-    file: 'apps/runtime/src/renderer/features/firstRun/PlayoutAddressGate.tsx',
+    shown: 'Direct to CasparCG',
+    file: 'apps/runtime/src/shared/station-address.ts',
   },
   {
     shown: 'Check',
