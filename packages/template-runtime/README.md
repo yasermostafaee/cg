@@ -1136,6 +1136,14 @@ template-data **XML** string, or an already-parsed object (direct console use);
 unknown keys are harmless (bindings only apply declared fields); unparseable
 payloads are dropped silently (a broadcast frame can't write logs).
 
+The single-file output boot supplies `RuntimeBootOptions.onOutputPosition` and
+marks the compiled page with `cg-live-position` capability version 1.
+`runtime.update()` validates the reserved `__cg.position` control and calls the
+hook with the row's position. The hook reuses `applyOutputPosition` on the current
+`.cg-stage` with the existing channel raster. A position-only command bypasses
+field application. Paired foreground pages receive the position through the
+same control-envelope forwarding used for other updates.
+
 ## Extension points — "how do I add X"
 
 > Every change here should also add/extend the matching unit tests in

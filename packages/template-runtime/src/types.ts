@@ -12,6 +12,7 @@ import type {
   Lifecycle,
   Playout,
   PlayoutMode,
+  Position,
   Scene,
   TickerElement,
   VideoElement,
@@ -309,6 +310,9 @@ export interface RuntimeBootOptions {
    * Absent/`full` preserves the existing single-page export and every authoring surface.
    */
   outputPass?: OutputPass;
+
+  /** The exported output page's existing stage placement, reapplied on a live CG UPDATE. */
+  onOutputPosition?: (position: Position) => void;
 
   /**
    * B-134 — whether this surface paints the EDITOR BACKDROP.

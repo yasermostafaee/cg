@@ -105,6 +105,8 @@ export const StackUpdateChannel = defineChannel(
      * any other surface must not silently drop a row's composition.
      */
     lookBindings: LiveSourceLookOverrideSchema.optional(),
+    /** In-place placement on a resident programme page advertising onAirPosition. */
+    position: PositionSchema.optional(),
   }),
   z.object({
     accepted: z.boolean(),

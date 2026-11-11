@@ -922,6 +922,11 @@ export class TemplateRegistry {
     return this.#versions.get(versionId)?.html ?? null;
   }
 
+  /** The metadata of a stored version, independent of channel catalogues. */
+  infoOf(versionId: string): TemplateInfo | null {
+    return this.#versions.get(versionId)?.info ?? null;
+  }
+
   // ── HOLDS ────────────────────────────────────────────────────────────────────
 
   /**

@@ -7,7 +7,9 @@ A layer must stay available for preview while on air so the operator can check I
 ## What Changes
 
 - Enable a browser-only preview record without the legacy mute or Take interlock.
-- Keep ON PVW and Play independently indicated for a loaded row.
+- Keep ON PVW and Play independently indicated for a loaded row, with ON PVW before Play.
+- Remove the bulk Remove All control from Layers. Keep the per-row Remove and the other bulk controls.
+- Enable in-place Position updates for a verified on-air page that supports them and has no separate live plates.
 - Keep the Inspector draft in PVW; programme uses the applied values until explicit Update on air.
 
 ## Capabilities

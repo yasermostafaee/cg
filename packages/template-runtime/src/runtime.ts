@@ -564,6 +564,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // step compiler and the builder). Absent ⇒ `'output'`: a forgotten boot site
   // paints nothing, which is the safe direction on air. See `RenderMode`.
   const mode = options.mode ?? 'output';
+  const onOutputPosition = mode === 'output' ? options.onOutputPosition : undefined;
   let editCountdowns = mode === 'author' && options.editCountdowns === true;
   // B-134 — the editor backdrop paints on the editing CANVAS only. A second axis
   // rather than a third `RenderMode`, because the Preview modal wants `'author'` for
@@ -3532,6 +3533,18 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       */
       const control = readCgControl(data);
       const values = stripCgControl(data as Record<string, unknown>);
+      // A move on its own has no field work: in particular, do not restamp a
+      // paged repeater or reapply the operator's countdown target.
+      if (
+        control?.position !== undefined &&
+        opts.mode !== 'replace' &&
+        Object.keys(values).length === 0 &&
+        Object.keys(control).length === 1
+      ) {
+        onOutputPosition?.(control.position);
+        bus.emit('update');
+        return;
+      }
       const mode = opts.mode ?? 'merge';
       if (mode === 'replace') {
         currentValues = { ...(values as NestedFieldValues) };
@@ -3602,6 +3615,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         applyPageAdvance(control.pageAdvance.field, control.pageAdvance.mode);
       }
       if (control?.page !== undefined) applyPageTurn(control.page);
+      if (control?.position !== undefined) onOutputPosition?.(control.position);
       bus.emit('update');
     },
 

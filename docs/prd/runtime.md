@@ -488,7 +488,7 @@ channel that applies a new `ConnectionConfig` to a RUNNING bridge
 > it), keeps overrides across `setConfig`, and drops them at remove.
 > Residuals (change `design.md` §8): non-1080 channels are future work
 > (offsets author against 1920×1080); no on-air repositioning by design;
-> overrides are process-memory.
+> overrides are process-memory. The later in-place update for compatible resident pages is tracked in [[R-117]].
 >
 > **Live smoke — PASSED on CasparCG 2.3.2 (build `4de6d18f`), 2026-07-13**: on a
 > real 1920×1080 CasparCG channel, a small-comp template renders **CENTERED** with
@@ -5052,3 +5052,5 @@ is no verified ownership map.
 - WHEN a row is on PVW and Play is pressed THEN Take uses the applied values; PVW and its draft stay available.
 - WHEN the operator edits the Inspector THEN PVW reflects the draft without sending it to air. Update on air commits it; Update on an off-air row stores it without a playout command.
 - WHEN an older Bridge does not advertise independent PVW THEN its existing rehearsal protections remain in force.
+- WHEN Layers shows a bound row THEN the ON PVW column precedes Play, and the toolbar offers Stop All and Clear All. Row Remove remains available under its existing guard.
+- WHEN a row is confirmed on air on a single-primary station with a supported resident page and no Live Source plates THEN its Position anchor and offsets can be drafted in PVW. Update on air carries them with the field update and moves the resident page in place. Unsupported pages, rows with Live Source plates and stations with a configured backup keep their on-air Position lock.

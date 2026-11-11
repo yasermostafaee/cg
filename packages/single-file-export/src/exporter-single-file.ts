@@ -1,4 +1,5 @@
 import {
+  CG_LIVE_POSITION_PAGE_MARKER,
   playoutOf,
   withoutEditorBackdrop,
   type Element,
@@ -462,6 +463,7 @@ function buildSingleFileHtml(parts: HtmlParts): string {
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    ${CG_LIVE_POSITION_PAGE_MARKER}
     <meta name="viewport" content="width=${w}, initial-scale=1" />
     <!-- Permissive CSP: a single self-contained file needs inline script/style
          and data: fonts. The .vcg keeps a strict 'self' CSP (it's http-served);
@@ -517,7 +519,10 @@ ${playoutJson}
           /* D-137 §9 — 'output': zero painted pixels for a Live Source, and no
              zone rule that could fill its hole. Named, never inferred. */
           var outputPass = CG.casparOutputPass ? CG.casparOutputPass(location.search) : 'full';
-          var runtime = CG.createRuntime(scene, { mode: 'output', assetUrls: ${assetUrlsJson}, lottieAssets: ${lottieAssetsJson}, outputPass: outputPass });
+          function applyLivePosition(position) {
+            CG.applyOutputPosition(scene, { search: location.search, position: position });
+          }
+          var runtime = CG.createRuntime(scene, { mode: 'output', assetUrls: ${assetUrlsJson}, lottieAssets: ${lottieAssetsJson}, outputPass: outputPass, onOutputPosition: applyLivePosition });
           CG.installCasparGlobals(runtime);
           // 🔴 SELF-STOP-24 / C-013 — the completion channel out of CEF. Inert unless the
           // bridge hands this page a take token (see completion-ping.ts), so a manually

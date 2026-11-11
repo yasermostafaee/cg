@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { PositionAnchorSchema, positionQuery } from '@cg/shared-schema';
+import { PositionAnchorSchema, positionQuery, withCgControl } from '@cg/shared-schema';
 import type { Position, Scene } from '@cg/shared-schema';
+import { installCasparGlobals } from '../src/adapters/caspar-globals.js';
 import { createRuntime } from '../src/runtime.js';
 import {
   applyOutputPosition,
@@ -63,6 +64,69 @@ function stage(): HTMLElement {
 }
 
 describe('applyOutputPosition — the on-air boot placement (R-011)', () => {
+  it('moves a playing output stage in place through CG UPDATE and retains the channel raster', async () => {
+    const scene = smallScene();
+    const search = '?pos=top-left&dx=6&dy=9&cw=1280&ch=720';
+    const runtime = createRuntime(scene, {
+      mode: 'output',
+      skipFontLoad: true,
+      onOutputPosition: (position) => applyOutputPosition(scene, { search, position }),
+    });
+    const uninstall = installCasparGlobals(runtime);
+    try {
+      applyOutputPosition(scene, { search });
+      await runtime.play({});
+      const resident = stage();
+      expect(resident.style.transform).toContain('translate(6px, 9px)');
+      window.update?.(
+        JSON.stringify(
+          withCgControl({}, { position: { anchor: 'bottom-right', offset: { x: -10, y: -20 } } }),
+        ),
+      );
+      expect(stage()).toBe(resident);
+      expect(resident.style.transform).toBe(
+        'translate(0px, 0px) scale(0.666667) translate(1610px, 760px)',
+      );
+      expect(document.body.classList.contains('cg-pending')).toBe(false);
+      expect(document.body.style.width).toBe('1280px');
+      expect(document.body.style.height).toBe('720px');
+      window.update?.('{"anchor":"ordinary update"}');
+      expect(resident.style.transform).toContain('translate(1610px, 760px)');
+      window.update?.(
+        JSON.stringify(
+          withCgControl(
+            { anchor: 'moved title' },
+            { position: { anchor: 'top-left', offset: { x: 14, y: -8 } } },
+          ),
+        ),
+      );
+      expect(resident.style.transform).toContain('translate(14px, -8px)');
+      expect(resident.querySelector('[data-cg-element-id="name"]')?.textContent).toBe(
+        'moved title',
+      );
+    } finally {
+      uninstall();
+      runtime.remove();
+    }
+  });
+
+  it('does not apply output controls to an authoring stage', async () => {
+    const scene = smallScene();
+    const runtime = createRuntime(scene, {
+      mode: 'author',
+      skipFontLoad: true,
+      onOutputPosition: (position) => applyOutputPosition(scene, { position }),
+    });
+    try {
+      await runtime.update(
+        withCgControl({}, { position: { anchor: 'bottom-right', offset: { x: -10, y: -20 } } }),
+      );
+      expect(stage().style.transform).toBe('');
+    } finally {
+      runtime.remove();
+    }
+  });
+
   it('places the stage from an explicit query anchor+offset and sizes the page to the output frame', () => {
     createRuntime(smallScene(), { skipFontLoad: true });
     applyOutputPosition(smallScene(), {

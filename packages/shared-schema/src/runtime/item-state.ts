@@ -142,6 +142,8 @@ export const StackItemStateSchema = z.object({
    * template's manifest default, exactly as before the field existed.
    */
   position: PositionSchema.optional(),
+  /** This confirmed resident programme page supports an in-place position update. */
+  onAirPosition: z.literal(true).optional(),
   /**
    * R-048 / C-015 phase 6 (6.9) — the operator’s PER-ITEM live-source override,
    * published for the same reason `position` is: the row has to be able to show

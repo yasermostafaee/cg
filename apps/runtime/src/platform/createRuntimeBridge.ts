@@ -284,7 +284,9 @@ export function createMockBridge(): RuntimeBridge {
       load: (req) => Promise.resolve(mock.load(req.itemId, req.templateId, req.fields)),
       take: (req) => Promise.resolve(mock.take(req.itemId)),
       update: (req) =>
-        Promise.resolve(mock.update(req.itemId, req.fields, req.mergeMode, req.lookBindings)),
+        Promise.resolve(
+          mock.update(req.itemId, req.fields, req.mergeMode, req.lookBindings, req.position),
+        ),
       stop: (req) => Promise.resolve(mock.stop(req.itemId)),
       // R-028 (5.4) — advance the template's sequence.
       next: (req) => Promise.resolve(mock.next(req.itemId)),

@@ -168,6 +168,8 @@ function css(n: number): string {
 }
 
 export interface ApplyOutputPositionOptions {
+  /** A live operator override, when applying the placement again to the resident stage. */
+  position?: Position;
   /** The page's `location.search` (the bridge-appended override). Default ''. */
   search?: string;
   /** Document override for tests. */
@@ -224,7 +226,8 @@ export function applyOutputPosition(scene: Scene, options: ApplyOutputPositionOp
   const raster = resolveChannelRaster(options.search ?? '', view);
   const scale = outputScale(raster);
   const pad = outputLetterbox(raster);
-  const { x, y } = outputTranslate(scene, resolveOutputPosition(scene, options.search ?? ''));
+  const position = options.position ?? resolveOutputPosition(scene, options.search ?? '');
+  const { x, y } = outputTranslate(scene, position);
   const anchor = `translate(${css(x)}px, ${css(y)}px)`;
   if (scale === 1 && pad.x === 0 && pad.y === 0) {
     stage.style.transform = anchor;

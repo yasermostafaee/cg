@@ -7,6 +7,7 @@ import { NumericInput } from '../../ui/NumericInput.js';
 import { defaultPositionOf } from '../stack/defaultPositionStore.js';
 import {
   draftsVersion,
+  offsetNumber,
   positionDraftOf,
   stagePosition,
   subscribeDrafts,
@@ -194,29 +195,16 @@ const styles = {
   },
 } as const;
 
-/**
- * The on-air lock, which is R-011's refusal asked from the UI side.
- *
- * ⚠ It KEEPS ITS NAME AND DELEGATES, where `isOnAirOrUnsettled` was deleted outright —
- * and the difference is real rather than a lapse. That one was a SYNONYM for the shared
- * predicate, so it was a second name for one rule; this one names a different question
- * ("is the position control locked") that today happens to be answered by that rule. What
- * it must not do is re-derive the answer: it used to spell the six terms out, mirroring
- * `setPosition`'s own inline copy rather than the canonical predicate, so the lock and the
- * refusal were two derivations that agreed by luck (`operator-surface` §5(B)).
- */
+/** On-air edits require a positive capability on the row's current producer. */
 export function isPositionLocked(item: StackItemState): boolean {
-  return isOnAirStatus(item);
+  return isOnAirStatus(item) && item.onAirPosition !== true;
 }
 
 /**
  * R-011 — the per-item on-air position picker: a 3×3 anchor grid + x/y
- * pixel-offset nudge. An explicit Apply sends ONE `stack.set-position` to the
- * bridge — refusals surface inline. LOCKED while the item is on air/unsettled
- * (position is fixed once taken — Option A cannot reposition on air without a
- * re-serve flash), mirroring the bridge's authoritative refusal; editable
- * while loaded-not-taken and idle. Callers key this component by itemId so
- * switching items re-seeds.
+ * pixel-offset nudge. The preview follows the draft. Update applies it to the
+ * current producer when Bridge publishes on-air position support, or saves it
+ * for Take while the row is off air. Callers key the picker by itemId.
  *
  * B-072 — it seeds from the item's APPLIED override (published in its state by
  * the bridge), and from the template's manifest default (recorded at import;
@@ -259,11 +247,6 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
   const setDy = (next: string): void => stage({ y: next });
   const locked = isPositionLocked(item);
 
-  const offset = (raw: string): number => {
-    const n = Number(raw);
-    return raw.trim() !== '' && Number.isFinite(n) ? n : 0;
-  };
-
   /**
    * STAGED-BUT-UNAPPLIED, said the same way a dynamic field says it (owner
    * request). Position was the one editable thing in this panel that changed
@@ -281,7 +264,9 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
    * re-read from the item on every render. No local "clean" flag to get stuck.
    */
   const dirty =
-    anchor !== seed.anchor || offset(dx) !== seed.offset.x || offset(dy) !== seed.offset.y;
+    anchor !== seed.anchor ||
+    offsetNumber(dx) !== seed.offset.x ||
+    offsetNumber(dy) !== seed.offset.y;
 
   return (
     <div className="cg-inspector-section" aria-label="On-air position">
@@ -382,8 +367,8 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
 
             The row has ONE commit now: UPDATE sends the text, the plates, the per-look
             composition and the placement, and DISCARD drops all four. `applyDraft` carries
-            the position on `stack.setPosition` exactly as this button did — the wire did not
-            move, the control did.
+            the off-air position on `stack.setPosition` and the live position with the
+            on-air field update.
 
             ⚠ The section keeps its own DIRTY DOT (on the heading above). It is not
             redundant with the commit bar's chip: the chip says this ROW has something
@@ -395,7 +380,7 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
       {/* BELOW the row, not inside it: it is a note about why the controls above are
           inert, and a note that sits in the control row changes the row's height as
           it appears and disappears. */}
-      {locked && <span style={styles.lock}>locked while on air</span>}
+      {locked && <span style={styles.lock}>Position locked while on air for this layer</span>}
     </div>
   );
 }

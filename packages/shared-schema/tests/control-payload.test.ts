@@ -18,6 +18,14 @@ import {
  */
 
 describe('the round trip — the bridge writes, the page reads', () => {
+  it('round-trips a live position alongside ordinary fields', () => {
+    const fields: FieldValues = { headline: 'Tehran' };
+    const position = { anchor: 'mid-left', offset: { x: -25.5, y: 60 } } as const;
+    const received: unknown = JSON.parse(JSON.stringify(withCgControl(fields, { position })));
+    expect(readCgControl(received)).toEqual({ position });
+    expect(stripCgControl(received as FieldValues)).toEqual(fields);
+  });
+
   it('carries a look id through the payload the wire actually sends', () => {
     const payload = withCgControl({ headline: 'Tehran' } as FieldValues, { look: 'solo' });
 
@@ -92,6 +100,17 @@ describe('stripCgControl — half of the collision proof', () => {
 });
 
 describe('readCgControl — defensive, because this arrives over AMCP', () => {
+  it.each([
+    null,
+    { anchor: 'top-middle', offset: { x: 0, y: 0 } },
+    { anchor: 'center', offset: { x: 0 } },
+    { anchor: 'center', offset: { x: 0, y: Infinity } },
+  ])('drops invalid position %o without discarding sibling controls', (position) => {
+    expect(readCgControl({ [CG_CONTROL_KEY]: { look: 'solo', position } })).toEqual({
+      look: 'solo',
+    });
+  });
+
   it('answers undefined for a payload carrying no control data', () => {
     expect(readCgControl({ headline: 'Tehran' })).toBeUndefined();
     expect(readCgControl(undefined)).toBeUndefined();

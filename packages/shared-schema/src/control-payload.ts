@@ -1,5 +1,9 @@
 import type { FieldValues } from './fields.js';
 import { LIVE_FIT_MODES, type LiveFitMode } from './live-fit.js';
+import { PositionSchema, type Position } from './scene.js';
+
+/** A generated output page advertises that it can reposition its resident stage. */
+export const CG_LIVE_POSITION_PAGE_MARKER = '<meta name="cg-live-position" content="1">';
 
 /**
  * `multibox-layout-switch` `tasks.md` 6.7 — **the BRIDGE→PAGE control channel, carried inside
@@ -172,6 +176,8 @@ export type CgLiveFallback =
 
 /** Bridge→page control data. Every member optional: a payload may carry any subset. */
 export interface CgControl {
+  /** Reposition this resident output page using the same coordinates as its boot override. */
+  position?: Position;
   /**
    * `D-163` — a page turn of a page list (see {@link CgPage}). Absent means "this payload turns no
    * page", never "go to page 1".
@@ -288,6 +294,7 @@ export function readCgControl(payload: unknown): CgControl | undefined {
   // `from` or `plates` is read for its `look` and the rest is ignored.
   return {
     ...(typeof look === 'string' && look !== '' ? { look } : {}),
+    ...readPosition((raw as Record<string, unknown>)['position']),
     /*
       `SELF-STOP-24` — the same shape test the look gets, and the empty-string rejection is
       load-bearing rather than tidy: an empty token would ARM the page to report a take that
@@ -303,6 +310,14 @@ export function readCgControl(payload: unknown): CgControl | undefined {
     ...readPageAdvance((raw as Record<string, unknown>)['pageAdvance']),
     ...readSound((raw as Record<string, unknown>)['sound']),
   };
+}
+
+function readPosition(raw: unknown): { position?: Position } {
+  if (raw === undefined) return {};
+  const parsed = PositionSchema.safeParse(raw);
+  if (!parsed.success) return {};
+  const { x, y } = parsed.data.offset;
+  return Number.isFinite(x) && Number.isFinite(y) ? { position: parsed.data } : {};
 }
 
 function readLiveFallback(raw: unknown): { liveFallback?: CgLiveFallback } {

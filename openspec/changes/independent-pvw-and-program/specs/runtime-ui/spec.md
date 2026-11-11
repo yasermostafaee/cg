@@ -19,3 +19,83 @@ On a capable Bridge, CG Control SHALL make the ON PVW and Play controls independ
 
 - **WHEN** the operator presses Play while the row is on PVW and its Inspector has unapplied edits
 - **THEN** Take uses the applied fields and the draft stays visible in PVW
+
+#### Scenario: Move an eligible layer in Preview and Program
+
+- **WHEN** Bridge confirms that the resident page supports live Position **THEN** its anchor and offsets are editable while on air
+- **WHEN** the operator edits Position **THEN** PVW follows the draft and programme keeps the applied position until Update on air
+- **WHEN** Bridge has no confirmed in-place position capability **THEN** Position remains locked while the layer is on air
+
+### Requirement: The Layers toolbar offers Stop All and Clear All
+
+The Layers table SHALL put ON PVW before Play in the heading and row controls. It SHALL offer Stop All and Clear All in the toolbar and Remove on each eligible row. It SHALL have no Remove All control.
+
+#### Scenario: Find the preview and programme actions
+
+- **WHEN** the operator opens Layers **THEN** ON PVW precedes Play and both actions align to their headings
+- **AND** the toolbar offers Stop All and Clear All and an eligible row retains its Remove action
+
+## MODIFIED Requirements
+
+### Requirement: Server settings panel and Remove-All
+
+The Runtime UI SHALL provide a server settings panel (opened from the status
+bar) that edits the CasparCG connection: primary host / AMCP port / OSC port,
+an optional backup section (add/remove backup), the redundancy strategy, and
+the auto-failover toggle. The panel SHALL load the current values from the
+bridge, refresh when any client applies a new config, validate its inputs
+(non-empty host, integer ports in range) before submitting, and apply via
+`connections.set-config`.
+
+Apply SHALL be pre-disabled with a visible reason while the stack indicates
+anything on air or unsettled (mirroring the bridge's authoritative gate), and
+the panel SHALL surface the bridge's refusal reason when a race slips
+through. WHEN any entered host is non-loopback the panel SHALL show a warning
+that template serving and OSC listening will use a LAN address while control
+stays on `127.0.0.1`, and SHALL confirm the actual exposure from the apply
+response.
+
+The Layers toolbar SHALL provide Clear All to cut the selected channel without removing its bound rows.
+
+#### Scenario: Apply is gated on air with the reason shown
+
+- **WHEN** any stack item is on air or unsettled **THEN** the panel's Apply
+  is disabled and shows why (clear first)
+- **WHEN** the stack is clear **THEN** Apply is enabled and submits the
+  edited config
+
+#### Scenario: Remote host shows the exposure warning
+
+- **WHEN** the operator enters a non-loopback primary or backup host **THEN**
+  the panel warns about LAN exposure of template serve + OSC (control stays
+  loopback) before Apply, and reports the confirmed exposure after
+
+#### Scenario: Clear All keeps the rows bound
+
+- **WHEN** the operator confirms Clear All **THEN** the selected channel is cleared and its rows stay bound.
+
+### Requirement: Selecting a channel switches the whole console to it
+
+The console SHALL, on a station that declares two or more channels, show and send everything that belongs to a channel for the channel selected on the strip: the layers table's rows and their names, the Inspector's selection, both monitors, the live plates, the playout rows, the bulk verbs' scope — CLEAR ALL and STOP ALL each act on that channel's items and are sent carrying it — and PANIC. A gate about the whole station SHALL keep reading every channel: the Servers Apply stays blocked while anything is on air or unsettled on any channel, because a server change reaches all of them. The selection SHALL be a channel id held for the session only and written nowhere; the console SHALL open, and a reload SHALL reopen, on the lowest declared channel. With one declared channel every verb SHALL be sent exactly as before — bare — and nothing SHALL be filtered.
+
+#### Scenario: A switch moves the table and both monitors
+
+- **GIVEN** two declared channels, and row 84 named on channel 2 only
+- **WHEN** the operator selects channel 2 **THEN** the table's rows are channel 2's, row 84 carries channel 2's name, both monitors read `CH 2`, and the bulk scope reads `CH 2` **AND WHEN** channel 1 is selected again **THEN** all of them are channel 1's
+
+#### Scenario: The Inspector is the channel's too
+
+- **WHEN** a channel-1 row is selected and the operator switches to channel 2 **THEN** the Inspector does not edit the channel-1 row under channel 2's tab
+
+#### Scenario: A bulk verb names the channel on screen
+
+- **WHEN** CLEAR ALL is confirmed on channel 2's view **THEN** exactly one `stack.clear-all` carrying channel 2 is sent, and channel 1's row stays on air **AND** the same press on channel 1's view names channel 1
+
+#### Scenario: A reload opens on the first declared channel
+
+- **WHEN** the operator has chosen channel 2 and the console reloads **THEN** it opens on the lowest declared channel, and the choice was written to no storage
+- **WHEN** the station declares channels 2 and 3 **THEN** the console opens on channel 2
+
+#### Scenario: One declared channel is exactly as before
+
+- **WHEN** one channel is declared and CLEAR ALL is confirmed **THEN** `stack.clear-all` is sent with no argument

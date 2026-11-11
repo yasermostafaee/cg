@@ -18,6 +18,7 @@ import {
   type ServerSessionState,
 } from '@cg/caspar-client';
 import {
+  CG_LIVE_POSITION_PAGE_MARKER,
   DEFAULT_LIVE_CROP_FOCUS,
   MAX_PREVIEW_PLATE_CROPS,
   isRestorable,
@@ -1768,6 +1769,11 @@ export class CasparRuntime {
    * knows explicit operator overrides.
    */
   readonly #positions = new Map<string, Position>();
+  // A held version alone can survive a restart, and #loaded also permits a backup-only ADD.
+  readonly #livePositionPages = new Map<
+    string,
+    { slot: CommandSlot; version: string; session: ServerSession; generation: number }
+  >();
   /**
    * R-048 / C-015 phase 6 (6.9) — itemId → plateId → catalog source id: this
    * ROW's live-source substitutions.
@@ -2866,6 +2872,8 @@ export class CasparRuntime {
     // Real health + failover from the adapter — replaces the Phase-1/2 mock health.
     this.#adapter.on('health', () => this.healthChanged.emit(this.health()));
     this.#adapter.on('failover-complete', (event: FailoverEvent) => {
+      for (const itemId of this.#livePositionPages.keys()) this.#markDirty(itemId);
+      this.#livePositionPages.clear();
       // `B-331` — the new primary's stage was never cleared by the old one's acknowledgements.
       this.#reconciler.liftProducerCleared();
       this.#lastFailover = {
@@ -3027,7 +3035,10 @@ export class CasparRuntime {
     this.#started = true;
 
     this.#reconciler.on('item-changed', (state) => this.#markDirty(state.itemId));
-    this.#reconciler.on('item-removed', (info) => this.#markDirty(info.itemId));
+    this.#reconciler.on('item-removed', (info) => {
+      this.#livePositionPages.delete(info.itemId);
+      this.#markDirty(info.itemId);
+    });
 
     this.#wireAdapter();
 
@@ -3209,6 +3220,7 @@ export class CasparRuntime {
   #published(): readonly StackItemState[] {
     return this.#reconciler.snapshot().map((item) => {
       const position = this.#positions.get(item.itemId);
+      const onAirPosition = this.#livePositionPage(item) !== undefined;
       // R-048 (6.9 / 6.9d) — the source override joins the snapshot at the same
       // point and for the same reasons: the row must be able to SAY that a plate
       // is not on its configured source, and the bridge's own stack file keeps what
@@ -3284,6 +3296,7 @@ export class CasparRuntime {
       */
       if (
         position === undefined &&
+        !onAirPosition &&
         sourceOverride === undefined &&
         lookSourceOverride === undefined &&
         frozenAssignment === undefined &&
@@ -3310,6 +3323,7 @@ export class CasparRuntime {
       return {
         ...item,
         ...(position !== undefined && { position }),
+        ...(onAirPosition && { onAirPosition: true }),
         ...(sourceOverride !== undefined && { sourceOverride }),
         ...(lookSourceOverride !== undefined && { lookSourceOverride }),
         ...(frozenAssignment !== undefined && { frozenAssignment }),
@@ -6290,16 +6304,140 @@ export class CasparRuntime {
      * field-only update from any other surface must not silently drop a row's composition.
      */
     lookBindings?: LookSourceBindings,
+    position?: Position,
   ): Promise<{ accepted: boolean; errorCode?: string; message?: string }> {
+    const apply = () =>
+      position === undefined
+        ? this.#updateImpl(itemId, fields, mergeMode, lookBindings)
+        : this.#updateLivePosition(itemId, fields, mergeMode, lookBindings, position);
     return this.#audited('update', this.#itemDetail(itemId), () =>
-      // `R-100` — a book's update queues with its page turns (`#withPageQueue`); every other row's
-      // update runs exactly as it always did.
-      this.#hasBook(itemId)
-        ? this.#withPageQueue(itemId, () =>
-            this.#updateImpl(itemId, fields, mergeMode, lookBindings),
-          )
-        : this.#updateImpl(itemId, fields, mergeMode, lookBindings),
+      // Queue a book with its turns and a position-capable page with its other field updates.
+      this.#hasBook(itemId) || position !== undefined || this.#livePositionPages.has(itemId)
+        ? this.#withPageQueue(itemId, apply)
+        : apply(),
     );
+  }
+
+  #livePositionPage(item: StackItemState) {
+    const itemId = item.itemId;
+    const page = this.#livePositionPages.get(itemId);
+    if (
+      page === undefined ||
+      // The redundant sender mirrors or journals updates. A primary ADD cannot prove
+      // that the same version is resident on another server.
+      this.#sessions.B !== undefined ||
+      // The Reconciler sees producer changes only. When that observation ages out,
+      // an acknowledged Take reads "playing"; the raw slot observation below is fresh.
+      (item.status !== 'on-air' && item.status !== 'playing') ||
+      item.pending ||
+      !this.#loaded.has(itemId) ||
+      this.#slots.get(itemId) !== page.slot ||
+      this.#templates.heldVersion(itemId) !== page.version ||
+      this.#foregroundPages.has(itemId) ||
+      (this.#liveLayers.get(itemId)?.length ?? 0) !== 0 ||
+      this.#pendingRestore.has(itemId) ||
+      this.#restoreBlocked.has(itemId) ||
+      this.#adapter.primarySession !== page.session ||
+      this.#amcpGeneration !== page.generation ||
+      page.session.state !== 'healthy' ||
+      !this.#isVerifiedCropSlot(page.slot)
+    ) {
+      return undefined;
+    }
+    const observed = page.session.osc.occupancy.occupied(this.#occupancyStaleMs);
+    return observed.some(
+      ({ channel, layer, producer }) =>
+        channel === page.slot.channel &&
+        layer === page.slot.layer &&
+        oscProducerKind(producer) === 'html',
+    )
+      ? page
+      : undefined;
+  }
+
+  async #updateLivePosition(
+    itemId: string,
+    fields: FieldValues,
+    mergeMode: 'merge' | 'replace',
+    lookBindings: LookSourceBindings | undefined,
+    position: Position,
+  ): Promise<{ accepted: boolean; errorCode?: string; message?: string; command?: string }> {
+    const item = this.#reconciler.get(itemId);
+    const page = item === null ? undefined : this.#livePositionPage(item);
+    const unavailable = {
+      accepted: false,
+      errorCode: 'live-position-unavailable',
+      message: 'The current programme page cannot apply Position in place.',
+    };
+    if (item === null || page === undefined || lookBindings !== undefined) return unavailable;
+
+    const info = this.#templates.infoOf(page.version);
+    if (info === null) return unavailable;
+    const pageRefusal = this.#refusePageLists(itemId, fields, info);
+    if (pageRefusal !== null) return { accepted: false, ...pageRefusal };
+    const merged = mergeMode === 'replace' ? fields : { ...item.fields, ...fields };
+    const pages = this.#pageIndexesAfterUpdate(
+      itemId,
+      fields,
+      this.#pageIdsBefore(itemId, info),
+      info,
+    );
+    const first = pages.entries().next().value;
+    const pageTurn =
+      first === undefined
+        ? undefined
+        : await this.#pageTurnFor(itemId, first[0], {
+            info,
+            fields: merged,
+            index: first[1],
+          });
+    const samePage = () => {
+      const current = this.#reconciler.get(itemId);
+      return (
+        current !== null &&
+        current.lastIntentSeq === item.lastIntentSeq &&
+        this.#livePositionPage(current) === page
+      );
+    };
+    if (!samePage()) return unavailable;
+
+    const control: CgControl = { position, ...(pageTurn !== undefined && { page: pageTurn }) };
+    const payload = mergeMode === 'merge' && Object.keys(fields).length === 0 ? fields : merged;
+    // The regular reconciler update eagerly stages its fields. For live Position publish the
+    // fields and position only after the same resident page has accepted their one CG UPDATE.
+    const cancel = new AbortController();
+    const invalidate = ({ itemId: changed }: { itemId: string }) => {
+      if (changed === itemId && !samePage()) cancel.abort();
+    };
+    this.#reconciler.on('item-changed', invalidate);
+    this.#reconciler.on('item-removed', invalidate);
+    const result = await this.#send(
+      this.#builder.update(page.slot, withCgControl(payload, control)),
+      this.#nextSeq(),
+      'normal',
+      { signal: cancel.signal },
+    ).finally(() => {
+      this.#reconciler.off('item-changed', invalidate);
+      this.#reconciler.off('item-removed', invalidate);
+    });
+    if (cancel.signal.aborted) return unavailable;
+    if (!result.ok)
+      return {
+        accepted: false,
+        errorCode: result.errorCode ?? 'amcp-error',
+        ...(result.command !== undefined && { command: result.command }),
+      };
+    if (!result.onPrimary || !samePage()) return unavailable;
+
+    const seq = this.#nextSeq();
+    this.#positions.set(itemId, position);
+    this.#reconciler.applyIntent({ kind: 'update', itemId, fields, mergeMode }, seq);
+    for (const [fieldId, index] of pages) {
+      if (index !== (this.#pageIndexes.get(itemId)?.[fieldId] ?? 0))
+        this.#setPageIndex(itemId, fieldId, index);
+    }
+    this.#reconciler.applyAck(seq, true);
+    return { accepted: true };
   }
 
   async #updateImpl(
@@ -6789,6 +6927,7 @@ export class CasparRuntime {
     itemId: string,
     templateId: string | undefined,
     fieldId?: string,
+    update?: { info: TemplateInfo; fields: FieldValues },
   ):
     | {
         fieldId: string;
@@ -6799,11 +6938,12 @@ export class CasparRuntime {
       }
     | undefined {
     if (templateId === undefined) return undefined;
-    const info = this.#templateOfItem(itemId, templateId);
+    const info = update?.info ?? this.#templateOfItem(itemId, templateId);
     const lists = info?.pageLists ?? [];
     const entry = fieldId === undefined ? lists[0] : lists.find((l) => l.fieldId === fieldId);
     if (info === null || entry === undefined) return undefined;
-    const value: unknown = this.#reconciler.get(itemId)?.fields[entry.fieldId];
+    const values = update?.fields ?? this.#reconciler.get(itemId)?.fields;
+    const value: unknown = values?.[entry.fieldId];
     const field = info.fields.find((f) => f.id === entry.fieldId);
     const raw: unknown = Array.isArray(value) ? value : field?.type === 'list' ? field.default : [];
     const items = pageRefsOf(raw);
@@ -6866,10 +7006,11 @@ export class CasparRuntime {
   #refusePageLists(
     itemId: string,
     fields: FieldValues,
+    heldInfo?: TemplateInfo,
   ): { errorCode: string; message: string } | null {
     const templateId = this.#reconciler.get(itemId)?.templateId;
     if (templateId === undefined) return null;
-    const info = this.#templateOfItem(itemId, templateId);
+    const info = heldInfo ?? this.#templateOfItem(itemId, templateId);
     for (const { fieldId } of info?.pageLists ?? []) {
       const value: unknown = fields[fieldId];
       if (!Array.isArray(value)) continue;
@@ -6901,11 +7042,11 @@ export class CasparRuntime {
    * the template's default. Read before an update replaces the book, so the page on screen can be
    * followed into the new one (`pageAfterBookChange`).
    */
-  #pageIdsBefore(itemId: string): Map<string, (string | undefined)[]> {
+  #pageIdsBefore(itemId: string, heldInfo?: TemplateInfo): Map<string, (string | undefined)[]> {
     const out = new Map<string, (string | undefined)[]>();
     const item = this.#reconciler.get(itemId);
     if (item === null) return out;
-    const info = this.#templateOfItem(itemId, item.templateId);
+    const info = heldInfo ?? this.#templateOfItem(itemId, item.templateId);
     for (const { fieldId } of info?.pageLists ?? []) {
       const value: unknown = item.fields[fieldId];
       const field = info?.fields.find((f) => f.id === fieldId);
@@ -6932,23 +7073,42 @@ export class CasparRuntime {
     const templateId = this.#reconciler.get(itemId)?.templateId;
     if (templateId === undefined) return undefined;
     const info = this.#templateOfItem(itemId, templateId);
-    let touched: string | undefined;
+    const pages = this.#pageIndexesAfterUpdate(itemId, fields, before, info);
+    for (const [fieldId, index] of pages) {
+      if (index !== (this.#pageIndexes.get(itemId)?.[fieldId] ?? 0))
+        this.#setPageIndex(itemId, fieldId, index);
+    }
+    return pages.keys().next().value;
+  }
+
+  #pageIndexesAfterUpdate(
+    itemId: string,
+    fields: FieldValues,
+    before: ReadonlyMap<string, (string | undefined)[]>,
+    info: TemplateInfo | null,
+  ): Map<string, number> {
+    const pages = new Map<string, number>();
     for (const { fieldId } of info?.pageLists ?? []) {
       const value: unknown = fields[fieldId];
       if (!Array.isArray(value)) continue;
-      touched ??= fieldId;
       const current = this.#pageIndexes.get(itemId)?.[fieldId] ?? 0;
-      const next = pageAfterBookChange(before.get(fieldId) ?? [], current, pageIdsOf(value));
-      if (next !== current) this.#setPageIndex(itemId, fieldId, next);
+      pages.set(fieldId, pageAfterBookChange(before.get(fieldId) ?? [], current, pageIdsOf(value)));
     }
-    return touched;
+    return pages;
   }
 
   /** The page turn that tells an on-air page its book changed: the page now shown, and its picture's address. */
-  async #pageTurnFor(itemId: string, fieldId: string): Promise<CgPage | undefined> {
-    const list = this.#pageList(itemId, this.#reconciler.get(itemId)?.templateId, fieldId);
+  async #pageTurnFor(
+    itemId: string,
+    fieldId: string,
+    update?: { info: TemplateInfo; fields: FieldValues; index: number },
+  ): Promise<CgPage | undefined> {
+    const list = this.#pageList(itemId, this.#reconciler.get(itemId)?.templateId, fieldId, update);
     if (list === undefined || list.items.length === 0) return undefined;
-    const index = Math.min(this.#pageIndexes.get(itemId)?.[fieldId] ?? 0, list.items.length - 1);
+    const index = Math.min(
+      update?.index ?? this.#pageIndexes.get(itemId)?.[fieldId] ?? 0,
+      list.items.length - 1,
+    );
     const ref = list.items[index];
     const media = ref === undefined ? undefined : await this.#pageMediaFor(ref);
     return { field: fieldId, index, ...(media !== undefined && media !== null ? { media } : {}) };
@@ -15566,6 +15726,7 @@ export class CasparRuntime {
     for (const slot of this.#slots.values()) this.#addInterest(slot);
     this.#loaded.clear();
     this.#foregroundPages.clear();
+    this.#livePositionPages.clear();
     this.#adopted.clear();
     // The last failover described the old server pair — a new era starts clean.
     this.#lastFailover = undefined;
@@ -17864,6 +18025,8 @@ export class CasparRuntime {
        * nothing (the adapter's `SendOptions.serverB`). Absent on every line but a clip's `PLAY`.
        */
       readonly serverB?: string | null;
+      /** Cancel a position write if its resident programme page changes while queued. */
+      readonly signal?: AbortSignal;
     } = {},
   ): Promise<{ ok: boolean; onPrimary: boolean; errorCode?: string; command?: string }> {
     /*
@@ -18017,13 +18180,17 @@ export class CasparRuntime {
       // `ROUTE-PLATES-01` C4 — a Playout route reaches the primary only, and is never journaled.
       // `PLAYOUT-FEATURES-01` A — a clip's `PLAY` carries server B's own line; a transport verb to a
       // clip server B was sent nothing for reaches the primary only (B's layer holds nothing of ours).
+      const sendOptions = {
+        priority,
+        ...(options.signal !== undefined && { signal: options.signal }),
+      };
       const result = await this.#adapter.send(
         line,
         options.routeEpoch !== undefined || this.#primaryOnlyTransport(line)
-          ? { priority, mirror: false }
+          ? { ...sendOptions, mirror: false }
           : options.serverB !== undefined
-            ? { priority, serverB: options.serverB }
-            : { priority },
+            ? { ...sendOptions, serverB: options.serverB }
+            : sendOptions,
       );
       // A response ARRIVED, so the B-044 bounded timeout no longer applies —
       // and the ack below settles the intent either way (B-070: a failed ack
@@ -18131,6 +18298,10 @@ export class CasparRuntime {
       this.#reconciler.applyAck(seq, false, 'unknown-template');
       return { ok: false, errorCode: 'unknown-template' };
     }
+    const session = this.#adapter.primarySession;
+    const generation = this.#amcpGeneration;
+    const served = this.#templateServer.listening;
+    if (outputPass === 'background') this.#livePositionPages.delete(itemId);
     this.#templates.pin(versionId);
     try {
       const sent = await this.#sendAddServed(
@@ -18143,6 +18314,24 @@ export class CasparRuntime {
         outputPass,
       );
       if (sent.ok) this.#templates.hold(itemId, versionId);
+      const info = this.#templates.infoOf(versionId);
+      if (
+        outputPass === 'background' &&
+        this.#sessions.B === undefined &&
+        served &&
+        sent.ok &&
+        sent.onPrimary &&
+        this.#slots.get(itemId) === slot &&
+        this.#adapter.primarySession === session &&
+        this.#amcpGeneration === generation &&
+        info !== null &&
+        liveSourceCarrierState(info) === 'none' &&
+        info.liveSources?.foregroundOverlay !== true &&
+        this.#templates.htmlOf(versionId)?.slice(0, 1024).includes(CG_LIVE_POSITION_PAGE_MARKER)
+      ) {
+        this.#livePositionPages.set(itemId, { slot, version: versionId, session, generation });
+        this.#markDirty(itemId);
+      }
       return sent;
     } finally {
       this.#templates.unpin(versionId);
@@ -18160,7 +18349,7 @@ export class CasparRuntime {
     seq: number,
     serveKey: string,
     outputPass: 'background' | 'foreground',
-  ): Promise<{ ok: boolean; errorCode?: string; command?: string }> {
+  ): Promise<{ ok: boolean; onPrimary: boolean; errorCode?: string; command?: string }> {
     let templateArg = this.#templateServer.listening
       ? this.#templateServer.urlFor(serveKey)
       : templateId;
@@ -18255,6 +18444,7 @@ export class CasparRuntime {
       // `B-209` — the MIXER line that was refused, not the ADD that never went.
       return {
         ok: false,
+        onPrimary: false,
         errorCode: ADD_MUTE_FAILED,
         ...(muted.command !== undefined && { command: muted.command }),
       };
@@ -18334,7 +18524,7 @@ export class CasparRuntime {
       ...(await this.#pageControl(itemId, templateId)),
     };
     const addFields = withCgControl(fields, control);
-    const { ok, errorCode, command } = await this.#send(
+    const { ok, onPrimary, errorCode, command } = await this.#send(
       this.#builder.load(slot, templateArg, addFields),
       seq,
       'normal',
@@ -18342,6 +18532,7 @@ export class CasparRuntime {
     if (ok && outputPass === 'background') this.#loaded.add(itemId);
     return {
       ok,
+      onPrimary,
       ...(errorCode !== undefined && { errorCode }),
       ...(command !== undefined && { command }),
     };

@@ -3,7 +3,9 @@ import type { Browser, Page } from '@playwright/test';
 import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { ConnectionConfig, FixedLayerBank } from '@cg/shared-ipc';
-import { expect, test } from './fixtures/runtime.js';
+import { cgCss, cgJsIife, ExporterSingleFile } from '@cg/single-file-export';
+import { buildTemplateLiveSources, unpack } from '@cg/vcg-format';
+import { buildPositionedVcg, expect, test } from './fixtures/runtime.js';
 
 /**
  * 🔴 `RELEASE-091-01` §1 (`B-288`) — **PVW RENDERS THE PAGE THE BRIDGE SERVES CASPARCG, IN A BROWSER
@@ -475,6 +477,104 @@ test('R-117 previews draft fields while Play and Update control the same program
   await expect(layer).not.toHaveAttribute('aria-label', /ON AIR$/);
   await expect(offPvw).toBeVisible();
   await expect(rendered).toHaveText('Second draft');
+});
+
+test('R-117 drafts Position in PVW and moves the resident page on Update on air', async ({
+  page,
+}) => {
+  const handle = await boot();
+  const engine = mock;
+  if (engine === null) throw new Error('Test engine is unavailable');
+  await handle.runtime.whenServerHealthy(15_000);
+  const itemId = 'live-position-item';
+  const templateId = 'tpl-live-position';
+  const { scene } = await unpack(await buildPositionedVcg(templateId));
+  const { html } = await new ExporterSingleFile({
+    cgJsIife,
+    cgCss,
+    fontsCss: '',
+    assets: { get: () => Promise.resolve(null), bytes: () => Promise.resolve(null) },
+  }).produce(scene);
+  handle.runtime.templateImport(
+    {
+      ...TEMPLATE,
+      templateId,
+      name: 'Live Position',
+      liveSources: buildTemplateLiveSources(scene),
+      fields: [{ id: 'anchor', label: 'Anchor text', type: 'text', required: false, default: '' }],
+    },
+    html,
+    1,
+  );
+  const slot = { channel: 1, layer: ROW };
+  expect(
+    await handle.runtime.loadFixed(slot, itemId, templateId, { anchor: 'Applied text' }),
+  ).toMatchObject({ accepted: true });
+  await openConsole(page, handle.url);
+  await showMonitors(page);
+  const layer = row(page);
+  await layer.locator('[data-row-body]').click();
+  await layer.getByRole('button', { name: 'ON PVW', exact: true }).click();
+  const pvw = page.getByRole('region', { name: 'PREVIEW (PVW)' });
+  await pvw.getByRole('button', { name: 'PLAY', exact: true }).click();
+  await layer.getByRole('button', { name: 'PLAY', exact: true }).click();
+  await expect(layer).toHaveAttribute('aria-label', /ON AIR$/);
+  const inspector = page.getByRole('complementary', { name: 'Inspector' });
+  const x = inspector.getByRole('textbox', { name: 'Position offset X', exact: true });
+  await expect(x).toBeEnabled();
+
+  const add = engine.lastCgAdd(slot);
+  if (add === undefined || !add.template.startsWith('http') || add.data === null)
+    throw new Error('The managed programme page was not served on Take');
+  const air = await page.context().newPage();
+  try {
+    await air.setViewportSize({ width: 1920, height: 1080 });
+    await air.goto(add.template);
+    await air.waitForFunction(
+      () => typeof (window as unknown as { update?: unknown }).update === 'function',
+    );
+    const updateAir = (data: string): Promise<void> =>
+      air.evaluate(
+        (payload) => (window as unknown as { update: (value: string) => void }).update(payload),
+        data,
+      );
+    await updateAir(add.data);
+    const airStage = air.locator('.cg-stage');
+    const initialPosition = await airStage.evaluate((stage) => getComputedStyle(stage).transform);
+    const wire = () =>
+      engine
+        .receivedCommands()
+        .map(({ line }) => line)
+        .filter((line) => /^(CG|MIXER|CLEAR) 1-99(?: |$)/.test(line));
+    const before = wire();
+    await inspector.getByRole('button', { name: 'Anchor top-left', exact: true }).click();
+    await x.fill('320');
+    await inspector.getByRole('textbox', { name: 'Position offset Y', exact: true }).fill('40');
+    await inspector.getByRole('textbox', { name: 'anchor', exact: true }).fill('Draft text');
+    const previewStage = pvw.frameLocator('iframe[data-rehearsal-frame]').locator('.cg-stage');
+    const moved = 'matrix(1, 0, 0, 1, 320, 40)';
+    await expect(previewStage).toHaveCSS('transform', moved);
+    expect(wire()).toEqual(before);
+    await expect(airStage).toHaveCSS('transform', initialPosition);
+    await inspector.getByRole('button', { name: 'Apply staged edits to the on-air row' }).click();
+    await expect(inspector.getByLabel('Position has unapplied changes')).toHaveCount(0);
+
+    const applied = wire().slice(before.length);
+    expect(applied).toHaveLength(1);
+    expect(applied[0]).toMatch(/^CG 1-99 UPDATE /);
+    const data = engine.lastCgUpdate(slot)?.data;
+    if (data == null) throw new Error('The on-air update was not decoded');
+    expect(JSON.parse(data)).toMatchObject({
+      anchor: 'Draft text',
+      __cg: { position: { anchor: 'top-left', offset: { x: 320, y: 40 } } },
+    });
+    await updateAir(data);
+    await expect(airStage).toHaveCSS('transform', moved);
+    await expect(airStage.locator('[data-cg-element-id="el-name"]')).toContainText('Draft text');
+    await expect(layer).toHaveAttribute('aria-label', /ON AIR$/);
+  } finally {
+    await air.close();
+  }
 });
 
 test('R-108 — a reloaded package refreshes the already-bound row in PVW', async ({ page }) => {

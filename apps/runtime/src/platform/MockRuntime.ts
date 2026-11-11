@@ -764,9 +764,11 @@ export class MockRuntime {
      * binding the test thought it had removed.
      */
     lookBindings?: Readonly<Record<string, Readonly<Record<string, string>>>>,
+    position?: Position,
   ): { accepted: boolean; errorCode?: string; message?: string } {
     const item = this.#find(itemId);
     if (item === null) return { accepted: false, errorCode: 'unknown-item' };
+    if (position !== undefined) return { accepted: false, errorCode: 'live-position-unavailable' };
     // `R-100` parity — refuse a bad page list before recording EITHER half of this atomic update.
     const pageRefusal = this.#refusePageLists(item.templateId, itemId, fields);
     if (pageRefusal !== null) return { accepted: false, ...pageRefusal };

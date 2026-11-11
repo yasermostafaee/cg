@@ -177,6 +177,12 @@ The exported `index.html` calls `createRuntime(scene)` then
 (`play`/`update`/`stop`/`next`/`remove`, JSON **or** legacy XML payloads) to the
 typed runtime.
 
+The single-file page served by CG Bridge declares live placement in its page head.
+Its `CG UPDATE` callback applies the reserved `__cg.position` control to the
+resident stage using the channel raster from the served URL. The same scene,
+media, and playback controller stay mounted. The authoring canvas has no output
+placement callback.
+
 **The served bundle runs on CasparCG's CEF, not a modern browser (B-066).**
 The compat baseline is **Chromium 71** (CasparCG 2.3 LTS). esbuild `target`
 lowers SYNTAX only — newer built-in METHODS (`replaceAll` et al.) pass

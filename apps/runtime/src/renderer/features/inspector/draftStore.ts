@@ -4,6 +4,7 @@ import {
   type FieldValue,
   type FieldValues,
   type LiveCropFocus,
+  type Position,
   type PositionAnchor,
   type StackItemTimingOverride,
 } from '@cg/shared-schema';
@@ -251,8 +252,10 @@ export function positionDraftOf(itemId: string): PositionDraft | undefined {
  * clears only its own, so an accepted position must not take an unrelated field edit the
  * operator staged during the round trip with it. Same rule as `clearStagedMatching`.
  */
-export function clearPositionDraft(itemId: string): void {
-  if (positionDrafts.delete(itemId)) bump();
+export function clearPositionDraftMatching(itemId: string, sent: PositionDraft): void {
+  if (positionDrafts.get(itemId) !== sent) return;
+  positionDrafts.delete(itemId);
+  bump();
 }
 
 /**
@@ -327,7 +330,7 @@ export function timingDraftOf(itemId: string): TimingDraft | undefined {
 /**
  * Drop just the timing draft — what an ACCEPTED send clears.
  *
- * ⚠ Narrower than {@link clearDraft}, for the reason {@link clearPositionDraft} states: one
+ * ⚠ Narrower than {@link clearDraft}, for the reason {@link clearPositionDraftMatching} states: one
  * press commits several halves and each clears only its own, so an accepted timing change must
  * not take a field edit staged during the round trip with it.
  */
@@ -935,8 +938,8 @@ export function offsetNumber(raw: string): number {
  */
 export function effectivePosition(
   itemId: string,
-  applied: { anchor: PositionAnchor; offset: { x: number; y: number } } | undefined,
-): { anchor: PositionAnchor; offset: { x: number; y: number } } | undefined {
+  applied: Position | undefined,
+): Position | undefined {
   const draft = positionDrafts.get(itemId);
   // No staged move: whatever is applied, INCLUDING nothing. See the note above.
   if (draft === undefined) return applied;
@@ -946,6 +949,10 @@ export function effectivePosition(
     `applied` is not consulted here and must not be, or a row with no override would inherit
     a centre it never chose.
   */
+  return positionFromDraft(draft);
+}
+
+export function positionFromDraft(draft: PositionDraft): Position {
   return {
     anchor: draft.anchor,
     offset: { x: offsetNumber(draft.x), y: offsetNumber(draft.y) },

@@ -10,7 +10,6 @@ import { reportCommandError } from '../status/commandFeedback.js';
 import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
 import { commitSourceAssignments, currentSourceAssignments } from '../sources/sourceStore.js';
 import { defaultPositionOf } from '../stack/defaultPositionStore.js';
-import { isPositionLocked } from './PositionPicker.js';
 import { recordSentPasses } from './timingSent.js';
 import { patternRefusalsOf } from './patternCheck.js';
 import {
@@ -18,14 +17,14 @@ import {
   buildApplyPayload,
   buildLookBindingsPayload,
   buildOverlayPayload,
-  clearPositionDraft,
+  clearPositionDraftMatching,
   clearTimingDraft,
   clearStagedLookBindingsMatching,
   clearStagedMatching,
   clearStagedPlatesMatching,
   isPositionDirty,
-  offsetNumber,
   positionDraftOf,
+  positionFromDraft,
   singleFieldOverlay,
   snapshotDraft,
   snapshotLookBindingDraft,
@@ -33,6 +32,7 @@ import {
   stageField,
   timingDraftOf,
   type FieldPath,
+  type PositionDraft,
 } from './draftStore.js';
 
 /**
@@ -71,6 +71,20 @@ export function applyDraft(
     reportCommandError(`Not sent: ${first.label} — ${first.line}`);
     return Promise.resolve({ accepted: false, errorCode: 'pattern' });
   }
+  const sentPosition =
+    item.onAirPosition === true &&
+    isPositionDirty(item.itemId, item.position ?? defaultPositionOf(item.templateId))
+      ? positionDraftOf(item.itemId)
+      : undefined;
+  if (
+    sentPosition !== undefined &&
+    [sentPosition.x, sentPosition.y].some(
+      (raw) => raw.trim() === '' || !Number.isFinite(Number(raw)),
+    )
+  ) {
+    reportCommandError('Enter valid X and Y offsets to update the on-air position.');
+    return Promise.resolve({ accepted: false, errorCode: 'invalid-position' });
+  }
   const plates = snapshotPlateDraft(item.itemId);
   /*
     🔴 **BM-2 §4.1 — THE PER-LOOK BINDINGS RIDE THE FIELD UPDATE, IN ONE CALL.**
@@ -97,28 +111,14 @@ export function applyDraft(
     sendUpdate(
       item,
       sent,
-      buildApplyPayload(item.itemId, item.fields),
+      sentPosition !== undefined && Object.keys(sent).length === 0
+        ? {}
+        : buildApplyPayload(item.itemId, item.fields),
       bindingsPayload,
       lookBindings,
+      sentPosition,
     );
-  /*
-    🔴 **THE POSITION RIDES THE SAME PRESS — owner, 2026-09-14.** `Apply position` is gone;
-    UPDATE commits the row's whole draft, text and placement together.
-
-    ⚠ **IT IS STILL `stack.setPosition`, ITS OWN CHANNEL.** No wire, no IPC schema and no
-    payload changed — what moved is which CONTROL fires it. Folding a position into the
-    `stack.update` field-set would send the template a field it never declared, which is the
-    reason `positionDrafts` is a separate map in the first place, and that reason is intact.
-
-    🔴 **AND IT IS NOT SENT ON A LOCKED ROW, which preserves the refusal rather than
-    weakening it.** `setPosition` is refused while the row is on air (`R-011`), and the boxes
-    are disabled for exactly as long. But a draft staged OFF air survives a take — drafts
-    outlive selection changes by design — so an UPDATE pressed after that take would fire a
-    command the bridge is bound to refuse and drag the whole press down with it, reporting a
-    failed update to an operator whose text edit was accepted. Asking the SAME predicate the
-    picker disables its boxes with (`isPositionLocked`) means the two can never disagree
-    about who is locked, and no refusal CONDITION moves.
-  */
+  // Off-air placement keeps the legacy set-position route. Live placement rides the field update.
   const position = (): Promise<boolean> => sendPosition(item);
   /*
     🔴 **AND THE TIMING RIDES THE SAME PRESS — `DELTA B4`.** It was committed on BLUR, which
@@ -294,20 +294,17 @@ function sendPosition(item: StackItemState): Promise<boolean> {
   if (draft === undefined) return Promise.resolve(true);
   const applied = item.position ?? defaultPositionOf(item.templateId);
   if (!isPositionDirty(item.itemId, applied)) return Promise.resolve(true);
-  // See the note at the call site: a locked row is left alone rather than refused.
-  if (isPositionLocked(item)) return Promise.resolve(true);
+  // Live placement travels with the field update, and legacy on-air rows keep their draft.
+  if (isOnAirStatus(item)) return Promise.resolve(true);
   return window.cg.stack
     .setPosition({
       itemId: item.itemId,
-      position: {
-        anchor: draft.anchor,
-        offset: { x: offsetNumber(draft.x), y: offsetNumber(draft.y) },
-      },
+      position: positionFromDraft(draft),
     })
     .then(
       (res) => {
         if (res.ok) {
-          clearPositionDraft(item.itemId);
+          clearPositionDraftMatching(item.itemId, draft);
           return true;
         }
         /*
@@ -431,6 +428,7 @@ function sendUpdate(
   fields: FieldValues,
   lookBindings?: Record<string, Record<string, string>> | undefined,
   sentBindings?: ReadonlyMap<string, ReadonlyMap<string, string>> | undefined,
+  sentPosition?: PositionDraft,
 ): Promise<{ accepted: boolean; errorCode?: string | undefined }> {
   return window.cg.stack
     .update({
@@ -438,27 +436,31 @@ function sendUpdate(
       fields,
       mergeMode: 'merge',
       ...(lookBindings !== undefined && { lookBindings }),
+      ...(sentPosition !== undefined && { position: positionFromDraft(sentPosition) }),
     })
     .then(
       (res) => {
-        if (res.accepted) clearStagedMatching(item.itemId, sent);
+        if (res.accepted) {
+          clearStagedMatching(item.itemId, sent);
+          if (sentBindings !== undefined)
+            clearStagedLookBindingsMatching(item.itemId, sentBindings);
+          if (sentPosition !== undefined) clearPositionDraftMatching(item.itemId, sentPosition);
+          return res;
+        }
         /*
         🔴 §4.4 — CLEARED ONLY ON ACCEPTANCE, and only what was actually sent. A refused batch
         leaves EVERY staged edit staged: the operator's composition is still theirs to retry,
         and the dirty chip still says so. Clearing on refusal is how an unapplied edit becomes
         an edit nobody knows was lost.
       */
-        if (res.accepted && sentBindings !== undefined)
-          clearStagedLookBindingsMatching(item.itemId, sentBindings);
         // B-070 — say WHY. An update onto a producerless slot is no longer
         // refused at all (the bridge commits it), so a refusal that reaches here
         // is a real one and must name its cause, not just "not accepted".
         // BM-2 — the refusal's OWN sentence wins when it has one: a binding refusal names the
         // two frames and the look, and no fixed code can carry that.
-        else
-          reportCommandError(
-            res.message ?? errorCodeMessage(res.errorCode) ?? 'Update was not accepted.',
-          );
+        reportCommandError(
+          res.message ?? errorCodeMessage(res.errorCode) ?? 'Update was not accepted.',
+        );
         return res;
       },
       (err: unknown) => {
