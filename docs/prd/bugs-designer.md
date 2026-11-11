@@ -4939,3 +4939,21 @@ The valid mask from Plate 1 to Plate 2 in the reported project survives.
 **Repro / Actual:** Open text-and-videoBackground.cgproj, play and Stop. The composition-following video plays its tail before the plain Text layer’s 510–539 opacity fade.
 
 **Expected / regression:** WHEN Stop begins the authored Outro THEN plain text keyframes and composition-following media share the authored time. Allow the author to place the text fade before the video tail. Cover a frame during the fade and the settled end.
+
+## [~] B-435 — Normalising a Sound creates another project asset and changes its other uses ⟨priority: high — owner, 2026-11-11⟩ — `openspec/changes/normalise-audio-layer/`
+
+**Repro / Actual:** Normalise a placed Sound. The Inspector measures the new WAV, the original remains alongside it in Project Assets, and all uses of the original asset are redirected. The action disappears at the target.
+
+**Expected / regression:** Normalise the selected Sound layer without duplicating its asset. Show the applied gain and provide a way to remove it. Respect the measured true-peak ceiling and keep the layer's manual volume and fades separately editable.
+
+## [~] B-436 — Adding a Sound that exceeds the timeline has no Extend choice ⟨priority: high — owner, 2026-11-11⟩ — `openspec/changes/extend-audio-duration/`
+
+**Repro / Actual:** Add a Sound longer than the active range. Its measured length is available, but the placement skips the duration guard used for video.
+
+**Expected / regression:** Show the clip duration and offer Extend for an overflowing Sound placement in the active composition. The sound remains a one-shot with its own entrance, offset or exit timing.
+
+## [~] B-437 — Static media can repeat with its Hold setting hidden ⟨priority: high — owner, 2026-11-11⟩ — `openspec/changes/expose-static-media-hold/`
+
+**Repro / Actual:** A Static composition with a retained Loop choice can repeat an unmarked video during Rehearse or Preview. Playback hides the Hold selector without an Outro marker. The supplied project stores Loop on a 50-frame composition at 25 fps and contains a 40.04-second video asset without a placed layer.
+
+**Expected / regression:** Show the composition-owned Freeze and Loop media choices for Static compositions containing visible Video or Lottie. The media checklist appears for Loop and lets the author opt clips out of repeats. A Follow layer's Inspector shows its effective timing; composition Playback owns its Hold behavior.

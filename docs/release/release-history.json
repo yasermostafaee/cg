@@ -337,6 +337,18 @@
         {
           "fa": "در حالت No Playout، کانال‌های قابل پخش از روی فهرست واقعی CasparCG مشخص می‌شوند. اگر کانالی روی سرور وجود نداشته باشد، دلیل رد Take همان‌جا نمایش داده می‌شود.",
           "en": "No Playout checks configured channels against the running CasparCG channel list and explains why a Take to a missing channel is refused."
+        },
+        {
+          "fa": "Normalize روی همان لایهٔ صدا اعمال می‌شود. مقدار Gain و امکان برداشتن آن در Inspector دیده می‌شود.",
+          "en": "Sound normalisation applies to the selected layer. The Inspector shows the gain and can remove it."
+        },
+        {
+          "fa": "طول لایهٔ صدا در Timeline دیده می‌شود و برای صدایی که از محدودهٔ فعال بلندتر است، گزینهٔ Extend در دسترس است.",
+          "en": "Sound layers show their duration on the timeline and offer Extend when the sound exceeds the active range."
+        },
+        {
+          "fa": "کنترل Freeze و Loop media برای کامپوزیشن Static دارای ویدئو یا Lottie در Playback دیده می‌شود.",
+          "en": "Playback shows Freeze and Loop media for Static compositions with Video or Lottie."
         }
       ],
       "planned": [
