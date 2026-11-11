@@ -164,11 +164,10 @@ about a box, an edge or a height compares zeros and is not evidence.
   it rests on an empty row **THEN** the row does not react; **WHEN** a row is selected **THEN** it
   carries the selection wash and a two-pixel inset frame in the interactive accent
 
-#### Scenario: The top bar's bulk verbs hover to their own colours and a refused one does not light
+#### Scenario: The top bar's bulk verbs hover to their own colours
 
 - **WHEN** the pointer rests on STOP ALL or CLEAR ALL while they are enabled **THEN** each takes
-  its own verb colour; **WHEN** REMOVE ALL is withheld because a row is on air **THEN** it does not
-  take the remove colour under the pointer
+  its own verb colour
 
 ### Requirement: A row's looks are the template's own declaration, and nothing is invented from a frame count
 

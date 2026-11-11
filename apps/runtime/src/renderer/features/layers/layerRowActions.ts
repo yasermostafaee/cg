@@ -720,10 +720,8 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
               🔴 `B-228` — `removeIsRefused`, THE ONE RENDERER-SIDE DECISION, and it replaced
               `isOnAirStatus(item) && !blocked` here. That spelling was right about the
               predicate and incomplete about the ANSWER: the bridge's `#removeRefusal` is the
-              predicate plus TWO exemptions, this carried one of them (`blocked`, off the
-              binding), and REMOVE ALL carried neither — so the bulk button withheld a press
-              the bridge would have accepted. Both surfaces now read the same function, which
-              reads the bridge's published `removeExempt` rather than recomputing the rule.
+              predicate plus TWO exemptions. The gate reads the bridge's published
+              `removeExempt` rather than recomputing the rule.
 
               ⚠ It reads the item's own `status` and NOT the row's DISPLAY badge — `LayerRow`
               masks an unbacked air claim to `unverified` for the operator's benefit, and a
@@ -771,6 +769,43 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
       is ONE `LOAD`, and the choice between "one I already have" and "a new file"
       happens after it, in a dialog, where it can be read.
     */
+    /**
+     * R-022 — REHEARSE, a TOGGLE in a fixed slot, exactly like LOAD/REMOVE.
+     *
+     * One key and one position, so the verb set on a row never changes SHAPE —
+     * only its label and enabled state flip. That is the same rule the rest of
+     * this list follows and the same reason: a control surface that moves under
+     * the operator's finger gets mis-clicked, and at 2 a.m. that is a wrong
+     * graphic on air.
+     *
+     * A bound row can open independent PVW while it is on air or blocked from
+     * Take. Legacy rehearsal can mute the layer, so its entry retains both guards.
+     * The toggle can always leave an active preview.
+     *
+     * ENGAGED, IT IS THE ONE ROW VERB THAT WEARS A COLOUR (`active`), filled in the
+     * same violet the row's REHEARSING mark uses. The verbs are otherwise neutral
+     * on purpose — thirty rows of coloured affordances drowned the state signal —
+     * and this does not reopen that: neutral bans colour advertising what a control
+     * COULD do, whereas a lit toggle says a mode IS ON, which is the state cell's
+     * own statement in the state cell's own hue. Reading `deps.rehearsing`, the
+     * same flag that flips the label, so the fill and the word cannot disagree.
+     */
+    {
+      ...act(
+        'rehearse',
+        // ON PVW / OFF PVW (owner's wording). It replaces REHEARSE / END
+        // REHEARSE, and it says the same thing in the operator's own terms: what
+        // the verb DOES is put this row's graphic on the PVW monitor. The KEY
+        // stays `rehearse` — the bridge channel, the row state and this whole
+        // feature are R-022's rehearse, and renaming the identity to match a
+        // label would be renaming the thing to match its caption.
+        deps.rehearsing ? 'OFF PVW' : 'ON PVW',
+        empty || (!deps.rehearsing && deps.independentPreview !== true && (onAir || blocked)),
+        () => (item === null ? noop() : deps.toggleRehearse(item.itemId)),
+        MonitorPlay,
+      ),
+      active: deps.rehearsing,
+    },
     {
       ...act(
         'play',
@@ -814,43 +849,6 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
       // exactly what B-087 forbids. It is also PLAY's own disabled gate, so the
       // fill and the disabling cannot disagree about why.
       active: playing,
-    },
-    /**
-     * R-022 — REHEARSE, a TOGGLE in a fixed slot, exactly like LOAD/REMOVE.
-     *
-     * One key and one position, so the verb set on a row never changes SHAPE —
-     * only its label and enabled state flip. That is the same rule the rest of
-     * this list follows and the same reason: a control surface that moves under
-     * the operator's finger gets mis-clicked, and at 2 a.m. that is a wrong
-     * graphic on air.
-     *
-     * A bound row can open independent PVW while it is on air or blocked from
-     * Take. Legacy rehearsal can mute the layer, so its entry retains both guards.
-     * The toggle can always leave an active preview.
-     *
-     * ENGAGED, IT IS THE ONE ROW VERB THAT WEARS A COLOUR (`active`), filled in the
-     * same violet the row's REHEARSING mark uses. The verbs are otherwise neutral
-     * on purpose — thirty rows of coloured affordances drowned the state signal —
-     * and this does not reopen that: neutral bans colour advertising what a control
-     * COULD do, whereas a lit toggle says a mode IS ON, which is the state cell's
-     * own statement in the state cell's own hue. Reading `deps.rehearsing`, the
-     * same flag that flips the label, so the fill and the word cannot disagree.
-     */
-    {
-      ...act(
-        'rehearse',
-        // ON PVW / OFF PVW (owner's wording). It replaces REHEARSE / END
-        // REHEARSE, and it says the same thing in the operator's own terms: what
-        // the verb DOES is put this row's graphic on the PVW monitor. The KEY
-        // stays `rehearse` — the bridge channel, the row state and this whole
-        // feature are R-022's rehearse, and renaming the identity to match a
-        // label would be renaming the thing to match its caption.
-        deps.rehearsing ? 'OFF PVW' : 'ON PVW',
-        empty || (!deps.rehearsing && deps.independentPreview !== true && (onAir || blocked)),
-        () => (item === null ? noop() : deps.toggleRehearse(item.itemId)),
-        MonitorPlay,
-      ),
-      active: deps.rehearsing,
     },
   ];
 

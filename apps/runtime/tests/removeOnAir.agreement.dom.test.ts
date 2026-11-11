@@ -1,123 +1,11 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { fillBridgeStub } from './support/authStub.js';
 import { isOnAirStatus, StackItemStatusSchema } from '@cg/shared-schema';
 import type { StackItemState } from '@cg/shared-schema';
 import { layerRowActions } from '../src/renderer/features/layers/layerRowActions.js';
 import { REMOVE_ON_AIR_REASON } from '../src/renderer/features/layers/layerRowActions.js';
 import { removeIsRefused } from '../src/renderer/features/layers/removeGate.js';
 import { bindingFor, itemWith, rowDeps } from './support/layerRow.js';
-import { StrictMode, createElement } from 'react';
-import { createRoot } from 'react-dom/client';
-import { act } from 'react-dom/test-utils';
-import { afterEach, vi } from 'vitest';
-import { LayersPanel } from '../src/renderer/features/layers/LayersPanel.js';
-import { clearPortals } from './support/dialog.js';
-import { connectionsStub } from './support/reachability.js';
-
-let panelContainer: HTMLDivElement | null = null;
-
-afterEach(() => {
-  panelContainer?.remove();
-  panelContainer = null;
-  clearPortals();
-  vi.restoreAllMocks();
-});
-
-let nextLayer = 10;
-function item(itemId: string, status: StackItemState['status']): StackItemState {
-  return {
-    itemId,
-    templateId: 'tpl',
-    fields: {},
-    status,
-    pending: false,
-    slot: { channel: 1, layer: nextLayer++, server: 'primary' },
-  };
-}
-
-/**
- * The real `LayersPanel`, rendered against a stack — the only way to assert what the BULK
- * button actually does. `layersPanel.clearAll.dom.test.ts`'s stub, narrowed to what this file
- * reads: a panel that renders REMOVE ALL needs the link, the declared bank, rehearse and the
- * three layer surfaces to answer, or it never gets past its own readiness guard.
- */
-async function renderPanelWith(stack: StackItemState[]): Promise<HTMLDivElement> {
-  const stub = {
-    link: {
-      status: () => 'live',
-      onStatusChanged: () => () => undefined,
-      resyncing: () => false,
-      onResyncingChanged: () => () => undefined,
-    },
-    templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
-    fixedLayers: {
-      config: () => Promise.resolve(null),
-      state: () => Promise.resolve([]),
-      onConfigChanged: () => () => undefined,
-      onStateChanged: () => () => undefined,
-    },
-    connections: connectionsStub('both-up'),
-    rehearse: { state: () => Promise.resolve([]), onStateChanged: () => () => undefined },
-    playoutLayers: {
-      state: () => Promise.resolve([]),
-      clear: () => Promise.resolve({ ok: true }),
-      onStateChanged: () => () => undefined,
-    },
-    liveLayers: {
-      state: () => Promise.resolve([]),
-      onStateChanged: () => () => undefined,
-      onPlateReleased: () => () => undefined,
-    },
-    stack: {
-      snapshot: () => Promise.resolve(stack),
-      onStateChanged: () => () => undefined,
-      clearAll: () => Promise.resolve({ ok: true, cleared: 0, attempted: 0, refused: [] }),
-      removeAll: () => Promise.resolve({ ok: true, removed: stack.length }),
-      take: () => Promise.resolve({ accepted: true }),
-      update: () => Promise.resolve({ accepted: true }),
-      out: () => Promise.resolve({ accepted: true }),
-      remove: () => Promise.resolve({ accepted: true }),
-      onRestoreSkips: () => () => undefined,
-      onRestoreMigrations: () => () => undefined,
-    },
-  };
-  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
-
-  panelContainer?.remove();
-  panelContainer = document.createElement('div');
-  document.body.appendChild(panelContainer);
-  const root = createRoot(panelContainer);
-  await act(async () => {
-    root.render(
-      createElement(
-        StrictMode,
-        null,
-        createElement(LayersPanel, {
-          onSelectionChange: () => undefined,
-          selectedId: null,
-          layout: {
-            inspectorPx: 320,
-            focus: 'none' as const,
-            narrow: false,
-            monitorPx: 220,
-            setInspectorPx: () => undefined,
-            setMonitorPx: () => undefined,
-            setFocus: () => undefined,
-            reset: () => undefined,
-            customized: false,
-            monitorsShown: true,
-            setMonitorsShown: () => undefined,
-          },
-          inspectorOpen: false,
-          onUpdate: () => Promise.resolve({ accepted: true }),
-          onToggleInspector: () => undefined,
-        }),
-      ),
-    );
-  });
-  return panelContainer;
-}
 
 /**
  * 🔴 `R-017` / `operator-surface` §5 answer (B) — **THE AGREEMENT TEST.**
@@ -274,43 +162,7 @@ describe('R-017 — the UI gate and the bridge refusal read ONE predicate', () =
   });
 });
 
-/**
- * 🔴 **`B-228` — THE AGREEMENT IS OVER THE DECISION, NOT THE PREDICATE.**
- *
- * ── WHY THE BLOCK ABOVE WAS NOT ENOUGH, WHICH IS THE WHOLE LESSON ───────────
- *
- * Everything above asserts that both sides read one PREDICATE, and it is all true — and
- * `B-228` shipped underneath it anyway. The bridge's answer was never the predicate: it is
- * `isOnAirStatus` **plus two exemptions** (`#removeRefusal`), and only the ROW carried one of
- * them. REMOVE ALL read the predicate alone and sat disabled for a press the bridge would have
- * accepted — the exact UI↔wire disagreement `#removeRefusal`'s own header forbids, arrived at
- * through a test suite that was watching the wrong noun.
- *
- * ⭐ **A ten-status enumeration of `isOnAirStatus` cannot catch that, and could not have.**
- * Every row of it passes on the defect, because the defect is not in the predicate — it is in
- * what each surface does with it. So these assertions are over the OUTCOME (`is REMOVE
- * refused for this row, right now?`) at each surface, with the exemption set as an input.
- *
- * ⚠ **STATED PLAINLY — WHAT THIS EXTENDED TEST STILL WOULD NOT CATCH.** It pins the two
- * RENDERER surfaces against the published fact. It does NOT prove the bridge computes
- * `removeExempt` correctly — that its `#removeExempt` really is the same condition its
- * `#removeRefusal` uses, and that the value reaches the wire. A bridge that published
- * `removeExempt: false` for a genuinely blocked row would leave both surfaces agreeing with
- * each other and both wrong, and every assertion here would still be green. That half is
- * proved where it can be, against a real runtime and a real wire, in
- * `tools/caspar-bridge/tests/remove-on-air-refusal.integration.test.ts`. Neither file is
- * sufficient alone, and this note exists so the next reader does not mistake this one for the
- * whole guard — the mistake this very item is made of.
- */
-describe('B-228 — the ROW and the BULK refuse the same set, exemptions included', () => {
-  /** The panel's REMOVE ALL, rendered for real, for a given stack. */
-  async function removeAllDisabled(stack: StackItemState[]): Promise<boolean> {
-    const el = await renderPanelWith(stack);
-    const btn = el.querySelector<HTMLButtonElement>('button[aria-label="Remove all items"]');
-    expect(btn, 'REMOVE ALL must be rendered even while withheld').not.toBeNull();
-    return btn?.disabled === true;
-  }
-
+describe('B-228 — row REMOVE uses the published exemption', () => {
   /** The row's REMOVE, for the same item. */
   function rowRemoveDisabled(item: StackItemState): boolean {
     return (
@@ -319,45 +171,7 @@ describe('B-228 — the ROW and the BULK refuse the same set, exemptions include
     );
   }
 
-  it('🔴 an EXEMPT on-air row blocks NEITHER surface — this is the defect, at both ends', async () => {
-    /*
-      The stack the E2E fixture actually seeds: one row, on air, and exempt because its layer
-      is held by a producer provably not ours. The bridge accepts REMOVE ALL here.
-
-      RED before the fix: `rowRemoveDisabled` was already false (the row read the binding),
-      while `removeAllDisabled` was TRUE (the bulk read the bare predicate). That single
-      disagreement is `B-228`, and it is what held `dev`'s Linux `e2e` red.
-    */
-    const exempt: StackItemState = { ...item('item-1', 'on-air'), removeExempt: true };
-    expect(rowRemoveDisabled(exempt), 'the ROW offers REMOVE').toBe(false);
-    expect(await removeAllDisabled([exempt]), 'and so must REMOVE ALL').toBe(false);
-  });
-
-  it('🔴 a NON-exempt on-air row blocks BOTH — the fix must not turn into an ungating', async () => {
-    // The inverse, and the one that matters more: `B-228`'s cheapest wrong fix is to drop the
-    // bulk gate entirely, which would go green on the test above and hand back R-017.
-    const live = item('item-1', 'on-air');
-    expect(rowRemoveDisabled(live), 'the ROW withholds REMOVE').toBe(true);
-    expect(await removeAllDisabled([live]), 'and so must REMOVE ALL').toBe(true);
-  });
-
-  it('the bulk is the OR of the rows: one non-exempt live row among exempt ones still withholds it', async () => {
-    // REMOVE ALL is all-or-nothing on the bridge (`removeAll` refuses if ANY item refuses), so
-    // the button must withhold on the same condition rather than on a majority or a count.
-    const exempt: StackItemState = { ...item('item-1', 'on-air'), removeExempt: true };
-    const live = item('item-2', 'on-air');
-    const idle = item('item-3', 'idle');
-    expect(await removeAllDisabled([exempt, idle]), 'nothing refusing').toBe(false);
-    expect(await removeAllDisabled([exempt, idle, live]), 'one refusing').toBe(true);
-  });
-
-  it('🔴 both surfaces resolve through ONE function, for every status × pending × exemption', () => {
-    /*
-      The identity assertion the block above makes for the predicate, made here for the
-      DECISION: the row's outcome is `removeIsRefused` for every cell of the matrix. The bulk
-      consumes the same export (the DOM assertions above are what prove it actually does), so
-      a third spelling has nowhere to hide.
-    */
+  it('agrees with the shared refusal for every status × pending × exemption', () => {
     for (const status of StackItemStatusSchema.options) {
       for (const pending of [false, true]) {
         for (const removeExempt of [undefined, false, true] as const) {

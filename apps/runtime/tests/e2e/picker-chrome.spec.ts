@@ -330,30 +330,20 @@ test('the confirm mark pictures the act — CLEAR and STOP are not deletions', a
   );
   await stopAll.getByRole('button', { name: 'Cancel' }).click();
 
-  /*
-    ── REMOVE — THE CONTROL. The bin still exists and still means what it says, on the one
-    console verb that cannot be undone. If this half ever goes, the change above stopped being
-    "the mark pictures the act" and became "there is no mark".
-
-    `Remove all` is WITHHELD while anything is on air (`R-017`), and the seed has rows on air —
-    so the row's own REMOVE is the reachable spelling of the same verb.
-  */
-  await page.getByRole('button', { name: 'Clear all rows holding a layer' }).click();
-  const confirmClear = page.getByRole('dialog', { name: /^Clear all/ });
-  await confirmClear.getByRole('button', { name: /^Clear all$/ }).click();
-  await expect(confirmClear).toBeHidden();
-
-  await page.getByRole('button', { name: 'Remove all items' }).click();
-  const removeAll = page.getByRole('dialog', { name: /^Remove all/ });
-  await expect(removeAll.locator('[data-confirm-emblem] svg')).toHaveClass(/lucide-trash/);
+  // The seeded, loaded row can open its own removal confirmation.
+  const row = app.layers.locator('[data-item-id="item-irib-news"]');
+  await row.getByRole('button', { name: 'REMOVE', exact: true }).click();
+  const remove = page.getByRole('dialog', { name: /^Remove / });
+  await expect(remove.locator('[data-confirm-emblem] svg')).toHaveClass(/lucide-trash/);
   // …in the deletion family Station setup already draws — see §D3's (c) and `controls.css`.
-  await expect(removeAll.getByRole('button', { name: /^Remove all$/ })).toHaveCSS(
+  await expect(remove.getByRole('button', { name: 'Remove', exact: true })).toHaveCSS(
     'background-color',
     await cssColour(page, 'var(--r-setup-danger-bg)'),
   );
-  await expect(removeAll.getByRole('button', { name: /^Remove all$/ })).toHaveCSS(
+  await expect(remove.getByRole('button', { name: 'Remove', exact: true })).toHaveCSS(
     'color',
     await cssColour(page, 'var(--r-setup-danger-ink)'),
   );
-  await removeAll.getByRole('button', { name: 'Cancel' }).click();
+  await remove.getByRole('button', { name: 'Cancel' }).click();
+  await expect(row).toBeVisible();
 });

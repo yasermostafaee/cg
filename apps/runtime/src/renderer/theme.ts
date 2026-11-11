@@ -494,15 +494,12 @@ export const APP_HEAD_PX = {
  * tokens and Phase 3 had to correct every one).
  *
  *   `.channel-target`     35.72 × 18   12 px, `padding: 0 9px 0 0`, no ground
- *   `.divider-vertical`        1 × 17   the line colour
  */
 export const LAYER_BULK_PX = {
-  /** The `CH N` scope label ahead of the three bulk verbs. */
+  /** The `CH N` scope label ahead of the bulk verbs. */
   targetText: 12,
   /** The well AFTER it — the reference pads the label rather than gapping the group. */
   targetWell: 9,
-  /** The rule that splits the irreversible verb off from the two remedies. */
-  dividerH: 17,
 } as const;
 
 /*
@@ -2878,7 +2875,6 @@ export const cssVars = {
   '--r-stage-note-bg': 'rgba(7 12 19 / 0.62)',
   '--r-bulk-target-text': `${String(LAYER_BULK_PX.targetText)}px`,
   '--r-bulk-target-well': `${String(LAYER_BULK_PX.targetWell)}px`,
-  '--r-bulk-divider-h': `${String(LAYER_BULK_PX.dividerH)}px`,
   /*
    * ⚠ There is deliberately NO `--r-row-icon-btn-narrow-w` here any more. Phase 2 transcribed
    * a `30px` destructive-group width from a stylesheet rule the prototype renders for no

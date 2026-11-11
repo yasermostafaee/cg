@@ -288,8 +288,8 @@ test('§3 — the header sits on its own ground, its labels clear AA, and the be
   const heads = await app.layers.locator('[data-verb-head]').allTextContents();
   expect(heads.map((h) => h.toUpperCase())).toEqual([
     'ITEM',
-    'PLAY',
     'ON PVW',
+    'PLAY',
     'NEXT',
     'STOP',
     'CLEAR',
@@ -312,7 +312,7 @@ test('§3 — the header sits on its own ground, its labels clear AA, and the be
   expect(px(bandBox.top)).toBe(2);
 });
 
-test('§3 — the top bar’s STOP ALL and CLEAR ALL hover to their own verb colours; REMOVE ALL does not light while refused', async ({
+test('§3 — Stop All and Clear All hover to their own colours; a refused row Remove does not light', async ({
   app,
 }) => {
   const page = app.page;
@@ -339,12 +339,14 @@ test('§3 — the top bar’s STOP ALL and CLEAR ALL hover to their own verb col
   await bar('Clear all rows holding a layer').hover();
   await expectBg('Clear all rows holding a layer', await cssColour(page, t.clear));
 
-  // REMOVE ALL is WITHHELD while anything is on air (`R-017`), and a refused control must
-  // not advertise itself under the pointer: its colour is not the remove red.
-  const remove = bar('Remove all items');
+  const remove = app.layers
+    .locator('[data-item-id="item-looks"]')
+    .getByRole('button', { name: 'REMOVE', exact: true });
   await expect(remove).toBeDisabled();
   await remove.hover({ force: true });
-  expect(await bg('Remove all items')).not.toBe(await cssColour(page, t.remove));
+  expect(await remove.evaluate((el) => getComputedStyle(el).backgroundColor)).not.toBe(
+    await cssColour(page, t.remove),
+  );
   await page.mouse.move(0, 0);
 });
 

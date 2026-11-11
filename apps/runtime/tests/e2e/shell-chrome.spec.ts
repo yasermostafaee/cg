@@ -287,44 +287,23 @@ test('§B2 — the filter narrows the list, and never hides a row that would los
   await expect.poll(rowsNow).toBe(before);
 });
 
-/**
- * 🔴 `CONSOLE-MATCH-03` §2 — WHAT THE LAYERS CARD SAYS ABOUT ITSELF.
- *
- * The `CH N` scope and the rule before Remove all are measured at 1280 × 800 against
- * the rendered reference. The Layers list uses the space once occupied by the footer hint.
- */
-test('§C1 — the bulk group states its scope, and the irreversible verb is fenced off', async ({
-  app,
-}) => {
+test('§C1 — the channel scope leads the Stop All and Clear All controls', async ({ app }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1280, height: 800 });
 
-  const target = page.locator('[data-bulk-target]');
+  const target = app.layers.locator('[data-bulk-target]');
+  const stop = app.layers.getByRole('button', { name: 'Stop all on-air items' });
+  const clear = app.layers.getByRole('button', { name: 'Clear all rows holding a layer' });
   await expect(target).toHaveText('CH 1');
-  const rule = page.locator('.cg-bulk-divider');
-  await expect(rule).toHaveCount(1);
+  await expect(stop).toBeVisible();
+  await expect(clear).toBeVisible();
+  await expect(app.layers.getByRole('button', { name: 'Remove all items' })).toHaveCount(0);
 
-  const tBox = await target.boundingBox();
-  const rBox = await rule.boundingBox();
-  const clearAll = page.getByRole('button', { name: 'Clear all rows holding a layer' });
-  const removeAll = page.getByRole('button', { name: 'Remove all items' });
-  const cBox = await clearAll.boundingBox();
-  const mBox = await removeAll.boundingBox();
-  expect(tBox).not.toBeNull();
-  expect(rBox).not.toBeNull();
-  expect(cBox).not.toBeNull();
-  expect(mBox).not.toBeNull();
-
-  // The reference's rule is 1 × 17. The WIDTH is the assertion that matters: a "divider"
-  // that laid out at zero would pass a presence check and draw nothing.
-  expect(rBox!.width).toBeCloseTo(1, 1);
-  expect(rBox!.height).toBeCloseTo(17, 1);
-
-  // The scope is AHEAD of the verbs it scopes, and the rule is BETWEEN the remedies and the
-  // one that cannot be undone. Ordering, in the reading direction, measured rather than assumed.
-  expect(tBox!.x, 'the scope leads the group').toBeLessThan(cBox!.x);
-  expect(rBox!.x, 'the rule follows CLEAR ALL').toBeGreaterThan(cBox!.x);
-  expect(rBox!.x, 'and precedes REMOVE ALL').toBeLessThan(mBox!.x);
+  const targetBox = await target.boundingBox();
+  const stopBox = await stop.boundingBox();
+  const clearBox = await clear.boundingBox();
+  expect(targetBox!.x + targetBox!.width).toBeLessThan(stopBox!.x);
+  expect(stopBox!.x + stopBox!.width).toBeLessThan(clearBox!.x);
 });
 
 test('R-093 — the Layers list reaches the bottom of its panel', async ({ app }) => {

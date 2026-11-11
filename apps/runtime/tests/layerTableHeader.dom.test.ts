@@ -66,9 +66,9 @@ describe('LayerTableHeader — the toggle column head', () => {
     expect(title).toContain('REMOVE');
   });
 
-  it('leaves every other head naming its verb — only the toggle column changed', async () => {
+  it('places the preview heading before the on-air play heading', async () => {
     const el = await renderHeader();
-    expect(heads(el).slice(1)).toEqual(['PLAY', 'ON PVW', 'NEXT', 'STOP', 'CLEAR']);
+    expect(heads(el).slice(1)).toEqual(['ON PVW', 'PLAY', 'NEXT', 'STOP', 'CLEAR']);
   });
 });
 

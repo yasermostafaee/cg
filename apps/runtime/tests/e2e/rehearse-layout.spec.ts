@@ -301,9 +301,9 @@ test('the header prints one word per verb BUTTON, so no word names the wrong gly
   // is a TOGGLE, so no verb can name it without being wrong on half the rows: the
   // row under test is BOUND, and its first glyph is a trash can. See
   // `LayerTableHeader`.
-  expect(heads).toEqual(['ITEM', 'PLAY', 'ON PVW', 'NEXT', 'STOP', 'CLEAR']);
+  expect(heads).toEqual(['ITEM', 'ON PVW', 'PLAY', 'NEXT', 'STOP', 'CLEAR']);
   // …and the head names the column while the BUTTON goes on naming itself — the
   // two channels the icon-only verbs depend on, and the reason the neutral head
   // costs nothing.
-  expect(buttons[0]).toBe('REMOVE');
+  expect(buttons).toEqual(['REMOVE', ...heads.slice(1)]);
 });

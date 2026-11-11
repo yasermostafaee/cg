@@ -910,12 +910,11 @@
   background: var(--r-caution);
 }
 
-/* ── 🔴 CONSOLE-MATCH-03 §2 — THE BULK GROUP'S SCOPE AND ITS RULE ───────────
+/* ── 🔴 CONSOLE-MATCH-03 §2 — THE BULK GROUP'S CHANNEL ───────────
  *
  * Measured in Chromium at 1280 × 800 on the reference (never read off the stylesheet — that
  * file restates its selectors in four waves and only the last one paints, PROMPT.md §0):
- * `.channel-target` is 12 px, muted-bright, with a 9 px well after it and NO ground; the
- * `.divider-vertical` is 1 × 17 in the line colour.
+ * `.channel-target` is 12 px, muted-bright, with a 9 px well after it and NO ground.
  */
 .cg-bulk-target {
   font-size: var(--r-bulk-target-text);
@@ -923,13 +922,6 @@
   padding-inline-end: var(--r-bulk-target-well);
   white-space: nowrap;
 }
-.cg-bulk-divider {
-  inline-size: 1px;
-  block-size: var(--r-bulk-divider-h);
-  background: var(--r-border);
-  flex: 0 0 auto;
-}
-
 /* ── Panel chrome — THE bar, shared by every panel ──────────────────────────
  *
  * Owner report: «هدر پنل Inspector باید با هدر بقیه پنل‌ها یکی باشه» — the
@@ -1026,8 +1018,7 @@
  * own `[data-verb-tone]` buttons are not in a panel header, so they are untouched too.
  *
  * ⭐ The QUIET ground is the same decision §1 made for the app header, for the same reason:
- * fill means STATE in this console, and STOP ALL / CLEAR ALL / REMOVE ALL are doors. The
- * hover still fills — the affordance moved to hover, it did not go away.
+ * fill indicates state. STOP ALL and CLEAR ALL use their verb colours on hover.
  */
 .cg-panel-header [data-verb-tone].cg-btn {
   min-height: 32px;
@@ -6257,7 +6248,7 @@ input[type='checkbox']:disabled:checked {
  *
  * ⚠ Scoped to the VERB, not to the layer. `clear` and `stop` above keep their own colours;
  * what travels here is the DELETION family, and it travels to every base confirm that
- * declares itself a deletion — the row's REMOVE, REMOVE ALL, `Remove item` and `Delete from
+ * declares itself a deletion — the row's REMOVE, `Remove item` and `Delete from
  * station` — rather than to the one dialog that was photographed.
  */
 [data-modal-layer='base'] .cg-btn[data-modal-role='destructive'][data-verb-tone='remove'] {

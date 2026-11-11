@@ -14,12 +14,6 @@ import {
 } from '../src/renderer/features/status/commandFeedback.js';
 
 /**
- * The stack header's Clear-All, beside Remove-All.
- *
- * The two must stay visibly distinct, because confusing them is expensive in opposite
- * directions: Remove-All empties the list (recovering costs a re-import and re-typing every
- * field), Clear-All only takes the graphics off air and leaves the rows idle and re-takeable.
- *
  * The gate is the app's own modal, not `window.confirm` — so these drive the dialog's real
  * buttons, and assert that no native dialog is reached for at all.
  */
@@ -151,8 +145,8 @@ async function renderPanel(): Promise<HTMLDivElement> {
 
 const clearAllButton = (el: HTMLElement): HTMLButtonElement | null =>
   el.querySelector<HTMLButtonElement>('button[aria-label="Clear all rows holding a layer"]');
-const removeAllButton = (el: HTMLElement): HTMLButtonElement | null =>
-  el.querySelector<HTMLButtonElement>('button[aria-label="Remove all items"]');
+const stopAllButton = (el: HTMLElement): HTMLButtonElement | null =>
+  el.querySelector<HTMLButtonElement>('button[aria-label="Stop all on-air items"]');
 
 describe('StackPanel Clear-All', () => {
   it('confirming clears air — and does NOT remove anything', async () => {
@@ -211,9 +205,7 @@ describe('StackPanel Clear-All', () => {
     const clear = clearAllButton(el);
     expect(clear).not.toBeNull();
     expect(clear?.disabled).toBe(false);
-    // Remove-All is present too, and enabled: the rows exist and can be dropped.
-    expect(removeAllButton(el)).not.toBeNull();
-    expect(removeAllButton(el)?.disabled).toBe(false);
+    expect(stopAllButton(el)?.disabled).toBe(true);
   });
 
   it('B-122 — counts every row HOLDING A LAYER, not the ones that read as on air', async () => {
@@ -309,12 +301,13 @@ describe('StackPanel Clear-All', () => {
     });
   });
 
-  it('offers both actions, distinctly, when items are on air', async () => {
+  it('offers Stop All and Clear All without a bulk removal action', async () => {
     stubBridge([item('a', 'on-air')]);
     const el = await renderPanel();
 
     expect(clearAllButton(el)?.textContent).toBe('CLEAR ALL');
-    expect(removeAllButton(el)?.textContent).toBe('REMOVE ALL');
+    expect(stopAllButton(el)?.textContent).toBe('STOP ALL');
+    expect(el.querySelector('button[aria-label="Remove all items"]')).toBeNull();
   });
 
   it('renders every bulk action NEUTRAL — colour belongs to state, not affordances', async () => {
@@ -322,18 +315,14 @@ describe('StackPanel Clear-All', () => {
     const el = await renderPanel();
 
     /*
-      These used to be amber (Clear) and red (Remove), matching their per-row
-      counterparts. Owner decision moved the row verbs to neutral and then extended
-      the same rule here: three permanently-coloured buttons above the list were
-      competing with the one ROW actually wearing the air colour, which is the first
-      thing a control room needs to find. Their distinctness now comes from their
-      icons, their words and their confirm gates.
+      Stop All and Clear All use the neutral text variant. Their icons, labels
+      and confirm gates distinguish the two actions.
 
       Asserted as the exact neutral class plus the ABSENCE of every state hue, so
       re-introducing colour on any of them fails here rather than being noticed on
       air months later.
     */
-    for (const button of [clearAllButton(el), removeAllButton(el)]) {
+    for (const button of [stopAllButton(el), clearAllButton(el)]) {
       // `--neutral`, the neutral TEXT variant — not `--verb`, which carries the row
       // verb's icon-only geometry (`padding: 0`, square, full-width) and squashed
       // these labels against their borders when it was first reused here.
@@ -354,9 +343,7 @@ describe('StackPanel Clear-All', () => {
     stubBridge([item('a', 'on-air')]);
     const el = await renderPanel();
 
-    // Same parent: the header is `space-between`, so loose siblings would strand Clear-All in
-    // the middle of the header and push Remove-All to the far edge.
-    expect(clearAllButton(el)?.parentElement).toBe(removeAllButton(el)?.parentElement);
+    expect(stopAllButton(el)?.parentElement).toBe(clearAllButton(el)?.parentElement);
   });
 
   it('both bulk actions are enabled while live and DISABLED while the link is down', async () => {
@@ -424,19 +411,7 @@ describe('StackPanel Clear-All', () => {
     (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
     const el = await renderPanel();
     expect(clearAllButton(el)?.disabled).toBe(false);
-    /*
-      🔴 `R-017` — REVERSED, and the reversal is the point of the two buttons being different.
-
-      This stack is `[item('a', 'on-air')]`, so Remove-All is now WITHHELD before the link even
-      drops: it is irreversible and never a remedy, so it waits. Clear-All beside it stays
-      enabled on the identical stack, because it IS the remedy — `B-122`'s rule that an
-      emergency control is never gated on the believed status.
-
-      That the two now differ HERE, on one stack, in one assertion pair, is the clearest
-      statement of the asymmetry this file exists to protect. It is not incidental to the
-      link-down subject below; it is what makes the link-down behaviour legible.
-    */
-    expect(removeAllButton(el)?.disabled).toBe(true);
+    expect(stopAllButton(el)?.disabled).toBe(false);
 
     await act(async () => {
       status = 'disconnected';
@@ -444,23 +419,7 @@ describe('StackPanel Clear-All', () => {
       await Promise.resolve();
     });
 
-    /*
-      Remove-All follows R-006 and goes disabled: it is a bridge round-trip like any
-      other, and refusing it costs nothing — the rows stay exactly as they are.
-
-      CLEAR ALL NOW GOES WITH IT — this assertion is REVERSED deliberately.
-
-      The escape-hatch rule stands where it was aimed: Clear-All is never gated on
-      the STATE MODEL, on how many rows read as on air, because that model is
-      exactly what may be wrong when the operator reaches for it. Reachability is a
-      different question. With the bridge down the command does not leave, so the
-      enabled button was not a remedy, only the appearance of one — and it costs
-      the operator the seconds in which he believes the graphics are coming off.
-
-      It returns the instant the link does, which keeps this a gate rather than a
-      removal of the hatch.
-    */
-    expect(removeAllButton(el)?.disabled).toBe(true);
+    expect(stopAllButton(el)?.disabled).toBe(true);
     expect(
       clearAllButton(el)?.disabled,
       'Clear-All cannot act with the bridge down — gated on reachability, never on state',

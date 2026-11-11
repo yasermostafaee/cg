@@ -576,8 +576,8 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
       // §6 — 'load-library' is GONE: LOAD opens the picker, so there is no second
       // similarly-named entry point to keep in the shape.
       'load-remove',
-      'play',
       'rehearse',
+      'play',
       'next',
       'update',
       'stop',
@@ -587,8 +587,8 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
     // plates, and they sit BEFORE `next`. Their position is part of the shape.
     const WITH_PLATES = [
       'load-remove',
-      'play',
       'rehearse',
+      'play',
       'swap-source',
       'plate-audio',
       'next',

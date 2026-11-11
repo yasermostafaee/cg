@@ -1,22 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-// B-228 — the ONE renderer-side REMOVE decision, shared with the row's own gate. It reads
-// `isOnAirStatus` for us, and `removeBlockedCount` below must read THIS and never the bare
-// predicate: the bridge's answer is `isOnAirStatus` MINUS two published exemptions, so a count
-// gated on the predicate disables a press the wire would have accepted.
-import { removeIsRefused } from './removeGate.js';
 import { silenceHasTarget } from './panicReport.js';
-/*
-  ⚠ THIS COMMENT USED TO SAY «this panel no longer imports that predicate directly», and the
-  import below now makes that false — so it is corrected rather than left to mislead.
-
-  `CONSOLE-MATCH-03` needs the air fact PER ROW for the sub-bar's filter override, and the one
-  thing golden rule 6 forbids is a second local spelling of that status list, so the canonical
-  function comes back in. What B-228 was protecting is not the absence of an import — it is
-  `removeBlockedCount`, and that is protected where it is written: it calls `removeIsRefused`,
-  and its own comment there says at length why it may never become `items.filter(isOnAirStatus)`.
-  🔴 If you are reading this because you are about to use `isOnAirStatus` for a REMOVE or a CLEAR
-  count, stop and read that comment first — the answer is `removeIsRefused`.
-*/
 import { isOnAirStatus, type StackItemState } from '@cg/shared-schema';
 import {
   isPlaylistOutput,
@@ -40,7 +23,6 @@ import {
   PanelRight,
   RotateCcw,
   Search,
-  Trash2,
   TriangleAlert,
   X,
   XSquare,
@@ -745,42 +727,8 @@ export function LayersPanel({
   // that HOLD A LAYER, an ownership fact, because the believed status is exactly
   // what may be wrong when the operator reaches for this button.
   const boundCount = items.filter((i) => i.slot !== undefined).length;
-  /*
-    🔴 `R-017` — REMOVE ALL's count, and it is a FOURTH one. Read this before "simplifying"
-    it into `onAirCount` four lines above.
 
-    `onAirCount` is `isOnAir` — status-only, everything but idle/loaded, so `unverified` and
-    `error` are IN. Two reasons it cannot gate this button. First, `isOnAir` carries `B-122`'s
-    standing prohibition — _"it must never gate a clear path again, on either side of the
-    bridge seam"_ — and Remove-All IS a clear path: `removeAll` is built from `remove`, which
-    sends `out(slot)`. Second, the bridge refuses `stack.remove-all` on `isOnAirStatus`, so
-    gating the button on a WIDER set would disable it on rows the bridge would have accepted —
-    the UI and the wire disagreeing about the same press, which is the one thing R-017's
-    ONE-AUTHORITY direction exists to prevent.
-
-    So the same imported function the row's REMOVE and the bridge's refusal read. Four counts
-    on this panel now, one per question, each spelled once.
-
-    🔴 **`B-228` — AND THAT WAS STILL WRONG, BECAUSE THE PREDICATE IS NOT THE ANSWER.** Every
-    sentence above is true and the line below it read `items.filter(isOnAirStatus)`, which is
-    the bridge's answer MINUS its two exemptions (`#removeRefusal`: a restore-blocked row, and
-    an item on no declared operator row). So this button sat disabled for a press
-    `stack.remove-all` would have accepted — the very "UI and the wire disagreeing about the
-    same press" this comment set out to prevent, reached by sweeping the predicate across and
-    leaving the rest of the decision behind. It held `dev`'s Linux `e2e` red until it was
-    traced.
-
-    `removeIsRefused` is now the one renderer-side decision, read here and by the ROW's REMOVE,
-    and it consults the bridge's PUBLISHED `removeExempt` instead of recomputing the rule —
-    which the renderer could not do anyway, since `#declaredLayerClass` is bridge knowledge.
-  */
-  const removeBlockedCount = items.filter(removeIsRefused).length;
-
-  // "Get it off the screen" is not "throw it away". This clears air and KEEPS
-  // the rows, so recovering is a re-take — not a re-import and re-typing every
-  // field, which is what Remove-All costs. Confirm-gated all the same: it is
-  // still an on-air action. (Wording carried over verbatim from the stack
-  // header it replaces — the distinction it draws is the point.)
+  // Clear air and retain each row's loaded template for a subsequent take.
   const clearAll = useCallback(async (): Promise<void> => {
     /*
       ⭐ B-122 — THE WORDING NOW MATCHES A BULK VERB THAT REALLY IS AN ESCAPE HATCH.
@@ -890,39 +838,6 @@ export function LayersPanel({
       reportCommandError(err instanceof Error ? err.message : 'Stop all failed.');
     }
   }, [confirm, onAirCount, bulkScope]);
-
-  /**
-   * R-010 — Remove All empties every row. It is not merely a convenience: it is
-   * the documented unblock path for a server reconfiguration (`connections.
-   * set-config` refuses while anything is on air or unsettled, and names this as
-   * the way out), so it must survive the panel merge.
-   */
-  const removeAll = useCallback(async (): Promise<void> => {
-    const ok = await confirm({
-      title: 'Remove all items?',
-      body: `This clears anything on air and empties the stack — all ${String(items.length)} item(s).`,
-      confirmLabel: 'Remove all',
-      tone: 'remove',
-    });
-    if (!ok) return;
-    const emptied = items.length;
-    try {
-      if (bulkScope === undefined) await window.cg.stack.removeAll();
-      else await window.cg.stack.removeAll(bulkScope);
-      /*
-        🔴 DELTA 8 §4(b) + §2's consequence rule. REMOVE ALL is the one bulk verb that is never
-        a remedy and cannot be undone, so its line carries that clause — and it must not be
-        vaguer than the confirm that preceded it, which named the count.
-      */
-      if (emptied > 0) {
-        reportCommandSuccess(
-          `Emptied · ${String(emptied)} ${emptied === 1 ? 'row' : 'rows'}. The templates are off the rows; this cannot be undone.`,
-        );
-      }
-    } catch (err) {
-      reportCommandError(err instanceof Error ? err.message : 'Remove all failed.');
-    }
-  }, [confirm, items.length, bulkScope]);
 
   /*
     🔴 `MULTI-CHANNEL-01` §2 G — THE PLAYOUT TAB IS SPLIT BY CHANNEL. `CHANNEL-AUTHORITY-01` fixed
@@ -1504,18 +1419,8 @@ export function LayersPanel({
             their confirm gates, not from being hidden.
           */}
               {/*
-            🔴 `CONSOLE-MATCH-03` §2 — WHICH CHANNEL THESE THREE VERBS REACH, said in front
-            of them rather than inferred.
-
-            The reference draws `CH 1` at the head of the bulk group and it is not decoration:
-            STOP ALL, CLEAR ALL and REMOVE ALL are the widest presses on this console, and the
-            operator is entitled to read their SCOPE in the same glance as their names. It was
-            one number while the bank was one channel — cheap to state and expensive to omit
-            the day it became two. `MULTI-CHANNEL-01` is that day: it is the SELECTED channel's
-            number, and the channel the three verbs are scoped to.
-
-            It is rendered only when the bank has actually answered: `CH undefined` over three
-            live verbs would be worse than saying nothing.
+            The channel label shows the scope of STOP ALL and CLEAR ALL once the
+            selected bank has answered.
           */}
               {bank !== null && (
                 <span className="cg-bulk-target" data-bulk-target="">
@@ -1572,46 +1477,6 @@ export function LayersPanel({
               >
                 <Icon icon={XSquare} />
                 CLEAR ALL
-              </Button>
-              {/*
-            🔴 `R-017` — WITHHELD WHILE ANYTHING IS ON AIR, and RENDERED while it is withheld.
-            The bulk action alone is withheld: individual idle rows stay removable, because
-            "some rows are removable and one is not" is a true statement about the stack and
-            silently removing the idle ones while skipping the live one would break the
-            action's own name.
-
-            ⚠ Do NOT harmonise this with CLEAR ALL's treatment above. That one is ALWAYS
-            enabled and gated only on reachability, because it is the emergency remedy and
-            refusing a remedy strands graphics on air. This one is the opposite kind of act —
-            irreversible, and never a remedy for anything — so it is the one that waits.
-          */}
-              {/*
-            🔴 `CONSOLE-MATCH-03` §2 — THE RULE THAT SPLITS THE IRREVERSIBLE VERB OFF.
-
-            The reference puts a 1 × 17 rule between CLEAR ALL and REMOVE ALL, and the
-            comment on REMOVE ALL above already says why in words: the first two are remedies
-            and this one is never a remedy for anything. A rule costs one pixel and makes the
-            reach into a different group a deliberate act rather than a slip along a row of
-            three identical buttons.
-
-            `aria-hidden`: the grouping is already stated by every label and title beside it,
-            and a separator announced to a screen reader in the middle of three verbs is noise.
-          */}
-              <span className="cg-bulk-divider" aria-hidden="true" />
-              <Button
-                variant="neutral"
-                disabled={linkDown || items.length === 0 || removeBlockedCount > 0}
-                aria-label="Remove all items"
-                data-verb-tone="remove"
-                title={
-                  removeBlockedCount > 0
-                    ? `${String(removeBlockedCount)} row(s) are on air, and REMOVE ALL cannot be undone. Take them off air first — STOP ALL runs their outros, CLEAR ALL cuts immediately.`
-                    : 'Clears anything on air and empties every row'
-                }
-                onClick={() => void removeAll()}
-              >
-                <Icon icon={Trash2} />
-                REMOVE ALL
               </Button>
             </>
           )}
