@@ -5,9 +5,9 @@ import type { Silenceable } from './look-media.js';
  * 🔴 `D-165` — **THE PAGE'S SOUND: how a sound effect sounds, never when it starts.**
  *
  * One `AudioContext` per document, lazily — a page with no sound never makes one. Each sound runs
- * `<audio>` → its own GAIN (the element's `volumeDb` and its fades) → its PARK gain (silenced while
+ * `<audio>` → its own GAIN (normalisation, volume and fades) → its PARK gain (silenced while
  * its look is hidden, `look-media.ts`) → the page's MASTER gain → the output. Web Audio, because a
- * media element's `volume` stops at 1.0 and the element's range runs to +6 dB.
+ * media element's `volume` stops at 1.0 and both gain controls can boost the sound.
  *
  * ⭐ **The master gain is the HOST's mute, and the page's own copy of the runtime owns it.**
  * CG Control's PVW renders the byte-identical page CasparCG plays and must stay SILENT by default;
@@ -107,7 +107,7 @@ export interface SoundAudition {
 }
 
 export interface AudioShape {
-  /** Linear gain (the element's `volumeDb`, converted). */
+  /** Linear normalisation gain multiplied by the manual fader, before fades. */
   readonly gain: number;
   readonly fadeInMs: number;
   readonly fadeOutMs: number;

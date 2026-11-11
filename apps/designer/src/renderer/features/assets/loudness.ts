@@ -2,6 +2,7 @@ import {
   AUDIO_LOUDNESS_TARGET_LUFS,
   AUDIO_PEAK_FLOOR_DBFS,
   AUDIO_TRUE_PEAK_CEILING_DBTP,
+  AudioNormalisationGainSchema,
 } from '@cg/shared-schema';
 
 /**
@@ -265,12 +266,14 @@ export function storedLoudness(info: {
  */
 export function normalisationGainDb(loudness: Loudness): number | null {
   if (loudness.loudnessLufs === null) return null;
-  return tenth(
+  const gain = tenth(
     Math.min(
       AUDIO_LOUDNESS_TARGET_LUFS - loudness.loudnessLufs,
       AUDIO_TRUE_PEAK_CEILING_DBTP - loudness.truePeakDbtp,
     ),
   );
+  const parsed = AudioNormalisationGainSchema.safeParse(gain);
+  return parsed.success ? parsed.data : null;
 }
 
 /** Below this, a sound is already where normalisation would put it, and nothing is offered. */
@@ -282,24 +285,15 @@ export function offeredGainDb(loudness: Loudness): number | null {
   return gain !== null && Math.abs(gain) >= NORMALISE_THRESHOLD_DB ? gain : null;
 }
 
-/**
- * The same WAV with every sample scaled by `gainDb` — a copy; the input is untouched. Rounded to the
- * nearest step and held inside 16 bits (a gain from `normalisationGainDb` never needs the hold: the
- * ceiling keeps the true peak, and so every sample, under full scale).
- */
-export function withGain(bytes: Uint8Array, gainDb: number): Uint8Array<ArrayBuffer> {
-  const out = new Uint8Array(bytes.byteLength);
-  out.set(bytes);
-  const pcm = pcmOf(out);
-  if (pcm === null) return out;
-  const view = new DataView(out.buffer);
-  const factor = Math.pow(10, gainDb / 20);
-  for (let i = 0; i < pcm.samples; i++) {
-    const at = pcm.dataAt + i * 2;
-    const v = Math.round(view.getInt16(at, true) * factor);
-    view.setInt16(at, Math.max(-32768, Math.min(32767, v)), true);
-  }
-  return out;
+/** Pre-fader estimate from the measured source. A gain can change the loudness gate. */
+export function estimateLoudnessAfterGain(loudness: Loudness, gainDb: number): Loudness {
+  return {
+    loudnessLufs: loudness.loudnessLufs === null ? null : tenth(loudness.loudnessLufs + gainDb),
+    truePeakDbtp:
+      loudness.truePeakDbtp <= AUDIO_PEAK_FLOOR_DBFS
+        ? loudness.truePeakDbtp
+        : tenth(loudness.truePeakDbtp + gainDb),
+  };
 }
 
 /** `loudnessLufs` as the author reads it: `−14.2 LUFS`, or `too quiet to measure`. */

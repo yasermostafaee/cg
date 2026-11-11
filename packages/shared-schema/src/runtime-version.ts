@@ -48,17 +48,25 @@ import type { Scene } from './scene.js';
 /**
  * The rendering contract this build implements. See the header for when to bump it.
  *
- * 1.2.0 adds authored clock separator styling, a countup range, and delayed Follow
- * video Outros. Older runtimes ignore those optional properties.
+ * 1.2.0 adds authored clock separator styling, a countup range and delayed Follow video Outros.
+ * 1.2.1 applies normalisation gain on audio elements.
  */
-export const CG_RUNTIME_VERSION = '1.2.0';
+export const CG_RUNTIME_VERSION = '1.2.1';
 
-/** Keep unchanged templates importable on 1.1 while guarding new authored rendering. */
+/** Declare the minimum runtime that can reproduce all authored behavior in a package. */
 export function requiredRuntimeVersionForScene(
   scene: Pick<Scene, 'layers' | 'compositions'>,
 ): string {
-  const requiresCurrent = (element: Element): boolean => {
-    if (element.type === 'container') return element.children.some(requiresCurrent);
+  const compositions = [scene, ...(scene.compositions ?? [])];
+  const hasElement = (matches: (element: Element) => boolean): boolean => {
+    const visit = (element: Element): boolean =>
+      matches(element) || (element.type === 'container' && element.children.some(visit));
+    return compositions.some((comp) => comp.layers.some((layer) => layer.children.some(visit)));
+  };
+  if (hasElement((el) => el.type === 'audio' && (el.normalisationGainDb ?? 0) !== 0))
+    return '1.2.1';
+
+  const needsRuntime120 = (element: Element): boolean => {
     if (element.type === 'video') {
       return element.phases?.source === 'composition' && (element.phases.outroDelayFrames ?? 0) > 0;
     }
@@ -70,11 +78,7 @@ export function requiredRuntimeVersionForScene(
         ((element.countupStartSeconds ?? 0) > 0 || element.countupLimitSeconds !== undefined))
     );
   };
-  return [scene, ...(scene.compositions ?? [])].some((composition) =>
-    composition.layers.some((layer) => layer.children.some(requiresCurrent)),
-  )
-    ? CG_RUNTIME_VERSION
-    : '1.1.0';
+  return hasElement(needsRuntime120) ? '1.2.0' : '1.1.0';
 }
 
 /** A parsed `major.minor.patch`. Pre-release and build metadata are not modelled. */
@@ -150,8 +154,8 @@ export function runtimeShortfall(
  */
 export function runtimeShortfallMessage(name: string, shortfall: RuntimeShortfall): string {
   return (
-    `"${name}" needs CG Control ${shortfall.required} and this station has ` +
-    `${shortfall.available} — it was exported by a newer build. Update this station, or ` +
+    `"${name}" needs template runtime ${shortfall.required}. CG Control on this station provides ` +
+    `${shortfall.available}. Update this station or ` +
     `re-export the template from a Designer matching it.`
   );
 }

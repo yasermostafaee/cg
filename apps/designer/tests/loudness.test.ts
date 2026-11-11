@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  estimateLoudnessAfterGain,
   formatLoudness,
   formatTruePeak,
   kWeighting,
   measureLoudness,
   normalisationGainDb,
   offeredGainDb,
-  withGain,
 } from '../src/renderer/features/assets/loudness.js';
 import { wavStats } from '../src/renderer/features/assets/wav-stats.js';
 
@@ -119,16 +119,13 @@ describe('Q10 — the gain that normalises a sound', () => {
     expect(offeredGainDb({ loudnessLufs: -14, truePeakDbtp: -0.5 })).toBe(-9);
   });
 
-  it('🔴 the gain applied to the bytes lands the sound on −23 LUFS, and the source is untouched', () => {
-    const source = wav(3, sine(-14));
-    const before = source.slice();
-    const loud = measureLoudness(source)!;
-    const gain = normalisationGainDb(loud)!;
-    const out = withGain(source, gain);
-    expect(source).toEqual(before);
-    const after = measureLoudness(out)!;
-    expect(Math.abs((after.loudnessLufs ?? 0) - -23)).toBeLessThanOrEqual(0.1);
-    expect(after.truePeakDbtp).toBeLessThanOrEqual(-1);
-    expect(wavStats(out)?.durationMs).toBe(wavStats(source)?.durationMs);
+  it('estimates a quiet sound with gain beyond the manual fader range', () => {
+    const source = { loudnessLufs: -35, truePeakDbtp: -25 };
+    const gain = offeredGainDb(source);
+    expect(gain).toBe(12);
+    expect(estimateLoudnessAfterGain(source, gain!)).toEqual({
+      loudnessLufs: -23,
+      truePeakDbtp: -13,
+    });
   });
 });

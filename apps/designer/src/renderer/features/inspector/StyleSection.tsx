@@ -61,7 +61,7 @@ import type {
   VideoPlaceholderElement,
 } from '@cg/shared-schema';
 import { LiveSourceIdSchema } from '@cg/shared-schema';
-import { AUDIO_VOLUME_DB_MAX, AUDIO_VOLUME_DB_MIN } from '@cg/shared-schema';
+import { AUDIO_PEAK_FLOOR_DBFS, AUDIO_VOLUME_DB_MAX, AUDIO_VOLUME_DB_MIN } from '@cg/shared-schema';
 import { isoOfInstant, nowPlus } from '@cg/text-shaping';
 import { compositionPackageId } from '@cg/vcg-format';
 import { ClockTargetDataKey } from './ClockTargetDataKey.js';
@@ -70,8 +70,14 @@ import { DateTimeInput } from '../../ui/DateTimeInput.js';
 import { CountdownStepsSection } from './CountdownStepsSection.js';
 import { ClockOffsetField } from './ClockOffsetField.js';
 import { formatPeak, formatSeconds } from '../assets/wav-stats.js';
-import { formatGain, formatLoudness, formatTruePeak, offeredGainDb } from '../assets/loudness.js';
-import { normaliseSound, useSoundLoudness } from '../assets/normaliseSound.js';
+import {
+  estimateLoudnessAfterGain,
+  formatGain,
+  formatLoudness,
+  formatTruePeak,
+  offeredGainDb,
+} from '../assets/loudness.js';
+import { useSoundLoudness } from '../assets/useSoundLoudness.js';
 import {
   ASPECT_CUSTOM,
   ASPECT_PRESETS,
@@ -2271,21 +2277,31 @@ function VideoFollowPanel({
  * asset. A sound draws nothing, so it has no transform, style or filter section, and nothing here
  * is keyframed.
  *
- * `RUN-NEXT-VERSION-02` Q10 — and its LOUDNESS and TRUE PEAK, with the offer to normalise it to
- * −23 LUFS (never past −1 dBTP) when it is not there already. The offer names where the sound will
- * land — short of −23 when its peaks stop it — and the gain it applies is in its title. Pressing it
- * stores the normalised sound and points this sound's every use at it (`normaliseSound`).
+ * Normalisation adds an independent gain to the selected layer. The readouts estimate its level
+ * after normalisation and before manual volume and fades.
  */
 function AudioSections({ element }: { element: AudioElement }): JSX.Element {
   const id = element.id;
   const asset = useAssets().find((a) => a.assetId === element.assetId);
   const info = asset?.audio;
-  const loudness = useSoundLoudness(asset);
-  const gain = loudness !== null ? offeredGainDb(loudness) : null;
-  const [normalising, setNormalising] = useState(false);
+  const sourceLoudness = useSoundLoudness(asset);
+  const appliedGain = element.normalisationGainDb;
+  const loudness =
+    appliedGain === undefined || sourceLoudness === null
+      ? sourceLoudness
+      : estimateLoudnessAfterGain(sourceLoudness, appliedGain);
+  const gain =
+    appliedGain === undefined && sourceLoudness !== null ? offeredGainDb(sourceLoudness) : null;
+  const levelTitle =
+    appliedGain === undefined
+      ? 'Source measurement before volume and fades'
+      : 'Estimated level after normalisation and before volume and fades';
   const start = element.start;
   const commit = (patch: Partial<AudioElement>): void => {
     designerStore.updateElement(id, patch as Partial<Element>);
+  };
+  const commitNormalisation = (normalisationGainDb: number | undefined): void => {
+    designerStore.runAsSingleHistoryEntry(() => commit({ normalisationGainDb }));
   };
   const clampDb = (v: number): number =>
     Math.min(AUDIO_VOLUME_DB_MAX, Math.max(AUDIO_VOLUME_DB_MIN, Math.round(v * 10) / 10));
@@ -2299,22 +2315,26 @@ function AudioSections({ element }: { element: AudioElement }): JSX.Element {
         </span>
       </div>
       {info !== undefined && (
-        <div className={fieldCss.row}>
+        <div className={fieldCss.row} title={levelTitle}>
           <span className={fieldCss.label}>peak</span>
           <span className={fieldCss.readout} data-testid="audio-peak">
-            {formatPeak(info.peakDbfs)}
+            {formatPeak(
+              info.peakDbfs <= AUDIO_PEAK_FLOOR_DBFS
+                ? info.peakDbfs
+                : info.peakDbfs + (appliedGain ?? 0),
+            )}
           </span>
         </div>
       )}
       {loudness !== null && (
         <>
-          <div className={fieldCss.row}>
+          <div className={fieldCss.row} title={levelTitle}>
             <span className={fieldCss.label}>loudness</span>
             <span className={fieldCss.readout} data-testid="audio-loudness">
               {formatLoudness(loudness.loudnessLufs)}
             </span>
           </div>
-          <div className={fieldCss.row}>
+          <div className={fieldCss.row} title={levelTitle}>
             <span className={fieldCss.label}>true peak</span>
             <span className={fieldCss.readout} data-testid="audio-true-peak">
               {formatTruePeak(loudness.truePeakDbtp)}
@@ -2322,22 +2342,27 @@ function AudioSections({ element }: { element: AudioElement }): JSX.Element {
           </div>
         </>
       )}
-      {asset !== undefined && loudness?.loudnessLufs != null && gain !== null && (
+      {appliedGain !== undefined && (
+        <>
+          <div className={fieldCss.row}>
+            <span className={fieldCss.label}>normalisation gain</span>
+            <span className={fieldCss.readout} data-testid="audio-normalisation-gain">
+              {formatGain(appliedGain)}
+            </span>
+          </div>
+          <Button variant="secondary" onClick={() => commitNormalisation(undefined)}>
+            Remove normalisation
+          </Button>
+        </>
+      )}
+      {loudness?.loudnessLufs != null && gain !== null && (
         <Button
           variant="secondary"
           data-testid="audio-normalise"
-          disabled={normalising}
-          title={`${formatGain(gain)}; the true peak stays at or below −1 dBTP`}
-          onClick={() => {
-            setNormalising(true);
-            void normaliseSound(asset)
-              .then((result) => {
-                if (!result.ok) designerStore.showNotice(result.message);
-              })
-              .finally(() => setNormalising(false));
-          }}
+          title={`${formatGain(gain)} before volume and fades. Estimated true peak at or below −1 dBTP.`}
+          onClick={() => commitNormalisation(gain)}
         >
-          Normalise to {formatLoudness(Math.round((loudness.loudnessLufs + gain) * 10) / 10)}
+          Normalise to {formatLoudness(estimateLoudnessAfterGain(loudness, gain).loudnessLufs)}
         </Button>
       )}
       <SelectField

@@ -1988,7 +1988,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         const { handle, silence, audition } = createAudioHandle(
           a.node,
           {
-            gain: gainOfDb(el.volumeDb),
+            gain: 10 ** ((el.normalisationGainDb ?? 0) / 20) * gainOfDb(el.volumeDb),
             fadeInMs: el.fadeInMs ?? 0,
             fadeOutMs: el.fadeOutMs ?? 0,
             durationMs: el.durationMs,

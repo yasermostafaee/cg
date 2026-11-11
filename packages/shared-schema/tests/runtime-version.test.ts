@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ClockElementSchema } from '../src/elements.js';
+import { AudioElementSchema, ClockElementSchema, type Element } from '../src/elements.js';
 import {
   CG_RUNTIME_VERSION,
   requiredRuntimeVersionForScene,
@@ -93,8 +93,8 @@ describe('runtimeShortfallMessage', () => {
     expect(message).toContain('lower third');
     expect(message).toContain('2.0.0');
     expect(message).toContain('1.0.0');
-    expect(message).toContain('needs CG Control');
-    expect(message).not.toContain('CG runtime');
+    expect(message).toContain('needs template runtime');
+    expect(message).toContain('CG Control on this station provides');
     // The operator has two ways out and the message must not leave them guessing which.
     expect(message).toContain('Update this station');
     expect(message).toContain('re-export');
@@ -102,6 +102,20 @@ describe('runtimeShortfallMessage', () => {
 });
 
 describe('CG_RUNTIME_VERSION', () => {
+  const versionFor = (element: Element) =>
+    requiredRuntimeVersionForScene({
+      layers: [
+        {
+          id: 'layer',
+          name: 'Layer',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [element],
+        },
+      ],
+    });
+
   it('requires the newer renderer only for authored clock and Follow-video behavior', () => {
     const clock = ClockElementSchema.parse({
       id: 'clock',
@@ -129,28 +143,41 @@ describe('CG_RUNTIME_VERSION', () => {
       color: '#FFFFFF',
       mode: 'countup',
     });
-    const versionForClock = (el: typeof clock) =>
-      requiredRuntimeVersionForScene({
-        layers: [
-          {
-            id: 'layer',
-            name: 'Layer',
-            visible: true,
-            locked: false,
-            blendMode: 'normal',
-            children: [el],
-          },
-        ],
-      });
-    expect(versionForClock(clock)).toBe('1.1.0');
-    expect(versionForClock({ ...clock, countupStartSeconds: 7 })).toBe('1.2.0');
-    expect(versionForClock({ ...clock, separatorOffsetYPx: 6 })).toBe('1.2.0');
+    expect(versionFor(clock)).toBe('1.1.0');
+    expect(versionFor({ ...clock, countupStartSeconds: 7 })).toBe('1.2.0');
+    expect(versionFor({ ...clock, separatorOffsetYPx: 6 })).toBe('1.2.0');
     expect(requiredRuntimeVersionForScene({ layers: [] })).toBe('1.1.0');
-    expect(CG_RUNTIME_VERSION).toBe('1.2.0');
-    expect(runtimeShortfall(CG_RUNTIME_VERSION, '1.1.0')).toEqual({
-      required: '1.2.0',
-      available: '1.1.0',
+  });
+
+  it('requires runtime 1.2.1 for audio with a nonzero normalisation gain', () => {
+    const sound = AudioElementSchema.parse({
+      id: 'sound',
+      name: 'Sound',
+      type: 'audio',
+      transform: {
+        position: { x: 0, y: 0 },
+        size: { w: 0, h: 0 },
+        scale: { x: 1, y: 1 },
+        rotation: 0,
+        anchor: { x: 0.5, y: 0.5 },
+      },
+      opacity: 1,
+      visible: true,
+      locked: false,
+      zIndex: 0,
+      assetId: 'source',
+      durationMs: 500,
     });
+    expect(versionFor(sound)).toBe('1.1.0');
+    expect(versionFor({ ...sound, normalisationGainDb: 0 })).toBe('1.1.0');
+    const normalised = AudioElementSchema.parse({ ...sound, normalisationGainDb: 12 });
+    expect(normalised.normalisationGainDb).toBe(12);
+    expect(versionFor(normalised)).toBe('1.2.1');
+    expect(runtimeShortfall(versionFor(normalised), '1.2.0')).toEqual({
+      required: '1.2.1',
+      available: '1.2.0',
+    });
+    expect(runtimeShortfall(versionFor(normalised))).toBeNull();
   });
 
   it('is a readable semver', () => {

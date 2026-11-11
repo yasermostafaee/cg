@@ -66,6 +66,15 @@ async function dropAsset(page: Page, filename: string): Promise<void> {
   expect(ok).toBe(true);
 }
 
+async function exportPackage(page: Page): ReturnType<typeof unpack> {
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export .vcg', exact: true }).click();
+  const download: Download = await downloadPromise;
+  const chunks: Buffer[] = [];
+  for await (const c of await download.createReadStream()) chunks.push(Buffer.from(c));
+  return unpack(new Uint8Array(Buffer.concat(chunks)));
+}
+
 test.describe('D-165 — sound effects in the Designer', () => {
   test('🔴 WAV, MP3, OGG and M4A each import as ONE 48 kHz stereo WAV, with its length and peak', async ({
     app,
@@ -175,7 +184,7 @@ test.describe('D-165 — sound effects in the Designer', () => {
     await expect(sound).toHaveAttribute('aria-pressed', 'false');
   });
 
-  test('🔴 Q10 — the Sound section shows loudness and true peak, and Normalise lands the sound on −23 LUFS', async ({
+  test('Normalise applies to one placement and exports the original sound once', async ({
     app,
     page,
   }) => {
@@ -192,12 +201,15 @@ test.describe('D-165 — sound effects in the Designer', () => {
       )
       .toBe(1);
     // Measured at import: a 1 kHz tone at −6 dBFS in both channels reads about −6 LUFS.
-    const imported = await page.evaluate(
-      async () => (await window.cg.assets.list()).find((a) => a.kind === 'audio')?.audio,
+    const original = await page.evaluate(async () =>
+      (await window.cg.assets.list()).find((a) => a.kind === 'audio'),
     );
+    const imported = original?.audio;
     expect(Math.abs((imported?.loudnessLufs ?? 0) - -6)).toBeLessThanOrEqual(0.2);
     expect(Math.abs((imported?.truePeakDbtp ?? 0) - -6)).toBeLessThanOrEqual(0.2);
+    const gainDb = -23 - (imported?.loudnessLufs ?? 0);
 
+    await dropAsset(page, 'tone-44k-mono.wav');
     await dropAsset(page, 'tone-44k-mono.wav');
     await expect(app.inspector.getByTestId('audio-loudness')).toHaveText(
       /^−(5\.9|6\.0|6\.1) LUFS$/,
@@ -207,21 +219,32 @@ test.describe('D-165 — sound effects in the Designer', () => {
     await expect(offer).toHaveText('Normalise to −23.0 LUFS');
     await offer.click();
 
-    await expect
-      .poll(
-        async () =>
-          page.evaluate(async () =>
-            (await window.cg.assets.list())
-              .filter((a) => a.kind === 'audio')
-              .map((a) => a.filename)
-              .sort(),
-          ),
-        { timeout: 30_000 },
-      )
-      .toEqual(['tone-44k-mono (-23.0 LUFS).wav', 'tone-44k-mono.wav']);
-    // The element now plays the normalised sound: its facts say so, and nothing more is offered.
     await expect(app.inspector.getByTestId('audio-loudness')).toHaveText('−23.0 LUFS');
-    await expect(offer).toHaveCount(0);
+    await expect(app.inspector.getByTestId('audio-normalisation-gain')).toHaveText(
+      `${gainDb.toFixed(1).replace('-', '−')} dB`,
+    );
+    expect(
+      await page.evaluate(async () =>
+        (await window.cg.assets.list()).filter((a) => a.kind === 'audio'),
+      ),
+    ).toEqual([original]);
+    const { manifest, scene } = await exportPackage(page);
+    expect(manifest.compatibility.minRuntimeVersion).toBe('1.2.1');
+    expect(manifest.assetIndex.filter((asset) => asset.kind === 'audio')).toHaveLength(1);
+    const placements = [...scene.layers, ...(scene.compositions ?? []).flatMap((c) => c.layers)]
+      .flatMap((layer) => layer.children)
+      .filter((element) => element.type === 'audio');
+    expect(placements).toHaveLength(2);
+    expect(placements[0]?.assetId).toBe(placements[1]?.assetId);
+    const normalised = placements.filter((sound) => sound.normalisationGainDb !== undefined);
+    expect(normalised).toHaveLength(1);
+    expect(normalised[0]?.normalisationGainDb).toBeCloseTo(gainDb, 1);
+
+    await app.inspector.getByRole('button', { name: 'Remove normalisation', exact: true }).click();
+    await expect(app.inspector.getByTestId('audio-loudness')).toHaveText(
+      /^−(5\.9|6\.0|6\.1) LUFS$/,
+    );
+    await expect(offer).toBeVisible();
   });
 
   test('the .vcg carries the WAV and the element (start, volume) round-trips', async ({
@@ -243,12 +266,8 @@ test.describe('D-165 — sound effects in the Designer', () => {
     await dropAsset(page, 'tone.wav');
     await app.inspector.getByRole('combobox', { name: 'starts' }).selectOption('exit');
 
-    const downloadPromise = page.waitForEvent('download');
-    await page.getByRole('button', { name: 'Export .vcg', exact: true }).click();
-    const download: Download = await downloadPromise;
-    const chunks: Buffer[] = [];
-    for await (const c of await download.createReadStream()) chunks.push(Buffer.from(c));
-    const { manifest, files, scene } = await unpack(new Uint8Array(Buffer.concat(chunks)));
+    const { manifest, files, scene } = await exportPackage(page);
+    expect(manifest.compatibility.minRuntimeVersion).toBe('1.1.0');
     const entry = manifest.assetIndex.find((e) => e.kind === 'audio');
     expect(entry?.path).toMatch(/^assets\/audio\/[0-9a-f]{64}\.wav$/);
     expect(entry?.mime).toBe('audio/wav');

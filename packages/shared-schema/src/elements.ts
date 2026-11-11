@@ -1805,6 +1805,9 @@ export type AudioStart = z.infer<typeof AudioStartSchema>;
 export const AUDIO_VOLUME_DB_MIN = -60;
 export const AUDIO_VOLUME_DB_MAX = 6;
 
+/** Normalisation measures sounds from −70 LUFS and targets −23 LUFS, so boost can reach +47 dB. */
+export const AudioNormalisationGainSchema = z.number().min(-120).max(47);
+
 /**
  * 🔴 `D-165` — a SOUND EFFECT authored in the template: a whoosh as the graphic enters, a hit as it
  * leaves. NOT drawn on the canvas — it lives on the timeline and in the Inspector; the base
@@ -1823,6 +1826,8 @@ export const AudioElementSchema = ElementBaseSchema.extend({
   start: AudioStartSchema.default({ at: 'entrance' }),
   /** Gain in dB applied on playback, −60…+6; 0 plays the sound as imported. */
   volumeDb: z.number().min(AUDIO_VOLUME_DB_MIN).max(AUDIO_VOLUME_DB_MAX).default(0),
+  /** Gain in dB calculated from this placement's asset before volume and fades. */
+  normalisationGainDb: AudioNormalisationGainSchema.optional(),
   /** Optional linear fades, in ms, from the sound's start and to its end. */
   fadeInMs: z.number().int().nonnegative().optional(),
   fadeOutMs: z.number().int().nonnegative().optional(),

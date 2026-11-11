@@ -210,6 +210,26 @@ describe('D-165 — the audio element in the runtime lifecycle', () => {
     r.remove();
   });
 
+  it('combines a normalisation boost above +6 dB with the selected layer fader', async () => {
+    const clock = makeClock();
+    const source = { ...audio('source', { at: 'entrance' }), volumeDb: -20 } as Element;
+    const normalised = {
+      ...audio('normalised', { at: 'entrance' }),
+      assetId: 'asset-source',
+      volumeDb: -20,
+      normalisationGainDb: 12,
+    } as Element;
+    const r = boot([bgShape('bg'), source, normalised], clock);
+    await r.play({});
+    await run(clock, 20);
+    const volume = (id: string) =>
+      document.querySelector<HTMLAudioElement>(`audio[data-cg-element-id="${id}"]`)?.volume;
+    // The fallback volume exposes the same product the Web Audio envelope receives.
+    expect(volume('source')).toBeCloseTo(0.1, 6);
+    expect(volume('normalised')).toBeCloseTo(10 ** (-8 / 20), 6);
+    r.remove();
+  });
+
   it('🔴 STOP starts the exit sound, and the exit is not held by it; the settle does not cut it', async () => {
     const clock = makeClock();
     // A long entrance sound (15 s) is still playing when the exit comes — the control below.

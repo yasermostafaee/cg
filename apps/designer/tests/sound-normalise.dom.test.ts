@@ -9,13 +9,10 @@ import { ProjectStore } from '../src/platform/ProjectStore.js';
 import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
 import { defaultAudio } from '../src/renderer/state/element-defaults.js';
 import { StyleSection } from '../src/renderer/features/inspector/StyleSection.js';
-import { measureLoudness } from '../src/renderer/features/assets/loudness.js';
 
 /**
- * 🔴 `RUN-NEXT-VERSION-02` Q10 — a sound's Sound section shows its loudness and true peak and
- * OFFERS normalisation to −23 LUFS when it is not there: pressing it stores the normalised sound as
- * a new asset and points every use of the original at it, in one undo step. A sound already there
- * is offered nothing; a sound stored before loudness was measured is measured from its bytes.
+ * The Sound section applies or removes a gain on the selected placement and can still measure
+ * older assets from their bytes.
  */
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -75,13 +72,6 @@ let container: HTMLDivElement | null = null;
 
 beforeEach(() => {
   storeBytes.mockReset();
-  storeBytes.mockImplementation(
-    (req: { filename: string; audio: NonNullable<AssetMeta['audio']> }) => {
-      const asset = { ...soundAsset('snd-2', req.audio), filename: req.filename };
-      assets = [...assets, asset];
-      return Promise.resolve({ asset });
-    },
-  );
   (window as unknown as { cg: unknown }).cg = {
     assets: {
       list: () => Promise.resolve(assets),
@@ -122,25 +112,29 @@ const sounds = (): AudioElement[] =>
     l.children.filter((c): c is AudioElement => c.type === 'audio'),
   );
 
-/** Two uses of sound `snd-1`. */
-function seed(): void {
+/** Two placements of one sound. */
+function seed(assetId = 'snd-1'): void {
   const { scene } = new ProjectStore(new MemoryWorkspace(), new MemoryKv()).newScene(
     'sounds',
     'lower-third',
   );
   designerStore.setScene(scene, null);
-  designerStore.addElement(defaultAudio('s1', 'snd-1', 1000, 'whoosh'));
-  designerStore.addElement(defaultAudio('s2', 'snd-1', 1000, 'whoosh again'));
+  designerStore.addElement(defaultAudio('s1', assetId, 1000, 'whoosh'));
+  designerStore.addElement(defaultAudio('s2', assetId, 1000, 'whoosh again'));
 }
 
 async function render(): Promise<HTMLDivElement> {
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
-  const element = sounds()[0]!;
+  await showSound();
+  return container;
+}
+
+async function showSound(index = 0): Promise<void> {
+  const element = sounds()[index]!;
   act(() => root?.render(createElement(StyleSection, { element, selectedKeyframe: null })));
   await settle();
-  return container;
 }
 
 async function settle(): Promise<void> {
@@ -154,11 +148,12 @@ async function settle(): Promise<void> {
 const q = (host: ParentNode, id: string): HTMLElement | null =>
   host.querySelector(`[data-testid="${id}"]`);
 
-describe('🔴 Q10 — a loud sound is offered normalisation, and it lands on −23 LUFS', () => {
-  it('shows loudness and true peak, offers −23.0 LUFS with its gain, and re-points every use', async () => {
+describe('Normalisation of a selected sound layer', () => {
+  it('applies only to the selected layer and supports Undo and Remove normalisation', async () => {
     bytes = sineWav(-14);
     assets = [soundAsset('snd-1', { loudnessLufs: -14, truePeakDbtp: -14 })];
     seed();
+    designerStore.updateElement('s1', { volumeDb: -5 });
     const host = await render();
 
     expect(q(host, 'audio-loudness')?.textContent).toBe('−14.0 LUFS');
@@ -167,43 +162,63 @@ describe('🔴 Q10 — a loud sound is offered normalisation, and it lands on �
     expect(offer?.textContent).toBe('Normalise to −23.0 LUFS');
     expect(offer?.title).toContain('−9.0 dB');
 
-    await act(async () => {
-      offer!.click();
-    });
-    await settle();
+    act(() => offer!.click());
+    expect(storeBytes).not.toHaveBeenCalled();
+    expect(sounds()).toMatchObject([
+      { assetId: 'snd-1', normalisationGainDb: -9, volumeDb: -5 },
+      { assetId: 'snd-1', volumeDb: 0 },
+    ]);
+    expect(sounds()[1]?.normalisationGainDb).toBeUndefined();
+    await showSound();
+    expect(q(host, 'audio-loudness')?.textContent).toBe('−23.0 LUFS');
+    expect(q(host, 'audio-peak')?.textContent).toBe('−23.0 dBFS');
+    expect(q(host, 'audio-true-peak')?.textContent).toBe('−23.0 dBTP');
+    expect(q(host, 'audio-normalisation-gain')?.textContent).toBe('−9.0 dB');
 
-    expect(storeBytes).toHaveBeenCalledTimes(1);
-    const req = storeBytes.mock.calls[0]![0] as {
-      bytes: Uint8Array;
-      filename: string;
-      audio: NonNullable<AssetMeta['audio']>;
-    };
-    expect(req.filename).toBe('whoosh (-23.0 LUFS).wav');
-    expect(req.audio.sourceFilename).toBe('whoosh.mp3');
-    expect(req.audio.loudnessLufs).toBeCloseTo(-23, 0);
-    expect(measureLoudness(req.bytes)?.loudnessLufs).toBeCloseTo(-23, 0);
-    // Both uses play the normalised sound; one undo puts both back.
-    expect(sounds().map((s) => s.assetId)).toEqual(['snd-2', 'snd-2']);
+    await showSound(1);
+    expect(q(host, 'audio-loudness')?.textContent).toBe('−14.0 LUFS');
+    expect(q(host, 'audio-peak')?.textContent).toBe('−14.0 dBFS');
+    expect(q(host, 'audio-normalisation-gain')).toBeNull();
     act(() => designerStore.undo());
-    expect(sounds().map((s) => s.assetId)).toEqual(['snd-1', 'snd-1']);
+    expect(sounds()[0]?.normalisationGainDb).toBeUndefined();
+    expect(sounds()[0]?.volumeDb).toBe(-5);
+    act(() => designerStore.redo());
+
+    await showSound();
+    const remove = [...host.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Remove normalisation',
+    );
+    expect(remove).toBeDefined();
+    act(() => remove!.click());
+    await showSound();
+    expect(q(host, 'audio-loudness')?.textContent).toBe('−14.0 LUFS');
+    expect(q(host, 'audio-normalise')).not.toBeNull();
+    expect(sounds()[0]?.normalisationGainDb).toBeUndefined();
+    expect(sounds()[0]?.volumeDb).toBe(-5);
   });
 });
 
-describe('Q10 — what is not offered', () => {
-  it('a sound already at −23 LUFS shows its facts and no offer', async () => {
+describe('Existing sound assets', () => {
+  it('a previously baked WAV keeps its measured level and asset reference', async () => {
     bytes = sineWav(-23);
-    assets = [soundAsset('snd-1', { loudnessLufs: -23.1, truePeakDbtp: -23 })];
-    seed();
+    assets = [
+      {
+        ...soundAsset('snd-baked', { loudnessLufs: -23.1, truePeakDbtp: -23 }),
+        filename: 'whoosh (-23.0 LUFS).wav',
+      },
+    ];
+    seed('snd-baked');
     const host = await render();
     expect(q(host, 'audio-loudness')?.textContent).toBe('−23.1 LUFS');
     expect(q(host, 'audio-normalise')).toBeNull();
+    expect(sounds().map((s) => s.assetId)).toEqual(['snd-baked', 'snd-baked']);
+    expect(sounds()[0]?.normalisationGainDb).toBeUndefined();
   });
 
   it('a sound stored before loudness was measured is measured from its bytes', async () => {
     bytes = sineWav(-14);
     assets = [soundAsset('snd-old', {})];
-    seed();
-    designerStore.replaceAudioAsset('snd-1', 'snd-old');
+    seed('snd-old');
     const host = await render();
     expect(q(host, 'audio-loudness')?.textContent).toBe('−14.0 LUFS');
     expect(q(host, 'audio-normalise')?.textContent).toBe('Normalise to −23.0 LUFS');
