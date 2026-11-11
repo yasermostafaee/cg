@@ -11,6 +11,8 @@ import {
   lowBankEnd,
   type FixedLayerBank,
   type FixedSlotState,
+  layerShortcutBindings,
+  type LayerShortcutBindings,
   type LayerShortcuts,
 } from '@cg/shared-ipc';
 import { isOnAirStatus, type StackItemState } from '@cg/shared-schema';
@@ -343,7 +345,9 @@ function BankEditor({
   };
   const [aliases, setAliases] = useState<Record<string, string>>(initialAliases);
   const [visible, setVisible] = useState<Record<string, boolean>>(initialVisible);
-  const [shortcuts, setShortcuts] = useState<LayerShortcuts>(() => bank.shortcuts ?? {});
+  const [shortcuts, setShortcuts] = useState<LayerShortcutBindings>(() =>
+    layerShortcutBindings(bank),
+  );
   const [editingShortcuts, setEditingShortcuts] = useState(false);
   const [busy, setBusy] = useState(false);
   /** `SETTINGS-MATCH-02` — the filter bar's two controls. Draft-local; nothing is persisted. */
@@ -360,6 +364,7 @@ function BankEditor({
   const admin = useHoldsStationAdmin();
   const capabilities = useAuthCapabilities();
   const canEditShortcuts = admin && capabilities?.fixedLayerShortcuts === true;
+  const canAssignNext = canEditShortcuts && capabilities?.fixedLayerNextShortcut === true;
   /*
     The row's REMOVE is a different verb — `stack.remove`, operator class, on this channel — so it
     asks the operator question, and is absent for a principal the bridge would refuse (a viewer,
@@ -379,12 +384,13 @@ function BankEditor({
   const dirtyLayers = ((): ReadonlySet<string> => {
     const beforeAliases = initialAliases();
     const beforeVisible = initialVisible();
+    const beforeShortcuts = layerShortcutBindings(bank);
     const keys = new Set([
       ...Object.keys(beforeAliases),
       ...Object.keys(aliases),
       ...Object.keys(beforeVisible),
       ...Object.keys(visible),
-      ...Object.keys(bank.shortcuts ?? {}),
+      ...Object.keys(beforeShortcuts),
       ...Object.keys(shortcuts),
     ]);
     const changed = new Set<string>();
@@ -392,9 +398,7 @@ function BankEditor({
       if ((beforeAliases[key] ?? '') !== (aliases[key] ?? '')) changed.add(key);
       if ((beforeVisible[key] ?? true) !== (visible[key] ?? true)) changed.add(key);
       if (
-        LAYER_SHORTCUT_VERBS.some(
-          (verb) => bank.shortcuts?.[key]?.[verb] !== shortcuts[key]?.[verb],
-        )
+        LAYER_SHORTCUT_VERBS.some((verb) => beforeShortcuts[key]?.[verb] !== shortcuts[key]?.[verb])
       ) {
         changed.add(key);
       }
@@ -426,7 +430,7 @@ function BankEditor({
   function revert(): void {
     setAliases(initialAliases());
     setVisible(initialVisible());
-    setShortcuts(bank.shortcuts ?? {});
+    setShortcuts(layerShortcutBindings(bank));
     report(null);
   }
 
@@ -455,6 +459,12 @@ function BankEditor({
     for (const [key, isVisible] of Object.entries(visible)) {
       if (isLowBankLayer(bank, Number(key)) && !isVisible) bedHidden[key] = false;
     }
+    const legacyShortcuts: LayerShortcuts = {};
+    const nextShortcuts: Record<string, string> = {};
+    for (const [layer, { next, ...legacy }] of Object.entries(shortcuts)) {
+      if (Object.keys(legacy).length > 0) legacyShortcuts[layer] = legacy;
+      if (next !== undefined) nextShortcuts[layer] = next;
+    }
     setBusy(true);
     const next: FixedLayerBank = {
       channel: bank.channel,
@@ -462,13 +472,17 @@ function BankEditor({
       count: bank.count,
       ...(Object.keys(cleaned).length > 0 ? { aliases: cleaned } : {}),
       ...(Object.keys(hidden).length > 0 ? { visibility: hidden } : {}),
-      ...(Object.keys(shortcuts).length > 0 ? { shortcuts } : {}),
+      ...(Object.keys(legacyShortcuts).length > 0 ? { shortcuts: legacyShortcuts } : {}),
       low: {
         start: bank.low.start,
         count: bank.low.count,
         ...(Object.keys(bedAliases).length > 0 ? { aliases: bedAliases } : {}),
         ...(Object.keys(bedHidden).length > 0 ? { visibility: bedHidden } : {}),
       },
+      ...(canAssignNext &&
+      (bank.nextShortcuts !== undefined || Object.keys(nextShortcuts).length > 0)
+        ? { nextShortcuts }
+        : {}),
     };
     /*
       🔴 `MULTI-CHANNEL-01` — THIS channel's bank, and every other channel's left exactly as it
@@ -931,6 +945,7 @@ function BankEditor({
             name: name.trim() || placeholder,
           }))}
           shortcuts={shortcuts}
+          canAssignNext={canAssignNext}
           onClose={() => setEditingShortcuts(false)}
           onDone={(next) => {
             setShortcuts(next);

@@ -4,6 +4,7 @@ import { silenceHasTarget } from './panicReport.js';
 import { isOnAirStatus, type StackItemState } from '@cg/shared-schema';
 import {
   isPlaylistOutput,
+  layerShortcutBindings,
   resolvePlateSourcesForLook,
   type EmptiedAirRow,
   type OrphanLayer,
@@ -1345,8 +1346,8 @@ export function LayersPanel({
   );
 
   const renderHiddenShortcutRows = (): JSX.Element | null => {
-    if (!selectedHeld || !listReady || bank?.shortcuts === undefined) return null;
-    const shortcutsByLayer = bank.shortcuts;
+    if (!selectedHeld || !listReady || bank === null) return null;
+    const shortcutsByLayer = layerShortcutBindings(bank);
     const visible =
       shortcutsOnly || (!selectedOnly && activeTab !== 'layers') ? [] : shownRowBindings;
     const visibleLayers = new Set(visible.map(({ slot }) => slot.layer));
@@ -1354,9 +1355,7 @@ export function LayersPanel({
       const shortcuts = shortcutsByLayer[String(slot.layer)];
       return (
         !visibleLayers.has(slot.layer) &&
-        (shortcuts?.play !== undefined ||
-          shortcuts?.stop !== undefined ||
-          shortcuts?.clear !== undefined)
+        Object.values(shortcuts ?? {}).some((chord) => chord !== undefined)
       );
     });
     // Clear's confirm is portalled, so a hidden row still uses the regular confirmation.

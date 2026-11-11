@@ -57,6 +57,7 @@ import {
   bankForChannel,
   firstBank,
   fixedBanksSlots,
+  FixedLayerBankSchema,
   isLowBankLayer,
   layerAlias,
   lowBankEnd,
@@ -7405,6 +7406,17 @@ export class CasparRuntime {
     next: readonly FixedLayerBank[],
     validate: () => readonly LayerSlot[],
   ): { ok: boolean; reason?: FixedLayersErrorCode; message?: string; layer?: number } {
+    const banks = next.map((bank) => this.#withRetainedNextShortcuts(bank));
+    for (const bank of banks) {
+      if (bank.nextShortcuts === undefined) continue;
+      const parsed = FixedLayerBankSchema.safeParse(bank);
+      if (!parsed.success) {
+        return {
+          ok: false,
+          message: parsed.error.issues[0]?.message ?? 'Invalid layer shortcuts.',
+        };
+      }
+    }
     let slots: readonly LayerSlot[];
     try {
       slots = validate();
@@ -7437,7 +7449,7 @@ export class CasparRuntime {
       if (slot !== undefined && !channels.has(slot.channel)) this.#strandItem(item.itemId);
     }
     this.#layers.applyFixed(slots);
-    this.#fixedBanks = sortBanks(next);
+    this.#fixedBanks = sortBanks(banks);
     this.#copyDefaultsToJoiningChannels(declaredBefore, [...channels]);
     /*
       🔴 `CHANNEL-TEMPLATES-01` decision 5 — a library written before the per-channel lists and not
@@ -18688,6 +18700,13 @@ export class CasparRuntime {
     return this.#isDeclaredChannel(channel);
   }
 
+  #withRetainedNextShortcuts(bank: FixedLayerBank): FixedLayerBank {
+    // Older consoles omit this field. A console that supports Next can clear it with {}.
+    if (bank.nextShortcuts !== undefined) return bank;
+    const nextShortcuts = this.#bankFor(bank.channel)?.nextShortcuts;
+    return nextShortcuts === undefined ? bank : { ...bank, nextShortcuts };
+  }
+
   /**
    * 🔴 `MULTI-CHANNEL-01` — **WHICH CHANNELS A NEW SET OF BANKS WOULD CHANGE**: every channel
    * ADDED, EDITED or REMOVED against the set in force, in channel order. The permission gate and
@@ -18699,7 +18718,10 @@ export class CasparRuntime {
     const touched = new Set<number>();
     for (const bank of next) {
       const before = this.#bankFor(bank.channel);
-      if (before === null || JSON.stringify(before) !== JSON.stringify(bank)) {
+      if (
+        before === null ||
+        JSON.stringify(before) !== JSON.stringify(this.#withRetainedNextShortcuts(bank))
+      ) {
         touched.add(bank.channel);
       }
     }

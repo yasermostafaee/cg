@@ -1,5 +1,9 @@
 import { useState, type KeyboardEvent } from 'react';
-import { LAYER_SHORTCUT_VERBS, type LayerShortcuts, type LayerShortcutVerb } from '@cg/shared-ipc';
+import {
+  LAYER_SHORTCUT_VERBS,
+  type LayerShortcutBindings,
+  type LayerShortcutVerb,
+} from '@cg/shared-ipc';
 import { X } from 'lucide-react';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
@@ -7,7 +11,7 @@ import { Modal, ModalAction } from '../../ui/Modal.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { layerShortcutChord, layerShortcutLabel } from './layer-shortcuts.js';
 
-const labels = { play: 'Play', stop: 'Stop', clear: 'Clear' } as const;
+const labels = { play: 'Play', next: 'Next', stop: 'Stop', clear: 'Clear' } as const;
 
 interface ShortcutRow {
   layer: number;
@@ -17,14 +21,17 @@ interface ShortcutRow {
 export function LayerShortcutsDialog({
   rows,
   shortcuts,
+  canAssignNext,
   onClose,
   onDone,
 }: {
   rows: readonly ShortcutRow[];
-  shortcuts: LayerShortcuts;
+  shortcuts: LayerShortcutBindings;
+  canAssignNext: boolean;
   onClose: () => void;
-  onDone: (shortcuts: LayerShortcuts) => void;
+  onDone: (shortcuts: LayerShortcutBindings) => void;
 }): JSX.Element {
+  const verbs = LAYER_SHORTCUT_VERBS.filter((verb) => verb !== 'next' || canAssignNext);
   const [draft, setDraft] = useState(shortcuts);
   const [recording, setRecording] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -94,7 +101,7 @@ export function LayerShortcutsDialog({
           <thead>
             <tr>
               <th scope="col">Layer</th>
-              {LAYER_SHORTCUT_VERBS.map((verb) => (
+              {verbs.map((verb) => (
                 <th key={verb} scope="col">
                   {labels[verb]}
                 </th>
@@ -107,7 +114,7 @@ export function LayerShortcutsDialog({
                 <th scope="row">
                   <IsolatedName>{row.name}</IsolatedName> <span>· {row.layer}</span>
                 </th>
-                {LAYER_SHORTCUT_VERBS.map((verb) => {
+                {verbs.map((verb) => {
                   const chord = draft[row.layer]?.[verb];
                   const key = `${String(row.layer)}:${verb}`;
                   const active = recording === key;

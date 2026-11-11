@@ -1125,6 +1125,7 @@ export class WebSocketRuntime implements RuntimeBridge {
           ? { sharedTemplateFolder: true }
           : {}),
         ...(caps.fixedLayerShortcuts === true ? { fixedLayerShortcuts: true } : {}),
+        ...(caps.fixedLayerNextShortcut === true ? { fixedLayerNextShortcut: true } : {}),
         ...(routed.has(ipcChannels.RehearseEnterPreviewChannel.name)
           ? { independentPreview: true }
           : {}),

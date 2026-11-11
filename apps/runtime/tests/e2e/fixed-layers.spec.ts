@@ -1,4 +1,5 @@
-import { test, expect, buildValidVcg } from './fixtures/runtime.js';
+import { test, expect, buildBookVcg, buildValidVcg } from './fixtures/runtime.js';
+import { solidPng } from './fixtures/pictures.js';
 
 /**
  * R-021 → R-028 part B — the declared-layer rows, driven against the offline
@@ -278,8 +279,10 @@ test('R-023 — fixed layer shortcuts follow the guarded actions in filtered and
     return button;
   };
   await expect(await assign('Play', 'F9')).toHaveText('F9');
-  await assign('Stop', 'F9', 81);
+  const nextBinding = await assign('Next', 'F9', 82);
   await expect(dialog.getByRole('alert')).toHaveText('F9 is assigned to Play on layer 80.');
+  await nextBinding.press('F8');
+  await expect(nextBinding).toHaveText('F8');
   await expect(await assign('Stop', 'F10')).toHaveText('F10');
   await expect(await assign('Clear', 'Shift+F9')).toHaveText('Shift+F9');
   await dialog.getByRole('button', { name: 'Done', exact: true }).click();
@@ -293,15 +296,45 @@ test('R-023 — fixed layer shortcuts follow the guarded actions in filtered and
       stop: 'F10',
       clear: 'Shift+F9',
     });
+  await expect
+    .poll(() => page.evaluate(async () => (await window.cg.fixedLayers.banks())[0]?.nextShortcuts))
+    .toEqual({ '82': 'F8' });
   await app.closeStationSetup();
+
+  const templateId = 'tpl-shortcut-book';
+  await app.importVcg('shortcut-book.vcg', await buildBookVcg(templateId), 82);
+  await app.selectStackRow(templateId);
+  const chooser = await app.chooseBookPages('Pictures…', 'pages');
+  await chooser.setFiles([
+    { name: '1.png', mimeType: 'image/png', buffer: solidPng(20, 20, [255, 0, 0]) },
+    { name: '2.png', mimeType: 'image/png', buffer: solidPng(20, 20, [0, 255, 0]) },
+  ]);
+  await expect(app.inspector.getByTestId('page-count-pages')).toHaveText('2 pages');
+  await app.applyEdits();
+  const bookRow = app.layerRow(82);
+  await expect(bookRow.locator('[data-page-counter]')).toHaveText('1 / 2');
 
   const confirm = page.getByRole('dialog', { name: /^Clear / });
   const search = app.layers.getByRole('searchbox', { name: 'Find row or template' });
   await search.fill('no rows match this');
   await expect(row).toBeHidden();
+  await expect(bookRow).toBeHidden();
   await page.keyboard.press('Shift+F9');
+  await page.keyboard.press('F8');
   await expect(confirm).toHaveCount(0);
   await search.evaluate((input) => (input as HTMLInputElement).blur());
+  const pageOfBook = () =>
+    page.evaluate(
+      async (id) =>
+        (await window.cg.stack.snapshot()).find((item) => item.templateId === id)?.pages?.pages ??
+        0,
+      templateId,
+    );
+  expect(await pageOfBook()).toBe(0);
+  await page.keyboard.press('F8');
+  await expect.poll(pageOfBook).toBe(1);
+  await page.keyboard.press('F8');
+  expect(await pageOfBook()).toBe(1);
   await page.keyboard.press('Shift+F9');
   await expect(confirm).toBeVisible();
   await confirm.getByRole('button', { name: 'Clear layer', exact: true }).click();

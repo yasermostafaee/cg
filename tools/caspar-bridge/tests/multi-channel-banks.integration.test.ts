@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { channelNotDeclaredRefusal, fixedBankSlots } from '@cg/shared-ipc';
+import { channelNotDeclaredRefusal, fixedBankSlots, FixedLayerBankSchema } from '@cg/shared-ipc';
 import { createBridge } from '../src/index.js';
 import { openClient } from './support/auth-harness.js';
 import { track } from './support/harness.js';
@@ -196,6 +196,40 @@ describe('§2 A — the plural door and the v1 door', () => {
       (h) => h.close(),
     );
     expect(again.runtime.declaredChannels()).toEqual([1, 2]);
+  });
+
+  it('retains Next assignments across older console edits and bridge restart', async () => {
+    const dir = track(fs.mkdtempSync(path.join(os.tmpdir(), 'cg-next-shortcuts-')), (d) => {
+      fs.rmSync(d, { recursive: true, force: true });
+    });
+    const file = path.join(dir, 'bridge-fixed-layers.json');
+    const first = FixedLayerBankSchema.parse(standardBank(1));
+    const second = FixedLayerBankSchema.parse(standardBank(2));
+    fs.writeFileSync(file, JSON.stringify({ banks: [first, second] }), 'utf8');
+    const rig = await twoChannelRig({ fromFile: file, awaitBlanket: false });
+    const runtime = rig.handle.runtime;
+    const client = await openClient(rig.handle);
+    const setBanks = (banks: unknown[]) => client.ask(id(), 'fixedLayers.set-banks', { banks });
+    const nextShortcuts = { '99': 'F8' };
+    const configured = await setBanks([first, { ...second, nextShortcuts }]);
+    expect(configured.payload).toEqual({ ok: true });
+    const older = FixedLayerBankSchema.parse({ ...first, aliases: { '99': 'News' } });
+    expect(runtime.bankChangeFootprint([older, second])).toEqual([1]);
+    expect((await setBanks([older, second])).payload).toEqual({ ok: true });
+    expect(runtime.fixedLayerBanks()[1]?.nextShortcuts).toEqual(nextShortcuts);
+    expect(
+      (await setBanks([older, { ...second, shortcuts: { '98': { stop: 'F8' } } }])).payload,
+    ).toMatchObject({ ok: false, message: 'Shortcut is already assigned in this channel' });
+
+    const restarted = track(
+      await createBridge({ port: 0, connection: rig.connection, fixedLayersPath: file }),
+      (handle) => handle.close(),
+    );
+    expect(restarted.runtime.fixedLayerBanks()[1]?.nextShortcuts).toEqual(nextShortcuts);
+    expect((await setBanks([older, { ...second, nextShortcuts: {} }])).payload).toEqual({
+      ok: true,
+    });
+    expect(runtime.fixedLayerBanks()[1]?.nextShortcuts).toEqual({});
   });
 
   it('the v1 door on a two-channel station makes the set that one bank — refused while ours holds air on a channel it drops', async () => {

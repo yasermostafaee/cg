@@ -1,9 +1,8 @@
 import { useEffect } from 'react';
-import type { FixedLayerBank, LayerShortcutVerb } from '@cg/shared-ipc';
+import { LAYER_SHORTCUT_VERBS, layerShortcutBindings, type FixedLayerBank } from '@cg/shared-ipc';
 import { useSelectedChannel } from '../channels/useSelectedChannel.js';
 import { layerShortcutChord } from '../fixedLayers/layer-shortcuts.js';
 
-const verbs = ['play', 'stop', 'clear'] as const satisfies readonly LayerShortcutVerb[];
 const editor = 'input, textarea, select, [role="textbox"], [role="combobox"], [role="spinbutton"]';
 
 function isEditing(target: EventTarget | null): boolean {
@@ -14,7 +13,7 @@ function isEditing(target: EventTarget | null): boolean {
 
 export function dispatchLayerShortcut(
   event: KeyboardEvent,
-  bank: Pick<FixedLayerBank, 'channel' | 'shortcuts'>,
+  bank: Pick<FixedLayerBank, 'channel' | 'shortcuts' | 'nextShortcuts'>,
   root: Document,
 ): void {
   if (
@@ -28,10 +27,10 @@ export function dispatchLayerShortcut(
     return;
   }
   const chord = layerShortcutChord(event);
-  if (chord === null || bank.shortcuts === undefined) return;
+  if (chord === null) return;
 
-  for (const [layer, shortcuts] of Object.entries(bank.shortcuts)) {
-    const verb = verbs.find((action) => shortcuts[action] === chord);
+  for (const [layer, shortcuts] of Object.entries(layerShortcutBindings(bank))) {
+    const verb = LAYER_SHORTCUT_VERBS.find((action) => shortcuts[action] === chord);
     if (verb === undefined) continue;
     const buttons = root.querySelectorAll<HTMLButtonElement>(
       `[data-shortcut-row="${String(bank.channel)}:${layer}"] [data-verb-block] > button[data-verb-tone="${verb}"]`,
@@ -49,7 +48,8 @@ export function dispatchLayerShortcut(
 export function useLayerShortcuts(): void {
   const { bank, canOperateSelected } = useSelectedChannel();
   useEffect(() => {
-    if (bank?.shortcuts === undefined || !canOperateSelected) return;
+    if (bank === null || !canOperateSelected) return;
+    if (bank.shortcuts === undefined && bank.nextShortcuts === undefined) return;
     const onKeyDown = (event: KeyboardEvent): void => dispatchLayerShortcut(event, bank, document);
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);

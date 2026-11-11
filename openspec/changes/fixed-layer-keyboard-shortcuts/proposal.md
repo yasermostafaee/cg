@@ -1,6 +1,6 @@
 # Fixed layer keyboard shortcuts
 
-Operators can assign shortcuts to Play, Stop and Clear on declared layers. Layer settings show
+Operators can assign shortcuts to Play, Next, Stop and Clear on declared layers. Layer settings show
 the same names and aliases as the layer table. The Bridge stores the assignments with the bank.
 
 The console uses physical key codes so bindings work with Persian and English keyboard layouts.

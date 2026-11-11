@@ -163,8 +163,12 @@ export const LowFixedLayerBankSchema = z.object({
 });
 export type LowFixedLayerBank = z.infer<typeof LowFixedLayerBankSchema>;
 
-export const LAYER_SHORTCUT_VERBS = ['play', 'stop', 'clear'] as const;
+export const LAYER_SHORTCUT_VERBS = ['play', 'next', 'stop', 'clear'] as const;
 export type LayerShortcutVerb = (typeof LAYER_SHORTCUT_VERBS)[number];
+export type LayerShortcutBindings = Record<
+  string,
+  Partial<Record<LayerShortcutVerb, string | undefined>>
+>;
 
 const FUNCTION_KEY = /^(?:Ctrl\+)?(?:Alt\+)?(?:Shift\+)?(?:Meta\+)?F(?:[1-9]|1\d|2[0-4])$/;
 const MODIFIED_KEY =
@@ -178,8 +182,10 @@ export const LayerShortcutChordSchema = z
     'Invalid layer shortcut',
   );
 
+const shortcutLayer = z.string().regex(/^[1-9]\d*$/);
+
 export const LayerShortcutsSchema = z.record(
-  z.string().regex(/^[1-9]\d*$/),
+  shortcutLayer,
   z
     .object({
       play: LayerShortcutChordSchema.optional(),
@@ -247,18 +253,30 @@ const FixedLayerBankShape = z.object({
     count: DEFAULT_LOW_BANK_COUNT,
     visibility: defaultLowBankVisibility(),
   })),
+  /** Kept outside the strict legacy action map so older consoles can still read this bank. */
+  nextShortcuts: z.record(shortcutLayer, LayerShortcutChordSchema).optional(),
 });
 export type FixedLayerBank = z.infer<typeof FixedLayerBankShape>;
 
+export function layerShortcutBindings(
+  bank: Pick<FixedLayerBank, 'shortcuts' | 'nextShortcuts'>,
+): LayerShortcutBindings {
+  const bindings: LayerShortcutBindings = { ...bank.shortcuts };
+  for (const [layer, next] of Object.entries(bank.nextShortcuts ?? {})) {
+    bindings[layer] = { ...bindings[layer], next };
+  }
+  return bindings;
+}
+
 export const FixedLayerBankSchema = FixedLayerBankShape.superRefine((bank, context) => {
   const assigned = new Set<string>();
-  for (const [layer, actions] of Object.entries(bank.shortcuts ?? {})) {
+  for (const [layer, actions] of Object.entries(layerShortcutBindings(bank))) {
     const number = Number(layer);
     const inOperatorBank = number >= bank.start && number <= fixedBankEnd(bank);
     if (!inOperatorBank && !isLowBankLayer(bank, number)) {
       context.addIssue({
         code: 'custom',
-        path: ['shortcuts', layer],
+        path: [bank.shortcuts?.[layer] === undefined ? 'nextShortcuts' : 'shortcuts', layer],
         message: 'Layer is not in the bank',
       });
     }
@@ -268,7 +286,7 @@ export const FixedLayerBankSchema = FixedLayerBankShape.superRefine((bank, conte
       if (assigned.has(chord)) {
         context.addIssue({
           code: 'custom',
-          path: ['shortcuts', layer, verb],
+          path: verb === 'next' ? ['nextShortcuts', layer] : ['shortcuts', layer, verb],
           message: 'Shortcut is already assigned in this channel',
         });
       }

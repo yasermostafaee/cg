@@ -10,6 +10,7 @@ import {
   defaultFixedLayerBank,
   fixedBankEnd,
   isLayerVisible,
+  layerShortcutBindings,
   reservedLayerNumbers,
 } from '../src/index.js';
 
@@ -18,6 +19,25 @@ describe('Fixed layer shortcuts', () => {
     const shortcuts = { '99': { play: 'F9', stop: 'Shift+F9' }, '59': { clear: 'Ctrl+KeyD' } };
     expect(FixedLayerBankSchema.parse({ channel: 1, shortcuts }).shortcuts).toEqual(shortcuts);
     expect(FixedLayerBankSchema.parse({ channel: 1 }).shortcuts).toBeUndefined();
+  });
+
+  it('reads Next and older bindings together and rejects a conflict across the two', () => {
+    const nextShortcuts = { '99': 'F10', '59': 'Shift+F10' };
+    const shortcuts = { '99': { play: 'F9' } };
+    const bank = FixedLayerBankSchema.parse({ channel: 1, shortcuts, nextShortcuts });
+    expect(bank.shortcuts).toEqual(shortcuts);
+    expect(bank.nextShortcuts).toEqual(nextShortcuts);
+    expect(layerShortcutBindings(bank)).toEqual({
+      '99': { play: 'F9', next: 'F10' },
+      '59': { next: 'Shift+F10' },
+    });
+    expect(
+      FixedLayerBankSchema.safeParse({ channel: 1, shortcuts, nextShortcuts: { '59': 'F9' } })
+        .success,
+    ).toBe(false);
+    expect(
+      FixedLayerBankSchema.safeParse({ channel: 1, nextShortcuts: { '79': 'F10' } }).success,
+    ).toBe(false);
   });
 
   it('rejects duplicate chords, invalid keys and undeclared layers', () => {

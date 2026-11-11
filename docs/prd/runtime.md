@@ -1025,7 +1025,7 @@ local preview catches wrong values and broken layouts before air.
 return problem twice; a server-true preview can be a later item if ever needed. Implementation
 touches renderer surfaces → `gate:e2e` owed at implementation time.
 
-## [~] R-023 — per-fixed-layer keyboard shortcuts (Play / Stop / Clear now; PAUSE and NEXT recon-first) ⟨priority: medium⟩ — `openspec/changes/fixed-layer-keyboard-shortcuts/`
+## [~] R-023 — per-fixed-layer keyboard shortcuts (Play / Next / Stop / Clear; PAUSE recon-first) ⟨priority: medium⟩ — `openspec/changes/fixed-layer-keyboard-shortcuts/`
 
 **What:** Operator keys per FIXED layer (depends on [[R-021]]): e.g. F1 = Play layer 1,
 Shift+F1 = Stop layer 1. A management modal lists the fixed layers (with aliases), captures key
@@ -1039,18 +1039,17 @@ a row — this is the Cinegy operating rhythm the fixed layers exist for.
 **Acceptance:**
 
 - WHEN the management modal is used THEN shortcuts are assignable per fixed layer for Play,
-  Stop (graceful), Clear — these three ride existing verbs; PAUSE and NEXT are RECON-FIRST
-  (see Notes) and ship only after recon
+  Next, Stop (graceful) and Clear. Next is offered when the Bridge can store its binding.
+- WHEN the operator presses Next THEN the same guarded row action advances a template step or
+  a book page, including when the row is filtered out.
 - WHEN a combo is assigned THEN conflicts are prevented at assignment time — a combo can bind
   once
 - WHEN focus is in any text input THEN shortcuts are inert
 - WHEN the app restarts THEN combos survive (config-persisted)
 - WHEN the modal lists layers THEN it shows aliases, not bare numbers
 
-**Notes:** RECON-FIRST for the two uncertain verbs — PAUSE: what AMCP `PAUSE` actually does to
-an html-producer layer on the production 2.5.0 is UNVERIFIED (probe first, never assume); NEXT: requires
-template-side step support (`CG NEXT` → template `next()`), which is Designer-track work on the
-playout lifecycle — a cross-track dependency: file the finding rather than assuming. Combos
+**Notes:** The existing R-028 Next button already advances steps and the R-100 book button turns
+pages. The shortcut invokes that same control. PAUSE is still recon-first for html producers. Combos
 match the PHYSICAL key (`e.code`) per the design-system keyboard rule, so a Persian layout
 never breaks them. Cross-ref [[R-021]].
 
