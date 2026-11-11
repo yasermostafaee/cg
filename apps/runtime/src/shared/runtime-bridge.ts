@@ -77,6 +77,7 @@ import type {
   LockState,
   PendingUpdate,
   StackLoadChannel,
+  StackLoadProfileChannel,
   StackOutChannel,
   StackStopChannel,
   StackClearAllChannel,
@@ -206,6 +207,7 @@ export interface AuthCapabilities {
   readonly bridgeClock?: BridgeClock | null;
   /** The bridge advertises browser-only PVW for a row that may also be on air. */
   readonly independentPreview?: true;
+  readonly layerProfiles?: true;
 }
 
 /**
@@ -424,6 +426,9 @@ export interface RuntimeBridge {
   };
 
   stack: {
+    loadProfile(
+      req: ChannelRequest<typeof StackLoadProfileChannel>,
+    ): Promise<ChannelResponse<typeof StackLoadProfileChannel>>;
     load(
       req: ChannelRequest<typeof StackLoadChannel>,
     ): Promise<ChannelResponse<typeof StackLoadChannel>>;

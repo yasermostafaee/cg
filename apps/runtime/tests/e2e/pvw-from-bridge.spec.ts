@@ -1,8 +1,9 @@
 import * as dgram from 'node:dgram';
+import { readFile } from 'node:fs/promises';
 import type { Browser, Page } from '@playwright/test';
 import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
-import type { ConnectionConfig, FixedLayerBank } from '@cg/shared-ipc';
+import { LayerProfileSchema, type ConnectionConfig, type FixedLayerBank } from '@cg/shared-ipc';
 import { cgCss, cgJsIife, ExporterSingleFile } from '@cg/single-file-export';
 import { buildTemplateLiveSources, unpack } from '@cg/vcg-format';
 import { buildPositionedVcg, expect, test } from './fixtures/runtime.js';
@@ -456,6 +457,91 @@ test('D-178 / B-433 — PVW crop reaches the first Take and Update on air refram
       .slice(wireBeforeClosing)
       .some(({ line }) => /(?:^| )(?:MIXER|PLAY|STOP|CLEAR) 1-60\b/.test(line)),
   ).toBe(false);
+});
+
+test('R-024 saves and reloads prepared layers and refuses to replace an on-air row', async ({
+  page,
+}) => {
+  const handle = await boot();
+  const engine = mock;
+  if (engine === null) throw new Error('Test engine is unavailable');
+  await handle.runtime.whenServerHealthy(15_000);
+  const itemId = 'profile-original';
+  const headline = 'خبر فوری از تهران';
+  const position = { anchor: 'top-left', offset: { x: 30, y: -7 } } as const;
+  handle.runtime.templateImport(
+    {
+      ...TEMPLATE,
+      fields: [{ id: 'headline', label: 'Headline', type: 'text', required: false, default: '' }],
+    },
+    HTML,
+    1,
+  );
+  expect(
+    await handle.runtime.loadFixed({ channel: 1, layer: ROW }, itemId, TEMPLATE.templateId, {
+      headline,
+    }),
+  ).toMatchObject({ accepted: true });
+  expect(await handle.runtime.setPosition(itemId, position)).toMatchObject({ ok: true });
+  await openConsole(page, handle.url);
+
+  await page.getByRole('button', { name: 'Layer profiles', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Layer profiles', exact: true });
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    dialog.getByRole('button', { name: 'Save profile…' }).click(),
+  ]);
+  const downloaded = await download.path();
+  if (downloaded === null) throw new Error('Missing profile download');
+  const profile = LayerProfileSchema.parse(JSON.parse(await readFile(downloaded, 'utf8')));
+  expect(profile.items).toMatchObject([
+    { layer: ROW, templateId: TEMPLATE.templateId, fields: { headline }, position },
+  ]);
+  expect(profile.items[0]).not.toHaveProperty('state');
+  profile.items.push({
+    layer: ROW - 1,
+    templateId: 'missing-template',
+    label: 'قالب خبری',
+    fields: {},
+  });
+  const file = {
+    name: 'news-profile.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(profile)),
+  };
+  await dialog.locator('input[type=file]').setInputFiles(file);
+  await expect(dialog.getByText(/replace prepared layers on channel 1/)).toBeVisible();
+  const load = dialog.getByRole('button', { name: 'Load profile', exact: true });
+  const commandsBefore = engine.receivedCommands().length;
+  await load.click();
+  await expect(dialog.getByRole('status')).toHaveText('Loaded 1 layer.');
+  await expect(dialog.getByText(/قالب خبری.*Template is missing from this channel/)).toBeVisible();
+  const [loaded] = handle.runtime.stackSnapshot(1);
+  expect(loaded).toMatchObject({
+    status: 'loaded',
+    slot: { layer: ROW },
+    fields: { headline },
+    position,
+  });
+  expect(loaded?.itemId).not.toBe(itemId);
+  expect(
+    engine
+      .receivedCommands()
+      .slice(commandsBefore)
+      .filter(({ line }) => /(?:^| )(?:CG|PLAY|CLEAR|MIXER)\b/.test(line)),
+  ).toEqual([]);
+
+  if (loaded === undefined) throw new Error('Missing restored layer');
+  expect(await handle.runtime.take(loaded.itemId)).toMatchObject({ accepted: true });
+  await dialog.locator('input[type=file]').setInputFiles(file);
+  await load.click();
+  await expect(dialog.getByRole('alert')).toHaveText(
+    'Stop the graphics on this channel before loading a profile.',
+  );
+  expect(handle.runtime.stackSnapshot(1)[0]).toMatchObject({
+    itemId: loaded.itemId,
+    status: 'on-air',
+  });
 });
 
 test('R-117 previews draft fields while Play and Update control the same programme row', async ({

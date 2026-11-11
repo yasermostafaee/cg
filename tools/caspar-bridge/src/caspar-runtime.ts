@@ -183,7 +183,8 @@ import {
   FIRST_ALLOCATABLE_LAYER,
   type StationStray,
 } from '@cg/shared-ipc';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import type { LayerProfile, StackLoadProfileResult } from '@cg/shared-ipc';
 import {
   inAnyLayerBand,
   isInCgBands,
@@ -3730,6 +3731,74 @@ export class CasparRuntime {
     };
   }
 
+  async loadLayerProfile(channel: number, profile: LayerProfile): Promise<StackLoadProfileResult> {
+    const bank = this.#bankFor(channel);
+    const issues: StackLoadProfileResult['issues'] = [];
+    if (bank === null || !this.#isDeclaredChannel(channel)) {
+      return { loaded: 0, refusal: 'not-declared', issues };
+    }
+
+    const channelRows = this.stackSnapshot(channel);
+    if (channelRows.some((row) => isOnAirStatus(row) || this.#ownsLiveSeats(row.itemId))) {
+      return { loaded: 0, refusal: 'on-air', issues };
+    }
+
+    // Resolve every reference before any replacement. A missing template leaves the
+    // existing row at its coordinate alone while the other profile rows can load.
+    const skippedLayers = new Set<number>();
+    const replacements: RetainedStackItem[] = [];
+    for (const { layer, label, ...item } of profile.items) {
+      const info = this.#templates.getOn(channel, item.templateId);
+      const slot = { channel, layer, server: 'primary' as const };
+      const reason =
+        info === null
+          ? 'unknown-template'
+          : !this.#layers.isFixed(slot)
+            ? 'not-fixed'
+            : requiredBankFor(info) !== (isLowBankLayer(bank, layer) ? 'low' : 'high')
+              ? 'wrong-bank'
+              : null;
+      if (reason !== null) {
+        issues.push({ layer, label, reason });
+        skippedLayers.add(layer);
+        continue;
+      }
+      replacements.push({ ...item, itemId: randomUUID(), state: 'loaded', slot });
+    }
+    if (profile.items.length > 0 && replacements.length === 0) {
+      return { loaded: 0, refusal: 'no-loadable-rows', issues };
+    }
+
+    for (const { itemId, slot } of channelRows) {
+      if (slot === undefined || !this.#layers.isFixed(slot) || skippedLayers.has(slot.layer)) {
+        continue;
+      }
+      // Profile loading changes prepared rows only. Leave a resident producer or a pending
+      // restore with its existing row, where the operator can still inspect or clear it.
+      if (
+        this.#loaded.has(itemId) ||
+        this.#foregroundPages.has(itemId) ||
+        this.#pendingRestore.has(itemId)
+      ) {
+        issues.push({ layer: slot.layer, reason: 'layer-occupied' });
+        skippedLayers.add(slot.layer);
+        continue;
+      }
+      this.#forgetWithoutWire(itemId);
+      this.#retireFromEmptiedAir(itemId);
+    }
+
+    const restored = await this.restore(
+      replacements.filter(({ slot }) => slot !== undefined && !skippedLayers.has(slot.layer)),
+      'profile',
+    );
+    for (const skip of restored.skipped) {
+      const layer = skip.slot?.layer;
+      if (layer !== undefined) issues.push({ layer, reason: skip.reason });
+    }
+    return { loaded: restored.restored, issues };
+  }
+
   /**
    * B-092 — rebuild the stack from its RETAINED intent. 🔴 `CENTRAL-BRIDGE-01` (`B-294`): the
    * intent is the bridge's own file now (`stack-store.ts`), restored by `createBridge` at start,
@@ -3771,7 +3840,10 @@ export class CasparRuntime {
    * all — silence on a layer the operator emptied is the EXPECTED reading, not
    * evidence that a producer was lost.
    */
-  async restore(items: readonly RetainedStackItem[]): Promise<{
+  async restore(
+    items: readonly RetainedStackItem[],
+    source: 'startup' | 'profile' = 'startup',
+  ): Promise<{
     restored: number;
     skipped: RestoreSkip[];
     migrated: RestoreMigration[];
@@ -4106,7 +4178,7 @@ export class CasparRuntime {
        * refused. A second copy of the predicate inside `#decidePendingRestores` is the
        * kind of drift golden rule 6 exists to prevent.
        */
-      if (isRestorable(item.state) && slot !== null) {
+      if (source === 'startup' && isRestorable(item.state) && slot !== null) {
         this.#pendingRestore.set(item.itemId, {
           slot,
           templateId: item.templateId,
@@ -4126,7 +4198,11 @@ export class CasparRuntime {
     // Gated on the PENDING set, not on `restored`: a restore of nothing but cleared
     // and errored rows restores rows but licenses no wire action, and sampling
     // occupancy for it would be work done to reach a no-op.
-    if (this.#pendingRestore.size > 0 && this.#adapter.primarySession.state === 'healthy') {
+    if (
+      source === 'startup' &&
+      this.#pendingRestore.size > 0 &&
+      this.#adapter.primarySession.state === 'healthy'
+    ) {
       // `CENTRAL-BRIDGE-01` — a row restored ON AIR over an empty layer is said, as at a reconnect.
       this.#raiseEmptiedAir(
         this.#decidePendingRestores(
@@ -4137,7 +4213,7 @@ export class CasparRuntime {
         false,
       );
     }
-    this.#setRestoreReport(skipped, migrated);
+    if (source === 'startup') this.#setRestoreReport(skipped, migrated);
     // `R-100` — every picture no restored row names is deleted (nothing is recent after a start).
     void this.#sweepPages();
     return { restored, skipped, migrated };

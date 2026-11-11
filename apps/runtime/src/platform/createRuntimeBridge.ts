@@ -281,6 +281,8 @@ export function createMockBridge(): RuntimeBridge {
     },
 
     stack: {
+      loadProfile: () =>
+        Promise.reject(new Error('Layer profiles require a compatible CG Bridge.')),
       load: (req) => Promise.resolve(mock.load(req.itemId, req.templateId, req.fields)),
       take: (req) => Promise.resolve(mock.take(req.itemId)),
       update: (req) =>

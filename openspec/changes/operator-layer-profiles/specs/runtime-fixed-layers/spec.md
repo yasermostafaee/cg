@@ -1,0 +1,25 @@
+## ADDED Requirements
+
+### Requirement: Operators can save and load prepared layer profiles
+
+CG Control SHALL export a versioned JSON profile of the active channel's bound fixed layers in
+stack order, including referenced template IDs, applied fields and position. Loading a profile
+SHALL show the destination channel and ask before replacing prepared layers.
+
+#### Scenario: Restore an operator profile
+
+- **WHEN** an operator loads a profile on a declared channel whose prepared layers can be replaced
+- **THEN** each available template loads Ready on its recorded layer with its applied fields and position
+- **AND** text in Persian round-trips verbatim
+- **AND** missing templates and incompatible layer numbers are reported individually
+
+#### Scenario: Keep the programme running
+
+- **WHEN** a layer on the destination channel is on air or transitioning
+- **THEN** loading the profile is refused before replacing any row
+
+#### Scenario: Leave occupied layers available for inspection
+
+- **WHEN** an off-air layer holds a producer or awaits occupancy verification
+- **THEN** the Bridge preserves that row and reports it in the profile result
+- **AND** loading a profile issues no commands to the playout engine

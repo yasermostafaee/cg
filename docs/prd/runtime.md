@@ -1051,7 +1051,7 @@ playout lifecycle — a cross-track dependency: file the finding rather than ass
 match the PHYSICAL key (`e.code`) per the design-system keyboard rule, so a Persian layout
 never breaks them. Cross-ref [[R-021]].
 
-## [ ] R-024 — save/load operator rundowns as files (JSON export/import of the prepared stack) ⟨priority: medium⟩
+## [~] R-024 — save/load operator rundowns as files (JSON export/import of the prepared stack) ⟨priority: medium⟩ — `openspec/changes/operator-layer-profiles/`
 
 **What:** Each operator saves their prepared list and re-loads it on demand. Export/import as a
 FILE (JSON) so rundowns move between stations.
@@ -1059,6 +1059,8 @@ FILE (JSON) so rundowns move between stations.
 prepared stack lives only in one browser's retention.
 **Acceptance:**
 
+- WHEN loading a profile THEN show which channel is affected and ask before replacing its prepared
+  layers. A layer on air or transitioning prevents the load. Each newly restored row is Ready.
 - WHEN the operator exports THEN the file captures the stack: items referencing library
   templates by id, field values, position overrides, fixed-layer bindings, order
 - WHEN the operator imports THEN the stack is rebuilt from the file

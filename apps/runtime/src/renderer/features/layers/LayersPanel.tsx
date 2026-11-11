@@ -57,6 +57,8 @@ import {
 } from '../../hooks/useRestoreSkips.js';
 import { useFixedSlotsState } from '../../hooks/useFixedLayers.js';
 import { useChannelBankState, useSelectedChannel } from '../channels/useSelectedChannel.js';
+import { useAuthCapabilities } from '../../hooks/useAuthCapabilities.js';
+import { LayerProfiles } from './LayerProfiles.js';
 import { boundChannelOf, itemChannelOf } from '../channels/itemChannel.js';
 import { useStationLayers } from '../../hooks/useStationLayers.js';
 import { useLiveLayers } from '../../hooks/useLiveLayers.js';
@@ -324,6 +326,7 @@ export function LayersPanel({
   // `C-038` — may this principal act on the channel this console is scoped to? The ONE
   // console-side answer; every operator control in this panel reads it (golden rule 6).
   const canOperate = useCanOperate();
+  const layerProfilesAvailable = useAuthCapabilities()?.layerProfiles === true;
   /*
     `MULTI-CHANNEL-01` — the SELECTED channel's bank: the table is that channel's rows.
 
@@ -1384,6 +1387,9 @@ export function LayersPanel({
       }
       actions={
         <>
+          {canOperate && layerProfilesAvailable && listReady && bank !== null && (
+            <LayerProfiles key={bank.channel} bank={bank} snapshot={items} />
+          )}
           {/*
             🔴 `C-038` / `R-066` bullet 4 — **THE BULK VERBS ARE ABSENT FOR A PRINCIPAL WHO
             MAY NOT USE THEM, not disabled.** Golden rule 13: a greyed-out STOP ALL tells the

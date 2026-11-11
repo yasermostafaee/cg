@@ -224,6 +224,7 @@ const REQUEST_TIMEOUT_MS = 8000;
 // Same-release Bridges can omit these features without affecting standard playout.
 const OPTIONAL_CHANNELS = new Set([
   ipcChannels.RehearseEnterPreviewChannel.name,
+  ipcChannels.StackLoadProfileChannel.name,
   StackPreviewPlateCropChannel.name,
   SourcesMediaThumbnailChannel.name,
   ipcChannels.SourcePreviewPvwChannel.name,
@@ -1116,6 +1117,7 @@ export class WebSocketRuntime implements RuntimeBridge {
         bridgeVersion: caps.bridgeVersion ?? null,
         // `DELTA-RUN-NEXT-VERSION-01-C` — CG Bridge's machine clock; an older bridge says nothing.
         bridgeClock: caps.clock ?? null,
+        ...(routed.has(ipcChannels.StackLoadProfileChannel.name) ? { layerProfiles: true } : {}),
         ...(routed.has(ipcChannels.RehearseEnterPreviewChannel.name)
           ? { independentPreview: true }
           : {}),
@@ -1929,6 +1931,8 @@ export class WebSocketRuntime implements RuntimeBridge {
   };
 
   readonly stack = {
+    loadProfile: (req: ChannelRequest<typeof ipcChannels.StackLoadProfileChannel>) =>
+      this.#invoke(ipcChannels.StackLoadProfileChannel, req),
     load: (req: ChannelRequest<typeof StackLoadChannel>) => this.#invoke(StackLoadChannel, req),
     take: (req: ChannelRequest<typeof StackTakeChannel>) => this.#invoke(StackTakeChannel, req),
     update: (req: ChannelRequest<typeof StackUpdateChannel>) =>

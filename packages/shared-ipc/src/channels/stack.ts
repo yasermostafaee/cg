@@ -7,6 +7,7 @@ import {
   LiveSourceLookOverrideSchema,
   MAX_PREVIEW_PLATE_CROPS,
   PositionSchema,
+  RetainedStackItemSchema,
   StackItemStateSchema,
 } from '@cg/shared-schema';
 import { defineChannel } from '../channel.js';
@@ -39,6 +40,53 @@ export const StackLoadChannel = defineChannel(
   }),
   z.object({ accepted: z.boolean(), errorCode: z.string().optional() }),
 );
+
+const LayerProfileItemSchema = RetainedStackItemSchema.pick({
+  templateId: true,
+  fields: true,
+  position: true,
+  sourceOverride: true,
+  lookSourceOverride: true,
+  plateVolumes: true,
+  timingOverride: true,
+  activeLookId: true,
+  pages: true,
+  pageAdvance: true,
+  soundMuted: true,
+}).extend({
+  layer: z.number().int().positive(),
+  label: z.string().max(240).optional(),
+});
+
+export const LayerProfileSchema = z.object({
+  kind: z.literal('apasai-cg-layer-profile'),
+  version: z.literal(1),
+  items: z
+    .array(LayerProfileItemSchema)
+    .max(100)
+    .refine(
+      (items) => new Set(items.map(({ layer }) => layer)).size === items.length,
+      'A layer can appear only once in a profile',
+    ),
+});
+export type LayerProfile = z.infer<typeof LayerProfileSchema>;
+
+export const StackLoadProfileChannel = defineChannel(
+  'stack.load-profile',
+  z.object({ channel: z.number().int().positive(), profile: LayerProfileSchema }),
+  z.object({
+    loaded: z.number().int().nonnegative(),
+    refusal: z.enum(['on-air', 'not-declared', 'no-loadable-rows']).optional(),
+    issues: z.array(
+      z.object({
+        layer: z.number().int().positive(),
+        label: z.string().optional(),
+        reason: z.string(),
+      }),
+    ),
+  }),
+);
+export type StackLoadProfileResult = z.infer<typeof StackLoadProfileChannel.response>;
 
 export const StackTakeChannel = defineChannel(
   'stack.take',

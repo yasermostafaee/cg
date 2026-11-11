@@ -128,6 +128,7 @@ import {
   type MediaPlateTransportAction,
   type MediaWhenHidden,
   StackLoadChannel,
+  StackLoadProfileChannel,
   StackNextChannel,
   StackPageChannel,
   PagesGetChannel,
@@ -5242,6 +5243,13 @@ export function buildRoutes(
     // C-012 / R-028 — the GRACEFUL bulk: every on-air item runs its own outro.
     route(StackStopAllChannel, 'operator', 'operator', (r?: { channel: number }) =>
       b.stopAll(r?.channel),
+    ),
+    route(
+      StackLoadProfileChannel,
+      'operator',
+      'operator',
+      (r: { channel: number; profile: import('@cg/shared-ipc').LayerProfile }) =>
+        b.loadLayerProfile(r.channel, r.profile),
     ),
     route(StackSnapshotChannel, 'read', 'read', (r?: { channel: number }) =>
       b.stackSnapshot(r?.channel),
