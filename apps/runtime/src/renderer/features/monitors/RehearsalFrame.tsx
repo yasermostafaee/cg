@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, Ref } from 'react';
-import type { CgPage, FieldValues, Position } from '@cg/shared-schema';
+import type { CgPage, FieldValues, FitRect, Position } from '@cg/shared-schema';
 import { pageMediaPath, positionQuery, withCgControl } from '@cg/shared-schema';
 import type { ChannelRaster } from '@cg/shared-ipc';
 import {
   applyOperatorPosition,
+  canApplyOperatorPosition,
   providePagePicture,
   silencePage,
   type PageRuntimeWindow,
 } from './frameEnvironment.js';
 import type { TimingToSend } from '../inspector/timingToSend.js';
 import { frameBox } from './rehearsalFrames.js';
+import { measureRehearsalBounds } from './rehearsalBounds.js';
 import type { PlatePlacement } from './livePlateGeometry.js';
 import { paintPvwPlatePictures } from './pvwPlatePictures.js';
 import type { PvwSourceFrame } from './usePvwSourceFrames.js';
@@ -111,6 +113,13 @@ export interface RehearsalFrameHandle {
   stop: () => void;
 }
 
+/** Both rectangles are in the frame's channel raster, before PVW fit. */
+export interface RehearsalFrameBounds {
+  content: FitRect;
+  stage: FitRect;
+  canPosition: boolean;
+}
+
 interface Props {
   itemId: string;
   /** The retained self-contained HTML — byte-identical to what the bridge serves. */
@@ -151,6 +160,7 @@ interface Props {
   handleRef?: Ref<RehearsalFrameHandle>;
   /** Told whenever this frame's readiness flips, so the stage can gate its transport. */
   onReadyChange?: (itemId: string, ready: boolean) => void;
+  onBoundsChange?: (itemId: string, bounds: RehearsalFrameBounds | null) => void;
 }
 
 export function RehearsalFrame({
@@ -169,9 +179,18 @@ export function RehearsalFrame({
   sourceFrames,
   handleRef,
   onReadyChange,
+  onBoundsChange,
 }: Props): JSX.Element {
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const [ready, setReady] = useState(false);
+  const loadedHtml = useRef<string | null>(null);
+  const authoredPlacement = useRef<{
+    stage: HTMLElement;
+    transform: string;
+    origin: string;
+    overridden: boolean;
+  } | null>(null);
+  const lastContent = useRef<{ doc: Document; relative: FitRect } | null>(null);
 
   /*
     🔴 `RUN-NEXT-VERSION-03` 1.1 — **THE PAGE'S PICTURE, AS THE AIR NAMES IT.**
@@ -237,8 +256,9 @@ export function RehearsalFrame({
     there is no difference — and `CG_CONTROL_KEY`'s strip rule means the page would silently
     tolerate it, so nothing would ever have told us.
   */
-  const payload = useCallback(
-    (): string =>
+  // Compare the payload by value so a bounds publish cannot resend unchanged fields.
+  const payload = useMemo(
+    () =>
       JSON.stringify(
         activeLookId === undefined ? fields : withCgControl(fields, { look: activeLookId }),
       ),
@@ -334,7 +354,7 @@ export function RehearsalFrame({
   // and could land out of order with the values it belongs to.
   useEffect(() => {
     if (!ready) return;
-    templateWindow()?.update?.(payload());
+    templateWindow()?.update?.(payload);
   }, [ready, payload, templateWindow]);
 
   /*
@@ -406,19 +426,84 @@ export function RehearsalFrame({
   // untouched — the composite does not re-place graphics nobody edited.
   const placementKey = position === undefined ? null : positionQuery(position);
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || loadedHtml.current !== html) return;
     const frame = frameRef.current;
     if (frame === null) return;
-    applyOperatorPosition(
+    const authored = authoredPlacement.current;
+    if (placementKey === null) {
+      if (authored?.overridden === true) {
+        authored.stage.style.transform = authored.transform;
+        authored.stage.style.transformOrigin = authored.origin;
+        authored.overridden = false;
+      }
+      return;
+    }
+    const applied = applyOperatorPosition(
       frame.contentWindow as TemplateWindow | null,
       frame.contentDocument,
       // Re-derived from the key rather than closed over, so the value the effect
       // applies is the one its dependency describes — they cannot drift.
-      placementKey === null ? undefined : position,
+      position,
     );
+    if (applied && authored !== null) authored.overridden = true;
     // `position` is deliberately absent from the deps: `placementKey` is its
     // value, and adding the object back would restore the identity churn above.
-  }, [ready, placementKey]);
+  }, [ready, html, placementKey]);
+
+  useEffect(() => {
+    return () => onBoundsChange?.(itemId, null);
+  }, [itemId, html, onBoundsChange]);
+
+  useEffect(() => {
+    if (!ready || loadedHtml.current !== html || onBoundsChange === undefined) return;
+    const doc = frameRef.current?.contentDocument;
+    if (doc == null) return;
+    const measured = measureRehearsalBounds(doc);
+    if (measured === null) {
+      const footprint = { x: 0, y: 0, width: raster.width, height: raster.height };
+      onBoundsChange(itemId, { stage: footprint, content: footprint, canPosition: false });
+      return;
+    }
+    const { stage, content } = measured;
+    if (content !== null) {
+      lastContent.current = {
+        doc,
+        relative: {
+          x: (content.x - stage.x) / stage.width,
+          y: (content.y - stage.y) / stage.height,
+          width: content.width / stage.width,
+          height: content.height / stage.height,
+        },
+      };
+    }
+    // Stop can hide every visual's layout. The last measured outline still follows stage
+    // placement, without borrowing a rectangle from a different page loaded into this iframe.
+    const prior = lastContent.current?.doc === doc ? lastContent.current.relative : undefined;
+    onBoundsChange(itemId, {
+      stage,
+      content:
+        content ??
+        (prior === undefined
+          ? stage
+          : {
+              x: stage.x + prior.x * stage.width,
+              y: stage.y + prior.y * stage.height,
+              width: prior.width * stage.width,
+              height: prior.height * stage.height,
+            }),
+      canPosition: canApplyOperatorPosition(templateWindow(), doc),
+    });
+  }, [
+    ready,
+    html,
+    itemId,
+    placementKey,
+    payload,
+    raster.width,
+    raster.height,
+    onBoundsChange,
+    templateWindow,
+  ]);
 
   // The template's own update and position are in place before the parent matches its plate DOM.
   useEffect(() => {
@@ -451,6 +536,17 @@ export function RehearsalFrame({
         // `D-165` — PVW is silent: mute the page's own sound BEFORE the frame reports ready,
         // so no PLAY reaches a page that could still make a sound.
         silencePage(frameRef.current?.contentWindow as TemplateWindow | null);
+        const stage = frameRef.current?.contentDocument?.querySelector<HTMLElement>('.cg-stage');
+        authoredPlacement.current =
+          stage == null
+            ? null
+            : {
+                stage,
+                transform: stage.style.transform,
+                origin: stage.style.transformOrigin,
+                overridden: false,
+              };
+        loadedHtml.current = html;
         setReady(true);
       }}
       style={{

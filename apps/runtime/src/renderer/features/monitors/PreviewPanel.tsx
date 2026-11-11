@@ -1,3 +1,5 @@
+import { isPositionLocked } from '../inspector/PositionPicker.js';
+import { defaultPositionOf } from '../stack/defaultPositionStore.js';
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import {
@@ -124,7 +126,15 @@ const PVW_TRANSPORT_TITLE = {
   stop: 'Stop every preview graphic; keep all layers on PVW',
 } as const;
 
-export function PreviewPanel({ companionActions }: { companionActions?: ReactNode }): JSX.Element {
+export function PreviewPanel({
+  companionActions,
+  canEditPosition = false,
+  onSelectItem,
+}: {
+  companionActions?: ReactNode;
+  canEditPosition?: boolean;
+  onSelectItem?: ((itemId: string) => void) | undefined;
+}): JSX.Element {
   const engine = useEngineName();
   const rehearsals = useRehearse();
   const items = useStack();
@@ -219,6 +229,15 @@ export function PreviewPanel({ companionActions }: { companionActions?: ReactNod
             caught it on the full suite; `effectivePosition`'s signature now carries the rule.
           */
             position: effectivePosition(item.itemId, item.position),
+            positionAnchor:
+              item.position?.anchor ??
+              live?.defaultPosition.anchor ??
+              defaultPositionOf(item.templateId).anchor,
+            canEditPosition:
+              canEditPosition &&
+              !isPositionLocked(item) &&
+              !item.pending &&
+              item.status !== 'exiting',
             // The operator's EFFECTIVE values: applied fields with any staged
             // edits layered on, through the same `buildApplyPayload` the
             // Inspector's Apply uses — so what is rehearsed is exactly what Apply
@@ -349,6 +368,7 @@ export function PreviewPanel({ companionActions }: { companionActions?: ReactNod
       sourceVersion,
       catalog,
       liveLayers,
+      canEditPosition,
     ],
   );
 
@@ -563,6 +583,7 @@ export function PreviewPanel({ companionActions }: { companionActions?: ReactNod
             templateNames={templateNames}
             raster={raster}
             onTransport={setTransport}
+            onSelectItem={onSelectItem}
             panOpen={panOpen}
             panSourceAspects={panSourceAspects}
           />

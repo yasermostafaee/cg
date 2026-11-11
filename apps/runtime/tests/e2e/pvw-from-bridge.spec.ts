@@ -577,6 +577,119 @@ test('R-117 drafts Position in PVW and moves the resident page on Update on air'
   }
 });
 
+test('R-117 outlines both stopped PVW templates and dragging one stages only its Position', async ({
+  page,
+}) => {
+  const handle = await boot();
+  const engine = mock;
+  if (engine === null) throw new Error('Test engine is unavailable');
+  await handle.runtime.whenServerHealthy(15_000);
+  const exporter = new ExporterSingleFile({
+    cgJsIife,
+    cgCss,
+    fontsCss: '',
+    assets: { get: () => Promise.resolve(null), bytes: () => Promise.resolve(null) },
+  });
+  const fixtures = [
+    { id: 'lower-pvw-template', layer: 98, x: 190, y: 690 },
+    { id: 'upper-pvw-template', layer: 99, x: 1120, y: 190 },
+  ];
+  const initial = { anchor: 'bottom-right', offset: { x: -10, y: -20 } } as const;
+  for (const fixture of fixtures) {
+    const { scene } = await unpack(await buildPositionedVcg(fixture.id));
+    const layer = scene.layers[0]!;
+    for (const [index, element] of layer.children.entries()) {
+      element.transform.position = { x: fixture.x + index * 40, y: fixture.y + index * 40 };
+    }
+    const { html } = await exporter.produce(scene);
+    handle.runtime.templateImport(
+      {
+        ...TEMPLATE,
+        templateId: fixture.id,
+        name: fixture.id,
+        liveSources: buildTemplateLiveSources(scene),
+      },
+      html,
+      1,
+    );
+    expect(
+      await handle.runtime.loadFixed({ channel: 1, layer: fixture.layer }, fixture.id, fixture.id, {
+        anchor: 'News',
+      }),
+    ).toMatchObject({ accepted: true });
+    expect(await handle.runtime.setPosition(fixture.id, initial)).toEqual({ ok: true });
+  }
+  await openConsole(page, handle.url);
+  await showMonitors(page);
+  const pvw = page.getByRole('region', { name: 'PREVIEW (PVW)' });
+  const layer = (n: number) =>
+    page.getByRole('region', { name: 'Layers' }).locator(`[data-layer="${n}"]`);
+  const lower = pvw.locator('[data-pvw-template-outline="lower-pvw-template"]');
+  const upper = pvw.locator('[data-pvw-template-outline="upper-pvw-template"]');
+  const lowerPage = pvw.frameLocator('iframe[data-rehearsal-frame="lower-pvw-template"]');
+  for (const fixture of fixtures)
+    await layer(fixture.layer).getByRole('button', { name: 'ON PVW', exact: true }).click();
+  await layer(99).locator('[data-row-body]').click();
+  await expect(lower).toBeVisible();
+  await expect(upper).toBeVisible();
+  await expect(lowerPage.locator('body')).toHaveClass(/\bcg-pending\b/);
+  const [beforeLower, beforeUpper, previewRaster] = await Promise.all([
+    lower.boundingBox(),
+    upper.boundingBox(),
+    pvw.locator('[data-rehearsal-checker]').boundingBox(),
+  ]);
+  if (beforeLower === null || beforeUpper === null || previewRaster === null)
+    throw new Error('The two PVW outlines or their raster did not render');
+  expect(beforeLower.x + beforeLower.width).toBeLessThan(beforeUpper.x);
+  expect(beforeLower.y).toBeGreaterThan(beforeUpper.y + beforeUpper.height);
+
+  const programmeCommands = () =>
+    engine
+      .receivedCommands()
+      .map(({ line }) => line)
+      .filter((line) => /^(?:CG|MIXER|CLEAR) 1-9[89](?: |$)/.test(line));
+  const before = programmeCommands();
+  const fit = previewRaster.width / 1920;
+  const startX = Math.round(beforeLower.x + beforeLower.width / 2);
+  const startY = Math.round(beforeLower.y + beforeLower.height / 2);
+  const moveX = Math.round(170 * fit);
+  const moveY = Math.round(-75 * fit);
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + moveX, startY + moveY, { steps: 4 });
+  await page.mouse.up();
+
+  const inspector = page.getByRole('complementary', { name: 'Inspector' });
+  await expect(inspector.getByText('lower-pvw-template', { exact: true })).toBeVisible();
+  const dx = String(initial.offset.x + Math.round(moveX / fit));
+  const dy = String(initial.offset.y + Math.round(moveY / fit));
+  await expect(inspector.getByRole('textbox', { name: 'Position offset X' })).toHaveValue(dx);
+  await expect(inspector.getByRole('textbox', { name: 'Position offset Y' })).toHaveValue(dy);
+  await expect(inspector.getByRole('button', { name: 'Anchor bottom-right' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect
+    .poll(async () => Math.abs((await lower.boundingBox())!.x - beforeLower.x - moveX))
+    .toBeLessThan(2);
+  expect(await upper.boundingBox()).toEqual(beforeUpper);
+  expect(programmeCommands()).toEqual(before);
+  await expect(lowerPage.locator('body')).toHaveClass(/\bcg-pending\b/);
+
+  await inspector.getByRole('button', { name: 'Apply staged edits', exact: true }).click();
+  await expect(inspector.getByLabel('Position has unapplied changes')).toHaveCount(0);
+  expect(programmeCommands()).toEqual(before);
+  await pvw.getByRole('button', { name: 'PLAY all 2 rehearsing', exact: true }).click();
+  await expect(lowerPage.locator('body')).not.toHaveClass(/\bcg-pending\b/);
+  await pvw.getByRole('button', { name: 'STOP all 2 rehearsing', exact: true }).click();
+  await expect(lowerPage.locator('body')).toHaveClass(/\bcg-pending\b/);
+  await expect(lower).toBeVisible();
+  await expect(upper).toBeVisible();
+  await layer(98).getByRole('button', { name: 'OFF PVW', exact: true }).click();
+  await expect(lower).toHaveCount(0);
+  await expect(upper).toBeVisible();
+});
+
 test('R-108 — a reloaded package refreshes the already-bound row in PVW', async ({ page }) => {
   const handle = await boot();
   await openConsole(page, handle.url);

@@ -18,6 +18,14 @@
         {
           "fa": "Image Sequence می‌تواند تصاویر با اندازه‌های متفاوت را در یک قاب مشترک به یک کلیپ تبدیل کند. اندازهٔ تصویر اول پیش‌فرض است و می‌توان آن را تغییر داد.",
           "en": "Image Sequence can fit different-size images into a common frame to create one clip. The first image sets the editable output size."
+        },
+        {
+          "fa": "قالب‌های ON PVW حتی پیش از Play کادر دارند. با درگ قالب می‌توان Position را در پیش‌نمایش تغییر داد و با Update آن را اعمال کرد.",
+          "en": "ON PVW templates show an outline before Preview Play. Drag a template to draft its Position in Preview, then apply it with Update."
+        },
+        {
+          "fa": "Inspector ردیف‌های فشردهٔ عنوان و مقدار دارد. مشخصات لایه و Position جمع می‌شوند و ویرایشگرهای Sequence و Countdown فضای لازم برای کنترل‌هایشان را دارند.",
+          "en": "The Inspector has compact label and value rows, collapsible layer and Position details, and space for the full Sequence and Countdown editors."
         }
       ],
       "fixes": [

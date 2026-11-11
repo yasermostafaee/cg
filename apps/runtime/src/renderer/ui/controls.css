@@ -489,6 +489,61 @@
   flex: 1;
 }
 
+.cg-pvw-template-outlines {
+  overflow: hidden;
+  pointer-events: none;
+}
+.cg-pvw-template-outline {
+  position: absolute;
+  box-shadow:
+    inset 0 0 0 1px var(--r-rehearsing),
+    inset 0 0 0 2px var(--r-video-ground);
+}
+.cg-pvw-template-outline[data-pvw-position-editable] {
+  pointer-events: auto;
+  cursor: move;
+  touch-action: none;
+}
+.cg-pvw-template-label {
+  position: absolute;
+  z-index: 1;
+}
+/* Labels may occupy picture only when the operator interacts with that template. */
+.cg-pvw-template-outline:not(:hover)
+  + .cg-pvw-template-label[data-pvw-label-over-picture]:not(:hover):not(:has(:focus-visible)) {
+  opacity: 0;
+}
+.cg-pvw-template-label .cg-pvw-template-grip,
+.cg-pvw-template-fact {
+  inline-size: 100%;
+  block-size: 100%;
+  min-block-size: 0;
+  padding: 0 var(--r-space-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: var(--r-text-xs);
+}
+.cg-pvw-template-label .cg-pvw-template-grip {
+  justify-content: flex-start;
+  pointer-events: auto;
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+}
+.cg-pvw-template-grip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cg-pvw-template-fact {
+  display: block;
+  color: var(--r-text);
+  background: var(--r-stage-note-bg);
+  line-height: 23px;
+}
+.cg-pvw-template-label[data-pvw-label-over-picture] .cg-pvw-template-fact {
+  pointer-events: auto;
+}
 /* D-178 · show the input across the source bounds and dim around an active crop. */
 .cg-pan-draft-layer {
   pointer-events: none;

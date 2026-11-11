@@ -26,6 +26,30 @@ On a capable Bridge, CG Control SHALL make the ON PVW and Play controls independ
 - **WHEN** the operator edits Position **THEN** PVW follows the draft and programme keeps the applied position until Update on air
 - **WHEN** Bridge has no confirmed in-place position capability **THEN** Position remains locked while the layer is on air
 
+### Requirement: Every retained template on PVW has a local placement outline
+
+CG Control SHALL show a labelled outline for each ON PVW template with a renderable retained page.
+It SHALL use the page's laid-out visual element boxes and fall back to the authored stage footprint
+when no such boxes are available. The outline SHALL follow the page's position in the channel raster.
+It SHALL remain visible when Preview transport is stopped. The same labels SHALL identify rows
+whose outlines coincide.
+
+#### Scenario: Outline a stopped Preview
+
+- **WHEN** two templates are put ON PVW before Preview Play
+- **THEN** each template has an outline at its own page placement
+- **AND** the Preview page remains pending until Play
+- **WHEN** Preview stops **THEN** the outlines remain while those rows stay ON PVW
+- **WHEN** a row leaves PVW **THEN** its outline is removed
+
+#### Scenario: Drag a template to draft its Position
+
+- **WHEN** the operator drags an editable template or its label in PVW
+- **THEN** its row is selected and the drag is staged in the existing Inspector Position draft
+- **AND** the template outline and preview follow the move, scaled to the channel raster
+- **AND** the applied position and playout commands stay unchanged until Update or Update on air
+- **WHEN** a row's Position is locked or Pan is active **THEN** its template outline remains visible and the position gesture is unavailable
+
 ### Requirement: The Layers toolbar offers Stop All and Clear All
 
 The Layers table SHALL put ON PVW before Play in the heading and row controls. It SHALL offer Stop All and Clear All in the toolbar and Remove on each eligible row. It SHALL have no Remove All control.

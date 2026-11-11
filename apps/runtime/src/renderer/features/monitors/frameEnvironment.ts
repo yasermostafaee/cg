@@ -142,14 +142,23 @@ export function applyOperatorPosition(
   position: Position | undefined,
 ): boolean {
   if (position === undefined) return false;
+  const target = operatorPositionTarget(win, doc);
+  if (target === null) return false;
+  target.apply({ resolution: target.resolution }, { search: `?${positionQuery(position)}` });
+  return true;
+}
+
+export function canApplyOperatorPosition(win: PageRuntimeWindow | null, doc: Document): boolean {
+  return operatorPositionTarget(win, doc) !== null;
+}
+
+function operatorPositionTarget(win: PageRuntimeWindow | null, doc: Document | null) {
   const apply = win?.CG?.applyOutputPosition;
-  if (apply === undefined || doc === null) return false;
+  if (typeof apply !== 'function' || doc === null) return null;
   const stage = doc.querySelector<HTMLElement>('.cg-stage');
-  if (stage === null) return false;
+  if (stage === null) return null;
   const width = Number.parseFloat(stage.style.width);
   const height = Number.parseFloat(stage.style.height);
-  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0)
-    return false;
-  apply({ resolution: { width, height } }, { search: `?${positionQuery(position)}` });
-  return true;
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
+  return { apply, resolution: { width, height } };
 }

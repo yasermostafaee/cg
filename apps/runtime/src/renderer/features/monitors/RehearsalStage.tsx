@@ -18,7 +18,12 @@ import { colors, cssVars } from '../../theme.js';
 import { LivePlateOverlay, anyRegionTooSmallForCaveat } from './LivePlateOverlay.js';
 import { platePlacements, type PlatePlacement } from './livePlateGeometry.js';
 import { PreviewPanRow } from './PreviewPanDraft.js';
-import { RehearsalFrame, type RehearsalFrameHandle } from './RehearsalFrame.js';
+import {
+  RehearsalFrame,
+  type RehearsalFrameBounds,
+  type RehearsalFrameHandle,
+} from './RehearsalFrame.js';
+import { PreviewTemplateOutlines } from './PreviewTemplateOutlines.js';
 import { frameBox, frameZIndex, overlayZIndex, type RehearsalSubject } from './rehearsalFrames.js';
 import type { PvwPage } from '../../../shared/pvwPage.js';
 import { usePvwSourceFrames } from './usePvwSourceFrames.js';
@@ -267,6 +272,7 @@ interface Props {
    * `null` on unmount so that row can disable itself rather than hold a stale handle.
    */
   onTransport?: ((transport: RehearsalTransport | null) => void) | undefined;
+  onSelectItem?: ((itemId: string) => void) | undefined;
 }
 
 export interface RehearsalTransport {
@@ -329,6 +335,16 @@ function MissingPageLine({
   }
 }
 
+function sameBounds(left: RehearsalFrameBounds, right: RehearsalFrameBounds): boolean {
+  const same = (a: RehearsalFrameBounds['stage'], b: RehearsalFrameBounds['stage']): boolean =>
+    a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+  return (
+    left.canPosition === right.canPosition &&
+    same(left.stage, right.stage) &&
+    same(left.content, right.content)
+  );
+}
+
 export function RehearsalStage({
   subjects,
   pageByItem,
@@ -337,6 +353,7 @@ export function RehearsalStage({
   panOpen = false,
   panSourceAspects,
   onTransport,
+  onSelectItem,
 }: Props): JSX.Element {
   const engine = useEngineName();
   const fitRef = useRef<HTMLDivElement | null>(null);
@@ -353,6 +370,24 @@ export function RehearsalStage({
       return next;
     });
   }, []);
+
+  const [boundsByItem, setBoundsByItem] = useState<ReadonlyMap<string, RehearsalFrameBounds>>(
+    () => new Map(),
+  );
+  const onBoundsChange = useCallback(
+    (itemId: string, bounds: RehearsalFrameBounds | null): void => {
+      setBoundsByItem((previous) => {
+        const old = previous.get(itemId);
+        if (bounds === null && old === undefined) return previous;
+        if (bounds !== null && old !== undefined && sameBounds(old, bounds)) return previous;
+        const next = new Map(previous);
+        if (bounds === null) next.delete(itemId);
+        else next.set(itemId, bounds);
+        return next;
+      });
+    },
+    [],
+  );
 
   /** The rows that actually have a page to render, in stacking order. */
   const renderable = useMemo(
@@ -640,6 +675,7 @@ export function RehearsalStage({
             )}
             sourceFrames={sourceFrames}
             onReadyChange={onReadyChange}
+            onBoundsChange={onBoundsChange}
             handleRef={(handle) => {
               if (handle === null) handles.current.delete(subject.itemId);
               else handles.current.set(subject.itemId, handle);
@@ -662,6 +698,18 @@ export function RehearsalStage({
             zIndex={overlayZIndex(renderable.length)}
           />
         )}
+        <PreviewTemplateOutlines
+          outlines={renderable.flatMap(({ subject }) => {
+            const bounds = boundsByItem.get(subject.itemId);
+            if (!readyIds.has(subject.itemId) || bounds === undefined) return [];
+            return [{ subject, bounds, templateName: templateNames.get(subject.itemId) ?? null }];
+          })}
+          raster={raster}
+          fit={fit}
+          zIndex={overlayZIndex(renderable.length)}
+          interactive={!panOpen}
+          onSelectItem={onSelectItem}
+        />
         {panRows.length > 0 && (
           <div
             className="cg-pan-draft-layer"

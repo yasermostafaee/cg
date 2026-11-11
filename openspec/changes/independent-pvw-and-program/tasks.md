@@ -10,3 +10,7 @@
 - [x] Chromium and Bridge verified unsupported pages stay locked. Bridge also verified stale occupancy and backup refusal, restoration of eligibility on a fresh observation, and retained applied state after rejection.
 - [x] Bridge integration held the off-air Update acknowledgement across a confirmed sweep and verified legacy rehearsal stays active with no change to layer volume.
 - [ ] Record carrying Linux E2E and test live Position on the target station.
+- [x] Show a separate labelled outline for each retained template before Preview Play and after Preview Stop.
+- [x] Drag an eligible template to stage its existing Inspector Position, with channel scaling and separate Pan gestures.
+- [x] Chromium verified two outlined pages, row selection, local-only drag, off-air Update, outline removal and existing layered video pixels.
+- [ ] Verify template outlines and Position dragging on the target station.

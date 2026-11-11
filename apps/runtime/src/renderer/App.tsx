@@ -1,3 +1,4 @@
+import { useCanOperate } from './hooks/useCanOperate.js';
 import { EngineNameContext, engineNameForMode } from './ui/engineWording.js';
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { mismatchedChannels, type TemplateInfo } from '@cg/shared-ipc';
@@ -145,6 +146,7 @@ export function App(): JSX.Element {
   // `B-257` — the lock screen covers the console only when the lock covers ALL of it. A partly
   // covered console keeps its other channels; the strip names the covered ones.
   const lockCovers = useLockCoverage().kind === 'all';
+  const canEditPreviewPosition = useCanOperate() && !lockCovers;
   const health = useConnections();
   // `RELEASE-0112-01` (`R-085`) — each engine's CG Bridge session, for the status bar's chips.
   const engines = useEngineSessions();
@@ -553,6 +555,8 @@ export function App(): JSX.Element {
                         companionMode={monitorCompanionMode}
                         hasSelectedLayer={selected !== null}
                         onCompanionModeChange={setMonitorCompanionMode}
+                        canEditPreviewPosition={canEditPreviewPosition}
+                        onSelectPreviewItem={setSelectedId}
                       />
                     </div>
                     {/* The ordinary strip is resizable. A maximized monitor gets the

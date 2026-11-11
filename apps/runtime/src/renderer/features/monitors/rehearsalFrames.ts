@@ -6,7 +6,7 @@ import {
   type Rehearsal,
   type TemplateLiveSources,
 } from '@cg/shared-ipc';
-import type { FieldValues, Position, StackItemState } from '@cg/shared-schema';
+import type { FieldValues, Position, PositionAnchor, StackItemState } from '@cg/shared-schema';
 import type { PlateSourceLookup } from './livePlateGeometry.js';
 import type { TimingToSend } from '../inspector/timingToSend.js';
 import type { BookPage } from '../layers/bookOf.js';
@@ -24,6 +24,9 @@ export interface RehearsalSubject {
   rowName: string;
   /** The operator's applied placement override, when the item has one (R-011). */
   position: Position | undefined;
+  /** Preferred anchor when the page is still showing its authored position. */
+  positionAnchor?: PositionAnchor;
+  canEditPosition?: boolean;
   /** Applied fields with any staged edits layered on. */
   fields: FieldValues;
   previewPlateCrops?: StackItemState['previewPlateCrops'];

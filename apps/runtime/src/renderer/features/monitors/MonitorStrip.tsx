@@ -19,6 +19,8 @@ export type MonitorCompanionMode = 'monitor' | 'layer' | 'layer-inspector';
 interface Props {
   companionMode: MonitorCompanionMode;
   hasSelectedLayer: boolean;
+  canEditPreviewPosition?: boolean;
+  onSelectPreviewItem?: (itemId: string) => void;
   onCompanionModeChange: (mode: MonitorCompanionMode) => void;
 }
 
@@ -45,6 +47,8 @@ export function MonitorStrip({
   companionMode,
   hasSelectedLayer,
   onCompanionModeChange,
+  canEditPreviewPosition = false,
+  onSelectPreviewItem,
 }: Props): JSX.Element {
   const { focus } = useShellLayoutContext();
   /*
@@ -180,7 +184,13 @@ export function MonitorStrip({
         show; now it shows all of them, and the selection's remaining job — which
         row an edit applies to — belongs to the Inspector and never to this panel.
       */}
-      {showPvw && <PreviewPanel companionActions={companionActions} />}
+      {showPvw && (
+        <PreviewPanel
+          companionActions={companionActions}
+          canEditPosition={canEditPreviewPosition}
+          onSelectItem={onSelectPreviewItem}
+        />
+      )}
       {showPgm && (
         <MonitorPanel
           id="pgm"
