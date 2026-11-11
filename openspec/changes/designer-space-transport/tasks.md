@@ -9,4 +9,4 @@
 - [x] 2.1 Use the active transport's Pause or Stop action and update shortcut help.
 - [x] 2.2 Verify pause, resume, and Rehearse Outro from Space in Chromium. The local fresh build
       also passed the existing Canvas lifecycle cases for button-driven Stop.
-- [ ] 2.3 Verify the Linux E2E run carrying the follow-up.
+- [x] 2.3 The carrying [Linux Playwright E2E](https://github.com/yasermostafaee/cg/actions/runs/43012308177/job/130494823472) passed on `349544ee`.

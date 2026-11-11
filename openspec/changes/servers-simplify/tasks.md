@@ -134,7 +134,7 @@ never relaxed.
 - [x] D.7 In [clean Windows acceptance](https://github.com/yasermostafaee/cg/actions/runs/42873144144/job/130039694031) on `c560f8cd`, installed Bridge reached raw AMCP/OSC and installed CG Control opened Layers and saved the standalone address with no Playout session. The assertion incorrectly expected the explicit default port.
 - [x] D.8 The [installed Windows acceptance](https://github.com/yasermostafaee/cg/actions/runs/42881287761/job/130064120206) on `d80fbf25` verified a Take on CH1 with the AMCP mock and no Playout session.
 - [x] D.9 B-434. Bridge tests verified a stale CH2 Take was refused before AMCP and its bank was retained. Chromium verified CH2 was excluded and CH1 reached ON AIR while the missing DeckLink banner remained.
-- [ ] D.10 Record the carrying Linux E2E.
+- [x] D.10 The carrying [Linux Playwright E2E](https://github.com/yasermostafaee/cg/actions/runs/43012308177/job/130494823472) passed on `349544ee`.
 - [ ] D.11 Repeat installed Take on the real standalone CasparCG station.
 - [x] D.12 Label the standalone mode **Direct to CasparCG** in CG Control and Bridge Setup, and show the tested CasparCG version. Native Setup tests and visual preview passed.
 - [x] D.13 Show the return path to APASAI Playout. Chromium verified Connection returns to the default Playout setup and existing Playout onboarding still works.
@@ -153,4 +153,8 @@ tasks and recorded evidence describe the builds on which those checks ran.
 - [x] F.1 Windows native previews and focused Chromium verified fresh Setup and enrollment, engine labels and the absence of the standalone selector.
 - [x] F.2 Chromium verified a saved standalone console opens, repairs its local address in the `CG Bridge` card and takes a template. Rust tests and native preview verified the existing standalone setup path.
 - [ ] F.3 Verify both explicit unattended mode flags, and verify the existing Playout install, upgrade and sign-in paths.
-- [ ] F.4 Record the carrying Linux E2E and installed Windows Setup smoke for this follow-up.
+- [x] F.4 The carrying [Linux Playwright E2E](https://github.com/yasermostafaee/cg/actions/runs/43012308177/job/130494823472)
+      and [Windows Bridge Setup smoke](https://github.com/yasermostafaee/cg/actions/runs/43012307923/job/130499739564)
+      passed on `349544ee`.
+- [x] F.5 The [installed No Playout Take](https://github.com/yasermostafaee/cg/actions/runs/43015973286/job/130512411348)
+      step passed on `c019352a` with the AMCP stand-in and an existing standalone console record.

@@ -8,4 +8,4 @@
 
 - [x] 2.1 Restore the document body's opacity when the main Canvas clears a rehearsal.
 - [x] 2.2 Verify both checker colors in the rendered frame after the authored Outro in Chromium. Both tones were absent before the fix and visible afterward on Windows, including in the reported Designer project.
-- [ ] 2.3 Verify the carrying Linux E2E step for the follow-up.
+- [x] 2.3 The carrying [Linux Playwright E2E](https://github.com/yasermostafaee/cg/actions/runs/43012308177/job/130494823472) passed on `349544ee`.

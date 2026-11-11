@@ -8,4 +8,4 @@
 
 - [x] 2.1 Cover the first-step choices, edited size, held slots and budget refusal. All 40 planning and modal tests passed.
 - [x] 2.2 Verify converted pictures, transparent padding, frame timing and dedupe in Chromium. The Windows browser batch passed all six cases across both import entry points. The converter checks passed 78 tests. A separate run of the shipped FFmpeg core in Chrome decoded all five frames of both PNG and TGA fixtures at 60×40, preserving frame order and transparency.
-- [ ] 2.3 Record carrying-commit Linux E2E evidence.
+- [x] 2.3 The carrying [Linux Playwright E2E](https://github.com/yasermostafaee/cg/actions/runs/43012308177/job/130494823472) passed on `349544ee`.

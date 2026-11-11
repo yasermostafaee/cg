@@ -7,4 +7,4 @@
 
 - [x] 2.1 Verify import, fitting and oversized drops, Cancel, Extend and undo in Windows Chromium.
 - [x] 2.2 Verify the shared duration guard and Timeline audition. Three existing duration-guard and two Timeline sound browser cases passed, as did 30 DOM cases covering pending project/composition changes, the current frame rate and a longer active range.
-- [ ] 2.3 Record carrying-commit Linux E2E evidence.
+- [x] 2.3 The carrying [Linux Playwright E2E](https://github.com/yasermostafaee/cg/actions/runs/43012308177/job/130494823472) passed on `349544ee`.
