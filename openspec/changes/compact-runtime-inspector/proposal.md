@@ -5,7 +5,7 @@ layer and its programme state in view.
 
 ## What Changes
 
-- Make Layer details and Position collapsible.
+- Make Layer details, Position and Timing collapsible and retain their state across layer selection.
 - Keep the layer name, template and state visible, and show the current placement and draft marker
   when Position is collapsed.
 - Align simple Fields in compact rows and give larger editors the width they need.

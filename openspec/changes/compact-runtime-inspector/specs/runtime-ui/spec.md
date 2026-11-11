@@ -2,7 +2,7 @@
 
 ### Requirement: CG Control provides a compact layer Inspector
 
-The Inspector SHALL provide independently collapsible Layer details and Position sections. The
+The Inspector SHALL provide independently collapsible Layer details, Position and Timing sections. The
 selected layer's name, template and current status SHALL remain visible. A collapsed Position
 SHALL summarize the effective anchor and offsets and indicate an unapplied Position change. The
 Inspector SHALL keep Update and Discard in the footer and retain the existing field editors.
@@ -19,6 +19,19 @@ Inspector SHALL keep Update and Discard in the footer and retain the existing fi
 - **THEN** the summary shows the draft placement and the unapplied marker
 - **AND** reopening shows the same staged position
 - **AND** Update and Discard remain available with the section collapsed
+
+#### Scenario: Select another layer with sections collapsed
+
+- **WHEN** the operator collapses Layer details, Position or Timing and selects another layer
+- **THEN** each section retains its expanded or collapsed state
+- **AND** the summary and fields reflect the newly selected layer
+- **AND** the same behavior applies after dismissing the narrow Inspector overlay to switch layers
+
+#### Scenario: Collapse Timing while editing a row
+
+- **WHEN** the operator collapses Timing
+- **THEN** its facts and controls are hidden and the disclosure remains available by keyboard
+- **AND** staged Timing values are available to Update and Discard while the section is collapsed
 
 #### Scenario: Edit Fields with a compact Inspector
 

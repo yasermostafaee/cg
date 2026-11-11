@@ -9,6 +9,9 @@
       each maximized monitor.
 - [x] Chromium verified same-row Sequence navigation and load controls, the file chooser, and the
       full-width layout at 200% with right-to-left text.
+- [x] Make Timing collapsible and retain all three disclosure choices when switching layers.
+- [x] Windows Chromium verified disclosure retention on wide and narrow layouts, with Position
+      drafts scoped to their rows.
 - [ ] Record the carrying Linux E2E run.
 
 The [Linux run for c019352a](https://github.com/yasermostafaee/cg/actions/runs/43015973303/job/130509988163)

@@ -160,6 +160,10 @@ export function App(): JSX.Element {
   const ownedOccupancy = useOwnedOccupancy();
   const emptiedAir = useEmptiedAir();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // The Inspector can remount between selections on a narrow screen.
+  const [layerDetailsOpen, setLayerDetailsOpen] = useState(true);
+  const [positionOpen, setPositionOpen] = useState(true);
+  const [timingOpen, setTimingOpen] = useState(true);
   // B-427 — a fullscreen panel can unmount LayersPanel without ending the console session.
   const [layerFilter, setLayerFilter] = useState<LayerFilter>(NO_FILTER);
   // R-028 part B — the operator's own workspace geometry (persisted per browser).
@@ -385,6 +389,14 @@ export function App(): JSX.Element {
   const selectedOnPvw = selected !== null && isRehearsing(rehearsals, selected.itemId);
   const renderInspector = (onClose: () => void): JSX.Element => (
     <Inspector
+      disclosures={{
+        layerDetails: {
+          open: layerDetailsOpen,
+          toggle: () => setLayerDetailsOpen((open) => !open),
+        },
+        position: { open: positionOpen, toggle: () => setPositionOpen((open) => !open) },
+        timing: { open: timingOpen, toggle: () => setTimingOpen((open) => !open) },
+      }}
       onClose={onClose}
       item={selected}
       // B-156 — ONE derivation of "is this row rehearsing", shared with the row picker.

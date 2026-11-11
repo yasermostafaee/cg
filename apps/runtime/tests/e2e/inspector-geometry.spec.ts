@@ -64,12 +64,15 @@ test('R-008 — a compact Inspector keeps Ready state, staged placement and comp
   const page = app.page;
   await page.setViewportSize(WIDE);
   const templateId = 'tpl-compact-inspector';
+  const otherTemplateId = 'tpl-compact-other';
   await app.importVcg('compact.vcg', await buildListFieldVcg(templateId));
+  await app.importVcg('other.vcg', await buildListFieldVcg(otherTemplateId));
   await app.selectStackRow(templateId);
 
   const inspector = app.inspector;
   const details = inspector.getByRole('button', { name: 'Layer details', exact: true });
   const position = inspector.getByRole('button', { name: 'Position', exact: true });
+  const timing = inspector.getByRole('button', { name: 'Timing', exact: true });
   const x = inspector.getByLabel('Position offset X');
   const dirtyPosition = inspector.getByLabel('Position has unapplied changes');
   const title = inspector.getByRole('textbox', { name: 'anchor', exact: true });
@@ -87,6 +90,7 @@ test('R-008 — a compact Inspector keeps Ready state, staged placement and comp
 
   await expect(details).toHaveAttribute('aria-expanded', 'true');
   await expect(position).toHaveAttribute('aria-expanded', 'true');
+  await expect(timing).toHaveAttribute('aria-expanded', 'true');
   const detailsContent = await controlled(details);
   const positionContent = await controlled(position);
   const heading = inspector.locator('[data-inspector-heading]');
@@ -114,7 +118,11 @@ test('R-008 — a compact Inspector keeps Ready state, staged placement and comp
   await expect(dirtyPosition).toBeVisible();
   await expect(inspector.getByText('top left · 42, 0', { exact: true })).toBeVisible();
   await expect(inspector.getByRole('button', { name: 'Discard staged edits' })).toBeEnabled();
-  await expectFootPinned(app, 'both sections collapsed');
+  const timingContent = await controlled(timing);
+  await timing.press('Space');
+  await expect(timing).toHaveAttribute('aria-expanded', 'false');
+  await expect(timingContent).toBeHidden();
+  await expectFootPinned(app, 'sections collapsed');
 
   const label = await box(inspector.locator('[data-field-heading="anchor"]'));
   const field = await box(title);
@@ -129,6 +137,18 @@ test('R-008 — a compact Inspector keeps Ready state, staged placement and comp
   await expect(item).toHaveValue('خبر تازه\nخط دوم');
   expect((await readApplied())?.position).toEqual(original.position);
   expect((await readApplied())?.fields).toEqual(original.fields);
+
+  await app.selectStackRow(otherTemplateId);
+  await expect(app.stackRow(otherTemplateId)).toHaveAttribute('aria-pressed', 'true');
+  await expect(details).toHaveAttribute('aria-expanded', 'false');
+  await expect(position).toHaveAttribute('aria-expanded', 'false');
+  await expect(timing).toHaveAttribute('aria-expanded', 'false');
+  await expect(x).toBeHidden();
+  await expect(dirtyPosition).toHaveCount(0);
+  await app.selectStackRow(templateId);
+  await expect(position).toHaveAttribute('aria-expanded', 'false');
+  await expect(dirtyPosition).toBeVisible();
+  await expect(inspector.getByText('top left · 42, 0', { exact: true })).toBeVisible();
 
   await position.press('Enter');
   await expect(position).toHaveAttribute('aria-expanded', 'true');
@@ -147,6 +167,18 @@ test('R-008 — a compact Inspector keeps Ready state, staged placement and comp
   await expect(position).toHaveAttribute('aria-expanded', 'false');
   await details.press('Space');
   await expect(detailsContent).toBeVisible();
+
+  await details.press('Space');
+  await page.setViewportSize({ width: 720, height: 900 });
+  await inspector.getByRole('button', { name: 'Close INSPECTOR' }).click();
+  await expect(inspector).toHaveCount(0);
+  await app.selectStackRow(otherTemplateId);
+  await expect(details).toHaveAttribute('aria-expanded', 'false');
+  await expect(position).toHaveAttribute('aria-expanded', 'false');
+  await expect(timing).toHaveAttribute('aria-expanded', 'false');
+  await timing.press('Enter');
+  await expect(await controlled(timing)).toBeVisible();
+  await expect(position).toHaveAttribute('aria-expanded', 'false');
 });
 
 test('the Update button stays pinned at the foot of the panel at every panel height, short content and long', async ({

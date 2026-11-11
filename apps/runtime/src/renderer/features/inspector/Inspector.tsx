@@ -174,6 +174,11 @@ interface Props {
    */
   rehearsing?: boolean | undefined;
   previewOnly?: boolean | undefined;
+  disclosures?: {
+    layerDetails: { open: boolean; toggle: () => void };
+    position: { open: boolean; toggle: () => void };
+    timing: { open: boolean; toggle: () => void };
+  };
 }
 
 const styles = {
@@ -382,8 +387,10 @@ export function Inspector({
   onClose,
   rehearsing,
   previewOnly,
+  disclosures,
 }: Props): JSX.Element {
-  const [layerDetailsOpen, setLayerDetailsOpen] = useState(true);
+  const [detailsOpen, setDetailsOpen] = useState(true);
+  const layerDetailsOpen = disclosures?.layerDetails.open ?? detailsOpen;
   const layerDetailsId = useId();
   const [lookup, setLookup] = useState<{
     templateId: string;
@@ -712,7 +719,7 @@ export function Inspector({
               aria-label="Layer details"
               aria-controls={layerDetailsId}
               aria-expanded={layerDetailsOpen}
-              onClick={() => setLayerDetailsOpen((open) => !open)}
+              onClick={disclosures?.layerDetails.toggle ?? (() => setDetailsOpen((open) => !open))}
             >
               <Icon icon={layerDetailsOpen ? ChevronDown : ChevronRight} size={14} flipRtl />
             </button>
@@ -805,7 +812,7 @@ export function Inspector({
           </p>
         )}
         {/* R-011 — per-item on-air position; keyed so item switches re-seed. */}
-        <PositionPicker key={`pos-${itemId}`} item={item} />
+        <PositionPicker key={`pos-${itemId}`} item={item} disclosure={disclosures?.position} />
         {/* D-137 / C-015 — bind this template's live plates. Renders nothing at
             all for a template that declares none, which is most of them. */}
         <LivePlatesSection item={item} info={resolvedInfo} channel={itemChannel} />
@@ -823,7 +830,7 @@ export function Inspector({
         {/* `TIMING-WIRE-22` §4 — the template's timing: `mode`/`hold` as FACTS, and the
             operator's passes/gap as controls. Renders nothing for a template imported before
             `TemplateInfo.playout` existed, rather than guessing what it does. */}
-        <TimingSection item={item} info={resolvedInfo} />
+        <TimingSection item={item} info={resolvedInfo} disclosure={disclosures?.timing} />
         <div className="cg-inspector-section cg-inspector-fields">
           <h2>Fields</h2>
           {isEmpty ? (

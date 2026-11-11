@@ -1,9 +1,11 @@
-import { useSyncExternalStore } from 'react';
+import { useId, useState, useSyncExternalStore } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { templateAdmitsPassTiming, type TemplateInfo } from '@cg/shared-ipc';
 import { TEMPLATE_TIMING_VERSION, type StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { Tag } from '../../ui/Tag.js';
 import { Button } from '../../ui/Button.js';
+import { Icon } from '../../ui/Icon.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { isOnAir } from '../stack/onAir.js';
 import { reportCommandError } from '../status/commandFeedback.js';
@@ -48,15 +50,21 @@ import { draftsVersion, stageTiming, subscribeDrafts, timingDraftOf } from './dr
 export function TimingSection({
   item,
   info,
+  disclosure,
 }: {
   item: StackItemState;
   /** `null` while the Inspector is still fetching it — the same shape its siblings take. */
   info: TemplateInfo | null | undefined;
+  disclosure?: { open: boolean; toggle: () => void } | undefined;
 }): JSX.Element | null {
+  const [localOpen, setLocalOpen] = useState(true);
+  const open = disclosure?.open ?? localOpen;
+  const controlsId = useId();
   // The draft is module state, so this section re-renders from the store's version counter —
   // the same subscription every other drafting control on this panel already uses.
   useSyncExternalStore(subscribeDrafts, draftsVersion, draftsVersion);
-  const playout = info?.playout;
+  // Wait for the selected template before deciding whether it needs a re-import.
+  if (info == null) return null;
   /*
     🔴 `DELTA A6` + `DELTA B1.4` — AN OLD OR STALE RECORD SAYS WHY, instead of vanishing or
     lying. A record without the current derivation version was produced by the entry-composition
@@ -71,19 +79,7 @@ export function TimingSection({
     that BACK-FILLS `playout` onto an existing registry entry without rebuilding its HTML breaks
     it: the console would offer a live pass control over a page that ignores `__cg.timing`.
   */
-  if (playout === undefined || playout.v !== TEMPLATE_TIMING_VERSION) {
-    // `null` is "not known yet", not "known to be old" — flashing this at every row selection
-    // would make the sentence noise, and noise is how a real one stops being read.
-    if (info == null) return null;
-    return (
-      <div className="cg-inspector-section">
-        <h2>Timing</h2>
-        <p style={styles.hint} data-testid="timing-needs-reimport">
-          Timing controls appear after this template is re-imported.
-        </p>
-      </div>
-    );
-  }
+  const playout = info.playout?.v === TEMPLATE_TIMING_VERSION ? info.playout : undefined;
 
   const onAir = isOnAir(item);
   /*
@@ -104,37 +100,56 @@ export function TimingSection({
 
   return (
     <div className="cg-inspector-section">
-      <h2>Timing</h2>
-
-      <div style={styles.row}>
-        <span style={styles.label}>Mode</span>
-        <Tag
-          className="cg-meta-chip"
-          data-testid="timing-mode-fact"
-          title={MODE_LONG[playout.mode]}
+      <h2>
+        <button
+          type="button"
+          className="cg-inspector-disclosure"
+          aria-controls={controlsId}
+          aria-expanded={open}
+          onClick={disclosure?.toggle ?? (() => setLocalOpen((expanded) => !expanded))}
         >
-          {MODE_WORD[playout.mode] ?? playout.mode}
-        </Tag>
+          <Icon icon={open ? ChevronDown : ChevronRight} size={14} flipRtl />
+          Timing
+        </button>
+      </h2>
+      <div id={controlsId} hidden={!open}>
+        {playout === undefined ? (
+          <p style={styles.hint} data-testid="timing-needs-reimport">
+            Timing controls appear after this template is re-imported.
+          </p>
+        ) : (
+          <>
+            <div style={styles.row}>
+              <span style={styles.label}>Mode</span>
+              <Tag
+                className="cg-meta-chip"
+                data-testid="timing-mode-fact"
+                title={MODE_LONG[playout.mode]}
+              >
+                {MODE_WORD[playout.mode] ?? playout.mode}
+              </Tag>
+            </div>
+            {playout.holdSource !== undefined && (
+              <div style={styles.row}>
+                <span style={styles.label}>Hold</span>
+                <Tag
+                  className="cg-meta-chip"
+                  data-testid="timing-hold-fact"
+                  title={HOLD_LONG[playout.holdSource]}
+                >
+                  {HOLD_WORD[playout.holdSource] ?? playout.holdSource}
+                </Tag>
+              </div>
+            )}
+            {admitsPassTiming && (
+              <>
+                <PassesControl item={item} onAir={onAir} authored={playout.repeat} />
+                <DelayControl item={item} authored={playout.delayMs} />
+              </>
+            )}
+          </>
+        )}
       </div>
-      {playout.holdSource !== undefined && (
-        <div style={styles.row}>
-          <span style={styles.label}>Hold</span>
-          <Tag
-            className="cg-meta-chip"
-            data-testid="timing-hold-fact"
-            title={HOLD_LONG[playout.holdSource]}
-          >
-            {HOLD_WORD[playout.holdSource] ?? playout.holdSource}
-          </Tag>
-        </div>
-      )}
-
-      {admitsPassTiming && (
-        <>
-          <PassesControl item={item} onAir={onAir} authored={playout.repeat} />
-          <DelayControl item={item} authored={playout.delayMs} />
-        </>
-      )}
     </div>
   );
 }

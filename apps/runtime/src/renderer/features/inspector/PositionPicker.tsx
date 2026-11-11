@@ -216,8 +216,15 @@ export function isPositionLocked(item: StackItemState): boolean {
  * what was applied — and a re-Apply of that stale display silently overwrote a
  * correct on-air position with the default.
  */
-export function PositionPicker({ item }: { item: StackItemState }): JSX.Element {
-  const [open, setOpen] = useState(true);
+export function PositionPicker({
+  item,
+  disclosure,
+}: {
+  item: StackItemState;
+  disclosure?: { open: boolean; toggle: () => void } | undefined;
+}): JSX.Element {
+  const [localOpen, setLocalOpen] = useState(true);
+  const open = disclosure?.open ?? localOpen;
   const controlsId = useId();
   // B-072 — seed from the APPLIED override the bridge publishes, falling back
   // to the manifest default only when the item has none. Same precedence as
@@ -281,7 +288,7 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
             className="cg-inspector-disclosure"
             aria-controls={controlsId}
             aria-expanded={open}
-            onClick={() => setOpen((expanded) => !expanded)}
+            onClick={disclosure?.toggle ?? (() => setLocalOpen((expanded) => !expanded))}
           >
             <Icon icon={open ? ChevronDown : ChevronRight} size={14} flipRtl />
             Position
