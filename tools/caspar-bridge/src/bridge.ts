@@ -129,6 +129,7 @@ import {
   type MediaWhenHidden,
   StackLoadChannel,
   StackLoadProfileChannel,
+  type LayerProfile,
   StackNextChannel,
   StackPageChannel,
   PagesGetChannel,
@@ -5264,8 +5265,7 @@ export function buildRoutes(
       StackLoadProfileChannel,
       'operator',
       'operator',
-      (r: { channel: number; profile: import('@cg/shared-ipc').LayerProfile }) =>
-        b.loadLayerProfile(r.channel, r.profile),
+      (r: { channel: number; profile: LayerProfile }) => b.loadLayerProfile(r.channel, r.profile),
     ),
     route(StackSnapshotChannel, 'read', 'read', (r?: { channel: number }) =>
       b.stackSnapshot(r?.channel),
