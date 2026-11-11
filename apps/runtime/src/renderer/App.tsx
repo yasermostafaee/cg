@@ -32,6 +32,7 @@ import { useForeignDismissals } from './features/layers/foreignNotice.js';
 import { EmptiedAirNotice, emptiedAirChannels } from './features/layers/EmptiedAirNotice.js';
 import { LayersPanel } from './features/layers/LayersPanel.js';
 import { NO_FILTER, type LayerFilter } from './features/layers/layerFilter.js';
+import { useLayerShortcuts } from './features/layers/useLayerShortcuts.js';
 import { ChannelScope } from './features/channels/ChannelScope.js';
 import { useChannelBankState } from './features/channels/useSelectedChannel.js';
 import { onChannel } from './features/stack/onAir.js';
@@ -116,6 +117,11 @@ export function isEditable(target: EventTarget | null): boolean {
   return target.isContentEditable === true;
 }
 
+function LayerShortcutsListener(): null {
+  useLayerShortcuts();
+  return null;
+}
+
 export function App(): JSX.Element {
   const items = useStack();
   /*
@@ -184,7 +190,13 @@ export function App(): JSX.Element {
     table's own `onChannel` rule. The choice itself is kept: coming back to channel 1 finds it
     as it was, because a switch is a scope change and never a mutation.
   */
-  const { selected: selectedChannel, viewChannel, verbScope, multiChannel } = useChannelBankState();
+  const {
+    bank,
+    selected: selectedChannel,
+    viewChannel,
+    verbScope,
+    multiChannel,
+  } = useChannelBankState();
   const selected = useMemo(
     () => onChannel(items, viewChannel).find((i) => i.itemId === selectedId) ?? null,
     [items, viewChannel, selectedId],
@@ -362,7 +374,7 @@ export function App(): JSX.Element {
       ? `1fr 6px ${String(layout.inspectorPx)}px`
       : '1fr';
 
-  const renderLayersPanel = (companion: boolean): JSX.Element => (
+  const renderLayersPanel = (view: 'layers' | 'companion' | 'shortcuts'): JSX.Element => (
     <LayersPanel
       /* `B-232` (owner) — the SAME notice the strip above renders, so the
          marked rows and the strip's list are one reading, not two. */
@@ -374,7 +386,8 @@ export function App(): JSX.Element {
       selectedId={selectedId}
       independentPreview={capabilities?.independentPreview === true}
       layout={layout}
-      selectedOnly={companion}
+      selectedOnly={view === 'companion'}
+      shortcutsOnly={view === 'shortcuts'}
       filter={layerFilter}
       onFilterChange={setLayerFilter}
       inspectorOpen={inspectorOpen}
@@ -491,6 +504,10 @@ export function App(): JSX.Element {
           monitors showing the first one while the tab claimed otherwise.
         */}
         <ChannelScope>
+          <LayerShortcutsListener />
+          {bank?.shortcuts !== undefined &&
+            (!showWorkspace || (monitorFocused && !showMonitorLayerCompanion)) &&
+            renderLayersPanel('shortcuts')}
           <div style={{ ...styles.shell, gridTemplateColumns: shellColumns }}>
             {/* R-028 — the Library panel is GONE, not hidden: a template is no
             longer a thing parked in a side panel, so there is no side panel.
@@ -600,7 +617,7 @@ export function App(): JSX.Element {
                     </div>
                     {/* R-028 (4.1) — ONE layer list, replacing the Stack and Fixed
                     Layers panels, with the playout system's layers on their own tab. */}
-                    {renderLayersPanel(false)}
+                    {renderLayersPanel('layers')}
                   </>
                 )}
                 {showMonitorLayerCompanion && (
@@ -615,7 +632,7 @@ export function App(): JSX.Element {
                       gridRow: '2',
                     }}
                   >
-                    {renderLayersPanel(true)}
+                    {renderLayersPanel('companion')}
                   </div>
                 )}
                 {showMonitorInspectorCompanion && (

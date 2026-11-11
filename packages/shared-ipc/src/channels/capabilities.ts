@@ -66,6 +66,8 @@ export const BridgeCapabilitiesChannel = defineChannel(
     auth: AuthModeSchema.optional(),
     /** Explicit installed No Playout mode; absent for older bridges, Playout, and bare development bridges. */
     stationMode: z.literal('standalone').optional(),
+    /** This Bridge retains shortcut assignments in the fixed-layer bank. */
+    fixedLayerShortcuts: z.literal(true).optional(),
     /**
      * Where the BROWSER posts its credentials — the Playout's D1 endpoint
      * (`POST /api/cg/auth/token`), absolute, as configured on this bridge.

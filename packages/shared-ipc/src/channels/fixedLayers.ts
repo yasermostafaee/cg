@@ -163,7 +163,34 @@ export const LowFixedLayerBankSchema = z.object({
 });
 export type LowFixedLayerBank = z.infer<typeof LowFixedLayerBankSchema>;
 
-export const FixedLayerBankSchema = z.object({
+export const LAYER_SHORTCUT_VERBS = ['play', 'stop', 'clear'] as const;
+export type LayerShortcutVerb = (typeof LAYER_SHORTCUT_VERBS)[number];
+
+const FUNCTION_KEY = /^(?:Ctrl\+)?(?:Alt\+)?(?:Shift\+)?(?:Meta\+)?F(?:[1-9]|1\d|2[0-4])$/;
+const MODIFIED_KEY =
+  /^(?=.+\+)(?:Ctrl\+)?(?:Alt\+)?(?:Shift\+)?(?:Meta\+)?(?:Key[A-Z]|Digit[0-9]|Numpad[0-9]|Arrow(?:Up|Down|Left|Right))$/;
+
+export const LayerShortcutChordSchema = z
+  .string()
+  .max(42)
+  .refine(
+    (chord) => FUNCTION_KEY.test(chord) || MODIFIED_KEY.test(chord),
+    'Invalid layer shortcut',
+  );
+
+export const LayerShortcutsSchema = z.record(
+  z.string().regex(/^[1-9]\d*$/),
+  z
+    .object({
+      play: LayerShortcutChordSchema.optional(),
+      stop: LayerShortcutChordSchema.optional(),
+      clear: LayerShortcutChordSchema.optional(),
+    })
+    .strict(),
+);
+export type LayerShortcuts = z.infer<typeof LayerShortcutsSchema>;
+
+const FixedLayerBankShape = z.object({
   /**
    * CasparCG channel the bank lives on — one channel per bank. A station holds ONE BANK PER
    * DECLARED CHANNEL (`MULTI-CHANNEL-01`, {@link FixedLayerBanksSchema}); it held exactly one bank
@@ -201,6 +228,7 @@ export const FixedLayerBankSchema = z.object({
    * unknown-occupancy — layer is refused by the validator (fail closed).
    */
   visibility: z.record(z.string().regex(/^\d+$/), z.boolean()).optional(),
+  shortcuts: LayerShortcutsSchema.optional(),
   /**
    * `single-clock-look-switch` — the BED rows (see {@link LowFixedLayerBankSchema}).
    *
@@ -220,7 +248,34 @@ export const FixedLayerBankSchema = z.object({
     visibility: defaultLowBankVisibility(),
   })),
 });
-export type FixedLayerBank = z.infer<typeof FixedLayerBankSchema>;
+export type FixedLayerBank = z.infer<typeof FixedLayerBankShape>;
+
+export const FixedLayerBankSchema = FixedLayerBankShape.superRefine((bank, context) => {
+  const assigned = new Set<string>();
+  for (const [layer, actions] of Object.entries(bank.shortcuts ?? {})) {
+    const number = Number(layer);
+    const inOperatorBank = number >= bank.start && number <= fixedBankEnd(bank);
+    if (!inOperatorBank && !isLowBankLayer(bank, number)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['shortcuts', layer],
+        message: 'Layer is not in the bank',
+      });
+    }
+    for (const verb of LAYER_SHORTCUT_VERBS) {
+      const chord = actions[verb];
+      if (chord === undefined) continue;
+      if (assigned.has(chord)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['shortcuts', layer, verb],
+          message: 'Shortcut is already assigned in this channel',
+        });
+      }
+      assigned.add(chord);
+    }
+  }
+});
 
 /** The inclusive last layer of the OPERATOR half. */
 export function fixedBankEnd(bank: Pick<FixedLayerBank, 'start' | 'count'>): number {

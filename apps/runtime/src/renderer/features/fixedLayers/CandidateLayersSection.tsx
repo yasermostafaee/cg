@@ -7,9 +7,11 @@ import {
   fixedBankEnd,
   isLayerVisible,
   isLowBankLayer,
+  LAYER_SHORTCUT_VERBS,
   lowBankEnd,
   type FixedLayerBank,
   type FixedSlotState,
+  type LayerShortcuts,
 } from '@cg/shared-ipc';
 import { isOnAirStatus, type StackItemState } from '@cg/shared-schema';
 import { STATION_SETUP_PX, colors } from '../../theme.js';
@@ -32,7 +34,9 @@ import { useCanOperate, useHoldsStationAdmin } from '../../hooks/useCanOperate.j
 import { useChannelBankState, useSelectedChannel } from '../channels/useSelectedChannel.js';
 import { useStack } from '../../hooks/useStack.js';
 import { useLink } from '../../hooks/useLink.js';
+import { useAuthCapabilities } from '../../hooks/useAuthCapabilities.js';
 import { Tag } from '../../ui/Tag.js';
+import { LayerShortcutsDialog } from './LayerShortcutsDialog.js';
 
 /**
  * R-021 stage 2b / R-028 — the candidate-layer bank's configuration: per-layer VISIBILITY
@@ -339,6 +343,8 @@ function BankEditor({
   };
   const [aliases, setAliases] = useState<Record<string, string>>(initialAliases);
   const [visible, setVisible] = useState<Record<string, boolean>>(initialVisible);
+  const [shortcuts, setShortcuts] = useState<LayerShortcuts>(() => bank.shortcuts ?? {});
+  const [editingShortcuts, setEditingShortcuts] = useState(false);
   const [busy, setBusy] = useState(false);
   /** `SETTINGS-MATCH-02` — the filter bar's two controls. Draft-local; nothing is persisted. */
   const [query, setQuery] = useState('');
@@ -352,6 +358,8 @@ function BankEditor({
     changes what is LISTED, not the station.
   */
   const admin = useHoldsStationAdmin();
+  const capabilities = useAuthCapabilities();
+  const canEditShortcuts = admin && capabilities?.fixedLayerShortcuts === true;
   /*
     The row's REMOVE is a different verb — `stack.remove`, operator class, on this channel — so it
     asks the operator question, and is absent for a principal the bridge would refuse (a viewer,
@@ -376,11 +384,20 @@ function BankEditor({
       ...Object.keys(aliases),
       ...Object.keys(beforeVisible),
       ...Object.keys(visible),
+      ...Object.keys(bank.shortcuts ?? {}),
+      ...Object.keys(shortcuts),
     ]);
     const changed = new Set<string>();
     for (const key of keys) {
       if ((beforeAliases[key] ?? '') !== (aliases[key] ?? '')) changed.add(key);
       if ((beforeVisible[key] ?? true) !== (visible[key] ?? true)) changed.add(key);
+      if (
+        LAYER_SHORTCUT_VERBS.some(
+          (verb) => bank.shortcuts?.[key]?.[verb] !== shortcuts[key]?.[verb],
+        )
+      ) {
+        changed.add(key);
+      }
     }
     return changed;
   })();
@@ -409,6 +426,7 @@ function BankEditor({
   function revert(): void {
     setAliases(initialAliases());
     setVisible(initialVisible());
+    setShortcuts(bank.shortcuts ?? {});
     report(null);
   }
 
@@ -444,6 +462,7 @@ function BankEditor({
       count: bank.count,
       ...(Object.keys(cleaned).length > 0 ? { aliases: cleaned } : {}),
       ...(Object.keys(hidden).length > 0 ? { visibility: hidden } : {}),
+      ...(Object.keys(shortcuts).length > 0 ? { shortcuts } : {}),
       low: {
         start: bank.low.start,
         count: bank.low.count,
@@ -508,7 +527,7 @@ function BankEditor({
       <Button
         variant="primary"
         aria-label="Apply layers"
-        title="Sends the ticks and names to the bridge"
+        title="Applies visibility, names and shortcuts"
         disabled={busy}
         onClick={apply}
       >
@@ -860,6 +879,11 @@ function BankEditor({
         <span className="cg-setup-results" data-layers-results="" role="status">
           {String(shown)} of {String(total)} rows
         </span>
+        {canEditShortcuts && (
+          <Button variant="neutral" onClick={() => setEditingShortcuts(true)}>
+            Layer shortcuts…
+          </Button>
+        )}
       </div>
 
       {shown === 0 ? (
@@ -900,6 +924,20 @@ function BankEditor({
           createPortal(actions, footerSlot)
         ))}
       {confirmDialog}
+      {canEditShortcuts && editingShortcuts && (
+        <LayerShortcutsDialog
+          rows={[...operatorRows, ...bedRows].map(({ layer, name, placeholder }) => ({
+            layer,
+            name: name.trim() || placeholder,
+          }))}
+          shortcuts={shortcuts}
+          onClose={() => setEditingShortcuts(false)}
+          onDone={(next) => {
+            setShortcuts(next);
+            setEditingShortcuts(false);
+          }}
+        />
+      )}
     </>
   );
 }

@@ -871,6 +871,7 @@ export function LayerRow({
       // The row's stable anchor is the LAYER NUMBER — the declared identity that
       // survives every load, unlike an itemId.
       data-layer={String(slot.layer)}
+      data-shortcut-row={`${String(slot.channel)}:${String(slot.layer)}`}
       data-row-number={String(displayPosition)}
       {...(item !== null ? { 'data-item-id': item.itemId } : {})}
       {...(template !== null ? { 'data-template-id': template.templateId } : {})}

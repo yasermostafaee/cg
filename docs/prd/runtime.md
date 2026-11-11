@@ -1025,12 +1025,15 @@ local preview catches wrong values and broken layouts before air.
 return problem twice; a server-true preview can be a later item if ever needed. Implementation
 touches renderer surfaces → `gate:e2e` owed at implementation time.
 
-## [ ] R-023 — per-fixed-layer keyboard shortcuts (Play / Stop / Clear now; PAUSE and NEXT recon-first) ⟨priority: medium⟩
+## [~] R-023 — per-fixed-layer keyboard shortcuts (Play / Stop / Clear now; PAUSE and NEXT recon-first) ⟨priority: medium⟩ — `openspec/changes/fixed-layer-keyboard-shortcuts/`
 
 **What:** Operator keys per FIXED layer (depends on [[R-021]]): e.g. F1 = Play layer 1,
 Shift+F1 = Stop layer 1. A management modal lists the fixed layers (with aliases), captures key
 combos per verb, prevents conflicts, and persists in the same install config as the fixed
 layers.
+
+The keyboard configuration is available when CG Bridge advertises shortcut storage. A shortcut
+targets the active channel and uses the same guard and confirmation as the layer button.
 **Why:** Under time pressure an operator fires known layers by muscle memory, not by mousing to
 a row — this is the Cinegy operating rhythm the fixed layers exist for.
 **Acceptance:**

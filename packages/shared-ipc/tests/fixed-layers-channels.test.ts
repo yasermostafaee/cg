@@ -13,6 +13,27 @@ import {
   reservedLayerNumbers,
 } from '../src/index.js';
 
+describe('Fixed layer shortcuts', () => {
+  it('retains physical assignments in both halves of a bank', () => {
+    const shortcuts = { '99': { play: 'F9', stop: 'Shift+F9' }, '59': { clear: 'Ctrl+KeyD' } };
+    expect(FixedLayerBankSchema.parse({ channel: 1, shortcuts }).shortcuts).toEqual(shortcuts);
+    expect(FixedLayerBankSchema.parse({ channel: 1 }).shortcuts).toBeUndefined();
+  });
+
+  it('rejects duplicate chords, invalid keys and undeclared layers', () => {
+    const invalid = [
+      { '99': { play: 'F9', stop: 'F9' } },
+      { '99': { play: 'F9' }, '59': { stop: 'F9' } },
+      { '99': { play: 'KeyP' } },
+      { '99': { play: 'Shift+Ctrl+F9' } },
+      { '79': { play: 'F9' } },
+    ];
+    for (const shortcuts of invalid) {
+      expect(FixedLayerBankSchema.safeParse({ channel: 1, shortcuts }).success).toBe(false);
+    }
+  });
+});
+
 /**
  * R-021 stage 2a — the fixed-bank wire contract (S1/S2).
  *

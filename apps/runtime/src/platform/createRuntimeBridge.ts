@@ -269,6 +269,7 @@ export function createMockBridge(): RuntimeBridge {
         contractVersion: null,
         // Test mode is never an installed station, so it is never in first-run.
         setupPhase: null,
+        fixedLayerShortcuts: true,
       }),
       onCapabilitiesChanged: () => () => undefined,
       state: () => ({ kind: 'off' as const }),

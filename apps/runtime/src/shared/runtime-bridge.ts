@@ -211,6 +211,7 @@ export interface AuthCapabilities {
   readonly independentPreview?: true;
   readonly layerProfiles?: true;
   readonly sharedTemplateFolder?: true;
+  readonly fixedLayerShortcuts?: true;
 }
 
 /**

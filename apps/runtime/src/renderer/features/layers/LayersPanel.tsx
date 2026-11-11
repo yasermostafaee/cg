@@ -134,6 +134,8 @@ interface Props {
   orphans?: readonly OrphanLayer[];
   /** R-111 — the maximized-monitor companion renders only the row already selected. */
   selectedOnly?: boolean;
+  /** Fullscreen without a visible layer panel still has the assigned row controls. */
+  shortcutsOnly?: boolean;
   /** The workspace owns these session filters across panel mounts. */
   filter?: LayerFilter;
   onFilterChange?: (filter: LayerFilter) => void;
@@ -307,6 +309,7 @@ export function LayersPanel({
   emptiedAirRows = NO_EMPTIED_AIR_ROWS,
   orphans = NO_ORPHANS,
   selectedOnly = false,
+  shortcutsOnly = false,
   filter = NO_FILTER,
   onFilterChange,
 }: Props): JSX.Element {
@@ -480,22 +483,23 @@ export function LayersPanel({
     that hook for why) and there is exactly one Layers table on the page. `scrollIntoView`
     is guarded for jsdom, where the rest of the gesture still runs.
   */
-  useEffect(
-    () =>
-      onRowFocus((layer) => {
-        const row = document.querySelector<HTMLElement>(`[data-layer="${String(layer)}"]`);
-        if (row === null) return;
-        if (!selectedOnly && typeof row.scrollIntoView === 'function')
-          row.scrollIntoView({ block: 'center' });
-        row.focus();
-        // `MULTI-CHANNEL-01` — the row of THIS table's channel: layer 99 exists on every channel.
-        const bound = slots.find(
-          (s) => s.layer === layer && (bank === null || s.channel === bank.channel),
-        )?.binding;
-        if (bound !== null && bound !== undefined) onSelectionChange(bound.itemId);
-      }),
-    [slots, bank, onSelectionChange, selectedOnly],
-  );
+  useEffect(() => {
+    if (shortcutsOnly) return;
+    return onRowFocus((layer) => {
+      const row = document.querySelector<HTMLElement>(
+        `[data-layer-list] [data-layer="${String(layer)}"]`,
+      );
+      if (row === null) return;
+      if (!selectedOnly && typeof row.scrollIntoView === 'function')
+        row.scrollIntoView({ block: 'center' });
+      row.focus();
+      // `MULTI-CHANNEL-01` — the row of THIS table's channel: layer 99 exists on every channel.
+      const bound = slots.find(
+        (s) => s.layer === layer && (bank === null || s.channel === bank.channel),
+      )?.binding;
+      if (bound !== null && bound !== undefined) onSelectionChange(bound.itemId);
+    });
+  }, [slots, bank, onSelectionChange, selectedOnly, shortcutsOnly]);
 
   // Template identity for every bound row, joined once for the whole list.
   /*
@@ -601,22 +605,13 @@ export function LayersPanel({
   }, [items]);
 
   // R-028 (4.1) — DESCENDING layer order: the list mirrors on-air z-order.
-  // Hidden rows are filtered here and NOWHERE else; part A's honesty override
-  // keeps a bound or observably-occupied row visible even when unticked, so a
-  // live graphic can never lose its only surface.
-  const rows = useMemo(() => {
+  const channelRows = useMemo(() => {
     if (bank === null) return [];
     return (
       [...slots]
         // `MULTI-CHANNEL-01` — the per-slot state carries EVERY declared channel's rows; this
         // table is the selected channel's, so its rows are that channel's and no other's.
         .filter((slot) => slot.channel === bank.channel)
-        .filter(
-          (slot) =>
-            isLayerVisible(bank, slot.layer) ||
-            slot.binding !== null ||
-            slot.observed.kind === 'producer',
-        )
         .sort((a, b) => b.layer - a.layer)
     );
   }, [bank, slots]);
@@ -635,9 +630,9 @@ export function LayersPanel({
    * That is also what the notice's test asserts: not that a notice exists, but that
    * it is present exactly when a row is waiting and absent exactly when none is.
    */
-  const rowBindings = useMemo(
+  const channelRowBindings = useMemo(
     () =>
-      rows.map((slot) => ({
+      channelRows.map((slot) => ({
         slot,
         binding: resolveRowBinding(
           slot.binding,
@@ -645,7 +640,20 @@ export function LayersPanel({
           stackReady,
         ),
       })),
-    [rows, itemById, stackReady],
+    [channelRows, itemById, stackReady],
+  );
+  // The visible list keeps bound and occupied rows even when unticked.
+  const rowBindings = useMemo(
+    () =>
+      bank === null
+        ? []
+        : channelRowBindings.filter(
+            ({ slot }) =>
+              isLayerVisible(bank, slot.layer) ||
+              slot.binding !== null ||
+              slot.observed.kind === 'producer',
+          ),
+    [bank, channelRowBindings],
   );
   /** How many rows do not yet know what they carry. Zero hides the notice. */
   const awaitingRows = rowBindings.filter((r) => r.binding.kind === 'awaiting').length;
@@ -1150,11 +1158,21 @@ export function LayersPanel({
     },
   ];
 
-  const renderLayerList = (layerBank: NonNullable<typeof bank>): JSX.Element => (
-    <div style={selectedOnly ? styles.compactList : styles.list} ref={listRef}>
+  const renderLayerList = (
+    layerBank: NonNullable<typeof bank>,
+    entries = shownRowBindings,
+    hidden = false,
+  ): JSX.Element => (
+    <div
+      hidden={hidden}
+      data-layer-list={hidden ? undefined : ''}
+      data-layer-shortcut-controls={hidden ? '' : undefined}
+      style={hidden ? undefined : selectedOnly ? styles.compactList : styles.list}
+      ref={hidden ? undefined : listRef}
+    >
       {/* STICKY, and inside the scroll area — see `LayerTableHeader`. */}
-      {!selectedOnly && <LayerTableHeader density={density} />}
-      {shownRowBindings.map(({ slot, binding }, index) => {
+      {!hidden && !selectedOnly && <LayerTableHeader density={density} />}
+      {entries.map(({ slot, binding }, index) => {
         /*
           THE `?? null` THAT USED TO BE HERE IS THE BUG, and it is worth
           naming because it reads as harmless: a bound slot whose item had
@@ -1165,7 +1183,7 @@ export function LayersPanel({
           `resolveRowBinding` is now the one place that decision is made,
           and it takes `stackReady` as a required argument so it cannot be
           made without considering it. It is resolved ONCE for the whole
-          table, in `rowBindings`, so the panel notice above and these rows
+          table, in `channelRowBindings`, so the panel notice above and these rows
           are reading the same array rather than agreeing by coincidence.
 
           The row is no longer handed an `item` beside its binding: it takes
@@ -1193,14 +1211,15 @@ export function LayersPanel({
         */
         // Against the VISIBLE list — the break belongs above the first bed row the
         // operator can actually see, not above one a filter has removed.
-        const previous = shownRowBindings[index - 1];
+        const previous = entries[index - 1];
         const startsBedGroup =
+          !hidden &&
           !selectedOnly &&
           isLowBankLayer(layerBank, slot.layer) &&
           (previous === undefined || !isLowBankLayer(layerBank, previous.slot.layer));
         const row = (
           <LayerRow
-            key={slot.layer}
+            key={`${String(slot.channel)}:${String(slot.layer)}`}
             slot={slot}
             binding={binding}
             template={template}
@@ -1312,7 +1331,7 @@ export function LayersPanel({
         );
         if (!startsBedGroup) return row;
         return (
-          <Fragment key={slot.layer}>
+          <Fragment key={`${String(slot.channel)}:${String(slot.layer)}`}>
             <h3 style={styles.bedGroupHead} data-bed-group-head="">
               <Icon icon={LayoutGrid} size={14} />
               Live layouts
@@ -1323,6 +1342,25 @@ export function LayersPanel({
       })}
     </div>
   );
+
+  const renderHiddenShortcutRows = (): JSX.Element | null => {
+    if (!selectedHeld || !listReady || bank?.shortcuts === undefined) return null;
+    const shortcutsByLayer = bank.shortcuts;
+    const visible =
+      shortcutsOnly || (!selectedOnly && activeTab !== 'layers') ? [] : shownRowBindings;
+    const visibleLayers = new Set(visible.map(({ slot }) => slot.layer));
+    const hiddenRows = channelRowBindings.filter(({ slot }) => {
+      const shortcuts = shortcutsByLayer[String(slot.layer)];
+      return (
+        !visibleLayers.has(slot.layer) &&
+        (shortcuts?.play !== undefined ||
+          shortcuts?.stop !== undefined ||
+          shortcuts?.clear !== undefined)
+      );
+    });
+    // Clear's confirm is portalled, so a hidden row still uses the regular confirmation.
+    return hiddenRows.length === 0 ? null : renderLayerList(bank, hiddenRows, true);
+  };
 
   const renderPlateAudioDialog = (): JSX.Element | null => {
     if (plateAudioFor === null) return null;
@@ -1354,10 +1392,13 @@ export function LayersPanel({
     );
   };
 
+  if (shortcutsOnly) return <>{renderHiddenShortcutRows()}</>;
+
   if (selectedOnly) {
     return (
       <section aria-label="Selected layer" style={styles.compactCompanion}>
         {selectedHeld && listReady && bank !== null && renderLayerList(bank)}
+        {renderHiddenShortcutRows()}
         {renderPlateAudioDialog()}
       </section>
     );
@@ -1948,6 +1989,7 @@ export function LayersPanel({
           <StationLayersPanel layers={playoutOnScreen} orphans={orphansOnScreen} />
         )}
       </TabPanel>
+      {renderHiddenShortcutRows()}
       {confirmDialog}
       {renderPlateAudioDialog()}
     </Panel>

@@ -260,6 +260,67 @@ test('CLEAR is confirm-gated and mirrored in the context menu; cancel does nothi
   await expect(app.layerState(81)).toHaveText('EMPTY');
 });
 
+test('R-023 — fixed layer shortcuts follow the guarded actions in filtered and fullscreen views', async ({
+  app,
+}) => {
+  const page = app.page;
+  const row = app.layerRow(80);
+  await app.openStationSetupAt('Layers');
+  await page.getByRole('button', { name: 'Layer shortcuts…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Layer shortcuts', exact: true });
+  const assign = async (verb: string, chord: string, layer = 80) => {
+    const button = dialog.getByRole('button', {
+      name: `${verb} shortcut for layer ${String(layer)}`,
+      exact: true,
+    });
+    await button.click();
+    await button.press(chord);
+    return button;
+  };
+  await expect(await assign('Play', 'F9')).toHaveText('F9');
+  await assign('Stop', 'F9', 81);
+  await expect(dialog.getByRole('alert')).toHaveText('F9 is assigned to Play on layer 80.');
+  await expect(await assign('Stop', 'F10')).toHaveText('F10');
+  await expect(await assign('Clear', 'Shift+F9')).toHaveText('Shift+F9');
+  await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+  await page.getByRole('button', { name: 'Apply layers', exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(async () => (await window.cg.fixedLayers.banks())[0]?.shortcuts?.['80']),
+    )
+    .toEqual({
+      play: 'F9',
+      stop: 'F10',
+      clear: 'Shift+F9',
+    });
+  await app.closeStationSetup();
+
+  const confirm = page.getByRole('dialog', { name: /^Clear / });
+  const search = app.layers.getByRole('searchbox', { name: 'Find row or template' });
+  await search.fill('no rows match this');
+  await expect(row).toBeHidden();
+  await page.keyboard.press('Shift+F9');
+  await expect(confirm).toHaveCount(0);
+  await search.evaluate((input) => (input as HTMLInputElement).blur());
+  await page.keyboard.press('Shift+F9');
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole('button', { name: 'Clear layer', exact: true }).click();
+  await search.clear();
+  await expect(row.getByRole('button', { name: 'PLAY', exact: true })).toBeEnabled();
+
+  await app.showMonitors();
+  await page.getByRole('button', { name: 'Show PREVIEW (PVW) fullscreen' }).click();
+  const readStatus = () =>
+    page.evaluate(
+      async () =>
+        (await window.cg.stack.snapshot()).find((item) => item.slot?.layer === 80)?.status,
+    );
+  await page.keyboard.press('F9');
+  await expect.poll(readStatus).toBe('on-air');
+  await page.keyboard.press('F10');
+  await expect.poll(readStatus).toMatch(/^(idle|loaded)$/);
+});
+
 test('B-421: import+load selects the exact row, and the template stays available for reuse', async ({
   app,
 }) => {
