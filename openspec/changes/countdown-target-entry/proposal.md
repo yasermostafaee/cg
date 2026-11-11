@@ -10,6 +10,10 @@ is **Jalali**.
 
 ## What Changes
 
+- **Compact CG Control target entry.** Keep the current target in the Inspector and open a dialog
+  for date, time, calendars, relative presets and a custom duration from now. Done stages the
+  dialog's valid target for the Inspector's existing Update action.
+
 - **Stopped Canvas remains editable.** Wall-clock expiry does not hide countdown digits or apply
   automatic Step visibility changes to the stopped authoring picture. Restore authored base
   visibility without overriding intentional hidden elements; an explicit Step rehearsal remains

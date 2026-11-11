@@ -137,7 +137,33 @@ const inspector = (): HTMLElement => {
   return el;
 };
 const group = (): HTMLElement | null =>
-  inspector().querySelector<HTMLElement>('[role="group"][aria-label="targetTime"]');
+  document.querySelector<HTMLElement>('[role="group"][aria-label="targetTime"]');
+
+async function openEditor(): Promise<void> {
+  const button = inspector().querySelector<HTMLButtonElement>(
+    'button[aria-label="Edit countdown target"]',
+  );
+  if (button === null) throw new Error('no countdown edit button');
+  await act(async () => {
+    button.click();
+    await flush();
+  });
+}
+
+function editorAction(label: 'Cancel' | 'Done'): HTMLButtonElement {
+  const button = Array.from(
+    document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button[data-modal-role]'),
+  ).find((candidate) => candidate.textContent?.trim() === label);
+  if (button === undefined) throw new Error(`no countdown dialog action ${label}`);
+  return button;
+}
+
+async function finishEdit(label: 'Cancel' | 'Done'): Promise<void> {
+  await act(async () => {
+    editorAction(label).click();
+    await flush();
+  });
+}
 /** `RUN-NEXT-VERSION-03` 2.1 — the date is ONE masked input. */
 const dateInput = (): HTMLInputElement => {
   const el = group()?.querySelector<HTMLInputElement>('[data-datetime-mask="date"]');
@@ -146,7 +172,11 @@ const dateInput = (): HTMLInputElement => {
 };
 
 /** Keys typed into a masked input from `caret`, as an operator types them. */
-async function typeAt(el: HTMLInputElement, keys: string, caret: number): Promise<void> {
+async function typeAt(
+  el: HTMLInputElement,
+  keys: string | readonly string[],
+  caret: number,
+): Promise<void> {
   await act(async () => {
     el.focus();
     el.setSelectionRange(caret, caret);
@@ -161,8 +191,11 @@ async function typeAt(el: HTMLInputElement, keys: string, caret: number): Promis
 }
 
 describe('the Inspector renders the date and time control for a countdown target field', () => {
-  it('a marked field is the control, an unmarked one stays a text box', async () => {
+  it('a marked field shows a compact target and opens the editor, while ordinary text stays inline', async () => {
     await boot();
+    expect(inspector().querySelector('[data-countdown-target]')?.textContent).toContain('۱۲:۰۰:۰۰');
+    expect(group()).toBeNull();
+    await openEditor();
     expect(group(), 'the countdown field is the shared control').not.toBeNull();
     expect(group()?.getAttribute('data-datetime-input')).toBe('datetime');
     expect(
@@ -174,7 +207,27 @@ describe('the Inspector renders the date and time control for a countdown target
   it('an edit STAGES the ISO through the ordinary path, and Update sends it as the row’s value update', async () => {
     await boot();
     const update = vi.spyOn(cg.stack, 'update');
+    await openEditor();
     await typeAt(dateInput(), '1499', 0);
+    expect(effectiveValue(ITEM, ['targetTime'], PAST)).toBe(PAST);
+    await finishEdit('Cancel');
+    expect(group()).toBeNull();
+    expect(effectiveValue(ITEM, ['targetTime'], PAST)).toBe(PAST);
+
+    await openEditor();
+    await typeAt(dateInput(), '1499', 0);
+    const time = group()?.querySelector<HTMLInputElement>('[data-datetime-mask="time"]');
+    if (time === null || time === undefined) throw new Error('no time input');
+    expect(editorAction('Done').disabled).toBe(false);
+    await typeAt(time, '25', 0);
+    expect(editorAction('Done').disabled).toBe(true);
+    await typeAt(time, '12', 0);
+    expect(editorAction('Done').disabled).toBe(false);
+    await typeAt(time, ['Delete'], 0);
+    expect(editorAction('Done').disabled).toBe(true);
+    await typeAt(time, '12', 0);
+    expect(editorAction('Done').disabled).toBe(false);
+    await finishEdit('Done');
     const staged = effectiveValue(ITEM, ['targetTime'], PAST);
     expect(typeof staged).toBe('string');
     expect(staged).not.toBe(PAST);
@@ -204,7 +257,9 @@ describe('the passed-target fact', () => {
     expect(document.querySelector<HTMLButtonElement>('[data-inspector-commit]')?.disabled).toBe(
       false,
     );
+    await openEditor();
     await typeAt(dateInput(), '1499', 0);
+    await finishEdit('Done');
     expect(fact()).toBeNull();
   });
 

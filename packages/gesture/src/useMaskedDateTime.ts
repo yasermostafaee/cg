@@ -78,6 +78,8 @@ export interface MaskedDateTime {
   readonly time: MaskedInput;
   /** Why the last keystroke or paste was refused — `null` once the masks name a whole value. */
   readonly refusal: string | null;
+  /** Whether the visible masks describe a complete target. A wholly blank second is zero. */
+  readonly complete: boolean;
   /** The Gregorian day a whole date names (the facts beside the field read it). */
   readonly gregorian: CalendarDay | null;
   /** The parts typed so far (a picker opens on them). */
@@ -130,18 +132,21 @@ export function valueOfMasks(
   calendar: CalendarSystem,
   adjust: number,
 ): string | null {
-  const t = partsOfSlots('time', masks.time);
-  if (t.hour === undefined || t.minute === undefined) return null;
-  if (t.second === undefined && partState('time', masks.time, 'second') !== 'empty') return null;
-  const second = t.second ?? 0;
-  if (mode === 'timeofday') return formatTimeOfDay(t.hour, t.minute, second, second !== 0);
+  const t = completeTimeParts(partsOfSlots('time', masks.time), masks.time);
+  if (t === null) return null;
+  if (mode === 'timeofday') return formatTimeOfDay(t.hour, t.minute, t.second, t.second !== 0);
   const d = partsOfSlots('date', masks.date);
   if (d.year === undefined || d.month === undefined || d.day === undefined) return null;
-  return isoOfParts(
-    { year: d.year, month: d.month, day: d.day, hour: t.hour, minute: t.minute, second },
-    calendar,
-    adjust,
-  );
+  return isoOfParts({ year: d.year, month: d.month, day: d.day, ...t }, calendar, adjust);
+}
+
+type TimeParts = Pick<DateTimeParts, 'hour' | 'minute' | 'second'>;
+
+function completeTimeParts(parts: Partial<TimeParts>, slots: MaskSlots): TimeParts | null {
+  const { hour, minute, second } = parts;
+  if (hour === undefined || minute === undefined) return null;
+  if (second === undefined && partState('time', slots, 'second') !== 'empty') return null;
+  return { hour, minute, second: second ?? 0 };
 }
 
 const OTHER: Readonly<Record<MaskKind, MaskKind>> = { date: 'time', time: 'date' };
@@ -296,6 +301,7 @@ export function useMaskedDateTime(o: MaskedDateTimeOptions): MaskedDateTime {
   });
 
   const d = partsOfSlots('date', masks.date);
+  const t = partsOfSlots('time', masks.time);
   const gregorian =
     mode === 'datetime' && d.year !== undefined && d.month !== undefined && d.day !== undefined
       ? toGregorian({ year: d.year, month: d.month, day: d.day }, calendar, adjust)
@@ -305,8 +311,10 @@ export function useMaskedDateTime(o: MaskedDateTimeOptions): MaskedDateTime {
     date: input('date'),
     time: input('time'),
     refusal,
+    complete:
+      (mode === 'timeofday' || gregorian !== null) && completeTimeParts(t, masks.time) !== null,
     gregorian,
-    parts: { ...d, ...partsOfSlots('time', masks.time) },
+    parts: { ...d, ...t },
     setDate: (day) => commit({ ...masks, date: slotsOfParts('date', day) }),
     setTime: (t) => commit({ ...masks, time: slotsOfParts('time', t) }),
     setValue: (v) => {

@@ -17,6 +17,26 @@ included. The Lunar Hijri reading SHALL take the station's day adjustment. It SH
 keyboard-only, at 1280×720 and at 200 % zoom, and in a right-to-left page the date SHALL still read
 year / month / day left to right.
 
+The Inspector SHALL show the current countdown target and an edit action. The edit dialog SHALL
+contain the target controls, the existing relative presets, and a custom duration from now. It SHALL
+accept a positive duration in whole seconds, in `h:mm:ss`, `m:ss` or seconds, including Persian
+digits. A time-of-day target SHALL accept custom durations shorter than one day. Done SHALL stage the
+new target in the Inspector only when the visible date and time are complete and valid. Cancel or
+Escape SHALL discard the dialog edit. Update or Update on air
+SHALL remain the operator's explicit action to apply the staged target.
+
+#### Scenario: Edit the target without expanding the Inspector
+
+- **WHEN** a row has a countdown target
+- **THEN** its Inspector shows the target and an edit action
+- **AND** its date, time, calendar and relative controls appear in the dialog
+
+#### Scenario: Stage a custom relative target
+
+- **WHEN** the operator enters `۱:۳۰:۰۰` and chooses Add time
+- **THEN** the dialog shows the target 90 minutes from the time of that action
+- **AND** Cancel discards the dialog edit, while Done stages it for the Inspector's Update
+
 #### Scenario: One instant in three calendars
 
 - **WHEN** the operator types `1405/12/29 21:45:00` in Jalali and switches to Gregorian, then
@@ -49,5 +69,5 @@ year / month / day left to right.
 #### Scenario: The control fits at 200 %
 
 - **WHEN** the console is at 1280×720, zoomed to 200 %, and then turned right-to-left
-- **THEN** neither input clips its digits, none leaves the Inspector, the year stays first, and each
+- **THEN** neither input clips its digits, none leaves the dialog, the year stays first, and each
   picker opens inside the window

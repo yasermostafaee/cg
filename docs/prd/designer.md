@@ -4105,6 +4105,11 @@ must update its standard validation pattern without discarding custom author con
 timing states a readable deadline. A countdown authored to close at zero must animate its normal
 outro; D-179's later Azan starter instead keeps its announcement until manual Stop.
 
+**CG Control Inspector follow-up (2026-11-11) — `openspec/changes/countdown-target-entry/`:** show
+the target in a compact row and put date, time, calendar and relative duration controls in its edit
+dialog. A custom duration uses the same from-now clock as the presets. Done stages the edit and
+Update applies it.
+
 **Stopped-Canvas follow-up (2026-11-04) — `openspec/changes/countdown-target-entry/`:** a past
 wall-clock target must not hide countdown digits or Step-associated design elements while the
 authoring Canvas is stopped, preventing selection/editing. Idle authoring shows the authored base

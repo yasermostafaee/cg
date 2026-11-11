@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { CalendarDays, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 import { useMaskedDateTime, type MaskedInput } from '@cg/gesture';
 import {
@@ -64,6 +64,8 @@ export interface DateTimeInputProps {
   value: string;
   /** Receives every WHOLE, possible value the operator makes — never a half-typed one. */
   onChange: (value: string) => void;
+  /** Whether the visible inputs are ready for an enclosing dialog to accept. */
+  onReadyChange?: ((ready: boolean) => void) | undefined;
   /** The field's own digits (`fieldDigitsOf`). */
   digits: FieldDigits;
   /** The station's Lunar Hijri day adjustment (−2 … +2). */
@@ -80,6 +82,7 @@ export function DateTimeInput({
   mode,
   value,
   onChange,
+  onReadyChange,
   digits,
   lunarAdjust,
   'aria-label': ariaLabel,
@@ -98,6 +101,8 @@ export function DateTimeInput({
     now,
   });
   const refusalId = useId();
+  const ready = m.complete && m.refusal === null;
+  useLayoutEffect(() => onReadyChange?.(ready), [onReadyChange, ready]);
 
   const field = (kind: 'date' | 'time', label: string, input: MaskedInput): JSX.Element => (
     <NumericInput

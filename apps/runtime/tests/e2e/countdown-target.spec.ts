@@ -6,25 +6,32 @@ import type { Locator, Page } from '@playwright/test';
  * COUNTDOWN'S TARGET IN CG CONTROL**, in a real browser.
  *
  * A template whose countdown target is a field (`clock-target` binding, `datetime` target) is
- * imported; CG Control's import marks the field and the Inspector shows the shared date and time
- * control instead of a text box: ONE masked date input and ONE masked time input, each with its picker
+ * imported; CG Control's import marks the field and the Inspector opens the shared date and time
+ * control in a dialog: ONE masked date input and ONE masked time input, each with its picker
  * (the owner: six boxes were not good). Driven as the owner described it:
  *
  *  1. the author's target is in the past, so the row says so — `Target passed … · counts past zero`;
  *  2. the owner's check: `1405/13/40` is refused, `25:61` is refused, each with its reason; then a
  *     date and time typed with the KEYBOARD ONLY in Jalali (the default) — digits, Tab, Up — stores one
- *     instant, and the passed fact goes;
+ *     instant, held in the dialog until Done;
  *  3. Gregorian and Lunar Hijri show the SAME day — 1405/12/29 = 20 March 2027 = 12 Shawwal 1448 —
  *     in the inputs and in the facts beside them;
  *  4. a date picked from the calendar, a time picked from the clock;
- *  5. `+5 min` sets now plus five minutes, and Update sends exactly that instant as the row's value;
+ *  5. `+5 min` and a custom duration use the same clock, and Update sends the staged instant;
  *  6. a past value is stated as passed again — and Update is still offered (the Take is never refused).
  */
 
 const TEMPLATE_ID = 'tpl-e2e-countdown';
 
-function control(inspector: Locator): Locator {
-  return inspector.getByRole('group', { name: 'targetTime' });
+function targetDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: 'Edit countdown target', exact: true });
+}
+
+async function openControl(page: Page, inspector: Locator): Promise<Locator> {
+  await inspector.getByRole('button', { name: 'Edit countdown target' }).click();
+  const dialog = targetDialog(page);
+  await expect(dialog).toBeVisible();
+  return dialog.getByRole('group', { name: 'targetTime' });
 }
 
 const mask = (c: Locator, kind: 'date' | 'time'): Locator =>
@@ -70,7 +77,11 @@ test('🔴 a countdown target: two masked inputs, the owner’s refusals, three 
   await app.importVcg('countdown.vcg', await buildCountdownVcg(TEMPLATE_ID));
   await app.selectStackRow(TEMPLATE_ID);
 
-  const c = control(app.inspector);
+  await expect(app.inspector.locator('[data-countdown-target]')).toBeVisible();
+  await expect(app.inspector.locator('[data-datetime-mask]')).toHaveCount(0);
+  await expect(app.inspector.getByRole('button', { name: '+5 min' })).toHaveCount(0);
+  const dialog = targetDialog(page);
+  const c = await openControl(page, app.inspector);
   await expect(c, 'the target field is the date and time control').toBeVisible();
   await expect(c).toHaveAttribute('data-datetime-input', 'datetime');
   // One date input and one time input — not six boxes.
@@ -112,7 +123,15 @@ test('🔴 a countdown target: two masked inputs, the owner’s refusals, three 
   // Persian digits in Jalali, the separators the mask's own.
   await expect.poll(() => both(c)).toEqual(['۱۴۰۵/۱۲/۲۹', '۲۱:۴۵:۰۰']);
   await expect(refusal, 'a whole value: the reason goes').toHaveCount(0);
-  await expect(past, 'a target ahead is not passed').toHaveCount(0);
+  const done = dialog.getByRole('button', { name: 'Done' });
+  await expect(done).toBeEnabled();
+  await retype(page, mask(c, 'time'), '25');
+  await expect(refusal).toHaveText('Hours run from 00 to 23.');
+  await expect(done).toBeDisabled();
+  await retype(page, mask(c, 'time'), '21');
+  await expect(done).toBeDisabled();
+  await retype(page, mask(c, 'time'), '214500');
+  await expect(done).toBeEnabled();
 
   // ── 3. The same day in the other two calendars, as facts — and then shown in each. ──
   const facts = c.locator('[data-datetime-facts]');
@@ -173,6 +192,8 @@ test('🔴 a countdown target: two masked inputs, the owner’s refusals, three 
   const t0 = await page.evaluate(() => Date.now());
   await c.getByRole('button', { name: '+5 min' }).click();
   const t1 = await page.evaluate(() => Date.now());
+  expect(await updates(page)).toEqual([]);
+  await dialog.getByRole('button', { name: 'Done' }).click();
   await app.applyEdits();
   await expect.poll(async () => (await updates(page)).length).toBe(1);
   const [sent] = await updates(page);
@@ -184,8 +205,39 @@ test('🔴 a countdown target: two masked inputs, the owner’s refusals, three 
   expect(ms).toBeLessThanOrEqual(t1 + 300_000);
   await expect(past).toHaveCount(0);
 
+  // Cancel discards a local custom target. Done stages it, and only Update sends it.
+  const beforeCustom = await app.inspector.locator('[data-countdown-target]').textContent();
+  await openControl(page, app.inspector);
+  const custom = dialog.getByRole('textbox', { name: 'Custom duration', exact: true });
+  const add = dialog.getByRole('button', { name: 'Add time', exact: true });
+  await custom.fill('0:00:00');
+  await expect(add).toBeDisabled();
+  await custom.fill('۱:۳۰:۰۰');
+  await add.click();
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(app.inspector.locator('[data-countdown-target]')).toHaveText(beforeCustom ?? '');
+  expect(await updates(page)).toHaveLength(1);
+  await openControl(page, app.inspector);
+  await custom.fill('۱:۳۰:۰۰');
+  const customStart = await page.evaluate(() => Date.now());
+  await add.click();
+  const customEnd = await page.evaluate(() => Date.now());
+  await dialog.getByRole('button', { name: 'Done' }).click();
+  expect(await updates(page)).toHaveLength(1);
+  await app.applyEdits();
+  await expect.poll(async () => (await updates(page)).length).toBe(2);
+  const [, customUpdate] = await updates(page);
+  const customTarget = Date.parse(String(customUpdate?.fields?.['targetTime']));
+  const ninetyMinutes = 90 * 60_000;
+  expect(customTarget).toBeGreaterThanOrEqual(
+    Math.floor((customStart + ninetyMinutes) / 1000) * 1000,
+  );
+  expect(customTarget).toBeLessThanOrEqual(customEnd + ninetyMinutes);
+
   // ── 6. A past value is stated as passed — and nothing is refused. ──
+  await openControl(page, app.inspector);
   await retype(page, mask(c, 'date'), '14000101');
+  await dialog.getByRole('button', { name: 'Done' }).click();
   await expect(past).toHaveText(/^Target passed .+ ago · counts past zero$/);
   await expect(app.inspector.getByRole('button', { name: 'Apply staged edits' })).toBeEnabled();
 });
@@ -205,7 +257,7 @@ test('🔴 2.2 — Jalali, Gregorian and Lunar Hijri switch at once with real cl
   const page = app.page;
   await app.importVcg('countdown.vcg', await buildCountdownVcg(TEMPLATE_ID));
   await app.selectStackRow(TEMPLATE_ID);
-  const c = control(app.inspector);
+  const c = await openControl(page, app.inspector);
   await expect(c).toBeVisible();
   await c.scrollIntoViewIfNeeded();
   const timings: number[] = [];
@@ -276,7 +328,7 @@ test('🔴 the date and time control fits at 1280×720, at 200 % zoom and in RTL
   await page.setViewportSize({ width: 1280, height: 720 });
   await app.importVcg('countdown.vcg', await buildCountdownVcg(TEMPLATE_ID));
   await app.selectStackRow(TEMPLATE_ID);
-  const c = control(app.inspector);
+  const c = await openControl(page, app.inspector);
   await expect(c).toBeVisible();
   const window = { x: 0, y: 0, width: 1280, height: 720 };
   // In view first, as an operator sees the field before pressing its icon: a scroll the click itself
@@ -324,8 +376,8 @@ test('🔴 the date and time control fits at 1280×720, at 200 % zoom and in RTL
   ] as const) {
     await page.evaluate(apply);
     await c.scrollIntoViewIfNeeded();
-    const panel = await app.inspector.boundingBox();
-    if (panel === null) throw new Error('the Inspector is not laid out');
+    const panel = await targetDialog(page).boundingBox();
+    if (panel === null) throw new Error('the countdown dialog is not laid out');
     const xs: number[] = [];
     for (const kind of ['date', 'time'] as const) {
       const input = mask(c, kind);
@@ -333,13 +385,13 @@ test('🔴 the date and time control fits at 1280×720, at 200 % zoom and in RTL
         (el) => (el as HTMLInputElement).scrollWidth > (el as HTMLInputElement).clientWidth + 1,
       );
       expect(clipped, `${label}: the ${kind} clips its digits`).toBe(false);
-      expect(await inside(input, panel), `${label}: the ${kind} leaves the Inspector`).toBe(true);
+      expect(await inside(input, panel), `${label}: the ${kind} leaves the dialog`).toBe(true);
       xs.push((await input.boundingBox())?.x ?? 0);
     }
     for (const name of ['Pick a date', 'Pick a time']) {
       expect(
         await inside(c.getByRole('button', { name }), panel),
-        `${label}: ${name} leaves the Inspector`,
+        `${label}: ${name} leaves the dialog`,
       ).toBe(true);
     }
     // The positive control: the zoom really applied — the time input is twice as tall.

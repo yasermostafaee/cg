@@ -4,6 +4,14 @@ Target entry uses the shared date/time parsing and masked-control behavior, whil
 its own UI primitives. A fresh accelerated rehearsal rebases only its session clock; authored
 absolute deadlines and real-time output remain unchanged.
 
+## CG Control target dialog
+
+The summary uses the same mask formatting, calendar preference and station adjustment as the
+existing target editor. The modal holds its target locally. Done passes the final value to the
+ordinary Inspector draft store and Cancel drops the modal value. Relative durations resolve
+from the console time at the click through the existing preset clock and target formatting.
+Time-of-day targets retain a daily wall time, so a custom duration there must be below 24 hours.
+
 ## Stopped authoring versus playback
 
 The stopped Canvas is an editing surface, not a live wall-clock rehearsal. It must retain authored

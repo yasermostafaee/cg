@@ -119,3 +119,11 @@ carried the defect is replaced by it.
       the facts say `Jalali`); Designer `date-time-input.dom.test.ts` (the options, by value and label);
       e2e `countdown-target.spec.ts` and Designer `date-time-input.spec.ts` (the same, in Chrome).
 - [x] 2.3.5 Linux `e2e` discharged on the pushed commit — run URL: https://github.com/yasermostafaee/cg/actions/runs/39698919913 — `7eec321b` (carries every commit of this run), completed `success`, its E2E job RAN (Designer 343 passed, CG Control 367 passed)
+
+## Compact CG Control target entry
+
+- [x] Show the current target in the Inspector and open the date/time and relative controls in a dialog.
+- [x] Add custom relative duration entry and stage the target through the existing Inspector workflow.
+- [x] Local Chromium passed all three countdown target cases, covering the dialog, calendar and
+      picker controls, custom duration and Update, including RTL and 200% zoom.
+- [ ] Record the carrying Linux E2E result.
