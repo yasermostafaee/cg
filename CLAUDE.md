@@ -579,6 +579,11 @@ count does not reset on its own.
     has code commits to push, the marker goes on the push's HEAD commit (the diff then carries a
     non-docs path); when it has nothing to push, CC **dispatches**
     (`gh workflow run Desktop --ref dev`) — after checking no Desktop run is queued for `dev`.
+  - Deliver local builds and downloaded installer artifacts to `installers/<version>/`
+    under the main project root. Keep the three final installers together and verify
+    their build commit before delivery. For a local build, pass that directory as
+    `--out` to `tools/release/src/pack-installers.mjs`. The Desktop workflow keeps its
+    own staging directory on its runner.
   - **A report no longer says "Desktop run green".** It says **"Desktop skipped by design"**
     unless the prompt asked for installers. A skipped Desktop run is the expected state, not a
     missing result.
