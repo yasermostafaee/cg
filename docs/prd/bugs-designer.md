@@ -4928,11 +4928,13 @@ The valid mask from Plate 1 to Plate 2 in the reported project survives.
 
 **Follow-up:** The shared runtime CSS also hides the preview document body when pending. Restoring the stage alone leaves the entire frame transparent. The cleared Canvas restores body opacity and verifies both checker colors in the rendered frame.
 
-## [~] B-430 — Space does not reliably Play the Designer timeline ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/designer-space-transport/`
+## [~] B-430 — Space transport in the Designer timeline and Rehearse ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/designer-space-transport/`
 
 **Repro / Actual:** Press Space with focus outside inputs in normal Canvas editing and in Rehearse. The active transport is not consistently started.
 
-**Expected / regression:** WHEN Space is pressed in either mode THEN invoke that mode’s Play behavior while preserving input, native button and dialog handling.
+**Follow-up:** Space starts playback in both modes, but pressing it again during playback has no effect.
+
+**Expected / regression:** Space starts either idle transport. In normal editing it pauses the timeline at its current frame. In Rehearse it runs the same Stop action as the transport button and plays the authored Outro before clearing the graphic. Preserve typing, native button and dialog handling.
 
 ## [~] B-431 — A Follow video closes before a plain text Outro starts ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/coordinate-follow-video-with-outro/`
 

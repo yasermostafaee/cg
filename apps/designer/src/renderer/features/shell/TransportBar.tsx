@@ -320,9 +320,23 @@ export function TransportBar({ scene }: Props): JSX.Element {
     designerStore.setCurrentFrame(frame);
   }
 
-  // Space starts the active transport. J / K / L remain authoring-only: L = play forward, J = play
-  // backward, K = stop. Holding K turns L/J into single-frame steps
-  // (K+L = next frame, K+J = previous frame). Ignored while typing.
+  function togglePlayback(): void {
+    const state = designerStore.get();
+    if (playoutPreviewRef.current) {
+      if (state.timelinePlaybackMode !== 'lifecycle') playPlayout();
+      else if (!playoutStopping) stopPlayout();
+    } else if (state.timelinePlaying) {
+      pausePlayback();
+    } else {
+      playDir(1);
+    }
+  }
+  // Keep the window listener on the current transport handlers as the authored Outro changes.
+  const togglePlaybackRef = useRef(togglePlayback);
+  togglePlaybackRef.current = togglePlayback;
+
+  // Space toggles the active transport. J / K / L remain authoring-only: L = play forward,
+  // J = play backward, K = pause. Holding K turns L/J into single-frame steps.
   useEffect(() => {
     function isEditable(t: EventTarget | null): boolean {
       if (!(t instanceof HTMLElement)) return false;
@@ -345,13 +359,7 @@ export function TransportBar({ scene }: Props): JSX.Element {
           return;
         }
         e.preventDefault();
-        if (e.repeat) return;
-        const state = designerStore.get();
-        if (playoutPreviewRef.current) {
-          if (state.timelinePlaybackMode !== 'lifecycle') playPlayout();
-        } else if (!state.timelinePlaying) {
-          playDir(1);
-        }
+        if (!e.repeat) togglePlaybackRef.current();
         return;
       }
       // D-199 — hidden authoring controls have no secret keyboard route in Rehearse preview.
@@ -472,10 +480,7 @@ export function TransportBar({ scene }: Props): JSX.Element {
               variant="bare"
               className={btnClass('play')}
               {...hoverProps('play')}
-              onClick={() => {
-                if (playing) pausePlayback();
-                else playDir(1);
-              }}
+              onClick={togglePlayback}
               aria-label={playing ? 'Pause' : 'Play'}
               title={playing ? 'Pause' : 'Play'}
             >

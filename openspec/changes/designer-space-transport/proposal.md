@@ -1,16 +1,16 @@
 ## Why
 
-B-430: Designer has no Space shortcut to start the timeline or canvas rehearsal.
+B-430: Designers need Space to start and control the timeline or canvas rehearsal.
 
 ## What Changes
 
-- Space starts the active Designer canvas transport.
+- Space toggles Play / Pause on the editing timeline and Play / Stop in Rehearse.
 - Add the shortcut to Help → Keyboard Shortcuts.
 - Preserve typing and native control activation with Space.
 
 ## Capabilities
 
-- `designer-playout-lifecycle`: start either Designer canvas transport mode from the keyboard.
+- `designer-playout-lifecycle`: control either Designer canvas transport mode from the keyboard.
 
 ## Impact
 
