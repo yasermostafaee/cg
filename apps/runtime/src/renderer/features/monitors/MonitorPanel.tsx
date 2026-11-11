@@ -13,6 +13,7 @@ import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { Panel } from '../../ui/Panel.js';
 import { Popover } from '../../ui/Popover.js';
+import { RangeInput } from '../../ui/RangeInput.js';
 import { MonitorHead, MonitorHeadFact, MonitorSignalStrip } from '../../ui/MonitorHead.js';
 import type { PanelId } from '../../hooks/useShellLayout.js';
 import type { ProgramReturn, ProgramSignal } from '../../hooks/useProgramReturn.js';
@@ -227,8 +228,7 @@ function ProgramVolume({ sound }: { sound: PgmAudio }): JSX.Element {
             <span>
               Volume <output>{String(sound.volume)}%</output>
             </span>
-            <input
-              type="range"
+            <RangeInput
               min={0}
               max={100}
               value={sound.volume}
