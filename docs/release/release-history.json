@@ -446,8 +446,26 @@
         "fa": "آزمون‌های باقی‌مانده و قابلیت‌های در دست پیگیری در این بخش ثبت می‌شوند.",
         "en": "This section tracks outstanding acceptance checks and features still in progress."
       },
-      "features": [],
-      "fixes": [],
+      "features": [
+        {
+          "fa": "برای Next هم می‌توان میان‌بر تعریف کرد. در کانال‌های بدون تنظیم قبلی، لایه‌های ۹۹ تا ۸۸ با F1 تا F12 و کلیدهای ترکیبی کنترل می‌شوند. تنظیمات از پنجرهٔ میان‌برها اعمال می‌شوند.",
+          "en": "Assign Next shortcuts alongside Play, Stop and Clear. Unconfigured channels use F1–F12 and modifiers for layers 99–88. Apply changes from the shortcut dialog."
+        }
+      ],
+      "fixes": [
+        {
+          "fa": "خروجی‌های پخش بالای ورودی‌های عادی در تنظیمات نمایش داده می‌شوند.",
+          "en": "Playlist outputs appear above other inputs in station settings."
+        },
+        {
+          "fa": "بارگذاری و جایگزینی صفحه‌های Sequence Folder از پنجرهٔ Manage pages انجام می‌شود.",
+          "en": "Manage pages handles loading and replacing Sequence Folder pages."
+        },
+        {
+          "fa": "فیلد نام پروژه در Designer هنگام خالی شدن اندازهٔ قابل استفاده دارد.",
+          "en": "The Designer project name field keeps a usable size when cleared."
+        }
+      ],
       "planned": [
         {
           "fa": "روی خروجی PGM ایستگاه Playout، نمایش عنوان و شکل روی قاب، حفظ اتصال ورودی هنگام تغییر پریست، ماسک و Revert و پس‌زمینهٔ قاب بررسی شوند.",
