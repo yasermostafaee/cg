@@ -212,3 +212,12 @@
       and security census; bridge integration; CG Control model and real-browser Inspector mode control.
 - [x] B.8 Full `pnpm gate`, CG Control + Designer E2E, conventional commit and push to `dev`; Linux E2E RAN and
       passed for commit `19f789b5`: https://github.com/yasermostafaee/cg/actions/runs/40219232417
+
+## Sequence Inspector page controls
+
+- [x] Keep Manage pages as the Sequence Inspector's picker entry. Offer picture and folder replacement
+      in the dialog. Keep the thumbnail strip, page navigation and drag-and-drop.
+- [x] Update the Designer's Data key hint, export guidance and page picker scenarios.
+- [x] Verify the page controls, replacement and related flows in Windows Playwright. The focused
+      Windows Chromium suite and rerun passed all 31 distinct book and fixed-layer scenarios.
+- [ ] Record the carrying Linux Playwright E2E result.

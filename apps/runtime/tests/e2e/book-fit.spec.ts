@@ -1,6 +1,12 @@
 import type { Page } from '@playwright/test';
 import { probeImage } from '@cg/shared-ipc';
-import { buildBookVcg, expect, test, type RuntimeApp } from './fixtures/runtime.js';
+import {
+  bookPagesDialog,
+  buildBookVcg,
+  expect,
+  test,
+  type RuntimeApp,
+} from './fixtures/runtime.js';
 import { noisePng, solidPng } from './fixtures/pictures.js';
 
 /**
@@ -9,7 +15,7 @@ import { noisePng, solidPng } from './fixtures/pictures.js';
  * Camera and scanner pictures are larger than the channel and over 4 MB; the owner's were refused.
  * CG Control now scales each one to fit the channel's frame (never up, aspect kept), re-encodes it
  * (PNG when it is transparent, else JPEG), says so in one line, and refuses — naming them — only the
- * pictures still over the cap after fitting. Real pictures through the real `Load pages… ▾` → `Pictures…` path; the
+ * pictures still over the cap after fitting. Real pictures through the real `Manage pages…` → `Replace with pictures…` path; the
  * stored pages are read back (`pages.get`) and measured from their own bytes.
  */
 
@@ -67,13 +73,15 @@ test('🔴 1.2 — oversize pictures are fitted to 1920×1080 and said in one li
     // Small and within everything: sent exactly as picked.
     { name: 'd-small.png', buffer: solidPng(640, 360, [10, 200, 10]) },
   ]);
-  await expect(app.inspector.getByTestId('page-count-pages')).toHaveText('4 pages', {
-    timeout: 60_000,
-  });
-  await expect(app.inspector.getByTestId('page-fit-line')).toHaveText(
-    '2 pictures were resized to fit 1920×1080 · 1 picture was made smaller than 4 MB',
-  );
-  await expect(app.inspector.locator('[data-refusal]')).toHaveCount(0);
+  const dialog = bookPagesDialog(app.page);
+  await expect(
+    dialog.getByText(
+      '2 pictures were resized to fit 1920×1080 · 1 picture was made smaller than 4 MB',
+    ),
+  ).toBeVisible({ timeout: 60_000 });
+  await expect(dialog.locator('[data-refusal]')).toHaveCount(0);
+  await app.stageBookPages();
+  await expect(app.inspector.getByTestId('page-count-pages')).toHaveText('4 pages');
   await app.applyEdits();
 
   expect(await storedPages(app.page)).toEqual([
@@ -97,13 +105,11 @@ test('🔴 1.2 — only a picture still over the cap after fitting is refused, b
     // Transparent noise at the frame's own size: it must stay a PNG, and no PNG of it fits 4 MB.
     { name: 'scan.png', buffer: noisePng(1920, 1080, 3, true) },
   ]);
-  await expect(app.inspector.getByTestId('page-count-pages')).toHaveText('1 page', {
+  const dialog = bookPagesDialog(app.page);
+  await expect(dialog.getByText(/scan\.png could not be made smaller than 4 MB/)).toBeVisible({
     timeout: 60_000,
   });
-  await expect(
-    app.inspector.getByText(/scan\.png could not be made smaller than 4 MB/),
-  ).toBeVisible();
-  await expect(app.inspector.getByTestId('page-fit-line')).toHaveText(
-    '1 picture was resized to fit 1920×1080',
-  );
+  await expect(dialog.getByText('1 picture was resized to fit 1920×1080')).toBeVisible();
+  await app.stageBookPages();
+  await expect(app.inspector.getByTestId('page-count-pages')).toHaveText('1 page');
 });

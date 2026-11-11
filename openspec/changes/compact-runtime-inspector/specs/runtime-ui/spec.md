@@ -49,6 +49,6 @@ Inspector SHALL keep Update and Discard in the footer and retain the existing fi
 
 #### Scenario: Turn and load pages in a Sequence field
 
-- **WHEN** the selected template has a Sequence field with page navigation and load actions
+- **WHEN** the selected template has a Sequence field with page navigation and Manage pages
 - **THEN** the page strip and controls use the full width below the field name
-- **AND** the navigation and load actions fit on their respective rows at the normal Inspector width
+- **AND** page navigation and Manage pages fit on their respective rows at the normal Inspector width

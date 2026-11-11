@@ -23,10 +23,10 @@ pages needed a tool in CG Control, not in the Designer; and a book with a text p
   The bridge's own check stays the guard.
 - **1.4 — The book block.** One block on one grid: headed by the book's name (never its field id — and no
   Inspector heading prints a field id any more), always saying where its pages come from and whether they are
-  on the row, a strip of the pages around the current one, a turning row and a loading row.
+  on the row, a strip of the pages around the current one, page navigation and a `Manage pages…` button.
 - **1.5 — `Manage pages…`.** The operator's tool for a book, in the shared Modal: a numbered grid with the page on
-  air and in PVW marked; drag and keyboard reorder; remove one or many; sort by name; add pictures / a folder,
-  replace with a folder; add and edit text pages. Its edits stage. CG Bridge keeps the page on screen through an
+  air and in PVW marked; drag and keyboard reorder; remove one or many; sort by name; add or replace
+  pictures from files or a folder; add and edit text pages. Its edits stage. CG Bridge keeps the page on screen through an
   edit (one rule, `pageAfterBookChange`, shared with the mock).
 - **1.6 — A book with text pages stays a book** (the owner's decision). The one rule
   (`sequenceItemsBinding`): at least one picture, every other item a text page; only a composition item
@@ -40,8 +40,8 @@ pages needed a tool in CG Control, not in the Designer; and a book with a text p
 - **Delta A (the owner, 2026-10-22) — the book block.** The strip shows only pages that exist (no empty box on
   the first or last page) and nothing moves as a page turns; every face, in the strip and in `Manage pages…`, is
   drawn as the air shows it — the channel's frame shape on PVW's checker, the picture at the sequence's own fit
-  (`TemplateInfo.pageLists[].fit`); `Load pictures…` and `Load folder…` become one `Load pages… ▾` (`Pictures…`,
-  `Folder…`), and files or a folder dropped on the block replace its pictures, dropped on `Manage pages…` are added.
+  (`TemplateInfo.pageLists[].fit`). Files or a folder dropped on the block replace its pictures, and a drop
+  on `Manage pages…` adds them. The Inspector opens `Manage pages…` for both picker operations.
 - **Delta B (the owner, 2026-10-24) — the live book is one state.** The page reports the index it actually shows, so
   Auto updates the Inspector and a manual Previous/Next during Auto moves from the live page and is never lost. CG
   Control exposes Auto/Manual per row. Next on the final live page and STOP play the book's authored transition out;
@@ -51,7 +51,7 @@ pages needed a tool in CG Control, not in the Designer; and a book with a text p
 
 - **Specs:** `runtime-ui` (MODIFIED, ADDED), `runtime-caspar-bridge` (MODIFIED — a book keeps the page on screen
   through an edit, superseding "else page 1" for an edit; ADDED), `designer-sequence-element` (MODIFIED),
-  `designer-composition-export` (MODIFIED — the export refusal names `Load pages…`; delta A).
+  `designer-composition-export` (MODIFIED — the export refusal names `Manage pages…`).
 - **Code:** `@cg/shared-ipc` (`pages.get`), CG Bridge (`getPage`, route, scope), `@cg/template-runtime`
   (`page-pictures-host`, the fill, `alt`, `showSequenceItem`), CG Control (`pagePictures`, `bookPageOf`, PVW's
   frame, the mock), the Designer (the sequence card, `sequenceItemFocus`, the canvas's `sequence-item`).

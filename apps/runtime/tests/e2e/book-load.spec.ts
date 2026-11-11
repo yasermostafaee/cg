@@ -2,20 +2,15 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { Locator, Page } from '@playwright/test';
-import { expect, test } from './fixtures/runtime.js';
+import { bookPagesDialog, expect, test } from './fixtures/runtime.js';
 import { solidPng } from './fixtures/pictures.js';
 import { buildTelavat2Vcg } from '../support/telavat2Vcg.js';
 
 /**
- * 🔴 `RUN-NEXT-VERSION-03` delta A — **ONE LOAD BUTTON, AND A DROP** (the owner's choice, 2026-10-22).
+ * The Inspector offers one management entry. Files or a folder dropped on the book block replace
+ * its pictures. Drops in Manage pages append them.
  *
- * `Load pictures…` and `Load folder…` were two buttons. There is one, `Load pages… ▾`, whose menu holds
- * `Pictures…` and `Folder…` (a browser's picker takes files OR a folder, never both); beside it,
- * `Manage pages…`, on one line. Files or a folder DROPPED on the book block replace its pictures, and
- * dropped on `Manage pages…` they are added — through the same fitting and the same text-page rule.
- *
- * The drop is Chrome's own (`Input.dispatchDragEvent` with real paths on disk), so a dropped folder
- * reaches the page as a real directory entry, exactly as one dragged out of Explorer does.
+ * Chrome's drag input uses real paths on disk, including directory entries from the file manager.
  */
 
 function folderOf(name: string, pictures: readonly string[]): { dir: string; folder: string } {
@@ -64,45 +59,38 @@ function readsLeftToRight(el: Element): boolean {
   return at(0) < at(text.length - 1);
 }
 
-test('🔴 delta A — one Load pages… button: its menu holds Pictures… and Folder…, beside Manage pages…, on one line', async ({
-  app,
-}) => {
+test('the Inspector opens Manage pages to replace pictures or a folder', async ({ app }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1280, height: 720 });
   const templateId = 'tpl-e2e-load-menu';
   await app.importVcg('load-menu.vcg', await buildTelavat2Vcg({ templateId, pages: 3 }));
   await app.selectStackRow(templateId);
   const block = app.inspector.locator('[data-book]');
-  const row = block.locator('[data-book-load]');
+  await expect(block.locator('[data-book-load]').getByRole('button')).toHaveText(['Manage pages…']);
+  await expect(block.locator('[data-book-thumb]')).toHaveCount(3);
 
-  // The row: exactly two controls, one height, one top.
-  const buttons = row.getByRole('button');
-  await expect(buttons).toHaveCount(2);
-  await expect(buttons.nth(0)).toHaveText(/^Load pages…/);
-  await expect(buttons.nth(1)).toHaveText(/^Manage pages…/);
-  const a = await buttons.nth(0).boundingBox();
-  const b = await buttons.nth(1).boundingBox();
-  expect(Math.abs((a?.y ?? 0) - (b?.y ?? 1))).toBeLessThan(1);
-  expect(Math.abs((a?.height ?? 0) - (b?.height ?? 1))).toBeLessThan(1);
-
-  // The menu: Pictures… and Folder…, each saying it replaces the book's pictures.
-  const load = block.getByRole('button', { name: 'Load pages for Sequence' });
-  await expect(load).toHaveAttribute('aria-haspopup', 'menu');
-  await load.scrollIntoViewIfNeeded();
-  await load.click();
-  const menu = page.getByRole('menu', { name: 'Load pages for Sequence' });
-  await expect(menu.getByRole('menuitem')).toHaveText(['Pictures…', 'Folder…']);
-  for (const item of await menu.getByRole('menuitem').all()) {
-    await expect(item).toHaveAttribute('title', /^Replaces the book's pictures/);
-  }
-  // Folder… opens a folder picker (the browser's `webkitdirectory` chooser).
-  const chooser = page.waitForEvent('filechooser');
-  await menu.getByRole('menuitem', { name: 'Folder…' }).click();
-  const picker = await chooser;
+  const picker = await app.chooseBookPages('Folder…', 'Sequence');
+  const dialog = bookPagesDialog(page);
   expect(await picker.element().evaluate((i) => (i as HTMLInputElement).webkitdirectory)).toBe(
     true,
   );
-  await expect(menu).toHaveCount(0);
+  for (const name of ['Add pictures…', 'Add folder…', 'Replace with pictures…', 'Add text page']) {
+    await expect(dialog.getByRole('button', { name, exact: true })).toBeVisible();
+  }
+
+  const { dir, folder } = folderOf('REPLACEMENT', ['b.png', 'a.png']);
+  try {
+    await picker.setFiles(folder);
+    await expect(dialog.locator('[data-page-tile] .cg-page-tile__name')).toHaveText([
+      'a.png',
+      'b.png',
+    ]);
+    await app.stageBookPages();
+    await expect(sources(block)).toHaveText('Folder "REPLACEMENT" · 2 pictures');
+    await expect(block.locator('[data-book-sent]')).toHaveText('Not sent — press Update');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('🔴 delta A — a folder, then files, dropped on the book block replace its pictures', async ({
@@ -197,7 +185,7 @@ test('delta A — the book block at 1280×720 and 200 % text, in RTL: no empty b
     for (const thumb of await thumbs.all()) {
       await expect(thumb.locator('img, .cg-book-thumb__text'), label).toHaveCount(1);
     }
-    // The block, its strip and its load row inside the Inspector, side to side.
+    // The block, its strip and its management row inside the Inspector, side to side.
     const panel = await app.inspector.boundingBox();
     for (const part of ['.cg-book__strip', '[data-book-load]']) {
       const box = await block.locator(part).boundingBox();
@@ -209,9 +197,10 @@ test('delta A — the book block at 1280×720 and 200 % text, in RTL: no empty b
     }
     for (const button of await block.locator('[data-book-load]').getByRole('button').all()) {
       const box = await button.boundingBox();
-      expect((box?.x ?? 0) + (box?.width ?? 0), `${label}: a load button`).toBeLessThanOrEqual(
-        (panel?.x ?? 0) + (panel?.width ?? 0) + 0.5,
-      );
+      expect(
+        (box?.x ?? 0) + (box?.width ?? 0),
+        `${label}: the Manage pages button`,
+      ).toBeLessThanOrEqual((panel?.x ?? 0) + (panel?.width ?? 0) + 0.5);
     }
     // The readouts say `1 / 4`, never `4 / 1`: the strip's counter and the row's.
     expect(await caption.evaluate(readsLeftToRight), `${label}: the strip's counter`).toBe(true);

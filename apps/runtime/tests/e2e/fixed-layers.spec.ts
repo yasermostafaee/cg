@@ -309,6 +309,7 @@ test('R-023 — fixed layer shortcuts follow the guarded actions in filtered and
     { name: '1.png', mimeType: 'image/png', buffer: solidPng(20, 20, [255, 0, 0]) },
     { name: '2.png', mimeType: 'image/png', buffer: solidPng(20, 20, [0, 255, 0]) },
   ]);
+  await app.stageBookPages();
   await expect(app.inspector.getByTestId('page-count-pages')).toHaveText('2 pages');
   await app.applyEdits();
   const bookRow = app.layerRow(82);

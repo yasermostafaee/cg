@@ -10,7 +10,7 @@ import { solidPng } from './fixtures/pictures.js';
  * never re-exported.
  */
 
-test('🔴 telavat2’s shape imports as a book: the bar, 1 / 87, Next, Previous, Go, Load pages…', async ({
+test('🔴 telavat2’s shape imports as a book: the bar, 1 / 87, Next, Previous, Go and Manage pages…', async ({
   app,
 }) => {
   await app.importVcg('telavat2.vcg', await buildTelavat2Vcg());
@@ -20,10 +20,10 @@ test('🔴 telavat2’s shape imports as a book: the bar, 1 / 87, Next, Previous
   await expect(app.inspector.getByRole('textbox', { name: /^a1 item \d+$/ })).toHaveCount(0);
   // `RUN-NEXT-VERSION-03` 1.4 — the book is named by its sequence (`Sequence`), never its key `a1`.
   await expect(
-    app.inspector.getByRole('button', { name: 'Load pages for Sequence' }),
+    app.inspector.getByRole('button', { name: 'Manage pages of Sequence' }),
   ).toBeVisible();
-  await expect(app.inspector.getByRole('button', { name: 'Load pages for Sequence' })).toHaveText(
-    /Load pages…/,
+  await expect(app.inspector.getByRole('button', { name: 'Manage pages of Sequence' })).toHaveText(
+    /Manage pages…/,
   );
 
   const counter = app.inspector.getByTestId('book-counter');
@@ -48,7 +48,7 @@ test('BOOK-EXPORT Q2 — the same book with no Data key is a book too', async ({
   await expect(app.inspector.getByTestId('book-counter')).toHaveText('1 / 4');
   // `RUN-NEXT-VERSION-03` 1.4 — its field is `pages-${TELAVAT2_SEQUENCE}`; the operator reads its name.
   await expect(
-    app.inspector.getByRole('button', { name: 'Load pages for Sequence' }),
+    app.inspector.getByRole('button', { name: 'Manage pages of Sequence' }),
   ).toBeVisible();
   await expect(app.inspector.getByText(`pages-${TELAVAT2_SEQUENCE}`)).toHaveCount(0);
 });
@@ -69,7 +69,7 @@ test('🔴 1.6 — a book with a text page is a book, and a load keeps the text 
   );
   await app.selectStackRow(templateId);
   await expect(app.inspector.getByTestId('book-counter')).toHaveText('1 / 4');
-  await expect(app.inspector.getByRole('button', { name: /^Load pages for / })).toBeVisible();
+  await expect(app.inspector.getByRole('button', { name: /^Manage pages of / })).toBeVisible();
 
   // Two new pictures for three: picture 1, the text page after it, picture 2 — three pages.
   await (
@@ -81,6 +81,7 @@ test('🔴 1.6 — a book with a text page is a book, and a load keeps the text 
       buffer: solidPng(64, 36, [40 * (i + 1), 90, 160]),
     })),
   );
+  await app.stageBookPages();
   await expect(app.inspector.getByTestId('page-count-a1')).toHaveText('3 pages');
   await app.applyEdits();
   const pages = await app.page.evaluate(async () => {

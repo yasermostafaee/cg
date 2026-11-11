@@ -1,4 +1,4 @@
-import { buildBookVcg, expect, test } from './fixtures/runtime.js';
+import { bookPagesDialog, buildBookVcg, expect, test } from './fixtures/runtime.js';
 
 /**
  * `R-100` — the OPERATOR loads a book of pictures on a row and turns its pages, in test mode (the
@@ -61,6 +61,7 @@ test('🔴 a folder’s pictures load in natural order; Next, Previous and Go to
       buffer: png(i),
     })),
   );
+  await app.stageBookPages();
   await expect(app.inspector.getByTestId('page-count-pages')).toHaveText('3 pages');
   await app.applyEdits();
 
@@ -135,7 +136,8 @@ test('a file that cannot be read as a picture is refused with a sentence naming 
     await app.chooseBookPages('Pictures…')
   ).setFiles({ name: 'panorama.png', mimeType: 'image/png', buffer: wide });
   await expect(
-    app.inspector.getByText(/panorama\.png is not a PNG, JPEG or WebP picture/),
+    bookPagesDialog(app.page).getByText(/panorama\.png is not a PNG, JPEG or WebP picture/),
   ).toBeVisible();
+  await bookPagesDialog(app.page).getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(app.inspector.getByTestId('page-count-pages')).toHaveText('0 pages');
 });

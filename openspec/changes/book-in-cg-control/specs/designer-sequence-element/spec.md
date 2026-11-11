@@ -96,7 +96,7 @@ The Designer's Inspector SHALL show one sentence under **advance** when a sequen
 text pages), is stepped by the operator, and is set to `auto`: Auto is the book's initial mode, CG Control follows the
 page actually shown on air, and the operator can switch that row between Auto and Manual. The exported page-list
 metadata SHALL carry the authored `advance` mode. A page list's Data key SHALL NOT offer "Allow file source"; it SHALL
-say that operators turn and load its pages in CG Control (Load pages…).
+say that operators turn and load its pages in CG Control (Manage pages…).
 
 #### Scenario: Auto is the initial mode, not a drift warning
 
@@ -107,7 +107,7 @@ say that operators turn and load its pages in CG Control (Load pages…).
 #### Scenario: A book's key offers no text-file grant
 
 - **WHEN** a book's Data key section is open
-- **THEN** there is no "Allow file source" control, and a line names Load pages…
+- **THEN** there is no "Allow file source" control, and a line names Manage pages…
 
 ### Requirement: Add many pictures at once, in natural order
 

@@ -1,12 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import {
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  FolderOpen,
-  Images,
-  ListOrdered,
-} from 'lucide-react';
+import { ChevronLeft, ChevronRight, ListOrdered } from 'lucide-react';
 import { REFERENCE_RASTER } from '@cg/shared-ipc';
 import type { FieldValue, ImageFit } from '@cg/shared-schema';
 import { parseLocalizedNumber } from '@cg/text-shaping';
@@ -30,11 +23,9 @@ import {
   dragCarriesFiles,
   droppedPictures,
   loadPictureFiles,
-  loadPictures,
-  type LoadOutcome,
+  type PictureFile,
 } from './loadPictures.js';
 import type { Raster } from './fitPicture.js';
-import { ContextMenu } from '../../ui/ContextMenu.js';
 import { useAuthoredPictureThumbnails } from './authoredPictures.js';
 import { ManagePagesModal } from './ManagePagesModal.js';
 import { useRehearse } from '../../hooks/useRehearse.js';
@@ -57,9 +48,8 @@ import {
  *   and WHETHER they are on the row (`Not sent — press Update` / `On the row`);
  * - WHICH pages are around the one the row is on: the page before, that page, the page after;
  *
- * and offers two rows of controls: turning (`Previous`, the page box with ` / 87`, `Next`, `Go`) and
- * loading (`Load pages… ▾` — `Pictures…` / `Folder…` — and `Manage pages…`; delta A: one load button, and
- * files or a folder dropped on the block load the same way). Its heading is the book's name, never
+ * and offers page navigation and `Manage pages…`. Dropping files or a folder on the block
+ * replaces its pictures. Its heading is the book's name, never
  * its field id (`bookTitle`). Built from the console's primitives only; its grid is `controls.css`'s
  * `.cg-book`. Labels, values and facts — no sentence explains it.
  */
@@ -91,9 +81,6 @@ export interface BookBlockProps {
   fit?: ImageFit | undefined;
 }
 
-/** One way of getting pictures in — the picker, or a drop — told how far it is. */
-type Loader = (progress: (done: number, total: number) => void) => Promise<LoadOutcome | null>;
-
 export function BookBlock({
   itemId,
   fieldId,
@@ -123,15 +110,15 @@ export function BookBlock({
   const [busy, setBusy] = useState<{ done: number; total: number } | null>(null);
   const [fitted, setFitted] = useState<string | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
-  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
   const [dropping, setDropping] = useState(false);
 
-  /** Every load — picked pictures, a picked folder, or a drop — REPLACES the book's pictures (1.6). */
-  async function load(outcomeOf: Loader): Promise<void> {
+  async function replaceDroppedPictures(dropped: Promise<PictureFile[]>): Promise<void> {
     setFitted(null);
     setRefusal(null);
     try {
-      const outcome = await outcomeOf((done, total) => setBusy({ done, total }));
+      const outcome = await loadPictureFiles(await dropped, raster, (done, total) => {
+        setBusy({ done, total });
+      });
       if (outcome === null) return;
       setFitted(outcome.fitted);
       setRefusal(outcome.refusal);
@@ -163,8 +150,7 @@ export function BookBlock({
         e.preventDefault();
         setDropping(false);
         // Read now: the drop's items are gone once this handler returns.
-        const dropped = droppedPictures(e.dataTransfer);
-        void load(async (progress) => loadPictureFiles(await dropped, raster, progress));
+        void replaceDroppedPictures(droppedPictures(e.dataTransfer));
       }}
     >
       {dropping && (
@@ -196,27 +182,6 @@ export function BookBlock({
       />
       {book !== null && <BookTurn itemId={itemId} title={title} book={book} onAir={onAir} />}
       <div className="cg-book__row" data-book-load="">
-        {/*
-          🔴 `RUN-NEXT-VERSION-03` delta A — ONE load button (the owner's choice): a browser's picker takes
-          files OR a folder, never both, so the button opens a two-item menu. Every load here REPLACES the
-          book's pictures (each text page keeps its place, 1.6) — the menu's items say so in their title,
-          and a drop says so while it is held over the block.
-        */}
-        <Button
-          variant="neutral"
-          aria-label={`Load pages for ${title}`}
-          aria-haspopup="menu"
-          aria-expanded={menuAt !== null}
-          disabled={busy !== null}
-          onClick={(e) => {
-            const r = e.currentTarget.getBoundingClientRect();
-            setMenuAt({ x: r.left, y: r.bottom + 2 });
-          }}
-        >
-          <Icon icon={Images} size={13} />
-          {busy === null ? 'Load pages…' : `Loading ${String(busy.done)} / ${String(busy.total)}…`}
-          <Icon icon={ChevronDown} size={13} />
-        </Button>
         <Button
           variant="neutral"
           aria-label={`Manage pages of ${title}`}
@@ -226,29 +191,12 @@ export function BookBlock({
           <Icon icon={ListOrdered} size={13} />
           Manage pages…
         </Button>
+        {busy !== null && (
+          <span className="cg-book-count" role="status">
+            Loading {String(busy.done)} / {String(busy.total)}…
+          </span>
+        )}
       </div>
-      {menuAt !== null && (
-        <ContextMenu
-          x={menuAt.x}
-          y={menuAt.y}
-          ariaLabel={`Load pages for ${title}`}
-          onClose={() => setMenuAt(null)}
-          items={[
-            {
-              label: 'Pictures…',
-              icon: Images,
-              title: "Replaces the book's pictures; text pages keep their places",
-              onSelect: () => void load((progress) => loadPictures(false, raster, progress)),
-            },
-            {
-              label: 'Folder…',
-              icon: FolderOpen,
-              title: "Replaces the book's pictures with a folder's; text pages keep their places",
-              onSelect: () => void load((progress) => loadPictures(true, raster, progress)),
-            },
-          ]}
-        />
-      )}
       {fitted !== null && (
         <span className="cg-book-count" data-testid="page-fit-line">
           {fitted}

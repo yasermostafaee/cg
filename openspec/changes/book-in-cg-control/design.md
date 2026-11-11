@@ -42,3 +42,9 @@ A page-list sequence joins the existing element-outro ledger. Operator STOP/OUT 
 picture decode in flight, and awaits the authored `transitionOut`. A finite Auto run or Next on its last live page uses
 the same visual boundary, then emits `book-end`; the existing completion receipt invokes the same graceful row STOP as
 other self-ending graphics. Operator exits do not emit natural completion, so there is no stop loop.
+
+## 6. Picture pickers in Manage pages
+
+The Sequence Inspector opens Manage pages for both adding and replacing pictures. The dialog's two
+replacement actions use the same loader and keep text pages in place. Done stages the page list for
+Update. Dropping files on the Inspector still replaces pictures and stages the result directly.

@@ -2,9 +2,9 @@
 
 ### Requirement: The operator loads a book of pictures on a row and turns its pages
 
-For a template field that is a page list, the CG Control Inspector SHALL offer one `Load pages… ▾` button
-whose menu holds `Pictures…` and `Folder…`, and SHALL take files or a folder dropped on the book block, in
-place of the list editor, sort the picked files in natural file-name order, FIT each
+For a template field that is a page list, the CG Control Inspector SHALL offer `Manage pages…` for the
+picture and folder pickers and SHALL take files or a folder dropped on the book block in place of the list
+editor. CG Control SHALL sort the files in natural file-name order and FIT each
 picture before it is sent — a picture larger than the row's channel frame on either side SHALL be
 scaled to fit inside it (never upscaled, the aspect kept) and re-encoded, and one within the frame
 but over the 4 MB page cap SHALL be re-encoded at its own size; a re-encoded picture SHALL be a PNG
@@ -109,9 +109,8 @@ picture fit (`TemplateInfo.pageLists[].fit`; `contain` when a template imported 
 console's pictures, the bridge's stored copies, or the template's own (read from the page CG Bridge stores); a
 text page as its words, small; a picture that cannot be had as a wordless placeholder, never its file name. Then
 the advance row (`Manual`, `Auto`) and the turning row (`Previous`, the page box with ` / count`, `Next`, `Go`, one height, one centre line, icons with
-words) and the loading row — `Load pages… ▾` and `Manage pages…`, one height, one line; each control's accessible
-name names the book. `Load pages… ▾` SHALL open a menu of `Pictures…` and `Folder…`, each saying in its title that
-it replaces the book's pictures; files or a folder dropped on the block SHALL load the same way, the block saying
+words), followed by a single `Manage pages…` button. Each control's accessible name names the book.
+Files or a folder dropped on the block SHALL replace the pictures, with the block saying
 `Drop to replace the pictures` while they are held over it. It SHALL fit the Inspector at 1280×720 and at 200 %
 text, in RTL.
 
@@ -137,7 +136,7 @@ text, in RTL.
 
 - **WHEN** a four-page book is on page 1, and is turned to page 4
 - **THEN** the strip reads `1 / 4`, `2`, `3`, then `2`, `3`, `4 / 4`, every face a page, the current one marked;
-  the strip and the loading row keep their place in the block on every turn
+  the strip and the management button keep their place in the block on every turn
 
 #### Scenario: A one- or two-page book
 
@@ -150,10 +149,13 @@ text, in RTL.
 - **THEN** in the strip and in `Manage pages…` the face is 16:9 for a 1920×1080 channel; the `contain` face shows
   the whole picture with bars beside it, and the `cover` face is filled
 
-#### Scenario: One load button
+#### Scenario: Replace pictures through the page manager
 
-- **WHEN** the operator presses `Load pages for Sequence`
-- **THEN** a menu offers `Pictures…` and `Folder…`, and `Folder…` opens a folder picker
+- **WHEN** the operator inspects a Sequence field and opens `Manage pages…`
+- **THEN** the Inspector's management row contains one button and its thumbnails remain visible
+- **AND** the dialog offers both add and replace actions for pictures and folders
+- **AND** selecting a folder through `Replace with folder…` replaces the pictures in the draft
+- **AND** `Done` stages the resulting page list in the Inspector
 
 #### Scenario: A folder or files dropped on the block
 
@@ -168,7 +170,8 @@ page on air and the page in PVW marked (`On air`, `PVW`); drag to reorder, and `
 page as the keyboard path; `Remove` per page and the selected pages removed together; `Sort by name` (natural order —
 `MRN (2)` before `MRN (10)` — text pages keeping their places); `Add pictures…` and `Add folder…` (appended, ids made
 unique), files or a folder dropped on the dialog (appended, the dialog saying `Drop to add pages` while they are
-held over it) and `Replace with folder…` (the pictures only, each text page keeping its place), all through the
+held over it), `Replace with pictures…` and `Replace with folder…` (the pictures only, each text page keeping
+its place), all through the
 console's fitting; each page drawn as the book block's strip draws it; `Add text page`, and a text page's words
 edited in place. `Done` SHALL stage the edited book like every
 Inspector edit — `Discard` and `Update` keep their meaning and nothing reaches air before Update. When the edit
@@ -201,8 +204,9 @@ removed; at Update, page 2 takes its place.`; after Update the row reads `2 / 3`
 ### Requirement: A book with text pages SHALL stay a book, and a load SHALL replace its pictures only
 
 A row whose template's book holds pictures and TEXT pages SHALL be a book in CG Control (the book bar,
-`Load pages…`), and the operator SHALL turn every page, text pages included. A load in the book block —
-`Pictures…`, `Folder…` or a drop — SHALL replace the PICTURE pages only: each text page SHALL keep its place after the picture it followed
+`Manage pages…`), and the operator SHALL turn every page, text pages included. Replacing pictures in
+`Manage pages…` or dropping them on the book block SHALL replace the PICTURE pages only. Each text page
+SHALL keep its place after the picture it followed
 (those before the first picture stay first), and when the new pictures are fewer, the text pages that followed a
 picture past their end SHALL move to the end, in their order.
 

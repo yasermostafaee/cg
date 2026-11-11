@@ -3,7 +3,14 @@ import type { Locator, Page } from '@playwright/test';
 import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { ConnectionConfig, FixedLayerBank } from '@cg/shared-ipc';
-import { buildBookVcg, expect, openVcgFileChooser, test } from './fixtures/runtime.js';
+import {
+  bookPagesDialog,
+  buildBookVcg,
+  expect,
+  openBookPageChooser,
+  openVcgFileChooser,
+  test,
+} from './fixtures/runtime.js';
 import { solidPng } from './fixtures/pictures.js';
 import { buildTelavat2Vcg } from '../support/telavat2Vcg.js';
 
@@ -17,7 +24,7 @@ import { buildTelavat2Vcg } from '../support/telavat2Vcg.js';
  *
  * The real path end to end: a real `@cg/caspar-bridge` and `@cg/amcp-mock` (`pvw-from-bridge`'s
  * shape), the template imported and loaded through the console's own controls (so PVW renders the
- * page CG Control baked), REAL pictures (`solidPng`) loaded through `Load pages… ▾` → `Pictures…`, and PVW's
+ * page CG Control baked), REAL pictures (`solidPng`) loaded through `Manage pages…` → `Replace with pictures…`, and PVW's
  * composite SAMPLED — the checker's screenshot holds every frame drawn over it
  * (`rehearse-canvas.spec.ts`'s method). One colour per page, so the sample says which page PVW is on.
  * A reload at the end proves the read-back: the console no longer holds the bytes it sent, and PVW
@@ -165,18 +172,13 @@ test('🔴 1.1 — PVW draws the loaded pictures, not their names; a turn moves 
   await pvwBar.getByRole('button', { name: 'PLAY', exact: true }).click();
 
   // Loaded, not yet sent: PVW shows the staged book at the row's page — page 1, red.
-  const chooser = page.waitForEvent('filechooser');
-  await inspector(page)
-    .getByRole('button', { name: /^Load pages for / })
-    .click();
-  await page.getByRole('menuitem', { name: 'Pictures…', exact: true }).click();
-  await (
-    await chooser
-  ).setFiles([
+  const chooser = await openBookPageChooser(page, inspector(page), 'Pictures…');
+  await chooser.setFiles([
     { name: 'page1.png', mimeType: 'image/png', buffer: solidPng(64, 36, RED) },
     { name: 'page2.png', mimeType: 'image/png', buffer: solidPng(64, 36, GREEN) },
     { name: 'page3.png', mimeType: 'image/png', buffer: solidPng(64, 36, BLUE) },
   ]);
+  await bookPagesDialog(page).getByRole('button', { name: 'Done', exact: true }).click();
   await expectPvw(page, RED);
 
   // The page's picture is the picture: real pixels, and no name for a browser to paint.
@@ -231,18 +233,13 @@ test('🔴 1.3 — the preview bar’s NEXT turns the loaded pages, exactly as t
   await expect(pvwBar.getByRole('button', { name: 'PLAY', exact: true })).toBeEnabled();
   await pvwBar.getByRole('button', { name: 'PLAY', exact: true }).click();
 
-  const chooser = page.waitForEvent('filechooser');
-  await inspector(page)
-    .getByRole('button', { name: /^Load pages for / })
-    .click();
-  await page.getByRole('menuitem', { name: 'Pictures…', exact: true }).click();
-  await (
-    await chooser
-  ).setFiles([
+  const chooser = await openBookPageChooser(page, inspector(page), 'Pictures…');
+  await chooser.setFiles([
     { name: 'page1.png', mimeType: 'image/png', buffer: solidPng(64, 36, RED) },
     { name: 'page2.png', mimeType: 'image/png', buffer: solidPng(64, 36, GREEN) },
     { name: 'page3.png', mimeType: 'image/png', buffer: solidPng(64, 36, BLUE) },
   ]);
+  await bookPagesDialog(page).getByRole('button', { name: 'Done', exact: true }).click();
   await inspector(page).getByRole('button', { name: 'Apply staged edits' }).click();
   await expect(inspector(page).getByTestId('book-counter')).toHaveText('1 / 3');
   await expectPvw(page, RED);

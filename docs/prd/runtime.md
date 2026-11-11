@@ -4729,8 +4729,9 @@ reads (control: every read happened), none for an unreachable Playout.
 
 ## [x] R-100 — the operator loads a book of pictures on a row and turns its pages: `12 / 300`, Previous, Next, Go to ⟨priority: high — confirmed by the owner 2026-10-14: the OPERATOR changes the book⟩ — FILED 2026-10-14 by `IMAGE-PAGES-01` · `openspec/changes/archive/2026-10-21-add-image-pages/` · the Designer half is [[D-163]]
 
-**What:** on a row whose template has a page list, the Inspector offers `Load pictures…` and `Load folder…`;
-the files are sorted naturally, checked against the limits (4 MB and 3840 × 2160 pixels a picture, 500 pages a
+**What:** on a row whose template has a page list, the Inspector opens `Manage pages…` to add or replace
+pictures from files or a folder. Dropping files or a folder on the Inspector still replaces pictures.
+The files are sorted naturally, checked against the limits (4 MB and 3840 × 2160 pixels a picture, 500 pages a
 row), sent to CG Bridge on the existing signed-in socket and stored there by content hash beside the template
 store. The Inspector reads `12 / 300` with Previous, Next and a page box; the row shows `12 / 300`, its NEXT
 turns the page and PREV is in its menu. Each press sends ONE `CG UPDATE` naming that one page by its address on
@@ -4745,6 +4746,9 @@ frame.
 Previous / `۱۲` THEN `2 / 300`, `1 / 300`, `12 / 300`; WHEN a picture is over a limit THEN a refusal naming it;
 WHEN the bridge restarts THEN the row keeps its pages and page; WHEN the row is removed THEN its pictures are
 deleted unless another row names them; WHEN a second console looks THEN it sees the same book.
+WHEN a Sequence field is selected THEN the Inspector shows one `Manage pages…` entry beside its existing
+thumbnails and page navigation, and picture or folder replacement is available in the dialog
+(`openspec/changes/book-in-cg-control/`).
 
 ## [x] R-101 — the Inspector checks a text field against its pattern before Update, so a mistyped Azan time is refused at the console instead of silently ignored by the page ⟨priority: medium — the Azan time is the first field whose bad value changes nothing on air without a word⟩ — FILED 2026-10-15 by `AZAN-DESIGNER-01` (item 4) · BUILT 2026-10-16 by `RUN-NEXT-VERSION-02` (Q14) · `openspec/changes/archive/2026-10-21-field-pattern-refusal/`
 

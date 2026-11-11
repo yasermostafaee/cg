@@ -5,10 +5,9 @@ import { rememberPicture } from './pagePictures.js';
 import type { PicturePage } from './bookPages.js';
 
 /**
- * `R-100` / `RUN-NEXT-VERSION-03` — **PICK, FIT AND SEND A BOOK'S PICTURES**: the one loader the Inspector's
- * `Load pages… ▾` (`Pictures…` / `Folder…`) and `Manage pages…`' `Add pictures…` / `Add folder…` /
- * `Replace with folder…` share — and, since delta A, files or a folder DROPPED on the book block or on
- * `Manage pages…`. The files are put in natural order (the comparison the Designer uses too), each is
+ * `R-100` / `RUN-NEXT-VERSION-03` — **PICK, FIT AND SEND A BOOK'S PICTURES**: one loader serves picture
+ * and folder pickers in `Manage pages…` and files dropped on the dialog or Inspector book block.
+ * The files are put in natural order (the comparison the Designer uses too), each is
  * FITTED to the row's channel (1.2, `fitPicture`) and sent to CG Bridge one at a time; the bytes sent
  * are kept under the hash the bridge answered (1.1, `pagePictures`). A picture from a folder keeps its
  * folder in its name (`IN/MRN (1).jpg`), so the Inspector can say where the book came from on any

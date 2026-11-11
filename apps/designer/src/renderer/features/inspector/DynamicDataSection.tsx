@@ -594,8 +594,7 @@ function FieldMeta({
             the book's mark. A book says where its pages come from instead. */}
         {field.pages === true ? (
           <p className={s.hint} data-testid="page-list-hint">
-            A book: operators turn its pages in CG Control, and load new ones there with Load
-            pages….
+            A book: operators turn its pages in CG Control and load new ones in Manage pages….
           </p>
         ) : (
           <>

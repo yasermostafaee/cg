@@ -74,6 +74,27 @@ export async function openVcgFileChooser(page: Page, picker: Locator): Promise<F
   return chooser;
 }
 
+export function bookPagesDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: 'Manage pages', exact: true });
+}
+
+export async function openBookPageChooser(
+  page: Page,
+  inspector: Locator,
+  item: 'Pictures…' | 'Folder…',
+  book?: string,
+): Promise<FileChooser> {
+  const name = book === undefined ? /^Manage pages of / : `Manage pages of ${book}`;
+  await inspector.getByRole('button', { name }).click();
+  const [chooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    bookPagesDialog(page)
+      .getByRole('button', { name: `Replace with ${item.toLowerCase()}`, exact: true })
+      .click(),
+  ]);
+  return chooser;
+}
+
 export class RuntimeApp {
   constructor(readonly page: Page) {}
 
@@ -551,33 +572,14 @@ export class RuntimeApp {
     await expect(this.page.locator('[data-monitor-strip]')).toHaveCount(1);
   }
 
-  /**
-   * 🔴 `RUN-NEXT-VERSION-03` delta A — **OPEN THE BOOK'S PICKER** through its one load button: `Load pages… ▾`,
-   * then `Pictures…` or `Folder…`. Resolves to the browser's chooser for the caller to fill. One place,
-   * so the next time the door moves the book specs do not each have to be found and edited.
-   */
-  async chooseBookPages(
-    item: 'Pictures…' | 'Folder…',
-    book: string | RegExp = /^Load pages for /,
-  ): Promise<FileChooser> {
-    const name = typeof book === 'string' ? `Load pages for ${book}` : book;
-    const load = this.inspector.getByRole('button', { name });
-    // Focus can scroll the Inspector and dismiss a menu opened during the same frame.
-    await load.scrollIntoViewIfNeeded();
-    await load.evaluate((button) => (button as HTMLElement).focus({ preventScroll: true }));
-    const option = this.page
-      .getByRole('menu', { name })
-      .getByRole('menuitem', { name: item, exact: true });
-    let chooser: FileChooser | undefined;
-    await expect(async () => {
-      if (!(await option.isVisible())) await load.press('Enter', { timeout: 2_000 });
-      [chooser] = await Promise.all([
-        this.page.waitForEvent('filechooser', { timeout: 2_000 }),
-        option.click({ force: true, timeout: 1_000 }),
-      ]);
-    }).toPass({ timeout: 10_000 });
-    if (chooser === undefined) throw new Error('The book file picker did not open');
-    return chooser;
+  /** Open a replacement picker in the book's Manage pages dialog. */
+  chooseBookPages(item: 'Pictures…' | 'Folder…', book?: string): Promise<FileChooser> {
+    return openBookPageChooser(this.page, this.inspector, item, book);
+  }
+
+  /** Put the page manager's edits in the Inspector's draft. */
+  async stageBookPages(): Promise<void> {
+    await bookPagesDialog(this.page).getByRole('button', { name: 'Done', exact: true }).click();
   }
 
   /** R-003 — apply the selected item's staged edits via the Inspector's Update. */

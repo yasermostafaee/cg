@@ -5,7 +5,7 @@ import { naturalCompare } from '@cg/text-shaping';
  *
  * The owner's decision: a sequence of pictures and text pages is still a book. A picture page names
  * its picture (`media`, an operator's; `assetId`, the author's); a text page is `{ id, text }` and
- * travels as text — never as a picture. Pure, so the Inspector's `Load pages…` and `Manage pages…`
+ * travels as text — never as a picture. Pure, so Inspector drops and `Manage pages…`
  * apply the same rules.
  */
 

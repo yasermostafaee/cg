@@ -46,11 +46,12 @@ async function sampleRgb(page: Page, locator: Locator, fx: number, fy: number): 
 const near = (a: RGB, b: RGB, tolerance = 30): boolean =>
   a.every((c, i) => Math.abs(c - (b[i] ?? 0)) <= tolerance);
 
-/** Pick pictures through the book block's one load button: `Load pages… ▾` → `Pictures…`. */
+/** Replace pictures in Manage pages and stage the result. */
 async function loadPictures(app: RuntimeApp, files: { name: string; png: Buffer }[]) {
   await (
     await app.chooseBookPages('Pictures…', 'Sequence')
   ).setFiles(files.map((f) => ({ name: f.name, mimeType: 'image/png', buffer: f.png })));
+  await app.stageBookPages();
 }
 
 const captions = (block: Locator): Promise<string[]> =>

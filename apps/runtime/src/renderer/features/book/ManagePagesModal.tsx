@@ -49,8 +49,8 @@ import type { Raster } from './fitPicture.js';
  * - drag to reorder — and `Move earlier` / `Move later` on every page, the keyboard path;
  * - `Remove` per page, and the pages selected (`Select`) removed together;
  * - `Sort by name` (natural order; text pages keep their places);
- * - `Add pictures…`, `Add folder…` (appended), `Replace with folder…` (the pictures only — each text page
- *   keeps its place; 1.6), and files or a folder dropped on the dialog (appended; delta A), all through
+ * - `Add pictures…` and `Add folder…` append pages. `Replace with pictures…` and `Replace with folder…`
+ *   replace pictures and keep text pages in place. Files or a folder dropped on the dialog append, through
  *   1.2's fitting;
  * - `Add text page`, and a text page's words edited in place.
  *
@@ -253,6 +253,10 @@ export function ManagePagesModal({
           <Button variant="neutral" disabled={busy !== null} onClick={() => void add(true, false)}>
             <Icon icon={FolderOpen} size={13} />
             Add folder…
+          </Button>
+          <Button variant="neutral" disabled={busy !== null} onClick={() => void add(false, true)}>
+            <Icon icon={Images} size={13} />
+            Replace with pictures…
           </Button>
           <Button variant="neutral" disabled={busy !== null} onClick={() => void add(true, true)}>
             <Icon icon={FolderSync} size={13} />

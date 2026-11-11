@@ -374,8 +374,8 @@ export class Exporter {
             `${mbOf(mediaBytes)} MB of pictures and media; one template can carry at most ` +
             `${mbOf(TEMPLATE_MEDIA_MAX_BYTES)} MB. Use fewer or smaller pictures, or load the ` +
             // BOOK-EXPORT Q1 (the owner: keep the limit) — and say the way around it, by the name of
-            // CG Control's one load button (`RUN-NEXT-VERSION-03` delta A).
-            `pages in CG Control instead (Load pages…).`,
+            // CG Control's page manager.
+            `pages in CG Control instead (Manage pages…).`,
           ...(heaviest !== null && { elementId: heaviest.id }),
         });
       }
