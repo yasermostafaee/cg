@@ -629,7 +629,7 @@ export const StackSetFramePlacementsChannel = defineChannel(
 
 /** Upsert edited windows of authored masks. */
 export const StackSetMaskPlacementsChannel = defineChannel(
-  'stack.setMaskPlacements',
+  'stack.set-mask-placements',
   z.object({
     itemId: IdSchema,
     placements: LiveMaskPlacementsSchema,

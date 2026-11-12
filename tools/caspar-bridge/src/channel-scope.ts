@@ -402,6 +402,7 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'stack.pgm-plate-crop': INTENT,
   'stack.preview-plate-crop': INTENT,
   'stack.set-frame-placements': INTENT,
+  'stack.set-mask-placements': INTENT,
   'stack.remove': INTENT,
   'stack.remove-all': INTENT,
   'stack.set-active-look': INTENT,
