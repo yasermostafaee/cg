@@ -43,7 +43,7 @@ const CONFIG_MESSAGES = {
   'stream-scheme-not-allowed':
     'That stream URL doesn’t start with an accepted scheme — use one of http, https, rtmp, rtmps, rtsp, srt, udp, rtp or mms.',
   'low-bank-not-below-band':
-    'The graphics-bed rows must sit BELOW the live source layer band, and they do not — a bed is composited under the plates it declares, so a bed row at or above the band would draw its background over the live pictures. Move the band up, or the bed rows down.',
+    'Live layers must sit below the Live Source layer band so their backgrounds render under the live plates. Move the band up or the live layers down.',
 } satisfies Record<SourcesSetConfigReason, string>;
 
 const ASSIGNMENT_MESSAGES = {

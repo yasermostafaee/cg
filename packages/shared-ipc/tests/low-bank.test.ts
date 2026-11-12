@@ -178,21 +178,21 @@ describe('the two halves keep their OWN ticks, aliases and numbering', () => {
     🔴 `DESKTOP-APPS-01-D` h — the default NAME carries the real AMCP layer, never the position:
     the owner's top row read `Layer 1` while the Inspector said layer 99.
   */
-  it('🔴 the default name is the word and the REAL layer — Layer 89, Bed 59, Bed 50', () => {
+  it('🔴 the default name is the word and the REAL layer — Layer 89, Live layer 59, Live layer 50', () => {
     const b = bank();
     expect(defaultLayerAlias(b, 89)).toBe('Layer 89');
     expect(defaultLayerAlias(b, 80)).toBe('Layer 80');
-    expect(defaultLayerAlias(b, 59)).toBe('Bed 59');
-    expect(defaultLayerAlias(b, 50)).toBe('Bed 50');
+    expect(defaultLayerAlias(b, 59)).toBe('Live layer 59');
+    expect(defaultLayerAlias(b, 50)).toBe('Live layer 50');
   });
 
   it('control — a configured name is kept, whatever the layer', () => {
     const b = bank({
       aliases: { '89': 'CLOCK' },
-      low: { start: 50, count: 10, aliases: { '59': 'BED' } },
+      low: { start: 50, count: 10, aliases: { '59': 'Bed 59' } },
     });
     expect(layerAlias(b, 89) ?? defaultLayerAlias(b, 89)).toBe('CLOCK');
-    expect(layerAlias(b, 59) ?? defaultLayerAlias(b, 59)).toBe('BED');
+    expect(layerAlias(b, 59) ?? defaultLayerAlias(b, 59)).toBe('Bed 59');
     expect(layerAlias(b, 88) ?? defaultLayerAlias(b, 88)).toBe('Layer 88');
   });
 });
@@ -267,7 +267,7 @@ describe('the band must lie ABOVE the beds — disjointness is not enough', () =
   it('🔴 refuses a band that starts INSIDE the bed rows', () => {
     expect(() =>
       validateSourceCatalog(catalog(55, 79), { fixedBank: bank(), reservedLayers: [] }),
-    ).toThrow(/BELOW/);
+    ).toThrow(/live layers 50-59 must lie below the Live Source layer band/);
   });
 
   it('🔴 refuses a band that is DISJOINT from the beds but sits BELOW them', () => {
@@ -284,6 +284,6 @@ describe('the band must lie ABOVE the beds — disjointness is not enough', () =
         }),
         reservedLayers: [],
       }),
-    ).toThrow(/BELOW/);
+    ).toThrow(/live layers 55-59 must lie below the Live Source layer band/);
   });
 });

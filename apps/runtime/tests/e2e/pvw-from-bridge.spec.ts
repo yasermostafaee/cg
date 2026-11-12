@@ -487,6 +487,36 @@ test('R-024 saves and reloads a layer profile and refuses to replace an on-air r
     }),
   ).toMatchObject({ accepted: true });
   expect(await handle.runtime.setPosition(itemId, position)).toMatchObject({ ok: true });
+  const liveTemplateId = 'live-profile-template';
+  const liveLayer = 59;
+  handle.runtime.templateImport(
+    {
+      ...TEMPLATE,
+      templateId: liveTemplateId,
+      liveSources: {
+        resolution: { width: 1920, height: 1080 },
+        defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
+        sources: [
+          {
+            elementId: 'el-guest',
+            sourceId: 'guest',
+            rect: { x: 0, y: 0, width: 960, height: 540 },
+            dynamic: false,
+          },
+        ],
+      },
+    },
+    HTML,
+    1,
+  );
+  expect(
+    await handle.runtime.loadFixed(
+      { channel: 1, layer: liveLayer },
+      'profile-live-layer',
+      liveTemplateId,
+      {},
+    ),
+  ).toMatchObject({ accepted: true });
   await page.addInitScript(() => {
     Object.defineProperty(window, 'showSaveFilePicker', { configurable: true, value: undefined });
   });
@@ -502,6 +532,7 @@ test('R-024 saves and reloads a layer profile and refuses to replace an on-air r
   const profile = LayerProfileSchema.parse(JSON.parse(await readFile(downloaded, 'utf8')));
   expect(profile.items).toMatchObject([
     { layer: ROW, templateId: TEMPLATE.templateId, fields: { headline }, position },
+    { layer: liveLayer, templateId: liveTemplateId, label: 'Live layer 59' },
   ]);
   expect(profile.items[0]).not.toHaveProperty('state');
 
@@ -570,9 +601,9 @@ test('R-024 saves and reloads a layer profile and refuses to replace an on-air r
   const load = dialog.getByRole('button', { name: 'Load profile', exact: true });
   const commandsBefore = engine.receivedCommands().length;
   await load.click();
-  await expect(dialog.getByRole('status')).toHaveText('Loaded 1 layer.');
+  await expect(dialog.getByRole('status')).toHaveText('Loaded 2 layers.');
   await expect(dialog.getByText(/قالب خبری.*Template is missing from this channel/)).toBeVisible();
-  const [loaded] = handle.runtime.stackSnapshot(1);
+  const loaded = handle.runtime.stackSnapshot(1).find(({ slot }) => slot?.layer === ROW);
   expect(loaded).toMatchObject({
     status: 'loaded',
     slot: { layer: ROW },
@@ -594,7 +625,7 @@ test('R-024 saves and reloads a layer profile and refuses to replace an on-air r
   await expect(dialog.getByRole('alert')).toHaveText(
     'Stop the graphics on this channel before loading a profile.',
   );
-  expect(handle.runtime.stackSnapshot(1)[0]).toMatchObject({
+  expect(handle.runtime.stackSnapshot(1).find(({ slot }) => slot?.layer === ROW)).toMatchObject({
     itemId: loaded.itemId,
     status: 'on-air',
   });

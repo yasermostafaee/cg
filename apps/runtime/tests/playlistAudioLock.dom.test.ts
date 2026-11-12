@@ -119,7 +119,7 @@ describe('the LIVE PLATES strip', () => {
   const row = (sourceId: string, layerNo: number) =>
     liveLayerRow(
       layer(sourceId, layerNo),
-      { row: 'Bed 59', detail: null },
+      { row: 'Live layer 59', detail: null },
       null,
       () => 0,
       () => null,

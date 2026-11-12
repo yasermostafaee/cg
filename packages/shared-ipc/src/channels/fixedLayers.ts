@@ -619,7 +619,7 @@ export function bankPosition(bank: FixedLayerBank, layer: number): number {
 
 /**
  * The default display name for an unaliased candidate layer — `Layer 99`, `Layer 98`, … for an
- * operator row, and `Bed 59`, `Bed 58`, … for a bed row: the word, then the REAL AMCP layer.
+ * operator row, and `Live layer 59`, `Live layer 58`, … for a live layer. Both use the real AMCP layer.
  *
  * 🔴 `DESKTOP-APPS-01-D` h — **THE NUMBER IS THE LAYER, never a position.** It used to be the
  * row's place in its half of the bank, so the owner's top row read `Layer 1` while the Inspector
@@ -627,12 +627,10 @@ export function bankPosition(bank: FixedLayerBank, layer: number): number {
  * operator must never be invited to believe he is touching. The number an operator reads is the
  * number CasparCG obeys.
  *
- * THE WORD IS PART OF THE REFUSAL. `wrong-bank`'s message tells the operator to use a bed
- * row; if the rows were all called `Layer N` there would be nothing on screen for that
- * sentence to point at.
+ * The two names match the groups that the template picker names in its placement instructions.
  */
 export function defaultLayerAlias(bank: FixedLayerBank, layer: number): string {
-  const word = isLowBankLayer(bank, layer) ? 'Bed' : 'Layer';
+  const word = isLowBankLayer(bank, layer) ? 'Live layer' : 'Layer';
   return `${word} ${String(layer)}`;
 }
 

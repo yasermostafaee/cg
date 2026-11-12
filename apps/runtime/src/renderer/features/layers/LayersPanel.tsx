@@ -1337,7 +1337,7 @@ export function LayersPanel({
           <Fragment key={`${String(slot.channel)}:${String(slot.layer)}`}>
             <h3 style={styles.bedGroupHead} data-bed-group-head="">
               <Icon icon={LayoutGrid} size={14} />
-              Live layouts
+              Live layers
             </h3>
             {row}
           </Fragment>
@@ -1767,7 +1767,7 @@ export function LayersPanel({
                         {i > 0 ? '; ' : ''}
                         <OperatorNames name={migrationName(m)} />
                         {` — it declares live plates, so it moved from layer ` +
-                          `${String(m.from.layer)} to bed layer ${String(m.to.layer)}` +
+                          `${String(m.from.layer)} to live layer ${String(m.to.layer)}` +
                           (m.demoted
                             ? ', and came back NOT on air — clear its old layer before taking it'
                             : '')}

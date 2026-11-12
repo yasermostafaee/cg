@@ -93,14 +93,14 @@ export function describeOldMapBank(raw: unknown): string | null {
   }
   if (typeof lowStart === 'number' && lowStart < LAYER_BANDS.bed.start) {
     offenders.push(
-      `its graphics-bed rows start at layer ${String(lowStart)}, below the bed band ` +
+      `its live layers start at layer ${String(lowStart)}, below the live layer band ` +
         `${bandText(LAYER_BANDS.bed)}`,
     );
   }
   if (offenders.length === 0) return null;
   return (
     `it was written under the OLD layer map — ${offenders.join(' and ')}. The map was ` +
-    `re-cut on 2026-09-14 to beds ${bandText(LAYER_BANDS.bed)}, live plates ` +
+    `re-cut on 2026-09-14 to live layers ${bandText(LAYER_BANDS.bed)}, live plates ` +
     `${bandText(LAYER_BANDS.plate)} and templates ${bandText(LAYER_BANDS.template)}, ` +
     `leaving 1-${String(LAYER_BANDS.bed.start - 1)} free for the playout server. Two maps ` +
     `are never mixed: move this file aside (rename it, do not delete it) and the built-in ` +
@@ -268,7 +268,7 @@ function validateLowBank(bank: FixedLayerBank, options: ValidateOptions, highRan
   if (bank.low.start <= fixedBankEnd(bank) && lowEnd >= bank.start) {
     throw new FixedLayersConfigError(
       'banks-overlap',
-      `the graphics-bed rows ${lowRange} overlap the operator's candidate layer bank ` +
+      `the live layers ${lowRange} overlap the operator's candidate layer bank ` +
         `${highRange} — a layer cannot be both, because the two answer opposite questions ` +
         `about whether a template composites above the live plates or below them`,
     );
@@ -277,7 +277,7 @@ function validateLowBank(bank: FixedLayerBank, options: ValidateOptions, highRan
     if (bank.low.start <= high && lowEnd >= low) {
       throw new FixedLayersConfigError(
         'overlaps-policy',
-        `the graphics-bed rows ${lowRange} overlap the '${templateType}' dynamic range ` +
+        `the live layers ${lowRange} overlap the '${templateType}' dynamic range ` +
           `${String(low)}–${String(high)} — the two must be disjoint`,
       );
     }
@@ -286,9 +286,9 @@ function validateLowBank(bank: FixedLayerBank, options: ValidateOptions, highRan
   if (reservedHits.length > 0) {
     throw new FixedLayersConfigError(
       'overlaps-reserved',
-      `the graphics-bed rows ${lowRange} overlap the reserved playout range ` +
+      `the live layers ${lowRange} overlap the reserved playout range ` +
         `${formatRanges(options.reservedLayers)} (C-015) on layer(s) ` +
-        `${reservedHits.map(String).join(', ')} — the two must be disjoint; move the bed rows ` +
+        `${reservedHits.map(String).join(', ')} — move the live layers ` +
         `or the reservation`,
     );
   }
@@ -297,7 +297,7 @@ function validateLowBank(bank: FixedLayerBank, options: ValidateOptions, highRan
     if (layer < bank.low.start || layer > lowEnd) {
       throw new FixedLayersConfigError(
         'alias-out-of-bank',
-        `alias key ${key} is outside the graphics-bed rows ${lowRange}`,
+        `alias key ${key} is outside the live layers ${lowRange}`,
       );
     }
   }
@@ -306,7 +306,7 @@ function validateLowBank(bank: FixedLayerBank, options: ValidateOptions, highRan
     if (layer < bank.low.start || layer > lowEnd) {
       throw new FixedLayersConfigError(
         'visibility-out-of-bank',
-        `visibility key ${key} is outside the graphics-bed rows ${lowRange}`,
+        `visibility key ${key} is outside the live layers ${lowRange}`,
       );
     }
   }

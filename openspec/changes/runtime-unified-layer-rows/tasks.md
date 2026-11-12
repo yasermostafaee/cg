@@ -346,3 +346,10 @@ for what part A deliberately skipped or found un-runnable.**
       (its own `conclusion: success`, not a SKIP — a skipped `e2e` would prove nothing about
       the suite, P-029). `pnpm gate` was green uncached locally beforehand: 85/85, `0 cached`.
 - [ ] 9.3 Real-hardware pass on CasparCG 2.3.2 before archive — on-air behaviour throughout.
+
+## Live layer naming
+
+- [x] Use Live layer for low-bank defaults, row groups, setup, placement guidance and notices.
+- [x] Keep configured aliases and the current layer coordinates.
+- [x] Verify rows, Station setup, layer profile labels, and template references in Windows Chromium.
+- [ ] Record the carrying Linux Playwright result.

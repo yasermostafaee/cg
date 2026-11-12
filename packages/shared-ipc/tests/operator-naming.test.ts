@@ -100,7 +100,7 @@ describe('a template’s name', () => {
 describe('a layer’s name', () => {
   it('the row’s alias, else its default; outside the bank, CasparCG’s name and that it is no row', () => {
     expect(placeName({ channel: 1, layer: 98 }, BANK)).toBe('زیرنویس اصلی');
-    expect(placeName({ channel: 1, layer: 58 }, BANK)).toBe('Bed 58');
+    expect(placeName({ channel: 1, layer: 58 }, BANK)).toBe('Live layer 58');
     expect(placeName({ channel: 1, layer: 60 }, BANK)).toBe('layer 60 (not a row)');
     // Another channel's layer, or more than one bank: the channel is named.
     expect(placeName({ channel: 2, layer: 60 }, BANK)).toBe('layer 2-60 (not a row)');

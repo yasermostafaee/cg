@@ -347,11 +347,11 @@ test('library: REMOVE FROM CH n is a different act from the row REMOVE, and it k
     not come back, which is the half a re-pointed locator would otherwise stop checking.
   */
   const references = picker.locator('[data-modal-message]');
-  await expect(references).toContainText(/on the row “Bed \d+” \(layer \d+\)/);
+  await expect(references).toContainText(/on the row “Live layer \d+” \(layer \d+\)/);
   await expect(picker.locator('[data-in-use-references]')).toHaveCount(0);
   await expect(picker).not.toContainText(/Remove All/i);
   // §C4(e) — `Show` did not say whether anything was about to move on screen or on air.
-  await references.getByRole('button', { name: /^Go to Bed \d+ \(layer \d+\)$/ }).click();
+  await references.getByRole('button', { name: /^Go to Live layer \d+ \(layer \d+\)$/ }).click();
   await expect(picker).toHaveCount(0);
   await expect(app.layerRow(layer)).toHaveAttribute('aria-pressed', 'true');
 

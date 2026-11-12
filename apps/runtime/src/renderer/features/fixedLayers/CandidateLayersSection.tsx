@@ -715,9 +715,7 @@ function BankEditor({
                     helping (golden rule 11). The operator's own row number sits under it. */}
                 <td>
                   <span className="cg-layer-id">{String(row.layer)}</span>
-                  <span className="cg-layer-row-number">
-                    {isLowBankLayer(bank, row.layer) ? 'Bed' : 'Row'} {String(row.position)}
-                  </span>
+                  <span className="cg-layer-row-number">Row {String(row.position)}</span>
                 </td>
                 <td>
                   {/*
@@ -922,11 +920,11 @@ function BankEditor({
           )}
           {shownBeds.length > 0 && (
             <div className="cg-setup-beds-head">
-              <h3>Graphics beds</h3>
+              <h3>Live layers</h3>
               <p>Composited below the live source layers.</p>
             </div>
           )}
-          {shownBeds.length > 0 && table(shownBeds, 'Graphics bed rows')}
+          {shownBeds.length > 0 && table(shownBeds, 'Live layer rows')}
         </>
       )}
       {/*

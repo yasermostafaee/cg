@@ -66,7 +66,7 @@ const MESSAGES = {
   'untick-occupied': occupiedRefusal({}),
   'untick-unknown': unknownRefusal({}),
   'banks-overlap':
-    'The graphics-bed rows and the operator’s candidate layers claim a layer in common — a layer cannot be both, because one composites above the live plates and the other below them. Edit the bridge’s fixed-layers config and restart it.',
+    'The live layers and the operator’s candidate layers overlap. They occupy separate ranges below and above the live plates. Edit the bridge’s fixed-layers config and restart it.',
 } satisfies Record<FixedLayersSetConfigReason, string>;
 
 /**

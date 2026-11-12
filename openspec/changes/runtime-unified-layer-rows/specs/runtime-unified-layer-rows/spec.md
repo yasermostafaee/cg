@@ -32,6 +32,13 @@ the real number to clear that layer by hand over AMCP.
 
 - **WHEN** the row list is rendered **THEN** rows appear in DESCENDING layer order
 
+#### Scenario: Live layers use the same names throughout CG Control
+
+- **WHEN** CG Control names a layer in the low bank
+- **THEN** it uses the configured alias or the default `Live layer N`, with the actual AMCP layer number
+- **AND** the Layers panel, Station setup, related dialogs, and operator notices use the term Live layer
+- **AND** an explicitly configured alias remains the operator's text
+
 ### Requirement: A fixed ceiling of candidate layers, with visibility separate from fencing
 
 Install config SHALL declare a FIXED ceiling of candidate layers that never grows or shrinks at

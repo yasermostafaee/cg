@@ -236,7 +236,7 @@ describe('two declared channels (`MULTI-CHANNEL-01` §2 D)', () => {
     // §2 M — an unnamed row still reads as its REAL layer on this channel, as on the first
     // (row 90 carries no alias in the seed this bank is copied from; row 99 is `DEBATE`).
     expect(document.querySelector('[data-layer="90"]')?.textContent).toContain('Layer 90');
-    expect(document.querySelector('[data-layer="59"]')?.textContent).toContain('Bed 59');
+    expect(document.querySelector('[data-layer="59"]')?.textContent).toContain('Live layer 59');
 
     // The round trip — a switch is a scope change, so coming back finds channel 1 as it was.
     await selectChannelTab(1);

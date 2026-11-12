@@ -905,11 +905,10 @@ export function validateSourceCatalog(
     if (range.start <= lowEnd) {
       throw new SourceCatalogConfigError(
         'low-bank-not-below-band',
-        `the graphics-bed rows ${String(bank.low.start)}-${String(lowEnd)} must lie BELOW the ` +
-          `Live Source layer band ${rangeText}, and they do not — a bed is composited UNDER ` +
-          `the plates it declares, so a bed row at or above layer ${String(range.start)} would ` +
+        `the live layers ${String(bank.low.start)}-${String(lowEnd)} must lie below the ` +
+          `Live Source layer band ${rangeText}. A live layer at or above layer ${String(range.start)} would ` +
           `draw its background OVER the live pictures instead of behind them; move the band up ` +
-          `or the bed rows down`,
+          `or the live layers down`,
       );
     }
   }

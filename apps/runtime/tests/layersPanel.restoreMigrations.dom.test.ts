@@ -185,7 +185,7 @@ it('a row that came back on a DIFFERENT row is announced — by its row name, wi
   expect(text).toContain('1 row came back on a different row');
   // WHERE it came from and where it landed — the layer numbers, because that is what the
   // operator carries to the row he now has to find.
-  expect(text).toContain('moved from layer 70 to bed layer 53');
+  expect(text).toContain('moved from layer 70 to live layer 53');
   // Named as the ROW it landed on, through the one canonical naming rule (golden rule 11),
   // and in its own bidi isolate. The alias is asked of the same function the table asks,
   // never spelled here — a spec that hard-coded `Bed 7` would go red on a bank change while
@@ -290,5 +290,5 @@ it('dismissing THIS report does not silence the NEXT one', async () => {
   ]);
   const el2 = await renderPanel();
   expect(migrations(el2)).not.toBeNull();
-  expect(migrations(el2)?.textContent).toContain('bed layer 52');
+  expect(migrations(el2)?.textContent).toContain('live layer 52');
 });

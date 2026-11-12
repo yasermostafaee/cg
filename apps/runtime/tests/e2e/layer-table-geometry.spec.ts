@@ -298,7 +298,7 @@ test('§3 — the header sits on its own ground, its labels clear AA, and the be
   // THE GRAPHICS-BEDS BAND — drawn once, the declared height, and ruled off above.
   const band = app.layers.locator('[data-bed-group-head]');
   await expect(band).toHaveCount(1);
-  await expect(band).toHaveText('Live layouts');
+  await expect(band).toHaveText('Live layers');
   const workspaceBg = await page
     .locator('main')
     .evaluate((el) => getComputedStyle(el).backgroundColor);

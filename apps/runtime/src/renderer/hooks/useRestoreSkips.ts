@@ -99,7 +99,7 @@ export function restoreSkipReason(skip: RestoreSkip): string {
      * matter here are the bed rows, and the whole group is full.
      */
     case 'no-bed-row':
-      return 'it is a graphics bed and every bed row is taken — remove a template from one of the bed rows, then load it again';
+      return 'it requires a live layer and every live layer is taken — remove a template from a live layer, then load it again';
     /*
      * 🔴 `LAYER-BANDS-16` — the row remembers a layer that is not a declared row, and since
      * the layer map was re-cut there is no dynamic layer left to put it on instead (every

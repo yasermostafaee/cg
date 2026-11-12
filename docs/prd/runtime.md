@@ -1204,6 +1204,10 @@ Runtime-track work.
 > Tests: `low-layer-clear.integration.test.ts` (both doors refused at the socket, nothing sent, the
 > same door still clearing 60), `stationLayersPanel.dom.test.ts`, `runtime-channels.test.ts`.
 
+CG Control calls the low-bank rows **Live layers**. An unaliased row is
+named **Live layer N** using its real CasparCG layer number. The same term appears in Layers,
+Station setup, dialogs and notices. Operator-configured aliases keep their original text.
+
 **What:** Merge the fixed-layer bank and the dynamic stack into ONE operator surface — a single
 list of DECLARED layer rows, ordered descending by layer, each with an alias, the real CasparCG
 layer number, its template, a description and a state indicator. One Load button does the whole
@@ -4956,6 +4960,7 @@ The chosen package remains visibly selected. Up opens its parent folder and is u
 configured root. The list previews packages using their embedded thumbnail or a still from the
 authored scene where available. Templates imported here support Reload and Reload all from their
 original shared path, using the same identity and row-data decisions as chooser imports.
+The selected template's Plates value is the number of declared live plates.
 
 **What:** a direct **Templates** button in the main CG Control header opens the current channel's
 catalogue without requiring an empty layer and without inventing a Load destination. When CG Control

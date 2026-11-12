@@ -148,7 +148,7 @@ async function renderPanel(): Promise<HTMLDivElement> {
 const row = (el: HTMLElement, layer: number): HTMLElement | null =>
   el.querySelector(`[data-layer="${String(layer)}"]`);
 
-it('h — the top row’s # reads 99 and its default name is `Layer 99`; a bed reads 59 and `Bed 59`', async () => {
+it('h — the top row’s # reads 99 and its default name is `Layer 99`; a bed reads 59 and `Live layer 59`', async () => {
   stubBridge();
   const el = await renderPanel();
   const top = row(el, 99);
@@ -158,7 +158,7 @@ it('h — the top row’s # reads 99 and its default name is `Layer 99`; a bed r
   expect(top?.getAttribute('title')).toBe('Layer 99 · CasparCG layer 2-99');
   const bed = row(el, 59);
   expect(bed?.getAttribute('data-row-number')).toBe('59');
-  expect(bed?.querySelector('[data-row-body]')?.textContent).toBe('Bed 59');
+  expect(bed?.querySelector('[data-row-body]')?.textContent).toBe('Live layer 59');
   // Nothing on the table still counts rows from 1.
   expect(el.textContent).not.toMatch(/\bLayer 1\b/);
 });

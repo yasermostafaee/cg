@@ -76,7 +76,7 @@ describe('placeName', () => {
   it('names a bank layer as the operator’s row — alias first, else the default', () => {
     expect(placeName({ channel: 1, layer: 99, server: 'primary' }, BANK)).toBe('لوگوی اصلی');
     expect(placeName({ channel: 1, layer: 90, server: 'primary' }, BANK)).toBe('Layer 90');
-    expect(placeName({ channel: 1, layer: 58, server: 'primary' }, BANK)).toBe('Bed 58');
+    expect(placeName({ channel: 1, layer: 58, server: 'primary' }, BANK)).toBe('Live layer 58');
   });
 
   it('says out loud when a layer is NOT one of the station’s rows', () => {

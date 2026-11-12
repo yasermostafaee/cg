@@ -89,7 +89,7 @@ test('a seeded bank renders permanent rows with aliases and honest occupancy', a
   // bottom — which is also where they are on air. The group head is drawn once, at the
   // FIRST of them, so the row immediately below it must be the highest bed row.
   // `DESKTOP-APPS-01-D` h — its default name carries the real layer, and so does its `#`.
-  await expect(app.layerRow(59)).toContainText('Bed 59');
+  await expect(app.layerRow(59)).toContainText('Live layer 59');
   await expect(app.layerRow(59)).toHaveAttribute('data-row-number', '59');
 
   // The ALIAS is the row's primary label.

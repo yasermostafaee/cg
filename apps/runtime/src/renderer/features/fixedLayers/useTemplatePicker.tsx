@@ -148,7 +148,7 @@ import appFontsCss from '../../fonts.css?inline';
  *
  * Two of the three refusals above are withdrawn, and the third is sharpened rather than
  * repeated. The aside is NOT a column of categories or filters — it is a read-out of the
- * SELECTED template (a preview, `Type / Looks / Text fields / Availability`, a compatibility
+ * SELECTED template (a preview, `Type / Plates / Text fields / Availability`, a compatibility
  * notice), so adopting it whole means adopting select-then-load, which is the contract
  * question `design.md` §15.1 filed to the owner and did not answer. What this column carries
  * instead is what the product genuinely knows while the list is open: the DESTINATION the
@@ -295,16 +295,16 @@ const REFUSAL = {
   /** The row is a BED row and the template is not a bed. */
   low: {
     chip: 'Requires an operator row',
-    title: 'Live-layout rows sit below the live plates',
+    title: 'Live layers sit below the live plates',
     text: 'This row is for layouts with live plates. Load this one onto an operator row.',
   },
   /** The row is an OPERATOR row and the template declares plates. */
   high: {
-    chip: 'Requires a live-layout row',
-    title: 'This template belongs on a live-layout row',
+    chip: 'Requires a live layer',
+    title: 'This template belongs on a live layer',
     text:
       'This template uses live plates and must sit below them. ' +
-      'Load it onto a row in Live layouts at the bottom of the list.',
+      'Load it onto a row in Live layers at the bottom of the list.',
   },
 } as const;
 
@@ -1562,7 +1562,7 @@ export function useTemplatePicker(
                         where an operator finds the layer they may have to clear by hand.
                       */}
                           <span className="cg-tpl-dest__meta">
-                            {request.accepts === 'low' ? 'Live-layout row' : 'Operator row'} · on{' '}
+                            {request.accepts === 'low' ? 'Live layer' : 'Operator row'} · on{' '}
                             {request.destination.coord}
                           </span>
                           <span className="cg-tpl-dest__meta">
@@ -1606,9 +1606,7 @@ export function useTemplatePicker(
                           </dd>
                           <dt>Text fields</dt>
                           <dd>{String(selected.fields.length)}</dd>
-                          <dt>Looks</dt>
-                          <dd>{String(selected.liveSources?.looks?.length ?? 0)}</dd>
-                          <dt>Live plates</dt>
+                          <dt>Plates</dt>
                           <dd>{String(selected.liveSources?.sources.length ?? 0)}</dd>
                           {/* `UI-POLISH-01` C — `Manage`'s usage line, here now that `Manage` is gone. */}
                           <dt>Rows</dt>
@@ -1709,7 +1707,7 @@ function matchesQuery(template: TemplateInfo, query: string): boolean {
     .includes(q);
 }
 
-/** `N look`/`N looks`, `N plate`/`N plates` — the reference's meta counts, from the carrier. */
+/** Singular and plural template metadata labels. */
 function count(n: number, one: string): string {
   return `${String(n)} ${one}${n === 1 ? '' : 's'}`;
 }
@@ -1843,7 +1841,6 @@ function PickerRow({
   const templateKind = kindOf(t);
   // `single-clock-look-switch` — the SAME predicate the bridge refuses on.
   const wrongBank = accepts !== null && requiredBankFor(t) !== accepts;
-  const looks = t.liveSources?.looks?.length ?? 0;
   const plates = t.liveSources?.sources.length ?? 0;
   return (
     <div
@@ -1885,12 +1882,6 @@ function PickerRow({
             <span>{templateKind === 'bed' ? 'Live layout' : t.templateType}</span>
             <span aria-hidden="true">·</span>
             <span>{count(t.fields.length, 'field')}</span>
-            {looks > 0 && (
-              <>
-                <span aria-hidden="true">·</span>
-                <span>{count(looks, 'look')}</span>
-              </>
-            )}
             {plates > 0 && (
               <>
                 <span aria-hidden="true">·</span>

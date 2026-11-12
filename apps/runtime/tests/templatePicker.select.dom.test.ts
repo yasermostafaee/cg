@@ -248,7 +248,7 @@ describe('§3 — the ONE refusal, unchanged, said where there is room for it', 
     const bedRow = document.querySelector('[data-template-id="tpl-bed"]');
     expect(bedRow?.getAttribute('data-template-incompatible')).toBe('true');
     expect(bedRow?.hasAttribute('data-wrong-bank')).toBe(true);
-    expect(bedRow?.textContent).toContain('Requires a live-layout row');
+    expect(bedRow?.textContent).toContain('Requires a live layer');
 
     // The row is NOT disabled — it can be selected, which is how the operator reads why.
     const control = row('tpl-bed') as HTMLButtonElement | null;
@@ -258,7 +258,7 @@ describe('§3 — the ONE refusal, unchanged, said where there is room for it', 
     // The whole sentence is in the aside, and the primary refuses.
     const verdict = document.querySelector('[data-template-verdict]');
     expect(verdict?.getAttribute('data-template-verdict')).toBe('refused');
-    expect(verdict?.textContent).toContain('a row in Live layouts');
+    expect(verdict?.textContent).toContain('a row in Live layers');
     expect(commitButton()?.disabled).toBe(true);
 
     /*
@@ -285,6 +285,10 @@ describe('§3 — the ONE refusal, unchanged, said where there is room for it', 
   it('the same template on its OWN half of the bank is ready, and says so', async () => {
     await openPicker('low'); // a bed row
     await click(row('tpl-bed'));
+    const details = document.querySelector('[data-template-selected="tpl-bed"] dl');
+    const labels = [...(details?.querySelectorAll('dt') ?? [])].map((label) => label.textContent);
+    expect(labels).toEqual(['Type', 'Text fields', 'Plates', 'Rows']);
+    expect([...details!.querySelectorAll('dd')][2]?.textContent).toBe('1');
     const verdict = document.querySelector('[data-template-verdict]');
     expect(verdict?.getAttribute('data-template-verdict')).toBe('ok');
     expect(commitButton()?.disabled).toBe(false);

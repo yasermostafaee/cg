@@ -74,7 +74,8 @@ The console opens, signed in, with its controls — no reload. Everything is in 
 afterwards: the Playout, where this console finds CG Bridge (a station admin can change both) and the
 check under **Connection**, the CasparCG host beside them, and the rows under **Layers**. Every layer row is shown after setup; hide the ones you do not use there once
 CasparCG is connected. **A row's `#` and its default name are its real CasparCG layer** — the top
-row is `99`, _Layer 99_; beds read _Bed 59_ … _Bed 50_. A name you give a row replaces the default.
+row is `99`, _Layer 99_. The live layers read _Live layer 59_ … _Live layer 50_. A name you give a
+row replaces the default.
 
 **Closing CG Control stops control, not air.** What is on air stays on air, CG Bridge keeps running,
 and the next start picks the rows up again. If CG Control cannot reach CG Bridge, its banner says

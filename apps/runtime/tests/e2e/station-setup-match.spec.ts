@@ -437,7 +437,7 @@ test('§4 — the Layers pane is the reference’s: a summary, a filter, five co
   await expect(dialog.locator('.cg-layer-footnote')).toContainText(
     'Highest layer first · rows from the active channel.',
   );
-  await expect(dialog.locator('.cg-setup-beds-head h3')).toHaveText('Graphics beds');
+  await expect(dialog.locator('.cg-setup-beds-head h3')).toHaveText('Live layers');
   await expect(dialog.locator('.cg-setup-beds-head p')).toHaveText(
     'Composited below the live source layers.',
   );

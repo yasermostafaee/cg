@@ -8,6 +8,8 @@ CG Control SHALL provide a direct main-header Templates door for the current cha
 the catalogue without a row destination and SHALL expose import, search, details, Reload and removal
 without offering a Load commit. Row LOAD SHALL remain the only action that binds a template to a
 layer.
+The catalogue SHALL show the number of declared live plates as Plates in the selected template's
+details and omit the separate Look count.
 
 #### Scenario: Every row is occupied
 

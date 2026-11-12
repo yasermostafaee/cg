@@ -79,7 +79,7 @@ describe('Station setup — Candidate layers', () => {
     expect(inputs.filter((i) => i.type === 'text')).toHaveLength(11);
     // …and the bed group announces itself, or the operator has no way to see which
     // rows the load refusal is talking about.
-    expect(section.textContent).toContain('Graphics beds');
+    expect(section.textContent).toContain('Live layers');
   });
 
   /*

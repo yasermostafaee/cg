@@ -39,6 +39,8 @@ test('§C1 — the selection list divides and responds', async ({ app }) => {
     })
     .not.toBe(rest);
 
+  await second.getByRole('button', { name: /^Select / }).click();
+  await expect(page.locator('.cg-tpl-kv dt')).toHaveText(['Type', 'Text fields', 'Plates', 'Rows']);
   await app.closeTemplatePicker();
 });
 
