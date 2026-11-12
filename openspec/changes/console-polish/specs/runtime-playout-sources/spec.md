@@ -11,5 +11,5 @@ SHALL be named by the catalogue's name, never its id; a default the catalogue do
 #### Scenario: The owner's fake Playout
 
 - **WHEN** a plate's default names the input `NDI کانالِ ۱ (APASAI)` and the Playout's input list is empty
-  **THEN** the Look inputs field reads `Default (NDI کانالِ ۱ (APASAI))` with the `Unavailable` tag — control: a
+  **THEN** the Plate inputs field reads `Default (NDI کانالِ ۱ (APASAI))` with the `Unavailable` tag — control: a
   default the Playout still lists carries no tag

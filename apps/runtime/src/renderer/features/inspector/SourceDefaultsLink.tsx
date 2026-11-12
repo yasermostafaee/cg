@@ -16,7 +16,7 @@ import { sourcesVersion, subscribeSources } from '../sources/sourceStore.js';
  *
  * ⚠ **IT IS ONE COMPONENT BECAUSE IT HAS TWO HOSTS, and exactly one of them renders it at a
  * time.** The owner's instruction is that the link belongs with the frames rather than in a
- * section of its own; ours is in `LOOK INPUTS` for a template that declares looks. But that
+ * section of its own; ours is in `PLATE INPUTS` for a template that declares looks. But that
  * section does not exist for a template WITHOUT looks — and this is the only surface in the
  * product that binds a plate to a source, so such a template would have no door at all and
  * every fresh row of it would start unbound with its take refused (`live-source-unassigned`).

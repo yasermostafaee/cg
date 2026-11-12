@@ -407,7 +407,7 @@ export function LooksBindingsSection({
   );
 
   return (
-    <div className="cg-inspector-section" aria-label="Look inputs">
+    <div className="cg-inspector-section" aria-label="Plate inputs">
       {/*
         🔴 **THE DEFAULTS LINK LIVES HERE — owner, 2026-09-14 (gh2):** «لینک مودال هم بالای
         فریمها باشه مثل gh2 نیاز نیست توی دو بخش جدا باشن.» The reference puts it in this
@@ -417,7 +417,7 @@ export function LooksBindingsSection({
         other. Sentence case in the source; the CAPS are the stylesheet's (`Inspector.tsx`).
       */}
       <div className="cg-section-caption">
-        <h2>Look inputs</h2>
+        <h2>Plate inputs</h2>
         <SourceDefaultsLink
           templateId={item.templateId}
           info={info}
@@ -441,12 +441,10 @@ export function LooksBindingsSection({
         are now said by the surface itself: the link names the level, and each list's blank
         option NAMES the default it inherits (`Default (sdi)`).
 
-        🔴 **WHAT SURVIVES IS THE GOLDEN-RULE-10 CLAUSE, and it survives on purpose.** It is
-        the reference's own sentence, and it is the one fact the surface cannot show: pressing
-        a look tab LOOKS like switching what is on air, and it is not — it changes which look
-        you are EDITING.
+        The remaining sentence states that editing plate inputs leaves the programme alone
+        until the operator applies an update.
       */}
-      <p style={styles.scope}>Editing a look does not take it on air.</p>
+      <p style={styles.scope}>Editing plate inputs does not take them on air.</p>
       {/*
         THE TABS. One per authored look, the live one marked, and a dot on any look holding
         an unapplied edit — see `dirtyLooks`.

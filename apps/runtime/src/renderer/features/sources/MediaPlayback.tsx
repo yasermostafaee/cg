@@ -25,7 +25,7 @@ import { currentSourceCatalog, sourcesVersion, subscribeSources } from './source
  *
  * Two pieces, both small:
  *
- *   - {@link MediaPlaybackControl} — beside a bound clip (Look inputs, Source defaults): one button,
+ *   - {@link MediaPlaybackControl} — beside a bound clip (Plate inputs, Source defaults): one button,
  *     `Playback`, opening an anchored panel (the source picker's `Popover`) whose heading is the
  *     clip's NAME, because the setting is the clip's, station-wide: `Loop`, and `When hidden` —
  *     `Pause` · `Restart` · `Keep playing`. A choice applies at once; it is not a row's draft.

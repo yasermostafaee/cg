@@ -172,7 +172,7 @@ export function fillBridgeStub<T extends object>(stub: T): T {
     onPlateReleased: () => () => undefined,
   };
   /*
-    `MEDIA-PLATES-01` — Look inputs reads each seated clip's transport state. NO CLIPS is the quiet
+    `MEDIA-PLATES-01` — Plate inputs reads each seated clip's transport state. NO CLIPS is the quiet
     default, filled even into a `liveLayers` a spec states itself (the `fillBankList` rule: a spec's
     own members are kept, and only the absent ones are completed).
   */

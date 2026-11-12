@@ -6,7 +6,7 @@ import { E2E_PLAYOUT, expect, test } from './fixtures/runtime.js';
  *
  * ── THE OWNER'S REPORT, 2026-08-21, with a screenshot ───────────────────────
  *
- * A row is ON PVW, PVW LOOK = `look-1`. In LOOK INPUTS he sets that look's plate to
+ * A row is ON PVW, PVW LOOK = `look-1`. In PLATE INPUTS he sets that look's plate to
  * **studio 3** and presses UPDATE. **The PVW placeholder still reads "studio 1"** — the
  * template's default. The binding is applied everywhere else; the preview names the old
  * source.
@@ -161,7 +161,7 @@ test('🔴 the PVW placeholder names the PER-LOOK binding, not the template defa
     Deliberately driven through the UI rather than through a bridge call — the defect lived
     between the published item and the overlay, so a shortcut past the panel would skip it.
   */
-  const looks = app.inspector.locator('[aria-label="Look inputs"]');
+  const looks = app.inspector.locator('[aria-label="Plate inputs"]');
   await expect(looks).toBeVisible();
   await app.chooseSource(looks.locator('[data-look-binding="look-1:l-1"]'), { input: 'Studio 3' });
   await app.applyEdits();
@@ -188,7 +188,7 @@ test('the name follows a PVW LOOK switch, not just the boxes', async ({ app }) =
   await rehearseRow(page, layer);
   await app.selectLayerRow(layer);
 
-  const looks = app.inspector.locator('[aria-label="Look inputs"]');
+  const looks = app.inspector.locator('[aria-label="Plate inputs"]');
   await app.chooseSource(looks.locator('[data-look-binding="look-1:l-1"]'), { input: 'Studio 3' });
   await app.applyEdits();
   await expect(marker(page, 'l-1')).toContainText('Studio 3');

@@ -107,7 +107,7 @@ test('🔴 the owner’s check: the clip on air counts, pauses and restarts — 
   const row = await app.loadTemplate(TPL);
   await app.selectLayerRow(row);
 
-  const looks = app.inspector.locator('[aria-label="Look inputs"]');
+  const looks = app.inspector.locator('[aria-label="Plate inputs"]');
   await app.chooseSource(looks.locator('[data-look-binding="two:l-1"]'), { input: 'Studio 1' });
   await app.chooseSource(looks.locator('[data-look-binding="two:l-2"]'), {
     media: 'کلیپ معرفی',
@@ -153,7 +153,7 @@ test('🔴 `Playback` sits on the field’s line, hangs its panel from itself, a
   await registerTemplate(page);
   const row = await app.loadTemplate(TPL);
   await app.selectLayerRow(row);
-  const looks = app.inspector.locator('[aria-label="Look inputs"]');
+  const looks = app.inspector.locator('[aria-label="Plate inputs"]');
   await app.chooseSource(looks.locator('[data-look-binding="two:l-2"]'), {
     media: 'کلیپ معرفی',
     search: 'کلیپ',

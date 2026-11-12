@@ -15,7 +15,7 @@ import {
  * 🔴 `PLAYOUT-SOURCES-01` §2.B — **ONE WAY TO NAME A BOUND SOURCE: its kind's icon, its NAME, and
  * `Unavailable` when the Playout stopped offering it.**
  *
- * Every surface that names a plate's source — the Look inputs, the on-air readouts, the name on the
+ * Every surface that names a plate's source — the Plate inputs, the on-air readouts, the name on the
  * PVW overlay, the swap dialog, the audit line and the picker's own field — renders it through here,
  * so an operator reads the same thing for the same source everywhere.
  *

@@ -48,7 +48,7 @@ check action beside the normal selection. The modal hosts the same card for chec
 and the picker returns focus to the field. The chosen source, draft, save state and rehearsal are
 independent of the check. No browser state persists the check or its speaker.
 
-The same scoped card and lease are available from a Look inputs picker, the row's live-source
+The same scoped card and lease are available from a Plate inputs picker, the row's live-source
 swap, and the Live sources section of Station setup. Opening a check is distinct from selecting
 the source. Leaving its scope releases its lease. While the check waits for a decodable frame
 or reports a terminal state, the card keeps an empty picture frame with the appropriate state.

@@ -43,7 +43,7 @@
 
 ## 4. Station feedback
 
-- [x] 4.1 Reuse the scoped v1 check in Look inputs, the live-source swap and Station setup → Live sources.
+- [x] 4.1 Reuse the scoped v1 check in Plate inputs, the live-source swap and Station setup → Live sources.
 - [x] 4.2 Give the check an empty picture frame while connecting or after losing the picture.
 - [x] 4.3 Verify scoped picture, lease cleanup and unchanged source values in all source surfaces.
       The expanded local Chromium live-input-check scenario passed.

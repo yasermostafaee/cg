@@ -41,7 +41,7 @@
   button's own), the controls and the empty line 8 px, the rows and headings 12 px (`--r-space-3`). The tab
   strip is the shared `.cg-tab-strip`, 0 inline — the flush `Inputs 0`. The same strip is worn by the
   Layers bar and the channel strip, so the fix is scoped to the picker. Three call sites share the panel:
-  Look inputs, Source defaults, the on-air swap.
+  Plate inputs, Source defaults, the on-air swap.
 - `Default (${sourceName(id)})` and `Use template assignment (${name})` are each ONE string; the closed
   field and the choice button render it bare. `sourceName` reads the name only — a departed default is
   never marked. The existing mark is `Unavailable` (`SourceLabel`), not `Missing`.

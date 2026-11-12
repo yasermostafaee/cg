@@ -3,7 +3,7 @@
 ### Requirement: PVW SHALL let the operator check one live input without changing rehearsal or air
 
 CG Control SHALL offer `Check input` for one Playout live source from the PVW workflow and from Source defaults,
-Look inputs, the row's live-source swap and Station setup → Live sources on stations without the thumbnail
+Plate inputs, the row's live-source swap and Station setup → Live sources on stations without the thumbnail
 capability. The actions SHALL target one input
 card labelled with the source's canonical name and channel. The card SHALL appear on the source surface that
 started it. It SHALL leave that surface open and SHALL NOT select, save or apply the source, alter any dirty
@@ -27,7 +27,7 @@ picture into a plate, change the retained page, trigger Play/Take/Update, or imp
 
 #### Scenario: A check started from the other source surfaces
 
-- **WHEN** the operator uses `Check input` beside an eligible source in Look inputs, the live-source swap or
+- **WHEN** the operator uses `Check input` beside an eligible source in Plate inputs, the live-source swap or
   Station setup → Live sources
 - **THEN** the live card displays that source on the initiating surface
 - **AND** the existing input selection, assignments, row overrides, rehearsal and PGM are preserved
@@ -67,7 +67,7 @@ SHALL start neither playback nor an input-check lease.
 ### Requirement: A supported source list SHALL show independently refreshed live thumbnails
 
 CG Control SHALL show a thumbnail in place of the Check icon for each visible eligible input when Playout
-exposes authenticated read-only pictures per source. This applies to Source defaults, Look inputs, the live-source
+exposes authenticated read-only pictures per source. This applies to Source defaults, Plate inputs, the live-source
 swap and Station setup → Live sources. The view SHALL acquire bounded video-only demand on open without a click or hover. Viewing a
 thumbnail SHALL leave selection, drafts, rehearsal, PGM, Playlist and the active Check lease intact. The console
 SHALL release demand as rows become hidden or inaccessible.

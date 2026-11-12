@@ -195,7 +195,7 @@ the badge SHALL not be shown.
 ### Requirement: The source picker's tabs SHALL start where its rows start
 
 The source picker's `Inputs` and `Media` tabs SHALL be inset from the panel's edge by the same spacing as the
-panel's rows, from the shared spacing tokens, in every place the picker opens (Look inputs, Source defaults,
+panel's rows, from the shared spacing tokens, in every place the picker opens (Plate inputs, Source defaults,
 the on-air swap); no other tab strip SHALL change.
 
 #### Scenario: Measured in a real engine
@@ -347,7 +347,7 @@ Changing a filter SHALL close Event details and SHALL NOT automatically select t
 ### Requirement: The on-air swap dialog SHALL name plates and sources in the operator's words, and carry no paragraph
 
 The on-air swap dialog SHALL label each plate `Plate N` — its place among the template's plates — with the
-plate's id on the label's `title` only, as the Look inputs and the defaults dialog name a plate. Every source
+plate's id on the label's `title` only, as the Plate inputs and the defaults dialog name a plate. Every source
 it names — each plate's template assignment and every choice — SHALL go through the one choice label the
 source pickers use: the Playout's name in its own direction, `none set` for no assignment, `Not listed` with
 the id on its `title` for a source the catalogue does not know, and `Unavailable` for one the Playout no

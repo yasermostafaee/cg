@@ -377,7 +377,7 @@ describe('B-151 — the overlay draws the ACTIVE look, and only it', () => {
 
 /**
  * 🔴 **THE OWNER'S REPORT, 2026-08-21, with a screenshot.** A row is ON PVW, PVW LOOK =
- * `look-1`. In LOOK INPUTS he sets `look-1` → plate `11` → **studio 3** and presses UPDATE.
+ * `look-1`. In PLATE INPUTS he sets `look-1` → plate `11` → **studio 3** and presses UPDATE.
  * **The PVW placeholder still reads "studio 1"** — the template's default for that plate.
  * The binding is applied everywhere else; the preview names the old source.
  *

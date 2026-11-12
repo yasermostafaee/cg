@@ -10,7 +10,7 @@ import { buildTemplateLiveSources, pack } from '@cg/vcg-format';
 import { expect, test } from './fixtures/runtime.js';
 
 /**
- * ⭐ **SESSION BO — the Inspector's LOOK INPUTS section, driven through the real UI.**
+ * ⭐ **SESSION BO — the Inspector's PLATE INPUTS section, driven through the real UI.**
  *
  * ── WHY THIS FILE EXISTS ────────────────────────────────────────────────────
  *
@@ -307,7 +307,7 @@ async function registerFlatTemplate(app: { page: Page }): Promise<void> {
   }, FLAT_TPL);
 }
 
-test('LOOK INPUTS lists every look with its own frames, and the flat template keeps its editor', async ({
+test('PLATE INPUTS lists every look with its own frames, and the flat template keeps its editor', async ({
   app,
 }) => {
   await registerLooksTemplate(app);
@@ -315,8 +315,12 @@ test('LOOK INPUTS lists every look with its own frames, and the flat template ke
   const row = await app.loadTemplate(LOOKS_TPL);
   await app.selectLayerRow(row);
 
-  const looks = app.inspector.locator('[aria-label="Look inputs"]');
+  const looks = app.inspector.locator('[aria-label="Plate inputs"]');
   await expect(looks).toBeVisible();
+  await expect(looks.getByRole('heading', { name: 'Plate inputs', exact: true })).toBeVisible();
+  await expect(
+    looks.getByText('Editing plate inputs does not take them on air.', { exact: true }),
+  ).toBeVisible();
 
   /*
     🔴 `INSPECTOR-DELTA` §4 — ONE LOOK AT A TIME, BEHIND TABS, which is what the reference
@@ -398,13 +402,13 @@ test('LOOK INPUTS lists every look with its own frames, and the flat template ke
   await expect(inheriting.locator('[data-source-label="choice"]')).toHaveText(/^Default \(/);
 
   /*
-    ⚠ §2.1 — A TEMPLATE WITH NO LOOKS GETS NO LOOK INPUTS SECTION, and must therefore keep its
+    ⚠ §2.1 — A TEMPLATE WITH NO LOOKS GETS NO PLATE INPUTS SECTION, and must therefore keep its
     flat editor. This is the case that makes the section conditional rather than a replacement:
     it is the commonest installation, and it has no other way to point a plate.
   */
   const flatRow = await app.loadTemplate(FLAT_TPL);
   await app.selectLayerRow(flatRow);
-  await expect(app.inspector.locator('[aria-label="Look inputs"]')).toHaveCount(0);
+  await expect(app.inspector.locator('[aria-label="Plate inputs"]')).toHaveCount(0);
   await expect(app.inspector.locator('[aria-label="Live plates"]')).toBeVisible();
 });
 

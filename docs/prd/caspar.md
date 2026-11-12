@@ -1345,14 +1345,14 @@ Playlist gain have separate acceptance.
 - WHEN a source list shows eligible rows THEN it requests a bounded batch for the visible rows.
   A missing or stale frame leaves the picture slot empty and selection stays independent.
 
-**Station follow-up, 2026-11-09:** Expose the v1 single-input check inside Look inputs, the row's
+**Station follow-up, 2026-11-09:** Expose the v1 single-input check inside Plate inputs, the row's
 live-source swap and Station setup → Live sources as well as Source defaults. The selected source,
 draft and output must remain intact. If a picture is absent or stale, show the empty picture frame
 and the check state. Use the signal label only when the source itself reports signal presence.
 
 **Live source thumbnails.** When a source picker opens, each visible eligible input row should
 show its own continuously refreshed thumbnail in place of the Check icon. This applies to Source
-defaults, Look inputs, the live-source swap and Station setup → Live sources. Viewing the list
+defaults, Plate inputs, the live-source swap and Station setup → Live sources. Viewing the list
 does not require selecting an input. The thumbnails are silent and leave source selection,
 rehearsal and any active check intact. An unavailable picture has an empty tile and an accurate
 status. Until the feed is available, the row shows a reserved thumbnail labelled `No signal`.

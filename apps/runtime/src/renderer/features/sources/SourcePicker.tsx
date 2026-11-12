@@ -52,7 +52,7 @@ import {
  * The station's sources are the Playout's now: its INPUTS (a short list whose playlist outputs lead,
  * with the Playout's order preserved inside both groups) and its MEDIA library (thousands of items,
  * searched on the Playout's side). A native select over `catalog.sources` could show neither
- * honestly, so the three call sites — Template defaults, the Inspector's Look inputs and the on-air
+ * honestly, so the three call sites — Template defaults, the Inspector's Plate inputs and the on-air
  * swap — share this one picker. Each keeps its own commit model (Save defaults · the draft with
  * Update/Discard · the swap committing on change): the picker only RETURNS A CHOICE, once, and
  * closes.

@@ -35,7 +35,7 @@ on, not an uncommitted selection elsewhere in the dialog.
 
 ### Requirement: The source label and availability shown in the check SHALL follow catalogue changes
 
-The check card SHALL use the same canonical source label as look inputs, on-air readouts and refusals. If a catalogue
+The check card SHALL use the same canonical source label as Plate inputs, on-air readouts and refusals. If a catalogue
 refresh removes the current source or marks it unavailable, Bridge SHALL end the check and publish that source and
 reason; it SHALL NOT silently retain the last picture under an obsolete label.
 

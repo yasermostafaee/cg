@@ -207,7 +207,7 @@ test('C-023 · inspect input picture from PVW and source controls without changi
     await defaults.getByRole('button', { name: 'Cancel' }).click();
     await expect.poll(() => preview.leases.size).toBe(0);
 
-    const look = page.locator('[aria-label="Look inputs"]');
+    const look = page.locator('[aria-label="Plate inputs"]');
     const lookField = look.locator('[data-look-binding="one:plate-1"]');
     const previousLookValue = await lookField.getAttribute('data-picker-value');
     await lookField.click();

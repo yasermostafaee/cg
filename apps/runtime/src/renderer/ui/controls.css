@@ -9655,7 +9655,7 @@ input[type='checkbox']:disabled:checked {
   font-size: var(--r-text-sm);
   white-space: nowrap;
 }
-/* On a Look inputs row it spans both columns, under the field it belongs to. */
+/* On a Plate inputs row it spans both columns, under the field it belongs to. */
 .cg-media-transport {
   grid-column: 1 / -1;
   display: flex;

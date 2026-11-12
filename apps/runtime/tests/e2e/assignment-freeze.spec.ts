@@ -147,7 +147,7 @@ test('🔴 an ON-AIR row says what it is FROZEN on when the template default is 
 
   /*
     ⚠ `SOURCE-DEFAULTS-20` — THE MARK IS READ WHERE IT NOW LIVES: on the plate's OWN row, in
-    `LOOK INPUTS`. The `LIVE PLATES` section that used to host it does not render at all for a
+    `PLATE INPUTS`. The `LIVE PLATES` section that used to host it does not render at all for a
     looks template any more (the owner's «این بخش قرمز فضای بیخودی اشغال کرده حذفش کن») — it
     was a heading, a rule and a block around one short sentence. The SENTENCE is unchanged and
     so is this claim; only its host moved, and it moved CLOSER to the control it is about.
@@ -156,7 +156,7 @@ test('🔴 an ON-AIR row says what it is FROZEN on when the template default is 
     green for the strongest reason a locator can — there is nothing there to find, on air or
     off — and the whole file would stop testing anything.
   */
-  const plates = app.inspector.locator('[aria-label="Look inputs"]');
+  const plates = app.inspector.locator('[aria-label="Plate inputs"]');
   /*
     Silence before the edit is the absence of the MARK, not of the section: the look section
     renders for its own reason (it is the plate↔source control), and nothing diverges yet.

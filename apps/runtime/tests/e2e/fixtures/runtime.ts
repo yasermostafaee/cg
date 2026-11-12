@@ -596,7 +596,7 @@ export class RuntimeApp {
    * HERE rather than being spelled out in each spec — when the door moves again, the specs
    * that merely need a default set do not each have to be found and edited.
    *
-   * ⚠ The link is in `LOOK INPUTS` for a template that declares looks and in `LIVE PLATES`
+   * ⚠ The link is in `PLATE INPUTS` for a template that declares looks and in `LIVE PLATES`
    * for one that does not, which is why this does NOT scope to either section: it asks the
    * Inspector for the one door, wherever that template put it.
    */

@@ -400,7 +400,7 @@ test('🔴 §4 — RED-FIRST: switch away and back, and the same source is on th
 
   // The row's OWN composition for this look — frame 3 shows Studio 3 in TRIO. What a switch
   // that re-derived the frames from the template would lose.
-  const looks = app.inspector.locator('[aria-label="Look inputs"]');
+  const looks = app.inspector.locator('[aria-label="Plate inputs"]');
   await expect(looks).toBeVisible();
   await app.chooseSource(looks.locator('[data-look-binding="trio:l-3"]'), { input: 'Studio 3' });
   await app.applyEdits();
@@ -449,7 +449,7 @@ test('🔴 B-355 — an unavailable preset saves off air, but a live switch into
   await app.selectLayerRow(layer);
   await captureB355Replies(page);
 
-  const inputs = app.inspector.locator('[aria-label="Look inputs"]');
+  const inputs = app.inspector.locator('[aria-label="Plate inputs"]');
   await inputs.locator('[data-look-tab="solo"]').click();
   const soloInput = inputs.locator('[data-look-binding="solo:l-1"]');
   await chooseDownInput(page, soloInput);
@@ -504,7 +504,7 @@ test('🔴 B-355 — live Update is atomic, keeps every draft, and ignores an un
   await app.selectLayerRow(layer);
   await captureB355Replies(page);
 
-  const inputs = app.inspector.locator('[aria-label="Look inputs"]');
+  const inputs = app.inspector.locator('[aria-label="Plate inputs"]');
   await inputs.locator('[data-look-tab="solo"]').click();
   await chooseDownInput(page, inputs.locator('[data-look-binding="solo:l-1"]'));
   await app.applyEdits();

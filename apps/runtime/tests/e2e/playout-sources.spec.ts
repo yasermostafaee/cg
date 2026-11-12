@@ -14,7 +14,7 @@ import { E2E_PLAYOUT, expect, test } from './fixtures/runtime.js';
  *   2. the Media list, scrolled for real, PAGES through the whole library — every item once, never
  *      audio — while the Playout does the searching (Persian normalisation included);
  *   3. inputs and media NEVER MEET, and no address reaches the page;
- *   4. the owner's take: one plate on an input, one on a media item — it plays, and Look inputs
+ *   4. the owner's take: one plate on an input, one on a media item — it plays, and Plate inputs
  *      name both with their own icons.
  *
  * Against the offline MockRuntime seeded with the fake Playout's list (`E2E_PLAYOUT`), whose
@@ -44,7 +44,7 @@ function colourContrast(a: string, b: string): number {
   return ((lighter ?? 0) + 0.05) / ((darker ?? 0) + 0.05);
 }
 
-/** Two plates, one look placing both — the shape Look inputs exists for. */
+/** Two plates, one look placing both — the shape Plate inputs exists for. */
 async function registerTemplate(page: Page): Promise<void> {
   await page.evaluate(async (templateId) => {
     const w = window as unknown as {
@@ -498,7 +498,7 @@ test.describe('live source thumbnails', () => {
   });
 });
 
-test('🔴 the owner’s take: a plate on an input and a plate on a media item — it plays, and Look inputs name both', async ({
+test('🔴 the owner’s take: a plate on an input and a plate on a media item — it plays, and Plate inputs name both', async ({
   app,
 }) => {
   const page = app.page;
@@ -506,7 +506,7 @@ test('🔴 the owner’s take: a plate on an input and a plate on a media item �
   const row = await app.loadTemplate(TPL);
   await app.selectLayerRow(row);
 
-  const looks = app.inspector.locator('[aria-label="Look inputs"]');
+  const looks = app.inspector.locator('[aria-label="Plate inputs"]');
   await app.chooseSource(looks.locator('[data-look-binding="two:l-1"]'), { input: 'Studio 1' });
   await app.chooseSource(looks.locator('[data-look-binding="two:l-2"]'), {
     media: 'خبر ۱۴۰۵',

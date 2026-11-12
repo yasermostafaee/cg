@@ -48,7 +48,7 @@ import {
  * title (`…for this row`), each plate's template assignment, and `swapped for this row` where one is.
  *
  * 🔴 `B-306` — **A PLATE IS `Plate N`, ITS ID ON THE `title`** (golden rule 11), as the Inspector's
- * Look inputs and the defaults dialog name it; `plate.sourceId` is the template author's word for a
+ * Plate inputs and the defaults dialog name it; `plate.sourceId` is the template author's word for a
  * hole in a layout. Every SOURCE it names goes through the one choice label (`ChoiceLabel`): the
  * Playout's name in its own direction, `none set`, `Not listed` with the id on its `title`,
  * `Unavailable`. What a swap SENDS is unchanged.

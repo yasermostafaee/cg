@@ -1702,7 +1702,7 @@ export const cssVars = {
    * interactive" takes the accent. Picking the wrong one compiles, looks identical today,
    * and silently drifts the day either is retuned — the failure has no moment at which it
    * announces itself, so the only defence is naming the rule where both are declared.
-   * (Session BP, on the Inspector's LOOK INPUTS badge.)
+   * (Session BP, on the Inspector's PLATE INPUTS badge.)
    */
   '--r-ready': colors.ready,
   '--r-idle': colors.idle,

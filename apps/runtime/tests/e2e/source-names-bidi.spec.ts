@@ -74,7 +74,7 @@ test.describe('the owner’s scene: D10 empty, the default naming an input it no
     },
   });
 
-  test('🔴 the Look inputs value and its choice read right to left, apart from `Default (`, and wear `Unavailable`', async ({
+  test('🔴 the Plate inputs value and its choice read right to left, apart from `Default (`, and wear `Unavailable`', async ({
     app,
   }) => {
     const page = app.page;

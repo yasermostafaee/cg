@@ -1890,7 +1890,7 @@ the band in force, and only a press of Apply band SHALL declare it.
 
 ### Requirement: A bound clip SHALL carry a Playback control where it is bound
 
-A `Playback` button SHALL sit beside every field that binds a clip, on its line — a look's input in Look inputs,
+A `Playback` button SHALL sit beside every field that binds a clip, on its line — a look's input in Plate inputs,
 and a plate's default in Source defaults — and SHALL open an anchored panel (the source picker's popover) headed
 by the clip's name, holding `Loop` and `When hidden` (`Pause` · `Restart` · `Keep playing`) and nothing else. A choice SHALL apply at once, station-wide, through `sources.set-media-playback`; the chosen `When hidden`
 SHALL wear the console's chosen-not-on-air treatment. A live input SHALL carry no `Playback`.

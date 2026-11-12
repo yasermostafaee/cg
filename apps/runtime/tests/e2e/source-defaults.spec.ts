@@ -114,7 +114,7 @@ test('🔴 §4.1 — a ROW OVERRIDE survives a default change, and the inheritin
     THE OVERRIDE: this ROW, in this look, pins `guest-1` to Studio 2. Level 3 of the chain —
     above the template default and below an emergency patch.
   */
-  const looks = app.inspector.locator('[aria-label="Look inputs"]');
+  const looks = app.inspector.locator('[aria-label="Plate inputs"]');
   await chooseSource(page, looks.locator('[data-look-binding="both:guest-1"]'), {
     input: 'Studio 2',
   });
@@ -206,7 +206,7 @@ test('🔴 §4.2 — changing a default while a row is ON AIR sends nothing and 
 
   /*
     …and the row is still resolving what its take froze. The Inspector says so ON the plate's
-    own row in `LOOK INPUTS`, which is the surface that had to survive the move:
+    own row in `PLATE INPUTS`, which is the surface that had to survive the move:
     `this row: <source> (frozen at take)`.
 
     ⚠ It used to be read from a `LIVE PLATES` section that no longer renders for a looks
@@ -214,7 +214,7 @@ test('🔴 §4.2 — changing a default while a row is ON AIR sends nothing and 
     section passes `toHaveCount(0)` and fails nothing, so relaxing it would have quietly
     deleted the half of §4.2 that is about what the OPERATOR can tell.
   */
-  const plates = app.inspector.locator('[aria-label="Look inputs"]');
+  const plates = app.inspector.locator('[aria-label="Plate inputs"]');
   await expect(
     plates.locator('[data-plate-frozen="guest-1"]'),
     'the row states that it is still on what it froze',

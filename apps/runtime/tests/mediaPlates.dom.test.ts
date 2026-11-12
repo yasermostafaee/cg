@@ -22,7 +22,7 @@ import { fillBridgeStub } from './support/authStub.js';
 
 /**
  * 🔴 `MEDIA-PLATES-01` §2 — **A CLIP'S `Playback` WHERE IT IS BOUND, AND ITS TRANSPORT ON AN ON-AIR
- * ROW**, in Look inputs.
+ * ROW**, in Plate inputs.
  *
  * What is pinned is the markup and what reaches the bridge: which plate gets which control, what the
  * panel holds (and, as an ABSENCE, that it holds no prose), the remaining time only when the server
@@ -173,7 +173,7 @@ const press = async (button: Element | null): Promise<void> => {
   });
 };
 
-it('🔴 a clip bound in Look inputs carries `Playback`; control: the live input beside it carries none', async () => {
+it('🔴 a clip bound in Plate inputs carries `Playback`; control: the live input beside it carries none', async () => {
   const { el } = await render();
   const playback = el.querySelectorAll('[data-media-playback]');
   expect(playback).toHaveLength(1);

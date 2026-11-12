@@ -128,7 +128,7 @@ export function LivePlatesSection({
   if (plates.length === 0) return null;
   /*
     🔴 …AND THE SAME RULE NOW APPLIES ONE LEVEL UP. With the editor behind a link and the
-    link in `LOOK INPUTS` for a looks template, this section can have literally nothing to
+    link in `PLATE INPUTS` for a looks template, this section can have literally nothing to
     say: no door (that section holds it) and no divergence line (the common case). An empty
     heading is exactly what the guard above refuses, so it is refused here too rather than
     left to be noticed later.
@@ -142,7 +142,7 @@ export function LivePlatesSection({
     🔴 **AND THE HEADING GOES WITH THE CONTENT** — the owner, 2026-09-14: «کلمه Live plates
     و فضایی که اشغال کرده رو هم حذف کن.»
 
-    With the editor behind a link, and the link in `LOOK INPUTS` for a looks template, this
+    With the editor behind a link, and the link in `PLATE INPUTS` for a looks template, this
     section can have literally nothing left to say: no door, and no divergence line (which is
     the common case — both are gated on the row being ON AIR and diverging). A heading with
     nothing under it is the same defect the `plates.length === 0` guard above refuses, so it
@@ -169,7 +169,7 @@ export function LivePlatesSection({
     🔴 **THIS SECTION EXISTS ONLY TO CARRY THE DOOR — owner, 2026-09-15:** «این بخش قرمز
     فضای بیخودی اشغال کرده حذفش کن.»
 
-    A looks template put the `Source defaults` link in `LOOK INPUTS`, which left this section
+    A looks template put the `Source defaults` link in `PLATE INPUTS`, which left this section
     drawing a heading, a rule and a block for one short divergence sentence — a container
     costing more than its contents. The sentence moved onto the plate's own row over there
     (`LooksBindingsSection`'s `divergenceOf`), where the operator is already looking, and the
@@ -227,7 +227,7 @@ export function LivePlatesSection({
   return (
     <div className="cg-inspector-section" aria-label="Live plates">
       {/*
-        ⚠ **THE DOOR IS HERE ONLY WHEN `LOOK INPUTS` IS NOT.** The owner's call is that the
+        ⚠ **THE DOOR IS HERE ONLY WHEN `PLATE INPUTS` IS NOT.** The owner's call is that the
         link sits above the frames (gh2) and not in a section of its own — so for a template
         that declares LOOKS it lives there, and this section does not draw a second one.
 

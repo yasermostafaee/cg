@@ -186,7 +186,7 @@ An input whose `compatibleChannels` does not include the channel of the row bein
 
 ### Requirement: One picker SHALL bind a plate to one of the Playout's inputs or media
 
-The native selects that bind a plate — template defaults, look inputs and the swap — SHALL be replaced by one
+The native selects that bind a plate — template defaults, Plate inputs and the swap — SHALL be replaced by one
 `SourcePicker` that returns a choice, each call site keeping its own commit model. Closed, it SHALL look like the
 field it replaces and show the kind icon, the name, a muted duration for media, an amber `Unavailable` tag, or
 `None`. Open, it SHALL be an anchored panel (not a modal), at least 440 px wide and at most 480 px tall, flipping
@@ -219,7 +219,7 @@ and nothing pressed, typed or right-clicked in it SHALL reach the surface beneat
 
 ### Requirement: A bound source SHALL be named by one label
 
-A bound source SHALL be named by one `SourceLabel` wherever it is named — look inputs, the on-air readouts, the PVW
+A bound source SHALL be named by one `SourceLabel` wherever it is named — Plate inputs, the on-air readouts, the PVW
 overlay, the swap dialog and a refusal line: its kind icon, its name and, when it is unavailable, the amber
 `Unavailable` tag. No source id and no URL SHALL ever be shown.
 
