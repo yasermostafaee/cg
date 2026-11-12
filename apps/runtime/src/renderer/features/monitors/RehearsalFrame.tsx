@@ -211,13 +211,23 @@ export function RehearsalFrame({
     picture neither holds is drawn as a placeholder, and the Inspector says which page.
   */
   const pageSha = book?.media;
+  const bookField = book?.fieldId;
+  const bookKey =
+    book === undefined
+      ? null
+      : JSON.stringify([book.fieldId, book.index, pageSha, book.id, book.assetId]);
+  const pageRewound = book?.rewound === true;
+  const rewindPage = useRef<{ doc: Document; field: string; key: string; changed: boolean }>();
+  const pendingBookPlay = useRef<{ key: string; doc: Document }>();
   const [picture, setPicture] = useState<{ sha: string; url: string } | null>(null);
   useEffect(() => {
     if (pageSha === undefined) return;
     let cancelled = false;
-    void pictureDataUrl(pageSha).then((url) => {
-      if (!cancelled) setPicture({ sha: pageSha, url: url ?? MISSING_PICTURE_URL });
-    });
+    void pictureDataUrl(pageSha)
+      .catch(() => null)
+      .then((url) => {
+        if (!cancelled) setPicture({ sha: pageSha, url: url ?? MISSING_PICTURE_URL });
+      });
     return () => {
       cancelled = true;
     };
@@ -237,8 +247,7 @@ export function RehearsalFrame({
       media: { [book.media]: pageMediaPath(book.media, pageExtOf(picture.url)) },
     };
   }, [book, picture]);
-  const pageKey =
-    page === undefined ? null : `${page.field}|${String(page.index)}|${pageSha ?? ''}`;
+  const pageKey = page === undefined ? null : bookKey;
 
   const templateWindow = useCallback((): TemplateWindow | null => {
     return (frameRef.current?.contentWindow as TemplateWindow | null | undefined) ?? null;
@@ -309,12 +318,24 @@ export function RehearsalFrame({
   /** The timing's VALUE as a stable key — an object identity would re-fire on every render. */
   const timingKey = timing === undefined ? null : JSON.stringify(timing);
 
+  const playNow = useCallback(() => {
+    offerPicture();
+    templateWindow()?.play?.(playPayload());
+  }, [offerPicture, playPayload, templateWindow]);
+
   useImperativeHandle(
     handleRef,
     () => ({
       play: () => {
-        offerPicture();
-        templateWindow()?.play?.(playPayload());
+        const doc = frameRef.current?.contentDocument;
+        if (pageRewound && pageKey === null && bookKey !== null && doc != null) {
+          // An explicit Play on a just-rewound picture waits for its bytes. Omitting
+          // the page payload here would restart the resident page at its old index.
+          pendingBookPlay.current = { key: bookKey, doc };
+          return;
+        }
+        pendingBookPlay.current = undefined;
+        playNow();
       },
       /*
         🔴 `RUN-NEXT-VERSION-03` 1.3 — A BOOK ROW'S NEXT IS THE ROW'S PAGE TURN. The page's local
@@ -330,9 +351,12 @@ export function RehearsalFrame({
         }
         templateWindow()?.next?.();
       },
-      stop: () => templateWindow()?.stop?.(),
+      stop: () => {
+        pendingBookPlay.current = undefined;
+        templateWindow()?.stop?.();
+      },
     }),
-    [templateWindow, playPayload, offerPicture, book, itemId],
+    [templateWindow, playNow, pageRewound, pageKey, bookKey, book, itemId],
   );
 
   // Re-arm on a template change: a fresh document has not booted yet.
@@ -409,12 +433,42 @@ export function RehearsalFrame({
     offerRef.current = offerPicture;
   }, [offerPicture]);
   useEffect(() => {
-    if (!ready || pageKey === null || pageRef.current === undefined) return;
+    if (!ready || loadedHtml.current !== html) return;
+    const doc = frameRef.current?.contentDocument;
+    if (!pageRewound || bookKey === null || bookField === undefined || doc == null) {
+      rewindPage.current = undefined;
+    } else {
+      if (rewindPage.current?.doc !== doc || rewindPage.current.field !== bookField) {
+        rewindPage.current = { doc, field: bookField, key: bookKey, changed: false };
+      }
+      // The first marked destination is the Stop's counter reset, even if an edit was
+      // already staged or the picture is still loading. A later page edit (and Discard
+      // after that edit was shown) can update this Preview normally.
+      if (!rewindPage.current.changed && rewindPage.current.key === bookKey) return;
+    }
+    if (pageKey === null || pageRef.current === undefined) return;
+    const win = templateWindow();
+    if (win?.update === undefined) return;
     offerRef.current();
-    templateWindow()?.update?.(
-      JSON.stringify(withCgControl({} as FieldValues, { page: pageRef.current })),
-    );
-  }, [ready, pageKey, templateWindow]);
+    win.update(JSON.stringify(withCgControl({} as FieldValues, { page: pageRef.current })));
+    if (rewindPage.current !== undefined) rewindPage.current.changed = true;
+  }, [ready, html, bookField, bookKey, pageKey, pageRewound, templateWindow]);
+
+  useEffect(() => {
+    const pending = pendingBookPlay.current;
+    if (pending === undefined) return;
+    if (
+      pending.key !== bookKey ||
+      pending.doc !== frameRef.current?.contentDocument ||
+      loadedHtml.current !== html
+    ) {
+      pendingBookPlay.current = undefined;
+      return;
+    }
+    if (!ready || pageKey === null) return;
+    pendingBookPlay.current = undefined;
+    playNow();
+  }, [ready, html, bookKey, pageKey, playNow]);
 
   // THE POSITION EDIT REACHING THE PREVIEW. `ready` and the placement are BOTH
   // dependencies, and that pairing is what makes an Apply visible: `ready`

@@ -63,7 +63,13 @@ off-air or malformed report SHALL be a `404` with no side effect. Auto and Manua
 counter. A finite book that naturally advances past its final page, or receives live Next there, SHALL play the final
 page's authored `transitionOut`, report completion through the existing take-token `/complete` channel, and land on
 the same graceful STOP path as a self-ending graphic. Operator STOP/OUT SHALL play the same page transition but SHALL
-NOT emit a second natural-completion report. The page server SHALL serve an already-stored picture at
+NOT emit a second natural-completion report. A successful PGM STOP, including the one from a natural or terminal
+completion, SHALL reset each numbered, picture-bearing page list on that row to index 0 and publish it for the row
+and Inspector. CG Bridge SHALL retain the pages and advance mode. When the first page list was rewound, the next
+explicit take SHALL carry its index 0 unless the operator turns the page again. The reset SHALL send no page update
+or PLAY and SHALL leave text-only lists and rows without a page list unchanged. A refused STOP SHALL leave the
+page unchanged.
+The page server SHALL serve an already-stored picture at
 `GET /page/<sha256>` as well as its extension-bearing compatibility path, so an Auto turn can fetch a page whose URL
 was not carried by an operator command.
 
@@ -83,6 +89,12 @@ was not carried by an operator command.
 - **WHEN** the operator presses STOP on any page, or Next on the last live page, of a book whose transition out is Fade
 - **THEN** the visible page fades out before the row settles; terminal Next then self-stops once, while operator STOP
   sends no completion report
+
+#### Scenario: A stopped picture Sequence is ready at its first page
+
+- **WHEN** a numbered picture Sequence is on page 3 and the operator presses layer Stop, or a finite Auto run ends naturally
+- **THEN** the row settles off air on page 1, with one STOP and no additional CG UPDATE or PLAY, and the next Play
+  begins at page 1
 
 ### Requirement: CG Control SHALL set a row's book advance mode
 

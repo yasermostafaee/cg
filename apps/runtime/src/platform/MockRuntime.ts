@@ -63,6 +63,8 @@ import {
   pageRefsOf,
   pageTarget,
   probeImage,
+  rewindPicturePageIndexes,
+  samePageAt,
   bankForChannel,
   ChannelRasterSchema,
   checkSourceAssignments,
@@ -833,6 +835,21 @@ export class MockRuntime {
     }
     const pages = this.#pagesAfterUpdate(item, fields);
     const merged = mergeMode === 'merge' ? { ...item.fields, ...fields } : fields;
+    const pageRewinds = item.pageRewinds?.filter((fieldId) => {
+      const index = item.pages?.[fieldId] ?? 0;
+      if (index !== (pages?.[fieldId] ?? 0)) return false;
+      const declared = this.#templateOfItem(itemId, item.templateId)?.fields.find(
+        (field) => field.id === fieldId,
+      );
+      const fallback = declared?.type === 'list' ? declared.default : [];
+      const before = item.fields[fieldId];
+      const after = merged[fieldId];
+      return samePageAt(
+        Array.isArray(before) ? before : fallback,
+        Array.isArray(after) ? after : fallback,
+        index,
+      );
+    });
 
     // No producer on the slot ⇒ commit only, nothing "sent", intent settled
     // (B-044: never rest non-terminal — an unsettled `updating` is the zombie
@@ -842,6 +859,7 @@ export class MockRuntime {
         fields: merged,
         pending: false,
         ...(pages !== undefined && { pages }),
+        ...(pageRewinds !== undefined && { pageRewinds }),
       });
       this.#record(auditEntry('update', this.#auditItem(itemId, item.templateId)));
       this.#emitStack();
@@ -854,6 +872,7 @@ export class MockRuntime {
       status: wasOnAir ? 'updating' : item.status,
       pending: wasOnAir,
       ...(pages !== undefined && { pages }),
+      ...(pageRewinds !== undefined && { pageRewinds }),
     });
     this.#record(auditEntry('update', this.#auditItem(itemId, item.templateId)));
     // B-044 contract: `updating` is transient — it settles to the item's
@@ -881,7 +900,17 @@ export class MockRuntime {
     // point: what the freeze protects is the PICTURE, and there is no longer one.
     this.#thawAssignment(itemId);
     // The producer survives, so `#loaded` is deliberately NOT cleared.
-    this.#settle(itemId, 'loaded');
+    this.#settle(itemId, 'loaded', (settled) => {
+      if (!isOnAirStatus(item)) return {};
+      const pages = rewindPicturePageIndexes(
+        this.#templateOfItem(itemId, settled.templateId),
+        settled.fields,
+        settled.pages,
+      );
+      if (pages === undefined) return {};
+      const rewound = Object.keys(pages).filter((field) => pages[field] !== settled.pages?.[field]);
+      return { pages, pageRewinds: [...new Set([...(settled.pageRewinds ?? []), ...rewound])] };
+    });
     return { accepted: true };
   }
 
@@ -992,9 +1021,10 @@ export class MockRuntime {
     }
     const value: unknown = item.fields[field];
     const declared = info.fields.find((f) => f.id === field);
-    const count = pageRefsOf(
+    const pages = pageRefsOf(
       Array.isArray(value) ? value : declared?.type === 'list' ? declared.default : [],
-    ).length;
+    );
+    const count = pages.length;
     if (count === 0) {
       return {
         accepted: false,
@@ -1003,9 +1033,25 @@ export class MockRuntime {
         count,
       };
     }
+    if (
+      item.status === 'exiting' &&
+      pages.some((page) => page.media !== undefined || page.assetId !== undefined)
+    ) {
+      return {
+        accepted: false,
+        errorCode: 'page-turn-superseded',
+        message: pageRefusalMessage('page-turn-superseded', {}),
+        count,
+      };
+    }
     const current = Math.min(item.pages?.[field] ?? 0, count - 1);
     const target = pageTarget(current, count, entry.wrap, to);
-    this.#patch(itemId, { pages: { ...item.pages, [field]: target } });
+    this.#patch(itemId, {
+      pages: { ...item.pages, [field]: target },
+      ...(item.pageRewinds !== undefined && {
+        pageRewinds: item.pageRewinds.filter((rewound) => rewound !== field),
+      }),
+    });
     this.#record(auditEntry('page-turn', this.#auditItem(itemId, item.templateId)));
     // Offline parity for the live terminal turn: the real page plays its transition and reports
     // completion; the mock has no page to animate, so it delivers that receipt immediately.
@@ -3494,14 +3540,18 @@ export class MockRuntime {
    * ⚠ `pending` is still required. It is what a `#transition` sets, so a settle whose item was
    * patched to a resting state by some other path must still decline.
    */
-  #settle(itemId: string, status: StackItemStatus): void {
+  #settle(
+    itemId: string,
+    status: StackItemStatus,
+    changes?: (item: StackItemState) => Partial<StackItemState>,
+  ): void {
     const gen = (this.#settleGen.get(itemId) ?? 0) + 1;
     this.#settleGen.set(itemId, gen);
     setTimeout(() => {
       if (this.#settleGen.get(itemId) !== gen) return; // superseded by a later verb
       const item = this.#find(itemId);
       if (item === null || !item.pending) return;
-      this.#patch(itemId, { status, pending: false });
+      this.#patch(itemId, { ...changes?.(item), status, pending: false });
     }, 160);
   }
   /** Which settle is the current one per item — see {@link #settle}. */

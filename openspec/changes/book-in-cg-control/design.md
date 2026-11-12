@@ -43,6 +43,13 @@ picture decode in flight, and awaits the authored `transitionOut`. A finite Auto
 the same visual boundary, then emits `book-end`; the existing completion receipt invokes the same graceful row STOP as
 other self-ending graphics. Operator exits do not emit natural completion, so there is no stop loop.
 
+When the current STOP is accepted, CG Bridge rewinds the saved index of each numbered, picture-bearing list to zero.
+The row and Inspector show the starting page of the first list, and the next explicit take carries that page in the
+existing `__cg.page` payload. A live-only `pageRewinds` marker tells an already-playing PVW to keep its current picture
+while the counter resets. The marker does not travel to the producer or persist across bridge restart. A subsequent
+page turn, deliberate picture replacement or preview Play updates PVW from its book again. The STOP path does not
+issue a picture update or start playback.
+
 ## 6. Picture pickers in Manage pages
 
 The Sequence Inspector opens Manage pages for both adding and replacing pictures. The dialog's two

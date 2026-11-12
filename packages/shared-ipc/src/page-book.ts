@@ -1,3 +1,6 @@
+import type { FieldValues } from '@cg/shared-schema';
+import type { TemplateInfo } from './channels/templates.js';
+
 /**
  * `R-100` — **A BOOK'S PAGES: the pure rules every reader shares** — CG Bridge, CG Control's
  * test-mode runtime and the console's own pre-check. What a picture is (from its bytes), where a page
@@ -139,6 +142,41 @@ export function pageRefsOf(raw: unknown): PageRef[] {
   });
 }
 
+/** Reset the saved start page of any numbered list with pictures after its run ends. */
+export function rewindPicturePageIndexes(
+  template: Pick<TemplateInfo, 'pageLists' | 'fields'> | null,
+  fields: FieldValues,
+  indexes: Readonly<Record<string, number>> | undefined,
+): Record<string, number> | undefined {
+  if (indexes === undefined) return undefined;
+  let rewound: Record<string, number> | undefined;
+  for (const fieldId of picturePageFieldIds(template, fields)) {
+    if ((indexes[fieldId] ?? 0) === 0) continue;
+    rewound ??= { ...indexes };
+    rewound[fieldId] = 0;
+  }
+  return rewound;
+}
+
+/** The operator-numbered page lists whose applied (or authored default) values contain a picture. */
+export function picturePageFieldIds(
+  template: Pick<TemplateInfo, 'pageLists' | 'fields'> | null,
+  fields: FieldValues,
+): string[] {
+  if (template === null) return [];
+  const pictureFields: string[] = [];
+  for (const { fieldId, step } of template.pageLists ?? []) {
+    if (step === false) continue;
+    const value = fields[fieldId];
+    const declared = template.fields.find((field) => field.id === fieldId);
+    const pages = Array.isArray(value) ? value : declared?.type === 'list' ? declared.default : [];
+    if (pageRefsOf(pages).some((page) => page.media !== undefined || page.assetId !== undefined)) {
+      pictureFields.push(fieldId);
+    }
+  }
+  return pictureFields;
+}
+
 /** `RUN-NEXT-VERSION-03` 1.5 — each page's id in a page-list VALUE (`undefined` where an item has none). */
 export function pageIdsOf(raw: unknown): (string | undefined)[] {
   if (!Array.isArray(raw)) return [];
@@ -146,6 +184,20 @@ export function pageIdsOf(raw: unknown): (string | undefined)[] {
     v !== null && typeof v === 'object' && typeof (v as { id?: unknown }).id === 'string'
       ? (v as { id: string }).id
       : undefined,
+  );
+}
+
+/** Whether the same page and picture still occupy the given position after an edit. */
+export function samePageAt(before: unknown, after: unknown, index: number): boolean {
+  const previous = Array.isArray(before) ? before.slice(index, index + 1) : [];
+  const next = Array.isArray(after) ? after.slice(index, index + 1) : [];
+  const [previousRef] = pageRefsOf(previous);
+  const [nextRef] = pageRefsOf(next);
+  return (
+    previous.length === next.length &&
+    pageIdsOf(previous)[0] === pageIdsOf(next)[0] &&
+    previousRef?.media === nextRef?.media &&
+    previousRef?.assetId === nextRef?.assetId
   );
 }
 

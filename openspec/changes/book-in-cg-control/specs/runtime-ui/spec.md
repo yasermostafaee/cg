@@ -55,7 +55,13 @@ be in the row's menu, so a book row keeps the same buttons, in the same columns,
 
 - **WHEN** a finite book is on air on its last page and the operator presses Next
 - **THEN** Next is enabled, the last page plays its authored transition out, the row stops itself, and PLAY is no
-  longer marked active; on the same last page off air, Next stays disabled
+  longer marked active. A numbered picture Sequence returns to page 1. At the last page off air, Next stays disabled
+
+#### Scenario: A PGM stop rewinds the counter while the picture on PVW stays put
+
+- **WHEN** a numbered picture Sequence on page 3 of 3 is stopped on PGM while PVW is playing page 3
+- **THEN** the row and Inspector read `1 / 3`, PGM stays stopped, and the current PVW picture remains on page 3.
+  An explicit preview page turn, Play or picture replacement updates PVW from the row's book again
 
 #### Scenario: A book row keeps the table's shape
 
@@ -70,6 +76,7 @@ be in the row's menu, so a book row keeps the same buttons, in the same columns,
 PVW SHALL tell each rehearsing frame the page a take of its row would show — the template's first page
 list, at the page the bridge holds the row on, clamped to the book PVW is rehearsing (staged over
 applied) — in the bridge's own `__cg.page` form, on PLAY and whenever the page or its picture changes.
+The PGM STOP rewind SHALL leave the current picture on a playing PVW unchanged.
 For an operator picture it SHALL first hand the page that picture through the page's own runtime
 (`CG.providePagePicture`): the bytes this console sent, else the bridge's copy read back once by its
 hash (`pages.get`). A picture neither holds SHALL be drawn as a placeholder with no words. The page

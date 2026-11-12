@@ -69,7 +69,7 @@ export const PAGE_MAX_SIDE = 4096;
 /** Pages one row may hold. */
 export const PAGES_MAX_PER_ROW = 500;
 
-/** The refusal codes `pages.put` and a page-list update answer with. */
+/** The refusal codes for loading, updating or turning pages. */
 export type PageRefusalCode =
   | 'page-not-a-picture'
   | 'page-too-large'
@@ -77,7 +77,8 @@ export type PageRefusalCode =
   | 'page-too-many'
   | 'page-missing'
   /** `D-163` — the template runs these pages by itself; the operator does not turn them. */
-  | 'page-not-stepped';
+  | 'page-not-stepped'
+  | 'page-turn-superseded';
 
 /**
  * The ONE wording of each refusal, in the operator's words: the file's own name and the limit it
@@ -101,6 +102,8 @@ export function pageRefusalMessage(
       return `${name} is not on CG Bridge any more. Load the pages again.`;
     case 'page-not-stepped':
       return 'This template turns these pages by itself; they are not turned from the console.';
+    case 'page-turn-superseded':
+      return 'Choose the page again after the row stops.';
   }
 }
 

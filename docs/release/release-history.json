@@ -554,7 +554,12 @@
         "en": "This section tracks outstanding acceptance checks and features still in progress."
       },
       "features": [],
-      "fixes": [],
+      "fixes": [
+        {
+          "fa": "در CG Control، پایان پخش یا Stop شمارهٔ صفحهٔ Sequence تصویری را برای اجرای بعدی به ۱ برمی‌گرداند.",
+          "en": "In CG Control, finishing or stopping a picture Sequence resets its page counter to 1 for the next Play."
+        }
+      ],
       "planned": [
         {
           "fa": "روی خروجی PGM ایستگاه Playout، نمایش عنوان و شکل روی قاب، حفظ اتصال ورودی هنگام تغییر پریست، ماسک و Revert و پس‌زمینهٔ قاب بررسی شوند.",

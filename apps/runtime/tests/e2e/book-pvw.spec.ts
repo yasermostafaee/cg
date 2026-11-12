@@ -3,6 +3,7 @@ import type { Locator, Page } from '@playwright/test';
 import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { ConnectionConfig, FixedLayerBank } from '@cg/shared-ipc';
+import { readCgControl } from '@cg/shared-schema';
 import {
   bookPagesDialog,
   buildBookVcg,
@@ -37,6 +38,7 @@ const GREEN: RGB = [30, 200, 60];
 const BLUE: RGB = [30, 60, 220];
 const BANK: FixedLayerBank = { channel: 1, start: 80, count: 20, low: { start: 50, count: 10 } };
 const ROW = 99;
+const SLOT = { channel: 1, layer: ROW };
 const TEMPLATE_ID = 'tpl-e2e-pvw-book';
 
 let bridge: BridgeHandle | null = null;
@@ -98,6 +100,24 @@ async function showMonitors(page: Page): Promise<void> {
 
 const row = (page: Page): Locator => page.locator(`[data-layer="${String(ROW)}"]`).first();
 const inspector = (page: Page): Locator => page.getByRole('complementary', { name: 'Inspector' });
+
+function programmeCommands(engine: MockHandle): string[] {
+  return engine
+    .receivedCommands()
+    .map(({ line }) => line)
+    .filter((line) => line.startsWith(`CG 1-${String(ROW)} `));
+}
+
+function latestTake(engine: MockHandle): { data: string; pageIndex: number } {
+  for (const message of [engine.lastCgUpdate(SLOT), engine.lastCgAdd(SLOT)]) {
+    if (message?.data === undefined || message.data === null) continue;
+    const control = readCgControl(JSON.parse(message.data));
+    if (control?.take !== undefined && control.page !== undefined && 'index' in control.page) {
+      return { data: message.data, pageIndex: control.page.index };
+    }
+  }
+  throw new Error('No take payload reached the programme producer');
+}
 
 /** LOAD → `Import a .vcg` → the file → `Load onto` — what the operator presses (`importVcg`'s steps). */
 async function importAndLoad(page: Page, bytes: Uint8Array): Promise<void> {
@@ -273,4 +293,131 @@ test('1.4 — the strip draws the template’s own pages from the page the bridg
     'src',
     /^data:image\/png/,
   );
+});
+
+test('R-100 — stopping a picture Sequence rewinds the row without changing the playing PVW', async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const handle = await boot();
+  const engine = mock;
+  if (engine === null) throw new Error('AMCP mock did not start');
+  await openConsole(page, handle.url);
+  await showMonitors(page);
+  await importAndLoad(page, await buildBookVcg(TEMPLATE_ID));
+  const layer = row(page);
+  const book = inspector(page);
+  const chooser = await openBookPageChooser(page, book, 'Pictures…');
+  await chooser.setFiles([
+    { name: 'page1.png', mimeType: 'image/png', buffer: solidPng(64, 36, RED) },
+    { name: 'page2.png', mimeType: 'image/png', buffer: solidPng(64, 36, GREEN) },
+    { name: 'page3.png', mimeType: 'image/png', buffer: solidPng(64, 36, BLUE) },
+  ]);
+  await bookPagesDialog(page).getByRole('button', { name: 'Done', exact: true }).click();
+  await book.getByRole('button', { name: 'Apply staged edits' }).click();
+  await expect(book.getByTestId('book-counter')).toHaveText('1 / 3');
+
+  const play = layer.getByRole('button', { name: 'PLAY', exact: true });
+  await play.click();
+  await expect(layer).toHaveAttribute('aria-label', /ON AIR$/);
+  const firstTake = latestTake(engine).data;
+  await layer.getByRole('button', { name: 'ON PVW', exact: true }).click();
+  const previewBar = page.locator('[data-pvw-controls]');
+  const previewPlay = previewBar.getByRole('button', { name: 'PLAY', exact: true });
+  await previewPlay.click();
+  await book.getByRole('textbox', { name: /^Page number/ }).fill('3');
+  await book.getByRole('button', { name: /^Go to page/ }).click();
+  await expect(layer.locator('[data-page-counter]')).toHaveText('3 / 3');
+  await expectPvw(page, BLUE);
+
+  const beforeStop = programmeCommands(engine).length;
+  await layer.getByRole('button', { name: 'STOP', exact: true }).click();
+  await expect(play).toBeEnabled();
+  await expect(layer.locator('[data-page-counter]')).toHaveText('1 / 3');
+  await expect(book.getByTestId('book-counter')).toHaveText('1 / 3');
+  await expect(layer.getByRole('button', { name: 'OFF PVW', exact: true })).toBeVisible();
+  await expectPvw(page, BLUE);
+  await previewBar.getByRole('button', { name: 'STOP', exact: true }).click();
+  await previewPlay.click();
+  await expectPvw(page, RED);
+  expect(programmeCommands(engine).slice(beforeStop)).toEqual([`CG 1-${String(ROW)} STOP 0`]);
+
+  // A deliberate replacement still reaches PVW even when the row's index remains zero.
+  const replacement = await openBookPageChooser(page, book, 'Pictures…');
+  await replacement.setFiles({
+    name: 'replacement.png',
+    mimeType: 'image/png',
+    buffer: solidPng(64, 36, GREEN),
+  });
+  await bookPagesDialog(page).getByRole('button', { name: 'Done', exact: true }).click();
+  await expectPvw(page, GREEN);
+  await book.getByRole('button', { name: 'Apply staged edits' }).click();
+  await expect(layer.locator('[data-page-counter]')).toHaveText('1 / 1');
+  await expectPvw(page, GREEN);
+
+  await play.click();
+  await expect(layer).toHaveAttribute('aria-label', /ON AIR$/);
+  const replay = latestTake(engine);
+  expect(replay.data).not.toBe(firstTake);
+  expect(replay.pageIndex).toBe(0);
+});
+
+test('R-100 — natural completion of an Auto picture Sequence rewinds without taking again', async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const handle = await boot();
+  const engine = mock;
+  if (engine === null) throw new Error('AMCP mock did not start');
+  await openConsole(page, handle.url);
+  await importAndLoad(
+    page,
+    await buildTelavat2Vcg({ templateId: 'tpl-e2e-auto-rewind', pages: 2 }),
+  );
+  const layer = row(page);
+  const book = inspector(page);
+  const play = layer.getByRole('button', { name: 'PLAY', exact: true });
+  await expect(layer.locator('[data-page-counter]')).toHaveText('1 / 2');
+  await play.click();
+  await expect(layer).toHaveAttribute('aria-label', /ON AIR$/);
+  const add = engine.lastCgAdd(SLOT);
+  if (add === undefined) throw new Error('Programme page was not loaded');
+  const take = latestTake(engine);
+  const beforeEnd = programmeCommands(engine).length;
+
+  // The mock carries the CasparCG wire. Chromium runs the exact served producer to emit its own
+  // page-state and completion receipts, using the payload the wire supplied for this take.
+  const air = await page.context().newPage();
+  try {
+    await air.goto(add.template);
+    await air.waitForFunction(
+      () => typeof (window as unknown as { play?: unknown }).play === 'function',
+    );
+    const completion = air.waitForResponse(
+      (response) => new URL(response.url()).pathname === '/complete',
+      { timeout: 30_000 },
+    );
+    await air.evaluate(
+      (payload) => (window as unknown as { play: (value: string) => void }).play(payload),
+      take.data,
+    );
+    const [response] = await Promise.all([
+      completion,
+      expect(layer.locator('[data-page-counter]')).toHaveText('2 / 2', { timeout: 20_000 }),
+    ]);
+    expect(response.status()).toBe(204);
+    await expect(play).toBeEnabled();
+    await expect(layer.locator('[data-page-counter]')).toHaveText('1 / 2');
+    await expect(book.getByTestId('book-counter')).toHaveText('1 / 2');
+    await expect(air.locator('img:visible')).toHaveCount(0);
+    expect(programmeCommands(engine).slice(beforeEnd)).toEqual([`CG 1-${String(ROW)} STOP 0`]);
+
+    await play.click();
+    await expect(layer).toHaveAttribute('aria-label', /ON AIR$/);
+    const replay = latestTake(engine);
+    expect(replay.data).not.toBe(take.data);
+    expect(replay.pageIndex).toBe(0);
+  } finally {
+    await air.close();
+  }
 });

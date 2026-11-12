@@ -3,9 +3,9 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { createMock, type MockHandle } from '@cg/amcp-mock';
+import { createMock, defaultHandlers, type MockHandle } from '@cg/amcp-mock';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
-import { retainedFromStackItem } from '@cg/shared-schema';
+import { retainedFromStackItem, TEMPLATE_COMPLETE_PATH } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 import { recvLines as readWireLines } from './support/wire-trace.js';
@@ -225,6 +225,184 @@ it('🔴 a current template page report updates the counter; a stale take cannot
   expect(stale.status).toBe(404);
   expect(pagesOf(r, 'item1')).toEqual({ pages: 2 });
 }, 40_000);
+
+it('rewinds a live picture book on explicit Stop without issuing a page command', async () => {
+  const r = await boot();
+  const book = await storeBook(r, 3);
+  expect((await r.load('item1', 'book', { pages: book })).accepted).toBe(true);
+  expect((await r.take('item1')).accepted).toBe(true);
+  expect(await r.pageItem('item1', 'pages', 2)).toMatchObject({ accepted: true, page: 2 });
+  const before = await lineCount();
+
+  expect(await r.stopItem('item1')).toEqual({ accepted: true });
+  expect((await linesSince(before)).filter((line) => line.startsWith(cg(r, 'item1')))).toEqual([
+    `${cg(r, 'item1')} STOP 0`,
+  ]);
+  const item = r.stackSnapshot()[0]!;
+  expect(item).toMatchObject({ pages: { pages: 0 }, pageRewinds: ['pages'] });
+  expect(retainedFromStackItem(item)).not.toHaveProperty('pageRewinds');
+
+  // A deliberate turn to the same number clears the PVW marker. An off-air Stop preserves a
+  // newly chosen starting page.
+  expect(await r.pageItem('item1', 'pages', 1)).toMatchObject({ accepted: true, page: 1 });
+  expect(r.stackSnapshot()[0]?.pageRewinds).toBeUndefined();
+  expect(await r.pageItem('item1', 'pages', 3)).toMatchObject({ accepted: true, page: 3 });
+  expect(await r.stopItem('item1')).toEqual({ accepted: true });
+  expect(pagesOf(r, 'item1')).toEqual({ pages: 2 });
+});
+
+it('rewinds after the finite picture book reports completion and starts the next Take at page 1', async () => {
+  const r = await boot();
+  const book = await storeBook(r, 3);
+  expect((await r.load('item1', 'book', { pages: book })).accepted).toBe(true);
+  expect((await r.take('item1')).accepted).toBe(true);
+  const take = latestTakeToken(await linesSince(0));
+  const serve = r.templateServe;
+  if (serve === null) throw new Error('the template server is not serving');
+  const origin = `http://${serve.serveHost}:${String(serve.port)}`;
+  const reportPage = () =>
+    fetch(`${origin}/page-state`, {
+      method: 'POST',
+      body: JSON.stringify({ take, field: 'pages', index: 2 }),
+    });
+  expect((await reportPage()).status).toBe(204);
+  const before = await lineCount();
+
+  expect(
+    (
+      await fetch(`${origin}${TEMPLATE_COMPLETE_PATH}`, {
+        method: 'POST',
+        body: JSON.stringify({ take }),
+      })
+    ).status,
+  ).toBe(204);
+  await waitFor(() => pagesOf(r, 'item1')?.['pages'] === 0, 4000, 'rewound page');
+  expect((await reportPage()).status).toBe(404);
+  expect((await linesSince(before)).filter((line) => line.startsWith(cg(r, 'item1')))).toEqual([
+    `${cg(r, 'item1')} STOP 0`,
+  ]);
+
+  const beforeTake = await lineCount();
+  expect((await r.take('item1')).accepted).toBe(true);
+  expect(await linesSince(beforeTake)).toEqual(
+    expect.arrayContaining([
+      expect.stringContaining('"page":{"field":"pages","index":0'),
+      `${cg(r, 'item1')} PLAY 0`,
+    ]),
+  );
+  expect((await reportPage()).status).toBe(404);
+  expect(pagesOf(r, 'item1')).toEqual({ pages: 0 });
+});
+
+it('refuses navigation already queued or requested while picture Stop is pending', async () => {
+  const r = await boot();
+  const book = await storeBook(r, 3);
+  expect((await r.load('item1', 'book', { pages: book })).accepted).toBe(true);
+  expect((await r.take('item1')).accepted).toBe(true);
+
+  const handler = defaultHandlers().get('CG');
+  if (mock === null || handler === undefined) throw new Error('no CG fixture');
+  let turnSeen = false;
+  let stopSeen = false;
+  let releaseTurn = (): void => undefined;
+  let releaseStop = (): void => undefined;
+  const holdTurn = new Promise<void>((resolve) => {
+    releaseTurn = resolve;
+  });
+  const holdStop = new Promise<void>((resolve) => {
+    releaseStop = resolve;
+  });
+  mock.setHandler('CG', async (request, context, connection) => {
+    if (!turnSeen && request.raw.includes(' UPDATE ')) {
+      turnSeen = true;
+      await holdTurn;
+    } else if (request.raw.endsWith(' STOP 0')) {
+      stopSeen = true;
+      await holdStop;
+    }
+    return handler(request, context, connection);
+  });
+
+  const before = await lineCount();
+  const first = r.pageItem('item1', 'pages', 2);
+  try {
+    await waitFor(() => turnSeen, 4000, 'first turn at the wire');
+    const queued = r.pageItem('item1', 'pages', 3);
+    const stopping = r.stopItem('item1');
+    await waitFor(() => stopSeen, 4000, 'pending Stop at the wire');
+    const during = r.pageItem('item1', 'pages', 3);
+
+    releaseTurn();
+    expect(await first).toMatchObject({ accepted: true, page: 2 });
+    for (const turn of [queued, during]) {
+      expect(await turn).toMatchObject({ accepted: false, errorCode: 'page-turn-superseded' });
+    }
+    releaseStop();
+    expect(await stopping).toEqual({ accepted: true });
+  } finally {
+    releaseTurn();
+    releaseStop();
+  }
+  expect(pagesOf(r, 'item1')).toEqual({ pages: 0 });
+  const writes = (await linesSince(before)).filter((line) => line.startsWith(cg(r, 'item1')));
+  expect(writes).toHaveLength(2);
+  expect(writes[0]).toContain('"page":{"field":"pages","index":1');
+  expect(writes[1]).toBe(`${cg(r, 'item1')} STOP 0`);
+  expect(await r.pageItem('item1', 'pages', 3)).toMatchObject({ accepted: true, page: 3 });
+});
+
+it('keeps the current picture page when CasparCG refuses Stop', async () => {
+  const r = await boot();
+  const book = await storeBook(r, 3);
+  expect((await r.load('item1', 'book', { pages: book })).accepted).toBe(true);
+  expect((await r.take('item1')).accepted).toBe(true);
+  expect(await r.pageItem('item1', 'pages', 2)).toMatchObject({ accepted: true, page: 2 });
+
+  const handler = defaultHandlers().get('CG');
+  if (mock === null || handler === undefined) throw new Error('no CG fixture');
+  mock.setHandler('CG', (request, context, connection) =>
+    request.raw.endsWith(' STOP 0')
+      ? { kind: 'err', code: 502, verb: 'CG' }
+      : handler(request, context, connection),
+  );
+  expect(await r.stopItem('item1')).toMatchObject({ accepted: false, errorCode: 'amcp-502' });
+  expect(pagesOf(r, 'item1')).toEqual({ pages: 1 });
+  expect(r.stackSnapshot()[0]?.pageRewinds).toBeUndefined();
+  expect(await r.pageItem('item1', 'pages', 3)).toMatchObject({ accepted: true, page: 3 });
+});
+
+it('clears a rewind marker when the picture on page 1 changes under the same page ID', async () => {
+  const r = await boot();
+  const [first, second, replacement] = await storeBook(r, 3);
+  if (first === undefined || second === undefined || replacement === undefined)
+    throw new Error('no picture book fixture');
+  expect((await r.load('item1', 'book', { pages: [first, second] })).accepted).toBe(true);
+  expect((await r.take('item1')).accepted).toBe(true);
+  expect((await r.pageItem('item1', 'pages', 2)).accepted).toBe(true);
+  expect((await r.stopItem('item1')).accepted).toBe(true);
+
+  const newSecond = { ...second, media: replacement.media };
+  expect((await r.update('item1', { pages: [first, newSecond] }, 'merge')).accepted).toBe(true);
+  expect(r.stackSnapshot()[0]?.pageRewinds).toEqual(['pages']);
+  const newFirst = { ...first, media: replacement.media };
+  expect((await r.update('item1', { pages: [newFirst, newSecond] }, 'merge')).accepted).toBe(true);
+  expect(r.stackSnapshot()[0]).toMatchObject({ pages: { pages: 0 } });
+  expect(r.stackSnapshot()[0]?.pageRewinds).toBeUndefined();
+});
+
+it('keeps the page of an applied text-only list even when its template has a page-list field', async () => {
+  const r = await boot();
+  const pages = [
+    { id: 'one', kind: 'text' as const, text: 'First' },
+    { id: 'two', kind: 'text' as const, text: 'Second' },
+  ];
+  expect((await r.load('item1', 'book', { pages })).accepted).toBe(true);
+  expect((await r.take('item1')).accepted).toBe(true);
+  expect(await r.pageItem('item1', 'pages', 2)).toMatchObject({ accepted: true, page: 2 });
+  expect(await r.stopItem('item1')).toEqual({ accepted: true });
+  expect(pagesOf(r, 'item1')).toEqual({ pages: 1 });
+  expect(r.stackSnapshot()[0]?.pageRewinds).toBeUndefined();
+});
 
 it('🔴 Auto/Manual changes live with one UPDATE, persists, and never plays an off-air row', async () => {
   const r = await boot();

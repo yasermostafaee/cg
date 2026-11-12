@@ -264,6 +264,8 @@ export const StackItemStateSchema = z.object({
    * The console's `12 / 300` reads it; a page turn changes it. ABSENT means page 1 of every list.
    */
   pages: StackItemPagesSchema.optional(),
+  /** Live-only marker: these saved pages were reset at Stop, so PVW waits for its next Play. */
+  pageRewinds: z.array(z.string()).optional(),
   /** Per-row override; absent fields inherit the template's authored advance mode. */
   pageAdvance: StackItemPageAdvanceSchema.optional(),
   /**

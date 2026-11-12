@@ -1,4 +1,4 @@
-import { pageRefsOf, type TemplateInfo } from '@cg/shared-ipc';
+import { pageIdsOf, pageRefsOf, type TemplateInfo } from '@cg/shared-ipc';
 import type { FieldValues, StackItemState } from '@cg/shared-schema';
 
 /**
@@ -56,6 +56,10 @@ export interface BookPage {
   step: boolean;
   /** The operator picture this page names (its SHA-256); `undefined` for an authored page. */
   media: string | undefined;
+  id?: string;
+  assetId?: string;
+  /** The index was reset at programme exit and is only for the next Play. */
+  rewound?: true;
 }
 
 export function bookPageOf(
@@ -67,18 +71,19 @@ export function bookPageOf(
   if (template === null || item === null || entry === undefined) return null;
   const value: unknown = fields[entry.fieldId];
   const declared = template.fields.find((f) => f.id === entry.fieldId);
-  const raw: unknown = Array.isArray(value)
-    ? value
-    : declared?.type === 'list'
-      ? declared.default
-      : [];
+  const raw = Array.isArray(value) ? value : declared?.type === 'list' ? declared.default : [];
   const refs = pageRefsOf(raw);
   if (refs.length === 0) return null;
   const index = Math.min(item.pages?.[entry.fieldId] ?? 0, refs.length - 1);
+  const id = pageIdsOf([raw[index]])[0];
+  const picture = refs[index];
   return {
     fieldId: entry.fieldId,
     index,
     step: entry.step !== false,
-    media: refs[index]?.media,
+    media: picture?.media,
+    ...(id !== undefined && { id }),
+    ...(picture?.assetId !== undefined && { assetId: picture.assetId }),
+    ...(item.pageRewinds?.includes(entry.fieldId) === true && { rewound: true as const }),
   };
 }

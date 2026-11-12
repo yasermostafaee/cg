@@ -4776,6 +4776,10 @@ deleted unless another row names them; WHEN a second console looks THEN it sees 
 WHEN a Sequence field is selected THEN the Inspector shows one `Manage pages…` entry beside its existing
 thumbnails and page navigation, and picture or folder replacement is available in the dialog
 (`openspec/changes/book-in-cg-control/`).
+WHEN a numbered Sequence with authored or operator-loaded pictures ends naturally on PGM or accepts a layer Stop
+THEN the layer and Inspector counters return to `1 / total`, the next Play starts at page 1, and the reset
+sends no page turn or Play to PGM. A playing PVW keeps its current picture through the reset.
+The page list and its Auto/Manual setting are retained.
 
 ## [x] R-101 — the Inspector checks a text field against its pattern before Update, so a mistyped Azan time is refused at the console instead of silently ignored by the page ⟨priority: medium — the Azan time is the first field whose bad value changes nothing on air without a word⟩ — FILED 2026-10-15 by `AZAN-DESIGNER-01` (item 4) · BUILT 2026-10-16 by `RUN-NEXT-VERSION-02` (Q14) · `openspec/changes/archive/2026-10-21-field-pattern-refusal/`
 

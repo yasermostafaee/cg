@@ -7,6 +7,9 @@ import {
   pageRefusalMessage,
   pageTarget,
   probeImage,
+  rewindPicturePageIndexes,
+  samePageAt,
+  type TemplateInfo,
 } from '../src/index.js';
 
 /**
@@ -176,6 +179,49 @@ describe('R-100 — pageRefsOf reads a page-list value defensively', () => {
     ).toEqual([{ media: sha, name: 'page1.png' }, { assetId: 'asset-2' }, {}, {}, {}, {}]);
     expect(pageRefsOf('not a list')).toEqual([]);
     expect(pageRefsOf(undefined)).toEqual([]);
+  });
+});
+
+describe('R-100 — rewind the saved index of numbered picture pages', () => {
+  const template: Pick<TemplateInfo, 'pageLists' | 'fields'> = {
+    pageLists: [
+      { fieldId: 'authored', wrap: false },
+      { fieldId: 'operator', wrap: true },
+      { fieldId: 'automatic', wrap: false, step: false },
+    ],
+    fields: [
+      {
+        id: 'authored',
+        label: 'Authored',
+        type: 'list',
+        required: false,
+        default: [{ id: 'cover', kind: 'image', assetId: 'cover-png' }],
+      },
+    ],
+  };
+  const media = [{ id: 'operator-png', kind: 'image' as const, media: 'a'.repeat(64) }];
+
+  it('rewinds authored and operator pictures without touching a non-numbered list', () => {
+    const indexes = { authored: 2, operator: 1, automatic: 2 };
+    expect(
+      rewindPicturePageIndexes(template, { operator: media, automatic: media }, indexes),
+    ).toEqual({ authored: 0, operator: 0, automatic: 2 });
+    expect(indexes).toEqual({ authored: 2, operator: 1, automatic: 2 });
+  });
+
+  it('uses the applied list over authored defaults and preserves text-only pages', () => {
+    expect(
+      rewindPicturePageIndexes(
+        template,
+        { authored: [{ id: 'text', text: 'A text page' }] },
+        { authored: 1 },
+      ),
+    ).toBeUndefined();
+  });
+
+  it('detects a new picture at the same saved page even if its id was kept', () => {
+    expect(samePageAt(media, [{ ...media[0], media: 'b'.repeat(64) }], 0)).toBe(false);
+    expect(samePageAt(media, [{ ...media[0], name: 'Cover' }], 0)).toBe(true);
   });
 });
 

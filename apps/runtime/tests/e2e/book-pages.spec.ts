@@ -105,7 +105,7 @@ test('🔴 a folder’s pictures load in natural order; Next, Previous and Go to
 
   // On air, the same last-page Next is an exit verb: the real template plays the page's
   // configured transition and reports completion. Test mode has no page to animate, so its
-  // faithful stand-in reports immediately; the row stops and PLAY becomes available again.
+  // stand-in reports immediately and rewinds the stopped row to the first page.
   const row = app.stackRow(templateId).first();
   await row.getByRole('button', { name: 'PLAY' }).click();
   await expect(row.getByLabel('status SIM ON AIR')).toBeVisible();
@@ -113,7 +113,9 @@ test('🔴 a folder’s pictures load in natural order; Next, Previous and Go to
   await next.click();
   await expect(row.getByLabel('status READY')).toBeVisible();
   await expect(row.getByRole('button', { name: 'PLAY' })).toBeEnabled();
-  await expect(next).toBeDisabled();
+  await expect(counter).toHaveText('1 / 3');
+  await expect(rowCounter).toHaveText('1 / 3');
+  await expect(next).toBeEnabled();
 });
 
 /*

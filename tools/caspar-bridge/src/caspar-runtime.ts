@@ -211,6 +211,9 @@ import {
   pageRefusalMessage,
   pageRefsOf,
   pageTarget,
+  picturePageFieldIds,
+  rewindPicturePageIndexes,
+  samePageAt,
   type PageRef,
   type PageTurn,
   CG_UNLICENSED_CODE,
@@ -465,6 +468,11 @@ interface SavedCropEdit {
   plateId: string;
   focus: LiveCropFocus;
   reset?: true;
+}
+
+interface PicturePageStop {
+  readonly pending: Set<number>;
+  confirmed?: number;
 }
 
 interface ResidentOutputPage {
@@ -2039,6 +2047,10 @@ export class CasparRuntime {
    * by a turn that succeeded (or a state-only one); published and retained like `#passTimings`.
    */
   readonly #pageIndexes = new Map<string, Record<string, number>>();
+  /** Pending Stops fence picture navigation; a confirmed Stop also supersedes older page ACKs. */
+  readonly #picturePageStops = new Map<string, PicturePageStop>();
+  /** Rewound counters whose new value belongs to the next run, not a playing PVW. */
+  readonly #pageRewinds = new Map<string, Set<string>>();
   /** Per-row Auto/Manual overrides for page-list sequences. */
   readonly #pageAdvance = new Map<string, StackItemPageAdvance>();
   /** `R-100` — the pictures operators loaded, kept by SHA-256 (see `page-store.ts`). */
@@ -2712,6 +2724,8 @@ export class CasparRuntime {
     this.#pages = new PageStore(options.pagesDir ?? null);
     this.#reconciler.on('item-removed', (info) => {
       this.#pageIndexes.delete(info.itemId);
+      this.#picturePageStops.delete(info.itemId);
+      this.#pageRewinds.delete(info.itemId);
       this.#pageAdvance.delete(info.itemId);
       void this.#sweepPages(info.itemId);
     });
@@ -3427,6 +3441,7 @@ export class CasparRuntime {
       const timingOverride = this.#passTimings.get(item.itemId);
       // `R-100` — the page each page list is on: the console's `12 / 300` reads it.
       const pages = this.#pageIndexes.get(item.itemId);
+      const pageRewinds = this.#pageRewinds.get(item.itemId);
       // The Auto/Manual choice beside that counter.
       const pageAdvance = this.#pageAdvance.get(item.itemId);
       // `RUN-NEXT-VERSION-02` Q9 — the row's template-sound mute: the toggle beside its speaker reads it.
@@ -3487,6 +3502,7 @@ export class CasparRuntime {
         timingOverride === undefined &&
         // `R-100` — and the page number, for `timingOverride`'s reason, on the day it was added.
         pages === undefined &&
+        pageRewinds === undefined &&
         pageAdvance === undefined &&
         // `RUN-NEXT-VERSION-02` Q9 — and the sound mute, for the same reason, on the day it was added.
         soundMuted === undefined &&
@@ -3511,6 +3527,7 @@ export class CasparRuntime {
         ...(activeLookId !== undefined && { activeLookId }),
         ...(timingOverride !== undefined && { timingOverride }),
         ...(pages !== undefined && { pages }),
+        ...(pageRewinds !== undefined && { pageRewinds: [...pageRewinds] }),
         ...(pageAdvance !== undefined && { pageAdvance }),
         ...(soundMuted !== undefined && { soundMuted }),
         ...(removeExempt && { removeExempt: true }),
@@ -7139,12 +7156,8 @@ export class CasparRuntime {
     const pageRefusal = this.#refusePageLists(itemId, fields, info);
     if (pageRefusal !== null) return { accepted: false, ...pageRefusal };
     const merged = mergeMode === 'replace' ? fields : { ...item.fields, ...fields };
-    const pages = this.#pageIndexesAfterUpdate(
-      itemId,
-      fields,
-      this.#pageIdsBefore(itemId, info),
-      info,
-    );
+    const pagesBefore = this.#pageValues(itemId, info);
+    const pages = this.#pageIndexesAfterUpdate(itemId, fields, pagesBefore, info);
     const first = pages.entries().next().value;
     const pageTurn =
       first === undefined
@@ -7180,10 +7193,7 @@ export class CasparRuntime {
       const seq = this.#nextSeq();
       this.#positions.set(itemId, position);
       this.#reconciler.applyIntent({ kind: 'update', itemId, fields, mergeMode }, seq);
-      for (const [fieldId, index] of pages) {
-        if (index !== (this.#pageIndexes.get(itemId)?.[fieldId] ?? 0))
-          this.#setPageIndex(itemId, fieldId, index);
-      }
+      this.#recordPageChanges(itemId, pages, pagesBefore, info);
       this.#reconciler.applyAck(seq, true);
     };
 
@@ -7337,7 +7347,7 @@ export class CasparRuntime {
 
     const seq = this.#nextSeq();
     // `RUN-NEXT-VERSION-03` 1.5 — the page on screen, read before the new book replaces the old.
-    const pagesBefore = this.#pageIdsBefore(itemId);
+    const pagesBefore = this.#pageValues(itemId);
     this.#reconciler.applyIntent({ kind: 'update', itemId, fields, mergeMode }, seq);
     // `R-100` — the page on screen stays on screen (`pageAfterBookChange`).
     const touchedPages = this.#keepPagesAfterUpdate(itemId, fields, pagesBefore);
@@ -7433,29 +7443,60 @@ export class CasparRuntime {
     // is refused with the link down exactly like take/update/out. Claiming a stop
     // succeeded when nothing reached CasparCG is the same lie in the other direction.
     if (this.#noServerReachable()) return { accepted: false, errorCode: 'disconnected' };
+    const item = this.#reconciler.get(itemId);
+    const version = this.#templates.heldVersion(itemId);
+    const template =
+      (version === undefined ? null : this.#templates.infoOf(version)) ??
+      (item === null ? null : this.#templateOfItem(itemId, item.templateId));
+    const take = this.#takeTokens.get(itemId);
     const seq = this.#nextSeq();
+    const pictureStop: PicturePageStop | undefined =
+      item !== null && isOnAirStatus(item) && picturePageFieldIds(template, item.fields).length > 0
+        ? (this.#picturePageStops.get(itemId) ?? { pending: new Set<number>() })
+        : undefined;
+    if (pictureStop !== undefined) {
+      pictureStop.pending.add(seq);
+      this.#picturePageStops.set(itemId, pictureStop);
+    }
     this.#reconciler.applyIntent({ kind: 'stop', itemId }, seq);
     this.#armExpiry(seq);
     // C-015 phase 6 (6.0/6.6) — the plates come down WITH the graphic. STOP takes
     // the template off air but leaves its producer resident, so without this the
     // guest pictures would still be on the channel with nothing around them. See
     // `out()` for why the live layers go FIRST.
-    await this.teardownLiveLayers(itemId);
-    // Urgent lane, like out(): an air-affecting verb does not queue behind loads.
-    // §8 — and the code comes with it. A refused STOP used to answer a bare
-    // `{ accepted: false }`, which the toast could only render as "Not accepted."
-    // — the operator told that a graphic did not come off air, and nothing about
-    // whether the command reached CasparCG at all.
-    const { ok, errorCode, command } = await this.#send(this.#builder.stop(slot), seq, 'urgent');
-    // SESSION BP — a landed STOP is off air too, so level 2 thaws here for the same reason
-    // and through the same method as `out`'s. The producer staying resident is beside the
-    // point: what the freeze protects is the PICTURE, and there is no longer one.
-    this.#thawAssignment(itemId, ok);
-    return {
-      accepted: ok,
-      ...(!ok && errorCode !== undefined && { errorCode }),
-      ...(!ok && command !== undefined && { command }),
-    };
+    try {
+      await this.teardownLiveLayers(itemId);
+      // Urgent lane, like out(): an air-affecting verb does not queue behind loads.
+      const { ok, onPrimary, errorCode, command } = await this.#send(
+        this.#builder.stop(slot),
+        seq,
+        'urgent',
+      );
+      // SESSION BP — a landed STOP is off air too, so level 2 thaws here for the same reason
+      // and through the same method as `out`'s. The producer staying resident is beside the
+      // point: what the freeze protects is the PICTURE, and there is no longer one.
+      this.#thawAssignment(itemId, ok);
+      const current = this.#reconciler.get(itemId);
+      if (
+        ok &&
+        onPrimary &&
+        pictureStop !== undefined &&
+        current?.lastIntentSeq === seq &&
+        this.#slots.get(itemId) === slot
+      ) {
+        pictureStop.confirmed = seq;
+        // Late receipts from the stopped page cannot act during a subsequent Take.
+        if (this.#takeTokens.get(itemId) === take) this.#takeTokens.delete(itemId);
+        this.#rewindPicturePages(itemId, template, current.fields);
+      }
+      return {
+        accepted: ok,
+        ...(!ok && errorCode !== undefined && { errorCode }),
+        ...(!ok && command !== undefined && { command }),
+      };
+    } finally {
+      pictureStop?.pending.delete(seq);
+    }
   }
 
   /**
@@ -7567,8 +7608,12 @@ export class CasparRuntime {
     errorCode?: string;
     message?: string;
   }> {
+    const stopAtRequest = {
+      confirmed: this.#picturePageStops.get(itemId)?.confirmed,
+      pending: this.#picturePageStopPending(itemId),
+    };
     return this.#audited('page-turn', this.#itemDetail(itemId), () =>
-      this.#withPageQueue(itemId, () => this.#pageItemImpl(itemId, field, to)),
+      this.#withPageQueue(itemId, () => this.#pageItemImpl(itemId, field, to, stopAtRequest)),
     );
   }
 
@@ -7594,10 +7639,16 @@ export class CasparRuntime {
     return (this.#templateOfItem(itemId, templateId)?.pageLists?.length ?? 0) > 0;
   }
 
+  #picturePageStopPending(itemId: string): boolean {
+    const seq = this.#reconciler.get(itemId)?.lastIntentSeq;
+    return seq !== undefined && this.#picturePageStops.get(itemId)?.pending.has(seq) === true;
+  }
+
   async #pageItemImpl(
     itemId: string,
     field: string,
     to: PageTurn,
+    stopAtRequest: { confirmed: number | undefined; pending: boolean },
   ): Promise<{
     accepted: boolean;
     page?: number;
@@ -7635,6 +7686,22 @@ export class CasparRuntime {
         count,
       };
     }
+    const pictureList = list.items.some(
+      ({ media, assetId }) => media !== undefined || assetId !== undefined,
+    );
+    const superseded = () =>
+      pictureList &&
+      (stopAtRequest.pending ||
+        this.#picturePageStops.get(itemId)?.confirmed !== stopAtRequest.confirmed);
+    const stoppedBeforeWrite = () =>
+      superseded() || (pictureList && this.#picturePageStopPending(itemId));
+    const stopped = {
+      accepted: false,
+      errorCode: 'page-turn-superseded',
+      message: pageRefusalMessage('page-turn-superseded', {}),
+      count,
+    };
+    if (stoppedBeforeWrite()) return stopped;
     const current = Math.min(this.#pageIndexes.get(itemId)?.[field] ?? 0, count - 1);
     const target = pageTarget(current, count, list.wrap, to);
     // Nothing on the layer: the page number is STATE, carried by the next take (golden rule 10).
@@ -7649,6 +7716,7 @@ export class CasparRuntime {
     const ownsLiveSeats = this.#ownsLiveSeats(itemId);
     const ref = list.items[target];
     const media = ref === undefined ? undefined : await this.#pageMediaFor(ref);
+    if (stoppedBeforeWrite()) return stopped;
     if (media === null) {
       return {
         accepted: false,
@@ -7677,12 +7745,29 @@ export class CasparRuntime {
         ...(command !== undefined && { command }),
       };
     }
+    if (superseded()) return stopped;
     this.#setPageIndex(itemId, field, target);
     return { accepted: true, page: target + 1, count };
   }
 
   #setPageIndex(itemId: string, field: string, index: number): void {
     this.#pageIndexes.set(itemId, { ...this.#pageIndexes.get(itemId), [field]: index });
+    const rewinds = this.#pageRewinds.get(itemId);
+    if (rewinds?.delete(field) === true && rewinds.size === 0) this.#pageRewinds.delete(itemId);
+    this.#markDirty(itemId);
+  }
+
+  #rewindPicturePages(itemId: string, template: TemplateInfo | null, fields: FieldValues): void {
+    const previous = this.#pageIndexes.get(itemId);
+    const rewound = rewindPicturePageIndexes(template, fields, previous);
+    if (rewound === undefined || previous === undefined) return;
+
+    const markers = this.#pageRewinds.get(itemId) ?? new Set<string>();
+    for (const [field, index] of Object.entries(rewound)) {
+      if (index !== previous[field]) markers.add(field);
+    }
+    this.#pageIndexes.set(itemId, rewound);
+    this.#pageRewinds.set(itemId, markers);
     this.#markDirty(itemId);
   }
 
@@ -7861,22 +7946,18 @@ export class CasparRuntime {
   }
 
   /**
-   * `RUN-NEXT-VERSION-03` 1.5 — each page list's page IDS as the row holds them NOW: its own value, else
-   * the template's default. Read before an update replaces the book, so the page on screen can be
-   * followed into the new one (`pageAfterBookChange`).
+   * Read each effective page list before replacing it, so the current page can be followed by ID
+   * and a replacement picture with the same ID can still clear a prior run's rewind marker.
    */
-  #pageIdsBefore(itemId: string, heldInfo?: TemplateInfo): Map<string, (string | undefined)[]> {
-    const out = new Map<string, (string | undefined)[]>();
+  #pageValues(itemId: string, heldInfo?: TemplateInfo | null): Map<string, unknown> {
+    const out = new Map<string, unknown>();
     const item = this.#reconciler.get(itemId);
     if (item === null) return out;
     const info = heldInfo ?? this.#templateOfItem(itemId, item.templateId);
     for (const { fieldId } of info?.pageLists ?? []) {
       const value: unknown = item.fields[fieldId];
       const field = info?.fields.find((f) => f.id === fieldId);
-      out.set(
-        fieldId,
-        pageIdsOf(Array.isArray(value) ? value : field?.type === 'list' ? field.default : []),
-      );
+      out.set(fieldId, Array.isArray(value) ? value : field?.type === 'list' ? field.default : []);
     }
     return out;
   }
@@ -7891,23 +7972,40 @@ export class CasparRuntime {
   #keepPagesAfterUpdate(
     itemId: string,
     fields: FieldValues,
-    before: ReadonlyMap<string, (string | undefined)[]>,
+    before: ReadonlyMap<string, unknown>,
   ): string | undefined {
     const templateId = this.#reconciler.get(itemId)?.templateId;
     if (templateId === undefined) return undefined;
     const info = this.#templateOfItem(itemId, templateId);
     const pages = this.#pageIndexesAfterUpdate(itemId, fields, before, info);
+    this.#recordPageChanges(itemId, pages, before, info);
+    return pages.keys().next().value;
+  }
+
+  #recordPageChanges(
+    itemId: string,
+    pages: ReadonlyMap<string, number>,
+    before: ReadonlyMap<string, unknown>,
+    info: TemplateInfo | null,
+  ): void {
     for (const [fieldId, index] of pages) {
       if (index !== (this.#pageIndexes.get(itemId)?.[fieldId] ?? 0))
         this.#setPageIndex(itemId, fieldId, index);
     }
-    return pages.keys().next().value;
+    const rewinds = this.#pageRewinds.get(itemId);
+    if (rewinds === undefined) return;
+    const after = this.#pageValues(itemId, info);
+    for (const fieldId of rewinds) {
+      const index = this.#pageIndexes.get(itemId)?.[fieldId] ?? 0;
+      if (!samePageAt(before.get(fieldId), after.get(fieldId), index))
+        this.#setPageIndex(itemId, fieldId, index);
+    }
   }
 
   #pageIndexesAfterUpdate(
     itemId: string,
     fields: FieldValues,
-    before: ReadonlyMap<string, (string | undefined)[]>,
+    before: ReadonlyMap<string, unknown>,
     info: TemplateInfo | null,
   ): Map<string, number> {
     const pages = new Map<string, number>();
@@ -7915,7 +8013,10 @@ export class CasparRuntime {
       const value: unknown = fields[fieldId];
       if (!Array.isArray(value)) continue;
       const current = this.#pageIndexes.get(itemId)?.[fieldId] ?? 0;
-      pages.set(fieldId, pageAfterBookChange(before.get(fieldId) ?? [], current, pageIdsOf(value)));
+      pages.set(
+        fieldId,
+        pageAfterBookChange(pageIdsOf(before.get(fieldId)), current, pageIdsOf(value)),
+      );
     }
     return pages;
   }

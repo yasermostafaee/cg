@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { StackItemState } from '@cg/shared-schema';
 import { MockRuntime } from '../src/platform/MockRuntime.js';
-import { bookOf } from '../src/renderer/features/layers/bookOf.js';
+import { bookOf, bookPageOf } from '../src/renderer/features/layers/bookOf.js';
 import { layerRowActions } from '../src/renderer/features/layers/layerRowActions.js';
 import { buttonActions } from '../src/renderer/ui/rowAction.js';
 import { bindingFor, itemWith, rowDeps, templateWith } from './support/layerRow.js';
@@ -73,6 +73,22 @@ describe('R-100 — bookOf, the one reading of a row’s book', () => {
     });
   });
 
+  it('passes the draft picture identity and the independent rewind marker to Preview', () => {
+    const original = { id: 'p1', kind: 'image', media: 'a'.repeat(64) };
+    const row = item({
+      fields: { pages: [original] },
+      pages: { pages: 0 },
+      pageRewinds: ['pages'],
+    });
+    const replacement = { id: 'replacement', kind: 'image', assetId: 'authored' };
+    expect(bookPageOf(BOOK, row, { pages: [replacement] })).toMatchObject({
+      index: 0,
+      id: 'replacement',
+      assetId: 'authored',
+      rewound: true,
+    });
+  });
+
   it('the authored advance mode is the default and the row override wins', () => {
     const authoredAuto = {
       ...BOOK,
@@ -138,14 +154,37 @@ describe('R-100 — test mode turns a book with the bridge’s rules', () => {
     });
   });
 
-  it('🔴 Next on the last on-air page self-stops the mock row, as the live page reports', async () => {
+  it('🔴 Next on the last on-air picture page self-stops and rewinds the mock row', async () => {
     const { mock } = await mockWithBook(2);
     expect(mock.page('item-1', 'pages', 2)).toMatchObject({ page: 2 });
     expect(mock.take('item-1').accepted).toBe(true);
     expect(mock.page('item-1', 'pages', 'next')).toMatchObject({ accepted: true, page: 2 });
     expect(mock.stackSnapshot().find((item) => item.itemId === 'item-1')?.status).toBe('exiting');
     await new Promise((resolve) => setTimeout(resolve, 180));
-    expect(mock.stackSnapshot().find((item) => item.itemId === 'item-1')?.status).toBe('loaded');
+    expect(mock.stackSnapshot().find((item) => item.itemId === 'item-1')).toMatchObject({
+      status: 'loaded',
+      pages: { pages: 0 },
+      pageRewinds: ['pages'],
+    });
+    expect(mock.page('item-1', 'pages', 1)).toMatchObject({ accepted: true, page: 1 });
+    expect(mock.stackSnapshot().find((item) => item.itemId === 'item-1')?.pageRewinds).toEqual([]);
+  });
+
+  it('accepts an off-air page selection after the Stop settles', async () => {
+    const { mock } = await mockWithBook(3);
+    expect(mock.take('item-1').accepted).toBe(true);
+    expect(mock.page('item-1', 'pages', 2)).toMatchObject({ page: 2 });
+    expect(mock.stop('item-1').accepted).toBe(true);
+    expect(mock.page('item-1', 'pages', 3)).toMatchObject({
+      accepted: false,
+      errorCode: 'page-turn-superseded',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    expect(mock.page('item-1', 'pages', 3)).toMatchObject({ page: 3 });
+    expect(mock.stackSnapshot().find((item) => item.itemId === 'item-1')).toMatchObject({
+      status: 'loaded',
+      pages: { pages: 2 },
+    });
   });
 
   it('🔴 D-163 — a list the template turns by itself is not turned: the bridge’s refusal', () => {

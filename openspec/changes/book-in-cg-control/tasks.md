@@ -221,3 +221,11 @@
 - [x] Verify the page controls, replacement and related flows in Windows Playwright. The focused
       Windows Chromium suite and rerun passed all 31 distinct book and fixed-layer scenarios.
 - [ ] Record the carrying Linux Playwright E2E result.
+
+## PGM picture Sequence rewind
+
+- [x] Rewind the retained page index after an accepted PGM Stop or a natural completion. Keep the current PVW
+      picture and send no page update or Play to PGM. The next explicit Take starts at page 1.
+- [x] Verify numbered Sequences with real pictures in Windows Chromium and focused Bridge integration. All seven
+      browser cases passed, including layer Stop, natural Auto completion, and same-index picture replacement.
+- [ ] Record the carrying Linux Playwright E2E result and target station verification.
