@@ -165,6 +165,7 @@ export function LivePlateCompositionSettings({
           <span className={s.label}>{label}</span>
           <input
             type="checkbox"
+            className={dds.checkbox}
             checked={composition[field] === true}
             onChange={(event) =>
               designerStore.updateScene({

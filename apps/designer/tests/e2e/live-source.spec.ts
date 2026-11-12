@@ -575,12 +575,14 @@ test.describe('Live Source (D-137 phase 1)', () => {
     const allow = app.inspector.getByRole('checkbox', { name: 'Allow live plate overlap' });
     const selectedControls = app.inspector.locator('[data-section="CG Control"]');
     const autoLayoutName = 'Allow Auto layout in CG Control';
-    await expect(
-      selectedControls.getByRole('checkbox', { name: autoLayoutName }),
-    ).not.toBeChecked();
+    const selectedAutoLayout = selectedControls.getByRole('checkbox', { name: autoLayoutName });
+    await expect(selectedAutoLayout).not.toBeChecked();
     await expect(
       selectedControls.getByRole('checkbox', { name: 'Allow live plate overlap' }),
     ).not.toBeChecked();
+    for (const checkbox of [allowMove, allow, selectedAutoLayout]) {
+      expect(await checkbox.boundingBox()).toMatchObject({ width: 14, height: 14 });
+    }
     await allow.check();
     await expect(exportButton).not.toHaveAttribute('data-export-blocked', 'errors');
     await expect(errorPill(app)).toHaveCount(0);

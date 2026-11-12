@@ -6107,7 +6107,8 @@ It is enabled only when that preset's effective crop differs from the authored f
 applies it, and Discard restores the prior crop.
 
 **Operator Auto layout:** The author enables **Allow Auto layout in CG Control** on the output
-composition. A preset with at least two live plates exposes **Auto layout** under Position when
+composition. It uses the same compact Inspector checkbox as the live plate overlap option.
+A preset with at least two live plates exposes **Auto layout** under Position when
 every plate permits both move and resize. The control uses the same aspect-aware arrangement as
 Designer, with separate gaps, row placement choices and **Swap frame order**. Arrange or Swap
 stages all frame placements for the active preset together in PVW. Update saves each staged

@@ -67,8 +67,9 @@ An opted-in frame in a one-plate composition SHALL travel with the artwork in th
 ### Requirement: Designers can authorize operator Auto layout
 
 Designer SHALL offer **Allow Auto layout in CG Control** for the open composition, off by
-default. CG Control SHALL offer **Auto layout** in Position only for an authorized template with
-at least two plates in its active preset, all with move and resize permission.
+default. Designer SHALL use the standard Inspector checkbox for this option and
+**Allow live plate overlap**. In Position, CG Control SHALL offer **Auto layout** only for an
+authorized template with at least two plates in its active preset, all with move and resize permission.
 The layout SHALL share Designer's aspect-aware geometry, horizontal and vertical gaps,
 two-plate arrangements, fuller row choices and spatial Swap. It SHALL preserve the template's
 layer order and the authored ratio of proportional frames.

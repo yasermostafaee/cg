@@ -34,6 +34,8 @@
 - [x] Verify a move-only frame moves its linked title without changing its authored frame size.
 - [x] Windows Chromium verified one-, two-, three- and four-frame presets, preset-specific
       controls and gaps, round-trip Swap, and saving the separate placements without off-air playout.
+- [x] Windows Chromium measured both composition checkboxes at the standard 14 × 14 CSS pixels
+      and verified their values in the exported VCG.
 - [ ] Record the carrying Linux Playwright result for Auto layout and title movement.
 
 ## Designer Auto layout
