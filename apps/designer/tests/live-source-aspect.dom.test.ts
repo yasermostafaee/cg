@@ -153,7 +153,7 @@ describe('D-147 — the picker shows the stored number as a NAMED preset', () =>
  */
 describe('C-028 — the fit mode is written to the ELEMENT', () => {
   const fitSelect = (c: HTMLElement): HTMLSelectElement =>
-    c.querySelector<HTMLSelectElement>('select[aria-label="fit"]') as HTMLSelectElement;
+    c.querySelector<HTMLSelectElement>('select[aria-label="Fit"]') as HTMLSelectElement;
 
   const pickFit = (c: HTMLElement, value: string): void => {
     const select = fitSelect(c);

@@ -1,11 +1,8 @@
 import { useState } from 'react';
 import {
-  DEFAULT_LIVE_FIT_MODE,
-  LIVE_FIT_MODES,
   type AnimatableProperty,
   type Element,
   type Fill,
-  type LiveFitMode,
   type VideoPlaceholderElement,
 } from '@cg/shared-schema';
 import { LayoutGrid } from 'lucide-react';
@@ -43,6 +40,7 @@ import {
   presetValueFor,
 } from './aspect-presets.js';
 import { LivePlateFallbackPicker } from './LivePlateFallbackPicker.js';
+import { LivePlateControlSection } from './LivePlateControlSection.js';
 import * as s from './InspectorPanel.css.js';
 import * as ms from './MultiSelectSection.css.js';
 import * as tx from './TransformSection.css.js';
@@ -502,11 +500,6 @@ function LiveSourceAppearanceSections({
   const allAspectLocked = eligibleLocks.length > 0 && !lockSummary.includes('0');
   const someAspectLocked = lockSummary.includes('1');
 
-  const fitModes = elements.map((element) => element.fitMode ?? DEFAULT_LIVE_FIT_MODE);
-  const selectedFitMode: LiveFitMode | typeof MIXED = allSame(fitModes)
-    ? (fitModes[0] ?? DEFAULT_LIVE_FIT_MODE)
-    : MIXED;
-
   const strokeColors = elements.map((element) => element.stroke?.color ?? '#ffffff');
   const strokeWidths = elements.map((element) => element.stroke?.width ?? 0);
   const repairable = elements.filter((element) => {
@@ -578,20 +571,6 @@ function LiveSourceAppearanceSections({
             {someAspectLocked && !allAspectLocked ? 'MIXED' : allAspectLocked ? 'LOCKED' : 'FREE'}
           </Button>
         </div>
-        <SelectField
-          label="fit"
-          value={selectedFitMode}
-          options={[...(selectedFitMode === MIXED ? [MIXED] : []), ...LIVE_FIT_MODES]}
-          labels={[
-            ...(selectedFitMode === MIXED ? ['— mixed —'] : []),
-            'Fit whole picture',
-            'Fill box (crop edges)',
-          ]}
-          onCommit={(fitMode) => {
-            if (fitMode === MIXED) return;
-            updateAll(() => ({ fitMode: fitMode as LiveFitMode }));
-          }}
-        />
         <LivePlateFallbackPicker plates={elements} onCommit={(patch) => updateAll(() => patch)} />
         <div className={fieldCss.row}>
           <span className={fieldCss.label} />
@@ -607,6 +586,7 @@ function LiveSourceAppearanceSections({
           </Button>
         </div>
       </CollapseSection>
+      <LivePlateControlSection plates={elements} onCommit={updateAll} />
       <CollapseSection title="Frame" defaultExpanded>
         <ColorField
           label="stroke"

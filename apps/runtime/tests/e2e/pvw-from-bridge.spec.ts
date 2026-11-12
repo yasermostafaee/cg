@@ -8,14 +8,16 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { LayerProfileSchema, type ConnectionConfig, type FixedLayerBank } from '@cg/shared-ipc';
 import { SceneSchema, type VideoPlaceholderElement } from '@cg/shared-schema';
 import { cgCss, cgJsIife, ExporterSingleFile } from '@cg/single-file-export';
-import { buildTemplateLiveSources, unpack } from '@cg/vcg-format';
+import { buildTemplateLiveSources, pack, sha256Hex, unpack } from '@cg/vcg-format';
 import {
+  buildBookVcg,
   buildPositionedVcg,
   buildValidVcg,
   expect,
   openVcgFileChooser,
   test,
 } from './fixtures/runtime.js';
+import { solidPng } from './fixtures/pictures.js';
 
 /**
  * 🔴 `RELEASE-091-01` §1 (`B-288`) — **PVW RENDERS THE PAGE THE BRIDGE SERVES CASPARCG, IN A BROWSER
@@ -561,8 +563,14 @@ test('R-024 saves and reloads a layer profile and refuses to replace an on-air r
   });
   await openConsole(page, handle.url);
 
-  await page.getByRole('button', { name: 'Layer profiles', exact: true }).click();
+  const profiles = page.getByRole('button', { name: 'Layer profiles', exact: true });
+  await profiles.click();
   const dialog = page.getByRole('dialog', { name: 'Layer profiles', exact: true });
+  const choose = () =>
+    Promise.all([
+      page.waitForEvent('filechooser'),
+      dialog.getByRole('button', { name: 'Choose profile…', exact: true }).click(),
+    ]).then(([chooser]) => chooser);
   const save = dialog.getByRole('button', { name: 'Save profile…' });
   const [download] = await Promise.all([page.waitForEvent('download'), save.click()]);
   await expect(dialog.getByRole('status')).toHaveText('Profile download started.');
@@ -635,13 +643,36 @@ test('R-024 saves and reloads a layer profile and refuses to replace an on-air r
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(profile)),
   };
-  await dialog.locator('input[type=file]').setInputFiles(file);
-  await expect(dialog.getByText(/replace prepared layers on channel 1/)).toBeVisible();
   const load = dialog.getByRole('button', { name: 'Load profile', exact: true });
+  const cancelled = await choose();
+  await cancelled.element().dispatchEvent('cancel');
+  await expect(dialog.getByRole('status')).toHaveText('File selection cancelled.');
+  await expect(load).toBeDisabled();
+
+  await (await choose()).setFiles({ ...file, buffer: Buffer.from('{}') });
+  await expect(dialog.getByRole('alert')).toHaveText(
+    'This is not a valid APASAI CG layer profile.',
+  );
+  await expect(load).toBeDisabled();
+
+  await (await choose()).setFiles(file);
+  await expect(dialog.getByText(/replace prepared layers on channel 1/)).toBeVisible();
+  await page.evaluate(() => {
+    const actualLoad = window.cg.stack.loadProfile;
+    window.cg.stack.loadProfile = () => {
+      window.cg.stack.loadProfile = actualLoad;
+      return Promise.reject(new Error('Connection lost while loading the profile.'));
+    };
+  });
   const commandsBefore = engine.receivedCommands().length;
   await load.click();
-  await expect(dialog.getByRole('status')).toHaveText('Loaded 2 layers.');
-  await expect(dialog.getByText(/قالب خبری.*Template is missing from this channel/)).toBeVisible();
+  await expect(dialog.getByRole('alert')).toHaveText('Connection lost while loading the profile.');
+  await expect(load).toBeEnabled();
+  await load.click();
+  await expect(dialog).toHaveCount(0);
+  await expect(profiles).toBeFocused();
+  const warning = page.getByRole('alert').filter({ hasText: 'Loaded 2 layers.' });
+  await expect(warning.getByText(/قالب خبری.*Template is missing from this channel/)).toBeVisible();
   const loaded = handle.runtime.stackSnapshot(1).find(({ slot }) => slot?.layer === ROW);
   expect(loaded).toMatchObject({
     status: 'loaded',
@@ -659,7 +690,8 @@ test('R-024 saves and reloads a layer profile and refuses to replace an on-air r
 
   if (loaded === undefined) throw new Error('Missing restored layer');
   expect(await handle.runtime.take(loaded.itemId)).toMatchObject({ accepted: true });
-  await dialog.locator('input[type=file]').setInputFiles(file);
+  await profiles.click();
+  await (await choose()).setFiles(file);
   await load.click();
   await expect(dialog.getByRole('alert')).toHaveText(
     'Stop the graphics on this channel before loading a profile.',
@@ -785,7 +817,11 @@ test('R-108 imported Templates show row thumbnails and the larger selected previ
     entry(console, id)
       .getByRole('button', { name: /^Select / })
       .click();
-  const checkPreviewPixels = async (console: Page, preview: Locator, containsWhite: boolean) => {
+  const checkPreviewPixels = async (
+    console: Page,
+    preview: Locator,
+    artwork?: { color: string; minimum: number },
+  ) => {
     const colors = await preview.evaluate((element) =>
       ['--r-checker-a', '--r-checker-b'].map((name) =>
         getComputedStyle(element).getPropertyValue(name).trim(),
@@ -804,7 +840,7 @@ test('R-108 imported Templates show row thumbnails and the larger selected previ
           if (ctx === null) throw new Error('Cannot decode preview pixels');
           ctx.drawImage(bitmap, 0, 0);
           const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-          return [...colors, '#ffffff'].map((color) => {
+          return colors.map((color) => {
             ctx.fillStyle = color;
             ctx.fillRect(0, 0, 1, 1);
             const [red, green, blue] = ctx.getImageData(0, 0, 1, 1).data;
@@ -819,39 +855,107 @@ test('R-108 imported Templates show row thumbnails and the larger selected previ
           bitmap.close();
         }
       },
-      { colors, image: png.toString('base64') },
+      {
+        colors: artwork === undefined ? colors : [...colors, artwork.color],
+        image: png.toString('base64'),
+      },
     );
-    const [dark, light, white] = counts;
+    const [dark, light, visibleArtwork] = counts;
     expect(dark).toBeGreaterThan(100);
     expect(light).toBeGreaterThan(100);
-    if (containsWhite) expect(white).toBeGreaterThan(100);
+    if (artwork !== undefined) expect(visibleArtwork).toBeGreaterThanOrEqual(artwork.minimum);
   };
+  const whiteArtwork = { color: '#ffffff', minimum: 100 };
+  const bookArtwork = { color: '#2074d8', minimum: 100 };
 
   try {
     const embeddedPng = await page.evaluate(() => {
       const canvas = document.createElement('canvas');
-      canvas.width = 64;
-      canvas.height = 36;
+      canvas.width = 320;
+      canvas.height = 180;
       const context = canvas.getContext('2d');
       if (context === null) throw new Error('Cannot make a transparent preview fixture');
       context.fillStyle = '#ffffff';
-      context.fillRect(16, 8, 32, 20);
+      context.fillRect(80, 40, 160, 100);
       return canvas.toDataURL('image/png').split(',')[1] ?? '';
     });
     await writeFile(
       join(shared, 'embedded.vcg'),
       await buildValidVcg(embeddedId, Buffer.from(embeddedPng, 'base64')),
     );
+    const legacySource = await unpack(await buildBookVcg(legacyId));
+    const sequence = legacySource.scene.layers[0]?.children.find(({ type }) => type === 'sequence');
+    const pages = legacySource.scene.fields.find(({ id }) => id === 'pages');
+    if (sequence === undefined || pages?.type !== 'list')
+      throw new Error('Book fixture is missing');
+    sequence.transform.position = { x: 900, y: 660 };
+    sequence.transform.size = { w: 800, h: 360 };
+    const picture = solidPng(64, 36, [32, 116, 216]);
+    const sha256 = sha256Hex(picture);
+    const picturePath = `assets/image/${sha256}.png`;
+    const assetId = 'bound-preview-picture';
+    pages.default = [
+      { id: 'preview-title', text: 'Opening title' },
+      { id: 'preview-picture', kind: 'image', assetId },
+    ];
+    const legacyPackage = await pack({
+      scene: legacySource.scene,
+      manifestExtras: {
+        ...legacySource.manifest,
+        assetIndex: [
+          {
+            id: assetId,
+            path: picturePath,
+            kind: 'image',
+            bytes: picture.length,
+            sha256,
+            mime: 'image/png',
+          },
+        ],
+      },
+      indexHtml: '<!doctype html><html><body>Legacy book</body></html>',
+      cgJs: '/* CG Control builds the served page */',
+      cgCss: '/* CG Control builds the served page */',
+      assets: new Map([[picturePath, picture]]),
+    });
+    await writeFile(join(shared, 'legacy.vcg'), legacyPackage);
     const handle = await boot(false, shared);
     await openConsole(page, handle.url);
     await openCatalogue(page);
     await catalogue(page).getByRole('button', { name: 'Shared folder…', exact: true }).click();
     const folder = page.getByRole('dialog', { name: 'Shared template folder', exact: true });
+    const sharedLegacy = folder.getByRole('row').filter({
+      has: page.getByRole('button', { name: 'legacy.vcg', exact: true }),
+    });
+    const legacyPreview = sharedLegacy.locator(stillFrame);
+    const legacyFrame = sharedLegacy.frameLocator(stillFrame);
+    const legacyCaption = legacyFrame.locator('[data-cg-element-id="el-name"]');
+    const bookImage = `img[data-cg-asset-id="${assetId}"]`;
+    await expect(legacyCaption).toBeVisible();
+    await expect
+      .poll(() =>
+        legacyFrame.locator(bookImage).evaluate((image: HTMLImageElement) => image.naturalWidth),
+      )
+      .toBe(64);
+    expect(
+      await legacyPreview.evaluate((frame) => {
+        const slot = frame.parentElement;
+        return [frame.clientWidth, frame.clientHeight, slot?.clientWidth, slot?.clientHeight];
+      }),
+    ).toEqual([80, 45, 80, 45]);
+    const [caption, frame] = await Promise.all([
+      legacyCaption.boundingBox(),
+      legacyPreview.boundingBox(),
+    ]);
+    if (caption === null || frame === null)
+      throw new Error('The shared preview has no drawable box');
+    expect(caption.y + caption.height).toBeLessThanOrEqual(frame.y + frame.height);
+    await checkPreviewPixels(page, legacyPreview, bookArtwork);
     await folder.getByRole('button', { name: 'embedded.vcg', exact: true }).click();
     await expect
       .poll(() => folder.locator(pngImage).evaluate((node: HTMLImageElement) => node.naturalWidth))
-      .toBe(64);
-    await checkPreviewPixels(page, folder.locator(pngImage), true);
+      .toBe(320);
+    await checkPreviewPixels(page, folder.locator(pngImage), whiteArtwork);
     await folder.getByRole('button', { name: 'Import package', exact: true }).click();
     await expect(folder).toHaveCount(0);
     await expect(entry(page, embeddedId)).toBeVisible();
@@ -860,7 +964,7 @@ test('R-108 imported Templates show row thumbnails and the larger selected previ
     await chooser.setFiles({
       name: 'legacy.vcg',
       mimeType: 'application/octet-stream',
-      buffer: Buffer.from(await buildPositionedVcg(legacyId)),
+      buffer: Buffer.from(legacyPackage),
     });
     await expect(entry(page, legacyId)).toBeVisible();
     expect(handle.runtime.stackSnapshot(1)).toHaveLength(0);
@@ -878,8 +982,8 @@ test('R-108 imported Templates show row thumbnails and the larger selected previ
       await expect(image).toBeVisible();
       await expect
         .poll(() => image.evaluate((node: HTMLImageElement) => node.naturalWidth))
-        .toBe(64);
-      await checkPreviewPixels(fresh, image, true);
+        .toBe(320);
+      await checkPreviewPixels(fresh, image, whiteArtwork);
       await expect(
         legacy.frameLocator(stillFrame).locator('[data-cg-element-id="el-name"]'),
       ).toBeVisible();
@@ -888,7 +992,7 @@ test('R-108 imported Templates show row thumbnails and the larger selected previ
       await select(fresh, embeddedId);
       await expect(detail.locator(pngImage)).toBeVisible();
       await expect(detail.locator(pngImage)).toHaveCSS('object-fit', 'contain');
-      await checkPreviewPixels(fresh, detail.locator(pngImage), true);
+      await checkPreviewPixels(fresh, detail.locator(pngImage), whiteArtwork);
       const [rowBox, detailBox] = await Promise.all([embedded.boundingBox(), detail.boundingBox()]);
       if (rowBox === null || detailBox === null) throw new Error('A preview slot has no box');
       expect(detailBox.width).toBeGreaterThan(rowBox.width);
@@ -899,7 +1003,15 @@ test('R-108 imported Templates show row thumbnails and the larger selected previ
       await expect(
         detail.frameLocator(stillFrame).locator('[data-cg-element-id="el-name"]'),
       ).toBeVisible();
-      await checkPreviewPixels(fresh, detail.locator(stillFrame), false);
+      await expect
+        .poll(() =>
+          detail
+            .frameLocator(stillFrame)
+            .locator(bookImage)
+            .evaluate((image: HTMLImageElement) => image.naturalWidth),
+        )
+        .toBe(64);
+      await checkPreviewPixels(fresh, detail.locator(stillFrame), bookArtwork);
       await select(fresh, oldEntryId);
       await expect(detail.locator('img, iframe')).toHaveCount(0);
       await expect(detail.locator('svg')).toBeVisible();
@@ -1840,6 +1952,21 @@ test('D-213 Take seats two opted-in plates in the authored paint order', async (
   await expect(frontResize).toBeVisible();
   await expect(pvw.getByRole('button', { name: /Resize Back source/ })).toHaveCount(0);
   await expect(pvw.getByRole('button', { name: 'Move frame for Front source' })).toHaveCount(0);
+  const frontOutline = frontResize.locator('..');
+  await frontOutline.hover();
+  await expect(frontOutline).toHaveCSS('cursor', 'default');
+  await expect(backMove.locator('..')).toHaveCSS('cursor', 'move');
+  const frontBox = await frontOutline.boundingBox();
+  if (frontBox === null) throw new Error('Resize-only frame has no visible bounds');
+  const frontCenter = { x: frontBox.x + frontBox.width / 2, y: frontBox.y + frontBox.height / 2 };
+  await page.mouse.move(frontCenter.x, frontCenter.y);
+  await page.mouse.down();
+  await page.mouse.move(frontCenter.x + 12, frontCenter.y + 8);
+  await expect(frontOutline).toHaveCSS('cursor', 'default');
+  await page.mouse.up();
+  expect(await frontOutline.boundingBox()).toEqual(frontBox);
+  await frontResize.hover();
+  await expect(frontResize).toHaveCSS('cursor', 'nwse-resize');
   const preserveRatio = inspector.getByRole('checkbox', {
     name: 'Preserve frame aspect ratio',
     exact: true,

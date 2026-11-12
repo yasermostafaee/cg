@@ -17,6 +17,7 @@ through the same validation and import as a package selected from the console's 
 CG Control SHALL clearly highlight the selected package and show the current folder. Up SHALL open
 the parent of the current folder and stop at the configured shared root. For visible package rows,
 CG Control SHALL show an available embedded thumbnail or a bounded still of the authored scene.
+Both forms SHALL fit their whole frame in the Shared folder preview slot.
 CG Bridge SHALL read preview data within the shared root and SHALL keep preview failures independent
 of listing and import. The browser SHALL treat preview content as data.
 
@@ -31,6 +32,11 @@ of listing and import. The browser SHALL treat preview content as data.
 
 - **WHEN** a package's preview is missing or cannot be read
 - **THEN** the package remains selectable with an icon in its preview slot
+
+#### Scenario: A shared package has artwork near the bottom of the frame
+
+- **WHEN** the Shared folder lists a lower-third package with an embedded thumbnail or an authored still
+- **THEN** its artwork is visible inside the compact preview, with the checkerboard behind transparent pixels
 
 ### Requirement: The imported Templates catalogue displays package previews
 

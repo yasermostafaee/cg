@@ -1,6 +1,8 @@
 # Live frame placement feasibility
 
-The Designer's Plate controls record movement permission separately from resize policy.
+The Designer's **CG Control** section groups Fit, movement permission and resize policy. The
+same section applies edits to one or several selected live plates. Designer geometry and aspect
+settings stay in the Plate section.
 An absent movement flag on an older opted-in frame keeps movement available. A frame with
 movement allowed and resize locked exports a move-only target. A resize-only target carries an
 explicit movement denial. Import derives a frame key from its full composition-instance path

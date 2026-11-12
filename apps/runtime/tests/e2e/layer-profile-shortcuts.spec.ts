@@ -36,7 +36,8 @@ test('R-024 saves and restores channel shortcuts and reports a Bridge without sh
       Object.defineProperty(window, 'showSaveFilePicker', { configurable: true, value: undefined });
     }, bridge.url);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Layer profiles', exact: true }).click();
+    const profiles = page.getByRole('button', { name: 'Layer profiles', exact: true });
+    await profiles.click();
     const dialog = page.getByRole('dialog', { name: 'Layer profiles', exact: true });
     const save = dialog.getByRole('button', { name: 'Save profile…' });
     const [download] = await Promise.all([page.waitForEvent('download'), save.click()]);
@@ -50,13 +51,19 @@ test('R-024 saves and restores channel shortcuts and reports a Bridge without sh
     });
 
     const load = async (value: LayerProfile): Promise<void> => {
-      await dialog.locator('input[type=file]').setInputFiles({
+      if (!(await dialog.isVisible())) await profiles.click();
+      const [chooser] = await Promise.all([
+        page.waitForEvent('filechooser'),
+        dialog.getByRole('button', { name: 'Choose profile…', exact: true }).click(),
+      ]);
+      await chooser.setFiles({
         name: 'keyboard-profile.json',
         mimeType: 'application/json',
         buffer: Buffer.from(JSON.stringify(value)),
       });
       await expect(dialog.getByText('This profile includes keyboard shortcuts.')).toBeVisible();
       await dialog.getByRole('button', { name: 'Load profile', exact: true }).click();
+      await expect(dialog).toHaveCount(0);
     };
     const currentBank = () => bridge.runtime.fixedLayerBanks()[0];
     const empty = { shortcuts: {}, nextShortcuts: {}, spaceShortcut: null };
@@ -64,13 +71,15 @@ test('R-024 saves and restores channel shortcuts and reports a Bridge without sh
     expect(currentBank()).toMatchObject(empty);
 
     await load(profile);
-    await expect(dialog.getByRole('status')).toHaveText('Loaded 0 layers.');
+    await expect(page.getByRole('status', { name: 'Command success' })).toHaveText(
+      'Loaded 0 layers.',
+    );
     expect(currentBank()).toMatchObject(bank);
 
     await load({ ...profile, layerShortcuts: { shortcuts: { '79': { play: 'F3' } } } });
-    await expect(dialog.getByRole('status')).toContainText(
-      'Shortcuts skipped. Layer is not in the bank',
-    );
+    await expect(
+      page.getByRole('alert').filter({ hasText: 'Shortcuts skipped. Layer is not in the bank' }),
+    ).toBeVisible();
     expect(currentBank()).toMatchObject(bank);
 
     await page.evaluate(() => {
@@ -82,9 +91,11 @@ test('R-024 saves and restores channel shortcuts and reports a Bridge without sh
       }) => loadProfile({ channel, profile: legacy });
     });
     await load({ ...profile, layerShortcuts: empty });
-    await expect(dialog.getByRole('status')).toHaveText(
-      'Loaded 0 layers. Shortcuts skipped. This CG Bridge cannot restore them.',
-    );
+    await expect(
+      page.getByRole('alert').filter({
+        hasText: 'Loaded 0 layers. Shortcuts skipped. This CG Bridge cannot restore them.',
+      }),
+    ).toBeVisible();
     expect(currentBank()).toMatchObject(bank);
   } finally {
     await bridge.close();

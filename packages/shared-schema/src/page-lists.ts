@@ -3,9 +3,11 @@ import {
   sequenceItemsBinding,
   sequencePictureFit,
   sequenceStepsByOperator,
+  SequenceImageItemSchema,
   type Element,
   type ImageFit,
   type SequenceElement,
+  type SequenceImageItem,
 } from './elements.js';
 import type { DynamicField, ListItem } from './fields.js';
 import type { Composition, Layer, Scene } from './scene.js';
@@ -79,6 +81,31 @@ export function isPageListField(
   if (field.type !== 'list') return false;
   if (sequence.items.length === 0) return field.pages === true;
   return sequenceItemsBinding(sequence.items) === 'pages' && isBookValue(field.default);
+}
+
+/** A still prefers a bound book's default pictures over the Sequence's own pictures. */
+export function thumbnailSequenceContent(
+  element: Pick<SequenceElement, 'id' | 'items'>,
+  source: Pick<Composition, 'bindings' | 'fields'>,
+): { pageList: boolean; picture?: SequenceImageItem } {
+  const binding = source.bindings?.find(
+    ({ target }) => target.kind === 'sequence-items' && target.elementId === element.id,
+  );
+  const field = source.fields?.find(({ id }) => id === binding?.fieldId);
+  const list =
+    field?.type === 'list' && (field.pages === true || isPageListField(field, element))
+      ? field
+      : undefined;
+  for (const raw of list?.default ?? []) {
+    const picture = SequenceImageItemSchema.safeParse(raw);
+    if (picture.success && picture.data.assetId !== undefined) {
+      return { pageList: true, picture: picture.data };
+    }
+  }
+  const picture = element.items.find(
+    (item): item is SequenceImageItem => item.kind === 'image' && item.assetId !== undefined,
+  );
+  return { pageList: list !== undefined, ...(picture !== undefined && { picture }) };
 }
 
 /**

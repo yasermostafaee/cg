@@ -3,9 +3,11 @@
 ### Requirement: Operators can place authored live frames from Preview
 
 CG Control SHALL allow each frame's author to grant movement and resize independently.
-Designer SHALL expose **Allow move** and **Resize** with **Locked**, **Preserve aspect ratio**
-and **Operator chooses aspect ratio**. CG Control SHALL expose only the gestures the author
-allows in PVW.
+Designer SHALL group **Fit**, **Allow move** and **Resize** under **CG Control** in its Inspector.
+**Resize** SHALL offer **Locked**, **Preserve aspect ratio** and **Operator chooses aspect ratio**.
+The same controls SHALL be available when multiple live plates are selected. They SHALL show
+different values as mixed and apply each choice as one undoable edit, preserving the other
+settings on every plate. CG Control SHALL expose only the gestures the author allows in PVW.
 The PVW control SHALL display a frame icon beside its **Edit frames** label.
 CG Control's Inspector SHALL provide a **Preserve aspect ratio** option for **Edit frames**,
 checked by default, when the active Look has a frame with **Operator chooses aspect ratio**.
@@ -30,7 +32,8 @@ An opted-in frame in a one-plate composition SHALL travel with the artwork in th
 - **WHEN** the author enables movement and locks resize
 - **THEN** the operator can move the frame and has no resize handles
 - **WHEN** the author grants resize and disables movement
-- **THEN** the operator can resize from its corners and has no movement grip
+- **THEN** the operator sees a neutral cursor on the frame body and resize cursors on its corners
+- **AND** dragging the frame body does not move it
 
 #### Scenario: The Bridge cannot enforce independent frame permissions
 

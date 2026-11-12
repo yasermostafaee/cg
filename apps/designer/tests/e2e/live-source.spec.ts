@@ -551,15 +551,15 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await app.addLiveSource({ x: 200, y: 160 });
     await app.setLiveSourceId('back');
     await app.setInspectorNumber('X position', 550);
-    await app.setInspectorNumber('Y position', 400);
+    await app.setInspectorNumber('Y position', 360);
     const allowMove = app.inspector.getByRole('checkbox', { name: 'Allow move', exact: true });
     const resize = app.inspector.getByRole('combobox', { name: 'Resize', exact: true });
     await allowMove.check();
     await expect(resize).toHaveValue('locked');
     await app.addLiveSource({ x: 230, y: 190 });
     await app.setLiveSourceId('front');
-    await app.setInspectorNumber('X position', 690);
-    await app.setInspectorNumber('Y position', 470);
+    await app.setInspectorNumber('X position', 1170);
+    await app.setInspectorNumber('Y position', 700);
     await resize.selectOption('free');
     await expect(allowMove).not.toBeChecked();
     const idOf = (source: string) =>
@@ -572,12 +572,33 @@ test.describe('Live Source (D-137 phase 1)', () => {
     if (back == null || front == null) throw new Error('The two plates need timeline rows');
     const exportButton = app.page.getByRole('button', { name: 'Export .vcg', exact: true });
     await expect(exportButton).toHaveAttribute('data-export-blocked', 'errors');
-    await app.deselect();
     const allow = app.inspector.getByRole('checkbox', { name: 'Allow live plate overlap' });
-    await expect(allow).not.toBeChecked();
+    const selectedControls = app.inspector.locator('[data-section="CG Control"]');
+    await expect(
+      selectedControls.getByRole('checkbox', { name: 'Allow live plate overlap' }),
+    ).not.toBeChecked();
     await allow.check();
     await expect(exportButton).not.toHaveAttribute('data-export-blocked', 'errors');
     await expect(errorPill(app)).toHaveCount(0);
+
+    await app.selectElementById(front);
+    await app.page.locator(`.cg-tl-row[data-element-id="${back}"]`).click({ modifiers: ['Shift'] });
+    const multiControls = app.multiInspector.locator('[data-section="CG Control"]');
+    await expect(multiControls.getByRole('combobox', { name: 'Resize' })).toHaveValue(
+      '__cg_mixed__',
+    );
+    await expect(multiControls.getByRole('checkbox', { name: 'Allow move' })).toHaveJSProperty(
+      'indeterminate',
+      true,
+    );
+    await multiControls.getByRole('combobox', { name: 'Fit', exact: true }).selectOption('cover');
+
+    await app.deselect();
+    await expect(allow).toBeChecked();
+    await allow.uncheck();
+    await expect(exportButton).toHaveAttribute('data-export-blocked', 'errors');
+    await allow.check();
+    await expect(exportButton).not.toHaveAttribute('data-export-blocked', 'errors');
 
     await expect.poll(() => app.timelineRowIds()).toEqual([front, back]);
     await app.dragRowAboveRow(back, front);
@@ -588,6 +609,7 @@ test.describe('Live Source (D-137 phase 1)', () => {
     expect(manifest.compatibility.minRuntimeVersion).toBe('1.2.3');
     const carrier = buildTemplateLiveSources(scene);
     expect(carrier.platePaintOrder).toEqual(['front', 'back']);
+    expect(carrier.sources.map((source) => source.fitMode)).toEqual(['cover', 'cover']);
     const permission = (id: string) =>
       carrier.sources.find((source) => source.sourceId === id)?.operatorFrame;
     expect(permission('back')).toMatchObject({ resize: 'move-only' });

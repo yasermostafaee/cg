@@ -4,6 +4,7 @@ import {
   LayerProfileSchema,
   defaultLayerAlias,
   fixedBankSlots,
+  isolateText,
   type FixedLayerBank,
   type LayerProfile,
   type StackLoadProfileResult,
@@ -15,7 +16,9 @@ import { Icon } from '../../ui/Icon.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
+import { pickFile } from '../../ui/pickFile.js';
 import { saveFile } from '../../ui/saveFile.js';
+import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
 
 const refusalCopy = {
   'on-air': 'Stop the graphics on this channel before loading a profile.',
@@ -31,6 +34,10 @@ const issueCopy: Readonly<Record<string, string>> = {
   'layer-occupied': 'Clear this layer before replacing it with a profile.',
 };
 
+function layerIssue(reason: string): string {
+  return issueCopy[reason] ?? errorCodeMessage(reason) ?? 'Could not load this row.';
+}
+
 function loadNotice(result: StackLoadProfileResult, includesShortcuts: boolean): string {
   const loaded = `Loaded ${String(result.loaded)} ${result.loaded === 1 ? 'layer' : 'layers'}.`;
   if (result.shortcuts?.status === 'admin-required') {
@@ -43,6 +50,23 @@ function loadNotice(result: StackLoadProfileResult, includesShortcuts: boolean):
     return `${loaded} Shortcuts skipped. This CG Bridge cannot restore them.`;
   }
   return loaded;
+}
+
+function reportLoadedProfile(result: StackLoadProfileResult, includesShortcuts: boolean): void {
+  const message = loadNotice(result, includesShortcuts);
+  const skippedShortcuts =
+    result.shortcuts === undefined ? includesShortcuts : result.shortcuts.status !== 'restored';
+  if (result.issues.length === 0 && !skippedShortcuts) {
+    reportCommandSuccess(message);
+    return;
+  }
+  const detail = result.issues
+    .map(({ layer, label, reason }) => {
+      const name = label ? ` · ${isolateText(label)}` : '';
+      return `Layer ${String(layer)}${name} — ${layerIssue(reason)}`;
+    })
+    .join(' ');
+  reportCommandError(message, { detail });
 }
 
 export function LayerProfiles({
@@ -111,17 +135,29 @@ export function LayerProfiles({
     }
   };
 
-  const select = async (file: File): Promise<void> => {
-    setSelected(null);
+  const choose = async (): Promise<void> => {
+    const input = picker.current;
+    if (busy || input === null) return;
     setProblem(null);
     setNotice(null);
     setResult(null);
     setBusy(true);
+    let file: File | null = null;
     try {
+      file = await pickFile(input);
+      if (file === null) {
+        setNotice('File selection cancelled.');
+        return;
+      }
+      setSelected(null);
       const contents: unknown = JSON.parse(await file.text());
       setSelected({ name: file.name, profile: LayerProfileSchema.parse(contents) });
     } catch {
-      setProblem('This is not a valid APASAI CG layer profile.');
+      setProblem(
+        file === null
+          ? 'Could not open the profile file chooser.'
+          : 'This is not a valid APASAI CG layer profile.',
+      );
     } finally {
       setBusy(false);
     }
@@ -132,13 +168,15 @@ export function LayerProfiles({
     setBusy(true);
     setProblem(null);
     setNotice(null);
+    setResult(null);
     try {
       const response = await window.cg.stack.loadProfile({ channel, profile: selected.profile });
-      setResult(response);
-      if (response.refusal === undefined) {
-        setNotice(loadNotice(response, selected.profile.layerShortcuts !== undefined));
-        setSelected(null);
+      if (response.refusal !== undefined) {
+        setResult(response);
+        return;
       }
+      reportLoadedProfile(response, selected.profile.layerShortcuts !== undefined);
+      setOpen(false);
     } catch (error) {
       setProblem(error instanceof Error ? error.message : 'Could not load the profile.');
     } finally {
@@ -191,7 +229,7 @@ export function LayerProfiles({
           <Button variant="neutral" disabled={busy} onClick={() => void save()}>
             Save profile…
           </Button>
-          <Button variant="neutral" disabled={busy} onClick={() => picker.current?.click()}>
+          <Button variant="neutral" disabled={busy} onClick={() => void choose()}>
             Choose profile…
           </Button>
           <FileInput
@@ -199,11 +237,6 @@ export function LayerProfiles({
             accept=".json,application/json"
             aria-label="Profile file"
             hidden
-            onChange={(event) => {
-              const file = event.currentTarget.files?.[0];
-              event.currentTarget.value = '';
-              if (file !== undefined) void select(file);
-            }}
           />
           {selected !== null && (
             <>
@@ -228,7 +261,7 @@ export function LayerProfiles({
                     </>
                   ) : null}
                   {' — '}
-                  {issueCopy[reason] ?? errorCodeMessage(reason) ?? 'Could not load this row.'}
+                  {layerIssue(reason)}
                 </li>
               ))}
             </ul>

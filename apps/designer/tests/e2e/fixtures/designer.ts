@@ -327,7 +327,7 @@ export class DesignerApp {
 
   /** `C-028` — the Live Source Inspector's FIT MODE picker (`contain` / `cover`). */
   get liveSourceFitModeSelect(): Locator {
-    return this.inspector.getByRole('combobox', { name: 'fit' });
+    return this.inspector.getByRole('combobox', { name: 'Fit', exact: true });
   }
 
   /** `C-028` — choose a fit mode by its option VALUE (`contain` / `cover`). */

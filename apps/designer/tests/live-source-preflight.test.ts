@@ -289,6 +289,28 @@ describe('D-137 — overlapping holes are reported against BOTH elements', () =>
     );
   });
 
+  it('validates corner overlap only in the composition being exported and its nested plates', () => {
+    const nested = {
+      ...scene([live('corner-a', 100, 100), live('corner-b', 720, 440)]),
+      id: 'nested',
+      allowLivePlateOverlap: true,
+    };
+    const unrelated = { ...scene([]), compositions: [nested] };
+    expect(codes(unrelated)).not.toContain('live-source-overlap');
+
+    const child: Element = {
+      ...baseElProps,
+      type: 'composition',
+      id: 'nested-instance',
+      name: 'Nested',
+      compositionId: nested.id,
+      transform: tf(0, 0, 1920, 1080),
+    };
+    const parent = { ...scene([child]), compositions: [nested] };
+    expect(codes(parent).filter((code) => code === 'live-source-overlap')).toHaveLength(2);
+    expect(codes({ ...parent, allowLivePlateOverlap: true })).not.toContain('live-source-overlap');
+  });
+
   it('D-202 — exempts only an explicitly linked pair whose reveal reaches the lower plate', () => {
     const upper = live('upper', 100, 100, {
       revealMask: {

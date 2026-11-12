@@ -40,7 +40,7 @@ const OVERLAP: ExportIssue = {
   code: 'live-source-overlap',
   message:
     'Plate "guest-1" overlaps "guest-2". ' +
-    'Enable “Allow live plate overlap” in the Composition Inspector if the overlap is intentional.',
+    'Enable “Allow live plate overlap” under CG Control in the Inspector if the overlap is intentional.',
   elementId: 'guest-1',
 };
 const OVERLAP_B: ExportIssue = { ...OVERLAP, elementId: 'guest-2' };

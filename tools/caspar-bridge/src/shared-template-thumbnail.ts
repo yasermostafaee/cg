@@ -1,7 +1,13 @@
 import { createHash } from 'node:crypto';
 import type { FileHandle } from 'node:fs/promises';
 import { inflateRawSync } from 'node:zlib';
-import { ManifestSchema, SceneSchema, repeaterRowLimit, type Layer } from '@cg/shared-schema';
+import {
+  ManifestSchema,
+  SceneSchema,
+  repeaterRowLimit,
+  thumbnailSequenceContent,
+  type Composition,
+} from '@cg/shared-schema';
 import {
   SHARED_TEMPLATE_IMAGES_MAX_BYTES,
   SHARED_TEMPLATE_MAX_PREVIEW_IMAGES,
@@ -208,25 +214,45 @@ function staticPreviewImageIds(
   const compositions = new Map(scene.compositions?.map((comp) => [comp.id, comp]));
   const imageIds = new Set<string>();
   let nodes = 0;
-  function count(layers: readonly Layer[], depth: number, copies: number): boolean {
-    for (const layer of layers) {
+  function count(
+    source: Pick<Composition, 'layers' | 'fields' | 'bindings'>,
+    depth: number,
+    copies: number,
+  ): boolean {
+    for (const layer of source.layers) {
       nodes += copies;
       for (const element of layer.children) {
         nodes += copies;
         if (element.type === 'ticker') nodes += copies * element.items.length;
-        if (element.type === 'image') imageIds.add(element.assetId);
+        if (element.type === 'image') {
+          const binding = source.bindings?.find(
+            ({ target }) => target.kind === 'image' && target.elementId === element.id,
+          );
+          const field = source.fields?.find(({ id }) => id === binding?.fieldId);
+          imageIds.add(
+            (field?.type === 'image' ? field.defaultAssetId : undefined) ?? element.assetId,
+          );
+        }
+        if (
+          element.type === 'video-placeholder' &&
+          element.posterAssetId !== undefined &&
+          (element.fallbackKind ?? 'image') === 'image'
+        ) {
+          imageIds.add(element.posterAssetId);
+        }
         if (nodes > MAX_RENDER_NODES) return false;
         if (depth >= 8) continue;
         if (element.type === 'composition') {
           const child = compositions.get(element.compositionId);
-          if (child !== undefined && !count(child.layers, depth + 1, copies)) return false;
+          if (child !== undefined && !count(child, depth + 1, copies)) return false;
         }
         if (element.type === 'sequence') {
           const first = element.items[0];
-          if (first?.kind === 'image' && first.assetId !== undefined) imageIds.add(first.assetId);
+          const assetId = thumbnailSequenceContent(element, source).picture?.assetId;
+          if (assetId !== undefined) imageIds.add(assetId);
           const child =
             first?.kind === 'composition' ? compositions.get(first.compositionId) : undefined;
-          if (child !== undefined && !count(child.layers, depth + 1, copies)) return false;
+          if (child !== undefined && !count(child, depth + 1, copies)) return false;
         }
         if (element.type === 'repeater') {
           const child = compositions.get(element.compositionId);
@@ -236,7 +262,7 @@ function staticPreviewImageIds(
           );
           nodes += rows * copies;
           if (nodes > MAX_RENDER_NODES) return false;
-          if (child !== undefined && rows > 0 && !count(child.layers, depth + 1, rows * copies))
+          if (child !== undefined && rows > 0 && !count(child, depth + 1, rows * copies))
             return false;
         }
       }
@@ -245,7 +271,7 @@ function staticPreviewImageIds(
     return true;
   }
   const { width, height } = scene.resolution;
-  return width <= 8192 && height <= 8192 && count(scene.layers, 0, 1) ? imageIds : undefined;
+  return width <= 8192 && height <= 8192 && count(scene, 0, 1) ? imageIds : undefined;
 }
 
 async function previewImages(

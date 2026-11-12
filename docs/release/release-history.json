@@ -553,11 +553,32 @@
         "fa": "آزمون‌های باقی‌مانده و قابلیت‌های در دست پیگیری در این بخش ثبت می‌شوند.",
         "en": "This section tracks outstanding acceptance checks and features still in progress."
       },
-      "features": [],
+      "features": [
+        {
+          "fa": "در Designer تنظیمات Fit، Allow move و Resize در بخش CG Control برای یک یا چند قاب لایو در دسترس‌اند.",
+          "en": "Designer groups Fit, Allow move and Resize under CG Control for single and multiple live plates."
+        }
+      ],
       "fixes": [
         {
           "fa": "در CG Control، پایان پخش یا Stop شمارهٔ صفحهٔ Sequence تصویری را برای اجرای بعدی به ۱ برمی‌گرداند.",
           "en": "In CG Control, finishing or stopping a picture Sequence resets its page counter to 1 for the next Play."
+        },
+        {
+          "fa": "پنجرهٔ Profiles پس از بارگذاری موفق بسته می‌شود و نتیجه در CG Control دیده می‌شود.",
+          "en": "The Profiles dialog closes after a successful load and reports the result in CG Control."
+        },
+        {
+          "fa": "بندانگشتی‌های Shared folder داخل قاب درست دیده می‌شوند. بندانگشتی Sequence تصویری، قاب لایو و پریست منتخب در Export اصلاح شده است.",
+          "en": "Shared folder thumbnails fit their tiles. Exported thumbnails show a picture Sequence, live plates and one representative preset."
+        },
+        {
+          "fa": "گزینهٔ هم‌پوشانی قاب‌ها هنگام انتخاب قاب هم در Inspector در دسترس است و خطای هم‌پوشانی به خروجی در حال ویرایش مربوط است.",
+          "en": "Live plate overlap is available while editing selected plates, and overlap errors are scoped to the current output."
+        },
+        {
+          "fa": "در PVW، قاب بدون مجوز Allow move نشانگر جابه‌جایی ندارد و فقط گوشه‌های مجاز نشانگر Resize دارند.",
+          "en": "In PVW, a frame with movement disabled has a neutral cursor and resize cursors on its enabled corners."
         }
       ],
       "planned": [

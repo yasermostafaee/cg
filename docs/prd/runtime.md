@@ -1078,6 +1078,9 @@ prepared stack lives only in one browser's retention.
 
 - WHEN loading a profile THEN show which channel is affected and ask before replacing its prepared
   layers. A layer on air or transitioning prevents the load. Each newly restored row is Ready.
+- WHEN CG Bridge accepts Load profile THEN close the dialog and show the result in CG Control.
+  Keep individual skipped layers and shortcut problems visible until dismissed. Cancelling file
+  selection, choosing an invalid file, or receiving a load refusal keeps the dialog open with feedback.
 - WHEN the operator exports THEN the file captures the stack: items referencing library
   templates by id, field values, position overrides, fixed-layer bindings, order, and the
   selected channel's keyboard shortcut settings
@@ -4968,7 +4971,8 @@ browse the path configured under Station setup → Shared files and its subfolde
 packages, and import the selected package into the active channel through the usual import flow.
 The chosen package remains visibly selected. Up opens its parent folder and is unavailable at the
 configured root. The list previews packages using their embedded thumbnail or a still from the
-authored scene where available. Templates imported here support Reload and Reload all from their
+authored scene where available. The whole preview fits inside each Shared folder thumbnail, including
+artwork near the edges of a legacy scene. Templates imported here support Reload and Reload all from their
 original shared path, using the same identity and row-data decisions as chooser imports.
 The selected template's Plates value is the number of declared live plates.
 

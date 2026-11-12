@@ -22,3 +22,10 @@ Windows Chromium with the real Bridge and test engine passed the focused accepta
 - [x] Use the transparency checkerboard behind thumbnails in Shared folder, rows and Details.
 - [x] Windows Chromium sampled both checker colors and authored white pixels in Shared folder,
       catalogue rows and Details, and verified the checker behind a generated legacy still.
+
+## Shared folder thumbnail containment
+
+- [x] Fit embedded images and legacy scene frames into the same Shared folder slot.
+- [x] Verify artwork and checkerboard pixels with a Bridge-local package in Windows Chromium.
+      Three scenarios passed, including a legacy book with a bound picture and an embedded 320×180 preview.
+- [ ] Record the carrying Linux Playwright result.

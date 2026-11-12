@@ -122,6 +122,7 @@ export function PreviewFramePlacement({
   return (
     <div
       className="cg-frame-placement"
+      data-frame-movable={canMove ? '' : undefined}
       style={{ left: plate.x, top: plate.y, width: plate.width, height: plate.height }}
       onPointerDown={(event) => start(event)}
       onPointerMove={(event) => {

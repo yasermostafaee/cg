@@ -166,7 +166,11 @@ describe('MultiSelectSection — single-inspector parity (D-049)', () => {
     expect(
       c.querySelector('button[aria-label="Keep aspect while resizing selected plates"]'),
     ).not.toBeNull();
-    expect(select(c, 'fit')).not.toBeNull();
+    const control = c.querySelector('[data-section="CG Control"]');
+    expect(control?.contains(select(c, 'Fit'))).toBe(true);
+    expect(control?.contains(select(c, 'Resize'))).toBe(true);
+    expect(control?.contains(input(c, 'Allow move'))).toBe(true);
+    expect(control?.contains(select(c, 'aspect'))).toBe(false);
     expect(c.querySelector('button[aria-label="fallback"]')).not.toBeNull();
     expect(input(c, 'stroke width')).not.toBeNull();
     expect(c.querySelector('input[aria-label="stroke hex value"]')).not.toBeNull();
@@ -177,7 +181,9 @@ describe('MultiSelectSection — single-inspector parity (D-049)', () => {
       ),
     );
     expect(select(c, 'aspect')).toBeNull();
-    expect(select(c, 'fit')).toBeNull();
+    expect(select(c, 'Fit')).toBeNull();
+    expect(select(c, 'Resize')).toBeNull();
+    expect(input(c, 'Allow move')).toBeNull();
     expect(c.querySelector('button[aria-label="fallback"]')).toBeNull();
   });
 
@@ -190,7 +196,7 @@ describe('MultiSelectSection — single-inspector parity (D-049)', () => {
     const layer = () =>
       editSceneOf(designerStore.get().scene, designerStore.get().activeCompositionId)!.layers[0]!;
     const c = render(layer().children);
-    const fit = select(c, 'fit')!;
+    const fit = select(c, 'Fit')!;
     expect(fit.value).toBe('__cg_mixed__');
     expect(layer().children.map((element) => (element as { fitMode?: string }).fitMode)).toEqual([
       'contain',
@@ -207,6 +213,55 @@ describe('MultiSelectSection — single-inspector parity (D-049)', () => {
       'contain',
       'cover',
     ]);
+  });
+
+  it('edits mixed CG Control move and resize independently in one Undo per choice', () => {
+    const projects = new ProjectStore(new MemoryWorkspace(), new MemoryKv());
+    const { scene } = projects.newScene('demo', 'lower-third');
+    designerStore.setScene(scene, null);
+    designerStore.addElement({
+      ...defaultLiveSource('live-a', 0, 0),
+      fitMode: 'contain',
+      expectedAspect: 4 / 3,
+      operatorPlacement: 'proportional',
+    });
+    designerStore.addElement({
+      ...defaultLiveSource('live-b', 640, 0),
+      fitMode: 'cover',
+      expectedAspect: 16 / 9,
+      operatorPlacement: 'free',
+      operatorMove: false,
+    });
+    const children = () =>
+      editSceneOf(designerStore.get().scene, designerStore.get().activeCompositionId)!.layers[0]!
+        .children;
+    const original = children();
+    const c = render(original);
+    const refresh = () =>
+      act(() => root!.render(createElement(MultiSelectSection, { elements: children() })));
+    const resize = select(c, 'Resize')!;
+    const allow = input(c, 'Allow move')!;
+    expect(resize.value).toBe('__cg_mixed__');
+    expect(allow.indeterminate).toBe(true);
+    expect(children()).toEqual(original);
+
+    choose(resize, 'locked');
+    expect(children()).toEqual([
+      { ...original[0], operatorPlacement: undefined, operatorMove: true },
+      { ...original[1], operatorPlacement: undefined, operatorMove: false },
+    ]);
+    designerStore.undo();
+    expect(children()).toEqual(original);
+
+    refresh();
+    act(() => allow.click());
+    expect(children()).toEqual(original.map((plate) => ({ ...plate, operatorMove: true })));
+    refresh();
+    expect(allow.indeterminate).toBe(false);
+    expect(allow.checked).toBe(true);
+    expect(resize.value).toBe('__cg_mixed__');
+    designerStore.undo();
+    expect(children()).toEqual(original);
   });
 
   it('R-105 — choosing Bars applies the same fallback to all selected plates in one undo', () => {

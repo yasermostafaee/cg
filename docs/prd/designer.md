@@ -6086,12 +6086,15 @@ target station. The legacy C-023 MJPEG does not have this mapping.
 If PGM Pan is revisited, an equivalent in-place editor needs a read of the already-running source
 before the programme mix and crop, without opening a second receiver.
 
-**Operator frame placement:** Designer gives each frame an **Allow move** checkbox and an
-independent **Resize** choice of **Locked**, **Preserve aspect ratio** or **Operator chooses
-aspect ratio**. **Edit frames** in PVW drafts changes in composition pixels for the active
-Look and frame instance. The Inspector's operator ratio option starts on and is available
+**Operator frame placement:** In Designer, the **CG Control** section groups **Fit**, **Allow
+move** and **Resize** separately from the plate's authoring aspect. **Resize** offers **Locked**,
+**Preserve aspect ratio** or **Operator chooses aspect ratio**. Selecting multiple live plates
+shows mixed values where they differ. Changing one of these settings applies it to all selected
+plates in one undoable edit and preserves the other settings. **Edit frames** in PVW drafts
+changes in composition pixels for the active Look and frame instance. The Inspector's operator ratio option starts on and is available
 for frames whose author allows that choice. Older placement opt-ins keep movement and their
-saved resize choice.
+saved resize choice. When Allow move is off, the PVW frame body keeps a neutral cursor and
+only enabled resize corners show a resize cursor.
 Discard restores the applied frame. Off-air Update saves it for
 Take, and Update on air moves the resident page and its existing picture together on a verified
 primary. **Crop input** keeps the source selection inside the frame. Target-engine verification is tracked in
@@ -6882,10 +6885,14 @@ affected element when available and can be activated with the keyboard.
 
 - WHEN a composition has an authored Hold start THEN the thumbnail uses that timeline frame. Otherwise it uses the midpoint of the active range before Outro start, or the active range midpoint when there is no Outro start.
 - WHEN a VCG is exported THEN the preview travels as `thumbnails/320.png` and CG Control displays it in Shared folder. If capture is unavailable the package still exports with a fallback preview.
+- WHEN the composition has live plates or a picture Sequence THEN the preview shows the authored plate fallback and a representative authored picture. An operator-filled Sequence without pictures has a visible image-sequence placeholder.
+- WHEN a live layout has several presets THEN the preview shows the shared composition with the single preset that has the most visible plates. The last authored preset wins ties.
 
 ## [~] D-213 — Allow live plates to overlap in authored order ⟨priority: high — owner, 2026-11-12⟩ — `openspec/changes/allow-live-plate-overlap/`
 
-**What:** **Allow live plate overlap** is an opt-in setting on a Designer composition. When it is
+**What:** **Allow live plate overlap** is an opt-in setting on a Designer composition. It appears
+under **CG Control** when one or more live plates are selected and in the Composition Inspector
+with nothing selected. Validation follows the open output and its nested plates. When the option is
 enabled, co-visible live plates can overlap and their authored back-to-front order governs the
 overlap in Designer and in output, including nested frames and each preset.
 

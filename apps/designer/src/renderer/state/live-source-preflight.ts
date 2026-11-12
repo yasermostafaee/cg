@@ -367,6 +367,7 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
     'name such as "guest-1", never a device. Existing sources are offered as you type; ' +
     'typing a new name is how a new source comes into existence.';
 
+  const reachablePlateIds = new Set(projectPlates.map(({ element }) => element.id));
   const seen = new Set<string>();
   for (const doc of docs) {
     const flat = collectFlat(doc.layers, seen);
@@ -519,10 +520,13 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
     if (allowOverlap) continue;
     // Overlap is reported against BOTH elements (D-137: "reports it against both"),
     // so selecting either issue takes the author to a participant in the collision.
-    for (let i = 0; i < flat.length; i++) {
-      for (let j = i + 1; j < flat.length; j++) {
-        const a = flat[i];
-        const b = flat[j];
+    // The editor keeps unrelated composition definitions for navigation. Only plates
+    // that belong to the output being checked can block that output for overlap.
+    const reachable = flat.filter(({ element }) => reachablePlateIds.has(element.id));
+    for (let i = 0; i < reachable.length; i++) {
+      for (let j = i + 1; j < reachable.length; j++) {
+        const a = reachable[i];
+        const b = reachable[j];
         if (a === undefined || b === undefined) continue;
         if (!overlaps(a.box, b.box) || allowedRevealOverlap(a, b)) continue;
         for (const [self, other] of [
@@ -711,7 +715,7 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
 function overlapMessage(a: Element, b: Element, context = ''): string {
   return (
     `Plate "${label(a)}" overlaps "${label(b)}"${context}. ` +
-    'Enable “Allow live plate overlap” in the Composition Inspector if the overlap is intentional.'
+    'Enable “Allow live plate overlap” under CG Control in the Inspector if the overlap is intentional.'
   );
 }
 

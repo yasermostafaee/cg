@@ -8,12 +8,11 @@ type ScenePreview = Extract<TemplateThumbnail, { kind: 'scene' }>;
 
 function renderStill(
   { scene, images }: ScenePreview,
-  { applyFieldValues, BASELINE_CSS, buildScene }: typeof StaticScene,
+  { BASELINE_CSS, buildThumbnailScene }: typeof StaticScene,
 ): string | undefined {
   try {
     const doc = document.implementation.createHTMLDocument('');
-    const { container, elementMap, textOriginals } = buildScene(scene, doc, 'output', false);
-    applyFieldValues(scene, {}, elementMap, textOriginals, container);
+    const container = buildThumbnailScene(scene, doc);
     const pictures = new Map(Object.entries(images ?? {}));
     for (const image of container.querySelectorAll('img')) {
       const bytes = pictures.get(image.dataset['cgAssetId'] ?? '');

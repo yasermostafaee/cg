@@ -5,6 +5,9 @@
 - [x] Verify default refusal, nested stacking, the preset boundary and existing linked Reveal.
       The focused Designer unit suite passed 68 cases. Windows Chromium verified opt-in,
       authored reorder and VCG export, and the existing linked mask editor.
+- [x] Expose the same open composition setting in the single-plate and multi-plate **CG Control**
+      Inspector section. Focused tests verify corner overlap, the parent composition's own setting
+      and exclusion of unrelated compositions.
 
 ## 2. CG Bridge
 

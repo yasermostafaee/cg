@@ -20,12 +20,20 @@ ask before replacing prepared layers.
 - **WHEN** an operator loads a profile on a declared channel whose prepared layers can be replaced
 - **THEN** each available template loads Ready on its recorded layer with its applied fields and position
 - **AND** text in Persian round-trips verbatim
-- **AND** missing templates and incompatible layer numbers are reported individually
+- **AND** the dialog closes once CG Bridge accepts the load and CG Control confirms the result
+- **AND** each skipped layer and any shortcut problem remains visible until dismissed
+
+#### Scenario: File selection and failed profile loads leave the dialog open
+
+- **WHEN** the operator cancels the file chooser, chooses an invalid profile, or a load fails
+- **THEN** the profile dialog remains open and shows what happened
+- **AND** selecting a valid file still asks which prepared layers to replace before sending the load
 
 #### Scenario: Keep the programme running
 
 - **WHEN** a layer on the destination channel is on air or transitioning
 - **THEN** loading the profile is refused before replacing any row
+- **AND** the dialog remains open and explains why
 
 #### Scenario: Restore the selected channel's shortcuts
 

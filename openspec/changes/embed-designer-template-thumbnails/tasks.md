@@ -8,3 +8,5 @@
       The exported 320×180 PNG contained the animated Hold-start artwork while the
       authoring playhead remained at frame zero. Three book export scenarios also passed.
 - [ ] Record the carrying Linux Playwright result.
+- [x] Verify folder Sequence and live plate artwork in exported PNG pixels in Windows Chromium.
+      The representative preset test verifies visible plate count, the tie break and shared artwork.

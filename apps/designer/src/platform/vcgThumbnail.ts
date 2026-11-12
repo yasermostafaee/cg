@@ -1,46 +1,22 @@
+import { activeRangeOf, type AssetEntry, type Scene } from '@cg/shared-schema';
 import {
-  activeRangeOf,
-  defaultLookOf,
-  lookGroupOf,
-  type AssetEntry,
-  type Scene,
-} from '@cg/shared-schema';
-import {
-  applyAnimationAtFrame,
-  applyArrangementToNodes,
-  applyScopedFieldValues,
   BASELINE_CSS,
-  buildScene,
-  type FieldScope,
+  buildThumbnailScene,
+  vcgThumbnailFrame,
 } from '@cg/template-runtime/static-scene';
 import { attachRobustVideoPoster } from '../shared/video-poster.js';
 
+export { vcgThumbnailFrame };
+
 const WIDTH = 320;
 const HEIGHT = 180;
-const MAX_MEDIA_BYTES = 8 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 8 * 1024 * 1024;
 const MAX_RASTER_ASSETS = 8;
 const FALLBACK_PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAUAAAAC0AQMAAADfKmdSAAAABlBMVEUWICyFn7n4VyNdAAAATUlEQVR4nO3WoRGAQAxFwXRAA8zQxvVfERL3GUo4lQN2RdRTiUkVAAAfcCTJ1RLuzxjCX4RbcjaF9YL1NIYus2roMkLhVNj4zgAAsLwbatNKaBRCkdkAAAAASUVORK5CYII=';
 
-export function vcgThumbnailFrame(
-  scene: Pick<Scene, 'frameRange' | 'activeRange' | 'lifecycle'>,
-): number {
-  const range = activeRangeOf(scene);
-  const outro = scene.lifecycle?.outPoint;
-  const last = outro !== undefined && outro < range.out ? Math.max(range.in, outro - 1) : range.out;
-  return scene.lifecycle?.contentStart ?? Math.floor((range.in + last) / 2);
-}
-
 function bytesFromBase64(encoded: string): Uint8Array {
   return Uint8Array.from(atob(encoded), (byte) => byte.charCodeAt(0));
-}
-
-function sampleScope(scope: FieldScope, frame: number): void {
-  for (const entry of scope.animated) applyAnimationAtFrame(entry, frame);
-  for (const { node, lifespan } of scope.lifespanGates) {
-    if (frame < lifespan.in || frame > lifespan.out) node.style.display = 'none';
-  }
-  for (const { scope: nested } of scope.children) sampleScope(nested, frame);
 }
 
 function visibleInStill(node: HTMLElement, root: HTMLElement): boolean {
@@ -94,7 +70,7 @@ async function assetStill(
   bytes: Uint8Array,
   atMs: number,
 ): Promise<string | null> {
-  if (bytes.byteLength > MAX_MEDIA_BYTES) return null;
+  if (entry.kind === 'video' && bytes.byteLength > MAX_VIDEO_BYTES) return null;
   const url = URL.createObjectURL(new Blob([Uint8Array.from(bytes).buffer], { type: entry.mime }));
   try {
     if (entry.kind === 'image') {
@@ -180,20 +156,10 @@ export async function renderVcgThumbnail(
     if (context === null) return fallback();
 
     const doc = document.implementation.createHTMLDocument('');
-    const built = buildScene(scene, doc, 'output', false);
+    const container = buildThumbnailScene(scene, doc);
     const frame = vcgThumbnailFrame(scene);
-    applyScopedFieldValues(scene, scene, {}, built.scopeTree);
-    const looks = lookGroupOf(scene);
-    const chosen = looks === undefined ? undefined : defaultLookOf(looks);
-    if (chosen !== undefined && looks !== undefined) {
-      const visibility = Object.fromEntries(
-        looks.looks.map((look) => [look.instanceId, look.id === chosen.id]),
-      );
-      applyArrangementToNodes(scene, built.elementMap, { visibility }, undefined);
-    }
-    sampleScope(built.scopeTree, frame);
     await embedMedia(
-      built.container,
+      container,
       assetIndex,
       assets,
       ((frame - activeRangeOf(scene).in) / scene.frameRate) * 1000,
@@ -202,7 +168,7 @@ export async function renderVcgThumbnail(
     const stage = doc.createElement('div');
     const sheet = doc.createElement('style');
     sheet.textContent = `* { box-sizing: border-box } ${BASELINE_CSS}\n${css}`;
-    stage.append(sheet, built.container);
+    stage.append(sheet, container);
     const { width, height } = scene.resolution;
     const artwork = new XMLSerializer().serializeToString(stage);
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${width} ${height}"><foreignObject width="${width}" height="${height}">${artwork}</foreignObject></svg>`;
@@ -211,6 +177,8 @@ export async function renderVcgThumbnail(
     );
     if (picture === null) return fallback();
     context.drawImage(picture, 0, 0, WIDTH, HEIGHT);
+    const pixels = context.getImageData(0, 0, WIDTH, HEIGHT).data;
+    if (!pixels.some((alpha, i) => i % 4 === 3 && alpha > 0)) return fallback();
     const png = canvas.toDataURL('image/png').split(',')[1];
     return png ? bytesFromBase64(png) : fallback();
   } catch {

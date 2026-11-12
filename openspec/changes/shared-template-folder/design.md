@@ -11,4 +11,10 @@ catalogue and its actions available, and an older Bridge keeps the existing icon
 
 Shared folder and catalogue use the same preview component. Its checkerboard is display chrome
 behind transparent pixels. The scriptless still remains transparent and shares the host
-element's color scheme so it can show that background.
+element's color scheme so it can show that background. The artwork element fills the preview
+slot's own box. This gives a scriptless frame the actual Shared folder tile viewport and keeps the
+browser's intrinsic iframe size from clipping the lower part of the graphic.
+
+Legacy packages use the same representative still as Designer export, including scoped defaults,
+the sampled Preset and authored Live fallbacks. The Bridge reads only bounded PNG assets from the
+package for that still. The renderer and Bridge use the same representative Sequence picture rule.

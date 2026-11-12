@@ -2,9 +2,11 @@
 
 ### Requirement: A composition can opt into authored live plate overlap
 
-The Designer SHALL offer **Allow live plate overlap** in the Composition Inspector. The option
-SHALL be off when absent or unchecked. With the option off, ordinary overlapping plates SHALL
-remain an export-blocking error. Valid linked reveals SHALL remain supported.
+The Designer SHALL offer **Allow live plate overlap** in the Composition Inspector and under
+**CG Control** when one or more live plates are selected. Both controls SHALL edit the open
+composition's setting. Overlaps in unrelated compositions SHALL leave this output's export
+available. The option SHALL be off when absent or unchecked. With the option off, ordinary
+overlapping plates SHALL remain an export-blocking error. Valid linked reveals SHALL remain supported.
 
 With the option on, Designer SHALL allow co-visible plates in the exported composition to
 overlap and SHALL use the authored paint order, including the order of nested instances.

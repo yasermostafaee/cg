@@ -21,3 +21,7 @@
 - [x] Windows Chromium verified move-only and resize-only affordances, the default-on frame
       ratio option, and an unlocked resize changing width independently of height.
 - [ ] Record the carrying Linux Playwright result for independent permissions and Reset frames.
+- [x] Group Fit, Allow move and Resize under **CG Control** for one or several selected live
+      plates. Focused Designer tests cover mixed values, single-step Undo and independent edits.
+- [x] Windows Chromium verified the resize-only frame body uses a neutral cursor during hover
+      and attempted drag, while its corners retain the resize cursor.

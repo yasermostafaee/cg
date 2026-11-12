@@ -168,6 +168,11 @@ describe('D-137 — the Live Source Inspector offers no affordance it cannot hon
       refresh();
     };
 
+    const control = c.querySelector('[data-section="CG Control"]');
+    expect(control?.contains(select('Fit'))).toBe(true);
+    expect(control?.contains(check('Allow move'))).toBe(true);
+    expect(control?.contains(select('Resize'))).toBe(true);
+    expect(control?.contains(select('aspect'))).toBe(false);
     expect(check('Allow move')?.checked).toBe(false);
     expect(select('Resize')?.value).toBe('locked');
     expect(Array.from(select('Resize')?.options ?? [], (option) => option.text)).toEqual([
