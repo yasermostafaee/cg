@@ -32,6 +32,65 @@ function info(templateId: string, extra: Partial<TemplateInfo> = {}): TemplateIn
   };
 }
 
+describe('TemplateRegistry — catalogue thumbnails', () => {
+  let directory: string | undefined;
+  afterEach(() => {
+    if (directory !== undefined) fs.rmSync(directory, { recursive: true, force: true });
+    directory = undefined;
+  });
+
+  it.each([false, true])(
+    'reads bounded legacy source data, with disk persistence %s',
+    async (persist) => {
+      if (persist) directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-template-thumbnail-'));
+      const first = new TemplateRegistry(directory);
+      const legacy = fs.readFileSync(
+        new URL('../../../fixtures/b034/hidden-ancestor-inert.vcg', import.meta.url),
+      );
+      const kept = first.putSource(legacy);
+      if (!kept.ok) throw new Error(kept.message);
+      first.importOn([1], info('legacy'), '<html>legacy</html>', { sourceSha256: kept.sha256 });
+      const reg = persist ? new TemplateRegistry(directory) : first;
+      if (persist) reg.loadPersisted();
+      await expect(reg.thumbnailOn(1, 'legacy')).resolves.toMatchObject({
+        kind: 'scene',
+        scene: { id: 'hidden-ancestor-inert' },
+      });
+      await expect(reg.thumbnailOn(2, 'legacy')).resolves.toBeNull();
+    },
+  );
+
+  it('keeps only a current channel’s sidecar across a restart without a full source package', async () => {
+    directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-template-thumbnail-'));
+    const reg = new TemplateRegistry(directory);
+    const html = '<html>same on both channels</html>';
+    const { versionId } = reg.importOn([1, 2], info('shared'), html);
+    const base64 =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+    const png = Buffer.from(base64, 'base64');
+    expect(reg.putThumbnailOn(1, 'shared', versionId, png)).toBe(true);
+    expect(reg.putThumbnailOn(1, 'shared', versionId, png)).toBe(false);
+    expect(reg.htmlOf(versionId)).toBe(html);
+    expect(reg.keptSources()).toEqual([]);
+
+    const restarted = new TemplateRegistry(directory);
+    restarted.loadPersisted();
+    await expect(restarted.thumbnailOn(1, 'shared')).resolves.toEqual({
+      kind: 'image',
+      mime: 'image/png',
+      base64,
+    });
+    await expect(restarted.thumbnailOn(2, 'shared')).resolves.toBeNull();
+    const newer = restarted.importOn([1], info('shared'), '<html>newer</html>').versionId;
+    expect(restarted.putThumbnailOn(1, 'shared', versionId, png)).toBe(false);
+    await expect(restarted.thumbnailOn(1, 'shared')).resolves.toBeNull();
+    expect(restarted.putThumbnailOn(1, 'shared', newer, png)).toBe(true);
+    expect(restarted.removeFrom([1], 'shared')).toEqual([1]);
+    restarted.importOn([1], info('shared'), '<html>newer</html>');
+    await expect(restarted.thumbnailOn(1, 'shared')).resolves.toBeNull();
+  });
+});
+
 describe('TemplateRegistry — a channel lists a version', () => {
   it('an import lists the template on the channels it names, and on no other', () => {
     const reg = new TemplateRegistry();

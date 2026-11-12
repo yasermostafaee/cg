@@ -4968,6 +4968,14 @@ authored scene where available. Templates imported here support Reload and Reloa
 original shared path, using the same identity and row-data decisions as chooser imports.
 The selected template's Plates value is the number of declared live plates.
 
+**Imported template previews.** The main Templates list shows a thumbnail for each visible
+imported template with preview data. Details shows a larger preview of the selected template and
+fits the full picture in its slot. For local and shared imports, the Bridge stores the embedded
+PNG separately for the listed version, including when the source package is too large to retain.
+The Bridge can also read the embedded thumbnail or an authored still from a bounded retained
+package. Other consoles on the channel can use these previews. A missing preview keeps the row
+selectable with its icon. A Bridge without the preview capability keeps the existing catalogue.
+
 **What:** a direct **Templates** button in the main CG Control header opens the current channel's
 catalogue without requiring an empty layer and without inventing a Load destination. When CG Control
 imports a `.vcg` through the Windows chooser, it remembers that file for the template on the current
@@ -4985,6 +4993,8 @@ it unclear whether current CG Control text/images or the edited file should win.
 - WHEN every layer is occupied, or the operator only wants to refresh packages, THEN the main
   header's Templates button still opens the current channel's catalogue with management actions and
   no Load commit
+- WHEN an imported package with preview data is visible in the main Templates catalogue THEN its
+  row shows a thumbnail and selecting it shows a larger, contained preview in Details
 - WHEN a package was imported through the chooser and its original local/UNC file still exists THEN
   its row offers Reload and Reload all includes it
 - WHEN the operator chooses **keep current data** THEN the package/catalogue entry updates while

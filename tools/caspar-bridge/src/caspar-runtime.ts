@@ -113,6 +113,8 @@ import {
   type TemplateInfo,
   type PageBuild,
   type TemplatePageRefusal,
+  SHARED_TEMPLATE_THUMBNAIL_MAX_BYTES,
+  type SharedTemplateThumbnail,
   type ClearedOutsideLayer,
   type TemplateLook,
   type ChannelSettings,
@@ -327,6 +329,7 @@ import {
   type LivePlateRelease,
 } from './live-plate-release.js';
 import { TemplateRegistry, type AppliedRebuild } from './template-registry.js';
+import { isPreviewPng } from './shared-template-thumbnail.js';
 import { DelimiterStore } from './delimiter-store.js';
 import { CalendarStore } from './calendar-store.js';
 import type { LivePreviewAudit } from './live-preview.js';
@@ -16692,7 +16695,7 @@ export class CasparRuntime {
     html: string,
     channel?: number,
     meta: { build?: PageBuild; sourceSha256?: string } = {},
-  ): { registered: boolean; templateId: string } {
+  ): { registered: boolean; templateId: string; versionId?: string } {
     /*
       B-141 — THE FIFTEENTH ACTION, and the one the change's own bookkeeping had
       lost: `import` is neither in the seven playout verbs nor among the three
@@ -16704,7 +16707,7 @@ export class CasparRuntime {
       place even though the call shapes are two.
     */
     const detail: AuditDetail = { templateId: template.templateId };
-    let result: { registered: boolean; templateId: string };
+    let result: ReturnType<CasparRuntime['templateImport']>;
     try {
       result = this.#templateImportImpl(template, html, channel, meta);
     } catch (err) {
@@ -16720,11 +16723,11 @@ export class CasparRuntime {
     html: string,
     channel: number | undefined,
     meta: { build?: PageBuild; sourceSha256?: string },
-  ): { registered: boolean; templateId: string } {
+  ): ReturnType<CasparRuntime['templateImport']> {
     const templateId = template.templateId;
     const targets: readonly number[] = channel === undefined ? this.#declaredChannels() : [channel];
     const wasListed = targets.some((c) => this.#templates.hasOn(c, templateId));
-    const { changed } = this.#templates.importOn(targets, template, html, meta);
+    const { changed, versionId } = this.#templates.importOn(targets, template, html, meta);
     if (changed.length > 0) {
       // R-028 (o1) — every browser converges on the same catalogue.
       this.templatesChanged.emit(this.#templates.listAll());
@@ -16738,7 +16741,48 @@ export class CasparRuntime {
       // must follow (published through the same change-compare as always).
       this.#publishFixedStateIfChanged();
     }
-    return { registered: targets.length > 0, templateId };
+    return targets.length === 0
+      ? { registered: false, templateId }
+      : { registered: true, templateId, versionId };
+  }
+
+  async templateThumbnail(
+    channel: number,
+    templateId: string,
+  ): Promise<{ thumbnail: SharedTemplateThumbnail | null }> {
+    return { thumbnail: await this.#templates.thumbnailOn(channel, templateId) };
+  }
+
+  /** The channels this upload can update, since only the imported version is eligible. */
+  templateThumbnailChannels(templateId: string, versionId: string): number[] {
+    return this.#templates
+      .channelsListing(templateId)
+      .filter((channel) => this.#templates.versionOn(channel, templateId) === versionId);
+  }
+
+  putTemplateThumbnail(
+    templateId: string,
+    versionId: string,
+    pngBase64: string,
+    channel?: number,
+  ): { stored: boolean } {
+    const png = Buffer.from(pngBase64, 'base64');
+    if (
+      png.length > SHARED_TEMPLATE_THUMBNAIL_MAX_BYTES ||
+      png.toString('base64') !== pngBase64 ||
+      !isPreviewPng(png)
+    ) {
+      return { stored: false };
+    }
+    const matching = this.templateThumbnailChannels(templateId, versionId);
+    const targets =
+      channel === undefined ? matching : matching.filter((listed) => listed === channel);
+    let changed = false;
+    for (const target of targets) {
+      if (this.#templates.putThumbnailOn(target, templateId, versionId, png)) changed = true;
+    }
+    if (changed) this.templatesChanged.emit(this.#templates.listAll());
+    return { stored: targets.length > 0 };
   }
 
   // ── PAGE-REBUILD-01 (`C-034`): PAGES BUILT AGAIN WHEN THE TEMPLATE RUNTIME CHANGES ──────────

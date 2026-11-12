@@ -1226,6 +1226,7 @@ export function LayersPanel({
             binding={binding}
             template={template}
             sharedFolderAvailable={capabilities?.sharedTemplateFolder === true}
+            templateThumbnailsAvailable={capabilities?.templateThumbnails === true}
             // 🔴 `DESKTOP-APPS-01-D` h — `#` IS THE AMCP LAYER. A search, a tick or
             // a filter can never renumber it, because it is not a position at all.
             displayPosition={slot.layer}

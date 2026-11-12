@@ -11,3 +11,11 @@ Windows Chromium with the real Bridge and test engine passed the focused accepta
 - [x] Load bounded preview data for visible packages and show a still for packages without a thumbnail.
 - [x] Verify navigation and selection in Chromium and embedded, legacy, and unreadable preview data in Bridge tests.
 - [ ] Record the carrying Linux Playwright result for selection, navigation and previews.
+
+## Imported Templates catalogue
+
+- [x] Serve bounded previews for the listed version from a saved PNG or a retained package.
+- [x] Show visible row thumbnails and a larger contained preview in Details.
+- [x] Verify chooser and shared imports, a fresh console, selection changes and older Bridge behavior.
+      Four focused Windows Chromium cases passed against the test Bridge.
+- [ ] Record the carrying Linux Playwright result for the imported catalogue.

@@ -336,6 +336,8 @@ const BRIDGE_SURFACE: {
     templates: [
       'get',
       'list',
+      'thumbnail',
+      'putThumbnail',
       'import',
       'remove',
       'onChanged',

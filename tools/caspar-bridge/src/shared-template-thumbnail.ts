@@ -40,6 +40,8 @@ function crc32(bytes: Buffer): number {
   return (checksum ^ 0xffffffff) >>> 0;
 }
 
+type VcgThumbnailReader = FileHandle | Buffer;
+
 interface ZipMember {
   name: string;
   flags: number;
@@ -50,7 +52,14 @@ interface ZipMember {
   offset: number;
 }
 
-async function readAt(file: FileHandle, offset: number, size: number): Promise<Buffer | undefined> {
+async function readAt(
+  file: VcgThumbnailReader,
+  offset: number,
+  size: number,
+): Promise<Buffer | undefined> {
+  if (Buffer.isBuffer(file)) {
+    return offset + size <= file.length ? file.subarray(offset, offset + size) : undefined;
+  }
   const bytes = Buffer.alloc(size);
   let read = 0;
   while (read < size) {
@@ -62,7 +71,7 @@ async function readAt(file: FileHandle, offset: number, size: number): Promise<B
 }
 
 /** A VCG is ZIP32. Read its bounded directory instead of transferring the media in the archive. */
-async function readDirectory(file: FileHandle, size: number) {
+async function readDirectory(file: VcgThumbnailReader, size: number) {
   const tailSize = Math.min(size, ZIP_END_SIZE + MAX_ZIP_COMMENT);
   const tailOffset = size - tailSize;
   const tail = await readAt(file, tailOffset, tailSize);
@@ -121,7 +130,7 @@ function previewMembers(bytes: Buffer, count: number): Map<string, ZipMember> | 
 }
 
 async function readMember(
-  file: FileHandle,
+  file: VcgThumbnailReader,
   member: ZipMember | undefined,
   directoryOffset: number,
   maxBytes: number,
@@ -166,7 +175,7 @@ async function readMember(
   }
 }
 
-function isPreviewPng(bytes: Buffer): boolean {
+export function isPreviewPng(bytes: Buffer): boolean {
   if (
     bytes.length < 33 ||
     !bytes.subarray(0, 8).equals(PNG_SIGNATURE) ||
@@ -240,7 +249,7 @@ function staticPreviewImageIds(
 }
 
 async function previewImages(
-  file: FileHandle,
+  file: VcgThumbnailReader,
   members: ReadonlyMap<string, ZipMember>,
   offset: number,
   imageIds: ReadonlySet<string>,
@@ -293,7 +302,7 @@ async function previewImages(
 }
 
 export async function readSharedVcgThumbnail(
-  file: FileHandle,
+  file: VcgThumbnailReader,
   size: number,
 ): Promise<SharedTemplateThumbnail | null> {
   const directory = await readDirectory(file, size);

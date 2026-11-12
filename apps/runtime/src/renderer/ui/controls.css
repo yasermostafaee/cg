@@ -7769,6 +7769,27 @@ input[type='checkbox']:disabled:checked {
   color: var(--r-text);
   line-height: 1.3;
 }
+.cg-tpl-preview {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--r-tpl-thumb-radius);
+  background: var(--r-surface-raised);
+  color: var(--r-accent);
+}
+.cg-tpl-thumb,
+.cg-tpl-preview {
+  position: relative;
+  overflow: hidden;
+  pointer-events: none;
+}
+.cg-tpl-thumb > .cg-shared-template-entry__picture,
+.cg-tpl-preview > .cg-shared-template-entry__picture {
+  position: absolute;
+  inset: 0;
+}
 /* `Type / Text fields / Looks / Live plates` — the reference's `.detail-kv`, two columns. */
 .cg-tpl-kv {
   display: grid;

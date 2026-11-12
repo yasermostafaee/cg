@@ -180,6 +180,7 @@ export function App(): JSX.Element {
   const { openTemplateLibrary, pickerDialog: templateLibraryDialog } = useTemplatePicker(
     engineName,
     capabilities?.sharedTemplateFolder === true,
+    capabilities?.templateThumbnails === true,
   );
   const [auditOpen, setAuditOpen] = useState(false);
   // `STATION-SETUP-02` — ONE settings dialog, opened at a section from five surfaces; the

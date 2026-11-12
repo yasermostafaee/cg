@@ -9,7 +9,13 @@ import { LayerProfileSchema, type ConnectionConfig, type FixedLayerBank } from '
 import { SceneSchema } from '@cg/shared-schema';
 import { cgCss, cgJsIife, ExporterSingleFile } from '@cg/single-file-export';
 import { buildTemplateLiveSources, unpack } from '@cg/vcg-format';
-import { buildPositionedVcg, buildValidVcg, expect, test } from './fixtures/runtime.js';
+import {
+  buildPositionedVcg,
+  buildValidVcg,
+  expect,
+  openVcgFileChooser,
+  test,
+} from './fixtures/runtime.js';
 
 /**
  * 🔴 `RELEASE-091-01` §1 (`B-288`) — **PVW RENDERS THE PAGE THE BRIDGE SERVES CASPARCG, IN A BROWSER
@@ -717,6 +723,156 @@ test('shared folder lists Bridge packages and imports through the template catal
     expect(handle.runtime.stackSnapshot(1)).toHaveLength(0);
     await page.getByRole('button', { name: 'Shared folder…', exact: true }).click();
     await expect(folder.getByRole('button', { name: 'خبر.vcg', exact: true })).toBeVisible();
+  } finally {
+    await rm(shared, { recursive: true, force: true });
+  }
+});
+
+test('R-108 imported Templates show row thumbnails and the larger selected preview', async ({
+  page,
+  browser,
+}) => {
+  test.setTimeout(90_000);
+  const shared = await mkdtemp(join(tmpdir(), 'cg-catalogue-preview-'));
+  const embeddedId = 'tpl-catalogue-embedded';
+  const legacyId = 'tpl-catalogue-legacy';
+  const oldEntryId = 'tpl-catalogue-no-package';
+  const rowThumb = '[data-template-thumbnail="row"]';
+  const detailThumb = '[data-template-thumbnail="detail"]';
+  const pngImage = 'img[src^="data:image/png;base64,"]';
+  const stillFrame = 'iframe[title="Template thumbnail"]';
+  const catalogue = (console: Page) => console.getByRole('dialog', { name: /Templates · CH 1/ });
+  const openCatalogue = (console: Page) =>
+    console.getByRole('button', { name: 'Open templates', exact: true }).click();
+  const entry = (console: Page, id: string) =>
+    catalogue(console).locator(`[data-template-id="${id}"]`);
+  const details = (console: Page) =>
+    catalogue(console).getByRole('complementary', { name: 'Template details' });
+  const select = (console: Page, id: string) =>
+    entry(console, id)
+      .getByRole('button', { name: /^Select / })
+      .click();
+
+  try {
+    await writeFile(
+      join(shared, 'embedded.vcg'),
+      await buildValidVcg(
+        embeddedId,
+        Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+          'base64',
+        ),
+      ),
+    );
+    const handle = await boot(false, shared);
+    await openConsole(page, handle.url);
+    await openCatalogue(page);
+    await catalogue(page).getByRole('button', { name: 'Shared folder…', exact: true }).click();
+    const folder = page.getByRole('dialog', { name: 'Shared template folder', exact: true });
+    await folder.getByRole('button', { name: 'embedded.vcg', exact: true }).click();
+    await folder.getByRole('button', { name: 'Import package', exact: true }).click();
+    await expect(folder).toHaveCount(0);
+    await expect(entry(page, embeddedId)).toBeVisible();
+
+    const chooser = await openVcgFileChooser(page, catalogue(page));
+    await chooser.setFiles({
+      name: 'legacy.vcg',
+      mimeType: 'application/octet-stream',
+      buffer: Buffer.from(await buildPositionedVcg(legacyId)),
+    });
+    await expect(entry(page, legacyId)).toBeVisible();
+    expect(handle.runtime.stackSnapshot(1)).toHaveLength(0);
+
+    // A fresh console has neither import in its local browser storage.
+    handle.runtime.templateImport({ ...TEMPLATE, templateId: oldEntryId }, HTML, 1);
+    const fresh = await freshProfile(browser, page);
+    try {
+      await openConsole(fresh, handle.url);
+      await openCatalogue(fresh);
+      const embedded = entry(fresh, embeddedId).locator(rowThumb);
+      const legacy = entry(fresh, legacyId).locator(rowThumb);
+      const detail = details(fresh).locator(detailThumb);
+      const image = embedded.locator(pngImage);
+      await expect(image).toBeVisible();
+      await expect
+        .poll(() => image.evaluate((node: HTMLImageElement) => node.naturalWidth))
+        .toBe(1);
+      await expect(
+        legacy.frameLocator(stillFrame).locator('[data-cg-element-id="el-name"]'),
+      ).toBeVisible();
+      await expect(entry(fresh, oldEntryId).locator(`${rowThumb} svg`)).toBeVisible();
+
+      await select(fresh, embeddedId);
+      await expect(detail.locator(pngImage)).toBeVisible();
+      await expect(detail.locator(pngImage)).toHaveCSS('object-fit', 'contain');
+      const [rowBox, detailBox] = await Promise.all([embedded.boundingBox(), detail.boundingBox()]);
+      if (rowBox === null || detailBox === null) throw new Error('A preview slot has no box');
+      expect(detailBox.width).toBeGreaterThan(rowBox.width);
+      expect(detailBox.height).toBeGreaterThan(rowBox.height);
+
+      await select(fresh, legacyId);
+      await expect(detail.locator(pngImage)).toHaveCount(0);
+      await expect(
+        detail.frameLocator(stillFrame).locator('[data-cg-element-id="el-name"]'),
+      ).toBeVisible();
+      await select(fresh, oldEntryId);
+      await expect(detail.locator('img, iframe')).toHaveCount(0);
+      await expect(detail.locator('svg')).toBeVisible();
+    } finally {
+      await fresh.context().close();
+    }
+
+    // Same-version Bridge without the optional route leaves the catalogue usable.
+    const older = await freshProfile(browser, page);
+    try {
+      const port = new URL(handle.url).port;
+      const capabilityRequests = new Set<string>();
+      let thumbnailRequests = 0;
+      await older
+        .context()
+        .routeWebSocket(new RegExp(`^ws://127\\.0\\.0\\.1:${port}`), (socket) => {
+          const server = socket.connectToServer();
+          socket.onMessage((message) => {
+            const frame = JSON.parse(String(message)) as {
+              type: string;
+              channel?: string;
+              id: string;
+            };
+            if (frame.type === 'request') {
+              if (frame.channel === 'bridge.capabilities') capabilityRequests.add(frame.id);
+              if (frame.channel === 'templates.thumbnail') thumbnailRequests++;
+            }
+            server.send(message);
+          });
+          server.onMessage((message) => {
+            const frame = JSON.parse(String(message)) as {
+              type: string;
+              id: string;
+              payload: { channels?: string[]; templateThumbnails?: boolean };
+            };
+            if (frame.type === 'response' && capabilityRequests.delete(frame.id)) {
+              delete frame.payload.templateThumbnails;
+              frame.payload.channels =
+                frame.payload.channels?.filter((ch) => ch !== 'templates.thumbnail') ?? [];
+              socket.send(JSON.stringify(frame));
+            } else {
+              socket.send(message);
+            }
+          });
+        });
+      await openConsole(older, handle.url);
+      await openCatalogue(older);
+      await expect(entry(older, embeddedId).locator(`${rowThumb} svg`)).toBeVisible();
+      await expect(entry(older, legacyId).locator(`${rowThumb} svg`)).toBeVisible();
+      await select(older, embeddedId);
+      await expect(details(older).getByText('embedded', { exact: true })).toBeVisible();
+      await expect(details(older).locator(detailThumb)).toHaveCount(0);
+      await expect(catalogue(older).locator(`${rowThumb} img, ${rowThumb} iframe`)).toHaveCount(0);
+      await expect(older.locator('[data-bridge-skew-banner]')).toHaveCount(0);
+      expect(thumbnailRequests).toBe(0);
+    } finally {
+      await older.context().close();
+    }
   } finally {
     await rm(shared, { recursive: true, force: true });
   }

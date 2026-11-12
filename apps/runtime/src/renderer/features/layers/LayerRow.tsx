@@ -56,6 +56,7 @@ interface Props {
   /** Keep the keyboard actions available when this layer is outside the visible list. */
   shortcutOnly?: boolean;
   sharedFolderAvailable?: boolean;
+  templateThumbnailsAvailable?: boolean;
   slot: FixedSlotState;
   /**
    * WHAT THIS ROW CARRIES, as the three-way fact — see `RowBinding`. THE ROW'S ONE
@@ -332,6 +333,7 @@ export function LayerRow({
   previewOnly = false,
   independentPreview = false,
   sharedFolderAvailable = false,
+  templateThumbnailsAvailable = false,
   seatedPlates = [],
   audioLockedOf,
   holdsLiveSeats = false,
@@ -348,7 +350,11 @@ export function LayerRow({
   const casparReach = useCasparReach();
   const { confirm, confirmDialog } = useConfirm();
   const engine = useEngineName();
-  const { pickTemplate, pickerDialog } = useTemplatePicker(engine, sharedFolderAvailable);
+  const { pickTemplate, pickerDialog } = useTemplatePicker(
+    engine,
+    sharedFolderAvailable,
+    templateThumbnailsAvailable,
+  );
   const { menu, open, openAt, close } = useContextMenu<number>();
   const spec = densitySpec(density);
 

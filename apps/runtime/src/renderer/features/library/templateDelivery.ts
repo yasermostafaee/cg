@@ -1,5 +1,6 @@
 import {
   TEMPLATE_SOURCE_MAX_BYTES,
+  SHARED_TEMPLATE_THUMBNAIL_MAX_BYTES,
   WS_MAX_FRAME_BYTES,
   wsFrameBytes,
   type AssetMeta,
@@ -9,6 +10,7 @@ import {
   type TemplateInfo,
   type TemplatesImportChannel,
   type TemplatesSourcePutChannel,
+  type TemplatesThumbnailPutChannel,
 } from '@cg/shared-ipc';
 import {
   aggregateBoundCompositionFields,
@@ -98,6 +100,7 @@ export interface TemplateDelivery {
   html: string;
   /** Non-blocking export preflight messages (e.g. an image whose bytes didn't resolve). */
   warnings: string[];
+  thumbnailPng?: Uint8Array;
   /**
    * R-011 — the scene's manifest default on-air position, surfaced at the
    * ONE moment the app holds the unpacked scene (import). The Library
@@ -160,6 +163,9 @@ export interface TemplateImportBridge {
     putSource?(
       req: ChannelRequest<typeof TemplatesSourcePutChannel>,
     ): Promise<ChannelResponse<typeof TemplatesSourcePutChannel>>;
+    putThumbnail?(
+      req: ChannelRequest<typeof TemplatesThumbnailPutChannel>,
+    ): Promise<ChannelResponse<typeof TemplatesThumbnailPutChannel>>;
   };
 }
 
@@ -314,6 +320,7 @@ export async function produceTemplateDelivery(
     page lists the bridge turns, and the page itself — so every one of them agrees.
   */
   const scene = withPageLists(unpacked);
+  const thumbnailPng = files.get('thumbnails/320.png');
 
   // B-067 — the operator's field form must be the template's FULL field closure, not the
   // entry composition's flat fields. A D-119 starter is a graphic composition nested in a
@@ -433,6 +440,9 @@ export async function produceTemplateDelivery(
       template,
       html: produced.html,
       warnings: produced.issues.map((i) => i.message),
+      ...(thumbnailPng !== undefined &&
+        thumbnailPng.length > 0 &&
+        thumbnailPng.length <= SHARED_TEMPLATE_THUMBNAIL_MAX_BYTES && { thumbnailPng }),
       ...(scene.defaultPosition !== undefined ? { defaultPosition: scene.defaultPosition } : {}),
       // R-018 — same walk shape as the field aggregation above, so the recorded
       // paths and the Inspector's field paths can never disagree.
@@ -517,13 +527,32 @@ export async function deliverTemplateImport(
       ? undefined
       : pageBuildOf(opts.consoleVersion, opts.fontsCss ?? '');
   const sourceSha256 = build === undefined ? undefined : await keepPackage(bridge, bytes);
-  await bridge.templates.import({
+  const registered = await bridge.templates.import({
     template,
     html,
     ...(opts.channel !== undefined && { channel: opts.channel }),
     ...(build !== undefined && { build }),
     ...(sourceSha256 !== undefined && { sourceSha256 }),
   });
+  const thumbnail = delivery.thumbnailPng;
+  if (
+    registered.registered &&
+    registered.versionId !== undefined &&
+    thumbnail !== undefined &&
+    bridge.templates.putThumbnail !== undefined
+  ) {
+    // Keep this small request separate so it cannot push the air page past its frame limit.
+    try {
+      await bridge.templates.putThumbnail({
+        templateId: template.templateId,
+        versionId: registered.versionId,
+        pngBase64: bytesToBase64(thumbnail),
+        ...(opts.channel !== undefined && { channel: opts.channel }),
+      });
+    } catch {
+      // A thumbnail is optional; the catalogue already has the imported template.
+    }
+  }
   return {
     templateId: template.templateId,
     displayName: templateDisplayName(template),

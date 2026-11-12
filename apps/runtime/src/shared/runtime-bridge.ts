@@ -116,6 +116,8 @@ import type {
   TemplateInfo,
   TemplatesGetChannel,
   TemplatesImportChannel,
+  TemplatesThumbnailChannel,
+  TemplatesThumbnailPutChannel,
   TemplatesListChannel,
   TemplatesRebuildChannel,
   TemplatesRebuildPlanChannel,
@@ -214,6 +216,7 @@ export interface AuthCapabilities {
   readonly layerProfiles?: true;
   readonly liveFramePlacement?: true;
   readonly sharedTemplateFolder?: true;
+  readonly templateThumbnails?: true;
   readonly fixedLayerShortcuts?: true;
   readonly fixedLayerNextShortcut?: true;
   readonly fixedLayerSpaceShortcut?: true;
@@ -967,6 +970,12 @@ export interface RuntimeBridge {
     list(
       req?: ChannelRequest<typeof TemplatesListChannel>,
     ): Promise<ChannelResponse<typeof TemplatesListChannel>>;
+    thumbnail(
+      req: ChannelRequest<typeof TemplatesThumbnailChannel>,
+    ): Promise<ChannelResponse<typeof TemplatesThumbnailChannel>>;
+    putThumbnail(
+      req: ChannelRequest<typeof TemplatesThumbnailPutChannel>,
+    ): Promise<ChannelResponse<typeof TemplatesThumbnailPutChannel>>;
     /**
      * Register a verified `.vcg` template (R-001). The renderer verifies +
      * unpacks the upload first; this call adds the parsed template to the

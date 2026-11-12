@@ -4,8 +4,6 @@ import type * as StaticScene from '@cg/template-runtime/static-scene';
 
 export type SharedTemplatePreview = TemplateThumbnail | null;
 
-const WIDTH = 80;
-const HEIGHT = 45;
 type ScenePreview = Extract<TemplateThumbnail, { kind: 'scene' }>;
 
 function renderStill(
@@ -28,11 +26,14 @@ function renderStill(
     for (const media of container.querySelectorAll('video, audio')) media.remove();
 
     const { width, height } = scene.resolution;
-    const scale = Math.min(WIDTH / width, HEIGHT / height);
-    const left = (WIDTH - width * scale) / 2;
-    const top = (HEIGHT - height * scale) / 2;
-    container.style.transformOrigin = 'top left';
-    container.style.transform = `translate(${left}px, ${top}px) scale(${scale})`;
+    // The same contained artwork fits both the compact row and the larger Details slot.
+    const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', `0 0 ${String(width)} ${String(height)}`);
+    const artwork = doc.createElementNS(svg.namespaceURI, 'foreignObject');
+    artwork.setAttribute('width', String(width));
+    artwork.setAttribute('height', String(height));
+    artwork.append(container);
+    svg.append(artwork);
 
     // Build from validated scene data in a detached document. Nothing in the
     // package supplies scripts, HTML, stylesheets or resource URLs to the frame.
@@ -41,9 +42,9 @@ function renderStill(
     policy.content =
       "default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'";
     const style = doc.createElement('style');
-    style.textContent = `* { box-sizing: border-box } body { margin: 0; overflow: hidden } ${BASELINE_CSS}`;
+    style.textContent = `* { box-sizing: border-box } body { margin: 0; overflow: hidden } body > svg { display: block; width: 100vw; height: 100vh } ${BASELINE_CSS}`;
     doc.head.replaceChildren(policy, style);
-    doc.body.replaceChildren(container);
+    doc.body.replaceChildren(svg);
     return `<!doctype html>${doc.documentElement.outerHTML}`;
   } catch {
     return undefined;

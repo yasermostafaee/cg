@@ -218,6 +218,8 @@ import {
   TemplatesRebuildPlanChannel,
   TemplatesSourceGetChannel,
   TemplatesSourcePutChannel,
+  TemplatesThumbnailChannel,
+  TemplatesThumbnailPutChannel,
   TextSourcesReadChannel,
   SharedFilesGetChannel,
   SharedFilesSetChannel,
@@ -1702,6 +1704,13 @@ export function channelsForRequest(
     channel listing it for a removal — so a principal who does not hold one of them is refused,
     never let through a door that names nothing.
   */
+  if (name === TemplatesThumbnailPutChannel.name) {
+    const preview = (req ?? {}) as Partial<ChannelRequest<typeof TemplatesThumbnailPutChannel>>;
+    return preview.templateId === undefined || preview.versionId === undefined
+      ? []
+      : runtime.templateThumbnailChannels(preview.templateId, preview.versionId);
+  }
+
   if (name === TemplatesImportChannel.name || name === TemplatesRemoveChannel.name) {
     return runtime.templateActionFootprint(
       name === TemplatesImportChannel.name ? 'import' : 'remove',
@@ -5704,6 +5713,20 @@ export function buildRoutes(
     // names the channel it reads or changes (absent = the station-wide reading it always was).
     route(TemplatesGetChannel, 'read', 'read', (r: { templateId: string; channel?: number }) =>
       b.templateGet(r.templateId, r.channel),
+    ),
+    route(
+      TemplatesThumbnailChannel,
+      'read',
+      'read',
+      (r: ChannelRequest<typeof TemplatesThumbnailChannel>) =>
+        b.templateThumbnail(r.channel, r.templateId),
+    ),
+    route(
+      TemplatesThumbnailPutChannel,
+      'operator',
+      'operator',
+      (r: ChannelRequest<typeof TemplatesThumbnailPutChannel>) =>
+        b.putTemplateThumbnail(r.templateId, r.versionId, r.pngBase64, r.channel),
     ),
     route(TemplatesListChannel, 'read', 'read', (r: { channel?: number } | undefined) =>
       b.templateList(r?.channel),

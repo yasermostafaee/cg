@@ -29,6 +29,7 @@ import type {
 import { defineChannel } from '../channel.js';
 import { definePublishChannel } from '../publish.js';
 import { WS_MAX_FRAME_BYTES } from '../ws-frame.js';
+import { SharedTemplatePngBase64Schema, SharedTemplateThumbnailSchema } from './sharedFiles.js';
 import {
   bankInSet,
   bankSetSize,
@@ -610,6 +611,25 @@ export const TemplatesGetChannel = defineChannel(
   z.union([TemplateInfoSchema, z.null()]),
 );
 
+const ListedTemplateVersionSchema = z.string().regex(/^[0-9a-f]{16}$/);
+
+export const TemplatesThumbnailChannel = defineChannel(
+  'templates.thumbnail',
+  z.object({ templateId: IdSchema, channel: TemplateChannelSchema }),
+  z.object({ thumbnail: SharedTemplateThumbnailSchema.nullable() }),
+);
+
+export const TemplatesThumbnailPutChannel = defineChannel(
+  'templates.thumbnail.put',
+  z.object({
+    templateId: IdSchema,
+    channel: TemplateChannelSchema.optional(),
+    versionId: ListedTemplateVersionSchema,
+    pngBase64: SharedTemplatePngBase64Schema,
+  }),
+  z.object({ stored: z.boolean() }),
+);
+
 export const TemplatesListChannel = defineChannel(
   'templates.list',
   z.object({ channel: TemplateChannelSchema.optional() }).optional(),
@@ -697,6 +717,7 @@ export const TemplatesImportChannel = defineChannel(
   z.object({
     registered: z.boolean(),
     templateId: IdSchema,
+    versionId: ListedTemplateVersionSchema.optional(),
   }),
 );
 

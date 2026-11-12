@@ -606,6 +606,8 @@ export function createMockBridge(): RuntimeBridge {
     templates: {
       get: (req) => Promise.resolve(mock.templateGet(req.templateId, req.channel)),
       list: (req) => Promise.resolve(mock.templateList(req?.channel)),
+      thumbnail: () => Promise.resolve({ thumbnail: null }),
+      putThumbnail: () => Promise.resolve({ stored: false }),
       // B-038 Phase 2 — offline accepts and IGNORES `req.html`: the mock has no
       // HTTP server and no CasparCG, so there is nothing to serve. Only the live
       // bridge retains the HTML; offline stays "OFFLINE (mock) — nothing renders".

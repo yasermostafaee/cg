@@ -4,9 +4,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { pack, sha256Hex } from '@cg/vcg-format';
 import { CG_RUNTIME_VERSION, requiredRuntimeVersionForScene } from '@cg/shared-schema';
 import type { AssetEntry, FontReference, Manifest, Scene } from '@cg/shared-schema';
-import { WS_MAX_FRAME_BYTES } from '@cg/shared-ipc';
+import { TEMPLATE_SOURCE_MAX_BYTES, WS_MAX_FRAME_BYTES } from '@cg/shared-ipc';
 import {
   assertTemplateRuntimeCompatibility,
+  deliverTemplateImport,
   importTemplateFromBytes,
   produceTemplateDelivery,
   TEMPLATE_DAMAGED,
@@ -146,6 +147,7 @@ async function buildVcgWithImage(
   minRuntimeVersion = '0.0.0',
   image: Uint8Array = PNG_1X1,
   sourceScene: Scene = fixtureScene(),
+  includeThumbnail = false,
 ): Promise<Uint8Array> {
   const scene = sourceScene;
   const assetPath = `assets/image/${sha256Hex(image)}.png`;
@@ -182,6 +184,7 @@ async function buildVcgWithImage(
     cgJs: '/* placeholder template runtime */',
     cgCss: '/* placeholder template styles */',
     assets: new Map([[assetPath, image]]),
+    ...(includeThumbnail && { thumbnails: new Map([['thumbnails/320.png', PNG_1X1]]) }),
   });
 }
 
@@ -389,6 +392,47 @@ describe('produceTemplateDelivery — B-066 Persian UTF-8 integrity (upstream ho
 });
 
 describe('importTemplateFromBytes', () => {
+  it('keeps the embedded thumbnail in a separate request when the VCG exceeds source retention', async () => {
+    const bytes = await buildVcgWithImage(
+      'large-archive',
+      'large',
+      '0.0.0',
+      PNG_1X1,
+      fixtureScene(),
+      true,
+    );
+    const delivery = await produceTemplateDelivery(bytes);
+    expect(delivery.thumbnailPng).toEqual(PNG_1X1);
+    const imported = vi.fn().mockResolvedValue({
+      registered: true,
+      templateId: 'large-archive',
+      versionId: 'abcd1234abcd1234',
+    });
+    const putSource = vi.fn();
+    const putThumbnail = vi
+      .fn()
+      .mockRejectedValue(new Error('The optional thumbnail upload failed.'));
+    const bridge: TemplateImportBridge = {
+      templates: { import: imported, putSource, putThumbnail },
+    };
+    await expect(
+      deliverTemplateImport(bridge, new Uint8Array(TEMPLATE_SOURCE_MAX_BYTES + 1), delivery, {
+        channel: 2,
+        consoleVersion: '1.2.3',
+      }),
+    ).resolves.toMatchObject({ templateId: 'large-archive' });
+    expect(putSource).not.toHaveBeenCalled();
+    expect(imported).toHaveBeenCalledWith(
+      expect.objectContaining({ channel: 2, html: delivery.html }),
+    );
+    expect(putThumbnail).toHaveBeenCalledWith({
+      templateId: 'large-archive',
+      channel: 2,
+      versionId: 'abcd1234abcd1234',
+      pngBase64: Buffer.from(PNG_1X1).toString('base64'),
+    });
+  });
+
   it('delivers { template, html } to the bridge and returns the registered id', async () => {
     const sent: { template: unknown; html: string }[] = [];
     const bridge: TemplateImportBridge = {

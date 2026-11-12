@@ -230,6 +230,8 @@ const OPTIONAL_CHANNELS = new Set([
   ipcChannels.SharedTemplateFolderChannel.name,
   ipcChannels.SharedTemplateReadChannel.name,
   ipcChannels.SharedTemplateThumbnailChannel.name,
+  ipcChannels.TemplatesThumbnailChannel.name,
+  ipcChannels.TemplatesThumbnailPutChannel.name,
   StackPreviewPlateCropChannel.name,
   SourcesMediaThumbnailChannel.name,
   ipcChannels.SourcePreviewPvwChannel.name,
@@ -1127,6 +1129,9 @@ export class WebSocketRuntime implements RuntimeBridge {
         ...(routed.has(ipcChannels.SharedTemplateFolderChannel.name) &&
         routed.has(ipcChannels.SharedTemplateReadChannel.name)
           ? { sharedTemplateFolder: true }
+          : {}),
+        ...(routed.has(ipcChannels.TemplatesThumbnailChannel.name)
+          ? { templateThumbnails: true }
           : {}),
         ...(caps.fixedLayerShortcuts === true ? { fixedLayerShortcuts: true } : {}),
         ...(caps.fixedLayerNextShortcut === true ? { fixedLayerNextShortcut: true } : {}),
@@ -2531,6 +2536,14 @@ export class WebSocketRuntime implements RuntimeBridge {
       }
       return this.#library.list(req?.channel);
     },
+    thumbnail: async (req: ChannelRequest<typeof ipcChannels.TemplatesThumbnailChannel>) =>
+      (await this.#optionalChannelMissing(ipcChannels.TemplatesThumbnailChannel.name))
+        ? { thumbnail: null }
+        : this.#invoke(ipcChannels.TemplatesThumbnailChannel, req),
+    putThumbnail: async (req: ChannelRequest<typeof ipcChannels.TemplatesThumbnailPutChannel>) =>
+      (await this.#optionalChannelMissing(ipcChannels.TemplatesThumbnailPutChannel.name))
+        ? { stored: false }
+        : this.#invoke(ipcChannels.TemplatesThumbnailPutChannel, req),
     /*
       🔴 `RELEASE-091-01` §1 (`B-288`) — THE BRIDGE FIRST, this browser's copy only when the bridge
       cannot be reached. It was a local read ("the page is already here; never a bridge round

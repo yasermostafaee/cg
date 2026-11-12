@@ -34,7 +34,10 @@ export const SHARED_TEMPLATE_THUMBNAIL_MAX_BYTES = 256 * 1024;
 export const SHARED_TEMPLATE_IMAGES_MAX_BYTES = 128 * 1024;
 export const SHARED_TEMPLATE_MAX_PREVIEW_IMAGES = 4;
 const base64MaxLength = (bytes: number): number => 4 * Math.ceil(bytes / 3);
-const PngBase64Schema = z.string().min(1).max(base64MaxLength(SHARED_TEMPLATE_THUMBNAIL_MAX_BYTES));
+export const SharedTemplatePngBase64Schema = z
+  .string()
+  .min(1)
+  .max(base64MaxLength(SHARED_TEMPLATE_THUMBNAIL_MAX_BYTES));
 const PreviewImagesSchema = z
   .record(z.string(), z.string().min(1).max(base64MaxLength(SHARED_TEMPLATE_IMAGES_MAX_BYTES)))
   .refine((images) => {
@@ -47,8 +50,12 @@ const PreviewImagesSchema = z
     );
   });
 
-const SharedTemplateThumbnailSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('image'), mime: z.literal('image/png'), base64: PngBase64Schema }),
+export const SharedTemplateThumbnailSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('image'),
+    mime: z.literal('image/png'),
+    base64: SharedTemplatePngBase64Schema,
+  }),
   z.object({
     kind: z.literal('scene'),
     scene: SceneSchema,

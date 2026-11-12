@@ -2,6 +2,7 @@ import { playoutEngineWording } from '../../ui/engineWording.js';
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -16,7 +17,6 @@ import {
   Layers,
   LayoutTemplate,
   RefreshCw,
-  Rows3,
   Search,
   Trash2,
 } from 'lucide-react';
@@ -36,6 +36,11 @@ import { Modal, ModalAction, type ModalMessage } from '../../ui/Modal.js';
 import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { SharedTemplateFolder } from '../library/SharedTemplateFolder.js';
+import { TemplatePickerThumbnail } from '../library/TemplatePickerThumbnail.js';
+import {
+  createCatalogueThumbnailLoader,
+  type ThumbnailLoader,
+} from '../library/templateThumbnailLoader.js';
 import { pickFile } from '../../ui/pickFile.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { importVcgToStation } from './fixedSlotLoad.js';
@@ -403,6 +408,7 @@ export type TemplateChoice = TemplateInfo | null;
 export function useTemplatePicker(
   engine = 'CasparCG',
   sharedFolderAvailable = false,
+  templateThumbnailsAvailable = false,
 ): {
   pickTemplate: (
     title: string,
@@ -563,6 +569,12 @@ export function useTemplatePicker(
     it claims none; every console door (`LayerRow`) passes one.
   */
   const channel = request?.channel;
+  const catalogue = request?.templates;
+  const loadThumbnail = useMemo(() => {
+    if (!templateThumbnailsAvailable || channel === undefined || catalogue === undefined)
+      return undefined;
+    return createCatalogueThumbnailLoader(channel);
+  }, [templateThumbnailsAvailable, channel, catalogue]);
   const unassigned = useCallback(
     (template: TemplateInfo): string[] =>
       channel === undefined
@@ -1540,6 +1552,7 @@ export function useTemplatePicker(
                         onReload={(template) => askReload([template], true)}
                         onDelete={(t) => void deleteTemplate(t, channel)}
                         onKeyDown={onListKeyDown}
+                        loadThumbnail={loadThumbnail}
                       />
                     )}
                   </div>
@@ -1599,6 +1612,14 @@ export function useTemplatePicker(
                         <IsolatedName className="cg-tpl-pick__name" title={selected.templateId}>
                           {templateDisplayName(selected)}
                         </IsolatedName>
+                        {loadThumbnail !== undefined && (
+                          <TemplatePickerThumbnail
+                            templateId={selected.templateId}
+                            kind={kindOf(selected)}
+                            slot="detail"
+                            load={loadThumbnail}
+                          />
+                        )}
                         <dl className="cg-tpl-kv">
                           <dt>Type</dt>
                           <dd>
@@ -1731,6 +1752,7 @@ function PickerList({
   onReload,
   onDelete,
   onKeyDown,
+  loadThumbnail,
 }: {
   request: PickRequest;
   query: string;
@@ -1744,6 +1766,7 @@ function PickerList({
   onReload: (t: TemplateInfo) => void;
   onDelete: (t: TemplateInfo) => void;
   onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => void;
+  loadThumbnail: ThumbnailLoader<string> | undefined;
 }): JSX.Element {
   // Newest first: the template the operator most recently imported is the one they
   // are looking for. Then the search, then the kind chip.
@@ -1803,6 +1826,7 @@ function PickerList({
                 {...(source !== undefined && { sourceName: templateSourceName(source) })}
                 onReload={() => onReload(t)}
                 onDelete={() => onDelete(t)}
+                loadThumbnail={loadThumbnail}
               />
             );
           })
@@ -1823,6 +1847,7 @@ function PickerRow({
   sourceName,
   onReload,
   onDelete,
+  loadThumbnail,
 }: {
   template: TemplateInfo;
   accepts: 'low' | 'high' | null;
@@ -1835,6 +1860,7 @@ function PickerRow({
   sourceName?: string | undefined;
   onReload: () => void;
   onDelete: () => void;
+  loadThumbnail: ThumbnailLoader<string> | undefined;
 }): JSX.Element {
   const label = templateDisplayName(t);
   const carrier = liveSourceCarrierState(t);
@@ -1871,9 +1897,12 @@ function PickerRow({
         onClick={onSelect}
         {...(accepts !== null ? { onDoubleClick: onCommit } : {})}
       >
-        <span className="cg-tpl-thumb" aria-hidden="true">
-          <Icon icon={templateKind === 'bed' ? Rows3 : LayoutTemplate} size={22} />
-        </span>
+        <TemplatePickerThumbnail
+          templateId={t.templateId}
+          kind={templateKind}
+          slot="row"
+          load={loadThumbnail}
+        />
         <span className="cg-tpl-text">
           {/* ADDENDUM B — the BOX is LTR chrome, the NAME is isolated INLINE inside it. A
                   `<bdi>` carrying the class was blockified here and flushed Persian titles right. */}

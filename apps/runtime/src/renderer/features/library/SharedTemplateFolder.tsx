@@ -7,13 +7,12 @@ import { IsolatedName } from '../../ui/OperatorNames.js';
 import { readSharedTemplateFile } from './sharedTemplateSource.js';
 import type { SharedTemplateSource } from './templateSourceStore.js';
 import { SharedTemplateThumbnail } from './SharedTemplateThumbnail.js';
+import { createThumbnailLoader, type ThumbnailLoader } from './templateThumbnailLoader.js';
 
 const FOLDER_KEY = 'cg.runtime.shared-template-folder.v1';
-const THUMBNAIL_CONCURRENCY = 3;
 type FolderListing = Awaited<ReturnType<typeof window.cg.sharedFiles.templateFolder>>;
 type Thumbnail = Awaited<ReturnType<typeof window.cg.sharedFiles.templateThumbnail>>['thumbnail'];
 type ThumbnailRequest = Parameters<typeof window.cg.sharedFiles.templateThumbnail>[0];
-type ThumbnailLoader = (request: ThumbnailRequest, signal: AbortSignal) => Promise<Thumbnail>;
 
 function folderParts(folder: string): string[] {
   return folder.split(/[/\\]/).filter(Boolean);
@@ -27,35 +26,6 @@ function recentFolder(): string {
   }
 }
 
-function createThumbnailLoader(): ThumbnailLoader {
-  const queue: (() => void)[] = [];
-  let running = 0;
-  const start = () => {
-    while (running < THUMBNAIL_CONCURRENCY && queue.length > 0) queue.shift()?.();
-  };
-  return (request, signal) =>
-    new Promise((resolve) => {
-      queue.push(() => {
-        if (signal.aborted) {
-          resolve(null);
-          return;
-        }
-        running += 1;
-        void Promise.resolve()
-          .then(() => window.cg.sharedFiles.templateThumbnail(request))
-          .then(
-            ({ thumbnail }) => resolve(signal.aborted ? null : thumbnail),
-            () => resolve(null),
-          )
-          .finally(() => {
-            running -= 1;
-            start();
-          });
-      });
-      start();
-    });
-}
-
 function VisiblePackageThumbnail({
   folder,
   name,
@@ -65,7 +35,7 @@ function VisiblePackageThumbnail({
   folder: string;
   name: string;
   expectedRoot: string;
-  load: ThumbnailLoader;
+  load: ThumbnailLoader<ThumbnailRequest>;
 }): JSX.Element {
   const tile = useRef<HTMLSpanElement>(null);
   const [preview, setPreview] = useState<Thumbnail>();
@@ -125,7 +95,11 @@ export function SharedTemplateFolder({
   const [loading, setLoading] = useState(true);
   const [reading, setReading] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
-  const [loadThumbnail] = useState(createThumbnailLoader);
+  const [loadThumbnail] = useState(() =>
+    createThumbnailLoader((request: ThumbnailRequest) =>
+      window.cg.sharedFiles.templateThumbnail(request),
+    ),
+  );
   const currentFolder = listing?.folder ?? folder;
   const trail = folderParts(currentFolder);
   const parent = trail.slice(0, -1).join('/');

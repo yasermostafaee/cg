@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
@@ -6,11 +7,14 @@ import {
   PageBuildSchema,
   TEMPLATE_SOURCE_MAX_BYTES,
   TemplateInfoSchema,
+  type SharedTemplateThumbnail,
   type PageBuild,
   type TemplateInfo,
 } from '@cg/shared-ipc';
 import { compareSemver, parseSemver } from '@cg/shared-schema';
 import type { ActorContext } from './actor-context.js';
+import { CatalogueThumbnailStore } from './catalogue-thumbnail-store.js';
+import { readSharedVcgThumbnail } from './shared-template-thumbnail.js';
 
 /**
  * One stored VERSION of a template: its registry metadata, the rendered self-contained HTML
@@ -289,6 +293,8 @@ export class TemplateRegistry {
    */
   readonly #pending = new Map<string, { to: string; actor: ActorContext | null }>();
   readonly #persistDir: string | null;
+  readonly #catalogueThumbnails: CatalogueThumbnailStore;
+  #thumbnailReads = 0;
   /**
    * 🔴 `CHANNEL-TEMPLATES-01` decision 5 — has the ONE-TIME COPY happened? False only while this
    * directory holds records written before the per-channel lists existed and no channel has been
@@ -299,6 +305,7 @@ export class TemplateRegistry {
 
   constructor(persistDir?: string) {
     this.#persistDir = persistDir ?? null;
+    this.#catalogueThumbnails = new CatalogueThumbnailStore(this.#persistDir);
   }
 
   /**
@@ -672,6 +679,49 @@ export class TemplateRegistry {
     }
   }
 
+  /** The exact listed version's small preview, reading only bounded archive members. */
+  async thumbnailOn(channel: number, templateId: string): Promise<SharedTemplateThumbnail | null> {
+    if (this.#thumbnailReads >= 4) return null;
+    const versionId = this.versionOn(channel, templateId);
+    if (versionId === null) return null;
+    const sidecar = this.#catalogueThumbnails.get(channel, templateId, versionId);
+    if (sidecar !== null)
+      return { kind: 'image', mime: 'image/png', base64: sidecar.toString('base64') };
+    const sourceSha256 = this.#versions.get(versionId)?.sourceSha256;
+    const source = sourceSha256 === undefined ? undefined : this.#sources.get(sourceSha256);
+    if (sourceSha256 === undefined || source === undefined) return null;
+    this.#thumbnailReads += 1;
+    try {
+      if (source.bytes !== null)
+        return await readSharedVcgThumbnail(source.bytes, source.bytes.length);
+      const directory = this.#sourcesDir();
+      if (directory === null) return null;
+      const sourcePath = path.join(directory, `${sourceSha256}.vcg`);
+      if (!(await fsp.lstat(sourcePath)).isFile()) return null;
+      const file = await fsp.open(
+        sourcePath,
+        fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0),
+      );
+      try {
+        const info = await file.stat();
+        return info.isFile() && info.size <= TEMPLATE_SOURCE_MAX_BYTES
+          ? await readSharedVcgThumbnail(file, info.size)
+          : null;
+      } finally {
+        await file.close();
+      }
+    } catch {
+      return null;
+    } finally {
+      this.#thumbnailReads -= 1;
+    }
+  }
+
+  putThumbnailOn(channel: number, templateId: string, versionId: string, png: Buffer): boolean {
+    if (this.versionOn(channel, templateId) !== versionId) return false;
+    return this.#catalogueThumbnails.put(channel, templateId, versionId, png);
+  }
+
   /** Every kept package's hash — for tests that count what is kept. */
   keptSources(): string[] {
     return [...this.#sources.keys()];
@@ -856,9 +906,12 @@ export class TemplateRegistry {
 
   /** Every list naming `from` names `to` instead, in the same place. */
   #swap(from: string, to: string, actor: ActorContext | null): AppliedRebuild {
-    for (const list of this.#lists.values()) {
+    for (const [channel, list] of this.#lists) {
       for (const [templateId, versionId] of list) {
-        if (versionId === from) list.set(templateId, to);
+        if (versionId !== from) continue;
+        const thumbnail = this.#catalogueThumbnails.get(channel, templateId, from);
+        if (thumbnail !== null) this.#catalogueThumbnails.put(channel, templateId, to, thumbnail);
+        list.set(templateId, to);
       }
     }
     const old = this.#versions.get(from);
@@ -886,7 +939,10 @@ export class TemplateRegistry {
   removeFrom(channels: readonly number[], templateId: string): number[] {
     const removed: number[] = [];
     for (const channel of [...new Set(channels)].sort((a, b) => a - b)) {
-      if (this.#lists.get(channel)?.delete(templateId) === true) removed.push(channel);
+      if (this.#lists.get(channel)?.delete(templateId) === true) {
+        removed.push(channel);
+        this.#catalogueThumbnails.remove(channel, templateId);
+      }
     }
     if (removed.length > 0) {
       this.#persistIndex();
