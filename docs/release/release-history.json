@@ -3,6 +3,57 @@
   "product": "APASAI CG",
   "releases": [
     {
+      "version": "1.2.3",
+      "title": {
+        "fa": "نسخهٔ ۱.۲.۳",
+        "en": "Release 1.2.3"
+      },
+      "date": "2026-11-12",
+      "status": "prepared",
+      "summary": {
+        "fa": "بستهٔ آزمایشی ویندوز برای بررسی CG Control، CG Bridge و CG Designer.",
+        "en": "Windows test package for CG Control, CG Bridge and CG Designer."
+      },
+      "features": [
+        {
+          "fa": "برای Next هم می‌توان میان‌بر تعریف کرد. در کانال‌های بدون تنظیم قبلی، لایه‌های ۹۹ تا ۸۸ با F1 تا F12 و کلیدهای ترکیبی کنترل می‌شوند. تنظیمات از پنجرهٔ میان‌برها اعمال می‌شوند.",
+          "en": "Assign Next shortcuts alongside Play, Stop and Clear. Unconfigured channels use F1–F12 and modifiers for layers 99–88. Apply changes from the shortcut dialog."
+        },
+        {
+          "fa": "در جدول میان‌برها برای هر کانال یک عملکرد را می‌توان به Space اختصاص داد. ستون‌ها ثابت‌اند و میان‌برهای تعریف‌نشده با خط تیره دیده می‌شوند.",
+          "en": "Assign Space to one action per channel. The compact shortcut table uses fixed columns and shows a dash for unassigned shortcuts."
+        },
+        {
+          "fa": "در Layers ← Profiles، ذخیرهٔ پروفایل مسیر فایل JSON را می‌پرسد و پس از ذخیره نام فایل را نشان می‌دهد. پروفایل می‌تواند میان‌برهای کانال را هم ذخیره و هنگام بارگذاری بازیابی کند.",
+          "en": "In Layers → Profiles, Save asks where to write the JSON file and confirms its filename. A profile can include and restore the selected channel’s shortcuts."
+        },
+        {
+          "fa": "در ایستگاه تک‌موتور، Frames در PVW امکان جابه‌جایی و تغییر اندازهٔ قاب‌های مجاز طراح را می‌دهد. Update چیدمان را برای Take بعدی ذخیره می‌کند و Update on air می‌تواند آن را روی خروجی فعال اعمال کند.",
+          "en": "On single-primary stations, Frames in PVW moves and resizes frames enabled by the author. Update saves placement for the next Take, and Update on air can apply it to the running output."
+        }
+      ],
+      "fixes": [
+        {
+          "fa": "خروجی‌های پخش بالای ورودی‌های عادی در تنظیمات نمایش داده می‌شوند.",
+          "en": "Playlist outputs appear above other inputs in station settings."
+        },
+        {
+          "fa": "بارگذاری و جایگزینی صفحه‌های Sequence Folder از پنجرهٔ Manage pages انجام می‌شود.",
+          "en": "Manage pages handles loading and replacing Sequence Folder pages."
+        },
+        {
+          "fa": "فیلد نام پروژه در Designer هنگام خالی شدن اندازهٔ قابل استفاده دارد.",
+          "en": "The Designer project name field keeps a usable size when cleared."
+        },
+        {
+          "fa": "میان‌برهای لایه در نمای فیلترشده و تمام‌صفحه فعال می‌مانند و ردیف یا دکمهٔ Play اضافه در جدول دیده نمی‌شود.",
+          "en": "Layer shortcuts stay available in filtered and fullscreen views without adding visible layer rows or duplicate Play buttons."
+        }
+      ],
+      "planned": [],
+      "downloadBaseUrl": null
+    },
+    {
       "version": "1.2.2",
       "title": {
         "fa": "نسخهٔ ۱.۲.۲",
@@ -440,32 +491,14 @@
         "fa": "نسخهٔ بعدی",
         "en": "Next release"
       },
-      "date": "2026-11-10",
+      "date": "2026-11-12",
       "status": "development",
       "summary": {
         "fa": "آزمون‌های باقی‌مانده و قابلیت‌های در دست پیگیری در این بخش ثبت می‌شوند.",
         "en": "This section tracks outstanding acceptance checks and features still in progress."
       },
-      "features": [
-        {
-          "fa": "برای Next هم می‌توان میان‌بر تعریف کرد. در کانال‌های بدون تنظیم قبلی، لایه‌های ۹۹ تا ۸۸ با F1 تا F12 و کلیدهای ترکیبی کنترل می‌شوند. تنظیمات از پنجرهٔ میان‌برها اعمال می‌شوند.",
-          "en": "Assign Next shortcuts alongside Play, Stop and Clear. Unconfigured channels use F1–F12 and modifiers for layers 99–88. Apply changes from the shortcut dialog."
-        }
-      ],
-      "fixes": [
-        {
-          "fa": "خروجی‌های پخش بالای ورودی‌های عادی در تنظیمات نمایش داده می‌شوند.",
-          "en": "Playlist outputs appear above other inputs in station settings."
-        },
-        {
-          "fa": "بارگذاری و جایگزینی صفحه‌های Sequence Folder از پنجرهٔ Manage pages انجام می‌شود.",
-          "en": "Manage pages handles loading and replacing Sequence Folder pages."
-        },
-        {
-          "fa": "فیلد نام پروژه در Designer هنگام خالی شدن اندازهٔ قابل استفاده دارد.",
-          "en": "The Designer project name field keeps a usable size when cleared."
-        }
-      ],
+      "features": [],
+      "fixes": [],
       "planned": [
         {
           "fa": "روی خروجی PGM ایستگاه Playout، نمایش عنوان و شکل روی قاب، حفظ اتصال ورودی هنگام تغییر پریست، ماسک و Revert و پس‌زمینهٔ قاب بررسی شوند.",
@@ -496,8 +529,8 @@
           "en": "If the Play indication differs from the output again, capture the contemporaneous Bridge log and layer state."
         },
         {
-          "fa": "جابه‌جایی و تغییر اندازهٔ خود قاب در PVW پس از هماهنگ‌کردن تصویر، عنوان، ماسک و fallback در طراحی و خروجی.",
-          "en": "Moving and resizing authored frames in PVW, with aligned input, title, mask and fallback geometry."
+          "fa": "روی موتور مقصد، پس از جابه‌جایی و تغییر اندازهٔ قاب در Frames، هم‌ترازی تصویر، عنوان، ماسک و تصویر جایگزین را در Take و Update on air بررسی کنید.",
+          "en": "On the target engine, verify that picture, title, mask and fallback stay aligned on Take and Update on air after moving and resizing a frame."
         }
       ],
       "downloadBaseUrl": null
