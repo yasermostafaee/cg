@@ -32,8 +32,8 @@
           "en": "On single-primary stations, Edit frames in PVW moves and resizes frames enabled by the author. Update saves placement for the next Take, and Update on air can apply it to the running output."
         },
         {
-          "fa": "نوار PVW سه دکمهٔ جدا دارد. Crop input برش ورودی، Edit frames اندازه و جای خود قاب و Move template جای کل تمپلیت را تنظیم می‌کند. Move template در شروع خاموش است.",
-          "en": "PVW provides separate Crop input, Edit frames, and Move template controls. Move template starts off."
+          "fa": "در نوار PVW، Move template برای جابه‌جایی کل تمپلیت، Crop input برای برش ورودی و Edit frames برای اندازه و جای قاب است. Move template در شروع خاموش است.",
+          "en": "The PVW toolbar shows Move template, Crop input, then Edit frames when available. Move template starts off."
         },
         {
           "fa": "در Shared folder می‌توان بندانگشتی و انتخاب فعلی را دید و با Up به پوشهٔ بالاتر رفت. قالب‌های واردشده از این مسیر را می‌توان از فایل اصلی Reload کرد.",
@@ -42,6 +42,22 @@
         {
           "fa": "Designer همراه هر فایل VCG یک بندانگشتی ذخیره می‌کند. اگر Hold start تنظیم شده باشد، تصویر همان فریم را نشان می‌دهد.",
           "en": "Designer embeds a thumbnail in every exported VCG. When Hold start is authored, the preview shows that frame."
+        },
+        {
+          "fa": "فهرست Templates برای قالب‌های واردشده بندانگشتی نشان می‌دهد. با انتخاب قالب، تصویر بزرگ‌تر در Details دیده می‌شود.",
+          "en": "The Templates catalogue shows thumbnails for imported packages. Selecting a template displays a larger preview in Details."
+        },
+        {
+          "fa": "با Allow live plate overlap در Designer، ترتیب لایه‌های طراحی تعیین می‌کند کدام قاب Live روی دیگری دیده شود. در حالت خاموش، هم‌پوشانی معمول خطای اکسپورت می‌دهد.",
+          "en": "Designer can allow Live plate overlap and use the authored stacking order. With the option off, ordinary overlap blocks export."
+        },
+        {
+          "fa": "Designer برای قاب‌های Live حرکت و تغییر اندازه را جداگانه مجاز می‌کند. وقتی طراح انتخاب نسبت را به اپراتور می‌دهد، Preserve frame aspect ratio در CG Control در دسترس است.",
+          "en": "Designer sets Live frame movement and resize permissions independently. CG Control offers Preserve frame aspect ratio when the author gives the operator that choice."
+        },
+        {
+          "fa": "در Inspector ← Position، Reset frames جای و اندازهٔ قاب‌ها و Reset crop برش ورودیِ پریست فعال را به مقدار طراحی‌شده برمی‌گردانند. برای اعمال از Update استفاده کنید.",
+          "en": "Inspector Position offers Reset frames and Reset crop to stage authored frame geometry and the active preset's crop for Update."
         }
       ],
       "fixes": [
@@ -72,6 +88,22 @@
         {
           "fa": "اعلان لایهٔ خارج از استک وجود HTML producer را گزارش می‌کند. وضعیت تصویر را در Program می‌توان بررسی کرد.",
           "en": "The untracked-layer notice reports the HTML producer and directs operators to Program to check the output."
+        },
+        {
+          "fa": "در Media، نتیجهٔ تازهٔ جست‌وجو وضعیت موارد Recent را اصلاح می‌کند. Bridge فقط با پاسخ کامل، مدیای پیدا‌نشده را Unavailable علامت می‌زند.",
+          "en": "Fresh Media search results refresh Recent availability. Bridge marks missing media Unavailable only when the lookup is complete."
+        },
+        {
+          "fa": "تغییر Position روی خود ردیف لایه هم نشان Draft دارد. در ایستگاه تک‌موتور، Update on air می‌تواند موقعیت لایهٔ Live و قاب‌های ورودی تأییدشدهٔ آن را حین پخش جابه‌جا کند.",
+          "en": "Position changes show Draft on the layer row. On single-primary stations, Update on air can move a verified Live layer and its input frames in place."
+        },
+        {
+          "fa": "Reload با گزینهٔ Use file defaults، جای و اندازهٔ قاب‌ها را از تمپلیت تازه می‌گیرد. صفحه‌ای که روی air است تا Take بعدی باقی می‌ماند.",
+          "en": "Reload with Use file defaults restores authored frame geometry. The running programme page stays in place until the next Take."
+        },
+        {
+          "fa": "قسمت‌های شفاف بندانگشتی تمپلیت‌ها روی پس‌زمینهٔ شطرنجی دیده می‌شوند.",
+          "en": "Transparent regions of template thumbnails use a checkerboard background."
         }
       ],
       "planned": [],
