@@ -35,3 +35,11 @@
       between the two ADDs no longer mixes foreground and background versions.
 - [x] 4.4 The carrying [Linux Playwright E2E](https://github.com/yasermostafaee/cg/actions/runs/42873144431/job/130029489197) passed on `c560f8cd`.
 - [ ] 4.5 Verify on the target CasparCG.
+
+## 5. Shared folder sources
+
+- [x] Remember and validate the exact Bridge path when importing through Shared folder.
+- [x] Include remembered shared sources in single and bulk Reload, preserving existing data choices.
+- [x] Verify source persistence, the same bound row, both data policies, and the changed-root guard.
+      Windows Chromium passed both Shared folder cases and all focused R-108 regressions.
+- [ ] Record the carrying Linux Playwright result for Shared folder Reload.

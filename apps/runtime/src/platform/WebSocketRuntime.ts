@@ -229,6 +229,7 @@ const OPTIONAL_CHANNELS = new Set([
   ipcChannels.StackSetFramePlacementsChannel.name,
   ipcChannels.SharedTemplateFolderChannel.name,
   ipcChannels.SharedTemplateReadChannel.name,
+  ipcChannels.SharedTemplateThumbnailChannel.name,
   StackPreviewPlateCropChannel.name,
   SourcesMediaThumbnailChannel.name,
   ipcChannels.SourcePreviewPvwChannel.name,
@@ -2733,6 +2734,12 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#invoke(ipcChannels.SharedTemplateFolderChannel, req),
     templateRead: (req: ChannelRequest<typeof ipcChannels.SharedTemplateReadChannel>) =>
       this.#invoke(ipcChannels.SharedTemplateReadChannel, req),
+    templateThumbnail: async (
+      req: ChannelRequest<typeof ipcChannels.SharedTemplateThumbnailChannel>,
+    ) =>
+      (await this.#optionalChannelMissing(ipcChannels.SharedTemplateThumbnailChannel.name))
+        ? { thumbnail: null }
+        : this.#invoke(ipcChannels.SharedTemplateThumbnailChannel, req),
     get: () => this.#invoke(SharedFilesGetChannel, undefined),
     set: (req: ChannelRequest<typeof SharedFilesSetChannel>) =>
       this.#invoke(SharedFilesSetChannel, req),

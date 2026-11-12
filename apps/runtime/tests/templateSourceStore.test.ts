@@ -6,6 +6,7 @@ import {
   pickTemplatePackage,
   saveTemplateSource,
   templateSourceKey,
+  templateSourceName,
 } from '../src/renderer/features/library/templateSourceStore.js';
 
 interface RequestLike<T = unknown> {
@@ -95,13 +96,30 @@ describe('R-108 template source handles', () => {
     const ch2 = handle('two.vcg');
     await saveTemplateSource('tpl', 1, ch1, 'pkg-one');
     await saveTemplateSource('tpl', 2, ch2, 'pkg-two');
-    expect((await loadTemplateSources()).map((r) => [r.key, r.handle.name, r.packageId])).toEqual([
+    expect(
+      (await loadTemplateSources()).map((r) => [r.key, templateSourceName(r), r.packageId]),
+    ).toEqual([
       [templateSourceKey('tpl', 1), 'one.vcg', 'pkg-one'],
       [templateSourceKey('tpl', 2), 'two.vcg', 'pkg-two'],
     ]);
 
     await deleteTemplateSource('tpl', 1);
-    expect((await loadTemplateSources()).map((r) => r.handle.name)).toEqual(['two.vcg']);
+    expect((await loadTemplateSources()).map(templateSourceName)).toEqual(['two.vcg']);
+  });
+
+  it('keeps the exact shared source beside older local handles', async () => {
+    const shared = {
+      bridgeAddress: '127.0.0.1:5280',
+      root: 'C:/Shared',
+      folder: 'خبر/روز',
+      name: 'تیتر.vcg',
+    };
+    await saveTemplateSource('tpl', 1, shared, 'shared-package');
+    await saveTemplateSource('tpl', 2, handle('local.vcg'), 'local-package');
+    records.set('broken', { key: 'broken', templateId: 'broken', channel: 1, shared: null });
+    const sources = await loadTemplateSources();
+    expect(sources.map(templateSourceName)).toEqual(['تیتر.vcg', 'local.vcg']);
+    expect(sources[0]).toMatchObject({ shared, packageId: 'shared-package', channel: 1 });
   });
 
   it('the picker returns a handle and a fresh File from that same source', async () => {

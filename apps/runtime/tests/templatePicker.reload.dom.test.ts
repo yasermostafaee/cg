@@ -9,6 +9,7 @@ import {
   type TemplateChoice,
 } from '../src/renderer/features/fixedLayers/useTemplatePicker.js';
 import { reloadTemplateSource } from '../src/renderer/features/library/reloadTemplateSource.js';
+import type * as TemplateSourceStore from '../src/renderer/features/library/templateSourceStore.js';
 import {
   __resetSourcesForTest,
   initSources,
@@ -17,7 +18,8 @@ import { clearPortals, openDialog } from './support/dialog.js';
 
 const sourceRecords = vi.hoisted(() => [] as Record<string, unknown>[]);
 
-vi.mock('../src/renderer/features/library/templateSourceStore.js', () => ({
+vi.mock('../src/renderer/features/library/templateSourceStore.js', async (original) => ({
+  ...(await original<typeof TemplateSourceStore>()),
   deleteTemplateSource: vi.fn(() => Promise.resolve()),
   loadTemplateSources: vi.fn(() => Promise.resolve(sourceRecords)),
   pickTemplatePackage: vi.fn(() => Promise.resolve(null)),

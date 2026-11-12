@@ -6,3 +6,8 @@
 - [ ] Record the carrying Linux Playwright result.
 
 Windows Chromium with the real Bridge and test engine passed the focused acceptance scenario.
+
+- [x] Show the selected row, the current folder, and an accessible parent action.
+- [x] Load bounded preview data for visible packages and show a still for packages without a thumbnail.
+- [x] Verify navigation and selection in Chromium and embedded, legacy, and unreadable preview data in Bridge tests.
+- [ ] Record the carrying Linux Playwright result for selection, navigation and previews.

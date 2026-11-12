@@ -593,6 +593,7 @@ export function createMockBridge(): RuntimeBridge {
     sharedFiles: {
       templateFolder: () => Promise.reject(new Error('Shared template folders require CG Bridge.')),
       templateRead: () => Promise.reject(new Error('Shared template folders require CG Bridge.')),
+      templateThumbnail: () => Promise.resolve({ thumbnail: null }),
       get: () => Promise.resolve({ path: 'text-sources' }),
       set: () =>
         Promise.resolve({

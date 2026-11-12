@@ -20,6 +20,13 @@ These handles remain local to the CG Control profile because paths and permissio
 capabilities. CG Bridge continues to own the shared catalogue. Another console establishes its own
 source by importing through its chooser rather than receiving a path it may not be able to access.
 
+An import through Shared folder records the Bridge address, canonical Shared files root, relative
+folder, and exact package name in the same browser-local store. The Bridge compares the expected root
+when reading and continues to validate and bound the file under its configured root. A prior Bridge
+that does not return the checked root is checked through its folder listing before and after the
+read. Older imports did not retain their source folders. The operator can select the original
+package and choose Update when the verified package id matches the existing entry.
+
 ### 3. Reload is identity-safe
 
 The package is verified and unpacked through the existing import chain. The remembered package id

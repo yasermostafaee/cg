@@ -605,17 +605,70 @@ test('shared folder lists Bridge packages and imports through the template catal
 }) => {
   const shared = await mkdtemp(join(tmpdir(), 'cg-shared-vcg-'));
   try {
-    await mkdir(join(shared, 'خبر'));
+    await mkdir(join(shared, 'خبر', 'ورزش'), { recursive: true });
     const packageId = 'tpl-shared-folder';
     await writeFile(join(shared, 'خبر', 'خبر.vcg'), await buildValidVcg(packageId));
+    await writeFile(join(shared, 'خبر', 'خراب.vcg'), 'invalid package');
+    await writeFile(
+      join(shared, 'خبر', 'تصویر.vcg'),
+      await buildValidVcg(
+        'tpl-shared-embedded',
+        Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+          'base64',
+        ),
+      ),
+    );
     await writeFile(join(shared, 'خبر', 'notes.txt'), 'not a template package');
     const handle = await boot(false, shared);
     await openConsole(page, handle.url);
     await page.getByRole('button', { name: 'Open templates', exact: true }).click();
     await page.getByRole('button', { name: 'Shared folder…', exact: true }).click();
     const folder = page.getByRole('dialog', { name: 'Shared template folder', exact: true });
+    const up = folder.getByRole('button', { name: 'Up', exact: true });
+    const location = folder.getByRole('status', { name: 'Shared folder location' });
+    await expect(up).toBeDisabled();
+    await expect(location).toHaveText('Shared files');
     await folder.getByRole('button', { name: 'خبر', exact: true }).click();
-    await folder.getByRole('button', { name: 'خبر.vcg', exact: true }).click();
+    await expect(up).toBeEnabled();
+    await folder.getByRole('button', { name: 'ورزش', exact: true }).click();
+    await expect(location).toHaveText('Shared files / خبر / ورزش');
+    await expect(up).toBeEnabled();
+    await up.click();
+    await expect(location).toHaveText('Shared files / خبر');
+    await up.click();
+    await expect(location).toHaveText('Shared files');
+    await expect(up).toBeDisabled();
+    await folder.getByRole('button', { name: 'خبر', exact: true }).click();
+    const file = folder.getByRole('button', { name: 'خبر.vcg', exact: true });
+    await expect(file).toHaveAttribute('aria-pressed', 'false');
+    const fileRow = folder.getByRole('row').filter({
+      has: page.getByRole('button', { name: 'خبر.vcg', exact: true }),
+    });
+    const still = fileRow.frameLocator('iframe[title="Template thumbnail"]');
+    await expect(still.locator('[data-cg-element-id="el-name"]')).toBeVisible();
+    const corrupt = folder.getByRole('button', { name: 'خراب.vcg', exact: true });
+    const corruptRow = folder.getByRole('row').filter({
+      has: page.getByRole('button', { name: 'خراب.vcg', exact: true }),
+    });
+    await expect(corruptRow.locator('[data-thumbnail-state="unavailable"] svg')).toBeVisible();
+    const embedded = folder.getByRole('row').filter({
+      has: page.getByRole('button', { name: 'تصویر.vcg', exact: true }),
+    });
+    const preview = embedded.locator('img[src^="data:image/png;base64,"]');
+    await expect(preview).toBeVisible();
+    await expect
+      .poll(() => preview.evaluate((image: HTMLImageElement) => image.naturalWidth))
+      .toBe(1);
+    await up.hover();
+    const restingColor = await file.evaluate((entry) => getComputedStyle(entry).backgroundColor);
+    const thumb = await fileRow.locator('[data-thumbnail-state="ready"]').boundingBox();
+    if (thumb === null) throw new Error('The template thumbnail is missing');
+    await page.mouse.click(thumb.x + thumb.width / 2, thumb.y + thumb.height / 2);
+    await up.hover();
+    await expect(file).toHaveAttribute('aria-pressed', 'true');
+    await expect(file).not.toHaveCSS('background-color', restingColor);
+    await expect(corrupt).toHaveAttribute('aria-pressed', 'false');
     await expect(folder.getByText('notes.txt')).toHaveCount(0);
     await folder.getByRole('button', { name: 'Import package', exact: true }).click();
     await expect(folder).toHaveCount(0);
@@ -633,6 +686,64 @@ test('shared folder lists Bridge packages and imports through the template catal
     expect(handle.runtime.stackSnapshot(1)).toHaveLength(0);
     await page.getByRole('button', { name: 'Shared folder…', exact: true }).click();
     await expect(folder.getByRole('button', { name: 'خبر.vcg', exact: true })).toBeVisible();
+  } finally {
+    await rm(shared, { recursive: true, force: true });
+  }
+});
+
+test('R-108 shared folder imports remember the source for single and bulk Reload', async ({
+  page,
+}) => {
+  const shared = await mkdtemp(join(tmpdir(), 'cg-shared-reload-'));
+  try {
+    await mkdir(join(shared, 'خبر'));
+    const packageId = 'tpl-shared-reload';
+    const source = join(shared, 'خبر', 'تیتر.vcg');
+    await writeFile(source, await buildValidVcg(packageId));
+    const handle = await boot(false, shared);
+    handle.runtime.templateImport({ ...TEMPLATE, templateId: packageId }, HTML, 1);
+    await openConsole(page, handle.url);
+    const open = page.getByRole('button', { name: 'Open templates', exact: true });
+    const templates = page.getByRole('dialog', { name: /Templates · CH 1/ });
+    const reload = templates.locator(`[data-template-reload="${packageId}"]`);
+    const reloadAll = templates.getByRole('button', { name: 'Reload all', exact: true });
+    await open.click();
+    await expect(reload).toBeDisabled();
+    await templates.getByRole('button', { name: 'Shared folder…', exact: true }).click();
+    const folder = page.getByRole('dialog', { name: 'Shared template folder', exact: true });
+    await folder.getByRole('button', { name: 'خبر', exact: true }).click();
+    await folder.getByRole('button', { name: 'تیتر.vcg', exact: true }).click();
+    await folder.getByRole('button', { name: 'Import package', exact: true }).click();
+    await templates.getByRole('button', { name: /^Update / }).click();
+    await expect(reload).toBeEnabled();
+
+    await page.reload();
+    await open.click();
+    await expect(reload).toBeEnabled();
+    await expect(reloadAll).toBeEnabled();
+    const itemId = 'shared-source-bound';
+    expect(
+      await handle.runtime.loadFixed({ channel: 1, layer: ROW }, itemId, packageId, {
+        anchor: 'متن اپراتور',
+      }),
+    ).toMatchObject({ accepted: true });
+
+    await writeFile(source, await buildPositionedVcg(packageId));
+    await reload.click();
+    await templates.getByRole('button', { name: 'Reload and keep current data' }).click();
+    await expect.poll(() => handle.runtime.templateGet(packageId, 1)?.name).toBe('e2e-positioned');
+    expect(handle.runtime.stackSnapshot(1)[0]).toMatchObject({
+      itemId,
+      templateId: packageId,
+      fields: { anchor: 'متن اپراتور' },
+    });
+
+    await writeFile(source, await buildValidVcg(packageId));
+    await reloadAll.click();
+    await templates.getByRole('button', { name: 'Reload and use file defaults' }).click();
+    await expect.poll(() => handle.runtime.stackSnapshot(1)[0]?.fields.anchor).toBe('سارا نادری');
+    expect(handle.runtime.stackSnapshot(1)[0]?.itemId).toBe(itemId);
+    expect(handle.runtime.templateList(1).map(({ templateId }) => templateId)).toEqual([packageId]);
   } finally {
     await rm(shared, { recursive: true, force: true });
   }

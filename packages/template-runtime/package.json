@@ -15,6 +15,10 @@
       "types": "./dist/scene-builder.d.ts",
       "import": "./dist/scene-builder.js"
     },
+    "./static-scene": {
+      "types": "./dist/static-scene.d.ts",
+      "import": "./dist/static-scene.js"
+    },
     "./position": {
       "types": "./dist/position.d.ts",
       "import": "./dist/position.js"

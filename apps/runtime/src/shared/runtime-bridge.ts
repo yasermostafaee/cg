@@ -127,6 +127,7 @@ import type {
   SharedFilesSetChannel,
   SharedTemplateFolderChannel,
   SharedTemplateReadChannel,
+  SharedTemplateThumbnailChannel,
   DelimitersListChannel,
   DelimitersSetChannel,
   DelimiterOption,
@@ -1448,5 +1449,8 @@ export interface RuntimeBridge {
     templateRead(
       req: ChannelRequest<typeof SharedTemplateReadChannel>,
     ): Promise<ChannelResponse<typeof SharedTemplateReadChannel>>;
+    templateThumbnail(
+      req: ChannelRequest<typeof SharedTemplateThumbnailChannel>,
+    ): Promise<ChannelResponse<typeof SharedTemplateThumbnailChannel>>;
   };
 }

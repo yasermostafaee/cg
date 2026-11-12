@@ -62,6 +62,7 @@ import {
   deleteTemplateSource,
   loadTemplateSources,
   pickTemplatePackage,
+  templateSourceName,
   templateSourcePickerSupported,
   type PickedTemplatePackage,
   type TemplateSourceRecord,
@@ -522,7 +523,7 @@ export function useTemplatePicker(
   const [importBusy, setImportBusy] = useState(false);
   const [importingFileName, setImportingFileName] = useState<string | null>(null);
   const [busyLabel, setBusyLabel] = useState<'Importing' | 'Reloading'>('Importing');
-  /** R-108 — source handles available on THIS browser/profile for the open channel. */
+  /** R-108 — original sources available to this console for the open channel. */
   const [templateSources, setTemplateSources] = useState<ReadonlyMap<string, TemplateSourceRecord>>(
     new Map(),
   );
@@ -532,12 +533,18 @@ export function useTemplatePicker(
       setTemplateSources(
         new Map(
           records
-            .filter((record) => record.channel === (onChannel ?? null))
+            .filter(
+              (record) =>
+                record.channel === (onChannel ?? null) &&
+                (record.shared === undefined ||
+                  (sharedFolderAvailable &&
+                    record.shared.bridgeAddress === window.cg.link.bridgeAddress())),
+            )
             .map((record) => [record.templateId, record] as const),
         ),
       );
     },
-    [],
+    [sharedFolderAvailable],
   );
   /** This dialog's OWN hidden `.vcg` input — the row's is no longer in the import path. */
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -1056,7 +1063,8 @@ export function useTemplatePicker(
       }
       // Closing the operating-system chooser is not an import and must not flash a busy surface.
       if (picked === null) return;
-      const { file, handle } = picked;
+      const { file } = picked;
+      const source = picked.handle ?? picked.shared;
       setBusyLabel('Importing');
       setImportBusy(true);
       setImportingFileName(file.name);
@@ -1067,10 +1075,10 @@ export function useTemplatePicker(
           () => Promise.resolve(file),
           channel,
           askOnClash,
-          handle,
+          source,
         );
         if (template === null) return; // The injected file means this is defensive only.
-        if (handle !== undefined) {
+        if (source !== undefined) {
           await refreshTemplateSources(channel);
         }
         const templates = await window.cg.templates.list(listRequest(channel));
@@ -1128,7 +1136,8 @@ export function useTemplatePicker(
         for (const template of templates) {
           const source = templateSources.get(template.templateId);
           if (source === undefined) continue;
-          setImportingFileName(source.handle.name);
+          const filename = templateSourceName(source);
+          setImportingFileName(filename);
           try {
             const result = await reloadTemplateSource(
               template,
@@ -1136,7 +1145,7 @@ export function useTemplatePicker(
               source,
               policy,
               reviewSourceChange
-                ? (incoming) => askReplaceSource(template, source.handle.name, incoming)
+                ? (incoming) => askReplaceSource(template, filename, incoming)
                 : undefined,
             );
             if (result === null) continue;
@@ -1654,9 +1663,11 @@ export function useTemplatePicker(
         {sharedFolderAvailable && sharedFolderOpen && (
           <SharedTemplateFolder
             onClose={() => setSharedFolderOpen(false)}
-            onImport={(file) => {
+            onImport={(file, shared) => {
               setSharedFolderOpen(false);
-              void runImport(() => Promise.resolve({ file }));
+              void runImport(() =>
+                Promise.resolve({ file, ...(shared !== undefined && { shared }) }),
+              );
             }}
           />
         )}
@@ -1779,23 +1790,24 @@ function PickerList({
             <p>Try another search.</p>
           </div>
         ) : (
-          shown.map((t) => (
-            <PickerRow
-              key={t.templateId}
-              template={t}
-              accepts={request.mode === 'load' ? request.accepts : null}
-              scope={listScope(request.channel)}
-              unassigned={unassigned(t)}
-              isSelected={selected?.templateId === t.templateId}
-              onSelect={() => onSelect(t)}
-              onCommit={() => onCommit(t)}
-              {...(reloadable.get(t.templateId)?.handle.name !== undefined
-                ? { sourceName: reloadable.get(t.templateId)?.handle.name }
-                : {})}
-              onReload={() => onReload(t)}
-              onDelete={() => onDelete(t)}
-            />
-          ))
+          shown.map((t) => {
+            const source = reloadable.get(t.templateId);
+            return (
+              <PickerRow
+                key={t.templateId}
+                template={t}
+                accepts={request.mode === 'load' ? request.accepts : null}
+                scope={listScope(request.channel)}
+                unassigned={unassigned(t)}
+                isSelected={selected?.templateId === t.templateId}
+                onSelect={() => onSelect(t)}
+                onCommit={() => onCommit(t)}
+                {...(source !== undefined && { sourceName: templateSourceName(source) })}
+                onReload={() => onReload(t)}
+                onDelete={() => onDelete(t)}
+              />
+            );
+          })
         )}
       </div>
     </>

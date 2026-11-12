@@ -797,7 +797,10 @@ function fixtureScene(): Scene {
 }
 
 /** Build a valid, verifiable `.vcg` whose registered template id is `templateId`. */
-export async function buildValidVcg(templateId = 'tpl-e2e-1'): Promise<Uint8Array> {
+export async function buildValidVcg(
+  templateId = 'tpl-e2e-1',
+  thumbnail?: Uint8Array,
+): Promise<Uint8Array> {
   const scene = fixtureScene();
   const fontDeps: readonly FontReference[] = scene.fonts;
   const assetIndex: readonly AssetEntry[] = [];
@@ -822,6 +825,7 @@ export async function buildValidVcg(templateId = 'tpl-e2e-1'): Promise<Uint8Arra
     indexHtml: '<!doctype html><html><body>placeholder</body></html>',
     cgJs: '/* placeholder template runtime */',
     cgCss: '/* placeholder template styles */',
+    ...(thumbnail !== undefined && { thumbnails: new Map([['thumbnails/320.png', thumbnail]]) }),
   });
 }
 

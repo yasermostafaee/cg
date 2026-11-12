@@ -43,11 +43,26 @@ const handle = {
 } as unknown as FileSystemFileHandle;
 
 const updates: unknown[] = [];
+const shared = { bridgeAddress: 'bridge:5280', root: '/share', folder: 'خبر', name: 'weather.vcg' };
+const bridgeAddress = vi.fn(() => shared.bridgeAddress);
+const templateFolder = vi.fn(() => Promise.resolve({ root: shared.root, folder: '', entries: [] }));
+const templateRead = vi.fn(() =>
+  Promise.resolve({
+    root: shared.root as string | undefined,
+    name: shared.name,
+    base64: 'cGFja2FnZQ==',
+  }),
+);
 
 beforeEach(() => {
   updates.length = 0;
   vi.mocked(importVcgFile).mockClear();
+  bridgeAddress.mockReset().mockReturnValue(shared.bridgeAddress);
+  templateFolder.mockClear();
+  templateRead.mockClear();
   const cg = {
+    link: { bridgeAddress },
+    sharedFiles: { templateFolder, templateRead },
     templates: { get: () => Promise.resolve(TEMPLATE) },
     stack: {
       snapshot: () => Promise.resolve([row('ch1', 1), row('ch2', 2)]),
@@ -79,5 +94,60 @@ describe('R-108 reload data policy', () => {
     expect(updates).toEqual([
       { itemId: 'ch1', fields: { title: 'new-file' }, mergeMode: 'replace' },
     ]);
+  });
+
+  it('reads the shared package from its exact Bridge and root, then uses the same data policy', async () => {
+    const result = await reloadTemplateSource(
+      TEMPLATE,
+      1,
+      { shared, packageId: 'pkg' },
+      'file-defaults',
+    );
+    expect(templateRead).toHaveBeenCalledWith({
+      folder: shared.folder,
+      name: shared.name,
+      expectedRoot: shared.root,
+    });
+    expect(importVcgFile).toHaveBeenCalledWith(
+      expect.objectContaining({ name: shared.name }),
+      1,
+      undefined,
+      { templateId: 'tpl', packageId: 'pkg' },
+    );
+    expect(result?.resetRows).toBe(1);
+    expect(updates).toEqual([
+      { itemId: 'ch1', fields: { title: 'new-file' }, mergeMode: 'replace' },
+    ]);
+  });
+
+  it('never reads a shared source from another station', async () => {
+    bridgeAddress.mockReturnValue('other:5280');
+    await expect(reloadTemplateSource(TEMPLATE, 1, { shared }, 'keep')).rejects.toThrow(
+      'remembered on another CG Bridge',
+    );
+    expect(templateRead).not.toHaveBeenCalled();
+    expect(importVcgFile).not.toHaveBeenCalled();
+  });
+
+  it('checks an older Bridge shared root before and after reading its bytes', async () => {
+    templateFolder.mockResolvedValueOnce({ root: '/moved', folder: '', entries: [] });
+    await expect(reloadTemplateSource(TEMPLATE, 1, { shared }, 'keep')).rejects.toThrow(
+      'The Shared files path has changed.',
+    );
+    expect(templateRead).not.toHaveBeenCalled();
+
+    templateRead.mockResolvedValueOnce({
+      root: undefined,
+      name: shared.name,
+      base64: 'cGFja2FnZQ==',
+    });
+    templateFolder
+      .mockResolvedValueOnce({ root: shared.root, folder: '', entries: [] })
+      .mockResolvedValueOnce({ root: '/moved', folder: '', entries: [] });
+    await expect(reloadTemplateSource(TEMPLATE, 1, { shared }, 'keep')).rejects.toThrow(
+      'The Shared files path has changed.',
+    );
+    expect(templateRead).toHaveBeenCalledOnce();
+    expect(importVcgFile).not.toHaveBeenCalled();
   });
 });

@@ -169,6 +169,34 @@ describe('B-153 — the bridge is asked what it can do, at connect', () => {
     },
   );
 
+  it('keeps shared folder browsing when a same-release bridge lacks thumbnails', async () => {
+    const preview = ipc.SharedTemplateThumbnailChannel.name;
+    const channels = ipc.runtimeRequestChannelNames(ipc).filter((name) => name !== preview);
+    const requests: string[] = [];
+    runtime = new WebSocketRuntime('ws://fake', {
+      consoleVersion: '1.2.3',
+      createWebSocket: () =>
+        fakeBridge((channel) => {
+          requests.push(channel);
+          if (channel === ipc.BridgeCapabilitiesChannel.name)
+            return { channels, bridgeVersion: '1.2.3' };
+          if (channel === ipc.SharedTemplateFolderChannel.name)
+            return { root: 'shared', folder: '', entries: [] };
+          return 'unknown-channel';
+        }),
+    });
+    await runtime.whenReady();
+    const listing = await runtime.sharedFiles.templateFolder({ folder: '' });
+    expect(listing.thumbnails).toBeUndefined();
+    expect(runtime.link.skew()).toBeNull();
+    await expect(
+      runtime.sharedFiles.templateThumbnail({ folder: '', name: 'test.vcg' }),
+    ).resolves.toEqual({
+      thumbnail: null,
+    });
+    expect(requests).not.toContain(preview);
+  });
+
   it('🔴 4.4 — a bridge missing channels is named at CONNECT, before any button is pressed', async () => {
     const all = ipc.runtimeRequestChannelNames(ipc);
     const withheld = ['stack.set-active-look', 'stack.swap-live-source'];

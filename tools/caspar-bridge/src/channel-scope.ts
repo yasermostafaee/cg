@@ -331,6 +331,7 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'sharedFiles.get': STATION_WIDE,
   'sharedFiles.template-folder': STATION_WIDE,
   'sharedFiles.template-read': STATION_WIDE,
+  'sharedFiles.template-thumbnail': STATION_WIDE,
   'sources.assignments': STATION_WIDE,
   'sources.config': STATION_WIDE,
   'sources.media-search': STATION_WIDE,

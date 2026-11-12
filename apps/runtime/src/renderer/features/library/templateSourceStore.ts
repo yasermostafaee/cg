@@ -5,20 +5,36 @@
  * `FileSystemFileHandle` is the durable capability Chromium gives us instead: it keeps pointing at
  * the same local/UNC file and is structured-cloneable, so IndexedDB can retain it across CG Control
  * restarts. The handle is browser-local by design; the central template catalogue stays on CG
- * Bridge, while each operator station remembers only paths it can actually reach.
+ * Bridge. A shared-folder import remembers the exact path on its Bridge instead.
  */
 
 const DB_NAME = 'cg-runtime-template-sources';
 const DB_VERSION = 1;
 const STORE = 'sources';
 
-export interface TemplateSourceRecord {
+export interface SharedTemplateSource {
+  bridgeAddress: string;
+  root: string;
+  folder: string;
+  name: string;
+}
+
+export type TemplateSource = (
+  | { handle: FileSystemFileHandle; shared?: never }
+  | { shared: SharedTemplateSource; handle?: never }
+) & {
+  /** The verified package's own identity. The catalogue can list it under a different id. */
+  packageId?: string;
+};
+
+export type TemplateSourceRecord = TemplateSource & {
   key: string;
   templateId: string;
   channel: number | null;
-  handle: FileSystemFileHandle;
-  /** The verified package's own identity. The catalogue can list it under a different id. */
-  packageId?: string;
+};
+
+export function templateSourceName(source: TemplateSource): string {
+  return source.shared === undefined ? source.handle.name : source.shared.name;
 }
 
 export function templateSourceKey(templateId: string, channel?: number): string {
@@ -64,7 +80,7 @@ function write(db: IDBDatabase, run: (store: IDBObjectStore) => void): Promise<v
 export async function saveTemplateSource(
   templateId: string,
   channel: number | undefined,
-  handle: FileSystemFileHandle,
+  source: FileSystemFileHandle | SharedTemplateSource,
   packageId: string,
 ): Promise<void> {
   const db = await openDb();
@@ -74,7 +90,7 @@ export async function saveTemplateSource(
       key: templateSourceKey(templateId, channel),
       templateId,
       channel: channel ?? null,
-      handle,
+      ...('folder' in source ? { shared: source } : { handle: source }),
       packageId,
     } satisfies TemplateSourceRecord),
   );
@@ -104,12 +120,20 @@ export async function loadTemplateSources(): Promise<TemplateSourceRecord[]> {
       const valid = request.result.filter((record): record is TemplateSourceRecord => {
         if (record === null || typeof record !== 'object') return false;
         const value = record as Partial<TemplateSourceRecord>;
+        const shared = value.shared;
         return (
           typeof value.key === 'string' &&
           typeof value.templateId === 'string' &&
           (value.packageId === undefined || typeof value.packageId === 'string') &&
           (value.channel === null || typeof value.channel === 'number') &&
-          value.handle?.kind === 'file'
+          (shared === undefined
+            ? value.handle?.kind === 'file'
+            : shared !== null &&
+              value.handle === undefined &&
+              typeof shared.bridgeAddress === 'string' &&
+              typeof shared.root === 'string' &&
+              typeof shared.folder === 'string' &&
+              typeof shared.name === 'string')
         );
       });
       resolve(valid);
@@ -131,6 +155,7 @@ interface TemplatePickerWindow {
 export interface PickedTemplatePackage {
   file: File;
   handle?: FileSystemFileHandle;
+  shared?: SharedTemplateSource;
 }
 
 /** True when the chooser can return a handle that makes later Reload possible. */

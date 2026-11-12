@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { BridgeTextSourcePathSchema } from '@cg/shared-schema';
+import { BridgeTextSourcePathSchema, SceneSchema } from '@cg/shared-schema';
 import { defineChannel } from '../channel.js';
 
 /**
@@ -30,6 +30,32 @@ export const SharedFilesSetChannel = defineChannel(
 
 const SharedTemplateFolderPath = z.union([z.literal(''), BridgeTextSourcePathSchema]);
 const SharedTemplateName = z.string().regex(/^[^/\\]+\.vcg$/i);
+export const SHARED_TEMPLATE_THUMBNAIL_MAX_BYTES = 256 * 1024;
+export const SHARED_TEMPLATE_IMAGES_MAX_BYTES = 128 * 1024;
+export const SHARED_TEMPLATE_MAX_PREVIEW_IMAGES = 4;
+const base64MaxLength = (bytes: number): number => 4 * Math.ceil(bytes / 3);
+const PngBase64Schema = z.string().min(1).max(base64MaxLength(SHARED_TEMPLATE_THUMBNAIL_MAX_BYTES));
+const PreviewImagesSchema = z
+  .record(z.string(), z.string().min(1).max(base64MaxLength(SHARED_TEMPLATE_IMAGES_MAX_BYTES)))
+  .refine((images) => {
+    const values = Object.values(images);
+    return (
+      values.length <= SHARED_TEMPLATE_MAX_PREVIEW_IMAGES &&
+      values.reduce((bytes, value) => bytes + value.length, 0) <=
+        base64MaxLength(SHARED_TEMPLATE_IMAGES_MAX_BYTES) +
+          4 * (SHARED_TEMPLATE_MAX_PREVIEW_IMAGES - 1)
+    );
+  });
+
+const SharedTemplateThumbnailSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('image'), mime: z.literal('image/png'), base64: PngBase64Schema }),
+  z.object({
+    kind: z.literal('scene'),
+    scene: SceneSchema,
+    images: PreviewImagesSchema.optional(),
+  }),
+]);
+export type SharedTemplateThumbnail = z.infer<typeof SharedTemplateThumbnailSchema>;
 
 export const SharedTemplateFolderChannel = defineChannel(
   'sharedFiles.template-folder',
@@ -38,11 +64,26 @@ export const SharedTemplateFolderChannel = defineChannel(
     root: z.string(),
     folder: z.string(),
     entries: z.array(z.object({ name: z.string(), kind: z.enum(['folder', 'package']) })),
+    thumbnails: z.literal(true).optional(),
   }),
 );
 
 export const SharedTemplateReadChannel = defineChannel(
   'sharedFiles.template-read',
-  z.object({ folder: SharedTemplateFolderPath, name: SharedTemplateName }),
-  z.object({ name: SharedTemplateName, base64: z.string() }),
+  z.object({
+    folder: SharedTemplateFolderPath,
+    name: SharedTemplateName,
+    expectedRoot: z.string().min(1).optional(),
+  }),
+  z.object({ name: SharedTemplateName, base64: z.string(), root: z.string().min(1).optional() }),
+);
+
+export const SharedTemplateThumbnailChannel = defineChannel(
+  'sharedFiles.template-thumbnail',
+  z.object({
+    folder: SharedTemplateFolderPath,
+    name: SharedTemplateName,
+    expectedRoot: z.string().min(1).optional(),
+  }),
+  z.object({ thumbnail: SharedTemplateThumbnailSchema.nullable() }),
 );

@@ -36,6 +36,21 @@ remain without a reloadable source and SHALL explain how to establish one.
 - **THEN** the template remains in the shared catalogue
 - **AND** Reload remains unavailable there until that console imports the source through its chooser
 
+### Requirement: Imports through Shared folder retain their exact Bridge source
+
+When a package is imported through Shared folder, CG Control SHALL remember the verified source
+location for the resulting catalogue entry. Reload and Reload all SHALL re-read that source through
+CG Bridge and use the normal package identity and row-data policy. A changed Bridge or shared root
+SHALL produce a refusal. An older import without a known source can acquire one by selecting its
+original package and updating the existing catalogue entry.
+
+#### Scenario: Reload a template imported from a Bridge subfolder
+
+- **GIVEN** the template was imported through Shared folder and bound to a layer
+- **WHEN** an updated package is saved to the same shared path and the operator chooses Reload
+- **THEN** CG Control reloads the existing catalogue entry using the selected row-data policy
+- **AND** the layer remains bound to that entry
+
 ### Requirement: Reload SHALL preserve the target catalogue entry
 
 CG Control SHALL remember a verified package's identity separately from its channel catalogue id.

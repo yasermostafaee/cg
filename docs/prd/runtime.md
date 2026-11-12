@@ -4952,6 +4952,10 @@ correction, explain when it is needed, and say that zero/**As calculated** needs
 **Shared template folder** — `openspec/changes/shared-template-folder/`. The template picker can
 browse the path configured under Station setup → Shared files and its subfolders, list `.vcg`
 packages, and import the selected package into the active channel through the usual import flow.
+The chosen package remains visibly selected. Up opens its parent folder and is unavailable at the
+configured root. The list previews packages using their embedded thumbnail or a still from the
+authored scene where available. Templates imported here support Reload and Reload all from their
+original shared path, using the same identity and row-data decisions as chooser imports.
 
 **What:** a direct **Templates** button in the main CG Control header opens the current channel's
 catalogue without requiring an empty layer and without inventing a Load destination. When CG Control

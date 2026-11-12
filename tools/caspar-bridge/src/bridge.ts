@@ -223,6 +223,7 @@ import {
   SharedFilesSetChannel,
   SharedTemplateFolderChannel,
   SharedTemplateReadChannel,
+  SharedTemplateThumbnailChannel,
   type PageBuild,
   TEMPLATE_REDELIVERY_REFUSAL,
   UpdateCancelChannel,
@@ -347,7 +348,11 @@ import {
 } from './backup-channels-store.js';
 import type { BackupChannelMap } from './server-b-line.js';
 import { readTextSource } from './text-source-reader.js';
-import { listSharedTemplateFolder, readSharedTemplatePackage } from './shared-template-folder.js';
+import {
+  listSharedTemplateFolder,
+  readSharedTemplatePackage,
+  readSharedTemplateThumbnail,
+} from './shared-template-folder.js';
 import { ServiceConfigSchema, writeServiceConfig } from './service-config.js';
 import {
   airOf,
@@ -4973,12 +4978,29 @@ export function buildRoutes(
         r.folder,
       ),
     ),
-    route(SharedTemplateReadChannel, 'read', 'read', (r: { folder: string; name: string }) =>
-      readSharedTemplatePackage(
-        paths.sharedFiles?.getPath() ?? paths.textSourceRoot ?? 'text-sources',
-        r.folder,
-        r.name,
-      ),
+    route(
+      SharedTemplateReadChannel,
+      'read',
+      'read',
+      (r: ChannelRequest<typeof SharedTemplateReadChannel>) =>
+        readSharedTemplatePackage(
+          paths.sharedFiles?.getPath() ?? paths.textSourceRoot ?? 'text-sources',
+          r.folder,
+          r.name,
+          r.expectedRoot,
+        ),
+    ),
+    route(
+      SharedTemplateThumbnailChannel,
+      'read',
+      'read',
+      (r: ChannelRequest<typeof SharedTemplateThumbnailChannel>) =>
+        readSharedTemplateThumbnail(
+          paths.sharedFiles?.getPath() ?? paths.textSourceRoot ?? 'text-sources',
+          r.folder,
+          r.name,
+          r.expectedRoot,
+        ),
     ),
     route(SharedFilesSetChannel, 'operator', 'station-admin', (r: { path: string }) => {
       if (paths.sharedFiles === undefined) {

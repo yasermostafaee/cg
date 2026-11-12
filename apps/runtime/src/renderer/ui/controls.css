@@ -7942,6 +7942,7 @@ input[type='checkbox']:disabled:checked {
  * grid's picked day, and Station setup's Lunar Hijri day adjustment: chosen settings, not air.
  */
 .cg-tpl-filter .cg-btn[aria-pressed='true'],
+.cg-btn.cg-shared-template-entry[aria-pressed='true'],
 .cg-timing-choice .cg-btn[aria-pressed='true'],
 .cg-playback__choices .cg-btn[aria-pressed='true'],
 .cg-datetime__calendars .cg-btn[aria-pressed='true'],
@@ -7955,6 +7956,7 @@ input[type='checkbox']:disabled:checked {
   font-weight: var(--r-weight-semibold);
 }
 .cg-tpl-filter .cg-btn[aria-pressed='true']:hover:not(:disabled),
+.cg-btn.cg-shared-template-entry[aria-pressed='true']:hover:not(:disabled),
 .cg-timing-choice .cg-btn[aria-pressed='true']:hover:not(:disabled),
 .cg-playback__choices .cg-btn[aria-pressed='true']:hover:not(:disabled),
 .cg-datetime__calendars .cg-btn[aria-pressed='true']:hover:not(:disabled),
@@ -7966,6 +7968,46 @@ input[type='checkbox']:disabled:checked {
   background: var(--r-look-btn-sel-line);
   border-color: var(--r-look-btn-sel-ring);
   color: var(--r-look-btn-sel-ink);
+}
+.cg-shared-template-location {
+  overflow-wrap: anywhere;
+}
+.cg-shared-template-entry-row {
+  position: relative;
+}
+.cg-btn.cg-shared-template-entry {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: start;
+}
+.cg-shared-template-entry__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cg-shared-template-entry__preview-space,
+.cg-shared-template-entry__preview {
+  flex: 0 0 80px;
+  width: 80px;
+  height: 45px;
+}
+.cg-shared-template-entry__preview {
+  position: absolute;
+  inset-inline-start: calc(0.4rem + 1px);
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  pointer-events: none;
+}
+.cg-shared-template-entry__picture {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  object-fit: contain;
 }
 .cg-tpl-list {
   display: flex;

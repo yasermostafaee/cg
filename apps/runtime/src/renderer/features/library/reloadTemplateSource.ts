@@ -1,10 +1,12 @@
 import type { TemplateInfo } from '@cg/shared-ipc';
 import { importVcgFile, type ReloadVcgTarget } from './importVcgFile.js';
 import { newItemFields } from './newItemFields.js';
+import { readSharedTemplateFile } from './sharedTemplateSource.js';
 import {
   ensureTemplateSourcePermission,
   saveTemplateSource,
-  type TemplateSourceRecord,
+  templateSourceName,
+  type TemplateSource,
 } from './templateSourceStore.js';
 
 /** What Reload does to rows that already hold the template. */
@@ -13,6 +15,19 @@ export type ReloadDataPolicy = 'keep' | 'file-defaults';
 export interface ReloadTemplateResult {
   template: TemplateInfo;
   resetRows: number;
+}
+
+async function readLocalTemplateFile(handle: FileSystemFileHandle): Promise<File> {
+  if (!(await ensureTemplateSourcePermission(handle))) {
+    throw new Error(`Access to “${handle.name}” was not granted; the template was not reloaded.`);
+  }
+  try {
+    return await handle.getFile();
+  } catch (err) {
+    throw new Error(
+      `Could not read “${handle.name}” from its original location: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }
 
 /**
@@ -28,22 +43,28 @@ export interface ReloadTemplateResult {
 export async function reloadTemplateSource(
   template: TemplateInfo,
   channel: number | undefined,
-  source: Pick<TemplateSourceRecord, 'handle' | 'packageId'>,
+  source: TemplateSource,
   policy: ReloadDataPolicy,
   approvePackageChange?: ReloadVcgTarget['approvePackageChange'],
 ): Promise<ReloadTemplateResult | null> {
-  const { handle, packageId } = source;
-  if (!(await ensureTemplateSourcePermission(handle))) {
-    throw new Error(`Access to “${handle.name}” was not granted; the template was not reloaded.`);
-  }
-
+  const { shared, packageId } = source;
   let file: File;
-  try {
-    file = await handle.getFile();
-  } catch (err) {
-    throw new Error(
-      `Could not read “${handle.name}” from its original location: ${err instanceof Error ? err.message : String(err)}`,
-    );
+  if (shared === undefined) {
+    file = await readLocalTemplateFile(source.handle);
+  } else {
+    if (window.cg.link.bridgeAddress() !== shared.bridgeAddress) {
+      throw new Error(`“${shared.name}” is remembered on another CG Bridge.`);
+    }
+    try {
+      file = await readSharedTemplateFile(shared);
+    } catch (err) {
+      throw new Error(
+        `Could not read “${shared.name}” from Shared folder: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    if (window.cg.link.bridgeAddress() !== shared.bridgeAddress) {
+      throw new Error('CG Bridge changed. Open Templates again.');
+    }
   }
 
   const imported = await importVcgFile(file, channel, undefined, {
@@ -54,7 +75,8 @@ export async function reloadTemplateSource(
   });
   if (imported === null) return null;
   if (packageId !== imported.packageId) {
-    await saveTemplateSource(template.templateId, channel, handle, imported.packageId);
+    const remembered = source.shared === undefined ? source.handle : source.shared;
+    await saveTemplateSource(template.templateId, channel, remembered, imported.packageId);
   }
   const updated = await window.cg.templates.get({
     templateId: template.templateId,
@@ -62,7 +84,7 @@ export async function reloadTemplateSource(
   });
   if (updated === null) {
     throw new Error(
-      `“${handle.name}” reloaded, but CG Bridge could not read the updated template.`,
+      `“${templateSourceName(source)}” reloaded, but CG Bridge could not read the updated template.`,
     );
   }
 
