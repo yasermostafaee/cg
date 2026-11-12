@@ -25,8 +25,8 @@
       plates. Focused Designer tests cover mixed values, single-step Undo and independent edits.
 - [x] Windows Chromium verified the resize-only frame body uses a neutral cursor during hover
       and attempted drag, while its corners retain the resize cursor.
-- [x] Expose and export a single Auto layout permission on the top-level live composition.
-      Windows Chromium verified the checkbox is absent on nested presets and in per-frame settings.
+- [x] Windows Chromium verified Auto layout permission only in the registered preset Inspector.
+      The real 3ghab project retained the inherited choices and saved an explicit off for preset 3.
 - [x] Share Designer's layout calculation with CG Control without changing the Designer result.
 - [x] Windows Chromium verified Arrange and Swap move both styled titles with their frames,
       Discard restores the authored positions, Take carries the saved layout, and Update on air
@@ -34,15 +34,18 @@
 - [x] Verify a move-only frame moves its linked title without changing its authored frame size.
 - [x] Windows Chromium verified one-, two-, three- and four-frame presets, preset-specific
       controls and gaps, round-trip Swap, and saving the separate placements without off-air playout.
-- [x] Windows Chromium measured both composition checkboxes at the standard 14 × 14 CSS pixels
-      and verified their values in the exported VCG.
+- [x] Windows Chromium measured the preset permission checkbox at the standard 14 × 14 CSS pixels
+      and checked the exported VCG values.
 - [x] Windows Chromium verified typing and dragging gaps reflows PVW while the active preset's
       applied geometry stays fixed until Update. Partial and out-of-range input preserve the draft.
 - [x] Windows Chromium verified replacement import followed by one placement update to the
       held page and the same input seats. Bridge tests also verified a preset rename and refusal
       before commands when the authored frame rectangle or key changes.
-- [ ] Record the carrying Linux Playwright result for Auto layout and title movement.
-- [x] Windows Chromium verified that a root-authorized multi-frame preset with missing frame
+- [x] [Linux Playwright on the preceding frame-permission and shared-title change](https://github.com/yasermostafaee/cg/actions/runs/43229720073/job/131221598389) passed.
+- [x] Windows Chromium verified equal-size presets with opposite permissions and the legacy fallback.
+      Bridge integration kept resident manual frame edits available after replacing the permission.
+- [ ] Record the carrying Linux Playwright result for per-preset Auto layout.
+- [x] Windows Chromium verified that a authorized multi-frame preset with missing frame
       permissions shows the reason in Position.
 - [x] Windows Chromium with Bridge and mock AMCP verified the owner's `3ghab-composition` export
       with one-, two- and three-frame presets. The original showed the permission message. The
@@ -62,7 +65,7 @@
 - [x] Windows Chromium verified proportional Width, Height and Canvas resize for titled frame
       instances, free resize when unlocked, restoration of legacy stretched geometry and Undo.
 - [x] The owner's `2ghab-composition.cgproj` opened with its saved transforms. Restoring both
-      instances recovered 16:9 and retained the titles. Re-export verified the root permission
+      instances recovered 16:9 and retained the titles. The legacy export verified the saved output-wide permission
       and both 16:9 frames in the second preset.
 - [x] The ten B-175 Designer tests verified that active Arrangement cells keep their existing
       resize behavior. Windows Chromium rechecked titled instances inside a managed preset.

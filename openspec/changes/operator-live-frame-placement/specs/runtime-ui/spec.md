@@ -75,26 +75,45 @@ An opted-in frame in a one-plate composition SHALL travel with the artwork in th
 
 ### Requirement: Designers can authorize operator Auto layout
 
-Designer SHALL offer one **Allow Auto layout in CG Control** checkbox in the composition
-Inspector of the top-level live layout, off by default. Designer SHALL use the standard
-Inspector checkbox for this option and **Allow live plate overlap**. In Position, CG Control
-SHALL offer **Auto layout** only for an authorized template with at least two plates in its active
-preset, all with move and resize permission. It SHALL show the missing-permission reason when
+Designer SHALL offer **Allow Auto layout in CG Control** in the composition Inspector of each
+registered preset and SHALL default the setting off for newly created presets. The checkbox
+SHALL use the standard Inspector control and SHALL be absent from the top-level output,
+ordinary child compositions and individual plate settings. An existing preset without its own
+setting SHALL inherit its saved output's legacy permission. In Position, CG Control SHALL
+offer **Auto layout** for the active preset when its permission is enabled and it has at least
+two plates that allow movement and resize. It SHALL show the missing-permission reason when
 an authorized multi-frame preset contains a frame that cannot move or resize.
 The layout SHALL share Designer's aspect-aware geometry, horizontal and vertical gaps,
 two-plate arrangements, fuller row choices and spatial Swap. It SHALL preserve the template's
 layer order and the authored ratio of proportional frames.
 
-#### Scenario: Author the template permission once
+#### Scenario: Author permission independently in each preset
 
 - **GIVEN** a top-level composition contains live presets and their frame compositions
 - **WHEN** the author opens the top-level composition, the presets, and their frame compositions
-- **THEN** the Auto layout checkbox appears in the top-level composition Inspector only
-- **AND** the exported live layout uses the top-level composition's permission
+- **THEN** the checkbox appears only in the registered preset composition Inspector
+- **WHEN** the author enables one preset and leaves the other off
+- **THEN** the exported template carries their individual permissions
+- **AND** switching the active preset in CG Control changes Arrange availability even when the frame counts match
+
+#### Scenario: Keep a legacy permission until a preset overrides it
+
+- **GIVEN** a project or template contains only a legacy output-wide permission
+- **WHEN** Designer or CG Control opens it
+- **THEN** its existing presets inherit that permission
+- **WHEN** the author turns off one inherited preset and re-exports
+- **THEN** that preset is disabled and untouched presets keep their effective permissions
+- **AND** older consumers that ignore the per-preset field do not receive a global grant
+
+#### Scenario: Reimport a changed permission on air
+
+- **GIVEN** a verified programme page is resident on the primary engine
+- **WHEN** a template replacement only changes Auto layout permission
+- **THEN** permitted manual frame edits can still update the resident page and its existing inputs
 
 #### Scenario: A frame lacks permission to be arranged
 
-- **GIVEN** the template author enabled Auto layout
+- **GIVEN** the author enabled Auto layout for the active preset
 - **WHEN** the operator selects a preset with at least two frames and one lacks movement or resize permission
 - **THEN** Position shows the missing authoring permission and keeps Arrange unavailable
 

@@ -5536,7 +5536,11 @@ export class CasparRuntime {
         ...arrangement,
         name: undefined,
       })),
-      looks: carrier.looks?.map((look) => ({ ...look, name: undefined })),
+      looks: carrier.looks?.map((look) => ({
+        ...look,
+        name: undefined,
+        allowOperatorAutoLayout: undefined,
+      })),
     });
     return isDeepStrictEqual(frameContract(held), frameContract(listed)) ? held : undefined;
   }

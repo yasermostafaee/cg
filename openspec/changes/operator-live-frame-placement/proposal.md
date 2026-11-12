@@ -13,5 +13,6 @@ a shape and a Repeater. In CG Control, the available layouts and settings follow
 separately. Typing or dragging a valid gap reflows that preset in PVW. Allow frame edits on
 the running page after a template replacement when the live frame layout remains compatible.
 
-Place the template-wide Auto layout permission in the top-level composition Inspector. Show the
-authoring permission required when CG Control cannot arrange an authorized multi-frame preset.
+Place Auto layout permission in the composition Inspector for each registered preset. Preserve
+legacy permissions for existing templates and show the authoring permission required when CG
+Control cannot arrange an authorized multi-frame preset.

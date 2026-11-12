@@ -8,4 +8,4 @@
 - [x] 1.6 Derive shared title identities from reused live-frame artwork and stage its instance field paths together.
 - [x] 1.7 Windows Chromium verified cross-preset draft, Discard and Update on air after VCG import
       and with the legacy Bridge page fallback.
-- [ ] 1.8 Record the carrying Linux E2E result for shared title values.
+- [x] 1.8 [Carrying Linux E2E for shared title values](https://github.com/yasermostafaee/cg/actions/runs/43229720073/job/131221598389) passed on the commit containing the change.

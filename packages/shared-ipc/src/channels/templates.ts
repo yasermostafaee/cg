@@ -19,6 +19,7 @@ import {
   liveRevealMaskFromRects,
   liveRevealRects,
   maskRectsWithPlacements,
+  resolveOperatorAutoLayout,
 } from '@cg/shared-schema';
 import type {
   LiveCropFocus,
@@ -102,6 +103,8 @@ export const TemplateLookSchema = z.object({
   instanceId: z.string().min(1).optional(),
   /** Cut-only in v1 (`design.md` §14.4 parks the other modes with the animated phase). */
   entered: LookTransitionSchema,
+  /** The effective CG Control Auto layout permission for this preset. */
+  allowOperatorAutoLayout: z.boolean().optional(),
   /** routeKey → scene-px rect while this look is active. No entry = not in this look. */
   rects: z.record(z.string(), LiveSourceRectSchema),
   /** An overlap-enabled preset's plate IDs in authored bottom-to-top paint order. */
@@ -173,7 +176,7 @@ export const TemplateLiveSourcesSchema = z.object({
   defaultLookId: z.string().min(1).optional(),
   /** The authored bottom-to-top order for an overlap-enabled layout without presets. */
   platePaintOrder: z.array(IdSchema).optional(),
-  /** The author allows the local Auto Layout tool within existing frame permissions. */
+  /** Legacy output-wide grant for carriers that predate preset-specific permissions. */
   allowOperatorAutoLayout: z.literal(true).optional(),
   /** D-201 — this template needs its marked authored elements on a transparent page above plates. */
   foregroundOverlay: z.literal(true).optional(),
@@ -235,6 +238,14 @@ export function lookPlateRects(
   const look = activeLookOf(live, activeLookId);
   if (look !== undefined) return { ...look.rects };
   return Object.fromEntries(live.sources.map((s) => [s.sourceId, s.rect] as const));
+}
+
+/** The active preset's Auto layout permission, with the legacy output-wide fallback. */
+export function lookAllowsOperatorAutoLayout(
+  live: TemplateLiveSources,
+  activeLookId: string | undefined,
+): boolean {
+  return resolveOperatorAutoLayout(activeLookOf(live, activeLookId), live.allowOperatorAutoLayout);
 }
 
 /** Resolve placement permissions for the same Look and route keys as the plate rects. */

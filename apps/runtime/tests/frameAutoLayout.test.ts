@@ -20,10 +20,15 @@ const leftFrame = {
 const rightFrame = { frameKey: 'pair/right', artworkKey: 'pair/right', resize: 'free' } as const;
 const soloFrame = { ...leftFrame, frameKey: 'solo/left', artworkKey: 'solo' };
 
-function carrier(
+function carrier({
   allowed = true,
-  pairFrames: Record<string, LiveFrameTarget> = { right: rightFrame, left: leftFrame },
-) {
+  pairFrames = { right: rightFrame, left: leftFrame },
+  pairPermission,
+}: {
+  allowed?: boolean;
+  pairFrames?: Record<string, LiveFrameTarget>;
+  pairPermission?: boolean;
+} = {}) {
   return TemplateLiveSourcesSchema.parse({
     resolution: { width: 1920, height: 1080 },
     defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
@@ -48,6 +53,7 @@ function carrier(
         entered: { mode: 'cut' },
         rects: { right, left },
         operatorFrames: pairFrames,
+        ...(pairPermission !== undefined && { allowOperatorAutoLayout: pairPermission }),
       },
       {
         id: 'other',
@@ -63,7 +69,19 @@ afterEach(__resetDraftsForTest);
 
 describe('Auto layout frame eligibility', () => {
   it('requires the authored permission, even with two individually editable frames', () => {
-    expect(frameAutoLayoutAvailability(carrier(false), 'pair')).toEqual({ kind: 'hidden' });
+    expect(frameAutoLayoutAvailability(carrier({ allowed: false }), 'pair')).toEqual({
+      kind: 'hidden',
+    });
+  });
+
+  it('allows Auto layout for a preset with explicit permission', () => {
+    const live = carrier({ allowed: false, pairPermission: true });
+    expect(frameAutoLayoutAvailability(live, 'pair').kind).toBe('eligible');
+  });
+
+  it('hides Auto layout for an explicitly disabled preset even with legacy template permission', () => {
+    const live = carrier({ pairPermission: false });
+    expect(frameAutoLayoutAvailability(live, 'pair')).toEqual({ kind: 'hidden' });
   });
 
   it('uses only the active preset and returns its frames in declaration order', () => {
@@ -85,7 +103,7 @@ describe('Auto layout frame eligibility', () => {
   ] as const;
   it.each(incompatible)('reports missing permissions if a frame is $name', ({ target }) => {
     const frames = { left: leftFrame, ...(target !== undefined && { right: target }) };
-    expect(frameAutoLayoutAvailability(carrier(true, frames), 'pair')).toEqual({
+    expect(frameAutoLayoutAvailability(carrier({ pairFrames: frames }), 'pair')).toEqual({
       kind: 'permissions',
     });
   });

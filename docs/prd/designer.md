@@ -6111,10 +6111,11 @@ applies it, and Discard restores the prior crop.
 An on-air crop-only update reframes the existing source directly. Reset crop can still apply
 after a Reload or replacement import with matching live framing.
 
-**Operator Auto layout:** The author enables **Allow Auto layout in CG Control** once in the
-Inspector of the top-level output composition. It uses the same compact checkbox as live plate overlap.
-A preset with at least two live plates exposes **Auto layout** under Position when
-every plate permits both move and resize. An authorized preset with a locked frame shows
+**Operator Auto layout:** The author enables **Allow Auto layout in CG Control** in each preset's
+composition Inspector. The setting defaults off for new presets. Older presets can inherit the
+permission from their saved output. An authorized preset with at least two live plates exposes
+**Auto layout** under Position when every plate permits both move and resize. An authorized
+preset with a locked frame shows
 the missing permission in Position. The control uses the same aspect-aware arrangement as
 Designer, with separate gaps, row placement choices and **Swap frame order**. Arrange or Swap
 stages all frame placements for the active preset together in PVW. Typing or dragging a valid
@@ -6791,11 +6792,13 @@ CG Control after swapping left/right inputs is not an acceptable operating workf
   composition's proportions during numeric and Canvas resize. The author can unlock it or restore
   a previously stretched instance. Opening a saved project preserves its transforms. Active cells
   in a legacy Arrangement use the Arrangement's own sizing rules.
-- WHEN authoring a top-level live layout THEN its composition Inspector offers one **Allow Auto
-  layout in CG Control** checkbox for the exported template.
-- WHEN the active preset contains at least two frames THEN the root permission and each frame's
-  movement and resize permissions determine whether Arrange is available. If the root permission
-  is enabled but a frame is locked, CG Control shows the reason.
+- WHEN authoring a registered preset THEN its composition Inspector offers **Allow Auto layout in
+  CG Control** for that preset. The control is exclusive to registered presets.
+- WHEN the active preset contains at least two frames THEN that preset's permission and each frame's
+  movement and resize permissions determine whether Arrange is available. If the preset is
+  authorized but a frame is locked, CG Control shows the reason.
+- WHEN an existing output has a legacy Auto layout permission THEN previously unset presets inherit
+  it until the author chooses their individual settings.
 - WHEN audio or locked layers are selected with eligible visuals THEN Auto layout leaves those
   layers alone
 

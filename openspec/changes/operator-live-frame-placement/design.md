@@ -62,8 +62,17 @@ the preset ID. The Inspector derives each preset's available layouts from its ow
 Gap controls use the shared numeric scrub input. A valid edit stages a full layout immediately.
 An incomplete value or a gap that cannot fit the frames preserves the last valid draft.
 
-Designer shows the export permission on the top-level live composition. The nested presets and
-frame compositions retain their own geometry and existing saved settings. Their individual
-**Allow move** and **Resize** settings control what the operator can change. For an opted-in
-multi-frame preset where some frames cannot move or resize, Position explains the missing
-permission. A preset with one frame needs no arrangement controls.
+Designer stores the permission on the managed preset record and shows its checkbox in the
+registered preset's composition Inspector. New presets default off. A saved preset with no
+explicit value inherits its owner's legacy output permission. An explicit false overrides a
+legacy true. The old permission fields remain readable, and ordinary nested compositions
+have no role in the inheritance.
+
+The carrier retains the root flag for exports with only a legacy permission. Once any preset
+has an explicit choice, the carrier sends each preset's effective value and omits the root flag.
+This prevents older consumers that ignore the preset field from enabling unauthorized presets.
+A catalogue change limited to Auto layout permission leaves the resident geometry compatible.
+
+Each frame's **Allow move** and **Resize** settings independently control its geometry edits.
+For an opted-in multi-frame preset where some frames cannot move or resize, Position explains
+the missing permission. A preset with one frame needs no arrangement controls.

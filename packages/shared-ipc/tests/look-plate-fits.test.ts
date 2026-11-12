@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   TemplateLiveSourcesSchema,
   framePlacementRects,
+  lookAllowsOperatorAutoLayout,
   lookOperatorFrames,
   lookOperatorMasks,
   lookPlateFocuses,
@@ -206,6 +207,27 @@ it('accepts an explicit Auto Layout authorization and preserves omission on olde
   expect(
     TemplateLiveSourcesSchema.safeParse({ ...legacy, allowOperatorAutoLayout: false }).success,
   ).toBe(false);
+});
+
+it('resolves Auto layout by the active or default preset before using the legacy grant', () => {
+  const legacy = { ...withLooks(), allowOperatorAutoLayout: true } as const;
+  expect(lookAllowsOperatorAutoLayout(legacy, 'grid')).toBe(true);
+  expect(lookAllowsOperatorAutoLayout(withoutLooks(), undefined)).toBe(false);
+
+  const live = TemplateLiveSourcesSchema.parse({
+    ...legacy,
+    looks: legacy.looks?.map((look) => ({
+      ...look,
+      ...(look.id === 'grid' && { allowOperatorAutoLayout: false }),
+      ...(look.id === 'solo' && { allowOperatorAutoLayout: true }),
+    })),
+  });
+  expect(live.looks?.map((look) => look.allowOperatorAutoLayout)).toEqual([false, true, undefined]);
+  expect(lookAllowsOperatorAutoLayout(live, 'grid')).toBe(false);
+  expect(lookAllowsOperatorAutoLayout(live, 'solo')).toBe(true);
+  expect(lookAllowsOperatorAutoLayout(live, 'bare')).toBe(true);
+  expect(lookAllowsOperatorAutoLayout(live, undefined)).toBe(false);
+  expect(lookAllowsOperatorAutoLayout(live, 'stale-id')).toBe(false);
 });
 
 it('moves only the authorized mask window in its own Look and preserves authored defaults', () => {

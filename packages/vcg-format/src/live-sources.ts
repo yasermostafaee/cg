@@ -21,6 +21,7 @@ import type {
   LookTransition,
   Scene,
 } from '@cg/shared-schema';
+import { materializePresetAutoLayout } from './preset-auto-layout.js';
 
 /**
  * D-137 / C-015 — derive the runtime's Live Source DECLARATIONS from a scene.
@@ -273,6 +274,7 @@ export interface TemplateLookCarrier {
   name: string;
   instanceId: string;
   entered: LookTransition;
+  allowOperatorAutoLayout?: boolean | undefined;
   rects: Record<string, LiveSourceRect>;
   platePaintOrder?: string[] | undefined;
   operatorFrames?: Record<string, LiveFrameTarget> | undefined;
@@ -549,6 +551,9 @@ export function collectLookCarrier(scene: Scene): {
         name: l.name,
         instanceId: l.instanceId,
         entered: l.entered,
+        ...(l.allowOperatorAutoLayout !== undefined && {
+          allowOperatorAutoLayout: l.allowOperatorAutoLayout,
+        }),
         rects: rectsByLook.get(l.id) ?? {},
         ...(order.length > 1 && { platePaintOrder: order }),
         ...(operatorFramesByLook.has(l.id) && { operatorFrames: operatorFramesByLook.get(l.id) }),
@@ -566,7 +571,7 @@ export function collectLookCarrier(scene: Scene): {
   };
 }
 
-export function buildTemplateLiveSources(scene: Scene): {
+export function buildTemplateLiveSources(authored: Scene): {
   resolution: Scene['resolution'];
   defaultPosition: ReturnType<typeof resolveDefaultPosition>;
   sources: LiveSourceDeclaration[];
@@ -577,6 +582,7 @@ export function buildTemplateLiveSources(scene: Scene): {
   allowOperatorAutoLayout?: true;
   foregroundOverlay?: true;
 } {
+  const scene = materializePresetAutoLayout(authored);
   const lookCarrier = collectLookCarrier(scene);
   const foregroundOverlay = liveForegroundKeys(scene).size > 0;
   const order =

@@ -575,8 +575,8 @@
           "en": "Designer groups Fit, Allow move and Resize under CG Control for single and multiple live plates."
         },
         {
-          "fa": "با اجازهٔ طراح، Auto layout بر اساس تعداد قاب‌های هر پریست چیدمان و Swap را در PVW پیش‌نمایش می‌دهد. عنوان همراه قاب جابه‌جا می‌شود و تنظیمات چیدمان هر پریست جداست.",
-          "en": "With the designer's permission, Auto layout previews arrangements and seat swaps based on the active preset's frames. Titles move with their frames and each preset keeps its own layout settings."
+          "fa": "طراح Auto layout را جداگانه در Inspector هر پریست فعال می‌کند. در CG Control، چیدمان و Swap قاب‌های مجاز در PVW پیش‌نمایش داده می‌شود و عنوان همراه قاب جابه‌جا می‌شود.",
+          "en": "Designer authors enable Auto layout in each preset’s Inspector. CG Control previews arrangements and seat swaps for eligible frames in PVW and moves titles with their frames."
         },
         {
           "fa": "Auto layout در Designer برای انتخاب ترکیبی لایه‌های تصویری هم در دسترس است. هنگام چیدمان و Swap در پریست، عنوان و طراحی هر قاب همراه آن جابه‌جا می‌شوند.",

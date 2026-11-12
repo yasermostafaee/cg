@@ -1,6 +1,7 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   framePlacementRects,
+  lookAllowsOperatorAutoLayout,
   lookOperatorFrames,
   lookPlateRects,
   type TemplateLiveSources,
@@ -61,7 +62,7 @@ export function frameAutoLayoutAvailability(
   live: TemplateLiveSources,
   lookId: string | undefined,
 ): AutoLayoutAvailability {
-  if (live.allowOperatorAutoLayout !== true) return { kind: 'hidden' };
+  if (!lookAllowsOperatorAutoLayout(live, lookId)) return { kind: 'hidden' };
   const rects = lookPlateRects(live, lookId);
   const rectCount = Object.keys(rects).length;
   if (rectCount < 2) return { kind: 'hidden' };

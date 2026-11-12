@@ -87,8 +87,18 @@ export const LookSchema = z.object({
   instanceId: z.string().min(1),
   /** How this look is entered — a property of the look being ENTERED (§13.6.2's scope). */
   entered: LookTransitionSchema.default(CUT_LOOK_TRANSITION),
+  /** Whether this preset grants CG Control's Auto layout tool. Omission uses the legacy output setting. */
+  allowOperatorAutoLayout: z.boolean().optional(),
 });
 export type Look = z.infer<typeof LookSchema>;
+
+/** A preset may explicitly grant or deny Auto layout independently of the legacy output. */
+export function resolveOperatorAutoLayout(
+  look: Pick<Look, 'allowOperatorAutoLayout'> | undefined,
+  legacyAllowed: boolean | undefined,
+): boolean {
+  return look?.allowOperatorAutoLayout ?? legacyAllowed ?? false;
+}
 
 export const LookGroupSchema = z
   .object({

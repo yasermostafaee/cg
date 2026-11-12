@@ -101,6 +101,7 @@ export function registeredLookCompositionIds(scene: Scene | null): ReadonlySet<s
 export function registeredLookForComposition(
   scene: Scene | null,
   compositionId: string,
+  preferredLookId?: string | null,
 ): Look | undefined {
   if (scene === null) return undefined;
   const group = projectLookGroup(scene);
@@ -115,7 +116,8 @@ export function registeredLookForComposition(
       }
     }
   }
-  return group.looks.find((look) => instanceIds.has(look.instanceId));
+  const matches = group.looks.filter((look) => instanceIds.has(look.instanceId));
+  return matches.find((look) => look.id === preferredLookId) ?? matches[0];
 }
 
 /**
@@ -304,6 +306,8 @@ function registerLook(compId: string, lookId: string, name: string): string | nu
     name,
     instanceId,
     entered: CUT_LOOK_TRANSITION,
+    // A new preset defaults off even in a project whose older presets inherit an opt-in.
+    ...(home.allowOperatorAutoLayout === true && { allowOperatorAutoLayout: false }),
   };
   const nextGroup: LookGroup = {
     ...withLook,
@@ -506,6 +510,23 @@ export const looksSlice = {
     const group = projectLookGroup(current.scene);
     if (group === undefined || !group.looks.some((l) => l.id === id)) return;
     set({ scene: writeProjectGroup(current.scene, { ...group, defaultLookId: id }) });
+  },
+
+  /** Set one registered preset's permission, including an explicit legacy opt-out. */
+  setLookOperatorAutoLayout(id: string, allowed: boolean): void {
+    const project = current.scene;
+    const group = projectLookGroup(project);
+    const look = group?.looks.find((candidate) => candidate.id === id);
+    if (project === null || group === undefined || look === undefined) return;
+    if (look.allowOperatorAutoLayout === allowed) return;
+    set({
+      scene: writeProjectGroup(project, {
+        ...group,
+        looks: group.looks.map((candidate) =>
+          candidate === look ? { ...candidate, allowOperatorAutoLayout: allowed } : candidate,
+        ),
+      }),
+    });
   },
 
   /** Which look the CANVAS shows — session state, driven by the picker. */

@@ -10,6 +10,7 @@ import { utf8ToBytes } from '@noble/hashes/utils';
 import { writeZip } from './zip.js';
 import { computeIntegrity } from './integrity.js';
 import { signEd25519, type Ed25519KeyInput } from './sign.js';
+import { materializePresetAutoLayout } from './preset-auto-layout.js';
 
 export interface PackInput {
   /** The Scene to embed as template.json. Validated before packing. */
@@ -79,10 +80,8 @@ export async function pack(input: PackInput): Promise<Uint8Array> {
   // B-129 — the artifact never carries the editor's backdrop. Defence in depth: the
   // guard is the render path's `author`-mode check; this makes the value unable to
   // travel at all. ONE helper, shared with the single-file exporter.
-  files.set(
-    'template.json',
-    utf8ToBytes(JSON.stringify(withoutEditorBackdrop(input.scene), null, 2)),
-  );
+  const packedScene = withoutEditorBackdrop(materializePresetAutoLayout(input.scene));
+  files.set('template.json', utf8ToBytes(JSON.stringify(packedScene, null, 2)));
   files.set('index.html', utf8ToBytes(input.indexHtml));
   files.set('cg.js', utf8ToBytes(input.cgJs));
   files.set('cg.css', utf8ToBytes(input.cgCss));

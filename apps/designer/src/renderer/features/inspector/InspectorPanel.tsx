@@ -1,14 +1,15 @@
-import { directCompositionRefs, flattenElements } from '@cg/shared-schema';
+import { flattenElements, resolveOperatorAutoLayout } from '@cg/shared-schema';
 import type { AnimatableProperty, Element, FieldBinding, Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { Control } from '../../ui/Control.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
+import { projectLookGroupHomeId, registeredLookForComposition } from '../../state/slices/looks.js';
 import { BackgroundControl } from '../canvas/BackgroundControl.js';
 import { describeBinding, elementNameResolver } from '../fields/bind-resolver.js';
 import { isFixedFileFieldId } from '../fields/fixedFileField.js';
 import { CollapseSection } from './CollapseSection.js';
 import { RealtimeNumberInput, SelectField, VectorField } from './controls.js';
-import { DynamicDataSection, FixedFileSourceSection } from './DynamicDataSection.js';
+import { CheckRow, DynamicDataSection, FixedFileSourceSection } from './DynamicDataSection.js';
 import { KeyframeInspector } from './KeyframeInspector.js';
 import { MultiSelectSection } from './MultiSelectSection.js';
 import { LooksSection } from './LooksSection.js';
@@ -74,14 +75,9 @@ export function InspectorPanel({
 }
 
 function SceneInspector({ scene }: { scene: Scene }): JSX.Element {
-  const compositionId = useDesignerSelector((state) => state.activeCompositionId);
   const hasLivePlates = flattenElements(scene).some(
     ({ element }) => element.type === 'video-placeholder',
   );
-  const showAutoLayout =
-    hasLivePlates &&
-    compositionId !== null &&
-    scene.compositions?.some((doc) => directCompositionRefs(doc).has(compositionId)) !== true;
   return (
     <aside className={s.panel} aria-label="Inspector">
       <h2 className={s.headingFirst}>COMPOSITION</h2>
@@ -92,8 +88,9 @@ function SceneInspector({ scene }: { scene: Scene }): JSX.Element {
       <Row label="elements" value={String(countElements(scene))} />
       <BackgroundControl editorBackdrop={scene.editorBackdrop} variant="full" />
       {(hasLivePlates || scene.allowLivePlateOverlap === true) && (
-        <LivePlateCompositionSettings composition={scene} showAutoLayout={showAutoLayout} />
+        <LivePlateCompositionSettings composition={scene} />
       )}
+      <PresetAutoLayoutSetting />
       <PlayoutSection scene={scene} />
       {/* `multibox-layout-switch` C2 — beside Playout, because an arrangement is a property
           of the COMPOSITION: the thing that becomes the `.vcg` on one layer. */}
@@ -102,6 +99,25 @@ function SceneInspector({ scene }: { scene: Scene }): JSX.Element {
           bug in the new surface cannot strand the owner. `tasks.md` §1b P2.DEL deletes it. */}
       <LooksSection scene={scene} />
     </aside>
+  );
+}
+
+function PresetAutoLayoutSetting(): JSX.Element | null {
+  const project = useDesignerSelector((state) => state.scene);
+  const compositionId = useDesignerSelector((state) => state.activeCompositionId);
+  const activeLookId = useDesignerSelector((state) => state.activeLookId);
+  if (project === null || compositionId === null) return null;
+  const preset = registeredLookForComposition(project, compositionId, activeLookId);
+  if (preset === undefined) return null;
+  const homeId = projectLookGroupHomeId(project);
+  const home = homeId === null ? project : project.compositions?.find((doc) => doc.id === homeId);
+  return (
+    <CheckRow
+      label="Allow Auto layout in CG Control"
+      title="This preset needs at least two frames with Allow move enabled and Resize unlocked."
+      checked={resolveOperatorAutoLayout(preset, home?.allowOperatorAutoLayout)}
+      onChange={(allowed) => designerStore.setLookOperatorAutoLayout(preset.id, allowed)}
+    />
   );
 }
 

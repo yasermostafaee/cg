@@ -2255,7 +2255,7 @@ test('Auto layout stages both frame boxes and keeps each styled title with its i
   }
 });
 
-test('Auto layout retains separate controls and drafts for each active preset', async ({
+test('Auto layout follows the active preset permission and retains separate controls and drafts', async ({
   page,
 }) => {
   const handle = await boot(true);
@@ -2276,7 +2276,8 @@ test('Auto layout retains separate controls and drafts for each active preset', 
   });
   const presets = [
     { id: 'solo', name: 'Solo', count: 1 },
-    { id: 'pair', name: 'Pair', count: 2 },
+    { id: 'pair', name: 'Pair', count: 2, allowOperatorAutoLayout: true },
+    { id: 'manual-pair', name: 'Manual pair', count: 2, allowOperatorAutoLayout: false },
     { id: 'locked-pair', name: 'Locked pair', count: 2 },
     { id: 'triple', name: 'Triple', count: 3 },
     { id: 'quad', name: 'Quad', count: 4 },
@@ -2292,7 +2293,12 @@ test('Auto layout retains separate controls and drafts for each active preset', 
       {
         id: 'layout-presets',
         defaultLookId: 'pair',
-        looks: presets.map(({ id, name }) => ({ id, name, instanceId: `instance-${id}` })),
+        looks: presets.map(({ id, name, allowOperatorAutoLayout }) => ({
+          id,
+          name,
+          instanceId: `instance-${id}`,
+          allowOperatorAutoLayout,
+        })),
       },
     ],
     layers: [
@@ -2420,9 +2426,16 @@ test('Auto layout retains separate controls and drafts for each active preset', 
   const pairDraft = await read();
   await expect(row.getByText('● draft', { exact: true })).toBeVisible();
 
+  const refusal = inspector.getByText(/^Auto layout unavailable\./);
+  await choosePreset('manual-pair', 2);
+  await expect(layout).toHaveCount(0);
+  await expect(refusal).toHaveCount(0);
+  await expect(
+    pvw.getByRole('button', { name: 'Edit frames in Preview', exact: true }),
+  ).toBeEnabled();
+
   await choosePreset('solo', 1);
   await expect(layout).toHaveCount(0);
-  const refusal = inspector.getByText(/^Auto layout unavailable\./);
   await expect(refusal).toHaveCount(0);
   await choosePreset('locked-pair', 2);
   await expect(layout).toHaveCount(0);
@@ -2493,7 +2506,7 @@ test('Auto layout retains separate controls and drafts for each active preset', 
       const placements = stackItem()?.framePlacements ?? [];
       return presets.map(({ id }) => placements.filter(({ lookId }) => lookId === id).length);
     })
-    .toEqual([0, 2, 0, 3, 4]);
+    .toEqual([0, 2, 0, 0, 3, 4]);
   expect(sent()).toEqual(beforeUpdate);
 });
 

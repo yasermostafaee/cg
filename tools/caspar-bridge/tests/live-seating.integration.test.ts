@@ -1374,7 +1374,7 @@ it('R-108 keeps current programme frames during Reload defaults and uses the new
   expect(r.stackSnapshot()[0]?.framePlacementsPendingReset).toBeUndefined();
 });
 
-it('keeps editing the held programme frame after Reload changes artwork and a preset label', async () => {
+it('keeps editing the held programme frame after Reload changes artwork and preset Auto layout', async () => {
   const info = template([{ id: 'guest-1', rect: BOX }]);
   if (info.liveSources === undefined) throw new Error('Missing frame carrier');
   const look = {
@@ -1385,7 +1385,10 @@ it('keeps editing the held programme frame after Reload changes artwork and a pr
     operatorFrames: { 'guest-1': FRAME },
   };
   const liveSources = { ...info.liveSources, defaultLookId: look.id, looks: [look] };
-  const original = { ...info, liveSources };
+  const original = {
+    ...info,
+    liveSources: { ...liveSources, allowOperatorAutoLayout: true as const },
+  };
   const placement = { ...MOVED_FRAME, lookId: look.id };
   const r = await boot({ template: original, html: FRAME_HTML });
   const itemId = 'item-1';
@@ -1406,8 +1409,7 @@ it('keeps editing the held programme frame after Reload changes artwork and a pr
         name: 'Revised title artwork',
         liveSources: {
           ...liveSources,
-          looks: [{ ...look, name: 'Guest' }],
-          allowOperatorAutoLayout: true,
+          looks: [{ ...look, name: 'Guest', allowOperatorAutoLayout: false }],
         },
       },
       revisedHtml,

@@ -6,6 +6,7 @@ import {
   activeLook,
   activeLookGroup,
   projectLookGroup,
+  registeredLookForComposition,
 } from '../src/renderer/state/slices/looks.js';
 import { activeLayersOf } from '../src/renderer/state/scene-doc.js';
 
@@ -96,6 +97,34 @@ describe('B-188 — a group owns no source list, and nothing can write one', () 
     const group = activeLookGroup(scene());
     expect(group?.looks).toHaveLength(2);
     expect('sources' in (group ?? {})).toBe(false);
+  });
+});
+
+describe('CG Control Auto layout permission', () => {
+  it('writes only the registered preset and defaults a new preset off under a legacy opt-in', () => {
+    fresh();
+    designerStore.createLookGroup();
+    const first = designerStore.addLook()!;
+    const second = designerStore.addLook()!;
+    designerStore.updateScene({ allowOperatorAutoLayout: true });
+    const added = designerStore.addLook()!;
+    expect(projectLookGroup(scene())?.looks.map((look) => look.allowOperatorAutoLayout)).toEqual([
+      undefined,
+      undefined,
+      false,
+    ]);
+
+    designerStore.editLookContents(second);
+    const compositionId = designerStore.get().activeCompositionId!;
+    expect(registeredLookForComposition(scene(), compositionId)?.id).toBe(second);
+    designerStore.setLookOperatorAutoLayout(second, false);
+    designerStore.setLookOperatorAutoLayout(added, true);
+    const looks = projectLookGroup(scene())?.looks;
+    expect(looks?.map((look) => [look.id, look.allowOperatorAutoLayout])).toEqual([
+      [first, undefined],
+      [second, false],
+      [added, true],
+    ]);
   });
 });
 

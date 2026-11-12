@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Element, Scene } from '@cg/shared-schema';
+import type { Composition, Element, Scene } from '@cg/shared-schema';
 import { pack } from '../src/pack.js';
 import { unpack } from '../src/unpack.js';
 import { verify } from '../src/verify.js';
@@ -43,7 +43,7 @@ const inst = (id: string, compositionId: string): Element =>
     compositionId,
     transform: xf(0, 0, 1920, 1080),
   }) as unknown as Element;
-const lookComp = (id: string, children: Element[]) => ({
+const lookComp = (id: string, children: Element[]): Composition => ({
   id,
   name: id,
   resolution: { width: 1920, height: 1080 },
@@ -67,6 +67,71 @@ describe('pack → unpack round-trip', () => {
     });
     const { scene } = await unpack(buf);
     expect(scene).toEqual(fixtureScene);
+  });
+
+  it('preserves per-preset Auto layout permissions and removes the global grant from a scoped VCG', async () => {
+    const baseLayer = fixtureScene.layers[0];
+    if (baseLayer === undefined) throw new Error('fixture missing layer 0');
+    const cut = { mode: 'cut' } as const;
+    const authored: Scene = {
+      ...fixtureScene,
+      allowOperatorAutoLayout: true,
+      layers: [
+        {
+          ...baseLayer,
+          children: [
+            inst('instance-off', 'framed'),
+            inst('instance-inherited', 'framed'),
+            inst('instance-on', 'framed'),
+          ],
+        },
+      ],
+      compositions: [lookComp('framed', [box('plate', 'guest-1', 0, 0)])],
+      lookGroups: [
+        {
+          id: 'group',
+          defaultLookId: 'off',
+          looks: [
+            {
+              id: 'off',
+              name: 'Off',
+              instanceId: 'instance-off',
+              entered: cut,
+              allowOperatorAutoLayout: false,
+            },
+            { id: 'inherited', name: 'Inherited', instanceId: 'instance-inherited', entered: cut },
+            {
+              id: 'on',
+              name: 'On',
+              instanceId: 'instance-on',
+              entered: cut,
+              allowOperatorAutoLayout: true,
+            },
+          ],
+        },
+      ],
+    };
+    const buf = await pack({
+      scene: authored,
+      manifestExtras: fixtureManifestExtras,
+      indexHtml: fixtureIndexHtml,
+      cgJs: fixtureCgJs,
+      cgCss: fixtureCgCss,
+    });
+    const { scene } = await unpack(buf);
+    const carrier = buildTemplateLiveSources(scene);
+    expect((await verify(buf)).ok).toBe(true);
+    expect(scene).not.toHaveProperty('allowOperatorAutoLayout');
+    expect(scene.lookGroups?.[0]?.looks.map((look) => look.allowOperatorAutoLayout)).toEqual([
+      false,
+      true,
+      true,
+    ]);
+    expect(carrier).not.toHaveProperty('allowOperatorAutoLayout');
+    expect(carrier.looks?.map((look) => look.allowOperatorAutoLayout)).toEqual([false, true, true]);
+    expect(buildTemplateLiveSources(authored)).toEqual(carrier);
+    expect(authored.allowOperatorAutoLayout).toBe(true);
+    expect(authored.lookGroups?.[0]?.looks[1]).not.toHaveProperty('allowOperatorAutoLayout');
   });
 
   it('B-129 — the packed scene carries NO editor backdrop', async () => {

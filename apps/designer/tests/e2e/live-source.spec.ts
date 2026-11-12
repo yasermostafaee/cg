@@ -606,14 +606,7 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await expect(app.multiInspector.getByRole('checkbox', { name: autoLayoutName })).toHaveCount(0);
 
     await app.deselect();
-    const autoLayout = app.inspector.getByRole('checkbox', { name: autoLayoutName });
-    await expect(autoLayout).not.toBeChecked();
-    expect(await autoLayout.boundingBox()).toMatchObject({ width: 14, height: 14 });
-    await autoLayout.check();
-    await expect(autoLayout).toBeChecked();
-    await autoLayout.uncheck();
-    await expect(autoLayout).not.toBeChecked();
-    await autoLayout.check();
+    await expect(app.inspector.getByRole('checkbox', { name: autoLayoutName })).toHaveCount(0);
     await expect(allow).toBeChecked();
     await allow.uncheck();
     await expect(exportButton).toHaveAttribute('data-export-blocked', 'errors');
@@ -626,11 +619,11 @@ test.describe('Live Source (D-137 phase 1)', () => {
     const [download] = await Promise.all([app.page.waitForEvent('download'), exportButton.click()]);
     const { scene, manifest } = await unpack(await readFile(await download.path()));
     expect(scene.allowLivePlateOverlap).toBe(true);
-    expect(scene.allowOperatorAutoLayout).toBe(true);
+    expect(scene.allowOperatorAutoLayout).toBeUndefined();
     expect(manifest.compatibility.minRuntimeVersion).toBe('1.2.3');
     const carrier = buildTemplateLiveSources(scene);
     expect(carrier.platePaintOrder).toEqual(['front', 'back']);
-    expect(carrier.allowOperatorAutoLayout).toBe(true);
+    expect(carrier.allowOperatorAutoLayout).toBeUndefined();
     expect(carrier.sources.map((source) => source.fitMode)).toEqual(['cover', 'cover']);
     const permission = (id: string) =>
       carrier.sources.find((source) => source.sourceId === id)?.operatorFrame;
@@ -642,7 +635,7 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await expect(exportButton).toHaveAttribute('data-export-blocked', 'errors');
   });
 
-  test('Authorizes CG Control Auto layout once on the output composition', async ({ app }) => {
+  test('Authorizes CG Control Auto layout independently in each preset', async ({ app }) => {
     await app.newProject('Auto layout permission');
     const permission = app.inspector.getByRole('checkbox', {
       name: 'Allow Auto layout in CG Control',
@@ -652,34 +645,50 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await app.addLiveSource();
     await app.addTextElement();
     await app.deselect();
-    // This composition has its own output setting while it is an independent root.
-    await expect(permission).not.toBeChecked();
-    await permission.check();
+    await expect(permission).toHaveCount(0);
 
     await app.openComposition('comp1');
     await app.addMultiFrameGroup();
     await app.addLook();
+    await app.addLook();
+    await expect(permission).toHaveCount(0);
+
     await app.openComposition('preset-1');
     await app.nestCompositionInstance('Titled frame');
-    await app.deselect();
     await expect(permission).toHaveCount(0);
+    await app.page.keyboard.press('Escape');
+    await expect(permission).not.toBeChecked();
+    expect(await permission.boundingBox()).toMatchObject({ width: 14, height: 14 });
+    await permission.check();
 
-    await app.openComposition('Titled frame');
+    await app.openComposition('preset-2');
+    await app.nestCompositionInstance('Titled frame');
     await expect(permission).toHaveCount(0);
-
-    await app.openComposition('comp1');
+    await app.page.keyboard.press('Escape');
     await expect(permission).not.toBeChecked();
     await permission.check();
+    await permission.uncheck();
+
+    await app.openComposition('preset-1');
+    await expect(permission).toBeChecked();
+    await app.openComposition('Titled frame');
+    await expect(permission).toHaveCount(0);
+    await app.openComposition('comp1');
+    await expect(permission).toHaveCount(0);
+
     const [download] = await Promise.all([
       app.page.waitForEvent('download'),
       app.page.getByRole('button', { name: 'Export .vcg', exact: true }).click(),
     ]);
     const { scene } = await unpack(await readFile(await download.path()));
-    expect(buildTemplateLiveSources(scene).allowOperatorAutoLayout).toBe(true);
-    // Nesting a previously authorized composition preserves its saved value.
+    const carrier = buildTemplateLiveSources(scene);
+    expect(carrier.allowOperatorAutoLayout).toBeUndefined();
     expect(
-      scene.compositions?.find(({ name }) => name === 'Titled frame')?.allowOperatorAutoLayout,
-    ).toBe(true);
+      carrier.looks?.map(({ name, allowOperatorAutoLayout }) => [name, allowOperatorAutoLayout]),
+    ).toEqual([
+      ['preset-1', true],
+      ['preset-2', false],
+    ]);
   });
 
   /**
