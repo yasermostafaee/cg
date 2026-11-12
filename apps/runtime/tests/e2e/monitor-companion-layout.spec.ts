@@ -23,21 +23,20 @@ async function expectHeaderActionsClear(panel: Locator): Promise<void> {
         rects.slice(i + 1).every((other) => !intersect(rect, other)),
       ),
     };
-    const panButton = element.querySelector('[data-monitor-pan]');
-    if (panButton === null) return { ...actions, iconAndTextFit: true };
-    const icon = panButton.querySelector('svg')?.getBoundingClientRect();
-    const label = panButton.lastChild;
-    if (icon === undefined || label === null) {
-      throw new Error('Pan button is missing its icon or label');
-    }
-    const range = document.createRange();
-    range.selectNodeContents(label);
-    const text = range.getBoundingClientRect();
-    const button = panButton.getBoundingClientRect();
-    return {
-      ...actions,
-      iconAndTextFit: inside(button, icon) && inside(button, text) && !intersect(icon, text),
-    };
+    const tools = element.querySelectorAll(
+      '[data-monitor-pan], [data-monitor-move], [data-monitor-frames]',
+    );
+    const iconAndTextFit = [...tools].every((tool) => {
+      const icon = tool.querySelector('svg')?.getBoundingClientRect();
+      const label = tool.lastChild;
+      if (icon === undefined || label === null) return false;
+      const range = document.createRange();
+      range.selectNodeContents(label);
+      const text = range.getBoundingClientRect();
+      const button = tool.getBoundingClientRect();
+      return inside(button, icon) && inside(button, text) && !intersect(icon, text);
+    });
+    return { ...actions, iconAndTextFit };
   });
   expect(geometry).toEqual({ insideHeader: true, distinctHitboxes: true, iconAndTextFit: true });
 }
@@ -62,6 +61,14 @@ for (const name of ['PROGRAM (PGM)', 'PREVIEW (PVW)']) {
     await page.getByRole('button', { name: `Show ${name} fullscreen` }).click();
     await expect(mainChrome).toHaveCount(0);
     await expect(panel.locator('[data-monitor-pan]')).toHaveCount(name === 'PREVIEW (PVW)' ? 1 : 0);
+    if (name === 'PREVIEW (PVW)') {
+      const crop = panel.getByRole('button', { name: 'Crop input in Preview', exact: true });
+      const move = panel.getByRole('button', { name: 'Move template in Preview', exact: true });
+      await expect(crop).toHaveText('Crop input');
+      await expect(move).toHaveText('Move template');
+      await expect(crop.locator('svg.lucide-crop')).toBeVisible();
+      await expect(move.locator('svg.lucide-hand')).toBeVisible();
+    }
     if (name === 'PROGRAM (PGM)') {
       await panel.getByRole('button', { name: 'A+B', exact: true }).click();
     }

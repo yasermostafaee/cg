@@ -51,11 +51,14 @@ whose outlines coincide.
 
 #### Scenario: Drag a template to draft its Position
 
-- **WHEN** the operator drags an editable template or its label in PVW
+- **GIVEN** the **Move template** tool starts off and the template outlines are visible
+- **WHEN** the operator drags with **Move template** off **THEN** Position stays unchanged
+- **WHEN** the operator enables **Move template** and drags an editable template or its label in PVW
 - **THEN** its row is selected and the drag is staged in the existing Inspector Position draft
 - **AND** the template outline and preview follow the move, scaled to the channel raster
 - **AND** the applied position and playout commands stay unchanged until Update or Update on air
-- **WHEN** a row's Position is locked or Pan is active **THEN** its template outline remains visible and the position gesture is unavailable
+- **WHEN** the operator switches **Move template** off or switches to **Crop input** or **Edit frames** **THEN** the outlines and completed Position drafts remain and further template dragging is unavailable
+- **WHEN** a row's Position is locked **THEN** its outline remains visible and its position gesture is unavailable
 
 ### Requirement: The Layers toolbar offers Stop All and Clear All
 

@@ -360,7 +360,8 @@
   padding: var(--r-monitor-head-btn-pad);
   border-radius: var(--r-monitor-head-btn-radius);
 }
-.cg-panel-header.cg-panel-header--monitor .cg-btn[data-monitor-pan] {
+.cg-panel-header.cg-panel-header--monitor
+  .cg-btn:is([data-monitor-pan], [data-monitor-move], [data-monitor-frames]) {
   width: auto;
   padding-inline: var(--r-space-2);
   white-space: nowrap;
@@ -527,9 +528,11 @@
 .cg-pvw-template-label .cg-pvw-template-grip {
   justify-content: flex-start;
   pointer-events: auto;
+  user-select: none;
+}
+.cg-pvw-template-label .cg-pvw-template-grip[data-pvw-template-draggable] {
   cursor: move;
   touch-action: none;
-  user-select: none;
 }
 .cg-pvw-template-grip span {
   overflow: hidden;

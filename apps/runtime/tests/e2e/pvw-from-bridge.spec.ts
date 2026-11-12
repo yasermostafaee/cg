@@ -308,7 +308,7 @@ test('D-178 / B-433 — PVW crop reaches the first Take and Update on air refram
   });
   await showMonitors(page);
   const pvw = page.getByRole('region', { name: 'PREVIEW (PVW)' });
-  const pan = pvw.getByRole('button', { name: 'Pan preview input', exact: true });
+  const pan = pvw.getByRole('button', { name: 'Crop input in Preview', exact: true });
   const pvwPicture = pvw
     .frameLocator('iframe[data-rehearsal-frame]')
     .locator('[data-cg-live-source="guest"] [data-cg-pvw-picture-part] img');
@@ -1105,7 +1105,17 @@ test('Frames drafts the authored box and title in stopped PVW, then applies on t
   await plateRow.locator('[data-row-body]').click();
   await plateRow.getByRole('button', { name: 'ON PVW', exact: true }).click();
   const pvw = page.getByRole('region', { name: 'PREVIEW (PVW)' });
-  await pvw.getByRole('button', { name: 'Edit live frame placement' }).click();
+  const moveTemplate = pvw.getByRole('button', { name: 'Move template in Preview', exact: true });
+  await moveTemplate.click();
+  await expect(moveTemplate).toHaveAttribute('aria-pressed', 'true');
+  const framesButton = pvw.getByRole('button', { name: 'Edit frames in Preview', exact: true });
+  const framesIcon = framesButton.locator('svg.lucide-frame[aria-hidden="true"]');
+  await expect(framesIcon).toBeVisible();
+  await expect(framesIcon).toHaveAttribute('width', '13');
+  await expect(framesButton).toHaveText('Edit frames');
+  await framesButton.click();
+  await expect(framesButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(moveTemplate).toHaveAttribute('aria-pressed', 'false');
   const move = pvw.getByRole('button', { name: 'Move frame for Crop source' });
   const resize = pvw.getByRole('button', { name: 'Resize Crop source from bottom right' });
   const artwork = pvw
@@ -1211,7 +1221,7 @@ test('Frames drafts the authored box and title in stopped PVW, then applies on t
   }
 });
 
-test('R-117 outlines both stopped PVW templates and dragging one stages only its Position', async ({
+test('R-117 Move toggles dragging while both stopped PVW templates remain outlined', async ({
   page,
 }) => {
   const handle = await boot();
@@ -1261,6 +1271,9 @@ test('R-117 outlines both stopped PVW templates and dragging one stages only its
   const lower = pvw.locator('[data-pvw-template-outline="lower-pvw-template"]');
   const upper = pvw.locator('[data-pvw-template-outline="upper-pvw-template"]');
   const lowerPage = pvw.frameLocator('iframe[data-rehearsal-frame="lower-pvw-template"]');
+  const move = pvw.getByRole('button', { name: 'Move template in Preview', exact: true });
+  await expect(move).toBeDisabled();
+  await expect(move).toHaveAttribute('aria-pressed', 'false');
   for (const fixture of fixtures)
     await layer(fixture.layer).getByRole('button', { name: 'ON PVW', exact: true }).click();
   await layer(99).locator('[data-row-body]').click();
@@ -1276,7 +1289,15 @@ test('R-117 outlines both stopped PVW templates and dragging one stages only its
     throw new Error('The two PVW outlines or their raster did not render');
   expect(beforeLower.x + beforeLower.width).toBeLessThan(beforeUpper.x);
   expect(beforeLower.y).toBeGreaterThan(beforeUpper.y + beforeUpper.height);
+  await expect(move).toBeEnabled();
+  await expect(move).toHaveAttribute('aria-pressed', 'false');
+  await expect(lower).not.toHaveAttribute('data-pvw-position-editable', 'true');
 
+  const inspector = page.getByRole('complementary', { name: 'Inspector' });
+  const x = inspector.getByRole('textbox', { name: 'Position offset X' });
+  const y = inspector.getByRole('textbox', { name: 'Position offset Y' });
+  const appliedPosition = (itemId: string) =>
+    handle.runtime.stackSnapshot(1).find((item) => item.itemId === itemId)?.position;
   const programmeCommands = () =>
     engine
       .receivedCommands()
@@ -1288,17 +1309,29 @@ test('R-117 outlines both stopped PVW templates and dragging one stages only its
   const startY = Math.round(beforeLower.y + beforeLower.height / 2);
   const moveX = Math.round(170 * fit);
   const moveY = Math.round(-75 * fit);
-  await page.mouse.move(startX, startY);
-  await page.mouse.down();
-  await page.mouse.move(startX + moveX, startY + moveY, { steps: 4 });
-  await page.mouse.up();
+  const drag = async (fromX: number, fromY: number): Promise<void> => {
+    await page.mouse.move(fromX, fromY);
+    await page.mouse.down();
+    await page.mouse.move(fromX + moveX, fromY + moveY, { steps: 4 });
+    await page.mouse.up();
+  };
 
-  const inspector = page.getByRole('complementary', { name: 'Inspector' });
+  await drag(startX, startY);
+  expect(await lower.boundingBox()).toEqual(beforeLower);
+  expect(await upper.boundingBox()).toEqual(beforeUpper);
+  await expect(inspector.getByLabel('Position has unapplied changes')).toHaveCount(0);
+  expect(appliedPosition('lower-pvw-template')).toEqual(initial);
+  expect(programmeCommands()).toEqual(before);
+
+  await move.click();
+  await expect(move).toHaveAttribute('aria-pressed', 'true');
+  await expect(lower).toHaveAttribute('data-pvw-position-editable', 'true');
+  await drag(startX, startY);
   await expect(inspector.getByText('lower-pvw-template', { exact: true })).toBeVisible();
   const dx = String(initial.offset.x + Math.round(moveX / fit));
   const dy = String(initial.offset.y + Math.round(moveY / fit));
-  await expect(inspector.getByRole('textbox', { name: 'Position offset X' })).toHaveValue(dx);
-  await expect(inspector.getByRole('textbox', { name: 'Position offset Y' })).toHaveValue(dy);
+  await expect(x).toHaveValue(dx);
+  await expect(y).toHaveValue(dy);
   await expect(inspector.getByRole('button', { name: 'Anchor bottom-right' })).toHaveAttribute(
     'aria-pressed',
     'true',
@@ -1310,8 +1343,26 @@ test('R-117 outlines both stopped PVW templates and dragging one stages only its
   expect(programmeCommands()).toEqual(before);
   await expect(lowerPage.locator('body')).toHaveClass(/\bcg-pending\b/);
 
+  const moved = await lower.boundingBox();
+  if (moved === null) throw new Error('The moved PVW outline did not render');
+  await move.click();
+  await expect(move).toHaveAttribute('aria-pressed', 'false');
+  await expect(lower).toBeVisible();
+  await expect(lower).not.toHaveAttribute('data-pvw-position-editable', 'true');
+  await drag(Math.round(moved.x + moved.width / 2), Math.round(moved.y + moved.height / 2));
+  expect(await lower.boundingBox()).toEqual(moved);
+  await expect(x).toHaveValue(dx);
+  await expect(y).toHaveValue(dy);
+  expect(appliedPosition('lower-pvw-template')).toEqual(initial);
+  expect(appliedPosition('upper-pvw-template')).toEqual(initial);
+  expect(programmeCommands()).toEqual(before);
+
   await inspector.getByRole('button', { name: 'Apply staged edits', exact: true }).click();
   await expect(inspector.getByLabel('Position has unapplied changes')).toHaveCount(0);
+  expect(appliedPosition('lower-pvw-template')).toEqual({
+    anchor: initial.anchor,
+    offset: { x: Number(dx), y: Number(dy) },
+  });
   expect(programmeCommands()).toEqual(before);
   await pvw.getByRole('button', { name: 'PLAY all 2 rehearsing', exact: true }).click();
   await expect(lowerPage.locator('body')).not.toHaveClass(/\bcg-pending\b/);

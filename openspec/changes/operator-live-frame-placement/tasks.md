@@ -9,5 +9,6 @@
 - [x] Verify the frame and title in fresh Windows Chromium, including Discard, the next Take and
       Update on air. Verify nested Look identity and both authoring policies in the carrier and
       Designer suites.
+- [x] Verify the separate **Edit frames** icon and label, mutual exclusion with Move template, and the monitor header at a narrow width.
 - [ ] Verify title, fallback, mask and picture alignment on the target engine.
 - [ ] Record the carrying Linux Playwright result.

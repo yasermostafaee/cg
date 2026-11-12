@@ -6046,12 +6046,13 @@ Playout; the client must not invent a vendor-specific capture endpoint.
 
 ## [~] D-178 — Pan a live input inside a differently shaped plate ⟨priority: high — clarified by the owner, 2026-11-09⟩ — `openspec/changes/pan-live-input-focus/`
 
-**What:** In CG Control, choose the visible region of an input inside its plate in PVW. Move the crop within the source and resize it from its corners to select a smaller region.
+**What:** In CG Control, use **Crop input** in PVW to choose the visible region of an input inside
+its plate. Move the crop within the source and resize it from its corners to select a smaller region.
 Preserve the authored plate, its aspect ratio, title and input assignment. Drag and
 Center stage a draft for the same row, look, plate and input. The draft survives OFF PVW. Off-air
 Update saves it for Take, including when PVW is off. Update on air applies it to the current verified
 plate without restarting its source. Discard restores the last applied position. Take applies a saved
-crop before the first on-air frame. With Pan closed, PVW shows the applied crop for the current
+crop before the first on-air frame. With **Crop input** closed, PVW shows the applied crop for the current
 verified plate, look and source. Absent focus centres a cover crop.
 
 **Implementation**
@@ -6085,10 +6086,10 @@ If PGM Pan is revisited, an equivalent in-place editor needs a read of the alrea
 before the programme mix and crop, without opening a second receiver.
 
 **Operator frame placement:** The author can allow moving and proportional resizing for each
-frame, and can enable free resize. Frames in PVW drafts changes in composition pixels for the
+frame, and can enable free resize. **Edit frames** in PVW drafts changes in composition pixels for the
 active Look and frame instance. Discard restores the applied frame. Off-air Update saves it for
 Take, and Update on air moves the resident page and its existing picture together on a verified
-primary. Pan keeps the source selection inside the frame. Target-engine verification is tracked in
+primary. **Crop input** keeps the source selection inside the frame. Target-engine verification is tracked in
 `openspec/changes/operator-live-frame-placement/`.
 
 ## [~] D-179 — Rebuild and re-audit the Persian production starter gallery ⟨priority: high — owner re-review reopened 2026-11-04⟩ — `openspec/changes/rebuild-production-starter-gallery/`

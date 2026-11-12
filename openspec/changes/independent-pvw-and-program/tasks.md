@@ -18,3 +18,6 @@
 - [x] Verify off-air reset and delayed acknowledgement in unit tests. Windows Chromium verified
       authored placement in PVW, Discard, and explicit Update on air through a real Bridge.
 - [ ] Record the carrying Linux Playwright result for Position reset.
+- [x] Gate whole-template dragging behind the PVW **Move template** toggle and keep outlines available.
+- [x] Verify in Windows Chromium that **Move template** starts off, toggles dragging, and preserves completed drafts for Update or Discard.
+- [ ] Record the carrying Linux Playwright result for the **Move template** toggle.

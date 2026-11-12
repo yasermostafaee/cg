@@ -29,7 +29,7 @@ import {
   type RehearsalFrameBounds,
   type RehearsalFrameHandle,
 } from './RehearsalFrame.js';
-import { PreviewTemplateOutlines } from './PreviewTemplateOutlines.js';
+import { canMoveTemplateOutline, PreviewTemplateOutlines } from './PreviewTemplateOutlines.js';
 import { PreviewFramePlacement } from './PreviewFramePlacement.js';
 import { frameBox, frameZIndex, overlayZIndex, type RehearsalSubject } from './rehearsalFrames.js';
 import type { PvwPage } from '../../../shared/pvwPage.js';
@@ -273,6 +273,7 @@ interface Props {
   /** The channel's real raster (R-030). Every iframe is sized to it. */
   raster: ChannelRaster;
   panOpen?: boolean;
+  moveOpen?: boolean;
   frameEditOpen?: boolean;
   panSession?: number;
   panSourceAspects?: ReadonlyMap<string, number | null>;
@@ -289,6 +290,7 @@ export interface RehearsalTransport {
   ready: boolean;
   count: number;
   panAvailable: boolean;
+  moveItemId: string | undefined;
 }
 
 const REHEARSAL_CAVEATS =
@@ -360,6 +362,7 @@ export function RehearsalStage({
   templateNames,
   raster,
   panOpen = false,
+  moveOpen = false,
   frameEditOpen = false,
   panSession = 0,
   panSourceAspects,
@@ -409,6 +412,12 @@ export function RehearsalStage({
       }),
     [subjects, pageByItem],
   );
+  const outlines = renderable.flatMap(({ subject }) => {
+    const bounds = boundsByItem.get(subject.itemId);
+    if (!readyIds.has(subject.itemId) || bounds === undefined) return [];
+    return [{ subject, bounds, templateName: templateNames.get(subject.itemId) ?? null }];
+  });
+  const moveItemId = outlines.find(canMoveTemplateOutline)?.subject.itemId;
   /*
    * R-106 — one local lifecycle fact for the whole composite. The key makes a changed
    * subject/page hidden immediately, in the same render, rather than waiting for an effect
@@ -641,11 +650,17 @@ export function RehearsalStage({
     out a closure over the ref, not the ref.
   */
   useEffect(() => {
-    onTransport?.({ drive: driveAll, ready: allReady, count: renderable.length, panAvailable });
+    onTransport?.({
+      drive: driveAll,
+      ready: allReady,
+      count: renderable.length,
+      panAvailable,
+      moveItemId,
+    });
     return () => {
       onTransport?.(null);
     };
-  }, [onTransport, driveAll, allReady, renderable.length, panAvailable]);
+  }, [onTransport, driveAll, allReady, renderable.length, panAvailable, moveItemId]);
 
   if (renderable.length === 0) {
     // Nothing to draw: the one line per row that has no page, or — while the pages are still being
@@ -740,16 +755,12 @@ export function RehearsalStage({
           />
         )}
         <PreviewTemplateOutlines
-          outlines={renderable.flatMap(({ subject }) => {
-            const bounds = boundsByItem.get(subject.itemId);
-            if (!readyIds.has(subject.itemId) || bounds === undefined) return [];
-            return [{ subject, bounds, templateName: templateNames.get(subject.itemId) ?? null }];
-          })}
+          outlines={outlines}
           raster={raster}
           fit={fit}
           zIndex={overlayZIndex(renderable.length)}
-          interactive={!panOpen && !frameEditOpen}
-          onSelectItem={onSelectItem}
+          moveOpen={moveOpen}
+          onSelectItem={panOpen || frameEditOpen ? undefined : onSelectItem}
         />
         {frameEditOpen && (
           <div

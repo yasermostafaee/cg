@@ -3,6 +3,7 @@
 ### Requirement: Operators can place authored live frames from Preview
 
 CG Control SHALL allow a frame opted in by its author to be moved and resized in PVW.
+The PVW control SHALL display a frame icon beside its **Edit frames** label.
 Resize SHALL preserve the authored aspect ratio unless the author enables free resize.
 An opted-in frame in a one-plate composition SHALL travel with the artwork in that composition.
 

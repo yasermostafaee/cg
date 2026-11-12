@@ -25,6 +25,10 @@ export interface PreviewOutline {
   templateName: string | null;
 }
 
+export function canMoveTemplateOutline({ subject, bounds }: PreviewOutline): boolean {
+  return subject.canEditPosition === true && bounds.canPosition;
+}
+
 const LABEL_HEIGHT = 23;
 const LABEL_WIDTH = 176;
 const LABEL_GAP = 3;
@@ -125,13 +129,13 @@ function restorePrior(itemId: string, drag: Drag): void {
 }
 
 function TemplateOutline({
-  outline: { subject, bounds, templateName },
+  outline,
   rect,
   label,
   concealLabel,
   raster,
   fit,
-  interactive,
+  moveOpen,
   onSelectItem,
 }: {
   outline: PreviewOutline;
@@ -140,11 +144,14 @@ function TemplateOutline({
   concealLabel: boolean;
   raster: ChannelRaster;
   fit: number;
-  interactive: boolean;
+  moveOpen: boolean;
   onSelectItem?: ((itemId: string) => void) | undefined;
 }): JSX.Element {
+  const { subject, bounds, templateName } = outline;
   const { itemId, rowName } = subject;
-  const moveable = interactive && subject.canEditPosition === true && bounds.canPosition;
+  const eligible = canMoveTemplateOutline(outline);
+  const moveable = moveOpen && eligible;
+  const selectable = onSelectItem !== undefined && eligible;
   const drag = useRef<Drag>();
   useEffect(() => {
     if (!moveable && drag.current !== undefined) {
@@ -204,6 +211,7 @@ function TemplateOutline({
     : {};
   const name =
     templateName === null || templateName === rowName ? rowName : `${rowName} (${templateName})`;
+  const labelAction = `${moveable ? 'Move' : 'Select'} ${name} in Preview`;
   const labelText = (
     <>
       <bdi>{rowName}</bdi>
@@ -231,15 +239,17 @@ function TemplateOutline({
         data-pvw-label-over-picture={concealLabel ? '' : undefined}
         style={boxStyle(label)}
       >
-        {moveable ? (
+        {moveable || selectable ? (
           <Button
             variant="neutral"
             className="cg-pvw-template-grip"
             data-pvw-template-grip={itemId}
-            aria-label={`Move ${name} in Preview`}
-            title={`Move ${name} in Preview`}
+            data-pvw-template-draggable={moveable ? '' : undefined}
+            aria-label={labelAction}
+            title={labelAction}
             onClick={select}
             onKeyDown={(event) => {
+              if (!moveable) return;
               const step = event.shiftKey ? 10 : 1;
               const dx = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0;
               const dy = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0;
@@ -253,7 +263,7 @@ function TemplateOutline({
             }}
             {...gesture}
           >
-            <Icon icon={Move} size={13} />
+            {moveable && <Icon icon={Move} size={13} />}
             <span>{labelText}</span>
           </Button>
         ) : (
@@ -271,14 +281,14 @@ export function PreviewTemplateOutlines({
   raster,
   fit,
   zIndex,
-  interactive,
+  moveOpen,
   onSelectItem,
 }: {
   outlines: readonly PreviewOutline[];
   raster: ChannelRaster;
   fit: number;
   zIndex: number;
-  interactive: boolean;
+  moveOpen: boolean;
   onSelectItem?: ((itemId: string) => void) | undefined;
 }): JSX.Element | null {
   if (outlines.length === 0 || fit <= 0) return null;
@@ -304,7 +314,7 @@ export function PreviewTemplateOutlines({
             concealLabel={artwork.some((content) => intersects(label, content))}
             raster={raster}
             fit={fit}
-            interactive={interactive}
+            moveOpen={moveOpen}
             onSelectItem={onSelectItem}
           />
         );

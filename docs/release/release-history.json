@@ -28,8 +28,12 @@
           "en": "In Layers → Profiles, Save asks where to write the JSON file and confirms its filename. A profile can include and restore the selected channel’s shortcuts."
         },
         {
-          "fa": "در ایستگاه تک‌موتور، Frames در PVW امکان جابه‌جایی و تغییر اندازهٔ قاب‌های مجاز طراح را می‌دهد. Update چیدمان را برای Take بعدی ذخیره می‌کند و Update on air می‌تواند آن را روی خروجی فعال اعمال کند.",
-          "en": "On single-primary stations, Frames in PVW moves and resizes frames enabled by the author. Update saves placement for the next Take, and Update on air can apply it to the running output."
+          "fa": "در ایستگاه تک‌موتور، Edit frames در PVW امکان جابه‌جایی و تغییر اندازهٔ قاب‌های مجاز طراح را می‌دهد. Update چیدمان را برای Take بعدی ذخیره می‌کند و Update on air می‌تواند آن را روی خروجی فعال اعمال کند.",
+          "en": "On single-primary stations, Edit frames in PVW moves and resizes frames enabled by the author. Update saves placement for the next Take, and Update on air can apply it to the running output."
+        },
+        {
+          "fa": "نوار PVW سه دکمهٔ جدا دارد. Crop input برش ورودی، Edit frames اندازه و جای خود قاب و Move template جای کل تمپلیت را تنظیم می‌کند. Move template در شروع خاموش است.",
+          "en": "PVW provides separate Crop input, Edit frames, and Move template controls. Move template starts off."
         },
         {
           "fa": "در Shared folder می‌توان بندانگشتی و انتخاب فعلی را دید و با Up به پوشهٔ بالاتر رفت. قالب‌های واردشده از این مسیر را می‌توان از فایل اصلی Reload کرد.",

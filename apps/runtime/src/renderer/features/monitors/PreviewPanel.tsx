@@ -5,7 +5,9 @@ import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } fr
 import {
   ArrowRightFromLine,
   CircleArrowOutDownRight,
-  Move,
+  Crop,
+  Frame,
+  Hand,
   Play,
   SquareDashed,
 } from 'lucide-react';
@@ -129,6 +131,8 @@ const PVW_TRANSPORT_TITLE = {
   stop: 'Stop every preview graphic; keep all layers on PVW',
 } as const;
 
+type PreviewEditTool = 'pan' | 'move' | 'frames';
+
 export function PreviewPanel({
   companionActions,
   canEditPosition = false,
@@ -144,8 +148,7 @@ export function PreviewPanel({
   const channelSettings = useChannelSettings();
   // `MULTI-CHANNEL-01` — the SELECTED channel's bank: PREVIEW is the channel on screen.
   const { bank, viewChannel } = useChannelBankState();
-  const [panChannel, setPanChannel] = useState<number | null | undefined>(undefined);
-  const [frameEditChannel, setFrameEditChannel] = useState<number | null | undefined>(undefined);
+  const [editTool, setEditTool] = useState<{ tool: PreviewEditTool; channel: number | null }>();
   const supportsFramePlacement = useAuthCapabilities()?.liveFramePlacement === true;
   const [panSession, setPanSession] = useState(0);
   const slots = useFixedSlots();
@@ -451,13 +454,30 @@ export function PreviewPanel({
     for what is — and the three buttons read that as "disabled" rather than as an error.
   */
   const [transport, setTransport] = useState<RehearsalTransport | null>(null);
-  const panAvailable = subjects.length > 0 && transport?.panAvailable === true;
-  const panOpen = panAvailable && panChannel === viewChannel;
+  const hasSubjects = subjects.length > 0;
+  const panAvailable = hasSubjects && transport?.panAvailable === true;
+  const activeTool = editTool?.channel === viewChannel ? editTool.tool : undefined;
+  const panOpen = panAvailable && activeTool === 'pan';
+  const moveAvailable = subjects.some(
+    (subject) => subject.canEditPosition && subject.itemId === transport?.moveItemId,
+  );
+  const moveOpen = moveAvailable && activeTool === 'move';
   const frameEditAvailable = subjects.some((subject) => subject.canEditFrames === true);
-  const frameEditOpen = frameEditAvailable && frameEditChannel === viewChannel;
+  const frameEditOpen = frameEditAvailable && activeTool === 'frames';
   useEffect(() => {
-    if (!panAvailable) setPanChannel(undefined);
-  }, [panAvailable]);
+    setEditTool((current) =>
+      current !== undefined &&
+      (!hasSubjects || current.channel !== viewChannel || (current.tool === 'pan' && !panAvailable))
+        ? undefined
+        : current,
+    );
+  }, [hasSubjects, panAvailable, viewChannel]);
+
+  function toggleEditTool(tool: PreviewEditTool): void {
+    const next = activeTool === tool ? undefined : { tool, channel: viewChannel };
+    setEditTool(next);
+    if (next?.tool === 'pan') setPanSession((session) => session + 1);
+  }
 
   /*
     How many rehearsing rows this browser can actually DRAW. The same arithmetic the stage
@@ -503,36 +523,49 @@ export function PreviewPanel({
           <Button
             variant="ghost"
             active={panOpen}
-            aria-label="Pan preview input"
+            aria-label="Crop input in Preview"
             aria-pressed={panOpen}
             data-monitor-pan=""
             disabled={!panAvailable}
             title={
               panAvailable
-                ? 'Frame a cropped input in Preview'
-                : 'Show a Crop edges plate in Preview to use Pan'
+                ? 'Adjust which part of the input appears inside the frame'
+                : 'Play a Crop edges plate in Preview to crop its input'
             }
-            onClick={() => {
-              setFrameEditChannel(undefined);
-              setPanChannel(panOpen ? undefined : viewChannel);
-              if (!panOpen) setPanSession((session) => session + 1);
-            }}
+            onClick={() => toggleEditTool('pan')}
           >
-            <Icon icon={Move} size={13} />
-            Pan
+            <Icon icon={Crop} size={13} />
+            Crop input
+          </Button>
+          <Button
+            variant="ghost"
+            active={moveOpen}
+            aria-label="Move template in Preview"
+            aria-pressed={moveOpen}
+            data-monitor-move=""
+            disabled={!moveAvailable}
+            title={
+              moveAvailable
+                ? 'Move the whole template in Preview'
+                : 'Show a template with editable Position in Preview to move it'
+            }
+            onClick={() => toggleEditTool('move')}
+          >
+            <Icon icon={Hand} size={13} />
+            Move template
           </Button>
           {frameEditAvailable && (
             <Button
               variant="ghost"
               active={frameEditOpen}
-              aria-label="Edit live frame placement"
+              aria-label="Edit frames in Preview"
               aria-pressed={frameEditOpen}
-              onClick={() => {
-                setPanChannel(undefined);
-                setFrameEditChannel(frameEditOpen ? undefined : viewChannel);
-              }}
+              data-monitor-frames=""
+              title="Move or resize an editable frame in Preview"
+              onClick={() => toggleEditTool('frames')}
             >
-              Frames
+              <Icon icon={Frame} size={13} />
+              Edit frames
             </Button>
           )}
           {companionActions}
@@ -627,6 +660,7 @@ export function PreviewPanel({
             onTransport={setTransport}
             onSelectItem={onSelectItem}
             panOpen={panOpen}
+            moveOpen={moveOpen}
             frameEditOpen={frameEditOpen}
             panSession={panSession}
             panSourceAspects={panSourceAspects}

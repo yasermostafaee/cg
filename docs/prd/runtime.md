@@ -3065,7 +3065,7 @@ apps/runtime/src apps/runtime/tests docs` → 0 hits), so it is not an existing 
 
 - WHEN the operator maximizes or restores a panel THEN both fullscreen icons use the neutral icon
   treatment. The icon and its accessible state indicate whether the workspace is maximized.
-  Engaged panel-header tools such as Pan keep their accent.
+  Engaged panel-header tools such as Crop input keep their accent.
   See `openspec/changes/neutral-panel-restore/` for the 2026-11-11 follow-up.
 - WHEN the FAILOVER button is at rest THEN it carries no role colour, matching its SERVERS /
   SOURCES / LOG neighbours, and the amber in that bar means only a fault
@@ -5063,7 +5063,7 @@ they are actively checking; fullscreen should change presentation, not silently 
 - WHEN the Inspector is included THEN its separate right column spans the workspace height
 - WHEN any panel is maximized THEN hide the app header and status footer, keep the panel's own
   controls and applicable alerts, and restore the bars on exit
-- WHEN the monitor header is narrow THEN Pan and the layout controls retain distinct hitboxes
+- WHEN the monitor header is narrow THEN the preview tools and layout controls retain distinct hitboxes
 
 ## [~] R-112 — Distinguish Live layouts in the Layers table ⟨priority: medium — the owner, 2026-11-09⟩ — `openspec/changes/distinguish-live-layout-rows/`
 
@@ -5116,7 +5116,9 @@ is no verified ownership map.
 - WHEN Layers shows a bound row THEN the ON PVW column precedes Play, and the toolbar offers Stop All and Clear All. Row Remove remains available under its existing guard.
 - WHEN a row is confirmed on air on a single-primary station with a supported resident page and no Live Source plates THEN its Position anchor and offsets can be drafted in PVW. Update on air carries them with the field update and moves the resident page in place. Unsupported pages, rows with Live Source plates and stations with a configured backup keep their on-air Position lock.
 - WHEN a row is ON PVW THEN its retained page has a labelled template outline in the Preview raster, including before Preview Play and after Preview Stop. Use the authored visual element boxes where measurable, with the page footprint as a fallback.
-- WHEN the operator drags an editable template in PVW THEN select its row and stage its Position offsets in Inspector. Preserve the current placement anchor when known. The outline and preview follow the move in channel coordinates and use the existing Update or Update on air action to apply it. The same Position locks apply to Inspector and Preview, and Pan remains available for the independent source crop.
+- WHEN **Move template** is off in PVW THEN template outlines remain visible and dragging does not change Position. The tool starts off and is available when an eligible template is ready.
+- WHEN the operator enables **Move template** and drags an editable template in PVW THEN select its row and stage its Position offsets in Inspector. Preserve the current anchor when known. The outline and preview follow the move in channel coordinates and the existing Update or Update on air action applies it.
+- WHEN the operator switches **Move template** off or switches to **Crop input** or **Edit frames** THEN template dragging stops and completed Position drafts remain available for Update or Discard. The same Position locks apply to Inspector and Preview.
 - WHEN the operator presses **Reset to default** in an editable Position section THEN the
   template's authored anchor and offsets are staged and PVW follows immediately. **Discard**
   restores the applied position. **Update** or **Update on air** applies the reset.

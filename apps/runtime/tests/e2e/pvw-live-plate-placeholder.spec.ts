@@ -185,7 +185,7 @@ test('D-178 — Pan stays in Preview and requires a visible Crop edges plate', a
   const { page } = app;
   const programme = page.getByRole('button', { name: 'Pan live input', exact: true });
   await expect(programme).toHaveCount(0);
-  const preview = page.getByRole('button', { name: 'Pan preview input', exact: true });
+  const preview = page.getByRole('button', { name: 'Crop input in Preview', exact: true });
   await expect(preview).toBeVisible();
   await expect(preview).toBeDisabled();
   await expect(preview).toHaveAttribute('aria-pressed', 'false');
@@ -210,7 +210,7 @@ test('D-178 — practice keeps the full source and each plate aspect across both
   await stubRetainedPage(page, pageWithHoles(PAN_HOLES));
   const layer = await app.loadTemplate(TWO_BOX);
   await rehearseRow(page, layer);
-  const preview = page.getByRole('button', { name: 'Pan preview input', exact: true });
+  const preview = page.getByRole('button', { name: 'Crop input in Preview', exact: true });
   await expect(preview).toBeDisabled();
   await pvwTransport(page, 'PLAY').click();
   await expect(preview).toBeEnabled();
@@ -301,7 +301,7 @@ test('D-178 — practice crop Draft and Update survive OFF PVW and ON PVW', asyn
   await stubRetainedPage(page, pageWithHoles(PAN_HOLES));
   const layer = await app.loadTemplate(TWO_BOX);
   await app.selectLayerRow(layer);
-  const pan = page.getByRole('button', { name: 'Pan preview input', exact: true });
+  const pan = page.getByRole('button', { name: 'Crop input in Preview', exact: true });
   const plate = page.getByRole('button', { name: 'Pan practice image in portrait', exact: true });
   const crop = plate.locator('[data-pan-practice-crop]');
   const readLeft = () => crop.evaluate((element) => element.style.left);
@@ -368,7 +368,7 @@ test('D-178 — corner resize preserves a matching-aspect plate and is saved thr
     };
   });
   const row = page.locator(`[data-layer="${String(layer)}"]`);
-  const pan = page.getByRole('button', { name: 'Pan preview input', exact: true });
+  const pan = page.getByRole('button', { name: 'Crop input in Preview', exact: true });
   const handle = page.getByRole('button', { name: 'Pan crop guide in guest-1', exact: true });
   const crop = handle.locator('[data-pan-practice-crop]');
   const corner = page.getByRole('button', {
@@ -493,7 +493,7 @@ test('D-178 / B-426 — measured JPEG crop uses the assigned aspect and cancels 
   await page.waitForFunction(() =>
     Boolean((window as unknown as { measuredPan: { sourceId: string } }).measuredPan.sourceId),
   );
-  await page.getByRole('button', { name: 'Pan preview input', exact: true }).click();
+  await page.getByRole('button', { name: 'Crop input in Preview', exact: true }).click();
   const handle = page.getByRole('button', { name: 'Pan source picture in portrait', exact: true });
   const draft = handle.locator('..');
   const picture = handle.locator('[data-pan-practice-picture]');
@@ -759,7 +759,7 @@ test('B-424 — PVW keeps the authored fallback when on-air fallback is off', as
   await expect(marker(page, 'guest-2').getByText('Crop edges', { exact: true })).toHaveCount(0);
 
   const coverPlate = await marker(page, 'guest-1').boundingBox();
-  await page.getByRole('button', { name: 'Pan preview input', exact: true }).click();
+  await page.getByRole('button', { name: 'Crop input in Preview', exact: true }).click();
   const coverPractice = page.getByRole('button', { name: 'Pan practice image in guest-1' });
   await expect(coverPractice).toBeVisible();
   expect(await coverPractice.boundingBox()).toEqual(coverPlate);
