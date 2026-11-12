@@ -462,6 +462,7 @@ export function PreviewPanel({
   */
   const [transport, setTransport] = useState<RehearsalTransport | null>(null);
   const hasSubjects = subjects.length > 0;
+  const panVisible = hasSubjects && transport?.panVisible === true;
   const panAvailable = hasSubjects && transport?.panAvailable === true;
   const activeTool = editTool?.channel === viewChannel ? editTool.tool : undefined;
   const panOpen = panAvailable && activeTool === 'pan';
@@ -525,7 +526,11 @@ export function PreviewPanel({
             testId="data-pvw-count"
             {...(subjects.length > 0 ? { title: subjects.map((s) => s.rowName).join(' · ') } : {})}
           >
-            {subjects.length} {subjects.length === 1 ? 'layer' : 'layers'} on PVW
+            {subjects.length}
+            <span className="cg-pvw-count-label">
+              {' '}
+              {subjects.length === 1 ? 'layer' : 'layers'} on PVW
+            </span>
           </MonitorHeadFact>
           <Button
             variant="ghost"
@@ -542,25 +547,27 @@ export function PreviewPanel({
             onClick={() => toggleEditTool('move')}
           >
             <Icon icon={Hand} size={13} />
-            Move template
+            <span className="cg-pvw-tool-label">Move template</span>
           </Button>
-          <Button
-            variant="ghost"
-            active={panOpen}
-            aria-label="Crop input in Preview"
-            aria-pressed={panOpen}
-            data-monitor-pan=""
-            disabled={!panAvailable}
-            title={
-              panAvailable
-                ? 'Adjust which part of the input appears inside the frame'
-                : 'Play a Crop edges plate in Preview to crop its input'
-            }
-            onClick={() => toggleEditTool('pan')}
-          >
-            <Icon icon={Crop} size={13} />
-            Crop input
-          </Button>
+          {panVisible && (
+            <Button
+              variant="ghost"
+              active={panOpen}
+              aria-label="Crop input in Preview"
+              aria-pressed={panOpen}
+              data-monitor-pan=""
+              disabled={!panAvailable}
+              title={
+                panAvailable
+                  ? 'Adjust which part of the input appears inside the frame'
+                  : 'Play a Crop edges plate in Preview to crop its input'
+              }
+              onClick={() => toggleEditTool('pan')}
+            >
+              <Icon icon={Crop} size={13} />
+              <span className="cg-pvw-tool-label">Crop input</span>
+            </Button>
+          )}
           {frameEditAvailable && (
             <Button
               variant="ghost"
@@ -572,7 +579,7 @@ export function PreviewPanel({
               onClick={() => toggleEditTool('frames')}
             >
               <Icon icon={Frame} size={13} />
-              Edit frames
+              <span className="cg-pvw-tool-label">Edit frames</span>
             </Button>
           )}
           {companionActions}
@@ -582,6 +589,8 @@ export function PreviewPanel({
       style={{
         flex: 1,
         minWidth: 0,
+        containerType: 'inline-size',
+        containerName: 'pvw',
         background: cssVars['--r-monitor-bg'],
         borderRadius: cssVars['--r-monitor-card-radius'],
       }}

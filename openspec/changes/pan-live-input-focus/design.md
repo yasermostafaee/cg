@@ -20,7 +20,8 @@ focus produces exactly the old centred crop. Schema bounds reject values outside
 ## Operator surface
 
 The Designer Inspector has no crop-focus editor. Previously authored values remain readable in the
-scene and on export. The CG Control gesture targets a visible `cover` plate. Movement is clamped
+scene and on export. The CG Control gesture targets a visible `cover` plate. The toolbar shows
+**Crop input** when that plate is on PVW, and Preview Play enables the gesture. Movement is clamped
 to axes with crop travel and keeps the authored plate fixed. Drag a corner to resize the window
 around the opposite corner. At the picture bounds the window shifts only as far as needed to fit.
 

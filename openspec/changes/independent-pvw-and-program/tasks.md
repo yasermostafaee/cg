@@ -35,3 +35,5 @@
 - [x] Put **Move template** before **Crop input**, followed by **Edit frames** when available.
 - [x] Verify the new PVW tool order in normal and compact layouts in Windows Chromium. Six focused
       cases passed, including the real-Bridge live Position and crop scenarios.
+- [x] Verify the one-row PVW tools with the Inspector open in normal 1280px and maximized
+      620px layouts. Windows Chromium confirmed the icon-only controls keep their hitboxes.

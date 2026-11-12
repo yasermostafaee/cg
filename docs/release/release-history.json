@@ -583,6 +583,10 @@
         {
           "fa": "دکمهٔ بازنشانی موقعیت با نام Reset position نمایش داده می‌شود. Reset crop فقط وقتی برش پریست فعال تغییر کرده باشد فعال است. نشان draft از نام لایه فاصله دارد.",
           "en": "The position reset is labeled Reset position. Reset crop is enabled only when the active preset's crop differs from its authored framing. The draft badge has space beside the layer name."
+        },
+        {
+          "fa": "Crop input فقط وقتی قاب مناسب روی PVW باشد دیده می‌شود. در پنل باریک ابزارهای هدر به‌صورت آیکون در همان ردیف می‌مانند.",
+          "en": "Crop input is shown when an eligible plate is on PVW. Narrow Preview panes keep the header tools on one row as icons."
         }
       ],
       "planned": [

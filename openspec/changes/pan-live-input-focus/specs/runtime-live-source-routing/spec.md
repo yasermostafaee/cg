@@ -24,13 +24,16 @@ be byte-identical to a centred focus, and `contain` SHALL ignore focus.
 
 ### Requirement: Operators can review the Pan interaction in PVW
 
-CG Control SHALL show the Pan tool as **Crop input** in PVW. The gesture SHALL move only on axes with crop travel
+CG Control SHALL show the Pan tool as **Crop input** when an eligible **Crop edges** plate is
+on PVW. The tool SHALL become enabled after Preview Play. The gesture SHALL move only on axes with crop travel
 and preserve the plate's boundaries and input assignment. PGM SHALL show its programme
 return without Pan controls or crop guides.
 
-#### Scenario: The Pan controls are discoverable before an input can be edited
+#### Scenario: Show Crop input for an eligible plate in Preview
 
-- **WHEN** the operator opens the monitors **THEN** the PVW header shows **Crop input** and the PGM header has no crop action
+- **WHEN** no eligible **Crop edges** plate is on PVW **THEN** the PVW header omits **Crop input**
+- **WHEN** such a plate is on PVW **THEN** the control is visible, including when local practice uses Bars
+- **AND** the PGM header has no crop action
 - **WHEN** the operator enables or closes **Crop input** **THEN** its pressed appearance follows the active tool state
 - **WHEN** Pan displays a plate guide **THEN** the guide has a strong blue border with a dark edge for contrast over the picture
 - **WHEN** the operator opens Pan in PVW with a visible Crop edges plate **THEN** a clearly labelled

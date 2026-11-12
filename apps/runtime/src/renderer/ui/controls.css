@@ -378,6 +378,45 @@
   gap: var(--r-space-1);
 }
 
+/* The PVW pane itself gets narrower when Inspector opens, even at the same viewport width. */
+@container pvw (min-width: 0px) {
+  .cg-panel-header.cg-panel-header--monitor,
+  .cg-panel-header--monitor .cg-panel-actions {
+    flex-wrap: nowrap;
+  }
+  .cg-panel-header--monitor .cg-monitor-head {
+    overflow: hidden;
+  }
+}
+
+@container pvw (max-width: 36rem) {
+  .cg-panel-header.cg-panel-header--monitor
+    .cg-btn:is([data-monitor-pan], [data-monitor-move], [data-monitor-frames]) {
+    width: var(--r-monitor-head-btn);
+    padding-inline: var(--r-monitor-head-btn-pad);
+  }
+  .cg-pvw-tool-label {
+    display: none;
+  }
+}
+
+@container pvw (max-width: 25rem) {
+  .cg-panel-header.cg-panel-header--monitor {
+    padding-inline: var(--r-space-1);
+    gap: var(--r-space-1);
+  }
+  .cg-panel-header--monitor .cg-panel-actions {
+    gap: var(--r-space-1);
+  }
+  .cg-pvw-count-label {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+}
+
 /* ── 🔴 CONSOLE-MATCH-03 §1 — THE MONITOR HEADS ─────────────────────────────
  *
  * Measured in Chromium at 1280 × 800 on the reference: `.pvw-label` / `.pgm-label` are

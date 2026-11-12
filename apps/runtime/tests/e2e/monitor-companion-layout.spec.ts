@@ -31,12 +31,17 @@ async function expectHeaderActionsClear(
     ];
     const iconAndTextFit = tools.every((tool) => {
       const icon = tool.querySelector('svg')?.getBoundingClientRect();
-      const label = tool.lastChild;
+      const label = tool.querySelector('.cg-pvw-tool-label');
       if (icon === undefined || label === null) return false;
+      const button = tool.getBoundingClientRect();
+      if (getComputedStyle(label).display === 'none') {
+        return (
+          inside(button, icon) && tool.hasAttribute('aria-label') && tool.hasAttribute('title')
+        );
+      }
       const range = document.createRange();
       range.selectNodeContents(label);
       const text = range.getBoundingClientRect();
-      const button = tool.getBoundingClientRect();
       return inside(button, icon) && inside(button, text) && !intersect(icon, text);
     });
     const toolOrder = tools
@@ -72,17 +77,14 @@ for (const name of ['PROGRAM (PGM)', 'PREVIEW (PVW)']) {
     const normal = await monitor.boundingBox();
     expect(normal).not.toBeNull();
     await expect(mainChrome).toHaveCount(2);
-    const expectedTools = name === 'PREVIEW (PVW)' ? ['Move template', 'Crop input'] : [];
+    const expectedTools = name === 'PREVIEW (PVW)' ? ['Move template'] : [];
     if (name === 'PREVIEW (PVW)') await expectHeaderActionsClear(panel, expectedTools);
     await page.getByRole('button', { name: `Show ${name} fullscreen` }).click();
     await expect(mainChrome).toHaveCount(0);
-    await expect(panel.locator('[data-monitor-pan]')).toHaveCount(name === 'PREVIEW (PVW)' ? 1 : 0);
+    await expect(panel.locator('[data-monitor-pan]')).toHaveCount(0);
     if (name === 'PREVIEW (PVW)') {
-      const crop = panel.getByRole('button', { name: 'Crop input in Preview', exact: true });
       const move = panel.getByRole('button', { name: 'Move template in Preview', exact: true });
-      await expect(crop).toHaveText('Crop input');
       await expect(move).toHaveText('Move template');
-      await expect(crop.locator('svg.lucide-crop')).toBeVisible();
       await expect(move.locator('svg.lucide-hand')).toBeVisible();
     }
     if (name === 'PROGRAM (PGM)') {

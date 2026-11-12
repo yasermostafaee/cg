@@ -186,9 +186,7 @@ test('D-178 — Pan stays in Preview and requires a visible Crop edges plate', a
   const programme = page.getByRole('button', { name: 'Pan live input', exact: true });
   await expect(programme).toHaveCount(0);
   const preview = page.getByRole('button', { name: 'Crop input in Preview', exact: true });
-  await expect(preview).toBeVisible();
-  await expect(preview).toBeDisabled();
-  await expect(preview).toHaveAttribute('aria-pressed', 'false');
+  await expect(preview).toHaveCount(0);
   await expect(page.locator('[data-pan-practice-picture]')).toHaveCount(0);
 
   await registerTwoBox(page);
@@ -197,7 +195,7 @@ test('D-178 — Pan stays in Preview and requires a visible Crop edges plate', a
   await rehearseRow(page, layer);
   await pvwTransport(page, 'PLAY').click();
   await expect(marker(page, 'guest-1')).toBeVisible();
-  await expect(preview).toBeDisabled();
+  await expect(preview).toHaveCount(0);
   await expect(page.locator('[data-pan-practice-picture]')).toHaveCount(0);
 });
 
@@ -323,6 +321,7 @@ test('D-178 — practice crop Draft and Update survive OFF PVW and ON PVW', asyn
   const moved = await readLeft();
   await expect(page.locator('[data-pan-crop-state="practice-draft"]')).toHaveCount(1);
   await leave();
+  await expect(pan).toHaveCount(0);
   await enter();
   await expect.poll(readLeft).toBe(moved);
   await app.inspector.getByRole('button', { name: 'Apply staged edits', exact: true }).click();

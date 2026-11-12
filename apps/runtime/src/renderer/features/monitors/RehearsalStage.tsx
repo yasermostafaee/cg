@@ -291,6 +291,7 @@ export interface RehearsalTransport {
   drive: (verb: 'play' | 'next' | 'stop') => void;
   ready: boolean;
   count: number;
+  panVisible: boolean;
   panAvailable: boolean;
   moveItemId: string | undefined;
 }
@@ -518,7 +519,8 @@ export function RehearsalStage({
   const panPlates = placements.filter(
     (plate) => plate.cropEdges === true && plateInRaster(plate, raster),
   );
-  const panAvailable = playing && panPlates.length > 0;
+  const panVisible = panPlates.length > 0;
+  const panAvailable = playing && panVisible;
   const panRows = panAvailable
     ? renderable.flatMap(({ subject }) => {
         const plates = panPlates
@@ -659,13 +661,14 @@ export function RehearsalStage({
       drive: driveAll,
       ready: allReady,
       count: renderable.length,
+      panVisible,
       panAvailable,
       moveItemId,
     });
     return () => {
       onTransport?.(null);
     };
-  }, [onTransport, driveAll, allReady, renderable.length, panAvailable, moveItemId]);
+  }, [onTransport, driveAll, allReady, renderable.length, panVisible, panAvailable, moveItemId]);
 
   if (renderable.length === 0) {
     // Nothing to draw: the one line per row that has no page, or — while the pages are still being

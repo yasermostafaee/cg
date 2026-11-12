@@ -126,3 +126,8 @@
 - [x] Disable Reset crop for the authored crop and when a reset is already staged. Verify
       that a saved or staged deviation in another preset does not enable it.
 - [ ] Verify Reset crop on the target station and record carrying Linux Playwright.
+
+## 13. Crop input visibility
+
+- [x] Show Crop input only for an eligible Crop edges plate on PVW. Windows Chromium verified
+      the empty and contain-only cases and the disabled state before Preview Play.

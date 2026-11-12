@@ -5157,7 +5157,9 @@ is no verified ownership map.
 - WHEN a row is ON PVW THEN its retained page has a labelled template outline in the Preview raster, including before Preview Play and after Preview Stop. Use the authored visual element boxes where measurable, with the page footprint as a fallback.
 - WHEN **Move template** is off in PVW THEN template outlines remain visible and dragging does not change Position. The tool starts off and is available when an eligible template is ready.
 - WHEN the PVW toolbar shows its editing tools THEN **Move template** comes before **Crop input**,
-  followed by **Edit frames** when available. Keep the order in compact layouts.
+  followed by **Edit frames** when available. **Crop input** appears for eligible **Crop edges**
+  plates on PVW and enables after Preview Play. As the pane narrows, its tools keep one row and
+  switch to icons with accessible names and tooltips.
 - WHEN the operator enables **Move template** and drags an editable template in PVW THEN select its row and stage its Position offsets in Inspector. Preserve the current anchor when known. The outline and preview follow the move in channel coordinates and the existing Update or Update on air action applies it.
 - WHEN the operator switches **Move template** off or switches to **Crop input** or **Edit frames** THEN template dragging stops and completed Position drafts remain available for Update or Discard. The same Position locks apply to Inspector and Preview.
 - WHEN the operator presses **Reset position** in an editable Position section THEN the

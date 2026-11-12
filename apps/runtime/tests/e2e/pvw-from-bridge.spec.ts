@@ -1434,6 +1434,7 @@ test('Frames drafts the authored box and whole-template Position moves the retai
                 type: 'video-placeholder',
                 routeKey: 'guest',
                 operatorPlacement: 'proportional',
+                fitMode: 'cover',
                 transform: transform(0, 0, 400, 300),
                 opacity: 1,
                 visible: true,
@@ -1474,11 +1475,49 @@ test('Frames drafts the authored box and whole-template Position moves the retai
   await showMonitors(page);
   const plateRow = page.getByRole('region', { name: 'Layers' }).locator('[data-layer="59"]');
   await plateRow.locator('[data-row-body]').click();
-  await plateRow.getByRole('button', { name: 'ON PVW', exact: true }).click();
   const pvw = page.getByRole('region', { name: 'PREVIEW (PVW)' });
-  await expect(
-    pvw.locator('[data-monitor-move], [data-monitor-pan], [data-monitor-frames]'),
-  ).toHaveText(['Move template', 'Crop input', 'Edit frames']);
+  const pan = pvw.getByRole('button', { name: 'Crop input in Preview', exact: true });
+  await expect(pan).toHaveCount(0);
+  await plateRow.getByRole('button', { name: 'ON PVW', exact: true }).click();
+  await expect(pan).toBeDisabled();
+  const tools = pvw.locator('[data-monitor-move], [data-monitor-pan], [data-monitor-frames]');
+  await expect(tools).toHaveText(['Move template', 'Crop input', 'Edit frames']);
+  const labels = tools.locator('.cg-pvw-tool-label');
+  const header = pvw.locator('.cg-panel-header--monitor');
+  const headerLayout = () =>
+    header.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      const buttons = [...element.querySelectorAll('button')].map((button) =>
+        button.getBoundingClientRect(),
+      );
+      return {
+        height: box.height,
+        singleRow: buttons.every(({ top }) => Math.abs(top - (buttons[0]?.top ?? top)) < 1),
+        inside: buttons.every(({ left, right }) => left >= box.left && right <= box.right),
+        distinct: buttons.every(({ right }, index) => right <= (buttons[index + 1]?.left ?? right)),
+      };
+    });
+  await expect(page.getByRole('complementary', { name: 'Inspector' })).toBeVisible();
+  await expect(labels.first()).toBeVisible();
+  const full = await headerLayout();
+  expect(full).toMatchObject({ singleRow: true, inside: true, distinct: true });
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(page.getByRole('complementary', { name: 'Inspector' })).toBeVisible();
+  await expect(labels.first()).toBeHidden();
+  await expect(tools.locator('svg')).toHaveCount(3);
+  expect(await headerLayout()).toEqual(full);
+
+  await pvw.getByRole('button', { name: 'Show PREVIEW (PVW) fullscreen' }).click();
+  await pvw.getByRole('button', { name: 'Monitor, selected layer and Inspector' }).click();
+  await page.setViewportSize({ width: 620, height: 900 });
+  await expect(page.locator('[data-monitor-inspector-companion]')).toBeVisible();
+  await expect(labels.first()).toBeHidden();
+  await expect(pvw.getByRole('button', { name: 'Exit fullscreen PREVIEW (PVW)' })).toBeVisible();
+  expect(await headerLayout()).toEqual(full);
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await pvw.getByRole('button', { name: 'Exit fullscreen PREVIEW (PVW)' }).click();
+  await expect(labels.first()).toBeVisible();
   const moveTemplate = pvw.getByRole('button', { name: 'Move template in Preview', exact: true });
   await moveTemplate.click();
   await expect(moveTemplate).toHaveAttribute('aria-pressed', 'true');
