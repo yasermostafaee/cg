@@ -104,11 +104,13 @@ describe('projectCompositionForExport', () => {
 
     const parent = projectCompositionForExport(authored, 'root');
     const child = projectCompositionForExport(authored, 'nested');
+    const originalChild = projectCompositionForExport(original, 'nested');
+    if (child === null || originalChild === null) throw new Error('Missing nested composition');
     expect(parent?.allowOperatorAutoLayout).toBeUndefined();
     expect(parent?.compositions?.[0]?.allowOperatorAutoLayout).toBe(true);
-    expect(child?.allowOperatorAutoLayout).toBe(true);
-    expect(requiredRuntimeVersionForScene(child!)).toBe(
-      requiredRuntimeVersionForScene(projectCompositionForExport(original, 'nested')!),
+    expect(child.allowOperatorAutoLayout).toBe(true);
+    expect(requiredRuntimeVersionForScene(child)).toBe(
+      requiredRuntimeVersionForScene(originalChild),
     );
   });
 
