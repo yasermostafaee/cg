@@ -1,6 +1,7 @@
 import {
   fixedBankEnd,
   layerShortcutBindings,
+  LAYER_SPACE_SHORTCUT,
   LayerShortcutChordSchema,
   type FixedLayerBank,
   type LayerShortcutBindings,
@@ -9,9 +10,15 @@ import {
 export function effectiveLayerShortcutBindings(
   bank: FixedLayerBank,
   supportsNext: boolean,
+  supportsSpace: boolean,
 ): LayerShortcutBindings {
-  if (!supportsNext || bank.shortcuts !== undefined || bank.nextShortcuts !== undefined) {
-    return layerShortcutBindings(bank);
+  if (
+    !supportsNext ||
+    bank.shortcuts !== undefined ||
+    bank.nextShortcuts !== undefined ||
+    bank.spaceShortcut !== undefined
+  ) {
+    return layerShortcutBindings(supportsSpace ? bank : { ...bank, spaceShortcut: undefined });
   }
   const defaults: LayerShortcutBindings = {};
   for (let layer = Math.min(fixedBankEnd(bank), 99); layer >= Math.max(bank.start, 88); layer--) {
@@ -30,7 +37,9 @@ export function layerShortcutChord(event: KeyboardEvent): string | null {
     ...(event.metaKey ? ['Meta'] : []),
     event.code,
   ].join('+');
-  return LayerShortcutChordSchema.safeParse(chord).success ? chord : null;
+  return chord === LAYER_SPACE_SHORTCUT || LayerShortcutChordSchema.safeParse(chord).success
+    ? chord
+    : null;
 }
 
 export function layerShortcutLabel(chord: string): string {

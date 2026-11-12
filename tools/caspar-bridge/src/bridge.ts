@@ -6011,6 +6011,7 @@ export function buildRoutes(
     channels: [...routes.keys()].sort(),
     fixedLayerShortcuts: true as const,
     fixedLayerNextShortcut: true as const,
+    fixedLayerSpaceShortcut: true as const,
     /*
       🔴 `C-037` / ADR 0010 rule 9 — the auth MODE and the SIGN-IN ADDRESS, answered to a
       socket that has not signed in, because that is the socket that needs them. `B-153`'s own

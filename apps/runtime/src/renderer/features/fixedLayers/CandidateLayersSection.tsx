@@ -7,6 +7,8 @@ import {
   fixedBankEnd,
   isLayerVisible,
   isLowBankLayer,
+  LAYER_SHORTCUT_VERBS,
+  LAYER_SPACE_SHORTCUT,
   lowBankEnd,
   type FixedLayerBank,
   type FixedSlotState,
@@ -189,7 +191,12 @@ export function CandidateLayersSection({
 }
 
 function bankKey(bank: FixedLayerBank): string {
-  const { shortcuts: _shortcuts, nextShortcuts: _nextShortcuts, ...layers } = bank;
+  const {
+    shortcuts: _shortcuts,
+    nextShortcuts: _nextShortcuts,
+    spaceShortcut: _spaceShortcut,
+    ...layers
+  } = bank;
   return JSON.stringify(layers);
 }
 
@@ -362,6 +369,7 @@ function BankEditor({
   const capabilities = useAuthCapabilities();
   const canEditShortcuts = admin && capabilities?.fixedLayerShortcuts === true;
   const canAssignNext = canEditShortcuts && capabilities?.fixedLayerNextShortcut === true;
+  const canAssignSpace = canEditShortcuts && capabilities?.fixedLayerSpaceShortcut === true;
   /*
     The row's REMOVE is a different verb — `stack.remove`, operator class, on this channel — so it
     asks the operator question, and is absent for a principal the bridge would refuse (a viewer,
@@ -509,14 +517,21 @@ function BankEditor({
   async function applyShortcuts(bindings: LayerShortcutBindings): Promise<string | null> {
     const legacyShortcuts: LayerShortcuts = {};
     const nextShortcuts: Record<string, string> = {};
-    for (const [layer, { next, ...legacy }] of Object.entries(bindings)) {
-      if (Object.keys(legacy).length > 0) legacyShortcuts[layer] = legacy;
-      if (next !== undefined) nextShortcuts[layer] = next;
+    let spaceShortcut: FixedLayerBank['spaceShortcut'] = null;
+    for (const [layer, shortcuts] of Object.entries(bindings)) {
+      for (const verb of LAYER_SHORTCUT_VERBS) {
+        const chord = shortcuts[verb];
+        if (chord === undefined) continue;
+        if (chord === LAYER_SPACE_SHORTCUT) spaceShortcut = { layer: Number(layer), verb };
+        else if (verb === 'next') nextShortcuts[layer] = chord;
+        else (legacyShortcuts[layer] ??= {})[verb] = chord;
+      }
     }
     const result = await saveBank({
       ...bank,
       shortcuts: legacyShortcuts,
       ...(canAssignNext ? { nextShortcuts } : {}),
+      ...(canAssignSpace ? { spaceShortcut } : {}),
     });
     return result.ok ? null : bankRefusal(result);
   }
@@ -938,8 +953,9 @@ function BankEditor({
             layer,
             name: name.trim() || placeholder,
           }))}
-          shortcuts={effectiveLayerShortcutBindings(bank, canAssignNext)}
+          shortcuts={effectiveLayerShortcutBindings(bank, canAssignNext, canAssignSpace)}
           canAssignNext={canAssignNext}
+          canAssignSpace={canAssignSpace}
           onClose={() => setEditingShortcuts(false)}
           onApply={applyShortcuts}
         />

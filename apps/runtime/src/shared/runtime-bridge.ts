@@ -213,6 +213,7 @@ export interface AuthCapabilities {
   readonly sharedTemplateFolder?: true;
   readonly fixedLayerShortcuts?: true;
   readonly fixedLayerNextShortcut?: true;
+  readonly fixedLayerSpaceShortcut?: true;
 }
 
 /**

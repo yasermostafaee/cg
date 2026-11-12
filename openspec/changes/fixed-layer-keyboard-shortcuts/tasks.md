@@ -19,3 +19,10 @@
 - [ ] Record the Linux Playwright E2E result for the preset and modal footer.
 
 Windows Chromium passed all 16 focused scenarios. The Bridge integration test persisted Next through an older console update and a restart, and refused a duplicate chord across both shortcut maps.
+
+## Space and shortcut table layout
+
+- [x] Support one Space assignment per channel with an additive bank field and Bridge capability.
+- [x] Use fixed table columns, compact rows, and an em dash for empty shortcuts.
+- [x] Verify Space recording and dispatch, older Bridge behavior, and measured table layout in Windows Chromium.
+- [ ] Record the carrying Linux Playwright E2E result.

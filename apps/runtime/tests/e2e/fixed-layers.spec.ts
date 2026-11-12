@@ -294,7 +294,7 @@ test('R-023 — fixed layer shortcuts follow the guarded actions in filtered and
   }
   for (const layer of [87, 59]) {
     for (const verb of ['Play', 'Next', 'Stop', 'Clear']) {
-      await expect(cell(verb, layer)).toHaveText('Assign');
+      await expect(cell(verb, layer)).toHaveText('—');
     }
   }
   const apply = dialog.getByRole('button', { name: 'Apply', exact: true });
@@ -303,7 +303,7 @@ test('R-023 — fixed layer shortcuts follow the guarded actions in filtered and
   await expect(revert).toBeDisabled();
   await expect(await assign('Play', 'Alt+Shift+F1')).toHaveText('Alt+Shift+F1');
   await revert.click();
-  await expect(cell('Play', 80)).toHaveText('Assign');
+  await expect(cell('Play', 80)).toHaveText('—');
   await expect(apply).toBeDisabled();
   await expect(await assign('Play', 'Alt+Shift+F1')).toHaveText('Alt+Shift+F1');
   const nextBinding = await assign('Next', 'Alt+Shift+F1', 82);
@@ -333,7 +333,7 @@ test('R-023 — fixed layer shortcuts follow the guarded actions in filtered and
   await expect(cell('Play', 86)).toHaveText('Alt+Shift+F9');
   await expect(cell('Play', 81)).toHaveText('Alt+Shift+F8');
   await revert.click();
-  await expect(cell('Play', 81)).toHaveText('Assign');
+  await expect(cell('Play', 81)).toHaveText('—');
   await expect(cell('Play', 86)).toHaveText('Alt+Shift+F9');
   await expect(apply).toBeDisabled();
   await expect

@@ -1,0 +1,56 @@
+.cg-layer-shortcut-scroll {
+  flex-shrink: 0;
+  padding: 2px;
+}
+
+[role='dialog']:has(.cg-layer-shortcut-table) {
+  max-inline-size: 720px;
+}
+
+.cg-layer-shortcut-table {
+  table-layout: fixed;
+  min-inline-size: 40rem;
+}
+
+.cg-layer-shortcut-table thead th:first-child {
+  inline-size: 24%;
+}
+
+.cg-layer-shortcut-table th,
+.cg-layer-shortcut-table td {
+  padding-inline: var(--r-space-2);
+}
+
+.cg-layer-shortcut-table tbody th,
+.cg-layer-shortcut-table td {
+  padding-block: var(--r-space-1);
+}
+
+.cg-layer-shortcut-table tbody th {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cg-layer-shortcut-cell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: var(--r-space-1);
+}
+
+.cg-layer-shortcut-cell .cg-btn {
+  min-block-size: 28px;
+  padding: 0 var(--r-space-1);
+}
+
+.cg-layer-shortcut-record span {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cg-layer-shortcut-cell .cg-layer-shortcut-remove {
+  inline-size: 24px;
+  padding: 0;
+}

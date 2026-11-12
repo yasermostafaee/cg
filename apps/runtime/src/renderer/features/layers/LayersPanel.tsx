@@ -1351,6 +1351,7 @@ export function LayersPanel({
     const shortcutsByLayer = effectiveLayerShortcutBindings(
       bank,
       capabilities?.fixedLayerNextShortcut === true,
+      capabilities?.fixedLayerSpaceShortcut === true,
     );
     const visible =
       shortcutsOnly || (!selectedOnly && activeTab !== 'layers') ? [] : shownRowBindings;

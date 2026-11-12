@@ -273,6 +273,7 @@ export function createMockBridge(): RuntimeBridge {
         setupPhase: null,
         fixedLayerShortcuts: true,
         fixedLayerNextShortcut: true,
+        fixedLayerSpaceShortcut: true,
       }),
       onCapabilitiesChanged: () => () => undefined,
       state: () => ({ kind: 'off' as const }),

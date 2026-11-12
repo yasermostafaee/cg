@@ -1044,6 +1044,10 @@ a row — this is the Cinegy operating rhythm the fixed layers exist for.
   a book page, including when the row is filtered out.
 - WHEN a combo is assigned THEN conflicts are prevented at assignment time — a combo can bind
   once
+- WHEN the Bridge supports Space THEN an admin can assign the physical Space key to Play, Next,
+  Stop or Clear. When the assigned action can run, Space triggers it once per press.
+- WHEN an admin records a shortcut THEN the shortcut table keeps its row and column sizes. Empty
+  cells show an em dash, and narrow windows can scroll the table horizontally.
 - WHEN a channel has no saved assignments THEN layers 99 through 88 default to F1 through F12
   for Play, Ctrl+F1 through Ctrl+F12 for Stop, Shift+F1 through Shift+F12 for Clear, and
   Alt+F1 through Alt+F12 for Next. Other layers start unassigned.

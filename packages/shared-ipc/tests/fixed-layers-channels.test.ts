@@ -52,6 +52,26 @@ describe('Fixed layer shortcuts', () => {
       expect(FixedLayerBankSchema.safeParse({ channel: 1, shortcuts }).success).toBe(false);
     }
   });
+
+  it('reads one additive Space assignment and keeps the legacy chord fields strict', () => {
+    const raw = { channel: 1, spaceShortcut: { layer: 59, verb: 'next' } };
+    expect(layerShortcutBindings(FixedLayerBankSchema.parse(raw))).toEqual({
+      '59': { next: 'Space' },
+    });
+    expect(
+      layerShortcutBindings(FixedLayerBankSchema.parse({ ...raw, spaceShortcut: null })),
+    ).toEqual({});
+    expect(FixedLayerBankSchema.safeParse({ ...raw, nextShortcuts: { '59': 'F1' } }).success).toBe(
+      false,
+    );
+    expect(
+      FixedLayerBankSchema.safeParse({ ...raw, spaceShortcut: { ...raw.spaceShortcut, layer: 79 } })
+        .success,
+    ).toBe(false);
+    expect(
+      FixedLayerBankSchema.safeParse({ ...raw, shortcuts: { '59': { stop: 'Space' } } }).success,
+    ).toBe(false);
+  });
 });
 
 /**

@@ -29,6 +29,14 @@ the Bridge advertises support for its storage.
 - **AND** shortcuts edited elsewhere are preserved when their cells are unedited here
 - **AND** Revert restores the most recently saved assignments
 
+#### Scenario: Record Space in the shortcut dialog
+
+- **WHEN** a Bridge advertises Space support and the admin records the physical Space key
+- **THEN** the dialog can assign it to Play, Next, Stop or Clear once per channel
+- **AND** empty cells show an em dash, and recording leaves the table's row heights and column widths stable
+- **AND** the table scrolls horizontally on a narrow window
+- **AND** an older Bridge still supports the legacy shortcut keys
+
 ### Requirement: Layer shortcuts use the guarded row actions
 
 A shortcut SHALL target the exact layer of the selected channel. It SHALL invoke the existing row
@@ -53,3 +61,9 @@ context menus and repeated keydown events SHALL suspend shortcuts.
 - **WHEN** the operator presses a Clear shortcut for a layer whose Clear action requires confirmation
 - **THEN** the existing Clear confirmation opens
 - **AND** the same shortcut performs no layer action while a text editor holds focus
+
+#### Scenario: Use Space outside shortcut recording
+
+- **WHEN** the operator presses Space while its assigned row action is available
+- **THEN** it invokes that action once, without also activating the focused control
+- **AND** when Space is unassigned or the action is unavailable, the focused control keeps its usual keyboard behavior

@@ -198,7 +198,7 @@ describe('§2 A — the plural door and the v1 door', () => {
     expect(again.runtime.declaredChannels()).toEqual([1, 2]);
   });
 
-  it('retains Next assignments across older console edits and bridge restart', async () => {
+  it('retains Next and Space assignments across older console edits and bridge restart', async () => {
     const dir = track(fs.mkdtempSync(path.join(os.tmpdir(), 'cg-next-shortcuts-')), (d) => {
       fs.rmSync(d, { recursive: true, force: true });
     });
@@ -211,25 +211,37 @@ describe('§2 A — the plural door and the v1 door', () => {
     const client = await openClient(rig.handle);
     const setBanks = (banks: unknown[]) => client.ask(id(), 'fixedLayers.set-banks', { banks });
     const nextShortcuts = { '99': 'F8' };
-    const configured = await setBanks([first, { ...second, nextShortcuts }]);
+    const spaceShortcut = { layer: 98, verb: 'play' };
+    const configured = await setBanks([first, { ...second, nextShortcuts, spaceShortcut }]);
     expect(configured.payload).toEqual({ ok: true });
     const older = FixedLayerBankSchema.parse({ ...first, aliases: { '99': 'News' } });
     expect(runtime.bankChangeFootprint([older, second])).toEqual([1]);
     expect((await setBanks([older, second])).payload).toEqual({ ok: true });
     expect(runtime.fixedLayerBanks()[1]?.nextShortcuts).toEqual(nextShortcuts);
+    expect(runtime.fixedLayerBanks()[1]?.spaceShortcut).toEqual(spaceShortcut);
     expect(
       (await setBanks([older, { ...second, shortcuts: { '98': { stop: 'F8' } } }])).payload,
     ).toMatchObject({ ok: false, message: 'Shortcut is already assigned in this channel' });
+    expect(
+      (await setBanks([older, { ...second, shortcuts: { '98': { play: 'F7' } } }])).payload,
+    ).toMatchObject({
+      ok: false,
+      message: 'Space and another shortcut are assigned to the same action',
+    });
 
     const restarted = track(
       await createBridge({ port: 0, connection: rig.connection, fixedLayersPath: file }),
       (handle) => handle.close(),
     );
     expect(restarted.runtime.fixedLayerBanks()[1]?.nextShortcuts).toEqual(nextShortcuts);
-    expect((await setBanks([older, { ...second, nextShortcuts: {} }])).payload).toEqual({
+    expect(restarted.runtime.fixedLayerBanks()[1]?.spaceShortcut).toEqual(spaceShortcut);
+    expect(
+      (await setBanks([older, { ...second, nextShortcuts: {}, spaceShortcut: null }])).payload,
+    ).toEqual({
       ok: true,
     });
     expect(runtime.fixedLayerBanks()[1]?.nextShortcuts).toEqual({});
+    expect(runtime.fixedLayerBanks()[1]?.spaceShortcut).toBeNull();
   });
 
   it('the v1 door on a two-channel station makes the set that one bank — refused while ours holds air on a channel it drops', async () => {

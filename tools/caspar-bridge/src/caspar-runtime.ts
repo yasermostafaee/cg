@@ -7406,9 +7406,9 @@ export class CasparRuntime {
     next: readonly FixedLayerBank[],
     validate: () => readonly LayerSlot[],
   ): { ok: boolean; reason?: FixedLayersErrorCode; message?: string; layer?: number } {
-    const banks = next.map((bank) => this.#withRetainedNextShortcuts(bank));
+    const banks = next.map((bank) => this.#withRetainedBankShortcuts(bank));
     for (const bank of banks) {
-      if (bank.nextShortcuts === undefined) continue;
+      if (bank.nextShortcuts === undefined && bank.spaceShortcut === undefined) continue;
       const parsed = FixedLayerBankSchema.safeParse(bank);
       if (!parsed.success) {
         return {
@@ -18700,11 +18700,17 @@ export class CasparRuntime {
     return this.#isDeclaredChannel(channel);
   }
 
-  #withRetainedNextShortcuts(bank: FixedLayerBank): FixedLayerBank {
-    // Older consoles omit this field. A console that supports Next can clear it with {}.
-    if (bank.nextShortcuts !== undefined) return bank;
-    const nextShortcuts = this.#bankFor(bank.channel)?.nextShortcuts;
-    return nextShortcuts === undefined ? bank : { ...bank, nextShortcuts };
+  #withRetainedBankShortcuts(bank: FixedLayerBank): FixedLayerBank {
+    const { nextShortcuts, spaceShortcut, ...layout } = bank;
+    const current = this.#bankFor(bank.channel);
+    // Older consoles omit these fields. Explicit empty/null values clear them.
+    const next = nextShortcuts ?? current?.nextShortcuts;
+    const space = spaceShortcut === undefined ? current?.spaceShortcut : spaceShortcut;
+    return {
+      ...layout,
+      ...(next !== undefined && { nextShortcuts: next }),
+      ...(space !== undefined && { spaceShortcut: space }),
+    };
   }
 
   /**
@@ -18720,7 +18726,7 @@ export class CasparRuntime {
       const before = this.#bankFor(bank.channel);
       if (
         before === null ||
-        JSON.stringify(before) !== JSON.stringify(this.#withRetainedNextShortcuts(bank))
+        JSON.stringify(before) !== JSON.stringify(this.#withRetainedBankShortcuts(bank))
       ) {
         touched.add(bank.channel);
       }
