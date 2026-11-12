@@ -32,6 +32,10 @@ import * as s from './Gizmo.css.js';
 import { hasNoActiveCell, renderedTransformAt } from '../../state/slices/arrangements.js';
 import { isAspectLocked } from '../../state/slices/view.js';
 import { sizeRatioForAspect } from '../inspector/aspect-presets.js';
+import {
+  compositionSizeRatio,
+  liveFrameCompositionAspect,
+} from '../inspector/composition-aspect.js';
 
 interface Props {
   element: Element;
@@ -518,19 +522,21 @@ function beginResize(
     place that knows the effective aspect includes `scale`, and `geometry.ts` deliberately
     never learns what an aspect is.
 
-    ⚠ NARROW BY CONSTRUCTION: a `video-placeholder` with `expectedAspect` SET, and nothing
-    else. Every other element kind, an unspecified aspect, and the lock switched off all
-    resolve to `undefined` and take the untouched free-resize path.
+    A single-live-frame composition uses the child raster ratio. A direct plate uses its
+    expected aspect. Other elements and unlocked instances take the free-resize path.
 
     `B-218` — the lock is THIS plate's (`isAspectLocked(state, element.id)`), never a flag
     shared by every plate in every look.
   */
-  const lockRatio =
-    element.type === 'video-placeholder' &&
-    element.expectedAspect !== undefined &&
-    isAspectLocked(designerStore.get(), element.id)
-      ? (sizeRatioForAspect(element.expectedAspect, t0.scale) ?? undefined)
-      : undefined;
+  const state = designerStore.get();
+  const compositionAspect = liveFrameCompositionAspect(state.scene, element);
+  const ratio =
+    compositionAspect !== undefined
+      ? compositionSizeRatio(compositionAspect, t0.scale)
+      : element.type === 'video-placeholder' && element.expectedAspect !== undefined
+        ? sizeRatioForAspect(element.expectedAspect, t0.scale)
+        : null;
+  const lockRatio = isAspectLocked(state, element.id) ? (ratio ?? undefined) : undefined;
   const targets = snapping ? buildSnapTargets(element.id, frameForElement) : { xs: [], ys: [] };
   const thr = SNAP_PX / scale;
 

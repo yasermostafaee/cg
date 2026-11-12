@@ -6785,6 +6785,12 @@ CG Control after swapping left/right inputs is not an acceptable operating workf
 - WHEN selecting two or more eligible visual layers THEN Auto layout supports mixed selections
   such as a live plate, an ordinary composition, a shape and a Repeater, preserving proportions
   and layer order with one Undo per layout action
+- WHEN a composition instance contains a single live plate THEN its ratio lock keeps the child
+  composition's proportions during numeric and Canvas resize. The author can unlock it or restore
+  a previously stretched instance. Opening a saved project preserves its transforms.
+- WHEN exporting a composition containing presets THEN its **Allow Auto layout in CG Control**
+  permission authorizes the tool, and the active preset's frame count and permissions determine
+  whether it is offered.
 - WHEN audio or locked layers are selected with eligible visuals THEN Auto layout leaves those
   layers alone
 

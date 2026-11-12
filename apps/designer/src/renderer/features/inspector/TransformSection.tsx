@@ -14,6 +14,11 @@ import { Seg, SingleField, transformFieldProps } from './transform-fields.js';
 import * as s from './TransformSection.css.js';
 import { renderedTransformAt } from '../../state/slices/arrangements.js';
 import { isAspectLocked } from '../../state/slices/view.js';
+import {
+  commitCompositionDimension,
+  compositionSizeRatio,
+  liveFrameCompositionAspect,
+} from './composition-aspect.js';
 
 interface Props {
   element: Element;
@@ -33,10 +38,13 @@ export function TransformSection({ element, selectedKeyframe }: Props): JSX.Elem
   // Self-subscribe to the frame so only this value-bearing section re-renders
   // during playback, not the whole inspector.
   const currentFrame = useDesignerSelector((s) => s.currentFrame);
+  const compositionAspect = useDesignerSelector((s) =>
+    liveFrameCompositionAspect(s.scene, element),
+  );
   const aspectLocked = useDesignerSelector(
     (state) =>
-      element.type === 'video-placeholder' &&
-      element.expectedAspect !== undefined &&
+      (compositionAspect !== undefined ||
+        (element.type === 'video-placeholder' && element.expectedAspect !== undefined)) &&
       isAspectLocked(state, element.id),
   );
   // Show the *effective* values at the current frame so editing a keyframe (or
@@ -93,9 +101,12 @@ export function TransformSection({ element, selectedKeyframe }: Props): JSX.Elem
     descriptorFor(element, 'opacity') === undefined
       ? (withheldReason(element, 'opacity') ?? 'Not available for this element')
       : undefined;
-  const scaleWithheld = aspectLocked
-    ? 'Scale is unavailable while this Plate keeps its aspect locked. Resize with Width or Height.'
-    : undefined;
+  const lockedComposition = aspectLocked && compositionAspect !== undefined;
+  const scaleWithheld = lockedComposition
+    ? 'Turn off Keep proportions to edit scale directly. Resize with Width or Height.'
+    : aspectLocked
+      ? 'Scale is unavailable while this Plate keeps its aspect locked. Resize with Width or Height.'
+      : undefined;
 
   // Commit a property's STORED value (the shared field props convert the
   // displayed value — e.g. opacity %, scale % — back to stored units).
@@ -114,10 +125,22 @@ export function TransformSection({ element, selectedKeyframe }: Props): JSX.Elem
   const liveRect = effectivePathLocalRect(element, currentFrame);
   const sizeW = liveRect?.w ?? t.size.w;
   const sizeH = liveRect?.h ?? t.size.h;
+  const ratio = lockedComposition ? compositionSizeRatio(compositionAspect, t.scale) : null;
+  const sizeBoundary = lockedComposition ? designerStore.markHistoryBoundary : undefined;
   const commitW = (v: number): void =>
-    commit('size.w')(liveRect === null ? v : t.size.w * (v / Math.max(liveRect.w, 1e-6)));
+    commitCompositionDimension(
+      id,
+      'size.w',
+      liveRect === null ? v : t.size.w * (v / Math.max(liveRect.w, 1e-6)),
+      ratio,
+    );
   const commitH = (v: number): void =>
-    commit('size.h')(liveRect === null ? v : t.size.h * (v / Math.max(liveRect.h, 1e-6)));
+    commitCompositionDimension(
+      id,
+      'size.h',
+      liveRect === null ? v : t.size.h * (v / Math.max(liveRect.h, 1e-6)),
+      ratio,
+    );
 
   return (
     <div className={s.col}>
@@ -134,8 +157,16 @@ export function TransformSection({ element, selectedKeyframe }: Props): JSX.Elem
       </div>
       {/* Size W/H — live morph extents for a keyframed path (D-110). */}
       <div className="cg-input-group">
-        <Seg {...transformFieldProps('size.w', sizeW, commitW)} point={indicatorFor('size.w')} />
-        <Seg {...transformFieldProps('size.h', sizeH, commitH)} point={indicatorFor('size.h')} />
+        <Seg
+          {...transformFieldProps('size.w', sizeW, commitW)}
+          point={indicatorFor('size.w')}
+          onCommitBoundary={sizeBoundary}
+        />
+        <Seg
+          {...transformFieldProps('size.h', sizeH, commitH)}
+          point={indicatorFor('size.h')}
+          onCommitBoundary={sizeBoundary}
+        />
       </div>
       {/* Scale X/Y (percent) */}
       <div className="cg-input-group">

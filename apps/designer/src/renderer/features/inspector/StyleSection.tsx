@@ -30,6 +30,7 @@ import type {
   AnimatableProperty,
   ClockElement,
   ClockTarget,
+  CompositionElement,
   Element,
   Filter,
   ImageElement,
@@ -99,6 +100,8 @@ import * as dds from './DynamicDataSection.css.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { elementDataField, typedTextDigits } from '../../state/slices/fields.js';
 import { isAspectLocked } from '../../state/slices/view.js';
+import { renderedTransformAt } from '../../state/slices/arrangements.js';
+import { liveFrameCompositionAspect, restoreCompositionAspect } from './composition-aspect.js';
 import { DigitsField } from './DigitsField.js';
 import { activeDocOf, activeFieldData, activeLayersOf, locate } from '../../state/scene-doc.js';
 import { nextAutoSourceId } from '../../state/auto-source-id.js';
@@ -297,6 +300,7 @@ export function StyleSection({ element, selectedKeyframe }: Props): JSX.Element 
               }
             />
           </div>
+          <CompositionProportions element={element} />
         </CollapseSection>
         <FilterSection
           element={element}
@@ -316,6 +320,39 @@ export function StyleSection({ element, selectedKeyframe }: Props): JSX.Element 
       currentFrame={currentFrame}
       selectedKeyframe={selectedKeyframe}
     />
+  );
+}
+
+function CompositionProportions({ element }: { element: CompositionElement }): JSX.Element | null {
+  const aspect = useDesignerSelector((state) => liveFrameCompositionAspect(state.scene, element));
+  const locked = useDesignerSelector((state) => isAspectLocked(state, element.id));
+  const frame = useDesignerSelector((state) => state.currentFrame);
+  if (aspect === undefined) return null;
+  const restore = restoreCompositionAspect(renderedTransformAt(element, frame), aspect);
+  return (
+    <>
+      <CheckRow
+        label="Keep proportions"
+        checked={locked}
+        onChange={(enabled) => designerStore.setAspectLock(element.id, enabled)}
+        title="Keep this instance at the child composition's aspect when resizing."
+      />
+      <Button
+        variant="secondary"
+        disabled={restore === null}
+        onClick={() => {
+          if (restore === null) return;
+          designerStore.runAsSingleHistoryEntry(() => {
+            designerStore.commitAnimatable(element.id, 'position.x', restore.position.x);
+            designerStore.commitAnimatable(element.id, 'position.y', restore.position.y);
+            designerStore.commitAnimatable(element.id, 'size.w', restore.size.w);
+            designerStore.commitAnimatable(element.id, 'size.h', restore.size.h);
+          });
+        }}
+      >
+        Restore composition ratio
+      </Button>
+    </>
   );
 }
 

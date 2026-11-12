@@ -1307,6 +1307,89 @@ test.describe('Live Source (D-137 phase 1)', () => {
     expect(a!.width / a!.height).toBeCloseTo(16 / 9, 2);
   });
 
+  test('Keeps a nested live composition proportional when resizing inside a preset', async ({
+    app,
+  }) => {
+    await app.newProject('Nested live proportions');
+    await app.newComposition('Titled frame');
+    await app.openComposition('Titled frame');
+    await app.addLiveSource();
+    await app.setLiveSourceId('nested-frame');
+    await app.addTextElement({ x: 280, y: 210 });
+    await app.openComposition('comp1');
+    await app.addMultiFrameGroup();
+    await app.addLook();
+    await app.openComposition('preset-1');
+    await app.nestCompositionInstance('Titled frame');
+    const [instance] = await app.timelineRowIds();
+    if (instance === undefined) throw new Error('Missing nested composition');
+    await app.selectElementById(instance);
+
+    const lock = app.inspector.getByRole('checkbox', { name: 'Keep proportions' });
+    const restore = app.inspector.getByRole('button', { name: 'Restore composition ratio' });
+    const scaleX = app.inspector.getByRole('spinbutton', { name: 'Scale X' });
+    const scaleY = app.inspector.getByRole('spinbutton', { name: 'Scale Y' });
+    const readSize = async () =>
+      Promise.all([app.getInspectorNumber('Width'), app.getInspectorNumber('Height')]);
+    const picture = app.canvasFrame.locator('[data-cg-live-source="nested-frame"]');
+    const readPictureAspect = async () => {
+      const box = await picture.boundingBox();
+      return box === null ? 0 : box.width / box.height;
+    };
+    await expect(lock).toBeChecked();
+    await expect(restore).toBeDisabled();
+    await expect(scaleX).toBeDisabled();
+    await expect(scaleY).toBeDisabled();
+
+    // Recreate a legacy free resize including unequal authored scale. Enabling
+    // the lock must leave the existing geometry until the author repairs it.
+    await lock.uncheck();
+    await app.setInspectorNumber('Width', 720);
+    await app.setInspectorNumber('Height', 720);
+    await app.setInspectorNumber('Scale X', 125);
+    await expect.poll(readPictureAspect).toBeCloseTo(1.25, 2);
+    await lock.check();
+    await expect.poll(readSize).toEqual([720, 720]);
+    await expect.poll(readPictureAspect).toBeCloseTo(1.25, 2);
+    await restore.click();
+    await expect.poll(readSize).toEqual([720, 506.25]);
+    await expect.poll(readPictureAspect).toBeCloseTo(16 / 9, 2);
+    await expect(scaleX).toHaveValue('125');
+    await expect(scaleY).toHaveValue('100');
+    await app.undo();
+    await app.selectElementById(instance);
+    await expect.poll(readSize).toEqual([720, 720]);
+
+    await app.setInspectorNumber('Width', 640);
+    await expect.poll(readSize).toEqual([640, 450]);
+    await expect.poll(readPictureAspect).toBeCloseTo(16 / 9, 2);
+    await app.setInspectorNumber('Height', 360);
+    await expect.poll(readSize).toEqual([512, 360]);
+    await app.undo();
+    await app.selectElementById(instance);
+    await expect.poll(readSize).toEqual([640, 450]);
+
+    const corner = await app.page.locator('.cg-gizmo-corner').nth(3).boundingBox();
+    if (corner === null) throw new Error('The nested composition has no corner handle');
+    const x = corner.x + corner.width / 2;
+    const y = corner.y + corner.height / 2;
+    await app.page.mouse.move(x, y);
+    await app.page.mouse.down();
+    await app.page.mouse.move(x + 37, y + 10, { steps: 4 });
+    await app.page.mouse.up();
+    await expect.poll(async () => (await readSize())[0]).toBeGreaterThan(640);
+    await expect.poll(readPictureAspect).toBeCloseTo(16 / 9, 2);
+    await app.undo();
+    await app.selectElementById(instance);
+    await expect.poll(readSize).toEqual([640, 450]);
+
+    await lock.uncheck();
+    await expect(scaleX).toBeEnabled();
+    await app.setInspectorNumber('Height', 500);
+    await expect.poll(readSize).toEqual([640, 500]);
+    await expect.poll(readPictureAspect).toBeCloseTo(1.6, 2);
+  });
+
   /**
    * 🔴 `B-148` — ONE source on TWO plates, in a template without looks, blocks the export and
    * names both. The comment above used to credit `look-source-duplicate` with this, which only

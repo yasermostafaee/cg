@@ -39,6 +39,11 @@ import {
 import { clearOrphanColourTrack } from './fill-commit.js';
 import { autoLayoutTargets, autoLayoutTransform } from './live-source-auto-layout.js';
 import {
+  commitCompositionDimension,
+  compositionSizeRatio,
+  liveFrameCompositionAspect,
+} from './composition-aspect.js';
+import {
   ASPECT_CUSTOM,
   ASPECT_PRESETS,
   ASPECT_UNSPECIFIED,
@@ -161,9 +166,24 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
         isAspectLocked(state, element.id),
     ),
   );
-  const lockedScaleReason = hasLockedLiveSource
-    ? 'Scale is unavailable while a selected Plate keeps its aspect locked. Resize with Width or Height.'
-    : undefined;
+  const compositionAspects = useMemo(
+    () =>
+      new Map(
+        elements.flatMap((element) => {
+          const aspect = liveFrameCompositionAspect(project, element);
+          return aspect === undefined ? [] : [[element.id, aspect] as const];
+        }),
+      ),
+    [elements, project],
+  );
+  const hasLockedComposition = useDesignerSelector((state) =>
+    [...compositionAspects.keys()].some((id) => isAspectLocked(state, id)),
+  );
+  const lockedScaleReason = hasLockedComposition
+    ? 'A selected composition keeps its proportions. Resize with Width or Height.'
+    : hasLockedLiveSource
+      ? 'Scale is unavailable while a selected Plate keeps its aspect locked. Resize with Width or Height.'
+      : undefined;
   const byKey = new Map(shared.map((sp) => [sp.descriptor.key, sp]));
 
   const has = (key: string): boolean => byKey.has(key);
@@ -178,8 +198,21 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
   // endpoint so the whole edit is one undo entry across the selection.
   const applyNumLive =
     (prop: AnimatableProperty) =>
-    (v: number): void =>
-      designerStore.applySharedPropertyLiveKeyframed(ids, prop, v);
+    (v: number): void => {
+      if (!hasLockedComposition || (prop !== 'size.w' && prop !== 'size.h')) {
+        designerStore.applySharedPropertyLiveKeyframed(ids, prop, v);
+        return;
+      }
+      const state = designerStore.get();
+      for (const element of elements) {
+        const aspect = compositionAspects.get(element.id);
+        const ratio =
+          aspect !== undefined && isAspectLocked(state, element.id)
+            ? compositionSizeRatio(aspect, renderedTransformAt(element, currentFrame).scale)
+            : null;
+        commitCompositionDimension(element.id, prop, v, ratio);
+      }
+    };
   const commitBoundary = (): void => designerStore.markHistoryBoundary();
   // The aggregate keyframe diamond for a shared property — undefined (no glyph) when
   // it isn't keyframe-able for every selected kind (D-051 registry gate).

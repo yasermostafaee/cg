@@ -53,4 +53,9 @@
       Repeater, proportional sizing, unchanged layer order and one-step Undo per action.
 - [x] Focused geometry tests verified the non-zero composition anchor, auto-sized RTL title
       and exclusion of audio and locked layers.
+- [x] Windows Chromium verified proportional Width, Height and Canvas resize for titled frame
+      instances, free resize when unlocked, restoration of legacy stretched geometry and Undo.
+- [x] The owner's `2ghab-composition.cgproj` opened with its saved transforms. Restoring both
+      instances recovered 16:9 and retained the titles. Re-export verified the root permission
+      and both 16:9 frames in the second preset.
 - [ ] Record the carrying Linux Playwright result for Designer Auto layout.

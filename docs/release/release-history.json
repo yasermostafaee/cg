@@ -40,6 +40,10 @@
           "en": "With the designer's permission, Edit masks in PVW moves and resizes existing mask windows. Update on air applies changes that can use the same live inputs and mixer layers."
         },
         {
+          "fa": "در Designer می‌توان نسبت اصلی کامپوزیشنِ قاب و عنوان را هنگام Resize حفظ کرد و نمونه‌ای را که قبلاً کشیده شده به نسبت اصلی برگرداند.",
+          "en": "Designer can keep the proportions of a titled live-frame composition when resizing and restore an already stretched instance to its original ratio."
+        },
+        {
           "fa": "در Shared folder می‌توان بندانگشتی و انتخاب فعلی را دید و با Up به پوشهٔ بالاتر رفت. قالب‌های واردشده از این مسیر را می‌توان از فایل اصلی Reload کرد.",
           "en": "Shared folder shows package previews and highlights the selection. Use Up to go to the parent folder. Templates imported here can reload from their original shared path."
         },

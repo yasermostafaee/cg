@@ -37,3 +37,20 @@ composition and SHALL be undoable as one edit per action.
 - **WHEN** the author applies Auto layout
 - **THEN** only the eligible visuals are arranged
 - **AND** Auto layout is unavailable once fewer than two eligible visuals are selected
+
+### Requirement: A titled live-frame instance can keep its composition ratio
+
+Designer SHALL provide a ratio lock for a composition instance containing one live plate.
+It SHALL start enabled. Opening an existing instance SHALL preserve its authored transform.
+
+#### Scenario: Resize a titled frame instance
+
+- **WHEN** the author resizes a locked instance with Width, Height or a corner handle
+- **THEN** the instance follows the referenced composition's ratio and transforms the title and frame together
+- **WHEN** the author unlocks the ratio **THEN** the instance can be sized on both axes independently
+
+#### Scenario: Restore an already stretched instance
+
+- **GIVEN** a saved instance is stretched relative to its referenced composition
+- **WHEN** the author restores its composition ratio
+- **THEN** the instance and its title return to the referenced proportions in one undoable edit

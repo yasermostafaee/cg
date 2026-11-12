@@ -50,6 +50,11 @@ and proportions.
 Apply the transforms through the existing geometry edit and undo paths. Swap changes spatial
 order while preserving layer order. Audio and locked elements are excluded from the calculation.
 
+Designer uses its per-instance aspect lock for compositions containing one live plate. The
+referenced raster supplies the ratio. A resize compensates for the instance's existing scale.
+Restore fits that ratio inside the current footprint around the instance anchor in one undo step.
+Existing transforms load as authored.
+
 CG Control resolves the visible frame set again when the active preset changes. Its Auto layout
 inputs are kept by preset while inspecting the row, and the existing placement draft carries
 the preset ID. The Inspector derives each preset's available layouts from its own frame count.
