@@ -609,7 +609,7 @@
 .cg-frame-placement {
   position: absolute;
   box-sizing: border-box;
-  border: calc(2px * var(--cg-pan-ui-scale, 1)) solid var(--r-accent);
+  border: calc(2px * var(--cg-pan-ui-scale, 1)) solid var(--cg-frame-guide-color, var(--r-accent));
   cursor: default;
   touch-action: none;
   pointer-events: auto;
@@ -621,7 +621,7 @@
   border-style: dashed;
 }
 .cg-frame-placement[data-mask-placement='reveal'] {
-  --r-accent: var(--r-rehearsing);
+  --cg-frame-guide-color: var(--r-rehearsing);
   border-style: dotted;
 }
 .cg-frame-placement .cg-frame-placement__move,
@@ -642,7 +642,7 @@
 .cg-frame-placement .cg-frame-placement__corner {
   width: calc(12px * var(--cg-pan-ui-scale, 1));
   height: calc(12px * var(--cg-pan-ui-scale, 1));
-  background: var(--r-accent);
+  background: var(--cg-frame-guide-color, var(--r-accent));
   border-color: var(--r-video-ground);
 }
 .cg-frame-placement__corner[data-corner='nw'] {
