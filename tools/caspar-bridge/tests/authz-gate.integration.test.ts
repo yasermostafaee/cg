@@ -74,7 +74,7 @@ describe('C-038 — the ROLE gate', () => {
     }
     const placement = await ask('i-placement', 'stack.set-frame-placements', {
       itemId: 'nope',
-      placements: [],
+      placements: [{ frameKey: 'plate-1', rect: { x: 0, y: 0, width: 100, height: 100 } }],
     });
     expectRefusedWith(placement.error, AUTHZ_ROLE_REFUSAL, 'a viewer reached frame placement');
   });
