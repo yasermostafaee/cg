@@ -32,6 +32,8 @@
       Discard restores the authored positions, Take carries the saved layout, and Update on air
       applies a single frame-placement update while retaining the seated inputs.
 - [x] Verify a move-only frame moves its linked title without changing its authored frame size.
+- [x] Windows Chromium verified one-, two-, three- and four-frame presets, preset-specific
+      controls and gaps, round-trip Swap, and saving the separate placements without off-air playout.
 - [ ] Record the carrying Linux Playwright result for Auto layout and title movement.
 
 ## Designer Auto layout

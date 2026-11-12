@@ -172,7 +172,6 @@ export function LiveFrameAdjustments({
     }
   }
 
-  if (!showResetFrames && !showResetCrop && !showAspect && layoutFrames.length === 0) return null;
   return (
     <>
       {showResetFrames && (
@@ -206,16 +205,14 @@ export function LiveFrameAdjustments({
           Preserve frame aspect ratio
         </label>
       )}
-      {layoutFrames.length > 0 && (
-        <FrameAutoLayout
-          key={JSON.stringify([item.itemId, lookId])}
-          item={item}
-          live={live}
-          lookId={lookId}
-          frames={layoutFrames}
-          enabled={canEdit && (!onAir || item.onAirFramePlacement === true)}
-        />
-      )}
+      <FrameAutoLayout
+        key={item.itemId}
+        item={item}
+        live={live}
+        lookId={lookId}
+        frames={layoutFrames}
+        enabled={canEdit && (!onAir || item.onAirFramePlacement === true)}
+      />
     </>
   );
 }

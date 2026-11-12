@@ -9,4 +9,5 @@ source selection inside the frame.
 In Designer, extend the existing **Auto layout** to visual timeline selections. Include child
 compositions containing a live frame and its title so authors can arrange and swap them while
 editing a preset. The same controls work for mixed selections such as a plate, a composition,
-a shape and a Repeater.
+a shape and a Repeater. In CG Control, the available layouts and settings follow each preset
+separately.

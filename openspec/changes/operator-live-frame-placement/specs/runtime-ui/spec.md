@@ -80,6 +80,14 @@ layer order and the authored ratio of proportional frames.
 - **AND** Update applies the draft through the existing frame placement path and Discard restores it
 - **AND** the arrangement affects only the active preset's frames
 
+#### Scenario: Switch between presets with different frame counts
+
+- **WHEN** the operator switches the active preset on the selected layer
+- **THEN** Auto layout shows the applicable controls for that preset's visible frames
+- **AND** a preset with fewer than two eligible frames has no Auto layout controls
+- **AND** returning to a preset in the Inspector restores its arrangement settings and Swap order
+- **AND** drafted and applied frame positions stay associated with their own presets
+
 #### Scenario: Keep a title attached to its frame
 
 - **GIVEN** each child composition holds one live plate and its title with authored text styling

@@ -2093,7 +2093,7 @@ test('Auto layout stages both frame boxes and keeps each styled title with its i
     __cg: { framePlacements: saved() },
   });
   await expect
-    .poll(() => programmeCommands().some(({ line }) => line.includes('\\\"plates\\\"')))
+    .poll(() => programmeCommands().some(({ line }) => line.includes('\\"plates\\"')))
     .toBe(true);
   const beforeSwap = programmeCommands();
   const wireStart = engine.receivedCommands().length;
@@ -2122,6 +2122,239 @@ test('Auto layout stages both frame boxes and keeps each styled title with its i
       .slice(wireStart)
       .some(({ line }) => /^PLAY 1-[67]\d /.test(line)),
   ).toBe(false);
+});
+
+test('Auto layout retains separate controls and drafts for each active preset', async ({
+  page,
+}) => {
+  const handle = await boot(true);
+  const engine = mock;
+  if (engine === null) throw new Error('Test engine is unavailable');
+  await handle.runtime.whenServerHealthy(15_000);
+  const templateId = 'tpl-preset-auto-layout';
+  const itemId = 'preset-auto-layout-item';
+  const { scene: base } = await unpack(await buildPositionedVcg(templateId));
+  const layer = base.layers[0];
+  if (layer === undefined) throw new Error('Missing test layer');
+  const transform = (x: number, y: number, w: number, h: number) => ({
+    position: { x, y },
+    size: { w, h },
+    anchor: { x: 0, y: 0 },
+    scale: { x: 1, y: 1 },
+    rotation: 0,
+  });
+  const presets = [
+    { id: 'solo', name: 'Solo', count: 1 },
+    { id: 'pair', name: 'Pair', count: 2 },
+    { id: 'triple', name: 'Triple', count: 3 },
+    { id: 'quad', name: 'Quad', count: 4 },
+  ];
+  const plates = ['one', 'two', 'three', 'four'];
+  const node = { opacity: 1, visible: true, locked: false, zIndex: 0 };
+  const scene = SceneSchema.parse({
+    ...base,
+    allowOperatorAutoLayout: true,
+    fields: [],
+    bindings: [],
+    lookGroups: [
+      {
+        id: 'layout-presets',
+        defaultLookId: 'pair',
+        looks: presets.map(({ id, name }) => ({ id, name, instanceId: `instance-${id}` })),
+      },
+    ],
+    layers: [
+      {
+        ...layer,
+        children: presets.map(({ id, name }) => ({
+          ...node,
+          id: `instance-${id}`,
+          name,
+          type: 'composition',
+          compositionId: `doc-${id}`,
+          transform: transform(0, 0, 1920, 1080),
+        })),
+      },
+    ],
+    compositions: presets.map(({ id, name, count }) => ({
+      id: `doc-${id}`,
+      name,
+      resolution: base.resolution,
+      frameRange: base.frameRange,
+      editorBackdrop: 'transparent',
+      layers: [
+        {
+          ...layer,
+          id: `layer-${id}`,
+          children: plates.slice(0, count).map((plate, index) => ({
+            ...node,
+            id: `plate-${id}-${plate}`,
+            name: plate,
+            type: 'video-placeholder',
+            routeKey: plate,
+            operatorMove: true,
+            operatorPlacement: 'proportional',
+            transform: transform(140 + (index % 2) * 600, 100 + index * 90, 480, 270),
+          })),
+        },
+      ],
+    })),
+  });
+  const { html } = await new ExporterSingleFile({
+    cgJsIife,
+    cgCss,
+    fontsCss: '',
+    assets: { get: () => Promise.resolve(null), bytes: () => Promise.resolve(null) },
+  }).produce(scene);
+  handle.runtime.templateImport(
+    { ...TEMPLATE, templateId, liveSources: buildTemplateLiveSources(scene) },
+    html,
+    1,
+  );
+  expect(
+    handle.runtime.setSourceCatalog({
+      layerRange: { start: 60, end: 79 },
+      sources: plates.map((id) => ({
+        id: `source-${id}`,
+        name: id,
+        format: '1080i5000',
+        producer: { kind: 'ndi', source: `PRESET (${id})` },
+      })),
+    }),
+  ).toMatchObject({ ok: true });
+  expect(
+    handle.runtime.setSourceAssignments({
+      assignments: plates.map((plateId) => ({
+        templateId,
+        plateId,
+        sourceId: `source-${plateId}`,
+      })),
+    }),
+  ).toMatchObject({ ok: true });
+  expect(
+    await handle.runtime.loadFixed({ channel: 1, layer: 59 }, itemId, templateId, {}),
+  ).toMatchObject({
+    accepted: true,
+  });
+
+  await openConsole(page, handle.url);
+  await showMonitors(page);
+  const row = page.getByRole('region', { name: 'Layers' }).locator('[data-layer="59"]');
+  await row.locator('[data-row-body]').click();
+  await row.getByRole('button', { name: 'ON PVW', exact: true }).click();
+  const pvw = page.getByRole('region', { name: 'PREVIEW (PVW)' });
+  await pvw.getByRole('button', { name: 'PLAY', exact: true }).click();
+  const preview = pvw.frameLocator('iframe[data-rehearsal-frame]');
+  const visiblePlates = preview.locator('[data-cg-live-source]:visible');
+  const read = () =>
+    visiblePlates.evaluateAll((nodes) =>
+      nodes.map((plate) => {
+        const { x, y, width, height } = plate.getBoundingClientRect();
+        return { id: plate.getAttribute('data-cg-live-source'), x, y, width, height };
+      }),
+    );
+  const inspector = page.getByRole('complementary', { name: 'Inspector' });
+  const layout = inspector
+    .locator('details')
+    .filter({ has: page.getByText('Auto layout', { exact: true }) });
+  const arrangement = layout.getByRole('combobox', { name: 'Arrangement' });
+  const verticalGap = layout.getByRole('textbox', { name: 'Vertical gap (px)' });
+  const horizontalGap = layout.getByRole('textbox', { name: 'Horizontal gap (px)' });
+  const swap = layout.getByRole('button', { name: 'Swap frame order' });
+  const arrange = layout.getByRole('button', { name: 'Arrange frames' });
+  const stackItem = () => handle.runtime.stackSnapshot().find((item) => item.itemId === itemId);
+  const choosePreset = async (id: string, count: number): Promise<void> => {
+    await row.locator(`[data-look-id="${id}"]`).click();
+    await expect.poll(() => stackItem()?.activeLookId).toBe(id);
+    await expect(visiblePlates).toHaveCount(count);
+  };
+  const openLayout = async (): Promise<void> => {
+    const summary = layout.locator('summary');
+    await expect(summary).toBeVisible();
+    if ((await layout.getAttribute('open')) === null) await summary.click();
+  };
+  const verticalOrder = async () =>
+    (await read()).sort((a, b) => a.y - b.y || a.x - b.x).map(({ id }) => id);
+
+  await expect(visiblePlates).toHaveCount(2);
+  await openLayout();
+  await expect(arrangement.locator('option')).toHaveText(['Side by side', 'Top and bottom']);
+  await arrangement.selectOption('vertical');
+  await verticalGap.fill('60');
+  await swap.click();
+  await expect.poll(verticalOrder).toEqual(['two', 'one']);
+  const pairDraft = await read();
+  await expect(row.getByText('● draft', { exact: true })).toBeVisible();
+
+  await choosePreset('solo', 1);
+  await expect(layout).toHaveCount(0);
+  await choosePreset('triple', 3);
+  await openLayout();
+  await expect(arrangement.locator('option')).toHaveText([
+    'More frames on top',
+    'More frames on bottom',
+  ]);
+  await arrangement.selectOption('more-bottom');
+  await horizontalGap.fill('54');
+  await arrange.click();
+  await expect
+    .poll(async () => {
+      const [top, lowerLeft, lowerRight] = await read();
+      return (
+        top !== undefined &&
+        lowerLeft !== undefined &&
+        lowerRight !== undefined &&
+        top.y < lowerLeft.y &&
+        Math.abs(lowerLeft.y - lowerRight.y) < 0.1
+      );
+    })
+    .toBe(true);
+  const tripleDraft = await read();
+
+  await choosePreset('quad', 4);
+  await openLayout();
+  await expect(arrangement).toHaveCount(0);
+  await expect(horizontalGap).toHaveValue('27');
+  await expect(verticalGap).toHaveValue('27');
+  await arrange.click();
+  await expect
+    .poll(async () => {
+      const [a, b, c, d] = await read();
+      return (
+        a !== undefined &&
+        b !== undefined &&
+        c !== undefined &&
+        d !== undefined &&
+        Math.abs(a.y - b.y) < 0.1 &&
+        Math.abs(c.y - d.y) < 0.1 &&
+        a.y < c.y
+      );
+    })
+    .toBe(true);
+
+  await choosePreset('pair', 2);
+  await expect.poll(read).toEqual(pairDraft);
+  await openLayout();
+  await expect(arrangement).toHaveValue('vertical');
+  await expect(verticalGap).toHaveValue('60');
+  await swap.click();
+  await expect.poll(verticalOrder).toEqual(['one', 'two']);
+  await choosePreset('triple', 3);
+  await expect.poll(read).toEqual(tripleDraft);
+  await openLayout();
+  await expect(arrangement).toHaveValue('more-bottom');
+  await expect(horizontalGap).toHaveValue('54');
+
+  const sent = () => engine.receivedCommands().filter(({ line }) => /^(CG|MIXER|PLAY) /.test(line));
+  const beforeUpdate = sent();
+  await inspector.getByRole('button', { name: 'Apply staged edits', exact: true }).click();
+  await expect
+    .poll(() => {
+      const placements = stackItem()?.framePlacements ?? [];
+      return presets.map(({ id }) => placements.filter(({ lookId }) => lookId === id).length);
+    })
+    .toEqual([0, 2, 3, 4]);
+  expect(sent()).toEqual(beforeUpdate);
 });
 
 test('D-213 Take seats two opted-in plates in the authored paint order', async ({ page }) => {

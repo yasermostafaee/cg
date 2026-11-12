@@ -30,6 +30,14 @@ interface Frame {
   authored: LiveSourceRect;
 }
 
+interface LayoutControls {
+  horizontalGap: string;
+  verticalGap: string;
+  twoPlateLayout: TwoPlateLayout;
+  bias: LiveSourceLayoutBias;
+  reverse: boolean;
+}
+
 /** Reflow the whole preset, or leave it alone if an authored frame has to stay fixed. */
 export function autoLayoutFrames(live: TemplateLiveSources, lookId: string | undefined): Frame[] {
   if (live.allowOperatorAutoLayout !== true) return [];
@@ -65,14 +73,28 @@ export function FrameAutoLayout({
   lookId: string | undefined;
   frames: readonly Frame[];
   enabled: boolean;
-}): JSX.Element {
-  const defaultGap = Math.round(Math.min(live.resolution.width, live.resolution.height) * 0.025);
+}): JSX.Element | null {
   const gapId = useId();
-  const [horizontalGap, setHorizontalGap] = useState(String(defaultGap));
-  const [verticalGap, setVerticalGap] = useState(String(defaultGap));
-  const [twoPlateLayout, setTwoPlateLayout] = useState<TwoPlateLayout>('horizontal');
-  const [bias, setBias] = useState<LiveSourceLayoutBias>('more-top');
-  const [reverse, setReverse] = useState(false);
+  const [controlsByLook, setControlsByLook] = useState<
+    ReadonlyMap<string | undefined, LayoutControls>
+  >(() => new Map());
+  if (frames.length < 2) return null;
+
+  const defaultGap = Math.round(Math.min(live.resolution.width, live.resolution.height) * 0.025);
+  const defaults: LayoutControls = {
+    horizontalGap: String(defaultGap),
+    verticalGap: String(defaultGap),
+    twoPlateLayout: 'horizontal',
+    bias: 'more-top',
+    reverse: false,
+  };
+  const { horizontalGap, verticalGap, twoPlateLayout, bias, reverse } =
+    controlsByLook.get(lookId) ?? defaults;
+  function updateControls(changes: Partial<LayoutControls>): void {
+    setControlsByLook((current) =>
+      new Map(current).set(lookId, { ...(current.get(lookId) ?? defaults), ...changes }),
+    );
+  }
   const frameDraft = snapshotFramePlacementDraft(item.itemId);
   const applied =
     item.framePlacementsPendingReset === true || frameDraft?.reset !== undefined
@@ -136,9 +158,10 @@ export function FrameAutoLayout({
               className="cg-field"
               value={twoPlateLayout}
               onChange={(event) =>
-                setTwoPlateLayout(
-                  event.currentTarget.value === 'vertical' ? 'vertical' : 'horizontal',
-                )
+                updateControls({
+                  twoPlateLayout:
+                    event.currentTarget.value === 'vertical' ? 'vertical' : 'horizontal',
+                })
               }
             >
               <option value="horizontal">Side by side</option>
@@ -153,7 +176,9 @@ export function FrameAutoLayout({
               className="cg-field"
               value={bias}
               onChange={(event) =>
-                setBias(event.currentTarget.value === 'more-bottom' ? 'more-bottom' : 'more-top')
+                updateControls({
+                  bias: event.currentTarget.value === 'more-bottom' ? 'more-bottom' : 'more-top',
+                })
               }
             >
               <option value="more-top">More frames on top</option>
@@ -170,7 +195,7 @@ export function FrameAutoLayout({
                 className="cg-field"
                 allow="digits"
                 value={horizontalGap}
-                onValueChange={setHorizontalGap}
+                onValueChange={(value) => updateControls({ horizontalGap: value })}
               />
             </label>
           )}
@@ -182,7 +207,7 @@ export function FrameAutoLayout({
                 className="cg-field"
                 allow="digits"
                 value={verticalGap}
-                onValueChange={setVerticalGap}
+                onValueChange={(value) => updateControls({ verticalGap: value })}
               />
             </label>
           )}
@@ -203,7 +228,7 @@ export function FrameAutoLayout({
             disabled={swapped.length !== frames.length}
             title="Exchange frame positions without changing layer order"
             onClick={() => {
-              setReverse(!reverse);
+              updateControls({ reverse: !reverse });
               arrange(swapped);
             }}
           >

@@ -6110,8 +6110,10 @@ applies it, and Discard restores the prior crop.
 composition. A preset with at least two live plates exposes **Auto layout** under Position when
 every plate permits both move and resize. The control uses the same aspect-aware arrangement as
 Designer, with separate gaps, row placement choices and **Swap frame order**. Arrange or Swap
-stages all frame placements together in PVW. Update applies the draft for the current preset and
-Discard returns to its applied arrangement.
+stages all frame placements for the active preset together in PVW. Update saves each staged
+placement to its own preset and Discard restores the applied arrangements.
+For a multi-preset template, the Inspector uses the active preset's frame count and keeps the
+direction, gaps and Swap order for each preset while inspecting the row.
 
 To attach a styled title, put one live plate and its Text element inside a child composition, then
 add that composition to the output or preset. Set Background and Padding on Text and add a Data key
