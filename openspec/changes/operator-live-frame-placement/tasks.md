@@ -45,6 +45,7 @@
 - [x] Windows Chromium verified equal-size presets with opposite permissions and the legacy fallback.
       Bridge integration kept resident manual frame edits available after replacing the permission.
 - [x] [Linux Playwright for per-preset Auto layout](https://github.com/yasermostafaee/cg/actions/runs/43244564688/job/131273766438) passed on c3742aff.
+      The [1.2.4 installer build commit](https://github.com/yasermostafaee/cg/actions/runs/43325027386/job/131555419509) also passed on 71645d36.
 - [x] Windows Chromium verified that an authorized multi-frame preset with missing frame
       permissions shows the reason in Position.
 - [x] Windows Chromium with Bridge and mock AMCP verified the owner's `3ghab-composition` export

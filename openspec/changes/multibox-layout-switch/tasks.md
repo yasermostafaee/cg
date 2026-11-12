@@ -1578,4 +1578,6 @@ items and are unaffected.
       and that an incompatible dormant copy cannot block an unrelated solo Take.
 - [x] Local CasparCG 2.5.0 synthetic picture samples verified both copies, independent FILL and
       CLIP, and a routed picture whose original seat is visually parked.
-- [ ] Record the carrying Linux Playwright result and target engine acceptance.
+- [x] [Linux Playwright](https://github.com/yasermostafaee/cg/actions/runs/43325027386/job/131555419509) passed on 71645d36, the source of the local 1.2.4 installers.
+      B-306 and B-308 passed on their first attempts, including the routed copy and failed-swap rollback.
+- [ ] Verify the shared source on the target APASAI Playout Engine.
