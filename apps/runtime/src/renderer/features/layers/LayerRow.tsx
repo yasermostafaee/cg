@@ -1,7 +1,7 @@
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useState } from 'react';
 import { useCanOperate } from '../../hooks/useCanOperate.js';
-import type { FixedSlotState, TemplateInfo } from '@cg/shared-ipc';
+import { LAYER_SHORTCUT_VERBS, type FixedSlotState, type TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState, StackItemStatus } from '@cg/shared-schema';
 import { colors, cssVars } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
@@ -53,6 +53,8 @@ import {
 } from './layerTable.js';
 
 interface Props {
+  /** Keep the keyboard actions available when this layer is outside the visible list. */
+  shortcutOnly?: boolean;
   sharedFolderAvailable?: boolean;
   slot: FixedSlotState;
   /**
@@ -316,6 +318,7 @@ const styles = {
  * the wire can no longer back.
  */
 export function LayerRow({
+  shortcutOnly = false,
   slot,
   binding,
   template,
@@ -759,6 +762,44 @@ export function LayerRow({
   });
 
   const buttons = buttonActions(actions);
+  const shortcutTarget = `${String(slot.channel)}:${String(slot.layer)}`;
+  const verbBlock = (
+    <span
+      style={shortcutOnly ? undefined : VERBS_GRID}
+      data-verb-block={shortcutOnly ? undefined : ''}
+      data-shortcut-verbs=""
+    >
+      {buttons
+        .filter(
+          (action) => !shortcutOnly || LAYER_SHORTCUT_VERBS.some((verb) => verb === action.tone),
+        )
+        .map((action) => (
+          <AsyncButton
+            key={action.key}
+            variant="verb"
+            run={action.run}
+            disabled={action.disabled}
+            onError={action.onError}
+            iconOnly
+            active={action.active === true}
+            {...(action.tone !== undefined ? { 'data-verb-tone': action.tone } : {})}
+            aria-label={action.label}
+            title={action.title ?? action.label}
+            {...(action.icon !== undefined ? { icon: action.icon } : {})}
+          >
+            {action.label}
+          </AsyncButton>
+        ))}
+    </span>
+  );
+  if (shortcutOnly) {
+    return (
+      <div data-shortcut-row={shortcutTarget}>
+        {verbBlock}
+        {confirmDialog}
+      </div>
+    );
+  }
 
   // R-006 — in TEST MODE an air claim is badged SIM, never the broadcast red:
   // the mock may simulate, but it may not claim air that does not exist.
@@ -873,7 +914,7 @@ export function LayerRow({
       // The row's stable anchor is the LAYER NUMBER — the declared identity that
       // survives every load, unlike an itemId.
       data-layer={String(slot.layer)}
-      data-shortcut-row={`${String(slot.channel)}:${String(slot.layer)}`}
+      data-shortcut-row={shortcutTarget}
       data-row-number={String(displayPosition)}
       {...(item !== null ? { 'data-item-id': item.itemId } : {})}
       {...(template !== null ? { 'data-template-id': template.templateId } : {})}
@@ -1260,34 +1301,7 @@ export function LayerRow({
         product's STOP (graceful) and CLEAR (hard kill) are the inverse of the reference
         product's, and the header word is what retires that misread.
       */}
-      <span style={VERBS_GRID} data-verb-block="">
-        {buttons.map((action) => (
-          <AsyncButton
-            key={action.key}
-            variant="verb"
-            run={action.run}
-            disabled={action.disabled}
-            onError={action.onError}
-            iconOnly
-            // R-022 — a TOGGLE whose mode is engaged paints filled (REHEARSE while
-            // rehearsing). Read from the action's own declaration so the button and
-            // its right-click twin cannot disagree.
-            active={action.active === true}
-            // The per-verb HOVER fill (`--r-verb-*`). An attribute rather than a
-            // class so the six colours live entirely in `controls.css` and the
-            // renderer never names one.
-            {...(action.tone !== undefined ? { 'data-verb-tone': action.tone } : {})}
-            aria-label={action.label}
-            // The tooltip. `title` is why-disabled when the action is refused,
-            // and otherwise the verb itself — an icon-only control must say what
-            // it is on hover and on keyboard focus.
-            title={action.title ?? action.label}
-            {...(action.icon !== undefined ? { icon: action.icon } : {})}
-          >
-            {action.label}
-          </AsyncButton>
-        ))}
-      </span>
+      {verbBlock}
       {/*
         🔴 §14.5 / `tasks.md` 7.2 — THE LOOK PICKER, ON A SECOND LINE OUTSIDE THE VERB BLOCK.
 

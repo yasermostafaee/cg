@@ -1221,6 +1221,7 @@ export function LayersPanel({
         const row = (
           <LayerRow
             key={`${String(slot.channel)}:${String(slot.layer)}`}
+            shortcutOnly={hidden}
             slot={slot}
             binding={binding}
             template={template}
@@ -1361,7 +1362,7 @@ export function LayersPanel({
         Object.values(shortcuts ?? {}).some((chord) => chord !== undefined)
       );
     });
-    // Clear's confirm is portalled, so a hidden row still uses the regular confirmation.
+    // The hidden list keeps the shared verbs and portalled Clear confirmation mounted.
     return hiddenRows.length === 0 ? null : renderLayerList(bank, hiddenRows, true);
   };
 

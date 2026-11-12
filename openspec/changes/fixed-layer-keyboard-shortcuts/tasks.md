@@ -13,6 +13,9 @@
 - [x] Verify the preset and modal persistence in Chromium. All 31 focused Windows Chromium scenarios passed with the final picker fixture. A further 16 passed with the concurrent shortcut edit scenario. The four modal and station suites passed all 46 Vitest checks.
 - [x] Verify all 48 function-key chords through physical Windows input in an isolated WebView2 host. Assigned Alt+F4 fired once under key repeat. The close guard held ordinary close and unassigned Alt+F4.
 - [x] Drive a three-page book on layer 96 with real key input in the Windows production build using MockRuntime. Alt+F4 advanced exactly once and was inert during editing or setup. F4, Ctrl+F4 and Shift+F4 invoked Play, Stop and the Clear confirmation.
+- [x] Keep hidden shortcut controls outside the visible layer rows and keep default and custom bindings available in filtered and fullscreen views.
+- [x] Verify both monitor companion layouts and default and custom shortcut actions in Windows Chromium. All four focused cases passed.
+- [ ] Verify first-run row counts on Linux. The local Windows fixture stopped at the channel occupancy warning before counting rows.
 - [ ] Record the Linux Playwright E2E result for the preset and modal footer.
 
 Windows Chromium passed all 16 focused scenarios. The Bridge integration test persisted Next through an older console update and a restart, and refused a duplicate chord across both shortcut maps.

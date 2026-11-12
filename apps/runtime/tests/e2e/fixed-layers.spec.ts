@@ -412,6 +412,37 @@ test('R-023 — fixed layer shortcuts follow the guarded actions in filtered and
   await expect.poll(readStatus).toMatch(/^(idle|loaded)$/);
 });
 
+test('R-023 — default shortcuts operate a filtered layer without adding visible rows', async ({
+  app,
+}) => {
+  const { page } = app;
+  // The fixture's ticker is ready on layer 96, the default target for F4.
+  await expect(app.layerRow(96).getByRole('button', { name: 'PLAY', exact: true })).toBeEnabled();
+  const search = app.layers.getByRole('searchbox', { name: 'Find row or template' });
+  await search.fill('no rows match this');
+  // The three occupied or blocked fixture rows stay visible through the filter.
+  await expect(app.layers.locator('[data-layer]')).toHaveCount(3);
+  await expect(app.layerRow(96)).toHaveCount(0);
+  await search.blur();
+  const status = () =>
+    page.evaluate(
+      async () =>
+        (await window.cg.stack.snapshot()).find((item) => item.slot?.layer === 96)?.status,
+    );
+  await page.keyboard.press('F4');
+  await expect.poll(status).toBe('on-air');
+
+  await app.showMonitors();
+  await page.getByRole('button', { name: 'Show PREVIEW (PVW) fullscreen' }).click();
+  await expect(page.locator('[data-monitor-layer-companion]')).toHaveCount(0);
+  await page.keyboard.press('Control+F4');
+  await expect.poll(status).toMatch(/^(idle|loaded)$/);
+  await page.keyboard.press('Shift+F4');
+  const confirm = page.getByRole('dialog', { name: /^Clear / });
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole('button', { name: 'Cancel', exact: true }).click();
+});
+
 test('B-421: import+load selects the exact row, and the template stays available for reuse', async ({
   app,
 }) => {

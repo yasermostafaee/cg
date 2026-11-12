@@ -39,7 +39,7 @@ export function dispatchLayerShortcut(
     const verb = LAYER_SHORTCUT_VERBS.find((action) => shortcuts[action] === chord);
     if (verb === undefined) continue;
     const buttons = root.querySelectorAll<HTMLButtonElement>(
-      `[data-shortcut-row="${String(channel)}:${layer}"] [data-verb-block] > button[data-verb-tone="${verb}"]`,
+      `[data-shortcut-row="${String(channel)}:${layer}"] [data-shortcut-verbs] > button[data-verb-tone="${verb}"]`,
     );
     const button = buttons[0];
     if (buttons.length !== 1 || button === undefined || button.disabled) return;

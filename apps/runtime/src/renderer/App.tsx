@@ -192,13 +192,7 @@ export function App(): JSX.Element {
     table's own `onChannel` rule. The choice itself is kept: coming back to channel 1 finds it
     as it was, because a switch is a scope change and never a mutation.
   */
-  const {
-    bank,
-    selected: selectedChannel,
-    viewChannel,
-    verbScope,
-    multiChannel,
-  } = useChannelBankState();
+  const { selected: selectedChannel, viewChannel, verbScope, multiChannel } = useChannelBankState();
   const selected = useMemo(
     () => onChannel(items, viewChannel).find((i) => i.itemId === selectedId) ?? null,
     [items, viewChannel, selectedId],
@@ -507,8 +501,7 @@ export function App(): JSX.Element {
         */}
         <ChannelScope>
           <LayerShortcutsListener />
-          {bank?.shortcuts !== undefined &&
-            (!showWorkspace || (monitorFocused && !showMonitorLayerCompanion)) &&
+          {(!showWorkspace || (monitorFocused && !showMonitorLayerCompanion)) &&
             renderLayersPanel('shortcuts')}
           <div style={{ ...styles.shell, gridTemplateColumns: shellColumns }}>
             {/* R-028 — the Library panel is GONE, not hidden: a template is no

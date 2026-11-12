@@ -39,6 +39,7 @@ context menus and repeated keydown events SHALL suspend shortcuts.
 
 - **WHEN** a layer is filtered out or the monitor is fullscreen and the operator presses its Play shortcut
 - **THEN** the same Play action runs for that layer if the operator and layer can play
+- **AND** shortcut targets outside the visible list do not add rows to the layer table or monitor companion
 
 #### Scenario: Use the assigned Next action
 
