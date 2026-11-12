@@ -1,4 +1,4 @@
-import { useId, useState, useSyncExternalStore } from 'react';
+import { useEffect, useId, useState, useSyncExternalStore } from 'react';
 import {
   activeLookOf,
   assignmentsOnChannel,
@@ -6,6 +6,7 @@ import {
   lookPlateFits,
   lookPlateFocuses,
   lookPlateRects,
+  type PreviewPlateCropTarget,
   type TemplateLiveSources,
 } from '@cg/shared-ipc';
 import {
@@ -28,9 +29,9 @@ import {
   sourcesVersion,
   subscribeSources,
 } from '../sources/sourceStore.js';
-import { reportCommandError } from '../status/commandFeedback.js';
 import {
   draftsVersion,
+  previewCropDraftOf,
   snapshotFramePlacementDraft,
   stageFramePlacementsReset,
   stagePreviewCrop,
@@ -51,9 +52,13 @@ export function LiveFrameAdjustments({
   const lock = useLockCoverage();
   const preserveAspect = usePreserveFrameAspect();
   const aspectId = useId();
-  const [readingCrop, setReadingCrop] = useState(false);
+  const [cropRead, setCropRead] = useState<{
+    key: string;
+    live: TemplateLiveSources;
+    targets: readonly PreviewPlateCropTarget[];
+  }>();
   useSyncExternalStore(subscribeDrafts, draftsVersion, draftsVersion);
-  useSyncExternalStore(subscribeSources, sourcesVersion, sourcesVersion);
+  const sourceRevision = useSyncExternalStore(subscribeSources, sourcesVersion, sourcesVersion);
 
   const onAir = isOnAirStatus(item);
   const canEdit =
@@ -92,42 +97,75 @@ export function LiveFrameAdjustments({
       fitOverride ||
       (item.previewPlateCrops?.length ?? 0) > 0);
 
-  async function resetCrop(): Promise<void> {
-    setReadingCrop(true);
-    try {
-      const result = await window.cg.stack.previewPlateCrop({
-        itemId: item.itemId,
-        ...(onAir && { allowOnAir: true }),
-      });
-      if (!result.ok || result.targets.length === 0) {
-        reportCommandError(result.message ?? 'No input crop is available in this preset.');
-        return;
-      }
-      const defaults = lookPlateFocuses(live, lookId);
-      for (const target of result.targets) {
-        const focus = defaults[target.plateId] ?? DEFAULT_LIVE_CROP_FOCUS;
-        const saved =
-          target.staged === true ||
-          item.previewPlateCrops?.some((crop) => crop.token === target.token);
-        stagePreviewCrop(
+  // Saved tokens are opaque and can belong to any preset. Read the current targets from Bridge,
+  // then compare each token-matched draft or applied focus to the author's setting.
+  const cropKey =
+    canEdit && showResetCrop
+      ? JSON.stringify([
           item.itemId,
-          {
-            kind: 'guide',
-            key: target.token,
-            token: target.token,
-            focus,
-            lookId,
-            ...((saved || !sameLiveCropFocus(target.focus, focus)) && { reset: true as const }),
-          },
-          target.focus,
-        );
+          item.templateId,
+          channel,
+          lookId,
+          onAir,
+          sourceRevision,
+          item.position,
+          item.sourceOverride,
+          item.lookSourceOverride,
+          item.frozenAssignment,
+          item.framePlacements,
+          item.framePlacementsPendingReset,
+          item.previewPlateCrops,
+        ])
+      : null;
+  useEffect(() => {
+    if (cropKey === null) {
+      setCropRead(undefined);
+      return;
+    }
+    let current = true;
+    void (async () => {
+      try {
+        const result = await window.cg.stack.previewPlateCrop({
+          itemId: item.itemId,
+          ...(onAir && { allowOnAir: true }),
+        });
+        if (current) setCropRead({ key: cropKey, live, targets: result.ok ? result.targets : [] });
+      } catch {
+        if (current) setCropRead(undefined);
       }
-    } catch (error) {
-      reportCommandError(
-        error instanceof Error ? error.message : 'Could not check the current crop.',
+    })();
+    return () => {
+      current = false;
+    };
+  }, [cropKey, live, item.itemId, onAir]);
+
+  const defaults = lookPlateFocuses(live, lookId);
+  const targets = cropRead?.key === cropKey && cropRead.live === live ? cropRead.targets : [];
+  const cropResets = targets.flatMap((target) => {
+    const focus = defaults[target.plateId] ?? DEFAULT_LIVE_CROP_FOCUS;
+    const draft = previewCropDraftOf(item.itemId, target.token);
+    if (
+      (draft?.kind === 'guide' && draft.reset === true) ||
+      sameLiveCropFocus(draft?.focus ?? target.focus, focus)
+    )
+      return [];
+    return [{ target, focus }];
+  });
+
+  function resetCrop(): void {
+    for (const { target, focus } of cropResets) {
+      stagePreviewCrop(
+        item.itemId,
+        {
+          kind: 'guide',
+          key: target.token,
+          token: target.token,
+          focus,
+          lookId,
+          ...(!sameLiveCropFocus(target.focus, focus) && { reset: true as const }),
+        },
+        target.focus,
       );
-    } finally {
-      setReadingCrop(false);
     }
   }
 
@@ -147,9 +185,9 @@ export function LiveFrameAdjustments({
       {showResetCrop && (
         <Button
           variant="neutral"
-          disabled={!canEdit || readingCrop}
+          disabled={cropResets.length === 0}
           title="Restore the authored crop and zoom in the active preset"
-          onClick={() => void resetCrop()}
+          onClick={resetCrop}
         >
           Reset crop
         </Button>

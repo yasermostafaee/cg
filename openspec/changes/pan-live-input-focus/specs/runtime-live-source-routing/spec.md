@@ -67,8 +67,10 @@ return without Pan controls or crop guides.
 #### Scenario: Reset a crop to authored framing
 
 - **GIVEN** the current preset has eligible cropped plates and a compatible Bridge
+- **THEN** **Reset crop** is enabled only when a saved or staged crop in that preset differs from its authored framing
 - **WHEN** the operator presses **Reset crop** in Inspector → Position
 - **THEN** PVW shows the authored crop or the centered, unzoomed default
+- **AND** **Reset crop** is disabled while the restored crop is staged
 - **AND** Discard restores the previously applied crop
 - **WHEN** the operator applies the reset
 - **THEN** Bridge clears the current preset's matching crop overrides after acceptance

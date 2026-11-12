@@ -30,6 +30,7 @@ Update on air applies framing to the verified seated source.
 
 **Reset crop** in Inspector → Position stages the current preset's authored framing for
 eligible plates. A plate with no authored override uses the centered, unzoomed cover crop.
+The button enables only when a verified target in that preset has a different effective crop.
 The browser preview follows the draft and Discard restores the applied crop. A Bridge that
 advertises `liveCropReset` clears the matching overrides after the reset is accepted. On air,
 the verified resident input receives the corresponding mixer geometry in place.

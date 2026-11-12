@@ -407,7 +407,7 @@ export function PositionPicker({
             disabled={resetDisabled}
             onClick={() => stagePosition(item.itemId, resetDraft)}
           >
-            Reset to default
+            Reset position
           </Button>
           {adjustments}
         </div>

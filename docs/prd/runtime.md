@@ -5141,7 +5141,7 @@ is no verified ownership map.
 - WHEN a row is on PVW and Play is pressed THEN Take uses the applied values; PVW and its draft stay available.
 - WHEN the operator edits the Inspector THEN PVW reflects the draft without sending it to air. Update on air commits it; Update on an off-air row stores it without a playout command.
 - WHEN a Position draft differs from the applied placement THEN Layers shows the existing draft
-  badge for that row, even if Position is the only edit. The on-air row's Update action includes
+  badge beside that row name with space between them, even if Position is the only edit. The on-air row's Update action includes
   Position. Applying or discarding the draft clears the badge when no other drafts remain.
 - WHEN an older Bridge does not advertise independent PVW THEN its existing rehearsal protections remain in force. An off-air Update waiting for its reply does not end legacy rehearsal or restore its layer volume.
 - WHEN Layers shows a bound row THEN the ON PVW column precedes Play, and the toolbar offers Stop All and Clear All. Row Remove remains available under its existing guard.
@@ -5160,6 +5160,6 @@ is no verified ownership map.
   followed by **Edit frames** when available. Keep the order in compact layouts.
 - WHEN the operator enables **Move template** and drags an editable template in PVW THEN select its row and stage its Position offsets in Inspector. Preserve the current anchor when known. The outline and preview follow the move in channel coordinates and the existing Update or Update on air action applies it.
 - WHEN the operator switches **Move template** off or switches to **Crop input** or **Edit frames** THEN template dragging stops and completed Position drafts remain available for Update or Discard. The same Position locks apply to Inspector and Preview.
-- WHEN the operator presses **Reset to default** in an editable Position section THEN the
+- WHEN the operator presses **Reset position** in an editable Position section THEN the
   template's authored anchor and offsets are staged and PVW follows immediately. **Discard**
   restores the applied position. **Update** or **Update on air** applies the reset.

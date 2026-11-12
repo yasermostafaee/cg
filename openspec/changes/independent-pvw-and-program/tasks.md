@@ -14,7 +14,7 @@
 - [x] Drag an eligible template to stage its existing Inspector Position, with channel scaling and separate Pan gestures.
 - [x] Chromium verified two outlined pages, row selection, local-only drag, off-air Update, outline removal and existing layered video pixels.
 - [ ] Verify template outlines and Position dragging on the target station.
-- [x] Add Reset to default to the Position section using the existing draft and Update actions.
+- [x] Add **Reset position** to the Position section using the existing draft and Update actions.
 - [x] Verify off-air reset and delayed acknowledgement in unit tests. Windows Chromium verified
       authored placement in PVW, Discard, and explicit Update on air through a real Bridge.
 - [ ] Record the carrying Linux Playwright result for Position reset.

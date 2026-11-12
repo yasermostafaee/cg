@@ -39,15 +39,15 @@ On a capable Bridge, CG Control SHALL make the ON PVW and Play controls independ
 
 #### Scenario: Reset Position to the template's authored placement
 
-- **WHEN** the operator presses Reset to default in the editable Position section
+- **WHEN** the operator presses **Reset position** in the editable Position section
 - **THEN** the authored anchor and both offsets are staged and PVW follows immediately
 - **AND** Update or Update on air applies the reset, and Discard returns to the applied placement
-- **WHEN** Position is locked **THEN** Reset to default is unavailable
+- **WHEN** Position is locked **THEN** **Reset position** is unavailable
 
 #### Scenario: See a Position draft in Layers
 
 - **WHEN** a Position draft differs from the row's applied placement, with or without other drafts
-- **THEN** the row shows its existing draft badge, and an on-air row includes the edit in its Update action
+- **THEN** the row shows its draft badge with space after the row name, and an on-air row includes the edit in its Update action
 - **WHEN** the operator discards or applies the draft and no other drafts remain
 - **THEN** the row's draft badge clears
 

@@ -579,6 +579,10 @@
         {
           "fa": "در PVW، قاب بدون مجوز Allow move نشانگر جابه‌جایی ندارد و فقط گوشه‌های مجاز نشانگر Resize دارند.",
           "en": "In PVW, a frame with movement disabled has a neutral cursor and resize cursors on its enabled corners."
+        },
+        {
+          "fa": "دکمهٔ بازنشانی موقعیت با نام Reset position نمایش داده می‌شود. Reset crop فقط وقتی برش پریست فعال تغییر کرده باشد فعال است. نشان draft از نام لایه فاصله دارد.",
+          "en": "The position reset is labeled Reset position. Reset crop is enabled only when the active preset's crop differs from its authored framing. The draft badge has space beside the layer name."
         }
       ],
       "planned": [

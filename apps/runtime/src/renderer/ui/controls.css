@@ -3730,6 +3730,9 @@ input[type='checkbox']:disabled:checked {
   font-weight: var(--r-weight-bold);
   letter-spacing: 0.03em;
 }
+[data-row-body] > .cg-chip-draft {
+  margin-inline-start: var(--r-space-2);
+}
 .cg-dirty-dot {
   color: var(--r-dirty);
   font-weight: var(--r-weight-bold);

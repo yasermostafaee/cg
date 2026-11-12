@@ -76,7 +76,7 @@ async function render(state: StackItemState, templatePosition?: Position): Promi
 
 describe('PositionPicker — R-011', () => {
   const reset = (el: HTMLElement): HTMLButtonElement | undefined =>
-    [...el.querySelectorAll('button')].find((button) => button.textContent === 'Reset to default');
+    [...el.querySelectorAll('button')].find((button) => button.textContent === 'Reset position');
 
   it('stages the template anchor and offsets, then applies the off-air reset only on Update', async () => {
     const { setPosition, update } = stubBridge();

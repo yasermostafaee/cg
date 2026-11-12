@@ -123,4 +123,6 @@
       Six focused Bridge cases passed.
 - [x] Windows Chromium verified the Inspector reset with Crop input closed, immediate PVW
       restoration, Discard, and Update on air on the same input seat.
+- [x] Disable Reset crop for the authored crop and when a reset is already staged. Verify
+      that a saved or staged deviation in another preset does not enable it.
 - [ ] Verify Reset crop on the target station and record carrying Linux Playwright.

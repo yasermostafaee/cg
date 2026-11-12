@@ -6103,7 +6103,8 @@ In Inspector → Position, **Reset frames** stages the authored frame positions 
 the eligible row's presets. PVW shows the reset immediately. Update applies it and Discard
 restores the prior placements. Whole-template Position and input crop are preserved.
 **Reset crop** in the same section stages the selected preset's authored input framing.
-Update applies it, and Discard restores the prior crop.
+It is enabled only when that preset's effective crop differs from the authored framing. Update
+applies it, and Discard restores the prior crop.
 
 ## [~] D-179 — Rebuild and re-audit the Persian production starter gallery ⟨priority: high — owner re-review reopened 2026-11-04⟩ — `openspec/changes/rebuild-production-starter-gallery/`
 

@@ -330,6 +330,10 @@ test('D-178 / B-433 — PVW crop reaches the first Take and Update on air refram
   await plateRow.locator('[data-row-body]').click();
   const update = page.getByRole('button', { name: 'Apply staged edits', exact: true });
   const discard = page.getByRole('button', { name: 'Discard staged edits' });
+  const resetCrop = page
+    .getByRole('complementary', { name: 'Inspector' })
+    .getByRole('button', { name: 'Reset crop', exact: true });
+  await expect(resetCrop).toBeDisabled();
   const startPan = async () => {
     await plateRow.getByRole('button', { name: 'ON PVW', exact: true }).click();
     await pvw.getByRole('button', { name: 'PLAY', exact: true }).click();
@@ -359,6 +363,7 @@ test('D-178 / B-433 — PVW crop reaches the first Take and Update on air refram
     await expect(draft).toBeVisible();
   };
   await dragRight();
+  await expect(resetCrop).toBeEnabled();
   await expect.poll(readLeft).toBeCloseTo(37.5, 0);
   expect(handle.runtime.previewPlateCrop(cropItem).targets[0]?.focus.x).toBe(0.5);
 
@@ -470,9 +475,6 @@ test('D-178 / B-433 — PVW crop reaches the first Take and Update on air refram
       .some(({ line }) => /(?:^| )(?:MIXER|PLAY|STOP|CLEAR) 1-60\b/.test(line)),
   ).toBe(false);
 
-  const resetCrop = page
-    .getByRole('complementary', { name: 'Inspector' })
-    .getByRole('button', { name: 'Reset crop', exact: true });
   const startReset = engine.receivedCommands().length;
   const cropCommands = () =>
     engine
@@ -484,11 +486,13 @@ test('D-178 / B-433 — PVW crop reaches the first Take and Update on air refram
       );
   await expect(resetCrop).toBeEnabled();
   await resetCrop.click();
+  await expect(resetCrop).toBeDisabled();
   await expect.poll(async () => (await readPicture()).width).toBeCloseTo(centeredPicture.width, 0);
   expect(engine.layerState(slot)?.fill).toEqual(appliedFill);
   expect(cropCommands()).toEqual([]);
 
   await discard.click();
+  await expect(resetCrop).toBeEnabled();
   await expect
     .poll(async () => (await readPicture()).width)
     .toBeCloseTo(appliedFill.width * 1920, 0);
@@ -502,6 +506,7 @@ test('D-178 / B-433 — PVW crop reaches the first Take and Update on air refram
   expect(cropCommands()).toEqual([expect.stringMatching(/MIXER 1-60 FILL /)]);
   expect(engine.layerState(slot)?.clip).toEqual(beforeClip);
   expect(engine.layerState(slot)?.opacity).toBe(1);
+  await expect(resetCrop).toBeDisabled();
 });
 
 test('R-024 saves and reloads a layer profile and refuses to replace an on-air row', async ({
@@ -1266,7 +1271,7 @@ test('R-117 drafts Position in PVW and moves the resident page on Update on air'
   const inspector = page.getByRole('complementary', { name: 'Inspector' });
   const x = inspector.getByRole('textbox', { name: 'Position offset X', exact: true });
   const y = inspector.getByRole('textbox', { name: 'Position offset Y', exact: true });
-  const reset = inspector.getByRole('button', { name: 'Reset to default', exact: true });
+  const reset = inspector.getByRole('button', { name: 'Reset position', exact: true });
   await expect(x).toBeEnabled();
   await expect(reset).toBeDisabled();
   await expect(rowDraft).toHaveCount(0);
@@ -1299,6 +1304,7 @@ test('R-117 drafts Position in PVW and moves the resident page on Update on air'
     await x.fill('320');
     await y.fill('40');
     await expect(rowDraft).toBeVisible();
+    await expect(rowDraft).toHaveCSS('margin-inline-start', '8px');
     await inspector.getByRole('textbox', { name: 'anchor', exact: true }).fill('Draft text');
     const previewStage = pvw.frameLocator('iframe[data-rehearsal-frame]').locator('.cg-stage');
     const moved = 'matrix(1, 0, 0, 1, 320, 40)';
