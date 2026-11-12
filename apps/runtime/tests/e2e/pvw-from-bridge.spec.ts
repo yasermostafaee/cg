@@ -462,7 +462,7 @@ test('D-178 / B-433 — PVW crop reaches the first Take and Update on air refram
   ).toBe(false);
 });
 
-test('R-024 saves and reloads prepared layers and refuses to replace an on-air row', async ({
+test('R-024 saves and reloads a layer profile and refuses to replace an on-air row', async ({
   page,
 }) => {
   const handle = await boot();
@@ -486,14 +486,16 @@ test('R-024 saves and reloads prepared layers and refuses to replace an on-air r
     }),
   ).toMatchObject({ accepted: true });
   expect(await handle.runtime.setPosition(itemId, position)).toMatchObject({ ok: true });
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'showSaveFilePicker', { configurable: true, value: undefined });
+  });
   await openConsole(page, handle.url);
 
   await page.getByRole('button', { name: 'Layer profiles', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Layer profiles', exact: true });
-  const [download] = await Promise.all([
-    page.waitForEvent('download'),
-    dialog.getByRole('button', { name: 'Save profile…' }).click(),
-  ]);
+  const save = dialog.getByRole('button', { name: 'Save profile…' });
+  const [download] = await Promise.all([page.waitForEvent('download'), save.click()]);
+  await expect(dialog.getByRole('status')).toHaveText('Profile download started.');
   const downloaded = await download.path();
   if (downloaded === null) throw new Error('Missing profile download');
   const profile = LayerProfileSchema.parse(JSON.parse(await readFile(downloaded, 'utf8')));
@@ -501,6 +503,56 @@ test('R-024 saves and reloads prepared layers and refuses to replace an on-air r
     { layer: ROW, templateId: TEMPLATE.templateId, fields: { headline }, position },
   ]);
   expect(profile.items[0]).not.toHaveProperty('state');
+
+  const pickerCalls: { suggestedName: string; activated: boolean }[] = [];
+  let savedText: string | null = null;
+  await page.exposeFunction('recordProfilePicker', (choice: (typeof pickerCalls)[number]) =>
+    pickerCalls.push(choice),
+  );
+  await page.exposeFunction('recordProfileFile', (content: string) => {
+    savedText = content;
+  });
+  await page.evaluate(() => {
+    const probe = window as unknown as {
+      recordProfilePicker(choice: { suggestedName: string; activated: boolean }): Promise<number>;
+      recordProfileFile(content: string): Promise<void>;
+    };
+    Object.defineProperty(window, 'showSaveFilePicker', {
+      configurable: true,
+      value: async ({ suggestedName }: { suggestedName: string }) => {
+        const call = await probe.recordProfilePicker({
+          suggestedName,
+          activated: navigator.userActivation.isActive,
+        });
+        if (call === 1) throw new DOMException('Cancelled', 'AbortError');
+        let content = '';
+        return {
+          name: 'operator-profile.json',
+          createWritable: async () => ({
+            write: async (blob: Blob) => {
+              content = await blob.text();
+            },
+            close: () => probe.recordProfileFile(content),
+          }),
+        };
+      },
+    });
+  });
+  await save.click();
+  await expect.poll(() => pickerCalls.length).toBe(1);
+  await expect(save).toBeEnabled();
+  await expect(dialog.getByRole('alert')).toHaveCount(0);
+  await expect(dialog.getByRole('status')).toHaveCount(0);
+  expect(savedText).toBeNull();
+
+  await save.click();
+  await expect(dialog.getByRole('status')).toHaveText('Saved operator-profile.json.');
+  expect(pickerCalls).toEqual([
+    { suggestedName: 'CG-CH1-profile.json', activated: true },
+    { suggestedName: 'CG-CH1-profile.json', activated: true },
+  ]);
+  expect(JSON.parse(savedText ?? 'null')).toEqual(profile);
+
   profile.items.push({
     layer: ROW - 1,
     templateId: 'missing-template',

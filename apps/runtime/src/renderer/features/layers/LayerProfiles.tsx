@@ -15,6 +15,7 @@ import { Icon } from '../../ui/Icon.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
+import { saveFile } from '../../ui/saveFile.js';
 
 const refusalCopy = {
   'on-air': 'Stop the graphics on this channel before loading a profile.',
@@ -30,19 +31,6 @@ const issueCopy: Readonly<Record<string, string>> = {
   'layer-occupied': 'Clear this layer before replacing it with a profile.',
 };
 
-function downloadProfile(profile: LayerProfile, channel: number): void {
-  const url = URL.createObjectURL(
-    new Blob([JSON.stringify(profile, null, 2)], { type: 'application/json' }),
-  );
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `CG-CH${String(channel)}-profile.json`;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
-}
-
 export function LayerProfiles({
   bank,
   snapshot,
@@ -55,11 +43,16 @@ export function LayerProfiles({
   const [selected, setSelected] = useState<{ name: string; profile: LayerProfile } | null>(null);
   const [result, setResult] = useState<StackLoadProfileResult | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const picker = useRef<HTMLInputElement>(null);
   const { channel } = bank;
 
-  const save = (): void => {
+  const save = async (): Promise<void> => {
+    if (busy) return;
+    setBusy(true);
     setProblem(null);
+    setNotice(null);
+    setResult(null);
     try {
       const layers = new Set(fixedBankSlots(bank).map(({ layer }) => layer));
       const items = snapshot.flatMap((item) => {
@@ -71,18 +64,30 @@ export function LayerProfiles({
         return [{ ...retainedFromStackItem(item), layer: slot.layer, label }];
       });
       // The file schema drops live runtime state and retains only portable operator intent.
-      downloadProfile(
-        LayerProfileSchema.parse({ kind: 'apasai-cg-layer-profile', version: 1, items }),
-        channel,
+      const profile = LayerProfileSchema.parse({
+        kind: 'apasai-cg-layer-profile',
+        version: 1,
+        items,
+      });
+      const outcome = await saveFile(
+        new Blob([JSON.stringify(profile, null, 2)], { type: 'application/json' }),
+        `CG-CH${String(channel)}-profile.json`,
+        'APASAI CG layer profile',
+        '.json',
       );
+      if (outcome.kind === 'saved') setNotice(`Saved ${outcome.handle.name}.`);
+      if (outcome.kind === 'download') setNotice('Profile download started.');
     } catch (error) {
       setProblem(error instanceof Error ? error.message : 'Could not save the profile.');
+    } finally {
+      setBusy(false);
     }
   };
 
   const select = async (file: File): Promise<void> => {
     setSelected(null);
     setProblem(null);
+    setNotice(null);
     setResult(null);
     setBusy(true);
     try {
@@ -99,6 +104,7 @@ export function LayerProfiles({
     if (selected === null || busy) return;
     setBusy(true);
     setProblem(null);
+    setNotice(null);
     try {
       const response = await window.cg.stack.loadProfile({ channel, profile: selected.profile });
       setResult(response);
@@ -120,6 +126,7 @@ export function LayerProfiles({
           setSelected(null);
           setResult(null);
           setProblem(null);
+          setNotice(null);
           setOpen(true);
         }}
       >
@@ -131,14 +138,16 @@ export function LayerProfiles({
           message={
             problem !== null
               ? { role: 'refusal', text: problem }
-              : result?.refusal !== undefined
-                ? { role: 'refusal', text: refusalCopy[result.refusal] }
-                : result !== null
-                  ? {
-                      role: 'notice',
-                      text: `Loaded ${String(result.loaded)} ${result.loaded === 1 ? 'layer' : 'layers'}.`,
-                    }
-                  : []
+              : notice !== null
+                ? { role: 'notice', text: notice }
+                : result?.refusal !== undefined
+                  ? { role: 'refusal', text: refusalCopy[result.refusal] }
+                  : result !== null
+                    ? {
+                        role: 'notice',
+                        text: `Loaded ${String(result.loaded)} ${result.loaded === 1 ? 'layer' : 'layers'}.`,
+                      }
+                    : []
           }
           onClose={() => {
             if (!busy) setOpen(false);
@@ -154,7 +163,7 @@ export function LayerProfiles({
           }
         >
           <p>Channel {String(channel)}</p>
-          <Button variant="neutral" disabled={busy} onClick={save}>
+          <Button variant="neutral" disabled={busy} onClick={() => void save()}>
             Save profile…
           </Button>
           <Button variant="neutral" disabled={busy} onClick={() => picker.current?.click()}>

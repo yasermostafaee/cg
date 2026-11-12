@@ -1074,6 +1074,9 @@ prepared stack lives only in one browser's retention.
   layers. A layer on air or transitioning prevents the load. Each newly restored row is Ready.
 - WHEN the operator exports THEN the file captures the stack: items referencing library
   templates by id, field values, position overrides, fixed-layer bindings, order
+- WHEN the operator selects Save profile in CG Control THEN a file chooser opens and the
+  dialog confirms the filename after writing. Closing the chooser cancels the save. Browsers
+  without a file chooser start a download and show that status.
 - WHEN the operator imports THEN the stack is rebuilt from the file
 - WHEN a referenced template is missing from the library THEN a legible PER-ITEM error is shown
   and the REST of the rundown still loads — never a silent drop and never a whole-file failure

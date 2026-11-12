@@ -6,6 +6,14 @@ CG Control SHALL export a versioned JSON profile of the active channel's bound f
 stack order, including referenced template IDs, applied fields and position. Loading a profile
 SHALL show the destination channel and ask before replacing prepared layers.
 
+#### Scenario: Save the profile from CG Control
+
+- **WHEN** an operator selects Save profile in CG Control
+- **THEN** the file chooser offers a JSON filename for the selected channel
+- **AND** the dialog confirms the chosen filename after the file is written
+- **AND** cancelling the chooser makes no write and leaves the profile dialog open
+- **AND** a browser without the file chooser starts a download and reports that it started
+
 #### Scenario: Restore an operator profile
 
 - **WHEN** an operator loads a profile on a declared channel whose prepared layers can be replaced
