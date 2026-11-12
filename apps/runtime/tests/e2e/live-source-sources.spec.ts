@@ -43,7 +43,7 @@ async function registerTwoBox(app: { page: Page }): Promise<void> {
         fields: [],
         liveSources: {
           resolution: { width: 1920, height: 1080 },
-          defaultPosition: { anchor: 'center', dx: 0, dy: 0 },
+          defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
           sources: [
             { elementId: 'el-1', sourceId: 'guest-1', rect, dynamic: false },
             { elementId: 'el-2', sourceId: 'guest-2', rect, dynamic: false },

@@ -117,7 +117,7 @@ async function registerB355Template(page: Page): Promise<void> {
         ],
         liveSources: {
           resolution: { width: 1920, height: 1080 },
-          defaultPosition: { anchor: 'center', dx: 0, dy: 0 },
+          defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
           sources: [
             { elementId: 'el-1', sourceId: 'l-1', rect: left, dynamic: false },
             { elementId: 'el-2', sourceId: 'l-2', rect: right, dynamic: false },

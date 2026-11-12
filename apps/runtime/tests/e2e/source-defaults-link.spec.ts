@@ -49,7 +49,7 @@ test('the warning dot carries no underline, and the link’s words still do', as
         fields: [],
         liveSources: {
           resolution: { width: 1920, height: 1080 },
-          defaultPosition: { anchor: 'center', dx: 0, dy: 0 },
+          defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
           sources: [{ elementId: 'el-1', sourceId: 'p-1', rect, dynamic: false }],
         },
       },
