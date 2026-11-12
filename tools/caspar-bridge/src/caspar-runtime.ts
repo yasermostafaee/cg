@@ -335,7 +335,6 @@ import {
   effectiveOverridesForLook,
   framesOfLook,
   resolveLookBindings,
-  seatCollisionMessage,
   type LookBindingPlan,
   type LookSourceBindings,
 } from './live-look-bindings.js';
@@ -611,7 +610,7 @@ function liveOverlapLayerOrder(input: {
       const authoredRect = rects[plateId];
       const rect =
         authoredRect === undefined ? null : intersectNormalizedRects(authoredRect, stage);
-      const main = frame === undefined ? undefined : indexBySeat.get(frame.producerArg);
+      const main = frame === undefined ? undefined : indexBySeat.get(frame.seatId);
       if (main === undefined || rect === null) return [];
       let topSeat = main;
       if (lookId === activeId) {
@@ -679,8 +678,10 @@ interface LivePlatePlacement {
    * new persisted field: the ledger already records `producer` as SENT.
    */
   readonly producerArg: string;
-  /** D-202 — seat identity; normally the producer argument, unique for a reveal duplicate. */
+  /** Stable ID across presets. A routed copy or overlay has its own seat. */
   readonly seatId: string;
+  /** The physical input seat tapped by a repeated-input plate. */
+  readonly sharedInputFrom?: string;
   /** The assigned catalog entry's producer, still as a parsed union. */
   readonly producer: SourceProducer;
   /**
@@ -733,7 +734,10 @@ const liveSeatId = (record: LiveLayerRecord): string => record.seatId ?? record.
 
 /** Is this placement a Playout route (`@cg/shared-ipc`'s one predicate, asked of a placement)? */
 function placementIsPlayoutRoute(placement: LivePlatePlacement): boolean {
-  return isPlayoutRoute({ origin: placement.source.origin, producer: placement.producer });
+  return (
+    placement.sharedInputFrom === undefined &&
+    isPlayoutRoute({ origin: placement.source.origin, producer: placement.producer })
+  );
 }
 
 /** `ROUTE-PLATES-01` — the first Playout-route seat a plan holds (punched or parked), if any. */
@@ -9107,10 +9111,8 @@ export class CasparRuntime {
    *    input share one seat. The owner's real template — 3-box `{s1,s2,s3}`, 2-box
    *    `{s1,s2}`, solo `{s3}` — needs THREE producers, exactly what it needed before.
    *
-   * ⚠ **PLATE ↔ SEAT IS STILL 1:1 WITHIN ONE LOOK, and that is not luck — it is what §6.2's
-   * refusal buys.** Every consumer that reads a record by its plate (`swapLiveSource`,
-   * `setPlateVolume`, the operator's layer table) leans on that, so the refusal is
-   * load-bearing rather than tidy.
+   * Each plate has its own display seat within a preset. When multiple plates show one input,
+   * the extra display seats route the physical input and carry their own fit and volume.
    */
   #planLiveSeating(
     itemId: string,
@@ -9193,14 +9195,13 @@ export class CasparRuntime {
     /*
       🔴 THE ONE RESOLUTION, for EVERY look — not just the one being entered.
 
-      The seat set has to be the union or a preset is not a preset, and the collisions and
-      the band arithmetic below are questions about the same union. Asking a second time,
+      The seat set has to be the union so a preset switch keeps its physical inputs and
+      any routed copies. The band arithmetic uses that same union. Asking a second time,
       per look, is how the four levels would come to be applied in two orders.
     */
     /*
       SESSION BP — level 2 comes from `#assignmentsFor`, which answers the FROZEN snapshot
-      for a row that has one. The seat set, the collisions and the band arithmetic below are
-      all questions about the same union, so they must all be asked of the same level 2.
+      for a row that has one. The seat set and band arithmetic must use the same level 2.
     */
     const resolvedFrom = this.#assignmentMapFor(itemId, templateId, levelTwo, slot.channel);
     /*
@@ -9339,15 +9340,26 @@ export class CasparRuntime {
       revealOverlay?: true;
       playback?: MediaPlayback;
       routeFrom?: string;
+      sharedInputFrom?: string;
     }[] = [];
+    const copiedInputs = new Set(
+      [...bindings.seats.values()].flatMap(({ routeFrom }) =>
+        routeFrom === undefined ? [] : [routeFrom],
+      ),
+    );
+    const onBackup = this.#adapter.currentPrimary === 'B';
 
     for (const seat of bindings.seats.values()) {
-      declared.add(seat.producerArg);
-      resolved.set(seat.producerArg, seat.source);
+      declared.add(seat.seatId);
+      resolved.set(seat.seatId, seat.source);
       // `MEDIA-PLATES-01` — a clip's playback travels with each of its seats, read ONCE here.
       const clip =
-        seat.source.producer.kind === 'media' ? { playback: mediaPlaybackOf(seat.source) } : {};
+        seat.routeFrom === undefined && seat.source.producer.kind === 'media'
+          ? { playback: mediaPlaybackOf(seat.source) }
+          : {};
       const punch = seat.frames.find((f) => f.lookId === lookId);
+      const tap = seat.routeFrom === undefined ? {} : { sharedInputFrom: seat.routeFrom };
+      if (onBackup && seat.routeFrom !== undefined && punch === undefined) continue;
       /*
         The REPRESENTATIVE frame names a parked seat for the ledger and the operator's table.
         Deterministic — the first look in authored order that binds this input — so two
@@ -9436,10 +9448,11 @@ export class CasparRuntime {
         // bind it, so the record still says how big the box will be when it arrives.
         seated.push({
           plateId: frame.plateId,
-          seatId: seat.producerArg,
+          seatId: seat.seatId,
           producerArg: seat.producerArg,
           producer: seat.source.producer,
-          source: sourceLabelOf(seat.source),
+          source: sourceLabelOf(frame.source),
+          ...tap,
           fit: parkedFit(this.#parkedSize(itemId, slot, carrier, frame, aspect.aspect)),
           held: true,
           ...clip,
@@ -9515,7 +9528,7 @@ export class CasparRuntime {
       )
         positionProposal.cropTokens.set(stagedCrop.token, token);
       const liveCrop = this.#liveCropFocuses.get(itemId)?.get(cropKey(frame.lookId, frame.plateId));
-      const landedFocus = liveCrop?.producer === seat.producerArg ? liveCrop.focus : undefined;
+      const landedFocus = liveCrop?.producer === seat.seatId ? liveCrop.focus : undefined;
       const savedFocus =
         stagedCrop?.focus ?? lookPlateFocuses(carrier, frame.lookId)[frame.plateId];
       const currentFocus =
@@ -9539,7 +9552,7 @@ export class CasparRuntime {
       const prior =
         proposedCrops === undefined
           ? undefined
-          : currentSeats.find((record) => liveSeatId(record) === seat.producerArg);
+          : currentSeats.find((record) => liveSeatId(record) === seat.seatId);
       const keepContinuous =
         exactEdges.has(frame.plateId) ||
         (prior !== undefined && sameMixerRect(prior.clip, continuousFit.clip, 1e-8));
@@ -9572,29 +9585,55 @@ export class CasparRuntime {
           parks instead, which is what a seat no visible frame punches means everywhere else
           in this method.
         */
-        if (seat.frames.length === 1) continue;
+        if (seat.frames.length === 1 && !copiedInputs.has(seat.seatId)) continue;
+        if (onBackup && seat.routeFrom !== undefined) continue;
         seated.push({
           plateId: frame.plateId,
-          seatId: seat.producerArg,
+          seatId: seat.seatId,
           producerArg: seat.producerArg,
           producer: seat.source.producer,
-          source: sourceLabelOf(seat.source),
+          source: sourceLabelOf(frame.source),
+          ...tap,
           fit: parkedFit({ width: fit.fill.width, height: fit.fill.height }),
           held: true,
           ...clip,
         });
         continue;
       }
+      if (onBackup && seat.routeFrom !== undefined) {
+        return {
+          ok: false,
+          errorCode: 'live-input-copy-backup',
+          message: 'The active backup engine cannot route one input to multiple plates.',
+        };
+      }
       seated.push({
         plateId: frame.plateId,
-        seatId: seat.producerArg,
+        seatId: seat.seatId,
         producerArg: seat.producerArg,
         producer: seat.source.producer,
-        source: sourceLabelOf(seat.source),
+        source: sourceLabelOf(frame.source),
+        ...tap,
         fit: { fill: fit.fill, clip: fit.clip },
         held: false,
         ...clip,
       });
+    }
+
+    // A dormant preset with an incompatible input must not block an unrelated Take.
+    const allocatedInputIds = new Set(seated.map(({ seatId }) => seatId));
+    for (let index = seated.length - 1; index >= 0; index -= 1) {
+      const copy = seated[index];
+      if (copy?.sharedInputFrom === undefined || allocatedInputIds.has(copy.sharedInputFrom))
+        continue;
+      if (!copy.held) {
+        return {
+          ok: false,
+          errorCode: LIVE_PLATE_SOURCE_UNAVAILABLE,
+          message: 'The shared input is unavailable.',
+        };
+      }
+      seated.splice(index, 1);
     }
 
     /*
@@ -9643,10 +9682,11 @@ export class CasparRuntime {
         const seatId = `${lower.producerArg}\u001freveal:${upperId}${suffix}`;
         addExtra(upperId, seatId);
         declared.add(seatId);
-        const lowerSource = resolved.get(lower.producerArg);
+        const lowerSource = resolved.get(lower.seatId);
         if (lowerSource !== undefined) resolved.set(seatId, lowerSource);
         seated.push({
           ...lower,
+          ...(copiedInputs.has(lower.seatId) && { sharedInputFrom: lower.seatId }),
           plateId: reveal.targetSourceId,
           seatId,
           fit: { fill: lower.fit.fill, clip },
@@ -9693,7 +9733,9 @@ export class CasparRuntime {
           fit: { fill, clip: fragment },
           held: false,
           revealOverlay: true,
-          routeFrom: main.seatId,
+          ...(main.sharedInputFrom === undefined
+            ? { routeFrom: main.seatId }
+            : { sharedInputFrom: main.sharedInputFrom }),
         });
       }
     }
@@ -9891,9 +9933,10 @@ export class CasparRuntime {
     const epoch = this.#sourceCatalog.inputsEpoch;
     const layerBySeat = new Map(seated.map((s, i) => [s.seatId, layers[i] as number]));
     const allocated: LivePlatePlacement[] = seated.map(({ routeFrom, ...seat }, i) => {
-      const sourceLayer = routeFrom === undefined ? undefined : layerBySeat.get(routeFrom);
-      if (routeFrom !== undefined && sourceLayer === undefined) {
-        throw new Error('A mask fragment must route an allocated source seat.');
+      const parent = routeFrom ?? seat.sharedInputFrom;
+      const sourceLayer = parent === undefined ? undefined : layerBySeat.get(parent);
+      if (parent !== undefined && sourceLayer === undefined) {
+        throw new Error('A routed copy must have an allocated source seat.');
       }
       const producer: SourceProducer =
         sourceLayer === undefined
@@ -9904,8 +9947,10 @@ export class CasparRuntime {
         slot: { channel: slot.channel, layer: layers[i] as number },
         producer,
         producerArg:
-          routeFrom === undefined ? seat.producerArg : this.#builder.sourceArgument(producer),
-        ...(epoch !== undefined && isPlayoutRoute({ origin: seat.source.origin, producer })
+          parent === undefined ? seat.producerArg : this.#builder.sourceArgument(producer),
+        ...(parent === undefined &&
+        epoch !== undefined &&
+        isPlayoutRoute({ origin: seat.source.origin, producer })
           ? { epoch }
           : {}),
       };
@@ -9999,17 +10044,8 @@ export class CasparRuntime {
    * 🔴 **§6.2 / §2.7 — THE DOOR A BINDING CHANGE IS REFUSED AT: HERE, IN CG CONTROL, WHILE
    * THE OPERATOR IS WATCHING — never at the take and never on air.**
    *
-   * Two refusals, one door, because they are the two ways a binding can be impossible and
-   * the operator meets both at the same moment:
-   *
-   * - **§6.2** — two frames of ONE look pointed at ONE input. One seat, so one of the two
-   *   frames goes to air empty. {@link seatCollisionMessage} carries why no export check
-   *   can catch it.
-   * - **§2.7** — the band cannot hold the resulting seat set. Demand is now the number of
-   *   DISTINCT INPUTS bound across the item's looks, so PRESETTING raises it: the band can
-   *   be exhausted by an assignment, which it never could before. Answered by running the
-   *   real planner against the prospective maps rather than by counting here, so there is
-   *   one allocator and the answer cannot drift from what the take would do.
+   * The real planner checks whether the band can hold the proposed physical seats and
+   * their routed copies. It also retains the existing binding and channel-safety checks.
    *
    * ⚠ **PROSPECTIVE, AND IT MUTATES NOTHING.** The maps are passed in rather than written
    * first, so a refused binding leaves no trace — `tasks.md` 7.9's lesson, and this method
@@ -10033,8 +10069,7 @@ export class CasparRuntime {
       carrier,
       // SESSION BP — the FROZEN level 2 for a row that has one. A prospective plan built on
       // the live store would refuse (or accept) a binding change against an assignment the
-      // row is not resolving from, which is the collision check answering about a different
-      // seat set than the reconcile below it will build.
+      // row is not resolving from would validate a different seat set from reconcile.
       assignments: this.#assignmentsFor(itemId, templateId, 'pinned', slot.channel).assignments,
       channel: slot.channel,
       catalog: this.#sourceCatalog,
@@ -10042,20 +10077,6 @@ export class CasparRuntime {
       overrides: next.overrides,
       argumentOf: (source) => this.#builder.sourceArgument(source.producer),
     });
-    const collision = prospective.collisions[0];
-    if (collision !== undefined) {
-      // `B-309` — the sentence names the look and the plates in the operator's words; the ids go here.
-      process.stderr.write(
-        `[caspar-bridge] ${itemId}: refused (live-source-duplicate) — plates ` +
-          `${collision.plateIds.map((id) => `"${id}"`).join(', ')} would both show ` +
-          `${collision.producerArg}` +
-          `${collision.lookId === undefined ? '' : ` in look "${collision.lookId}"`}\n`,
-      );
-      return {
-        reason: 'live-source-duplicate',
-        message: seatCollisionMessage(collision, carrier),
-      };
-    }
     /*
       🔴 `PLAYOUT-FEATURES-01` B (`B-298`) and `B-299` — A NEW BINDING THIS ROW'S CHANNEL MAY NOT SHOW: the
       channel's own output (it would loop), or a Playout route whose `compatibleChannels` do not name the
@@ -11003,7 +11024,7 @@ export class CasparRuntime {
             message: applied.message ?? 'CasparCG could not apply the crop.',
           };
         const focuses = this.#liveCropFocuses.get(itemId) ?? new Map();
-        focuses.set(cropKey(lookId, plateId), { producer: record.producer, focus });
+        focuses.set(cropKey(lookId, plateId), { producer: liveSeatId(record), focus });
         this.#liveCropFocuses.set(itemId, focuses);
         return { accepted: true };
       }),
@@ -12634,7 +12655,27 @@ export class CasparRuntime {
         return results;
       }
     }
-    for (const r of requests) {
+    const ordered = [
+      ...requests.filter(({ placement }) => placement.sharedInputFrom === undefined),
+      ...requests.filter(({ placement }) => placement.sharedInputFrom !== undefined),
+    ];
+    for (const r of ordered) {
+      const source =
+        r.placement.sharedInputFrom === undefined
+          ? undefined
+          : results.get(r.placement.sharedInputFrom);
+      if (source !== undefined && source.outcome !== 'landed') {
+        results.set(r.placement.seatId, {
+          placement: r.placement,
+          outcome: 'refused',
+          sent: false,
+          hidden: r.hide,
+          errorCode: source.errorCode ?? 'amcp-error',
+          ...(source.command !== undefined && { command: source.command }),
+        });
+        if (!r.optional) break;
+        continue;
+      }
       const sent = await this.#startSeatProducer(r.placement);
       // `ROUTE-PLATES-01` — a route names its own outcome when its `LOADBG` landed (`loaded`).
       const outcome = sent.outcome ?? outcomeOf(sent);
@@ -12990,8 +13031,8 @@ export class CasparRuntime {
      * SWAP would not be (`B-126`).
      */
     const moved: { slot: CommandSlot; fill: NormalizedRect; clip: NormalizedRect }[] = [];
-    /** Plates this action un-muted on the way out of HELD — re-muted by the same rollback. */
-    const unmuted: CommandSlot[] = [];
+    /** Reused seats whose programme volume changes, restored if a switch is refused. */
+    const changedVolumes: LiveLayerRecord[] = [];
     /**
      * `ROUTE-PLATES-01` — Playout routes this action un-hid on the way out of HELD — re-hidden too.
      * `MEDIA-PLATES-01` — and held clips ({@link hiddenWhenHeld}, the one question).
@@ -13005,6 +13046,7 @@ export class CasparRuntime {
      * it is not a `MIXER` line — so it follows the commit, and the clip is never seen to stop).
      */
     const pauseWhenHidden = new Set<string>();
+    const visibleCopyParents = new Set(placements.map((placement) => placement.sharedInputFrom));
     let failure: string | undefined;
     let failedPlate:
       | {
@@ -13192,7 +13234,8 @@ export class CasparRuntime {
         ...(placement.seatId !== producer && { seatId: placement.seatId }),
         ...(placement.revealOverlay === true && { revealOverlay: true as const }),
         // `PLAYOUT-SOURCES-01` §1.I — a later raise reaches this layer from the record alone.
-        ...(placement.source.origin !== undefined && { origin: placement.source.origin }),
+        ...(placement.sharedInputFrom === undefined &&
+          placement.source.origin !== undefined && { origin: placement.source.origin }),
         // `ROUTE-PLATES-01` rule 5 — the epoch of the route actually running: the prior one for a
         // seat this action does not re-`PLAY`, the placement's for one it does.
         ...(() => {
@@ -13252,7 +13295,6 @@ export class CasparRuntime {
         if (!sameMixerRect(prior.fill, record.fill) || !sameMixerRect(prior.clip, record.clip)) {
           moved.push({ slot: placement.slot, fill: prior.fill, clip: prior.clip });
         }
-        if (prior.held === true) unmuted.push(placement.slot);
         if (prior.held === true && hiddenWhenHeld(prior)) unhidden.push(placement.slot);
         if (resumeOnReveal) resumed.push(placement.slot);
       }
@@ -13265,10 +13307,9 @@ export class CasparRuntime {
         if (!sameMixerRect(prior.fill, record.fill) || !sameMixerRect(prior.clip, record.clip)) {
           lines.push(...this.#builder.mixerFit(placement.slot, placement.fit));
         }
-        // A plate coming back from HELD was muted by the hold, so its intent has to be
-        // re-asserted or a deliberately-raised source returns silent — the same fault
-        // 6.9c names for the swap, arriving by the look switch instead.
-        if (prior.held === true) {
+        // A held seat was muted. A seat now serving another plate also needs that plate's volume.
+        if (prior.held === true || prior.intendedVolume !== record.intendedVolume) {
+          changedVolumes.push(prior);
           // `PLAYOUT-SOURCES-01` §1.I — a Playout input comes back by a ramp, never a jump.
           lines.push(
             this.#builder.mixerVolume(
@@ -13277,6 +13318,8 @@ export class CasparRuntime {
               plateVolumeFrames(record.origin, record.intendedVolume),
             ),
           );
+        }
+        if (prior.held === true) {
           // `ROUTE-PLATES-01` (C2) — a held Playout route was hidden, not only parked: showing it
           // again is ONLY the reveal — no new `PLAY`, it never stopped playing.
           // `MEDIA-PLATES-01` — and so was a held clip ({@link hiddenWhenHeld}).
@@ -13405,7 +13448,12 @@ export class CasparRuntime {
         next[recordIndex] = { ...record, held: true };
         // `MEDIA-PLATES-01` — a PRESET clip set to `pause` waits, hidden and paused, for the look
         // that shows it; it is paused after the commit, like every clip a look hides.
-        if (placement.playback?.whenHidden === 'pause') pauseWhenHidden.add(key(record));
+        if (
+          placement.playback?.whenHidden === 'pause' &&
+          !visibleCopyParents.has(placement.seatId)
+        ) {
+          pauseWhenHidden.add(key(record));
+        }
       }
       if (failure !== undefined && placement.held) {
         /*
@@ -13565,9 +13613,10 @@ export class CasparRuntime {
             await this.#send(line, this.#nextSeq(), 'urgent');
           }
         }
-        for (const slot of unmuted) {
+        for (const prior of changedVolumes) {
+          const volume = wireVolumeOf(prior);
           await this.#send(
-            this.#builder.mixerVolume(slot, CREATED_MUTED_VOLUME),
+            this.#builder.mixerVolume(prior.slot, volume, plateVolumeFrames(prior.origin, volume)),
             this.#nextSeq(),
             'urgent',
           );
@@ -13841,6 +13890,11 @@ export class CasparRuntime {
       hold), or torn down when no look binds its input any more.
     */
     const placed = new Set(placements.map((p) => p.seatId));
+    const copySeats = new Set(
+      parked
+        .filter((placement) => placement.sharedInputFrom !== undefined)
+        .map((placement) => placement.seatId),
+    );
     /*
       A seat REPLACED IN PLACE is not a release, and must not be announced as one. When a
       plate is re-pointed, the arriving producer takes the departing one's layer (see
@@ -13874,6 +13928,8 @@ export class CasparRuntime {
         itemId,
         plateId: record.sourceId,
         source: entry,
+        keepRunning:
+          visibleCopyParents.has(liveSeatId(record)) || copySeats.has(liveSeatId(record)),
         // From the CARRIER, never from what this plan happened to resolve — see the note on
         // `declared`. A live action resolves only the plates going on screen, so a held
         // plate is routinely absent from `resolved` while being very much still declared.
@@ -13994,6 +14050,7 @@ export class CasparRuntime {
       if (
         muted &&
         record.transport !== undefined &&
+        !visibleCopyParents.has(liveSeatId(record)) &&
         entry !== undefined &&
         entry.producer.kind === 'media' &&
         mediaPlaybackOf(entry).whenHidden === 'pause' &&
@@ -14020,6 +14077,22 @@ export class CasparRuntime {
     if (cropBaseline !== undefined && !committed.landed) {
       await this.#reassertLedgerGeometry(itemId);
       return { ok: false, errorCode: committed.errorCode ?? 'amcp-error' };
+    }
+
+    // The physical seat may be held offscreen while its picture is still used by a copy.
+    for (const [index, record] of next.entries()) {
+      if (
+        record.held !== true ||
+        record.transport?.paused !== 'hidden' ||
+        !visibleCopyParents.has(liveSeatId(record))
+      )
+        continue;
+      const resumed = await this.#send(
+        this.#builder.resume(record.slot),
+        this.#nextSeq(),
+        'urgent',
+      );
+      if (resumed.ok) next[index] = { ...record, transport: { loop: record.transport.loop } };
     }
 
     /*
@@ -14207,12 +14280,8 @@ export class CasparRuntime {
       }
 
       /*
-      🔴 §6.2 / §2.7 — REFUSED HERE, BEFORE ANYTHING IS WRITTEN OR SENT.
-
-      Both refusals are about the binding the operator just asked for, so they belong at the
-      moment they asked — in CG Control, with nothing on air disturbed. Reaching them at the
-      take instead would refuse a graphic on the way to air over a choice made minutes
-      earlier; reaching them during the reconcile would already have written the override.
+      Validate the proposed binding and the layer band before writing an override or sending
+      a command. The running programme still has its previous bindings if validation refuses.
     */
       const refusal = this.#refuseBindingChange(itemId, itemSlot, {
         overrides: next,

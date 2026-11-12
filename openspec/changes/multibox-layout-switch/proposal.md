@@ -77,6 +77,11 @@ Documentation, plus the measurement harness (no product code):
 | `docs/prd/bugs-runtime.md` · `bugs-designer.md` | `B-145`, `B-146`, `B-147`                                    |
 | `tools/caspar-amcp-probe/bin/`                  | the plant harness this change's measurements were taken with |
 
+## Reuse an input inside one preset
+
+Allow one station input to fill multiple distinct plates in a preset. Reuse the acquired
+picture and give each plate its own framing on the primary engine.
+
 ## Impact if it proceeds
 
 | Area                   | Effect                                                                                                                |

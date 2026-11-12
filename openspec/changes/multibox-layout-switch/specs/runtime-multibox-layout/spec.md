@@ -261,6 +261,29 @@ allocation — the corresponding INVERSE SHALL exist and be exercised by a test.
 - **THEN** a corresponding release, un-punch, fit-clear and de-allocation exists and is covered by a
   test, so no half of a pair can ship without the other
 
+### Requirement: Distinct plates in a preset can use the same station input
+
+CG Control SHALL show the assigned picture in every distinct plate in Preview. The primary
+engine SHALL acquire a shared input once and route a separate picture to each additional
+plate. Each plate SHALL keep its own fit, crop and position. Bridge SHALL account for the copies
+in its existing layer budget and hold them across preset switches when possible.
+
+#### Scenario: Assign one source to two plates
+
+- **WHEN** an operator assigns one station input to two different plates in the same preset
+- **THEN** PVW shows both plates and an off-air Update saves the assignment without seating or revealing a producer
+- **AND** the next Take seats one input and its routed copy with independent plate geometry
+
+#### Scenario: Switch to another preset using the same input twice
+
+- **WHEN** another preset uses the same input in a different pair of plates
+- **THEN** its two placements reuse the existing input and copy without playing them again
+
+#### Scenario: A copy cannot be seated safely
+
+- **WHEN** the primary cannot allocate the needed layer or the active backup cannot route a copy
+- **THEN** the action is refused before changing the running programme
+
 ### Requirement: A configuration verb is never a playout verb, and ownership is the LEDGER
 
 A configuration verb SHALL touch a live layer only on a row that **owns live layers** — an UPDATE

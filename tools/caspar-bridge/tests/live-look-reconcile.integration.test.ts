@@ -2247,8 +2247,7 @@ it('🔴 §8.3 — two looks bound to ONE input share ONE seat, held across the 
   /*
     SOLO's only frame is pointed at the SAME input 2-box's LEFT cell shows. Two DIFFERENT
     plates, two different looks, one physical input — which is the case the dedupe exists
-    for, and the one no plate-keyed model can express. (Pointing a frame of `three` at it
-    instead would be a §6.2 collision, because `three` already shows studio-1 in `live-1`.)
+    for, and the one no plate-keyed model can express.
   */
   expect(await r.swapLiveSource('item-1', 'live-3', 'src-1', 'solo')).toEqual({ ok: true });
 
@@ -2276,32 +2275,169 @@ it('🔴 §8.3 — two looks bound to ONE input share ONE seat, held across the 
   expect(recordOf(r, 'live-3')?.fill.width).toBeCloseTo(1, 5);
 });
 
-it('🔴 §8.6 — two frames of ONE look on ONE input is refused in CG Control, naming both', async () => {
+it('rebinds two on-air plates to one input with an independent picture in each', async () => {
   const r = await boot({ template: ownersTemplate(), assignments: OWNERS_ASSIGNMENTS });
   await onAir(r);
-  const before = (await recvLines()).length;
+  const firstLayer = layerOf(r, 'live-1');
+  const originalSecondLayer = layerOf(r, 'live-2');
+  const copy = `"route://1-${String(firstLayer)}"`;
+  const honestPlay = defaultHandlers().get('PLAY');
+  if (mock === null || honestPlay === undefined) throw new Error('missing PLAY fixture');
 
-  // Both of 2-box's cells pointed at studio-1. One input is one seat, so one of the two
-  // frames would go to air empty — and the export preflight cannot see this, because the
-  // AUTHOR wrote two different holes and it is the OPERATOR who collided them.
-  const verdict = await r.swapLiveSource('item-1', 'live-2', 'src-1', 'two');
-
-  expect(verdict.ok).toBe(false);
-  expect(verdict.reason).toBe('live-source-duplicate');
-  // It NAMES both frames and the look — a refusal that named neither is a dead end. `B-308`: the
-  // frames as the operator knows them, `Plate N`, never by their ids.
-  expect(verdict.message).toMatch(/^Plate 1 and Plate 2 would both show /);
-  expect(verdict.message).not.toMatch(/live-\d/);
-  expect(verdict.message).toContain('two');
-  // Refused means refused: nothing reached the wire and nothing was recorded.
-  expect(await since(before), 'nothing on air was disturbed').toEqual([]);
-  expect(recordOf(r, 'live-2')?.producer, 'the frame is on its own source still').toBe(
-    '"route://3"',
+  mock.setHandler('PLAY', (request, context) =>
+    request.raw.includes(copy)
+      ? { kind: 'err', code: 404, verb: 'PLAY' }
+      : honestPlay(request, context),
   );
+  expect(await r.swapLiveSource('item-1', 'live-2', 'src-1', 'two')).toMatchObject({ ok: false });
+  expect(recordOf(r, 'live-1')?.producer).toBe('"route://2"');
+  expect(recordOf(r, 'live-2')?.producer).toBe('"route://3"');
+  expect(layerOf(r, 'live-2')).toBe(originalSecondLayer);
+  expect(mock.layerRenderedRect({ channel: 1, layer: originalSecondLayer })).toEqual({
+    x: 0.25,
+    y: 0,
+    width: 0.25,
+    height: 0.25,
+  });
   expect(
-    r.stackSnapshot().find((i) => i.itemId === 'item-1')?.lookSourceOverride,
-    'a refused binding records nothing',
+    r.stackSnapshot().find((item) => item.itemId === 'item-1')?.lookSourceOverride,
   ).toBeUndefined();
+
+  mock.setHandler('PLAY', honestPlay);
+  const before = (await recvLines()).length;
+  expect(await r.swapLiveSource('item-1', 'live-2', 'src-1', 'two')).toEqual({ ok: true });
+
+  const secondLayer = layerOf(r, 'live-2');
+  expect(secondLayer).not.toBe(firstLayer);
+  expect(playsIn(await since(before))).toEqual([`PLAY 1-${String(secondLayer)} ${copy}`]);
+  expect(recordOf(r, 'live-1')?.producer).toBe('"route://2"');
+  expect(recordOf(r, 'live-2')?.producer).toBe(copy);
+  const firstSlot = { channel: 1, layer: firstLayer };
+  const secondSlot = { channel: 1, layer: secondLayer };
+  const left = { x: 0, y: 0, width: 0.25, height: 0.25 };
+  const right = { ...left, x: 0.25 };
+  expect(mock?.layerState(firstSlot)).toMatchObject({ fill: left, clip: left });
+  expect(mock?.layerState(secondSlot)).toMatchObject({ fill: right, clip: right, volume: 0 });
+  expect(mock?.layerRenderedRect(firstSlot)).toEqual(left);
+  expect(mock?.layerRenderedRect(secondSlot)).toEqual(right);
+  expect(r.stackSnapshot().find((item) => item.itemId === 'item-1')?.lookSourceOverride).toEqual({
+    two: { 'live-2': 'src-1' },
+  });
+
+  const beforeSwitch = (await recvLines()).length;
+  expect(await r.setActiveLook('item-1', 'three')).toEqual({ ok: true });
+  expect(mock?.layerRenderedRect(secondSlot)).toBeNull();
+  expect(recordOf(r, 'live-2')?.producer).toBe('"route://3"');
+  expect(await r.setActiveLook('item-1', 'two')).toEqual({ ok: true });
+  const switchWire = await since(beforeSwitch);
+  expect(playsIn(switchWire)).toEqual([]);
+  expect(clearsIn(switchWire)).toEqual([]);
+  expect(layerOf(r, 'live-2')).toBe(secondLayer);
+  expect(mock?.layerRenderedRect(secondSlot)).toEqual(right);
+});
+
+it('takes solo when an inactive pair’s shared input conflicts with its authored aspect', async () => {
+  const template = sixBoxTemplate({
+    sources: ['live-1', 'live-2', 'live-3'],
+    looks: [
+      look('pair', { 'live-1': GRID['live-1']!, 'live-2': GRID['live-2']! }),
+      look('solo', { 'live-3': SOLO['live-1']! }),
+    ],
+    defaultLookId: 'solo',
+  });
+  const r = await boot({
+    template: {
+      ...template,
+      liveSources: {
+        ...template.liveSources,
+        sources: template.liveSources.sources.map((source) =>
+          source.sourceId === 'live-1' ? { ...source, expectedAspect: 4 / 3 } : source,
+        ),
+      },
+    },
+    assignments: {
+      assignments: [
+        { templateId: 'debate', plateId: 'live-1', sourceId: 'src-1', fitMode: 'cover' },
+        { templateId: 'debate', plateId: 'live-2', sourceId: 'src-1' },
+        { templateId: 'debate', plateId: 'live-3', sourceId: 'src-3' },
+      ],
+    },
+  });
+  await r.load('item-1', 'debate', {});
+  expect(await r.setActiveLook('item-1', 'pair')).toEqual({ ok: true });
+  const beforeRefusal = (await recvLines()).length;
+  expect(await r.take('item-1')).toMatchObject({
+    accepted: false,
+    errorCode: 'live-source-aspect-mismatch',
+  });
+  expect(await since(beforeRefusal)).toEqual([]);
+
+  expect(await r.setActiveLook('item-1', 'solo')).toEqual({ ok: true });
+  const beforeTake = (await recvLines()).length;
+  expect(await r.take('item-1')).toMatchObject({ accepted: true });
+  const soloLayer = layerOf(r, 'live-3');
+  expect(layerSet(r)).toEqual([soloLayer]);
+  expect(playsIn(await since(beforeTake))).toEqual([`PLAY 1-${String(soloLayer)} "route://4"`]);
+  expect(mock?.layerRenderedRect({ channel: 1, layer: soloLayer })).toEqual({
+    x: 0,
+    y: 0,
+    width: 1,
+    height: 1,
+  });
+});
+
+it('keeps a shared clip running when only its routed copy is visible', async () => {
+  const rects = {
+    'live-1': { x: SCENE.width, y: 0, width: 480, height: 270 },
+    'live-2': { x: 480, y: 0, width: 480, height: 270 },
+  };
+  const r = await boot({
+    template: sixBoxTemplate({
+      sources: Object.keys(rects),
+      looks: [look('copy-visible', rects), look('empty', {})],
+      defaultLookId: 'copy-visible',
+    }),
+    assignments: assign([
+      ['live-1', 'src-clip'],
+      ['live-2', 'src-clip'],
+    ]),
+  });
+  const sources = catalog();
+  r.setSourceCatalog({
+    ...sources,
+    sources: sources.sources.map((source) =>
+      source.id === 'src-clip' ? { ...source, media: { whenHidden: 'pause' } } : source,
+    ),
+  });
+  const beforeTake = (await recvLines()).length;
+  await onAir(r);
+
+  const inputLayer = layerOf(r, 'live-1');
+  const copyLayer = layerOf(r, 'live-2');
+  const inputSlot = { channel: 1, layer: inputLayer };
+  const copySlot = { channel: 1, layer: copyLayer };
+  const right = { x: 0.25, y: 0, width: 0.25, height: 0.25 };
+  const takeWire = await since(beforeTake);
+  expect(playsIn(takeWire)).toEqual([
+    expect.stringMatching(new RegExp(`^PLAY 1-${String(inputLayer)} .*sting[.]mov`)),
+    `PLAY 1-${String(copyLayer)} "route://1-${String(inputLayer)}"`,
+  ]);
+  expect(takeWire).not.toContain(`PAUSE 1-${String(inputLayer)}`);
+  expect(mock?.layerRenderedRect(inputSlot)).toBeNull();
+  expect(mock?.layerRenderedRect(copySlot)).toEqual(right);
+
+  const beforeHide = (await recvLines()).length;
+  expect(await r.setActiveLook('item-1', 'empty')).toEqual({ ok: true });
+  expect(await since(beforeHide)).toContain(`PAUSE 1-${String(inputLayer)}`);
+  expect(mock?.layerRenderedRect(copySlot)).toBeNull();
+
+  const beforeShow = (await recvLines()).length;
+  expect(await r.setActiveLook('item-1', 'copy-visible')).toEqual({ ok: true });
+  const showWire = await since(beforeShow);
+  expect(showWire).toContain(`RESUME 1-${String(inputLayer)}`);
+  expect(playsIn(showWire)).toEqual([]);
+  expect(mock?.layerRenderedRect(inputSlot)).toBeNull();
+  expect(mock?.layerRenderedRect(copySlot)).toEqual(right);
 });
 
 it('🔴 §8.7 — a preset that would exceed the band is refused at ASSIGNMENT, not at the take', async () => {
@@ -2579,34 +2715,56 @@ it('🔴 §6.1 — ONE update carries the text AND the per-look binding, and bot
   });
 });
 
-it('🔴 §6.2 — a REFUSED batch lands NOTHING: not the texts, not the bindings, no residue', async () => {
+it('saves repeated input bindings off air and pre-seats one copy for two presets at Take', async () => {
   const r = await boot({
     template: ownersTemplateWithField(),
     assignments: OWNERS_ASSIGNMENTS,
   });
   await r.load('item-1', 'debate', { title: 'before' });
-  expect((await r.take('item-1')).accepted).toBe(true);
-  const before = (await recvLines()).length;
+  expect(await r.setActiveLook('item-1', 'solo')).toEqual({ ok: true });
+  const beforeUpdate = (await recvLines()).length;
+  const bindings = { two: { 'live-2': 'src-1' }, three: { 'live-3': 'src-1' } };
 
-  /*
-    A REAL cause, not a stub (§6.2): both of 2-box's frames pointed at one input is §6.2's
-    collision — one seat, so one frame would go to air empty — and it is refused at the
-    binding door before anything is sent.
-  */
-  const res = await r.update('item-1', { title: 'after' }, 'merge', {
-    two: { 'live-1': 'src-1', 'live-2': 'src-1' },
+  expect(await r.update('item-1', { title: 'after' }, 'merge', bindings)).toMatchObject({
+    accepted: true,
+  });
+  expect(await since(beforeUpdate)).toEqual([expect.stringMatching(/^CG 1-\d+ UPDATE /)]);
+  expect(r.stackSnapshot().find((item) => item.itemId === 'item-1')).toMatchObject({
+    fields: { title: 'after' },
+    lookSourceOverride: bindings,
   });
 
-  expect(res.accepted).toBe(false);
-  expect(res.errorCode).toBe('live-source-duplicate');
-  expect(res.message).toMatch(/^Plate 1 and Plate 2 would both show /);
-  // 🔴 NOTHING REACHED THE WIRE — no producer moved, and the page was never told.
-  expect(await since(before), 'a refused batch sends nothing at all').toEqual([]);
-  // 🔴 AND NOTHING WAS RECORDED — the TEXT did not land either, which is the half a
-  // two-call apply would have got wrong.
-  const item = r.stackSnapshot().find((i) => i.itemId === 'item-1');
-  expect(item?.fields.title, 'the text must not land when the binding was refused').toBe('before');
-  expect(item?.lookSourceOverride, 'and no binding residue').toBeUndefined();
+  const beforeTake = (await recvLines()).length;
+  expect(await r.take('item-1')).toMatchObject({ accepted: true });
+  const records = r.liveLayers().get('item-1') ?? [];
+  expect(records).toHaveLength(4);
+  const input = records.find(({ producer }) => producer === '"route://2"');
+  expect(input).toBeDefined();
+  const inputLayer = input!.slot.layer;
+  const copyArgument = `"route://1-${String(inputLayer)}"`;
+  const copy = records.find(({ producer }) => producer === copyArgument);
+  expect(copy).toMatchObject({ held: true });
+  const copySlot = copy!.slot;
+  const takePlays = playsIn(await since(beforeTake));
+  expect(takePlays.filter((line) => line.endsWith('"route://2"'))).toHaveLength(1);
+  expect(takePlays.filter((line) => line.endsWith(copyArgument))).toHaveLength(1);
+  expect(takePlays.indexOf(`PLAY 1-${String(inputLayer)} "route://2"`)).toBeLessThan(
+    takePlays.indexOf(`PLAY 1-${String(copySlot.layer)} ${copyArgument}`),
+  );
+  expect(mock?.layerRenderedRect(copySlot)).toBeNull();
+
+  const beforeSwitch = (await recvLines()).length;
+  expect(await r.setActiveLook('item-1', 'two')).toEqual({ ok: true });
+  expect(layerOf(r, 'live-1')).toBe(inputLayer);
+  expect(layerOf(r, 'live-2')).toBe(copySlot.layer);
+  expect(mock?.layerRenderedRect(copySlot)).toEqual({ x: 0.25, y: 0, width: 0.25, height: 0.25 });
+  expect(await r.setActiveLook('item-1', 'three')).toEqual({ ok: true });
+  expect(layerOf(r, 'live-1')).toBe(inputLayer);
+  expect(layerOf(r, 'live-3')).toBe(copySlot.layer);
+  expect(mock?.layerRenderedRect(copySlot)).toEqual({ x: 0.5, y: 0, width: 0.25, height: 0.25 });
+  const switchWire = await since(beforeSwitch);
+  expect(playsIn(switchWire)).toEqual([]);
+  expect(clearsIn(switchWire)).toEqual([]);
 });
 
 it('🔴 B-355 — a live UPDATE refuses a newly bound unavailable input atomically', async () => {
@@ -2700,26 +2858,33 @@ it('B-355 neighbour — an unchanged binding that later became unavailable does 
   expect(JSON.stringify(r.liveLayers().get('item-1') ?? [])).toBe(ledgerBefore);
 });
 
-it('🔴 §6.2 — a batch refused by the BAND leaves the texts alone too', async () => {
-  const r = await boot({
-    template: ownersTemplateWithField(),
-    assignments: OWNERS_ASSIGNMENTS,
-  });
-  r.setSourceCatalog({ ...catalog(), layerRange: { start: BAND.start, end: BAND.start + 2 } });
-  await r.load('item-1', 'debate', { title: 'before' });
-  expect((await r.take('item-1')).accepted).toBe(true);
-  const before = (await recvLines()).length;
+it.each([
+  ['another input', 'solo', 'live-3', 'src-4'],
+  ['a copy of a shared input', 'two', 'live-2', 'src-1'],
+])(
+  'leaves texts and bindings alone when the band cannot fit %s',
+  async (_, lookId, plateId, sourceId) => {
+    const r = await boot({
+      template: ownersTemplateWithField(),
+      assignments: OWNERS_ASSIGNMENTS,
+    });
+    r.setSourceCatalog({ ...catalog(), layerRange: { start: BAND.start, end: BAND.start + 2 } });
+    await r.load('item-1', 'debate', { title: 'before' });
+    expect((await r.take('item-1')).accepted).toBe(true);
+    const before = (await recvLines()).length;
 
-  // A fourth distinct input needs a fourth layer, and the band holds three.
-  const res = await r.update('item-1', { title: 'after' }, 'merge', {
-    solo: { 'live-3': 'src-4' },
-  });
+    const res = await r.update('item-1', { title: 'after' }, 'merge', {
+      [lookId]: { [plateId]: sourceId },
+    });
 
-  expect(res.accepted).toBe(false);
-  expect(res.errorCode).toBe('live-source-no-layer');
-  expect(await since(before)).toEqual([]);
-  expect(r.stackSnapshot().find((i) => i.itemId === 'item-1')?.fields.title).toBe('before');
-});
+    expect(res.accepted).toBe(false);
+    expect(res.errorCode).toBe('live-source-no-layer');
+    expect(await since(before)).toEqual([]);
+    const row = r.stackSnapshot().find((i) => i.itemId === 'item-1');
+    expect(row?.fields.title).toBe('before');
+    expect(row?.lookSourceOverride).toBeUndefined();
+  },
+);
 
 it('an update with NO bindings leaves the row composition untouched', async () => {
   /*

@@ -579,6 +579,10 @@
           "en": "Designer authors enable Auto layout in each preset’s Inspector. CG Control previews arrangements and seat swaps for eligible frames in PVW and moves titles with their frames."
         },
         {
+          "fa": "در یک پریست، می‌توان یک ورودی ایستگاه را به چند قاب اختصاص داد. هر قاب تصویر و برش خودش را در پیش‌نمایش و روی موتور اصلی دارد.",
+          "en": "Assign one station input to several plates in a preset. Each plate keeps its own picture placement and crop in Preview and on the primary engine."
+        },
+        {
           "fa": "Auto layout در Designer برای انتخاب ترکیبی لایه‌های تصویری هم در دسترس است. هنگام چیدمان و Swap در پریست، عنوان و طراحی هر قاب همراه آن جابه‌جا می‌شوند.",
           "en": "Designer Auto layout supports mixed visual selections. When arranging or swapping frames in a preset, each frame's title and artwork move with it."
         }

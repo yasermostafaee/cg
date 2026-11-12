@@ -234,6 +234,8 @@ export function releaseLivePlate(input: {
    */
   source: HoldableSource | undefined;
   stillDeclared: boolean;
+  /** An internal input copy or the physical seat currently feeding a visible copy. */
+  keepRunning?: boolean;
   /**
    * The desired set DID place a rect for this plate; the hole then clipped to nothing,
    * because the row's position override carried it off the frame. A different FACT from
@@ -281,7 +283,7 @@ export function releaseLivePlate(input: {
         `not a reason to destroy a picture that is working`,
     };
   }
-  if (!canHoldLivePlate(input.source)) {
+  if (!input.keepRunning && !canHoldLivePlate(input.source)) {
     // `MEDIA-PLATES-01` — the one form that is not held: a clip whose `whenHidden` is `restart`.
     return {
       itemId,
@@ -303,7 +305,7 @@ export function releaseLivePlate(input: {
         `idle rather than being cleared`,
     };
   }
-  if (input.source.producer.kind === 'media') {
+  if (!input.keepRunning && input.source.producer.kind === 'media') {
     // `MEDIA-PLATES-01` — a held clip says which of its two held behaviours it has.
     return {
       itemId,

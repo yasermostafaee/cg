@@ -1337,20 +1337,18 @@ straight back and the operator would have to re-patch, live, once per look — h
 the substitution was applied. Neither level writes back to the template assignment, so the property
 that matters is untouched: an emergency never becomes tomorrow's configuration.
 
-##### Two refusals, both at the assignment door
+##### §6.2 — Reuse one input in distinct plates
 
-- **§6.2 (new)** — two frames of ONE look pointed at ONE input. The export preflight **cannot** catch
-  it: the author wrote two different holes, and it is the OPERATOR who collides them, after export.
-  One input is one seat, so one of the two frames would go to air empty with nothing complaining.
-  ⚠ **Measured on the shipped code before this refusal existed, the same configuration did something
-  worse** — it seated the same route TWICE, exactly what the invariant forbids, and two of this
-  repo's own tests were exercising it unnoticed.
-- **§2.7 (new trigger, old code)** — `LIVE_PLATE_NO_LAYER`. Demand is now the number of distinct
-  inputs bound across the item's looks, so PRESETTING raises it: the band can be exhausted by an
-  ASSIGNMENT, which it never could before. Refused in CG Control, never at the take and never on air.
+The station input is resolved by producer argument. The first concurrent frame uses its physical
+seat. Additional concurrent frames tap that seat before its mixer transform and have independent
+FILL and CLIP. Presets share the same occurrence slots, so the allocation uses the highest
+simultaneous demand per input. Two identical Designer plate IDs still collide at authoring time.
 
-Both are decided from the same prospective plan, which mutates nothing — `tasks.md` 7.9's rule
-applied to a second writer in the same area.
+The layer allocator counts the physical seats and copies together. An off-air assignment changes
+state only. A Take starts the physical seat before its copies and a refused copy follows the
+ordinary rollback rules. An input feeding a visible copy stays running even if its own frame
+is outside the picture. The backup route guard remains in force, so a backup active as primary
+refuses an arrangement needing a routed copy before changing the running output.
 
 ##### §2.9 — the take now refuses only on the look being ENTERED
 

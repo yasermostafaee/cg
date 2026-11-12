@@ -3265,6 +3265,11 @@ over counts (`056ffdd5`) and D1's toggle-per-source (2026-08-18): with per-slot 
 longer carry the combination — **the look does** (`design.md` §14.5 records both reversals). What
 survives every reversal: always visible, state-carrying, no menu.
 
+Each preset can assign the same station input to multiple distinct plates. Preview reuses its
+picture in each plate. On the primary engine, one producer supplies separate routed seats so
+each plate keeps its own geometry. All seats count toward the layer band. The backup engine’s
+existing route restriction still applies.
+
 **The decisions this item implements** (owner-answered; `design.md` §12 as re-keyed by §14):
 
 |                                               | Decision                                                                                                                                                                                                                                                           |

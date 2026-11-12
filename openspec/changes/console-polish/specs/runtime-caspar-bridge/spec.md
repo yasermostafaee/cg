@@ -163,18 +163,11 @@ condition and nothing sent to CasparCG.
 ### Requirement: CG Bridge SHALL name a look by its author's name, and keep every id out of an operator's sentence
 
 CG Bridge SHALL name a look by the name its author gave it (`lookLabel`, `@cg/shared-ipc`), in its own bidi
-isolate, in every sentence a console shows — a binding change refused because two plates of one look would
-show one input, and a take whose look tell CasparCG refused — and SHALL say a look the template no longer names
+isolate, in every sentence a console shows — including a take whose look tell CasparCG refused — and SHALL say a look the template no longer names
 in words, never by its id. The look's and the plates' ids SHALL be written to the bridge's log line instead. The
 source assignment validator's sentences SHALL name no plate, template or source by its id; the ids SHALL ride
 the error's `detail`, which the bridge logs at start and on a refused change. Only the words change: no refusal
 condition and nothing sent to CasparCG (`B-309`).
-
-#### Scenario: Two plates of a Persian-named look on one input
-
-- **WHEN** a binding change would show `استودیو ۱` in two plates of the look its author named `سه‌نفره` **THEN**
-  the refusal reads `Plate 1 and Plate 2 would both show “استودیو ۱” in look “سه‌نفره”. …`, each name in a
-  right-to-left isolate in logical order, with no look, plate or source id in it
 
 #### Scenario: A re-take whose look tell is refused
 

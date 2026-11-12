@@ -2,21 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { SourceCatalog, TemplateLiveSources, TemplateLook } from '@cg/shared-ipc';
 import { lookPlateRects, resolvePlateSourcesForLook } from '@cg/shared-ipc';
 import type { LiveSourceRect } from '@cg/shared-schema';
-import {
-  framesOfLook,
-  resolveLookBindings,
-  seatCollisionMessage,
-} from '../src/live-look-bindings.js';
+import { framesOfLook, resolveLookBindings } from '../src/live-look-bindings.js';
 
-/**
- * Session BM — **a seat is one producer per DISTINCT RESOLVED INPUT, per item.**
- *
- * The pure half of the model: no bridge, no wire, no server. What is proven here is the
- * arithmetic the seating plan then acts on — how many producers an item needs, which frame
- * punches which, and which configurations are refusable. The wire's half is
- * `live-look-reconcile.integration.test.ts`'s.
- */
-
+/** The binding plan is shared across all presets. Its seats are opened by the bridge. */
 const CELL = (x: number): LiveSourceRect => ({ x, y: 0, width: 640, height: 360 });
 const FULL: LiveSourceRect = { x: 0, y: 0, width: 1920, height: 1080 };
 
@@ -111,15 +99,19 @@ describe('the seat count', () => {
     ]);
   });
 
-  it('SHRINKS when the last look using an input is pointed elsewhere', () => {
-    // Both frames of studio-3 (`three/l-3` and `solo/l-3`) move onto studio-1, so studio-3
-    // is bound nowhere and needs no producer at all.
+  it('releases an unused input while keeping a copy for concurrent use of another input', () => {
     const p = plan({ bindings: { three: { 'l-3': 'studio-1' }, solo: { 'l-3': 'studio-1' } } });
-    expect([...p.seats.keys()].sort()).toEqual(['"route://2"', '"route://3"']);
-    // …and studio-1's seat is now punched by three different frames across the three looks.
-    expect(
-      p.seats.get('"route://2"')?.frames.map((f) => `${f.lookId ?? '-'}/${f.plateId}`),
-    ).toEqual(['three/l-1', 'three/l-3', 'two/l-1', 'solo/l-3']);
+    const primary = '"route://2"';
+    const copy = p.seats.get(primary + '\u001fcopy:1');
+    expect(p.seats.has('"route://4"')).toBe(false);
+    expect(p.seats.size).toBe(3);
+    expect(copy?.routeFrom).toBe(primary);
+    expect(copy?.frames.map((f) => [f.lookId, f.plateId])).toEqual([['three', 'l-3']]);
+    expect(p.seats.get(primary)?.frames.map((f) => [f.lookId, f.plateId])).toEqual([
+      ['three', 'l-1'],
+      ['two', 'l-1'],
+      ['solo', 'l-3'],
+    ]);
   });
 
   it('🔴 dedupes on the WIRE ARGUMENT, so two catalog entries on one route are ONE seat', () => {
@@ -168,76 +160,38 @@ describe('the four levels', () => {
   });
 });
 
-describe('§6.2 — two frames of ONE look on ONE input', () => {
-  it('🔴 is reported as a collision, naming both plates and the look', () => {
-    const p = plan({ bindings: { three: { 'l-2': 'studio-1' } } });
-    expect(p.collisions).toHaveLength(1);
-    expect(p.collisions[0]).toMatchObject({
-      lookId: 'three',
-      plateIds: ['l-1', 'l-2'],
-      sourceName: 'Studio 1',
-    });
-  });
-
-  it('the SAME input in two DIFFERENT looks is NOT a collision — that is the point', () => {
-    const p = plan({ bindings: { solo: { 'l-3': 'studio-1' } } });
-    expect(p.collisions).toEqual([]);
-    expect(p.seats.get('"route://2"')?.frames).toHaveLength(3);
-  });
-
-  it('catches it across the catalog-alias spelling too', () => {
-    const p = plan({ bindings: { three: { 'l-2': 'studio-3-alias', 'l-3': 'studio-3' } } });
-    expect(p.collisions.map((c) => c.plateIds)).toEqual([['l-2', 'l-3']]);
-  });
-});
-
-describe('🔴 `B-309` — the collision sentence names the look by the name its author gave it', () => {
-  const RLI = String.fromCodePoint(0x2067);
-  const PDI = String.fromCodePoint(0x2069);
-  // The look's id is `three`; its author named it in Persian. The input's name is Persian too.
-  const named = carrier({
-    looks: [
-      {
-        ...look('three', { 'l-1': CELL(0), 'l-2': CELL(640), 'l-3': CELL(1280) }),
-        name: 'سه‌نفره',
-      },
-      look('two', { 'l-1': CELL(0), 'l-2': CELL(640) }),
-      look('solo', { 'l-3': FULL }),
-    ],
-  });
-  const persianCatalog: SourceCatalog = {
-    ...catalog,
-    sources: catalog.sources.map((s) => (s.id === 'studio-1' ? { ...s, name: 'استودیو ۱' } : s)),
-  };
-
-  it('`Plate N` for each frame, the look and the input each by name in its own isolate — no id', () => {
+describe('one input in several frames of the same preset', () => {
+  it('holds the largest concurrent set and reuses the same copy when another preset needs it', () => {
+    const primary = '"route://2"';
+    const firstCopy = primary + '\u001fcopy:1';
+    const secondCopy = primary + '\u001fcopy:2';
     const p = plan({
-      carrier: named,
-      catalog: persianCatalog,
-      bindings: { three: { 'l-2': 'studio-1' } },
+      bindings: {
+        three: { 'l-2': 'studio-1', 'l-3': 'studio-1' },
+        two: { 'l-2': 'studio-1' },
+        solo: { 'l-3': 'studio-1' },
+      },
     });
-    const collision = p.collisions[0];
-    if (collision === undefined) throw new Error('control: the binding must collide');
-    const sentence = seatCollisionMessage(collision, named);
-    expect(sentence).toBe(
-      `Plate 1 and Plate 2 would both show “${RLI}استودیو ۱${PDI}” in look “${RLI}سه‌نفره${PDI}”. ` +
-        'One source is ONE seat, so only one frame can show it and the other would go to air ' +
-        'empty. Point one of them at a different source.',
-    );
-    // No id of the look, the plates or the input; the payload keeps them.
-    expect(sentence).not.toMatch(/three|l-1|l-2|studio-1/);
-    expect(collision).toMatchObject({ lookId: 'three', plateIds: ['l-1', 'l-2'] });
-    // The Persian name is stored in logical order, inside its right-to-left isolate.
-    expect(sentence.indexOf(`${RLI}سه‌نفره${PDI}`)).toBeGreaterThan(0);
+    expect([...p.seats.keys()]).toEqual([primary, firstCopy, secondCopy]);
+    expect(p.seats.get(primary)?.routeFrom).toBeUndefined();
+    expect(p.seats.get(firstCopy)?.routeFrom).toBe(primary);
+    expect(p.seats.get(secondCopy)?.routeFrom).toBe(primary);
+    expect(framesOfLook(p, 'three').get('l-2')?.seatId).toBe(firstCopy);
+    expect(framesOfLook(p, 'two').get('l-2')?.seatId).toBe(firstCopy);
+    expect(framesOfLook(p, 'three').get('l-3')?.seatId).toBe(secondCopy);
+    expect(framesOfLook(p, 'solo').get('l-3')?.seatId).toBe(primary);
+    expect(p.frames.every((frame) => frame.producerArg === primary)).toBe(true);
   });
 
-  it('a look the template no longer names is said in words, never by its id', () => {
-    const p = plan({ bindings: { three: { 'l-2': 'studio-1' } } });
-    const collision = p.collisions[0];
-    if (collision === undefined) throw new Error('control: the binding must collide');
-    const sentence = seatCollisionMessage(collision, { ...named, looks: [] });
-    expect(sentence).toContain('in one of its looks.');
-    expect(sentence).not.toContain('three');
+  it('copies an input even when two frames refer to different aliases of its producer', () => {
+    const p = plan({ bindings: { three: { 'l-2': 'studio-3-alias' } } });
+    const first = framesOfLook(p, 'three').get('l-2');
+    const second = framesOfLook(p, 'three').get('l-3');
+    expect(first?.source.id).toBe('studio-3-alias');
+    expect(second?.source.id).toBe('studio-3');
+    expect(first?.producerArg).toBe(second?.producerArg);
+    expect(first?.seatId).not.toBe(second?.seatId);
+    expect(p.seats.get(second?.seatId ?? '')?.routeFrom).toBe(first?.seatId);
   });
 });
 
@@ -248,7 +202,6 @@ describe('a carrier that authors no looks', () => {
     // Three declarations, one implicit look, three seats — exactly what it had before LOOKS.
     expect(p.frames.map((f) => f.lookId)).toEqual([undefined, undefined, undefined]);
     expect([...p.seats.keys()]).toHaveLength(3);
-    expect(p.collisions).toEqual([]);
   });
 
   it('and a per-look binding cannot reach it — there is no look id to name', () => {

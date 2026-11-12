@@ -996,6 +996,12 @@ test('PVW composites distinct source snapshots under authored shapes and inside 
     /studio-2$/,
   );
   await expect(sourcePicture('guest-1')).toHaveJSProperty('naturalWidth', 160);
+  // Both plates keep their own picture node while sharing the one fetched Studio 2 snapshot.
+  await expect(sourcePicture('guest-2')).toHaveJSProperty('naturalWidth', 160);
+  await expect(sourcePicture('guest-1')).toHaveAttribute(
+    'src',
+    (await sourcePicture('guest-2').getAttribute('src')) ?? '',
+  );
   await pvwTransport(page, 'STOP').click();
   await expect
     .poll(() =>

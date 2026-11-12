@@ -850,10 +850,8 @@ candidate shapes.
       seated, muted and PARKED, and entering that look is a `MIXER FILL` with no `PLAY`.
       **The writer is `swapLiveSource` with an optional `lookId`** — absent is `R-048`'s emergency
       patch (every look, and it outranks the per-look map, because a dead input is dead everywhere);
-      present is the deliberate composition. Two refusals at the assignment door: §6.2's
-      `live-source-duplicate` (two frames of one look on one input — which the export preflight
-      cannot see, and which the shipped code answered by seating one route TWICE) and §2.7's
-      `live-source-no-layer` (presetting now raises layer demand).
+      present is the deliberate composition. The layer-band refusal also applies to presetting.
+      The later repeated-input follow-up adds routed copies for multiple frames on one input.
       ⚠ **`#multiBoxCount` re-confirmed and deliberately NOT changed.** It counts DECLARATIONS
       (`liveSources.sources.length`) and its own anti-drift comment says why exclusivity is a
       property of what a template CAN put on a channel. It is **not** a layer-demand proxy, and
@@ -1570,3 +1568,14 @@ items and are unaffected.
 
 **Re-run any of these with the committed harness:**
 `node tools/caspar-amcp-probe/bin/arrangement-probes.mjs <probe>`.
+
+## Reuse one station input in a preset
+
+- [x] Windows Chromium verified distinct PVW plates render the same input with one snapshot request.
+- [x] Bridge wire tests verified Take, live rebinding, preset switches, rollback on a refused copy,
+      a parked media producer feeding a visible copy, and atomic layer-capacity refusal.
+- [x] Verified that the reused seat keeps each plate’s intended volume after an on-air rebind,
+      and that an incompatible dormant copy cannot block an unrelated solo Take.
+- [x] Local CasparCG 2.5.0 synthetic picture samples verified both copies, independent FILL and
+      CLIP, and a routed picture whose original seat is visually parked.
+- [ ] Record the carrying Linux Playwright result and target engine acceptance.

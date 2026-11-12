@@ -245,11 +245,11 @@ it('a raised plate is still audible after an ON-AIR SOURCE SWAP (6.9c, from the 
   await onAir(r);
   await r.setLivePlateVolume('item-1', 'guest-1', 1);
 
-  await r.swapLiveSource('item-1', 'guest-1', 'src-b');
+  expect(await r.swapLiveSource('item-1', 'guest-1', 'src-b')).toMatchObject({ ok: true });
 
-  // The new producer is born muted like every other; the swap re-asserts the
-  // plate's intent onto it.
+  // The physical producer now supplies both plates. Each seat gets the plate's volume.
   expect(volumeOf(r, 'guest-1')).toBe(1);
+  expect(volumeOf(r, 'guest-2')).toBe(0);
 });
 
 it('🔴 6.5f/6.9d — the intent SURVIVES a bridge restart, through retention', async () => {
