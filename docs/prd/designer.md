@@ -6861,3 +6861,12 @@ affected element when available and can be activated with the keyboard.
 **Acceptance:**
 
 - WHEN the suggested filename is used THEN the existing composition package id is preserved. WHEN the author chooses another filename THEN that name gets a stable, separate package identity; re-exporting the same variant updates it.
+
+## [~] D-212 — Embed a still preview in exported templates ⟨priority: high — owner, 2026-11-12⟩ — `openspec/changes/embed-designer-template-thumbnails/`
+
+**What:** Include a small PNG of the exported composition in every Designer VCG for browsing shared packages in CG Control.
+
+**Acceptance:**
+
+- WHEN a composition has an authored Hold start THEN the thumbnail uses that timeline frame. Otherwise it uses the midpoint of the active range before Outro start, or the active range midpoint when there is no Outro start.
+- WHEN a VCG is exported THEN the preview travels as `thumbnails/320.png` and CG Control displays it in Shared folder. If capture is unavailable the package still exports with a fallback preview.

@@ -34,6 +34,7 @@ import {
   type ImageAssetLibrary,
 } from '@cg/single-file-export';
 import { Emitter } from './emitter.js';
+import { renderVcgThumbnail } from './vcgThumbnail.js';
 import { CG_CONTROL_TOO_LARGE } from '../shared/designer-bridge.js';
 // D-137 — the Live Source preflight, kept beside `off-frame.ts` because the two must
 // agree on what "off-frame" means and share ONE copy of the AABB flattening. The
@@ -532,6 +533,7 @@ export class Exporter {
 
     this.progress.emit({ step: 'template', progress: 0.3 });
     const indexHtml = buildVcgIndexHtml(scene, assetIndex, fontIndex, includePlayer);
+    const thumbnail = await renderVcgThumbnail(scene, assetIndex, assetsMap, this.#cgCss);
 
     const nowIso = new Date().toISOString();
     this.progress.emit({ step: 'pack', progress: 0.3 });
@@ -570,6 +572,7 @@ export class Exporter {
       cgCss: this.#cgCss,
       assets: assetsMap,
       fonts: fontsMap,
+      thumbnails: new Map([['thumbnails/320.png', thumbnail]]),
     });
 
     this.progress.emit({ step: 'pack', progress: 0.9 });
