@@ -43,3 +43,10 @@
 - [x] Verify source persistence, the same bound row, both data policies, and the changed-root guard.
       Windows Chromium passed both Shared folder cases and all focused R-108 regressions.
 - [ ] Record the carrying Linux Playwright result for Shared folder Reload.
+
+## 6. Authored live frames on Reload
+
+- [x] Keep saved frame placements with **Keep current data** and clear them with **Use file defaults**.
+- [x] Bridge and Runtime regression tests verified the newly listed geometry, held programme
+      and next Take. Windows Chromium also verified both existing Shared folder Reload paths.
+- [ ] Verify the frame reset after Reload on the target station.

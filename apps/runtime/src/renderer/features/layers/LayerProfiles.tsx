@@ -75,7 +75,15 @@ export function LayerProfiles({
         const layer = String(slot.layer);
         const label =
           bank.aliases?.[layer] ?? bank.low.aliases?.[layer] ?? defaultLayerAlias(bank, slot.layer);
-        return [{ ...retainedFromStackItem(item), layer: slot.layer, label }];
+        return [
+          {
+            ...retainedFromStackItem(item),
+            // A profile describes the next Take, not a still-resident programme page.
+            ...(item.framePlacementsPendingReset === true && { framePlacements: [] }),
+            layer: slot.layer,
+            label,
+          },
+        ];
       });
       // The file schema drops live runtime state and retains only portable operator intent.
       const profile = LayerProfileSchema.parse({

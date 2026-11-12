@@ -275,6 +275,20 @@ describe('D-137 — overlapping holes are reported against BOTH elements', () =>
     expect(overlap.map((i) => i.elementId).sort()).toEqual(['guest-1', 'guest-2']);
   });
 
+  it('allows ordinary overlap when enabled while preserving other preflight errors', () => {
+    const composition = scene([
+      live('guest-1', 100, 100),
+      live('guest-2', 300, 200),
+      live('guest-3', 5000, 100),
+    ]);
+    expect(codes({ ...composition, allowLivePlateOverlap: true })).toEqual([
+      'live-source-off-frame',
+    ]);
+    expect(codes({ ...composition, allowLivePlateOverlap: false })).toContain(
+      'live-source-overlap',
+    );
+  });
+
   it('D-202 — exempts only an explicitly linked pair whose reveal reaches the lower plate', () => {
     const upper = live('upper', 100, 100, {
       revealMask: {

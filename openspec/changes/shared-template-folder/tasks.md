@@ -19,3 +19,6 @@ Windows Chromium with the real Bridge and test engine passed the focused accepta
 - [x] Verify chooser and shared imports, a fresh console, selection changes and older Bridge behavior.
       Four focused Windows Chromium cases passed against the test Bridge.
 - [ ] Record the carrying Linux Playwright result for the imported catalogue.
+- [x] Use the transparency checkerboard behind thumbnails in Shared folder, rows and Details.
+- [x] Windows Chromium sampled both checker colors and authored white pixels in Shared folder,
+      catalogue rows and Details, and verified the checker behind a generated legacy still.

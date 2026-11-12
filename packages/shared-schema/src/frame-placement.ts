@@ -21,16 +21,30 @@ export function framePlacementFits(
   placement: LiveFramePlacement,
   authored: LiveSourceRect,
   resize: LiveFrameTarget['resize'],
+  moveAllowed = true,
 ): boolean {
   const { x, y, width, height } = placement.rect;
   if (authored.width <= 0 || authored.height <= 0) return false;
   const scaleX = width / authored.width;
   const scaleY = height / authored.height;
-  return (
-    Number.isFinite(x + width) &&
-    Number.isFinite(y + height) &&
-    Number.isFinite(scaleX) &&
-    Number.isFinite(scaleY) &&
-    (resize === 'free' || Math.abs(scaleX / scaleY - 1) <= 1e-6)
-  );
+  if (
+    !Number.isFinite(x + width) ||
+    !Number.isFinite(y + height) ||
+    !Number.isFinite(scaleX) ||
+    !Number.isFinite(scaleY) ||
+    scaleX <= 0 ||
+    scaleY <= 0
+  )
+    return false;
+  const epsilon = 1e-6;
+  if (
+    !moveAllowed &&
+    (Math.abs(x - authored.x + (width - authored.width) / 2) > epsilon ||
+      Math.abs(y - authored.y + (height - authored.height) / 2) > epsilon)
+  )
+    return false;
+  if (resize === 'move-only') {
+    return Math.abs(scaleX - 1) <= epsilon && Math.abs(scaleY - 1) <= epsilon;
+  }
+  return resize === 'free' || Math.abs(scaleX / scaleY - 1) <= epsilon;
 }

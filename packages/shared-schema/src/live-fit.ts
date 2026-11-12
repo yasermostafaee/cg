@@ -56,7 +56,9 @@ export type LiveFrameResize = z.infer<typeof LiveFrameResizeSchema>;
 export const LiveFrameTargetSchema = z.object({
   frameKey: z.string().min(1),
   artworkKey: z.string().min(1),
-  resize: LiveFrameResizeSchema,
+  resize: z.enum(['move-only', 'proportional', 'free']),
+  /** Absent permits moving the frame, including for legacy targets. */
+  move: z.literal(false).optional(),
 });
 export type LiveFrameTarget = z.infer<typeof LiveFrameTargetSchema>;
 

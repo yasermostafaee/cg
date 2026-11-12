@@ -28,9 +28,9 @@ existing projects. The optional array adds up to seven windows that reveal the s
 The target is the lower plate's symbolic source id, never a device
 address. Self-links, missing targets and direct cycles are invalid.
 
-The existing overlap rule stays intact. Preflight exempts only the explicitly linked pair and only
-when every authored reveal window intersects the lower plate in that document/look. Every third-party
-collision is still reported against both elements.
+With **Allow live plate overlap** off, preflight exempts the explicitly linked pair only when
+every authored reveal window intersects the lower plate in that document/look. Third-party
+collisions are reported against both elements under that default rule.
 
 ## Output composition
 

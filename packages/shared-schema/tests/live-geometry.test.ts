@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { framePlacementFits } from '../src/frame-placement.js';
 import {
   intersectNormalizedRects,
   livePlateMaskRegions,
@@ -56,6 +57,30 @@ const px = (
   y: r.y * raster.height,
   width: r.width * raster.width,
   height: r.height * raster.height,
+});
+
+describe('authored operator frame motion', () => {
+  const authored = { x: 480, y: 270, width: 960, height: 540 };
+  const moved = { ...authored, x: 600 };
+  const proportional = { x: 720, y: 405, width: 480, height: 270 };
+  const stretched = { ...authored, x: 720, width: 480 };
+  const proposal = (rect: typeof authored) => ({ frameKey: 'live-plate', rect });
+
+  it('moves a move-only frame while retaining both authored dimensions', () => {
+    expect(framePlacementFits(proposal(moved), authored, 'move-only')).toBe(true);
+    expect(framePlacementFits(proposal(proportional), authored, 'move-only')).toBe(false);
+    expect(framePlacementFits(proposal(stretched), authored, 'move-only')).toBe(false);
+  });
+
+  it('resizes around the authored center when movement is disabled', () => {
+    expect(framePlacementFits(proposal(proportional), authored, 'proportional', false)).toBe(true);
+    expect(framePlacementFits(proposal(stretched), authored, 'proportional', false)).toBe(false);
+    expect(framePlacementFits(proposal(stretched), authored, 'free', false)).toBe(true);
+    expect(
+      framePlacementFits(proposal({ ...stretched, x: stretched.x + 1 }), authored, 'free', false),
+    ).toBe(false);
+    expect(framePlacementFits(proposal(moved), authored, 'free')).toBe(true);
+  });
 });
 
 describe('full live plate output pixel alignment', () => {

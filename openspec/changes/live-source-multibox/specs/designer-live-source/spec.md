@@ -184,8 +184,9 @@ off-frame static elements without a message; a Live Source SHALL be EXEMPT from 
 because it is a compositing contract with the runtime and deleting it silently would remove the
 contract while leaving the template that depends on it.
 
-An out-of-frame or overlapping Live Source, and a Live Source carrying any geometry keyframe, SHALL
-each raise a preflight **error** — not a warning, because only an error blocks the export.
+An out-of-frame Live Source and a Live Source carrying any geometry keyframe SHALL each raise
+a preflight **error**. An overlap SHALL raise the same error under the default rule, with valid
+linked reveals and the composition's **Allow live plate overlap** option handled separately.
 
 #### Scenario: An off-frame Live Source blocks rather than vanishes
 
@@ -210,8 +211,8 @@ each raise a preflight **error** — not a warning, because only an error blocks
 
 #### Scenario: Overlapping Live Sources are reported
 
-- **WHEN** two Live Sources overlap, or one exceeds the frame **THEN** preflight reports it against
-  both elements
+- **WHEN** two Live Sources overlap without an authored exception **THEN** preflight reports
+  it against both elements
 
 ### Requirement: A Live Source may carry a FRAME, and the frame never enters the hole
 
@@ -256,8 +257,8 @@ The frame SHALL survive the round trip through BOTH exporters.
 
 - **WHEN** two plates are placed so their FRAMES overlap but their declared rects do not **THEN**
   preflight reports no overlap error
-- **WHEN** two plates' declared rects overlap **THEN** preflight reports the overlap error against
-  both, whether or not either carries a frame
+- **WHEN** two plates' declared rects overlap without an authored exception **THEN** preflight
+  reports the overlap error against both, independent of the frame stroke
 
 ### Requirement: Each Live Source is independent, and the scene declares them for the runtime
 

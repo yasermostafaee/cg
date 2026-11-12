@@ -3,6 +3,11 @@ import type { TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { reloadTemplateSource } from '../src/renderer/features/library/reloadTemplateSource.js';
 import { importVcgFile } from '../src/renderer/features/library/importVcgFile.js';
+import {
+  __resetDraftsForTest,
+  snapshotFramePlacementDraft,
+  stageFramePlacement,
+} from '../src/renderer/features/inspector/draftStore.js';
 
 vi.mock('../src/renderer/features/library/importVcgFile.js', () => ({
   importVcgFile: vi.fn(() =>
@@ -43,6 +48,9 @@ const handle = {
 } as unknown as FileSystemFileHandle;
 
 const updates: unknown[] = [];
+const FRAME = { frameKey: 'guest', rect: { x: 40, y: 20, width: 640, height: 360 } };
+const rows = vi.fn(() => Promise.resolve([row('ch1', 1), row('ch2', 2)]));
+const resetFrames = vi.fn((_request: unknown) => Promise.resolve({ accepted: true }));
 const shared = { bridgeAddress: 'bridge:5280', root: '/share', folder: 'خبر', name: 'weather.vcg' };
 const bridgeAddress = vi.fn(() => shared.bridgeAddress);
 const templateFolder = vi.fn(() => Promise.resolve({ root: shared.root, folder: '', entries: [] }));
@@ -55,17 +63,22 @@ const templateRead = vi.fn(() =>
 );
 
 beforeEach(() => {
+  __resetDraftsForTest();
   updates.length = 0;
+  rows.mockReset().mockResolvedValue([row('ch1', 1), row('ch2', 2)]);
+  resetFrames.mockClear();
   vi.mocked(importVcgFile).mockClear();
   bridgeAddress.mockReset().mockReturnValue(shared.bridgeAddress);
   templateFolder.mockClear();
   templateRead.mockClear();
   const cg = {
     link: { bridgeAddress },
+    auth: { capabilities: () => ({ liveFramePlacementReset: true }) },
     sharedFiles: { templateFolder, templateRead },
     templates: { get: () => Promise.resolve(TEMPLATE) },
     stack: {
-      snapshot: () => Promise.resolve([row('ch1', 1), row('ch2', 2)]),
+      snapshot: rows,
+      setFramePlacements: resetFrames,
       update: (req: unknown) => {
         updates.push(req);
         return Promise.resolve({ accepted: true });
@@ -94,6 +107,35 @@ describe('R-108 reload data policy', () => {
     expect(updates).toEqual([
       { itemId: 'ch1', fields: { title: 'new-file' }, mergeMode: 'replace' },
     ]);
+    expect(resetFrames).not.toHaveBeenCalled();
+  });
+
+  it('keeps live frame edits or resets them for the matching channel according to the chosen policy', async () => {
+    rows.mockResolvedValue([
+      { ...row('ch1', 1), framePlacements: [FRAME] },
+      { ...row('ch2', 2), framePlacements: [FRAME] },
+    ]);
+    const localEdit = { ...FRAME, rect: { ...FRAME.rect, x: 60 } };
+    stageFramePlacement('ch1', localEdit, FRAME.rect);
+    stageFramePlacement('ch2', localEdit, FRAME.rect);
+    const source = { handle, packageId: 'pkg' };
+    await reloadTemplateSource(TEMPLATE, 1, source, 'keep');
+    expect(resetFrames).not.toHaveBeenCalled();
+    expect(snapshotFramePlacementDraft('ch1')).toBeDefined();
+
+    await expect(reloadTemplateSource(TEMPLATE, 1, source, 'file-defaults')).resolves.toMatchObject(
+      {
+        resetRows: 1,
+      },
+    );
+    expect(resetFrames).toHaveBeenCalledTimes(1);
+    expect(resetFrames).toHaveBeenCalledWith({
+      itemId: 'ch1',
+      placements: [],
+      reset: 'reload-defaults',
+    });
+    expect(snapshotFramePlacementDraft('ch1')).toBeUndefined();
+    expect(snapshotFramePlacementDraft('ch2')).toBeDefined();
   });
 
   it('reads the shared package from its exact Bridge and root, then uses the same data policy', async () => {

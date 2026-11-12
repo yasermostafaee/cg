@@ -139,10 +139,12 @@ import {
   lookPlateFits,
   lookPlateFocuses,
   lookPlateMasks,
+  lookPlatePaintOrder,
   lookPlateReveals,
   lookPlateRects,
   lookOperatorFrames,
   framePlacementRects,
+  type FramePlacementReset,
   type TemplateLiveSources,
   type PgmPlateCropTarget,
   type PreviewPlateCropEdit,
@@ -312,15 +314,19 @@ import {
 import { resolvePlateAspect, resolvePlateFitMode } from './live-plate-fit.js';
 import {
   allocateLiveLayers,
+  allocateOrderedLiveLayers,
   liveBandExhaustedMessage,
+  LIVE_PLATE_LAYER_ORDER,
   LIVE_PLATE_NO_LAYER,
   LIVE_PLATE_NO_RANGE,
+  type LiveLayerOrder,
 } from './live-plate-seating.js';
 import {
   effectiveOverridesForLook,
   framesOfLook,
   resolveLookBindings,
   seatCollisionMessage,
+  type LookBindingPlan,
   type LookSourceBindings,
 } from './live-look-bindings.js';
 import {
@@ -458,6 +464,7 @@ interface SavedCropEdit {
   lookId: string | undefined;
   plateId: string;
   focus: LiveCropFocus;
+  reset?: true;
 }
 
 interface ResidentOutputPage {
@@ -491,6 +498,22 @@ function cropKey(lookId: string | undefined, plateId: string): string {
   return (lookId ?? '') + '\u001f' + plateId;
 }
 
+function resolveCropEdit(
+  edit: PreviewPlateCropEdit,
+  target: PreviewPlateCropTarget,
+  lookId: string | undefined,
+  carrier: TemplateLiveSources | undefined,
+): SavedCropEdit {
+  const { plateId } = target;
+  if (edit.reset !== true) {
+    // Older consoles send position only. Keep the size unless the edit changes it.
+    return { lookId, plateId, focus: { ...target.focus, ...edit.focus } };
+  }
+  const authored = carrier === undefined ? undefined : lookPlateFocuses(carrier, lookId)[plateId];
+  const focus = { ...(authored ?? DEFAULT_LIVE_CROP_FOCUS), zoom: authored?.zoom ?? 1 };
+  return { lookId, plateId, focus, reset: true };
+}
+
 function framePlacementKey({ lookId, frameKey }: LiveFramePlacement): string {
   return JSON.stringify([lookId, frameKey]);
 }
@@ -507,9 +530,9 @@ function allowedFramePlacement(
   const targets = lookOperatorFrames(carrier, lookId);
   const found = Object.entries(targets).find(([, frame]) => frame.frameKey === frameKey);
   if (found === undefined) return false;
-  const [routeKey, { resize }] = found;
+  const [routeKey, { resize, move }] = found;
   const authored = lookPlateRects(carrier, lookId)[routeKey];
-  return authored !== undefined && framePlacementFits(placement, authored, resize);
+  return authored !== undefined && framePlacementFits(placement, authored, resize, move !== false);
 }
 
 function maskSeatPrefix(plateId: string): string {
@@ -525,6 +548,69 @@ function exactPlateEdges(
     ...Object.keys(reveals),
     ...Object.values(reveals).map(({ targetSourceId }) => targetSourceId),
   ]);
+}
+
+function liveOverlapLayerOrder(input: {
+  readonly carrier: TemplateLiveSources;
+  readonly lookId: string | undefined;
+  readonly framePlacements: readonly LiveFramePlacement[] | undefined;
+  readonly bindings: LookBindingPlan;
+  readonly seated: readonly { seatId: string }[];
+  readonly extrasByPlate: ReadonlyMap<string, readonly string[]>;
+}): LiveLayerOrder[] {
+  const { carrier, framePlacements, bindings, seated, extrasByPlate } = input;
+  const activeId = activeLookOf(carrier, input.lookId)?.id;
+  const lookIds = carrier.looks?.length ? carrier.looks.map(({ id }) => id) : [undefined];
+  const indexBySeat = new Map(seated.map(({ seatId }, index) => [seatId, index]));
+  const stage = { x: 0, y: 0, ...carrier.resolution };
+  const order: LiveLayerOrder[] = [];
+
+  for (const lookId of lookIds) {
+    const paintOrder = lookPlatePaintOrder(carrier, lookId);
+    if (paintOrder === undefined) continue;
+    const frames = framesOfLook(bindings, lookId);
+    const rects = framePlacementRects(carrier, lookId, framePlacements);
+    const reveals = lookPlateReveals(carrier, lookId);
+    const plates = paintOrder.flatMap((plateId) => {
+      const frame = frames.get(plateId);
+      const authoredRect = rects[plateId];
+      const rect =
+        authoredRect === undefined ? null : intersectNormalizedRects(authoredRect, stage);
+      const main = frame === undefined ? undefined : indexBySeat.get(frame.producerArg);
+      if (main === undefined || rect === null) return [];
+      let topSeat = main;
+      if (lookId === activeId) {
+        for (const id of extrasByPlate.get(plateId) ?? []) {
+          const index = indexBySeat.get(id);
+          if (index === undefined) continue;
+          order.push([topSeat, index]);
+          topSeat = index;
+        }
+      }
+      return [{ plateId, rect, main, topSeat }];
+    });
+
+    for (const [index, lower] of plates.entries()) {
+      for (let above = index + 1; above < plates.length; above += 1) {
+        const upper = plates[above];
+        if (upper === undefined) continue;
+        const revealFromLower = reveals[upper.plateId]?.targetSourceId === lower.plateId;
+        const revealFromUpper = reveals[lower.plateId]?.targetSourceId === upper.plateId;
+        if (
+          !revealFromLower &&
+          !revealFromUpper &&
+          intersectNormalizedRects(lower.rect, upper.rect) === null
+        ) {
+          continue;
+        }
+        // A linked reveal always sits over its target. Its copies belong with the upper plate,
+        // and every fragment of a masked plate stays at that plate's place in the stack.
+        const [below, top] = revealFromUpper ? [upper, lower] : [lower, upper];
+        if (below.topSeat !== top.main) order.push([below.topSeat, top.main]);
+      }
+    }
+  }
+  return order;
 }
 
 function sameMixerRect(a: NormalizedRect, b: NormalizedRect | null, tolerance = 0): boolean {
@@ -1798,6 +1884,7 @@ export class CasparRuntime {
   >();
   readonly #previewPlateCrops = new Map<string, NonNullable<StackItemState['previewPlateCrops']>>();
   readonly #framePlacements = new Map<string, LiveFramePlacement[]>();
+  readonly #framePlacementsPendingReset = new Set<string>();
   /**
    * B-039 — itemIds whose slot currently has a LIVE producer (a `CG ADD` succeeded
    * and no later `CLEAR` destroyed it). The prescriptive signal: `take` plays when
@@ -3319,6 +3406,7 @@ export class CasparRuntime {
       const plateVolumes = this.#plateVolumes.get(item.itemId);
       const previewPlateCrops = this.#previewPlateCrops.get(item.itemId);
       const framePlacements = this.#framePlacements.get(item.itemId);
+      const framePlacementsPendingReset = this.#framePlacementsPendingReset.has(item.itemId);
       const onAirFramePlacement = this.#liveFramePage(item) !== undefined;
       // §14 (LOOKS) Stage E — and the ACTIVE LOOK, through the ONE resolver rather than
       // off `#activeLooks` directly. The map holds only what an operator explicitly
@@ -3388,6 +3476,7 @@ export class CasparRuntime {
         plateVolumes === undefined &&
         previewPlateCrops === undefined &&
         framePlacements === undefined &&
+        !framePlacementsPendingReset &&
         !onAirFramePlacement &&
         activeLookId === undefined &&
         // 🔴 `TIMING-WIRE-22` (e) — BOTH HALVES, and this is the half that bites. A row whose
@@ -3417,6 +3506,7 @@ export class CasparRuntime {
         ...(plateVolumes !== undefined && { plateVolumes }),
         ...(previewPlateCrops !== undefined && { previewPlateCrops }),
         ...(framePlacements !== undefined && { framePlacements }),
+        ...(framePlacementsPendingReset && { framePlacementsPendingReset: true as const }),
         ...(onAirFramePlacement && { onAirFramePlacement: true as const }),
         ...(activeLookId !== undefined && { activeLookId }),
         ...(timingOverride !== undefined && { timingOverride }),
@@ -4243,6 +4333,9 @@ export class CasparRuntime {
       if (item.framePlacements !== undefined) {
         this.#framePlacements.set(item.itemId, item.framePlacements);
       }
+      if (item.framePlacementsPendingReset === true) {
+        this.#framePlacementsPendingReset.add(item.itemId);
+      }
       /*
         §14 (LOOKS) Stage E — and the ACTIVE LOOK, re-applied HERE for the same reason as
         its three neighbours: BEFORE any adopt-vs-re-ADD decision runs, so whatever this
@@ -4481,6 +4574,7 @@ export class CasparRuntime {
     this.#liveCropFocuses.delete(itemId);
     this.#previewPlateCrops.delete(itemId);
     this.#framePlacements.delete(itemId);
+    this.#framePlacementsPendingReset.delete(itemId);
     this.#plateVolumes.delete(itemId);
     this.#activeLooks.delete(itemId);
     this.#passTimings.delete(itemId);
@@ -5155,6 +5249,7 @@ export class CasparRuntime {
   async setFramePlacements(
     itemId: string,
     placements: LiveFramePlacement[],
+    reset?: FramePlacementReset,
   ): Promise<{ accepted: boolean; errorCode?: string; message?: string }> {
     return this.#audited('update', this.#itemDetail(itemId), () =>
       this.#withPageQueue(itemId, () =>
@@ -5163,6 +5258,25 @@ export class CasparRuntime {
           const slot = this.#slots.get(itemId);
           if (item === null || slot === undefined)
             return { accepted: false, errorCode: 'unknown-item' };
+          const priorPlacements = this.#framePlacements.get(itemId) ?? [];
+          const programmeHeld =
+            this.#ownsLiveSeats(itemId) ||
+            this.#pendingRestore.has(itemId) ||
+            this.#restoreBlocked.has(itemId);
+          if (reset === 'reload-defaults') {
+            if (placements.length > 0)
+              return { accepted: false, errorCode: 'invalid-frame-placement' };
+            if (priorPlacements.length === 0) return { accepted: true };
+            // Reload changes the catalogue. Keep any programme page and its seats on their
+            // existing geometry while PVW and the next eligible Take follow the new defaults.
+            if (programmeHeld || (item.status !== 'loaded' && item.status !== 'idle')) {
+              this.#framePlacementsPendingReset.add(itemId);
+              this.#markDirty(itemId);
+            } else {
+              this.#recordFramePlacements(itemId, []);
+            }
+            return { accepted: true };
+          }
           const version = this.#templates.versionOn(slot.channel, item.templateId);
           const carrier =
             version === null ? undefined : this.#templates.infoOf(version)?.liveSources;
@@ -5181,7 +5295,7 @@ export class CasparRuntime {
             placements.map((placement) => [framePlacementKey(placement), placement]),
           );
           if (
-            edits.size === 0 ||
+            (edits.size === 0 && reset !== 'all') ||
             edits.size !== placements.length ||
             placements.some((placement) => !allowedFramePlacement(carrier, placement))
           ) {
@@ -5194,16 +5308,15 @@ export class CasparRuntime {
           }
           // Independent operator edits merge against the latest applied row inside the lock.
           const merged = new Map<string, LiveFramePlacement>();
-          for (const prior of this.#framePlacements.get(itemId) ?? []) {
-            if (allowedFramePlacement(carrier, prior)) merged.set(framePlacementKey(prior), prior);
+          if (reset !== 'all' && !this.#framePlacementsPendingReset.has(itemId)) {
+            for (const prior of priorPlacements) {
+              if (allowedFramePlacement(carrier, prior))
+                merged.set(framePlacementKey(prior), prior);
+            }
           }
           for (const [key, placement] of edits) merged.set(key, placement);
           const next = [...merged.values()];
-          if (
-            this.#ownsLiveSeats(itemId) ||
-            this.#pendingRestore.has(itemId) ||
-            this.#restoreBlocked.has(itemId)
-          ) {
+          if (programmeHeld) {
             return this.#applyFramePlacementOnAir(item, next);
           }
           // An off-air Update stores configuration only. A stopped resident page receives it on Take.
@@ -5225,6 +5338,7 @@ export class CasparRuntime {
 
   #recordFramePlacements(itemId: string, placements: LiveFramePlacement[]): void {
     this.#framePlacements.set(itemId, placements);
+    this.#framePlacementsPendingReset.delete(itemId);
     this.#markDirty(itemId);
   }
 
@@ -5327,6 +5441,9 @@ export class CasparRuntime {
     const lookId = this.activeLookId(itemId);
     const previousPlan = this.#planLiveSeating(itemId, page.slot, lookId, 'already-live', 'pinned');
     const proposed = edit.plan;
+    if (!proposed.ok && proposed.errorCode === LIVE_PLATE_LAYER_ORDER) {
+      return { accepted: false, errorCode: proposed.errorCode, message: proposed.message };
+    }
     const visible = baseline.filter(({ held }) => held !== true);
     if (
       !previousPlan.ok ||
@@ -5802,6 +5919,7 @@ export class CasparRuntime {
     templateId: string,
     fields: FieldValues,
     replaceResident = false,
+    framePlacements?: LiveFramePlacement[],
   ): Promise<{ ok: boolean; errorCode?: string; command?: string }> {
     const existing = this.#foregroundPages.get(itemId);
     if (
@@ -5830,6 +5948,7 @@ export class CasparRuntime {
         fields,
         this.#nextSeq(),
         'foreground',
+        framePlacements,
       );
       if (!added.ok) return added;
       this.#foregroundPages.set(itemId, slot);
@@ -5844,7 +5963,14 @@ export class CasparRuntime {
       ) {
         const cleared = await this.#clearForegroundPage(itemId);
         if (cleared.ok) {
-          return this.#prepareForegroundPage(itemId, slot, templateId, fields);
+          return this.#prepareForegroundPage(
+            itemId,
+            slot,
+            templateId,
+            fields,
+            false,
+            framePlacements,
+          );
         }
       }
       // A failed PLAY can leave an ADDed page resident. Take it back so the next take cannot
@@ -5951,6 +6077,18 @@ export class CasparRuntime {
       take must mutate nothing — including the parked restore the next line retires.
     */
     if (this.#ownsLiveSeats(itemId)) return { accepted: false, errorCode: TAKE_ON_AIR_CODE };
+    const statusBeforeTake = this.#reconciler.get(itemId)?.status;
+    if (
+      this.#framePlacementsPendingReset.has(itemId) &&
+      statusBeforeTake !== 'loaded' &&
+      statusBeforeTake !== 'idle'
+    ) {
+      return {
+        accepted: false,
+        errorCode: 'frame-defaults-waiting-for-clear',
+        message: 'Clear the row before taking it with the reloaded frame defaults.',
+      };
+    }
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);
     const slot = this.#slots.get(itemId);
@@ -6033,6 +6171,8 @@ export class CasparRuntime {
       re-taking a row does not silently return it to the default look while the operator is
       watching the one they chose.
     */
+    let pendingFrameReset = this.#framePlacementsPendingReset.has(itemId);
+    let takeFramePlacements = pendingFrameReset ? [] : this.#framePlacements.get(itemId);
     const planTake = () =>
       this.#planLiveSeating(
         itemId,
@@ -6042,6 +6182,8 @@ export class CasparRuntime {
         // SESSION BP — THE TAKE IS THE ONE ACTION THAT RESOLVES LEVEL 2 AFRESH, and pins what
         // it resolved. See `LevelTwoSource`.
         'fresh',
+        undefined,
+        takeFramePlacements,
       );
     const refusePlan = (refused: Extract<ReturnType<typeof planTake>, { ok: false }>) => {
       // A refused take mutates NOTHING — and the freeze below is the newest thing that would
@@ -6114,8 +6256,11 @@ export class CasparRuntime {
       if (
         this.#sourceCatalog.inputsEpoch !== epochBefore ||
         this.#previewPlateCrops.get(itemId) !== cropsBefore ||
-        this.#framePlacements.get(itemId) !== placementsBefore
+        this.#framePlacements.get(itemId) !== placementsBefore ||
+        this.#framePlacementsPendingReset.has(itemId) !== pendingFrameReset
       ) {
+        pendingFrameReset = this.#framePlacementsPendingReset.has(itemId);
+        takeFramePlacements = pendingFrameReset ? [] : this.#framePlacements.get(itemId);
         plan = planTake();
         if (!plan.ok) return refusePlan(plan);
       }
@@ -6202,7 +6347,8 @@ export class CasparRuntime {
       heldVersion !== undefined &&
       listedVersion !== null &&
       heldVersion !== listedVersion;
-    let resident = this.#loaded.has(itemId) && !pageVersionChanged;
+    // A deferred frame reset needs a newly prepared page before any authored seats are shown.
+    let resident = this.#loaded.has(itemId) && !pageVersionChanged && !pendingFrameReset;
     if (resident) {
       /*
         🔴 **`B-191` — THE OTHER HALF OF THE RE-ADD, AND THE ONLY PLACE BOTH ROUTES INTO AIR
@@ -6248,7 +6394,7 @@ export class CasparRuntime {
         stopped after an on-air count and set to `Until stop` came back with the old count. The
         control is `#takeControl`'s, the one both branches build from. No command is added.
       */
-      const told = await this.#tellPageTake(itemId, slot);
+      const told = await this.#tellPageTake(itemId, slot, takeFramePlacements);
       if (told.pageGone === true) {
         resident = false;
         this.#loaded.delete(itemId);
@@ -6281,6 +6427,8 @@ export class CasparRuntime {
         templateId,
         item?.fields ?? {},
         this.#nextSeq(),
+        'background',
+        takeFramePlacements,
       );
       if (!added.ok) {
         /*
@@ -6371,6 +6519,7 @@ export class CasparRuntime {
             itemForForeground?.templateId ?? itemId,
             itemForForeground?.fields ?? {},
             addedPage,
+            takeFramePlacements,
           );
     if (!foreground.ok) {
       if (addedPage) await this.#removeUnplayedPage(itemId, slot);
@@ -6445,7 +6594,11 @@ export class CasparRuntime {
     // left this process) and `amcp-404` (CasparCG refused it) are different facts
     // pointing at different machines, and flattening both to `amcp-error` told the
     // operator neither.
-    const { ok, errorCode, command } = await this.#send(this.#builder.take(slot), seq, 'normal');
+    const { ok, onPrimary, errorCode, command } = await this.#send(
+      this.#builder.take(slot),
+      seq,
+      'normal',
+    );
     if (!ok) {
       /*
         🔴 `FIELD-FIXES-01-A` DECISION 1, THE OTHER HALF — the graphic's own `CG PLAY` failed
@@ -6476,6 +6629,15 @@ export class CasparRuntime {
         refusalOnRow: true,
         ...(command !== undefined && { command }),
       };
+    }
+    if (
+      pendingFrameReset &&
+      onPrimary &&
+      this.#framePlacementsPendingReset.has(itemId) &&
+      this.#templates.versionOn(slot.channel, itemBeforeTake?.templateId ?? itemId) ===
+        listedVersion
+    ) {
+      this.#recordFramePlacements(itemId, []);
     }
     if (plan.foregroundSlot !== undefined) {
       const revealed = await this.#send(
@@ -9104,6 +9266,12 @@ export class CasparRuntime {
     const activeMain = new Map(
       seated.filter((entry) => !entry.held).map((entry) => [entry.plateId, entry]),
     );
+    const extrasByPlate = new Map<string, string[]>();
+    const addExtra = (plateId: string, seatId: string): void => {
+      const extras = extrasByPlate.get(plateId) ?? [];
+      extras.push(seatId);
+      extrasByPlate.set(plateId, extras);
+    };
     // Lower must be below upper. Move each linked lower before its upper without changing unrelated order.
     for (const [upperId, reveal] of Object.entries(reveals)) {
       const upperIndex = seated.findIndex((entry) => entry.plateId === upperId && !entry.held);
@@ -9135,6 +9303,7 @@ export class CasparRuntime {
         if (clip === null) continue;
         const suffix = index === 0 ? '' : `:${index}`;
         const seatId = `${lower.producerArg}\u001freveal:${upperId}${suffix}`;
+        addExtra(upperId, seatId);
         declared.add(seatId);
         const lowerSource = resolved.get(lower.producerArg);
         if (lowerSource !== undefined) resolved.set(seatId, lowerSource);
@@ -9175,6 +9344,7 @@ export class CasparRuntime {
       main.fit = first === undefined ? parkedFit(fill) : { fill, clip: first };
       for (const [index, fragment] of additional.entries()) {
         const seatId = maskSeatPrefix(plateId) + String(index);
+        addExtra(plateId, seatId);
         declared.add(seatId);
         seated.push({
           plateId,
@@ -9307,6 +9477,24 @@ export class CasparRuntime {
         !occupiedForeground.has(layer) &&
         layer !== currentForegroundLayer);
 
+    const order = liveOverlapLayerOrder({
+      carrier,
+      lookId,
+      framePlacements,
+      bindings,
+      seated,
+      extrasByPlate,
+    });
+    let orderUnavailable = false;
+    const allocate = (isAvailable: (layer: number) => boolean): number[] | null => {
+      const input = { range, preferred, isAvailable };
+      const ordinary = allocateLiveLayers(input);
+      if (ordinary === null || order.length === 0) return ordinary;
+      const ordered = allocateOrderedLiveLayers(input, order);
+      orderUnavailable = ordered === null;
+      return ordered;
+    };
+
     /*
       D-201 — the foreground HTML page is a real producer and therefore consumes one layer.
       Choose it FIRST, highest-first, then allocate every live seat strictly below it. This is
@@ -9328,26 +9516,28 @@ export class CasparRuntime {
             !bound.has(candidate) &&
             !occupiedForeground.has(candidate));
         if (!candidateIsFree || ours.has(candidate)) continue;
-        const candidateLayers = allocateLiveLayers({
-          range,
-          preferred,
-          isAvailable: (layer) => layer < candidate && ordinaryAvailable(layer),
-        });
+        const candidateLayers = allocate((layer) => layer < candidate && ordinaryAvailable(layer));
+        // Every lower foreground candidate leaves fewer slots for the same order.
+        if (orderUnavailable) break;
         if (candidateLayers === null) continue;
         foregroundLayer = candidate;
         layers = candidateLayers;
         break;
       }
     } else {
-      layers = allocateLiveLayers({
-        range,
-        preferred,
-        // ⚠ OUR OWN ledgered layers count as AVAILABLE — for this item, and only for the seats
-        // this plan is actually placing (see `ours` above).
-        isAvailable: ordinaryAvailable,
-      });
+      // Our ledgered layers are available only for the seats this plan is actually placing.
+      layers = allocate(ordinaryAvailable);
     }
     if (layers === null) {
+      if (orderUnavailable) {
+        return {
+          ok: false,
+          errorCode: LIVE_PLATE_LAYER_ORDER,
+          message:
+            'The assigned live inputs cannot keep the authored overlap order in the available layers. ' +
+            'Change the input assignments or the plate order in Designer. If the graphic is holding live layers, clear it before trying again.',
+        };
+      }
       return {
         ok: false,
         errorCode: LIVE_PLATE_NO_LAYER,
@@ -9614,6 +9804,9 @@ export class CasparRuntime {
       'pinned',
     );
     this.#applyBindingMaps(itemId, restoreOverrides, restoreBindings);
+    if (!plan.ok && plan.errorCode === LIVE_PLATE_LAYER_ORDER) {
+      return { reason: plan.errorCode, message: plan.message };
+    }
     if (!plan.ok && plan.errorCode === LIVE_PLATE_NO_LAYER) {
       const range = this.#plateBand();
       return {
@@ -10101,7 +10294,8 @@ export class CasparRuntime {
     if (drafts.length === 0 || drafts.length > MAX_PREVIEW_PLATE_CROPS) {
       return { ok: false, targets, message: 'The Inspector crop update has an invalid size.' };
     }
-    const looks = this.#templates.getOn(slot.channel, item.templateId)?.liveSources?.looks;
+    const carrier = this.#templates.getOn(slot.channel, item.templateId)?.liveSources;
+    const looks = carrier?.looks;
     const plans = new Map([[activeLookId, activePlan]]);
     const accepted = new Map<string, SavedCropEdit>();
     for (const draft of drafts) {
@@ -10121,12 +10315,7 @@ export class CasparRuntime {
           message: 'The preview plate changed. Frame its current input.',
         };
       }
-      // Older consoles send position only. Keep the size unless the edit explicitly changes it.
-      accepted.set(draft.token, {
-        lookId,
-        plateId: target.plateId,
-        focus: { ...target.focus, ...draft.focus },
-      });
+      accepted.set(draft.token, resolveCropEdit(draft, target, lookId, carrier));
     }
 
     const saved = this.#savePreviewPlateCrops(itemId, targets, accepted);
@@ -10141,9 +10330,12 @@ export class CasparRuntime {
     const prior = this.#previewPlateCrops.get(itemId) ?? [];
     const crops = [
       ...prior.filter(({ token }) => !accepted.has(token)),
-      ...Array.from(accepted, ([token, { focus }]) => ({ token, focus })),
+      ...Array.from(accepted).flatMap(([token, { focus, reset }]) =>
+        reset === true ? [] : [{ token, focus }],
+      ),
     ];
-    this.#previewPlateCrops.set(itemId, crops.slice(-MAX_PREVIEW_PLATE_CROPS));
+    if (crops.length === 0) this.#previewPlateCrops.delete(itemId);
+    else this.#previewPlateCrops.set(itemId, crops.slice(-MAX_PREVIEW_PLATE_CROPS));
     // A saved Inspector crop supersedes an older relative PGM pan for the same plate.
     const liveCrops = this.#liveCropFocuses.get(itemId);
     for (const { lookId, plateId } of accepted.values())
@@ -10153,7 +10345,7 @@ export class CasparRuntime {
       ok: true,
       targets: targets.map((entry) => {
         const crop = accepted.get(entry.token);
-        return crop === undefined ? entry : { ...entry, focus: crop.focus, staged: true };
+        return crop === undefined ? entry : { ...entry, focus: crop.focus, staged: !crop.reset };
       }),
     };
   }
@@ -10241,6 +10433,27 @@ export class CasparRuntime {
             message: 'The Inspector crop update has an invalid size.',
           };
         }
+        const item = this.#reconciler.get(itemId);
+        const carrier =
+          item === null
+            ? undefined
+            : this.#templates.getOn(row.slot.channel, item.templateId)?.liveSources;
+        if (edits.some(({ reset }) => reset === true)) {
+          const listedVersion =
+            item === null
+              ? undefined
+              : this.#templates.versionOn(row.slot.channel, item.templateId);
+          if (
+            carrier === undefined ||
+            listedVersion === undefined ||
+            this.#templates.heldVersion(itemId) !== listedVersion
+          ) {
+            return {
+              ...stale,
+              message: 'The on-air template version changed. Take it again to reset its crop.',
+            };
+          }
+        }
         const accepted = new Map<string, SavedCropEdit>();
         const focuses = new Map<string, LiveCropFocus>();
         for (const edit of edits) {
@@ -10251,9 +10464,9 @@ export class CasparRuntime {
             accepted.has(edit.token)
           )
             return stale;
-          const focus = { ...target.focus, ...edit.focus };
-          accepted.set(edit.token, { lookId: row.lookId, plateId: target.plateId, focus });
-          focuses.set(target.plateId, focus);
+          const crop = resolveCropEdit(edit, target, row.lookId, carrier);
+          accepted.set(edit.token, crop);
+          focuses.set(target.plateId, crop.focus);
         }
         const plan = this.#planLiveSeating(
           itemId,
@@ -10568,11 +10781,12 @@ export class CasparRuntime {
   async #tellPageTake(
     itemId: string,
     slot: CommandSlot,
+    framePlacements?: LiveFramePlacement[],
   ): Promise<{ ok: boolean; lookId?: string; errorCode?: string; pageGone?: true }> {
     const takeTemplateId = this.#reconciler.get(itemId)?.templateId;
     // `R-100` — the take tells a resident page its book's page too: the one helper, both routes.
     const control = {
-      ...this.#takeControl(itemId, takeTemplateId),
+      ...this.#takeControl(itemId, takeTemplateId, true, framePlacements),
       ...(await this.#pageControl(itemId, takeTemplateId)),
     };
     const lookId = control.look;
@@ -16333,6 +16547,7 @@ export class CasparRuntime {
     this.#liveCropFocuses.delete(itemId);
     this.#previewPlateCrops.delete(itemId);
     this.#framePlacements.delete(itemId);
+    this.#framePlacementsPendingReset.delete(itemId);
     // 6.5f — and the audio intent. A re-used itemId inheriting a RAISED plate is
     // the worst of the three: it puts a microphone on air that nobody asked for.
     this.#plateVolumes.delete(itemId);
@@ -19083,6 +19298,7 @@ export class CasparRuntime {
     fields: FieldValues,
     seq: number,
     outputPass: 'background' | 'foreground' = 'background',
+    framePlacements?: LiveFramePlacement[],
   ): Promise<{ ok: boolean; errorCode?: string; command?: string }> {
     // fix-setconfig-serve-restart — the loud-failure contract: when serving
     // is INTENDED for this process but the server is down, a load must fail
@@ -19136,6 +19352,7 @@ export class CasparRuntime {
         seq,
         serveKey,
         outputPass,
+        framePlacements,
       );
       if (sent.ok) this.#templates.hold(itemId, versionId);
       const info = this.#templates.infoOf(versionId);
@@ -19187,6 +19404,7 @@ export class CasparRuntime {
     seq: number,
     serveKey: string,
     outputPass: 'background' | 'foreground',
+    framePlacements?: LiveFramePlacement[],
   ): Promise<{ ok: boolean; onPrimary: boolean; errorCode?: string; command?: string }> {
     let templateArg = this.#templateServer.listening
       ? this.#templateServer.urlFor(serveKey)
@@ -19353,8 +19571,8 @@ export class CasparRuntime {
     // `R-100` — and the row's page, naming its picture: a rebuilt page opens on the page it was on.
     const takeControl =
       outputPass === 'background'
-        ? this.#takeControl(itemId, templateId)
-        : this.#takeControl(itemId, templateId, false);
+        ? this.#takeControl(itemId, templateId, true, framePlacements)
+        : this.#takeControl(itemId, templateId, false, framePlacements);
     const control: CgControl = {
       ...takeControl,
       // Page-list state can itself be a marked foreground visual, so both passes need it. Only
@@ -19545,16 +19763,23 @@ export class CasparRuntime {
    * ⚠ Absent members are absent, never defaulted: a row with no override carries no `timing`, so
    * its wire is what it was. And it MINTS — call it once per take.
    */
-  #takeControl(itemId: string, templateId: string | undefined): TakeControl;
+  #takeControl(
+    itemId: string,
+    templateId: string | undefined,
+    includeTakeToken: true,
+    framePlacements?: LiveFramePlacement[],
+  ): TakeControl;
   #takeControl(
     itemId: string,
     templateId: string | undefined,
     includeTakeToken: false,
+    framePlacements?: LiveFramePlacement[],
   ): Omit<TakeControl, 'take'>;
   #takeControl(
     itemId: string,
     templateId: string | undefined,
-    includeTakeToken = true,
+    includeTakeToken: boolean,
+    framePlacements = this.#framePlacements.get(itemId),
   ): TakeControl | Omit<TakeControl, 'take'> {
     const activeLook = this.#activeLookOf(itemId);
     // `PASSES-CYCLE-ONLY-26` — a recorded count crosses only for a template whose stated mode
@@ -19566,7 +19791,6 @@ export class CasparRuntime {
     // page, or tells a resident one, leaves it muted (or unmuted) as the operator last asked.
     const soundMuted = this.#soundMutes.get(itemId);
     const plateFits = this.#plateFits.get(itemId);
-    const framePlacements = this.#framePlacements.get(itemId);
     const shared: Omit<TakeControl, 'take'> = {
       ...(framePlacements !== undefined && { framePlacements }),
       ...(activeLook !== undefined && { look: activeLook.id }),

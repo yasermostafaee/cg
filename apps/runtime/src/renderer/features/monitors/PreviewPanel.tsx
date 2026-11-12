@@ -52,6 +52,7 @@ import { rowNameFor, subjectsFor, type RehearsalSubject } from './rehearsalFrame
 import { SourcePicker } from '../sources/SourcePicker.js';
 import { LiveInputCheckCard } from './LiveInputCheckCard.js';
 import { PVW_INPUT_SURFACE, useLiveInputCheck } from './liveInputCheckContext.js';
+import { usePreserveFrameAspect } from './previewResizePreferences.js';
 
 /**
  * PREVIEW — the PVW box.
@@ -149,7 +150,10 @@ export function PreviewPanel({
   // `MULTI-CHANNEL-01` — the SELECTED channel's bank: PREVIEW is the channel on screen.
   const { bank, viewChannel } = useChannelBankState();
   const [editTool, setEditTool] = useState<{ tool: PreviewEditTool; channel: number | null }>();
-  const supportsFramePlacement = useAuthCapabilities()?.liveFramePlacement === true;
+  const capabilities = useAuthCapabilities();
+  const supportsFramePlacement = capabilities?.liveFramePlacement === true;
+  const resizeModes = capabilities?.previewResizeMode === true;
+  const preserveFrameAspect = usePreserveFrameAspect();
   const [panSession, setPanSession] = useState(0);
   const slots = useFixedSlots();
   // `RELEASE-091-01` §1 — each rehearsing row's page: the bridge's first, this browser's copy only
@@ -207,6 +211,9 @@ export function PreviewPanel({
           const hasEditableFrame =
             live !== undefined &&
             Object.keys(lookOperatorFrames(live, item.activeLookId)).length > 0;
+          const frameDraft = snapshotFramePlacementDraft(item.itemId);
+          const appliedFrames =
+            item.framePlacementsPendingReset === true ? [] : item.framePlacements;
           const fields = buildApplyPayload(item.itemId, item.fields);
           return {
             itemId: r.itemId,
@@ -256,10 +263,10 @@ export function PreviewPanel({
             // would send.
             fields,
             framePlacements: framePlacementsWithDraft(
-              item.framePlacements ?? (hasEditableFrame ? [] : undefined),
-              snapshotFramePlacementDraft(item.itemId),
+              appliedFrames ?? (hasEditableFrame ? [] : undefined),
+              frameDraft,
             ),
-            appliedFramePlacements: item.framePlacements,
+            appliedFramePlacements: frameDraft?.reset === undefined ? appliedFrames : [],
             canEditFrames:
               supportsFramePlacement &&
               canEditPosition &&
@@ -662,6 +669,7 @@ export function PreviewPanel({
             panOpen={panOpen}
             moveOpen={moveOpen}
             frameEditOpen={frameEditOpen}
+            preserveFrameAspect={resizeModes && preserveFrameAspect}
             panSession={panSession}
             panSourceAspects={panSourceAspects}
           />

@@ -272,6 +272,7 @@ export interface TemplateLookCarrier {
   instanceId: string;
   entered: LookTransition;
   rects: Record<string, LiveSourceRect>;
+  platePaintOrder?: string[] | undefined;
   operatorFrames?: Record<string, LiveFrameTarget> | undefined;
   /**
    * ⭐ `B-178` — **the AUTHOR's fit mode for each source IN THIS LOOK**, taken from the plate
@@ -295,6 +296,15 @@ export interface TemplateLookCarrier {
   reveals: Record<string, LiveRevealMask>;
   masks?: Record<string, LivePlateMask> | undefined;
   fallbacks?: string[] | undefined;
+}
+
+function plateIdsInPaintOrder(flattened: readonly FlatElement[]): string[] {
+  const ids = new Set<string>();
+  for (const { element } of flattened) {
+    if (element.type === 'video-placeholder' && element.routeKey !== undefined)
+      ids.add(element.routeKey);
+  }
+  return [...ids];
 }
 
 /**
@@ -346,6 +356,9 @@ export function collectLookCarrier(scene: Scene): {
   if (group === undefined) return null;
 
   const lookByInstance = new Map(group.looks.map((l) => [l.instanceId, l] as const));
+  const ownerOf = (flat: FlatElement) =>
+    flat.ancestry.map(({ id }) => lookByInstance.get(id)).find((look) => look !== undefined);
+  const painted = scene.allowLivePlateOverlap === true ? flattenElements(scene, 'paint') : [];
   /*
     🔴 `B-188` — THE SOURCE LIST IS DERIVED, AND THIS IS ITS ONE DEFINITION'S ONE CALL SITE.
 
@@ -428,8 +441,7 @@ export function collectLookCarrier(scene: Scene): {
       if (el.expectedAspect !== undefined) aspectFor.set(routeKey, el.expectedAspect);
       dynamicFor.set(routeKey, dynamicRoles.get(el.id)?.has('fill') ?? false);
     }
-    const ownerInstanceId = flat.ancestry.map((a) => a.id).find((id) => lookByInstance.has(id));
-    const owner = ownerInstanceId === undefined ? undefined : lookByInstance.get(ownerInstanceId);
+    const owner = ownerOf(flat);
     const inLooks = owner === undefined ? group.looks : [owner];
     for (const look of inLooks) {
       const rects = rectsByLook.get(look.id);
@@ -513,19 +525,28 @@ export function collectLookCarrier(scene: Scene): {
 
   return {
     sources,
-    looks: group.looks.map((l) => ({
-      id: l.id,
-      name: l.name,
-      instanceId: l.instanceId,
-      entered: l.entered,
-      rects: rectsByLook.get(l.id) ?? {},
-      ...(operatorFramesByLook.has(l.id) && { operatorFrames: operatorFramesByLook.get(l.id) }),
-      fits: fitsByLook.get(l.id) ?? {},
-      focuses: focusesByLook.get(l.id) ?? {},
-      reveals: revealsByLook.get(l.id) ?? {},
-      ...(masksByLook.has(l.id) && { masks: masksByLook.get(l.id) }),
-      ...(fallbacksByLook.has(l.id) && { fallbacks: fallbacksByLook.get(l.id) }),
-    })),
+    looks: group.looks.map((l) => {
+      const order = plateIdsInPaintOrder(
+        painted.filter((flat) => {
+          const owner = ownerOf(flat);
+          return owner === undefined || owner === l;
+        }),
+      );
+      return {
+        id: l.id,
+        name: l.name,
+        instanceId: l.instanceId,
+        entered: l.entered,
+        rects: rectsByLook.get(l.id) ?? {},
+        ...(order.length > 1 && { platePaintOrder: order }),
+        ...(operatorFramesByLook.has(l.id) && { operatorFrames: operatorFramesByLook.get(l.id) }),
+        fits: fitsByLook.get(l.id) ?? {},
+        focuses: focusesByLook.get(l.id) ?? {},
+        reveals: revealsByLook.get(l.id) ?? {},
+        ...(masksByLook.has(l.id) && { masks: masksByLook.get(l.id) }),
+        ...(fallbacksByLook.has(l.id) && { fallbacks: fallbacksByLook.get(l.id) }),
+      };
+    }),
     ...(group.defaultLookId !== undefined ? { defaultLookId: group.defaultLookId } : {}),
   };
 }
@@ -537,10 +558,15 @@ export function buildTemplateLiveSources(scene: Scene): {
   arrangements: LiveSourceArrangement[];
   looks?: TemplateLookCarrier[];
   defaultLookId?: string;
+  platePaintOrder?: string[];
   foregroundOverlay?: true;
 } {
   const lookCarrier = collectLookCarrier(scene);
   const foregroundOverlay = liveForegroundKeys(scene).size > 0;
+  const order =
+    lookCarrier === null && scene.allowLivePlateOverlap === true
+      ? plateIdsInPaintOrder(flattenElements(scene, 'paint'))
+      : [];
   return {
     resolution: scene.resolution,
     defaultPosition: resolveDefaultPosition(scene),
@@ -548,6 +574,7 @@ export function buildTemplateLiveSources(scene: Scene): {
     // source); the per-element emission would double-seat a source two looks share.
     sources: lookCarrier === null ? collectLiveSources(scene) : lookCarrier.sources,
     arrangements: collectArrangements(scene),
+    ...(order.length > 1 && { platePaintOrder: order }),
     ...(foregroundOverlay ? { foregroundOverlay: true as const } : {}),
     ...(lookCarrier === null
       ? {}

@@ -6,10 +6,8 @@ import { liveSourceIssues } from '../src/renderer/state/live-source-preflight.js
  * `multibox-layout-switch` C2 (`tasks.md` 5.6) — **the overlap rule applied WITHIN an
  * arrangement, and NOT across arrangements.**
  *
- * The rule itself does not change: two holes that intersect put two live sources over the
- * same pixels and which one shows is a z-order accident. What changed is the input — and
- * the second test below is the one that matters, because "the same screen area in two
- * DIFFERENT arrangements" is the NORMAL case that a naive per-document check would refuse.
+ * By default, two intersecting holes in the same arrangement are invalid. Reusing the same
+ * screen area in different arrangements is a normal case because they never display together.
  */
 
 const baseElProps = { opacity: 1, visible: true, locked: false, zIndex: 0 };
@@ -152,5 +150,14 @@ describe('5.6 — overlap is checked WITHIN an arrangement', () => {
 
   it('a scene with no arrangements is untouched by any of this', () => {
     expect(overlapIssues(scene(TWO_BOXES, []))).toEqual([]);
+  });
+
+  it('checks co-visible plates in separate nested compositions when the host has no arrangement', () => {
+    const host = scene([instance('inst-a', 'boxA', 0, 0), instance('inst-b', 'boxB', 100, 0)], []);
+    expect(overlapIssues(host).map((issue) => issue.elementId)).toEqual([
+      'boxA-plate',
+      'boxB-plate',
+    ]);
+    expect(overlapIssues({ ...host, allowLivePlateOverlap: true })).toEqual([]);
   });
 });

@@ -36,7 +36,8 @@ export function createFramePlacementRenderer(
       const artwork = authored.get(target.artworkKey);
       const wrapper = wrappers.get(target.artworkKey);
       if (plate === undefined || artwork === undefined || wrapper === undefined) continue;
-      if (!framePlacementFits(placement, plate.rect, target.resize)) continue;
+      if (!framePlacementFits(placement, plate.rect, target.resize, target.move !== false))
+        continue;
       const matrix = placementTransform(plate, artwork, placement.rect);
       if (matrix === null) continue;
 

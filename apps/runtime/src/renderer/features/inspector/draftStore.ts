@@ -166,11 +166,17 @@ export type PreviewCropDraft =
       readonly kind: 'guide';
       readonly token: string;
       readonly lookId?: string | undefined;
+      readonly reset?: true;
     };
 
 const previewCropDrafts = new Map<string, Map<string, PreviewCropDraft>>();
-const framePlacementDrafts = new Map<string, ReadonlyMap<string, LiveFramePlacement>>();
-const applyingFramePlacements = new Map<string, ReadonlyMap<string, LiveFramePlacement>>();
+interface FramePlacementDraft {
+  readonly edits: ReadonlyMap<string, LiveFramePlacement>;
+  readonly reset?: symbol | undefined;
+}
+
+const framePlacementDrafts = new Map<string, FramePlacementDraft>();
+const applyingFramePlacements = new Map<string, FramePlacementDraft>();
 
 const framePlacementKey = ({ lookId, frameKey }: LiveFramePlacement): string =>
   JSON.stringify([lookId, frameKey]);
@@ -179,14 +185,21 @@ function sameFrameRect(a: LiveFramePlacement['rect'], b: LiveFramePlacement['rec
   return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
 }
 
+function putFramePlacementDraft(itemId: string, draft: FramePlacementDraft): void {
+  if (draft.edits.size === 0 && draft.reset === undefined) framePlacementDrafts.delete(itemId);
+  else framePlacementDrafts.set(itemId, draft);
+  bump();
+}
+
 export function stageFramePlacement(
   itemId: string,
   placement: LiveFramePlacement,
   baseline: LiveFramePlacement['rect'],
 ): void {
-  const next = new Map(framePlacementDrafts.get(itemId));
+  const draft = framePlacementDrafts.get(itemId);
+  const next = new Map(draft?.edits);
   const key = framePlacementKey(placement);
-  const applying = applyingFramePlacements.get(itemId)?.get(key);
+  const applying = applyingFramePlacements.get(itemId)?.edits.get(key);
   if (
     sameFrameRect(placement.rect, baseline) &&
     (applying === undefined || sameFrameRect(placement.rect, applying.rect))
@@ -195,46 +208,68 @@ export function stageFramePlacement(
   } else {
     next.set(key, placement);
   }
-  if (next.size === 0) framePlacementDrafts.delete(itemId);
-  else framePlacementDrafts.set(itemId, next);
-  bump();
+  putFramePlacementDraft(itemId, { edits: next, reset: draft?.reset });
+}
+
+/** Restore the authored geometry in PVW. A reset of committed edits is staged until Update. */
+export function stageFramePlacementsReset(itemId: string, hasAppliedPlacements: boolean): void {
+  const current = framePlacementDrafts.get(itemId);
+  if (current?.reset !== undefined && current.edits.size === 0) return;
+  const applying = applyingFramePlacements.get(itemId);
+  const needsReset = hasAppliedPlacements || (applying?.edits.size ?? 0) > 0;
+  if (!needsReset && current === undefined) return;
+  putFramePlacementDraft(itemId, { edits: new Map(), reset: needsReset ? Symbol() : undefined });
 }
 
 export function snapshotFramePlacementDraft(itemId: string) {
   return framePlacementDrafts.get(itemId);
 }
 
+export function clearFramePlacementDraftsMatching(
+  itemId: string,
+  captured: FramePlacementDraft | undefined,
+): void {
+  const current = framePlacementDrafts.get(itemId);
+  if (current === undefined || captured === undefined) return;
+  const remaining = new Map(current.edits);
+  for (const [key, placement] of captured.edits) {
+    if (remaining.get(key) === placement) remaining.delete(key);
+  }
+  const reset = current.reset === captured.reset ? undefined : current.reset;
+  if (remaining.size !== current.edits.size || reset !== current.reset)
+    putFramePlacementDraft(itemId, { edits: remaining, reset });
+}
+
 export function framePlacementsWithDraft(
   applied: LiveFramePlacement[] | undefined,
-  draft: ReadonlyMap<string, LiveFramePlacement> | undefined,
+  draft: FramePlacementDraft | undefined,
 ): LiveFramePlacement[] | undefined {
   if (draft === undefined) return applied;
   const merged = new Map(
-    (applied ?? []).map((placement) => [framePlacementKey(placement), placement]),
+    (draft.reset === undefined ? (applied ?? []) : []).map((placement) => [
+      framePlacementKey(placement),
+      placement,
+    ]),
   );
-  for (const [key, placement] of draft) merged.set(key, placement);
+  for (const [key, placement] of draft.edits) merged.set(key, placement);
   return [...merged.values()];
 }
 
 export function beginFramePlacementApply(itemId: string): {
   placements: LiveFramePlacement[];
+  reset: boolean;
   accept: () => void;
   finish: () => void;
 } | null {
   if (applyingFramePlacements.has(itemId)) return null;
-  const sent = framePlacementDrafts.get(itemId) ?? new Map<string, LiveFramePlacement>();
-  if (sent.size > 0) applyingFramePlacements.set(itemId, sent);
+  const sent = framePlacementDrafts.get(itemId);
+  if (sent !== undefined) applyingFramePlacements.set(itemId, sent);
   return {
-    placements: [...sent.values()],
+    placements: [...(sent?.edits.values() ?? [])],
+    reset: sent?.reset !== undefined,
     accept() {
       if (applyingFramePlacements.get(itemId) !== sent) return;
-      const remaining = new Map(framePlacementDrafts.get(itemId));
-      for (const [key, placement] of sent) {
-        if (remaining.get(key) === placement) remaining.delete(key);
-      }
-      if (remaining.size === 0) framePlacementDrafts.delete(itemId);
-      else framePlacementDrafts.set(itemId, remaining);
-      bump();
+      clearFramePlacementDraftsMatching(itemId, sent);
     },
     finish() {
       if (applyingFramePlacements.get(itemId) === sent) applyingFramePlacements.delete(itemId);
@@ -246,6 +281,12 @@ const applyingPreviewCrops = new Map<string, ReadonlyMap<string, PreviewCropDraf
 
 export function previewCropDraftOf(itemId: string, key: string): PreviewCropDraft | undefined {
   return previewCropDrafts.get(itemId)?.get(key);
+}
+
+export function hasPreviewCropReset(itemId: string): boolean {
+  return [...(previewCropDrafts.get(itemId)?.values() ?? [])].some(
+    (draft) => draft.kind === 'guide' && draft.reset === true,
+  );
 }
 
 export function appliedPracticeCropOf(itemId: string, key: string): LiveCropFocus | undefined {
@@ -260,6 +301,7 @@ export function stagePreviewCrop(
   const item = previewCropDrafts.get(itemId) ?? new Map<string, PreviewCropDraft>();
   const applying = applyingPreviewCrops.get(itemId)?.get(draft.key);
   if (
+    !(draft.kind === 'guide' && draft.reset === true) &&
     sameLiveCropFocus(draft.focus, appliedFocus) &&
     (applying === undefined || sameLiveCropFocus(draft.focus, applying.focus))
   ) {

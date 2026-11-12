@@ -100,6 +100,8 @@ export const TemplateLookSchema = z.object({
   entered: LookTransitionSchema,
   /** routeKey → scene-px rect while this look is active. No entry = not in this look. */
   rects: z.record(z.string(), LiveSourceRectSchema),
+  /** An overlap-enabled preset's plate IDs in authored bottom-to-top paint order. */
+  platePaintOrder: z.array(IdSchema).optional(),
   /** routeKey → operator placement target for the exact plate in this Look. */
   operatorFrames: z.record(z.string(), LiveFrameTargetSchema).optional(),
   /**
@@ -164,6 +166,8 @@ export const TemplateLiveSourcesSchema = z.object({
   looks: z.array(TemplateLookSchema).optional(),
   /** Which look a fresh take enters. Present exactly when `looks` is non-empty. */
   defaultLookId: z.string().min(1).optional(),
+  /** The authored bottom-to-top order for an overlap-enabled layout without presets. */
+  platePaintOrder: z.array(IdSchema).optional(),
   /** D-201 — this template needs its marked authored elements on a transparent page above plates. */
   foregroundOverlay: z.literal(true).optional(),
 });
@@ -255,7 +259,7 @@ export function framePlacementRects(
       .filter((placement) => placement.lookId === activeId)
       .map((placement) => [placement.frameKey, placement]),
   );
-  for (const [routeKey, { frameKey, resize }] of Object.entries(
+  for (const [routeKey, { frameKey, resize, move }] of Object.entries(
     lookOperatorFrames(carrier, lookId),
   )) {
     const authored = rects[routeKey];
@@ -263,7 +267,7 @@ export function framePlacementRects(
     if (
       edit !== undefined &&
       authored !== undefined &&
-      framePlacementFits(edit, authored, resize)
+      framePlacementFits(edit, authored, resize, move !== false)
     ) {
       rects[routeKey] = edit.rect;
     }
@@ -330,6 +334,23 @@ export function lookPlateReveals(
     (s): s is typeof s & { revealMask: LiveRevealMask } => s.revealMask !== undefined,
   );
   return Object.fromEntries(stated.map((s) => [s.sourceId, s.revealMask] as const));
+}
+
+/** Lower to upper; absence keeps legacy seat ordering. */
+export function lookPlatePaintOrder(
+  live: TemplateLiveSources,
+  lookId: string | undefined,
+): readonly string[] | undefined {
+  const look = activeLookOf(live, lookId);
+  return look === undefined ? live.platePaintOrder : look.platePaintOrder;
+}
+
+export function usesLivePlatePaintOrder(live: TemplateLiveSources | undefined): boolean {
+  return (
+    live !== undefined &&
+    (live.platePaintOrder !== undefined ||
+      live.looks?.some((look) => look.platePaintOrder !== undefined) === true)
+  );
 }
 
 /** D-202 — crop of each plate's own picture in the active look. */

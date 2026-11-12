@@ -4975,6 +4975,8 @@ PNG separately for the listed version, including when the source package is too 
 The Bridge can also read the embedded thumbnail or an authored still from a bounded retained
 package. Other consoles on the channel can use these previews. A missing preview keeps the row
 selectable with its icon. A Bridge without the preview capability keeps the existing catalogue.
+Shared folder, catalogue rows and Details use a checkerboard behind the transparent areas of
+both embedded and generated previews. The artwork keeps its authored colors.
 
 **What:** a direct **Templates** button in the main CG Control header opens the current channel's
 catalogue without requiring an empty layer and without inventing a Load destination. When CG Control
@@ -4998,9 +5000,11 @@ it unclear whether current CG Control text/images or the edited file should win.
 - WHEN a package was imported through the chooser and its original local/UNC file still exists THEN
   its row offers Reload and Reload all includes it
 - WHEN the operator chooses **keep current data** THEN the package/catalogue entry updates while
-  existing row field values stay unchanged
+  existing row field values and live frame placement overrides stay unchanged
 - WHEN the operator chooses **use file defaults** THEN rows holding that template on the current
-  channel are replaced through the normal Update path with the reloaded package defaults
+  channel receive the reloaded fields and clear saved live frame placement overrides across presets.
+  An active programme keeps its frame geometry until the next permitted Take. PVW shows the new
+  authored frame geometry after the reset is accepted.
 - WHEN the package id behind a remembered file changes THEN Reload all skips it with a visible
   reason and single Reload lets the operator explicitly approve or cancel replacing that entry
 - WHEN the operator approves the replacement THEN the existing catalogue id, label, row bindings

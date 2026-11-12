@@ -1,4 +1,8 @@
 import type { TemplateInfo } from '@cg/shared-ipc';
+import {
+  clearFramePlacementDraftsMatching,
+  snapshotFramePlacementDraft,
+} from '../inspector/draftStore.js';
 import { importVcgFile, type ReloadVcgTarget } from './importVcgFile.js';
 import { newItemFields } from './newItemFields.js';
 import { readSharedTemplateFile } from './sharedTemplateSource.js';
@@ -32,7 +36,7 @@ async function readLocalTemplateFile(handle: FileSystemFileHandle): Promise<File
 
 /**
  * Re-read one remembered package, update that exact catalogue entry, then optionally replace the
- * field values of rows already holding it with the reloaded template defaults.
+ * field values and frame placements of rows already holding it with the reloaded template defaults.
  *
  * The import itself is atomic at CG Bridge. Row resets intentionally happen afterwards through the
  * existing `stack.update` door: choosing “file defaults” is an explicit operator action and reaches
@@ -98,6 +102,7 @@ export async function reloadTemplateSource(
   const defaults = newItemFields(updated);
   let accepted = 0;
   for (const row of rows) {
+    const frameDraft = snapshotFramePlacementDraft(row.itemId);
     const answer = await window.cg.stack.update({
       itemId: row.itemId,
       fields: defaults,
@@ -108,6 +113,22 @@ export async function reloadTemplateSource(
         `The package reloaded, but file defaults reached only ${String(accepted)} of ${String(rows.length)} row(s). ${answer.message ?? answer.errorCode ?? 'CG Bridge refused the row update.'}`,
       );
     }
+    if ((row.framePlacements?.length ?? 0) > 0 || row.framePlacementsPendingReset === true) {
+      const reset =
+        window.cg.auth?.capabilities?.()?.liveFramePlacementReset === true
+          ? await window.cg.stack.setFramePlacements({
+              itemId: row.itemId,
+              placements: [],
+              reset: 'reload-defaults',
+            })
+          : { accepted: false, message: 'This CG Bridge cannot reset frame placements.' };
+      if (!reset.accepted) {
+        throw new Error(
+          `The package and row fields reloaded, but live frames reset on only ${String(accepted)} of ${String(rows.length)} row(s). ${reset.message ?? 'CG Bridge refused the frame reset.'}`,
+        );
+      }
+    }
+    clearFramePlacementDraftsMatching(row.itemId, frameDraft);
     accepted += 1;
   }
   return { template: updated, resetRows: accepted };

@@ -6,6 +6,7 @@ import {
   __resetDraftsForTest,
   appliedPracticeCropOf,
   clearDraft,
+  framePlacementsWithDraft,
   isItemDirty,
   positionDraftOf,
   previewCropDraftOf,
@@ -13,6 +14,7 @@ import {
   snapshotFramePlacementDraft,
   stageField,
   stageFramePlacement,
+  stageFramePlacementsReset,
   stagePosition,
   stagePreviewCrop,
   type PreviewCropDraft,
@@ -233,8 +235,43 @@ it('sends only edited frame keys and keeps a return to the prior rectangle durin
   await expect(applyDraft(row)).resolves.toEqual({ accepted: false });
   confirm({ accepted: true });
   await expect(pending).resolves.toMatchObject({ accepted: true });
-  expect([...snapshotFramePlacementDraft(itemId)!.values()]).toEqual([latest]);
+  expect([...snapshotFramePlacementDraft(itemId)!.edits.values()]).toEqual([latest]);
   expect(dirty()).toBe(true);
   pruneDrafts({ ready: true, liveItemIds: new Set() });
+  expect(snapshotFramePlacementDraft(itemId)).toBeUndefined();
+});
+
+it('sends an explicit crop reset even if a saved focus already equals the authored focus', async () => {
+  const { update, previewPlateCrop } = bridge();
+  previewPlateCrop.mockResolvedValue({ ok: true, targets: [], applied: [guide.token] });
+  stagePreviewCrop(itemId, { ...guide, reset: true }, guide.focus);
+
+  await expect(applyDraft({ ...row, status: 'on-air' })).resolves.toMatchObject({ accepted: true });
+  expect(previewPlateCrop).toHaveBeenCalledWith({
+    itemId,
+    allowOnAir: true,
+    edits: [{ token: guide.token, focus: guide.focus, lookId: guide.lookId, reset: true }],
+  });
+  expect(update).not.toHaveBeenCalled();
+  expect(previewCropDraftOf(itemId, guide.key)).toBeUndefined();
+});
+
+it('previews authored frame placement and sends a reset with any edits made afterwards', async () => {
+  const { update, setFramePlacements } = bridge();
+  const authored = { x: 100, y: 80, width: 320, height: 180 };
+  const saved = { frameKey: 'old', rect: { ...authored, x: 120 } };
+  const latest = { frameKey: 'new', rect: { ...authored, y: 110 } };
+  stageFramePlacementsReset(itemId, true);
+  expect(framePlacementsWithDraft([saved], snapshotFramePlacementDraft(itemId))).toEqual([]);
+  stageFramePlacement(itemId, latest, authored);
+  expect(framePlacementsWithDraft([saved], snapshotFramePlacementDraft(itemId))).toEqual([latest]);
+  expect(setFramePlacements).not.toHaveBeenCalled();
+
+  setFramePlacements.mockResolvedValue({ accepted: true });
+  await expect(applyDraft({ ...row, framePlacements: [saved] })).resolves.toEqual({
+    accepted: true,
+  });
+  expect(setFramePlacements).toHaveBeenCalledWith({ itemId, placements: [latest], reset: 'all' });
+  expect(update).not.toHaveBeenCalled();
   expect(snapshotFramePlacementDraft(itemId)).toBeUndefined();
 });

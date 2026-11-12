@@ -40,16 +40,17 @@ the complement of that union inside the plate. The same rule SHALL clip the plat
 ### Requirement: Overlapping live plates are refused unless one explicitly reveals the other
 
 The Designer SHALL keep overlapping Live Source plates export-blocking by default. An upper plate
-MAY name one lower symbolic source and up to eight normalized reveal rectangles. Only that linked pair
-SHALL be exempt, and only while every reveal rectangle intersects the lower plate in the same document/look.
-Missing targets, self-links, cycles and unrelated third-party overlap SHALL remain blocking errors.
+MAY name one lower symbolic source and up to eight normalized reveal rectangles. With the
+composition's **Allow live plate overlap** option off, only that linked pair SHALL be exempt,
+and only while every reveal rectangle intersects the lower plate in the same document/look.
+Missing targets, self-links and cycles SHALL remain blocking errors in either mode.
 
 #### Scenario: Author draws an intentional reveal
 
 - **GIVEN** two overlapping Live Source plates with distinct symbolic ids
 - **WHEN** the author selects the lower plate for the upper and draws a valid reveal window
 - **THEN** that pair no longer raises the ordinary overlap error
-- **AND** every other overlap remains independently blocking
+- **AND** other overlaps remain independently blocking while **Allow live plate overlap** is off
 
 #### Scenario: Each mask can be edited or removed
 

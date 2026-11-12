@@ -632,6 +632,45 @@ describe('per-look maps: absence is NO ENTRY, and the empty look is valid', () =
 });
 
 describe('buildTemplateLiveSources — the assembly, and the coexistence control', () => {
+  it('emits bottom-to-top paint order only for overlap-enabled layouts', () => {
+    const s = scene({
+      rootChildren: [
+        { ...plate('top', 'front', 80, 80, 640, 360), zIndex: 5 },
+        plate('bottom', 'back', 0, 0, 640, 360),
+      ],
+      compositions: [],
+    });
+    expect(buildTemplateLiveSources(s).platePaintOrder).toBeUndefined();
+    const enabled = buildTemplateLiveSources({ ...s, allowLivePlateOverlap: true });
+    expect(enabled.sources.map(({ sourceId }) => sourceId)).toEqual(['front', 'back']);
+    expect(enabled.platePaintOrder).toEqual(['back', 'front']);
+  });
+
+  it('carries a different authored paint order for each overlapping preset', () => {
+    const a = plate('a', 'one', 0, 0, 640, 360);
+    const b = plate('b', 'two', 80, 80, 640, 360);
+    const s = scene({
+      rootChildren: [
+        instance('first', 'first-comp', 0, 0, 1920, 1080),
+        instance('second', 'second-comp', 0, 0, 1920, 1080),
+      ],
+      compositions: [
+        comp('first-comp', [a, b]),
+        comp('second-comp', [
+          { ...a, id: 'second-a', zIndex: 2 },
+          { ...b, id: 'second-b' },
+        ]),
+      ],
+      lookGroups: [{ id: 'order', looks: [look('first', 'first'), look('second', 'second')] }],
+    });
+    const enabled = buildTemplateLiveSources({ ...s, allowLivePlateOverlap: true });
+    expect(enabled.platePaintOrder).toBeUndefined();
+    expect(enabled.looks?.map(({ platePaintOrder }) => platePaintOrder)).toEqual([
+      ['one', 'two'],
+      ['two', 'one'],
+    ]);
+  });
+
   it('carries distinct frame and artwork keys for two Looks instancing the same plate', () => {
     const nestedPlate = {
       ...plate('picture', 'guest-1', 320, 180, 1280, 720),
@@ -667,6 +706,31 @@ describe('buildTemplateLiveSources — the assembly, and the coexistence control
       })),
     );
     expect(block.sources.every((source) => source.operatorFrame === undefined)).toBe(true);
+  });
+
+  it('carries move-only and resize-only frame permissions independently', () => {
+    const s = scene({
+      rootChildren: [
+        { ...plate('move', 'move', 0, 0, 320, 180), operatorMove: true },
+        {
+          ...plate('resize', 'resize', 320, 0, 320, 180),
+          operatorMove: false,
+          operatorPlacement: 'free',
+        },
+        { ...plate('locked', 'locked', 640, 0, 320, 180), operatorMove: false },
+      ],
+    });
+    const block = buildTemplateLiveSources(s);
+    const target = (id: string) =>
+      block.sources.find((source) => source.sourceId === id)?.operatorFrame;
+    expect(target('move')).toEqual({ frameKey: 'move', artworkKey: 'move', resize: 'move-only' });
+    expect(target('resize')).toEqual({
+      frameKey: 'resize',
+      artworkKey: 'resize',
+      resize: 'free',
+      move: false,
+    });
+    expect(target('locked')).toBeUndefined();
   });
 
   it('uses the plate alone in multi-plate artwork and excludes unrendered container descendants', () => {

@@ -39,9 +39,8 @@ const OVERLAP: ExportIssue = {
   severity: 'error',
   code: 'live-source-overlap',
   message:
-    'Plate "guest-1" overlaps "guest-2". Each is composited on its own CasparCG layer, ' +
-    'so overlapping plates put two live inputs over the same pixels and which one shows is a ' +
-    'z-order accident.',
+    'Plate "guest-1" overlaps "guest-2". ' +
+    'Enable “Allow live plate overlap” in the Composition Inspector if the overlap is intentional.',
   elementId: 'guest-1',
 };
 const OVERLAP_B: ExportIssue = { ...OVERLAP, elementId: 'guest-2' };

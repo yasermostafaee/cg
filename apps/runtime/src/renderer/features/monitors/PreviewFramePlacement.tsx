@@ -23,10 +23,12 @@ function editRect(
   dy: number,
   corner: Corner | undefined,
   proportional: boolean,
+  centerLocked: boolean,
 ): Rect {
   if (corner === undefined) return { ...seed, x: seed.x + dx, y: seed.y + dy };
-  let width = Math.max(1, seed.width + dx * corner.x);
-  let height = Math.max(1, seed.height + dy * corner.y);
+  const sides = centerLocked ? 2 : 1;
+  let width = Math.max(1, seed.width + dx * corner.x * sides);
+  let height = Math.max(1, seed.height + dy * corner.y * sides);
   if (proportional) {
     const factor = Math.max(
       1 / Math.min(seed.width, seed.height),
@@ -36,8 +38,8 @@ function editRect(
     height = seed.height * factor;
   }
   return {
-    x: corner.x < 0 ? seed.x + seed.width - width : seed.x,
-    y: corner.y < 0 ? seed.y + seed.height - height : seed.y,
+    x: seed.x + (seed.width - width) * (centerLocked ? 0.5 : Number(corner.x < 0)),
+    y: seed.y + (seed.height - height) * (centerLocked ? 0.5 : Number(corner.y < 0)),
     width,
     height,
   };
@@ -49,6 +51,7 @@ interface Drag {
   y: number;
   corner: Corner | undefined;
   seed: FrameEdit;
+  preserveAspect: boolean;
 }
 
 export function PreviewFramePlacement({
@@ -56,16 +59,21 @@ export function PreviewFramePlacement({
   plate,
   frame,
   pixelsPerScenePixel,
+  preserveAspect,
   onSelect,
 }: {
   itemId: string;
   plate: PlatePlacement;
   frame: FrameEdit;
   pixelsPerScenePixel: number;
+  preserveAspect: boolean;
   onSelect: () => void;
 }): JSX.Element {
   const drag = useRef<Drag>();
   const name = plate.sourceName ?? plate.plateId;
+  const canMove = frame.move !== false;
+  const canResize = frame.resize !== 'move-only';
+  const keepRatio = frame.resize === 'proportional' || preserveAspect;
 
   const stage = (seed: FrameEdit, rect: Rect): void => {
     stageFramePlacement(
@@ -75,7 +83,13 @@ export function PreviewFramePlacement({
     );
   };
   const start = (event: PointerEvent<HTMLElement>, corner?: Corner): void => {
-    if (event.button !== 0 || drag.current !== undefined || pixelsPerScenePixel <= 0) return;
+    if (
+      event.button !== 0 ||
+      drag.current !== undefined ||
+      pixelsPerScenePixel <= 0 ||
+      (corner === undefined ? !canMove : !canResize)
+    )
+      return;
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
     onSelect();
@@ -85,6 +99,7 @@ export function PreviewFramePlacement({
       y: event.clientY,
       corner,
       seed: frame,
+      preserveAspect: keepRatio,
     };
   };
   const finish = (event: PointerEvent<HTMLElement>, cancelled = false): void => {
@@ -101,7 +116,7 @@ export function PreviewFramePlacement({
     event.preventDefault();
     event.stopPropagation();
     onSelect();
-    stage(frame, editRect(frame.rect, dx, dy, corner, frame.resize === 'proportional'));
+    stage(frame, editRect(frame.rect, dx, dy, corner, keepRatio, !canMove));
   };
 
   return (
@@ -114,33 +129,36 @@ export function PreviewFramePlacement({
         if (current?.pointerId !== event.pointerId) return;
         const dx = (event.clientX - current.x) / pixelsPerScenePixel;
         const dy = (event.clientY - current.y) / pixelsPerScenePixel;
-        const { seed, corner } = current;
-        stage(seed, editRect(seed.rect, dx, dy, corner, seed.resize === 'proportional'));
+        const { seed, corner, preserveAspect } = current;
+        stage(seed, editRect(seed.rect, dx, dy, corner, preserveAspect, seed.move === false));
       }}
       onPointerUp={(event) => finish(event)}
       onPointerCancel={(event) => finish(event, true)}
       onLostPointerCapture={(event) => finish(event, true)}
     >
-      <Button
-        variant="neutral"
-        className="cg-frame-placement__move"
-        aria-label={`Move frame for ${name}`}
-        onKeyDown={(event) => keyboard(event)}
-      >
-        <Icon icon={Move} size={14} />
-      </Button>
-      {corners.map((corner) => (
+      {canMove && (
         <Button
-          key={corner.key}
           variant="neutral"
-          className="cg-frame-placement__corner"
-          data-corner={corner.key}
-          aria-label={`Resize ${name} from ${corner.name}`}
-          onPointerDown={(event) => start(event, corner)}
-          onKeyDown={(event) => keyboard(event, corner)}
-          children={null}
-        />
-      ))}
+          className="cg-frame-placement__move"
+          aria-label={`Move frame for ${name}`}
+          onKeyDown={(event) => keyboard(event)}
+        >
+          <Icon icon={Move} size={14} />
+        </Button>
+      )}
+      {canResize &&
+        corners.map((corner) => (
+          <Button
+            key={corner.key}
+            variant="neutral"
+            className="cg-frame-placement__corner"
+            data-corner={corner.key}
+            aria-label={`Resize ${name} from ${corner.name}`}
+            onPointerDown={(event) => start(event, corner)}
+            onKeyDown={(event) => keyboard(event, corner)}
+            children={null}
+          />
+        ))}
     </div>
   );
 }

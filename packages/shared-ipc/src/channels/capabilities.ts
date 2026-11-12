@@ -72,6 +72,11 @@ export const BridgeCapabilitiesChannel = defineChannel(
     fixedLayerSpaceShortcut: z.literal(true).optional(),
     /** The Bridge can validate and apply authored live-frame placements. */
     liveFramePlacement: z.literal(true).optional(),
+    liveFramePlacementReset: z.literal(true).optional(),
+    liveCropReset: z.literal(true).optional(),
+    previewResizeMode: z.literal(true).optional(),
+    /** The Bridge can enforce authored layer order for overlapping Live plates. */
+    livePlatePaintOrder: z.literal(true).optional(),
     /**
      * Where the BROWSER posts its credentials — the Playout's D1 endpoint
      * (`POST /api/cg/auth/token`), absolute, as configured on this bridge.

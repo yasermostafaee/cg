@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allocateLiveLayers } from '../src/live-plate-seating.js';
+import { allocateLiveLayers, allocateOrderedLiveLayers } from '../src/live-plate-seating.js';
 
 /**
  * C-015 phase 6 (task 6.0) — **which layers a template's plates go on.**
@@ -119,5 +119,44 @@ describe('allocateLiveLayers', () => {
     expect(
       allocateLiveLayers({ range: { start: 10, end: 59 }, preferred: [], isAvailable: FREE }),
     ).toEqual([]);
+  });
+});
+
+describe('allocateOrderedLiveLayers', () => {
+  it('places a pinned upper seat’s predecessors first, even with holes and unrelated seats', () => {
+    expect(
+      allocateOrderedLiveLayers(
+        {
+          range: { start: 30, end: 35 },
+          preferred: [undefined, 33, undefined, undefined],
+          isAvailable: (layer) => layer !== 31,
+        },
+        [
+          [3, 2],
+          [2, 1],
+        ],
+      ),
+    ).toEqual([34, 33, 32, 30]);
+  });
+
+  it('refuses incompatible pinned coordinates even when there is spare capacity', () => {
+    expect(
+      allocateOrderedLiveLayers(
+        { range: { start: 30, end: 35 }, preferred: [33, 30], isAvailable: FREE },
+        [[0, 1]],
+      ),
+    ).toBeNull();
+  });
+
+  it('refuses a producer order that loops across Looks', () => {
+    expect(
+      allocateOrderedLiveLayers(
+        { range: { start: 30, end: 35 }, preferred: [undefined, undefined], isAvailable: FREE },
+        [
+          [0, 1],
+          [1, 0],
+        ],
+      ),
+    ).toBeNull();
   });
 });

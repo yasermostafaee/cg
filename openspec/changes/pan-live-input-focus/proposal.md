@@ -19,6 +19,7 @@ which part of the live input stays visible while the plate and picture proportio
 - Show the actual source in the PVW editor when Playout supplies the source picture mapping.
 - Let the operator resize the crop from any corner while preserving its aspect and plate.
   Stage size with position through the same Inspector Update and Take.
+- Let the operator stage the current preset's authored framing with **Reset crop** in Inspector.
 
 ## Capabilities
 

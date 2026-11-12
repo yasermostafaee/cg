@@ -2,6 +2,8 @@
 
 ### Requirement: Designer exports a representative thumbnail with each VCG
 
+The thumbnail PNG SHALL retain transparent artwork regions as alpha.
+
 Designer SHALL include a small PNG at `thumbnails/320.png` in the exported VCG. Designer SHALL
 evaluate the authored Hold start frame when set. Otherwise it SHALL evaluate the midpoint of the
 active range before Outro start, using the active range midpoint when no Outro start is set. The

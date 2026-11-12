@@ -50,12 +50,13 @@ import type { Scene } from './scene.js';
  *
  * 1.2.0 adds authored clock separator styling, a countup range and delayed Follow video Outros.
  * 1.2.1 applies normalisation gain on audio elements.
+ * 1.2.3 carries authored paint order for overlapping Live plates.
  */
-export const CG_RUNTIME_VERSION = '1.2.1';
+export const CG_RUNTIME_VERSION = '1.2.3';
 
 /** Declare the minimum runtime that can reproduce all authored behavior in a package. */
 export function requiredRuntimeVersionForScene(
-  scene: Pick<Scene, 'layers' | 'compositions'>,
+  scene: Pick<Scene, 'layers' | 'compositions' | 'allowLivePlateOverlap'>,
 ): string {
   const compositions = [scene, ...(scene.compositions ?? [])];
   const hasElement = (matches: (element: Element) => boolean): boolean => {
@@ -63,6 +64,16 @@ export function requiredRuntimeVersionForScene(
       matches(element) || (element.type === 'container' && element.children.some(visit));
     return compositions.some((comp) => comp.layers.some((layer) => layer.children.some(visit)));
   };
+  if (
+    scene.allowLivePlateOverlap === true ||
+    hasElement(
+      (el) =>
+        el.type === 'video-placeholder' &&
+        el.operatorMove !== undefined &&
+        el.operatorMove !== (el.operatorPlacement !== undefined),
+    )
+  )
+    return '1.2.3';
   if (hasElement((el) => el.type === 'audio' && (el.normalisationGainDb ?? 0) !== 0))
     return '1.2.1';
 

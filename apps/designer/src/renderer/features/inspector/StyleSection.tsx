@@ -904,24 +904,7 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
         />
         <AspectRow element={element} />
         <FitModeRow element={element} />
-        <CheckRow
-          label="Allow placement in CG Control"
-          checked={element.operatorPlacement !== undefined}
-          onChange={(allowed) =>
-            designerStore.updateElement(id, {
-              operatorPlacement: allowed ? 'proportional' : undefined,
-            })
-          }
-        />
-        {element.operatorPlacement !== undefined && (
-          <CheckRow
-            label="Allow free resize"
-            checked={element.operatorPlacement === 'free'}
-            onChange={(free) =>
-              designerStore.updateElement(id, { operatorPlacement: free ? 'free' : 'proportional' })
-            }
-          />
-        )}
+        <OperatorFrameRows element={element} />
         <PlateMaskRows key={'mask-' + element.id} element={element} />
         <PlateMaskRows key={'reveal-' + element.id} element={element} linked />
         <LivePlateFallbackPicker
@@ -1146,6 +1129,32 @@ function LiveSourceFrameRow({ element }: { element: VideoPlaceholderElement }): 
         }}
       />
     </CollapseSection>
+  );
+}
+
+function OperatorFrameRows({ element }: { element: VideoPlaceholderElement }): JSX.Element {
+  const { id, operatorPlacement, operatorMove } = element;
+  const allowMove = operatorMove ?? operatorPlacement !== undefined;
+  return (
+    <>
+      <CheckRow
+        label="Allow move"
+        checked={allowMove}
+        onChange={(allowed) => designerStore.updateElement(id, { operatorMove: allowed })}
+      />
+      <SelectField
+        label="Resize"
+        value={operatorPlacement ?? 'locked'}
+        options={['locked', 'proportional', 'free'] as const}
+        labels={['Locked', 'Preserve aspect ratio', 'Operator chooses aspect ratio']}
+        onCommit={(mode) =>
+          designerStore.updateElement(id, {
+            operatorPlacement: mode === 'locked' ? undefined : mode,
+            operatorMove: allowMove,
+          })
+        }
+      />
+    </>
   );
 }
 

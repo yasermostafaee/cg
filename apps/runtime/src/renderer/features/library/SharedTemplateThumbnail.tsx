@@ -42,7 +42,13 @@ function renderStill(
     policy.content =
       "default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'";
     const style = doc.createElement('style');
-    style.textContent = `* { box-sizing: border-box } body { margin: 0; overflow: hidden } body > svg { display: block; width: 100vw; height: 100vh } ${BASELINE_CSS}`;
+    style.textContent = `
+      * { box-sizing: border-box }
+      html, body { background: transparent; color-scheme: light }
+      body { margin: 0; overflow: hidden }
+      body > svg { display: block; width: 100vw; height: 100vh }
+      ${BASELINE_CSS}
+    `;
     doc.head.replaceChildren(policy, style);
     doc.body.replaceChildren(svg);
     return `<!doctype html>${doc.documentElement.outerHTML}`;

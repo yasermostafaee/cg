@@ -48,11 +48,13 @@ test('Export (.vcg) saves a rendered thumbnail at the authored Hold start', asyn
       ctx.drawImage(bitmap, 0, 0);
       const rgba = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
       let visibleRectangle = 0;
+      let transparentPixels = 0;
       for (let i = 0; i < rgba.length; i += 4) {
         const [red, green, blue, alpha] = rgba.subarray(i, i + 4);
         if (red === 190 && green === 190 && blue === 190 && alpha === 255) visibleRectangle += 1;
+        if (alpha === 0) transparentPixels += 1;
       }
-      return { width: bitmap.width, height: bitmap.height, visibleRectangle };
+      return { width: bitmap.width, height: bitmap.height, visibleRectangle, transparentPixels };
     } finally {
       bitmap.close();
     }
@@ -60,4 +62,5 @@ test('Export (.vcg) saves a rendered thumbnail at the authored Hold start', asyn
 
   expect(picture).toMatchObject({ width: 320, height: 180 });
   expect(picture.visibleRectangle).toBeGreaterThan(60);
+  expect(picture.transparentPixels).toBeGreaterThan(320 * 180 * 0.9);
 });

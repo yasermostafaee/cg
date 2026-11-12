@@ -1559,8 +1559,10 @@ export function liveRevealMaskFromRects(
  */
 export const VideoPlaceholderElementSchema = ElementBaseSchema.extend({
   type: z.literal('video-placeholder'),
-  /** Absent keeps the authored frame fixed in CG Control. */
+  /** Absent disallows resizing the authored frame in CG Control. */
   operatorPlacement: LiveFrameResizeSchema.optional(),
+  /** Absent preserves legacy movement for a frame with an authored resize policy. */
+  operatorMove: z.boolean().optional(),
   /**
    * R-105 — what the graphics bed paints underneath this live picture. Absent preserves the
    * long-standing Designer choice: Bars. `posterAssetId` supplies the image branch's asset.

@@ -160,8 +160,13 @@ export function applyDraft(
       : undefined;
   const combinedPosition = deferredPosition === undefined ? sentPosition : undefined;
   const noFieldDrafts = Object.keys(sent).length === 0;
+  const resetGeometry =
+    frame.reset || crop.drafts.some((draft) => draft.kind === 'guide' && draft.reset === true);
   const fields = (): Promise<{ accepted: boolean; errorCode?: string | undefined }> =>
-    deferredPosition !== undefined && noFieldDrafts && bindingsPayload === undefined
+    noFieldDrafts &&
+    bindingsPayload === undefined &&
+    combinedPosition === undefined &&
+    (deferredPosition !== undefined || resetGeometry)
       ? Promise.resolve({ accepted: true })
       : sendUpdate(
           item,
@@ -186,11 +191,12 @@ export function applyDraft(
         const moved = await sendUpdate(item, {}, {}, undefined, undefined, deferredPosition);
         if (!moved.accepted) return moved;
       }
-      if (frame.placements.length > 0) {
+      if (frame.reset || frame.placements.length > 0) {
         try {
           const placed = await window.cg.stack.setFramePlacements({
             itemId: item.itemId,
             placements: frame.placements,
+            ...(frame.reset && { reset: 'all' as const }),
           });
           if (!placed.accepted) {
             reportCommandError(placed.message ?? 'CG Bridge could not apply the frame placement.');
@@ -223,6 +229,7 @@ async function applyPreviewCropDrafts(
           {
             token: draft.token,
             focus: draft.focus,
+            ...(draft.reset === true && { reset: true as const }),
             ...(draft.lookId === undefined ? {} : { lookId: draft.lookId }),
           },
         ]

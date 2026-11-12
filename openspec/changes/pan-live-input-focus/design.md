@@ -28,6 +28,12 @@ PVW can draft normalized focus for a source whose aspect and fit Bridge has reso
 and resizing affect the browser preview immediately. Off-air Update saves framing for Take.
 Update on air applies framing to the verified seated source.
 
+**Reset crop** in Inspector → Position stages the current preset's authored framing for
+eligible plates. A plate with no authored override uses the centered, unzoomed cover crop.
+The browser preview follows the draft and Discard restores the applied crop. A Bridge that
+advertises `liveCropReset` clears the matching overrides after the reset is accepted. On air,
+the verified resident input receives the corresponding mixer geometry in place.
+
 ## Picture and guide geometry
 
 The [2.18.17 handoff](../../../docs/integration/playout/source-previews-2.18.17-adoption.md) supplies

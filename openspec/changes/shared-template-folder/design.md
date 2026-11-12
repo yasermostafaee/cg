@@ -8,3 +8,7 @@ scene preview. The Bridge resolves the current channel's listed version for eith
 CG Control requests data for visible rows and shares it with the selected template's larger
 Details slot. Template changes invalidate the old preview. A preview read failure leaves the
 catalogue and its actions available, and an older Bridge keeps the existing icon layout.
+
+Shared folder and catalogue use the same preview component. Its checkerboard is display chrome
+behind transparent pixels. The scriptless still remains transparent and shares the host
+element's color scheme so it can show that background.

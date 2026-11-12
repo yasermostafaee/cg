@@ -34,6 +34,7 @@ import { PreviewFramePlacement } from './PreviewFramePlacement.js';
 import { frameBox, frameZIndex, overlayZIndex, type RehearsalSubject } from './rehearsalFrames.js';
 import type { PvwPage } from '../../../shared/pvwPage.js';
 import { usePvwSourceFrames } from './usePvwSourceFrames.js';
+import { hasPreviewCropReset, previewCropDraftOf } from '../inspector/draftStore.js';
 
 /**
  * R-022 — the rehearsal render: EVERY rehearsing row's graphic, with the
@@ -275,6 +276,7 @@ interface Props {
   panOpen?: boolean;
   moveOpen?: boolean;
   frameEditOpen?: boolean;
+  preserveFrameAspect?: boolean;
   panSession?: number;
   panSourceAspects?: ReadonlyMap<string, number | null>;
   /**
@@ -364,6 +366,7 @@ export function RehearsalStage({
   panOpen = false,
   moveOpen = false,
   frameEditOpen = false,
+  preserveFrameAspect = false,
   panSession = 0,
   panSourceAspects,
   onTransport,
@@ -564,23 +567,25 @@ export function RehearsalStage({
       return next;
     });
   }, []);
-  const appliedFocusesByItem = new Map(
+  const previewFocusesByItem = new Map(
     panRows.map(({ subject, plates, key }) => [
       subject.itemId,
       new Map(
         plates.flatMap((plate) => {
           const target = previewCropTarget(plate, cropReads.get(key));
-          const saved =
-            target === undefined
-              ? undefined
-              : subject.previewPlateCrops?.find((crop) => crop.token === target.token);
-          return saved === undefined ? [] : ([[plate.elementId, saved.focus]] as const);
+          if (target === undefined) return [];
+          const draft = previewCropDraftOf(subject.itemId, target.token);
+          const focus =
+            draft?.kind === 'guide' && draft.reset === true
+              ? draft.focus
+              : subject.previewPlateCrops?.find((crop) => crop.token === target.token)?.focus;
+          return focus === undefined ? [] : ([[plate.elementId, focus]] as const);
         }),
       ),
     ]),
   );
   const picturePlacements = placements.map((plate) => {
-    const focus = appliedFocusesByItem.get(plate.itemId)?.get(plate.elementId);
+    const focus = previewFocusesByItem.get(plate.itemId)?.get(plate.elementId);
     return focus === undefined ? plate : { ...plate, focus };
   });
 
@@ -794,6 +799,7 @@ export function RehearsalStage({
                   plate={plate}
                   frame={plate.frameEdit}
                   pixelsPerScenePixel={fit * outputScale(raster)}
+                  preserveAspect={preserveFrameAspect}
                   onSelect={() => onSelectItem?.(plate.itemId)}
                 />
               );
@@ -807,7 +813,9 @@ export function RehearsalStage({
             scopeKey={key}
             enabled={
               subject.previewCropPending !== true &&
-              (panOpen || (subject.previewPlateCrops?.length ?? 0) > 0) &&
+              (panOpen ||
+                hasPreviewCropReset(subject.itemId) ||
+                (subject.previewPlateCrops?.length ?? 0) > 0) &&
               plates.some((plate) => plate.sourceId !== null)
             }
             onAir={subject.previewCropOnAir === true}

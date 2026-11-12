@@ -215,6 +215,10 @@ export interface AuthCapabilities {
   readonly independentPreview?: true;
   readonly layerProfiles?: true;
   readonly liveFramePlacement?: true;
+  readonly liveFramePlacementReset?: true;
+  readonly liveCropReset?: true;
+  readonly previewResizeMode?: true;
+  readonly livePlatePaintOrder?: true;
   readonly sharedTemplateFolder?: true;
   readonly templateThumbnails?: true;
   readonly fixedLayerShortcuts?: true;

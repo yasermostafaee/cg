@@ -116,3 +116,11 @@
 - [x] Windows Chromium verified the saved off-air crop and matched the updated on-air FILL
       to the PVW picture after closing Pan, without additional playout commands.
 - [x] The carrying [Linux Playwright E2E step](https://github.com/yasermostafaee/cg/actions/runs/43060000125/job/130659729029) passed on `edcbe428` after `9e67b0a8`.
+
+## 12. Reset crop from Inspector
+
+- [x] Restore authored framing only for the requested preset and clear its overrides after acceptance.
+      Six focused Bridge cases passed.
+- [x] Windows Chromium verified the Inspector reset with Crop input closed, immediate PVW
+      restoration, Discard, and Update on air on the same input seat.
+- [ ] Verify Reset crop on the target station and record carrying Linux Playwright.

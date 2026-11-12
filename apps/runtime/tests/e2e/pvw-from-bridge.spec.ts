@@ -2,11 +2,11 @@ import * as dgram from 'node:dgram';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Browser, Page } from '@playwright/test';
+import type { Browser, Locator, Page } from '@playwright/test';
 import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { LayerProfileSchema, type ConnectionConfig, type FixedLayerBank } from '@cg/shared-ipc';
-import { SceneSchema } from '@cg/shared-schema';
+import { SceneSchema, type VideoPlaceholderElement } from '@cg/shared-schema';
 import { cgCss, cgJsIife, ExporterSingleFile } from '@cg/single-file-export';
 import { buildTemplateLiveSources, unpack } from '@cg/vcg-format';
 import {
@@ -467,6 +467,39 @@ test('D-178 / B-433 — PVW crop reaches the first Take and Update on air refram
       .slice(wireBeforeClosing)
       .some(({ line }) => /(?:^| )(?:MIXER|PLAY|STOP|CLEAR) 1-60\b/.test(line)),
   ).toBe(false);
+
+  const resetCrop = page
+    .getByRole('complementary', { name: 'Inspector' })
+    .getByRole('button', { name: 'Reset crop', exact: true });
+  const startReset = engine.receivedCommands().length;
+  const cropCommands = () =>
+    engine
+      .receivedCommands()
+      .slice(startReset)
+      .map(({ line }) => line)
+      .filter((line) =>
+        /(?:^| )(?:MIXER 1-60 (?:FILL|CLIP)|(?:PLAY|STOP|CLEAR|LOADBG) 1-60)\b/.test(line),
+      );
+  await expect(resetCrop).toBeEnabled();
+  await resetCrop.click();
+  await expect.poll(async () => (await readPicture()).width).toBeCloseTo(centeredPicture.width, 0);
+  expect(engine.layerState(slot)?.fill).toEqual(appliedFill);
+  expect(cropCommands()).toEqual([]);
+
+  await discard.click();
+  await expect
+    .poll(async () => (await readPicture()).width)
+    .toBeCloseTo(appliedFill.width * 1920, 0);
+  expect(cropCommands()).toEqual([]);
+
+  await resetCrop.click();
+  await page.getByRole('button', { name: 'Apply staged edits to the on-air row' }).click();
+  await expect
+    .poll(() => engine.layerState(slot)?.fill?.width ?? 0)
+    .toBeCloseTo(centeredPicture.width / 1920, 3);
+  expect(cropCommands()).toEqual([expect.stringMatching(/MIXER 1-60 FILL /)]);
+  expect(engine.layerState(slot)?.clip).toEqual(beforeClip);
+  expect(engine.layerState(slot)?.opacity).toBe(1);
 });
 
 test('R-024 saves and reloads a layer profile and refuses to replace an on-air row', async ({
@@ -752,17 +785,62 @@ test('R-108 imported Templates show row thumbnails and the larger selected previ
     entry(console, id)
       .getByRole('button', { name: /^Select / })
       .click();
+  const checkPreviewPixels = async (console: Page, preview: Locator, containsWhite: boolean) => {
+    const colors = await preview.evaluate((element) =>
+      ['--r-checker-a', '--r-checker-b'].map((name) =>
+        getComputedStyle(element).getPropertyValue(name).trim(),
+      ),
+    );
+    const png = await preview.screenshot();
+    const counts = await console.evaluate(
+      async ({ colors, image }) => {
+        const bytes = Uint8Array.from(atob(image), (character) => character.charCodeAt(0));
+        const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = bitmap.width;
+          canvas.height = bitmap.height;
+          const ctx = canvas.getContext('2d');
+          if (ctx === null) throw new Error('Cannot decode preview pixels');
+          ctx.drawImage(bitmap, 0, 0);
+          const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+          return [...colors, '#ffffff'].map((color) => {
+            ctx.fillStyle = color;
+            ctx.fillRect(0, 0, 1, 1);
+            const [red, green, blue] = ctx.getImageData(0, 0, 1, 1).data;
+            let count = 0;
+            for (let at = 0; at < pixels.length; at += 4) {
+              if (pixels[at] === red && pixels[at + 1] === green && pixels[at + 2] === blue)
+                count++;
+            }
+            return count;
+          });
+        } finally {
+          bitmap.close();
+        }
+      },
+      { colors, image: png.toString('base64') },
+    );
+    const [dark, light, white] = counts;
+    expect(dark).toBeGreaterThan(100);
+    expect(light).toBeGreaterThan(100);
+    if (containsWhite) expect(white).toBeGreaterThan(100);
+  };
 
   try {
+    const embeddedPng = await page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 64;
+      canvas.height = 36;
+      const context = canvas.getContext('2d');
+      if (context === null) throw new Error('Cannot make a transparent preview fixture');
+      context.fillStyle = '#ffffff';
+      context.fillRect(16, 8, 32, 20);
+      return canvas.toDataURL('image/png').split(',')[1] ?? '';
+    });
     await writeFile(
       join(shared, 'embedded.vcg'),
-      await buildValidVcg(
-        embeddedId,
-        Buffer.from(
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
-          'base64',
-        ),
-      ),
+      await buildValidVcg(embeddedId, Buffer.from(embeddedPng, 'base64')),
     );
     const handle = await boot(false, shared);
     await openConsole(page, handle.url);
@@ -770,6 +848,10 @@ test('R-108 imported Templates show row thumbnails and the larger selected previ
     await catalogue(page).getByRole('button', { name: 'Shared folder…', exact: true }).click();
     const folder = page.getByRole('dialog', { name: 'Shared template folder', exact: true });
     await folder.getByRole('button', { name: 'embedded.vcg', exact: true }).click();
+    await expect
+      .poll(() => folder.locator(pngImage).evaluate((node: HTMLImageElement) => node.naturalWidth))
+      .toBe(64);
+    await checkPreviewPixels(page, folder.locator(pngImage), true);
     await folder.getByRole('button', { name: 'Import package', exact: true }).click();
     await expect(folder).toHaveCount(0);
     await expect(entry(page, embeddedId)).toBeVisible();
@@ -796,7 +878,8 @@ test('R-108 imported Templates show row thumbnails and the larger selected previ
       await expect(image).toBeVisible();
       await expect
         .poll(() => image.evaluate((node: HTMLImageElement) => node.naturalWidth))
-        .toBe(1);
+        .toBe(64);
+      await checkPreviewPixels(fresh, image, true);
       await expect(
         legacy.frameLocator(stillFrame).locator('[data-cg-element-id="el-name"]'),
       ).toBeVisible();
@@ -805,6 +888,7 @@ test('R-108 imported Templates show row thumbnails and the larger selected previ
       await select(fresh, embeddedId);
       await expect(detail.locator(pngImage)).toBeVisible();
       await expect(detail.locator(pngImage)).toHaveCSS('object-fit', 'contain');
+      await checkPreviewPixels(fresh, detail.locator(pngImage), true);
       const [rowBox, detailBox] = await Promise.all([embedded.boundingBox(), detail.boundingBox()]);
       if (rowBox === null || detailBox === null) throw new Error('A preview slot has no box');
       expect(detailBox.width).toBeGreaterThan(rowBox.width);
@@ -815,6 +899,7 @@ test('R-108 imported Templates show row thumbnails and the larger selected previ
       await expect(
         detail.frameLocator(stillFrame).locator('[data-cg-element-id="el-name"]'),
       ).toBeVisible();
+      await checkPreviewPixels(fresh, detail.locator(stillFrame), false);
       await select(fresh, oldEntryId);
       await expect(detail.locator('img, iframe')).toHaveCount(0);
       await expect(detail.locator('svg')).toBeVisible();
@@ -1461,6 +1546,49 @@ test('Frames drafts the authored box and whole-template Position moves the retai
       .poll(async () => (await airTitle.boundingBox())?.x ?? 0)
       .toBeCloseTo(previousAir.x + dx, 1);
     await expect(plateRow).toHaveAttribute('aria-label', /ON AIR$/);
+
+    const reset = inspector.getByRole('button', { name: 'Reset frames', exact: true });
+    const airPlate = air.locator('[data-cg-element-id="live-guest"]');
+    const changedFrame = await readBox();
+    const changedAir = await airPlate.boundingBox();
+    if (changedAir === null) throw new Error('The programme frame is missing before Reset frames');
+    const appliedRow = () => handle.runtime.stackSnapshot(1).find((item) => item.itemId === itemId);
+    const appliedPosition = appliedRow()?.position;
+    const beforeReset = positionWire();
+    await expect(reset).toBeEnabled();
+    await reset.click();
+    await expect(rowDraft).toBeVisible();
+    await expect
+      .poll(async () => (await readBox()).picture.width)
+      .toBeCloseTo(original.picture.width, 1);
+    expect(positionWire()).toEqual(beforeReset);
+    expect(await airPlate.boundingBox()).toEqual(changedAir);
+
+    await inspector.getByRole('button', { name: 'Discard staged edits', exact: true }).click();
+    await expect
+      .poll(async () => (await readBox()).picture.width)
+      .toBeCloseTo(changedFrame.picture.width, 1);
+    await expect(rowDraft).toHaveCount(0);
+    expect(positionWire()).toEqual(beforeReset);
+
+    await reset.click();
+    await inspector.getByRole('button', { name: 'Apply staged edits to the on-air row' }).click();
+    await expect(rowDraft).toHaveCount(0);
+    expect(appliedRow()?.framePlacements ?? []).toHaveLength(0);
+    expect(appliedRow()?.position).toEqual(appliedPosition);
+    await expect(offsetX).toHaveValue(String(x));
+    await expect(offsetY).toHaveValue(String(y));
+    expect(positionWire().slice(beforeReset.length)).toEqual([
+      expect.stringMatching(/^MIXER 1-\d+ FILL .* DEFER$/),
+      expect.stringMatching(/^MIXER 1-\d+ CLIP .* DEFER$/),
+      expect.stringMatching(/^CG 1-59 UPDATE /),
+      'MIXER 1 COMMIT',
+    ]);
+    const resetData = engine.lastCgUpdate(slot)?.data;
+    if (resetData == null) throw new Error('The programme page did not receive Reset frames');
+    await tellAir(resetData);
+    await expect.poll(async () => (await airPlate.boundingBox())?.width ?? 0).toBeCloseTo(400, 1);
+    await expect(plateRow).toHaveAttribute('aria-label', /ON AIR$/);
   } finally {
     await air.close();
   }
@@ -1622,6 +1750,131 @@ test('R-117 Move toggles dragging while both stopped PVW templates remain outlin
   await layer(98).getByRole('button', { name: 'OFF PVW', exact: true }).click();
   await expect(lower).toHaveCount(0);
   await expect(upper).toBeVisible();
+});
+
+test('D-213 Take seats two opted-in plates in the authored paint order', async ({ page }) => {
+  const handle = await boot(true);
+  const engine = mock;
+  if (engine === null) throw new Error('Test engine is unavailable');
+  await handle.runtime.whenServerHealthy(15_000);
+  const templateId = 'tpl-overlap-paint-order';
+  const itemId = 'overlap-paint-order';
+  const { scene } = await unpack(await buildPositionedVcg(templateId));
+  const layer = scene.layers[0];
+  const transform = layer?.children[0]?.transform;
+  if (layer === undefined || transform === undefined) throw new Error('Missing template fixture');
+  scene.allowLivePlateOverlap = true;
+  scene.fields = [];
+  scene.bindings = [];
+  const plate = (id: string, x: number, y: number, zIndex: number): VideoPlaceholderElement => ({
+    id,
+    name: id,
+    type: 'video-placeholder',
+    routeKey: id,
+    transform: {
+      ...transform,
+      position: { x, y },
+      size: { w: 400, h: 300 },
+      anchor: { x: 0, y: 0 },
+    },
+    opacity: 1,
+    visible: true,
+    locked: false,
+    zIndex,
+  });
+  // The source ids sort in the opposite direction to the authored order.
+  layer.children = [
+    { ...plate('z-back', 600, 350, 0), operatorMove: true },
+    { ...plate('a-front', 740, 420, 1), operatorMove: false, operatorPlacement: 'free' },
+  ];
+  const liveSources = buildTemplateLiveSources(scene);
+  expect(liveSources.platePaintOrder).toEqual(['z-back', 'a-front']);
+  const { html } = await new ExporterSingleFile({
+    cgJsIife,
+    cgCss,
+    fontsCss: '',
+    assets: { get: () => Promise.resolve(null), bytes: () => Promise.resolve(null) },
+  }).produce(scene);
+  expect(
+    handle.runtime.setSourceCatalog({
+      layerRange: { start: 60, end: 79 },
+      sources: [
+        {
+          id: 'front-source',
+          name: 'Front source',
+          format: '1080i5000',
+          producer: { kind: 'ndi', source: 'OVERLAP-TEST (Front)' },
+        },
+        {
+          id: 'back-source',
+          name: 'Back source',
+          format: '1080i5000',
+          producer: { kind: 'route', channel: 2 },
+        },
+      ],
+    }),
+  ).toMatchObject({ ok: true });
+  handle.runtime.templateImport({ ...TEMPLATE, templateId, liveSources }, html, 1);
+  expect(
+    handle.runtime.setSourceAssignments({
+      assignments: [
+        { templateId, plateId: 'a-front', sourceId: 'front-source' },
+        { templateId, plateId: 'z-back', sourceId: 'back-source' },
+      ],
+    }),
+  ).toMatchObject({ ok: true });
+  expect(
+    await handle.runtime.loadFixed({ channel: 1, layer: 59 }, itemId, templateId, {}),
+  ).toMatchObject({ accepted: true });
+  await openConsole(page, handle.url);
+  const row = page.getByRole('region', { name: 'Layers' }).locator('[data-layer="59"]');
+  await showMonitors(page);
+  await row.locator('[data-row-body]').click();
+  await row.getByRole('button', { name: 'ON PVW', exact: true }).click();
+  const pvw = page.getByRole('region', { name: 'PREVIEW (PVW)' });
+  const inspector = page.getByRole('complementary', { name: 'Inspector' });
+  await pvw.getByRole('button', { name: 'Edit frames in Preview', exact: true }).click();
+  const backMove = pvw.getByRole('button', { name: 'Move frame for Back source' });
+  const frontResize = pvw.getByRole('button', { name: 'Resize Front source from bottom right' });
+  await expect(backMove).toBeVisible();
+  await expect(frontResize).toBeVisible();
+  await expect(pvw.getByRole('button', { name: /Resize Back source/ })).toHaveCount(0);
+  await expect(pvw.getByRole('button', { name: 'Move frame for Front source' })).toHaveCount(0);
+  const preserveRatio = inspector.getByRole('checkbox', {
+    name: 'Preserve frame aspect ratio',
+    exact: true,
+  });
+  await expect(preserveRatio).toBeChecked();
+  await preserveRatio.uncheck();
+  const frontFrame = pvw
+    .frameLocator('iframe[data-rehearsal-frame]')
+    .locator('[data-cg-element-id="a-front"]');
+  const size = () =>
+    frontFrame.evaluate((element) => {
+      const { width, height } = element.getBoundingClientRect();
+      return { width, height };
+    });
+  const authored = await size();
+  await frontResize.press('Shift+ArrowRight');
+  await expect.poll(async () => (await size()).width).toBeGreaterThan(authored.width);
+  expect((await size()).height).toBeCloseTo(authored.height, 2);
+  await inspector.getByRole('button', { name: 'Discard staged edits' }).click();
+  await expect.poll(async () => (await size()).width).toBeCloseTo(authored.width, 2);
+
+  const start = engine.receivedCommands().length;
+  await row.getByRole('button', { name: 'PLAY', exact: true }).click();
+  await expect(row).toHaveAttribute('aria-label', /ON AIR$/);
+
+  const wire = engine
+    .receivedCommands()
+    .slice(start)
+    .map(({ line }) => line);
+  const back = wire.find((line) => /^PLAY 1-\d+ .*route:\/\/2/.test(line));
+  const front = wire.find((line) => /^PLAY 1-\d+ .*OVERLAP-TEST \(Front\)/.test(line));
+  const layerOf = (command: string | undefined) => Number(command?.match(/^PLAY 1-(\d+) /)?.[1]);
+  expect(layerOf(back)).toBeGreaterThanOrEqual(60);
+  expect(layerOf(front)).toBeGreaterThan(layerOf(back));
+  expect(layerOf(front)).toBeLessThanOrEqual(79);
 });
 
 test('R-108 — a reloaded package refreshes the already-bound row in PVW', async ({ page }) => {

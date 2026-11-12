@@ -324,6 +324,8 @@ const CompositionObjectSchema = z
      * wide — phase 2 deletes arrangements (`tasks.md` §1b's deletion clause).
      */
     lookGroups: LookGroupsSchema.optional(),
+    /** Deliberately composite overlapping Live plates in this output's paint order. */
+    allowLivePlateOverlap: z.boolean().optional(),
   })
   .superRefine(refineLifecycle);
 /**
@@ -643,6 +645,7 @@ const SceneObjectSchema = z
     arrangements: ArrangementsSchema.optional(),
     /** LOOKS (§14) — see the composition-side field; this is the projection/runtime home. */
     lookGroups: LookGroupsSchema.optional(),
+    allowLivePlateOverlap: z.boolean().optional(),
     metadata: SceneMetadataSchema,
   })
   .superRefine(refineLifecycle);

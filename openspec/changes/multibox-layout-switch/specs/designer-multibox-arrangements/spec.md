@@ -203,15 +203,17 @@ Exactly one arrangement SHALL be active while authoring, so the canvas always sh
 runtime can actually produce.
 
 The `live-source-overlap` export-blocking check SHALL be applied **WITHIN** an arrangement and SHALL
-NOT fire across arrangements. Two plates whose holes overlap inside one arrangement remain a fault —
-overlapping holes put two live sources over the same pixels and which one shows is a z-order accident.
+NOT fire across arrangements. Two plates whose holes overlap inside one arrangement remain a fault
+with **Allow live plate overlap** off, unless they have a valid linked reveal.
 Two plates that occupy the same screen area in _different_ arrangements are the normal case and SHALL
 be accepted.
 
-The rule itself does not change; only the input it is evaluated over does.
+With **Allow live plate overlap** on, each arrangement uses the composition's authored paint order
+for its co-visible plates.
 
 #### Scenario: Overlap inside one arrangement is still refused
 
+- **GIVEN** the composition's overlap option is off
 - **WHEN** two boxes overlap within the 3-box arrangement
 - **THEN** export is blocked with the existing overlap error, reported against both elements
 

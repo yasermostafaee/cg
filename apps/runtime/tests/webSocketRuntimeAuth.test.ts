@@ -407,6 +407,44 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+it.each([false, true])(
+  'checks Bridge support for imported Live plate order (%s)',
+  async (capable) => {
+    const bridge = new FakeBridge();
+    bridge.capabilities = {
+      channels: ipc.runtimeRequestChannelNames(ipc),
+      ...(capable && { livePlatePaintOrder: true as const }),
+    };
+    const templateId = 'overlapping-plates';
+    bridge.succeed.set(ipc.TemplatesImportChannel.name, { registered: true, templateId });
+    const runtime = start(bridge);
+    bridge.socket().open();
+    await settle();
+    const request = runtime.templates.import({
+      template: {
+        templateId,
+        templateType: 'custom',
+        fields: [],
+        liveSources: {
+          resolution: { width: 1920, height: 1080 },
+          defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
+          sources: [],
+          platePaintOrder: ['back', 'front'],
+        },
+      },
+      html: '<html></html>',
+    });
+
+    if (capable) {
+      await expect(request).resolves.toMatchObject({ registered: true, templateId });
+      expect(wireOf(bridge)).toContain(ipc.TemplatesImportChannel.name);
+    } else {
+      await expect(request).rejects.toThrow('Update CG Bridge to import it');
+      expect(wireOf(bridge)).not.toContain(ipc.TemplatesImportChannel.name);
+    }
+  },
+);
+
 // ── 1 + 3 — the frame, its place in the queue, and the console that has no token ─────────────
 
 describe('R-066 — the `auth` frame is the FIRST thing on a connected socket', () => {
@@ -751,6 +789,7 @@ describe('R-066 — the MODE comes from `bridge.capabilities`, and `unknown` is 
       independentPreview: true,
       layerProfiles: true,
       sharedTemplateFolder: true,
+      templateThumbnails: true,
     });
     expect(runtime.auth.state()).toEqual({ kind: 'signed-in', principal, permittedChannels: [1] });
   });
@@ -781,6 +820,7 @@ describe('R-066 — the MODE comes from `bridge.capabilities`, and `unknown` is 
       independentPreview: true,
       layerProfiles: true,
       sharedTemplateFolder: true,
+      templateThumbnails: true,
     });
     expect(runtime.auth.state()).toEqual({ kind: 'off' });
   });

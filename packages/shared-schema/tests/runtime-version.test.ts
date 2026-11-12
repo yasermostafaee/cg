@@ -184,6 +184,16 @@ describe('CG_RUNTIME_VERSION', () => {
     expect(parseSemver(CG_RUNTIME_VERSION)).not.toBeNull();
   });
 
+  it('requires runtime 1.2.3 for authored live plate overlap', () => {
+    const minVersion = requiredRuntimeVersionForScene({ layers: [], allowLivePlateOverlap: true });
+    expect(minVersion).toBe('1.2.3');
+    expect(runtimeShortfall(minVersion, '1.2.1')).toEqual({
+      required: '1.2.3',
+      available: '1.2.1',
+    });
+    expect(runtimeShortfall(minVersion)).toBeNull();
+  });
+
   it('🔴 is NOT the 0.0.0 this item exists to remove', () => {
     // A floor of zero parses, compares below everything, and could never refuse anything —
     // a gate that advertises itself and cannot fire.

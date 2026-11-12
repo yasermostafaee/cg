@@ -275,6 +275,8 @@ export const StackItemStateSchema = z.object({
   /** Operator framing staged in PVW, keyed by the Bridge's exact take geometry token. */
   previewPlateCrops: PreviewPlateCropsSchema.optional(),
   framePlacements: LiveFramePlacementsSchema.optional(),
+  /** PVW and the next Take use authored frames while the current programme keeps its geometry. */
+  framePlacementsPendingReset: z.literal(true).optional(),
   /** A confirmed resident page can accept frame geometry in place. */
   onAirFramePlacement: z.literal(true).optional(),
   /**
@@ -676,6 +678,7 @@ export const RetainedStackItemSchema = z.object({
   /** Keeps staged framing through a Bridge restart, before any seats are restored. */
   previewPlateCrops: PreviewPlateCropsSchema.optional(),
   framePlacements: LiveFramePlacementsSchema.optional(),
+  framePlacementsPendingReset: z.literal(true).optional(),
 });
 export type RetainedStackItem = z.infer<typeof RetainedStackItemSchema>;
 
@@ -730,5 +733,6 @@ export function retainedFromStackItem(item: StackItemState): RetainedStackItem {
     ...(item.soundMuted !== undefined && { soundMuted: item.soundMuted }),
     ...(item.previewPlateCrops !== undefined && { previewPlateCrops: item.previewPlateCrops }),
     ...(item.framePlacements !== undefined && { framePlacements: item.framePlacements }),
+    ...(item.framePlacementsPendingReset === true && { framePlacementsPendingReset: true }),
   };
 }

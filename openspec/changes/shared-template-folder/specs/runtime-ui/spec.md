@@ -63,3 +63,15 @@ availability SHALL be independent of import, selection, reload and load.
 - **THEN** the row keeps its icon and remains selectable
 - **WHEN** the Bridge does not support the optional route
 - **THEN** the catalogue remains usable with the existing icons and no preview request
+
+### Requirement: Template previews show transparent areas on a checkerboard
+
+CG Control SHALL display a checkerboard behind the transparent areas of template previews
+in Shared folder, catalogue rows and Details. Embedded images and scriptless authored stills
+SHALL retain their visible colors and opacity.
+
+#### Scenario: Browse artwork with transparent and white areas
+
+- **WHEN** an embedded or generated preview has transparent pixels
+- **THEN** the checkerboard is visible in those areas
+- **AND** opaque white artwork remains white

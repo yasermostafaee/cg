@@ -38,9 +38,8 @@ import { frameAabb, GEOMETRY_TRACK_KEYS, type Aabb } from './off-frame.js';
  *   element silently, taking the runtime contract with it while leaving the template
  *   that depends on it. That deletion is now exempted, so the element survives — and
  *   this error is what stops it shipping in a state the bridge cannot place.
- * - `live-source-overlap` — two holes intersect, so two live layers fight over the
- *   same pixels. Which one wins is a z-order accident, and it is not visible while
- *   authoring, because in `'author'` mode both paint bars.
+ * - `live-source-overlap` — two co-visible holes intersect without the composition's
+ *   opt-in to layer-ordered overlap or a valid Reveal relationship.
  * - `live-source-device-id` — the id names a concrete device. Caught at the schema
  *   boundary too, but a hand-edited scene never round-trips through a parse, and this
  *   is the check that can name the ELEMENT rather than a field path.
@@ -49,9 +48,9 @@ import { frameAabb, GEOMETRY_TRACK_KEYS, type Aabb } from './off-frame.js';
  *   composited box, and the guest slides out from behind their own window. v1 refuses
  *   it rather than shipping a template that looks right until it plays.
  *
- * Every check is per-DOC: the root layers against `scene.resolution`, each
- * composition against its OWN resolution — the same partition
- * `dropFullyOffFrameForExport` uses, so "off-frame" means the same thing in both.
+ * The off-frame checks use each document's own resolution, like
+ * `dropFullyOffFrameForExport`. Cross-composition overlaps use the actual
+ * rendered plate rectangles in the exported composition's coordinates.
  *
  * PURE and dependency-light on purpose, so `Exporter.preflight` (platform) can call
  * it without pulling in UI. The AABB flattening is IMPORTED from `off-frame.ts`
@@ -256,6 +255,7 @@ function plateRef(el: Element, box?: Aabb): string {
 /** The four Live Source preflight checks, over the whole project. */
 export function liveSourceIssues(scene: Scene): ExportIssue[] {
   const issues: ExportIssue[] = [];
+  const allowOverlap = scene.allowLivePlateOverlap === true;
 
   // D-202 — validate relationships independently of overlap so a dangling or cyclic mask never
   // turns into a silent no-op merely because its plates happen not to touch in the current look.
@@ -516,6 +516,7 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
         }
       }
     }
+    if (allowOverlap) continue;
     // Overlap is reported against BOTH elements (D-137: "reports it against both"),
     // so selecting either issue takes the author to a participant in the collision.
     for (let i = 0; i < flat.length; i++) {
@@ -531,10 +532,7 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
           issues.push({
             severity: 'error',
             code: 'live-source-overlap',
-            message:
-              `Plate "${label(self.element)}" overlaps "${label(other.element)}". Each is ` +
-              `composited on its own CasparCG layer, so overlapping plates put two live inputs ` +
-              `over the same pixels and which one shows is a z-order accident.`,
+            message: overlapMessage(self.element, other.element),
             elementId: self.element.id,
           });
         }
@@ -543,10 +541,6 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
   }
 
   // 🔴 `multibox-layout-switch` 5.6 — OVERLAP, APPLIED WITHIN AN ARRANGEMENT.
-  //
-  // ⚠ The RULE is unchanged and is deliberately not re-implemented: two holes that
-  // intersect put two live sources over the same pixels and which one shows is a z-order
-  // accident. What changes is the INPUT it is evaluated over.
   //
   // ── WHY THIS IS AN ADDITION AND NOT A SWAP ─────────────────────────────────
   //
@@ -561,7 +555,8 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
   // than `collectFlat`, because the hole the page punches and the hole this check measures
   // have to be one computation — a preflight that disagrees with the canvas about where a
   // hole is teaches the author to distrust the preflight.
-  for (const arrangement of scene.arrangements ?? []) {
+  const arrangements = scene.arrangements ?? [];
+  for (const arrangement of allowOverlap ? [] : arrangements) {
     const view = arrangementViewOf(arrangement, boxInstanceIds(scene));
     const plates = applyArrangementGeometry(
       flattenElements(scene, 'document'),
@@ -582,12 +577,11 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
           issues.push({
             severity: 'error',
             code: 'live-source-overlap',
-            message:
-              `Plate "${label(self.element)}" overlaps "${label(other.element)}" in ` +
-              `arrangement "${arrangement.name}". Each is composited on its own CasparCG ` +
-              `layer, so overlapping plates put two live inputs over the same pixels and ` +
-              `which one shows is a z-order accident. The same two plates in DIFFERENT ` +
-              `arrangements are fine — they are never on air together.`,
+            message: overlapMessage(
+              self.element,
+              other.element,
+              ` in arrangement "${arrangement.name}"`,
+            ),
             elementId: self.element.id,
           });
         }
@@ -613,10 +607,16 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
     });
   }
   const group = groups[0];
-  if (group !== undefined) {
-    const flatPlates = flattenElements(scene, 'document').filter(
-      (f) => f.element.type === 'video-placeholder',
+  const reportedCrossCompositionPairs = new Set<string>();
+  if (!allowOverlap && arrangements.length === 0 && (group?.looks.length ?? 0) === 0) {
+    reportCrossCompositionOverlaps(
+      projectPlates.filter((plate) => !hiddenInArrangement(plate, undefined)),
+      '',
+      issues,
+      reportedCrossCompositionPairs,
     );
+  }
+  if (group !== undefined) {
     const ancestorIds = (f: FlatElement): string[] => f.ancestry.map((a) => a.id);
 
     /*
@@ -639,7 +639,7 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
       promoted to an error, because a check that can block is a second copy of the truth again.
     */
     for (const look of group.looks) {
-      const visibleSet = flatPlates.filter((f) => {
+      const visibleSet = projectPlates.filter((f) => {
         const owner = lookContaining(group, ancestorIds(f));
         return owner === undefined || owner.id === look.id;
       });
@@ -692,44 +692,58 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
         }
       }
 
-      // B.3 — the visible-set overlap pass: ROOT-level plates vs this look's plates. The
-      // per-document loop above cannot see this pair (they live in different documents),
-      // and it already covers root-vs-root and each document's interior — so this pass
-      // checks exactly the cross-boundary pairs, and only those, to report each collision
-      // once. ⚠ Known v1 residual, recorded in `design.md` §14.3 claim 3: a plate in a
-      // composition nested INSIDE a look vs a plate directly in that look is checked only
-      // at each document's own level.
-      for (let i = 0; i < visibleSet.length; i++) {
-        for (let j = i + 1; j < visibleSet.length; j++) {
-          const a = visibleSet[i];
-          const b = visibleSet[j];
-          if (a === undefined || b === undefined) continue;
-          const ownerA = lookContaining(group, ancestorIds(a));
-          const ownerB = lookContaining(group, ancestorIds(b));
-          if ((ownerA === undefined) === (ownerB === undefined)) continue;
-          if (!rectsOverlap(a.rect, b.rect) || allowedFlatRevealOverlap(a, b)) continue;
-          for (const [self, other] of [
-            [a, b],
-            [b, a],
-          ] as const) {
-            issues.push({
-              severity: 'error',
-              code: 'live-source-overlap',
-              message:
-                `Plate "${label(self.element)}" overlaps "${label(other.element)}" ` +
-                `when Preset "${look.name}" is active. Each is composited on its own CasparCG ` +
-                `layer, so overlapping plates put two live inputs over the same pixels and ` +
-                `which one shows is a z-order accident. The same two plates in DIFFERENT ` +
-                `Presets are fine — they are never on air together.`,
-              elementId: self.element.id,
-            });
-          }
-        }
+      if (!allowOverlap) {
+        // The active Look overrides its instance's authored visibility, as it does in output.
+        const view: ArrangementView = { visibility: { [look.instanceId]: true } };
+        reportCrossCompositionOverlaps(
+          visibleSet.filter((plate) => !hiddenInArrangement(plate, view)),
+          ` when Preset "${look.name}" is active`,
+          issues,
+          reportedCrossCompositionPairs,
+        );
       }
     }
   }
   issues.push(...nearMissIssues(scene));
   return issues;
+}
+
+function overlapMessage(a: Element, b: Element, context = ''): string {
+  return (
+    `Plate "${label(a)}" overlaps "${label(b)}"${context}. ` +
+    'Enable “Allow live plate overlap” in the Composition Inspector if the overlap is intentional.'
+  );
+}
+
+/** The document-local pass cannot compare plates under different composition instances. */
+function reportCrossCompositionOverlaps(
+  plates: readonly FlatElement[],
+  context: string,
+  issues: ExportIssue[],
+  reported: Set<string>,
+): void {
+  const instanceOf = (plate: FlatElement): string =>
+    plate.key.slice(0, plate.key.length - plate.element.id.length);
+  for (const [index, a] of plates.entries()) {
+    for (const b of plates.slice(index + 1)) {
+      if (instanceOf(a) === instanceOf(b)) continue;
+      const pair = JSON.stringify([a.key, b.key]);
+      if (reported.has(pair) || !rectsOverlap(a.rect, b.rect) || allowedFlatRevealOverlap(a, b))
+        continue;
+      reported.add(pair);
+      for (const [self, other] of [
+        [a, b],
+        [b, a],
+      ] as const) {
+        issues.push({
+          severity: 'error',
+          code: 'live-source-overlap',
+          message: overlapMessage(self.element, other.element, context),
+          elementId: self.element.id,
+        });
+      }
+    }
+  }
 }
 
 /**

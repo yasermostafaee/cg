@@ -17,6 +17,7 @@ import {
   lookPlateFits,
   lookPlateFocuses,
   lookPlateMasks,
+  lookPlatePaintOrder,
   lookPlateReveals,
   resolvePlateSourcesForLook,
 } from '@cg/shared-ipc';
@@ -98,6 +99,7 @@ export interface PlatePlacement {
   frameEdit?: {
     frameKey: string;
     resize: LiveFrameTarget['resize'];
+    move?: false | undefined;
     lookId: string | undefined;
     rect: LiveFramePlacement['rect'];
     baseline: LiveFramePlacement['rect'];
@@ -286,7 +288,15 @@ export function platePlacements(
     lookBindings: sources.lookBindings,
     overrides: sources.overrides,
   });
-  return live.sources.flatMap((plate) => {
+  const order = lookPlatePaintOrder(live, activeLookId);
+  const rank = new Map(order?.map((id, index) => [id, index]));
+  const declarations =
+    order === undefined
+      ? live.sources
+      : [...live.sources].sort(
+          (a, b) => (rank.get(a.sourceId) ?? order.length) - (rank.get(b.sourceId) ?? order.length),
+        );
+  return declarations.flatMap((plate) => {
     const rect = rects[plate.sourceId];
     if (rect === undefined) return [];
     const catalogId = resolvedIds.get(plate.sourceId) ?? null;
@@ -303,6 +313,7 @@ export function platePlacements(
           frameEdit: {
             frameKey: frameTarget.frameKey,
             resize: frameTarget.resize,
+            move: frameTarget.move,
             lookId,
             rect,
             baseline: baselines[plate.sourceId] ?? rect,

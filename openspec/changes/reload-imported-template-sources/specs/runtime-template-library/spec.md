@@ -81,7 +81,10 @@ any Bridge registration. Bulk Reload SHALL report and skip such a file.
 Before reading one or all remembered sources, CG Control SHALL offer **keep current data** and **use
 file defaults**. Keeping data SHALL update packages without changing existing row field maps. Using
 file defaults SHALL replace fields on rows holding those templates on the current channel through
-the normal stack Update path.
+the normal stack Update path. Keeping data SHALL preserve saved live frame overrides. Using
+file defaults SHALL clear the affected rows' live frame overrides across presets and restore
+the new package's authored frame geometry in PVW. A currently active programme SHALL retain
+its applied frame geometry until the next permitted Take.
 
 #### Scenario: Current newsroom data is retained
 
@@ -94,6 +97,15 @@ the normal stack Update path.
 - **WHEN** the operator reloads a package and chooses **use file defaults**
 - **THEN** the package updates
 - **AND** every current-channel row holding it is replaced with the reloaded package defaults
+
+#### Scenario: Reload restores authored live frame geometry
+
+- **GIVEN** a row holding the package has saved live frame overrides
+- **WHEN** the operator reloads and chooses **use file defaults**
+- **THEN** the row's next Take and PVW use the new authored geometry
+- **AND** an active programme keeps its applied geometry until the next permitted Take
+- **WHEN** the operator instead chooses **keep current data**
+- **THEN** the existing live frame overrides remain stored
 
 ### Requirement: A reloaded page reaches an already-bound row
 

@@ -1,3 +1,4 @@
+import type { Element, VideoPlaceholderElement } from './elements.js';
 import type { LiveFrameTarget } from './live-fit.js';
 import { flattenElements } from './scene-flatten.js';
 import type { Scene } from './scene.js';
@@ -8,14 +9,10 @@ export function collectOperatorFrameTargets(
   flattened = flattenElements(scene),
 ): ReadonlyMap<string, LiveFrameTarget> {
   const targets = new Map<string, LiveFrameTarget>();
-  if (
-    !flattened.some(
-      ({ element }) =>
-        element.type === 'video-placeholder' && element.operatorPlacement !== undefined,
-    )
-  ) {
-    return targets;
-  }
+  const canAdjust = (element: Element): element is VideoPlaceholderElement =>
+    element.type === 'video-placeholder' &&
+    (element.operatorPlacement !== undefined || element.operatorMove === true);
+  if (!flattened.some(({ element }) => canAdjust(element))) return targets;
   const typeByKey = new Map(flattened.map(({ key, element }) => [key, element.type]));
   const renderedPlates = flattened.filter(
     ({ element, ancestorKeys }) =>
@@ -29,11 +26,16 @@ export function collectOperatorFrameTargets(
   }
 
   for (const { element, key, ancestorKeys } of renderedPlates) {
-    if (element.type !== 'video-placeholder' || element.operatorPlacement === undefined) continue;
+    if (!canAdjust(element)) continue;
     // All remaining ancestors are rendered composition instances.
     const artworkKey =
       [...ancestorKeys].reverse().find((ancestor) => countByAncestor.get(ancestor) === 1) ?? key;
-    targets.set(key, { frameKey: key, artworkKey, resize: element.operatorPlacement });
+    targets.set(key, {
+      frameKey: key,
+      artworkKey,
+      resize: element.operatorPlacement ?? 'move-only',
+      ...(element.operatorMove === false && { move: false }),
+    });
   }
   return targets;
 }

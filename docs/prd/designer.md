@@ -3849,7 +3849,7 @@ the runtime track: "live plate source routing").
   Source's geometry + source id (+ key id) + expectedAspect + whether the id is dynamic are carried
   in export METADATA the runtime reads WITHOUT parsing the whole scene (the metadata surface — the
   manifest section name — is a design.md decision)
-- WHEN Live Sources overlap each other or exceed the frame THEN the existing issues/preflight path
+- WHEN Live Sources overlap without an authored exception or exceed the frame THEN the existing issues/preflight path
   reports it as an ERROR. **CORRECTED 2026-08-03 (`live-source-multibox` design.md §9, C8):** this
   said "warns", and a warning would not do the job for two measured reasons. (a) Only
   `severity: 'error'` blocks an export
@@ -4678,8 +4678,9 @@ home.
   the source and the declared list
 - WHEN the same source is referenced twice within ONE look THEN export is refused — and the refusal
   says that across looks it would be the identity mechanism
-- WHEN two plates' holes overlap WITHIN one look THEN the export-blocking overlap error fires; WHEN
-  they overlap only ACROSS looks THEN it does not
+- WHEN two plates' holes overlap within one look and the composition has no authored exception
+  THEN the export-blocking overlap error fires. Plates visible only in separate looks are not
+  compared for overlap.
 - WHEN a template is exported THEN the declaration carries deduped sources and one `{routeKey →
 rect}` map per look, a source absent from a look has no entry, and the `.vcg` format is unchanged
 - WHEN a look authors no plates THEN it is valid and exports an empty map — background alone
@@ -6085,12 +6086,21 @@ target station. The legacy C-023 MJPEG does not have this mapping.
 If PGM Pan is revisited, an equivalent in-place editor needs a read of the already-running source
 before the programme mix and crop, without opening a second receiver.
 
-**Operator frame placement:** The author can allow moving and proportional resizing for each
-frame, and can enable free resize. **Edit frames** in PVW drafts changes in composition pixels for the
-active Look and frame instance. Discard restores the applied frame. Off-air Update saves it for
+**Operator frame placement:** Designer gives each frame an **Allow move** checkbox and an
+independent **Resize** choice of **Locked**, **Preserve aspect ratio** or **Operator chooses
+aspect ratio**. **Edit frames** in PVW drafts changes in composition pixels for the active
+Look and frame instance. The Inspector's operator ratio option starts on and is available
+for frames whose author allows that choice. Older placement opt-ins keep movement and their
+saved resize choice.
+Discard restores the applied frame. Off-air Update saves it for
 Take, and Update on air moves the resident page and its existing picture together on a verified
 primary. **Crop input** keeps the source selection inside the frame. Target-engine verification is tracked in
 `openspec/changes/operator-live-frame-placement/`.
+In Inspector → Position, **Reset frames** stages the authored frame positions and sizes across
+the eligible row's presets. PVW shows the reset immediately. Update applies it and Discard
+restores the prior placements. Whole-template Position and input crop are preserved.
+**Reset crop** in the same section stages the selected preset's authored input framing.
+Update applies it, and Discard restores the prior crop.
 
 ## [~] D-179 — Rebuild and re-audit the Persian production starter gallery ⟨priority: high — owner re-review reopened 2026-11-04⟩ — `openspec/changes/rebuild-production-starter-gallery/`
 
@@ -6768,7 +6778,8 @@ part of an input, or leave a transparent opening in the picture for another grap
 - WHEN the author selects an existing mask or finishes drawing one THEN direct editing is active by default and its Inspector icon shows the active state
 - WHEN the author cancels an in-progress mask drag THEN the saved window keeps its geometry
 - WHEN the last linked reveal is removed THEN the plate returns to ordinary overlap validation
-- WHEN plates merely overlap without that explicit relation THEN both remain red/export-blocking
+- WHEN plates overlap without that explicit relation and **Allow live plate overlap** is off
+  THEN both remain red and export is blocked
 - WHEN the relation is missing, self-referential, cyclic or a window does not reach the lower plate
   THEN export is refused with a targeted error
 - WHEN the live-source band lacks the extra layers required by the masks THEN take is refused before
@@ -6871,3 +6882,20 @@ affected element when available and can be activated with the keyboard.
 
 - WHEN a composition has an authored Hold start THEN the thumbnail uses that timeline frame. Otherwise it uses the midpoint of the active range before Outro start, or the active range midpoint when there is no Outro start.
 - WHEN a VCG is exported THEN the preview travels as `thumbnails/320.png` and CG Control displays it in Shared folder. If capture is unavailable the package still exports with a fallback preview.
+
+## [~] D-213 — Allow live plates to overlap in authored order ⟨priority: high — owner, 2026-11-12⟩ — `openspec/changes/allow-live-plate-overlap/`
+
+**What:** **Allow live plate overlap** is an opt-in setting on a Designer composition. When it is
+enabled, co-visible live plates can overlap and their authored back-to-front order governs the
+overlap in Designer and in output, including nested frames and each preset.
+
+**Acceptance**
+
+- WHEN the option is off or absent THEN ordinary overlap stays export-blocking and valid linked
+  reveals keep their existing behavior.
+- WHEN the option is enabled THEN Preview and export carry the authored paint order of co-visible
+  plates, including instances nested in the composition.
+- WHEN different presets require different layering THEN each preset uses its own authored order.
+  If the order cannot be represented or safely changed with the available producer layers,
+  preflight or Bridge refuses with the affected preset and a precise reason.
+- WHEN output is refused THEN the current programme remains in force.

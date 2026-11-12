@@ -11,7 +11,7 @@ removed. Existing projects can also reveal part of a second, explicitly linked i
 - Add an explicit upper-source → lower-source relation and up to eight normalized reveal windows.
 - Let the author add, edit and remove each window independently in the Inspector and Canvas.
 - Default to direct editing for a selected mask. Drag its body to move it or a corner to resize it.
-- Keep every unrelated live-plate overlap blocking.
+- Keep unrelated live-plate overlap blocking when **Allow live plate overlap** is off.
 - Render each window as a muted clipped copy of the lower producer above the upper producer.
 - Count each copy as an additional seat and refuse atomically when the live-source band lacks room.
 - Add an own-plate mask with independently editable windows and a Revert option.

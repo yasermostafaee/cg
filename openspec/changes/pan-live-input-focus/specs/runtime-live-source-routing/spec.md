@@ -64,6 +64,16 @@ return without Pan controls or crop guides.
 - **AND** a smaller crop can move on both axes while the plate and the source assignment stay fixed
 - **AND** the resized crop becomes an Inspector draft with its position and size
 
+#### Scenario: Reset a crop to authored framing
+
+- **GIVEN** the current preset has eligible cropped plates and a compatible Bridge
+- **WHEN** the operator presses **Reset crop** in Inspector → Position
+- **THEN** PVW shows the authored crop or the centered, unzoomed default
+- **AND** Discard restores the previously applied crop
+- **WHEN** the operator applies the reset
+- **THEN** Bridge clears the current preset's matching crop overrides after acceptance
+- **AND** a verified on-air seat applies the restored framing without restarting its input
+
 ### Requirement: Pan displays available pictures from the assigned source
 
 Bridge SHALL pair each measured source JPEG with normalized active bounds, display aspect and a

@@ -81,6 +81,7 @@ import { appliedPlateSources } from './livePlates.js';
 import { boundChannelOf, itemChannelOf } from '../channels/itemChannel.js';
 import { useSelectedChannel } from '../channels/useSelectedChannel.js';
 import { PositionPicker } from './PositionPicker.js';
+import { LiveFrameAdjustments } from './LiveFrameAdjustments.js';
 import { Tag } from '../../ui/Tag.js';
 import {
   draftsVersion,
@@ -822,6 +823,12 @@ export function Inspector({
           templatePosition={templatePosition}
           canReset={resolvedInfo !== null}
           disclosure={disclosures?.position}
+          adjustments={
+            lookCarrier !== undefined &&
+            lookCarrier.sources.length > 0 && (
+              <LiveFrameAdjustments item={item} live={lookCarrier} channel={itemChannel} />
+            )
+          }
         />
         {/* D-137 / C-015 — bind this template's live plates. Renders nothing at
             all for a template that declares none, which is most of them. */}

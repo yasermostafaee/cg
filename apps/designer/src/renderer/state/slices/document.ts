@@ -240,6 +240,7 @@ export const documentSlice = {
       'activeRange',
       'lifecycle',
       'playout',
+      'allowLivePlateOverlap',
       'editorBackdrop',
       'name',
       'layers',

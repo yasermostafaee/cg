@@ -1,5 +1,6 @@
 # Place an authored live frame from Preview
 
-Allow an author to opt a frame in to operator placement. In CG Control the operator can
-draft a move or resize in PVW. Proportional resize is the default; authors can allow free resize.
-Pan remains the source selection inside the frame.
+Allow an author to grant frame movement and resizing independently. In CG Control the operator
+can draft the permitted moves and resizes in PVW. For a frame whose author allows the operator
+to choose its ratio, **Preserve aspect ratio** in Inspector starts on. **Crop input** remains the
+source selection inside the frame.

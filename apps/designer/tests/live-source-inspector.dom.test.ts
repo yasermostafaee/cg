@@ -139,12 +139,12 @@ const live = (stroke?: { width: number; color: string }): Element =>
 const shape = (): Element => defaultShape('sh-1', 100, 100);
 
 describe('D-137 — the Live Source Inspector offers no affordance it cannot honour', () => {
-  it('opts an authored frame into proportional or free placement in CG Control', () => {
+  it('authors movement and resize independently for the live frame', () => {
     const c = render(live());
     const check = (label: string) =>
       c.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`);
-    const placement = 'Allow placement in CG Control';
-    const freeResize = 'Allow free resize';
+    const select = (label: string) =>
+      c.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`);
 
     const read = () => {
       const scene = designerStore.get().scene;
@@ -158,18 +158,45 @@ describe('D-137 — the Live Source Inspector offers no affordance it cannot hon
         root?.render(createElement(StyleSection, { element: read(), selectedKeyframe: null })),
       );
 
-    expect(check(placement)?.checked).toBe(false);
-    expect(check(freeResize)).toBeNull();
-    act(() => check(placement)?.click());
-    expect(read().operatorPlacement).toBe('proportional');
+    const commit = (label: string, value: string) => {
+      const field = select(label);
+      if (field === null) throw new Error(`Missing ${label}`);
+      act(() => {
+        field.value = value;
+        field.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      refresh();
+    };
+
+    expect(check('Allow move')?.checked).toBe(false);
+    expect(select('Resize')?.value).toBe('locked');
+    expect(Array.from(select('Resize')?.options ?? [], (option) => option.text)).toEqual([
+      'Locked',
+      'Preserve aspect ratio',
+      'Operator chooses aspect ratio',
+    ]);
+
+    commit('Resize', 'free');
+    expect(read()).toMatchObject({ operatorMove: false, operatorPlacement: 'free' });
+    act(() => check('Allow move')?.click());
     refresh();
-    expect(check(freeResize)?.checked).toBe(false);
-    act(() => check(freeResize)?.click());
-    expect(read().operatorPlacement).toBe('free');
-    refresh();
-    expect(check(freeResize)?.checked).toBe(true);
-    act(() => check(placement)?.click());
+    commit('Resize', 'locked');
+    expect(read().operatorMove).toBe(true);
     expect(read().operatorPlacement).toBeUndefined();
+
+    act(() => check('Allow move')?.click());
+    expect(read().operatorMove).toBe(false);
+    expect(read().operatorPlacement).toBeUndefined();
+  });
+
+  it('retains move and proportional resize for an older placement opt-in', () => {
+    const element = live();
+    if (element.type !== 'video-placeholder') throw new Error('Expected a Live Source');
+    const c = render({ ...element, operatorPlacement: 'proportional' });
+    expect(c.querySelector<HTMLInputElement>('input[aria-label="Allow move"]')?.checked).toBe(true);
+    expect(c.querySelector<HTMLSelectElement>('select[aria-label="Resize"]')?.value).toBe(
+      'proportional',
+    );
   });
 
   it('D-169 — fits one Live Source to the active canvas from Quick layout', () => {

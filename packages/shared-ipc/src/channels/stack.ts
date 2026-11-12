@@ -575,7 +575,10 @@ export type PreviewPlateCropTarget = z.infer<typeof PreviewPlateCropTargetSchema
 const PreviewPlateCropEditSchema = PreviewPlateCropTargetSchema.pick({
   token: true,
   focus: true,
-}).extend({ lookId: z.string().min(1).optional() });
+}).extend({
+  lookId: z.string().min(1).optional(),
+  reset: z.literal(true).optional(),
+});
 export type PreviewPlateCropEdit = z.infer<typeof PreviewPlateCropEditSchema>;
 
 /** Inspect and save an Inspector crop batch. The on-air action is opt-in. */
@@ -598,10 +601,24 @@ export const StackPreviewPlateCropChannel = defineChannel(
   }),
 );
 
-/** Replace the saved placements for an opted-in row. An empty array restores authored geometry. */
+export type FramePlacementReset = 'all' | 'reload-defaults';
+
+/** Upsert placements or explicitly restore authored geometry. */
 export const StackSetFramePlacementsChannel = defineChannel(
   'stack.set-frame-placements',
-  z.object({ itemId: IdSchema, placements: LiveFramePlacementsSchema.min(1) }),
+  z
+    .object({
+      itemId: IdSchema,
+      placements: LiveFramePlacementsSchema,
+      reset: z.enum(['all', 'reload-defaults']).optional(),
+    })
+    .refine(
+      ({ placements, reset }) =>
+        reset === 'reload-defaults'
+          ? placements.length === 0
+          : reset === 'all' || placements.length > 0,
+      'Supply frame placements or request an explicit reset.',
+    ),
   z.object({
     accepted: z.boolean(),
     errorCode: z.string().optional(),

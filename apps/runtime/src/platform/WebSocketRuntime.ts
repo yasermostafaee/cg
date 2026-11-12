@@ -1126,6 +1126,10 @@ export class WebSocketRuntime implements RuntimeBridge {
         bridgeClock: caps.clock ?? null,
         ...(routed.has(ipcChannels.StackLoadProfileChannel.name) ? { layerProfiles: true } : {}),
         ...(caps.liveFramePlacement === true && { liveFramePlacement: true }),
+        ...(caps.liveFramePlacementReset === true && { liveFramePlacementReset: true }),
+        ...(caps.liveCropReset === true && { liveCropReset: true }),
+        ...(caps.previewResizeMode === true && { previewResizeMode: true }),
+        ...(caps.livePlatePaintOrder === true && { livePlatePaintOrder: true }),
         ...(routed.has(ipcChannels.SharedTemplateFolderChannel.name) &&
         routed.has(ipcChannels.SharedTemplateReadChannel.name)
           ? { sharedTemplateFolder: true }
@@ -2102,6 +2106,7 @@ export class WebSocketRuntime implements RuntimeBridge {
         ...(i.position !== undefined && { position: i.position }),
         ...(i.previewPlateCrops !== undefined && { previewPlateCrops: i.previewPlateCrops }),
         ...(i.framePlacements !== undefined && { framePlacements: i.framePlacements }),
+        ...(i.framePlacementsPendingReset === true && { framePlacementsPendingReset: true }),
       }),
     );
   }
@@ -2512,6 +2517,25 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#invoke(ipcChannels.TextSourcesReadChannel, req),
   };
 
+  #requireTemplateFeatures(template: TemplateInfo): void {
+    const live = template.liveSources;
+    if (ipcChannels.usesLivePlatePaintOrder(live) && this.#authCaps?.livePlatePaintOrder !== true) {
+      throw new Error('This template uses overlapping Live plates. Update CG Bridge to import it.');
+    }
+    const targets = [
+      ...(live?.sources.map((source) => source.operatorFrame) ?? []),
+      ...(live?.looks?.flatMap((look) => Object.values(look.operatorFrames ?? {})) ?? []),
+    ];
+    if (
+      this.#authCaps?.previewResizeMode !== true &&
+      targets.some((target) => target?.resize === 'move-only' || target?.move === false)
+    ) {
+      throw new Error(
+        'This template sets separate frame move and resize permissions. Update CG Bridge to import it.',
+      );
+    }
+  }
+
   readonly templates = {
     get: async (req: ChannelRequest<typeof TemplatesGetChannel>) => {
       if (this.#status === 'live') {
@@ -2575,6 +2599,7 @@ export class WebSocketRuntime implements RuntimeBridge {
     */
     import: async (req: ChannelRequest<typeof TemplatesImportChannel>) => {
       if (this.#status !== 'live') throw new Error(TEMPLATE_IMPORT_NEEDS_BRIDGE);
+      this.#requireTemplateFeatures(req.template);
       const res = await this.#invoke(TemplatesImportChannel, req);
       await this.#library.import(req.template, req.html, req.channel).catch(() => {
         /* the display copy is best-effort; the bridge holds the template */
@@ -2611,8 +2636,10 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#invoke(ipcChannels.TemplatesSourceGetChannel, req),
     rebuildPlan: (req: ChannelRequest<typeof ipcChannels.TemplatesRebuildPlanChannel>) =>
       this.#invoke(ipcChannels.TemplatesRebuildPlanChannel, req),
-    rebuild: (req: ChannelRequest<typeof ipcChannels.TemplatesRebuildChannel>) =>
-      this.#invoke(ipcChannels.TemplatesRebuildChannel, req),
+    rebuild: async (req: ChannelRequest<typeof ipcChannels.TemplatesRebuildChannel>) => {
+      if (req.result.ok) this.#requireTemplateFeatures(req.result.template);
+      return this.#invoke(ipcChannels.TemplatesRebuildChannel, req);
+    },
   };
 
   readonly audit = {

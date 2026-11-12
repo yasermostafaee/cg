@@ -43,6 +43,12 @@ the question does not register any bytes. Bulk Reload reports the changed source
 replace-mode `stack.update` for every current-channel row holding that template. This keeps the same
 validation and resident/on-air update path as an ordinary operator Update.
 
+**Keep current data** also retains saved live frame overrides. **Use file defaults** clears the
+row's live frame overrides for the newly listed package across all presets. PVW uses the
+new authored geometry after acceptance. A currently resident programme retains its previous
+frame geometry until the next permitted Take. A local frame draft is cleared when its reset is
+accepted.
+
 ### 5. Reload all is a sequence of honest single reloads
 
 Reload all includes only templates in the current channel list with remembered handles. Each source

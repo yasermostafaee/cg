@@ -24,6 +24,8 @@ import type { LiveSourceLayerRange } from '@cg/shared-ipc';
 export const LIVE_PLATE_NO_RANGE = 'live-source-no-layer-range';
 /** A band is declared, and it cannot hold this template's plates. */
 export const LIVE_PLATE_NO_LAYER = 'live-source-no-layer';
+/** Enough layers exist, but they cannot preserve the authored order and existing seats. */
+export const LIVE_PLATE_LAYER_ORDER = 'live-source-layer-order';
 
 /**
  * 🔴 **THE ONE SENTENCE FOR AN EXHAUSTED BAND, spoken at BOTH doors (§2.7).**
@@ -125,4 +127,88 @@ export function allocateLiveLayers(input: LiveLayerAllocationInput): number[] | 
     chosen[i] = found;
   }
   return chosen as number[];
+}
+
+/** Seat indices in the caller's allocation request, from lower to upper. */
+export type LiveLayerOrder = readonly [lower: number, upper: number];
+
+interface OrderedSeat {
+  readonly index: number;
+  readonly successors: Set<OrderedSeat>;
+  pinnedLayer?: number;
+  deadline: number;
+  predecessors: number;
+  remaining: number;
+}
+
+/**
+ * Place a partial order in the free slots while keeping every existing producer on its layer.
+ * A pinned seat gives each predecessor a deadline. Propagate those deadlines backwards, then
+ * take the earliest-deadline ready seat at each free layer. An unrelated seat can wait when the
+ * next pinned seat still needs one of its predecessors.
+ */
+export function allocateOrderedLiveLayers(
+  input: LiveLayerAllocationInput,
+  order: readonly LiveLayerOrder[],
+): number[] | null {
+  const { range, preferred, isAvailable } = input;
+  const seats: OrderedSeat[] = preferred.map((_, index) => ({
+    index,
+    successors: new Set(),
+    deadline: range.end,
+    predecessors: 0,
+    remaining: 0,
+  }));
+  for (const [lower, upper] of order) {
+    const before = seats[lower];
+    const after = seats[upper];
+    if (before === undefined || after === undefined) return null;
+    if (before.successors.has(after)) continue;
+    before.successors.add(after);
+    after.predecessors += 1;
+    after.remaining += 1;
+  }
+
+  const pinned = new Map<number, OrderedSeat>();
+  for (const seat of seats) {
+    const layer = preferred[seat.index];
+    // Several replacements can request one departing seat. Only the first inherits it.
+    if (layer === undefined || pinned.has(layer)) continue;
+    if (layer < range.start || layer > range.end || !isAvailable(layer)) return null;
+    pinned.set(layer, seat);
+    seat.pinnedLayer = layer;
+    seat.deadline = layer;
+  }
+
+  const sorted = seats.filter((seat) => seat.remaining === 0);
+  for (const seat of sorted) {
+    for (const upper of seat.successors) {
+      upper.remaining -= 1;
+      if (upper.remaining === 0) sorted.push(upper);
+    }
+  }
+  if (sorted.length !== seats.length) return null;
+
+  for (const seat of sorted.reverse()) {
+    for (const upper of seat.successors) {
+      seat.deadline = Math.min(seat.deadline, upper.deadline - 1);
+    }
+  }
+
+  const flexible = seats
+    .filter((seat) => seat.pinnedLayer === undefined)
+    .sort((a, b) => a.deadline - b.deadline);
+  const chosen: number[] = [];
+  let placed = 0;
+  for (let layer = range.start; layer <= range.end && placed < seats.length; layer += 1) {
+    if (!isAvailable(layer)) continue;
+    const seat = pinned.get(layer) ?? flexible.find((candidate) => candidate.predecessors === 0);
+    if (seat === undefined) continue;
+    if (seat.predecessors !== 0 || layer > seat.deadline) return null;
+    chosen[seat.index] = layer;
+    seat.predecessors = -1;
+    placed += 1;
+    for (const upper of seat.successors) upper.predecessors -= 1;
+  }
+  return placed === seats.length ? chosen : null;
 }

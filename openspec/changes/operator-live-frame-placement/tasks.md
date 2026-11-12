@@ -12,3 +12,12 @@
 - [x] Verify the separate **Edit frames** icon and label, mutual exclusion with Move template, and the monitor header at a narrow width.
 - [ ] Verify title, fallback, mask and picture alignment on the target engine.
 - [ ] Record the carrying Linux Playwright result.
+- [x] Stage **Reset frames** from Inspector → Position and apply it through Update or Update on air.
+- [x] Windows Chromium verified immediate PVW reset, Discard, Update on air and unchanged
+      whole-template Position. The served frame returned to its authored width.
+- [x] Carry independent frame movement and resize policies through Designer and the export.
+      The focused 18 Inspector DOM and 35 carrier tests passed. Windows Chromium verified
+      authoring and export for move-only and resize-only frames.
+- [x] Windows Chromium verified move-only and resize-only affordances, the default-on frame
+      ratio option, and an unlocked resize changing width independently of height.
+- [ ] Record the carrying Linux Playwright result for independent permissions and Reset frames.

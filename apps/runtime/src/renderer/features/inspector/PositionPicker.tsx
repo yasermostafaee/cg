@@ -1,4 +1,4 @@
-import { useId, useState, useSyncExternalStore } from 'react';
+import { useId, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { isOnAirStatus } from '@cg/shared-schema';
 import type { Position, PositionAnchor, StackItemState } from '@cg/shared-schema';
@@ -143,7 +143,6 @@ const styles = {
     justifyItems: 'start',
     minWidth: 0,
   },
-  resetRow: { gridColumn: '1 / -1' },
   /**
    * One nudge input with its own label ABOVE it, so the two never compete for a row.
    *
@@ -208,11 +207,13 @@ export function PositionPicker({
   templatePosition = defaultPositionOf(item.templateId),
   canReset = true,
   disclosure,
+  adjustments,
 }: {
   item: StackItemState;
   templatePosition?: Position | undefined;
   canReset?: boolean;
   disclosure?: { open: boolean; toggle: () => void } | undefined;
+  adjustments?: ReactNode;
 }): JSX.Element {
   const [localOpen, setLocalOpen] = useState(true);
   const open = disclosure?.open ?? localOpen;
@@ -383,15 +384,6 @@ export function PositionPicker({
               />
               <span style={styles.offsetLabel}>dy</span>
             </div>
-            <div style={styles.resetRow}>
-              <Button
-                variant="neutral"
-                disabled={resetDisabled}
-                onClick={() => stagePosition(item.itemId, resetDraft)}
-              >
-                Reset to default
-              </Button>
-            </div>
             {/*
             🔴 `Apply position` IS GONE — the owner, 2026-09-14: «دکمه apply position فقط یه
             مرحله اضافیه و همون دکمه update باید پوزیشن رو هم اعمال کنه و همچنین discard هم
@@ -408,6 +400,16 @@ export function PositionPicker({
             second question is the one the operator is actually asking.
           */}
           </div>
+        </div>
+        <div className="cg-position-adjustments">
+          <Button
+            variant="neutral"
+            disabled={resetDisabled}
+            onClick={() => stagePosition(item.itemId, resetDraft)}
+          >
+            Reset to default
+          </Button>
+          {adjustments}
         </div>
         {/* BELOW the row, not inside it: it is a note about why the controls above are
           inert, and a note that sits in the control row changes the row's height as
