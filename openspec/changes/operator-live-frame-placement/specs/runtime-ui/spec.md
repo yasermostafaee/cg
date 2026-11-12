@@ -75,13 +75,28 @@ An opted-in frame in a one-plate composition SHALL travel with the artwork in th
 
 ### Requirement: Designers can authorize operator Auto layout
 
-Designer SHALL offer **Allow Auto layout in CG Control** for the open composition, off by
-default. Designer SHALL use the standard Inspector checkbox for this option and
-**Allow live plate overlap**. In Position, CG Control SHALL offer **Auto layout** only for an
-authorized template with at least two plates in its active preset, all with move and resize permission.
+Designer SHALL offer one **Allow Auto layout in CG Control** checkbox in the composition
+Inspector of the top-level live layout, off by default. Designer SHALL use the standard
+Inspector checkbox for this option and **Allow live plate overlap**. In Position, CG Control
+SHALL offer **Auto layout** only for an authorized template with at least two plates in its active
+preset, all with move and resize permission. It SHALL show the missing-permission reason when
+an authorized multi-frame preset contains a frame that cannot move or resize.
 The layout SHALL share Designer's aspect-aware geometry, horizontal and vertical gaps,
 two-plate arrangements, fuller row choices and spatial Swap. It SHALL preserve the template's
 layer order and the authored ratio of proportional frames.
+
+#### Scenario: Author the template permission once
+
+- **GIVEN** a top-level composition contains live presets and their frame compositions
+- **WHEN** the author opens the top-level composition, the presets, and their frame compositions
+- **THEN** the Auto layout checkbox appears in the top-level composition Inspector only
+- **AND** the exported live layout uses the top-level composition's permission
+
+#### Scenario: A frame lacks permission to be arranged
+
+- **GIVEN** the template author enabled Auto layout
+- **WHEN** the operator selects a preset with at least two frames and one lacks movement or resize permission
+- **THEN** Position shows the missing authoring permission and keeps Arrange unavailable
 
 #### Scenario: Preview an authorized arrangement
 

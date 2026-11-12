@@ -1,7 +1,7 @@
 import { TemplateLiveSourcesSchema } from '@cg/shared-ipc';
 import type { LiveFramePlacement, LiveFrameTarget } from '@cg/shared-schema';
 import { afterEach, describe, expect, it } from 'vitest';
-import { autoLayoutFrames } from '../src/renderer/features/inspector/FrameAutoLayout.js';
+import { frameAutoLayoutAvailability } from '../src/renderer/features/inspector/FrameAutoLayout.js';
 import {
   __resetDraftsForTest,
   snapshotFramePlacementDraft,
@@ -63,16 +63,19 @@ afterEach(__resetDraftsForTest);
 
 describe('Auto layout frame eligibility', () => {
   it('requires the authored permission, even with two individually editable frames', () => {
-    expect(autoLayoutFrames(carrier(false), 'pair')).toEqual([]);
+    expect(frameAutoLayoutAvailability(carrier(false), 'pair')).toEqual({ kind: 'hidden' });
   });
 
   it('uses only the active preset and returns its frames in declaration order', () => {
     const live = carrier();
-    expect(autoLayoutFrames(live, undefined)).toEqual([]);
-    expect(autoLayoutFrames(live, 'pair')).toEqual([
-      { id: 'left', target: leftFrame, authored: left },
-      { id: 'right', target: rightFrame, authored: right },
-    ]);
+    expect(frameAutoLayoutAvailability(live, undefined)).toEqual({ kind: 'hidden' });
+    expect(frameAutoLayoutAvailability(live, 'pair')).toEqual({
+      kind: 'eligible',
+      frames: [
+        { id: 'left', target: leftFrame, authored: left },
+        { id: 'right', target: rightFrame, authored: right },
+      ],
+    });
   });
 
   const incompatible = [
@@ -80,9 +83,11 @@ describe('Auto layout frame eligibility', () => {
     { name: 'move-only', target: { ...rightFrame, resize: 'move-only' } },
     { name: 'resize-only', target: { ...rightFrame, move: false } },
   ] as const;
-  it.each(incompatible)('leaves the whole preset alone if a frame is $name', ({ target }) => {
+  it.each(incompatible)('reports missing permissions if a frame is $name', ({ target }) => {
     const frames = { left: leftFrame, ...(target !== undefined && { right: target }) };
-    expect(autoLayoutFrames(carrier(true, frames), 'pair')).toEqual([]);
+    expect(frameAutoLayoutAvailability(carrier(true, frames), 'pair')).toEqual({
+      kind: 'permissions',
+    });
   });
 });
 
@@ -90,7 +95,9 @@ it('publishes all arranged frame drafts together and keeps a draft from another 
   const itemId = 'live-row';
   const previous = { frameKey: soloFrame.frameKey, lookId: 'solo', rect: { ...left, y: 35 } };
   stageFramePlacement(itemId, previous, left);
-  const updates = autoLayoutFrames(carrier(), 'pair').map(({ target, authored }) => ({
+  const layout = frameAutoLayoutAvailability(carrier(), 'pair');
+  if (layout.kind !== 'eligible') throw new Error('The test needs an eligible pair');
+  const updates = layout.frames.map(({ target, authored }) => ({
     placement: { frameKey: target.frameKey, lookId: 'pair', rect: { ...authored, y: 80 } },
     baseline: authored,
   }));

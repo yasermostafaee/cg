@@ -1,8 +1,8 @@
-import { flattenElements } from '@cg/shared-schema';
+import { directCompositionRefs, flattenElements } from '@cg/shared-schema';
 import type { AnimatableProperty, Element, FieldBinding, Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { Control } from '../../ui/Control.js';
-import { designerStore } from '../../state/store.js';
+import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { BackgroundControl } from '../canvas/BackgroundControl.js';
 import { describeBinding, elementNameResolver } from '../fields/bind-resolver.js';
 import { isFixedFileFieldId } from '../fields/fixedFileField.js';
@@ -74,10 +74,14 @@ export function InspectorPanel({
 }
 
 function SceneInspector({ scene }: { scene: Scene }): JSX.Element {
-  const showPlateSettings =
-    scene.allowLivePlateOverlap === true ||
-    scene.allowOperatorAutoLayout === true ||
-    flattenElements(scene).some(({ element }) => element.type === 'video-placeholder');
+  const compositionId = useDesignerSelector((state) => state.activeCompositionId);
+  const hasLivePlates = flattenElements(scene).some(
+    ({ element }) => element.type === 'video-placeholder',
+  );
+  const showAutoLayout =
+    hasLivePlates &&
+    compositionId !== null &&
+    scene.compositions?.some((doc) => directCompositionRefs(doc).has(compositionId)) !== true;
   return (
     <aside className={s.panel} aria-label="Inspector">
       <h2 className={s.headingFirst}>COMPOSITION</h2>
@@ -87,7 +91,9 @@ function SceneInspector({ scene }: { scene: Scene }): JSX.Element {
       <FrameRateRow scene={scene} />
       <Row label="elements" value={String(countElements(scene))} />
       <BackgroundControl editorBackdrop={scene.editorBackdrop} variant="full" />
-      {showPlateSettings && <LivePlateCompositionSettings composition={scene} />}
+      {(hasLivePlates || scene.allowLivePlateOverlap === true) && (
+        <LivePlateCompositionSettings composition={scene} showAutoLayout={showAutoLayout} />
+      )}
       <PlayoutSection scene={scene} />
       {/* `multibox-layout-switch` C2 — beside Playout, because an arrangement is a property
           of the COMPOSITION: the thing that becomes the `.vcg` on one layer. */}

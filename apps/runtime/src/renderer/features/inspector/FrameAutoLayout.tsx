@@ -31,6 +31,11 @@ interface Frame {
   authored: LiveSourceRect;
 }
 
+type AutoLayoutAvailability =
+  | { kind: 'eligible'; frames: Frame[] }
+  | { kind: 'permissions' }
+  | { kind: 'hidden' };
+
 interface GapControl {
   text: string;
   amount: number;
@@ -51,27 +56,31 @@ function readGap(text: string): number | null {
   return text.trimEnd().endsWith('.') ? null : parseLocalizedNumber(text);
 }
 
-/** Reflow the whole preset, or leave it alone if an authored frame has to stay fixed. */
-export function autoLayoutFrames(live: TemplateLiveSources, lookId: string | undefined): Frame[] {
-  if (live.allowOperatorAutoLayout !== true) return [];
+/** A preset is arranged as a unit. Every visible frame must be allowed to move and resize. */
+export function frameAutoLayoutAvailability(
+  live: TemplateLiveSources,
+  lookId: string | undefined,
+): AutoLayoutAvailability {
+  if (live.allowOperatorAutoLayout !== true) return { kind: 'hidden' };
   const rects = lookPlateRects(live, lookId);
+  const rectCount = Object.keys(rects).length;
+  if (rectCount < 2) return { kind: 'hidden' };
   const targets = lookOperatorFrames(live, lookId);
   const frames: Frame[] = [];
+  let missingPermission = false;
   for (const { sourceId } of live.sources) {
     const authored = rects[sourceId];
     if (authored === undefined) continue;
+    if (authored.width <= 0 || authored.height <= 0) return { kind: 'hidden' };
     const target = targets[sourceId];
-    if (
-      target === undefined ||
-      target.move === false ||
-      target.resize === 'move-only' ||
-      authored.width <= 0 ||
-      authored.height <= 0
-    )
-      return [];
-    frames.push({ id: sourceId, target, authored });
+    if (target === undefined || target.move === false || target.resize === 'move-only') {
+      missingPermission = true;
+    } else {
+      frames.push({ id: sourceId, target, authored });
+    }
   }
-  return frames.length >= 2 && frames.length === Object.keys(rects).length ? frames : [];
+  if (missingPermission) return { kind: 'permissions' };
+  return frames.length === rectCount ? { kind: 'eligible', frames } : { kind: 'hidden' };
 }
 
 export function FrameAutoLayout({

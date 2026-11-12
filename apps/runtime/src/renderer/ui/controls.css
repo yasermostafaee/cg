@@ -3652,6 +3652,11 @@ input.cg-field.cg-book-page {
   font-size: var(--r-text-sm);
   font-weight: var(--r-weight-semibold);
 }
+.cg-frame-auto-layout__notice {
+  margin: 0;
+  font-size: var(--r-text-sm);
+  color: var(--r-text-secondary);
+}
 .cg-frame-auto-layout__fields {
   display: grid;
   justify-items: start;

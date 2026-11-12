@@ -61,3 +61,9 @@ inputs are kept by preset while inspecting the row, and the existing placement d
 the preset ID. The Inspector derives each preset's available layouts from its own frame count.
 Gap controls use the shared numeric scrub input. A valid edit stages a full layout immediately.
 An incomplete value or a gap that cannot fit the frames preserves the last valid draft.
+
+Designer shows the export permission on the top-level live composition. The nested presets and
+frame compositions retain their own geometry and existing saved settings. Their individual
+**Allow move** and **Resize** settings control what the operator can change. For an opted-in
+multi-frame preset where some frames cannot move or resize, Position explains the missing
+permission. A preset with one frame needs no arrangement controls.

@@ -155,37 +155,41 @@ export function LivePlateControlSection({
   );
 }
 
-const compositionSettings = [
-  { field: 'allowLivePlateOverlap', label: 'Allow live plate overlap' },
-  { field: 'allowOperatorAutoLayout', label: 'Allow Auto layout in CG Control' },
-] as const;
-
 export function LivePlateCompositionSettings({
   composition,
+  showAutoLayout = false,
 }: {
-  composition: Pick<Scene, (typeof compositionSettings)[number]['field']>;
+  composition: Pick<Scene, 'allowLivePlateOverlap' | 'allowOperatorAutoLayout'>;
+  showAutoLayout?: boolean;
 }): JSX.Element {
   return (
     <>
-      {compositionSettings.map(({ field, label }) => (
-        <label
-          key={field}
-          className={s.row}
-          title="Applies to the open composition. When exporting a parent composition, enable this on that parent."
-        >
-          <span className={s.label}>{label}</span>
-          <input
-            type="checkbox"
-            className={dds.checkbox}
-            checked={composition[field] === true}
-            onChange={(event) =>
-              designerStore.updateScene({
-                [field]: event.currentTarget.checked ? true : undefined,
-              })
-            }
-          />
-        </label>
-      ))}
+      <label
+        className={s.row}
+        title="Applies to the open composition. When exporting a parent composition, enable this on that parent."
+      >
+        <span className={s.label}>Allow live plate overlap</span>
+        <input
+          type="checkbox"
+          className={dds.checkbox}
+          checked={composition.allowLivePlateOverlap === true}
+          onChange={(event) =>
+            designerStore.updateScene({
+              allowLivePlateOverlap: event.currentTarget.checked ? true : undefined,
+            })
+          }
+        />
+      </label>
+      {showAutoLayout && (
+        <CheckRow
+          label="Allow Auto layout in CG Control"
+          title="Applies to this exported template. For Auto layout, a preset needs at least two frames, all with Allow move checked and Resize unlocked."
+          checked={composition.allowOperatorAutoLayout === true}
+          onChange={(checked) =>
+            designerStore.updateScene({ allowOperatorAutoLayout: checked ? true : undefined })
+          }
+        />
+      )}
     </>
   );
 }

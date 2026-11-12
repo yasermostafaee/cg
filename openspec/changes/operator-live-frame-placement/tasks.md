@@ -25,8 +25,8 @@
       plates. Focused Designer tests cover mixed values, single-step Undo and independent edits.
 - [x] Windows Chromium verified the resize-only frame body uses a neutral cursor during hover
       and attempted drag, while its corners retain the resize cursor.
-- [x] Expose and export an independent Auto layout permission on the open composition.
-      Designer Chromium verified that it is off initially, can be toggled and reaches the VCG.
+- [x] Expose and export a single Auto layout permission on the top-level live composition.
+      Windows Chromium verified the checkbox is absent on nested presets and in per-frame settings.
 - [x] Share Designer's layout calculation with CG Control without changing the Designer result.
 - [x] Windows Chromium verified Arrange and Swap move both styled titles with their frames,
       Discard restores the authored positions, Take carries the saved layout, and Update on air
@@ -42,6 +42,12 @@
       held page and the same input seats. Bridge tests also verified a preset rename and refusal
       before commands when the authored frame rectangle or key changes.
 - [ ] Record the carrying Linux Playwright result for Auto layout and title movement.
+- [x] Windows Chromium verified that a root-authorized multi-frame preset with missing frame
+      permissions shows the reason in Position.
+- [x] Windows Chromium with Bridge and mock AMCP verified the owner's `3ghab-composition` export
+      with one-, two- and three-frame presets. The original showed the permission message. The
+      corrected export arranged the two- and three-frame presets, kept 16:9, and saved the
+      placements without any off-air playout command.
 
 ## Designer Auto layout
 

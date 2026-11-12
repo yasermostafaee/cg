@@ -581,12 +581,11 @@ test.describe('Live Source (D-137 phase 1)', () => {
     const allow = app.inspector.getByRole('checkbox', { name: 'Allow live plate overlap' });
     const selectedControls = app.inspector.locator('[data-section="CG Control"]');
     const autoLayoutName = 'Allow Auto layout in CG Control';
-    const selectedAutoLayout = selectedControls.getByRole('checkbox', { name: autoLayoutName });
-    await expect(selectedAutoLayout).not.toBeChecked();
+    await expect(app.inspector.getByRole('checkbox', { name: autoLayoutName })).toHaveCount(0);
     await expect(
       selectedControls.getByRole('checkbox', { name: 'Allow live plate overlap' }),
     ).not.toBeChecked();
-    for (const checkbox of [allowMove, allow, selectedAutoLayout]) {
+    for (const checkbox of [allowMove, allow]) {
       expect(await checkbox.boundingBox()).toMatchObject({ width: 14, height: 14 });
     }
     await allow.check();
@@ -604,10 +603,13 @@ test.describe('Live Source (D-137 phase 1)', () => {
       true,
     );
     await multiControls.getByRole('combobox', { name: 'Fit', exact: true }).selectOption('cover');
-    await multiControls.getByRole('checkbox', { name: autoLayoutName }).check();
+    await expect(app.multiInspector.getByRole('checkbox', { name: autoLayoutName })).toHaveCount(0);
 
     await app.deselect();
     const autoLayout = app.inspector.getByRole('checkbox', { name: autoLayoutName });
+    await expect(autoLayout).not.toBeChecked();
+    expect(await autoLayout.boundingBox()).toMatchObject({ width: 14, height: 14 });
+    await autoLayout.check();
     await expect(autoLayout).toBeChecked();
     await autoLayout.uncheck();
     await expect(autoLayout).not.toBeChecked();
@@ -638,6 +640,46 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await app.deselect();
     await allow.uncheck();
     await expect(exportButton).toHaveAttribute('data-export-blocked', 'errors');
+  });
+
+  test('Authorizes CG Control Auto layout once on the output composition', async ({ app }) => {
+    await app.newProject('Auto layout permission');
+    const permission = app.inspector.getByRole('checkbox', {
+      name: 'Allow Auto layout in CG Control',
+      exact: true,
+    });
+    await app.newComposition('Titled frame');
+    await app.addLiveSource();
+    await app.addTextElement();
+    await app.deselect();
+    // This composition has its own output setting while it is an independent root.
+    await expect(permission).not.toBeChecked();
+    await permission.check();
+
+    await app.openComposition('comp1');
+    await app.addMultiFrameGroup();
+    await app.addLook();
+    await app.openComposition('preset-1');
+    await app.nestCompositionInstance('Titled frame');
+    await app.deselect();
+    await expect(permission).toHaveCount(0);
+
+    await app.openComposition('Titled frame');
+    await expect(permission).toHaveCount(0);
+
+    await app.openComposition('comp1');
+    await expect(permission).not.toBeChecked();
+    await permission.check();
+    const [download] = await Promise.all([
+      app.page.waitForEvent('download'),
+      app.page.getByRole('button', { name: 'Export .vcg', exact: true }).click(),
+    ]);
+    const { scene } = await unpack(await readFile(await download.path()));
+    expect(buildTemplateLiveSources(scene).allowOperatorAutoLayout).toBe(true);
+    // Nesting a previously authorized composition preserves its saved value.
+    expect(
+      scene.compositions?.find(({ name }) => name === 'Titled frame')?.allowOperatorAutoLayout,
+    ).toBe(true);
   });
 
   /**

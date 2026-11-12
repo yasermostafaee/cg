@@ -6111,10 +6111,11 @@ applies it, and Discard restores the prior crop.
 An on-air crop-only update reframes the existing source directly. Reset crop can still apply
 after a Reload or replacement import with matching live framing.
 
-**Operator Auto layout:** The author enables **Allow Auto layout in CG Control** on the output
-composition. It uses the same compact Inspector checkbox as the live plate overlap option.
+**Operator Auto layout:** The author enables **Allow Auto layout in CG Control** once in the
+Inspector of the top-level output composition. It uses the same compact checkbox as live plate overlap.
 A preset with at least two live plates exposes **Auto layout** under Position when
-every plate permits both move and resize. The control uses the same aspect-aware arrangement as
+every plate permits both move and resize. An authorized preset with a locked frame shows
+the missing permission in Position. The control uses the same aspect-aware arrangement as
 Designer, with separate gaps, row placement choices and **Swap frame order**. Arrange or Swap
 stages all frame placements for the active preset together in PVW. Typing or dragging a valid
 gap reflows the active preset immediately. Update saves each staged placement to its own preset
@@ -6125,7 +6126,8 @@ direction, gaps and Swap order for each preset while inspecting the row.
 To attach a styled title, put one live plate and its Text element inside a child composition, then
 add that composition to the output or preset. Set Background and Padding on Text and add a Data key
 if the operator edits the title. To draw it over the picture, set Live foreground → Live order →
-Above inputs. That artwork moves with its frame during drag, resize and Swap.
+Above inputs. That artwork moves with its frame during drag, resize and Swap. Reuse the same
+child composition to keep the bound title shared across its presets.
 
 ## [~] D-179 — Rebuild and re-audit the Persian production starter gallery ⟨priority: high — owner re-review reopened 2026-11-04⟩ — `openspec/changes/rebuild-production-starter-gallery/`
 
@@ -6789,9 +6791,11 @@ CG Control after swapping left/right inputs is not an acceptable operating workf
   composition's proportions during numeric and Canvas resize. The author can unlock it or restore
   a previously stretched instance. Opening a saved project preserves its transforms. Active cells
   in a legacy Arrangement use the Arrangement's own sizing rules.
-- WHEN exporting a composition containing presets THEN its **Allow Auto layout in CG Control**
-  permission authorizes the tool, and the active preset's frame count and permissions determine
-  whether it is offered.
+- WHEN authoring a top-level live layout THEN its composition Inspector offers one **Allow Auto
+  layout in CG Control** checkbox for the exported template.
+- WHEN the active preset contains at least two frames THEN the root permission and each frame's
+  movement and resize permissions determine whether Arrange is available. If the root permission
+  is enabled but a frame is locked, CG Control shows the reason.
 - WHEN audio or locked layers are selected with eligible visuals THEN Auto layout leaves those
   layers alone
 

@@ -12,3 +12,6 @@ editing a preset. The same controls work for mixed selections such as a plate, a
 a shape and a Repeater. In CG Control, the available layouts and settings follow each preset
 separately. Typing or dragging a valid gap reflows that preset in PVW. Allow frame edits on
 the running page after a template replacement when the live frame layout remains compatible.
+
+Place the template-wide Auto layout permission in the top-level composition Inspector. Show the
+authoring permission required when CG Control cannot arrange an authorized multi-frame preset.

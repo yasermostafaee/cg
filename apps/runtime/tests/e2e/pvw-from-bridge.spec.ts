@@ -2277,6 +2277,7 @@ test('Auto layout retains separate controls and drafts for each active preset', 
   const presets = [
     { id: 'solo', name: 'Solo', count: 1 },
     { id: 'pair', name: 'Pair', count: 2 },
+    { id: 'locked-pair', name: 'Locked pair', count: 2 },
     { id: 'triple', name: 'Triple', count: 3 },
     { id: 'quad', name: 'Quad', count: 4 },
   ];
@@ -2323,8 +2324,10 @@ test('Auto layout retains separate controls and drafts for each active preset', 
             name: plate,
             type: 'video-placeholder',
             routeKey: plate,
-            operatorMove: true,
-            operatorPlacement: 'proportional',
+            ...(id !== 'locked-pair' && {
+              operatorMove: true,
+              operatorPlacement: 'proportional',
+            }),
             transform: transform(140 + (index % 2) * 600, 100 + index * 90, 480, 270),
           })),
         },
@@ -2419,7 +2422,14 @@ test('Auto layout retains separate controls and drafts for each active preset', 
 
   await choosePreset('solo', 1);
   await expect(layout).toHaveCount(0);
+  const refusal = inspector.getByText(/^Auto layout unavailable\./);
+  await expect(refusal).toHaveCount(0);
+  await choosePreset('locked-pair', 2);
+  await expect(layout).toHaveCount(0);
+  await expect(refusal).toBeVisible();
+  await expect(refusal).toContainText('enable Allow move and unlock Resize');
   await choosePreset('triple', 3);
+  await expect(refusal).toHaveCount(0);
   await openLayout();
   await expect(arrangement.locator('option')).toHaveText([
     'More frames on top',
@@ -2483,7 +2493,7 @@ test('Auto layout retains separate controls and drafts for each active preset', 
       const placements = stackItem()?.framePlacements ?? [];
       return presets.map(({ id }) => placements.filter(({ lookId }) => lookId === id).length);
     })
-    .toEqual([0, 2, 3, 4]);
+    .toEqual([0, 2, 0, 3, 4]);
   expect(sent()).toEqual(beforeUpdate);
 });
 

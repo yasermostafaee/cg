@@ -37,7 +37,7 @@ import {
   stagePreviewCrop,
   subscribeDrafts,
 } from './draftStore.js';
-import { autoLayoutFrames, FrameAutoLayout } from './FrameAutoLayout.js';
+import { FrameAutoLayout, frameAutoLayoutAvailability } from './FrameAutoLayout.js';
 
 export function LiveFrameAdjustments({
   item,
@@ -84,8 +84,10 @@ export function LiveFrameAdjustments({
     ((frameDraft?.edits.size ?? 0) > 0 || (hasAppliedFrames && frameDraft?.reset === undefined));
   const showAspect =
     capabilities?.previewResizeMode === true && frames.some((frame) => frame.resize === 'free');
-  const layoutFrames =
-    capabilities?.liveFramePlacement === true ? autoLayoutFrames(live, lookId) : [];
+  const layout =
+    capabilities?.liveFramePlacement === true
+      ? frameAutoLayoutAvailability(live, lookId)
+      : undefined;
   const fits = lookPlateFits(live, lookId);
   const rects = lookPlateRects(live, lookId);
   const fitOverride = assignmentsOnChannel(currentSourceAssignments(), channel).assignments.some(
@@ -205,12 +207,18 @@ export function LiveFrameAdjustments({
           Preserve frame aspect ratio
         </label>
       )}
+      {layout?.kind === 'permissions' && (
+        <p className="cg-frame-auto-layout cg-frame-auto-layout__notice" role="status">
+          Auto layout unavailable. In Designer, enable Allow move and unlock Resize for every frame
+          in this preset.
+        </p>
+      )}
       <FrameAutoLayout
         key={item.itemId}
         item={item}
         live={live}
         lookId={lookId}
-        frames={layoutFrames}
+        frames={layout?.kind === 'eligible' ? layout.frames : []}
         enabled={canEdit && (!onAir || item.onAirFramePlacement === true)}
       />
     </>
