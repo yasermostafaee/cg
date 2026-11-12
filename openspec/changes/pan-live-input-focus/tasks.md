@@ -115,4 +115,4 @@
 - [x] Use the saved crop for the current verified plate, source and look in normal PVW.
 - [x] Windows Chromium verified the saved off-air crop and matched the updated on-air FILL
       to the PVW picture after closing Pan, without additional playout commands.
-- [ ] Record the carrying Linux Playwright run.
+- [x] The carrying [Linux Playwright E2E step](https://github.com/yasermostafaee/cg/actions/runs/43060000125/job/130659729029) passed on `edcbe428` after `9e67b0a8`.

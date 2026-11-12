@@ -30,6 +30,14 @@
         {
           "fa": "در ایستگاه تک‌موتور، Frames در PVW امکان جابه‌جایی و تغییر اندازهٔ قاب‌های مجاز طراح را می‌دهد. Update چیدمان را برای Take بعدی ذخیره می‌کند و Update on air می‌تواند آن را روی خروجی فعال اعمال کند.",
           "en": "On single-primary stations, Frames in PVW moves and resizes frames enabled by the author. Update saves placement for the next Take, and Update on air can apply it to the running output."
+        },
+        {
+          "fa": "در Shared folder می‌توان بندانگشتی و انتخاب فعلی را دید و با Up به پوشهٔ بالاتر رفت. قالب‌های واردشده از این مسیر را می‌توان از فایل اصلی Reload کرد.",
+          "en": "Shared folder shows package previews and highlights the selection. Use Up to go to the parent folder. Templates imported here can reload from their original shared path."
+        },
+        {
+          "fa": "Designer همراه هر فایل VCG یک بندانگشتی ذخیره می‌کند. اگر Hold start تنظیم شده باشد، تصویر همان فریم را نشان می‌دهد.",
+          "en": "Designer embeds a thumbnail in every exported VCG. When Hold start is authored, the preview shows that frame."
         }
       ],
       "fixes": [
@@ -48,6 +56,10 @@
         {
           "fa": "میان‌برهای لایه در نمای فیلترشده و تمام‌صفحه فعال می‌مانند و ردیف یا دکمهٔ Play اضافه در جدول دیده نمی‌شود.",
           "en": "Layer shortcuts stay available in filtered and fullscreen views without adding visible layer rows or duplicate Play buttons."
+        },
+        {
+          "fa": "در CG Control نام پیش‌فرض ردیف‌های Bed به Live layer تغییر کرد. پنل جزئیات Templates تعداد قاب‌ها را با عنوان Plates نشان می‌دهد.",
+          "en": "CG Control uses Live layer for the default row names previously shown as Bed. Templates shows the plate count as Plates."
         }
       ],
       "planned": [],

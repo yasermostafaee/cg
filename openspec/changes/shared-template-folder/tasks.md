@@ -3,7 +3,7 @@
 - [x] Read folders and bounded package files within the configured shared root.
 - [x] Browse and refresh the listing from Templates and pass the selected package to existing import.
 - [x] Verify a Bridge-local folder with Persian names, filtering, import and the remembered folder.
-- [ ] Record the carrying Linux Playwright result.
+- [x] The original browser scenario passed in the [Linux Playwright E2E step](https://github.com/yasermostafaee/cg/actions/runs/43127863653/job/130884489592) on `db10877b`.
 
 Windows Chromium with the real Bridge and test engine passed the focused acceptance scenario.
 
