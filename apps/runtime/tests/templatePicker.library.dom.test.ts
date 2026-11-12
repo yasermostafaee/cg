@@ -222,12 +222,12 @@ describe('§8 — the picker follows `01`: search, kind chips, the meta line and
     expect(rowsOf(dialog)).toHaveLength(2);
   });
 
-  it('a row’s meta line counts fields, looks and plates from the CARRIER; the load is the FOOTER’s', async () => {
+  it('a row’s meta line counts fields and plates from the carrier, with Load in the footer', async () => {
     const { dialog, choice } = await openPicker('low');
     const bed = dialog.querySelector('[data-template-id="tpl-bed"]');
     expect(bed?.querySelector('.cg-tpl-meta')?.textContent).toContain('Live layout');
     expect(bed?.querySelector('.cg-tpl-meta')?.textContent).toContain('0 fields');
-    expect(bed?.querySelector('.cg-tpl-meta')?.textContent).toContain('2 looks');
+    expect(bed?.querySelector('.cg-tpl-meta')?.textContent).not.toContain('looks');
     expect(bed?.querySelector('.cg-tpl-meta')?.textContent).toContain('1 plate');
     /*
       The plain one, on a BED row, is refused by the SAME predicate the bridge uses. The

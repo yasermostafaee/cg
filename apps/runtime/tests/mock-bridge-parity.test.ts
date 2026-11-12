@@ -153,7 +153,7 @@ const BRIDGE_SURFACE: {
     // `R-102` — live authored text comes from CG Bridge; test mode refuses honestly.
     textSources: ['read'],
     // The station-wide folder is owned by the Bridge server; test mode exposes the same door.
-    sharedFiles: ['get', 'set', 'templateFolder', 'templateRead'],
+    sharedFiles: ['get', 'set', 'templateFolder', 'templateRead', 'templateThumbnail'],
     /*
       🔴 **SESSION BR — `delimiters` AND `sources` were BOTH missing from this expected tree,
       so the one guard that exists to prove the mock shim matches the real bridge has never
