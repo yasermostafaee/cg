@@ -9,15 +9,19 @@ import {
   LiveRevealMaskSchema,
   LiveSourceArrangementSchema,
   LiveFitModeSchema,
+  LiveFrameTargetSchema,
   LiveSourceDeclarationSchema,
   LiveSourceRectSchema,
   LookTransitionSchema,
   PositionSchema,
   ResolutionSchema,
+  framePlacementFits,
 } from '@cg/shared-schema';
 import type {
   LiveCropFocus,
   LiveFitMode,
+  LiveFramePlacement,
+  LiveFrameTarget,
   LivePlateMask,
   LiveRevealMask,
   LiveSourceRect,
@@ -95,6 +99,8 @@ export const TemplateLookSchema = z.object({
   entered: LookTransitionSchema,
   /** routeKey → scene-px rect while this look is active. No entry = not in this look. */
   rects: z.record(z.string(), LiveSourceRectSchema),
+  /** routeKey → operator placement target for the exact plate in this Look. */
+  operatorFrames: z.record(z.string(), LiveFrameTargetSchema).optional(),
   /**
    * ⭐ `B-178` — routeKey → the AUTHOR's fit mode while this look is active, from the plate
    * ELEMENT that serves that routeKey here.
@@ -217,6 +223,51 @@ export function lookPlateRects(
   const look = activeLookOf(live, activeLookId);
   if (look !== undefined) return { ...look.rects };
   return Object.fromEntries(live.sources.map((s) => [s.sourceId, s.rect] as const));
+}
+
+/** Resolve placement permissions for the same Look and route keys as the plate rects. */
+export function lookOperatorFrames(
+  live: TemplateLiveSources,
+  activeLookId: string | undefined,
+): Record<string, LiveFrameTarget> {
+  const look = activeLookOf(live, activeLookId);
+  if (look !== undefined) return { ...look.operatorFrames };
+  const frames: Record<string, LiveFrameTarget> = {};
+  for (const { sourceId, operatorFrame } of live.sources) {
+    if (operatorFrame === undefined) delete frames[sourceId];
+    else frames[sourceId] = operatorFrame;
+  }
+  return frames;
+}
+
+/** Apply exact Look-instance edits to the authored plate rects used by Preview and output. */
+export function framePlacementRects(
+  carrier: TemplateLiveSources,
+  lookId: string | undefined,
+  placements: readonly LiveFramePlacement[] | undefined,
+): Record<string, LiveSourceRect> {
+  const rects = lookPlateRects(carrier, lookId);
+  if (placements === undefined || placements.length === 0) return rects;
+  const activeId = activeLookOf(carrier, lookId)?.id;
+  const edits = new Map(
+    placements
+      .filter((placement) => placement.lookId === activeId)
+      .map((placement) => [placement.frameKey, placement]),
+  );
+  for (const [routeKey, { frameKey, resize }] of Object.entries(
+    lookOperatorFrames(carrier, lookId),
+  )) {
+    const authored = rects[routeKey];
+    const edit = edits.get(frameKey);
+    if (
+      edit !== undefined &&
+      authored !== undefined &&
+      framePlacementFits(edit, authored, resize)
+    ) {
+      rects[routeKey] = edit.rect;
+    }
+  }
+  return rects;
 }
 
 /**

@@ -27,6 +27,8 @@ export * from './page-lists.js';
 export * from './field-patterns.js';
 export * from './list-limits.js';
 export * from './scene-flatten.js';
+export * from './operator-frame-placement.js';
+export * from './frame-placement.js';
 export * from './look-sources.js';
 export * from './composition-fields.js';
 export * from './path-migration.js';

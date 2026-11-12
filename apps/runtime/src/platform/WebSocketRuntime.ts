@@ -226,6 +226,7 @@ const REQUEST_TIMEOUT_MS = 8000;
 const OPTIONAL_CHANNELS = new Set([
   ipcChannels.RehearseEnterPreviewChannel.name,
   ipcChannels.StackLoadProfileChannel.name,
+  ipcChannels.StackSetFramePlacementsChannel.name,
   ipcChannels.SharedTemplateFolderChannel.name,
   ipcChannels.SharedTemplateReadChannel.name,
   StackPreviewPlateCropChannel.name,
@@ -1121,6 +1122,7 @@ export class WebSocketRuntime implements RuntimeBridge {
         // `DELTA-RUN-NEXT-VERSION-01-C` — CG Bridge's machine clock; an older bridge says nothing.
         bridgeClock: caps.clock ?? null,
         ...(routed.has(ipcChannels.StackLoadProfileChannel.name) ? { layerProfiles: true } : {}),
+        ...(caps.liveFramePlacement === true && { liveFramePlacement: true }),
         ...(routed.has(ipcChannels.SharedTemplateFolderChannel.name) &&
         routed.has(ipcChannels.SharedTemplateReadChannel.name)
           ? { sharedTemplateFolder: true }
@@ -1943,6 +1945,8 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly stack = {
     loadProfile: (req: ChannelRequest<typeof ipcChannels.StackLoadProfileChannel>) =>
       this.#invoke(ipcChannels.StackLoadProfileChannel, req),
+    setFramePlacements: (req: ChannelRequest<typeof ipcChannels.StackSetFramePlacementsChannel>) =>
+      this.#invoke(ipcChannels.StackSetFramePlacementsChannel, req),
     load: (req: ChannelRequest<typeof StackLoadChannel>) => this.#invoke(StackLoadChannel, req),
     take: (req: ChannelRequest<typeof StackTakeChannel>) => this.#invoke(StackTakeChannel, req),
     update: (req: ChannelRequest<typeof StackUpdateChannel>) =>
@@ -2091,6 +2095,7 @@ export class WebSocketRuntime implements RuntimeBridge {
         ...(i.slot !== undefined && { slot: i.slot }),
         ...(i.position !== undefined && { position: i.position }),
         ...(i.previewPlateCrops !== undefined && { previewPlateCrops: i.previewPlateCrops }),
+        ...(i.framePlacements !== undefined && { framePlacements: i.framePlacements }),
       }),
     );
   }

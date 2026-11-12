@@ -6084,12 +6084,12 @@ target station. The legacy C-023 MJPEG does not have this mapping.
 If PGM Pan is revisited, an equivalent in-place editor needs a read of the already-running source
 before the programme mix and crop, without opening a second receiver.
 
-**Operator placement feasibility (2026-11-11):** Moving or resizing an actual frame is a separate
-edit from Pan. The author can opt a frame in to move and proportional resize, or permit free
-resize as well. Preview can stage a draft in composition pixels. Applying it needs the frame
-geometry to reach the template page, its mask and the engine's fill/clip in the same operation.
-The active Look and frame instance must identify the target even when the same input is used in
-several Looks. See `openspec/changes/operator-live-frame-placement/`.
+**Operator frame placement:** The author can allow moving and proportional resizing for each
+frame, and can enable free resize. Frames in PVW drafts changes in composition pixels for the
+active Look and frame instance. Discard restores the applied frame. Off-air Update saves it for
+Take, and Update on air moves the resident page and its existing picture together on a verified
+primary. Pan keeps the source selection inside the frame. Target-engine verification is tracked in
+`openspec/changes/operator-live-frame-placement/`.
 
 ## [~] D-179 — Rebuild and re-audit the Persian production starter gallery ⟨priority: high — owner re-review reopened 2026-11-04⟩ — `openspec/changes/rebuild-production-starter-gallery/`
 

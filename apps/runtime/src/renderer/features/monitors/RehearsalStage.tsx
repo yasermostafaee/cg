@@ -14,6 +14,7 @@ import type { CSSProperties } from 'react';
 // them stubbed out and back), because nothing else in the package is reachable
 // from them and both imports go through subpaths rather than the entry index.
 import { activeLookOf, type ChannelRaster } from '@cg/shared-ipc';
+import { outputScale } from '@cg/shared-schema';
 import { colors, cssVars } from '../../theme.js';
 import { LivePlateOverlay, anyRegionTooSmallForCaveat } from './LivePlateOverlay.js';
 import { platePlacements, type PlatePlacement } from './livePlateGeometry.js';
@@ -29,6 +30,7 @@ import {
   type RehearsalFrameHandle,
 } from './RehearsalFrame.js';
 import { PreviewTemplateOutlines } from './PreviewTemplateOutlines.js';
+import { PreviewFramePlacement } from './PreviewFramePlacement.js';
 import { frameBox, frameZIndex, overlayZIndex, type RehearsalSubject } from './rehearsalFrames.js';
 import type { PvwPage } from '../../../shared/pvwPage.js';
 import { usePvwSourceFrames } from './usePvwSourceFrames.js';
@@ -271,6 +273,7 @@ interface Props {
   /** The channel's real raster (R-030). Every iframe is sized to it. */
   raster: ChannelRaster;
   panOpen?: boolean;
+  frameEditOpen?: boolean;
   panSession?: number;
   panSourceAspects?: ReadonlyMap<string, number | null>;
   /**
@@ -357,6 +360,7 @@ export function RehearsalStage({
   templateNames,
   raster,
   panOpen = false,
+  frameEditOpen = false,
   panSession = 0,
   panSourceAspects,
   onTransport,
@@ -466,6 +470,8 @@ export function RehearsalStage({
           subject.position,
           subject.plateSources,
           subject.activeLookId,
+          subject.framePlacements,
+          subject.appliedFramePlacements,
         ).map((p) => ({
           ...p,
           itemId: subject.itemId,
@@ -702,6 +708,7 @@ export function RehearsalStage({
             position={subject.position}
             rowName={subject.rowName}
             activeLookId={subject.activeLookId}
+            framePlacements={subject.framePlacements}
             timing={subject.timing}
             book={subject.book}
             livePlates={picturePlacements.filter(
@@ -741,9 +748,47 @@ export function RehearsalStage({
           raster={raster}
           fit={fit}
           zIndex={overlayZIndex(renderable.length)}
-          interactive={!panOpen}
+          interactive={!panOpen && !frameEditOpen}
           onSelectItem={onSelectItem}
         />
+        {frameEditOpen && (
+          <div
+            className="cg-pan-draft-layer"
+            style={
+              {
+                ...frameBox(raster, fit),
+                zIndex: overlayZIndex(renderable.length) + 1,
+                '--cg-pan-ui-scale': 1 / fit,
+              } as CSSProperties
+            }
+          >
+            {placements.map((plate) => {
+              const subject = renderable.find(
+                ({ subject }) => subject.itemId === plate.itemId,
+              )?.subject;
+              if (
+                plate.frameEdit === undefined ||
+                subject?.canEditFrames !== true ||
+                !readyIds.has(plate.itemId)
+              )
+                return null;
+              return (
+                <PreviewFramePlacement
+                  key={JSON.stringify([
+                    plate.itemId,
+                    plate.frameEdit.lookId,
+                    plate.frameEdit.frameKey,
+                  ])}
+                  itemId={plate.itemId}
+                  plate={plate}
+                  frame={plate.frameEdit}
+                  pixelsPerScenePixel={fit * outputScale(raster)}
+                  onSelect={() => onSelectItem?.(plate.itemId)}
+                />
+              );
+            })}
+          </div>
+        )}
         {panRows.map(({ subject, plates, key }) => (
           <PreviewCropReader
             key={key}

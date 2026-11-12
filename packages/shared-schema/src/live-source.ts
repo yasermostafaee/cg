@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { IdSchema } from './primitives.js';
 import { LivePlateMaskSchema, LiveRevealMaskSchema, LiveSourceIdSchema } from './elements.js';
-import { LiveCropFocusSchema, LiveFitModeSchema } from './live-fit.js';
+import { LiveCropFocusSchema, LiveFitModeSchema, LiveFrameTargetSchema } from './live-fit.js';
 
 /**
  * D-137 / C-015 — the flattened axis-aligned rect a Live Source occupies, in the
@@ -59,6 +59,8 @@ export const LiveSourceDeclarationSchema = z.object({
   keySourceId: LiveSourceIdSchema.optional(),
   /** The hole, flattened to scene pixels through its FULL ancestor chain. */
   rect: LiveSourceRectSchema,
+  /** Operator placement metadata for a template without Looks. */
+  operatorFrame: LiveFrameTargetSchema.optional(),
   /**
    * `multibox-layout-switch` `tasks.md` 5.2 — **where this plate's hole sits INSIDE its own
    * BOX, as fractions of the box (0..1 on each axis).**

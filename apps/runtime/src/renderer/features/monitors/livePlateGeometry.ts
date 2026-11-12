@@ -11,16 +11,20 @@
 import { outputLetterbox, outputScale, outputTranslate } from '@cg/template-runtime/position';
 import {
   assignmentsOnChannel,
+  activeLookOf,
+  framePlacementRects,
+  lookOperatorFrames,
   lookPlateFits,
   lookPlateFocuses,
   lookPlateMasks,
-  lookPlateRects,
   lookPlateReveals,
   resolvePlateSourcesForLook,
 } from '@cg/shared-ipc';
 import type { ChannelRaster, SourceAssignments, TemplateLiveSources } from '@cg/shared-ipc';
 import type {
   LiveCropFocus,
+  LiveFramePlacement,
+  LiveFrameTarget,
   LiveFitMode,
   LivePlateMask,
   LiveRevealMask,
@@ -91,6 +95,13 @@ export interface PlatePlacement {
   focus?: LiveCropFocus;
   mask?: LivePlateMask;
   reveal?: LiveRevealMask;
+  frameEdit?: {
+    frameKey: string;
+    resize: LiveFrameTarget['resize'];
+    lookId: string | undefined;
+    rect: LiveFramePlacement['rect'];
+    baseline: LiveFramePlacement['rect'];
+  };
   /**
    * The operator-facing NAME of the source bound to this plate, or `null` when
    * nothing is bound.
@@ -212,6 +223,8 @@ export function platePlacements(
   position: Position | undefined,
   sources: PlateSourceLookup,
   activeLookId: string | undefined,
+  framePlacements?: readonly LiveFramePlacement[],
+  appliedFramePlacements?: readonly LiveFramePlacement[],
 ): PlatePlacement[] {
   const s = outputScale(raster);
   const pad = outputLetterbox(raster);
@@ -236,7 +249,10 @@ export function platePlacements(
     not in this look and gets no placement — not a zero-area one, which would still paint a
     frame and a label at the origin.
   */
-  const rects = lookPlateRects(live, activeLookId);
+  const rects = framePlacementRects(live, activeLookId, framePlacements ?? []);
+  const frameTargets = lookOperatorFrames(live, activeLookId);
+  const baselines = framePlacementRects(live, activeLookId, appliedFramePlacements ?? []);
+  const lookId = activeLookOf(live, activeLookId)?.id;
   const authoredFits = lookPlateFits(live, activeLookId);
   const focuses = lookPlateFocuses(live, activeLookId);
   const masks = lookPlateMasks(live, activeLookId);
@@ -278,10 +294,20 @@ export function platePlacements(
     // plate will refuse its take.
     const sourceName = catalogId === null ? null : sources.nameOf(catalogId);
     const fitMode = overrideFits.get(plate.sourceId) ?? authoredFits[plate.sourceId];
+    const frameTarget = frameTargets[plate.sourceId];
     return [
       {
         elementId: plate.elementId,
         plateId: plate.sourceId,
+        ...(frameTarget !== undefined && {
+          frameEdit: {
+            frameKey: frameTarget.frameKey,
+            resize: frameTarget.resize,
+            lookId,
+            rect,
+            baseline: baselines[plate.sourceId] ?? rect,
+          },
+        }),
         ...(fitMode === 'cover' && { cropEdges: true as const }),
         ...(focuses[plate.sourceId] !== undefined && { focus: focuses[plate.sourceId] }),
         ...(masks[plate.sourceId] !== undefined && { mask: masks[plate.sourceId] }),

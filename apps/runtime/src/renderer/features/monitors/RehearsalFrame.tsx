@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, Ref } from 'react';
 import type { CgPage, FieldValues, FitRect, Position } from '@cg/shared-schema';
-import { pageMediaPath, positionQuery, withCgControl } from '@cg/shared-schema';
+import {
+  pageMediaPath,
+  positionQuery,
+  withCgControl,
+  type LiveFramePlacement,
+} from '@cg/shared-schema';
 import type { ChannelRaster } from '@cg/shared-ipc';
 import {
   applyOperatorPosition,
@@ -156,6 +161,7 @@ interface Props {
   /** `RUN-NEXT-VERSION-03` 1.1 — the page a take would show (`bookPageOf`), or undefined. */
   book?: BookPage | undefined;
   livePlates: readonly PlatePlacement[];
+  framePlacements?: LiveFramePlacement[] | undefined;
   sourceFrames: ReadonlyMap<string, PvwSourceFrame>;
   handleRef?: Ref<RehearsalFrameHandle>;
   /** Told whenever this frame's readiness flips, so the stage can gate its transport. */
@@ -176,6 +182,7 @@ export function RehearsalFrame({
   timing,
   book,
   livePlates,
+  framePlacements,
   sourceFrames,
   handleRef,
   onReadyChange,
@@ -260,9 +267,12 @@ export function RehearsalFrame({
   const payload = useMemo(
     () =>
       JSON.stringify(
-        activeLookId === undefined ? fields : withCgControl(fields, { look: activeLookId }),
+        withCgControl(fields, {
+          ...(activeLookId !== undefined && { look: activeLookId }),
+          ...(framePlacements !== undefined && { framePlacements }),
+        }),
       ),
-    [fields, activeLookId],
+    [fields, activeLookId, framePlacements],
   );
 
   /*
@@ -287,12 +297,13 @@ export function RehearsalFrame({
       JSON.stringify(
         withCgControl(fields, {
           ...(activeLookId !== undefined && { look: activeLookId }),
+          ...(framePlacements !== undefined && { framePlacements }),
           ...(timing !== undefined && { timing }),
           // `RUN-NEXT-VERSION-03` 1.1 — a take carries its page (`#pageControl`); so does PVW's.
           ...(page !== undefined && { page }),
         }),
       ),
-    [fields, activeLookId, timing, page],
+    [fields, activeLookId, framePlacements, timing, page],
   );
 
   /** The timing's VALUE as a stable key — an object identity would re-fire on every render. */

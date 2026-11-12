@@ -6,6 +6,7 @@ import type { Browser, Page } from '@playwright/test';
 import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { LayerProfileSchema, type ConnectionConfig, type FixedLayerBank } from '@cg/shared-ipc';
+import { SceneSchema } from '@cg/shared-schema';
 import { cgCss, cgJsIife, ExporterSingleFile } from '@cg/single-file-export';
 import { buildTemplateLiveSources, unpack } from '@cg/vcg-format';
 import { buildPositionedVcg, buildValidVcg, expect, test } from './fixtures/runtime.js';
@@ -819,6 +820,213 @@ test('R-117 drafts Position in PVW and moves the resident page on Update on air'
     await expect(airStage).toHaveCSS('transform', moved);
     await expect(airStage.locator('[data-cg-element-id="el-name"]')).toContainText('Draft text');
     await expect(layer).toHaveAttribute('aria-label', /ON AIR$/);
+  } finally {
+    await air.close();
+  }
+});
+
+test('Frames drafts the authored box and title in stopped PVW, then applies on the next Take', async ({
+  page,
+}) => {
+  const handle = await boot(true);
+  const engine = mock;
+  if (engine === null) throw new Error('Test engine is unavailable');
+  await handle.runtime.whenServerHealthy(15_000);
+  const itemId = 'editable-live-frame';
+  const templateId = 'tpl-pvw-crop';
+  const { scene: base } = await unpack(await buildPositionedVcg(templateId));
+  const layer = base.layers[0];
+  const title = layer?.children.find((element) => element.type === 'text');
+  if (layer === undefined || title === undefined) throw new Error('Missing test title');
+  const transform = (x: number, y: number, w: number, h: number) => ({
+    ...title.transform,
+    position: { x, y },
+    size: { w, h },
+    anchor: { x: 0, y: 0 },
+  });
+  const scene = SceneSchema.parse({
+    ...base,
+    layers: [
+      {
+        ...layer,
+        children: [
+          {
+            id: 'live-box',
+            name: 'Live box',
+            type: 'composition',
+            compositionId: 'live-box-doc',
+            transform: transform(600, 350, 400, 300),
+            opacity: 1,
+            visible: true,
+            locked: false,
+            zIndex: 0,
+          },
+        ],
+      },
+    ],
+    compositions: [
+      {
+        id: 'live-box-doc',
+        name: 'Live box',
+        resolution: { width: 400, height: 300 },
+        frameRange: base.frameRange,
+        editorBackdrop: 'transparent',
+        fields: [],
+        bindings: [],
+        layers: [
+          {
+            ...layer,
+            id: 'live-box-layer',
+            children: [
+              {
+                id: 'live-guest',
+                name: 'Guest',
+                type: 'video-placeholder',
+                routeKey: 'guest',
+                operatorPlacement: 'proportional',
+                transform: transform(0, 0, 400, 300),
+                opacity: 1,
+                visible: true,
+                locked: false,
+                zIndex: 0,
+              },
+              {
+                ...title,
+                id: 'live-title',
+                liveForeground: false,
+                transform: transform(20, 220, 180, 42),
+                zIndex: 1,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    fields: [],
+    bindings: [],
+  });
+  const { html } = await new ExporterSingleFile({
+    cgJsIife,
+    cgCss,
+    fontsCss: '',
+    assets: { get: () => Promise.resolve(null), bytes: () => Promise.resolve(null) },
+  }).produce(scene);
+  handle.runtime.templateImport(
+    { ...TEMPLATE, templateId, liveSources: buildTemplateLiveSources(scene) },
+    html,
+    1,
+  );
+  const slot = { channel: 1, layer: 59 };
+  expect(await handle.runtime.loadFixed(slot, itemId, templateId, {})).toMatchObject({
+    accepted: true,
+  });
+  await openConsole(page, handle.url);
+  await showMonitors(page);
+  const plateRow = page.getByRole('region', { name: 'Layers' }).locator('[data-layer="59"]');
+  await plateRow.locator('[data-row-body]').click();
+  await plateRow.getByRole('button', { name: 'ON PVW', exact: true }).click();
+  const pvw = page.getByRole('region', { name: 'PREVIEW (PVW)' });
+  await pvw.getByRole('button', { name: 'Edit live frame placement' }).click();
+  const move = pvw.getByRole('button', { name: 'Move frame for Crop source' });
+  const resize = pvw.getByRole('button', { name: 'Resize Crop source from bottom right' });
+  const artwork = pvw
+    .frameLocator('iframe[data-rehearsal-frame]')
+    .locator('[data-cg-frame-artwork="live-box"]');
+  const plate = artwork.locator('[data-cg-element-id="live-guest"]');
+  const renderedTitle = artwork.locator('[data-cg-element-id="live-title"]');
+  await expect(move).toBeVisible();
+  const readBox = async () => {
+    const [picture, caption] = await Promise.all([
+      plate.boundingBox(),
+      renderedTitle.boundingBox(),
+    ]);
+    if (picture === null || caption === null) throw new Error('Frame and title should both render');
+    return { picture, caption };
+  };
+  const original = await readBox();
+  const before = engine.receivedCommands().filter(({ line }) => /^(CG|MIXER) /.test(line));
+  const dragControl = async (control: typeof move, dx: number, dy: number) => {
+    const bounds = await control.boundingBox();
+    if (bounds === null) throw new Error('Missing frame placement control');
+    const x = bounds.x + bounds.width / 2;
+    const y = bounds.y + bounds.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + dx, y + dy, { steps: 4 });
+    await page.mouse.up();
+  };
+  await dragControl(move, 25, 0);
+  await expect.poll(async () => (await readBox()).picture.x).toBeGreaterThan(original.picture.x);
+  const moved = await readBox();
+  expect(moved.caption.x - original.caption.x).toBeCloseTo(moved.picture.x - original.picture.x, 1);
+  await page.getByRole('button', { name: 'Discard staged edits' }).click();
+  await expect.poll(async () => (await readBox()).picture.x).toBeCloseTo(original.picture.x, 1);
+
+  await dragControl(resize, 22, 7);
+  await expect
+    .poll(async () => (await readBox()).picture.width)
+    .toBeGreaterThan(original.picture.width);
+  const resized = (await readBox()).picture;
+  expect(resized.width / resized.height).toBeCloseTo(4 / 3, 2);
+  await page.getByRole('button', { name: 'Apply staged edits', exact: true }).click();
+  await expect
+    .poll(
+      () =>
+        handle.runtime.stackSnapshot().find((item) => item.itemId === itemId)?.framePlacements?.[0]
+          ?.rect.width ?? 0,
+    )
+    .toBeGreaterThan(400);
+  expect(engine.receivedCommands().filter(({ line }) => /^(CG|MIXER) /.test(line))).toEqual(before);
+  await plateRow.getByRole('button', { name: 'PLAY', exact: true }).click();
+  await expect(plateRow).toHaveAttribute('aria-label', /ON AIR$/);
+  const add = engine.lastCgAdd(slot);
+  expect(JSON.parse(add?.data ?? '{}')).toMatchObject({
+    __cg: { framePlacements: [{ frameKey: 'live-box/live-guest' }] },
+  });
+  if (add === undefined || add.data === null) throw new Error('Frame page is missing on Take');
+  const air = await page.context().newPage();
+  try {
+    await air.setViewportSize({ width: 1920, height: 1080 });
+    await air.goto(add.template);
+    await air.waitForFunction(
+      () => typeof (window as unknown as { update?: unknown }).update === 'function',
+    );
+    const tellAir = (data: string) =>
+      air.evaluate(
+        (payload) => (window as unknown as { update: (value: string) => void }).update(payload),
+        data,
+      );
+    await tellAir(add.data);
+    const airTitle = air.locator('[data-cg-element-id="live-title"]');
+    const beforeAir = await airTitle.boundingBox();
+    if (beforeAir === null) throw new Error('The programme page has no title');
+
+    await expect(move).toBeVisible();
+    const liveStart = engine.receivedCommands().length;
+    await dragControl(move, 25, 0);
+    expect((await airTitle.boundingBox())?.x).toBeCloseTo(beforeAir.x, 1);
+    await page.getByRole('button', { name: 'Apply staged edits to the on-air row' }).click();
+    await expect
+      .poll(() =>
+        engine
+          .receivedCommands()
+          .slice(liveStart)
+          .some(({ line }) => line === 'MIXER 1 COMMIT'),
+      )
+      .toBe(true);
+    const wire = engine
+      .receivedCommands()
+      .slice(liveStart)
+      .map(({ line }) => line);
+    expect(wire).toContainEqual(expect.stringMatching(/^MIXER 1-\d+ FILL .* DEFER$/));
+    expect(wire).toContainEqual(expect.stringMatching(/^MIXER 1-\d+ CLIP .* DEFER$/));
+    expect(wire.some((line) => /^(?:PLAY |CG \d+-\d+ (?:ADD|PLAY) )/.test(line))).toBe(false);
+    const liveData = engine.lastCgUpdate(slot)?.data;
+    if (liveData == null) throw new Error('The programme page did not receive a frame update');
+    await tellAir(liveData);
+    await expect
+      .poll(async () => (await airTitle.boundingBox())?.x ?? 0)
+      .toBeGreaterThan(beforeAir.x);
   } finally {
     await air.close();
   }

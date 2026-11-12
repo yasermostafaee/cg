@@ -632,6 +632,67 @@ describe('per-look maps: absence is NO ENTRY, and the empty look is valid', () =
 });
 
 describe('buildTemplateLiveSources — the assembly, and the coexistence control', () => {
+  it('carries distinct frame and artwork keys for two Looks instancing the same plate', () => {
+    const nestedPlate = {
+      ...plate('picture', 'guest-1', 320, 180, 1280, 720),
+      operatorPlacement: 'free',
+    } as const;
+    const rootPlate = {
+      ...plate('bug', 'guest-root', 10, 20, 100, 60),
+      operatorPlacement: 'proportional',
+    } as const;
+    const s = scene({
+      rootChildren: [
+        instance('left', 'outer', 0, 0, 960, 540),
+        instance('right', 'outer', 720, 180, 960, 540),
+        rootPlate,
+      ],
+      compositions: [
+        comp('outer', [
+          instance('box', 'inner', 0, 0, 960, 540),
+          plate('unrelated', 'guest-2', 960, 540, 960, 540),
+        ]),
+        comp('inner', [nestedPlate]),
+      ],
+      lookGroups: [
+        { id: 'group', looks: [look('left-look', 'left'), look('right-look', 'right')] },
+      ],
+    });
+
+    const block = buildTemplateLiveSources(s);
+    expect(block.looks?.map(({ operatorFrames }) => operatorFrames)).toEqual(
+      ['left', 'right'].map((side) => ({
+        'guest-1': { frameKey: `${side}/box/picture`, artworkKey: `${side}/box`, resize: 'free' },
+        'guest-root': { frameKey: 'bug', artworkKey: 'bug', resize: 'proportional' },
+      })),
+    );
+    expect(block.sources.every((source) => source.operatorFrame === undefined)).toBe(true);
+  });
+
+  it('uses the plate alone in multi-plate artwork and excludes unrendered container descendants', () => {
+    const first = { ...plate('a', 'guest-1', 0, 0, 640, 360), operatorPlacement: 'free' } as const;
+    const second = plate('b', 'guest-2', 640, 0, 640, 360);
+    const inside = { ...plate('c', 'guest-3', 0, 0, 640, 360), operatorPlacement: 'free' } as const;
+    const container: Element = {
+      ...baseElProps,
+      id: 'container',
+      name: 'container',
+      type: 'container',
+      transform: tf(1280, 0, 640, 360),
+      children: [inside],
+    };
+    const s = scene({
+      rootChildren: [instance('paired', 'pair', 0, 0, 1920, 1080), container],
+      compositions: [comp('pair', [first, second])],
+    });
+
+    expect(buildTemplateLiveSources(s).sources.map(({ operatorFrame }) => operatorFrame)).toEqual([
+      { frameKey: 'paired/a', artworkKey: 'paired/a', resize: 'free' },
+      undefined,
+      undefined,
+    ]);
+  });
+
   it('with a group: SOURCE-KEYED sources + looks + defaultLookId ride the block', () => {
     const block = buildTemplateLiveSources(twoLookScene());
     expect(block.sources.map((s) => s.sourceId)).toEqual(['guest-1', 'guest-2']);

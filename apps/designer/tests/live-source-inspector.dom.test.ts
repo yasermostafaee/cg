@@ -139,6 +139,39 @@ const live = (stroke?: { width: number; color: string }): Element =>
 const shape = (): Element => defaultShape('sh-1', 100, 100);
 
 describe('D-137 — the Live Source Inspector offers no affordance it cannot honour', () => {
+  it('opts an authored frame into proportional or free placement in CG Control', () => {
+    const c = render(live());
+    const check = (label: string) =>
+      c.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`);
+    const placement = 'Allow placement in CG Control';
+    const freeResize = 'Allow free resize';
+
+    const read = () => {
+      const scene = designerStore.get().scene;
+      if (scene === null) throw new Error('scene was not mounted');
+      const el = activeLayersOf(scene)[0]?.children[0];
+      if (el?.type !== 'video-placeholder') throw new Error('stored Live Source was not found');
+      return el;
+    };
+    const refresh = () =>
+      act(() =>
+        root?.render(createElement(StyleSection, { element: read(), selectedKeyframe: null })),
+      );
+
+    expect(check(placement)?.checked).toBe(false);
+    expect(check(freeResize)).toBeNull();
+    act(() => check(placement)?.click());
+    expect(read().operatorPlacement).toBe('proportional');
+    refresh();
+    expect(check(freeResize)?.checked).toBe(false);
+    act(() => check(freeResize)?.click());
+    expect(read().operatorPlacement).toBe('free');
+    refresh();
+    expect(check(freeResize)?.checked).toBe(true);
+    act(() => check(placement)?.click());
+    expect(read().operatorPlacement).toBeUndefined();
+  });
+
   it('D-169 — fits one Live Source to the active canvas from Quick layout', () => {
     const c = render(live());
     const action = c.querySelector<HTMLButtonElement>('[aria-label="Fit Plate to canvas"]');

@@ -12,9 +12,12 @@ import {
   type TemplateInfo,
 } from '@cg/shared-ipc';
 import {
+  CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER,
   RetainedStackItemSchema,
   retainedFromStackItem,
   type LiveFitMode,
+  type LiveFramePlacement,
+  type LiveFrameTarget,
   type LiveRevealMask,
 } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
@@ -38,6 +41,7 @@ import { recvLines as readWireLines } from './support/wire-trace.js';
  */
 
 let mock: MockHandle | null = null;
+let backup: MockHandle | null = null;
 let runtime: CasparRuntime | null = null;
 let tracePath: string | null = null;
 
@@ -51,6 +55,8 @@ afterEach(async () => {
   runtime = null;
   await mock?.stop();
   mock = null;
+  await backup?.stop();
+  backup = null;
   if (tracePath !== null && fs.existsSync(tracePath)) fs.rmSync(tracePath);
   tracePath = null;
 });
@@ -87,6 +93,7 @@ interface PlateSpec {
   /** `C-028` — the AUTHOR's fit mode. Absent ⇒ `contain`, the shipped default. */
   fitMode?: LiveFitMode;
   revealMask?: LiveRevealMask;
+  operatorFrame?: LiveFrameTarget;
 }
 
 /** A template declaring one hole per entry, each with its own rect. */
@@ -106,6 +113,7 @@ function template(plates: readonly PlateSpec[], foregroundOverlay = false): Temp
         ...(p.expectedAspect !== undefined && { expectedAspect: p.expectedAspect }),
         ...(p.fitMode !== undefined && { fitMode: p.fitMode }),
         ...(p.revealMask !== undefined && { revealMask: p.revealMask }),
+        ...(p.operatorFrame !== undefined && { operatorFrame: p.operatorFrame }),
       })),
       ...(foregroundOverlay ? { foregroundOverlay: true as const } : {}),
     },
@@ -113,6 +121,17 @@ function template(plates: readonly PlateSpec[], foregroundOverlay = false): Temp
 }
 
 const BOX = { x: 480, y: 270, width: 960, height: 540 };
+const FRAME: LiveFrameTarget = {
+  frameKey: 'el-guest-1',
+  artworkKey: 'el-guest-1',
+  resize: 'proportional',
+};
+const MOVED_FRAME: LiveFramePlacement = {
+  frameKey: FRAME.frameKey,
+  rect: { x: 960, y: 540, width: 480, height: 270 },
+};
+const AUTHORED_FRAME: LiveFramePlacement = { frameKey: FRAME.frameKey, rect: BOX };
+const FRAME_HTML = `<!doctype html><html><head>${CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER}</head><body>served</body></html>`;
 
 function catalog(over: Partial<SourceCatalog> = {}): SourceCatalog {
   return {
@@ -159,6 +178,8 @@ async function boot(options: {
   template: TemplateInfo;
   catalog?: SourceCatalog;
   assignments?: SourceAssignments;
+  html?: string;
+  redundant?: boolean;
 }): Promise<CasparRuntime> {
   const oscPort = await freeUdpPort();
   tracePath = path.join(
@@ -166,8 +187,19 @@ async function boot(options: {
     `cg-liveseat-${String(process.pid)}-${String(Date.now())}-${String(Math.round(performance.now() * 1000))}.ndjson`,
   );
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30, tracePath });
+  const config = singleServer(mock.amcpPort, oscPort);
+  if (options.redundant === true) {
+    const backupOscPort = await freeUdpPort();
+    backup = await createMock({
+      amcpPort: 0,
+      oscPort: backupOscPort,
+      oscHost: '127.0.0.1',
+      oscHz: 30,
+    });
+    config.servers.B = { host: '127.0.0.1', amcpPort: backup.amcpPort, oscPort: backupOscPort };
+  }
   const r = new CasparRuntime(
-    singleServer(mock.amcpPort, oscPort),
+    config,
     {},
     {
       layerPolicy: TEST_LAYER_POLICY,
@@ -179,7 +211,10 @@ async function boot(options: {
   runtime = r;
   r.start();
   await r.startServing();
-  r.templateImport(options.template, '<!doctype html><html><body>served</body></html>');
+  r.templateImport(
+    options.template,
+    options.html ?? '<!doctype html><html><body>served</body></html>',
+  );
   await r.whenServerHealthy(HEALTH_MS);
   // The refusal cases below assert "NOTHING reaches the wire" from a `before`
   // baseline — valid only once R-030's timer-driven one-shot `INFO` has drained
@@ -907,6 +942,293 @@ it('does not save a new on-air crop when the engine refuses the mixer edit', asy
   expect(refused).toBe(true);
   expect(r.stackSnapshot()[0]?.previewPlateCrops).toBeUndefined();
   expect(mock.layerState({ channel: 1, layer: 30 })?.fill).toEqual(prior);
+});
+
+it('saves frame placements off air, keeps Pan identity, and sends them to a resident page before Take', async () => {
+  const r = await boot({
+    template: template([{ id: 'guest-1', rect: BOX, fitMode: 'cover', operatorFrame: FRAME }]),
+    html: FRAME_HTML,
+  });
+  const itemId = 'item-1';
+  expect(await r.load(itemId, 'lower-third', {})).toMatchObject({ accepted: true });
+  expect(r.enterPreview(itemId)).toEqual({ ok: true });
+  const [initial] = r.previewPlateCrop(itemId).targets;
+  expect(initial).toBeDefined();
+  const crop = { token: initial!.token, focus: { x: 1, y: 0.5, zoom: 2 } };
+  expect(r.previewPlateCrop(itemId, undefined, [crop]).ok).toBe(true);
+  const before = (await recvLines()).length;
+  await expect(
+    r.setFramePlacements(itemId, [{ ...MOVED_FRAME, rect: { ...MOVED_FRAME.rect, height: 480 } }]),
+  ).resolves.toMatchObject({ accepted: false, errorCode: 'invalid-frame-placement' });
+  await expect(r.setFramePlacements(itemId, [MOVED_FRAME])).resolves.toEqual({ accepted: true });
+  expect((await recvLines()).slice(before)).toEqual([]);
+  expect(r.previewPlateCrop(itemId).targets).toMatchObject([
+    { token: crop.token, focus: crop.focus },
+  ]);
+  const retained = RetainedStackItemSchema.parse(retainedFromStackItem(r.stackSnapshot()[0]!));
+  expect(retained.framePlacements).toEqual([MOVED_FRAME]);
+
+  expect(await r.take(itemId)).toMatchObject({ accepted: true });
+  const writes = (await recvLines()).slice(before);
+  const firstPlacement = writes.findIndex(
+    (line) => line.startsWith('CG 1-10 UPDATE ') && line.includes('framePlacements'),
+  );
+  const reveal = writes.findIndex((line) => line === 'CG 1-10 PLAY 0');
+  expect(firstPlacement).toBeGreaterThanOrEqual(0);
+  expect(reveal).toBeGreaterThan(firstPlacement);
+  expect(JSON.parse(mock!.lastCgUpdate({ channel: 1, layer: 10 })?.data ?? '{}')).toMatchObject({
+    __cg: { framePlacements: [MOVED_FRAME] },
+  });
+  expect(mock!.layerState({ channel: 1, layer: 30 })?.clip).toEqual({
+    x: 0.5,
+    y: 0.5,
+    width: 0.25,
+    height: 0.25,
+  });
+  expect(mock!.layerState({ channel: 1, layer: 30 })?.fill).toEqual({
+    x: 0.25,
+    y: 0.375,
+    width: 0.5,
+    height: 0.5,
+  });
+
+  expect(await r.stopItem(itemId)).toMatchObject({ accepted: true });
+  const stopped = (await recvLines()).length;
+  await expect(r.setFramePlacements(itemId, [AUTHORED_FRAME])).resolves.toEqual({ accepted: true });
+  expect((await recvLines()).slice(stopped)).toEqual([]);
+  expect(await r.take(itemId)).toMatchObject({ accepted: true });
+  expect(JSON.parse(mock!.lastCgUpdate({ channel: 1, layer: 10 })?.data ?? '{}')).toMatchObject({
+    __cg: { framePlacements: [AUTHORED_FRAME] },
+  });
+  expect(mock!.layerState({ channel: 1, layer: 30 })?.clip).toEqual({
+    x: 0.25,
+    y: 0.25,
+    width: 0.5,
+    height: 0.5,
+  });
+});
+
+it('moves the same on-air page and picture in place and rolls back after a refused CLIP', async () => {
+  const r = await boot({
+    template: template([{ id: 'guest-1', rect: BOX, operatorFrame: FRAME }]),
+    html: FRAME_HTML,
+  });
+  const itemId = 'item-1';
+  const row = () => r.stackSnapshot().find((item) => item.itemId === itemId);
+  expect(await loadAndTake(r, itemId)).toMatchObject({ accepted: true });
+  await expect.poll(row).toMatchObject({ onAirFramePlacement: true });
+  const before = (await recvLines()).length;
+  await expect(r.setFramePlacements(itemId, [MOVED_FRAME])).resolves.toEqual({ accepted: true });
+  const writes = (await recvLines())
+    .slice(before)
+    .filter((line) => /^(CG |MIXER |PLAY |CLEAR )/.test(line));
+  expect(writes).toEqual([
+    'MIXER 1-30 FILL 0.5 0.5 0.25 0.25 DEFER',
+    'MIXER 1-30 CLIP 0.5 0.5 0.25 0.25 DEFER',
+    expect.stringContaining('CG 1-10 UPDATE '),
+    'MIXER 1 COMMIT',
+  ]);
+  const slot = { channel: 1, layer: 30 };
+  const moved = mock!.layerState(slot);
+  expect(row()?.framePlacements).toEqual([MOVED_FRAME]);
+  const mixer = defaultHandlers().get('MIXER')!;
+  let refused = false;
+  mock!.setHandler('MIXER', (request, context, connection) => {
+    if (!refused && request.raw.startsWith('MIXER 1-30 CLIP ')) {
+      refused = true;
+      return { kind: 'err', code: 502, verb: 'MIXER' };
+    }
+    return mixer(request, context, connection);
+  });
+  await expect(r.setFramePlacements(itemId, [AUTHORED_FRAME])).resolves.toMatchObject({
+    accepted: false,
+    errorCode: 'amcp-502',
+  });
+  expect(refused).toBe(true);
+  expect(row()?.framePlacements).toEqual([MOVED_FRAME]);
+  expect(mock!.layerState(slot)).toMatchObject({
+    fill: moved?.fill,
+    clip: moved?.clip,
+    volume: moved?.volume,
+  });
+  expect(JSON.parse(mock!.lastCgUpdate({ channel: 1, layer: 10 })?.data ?? '{}')).toEqual({
+    __cg: { framePlacements: [MOVED_FRAME] },
+  });
+
+  let refusedCommit = false;
+  mock!.setHandler('MIXER', (request, context, connection) => {
+    if (!refusedCommit && request.raw === 'MIXER 1 COMMIT') {
+      refusedCommit = true;
+      return { kind: 'err', code: 502, verb: 'MIXER' };
+    }
+    return mixer(request, context, connection);
+  });
+  const beforeCommitRefusal = (await recvLines()).length;
+  await expect(r.setFramePlacements(itemId, [AUTHORED_FRAME])).resolves.toMatchObject({
+    accepted: false,
+    errorCode: 'amcp-502',
+    message: expect.stringContaining('previous placement was restored'),
+  });
+  expect(refusedCommit).toBe(true);
+  expect(
+    (await recvLines()).slice(beforeCommitRefusal).filter((line) => line === 'MIXER 1 COMMIT'),
+  ).toHaveLength(2);
+  expect(row()).toMatchObject({ framePlacements: [MOVED_FRAME], onAirFramePlacement: true });
+  expect(mock!.layerState(slot)).toMatchObject({
+    fill: moved?.fill,
+    clip: moved?.clip,
+    volume: moved?.volume,
+  });
+  expect(JSON.parse(mock!.lastCgUpdate({ channel: 1, layer: 10 })?.data ?? '{}')).toEqual({
+    __cg: { framePlacements: [MOVED_FRAME] },
+  });
+});
+
+it('merges concurrent edits to different frames of the same on-air row', async () => {
+  const secondTarget = { ...FRAME, frameKey: 'el-guest-2', artworkKey: 'el-guest-2' };
+  const second = {
+    frameKey: secondTarget.frameKey,
+    rect: { x: 120, y: 540, width: 480, height: 270 },
+  };
+  const r = await boot({
+    template: template([
+      { id: 'guest-1', rect: BOX, operatorFrame: FRAME },
+      { id: 'guest-2', rect: { ...BOX, x: 960 }, operatorFrame: secondTarget },
+    ]),
+    assignments: assign([
+      ['guest-1', 'src-a'],
+      ['guest-2', 'src-b'],
+    ]),
+    html: FRAME_HTML,
+  });
+  const itemId = 'item-1';
+  const row = () => r.stackSnapshot().find((item) => item.itemId === itemId);
+  expect(await loadAndTake(r, itemId)).toMatchObject({ accepted: true });
+  await expect.poll(row).toMatchObject({ onAirFramePlacement: true });
+  const before = (await recvLines()).length;
+  const results = await Promise.all([
+    r.setFramePlacements(itemId, [MOVED_FRAME]),
+    r.setFramePlacements(itemId, [second]),
+  ]);
+  expect(results).toEqual([{ accepted: true }, { accepted: true }]);
+  expect(row()?.framePlacements).toEqual([MOVED_FRAME, second]);
+  expect(JSON.parse(mock!.lastCgUpdate({ channel: 1, layer: 10 })?.data ?? '{}')).toEqual({
+    __cg: { framePlacements: [MOVED_FRAME, second] },
+  });
+  const wire = (await recvLines()).slice(before).filter((line) => /^MIXER /.test(line));
+  expect(wire).toEqual([
+    'MIXER 1-30 FILL 0.5 0.5 0.25 0.25 DEFER',
+    'MIXER 1-30 CLIP 0.5 0.5 0.25 0.25 DEFER',
+    'MIXER 1 COMMIT',
+    'MIXER 1-31 FILL 0.0625 0.5 0.25 0.25 DEFER',
+    'MIXER 1-31 CLIP 0.0625 0.5 0.25 0.25 DEFER',
+    'MIXER 1 COMMIT',
+  ]);
+});
+
+it('keeps concurrent placement batches on the same channel separate until each COMMIT', async () => {
+  const r = await boot({
+    template: template([{ id: 'guest-1', rect: BOX, operatorFrame: FRAME }]),
+    html: FRAME_HTML,
+  });
+  expect(await loadAndTake(r, 'item-1')).toMatchObject({ accepted: true });
+  expect(await loadAndTake(r, 'item-2')).toMatchObject({ accepted: true });
+  await expect
+    .poll(() => r.stackSnapshot().filter(({ onAirFramePlacement }) => onAirFramePlacement))
+    .toHaveLength(2);
+  const before = (await recvLines()).length;
+  const one = r.setFramePlacements('item-1', [MOVED_FRAME]);
+  const two = r.setFramePlacements('item-2', [MOVED_FRAME]);
+  await expect(Promise.all([one, two])).resolves.toEqual([{ accepted: true }, { accepted: true }]);
+  const wire = (await recvLines()).slice(before).filter((line) => /^MIXER /.test(line));
+  expect(wire).toEqual([
+    'MIXER 1-30 FILL 0.5 0.5 0.25 0.25 DEFER',
+    'MIXER 1-30 CLIP 0.5 0.5 0.25 0.25 DEFER',
+    'MIXER 1 COMMIT',
+    'MIXER 1-31 FILL 0.5 0.5 0.25 0.25 DEFER',
+    'MIXER 1-31 CLIP 0.5 0.5 0.25 0.25 DEFER',
+    'MIXER 1 COMMIT',
+  ]);
+});
+
+it('applies free resizing to the exact Look instance with the foreground page resident', async () => {
+  const second = { ...FRAME, frameKey: 'look-two/el-guest-1', resize: 'free' } as const;
+  const free: LiveFramePlacement = {
+    frameKey: second.frameKey,
+    lookId: 'two',
+    rect: { x: 960, y: 540, width: 480, height: 432 },
+  };
+  const first = { ...MOVED_FRAME, lookId: 'one' };
+  const info = template([{ id: 'guest-1', rect: BOX, fitMode: 'cover' }], true);
+  const r = await boot({
+    template: {
+      ...info,
+      liveSources: {
+        ...info.liveSources!,
+        defaultLookId: 'one',
+        looks: [
+          {
+            id: 'one',
+            name: 'One',
+            entered: { mode: 'cut' },
+            rects: { 'guest-1': BOX },
+            fits: { 'guest-1': 'cover' },
+            operatorFrames: { 'guest-1': FRAME },
+          },
+          {
+            id: 'two',
+            name: 'Two',
+            entered: { mode: 'cut' },
+            rects: { 'guest-1': BOX },
+            fits: { 'guest-1': 'cover' },
+            operatorFrames: { 'guest-1': second },
+          },
+        ],
+      },
+    },
+    html: FRAME_HTML,
+  });
+  const itemId = 'item-1';
+  await r.load(itemId, 'lower-third', {});
+  await expect(
+    r.setFramePlacements(itemId, [first, { ...free, frameKey: FRAME.frameKey }]),
+  ).resolves.toMatchObject({ accepted: false, errorCode: 'invalid-frame-placement' });
+  await expect(r.setFramePlacements(itemId, [first])).resolves.toEqual({ accepted: true });
+  await expect(r.take(itemId)).resolves.toMatchObject({ accepted: true });
+  const plate = { channel: 1, layer: 30 };
+  expect(mock!.layerState(plate)?.clip).toEqual({ x: 0.5, y: 0.5, width: 0.25, height: 0.25 });
+  await expect(r.setActiveLook(itemId, 'two')).resolves.toEqual({ ok: true });
+  expect(mock!.layerState(plate)?.clip).toEqual({ x: 0.25, y: 0.25, width: 0.5, height: 0.5 });
+  await expect.poll(() => r.stackSnapshot()[0]).toMatchObject({ onAirFramePlacement: true });
+  await expect(r.setFramePlacements(itemId, [free])).resolves.toEqual({ accepted: true });
+  expect(mock!.layerState(plate)?.clip).toEqual({ x: 0.5, y: 0.5, width: 0.25, height: 0.4 });
+  await expect(r.setActiveLook(itemId, 'one')).resolves.toEqual({ ok: true });
+  expect(mock!.layerState(plate)?.clip).toEqual({ x: 0.5, y: 0.5, width: 0.25, height: 0.25 });
+  expect(JSON.parse(mock!.lastCgUpdate({ channel: 1, layer: 10 })?.data ?? '{}')).toMatchObject({
+    __cg: { look: 'one', framePlacements: [first, free] },
+  });
+});
+
+it('keeps a placement off-air only when a backup engine is declared', async () => {
+  const r = await boot({
+    template: template([{ id: 'guest-1', rect: BOX, operatorFrame: FRAME }]),
+    html: FRAME_HTML,
+    redundant: true,
+  });
+  const itemId = 'item-1';
+  await r.load(itemId, 'lower-third', {});
+  await expect(r.setFramePlacements(itemId, [MOVED_FRAME])).resolves.toEqual({ accepted: true });
+  await expect(r.take(itemId)).resolves.toMatchObject({ accepted: true });
+  const before = (await recvLines()).length;
+  expect(r.stackSnapshot()[0]?.onAirFramePlacement).toBeUndefined();
+  await expect(r.setFramePlacements(itemId, [AUTHORED_FRAME])).resolves.toMatchObject({
+    accepted: false,
+    errorCode: 'frame-placement-on-air-unavailable',
+  });
+  expect(
+    (await recvLines()).slice(before).filter((line) => /^(CG |MIXER |PLAY |CLEAR )/.test(line)),
+  ).toEqual([]);
+  expect(r.stackSnapshot()[0]?.framePlacements).toEqual([MOVED_FRAME]);
 });
 
 it('D-202 — multiple reveals are refused atomically when only one extra seat fits', async () => {

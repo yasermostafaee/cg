@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   TemplateLiveSourcesSchema,
+  framePlacementRects,
+  lookOperatorFrames,
   lookPlateFocuses,
   lookPlateFits,
   lookPlateReveals,
@@ -164,6 +166,32 @@ describe('B-178 — lookPlateFits resolves the AUTHOR’s mode for the active lo
     fits['guest-1'] = 'cover';
     expect(lookPlateFits(live, 'grid')['guest-1']).toBe('contain');
   });
+});
+
+it('resolves the operator frame by active Look or the standalone declaration', () => {
+  const target = { frameKey: 'inst/plate', artworkKey: 'inst', resize: 'proportional' } as const;
+  const live = withLooks();
+  const firstLook = live.looks?.[0];
+  const firstSource = live.sources[0];
+  if (firstLook === undefined || firstSource === undefined) throw new Error('missing fixture');
+  firstLook.operatorFrames = { 'guest-1': target };
+  firstSource.operatorFrame = target;
+
+  const parsed = TemplateLiveSourcesSchema.parse(live);
+  expect(lookOperatorFrames(parsed, 'grid')).toEqual({ 'guest-1': target });
+  expect(lookOperatorFrames(parsed, undefined)).toEqual({ 'guest-1': target });
+  const authored = lookPlateRects(parsed, 'grid')['guest-1'];
+  if (authored === undefined) throw new Error('missing authored plate');
+  const moved = { ...authored, x: authored.x + 100 };
+  const placements = [{ frameKey: target.frameKey, lookId: 'grid', rect: moved }];
+  expect(framePlacementRects(parsed, undefined, placements)['guest-1']).toEqual(moved);
+  expect(framePlacementRects(parsed, 'missing-look', placements)['guest-1']).toEqual(moved);
+  expect(framePlacementRects(parsed, 'solo', placements)).toEqual(lookPlateRects(parsed, 'solo'));
+  expect(lookOperatorFrames(parsed, 'solo')).toEqual({});
+  expect(lookOperatorFrames({ ...parsed, looks: undefined }, undefined)).toEqual({
+    'guest-1': target,
+  });
+  expect(lookOperatorFrames(withoutLooks(), undefined)).toEqual({});
 });
 
 describe('D-178 — lookPlateFocuses resolves focus through both carrier shapes', () => {

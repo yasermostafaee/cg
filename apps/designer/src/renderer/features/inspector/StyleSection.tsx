@@ -904,6 +904,24 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
         />
         <AspectRow element={element} />
         <FitModeRow element={element} />
+        <CheckRow
+          label="Allow placement in CG Control"
+          checked={element.operatorPlacement !== undefined}
+          onChange={(allowed) =>
+            designerStore.updateElement(id, {
+              operatorPlacement: allowed ? 'proportional' : undefined,
+            })
+          }
+        />
+        {element.operatorPlacement !== undefined && (
+          <CheckRow
+            label="Allow free resize"
+            checked={element.operatorPlacement === 'free'}
+            onChange={(free) =>
+              designerStore.updateElement(id, { operatorPlacement: free ? 'free' : 'proportional' })
+            }
+          />
+        )}
         <PlateMaskRows key={'mask-' + element.id} element={element} />
         <PlateMaskRows key={'reveal-' + element.id} element={element} linked />
         <LivePlateFallbackPicker

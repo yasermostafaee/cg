@@ -4,6 +4,7 @@ import {
   IdSchema,
   LayerSlotSchema,
   LiveCropFocusSchema,
+  LiveFramePlacementsSchema,
   LiveSourceLookOverrideSchema,
   MAX_PREVIEW_PLATE_CROPS,
   PositionSchema,
@@ -53,6 +54,7 @@ const LayerProfileItemSchema = RetainedStackItemSchema.pick({
   pages: true,
   pageAdvance: true,
   soundMuted: true,
+  framePlacements: true,
 }).extend({
   layer: z.number().int().positive(),
   label: z.string().max(240).optional(),
@@ -592,6 +594,17 @@ export const StackPreviewPlateCropChannel = defineChannel(
       .array(PreviewPlateCropTargetSchema.shape.token)
       .max(MAX_PREVIEW_PLATE_CROPS)
       .optional(),
+    message: z.string().optional(),
+  }),
+);
+
+/** Replace the saved placements for an opted-in row. An empty array restores authored geometry. */
+export const StackSetFramePlacementsChannel = defineChannel(
+  'stack.set-frame-placements',
+  z.object({ itemId: IdSchema, placements: LiveFramePlacementsSchema.min(1) }),
+  z.object({
+    accepted: z.boolean(),
+    errorCode: z.string().optional(),
     message: z.string().optional(),
   }),
 );

@@ -1,4 +1,5 @@
 import {
+  collectOperatorFrameTargets,
   defaultLookOf,
   deriveLookSources,
   flattenElements,
@@ -11,6 +12,7 @@ import type {
   FlatElement,
   LiveCropFocus,
   LiveFitMode,
+  LiveFrameTarget,
   LivePlateMask,
   LiveRevealMask,
   LiveSourceArrangement,
@@ -182,6 +184,7 @@ export function collectLiveSources(scene: Scene): LiveSourceDeclaration[] {
   const dynamicRoles = dynamicRoleIndex(scene);
 
   const flattened = flattenElements(scene, 'document');
+  const operatorFrames = collectOperatorFrameTargets(scene, flattened);
   // Every ROOT-level composition instance is a candidate BOX, with its authored scene rect.
   // Root-level because that is what an arrangement's cells position (A′, §12.9.10).
   const boxRects = new Map<string, LiveSourceRect>();
@@ -221,10 +224,12 @@ export function collectLiveSources(scene: Scene): LiveSourceDeclaration[] {
     const boxId = boxIdOf(flat, boxIds);
     const boxRect = boxId === null ? undefined : boxRects.get(boxId);
     const boxRelativeRect = boxRect === undefined ? null : relativeRect(flat.rect, boxRect);
+    const operatorFrame = operatorFrames.get(flat.key);
     out.push({
       elementId: el.id,
       sourceId: el.routeKey,
       rect: flat.rect,
+      ...(operatorFrame !== undefined && { operatorFrame }),
       ...(el.expectedAspect !== undefined ? { expectedAspect: el.expectedAspect } : {}),
       // `C-028` — omitted when absent rather than defaulted to `contain` here. The
       // default belongs at the ONE resolution point (the bridge's mode chain), and a
@@ -267,6 +272,7 @@ export interface TemplateLookCarrier {
   instanceId: string;
   entered: LookTransition;
   rects: Record<string, LiveSourceRect>;
+  operatorFrames?: Record<string, LiveFrameTarget> | undefined;
   /**
    * ⭐ `B-178` — **the AUTHOR's fit mode for each source IN THIS LOOK**, taken from the plate
    * ELEMENT that serves that `routeKey` here.
@@ -376,6 +382,7 @@ export function collectLookCarrier(scene: Scene): {
     group.looks.map((l) => [l.id, {}]),
   );
   const masksByLook = new Map<string, Record<string, LivePlateMask>>();
+  const operatorFramesByLook = new Map<string, Record<string, LiveFrameTarget>>();
   const fallbacksByLook = new Map<string, string[]>();
   const firstPlateFor = new Map<string, string>();
   /**
@@ -404,7 +411,9 @@ export function collectLookCarrier(scene: Scene): {
   const aspectFor = new Map<string, number>();
   const dynamicFor = new Map<string, boolean>();
 
-  for (const flat of flattenElements(scene, 'document')) {
+  const flattened = flattenElements(scene, 'document');
+  const operatorFrames = collectOperatorFrameTargets(scene, flattened);
+  for (const flat of flattened) {
     const el = flat.element;
     if (el.type !== 'video-placeholder') continue;
     // `B-183` — narrowed once, at the top, so the reads below cannot disagree about whether
@@ -426,6 +435,12 @@ export function collectLookCarrier(scene: Scene): {
       const rects = rectsByLook.get(look.id);
       if (rects === undefined || routeKey in rects) continue;
       rects[routeKey] = flat.rect;
+      const operatorFrame = operatorFrames.get(flat.key);
+      if (operatorFrame !== undefined) {
+        const frames = operatorFramesByLook.get(look.id) ?? {};
+        frames[routeKey] = operatorFrame;
+        operatorFramesByLook.set(look.id, frames);
+      }
       /*
         ⚠ WRITTEN ONLY WHEN THE AUTHOR STATED ONE. An absent entry is the third state —
         "nobody said" — and it must reach the bridge as an absence rather than as a defaulted
@@ -504,6 +519,7 @@ export function collectLookCarrier(scene: Scene): {
       instanceId: l.instanceId,
       entered: l.entered,
       rects: rectsByLook.get(l.id) ?? {},
+      ...(operatorFramesByLook.has(l.id) && { operatorFrames: operatorFramesByLook.get(l.id) }),
       fits: fitsByLook.get(l.id) ?? {},
       focuses: focusesByLook.get(l.id) ?? {},
       reveals: revealsByLook.get(l.id) ?? {},

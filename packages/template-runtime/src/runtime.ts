@@ -1,6 +1,8 @@
 import {
   activeRangeOf,
+  collectOperatorFrameTargets,
   elementLoopsOnHold,
+  flattenElements,
   followsComposition,
   followWindowMs,
   listBoundSequenceIds,
@@ -28,6 +30,7 @@ import {
   stripCgControl,
   type CgLiveFallback,
   type CgPage,
+  type LiveFramePlacement,
   type Look,
   type SequenceElement,
 } from '@cg/shared-schema';
@@ -46,6 +49,7 @@ import {
   type FieldDocLite,
 } from './bindings.js';
 import { applyArrangementToNodes } from './arrangement-view.js';
+import { createFramePlacementRenderer } from './frame-placement.js';
 import { LookMediaPark } from './look-media.js';
 import {
   pagedRepeaterItems,
@@ -583,15 +587,32 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const outputPass = mode === 'output' ? (options.outputPass ?? 'full') : 'full';
   const holdsLiveFallback =
     mode === 'output' && outputPass !== 'foreground' && !isPvwRehearsal(doc);
+  const hasFramePlacement = [scene, ...(scene.compositions ?? [])].some(({ layers }) =>
+    layers.some(({ children }) =>
+      children.some(
+        (element) =>
+          element.type === 'video-placeholder' && element.operatorPlacement !== undefined,
+      ),
+    ),
+  );
+  const flattened = hasFramePlacement ? flattenElements(scene) : [];
+  const frameTargets = collectOperatorFrameTargets(scene, flattened);
   const built = buildScene(
     scene,
     doc,
     mode,
     paintEditorBackdrop,
     outputPass === 'full' ? undefined : liveForegroundKeys(scene),
+    new Set(Array.from(frameTargets.values(), ({ artworkKey }) => artworkKey)),
   );
   applyOutputPass(built.container, outputPass);
   root.appendChild(built.container);
+  const renderFramePlacements = createFramePlacementRenderer(
+    built.container,
+    flattened,
+    frameTargets,
+  );
+  let framePlacements: readonly LiveFramePlacement[] = [];
 
   /**
    * ⭐ **`multibox-layout-switch` `tasks.md` 4.3 — UNIT B′'s re-punch pass.**
@@ -709,6 +730,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     // The park follows from INSIDE `repunch`, off this same `visibility` map — see the note
     // there for why it cannot be done at this line without acquiring a second answer.
     repunch({ visibility: visibilityOfLook(look.id) });
+    renderFramePlacements(framePlacements, look.id);
   };
   /**
    * `tasks.md` 6.7 — ENTER A LOOK BY ID. **The one implementation, two entry points.**
@@ -3457,7 +3479,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         implementation, three entry points, so the page cannot grow a second answer to "which
         look is active".
       */
-      if (control?.look !== undefined) enterLook(control.look);
+      if (control?.framePlacements !== undefined) framePlacements = control.framePlacements;
+      const enteredLook = control?.look !== undefined && enterLook(control.look);
+      if (!enteredLook && control?.framePlacements !== undefined) {
+        renderFramePlacements(framePlacements, currentLookId);
+      }
       bus.emit('play.end');
     },
 
@@ -3567,9 +3593,12 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // A late rollback also carries a look. Ignore it once another cut or take owns the page.
       const staleRelease = phase?.phase === 'release' && lastFallbackPhaseId !== phase.id;
       const previousLook = currentLookId;
+      const nextPlacements = staleRelease ? undefined : control?.framePlacements;
+      if (nextPlacements !== undefined) framePlacements = nextPlacements;
       const enteredLook = !staleRelease && control?.look !== undefined && enterLook(control.look);
       if (!enteredLook) {
         repunch(arrangementView);
+        if (nextPlacements !== undefined) renderFramePlacements(framePlacements, currentLookId);
       }
       if (phase?.phase === 'hold' && (control?.look === undefined || enteredLook)) {
         holdLiveFallback(phase);

@@ -212,6 +212,8 @@ export interface FlatElement {
    * their bare id.
    */
   readonly key: string;
+  /** Rendered keys of the container and composition ancestors, outermost first. */
+  readonly ancestorKeys: readonly string[];
   /** Composition nesting depth, bounded exactly as the builder bounds it. */
   readonly depth: number;
   /**
@@ -289,6 +291,7 @@ export function flattenElements(scene: Scene, order: SiblingOrder = 'document'):
     depth: number,
     prefix: string,
     ancestry: readonly VisibilitySubject[],
+    ancestorKeys: readonly string[],
   ): void => {
     const ordered =
       order === 'paint' ? [...children].sort((a, b) => a.zIndex - b.zIndex) : children;
@@ -301,6 +304,7 @@ export function flattenElements(scene: Scene, order: SiblingOrder = 'document'):
         ancestors,
         ancestry,
         key,
+        ancestorKeys,
         depth,
       });
       if (el.type === 'container') {
@@ -311,6 +315,7 @@ export function flattenElements(scene: Scene, order: SiblingOrder = 'document'):
           depth,
           prefix,
           [...ancestry, subjectOf(el)],
+          [...ancestorKeys, key],
         );
         continue;
       }
@@ -332,11 +337,15 @@ export function flattenElements(scene: Scene, order: SiblingOrder = 'document'):
         for (const layer of layers) {
           // The composition INSTANCE can hide its whole subtree, and so can the layer
           // INSIDE the composition that a child sits on — both go on the chain.
-          walk(layer.children, [...ancestors, level], nextVisited, depth + 1, `${key}/`, [
-            ...ancestry,
-            subjectOf(el),
-            subjectOf(layer),
-          ]);
+          walk(
+            layer.children,
+            [...ancestors, level],
+            nextVisited,
+            depth + 1,
+            `${key}/`,
+            [...ancestry, subjectOf(el), subjectOf(layer)],
+            [...ancestorKeys, key],
+          );
         }
       }
       // A `repeater` is deliberately NOT walked — see the docstring.
@@ -344,7 +353,7 @@ export function flattenElements(scene: Scene, order: SiblingOrder = 'document'):
   };
 
   for (const layer of scene.layers)
-    walk(layer.children, [], new Set<string>(), 0, '', [subjectOf(layer)]);
+    walk(layer.children, [], new Set<string>(), 0, '', [subjectOf(layer)], []);
   return out;
 }
 

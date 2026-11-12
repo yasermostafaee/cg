@@ -309,6 +309,8 @@ export function createMockBridge(): RuntimeBridge {
       setPlateVolume: (req) =>
         Promise.resolve(mock.setPlateVolume(req.itemId, req.plateId, req.volume)),
       pgmPlateCrop: () => Promise.resolve({ ok: true, targets: [] }),
+      setFramePlacements: () =>
+        Promise.resolve({ accepted: false, message: 'Frame placement requires CG Bridge.' }),
       previewPlateCrop: () =>
         Promise.resolve({
           ok: false,

@@ -30,6 +30,9 @@ export interface RehearsalSubject {
   /** Applied fields with any staged edits layered on. */
   fields: FieldValues;
   previewPlateCrops?: StackItemState['previewPlateCrops'];
+  framePlacements?: StackItemState['framePlacements'];
+  appliedFramePlacements?: StackItemState['framePlacements'];
+  canEditFrames?: boolean;
   /** Pan checks the live seat when the row's Inspector offers Update on air. */
   previewCropOnAir?: boolean;
   previewCropPending?: boolean;

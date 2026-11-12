@@ -3,6 +3,7 @@ import { IdSchema, ISODateSchema } from '../primitives.js';
 import { FieldValuesSchema } from '../fields.js';
 import { PositionSchema } from '../scene.js';
 import { LiveCropFocusSchema } from '../live-fit.js';
+import { LiveFramePlacementsSchema } from '../frame-placement.js';
 import {
   LivePlateVolumesSchema,
   LiveSourceFrozenAssignmentSchema,
@@ -273,6 +274,9 @@ export const StackItemStateSchema = z.object({
   soundMuted: z.boolean().optional(),
   /** Operator framing staged in PVW, keyed by the Bridge's exact take geometry token. */
   previewPlateCrops: PreviewPlateCropsSchema.optional(),
+  framePlacements: LiveFramePlacementsSchema.optional(),
+  /** A confirmed resident page can accept frame geometry in place. */
+  onAirFramePlacement: z.literal(true).optional(),
   /**
    * `FIELD-FIXES-01` B — why this row's last take was refused (see {@link TakeRefusalSchema}).
    * ABSENT on every row whose last take landed, or that has been cleared since.
@@ -671,6 +675,7 @@ export const RetainedStackItemSchema = z.object({
   soundMuted: z.boolean().optional(),
   /** Keeps staged framing through a Bridge restart, before any seats are restored. */
   previewPlateCrops: PreviewPlateCropsSchema.optional(),
+  framePlacements: LiveFramePlacementsSchema.optional(),
 });
 export type RetainedStackItem = z.infer<typeof RetainedStackItemSchema>;
 
@@ -724,5 +729,6 @@ export function retainedFromStackItem(item: StackItemState): RetainedStackItem {
     ...(item.pageAdvance !== undefined && { pageAdvance: item.pageAdvance }),
     ...(item.soundMuted !== undefined && { soundMuted: item.soundMuted }),
     ...(item.previewPlateCrops !== undefined && { previewPlateCrops: item.previewPlateCrops }),
+    ...(item.framePlacements !== undefined && { framePlacements: item.framePlacements }),
   };
 }

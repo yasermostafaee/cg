@@ -49,6 +49,17 @@ export const LIVE_FIT_MODES = ['contain', 'cover'] as const;
 export const LiveFitModeSchema = z.enum(LIVE_FIT_MODES);
 export type LiveFitMode = z.infer<typeof LiveFitModeSchema>;
 
+export const LiveFrameResizeSchema = z.enum(['proportional', 'free']);
+export type LiveFrameResize = z.infer<typeof LiveFrameResizeSchema>;
+
+/** Exact flattened instance keys for an operator-editable plate and its artwork. */
+export const LiveFrameTargetSchema = z.object({
+  frameKey: z.string().min(1),
+  artworkKey: z.string().min(1),
+  resize: LiveFrameResizeSchema,
+});
+export type LiveFrameTarget = z.infer<typeof LiveFrameTargetSchema>;
+
 /** D-178 — the smallest crop shows 1/8 of the largest cover window in each dimension. */
 export const MAX_LIVE_CROP_ZOOM = 8;
 

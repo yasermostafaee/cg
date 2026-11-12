@@ -9,9 +9,10 @@ import {
   Play,
   SquareDashed,
 } from 'lucide-react';
-import { REFERENCE_RASTER, sourceAspect } from '@cg/shared-ipc';
+import { lookOperatorFrames, REFERENCE_RASTER, sourceAspect } from '@cg/shared-ipc';
 import { isOnAirStatus } from '@cg/shared-schema';
 import { Panel } from '../../ui/Panel.js';
+import { useAuthCapabilities } from '../../hooks/useAuthCapabilities.js';
 import { effectiveTimingFor } from '../inspector/timingToSend.js';
 import { Button } from '../../ui/Button.js';
 import { rehearsalCaption } from './rehearsalFrames.js';
@@ -30,6 +31,8 @@ import { plateAudioState } from '../layers/plateAudio.js';
 import { bookPageOf } from '../layers/bookOf.js';
 import {
   buildApplyPayload,
+  framePlacementsWithDraft,
+  snapshotFramePlacementDraft,
   draftsVersion,
   effectivePosition,
   subscribeDrafts,
@@ -142,6 +145,8 @@ export function PreviewPanel({
   // `MULTI-CHANNEL-01` — the SELECTED channel's bank: PREVIEW is the channel on screen.
   const { bank, viewChannel } = useChannelBankState();
   const [panChannel, setPanChannel] = useState<number | null | undefined>(undefined);
+  const [frameEditChannel, setFrameEditChannel] = useState<number | null | undefined>(undefined);
+  const supportsFramePlacement = useAuthCapabilities()?.liveFramePlacement === true;
   const [panSession, setPanSession] = useState(0);
   const slots = useFixedSlots();
   // `RELEASE-091-01` §1 — each rehearsing row's page: the bridge's first, this browser's copy only
@@ -196,6 +201,9 @@ export function PreviewPanel({
           const alias = slots.find((s) => s.layer === r.layer && s.channel === r.channel)?.alias;
           const info = templates.get(item.templateId, r.channel) ?? null;
           const live = info?.liveSources;
+          const hasEditableFrame =
+            live !== undefined &&
+            Object.keys(lookOperatorFrames(live, item.activeLookId)).length > 0;
           const fields = buildApplyPayload(item.itemId, item.fields);
           return {
             itemId: r.itemId,
@@ -244,6 +252,18 @@ export function PreviewPanel({
             // Inspector's Apply uses — so what is rehearsed is exactly what Apply
             // would send.
             fields,
+            framePlacements: framePlacementsWithDraft(
+              item.framePlacements ?? (hasEditableFrame ? [] : undefined),
+              snapshotFramePlacementDraft(item.itemId),
+            ),
+            appliedFramePlacements: item.framePlacements,
+            canEditFrames:
+              supportsFramePlacement &&
+              canEditPosition &&
+              hasEditableFrame &&
+              !item.pending &&
+              item.status !== 'exiting' &&
+              (!isOnAirStatus(item) || item.onAirFramePlacement === true),
             previewPlateCrops: item.previewPlateCrops,
             previewCropOnAir: isOnAirStatus(item),
             previewCropPending: item.pending || item.status === 'exiting',
@@ -370,6 +390,7 @@ export function PreviewPanel({
       catalog,
       liveLayers,
       canEditPosition,
+      supportsFramePlacement,
     ],
   );
 
@@ -432,6 +453,8 @@ export function PreviewPanel({
   const [transport, setTransport] = useState<RehearsalTransport | null>(null);
   const panAvailable = subjects.length > 0 && transport?.panAvailable === true;
   const panOpen = panAvailable && panChannel === viewChannel;
+  const frameEditAvailable = subjects.some((subject) => subject.canEditFrames === true);
+  const frameEditOpen = frameEditAvailable && frameEditChannel === viewChannel;
   useEffect(() => {
     if (!panAvailable) setPanChannel(undefined);
   }, [panAvailable]);
@@ -490,6 +513,7 @@ export function PreviewPanel({
                 : 'Show a Crop edges plate in Preview to use Pan'
             }
             onClick={() => {
+              setFrameEditChannel(undefined);
               setPanChannel(panOpen ? undefined : viewChannel);
               if (!panOpen) setPanSession((session) => session + 1);
             }}
@@ -497,6 +521,20 @@ export function PreviewPanel({
             <Icon icon={Move} size={13} />
             Pan
           </Button>
+          {frameEditAvailable && (
+            <Button
+              variant="ghost"
+              active={frameEditOpen}
+              aria-label="Edit live frame placement"
+              aria-pressed={frameEditOpen}
+              onClick={() => {
+                setPanChannel(undefined);
+                setFrameEditChannel(frameEditOpen ? undefined : viewChannel);
+              }}
+            >
+              Frames
+            </Button>
+          )}
           {companionActions}
         </>
       }
@@ -589,6 +627,7 @@ export function PreviewPanel({
             onTransport={setTransport}
             onSelectItem={onSelectItem}
             panOpen={panOpen}
+            frameEditOpen={frameEditOpen}
             panSession={panSession}
             panSourceAspects={panSourceAspects}
           />

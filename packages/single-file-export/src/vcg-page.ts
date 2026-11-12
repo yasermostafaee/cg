@@ -1,4 +1,8 @@
-import type { AssetEntry, Scene } from '@cg/shared-schema';
+import {
+  CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER,
+  type AssetEntry,
+  type Scene,
+} from '@cg/shared-schema';
 
 /** Build the package-relative broadcast page embedded in every `.vcg`. */
 export function buildVcgIndexHtml(
@@ -30,6 +34,7 @@ export function buildVcgIndexHtml(
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    ${CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER}
     <meta name="viewport" content="width=${String(scene.resolution.width)}, initial-scale=1" />
     <title>${escapeHtml(scene.name)}</title>
     <link rel="stylesheet" href="./cg.css" />${fontStyle}

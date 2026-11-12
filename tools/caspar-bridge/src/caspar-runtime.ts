@@ -19,8 +19,10 @@ import {
 } from '@cg/caspar-client';
 import {
   CG_LIVE_POSITION_PAGE_MARKER,
+  CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER,
   DEFAULT_LIVE_CROP_FOCUS,
   MAX_PREVIEW_PLATE_CROPS,
+  framePlacementFits,
   isRestorable,
   intersectNormalizedRects,
   livePlateMaskRegions,
@@ -39,6 +41,7 @@ import type {
   CgPassTiming,
   FieldValues,
   LiveCropFocus,
+  LiveFramePlacement,
   LiveFitMode,
   LivePlateVolumes,
   LiveSourceDeclaration,
@@ -134,6 +137,9 @@ import {
   lookPlateMasks,
   lookPlateReveals,
   lookPlateRects,
+  lookOperatorFrames,
+  framePlacementRects,
+  type TemplateLiveSources,
   type PgmPlateCropTarget,
   type PreviewPlateCropEdit,
   type PreviewPlateCropTarget,
@@ -449,8 +455,43 @@ interface SavedCropEdit {
   focus: LiveCropFocus;
 }
 
+interface ResidentOutputPage {
+  readonly slot: CommandSlot;
+  readonly version: string;
+  readonly session: ServerSession;
+  readonly generation: number;
+}
+
+/** A private owner of the server's shared DEFER buffer for one channel. */
+interface MixerBatch {
+  channel?: number;
+  release?: () => void;
+  staged?: boolean;
+}
+
 function cropKey(lookId: string | undefined, plateId: string): string {
   return (lookId ?? '') + '\u001f' + plateId;
+}
+
+function framePlacementKey({ lookId, frameKey }: LiveFramePlacement): string {
+  return JSON.stringify([lookId, frameKey]);
+}
+
+function allowedFramePlacement(
+  carrier: TemplateLiveSources,
+  placement: LiveFramePlacement,
+): boolean {
+  const { frameKey, lookId } = placement;
+  const looks = carrier.looks ?? [];
+  if (looks.length === 0 ? lookId !== undefined : !looks.some(({ id }) => id === lookId)) {
+    return false;
+  }
+  const targets = lookOperatorFrames(carrier, lookId);
+  const found = Object.entries(targets).find(([, frame]) => frame.frameKey === frameKey);
+  if (found === undefined) return false;
+  const [routeKey, { resize }] = found;
+  const authored = lookPlateRects(carrier, lookId)[routeKey];
+  return authored !== undefined && framePlacementFits(placement, authored, resize);
 }
 
 function maskSeatPrefix(plateId: string): string {
@@ -1714,6 +1755,7 @@ export class CasparRuntime {
     Map<string, { producer: string; focus: LiveCropFocus }>
   >();
   readonly #previewPlateCrops = new Map<string, NonNullable<StackItemState['previewPlateCrops']>>();
+  readonly #framePlacements = new Map<string, LiveFramePlacement[]>();
   /**
    * B-039 — itemIds whose slot currently has a LIVE producer (a `CG ADD` succeeded
    * and no later `CLEAR` destroyed it). The prescriptive signal: `take` plays when
@@ -1773,10 +1815,8 @@ export class CasparRuntime {
    */
   readonly #positions = new Map<string, Position>();
   // A held version alone can survive a restart, and #loaded also permits a backup-only ADD.
-  readonly #livePositionPages = new Map<
-    string,
-    { slot: CommandSlot; version: string; session: ServerSession; generation: number }
-  >();
+  readonly #livePositionPages = new Map<string, ResidentOutputPage>();
+  readonly #liveFramePages = new Map<string, ResidentOutputPage>();
   /**
    * R-048 / C-015 phase 6 (6.9) — itemId → plateId → catalog source id: this
    * ROW's live-source substitutions.
@@ -2261,14 +2301,7 @@ export class CasparRuntime {
   /** `B-198` — the layer the last `MIXER` line addressed, so the injector can find the boundary. */
   #lastMixerTarget: string | null = null;
   /**
-   * 🔴 `B-199` — **the channel this process has `MIXER … DEFER`red something on and not yet
-   * committed**, or `null`. An INSTANCE field rather than a local, so the guard that drains it
-   * can sit OUTSIDE the batch that fills it and still run when that batch throws.
-   */
-  #stagedMixerChannel: number | null = null;
-  /**
-   * 🔴 `B-221` — **the channel on which this process staged something and then could not
-   * DELIVER the commit**, or `null`.
+   * `B-221` — channels where this process staged a batch and its commit is unconfirmed.
    *
    * `B-199`'s guard puts the commit in a `finally`, which guarantees it is SENT on every
    * exit path; nothing can guarantee it ARRIVES. A link that dies between the first
@@ -2280,7 +2313,9 @@ export class CasparRuntime {
    * and puts the ledger's geometry back — the same repair `B-199` makes on the throw path,
    * moved to the one moment a dead link can be repaired at.
    */
-  #orphanedMixerChannel: number | null = null;
+  readonly #orphanedMixerChannels = new Set<number>();
+  // CasparCG's per-channel DEFER buffer survives reconnects. Emergency Out/Stop/Clear bypass it.
+  readonly #mixerBatchTails = new Map<number, Promise<void>>();
   readonly #sessionTuning: {
     oscDegradedAfterMs?: number;
     oscDownAfterMs?: number;
@@ -2877,6 +2912,8 @@ export class CasparRuntime {
     this.#adapter.on('failover-complete', (event: FailoverEvent) => {
       for (const itemId of this.#livePositionPages.keys()) this.#markDirty(itemId);
       this.#livePositionPages.clear();
+      for (const itemId of this.#liveFramePages.keys()) this.#markDirty(itemId);
+      this.#liveFramePages.clear();
       // `B-331` — the new primary's stage was never cleared by the old one's acknowledgements.
       this.#reconciler.liftProducerCleared();
       this.#lastFailover = {
@@ -3040,6 +3077,7 @@ export class CasparRuntime {
     this.#reconciler.on('item-changed', (state) => this.#markDirty(state.itemId));
     this.#reconciler.on('item-removed', (info) => {
       this.#livePositionPages.delete(info.itemId);
+      this.#liveFramePages.delete(info.itemId);
       this.#markDirty(info.itemId);
     });
 
@@ -3238,6 +3276,8 @@ export class CasparRuntime {
       // cannot read this back cannot tell a live guest from a silent one.
       const plateVolumes = this.#plateVolumes.get(item.itemId);
       const previewPlateCrops = this.#previewPlateCrops.get(item.itemId);
+      const framePlacements = this.#framePlacements.get(item.itemId);
+      const onAirFramePlacement = this.#liveFramePage(item) !== undefined;
       // §14 (LOOKS) Stage E — and the ACTIVE LOOK, through the ONE resolver rather than
       // off `#activeLooks` directly. The map holds only what an operator explicitly
       // picked; `activeLookId()` answers what the row is actually SHOWING (the pick, else
@@ -3305,6 +3345,8 @@ export class CasparRuntime {
         frozenAssignment === undefined &&
         plateVolumes === undefined &&
         previewPlateCrops === undefined &&
+        framePlacements === undefined &&
+        !onAirFramePlacement &&
         activeLookId === undefined &&
         // 🔴 `TIMING-WIRE-22` (e) — BOTH HALVES, and this is the half that bites. A row whose
         // ONLY override is a pass count would take the fast path above and be published without
@@ -3332,6 +3374,8 @@ export class CasparRuntime {
         ...(frozenAssignment !== undefined && { frozenAssignment }),
         ...(plateVolumes !== undefined && { plateVolumes }),
         ...(previewPlateCrops !== undefined && { previewPlateCrops }),
+        ...(framePlacements !== undefined && { framePlacements }),
+        ...(onAirFramePlacement && { onAirFramePlacement: true as const }),
         ...(activeLookId !== undefined && { activeLookId }),
         ...(timingOverride !== undefined && { timingOverride }),
         ...(pages !== undefined && { pages }),
@@ -4154,6 +4198,9 @@ export class CasparRuntime {
       if (item.previewPlateCrops !== undefined) {
         this.#previewPlateCrops.set(item.itemId, item.previewPlateCrops);
       }
+      if (item.framePlacements !== undefined) {
+        this.#framePlacements.set(item.itemId, item.framePlacements);
+      }
       /*
         §14 (LOOKS) Stage E — and the ACTIVE LOOK, re-applied HERE for the same reason as
         its three neighbours: BEFORE any adopt-vs-re-ADD decision runs, so whatever this
@@ -4391,6 +4438,7 @@ export class CasparRuntime {
     this.#plateFits.delete(itemId);
     this.#liveCropFocuses.delete(itemId);
     this.#previewPlateCrops.delete(itemId);
+    this.#framePlacements.delete(itemId);
     this.#plateVolumes.delete(itemId);
     this.#activeLooks.delete(itemId);
     this.#passTimings.delete(itemId);
@@ -5062,6 +5110,304 @@ export class CasparRuntime {
     return { ok: true };
   }
 
+  async setFramePlacements(
+    itemId: string,
+    placements: LiveFramePlacement[],
+  ): Promise<{ accepted: boolean; errorCode?: string; message?: string }> {
+    return this.#audited('update', this.#itemDetail(itemId), () =>
+      this.#withPageQueue(itemId, () =>
+        this.#withLiveSeatLock(itemId, async () => {
+          const item = this.#reconciler.get(itemId);
+          const slot = this.#slots.get(itemId);
+          if (item === null || slot === undefined)
+            return { accepted: false, errorCode: 'unknown-item' };
+          const version = this.#templates.versionOn(slot.channel, item.templateId);
+          const carrier =
+            version === null ? undefined : this.#templates.infoOf(version)?.liveSources;
+          if (
+            version === null ||
+            carrier === undefined ||
+            !this.#hasFramePlacementMarker(version)
+          ) {
+            return {
+              accepted: false,
+              errorCode: 'frame-placement-unavailable',
+              message: 'This template does not support frame placement.',
+            };
+          }
+          const edits = new Map(
+            placements.map((placement) => [framePlacementKey(placement), placement]),
+          );
+          if (
+            edits.size === 0 ||
+            edits.size !== placements.length ||
+            placements.some((placement) => !allowedFramePlacement(carrier, placement))
+          ) {
+            return {
+              accepted: false,
+              errorCode: 'invalid-frame-placement',
+              message:
+                'A frame or its resize options changed. Check the current template in Preview.',
+            };
+          }
+          // Independent operator edits merge against the latest applied row inside the lock.
+          const merged = new Map<string, LiveFramePlacement>();
+          for (const prior of this.#framePlacements.get(itemId) ?? []) {
+            if (allowedFramePlacement(carrier, prior)) merged.set(framePlacementKey(prior), prior);
+          }
+          for (const [key, placement] of edits) merged.set(key, placement);
+          const next = [...merged.values()];
+          if (
+            this.#ownsLiveSeats(itemId) ||
+            this.#pendingRestore.has(itemId) ||
+            this.#restoreBlocked.has(itemId)
+          ) {
+            return this.#applyFramePlacementOnAir(item, next);
+          }
+          // An off-air Update stores configuration only. A stopped resident page receives it on Take.
+          this.#recordFramePlacements(itemId, next);
+          return { accepted: true };
+        }),
+      ),
+    );
+  }
+
+  #hasFramePlacementMarker(version: string): boolean {
+    return (
+      this.#templates
+        .htmlOf(version)
+        ?.slice(0, 1024)
+        .includes(CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER) === true
+    );
+  }
+
+  #recordFramePlacements(itemId: string, placements: LiveFramePlacement[]): void {
+    this.#framePlacements.set(itemId, placements);
+    this.#markDirty(itemId);
+  }
+
+  #liveFramePage(item: StackItemState): ResidentOutputPage | undefined {
+    const { itemId } = item;
+    const page = this.#liveFramePages.get(itemId);
+    if (
+      page === undefined ||
+      this.#sessions.B !== undefined ||
+      (item.status !== 'on-air' && item.status !== 'playing') ||
+      item.pending ||
+      !this.#loaded.has(itemId) ||
+      this.#slots.get(itemId) !== page.slot ||
+      this.#templates.heldVersion(itemId) !== page.version ||
+      this.#templates.versionOn(page.slot.channel, item.templateId) !== page.version ||
+      this.#pendingRestore.has(itemId) ||
+      this.#restoreBlocked.has(itemId) ||
+      this.#adapter.primarySession !== page.session ||
+      this.#amcpGeneration !== page.generation ||
+      page.session.state !== 'healthy' ||
+      !this.#takeTokens.has(itemId) ||
+      !this.#isVerifiedCropSlot(page.slot)
+    )
+      return undefined;
+
+    const occupied = page.session.osc.occupancy.occupied(this.#occupancyStaleMs);
+    const hasHtml = (slot: CommandSlot) =>
+      occupied.some(
+        ({ channel, layer, producer }) =>
+          channel === slot.channel && layer === slot.layer && oscProducerKind(producer) === 'html',
+      );
+    const carrier = this.#templates.infoOf(page.version)?.liveSources;
+    if (carrier === undefined || !hasHtml(page.slot)) return undefined;
+    if (carrier.foregroundOverlay === true) {
+      const foreground = this.#foregroundPages.get(itemId);
+      if (
+        foreground === undefined ||
+        !this.#isVerifiedCropSlot(foreground) ||
+        !hasHtml(foreground)
+      ) {
+        return undefined;
+      }
+    }
+    return page;
+  }
+
+  async #applyFramePlacementOnAir(
+    item: StackItemState,
+    placements: LiveFramePlacement[],
+  ): Promise<{ accepted: boolean; errorCode?: string; message?: string; command?: string }> {
+    const { itemId } = item;
+    const page = this.#liveFramePage(item);
+    const baseline = this.#liveLayers.get(itemId);
+    const take = this.#takeTokens.get(itemId);
+    const foreground = this.#foregroundPages.get(itemId);
+    const unavailable = {
+      accepted: false,
+      errorCode: 'frame-placement-on-air-unavailable',
+      message: 'The current programme page cannot apply frame placement in place.',
+    };
+    if (page === undefined || baseline === undefined) return unavailable;
+    const lookId = this.activeLookId(itemId);
+    const prior = this.#framePlacements.get(itemId) ?? [];
+    const previousPlan = this.#planLiveSeating(itemId, page.slot, lookId, 'already-live', 'pinned');
+    const proposed = this.#planLiveSeating(
+      itemId,
+      page.slot,
+      lookId,
+      'already-live',
+      'pinned',
+      undefined,
+      placements,
+    );
+    const visible = baseline.filter(({ held }) => held !== true);
+    if (
+      !previousPlan.ok ||
+      !proposed.ok ||
+      previousPlan.placements.length !== visible.length ||
+      proposed.placements.length !== visible.length ||
+      proposed.unresolved.size > 0
+    )
+      return unavailable;
+
+    const previous = new Map(
+      previousPlan.placements.map((placement) => [placement.seatId, placement]),
+    );
+    const next = new Map(proposed.placements.map((placement) => [placement.seatId, placement]));
+    const changes = new Map<LiveLayerRecord, LivePlatePlacement['fit']>();
+    for (const record of visible) {
+      const before = previous.get(liveSeatId(record));
+      const after = next.get(liveSeatId(record));
+      if (
+        before === undefined ||
+        after === undefined ||
+        !isSameVisibleCropSeat(record, before) ||
+        !sameMixerRect(record.fill, before.fit.fill, 1e-8) ||
+        !isSeatUnchanged('switch', record, after) ||
+        record.sourceId !== after.plateId ||
+        record.revealOverlay !== after.revealOverlay ||
+        record.epoch !== after.epoch ||
+        intersectNormalizedRects(after.fit.fill, after.fit.clip) === null ||
+        !this.#isVerifiedCropSlot(record.slot)
+      )
+        return unavailable;
+      if (
+        !sameMixerRect(record.fill, after.fit.fill, 1e-8) ||
+        !sameMixerRect(record.clip, after.fit.clip, 1e-8)
+      ) {
+        changes.set(record, after.fit);
+      }
+    }
+
+    const stillOwnsOutput = () => {
+      const current = this.#reconciler.get(itemId);
+      return (
+        current !== null &&
+        current.lastIntentSeq === item.lastIntentSeq &&
+        this.#liveFramePage(current) === page &&
+        this.#takeTokens.get(itemId) === take &&
+        this.#foregroundPages.get(itemId) === foreground &&
+        this.#liveLayers.get(itemId) === baseline &&
+        this.activeLookId(itemId) === lookId &&
+        visible.every(({ slot }) => this.#isVerifiedCropSlot(slot))
+      );
+    };
+    const cancel = new AbortController();
+    const invalidate = ({ itemId: changed }: { itemId: string }) => {
+      if (changed === itemId && !stillOwnsOutput()) cancel.abort();
+    };
+    const write = (line: string) =>
+      this.#send(line, this.#nextSeq(), 'urgent', { signal: cancel.signal });
+    const pageUpdate = (framePlacements: LiveFramePlacement[]) =>
+      this.#builder.update(page.slot, withCgControl({}, { framePlacements }));
+    const touched: LiveLayerRecord[] = [];
+    const batch: MixerBatch = {};
+    const stageFit = async (record: LiveLayerRecord, fit: LivePlatePlacement['fit']) => {
+      for (const line of this.#builder.mixerFit(record.slot, fit)) {
+        if (!stillOwnsOutput()) return { ok: false, errorCode: 'not-live' };
+        const sent = await this.#sendDeferredMixer(batch, record.slot.channel, line, cancel.signal);
+        if (!sent.ok || !sent.onPrimary) return sent;
+      }
+      return { ok: true };
+    };
+    let refusal: { errorCode?: string; command?: string } | undefined;
+    let pageAttempted = false;
+    this.#reconciler.on('item-changed', invalidate);
+    this.#reconciler.on('item-removed', invalidate);
+    try {
+      if (!stillOwnsOutput()) return unavailable;
+      if (changes.size > 0) {
+        await this.#leaseMixerChannel(batch, page.slot.channel);
+        if (!stillOwnsOutput() || this.#orphanedMixerChannels.has(page.slot.channel))
+          return unavailable;
+        // Stage both geometry components before the page can move. They commit together.
+        for (const [record, fit] of changes) {
+          touched.push(record);
+          const staged = await stageFit(record, fit);
+          if (!staged.ok) {
+            refusal = staged;
+            break;
+          }
+        }
+      }
+      if (refusal === undefined && stillOwnsOutput()) {
+        pageAttempted = true;
+        const told = await write(pageUpdate(placements));
+        if (!told.ok || !told.onPrimary) refusal = told;
+        else if (changes.size > 0) {
+          const hold = this.#lookMixerHoldMsFor(page.slot.channel);
+          if (hold > 0) await sleepMs(hold);
+          if (stillOwnsOutput()) {
+            const commit = await this.#commitStagedMixer(batch, { retainOnFailure: true });
+            if (!commit.landed) refusal = commit;
+          }
+        }
+      }
+      if (refusal === undefined && stillOwnsOutput()) {
+        if (changes.size > 0) {
+          this.#liveLayers.set(
+            itemId,
+            baseline.map((record) => {
+              const fit = changes.get(record);
+              return fit === undefined ? record : { ...record, ...fit };
+            }),
+          );
+          this.#publishLiveLayers();
+        }
+        this.#recordFramePlacements(itemId, placements);
+        return { accepted: true };
+      }
+
+      let restored = stillOwnsOutput();
+      if (restored && pageAttempted) {
+        const oldPage = await write(pageUpdate(prior));
+        restored = oldPage.ok && oldPage.onPrimary;
+      }
+      // Before the first COMMIT, overwrite partial staging with the old fit. After an
+      // unconfirmed COMMIT, re-stage that fit under a new lease while the same seats remain.
+      for (const record of touched) {
+        if (!stillOwnsOutput()) break;
+        if (batch.channel === undefined) await this.#leaseMixerChannel(batch, record.slot.channel);
+        const old = await stageFit(record, record);
+        restored = restored && old.ok;
+      }
+      const rollbackCommit = await this.#commitStagedMixer(batch, { clearsOrphan: restored });
+      restored = restored && rollbackCommit.landed && stillOwnsOutput();
+      if (!restored && this.#liveFramePages.get(itemId) === page) {
+        this.#liveFramePages.delete(itemId);
+        this.#markDirty(itemId);
+      }
+      return {
+        accepted: false,
+        errorCode: refusal?.errorCode ?? 'frame-placement-not-confirmed',
+        ...(refusal?.command !== undefined && { command: refusal.command }),
+        message: restored
+          ? 'CasparCG refused the frame placement. The previous placement was restored.'
+          : 'Frame placement could not be confirmed. Check the current programme picture.',
+      };
+    } finally {
+      this.#reconciler.off('item-changed', invalidate);
+      this.#reconciler.off('item-removed', invalidate);
+      await this.#commitStagedMixer(batch);
+    }
+  }
+
   /**
    * R-006 — the connection gate the on-air verbs never had.
    *
@@ -5673,6 +6019,7 @@ export class CasparRuntime {
     if (routeSeat !== undefined) {
       const epochBefore = this.#sourceCatalog.inputsEpoch;
       const cropsBefore = this.#previewPlateCrops.get(itemId);
+      const placementsBefore = this.#framePlacements.get(itemId);
       const confirmed = await this.#ensureRouteEpoch();
       // The read is an await: re-ask what the take's first lines asked before it.
       if (this.#isLegacyRehearsal(itemId)) return { accepted: false, errorCode: 'rehearsing' };
@@ -5680,7 +6027,8 @@ export class CasparRuntime {
       if (!confirmed) return this.#refuseRouteWaiting(itemId, routeSeat);
       if (
         this.#sourceCatalog.inputsEpoch !== epochBefore ||
-        this.#previewPlateCrops.get(itemId) !== cropsBefore
+        this.#previewPlateCrops.get(itemId) !== cropsBefore ||
+        this.#framePlacements.get(itemId) !== placementsBefore
       ) {
         plan = planTake();
         if (!plan.ok) return refusePlan(plan);
@@ -6441,7 +6789,10 @@ export class CasparRuntime {
         : this.#updateLivePosition(itemId, fields, mergeMode, lookBindings, position);
     return this.#audited('update', this.#itemDetail(itemId), () =>
       // Queue a book with its turns and a position-capable page with its other field updates.
-      this.#hasBook(itemId) || position !== undefined || this.#livePositionPages.has(itemId)
+      this.#hasBook(itemId) ||
+      position !== undefined ||
+      this.#livePositionPages.has(itemId) ||
+      this.#liveFramePages.has(itemId)
         ? this.#withPageQueue(itemId, apply)
         : apply(),
     );
@@ -8128,6 +8479,7 @@ export class CasparRuntime {
      */
     levelTwo: LevelTwoSource,
     proposedCrops?: ReadonlyMap<string, LiveCropFocus>,
+    framePlacements = this.#framePlacements.get(itemId),
   ): LiveSeatingPlan {
     const templateId = this.#reconciler.get(itemId)?.templateId ?? itemId;
     // `CHANNEL-TEMPLATES-01` — the carrier of the version the row's channel lists.
@@ -8211,7 +8563,8 @@ export class CasparRuntime {
       if (a.templateId !== templateId || a.fitMode === undefined) continue;
       fitOverrides.set(a.plateId, a.fitMode);
     }
-    const desired = lookPlateRects(carrier, lookId);
+    const authoredRects = lookPlateRects(carrier, lookId);
+    const desired = framePlacementRects(carrier, lookId, framePlacements);
     const masks = lookPlateMasks(carrier, lookId);
     const reveals = lookPlateReveals(carrier, lookId);
     const exactEdges = exactPlateEdges(masks, reveals);
@@ -8423,6 +8776,12 @@ export class CasparRuntime {
         fitMode.mode === 'cover' && cropAspect !== null
           ? this.liveSourceFitFor({ ...fitInput, sourceAspect: null })
           : undefined;
+      // A move/resize changes the fit, not the identity of the saved source-relative Pan crop.
+      const authoredRect = authoredRects[frame.plateId];
+      const cropIdentityBox =
+        box !== undefined && authoredRect !== undefined && !sameMixerRect(authoredRect, rect)
+          ? this.liveSourceFitFor({ ...fitInput, rect: authoredRect, sourceAspect: null })
+          : box;
       const token =
         box?.clip == null
           ? undefined
@@ -8438,7 +8797,7 @@ export class CasparRuntime {
                   seat.producerArg,
                   fitMode.mode,
                   cropAspect,
-                  box,
+                  cropIdentityBox,
                   this.#channelSettings.rasterFor(slot.channel),
                   masks[frame.plateId],
                 ]),
@@ -9348,7 +9707,9 @@ export class CasparRuntime {
     frame: { lookId: string | undefined; plateId: string },
     sourceAspect: number | null,
   ): { width: number; height: number } {
-    const rect = lookPlateRects(carrier, frame.lookId)[frame.plateId];
+    const rect = framePlacementRects(carrier, frame.lookId, this.#framePlacements.get(itemId))[
+      frame.plateId
+    ];
     if (rect === undefined) return { width: 0, height: 0 };
     const fit = this.liveSourceFitFor({
       channel: slot.channel,
@@ -9413,7 +9774,7 @@ export class CasparRuntime {
     const carrier = this.#templates.getOn(slot.channel, item.templateId)?.liveSources;
     if (carrier === undefined) return [];
     const lookId = this.activeLookId(itemId);
-    const rects = lookPlateRects(carrier, lookId);
+    const rects = framePlacementRects(carrier, lookId, this.#framePlacements.get(itemId));
     const exactEdges = exactPlateEdges(
       lookPlateMasks(carrier, lookId),
       lookPlateReveals(carrier, lookId),
@@ -10046,7 +10407,14 @@ export class CasparRuntime {
       because nothing composited over a picture depends on when it arrives.
     */
     const told = await this.#send(
-      this.#builder.updateLook(slot, lookId, {}, plateFits, liveFallback),
+      this.#builder.updateLook(
+        slot,
+        lookId,
+        {},
+        plateFits,
+        liveFallback,
+        this.#framePlacements.get(itemId),
+      ),
       this.#nextSeq(),
       'urgent',
     );
@@ -11147,19 +11515,54 @@ export class CasparRuntime {
     cropBaseline?: readonly LiveLayerRecord[],
   ): Promise<LivePlateApplyResult> {
     const releaseClaims = this.#claimSeatLayers(plan);
+    const batch: MixerBatch = {};
     try {
-      return await this.#applyLivePlatesUnguarded(itemId, plan, mode, preSeated, cropBaseline);
+      return await this.#applyLivePlatesUnguarded(
+        itemId,
+        plan,
+        mode,
+        batch,
+        preSeated,
+        cropBaseline,
+      );
     } finally {
       // Staged at this point ⇒ the batch did NOT reach either of its own commit points, i.e.
       // it threw. `#commitStagedMixer` is idempotent, so the ordinary paths cost nothing here.
-      const abandoned = this.#stagedMixerChannel !== null;
+      const abandoned = batch.staged === true;
       try {
-        await this.#commitStagedMixer();
+        await this.#commitStagedMixer(batch);
         if (abandoned) await this.#reassertLedgerGeometry(itemId);
       } finally {
         releaseClaims();
       }
     }
+  }
+
+  async #leaseMixerChannel(batch: MixerBatch, channel: number): Promise<void> {
+    if (batch.channel === channel) return;
+    if (batch.channel !== undefined) throw new Error('A mixer batch cannot span channels.');
+    const previous = this.#mixerBatchTails.get(channel);
+    let done!: () => void;
+    const tail = new Promise<void>((resolve) => {
+      done = resolve;
+    });
+    this.#mixerBatchTails.set(channel, tail);
+    if (previous !== undefined) await previous;
+    batch.channel = channel;
+    batch.release = () => {
+      if (this.#mixerBatchTails.get(channel) === tail) this.#mixerBatchTails.delete(channel);
+      done();
+    };
+  }
+
+  async #sendDeferredMixer(batch: MixerBatch, channel: number, line: string, signal?: AbortSignal) {
+    await this.#leaseMixerChannel(batch, channel);
+    if (signal?.aborted) return { ok: false, onPrimary: false, errorCode: 'not-live' };
+    batch.staged = true;
+    return this.#send(this.#builder.deferMixer(line), this.#nextSeq(), 'urgent', {
+      mixerBatch: batch,
+      ...(signal !== undefined && { signal }),
+    });
   }
 
   /**
@@ -11169,11 +11572,25 @@ export class CasparRuntime {
    * splitting the batch the first one just closed. A commit is channel-wide and applies
    * whatever ANY connection has staged, so it is issued only when we have staged something.
    */
-  async #commitStagedMixer(): Promise<MixerCommitOutcome> {
-    if (this.#stagedMixerChannel === null) return { landed: true };
-    const channel = this.#stagedMixerChannel;
-    this.#stagedMixerChannel = null;
-    return this.#sendMixerCommit(channel);
+  async #commitStagedMixer(
+    batch: MixerBatch,
+    { retainOnFailure = false, clearsOrphan = false } = {},
+  ): Promise<MixerCommitOutcome> {
+    let release = true;
+    try {
+      if (batch.channel === undefined || batch.staged !== true) return { landed: true };
+      const outcome = await this.#sendMixerCommit(batch.channel);
+      if (outcome.landed && clearsOrphan) this.#orphanedMixerChannels.delete(batch.channel);
+      release = !retainOnFailure || outcome.landed;
+      return outcome;
+    } finally {
+      if (release) {
+        batch.release?.();
+        delete batch.channel;
+        delete batch.release;
+        delete batch.staged;
+      }
+    }
   }
 
   /**
@@ -11191,7 +11608,7 @@ export class CasparRuntime {
   async #sendMixerCommit(channel: number): Promise<MixerCommitOutcome> {
     const sent = await this.#send(this.#builder.mixerCommit(channel), this.#nextSeq(), 'urgent');
     const landed = sent.ok && sent.onPrimary;
-    if (!landed) this.#orphanedMixerChannel = channel;
+    if (!landed) this.#orphanedMixerChannels.add(channel);
     // `LOOK-SWITCH-01` — the seat step reads this: a hide whose commit did not land is not a
     // hide, and no `PLAY` may follow it. The code and the line ride along for its refusal.
     return {
@@ -11239,16 +11656,16 @@ export class CasparRuntime {
    * bounded. That is an owner decision and is filed under `B-221`, not made here.
    */
   async #flushOrphanedStaging(): Promise<void> {
-    const channel = this.#orphanedMixerChannel;
-    if (channel === null) return;
-    this.#orphanedMixerChannel = null;
-    if (!(await this.#sendMixerCommit(channel)).landed) return;
-    for (const [itemId, records] of this.#liveLayers) {
-      if (!records.some((record) => record.slot.channel === channel)) continue;
-      // Under the row's seat lock so the repair cannot interleave with a switch or swap
-      // that arrived with the link; a take is unlocked by design and re-asserts every seat
-      // it owns anyway.
-      await this.#withLiveSeatLock(itemId, () => this.#reassertLedgerGeometry(itemId));
+    for (const channel of [...this.#orphanedMixerChannels]) {
+      const batch: MixerBatch = {};
+      await this.#leaseMixerChannel(batch, channel);
+      batch.staged = this.#orphanedMixerChannels.has(channel);
+      if (!(await this.#commitStagedMixer(batch, { clearsOrphan: true })).landed) continue;
+      for (const [itemId, records] of this.#liveLayers) {
+        if (!records.some((record) => record.slot.channel === channel)) continue;
+        // Never hold the mixer lease while waiting for a row lock.
+        await this.#withLiveSeatLock(itemId, () => this.#reassertLedgerGeometry(itemId));
+      }
     }
   }
 
@@ -11293,24 +11710,27 @@ export class CasparRuntime {
           isInCgBands(r.slot.layer),
         );
         for (const channel of new Set(records.map((r) => r.slot.channel))) {
-          for (const record of records.filter((r) => r.slot.channel === channel)) {
-            const volume = wireVolumeOf(record);
-            for (const line of [
-              ...this.#builder.mixerFit(record.slot, { fill: record.fill, clip: record.clip }),
-              // `PLAYOUT-SOURCES-01` §1.I — a Playout input's declared volume is re-set by a ramp.
-              this.#builder.mixerVolume(
-                record.slot,
-                volume,
-                plateVolumeFrames(record.origin, volume),
-              ),
-              // `ROUTE-PLATES-01` — a held Playout route stays hidden; every other plate is shown.
-              this.#builder.mixerOpacity(record.slot, wireOpacityOf(record)),
-            ]) {
-              this.#stagedMixerChannel = channel;
-              await this.#send(this.#builder.deferMixer(line), this.#nextSeq(), 'urgent');
+          const batch: MixerBatch = {};
+          try {
+            for (const record of records.filter((r) => r.slot.channel === channel)) {
+              const volume = wireVolumeOf(record);
+              for (const line of [
+                ...this.#builder.mixerFit(record.slot, { fill: record.fill, clip: record.clip }),
+                // `PLAYOUT-SOURCES-01` §1.I — a Playout input's declared volume is re-set by a ramp.
+                this.#builder.mixerVolume(
+                  record.slot,
+                  volume,
+                  plateVolumeFrames(record.origin, volume),
+                ),
+                // `ROUTE-PLATES-01` — a held Playout route stays hidden; every other plate is shown.
+                this.#builder.mixerOpacity(record.slot, wireOpacityOf(record)),
+              ]) {
+                await this.#sendDeferredMixer(batch, channel, line);
+              }
             }
+          } finally {
+            await this.#commitStagedMixer(batch);
           }
-          await this.#commitStagedMixer();
         }
       });
     }
@@ -11399,7 +11819,10 @@ export class CasparRuntime {
    * refused, or the commit not acked on the primary) sends NO `PLAY` at all: every seat answers
    * `refused` with `sent: false`, so its action is refused having seated nothing.
    */
-  async #seatPlates(requests: readonly SeatRequest[]): Promise<Map<string, SeatResult>> {
+  async #seatPlates(
+    requests: readonly SeatRequest[],
+    batch: MixerBatch,
+  ): Promise<Map<string, SeatResult>> {
     const results = new Map<string, SeatResult>();
     if (requests.length === 0) return results;
     if (requests.some((r) => r.hide || mutedInPlace(r))) {
@@ -11416,8 +11839,7 @@ export class CasparRuntime {
             ? [this.#builder.mixerVolume(placement.slot, CREATED_MUTED_VOLUME)]
             : [];
         for (const line of lines) {
-          this.#stagedMixerChannel = placement.slot.channel;
-          const sent = await this.#send(this.#builder.deferMixer(line), this.#nextSeq(), 'urgent');
+          const sent = await this.#sendDeferredMixer(batch, placement.slot.channel, line);
           if (sent.ok) continue;
           hideFailure = {
             errorCode: sent.errorCode ?? 'amcp-error',
@@ -11432,7 +11854,7 @@ export class CasparRuntime {
         any `BEGIN` (fact 3), and the reply is awaited — it arrives after the transforms are
         installed (`AMCPCommandsImpl.cpp` 865–869), so every `PLAY` below starts hidden.
       */
-      const committed = await this.#commitStagedMixer();
+      const committed = await this.#commitStagedMixer(batch);
       if (hideFailure === undefined && !committed.landed) {
         hideFailure = {
           errorCode: committed.errorCode ?? 'amcp-error',
@@ -11699,11 +12121,12 @@ export class CasparRuntime {
       requests.push({ placement, hide: true, optional: placement.held });
     }
     let seats: Map<string, SeatResult>;
+    const batch: MixerBatch = {};
     try {
-      seats = await this.#seatPlates(requests);
+      seats = await this.#seatPlates(requests, batch);
     } finally {
       // `B-199`'s rule for this step too: a throw inside the hide leaves nothing staged.
-      await this.#commitStagedMixer();
+      await this.#commitStagedMixer(batch);
     }
     const failed = requests.find((r) => {
       const seat = seats.get(r.placement.seatId);
@@ -11749,6 +12172,7 @@ export class CasparRuntime {
     itemId: string,
     plan: LivePlateApplyPlan,
     mode: 'take' | 'live' | 'switch',
+    batch: MixerBatch,
     preSeated?: ReadonlyMap<string, SeatResult>,
     cropBaseline?: readonly LiveLayerRecord[],
   ): Promise<LivePlateApplyResult> {
@@ -11888,7 +12312,8 @@ export class CasparRuntime {
       toSeat.push({ placement, hide: !oursBefore.has(key(placement)), optional: placement.held });
     }
     const seats = new Map<string, SeatResult>(preSeated ?? []);
-    for (const [producerArg, seat] of await this.#seatPlates(toSeat)) seats.set(producerArg, seat);
+    for (const [producerArg, seat] of await this.#seatPlates(toSeat, batch))
+      seats.set(producerArg, seat);
     /*
       🔴 A TAKE STAGES NOTHING ONCE ONE OF ITS REQUIRED SEATS IS REFUSED. Its reveals would ride the
       failure path's commit below (`B-198`: a failed batch is committed, never left staged) and put
@@ -12193,8 +12618,9 @@ export class CasparRuntime {
 
           Urgent lane: seating runs inside a take, and a take does not queue behind a load.
         */
-        if (line.startsWith('MIXER ')) this.#stagedMixerChannel = placement.slot.channel;
-        const sent = await this.#send(this.#builder.deferMixer(line), this.#nextSeq(), 'urgent');
+        const sent = line.startsWith('MIXER ')
+          ? await this.#sendDeferredMixer(batch, placement.slot.channel, line)
+          : await this.#send(line, this.#nextSeq(), 'urgent');
         if (sent.ok) {
           landed += 1;
           continue;
@@ -12289,7 +12715,7 @@ export class CasparRuntime {
       would split the batch at the one seam the defect lives in. Its commit is at the end,
       after everything this switch moves has been staged.
     */
-    if (failure !== undefined) await this.#commitStagedMixer();
+    if (failure !== undefined) await this.#commitStagedMixer(batch);
 
     if (cropRowLeft())
       return { ok: false, errorCode: 'not-live', message: ROW_LEFT_AIR_MID_SWITCH };
@@ -12708,11 +13134,10 @@ export class CasparRuntime {
       if (release.disposition !== 'held') {
         if (record.revealOverlay === true) {
           // Departing fragments vanish with the new fit, before their layers are cleared.
-          this.#stagedMixerChannel = record.slot.channel;
-          await this.#send(
-            this.#builder.deferMixer(this.#builder.mixerOpacity(record.slot, 0)),
-            this.#nextSeq(),
-            'urgent',
+          await this.#sendDeferredMixer(
+            batch,
+            record.slot.channel,
+            this.#builder.mixerOpacity(record.slot, 0),
           );
         }
         continue;
@@ -12737,11 +13162,10 @@ export class CasparRuntime {
       // repair reason above.
       if (record.held !== true || mode === 'take') {
         // `B-198` — staged, like every other `MIXER` this switch sends. See `commitStaged`.
-        this.#stagedMixerChannel = record.slot.channel;
-        const sent = await this.#send(
-          this.#builder.deferMixer(this.#builder.mixerVolume(record.slot, CREATED_MUTED_VOLUME)),
-          this.#nextSeq(),
-          'urgent',
+        const sent = await this.#sendDeferredMixer(
+          batch,
+          record.slot.channel,
+          this.#builder.mixerVolume(record.slot, CREATED_MUTED_VOLUME),
         );
         muted = sent.ok;
         /*
@@ -12754,11 +13178,10 @@ export class CasparRuntime {
           after the commit below; a `continue` clip is not, and runs on hidden.
         */
         if (muted && hiddenWhenHeld(record)) {
-          this.#stagedMixerChannel = record.slot.channel;
-          const hidden = await this.#send(
-            this.#builder.deferMixer(this.#builder.mixerOpacity(record.slot, 0)),
-            this.#nextSeq(),
-            'urgent',
+          const hidden = await this.#sendDeferredMixer(
+            batch,
+            record.slot.channel,
+            this.#builder.mixerOpacity(record.slot, 0),
           );
           muted = hidden.ok;
         }
@@ -12789,8 +13212,7 @@ export class CasparRuntime {
         for (const line of this.#builder.mixerFit(record.slot, parked)) {
           // `B-198` — the PARK is the departing half of the switch, so it stages with the
           // arriving half and lands on the same frame. This is the seam the defect lived in.
-          this.#stagedMixerChannel = record.slot.channel;
-          const sent = await this.#send(this.#builder.deferMixer(line), this.#nextSeq(), 'urgent');
+          const sent = await this.#sendDeferredMixer(batch, record.slot.channel, line);
           if (sent.ok) continue;
           // Under-claims on failure, the same safe direction the mute takes: the next
           // reconcile re-sends both. A refused `CLIP` after an acked `FILL` still renders
@@ -12831,8 +13253,9 @@ export class CasparRuntime {
       commit after it would re-apply a staged `FILL` onto a layer it had just reset.
     */
     const stagedGeometry =
-      this.#stagedMixerChannel === (placements[0] ?? parked[0] ?? previous[0])?.slot.channel;
-    const committed = await this.#commitStagedMixer();
+      batch.staged === true &&
+      batch.channel === (placements[0] ?? parked[0] ?? previous[0])?.slot.channel;
+    const committed = await this.#commitStagedMixer(batch);
     if (cropRowLeft())
       return { ok: false, errorCode: 'not-live', message: ROW_LEFT_AIR_MID_SWITCH };
     if (cropBaseline !== undefined && !committed.landed) {
@@ -15697,6 +16120,7 @@ export class CasparRuntime {
     this.#plateFits.delete(itemId);
     this.#liveCropFocuses.delete(itemId);
     this.#previewPlateCrops.delete(itemId);
+    this.#framePlacements.delete(itemId);
     // 6.5f — and the audio intent. A re-used itemId inheriting a RAISED plate is
     // the worst of the three: it puts a microphone on air that nobody asked for.
     this.#plateVolumes.delete(itemId);
@@ -15871,6 +16295,7 @@ export class CasparRuntime {
     this.#loaded.clear();
     this.#foregroundPages.clear();
     this.#livePositionPages.clear();
+    this.#liveFramePages.clear();
     this.#adopted.clear();
     // The last failover described the old server pair — a new era starts clean.
     this.#lastFailover = undefined;
@@ -18171,6 +18596,8 @@ export class CasparRuntime {
       readonly serverB?: string | null;
       /** Cancel a position write if its resident programme page changes while queued. */
       readonly signal?: AbortSignal;
+      /** Active owner of the channel's DEFER buffer. */
+      readonly mixerBatch?: MixerBatch;
     } = {},
   ): Promise<{ ok: boolean; onPrimary: boolean; errorCode?: string; command?: string }> {
     /*
@@ -18183,12 +18610,9 @@ export class CasparRuntime {
       🔴 `B-221` — **THE INVARIANT AT THE SEAM: a staged line cannot leave this process
       unless the accumulator that will commit it is armed for its channel.**
 
-      Every `MIXER … DEFER` on the wire is a promise that a `MIXER <ch> COMMIT` follows, and
-      the only thing that keeps that promise is `#stagedMixerChannel`: the batch's own
-      commit, the failure-path commit and `B-199`'s `finally` all read it and send nothing
-      when it is `null`. So the one way to write an unbalanced batch is to stage a line
-      without arming it — a new staging site that forgets the assignment, or a hand-built
-      `${line} DEFER` that bypasses `deferMixer` — and that mistake is silent by
+      Every `MIXER … DEFER` on the wire is a promise that a `MIXER <ch> COMMIT` follows. The
+      owner of the channel's lease can stage and drain its batch. A staging call that bypasses
+      `#sendDeferredMixer` is refused here because the error would otherwise be silent by
       construction: the server acks the line, the commit is skipped because nothing was
       recorded, and the change waits in the server for whatever commits next.
 
@@ -18207,10 +18631,10 @@ export class CasparRuntime {
     */
     if (line.endsWith(' DEFER')) {
       const channel = Number(line.split(' ')[1]?.split('-')[0]);
-      if (!Number.isInteger(channel) || this.#stagedMixerChannel !== channel) {
+      if (!Number.isInteger(channel) || options.mixerBatch?.channel !== channel) {
         throw new Error(
           `INVARIANT (B-221): a MIXER line was staged with no armed commit for its channel ` +
-            `(armed: ${String(this.#stagedMixerChannel)}) — it would never be committed. ` +
+            `(armed: ${String(options.mixerBatch?.channel)}) — it would never be committed. ` +
             `Line: ${summarizeWireLine(line)}`,
         );
       }
@@ -18445,7 +18869,10 @@ export class CasparRuntime {
     const session = this.#adapter.primarySession;
     const generation = this.#amcpGeneration;
     const served = this.#templateServer.listening;
-    if (outputPass === 'background') this.#livePositionPages.delete(itemId);
+    if (outputPass === 'background') {
+      this.#livePositionPages.delete(itemId);
+      this.#liveFramePages.delete(itemId);
+    }
     this.#templates.pin(versionId);
     try {
       const sent = await this.#sendAddServed(
@@ -18459,6 +18886,21 @@ export class CasparRuntime {
       );
       if (sent.ok) this.#templates.hold(itemId, versionId);
       const info = this.#templates.infoOf(versionId);
+      if (
+        outputPass === 'background' &&
+        this.#sessions.B === undefined &&
+        served &&
+        sent.ok &&
+        sent.onPrimary &&
+        this.#slots.get(itemId) === slot &&
+        this.#adapter.primarySession === session &&
+        this.#amcpGeneration === generation &&
+        info?.liveSources !== undefined &&
+        this.#hasFramePlacementMarker(versionId)
+      ) {
+        this.#liveFramePages.set(itemId, { slot, version: versionId, session, generation });
+        this.#markDirty(itemId);
+      }
       if (
         outputPass === 'background' &&
         this.#sessions.B === undefined &&
@@ -18872,7 +19314,9 @@ export class CasparRuntime {
     // page, or tells a resident one, leaves it muted (or unmuted) as the operator last asked.
     const soundMuted = this.#soundMutes.get(itemId);
     const plateFits = this.#plateFits.get(itemId);
+    const framePlacements = this.#framePlacements.get(itemId);
     const shared: Omit<TakeControl, 'take'> = {
+      ...(framePlacements !== undefined && { framePlacements }),
       ...(activeLook !== undefined && { look: activeLook.id }),
       ...(plateFits !== undefined &&
         Object.keys(plateFits).length > 0 && {

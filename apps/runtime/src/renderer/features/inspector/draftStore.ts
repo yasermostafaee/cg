@@ -4,6 +4,7 @@ import {
   type FieldValue,
   type FieldValues,
   type LiveCropFocus,
+  type LiveFramePlacement,
   type Position,
   type PositionAnchor,
   type StackItemTimingOverride,
@@ -168,6 +169,78 @@ export type PreviewCropDraft =
     };
 
 const previewCropDrafts = new Map<string, Map<string, PreviewCropDraft>>();
+const framePlacementDrafts = new Map<string, ReadonlyMap<string, LiveFramePlacement>>();
+const applyingFramePlacements = new Map<string, ReadonlyMap<string, LiveFramePlacement>>();
+
+const framePlacementKey = ({ lookId, frameKey }: LiveFramePlacement): string =>
+  JSON.stringify([lookId, frameKey]);
+
+function sameFrameRect(a: LiveFramePlacement['rect'], b: LiveFramePlacement['rect']): boolean {
+  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+}
+
+export function stageFramePlacement(
+  itemId: string,
+  placement: LiveFramePlacement,
+  baseline: LiveFramePlacement['rect'],
+): void {
+  const next = new Map(framePlacementDrafts.get(itemId));
+  const key = framePlacementKey(placement);
+  const applying = applyingFramePlacements.get(itemId)?.get(key);
+  if (
+    sameFrameRect(placement.rect, baseline) &&
+    (applying === undefined || sameFrameRect(placement.rect, applying.rect))
+  ) {
+    if (!next.delete(key)) return;
+  } else {
+    next.set(key, placement);
+  }
+  if (next.size === 0) framePlacementDrafts.delete(itemId);
+  else framePlacementDrafts.set(itemId, next);
+  bump();
+}
+
+export function snapshotFramePlacementDraft(itemId: string) {
+  return framePlacementDrafts.get(itemId);
+}
+
+export function framePlacementsWithDraft(
+  applied: LiveFramePlacement[] | undefined,
+  draft: ReadonlyMap<string, LiveFramePlacement> | undefined,
+): LiveFramePlacement[] | undefined {
+  if (draft === undefined) return applied;
+  const merged = new Map(
+    (applied ?? []).map((placement) => [framePlacementKey(placement), placement]),
+  );
+  for (const [key, placement] of draft) merged.set(key, placement);
+  return [...merged.values()];
+}
+
+export function beginFramePlacementApply(itemId: string): {
+  placements: LiveFramePlacement[];
+  accept: () => void;
+  finish: () => void;
+} | null {
+  if (applyingFramePlacements.has(itemId)) return null;
+  const sent = framePlacementDrafts.get(itemId) ?? new Map<string, LiveFramePlacement>();
+  if (sent.size > 0) applyingFramePlacements.set(itemId, sent);
+  return {
+    placements: [...sent.values()],
+    accept() {
+      if (applyingFramePlacements.get(itemId) !== sent) return;
+      const remaining = new Map(framePlacementDrafts.get(itemId));
+      for (const [key, placement] of sent) {
+        if (remaining.get(key) === placement) remaining.delete(key);
+      }
+      if (remaining.size === 0) framePlacementDrafts.delete(itemId);
+      else framePlacementDrafts.set(itemId, remaining);
+      bump();
+    },
+    finish() {
+      if (applyingFramePlacements.get(itemId) === sent) applyingFramePlacements.delete(itemId);
+    },
+  };
+}
 const appliedPracticeCrops = new Map<string, Map<string, LiveCropFocus>>();
 const applyingPreviewCrops = new Map<string, ReadonlyMap<string, PreviewCropDraft>>();
 
@@ -818,7 +891,7 @@ export function isItemDirty(
     there.
   */
   if (isTimingDirty(itemId, appliedTiming)) return true;
-  return previewCropDrafts.has(itemId);
+  return previewCropDrafts.has(itemId) || framePlacementDrafts.has(itemId);
 }
 
 /**
@@ -873,7 +946,17 @@ export function clearDraft(itemId: string): void {
   // is an unapplied edit nobody can see, and this one reaches air at the next take.
   const hadTiming = timingDrafts.delete(itemId);
   const hadPreviewCrops = previewCropDrafts.delete(itemId);
-  if (hadFields || hadPlates || hadLooks || hadPosition || hadTiming || hadPreviewCrops) bump();
+  const hadFramePlacement = framePlacementDrafts.delete(itemId);
+  if (
+    hadFields ||
+    hadPlates ||
+    hadLooks ||
+    hadPosition ||
+    hadTiming ||
+    hadPreviewCrops ||
+    hadFramePlacement
+  )
+    bump();
 }
 
 /**
@@ -1034,6 +1117,8 @@ export function pruneDrafts(snapshot: StackPruneInput): void {
     positionDrafts,
     timingDrafts,
     previewCropDrafts,
+    framePlacementDrafts,
+    applyingFramePlacements,
     appliedPracticeCrops,
     applyingPreviewCrops,
   ] as {
@@ -1058,6 +1143,8 @@ export function __resetDraftsForTest(): void {
   positionDrafts.clear();
   timingDrafts.clear();
   previewCropDrafts.clear();
+  framePlacementDrafts.clear();
+  applyingFramePlacements.clear();
   appliedPracticeCrops.clear();
   applyingPreviewCrops.clear();
   bump();

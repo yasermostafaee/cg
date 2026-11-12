@@ -9,7 +9,9 @@ import {
   isItemDirty,
   previewCropDraftOf,
   pruneDrafts,
+  snapshotFramePlacementDraft,
   stageField,
+  stageFramePlacement,
   stagePreviewCrop,
   type PreviewCropDraft,
 } from '../src/renderer/features/inspector/draftStore.js';
@@ -46,8 +48,9 @@ const practice = {
 function bridge() {
   const update = vi.fn<RuntimeBridge['stack']['update']>().mockResolvedValue({ accepted: true });
   const previewPlateCrop = vi.fn<RuntimeBridge['stack']['previewPlateCrop']>();
-  vi.stubGlobal('window', { cg: { stack: { update, previewPlateCrop } } });
-  return { update, previewPlateCrop };
+  const setFramePlacements = vi.fn<RuntimeBridge['stack']['setFramePlacements']>();
+  vi.stubGlobal('window', { cg: { stack: { update, previewPlateCrop, setFramePlacements } } });
+  return { update, previewPlateCrop, setFramePlacements };
 }
 
 const dirty = () => isItemDirty(itemId, row.fields, new Map());
@@ -171,4 +174,32 @@ it('keeps an edit made during Update, including a return to the previously appli
   await expect(firstUpdate).resolves.toMatchObject({ accepted: true });
   expect(previewCropDraftOf(itemId, guide.key)).toEqual(latest);
   expect(dirty()).toBe(true);
+});
+
+it('sends only edited frame keys and keeps a return to the prior rectangle during Update', async () => {
+  const { setFramePlacements } = bridge();
+  const authored = { x: 0, y: 0, width: 200, height: 100 };
+  const moved = { frameKey: 'plate-1', rect: { ...authored, x: 30 } };
+  const unrelated = { frameKey: 'plate-2', rect: { ...authored, x: 400 } };
+  let confirm!: (value: { accepted: boolean }) => void;
+  setFramePlacements.mockReturnValueOnce(
+    new Promise((resolve) => {
+      confirm = resolve;
+    }),
+  );
+  stageFramePlacement(itemId, moved, authored);
+  const pending = applyDraft({ ...row, framePlacements: [unrelated] });
+  await vi.waitFor(() =>
+    expect(setFramePlacements).toHaveBeenCalledWith({ itemId, placements: [moved] }),
+  );
+
+  const latest = { ...moved, rect: authored };
+  stageFramePlacement(itemId, latest, authored);
+  await expect(applyDraft(row)).resolves.toEqual({ accepted: false });
+  confirm({ accepted: true });
+  await expect(pending).resolves.toMatchObject({ accepted: true });
+  expect([...snapshotFramePlacementDraft(itemId)!.values()]).toEqual([latest]);
+  expect(dirty()).toBe(true);
+  pruneDrafts({ ready: true, liveItemIds: new Set() });
+  expect(snapshotFramePlacementDraft(itemId)).toBeUndefined();
 });

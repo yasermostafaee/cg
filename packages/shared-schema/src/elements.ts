@@ -22,7 +22,7 @@ import {
   ListItemSchema,
   type FieldDigits,
 } from './fields.js';
-import { LiveCropFocusSchema, LiveFitModeSchema } from './live-fit.js';
+import { LiveCropFocusSchema, LiveFitModeSchema, LiveFrameResizeSchema } from './live-fit.js';
 import {
   ChangeTransitionSchema,
   ElementChangeSchema,
@@ -1559,6 +1559,8 @@ export function liveRevealMaskFromRects(
  */
 export const VideoPlaceholderElementSchema = ElementBaseSchema.extend({
   type: z.literal('video-placeholder'),
+  /** Absent keeps the authored frame fixed in CG Control. */
+  operatorPlacement: LiveFrameResizeSchema.optional(),
   /**
    * R-105 — what the graphics bed paints underneath this live picture. Absent preserves the
    * long-standing Designer choice: Bars. `posterAssetId` supplies the image branch's asset.

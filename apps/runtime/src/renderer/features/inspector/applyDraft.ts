@@ -13,6 +13,7 @@ import { defaultPositionOf } from '../stack/defaultPositionStore.js';
 import { recordSentPasses } from './timingSent.js';
 import { patternRefusalsOf } from './patternCheck.js';
 import {
+  beginFramePlacementApply,
   beginPreviewCropApply,
   buildApplyPayload,
   buildLookBindingsPayload,
@@ -156,6 +157,11 @@ export function applyDraft(
   ];
   const crop = beginPreviewCropApply(item.itemId);
   if (crop === null) return Promise.resolve({ accepted: false });
+  const frame = beginFramePlacementApply(item.itemId);
+  if (frame === null) {
+    crop.finish();
+    return Promise.resolve({ accepted: false });
+  }
   return preflight
     .reduce<Promise<boolean>>(
       (prior, half) => prior.then((ok) => half().then((mine) => ok && mine)),
@@ -165,9 +171,30 @@ export function applyDraft(
       const res = await fields();
       if (!res.accepted) return res;
       const cropsAccepted = await applyPreviewCropDrafts(item, crop);
+      if (frame.placements.length > 0) {
+        try {
+          const placed = await window.cg.stack.setFramePlacements({
+            itemId: item.itemId,
+            placements: frame.placements,
+          });
+          if (!placed.accepted) {
+            reportCommandError(placed.message ?? 'CG Bridge could not apply the frame placement.');
+            return placed;
+          }
+          frame.accept();
+        } catch (error) {
+          reportCommandError(
+            error instanceof Error ? error.message : 'Frame placement update failed.',
+          );
+          return { accepted: false };
+        }
+      }
       return ok && cropsAccepted ? res : { ...res, accepted: false };
     })
-    .finally(crop.finish);
+    .finally(() => {
+      crop.finish();
+      frame.finish();
+    });
 }
 
 async function applyPreviewCropDrafts(

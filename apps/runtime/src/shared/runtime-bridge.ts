@@ -78,6 +78,7 @@ import type {
   PendingUpdate,
   StackLoadChannel,
   StackLoadProfileChannel,
+  StackSetFramePlacementsChannel,
   StackOutChannel,
   StackStopChannel,
   StackClearAllChannel,
@@ -210,6 +211,7 @@ export interface AuthCapabilities {
   /** The bridge advertises browser-only PVW for a row that may also be on air. */
   readonly independentPreview?: true;
   readonly layerProfiles?: true;
+  readonly liveFramePlacement?: true;
   readonly sharedTemplateFolder?: true;
   readonly fixedLayerShortcuts?: true;
   readonly fixedLayerNextShortcut?: true;
@@ -545,6 +547,9 @@ export interface RuntimeBridge {
     previewPlateCrop(
       req: ChannelRequest<typeof StackPreviewPlateCropChannel>,
     ): Promise<ChannelResponse<typeof StackPreviewPlateCropChannel>>;
+    setFramePlacements(
+      req: ChannelRequest<typeof StackSetFramePlacementsChannel>,
+    ): Promise<ChannelResponse<typeof StackSetFramePlacementsChannel>>;
     /**
      * `add-multibox-audio` — the same intent for SEVERAL plates of one row, as ONE action.
      *

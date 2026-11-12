@@ -94,6 +94,7 @@ interface BuildCtx {
    */
   paintEditorBackdrop: boolean;
   foregroundKeys?: ReadonlySet<string> | undefined;
+  frameArtworkKeys?: ReadonlySet<string> | undefined;
   instancePrefix: string;
 }
 
@@ -124,6 +125,7 @@ export function buildScene(
   mode: RenderMode = 'output',
   paintEditorBackdrop = true,
   foregroundKeys?: ReadonlySet<string>,
+  frameArtworkKeys?: ReadonlySet<string>,
 ): BuildSceneResult {
   const container = doc.createElement('div');
   container.className = 'cg-stage';
@@ -156,6 +158,7 @@ export function buildScene(
     mode,
     paintEditorBackdrop,
     foregroundKeys,
+    frameArtworkKeys,
     instancePrefix: '',
   };
 
@@ -194,13 +197,23 @@ function buildLayer(layer: Layer, ctx: BuildCtx): HTMLElement {
       : element;
     const elementNode = buildElement(built, ctx);
     if (elementNode === null) continue;
+    const instanceKey = ctx.instancePrefix + element.id;
+    let contentNode = elementNode;
+    if (ctx.frameArtworkKeys?.has(instanceKey) === true) {
+      const wrapper = ctx.doc.createElement('div');
+      wrapper.dataset['cgFrameArtwork'] = instanceKey;
+      wrapper.style.left = '0';
+      wrapper.style.top = '0';
+      wrapper.style.width = '100%';
+      wrapper.style.height = '100%';
+      wrapper.style.transformOrigin = '0 0';
+      wrapper.appendChild(elementNode);
+      contentNode = wrapper;
+    }
     // D-201 — the split-page filter reads one marker after the ordinary scene has been built.
     // The marker lives on the element's OUTERMOST node, so marking a composition keeps/removes
     // its complete subtree while marking one child affects only that child.
-    if (
-      element.liveForeground === true ||
-      ctx.foregroundKeys?.has(ctx.instancePrefix + element.id) === true
-    ) {
+    if (element.liveForeground === true || ctx.foregroundKeys?.has(instanceKey) === true) {
       elementNode.dataset['cgLiveForeground'] = '';
     }
     const stepIndex = plan.elements.get(element.id);
@@ -220,10 +233,10 @@ function buildLayer(layer: Layer, ctx: BuildCtx): HTMLElement {
       wrap.style.height = '100%';
       wrap.style.pointerEvents = 'none';
       elementNode.style.pointerEvents = 'auto';
-      wrap.appendChild(elementNode);
+      wrap.appendChild(contentNode);
       node.appendChild(wrap);
     } else {
-      node.appendChild(elementNode);
+      node.appendChild(contentNode);
     }
     // Every scope owns its elements, keyed by id, so field bindings apply within
     // the right instance (the same child instanced twice has two scopes).
