@@ -405,9 +405,11 @@ it('🔴 CENTRAL-BRIDGE-01 (B-294) — a REMOVAL outlives a bridge restart with 
   expect(second.templateList().map((t) => t.templateId)).toEqual(['tpl-b']);
 
   // An operator's import is the one way back, and it is recorded like any import.
-  expect(second.templateImport(info('tpl-a', 'deliberately re-imported'), HTML)).toEqual({
+  const reimport = second.templateImport(info('tpl-a', 'deliberately re-imported'), HTML);
+  expect(reimport).toMatchObject({
     registered: true,
     templateId: 'tpl-a',
   });
+  expect(reimport.versionId).toMatch(/^[0-9a-f]{16}$/);
   expect(second.templateGet('tpl-a')?.name).toBe('deliberately re-imported');
 });

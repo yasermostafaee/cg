@@ -719,6 +719,7 @@ describe('buildTemplateLiveSources — the assembly, and the coexistence control
         },
         { ...plate('locked', 'locked', 640, 0, 320, 180), operatorMove: false },
       ],
+      compositions: [],
     });
     const block = buildTemplateLiveSources(s);
     const target = (id: string) =>

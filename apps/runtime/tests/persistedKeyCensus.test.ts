@@ -153,6 +153,8 @@ const BEFORE_AND_AFTER = {
     */
     'cg.runtime.pgm-monitor.v1',
     'cg.runtime.playoutSession',
+    // Per-console preference for operator-selectable frame resizing. Absence preserves aspect.
+    'cg.runtime.preview-resize.v1',
     // A per-console relative folder within the Bridge share. Absence opens the root.
     'cg.runtime.shared-template-folder.v1',
     'cg.runtime.shell-layout.v1',

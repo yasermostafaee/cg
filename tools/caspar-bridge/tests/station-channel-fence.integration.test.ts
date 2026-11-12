@@ -703,6 +703,8 @@ describe('the census: every route that names a channel, classified', () => {
       // `PAGE-REBUILD-01` — what this channel's list needs re-imported or rebuilt: a read of it.
       'templates.rebuild-plan': ['req.channel'],
       'templates.remove': ['req.channel'],
+      'templates.thumbnail': ['req.channel'],
+      'templates.thumbnail.put': ['req.channel'],
     });
   });
 
@@ -753,6 +755,8 @@ describe('the census: every route that names a channel, classified', () => {
       'templates.page',
       'templates.rebuild-plan',
       'templates.remove',
+      'templates.thumbnail',
+      'templates.thumbnail.put',
     ]);
     for (const [name, route] of fenced) {
       expect(stationRefusal(route, { channel: 1, layer: 72 }, r), name).toBe(
