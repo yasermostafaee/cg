@@ -16,16 +16,15 @@ import { textRunX } from './fixtures/runtime.js';
 
 /**
  * 🔴 `CONSOLE-POLISH-01-A` (`B-306`) — **THE ON-AIR SWAP NAMES PLATES AND SOURCES IN THE OPERATOR'S
- * WORDS, AND SENDS EXACTLY WHAT IT SENT.**
+ * WORDS, AND SEATS THE NEW SOURCE BEFORE CLEARING THE COPY.**
  *
  * The dialog labelled each plate with the template author's id (`l1`) and opened with a four-line
  * paragraph. Now a plate is `Plate N` (its id on the `title`), every source is the Playout's name in its
  * own direction, and there is no paragraph. Measured in a real engine because ORDER is layout (golden
  * rule 12c): laid out right to left, a name's first word is RIGHTMOST.
  *
- * CONTROL — **the wire**. A real CG Bridge and a real `@cg/amcp-mock` CasparCG: the swap's AMCP lines
- * are compared with the lines the UNCHANGED dialog sent for the same press, recorded on 2026-10-04
- * before this change. A markup change that reached what a swap sends would fail here.
+ * CONTROL — **the wire**. The Take seats one DeckLink producer and a routed copy in separate
+ * rectangles. The swap seats the new producer in a fresh layer before retiring the copy.
  */
 
 const BANK: FixedLayerBank = { channel: 1, start: 80, count: 4, low: { start: 50, count: 10 } };
@@ -63,19 +62,32 @@ const TWO_BOX: TemplateInfo = {
 };
 const HTML = '<!doctype html><html><head><meta charset="utf-8"></head><body>swap</body></html>';
 
-/** The recorded swap of plate 1 to `NAME_2`, with the R-105 fallback fit update. */
-const RECORDED_WIRE = [
-  'MIXER 1-61 OPACITY 0 DEFER',
-  'MIXER 1-61 VOLUME 0 DEFER',
-  'MIXER 1-61 FILL 0 0.238542 0.522917 0.522917 DEFER',
-  'MIXER 1-61 CLIP 0 0.238542 0.522917 0.522917 DEFER',
+const PHYSICAL_SEAT = { channel: 1, layer: 60 };
+const COPY_SEAT = { channel: 1, layer: 61 };
+const NEW_SEAT = { channel: 1, layer: 62 };
+const LEFT_RENDERED = { x: 0, y: 0.238542, width: 0.522917, height: 0.522917 };
+const RIGHT_RENDERED = {
+  x: 0.522917,
+  y: 0.261458,
+  width: expect.closeTo(0.477083, 6),
+  height: 0.477083,
+};
+
+/** The swap of plate 1 to `NAME_2`, with the R-105 fallback fit update. */
+const SUCCESSFUL_SWAP_WIRE = [
+  'MIXER 1-62 OPACITY 0 DEFER',
+  'MIXER 1-62 VOLUME 0 DEFER',
+  'MIXER 1-62 FILL 0 0.238542 0.522917 0.522917 DEFER',
+  'MIXER 1-62 CLIP 0 0.238542 0.522917 0.522917 DEFER',
   'MIXER 1 COMMIT',
-  'PLAY 1-61 DECKLINK DEVICE 2',
-  'MIXER 1-61 OPACITY 1 DEFER',
-  'MIXER 1-61 VOLUME 0 DEFER',
+  'PLAY 1-62 DECKLINK DEVICE 2',
+  'MIXER 1-62 OPACITY 1 DEFER',
+  'MIXER 1-62 VOLUME 0 DEFER',
   'MIXER 1-60 FILL 0.522917 0.261458 0.477083 0.477083 DEFER',
   'MIXER 1-60 CLIP 0.522917 0.261458 0.477083 0.477083 DEFER',
   'MIXER 1 COMMIT',
+  'CLEAR 1-61',
+  'MIXER 1-61 CLEAR',
   'CG 1-59 UPDATE 0 "{\\"__cg\\":{\\"plates\\":{\\"l1\\":{\\"aspect\\":1.7777777777777777,\\"mode\\":\\"contain\\"},\\"l2\\":{\\"aspect\\":1.7777777777777777,\\"mode\\":\\"contain\\"}}}}"',
 ];
 
@@ -189,6 +201,25 @@ async function swapDialogOnAir(
     })
     .toEqual([]);
 
+  const producerStarts = mock
+    .receivedCommands()
+    .map(({ line }) => line)
+    .filter((line) => /^PLAY 1-(6\d|7\d) /.test(line));
+  expect(producerStarts).toEqual(['PLAY 1-60 DECKLINK DEVICE 1', 'PLAY 1-61 "route://1-60"']);
+  expect(mock.layerState(PHYSICAL_SEAT)).toMatchObject({
+    producer: 'decklink',
+    onAir: true,
+    opacity: 1,
+  });
+  expect(mock.layerState(COPY_SEAT)).toMatchObject({
+    producer: 'route',
+    onAir: true,
+    opacity: 1,
+    volume: 0,
+  });
+  expect(mock.layerRenderedRect(PHYSICAL_SEAT)).toEqual(LEFT_RENDERED);
+  expect(mock.layerRenderedRect(COPY_SEAT)).toEqual(RIGHT_RENDERED);
+
   // ── the row's SOURCE, from its menu ──
   /*
     The menu CLOSES on any scroll or resize, by design (`ContextMenu`: close rather than chase a row
@@ -211,7 +242,7 @@ async function swapDialogOnAir(
   return { mock, row, dialog };
 }
 
-test('🔴 B-306 — plates are `Plate N`, sources the Playout’s names in their own order, no paragraph, no id; control: the swap sends exactly the recorded wire', async ({
+test('🔴 B-306 — plates are `Plate N`, sources the Playout’s names in their own order, no paragraph, no id; control: the swap seats the new source before clearing the copy', async ({
   page,
 }) => {
   const { mock, dialog } = await swapDialogOnAir(page, BANK);
@@ -239,7 +270,7 @@ test('🔴 B-306 — plates are `Plate N`, sources the Playout’s names in thei
   // The field now names the new source in its own order.
   await readsRightToLeft(dialog.locator('#swap-bed-59-l1'), 'HD', 'CAM');
 
-  // CONTROL — the wire is the recorded one, line for line.
+  // CONTROL — the new source is visible before the routed copy is cleared.
   await expect
     .poll(
       () =>
@@ -250,7 +281,16 @@ test('🔴 B-306 — plates are `Plate N`, sources the Playout’s names in thei
           .filter((l) => /^(PLAY|LOAD|LOADBG|MIXER|CLEAR|STOP|CG) /.test(l)) ?? [],
       { timeout: 5000 },
     )
-    .toEqual(RECORDED_WIRE);
+    .toEqual(SUCCESSFUL_SWAP_WIRE);
+  expect(mock.layerState(PHYSICAL_SEAT)).toMatchObject({ producer: 'decklink', onAir: true });
+  expect(mock.layerState(NEW_SEAT)).toMatchObject({
+    producer: 'decklink',
+    onAir: true,
+    opacity: 1,
+  });
+  expect(mock.layerState(COPY_SEAT)).toMatchObject({ producer: 'empty', onAir: false });
+  expect(mock.layerRenderedRect(PHYSICAL_SEAT)).toEqual(RIGHT_RENDERED);
+  expect(mock.layerRenderedRect(NEW_SEAT)).toEqual(LEFT_RENDERED);
 });
 
 /**
@@ -264,8 +304,8 @@ test('🔴 B-306 — plates are `Plate N`, sources the Playout’s names in thei
  * The row is named by the console alone (`operatorRowName` — its alias here, Persian), never by CG
  * Bridge, and it reads in its own logical order: right to left, its first word RIGHTMOST.
  *
- * CONTROL — **the wire**. The refused swap's AMCP lines are compared with what the bridge sent for
- * the same press BEFORE `B-308`, recorded on 2026-10-04 from the unchanged build.
+ * CONTROL — **the wire**. A refused swap stops at the new source's failed PLAY and leaves both
+ * original plates on air with their original geometry.
  */
 const PERSIAN_ROW = 'بستر خبر';
 const PERSIAN_BANK: FixedLayerBank = {
@@ -273,17 +313,16 @@ const PERSIAN_BANK: FixedLayerBank = {
   low: { start: 50, count: 10, aliases: { '59': PERSIAN_ROW } },
 };
 
-/** What the refused swap of plate 1 to `NAME_2` sent, recorded on the bridge before `B-308`. */
-const REFUSED_WIRE: readonly string[] = [
-  'MIXER 1-61 OPACITY 0 DEFER',
-  'MIXER 1-61 VOLUME 0 DEFER',
-  'MIXER 1-61 FILL 0 0.238542 0.522917 0.522917 DEFER',
-  'MIXER 1-61 CLIP 0 0.238542 0.522917 0.522917 DEFER',
+const REFUSED_SWAP_WIRE = [
+  'MIXER 1-62 OPACITY 0 DEFER',
+  'MIXER 1-62 VOLUME 0 DEFER',
+  'MIXER 1-62 FILL 0 0.238542 0.522917 0.522917 DEFER',
+  'MIXER 1-62 CLIP 0 0.238542 0.522917 0.522917 DEFER',
   'MIXER 1 COMMIT',
-  'PLAY 1-61 DECKLINK DEVICE 2',
+  'PLAY 1-62 DECKLINK DEVICE 2',
 ];
 
-test('🔴 B-308 — a refused swap names the plate `Plate 1`, never its id; the Persian row reads right to left; control: the refused swap sends exactly the recorded wire', async ({
+test('🔴 B-308 — a refused swap names the plate `Plate 1`, never its id; the Persian row reads right to left; control: a refusal keeps both original plates on air', async ({
   page,
 }) => {
   const { mock, row, dialog } = await swapDialogOnAir(page, PERSIAN_BANK);
@@ -302,6 +341,8 @@ test('🔴 B-308 — a refused swap names the plate `Plate 1`, never its id; the
   );
 
   // ── the swap: plate 1 onto `NAME_2`, refused ──
+  const originalPhysical = structuredClone(mock.layerState(PHYSICAL_SEAT));
+  const originalCopy = structuredClone(mock.layerState(COPY_SEAT));
   const before = mock.receivedCommands().length;
   await dialog.locator('#swap-bed-59-l1').click();
   await page.locator('[data-picker-input]').filter({ hasText: 'CAM 2' }).first().click();
@@ -321,6 +362,9 @@ test('🔴 B-308 — a refused swap names the plate `Plate 1`, never its id; the
   // …and the plate did not move: it is not marked swapped.
   await expect(dialog.locator('[data-swap-plate="l1"]')).not.toContainText('swapped for this row');
 
-  // CONTROL — the wire is the recorded one, line for line.
-  await expect.poll(wire, { timeout: 5000 }).toEqual(REFUSED_WIRE);
+  // CONTROL — neither original seat changes and the failed PLAY is the last wire command.
+  await expect.poll(wire, { timeout: 5000 }).toEqual(REFUSED_SWAP_WIRE);
+  expect(mock.layerState(PHYSICAL_SEAT)).toEqual(originalPhysical);
+  expect(mock.layerState(COPY_SEAT)).toEqual(originalCopy);
+  expect(mock.layerState(NEW_SEAT)).toMatchObject({ producer: 'empty', onAir: false });
 });

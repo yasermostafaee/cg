@@ -3,6 +3,37 @@
   "product": "APASAI CG",
   "releases": [
     {
+      "version": "1.2.4",
+      "title": {
+        "fa": "نسخهٔ ۱.۲.۴",
+        "en": "Release 1.2.4"
+      },
+      "date": "2026-11-13",
+      "status": "prepared",
+      "summary": {
+        "fa": "بستهٔ آزمایشی ویندوز برای بررسی چیدمان قاب‌های زنده و انتخاب ورودی در CG Control.",
+        "en": "Windows test package for live frame arrangement and input selection in CG Control."
+      },
+      "features": [
+        {
+          "fa": "طراح در Inspector هر پریست مشخص می‌کند که چیدمان قاب‌های همان پریست در CG Control مجاز باشد.",
+          "en": "The designer enables Auto layout in each preset’s Inspector to allow operators to arrange that preset’s frames in CG Control."
+        }
+      ],
+      "fixes": [
+        {
+          "fa": "یک ورودی ایستگاه می‌تواند در چند قاب یک پریست نمایش داده شود. هر قاب جای تصویر و برش خودش را دارد.",
+          "en": "Multiple plates in one preset can show the same station input. Each plate keeps its own picture placement and crop."
+        },
+        {
+          "fa": "بخش انتخاب ورودی قاب‌ها در Inspector با نام Plate inputs نمایش داده می‌شود.",
+          "en": "The Inspector’s source assignment section is labeled Plate inputs."
+        }
+      ],
+      "planned": [],
+      "downloadBaseUrl": null
+    },
+    {
       "version": "1.2.3",
       "title": {
         "fa": "نسخهٔ ۱.۲.۳",
