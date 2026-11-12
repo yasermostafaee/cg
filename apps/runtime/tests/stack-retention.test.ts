@@ -745,6 +745,13 @@ it('🔴 every OPEN-AXIS field a published row carries survives retainedFromStac
     lookSourceOverride: { solo: { 'l-1': 'studio-3' } },
     frozenAssignment: { 'l-1': 'studio-1' },
     previewPlateCrops: [{ token: 'a'.repeat(64), focus: { x: 0.25, y: 0.5 } }],
+    framePlacements: [
+      {
+        frameKey: 'solo-frame/guest',
+        lookId: 'solo',
+        rect: { x: 30, y: 60, width: 640, height: 360 },
+      },
+    ],
     // `TIMING-BUILD-21` §2(a) — the row's passes/delay override. Added here the day the field
     // was added, because this guard refuses to run against a fixture that does not populate
     // every carriable key: an unpopulated field would make the assertion below pass vacuously.
@@ -805,4 +812,5 @@ it('🔴 every OPEN-AXIS field a published row carries survives retainedFromStac
     (golden rule 6 — the map has one owner). Everything else present on the row must be here.
   */
   expect(dropped, 'these fields were published and did not survive retention').toEqual([]);
+  expect(retained?.framePlacements).toEqual(populated.framePlacements);
 });

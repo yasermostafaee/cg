@@ -679,6 +679,7 @@ describe('buildTemplateLiveSources — the assembly, and the coexistence control
       name: 'container',
       type: 'container',
       transform: tf(1280, 0, 640, 360),
+      clip: false,
       children: [inside],
     };
     const s = scene({
