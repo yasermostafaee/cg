@@ -60,6 +60,10 @@
         {
           "fa": "در CG Control نام پیش‌فرض ردیف‌های Bed به Live layer تغییر کرد. پنل جزئیات Templates تعداد قاب‌ها را با عنوان Plates نشان می‌دهد.",
           "en": "CG Control uses Live layer for the default row names previously shown as Bed. Templates shows the plate count as Plates."
+        },
+        {
+          "fa": "در Position اینسپکتور، Reset to default موقعیت پیش‌فرض قالب را برای اعمال با Update برمی‌گرداند.",
+          "en": "Reset to default in the Inspector’s Position section restores the template’s default position for the next Update."
         }
       ],
       "planned": [],

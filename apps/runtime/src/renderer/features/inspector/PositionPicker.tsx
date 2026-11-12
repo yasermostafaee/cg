@@ -1,7 +1,7 @@
 import { useId, useState, useSyncExternalStore } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { isOnAirStatus } from '@cg/shared-schema';
-import type { PositionAnchor, StackItemState } from '@cg/shared-schema';
+import type { Position, PositionAnchor, StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
@@ -143,20 +143,7 @@ const styles = {
     justifyItems: 'start',
     minWidth: 0,
   },
-  /*
-   * `Apply position` ON ITS OWN ROW, at its own size — §3: "it must not shrink into a
-   * corner". The row is `flex-start`, so the button is the width of its own words rather
-   * than the section's.
-   */
-  applyRow: {
-    // SPANS the label and box columns, so it starts on the edge every row here shares.
-    gridColumn: '1 / -1',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 'var(--r-space-2)',
-    flexWrap: 'wrap' as const,
-    marginTop: 'var(--r-space-1)',
-  },
+  resetRow: { gridColumn: '1 / -1' },
   /**
    * One nudge input with its own label ABOVE it, so the two never compete for a row.
    *
@@ -218,9 +205,13 @@ export function isPositionLocked(item: StackItemState): boolean {
  */
 export function PositionPicker({
   item,
+  templatePosition = defaultPositionOf(item.templateId),
+  canReset = true,
   disclosure,
 }: {
   item: StackItemState;
+  templatePosition?: Position | undefined;
+  canReset?: boolean;
   disclosure?: { open: boolean; toggle: () => void } | undefined;
 }): JSX.Element {
   const [localOpen, setLocalOpen] = useState(true);
@@ -232,7 +223,7 @@ export function PositionPicker({
   // shows what the graphic actually does. The override comes from the item's
   // published state — never a renderer-local store, which would go stale on
   // reload/reconnect and miss delete-on-remove.
-  const seed = item.position ?? defaultPositionOf(item.templateId);
+  const seed = item.position ?? templatePosition;
   /*
    * `RUNTIME-REDESIGN-01` PHASE 5 — THE DRAFT LIVES IN THE STORE, NOT HERE.
    *
@@ -240,8 +231,8 @@ export function PositionPicker({
    * re-seeds it — and that same remount threw away whatever the operator had staged but not
    * applied: move the anchor, glance at another row, come back, and the anchor was where the
    * bridge last put it. Every other staged edit in the panel survives that round trip through
-   * `draftStore`; the position now does too (its header there says why it is a separate map
-   * and why DISCARD leaves it alone). The seed rule is unchanged (B-072): a draft when one is
+   * `draftStore`; the position uses the same Update and Discard controls. The seed rule
+   * (B-072) reads a draft when one is
    * staged, else the APPLIED override, else the manifest default.
    */
   useSyncExternalStore(subscribeDrafts, draftsVersion);
@@ -257,6 +248,15 @@ export function PositionPicker({
   const setDx = (next: string): void => stage({ x: next });
   const setDy = (next: string): void => stage({ y: next });
   const locked = isPositionLocked(item);
+  const resetDraft = {
+    anchor: templatePosition.anchor,
+    x: String(templatePosition.offset.x),
+    y: String(templatePosition.offset.y),
+  };
+  const resetDisabled =
+    locked ||
+    !canReset ||
+    (anchor === resetDraft.anchor && dx === resetDraft.x && dy === resetDraft.y);
 
   /**
    * STAGED-BUT-UNAPPLIED, said the same way a dynamic field says it (owner
@@ -382,6 +382,15 @@ export function PositionPicker({
                 aria-label="Position offset Y"
               />
               <span style={styles.offsetLabel}>dy</span>
+            </div>
+            <div style={styles.resetRow}>
+              <Button
+                variant="neutral"
+                disabled={resetDisabled}
+                onClick={() => stagePosition(item.itemId, resetDraft)}
+              >
+                Reset to default
+              </Button>
             </div>
             {/*
             🔴 `Apply position` IS GONE — the owner, 2026-09-14: «دکمه apply position فقط یه

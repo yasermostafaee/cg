@@ -647,6 +647,10 @@ export function Inspector({
   // has to see them: an Update the operator cannot press, or a Discard that
   // reads as nothing-to-discard, would be the panel disagreeing with its own
   // controls about whether there is an unapplied edit.
+  const templatePosition = defaultPositionOf(
+    item.templateId,
+    resolvedInfo?.liveSources?.defaultPosition,
+  );
   const dirty = isItemDirty(
     itemId,
     item.fields,
@@ -659,7 +663,7 @@ export function Inspector({
       would leave the bar reporting itself clean with a placement still to send — and
       DISCARD, which now drops it, would throw it away with nothing having said it was there.
     */
-    item.position ?? defaultPositionOf(item.templateId),
+    item.position ?? templatePosition,
     /*
       🔴 …and the TIMING (`DELTA B4`). It stages like every other edit now and `Update` spends
       it, so the bar has to see it: a pass count staged against a bar reporting itself clean is
@@ -812,7 +816,13 @@ export function Inspector({
           </p>
         )}
         {/* R-011 — per-item on-air position; keyed so item switches re-seed. */}
-        <PositionPicker key={`pos-${itemId}`} item={item} disclosure={disclosures?.position} />
+        <PositionPicker
+          key={`pos-${itemId}`}
+          item={item}
+          templatePosition={templatePosition}
+          canReset={resolvedInfo !== null}
+          disclosure={disclosures?.position}
+        />
         {/* D-137 / C-015 — bind this template's live plates. Renders nothing at
             all for a template that declares none, which is most of them. */}
         <LivePlatesSection item={item} info={resolvedInfo} channel={itemChannel} />

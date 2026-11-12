@@ -26,6 +26,13 @@ On a capable Bridge, CG Control SHALL make the ON PVW and Play controls independ
 - **WHEN** the operator edits Position **THEN** PVW follows the draft and programme keeps the applied position until Update on air
 - **WHEN** Bridge has no confirmed in-place position capability **THEN** Position remains locked while the layer is on air
 
+#### Scenario: Reset Position to the template's authored placement
+
+- **WHEN** the operator presses Reset to default in the editable Position section
+- **THEN** the authored anchor and both offsets are staged and PVW follows immediately
+- **AND** Update or Update on air applies the reset, and Discard returns to the applied placement
+- **WHEN** Position is locked **THEN** Reset to default is unavailable
+
 ### Requirement: Every retained template on PVW has a local placement outline
 
 CG Control SHALL show a labelled outline for each ON PVW template with a renderable retained page.

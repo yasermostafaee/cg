@@ -2,6 +2,7 @@ import {
   isOnAirStatus,
   type FieldValue,
   type FieldValues,
+  type Position,
   type StackItemState,
 } from '@cg/shared-schema';
 import { withChannelDefaults, type TemplateInfo } from '@cg/shared-ipc';
@@ -57,7 +58,7 @@ export function applyDraft(
    */
   playout?: TemplateInfo['playout'] | undefined,
   /** `R-101` — the template's field form, so a staged value its pattern refuses is never sent. */
-  template?: Pick<TemplateInfo, 'fields' | 'groups'> | undefined,
+  template?: Pick<TemplateInfo, 'fields' | 'groups' | 'liveSources'> | undefined,
 ): Promise<{ accepted: boolean; errorCode?: string | undefined }> {
   const sent = snapshotDraft(item.itemId);
   /*
@@ -72,9 +73,10 @@ export function applyDraft(
     reportCommandError(`Not sent: ${first.label} — ${first.line}`);
     return Promise.resolve({ accepted: false, errorCode: 'pattern' });
   }
+  const appliedPosition =
+    item.position ?? defaultPositionOf(item.templateId, template?.liveSources?.defaultPosition);
   const sentPosition =
-    item.onAirPosition === true &&
-    isPositionDirty(item.itemId, item.position ?? defaultPositionOf(item.templateId))
+    item.onAirPosition === true && isPositionDirty(item.itemId, appliedPosition)
       ? positionDraftOf(item.itemId)
       : undefined;
   if (
@@ -120,7 +122,7 @@ export function applyDraft(
       sentPosition,
     );
   // Off-air placement keeps the legacy set-position route. Live placement rides the field update.
-  const position = (): Promise<boolean> => sendPosition(item);
+  const position = (): Promise<boolean> => sendPosition(item, appliedPosition);
   /*
     🔴 **AND THE TIMING RIDES THE SAME PRESS — `DELTA B4`.** It was committed on BLUR, which
     made looking away from the box a command toward air; it is a draft now, and this is where
@@ -316,10 +318,9 @@ function sendTiming(
  * refused move stays staged, the dirty mark stays up, and the operator's placement is still
  * theirs to retry.
  */
-function sendPosition(item: StackItemState): Promise<boolean> {
+function sendPosition(item: StackItemState, applied: Position): Promise<boolean> {
   const draft = positionDraftOf(item.itemId);
   if (draft === undefined) return Promise.resolve(true);
-  const applied = item.position ?? defaultPositionOf(item.templateId);
   if (!isPositionDirty(item.itemId, applied)) return Promise.resolve(true);
   // Live placement travels with the field update, and legacy on-air rows keep their draft.
   if (isOnAirStatus(item)) return Promise.resolve(true);

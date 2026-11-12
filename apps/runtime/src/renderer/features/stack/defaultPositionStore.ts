@@ -1,14 +1,9 @@
 import type { Position } from '@cg/shared-schema';
 
 /**
- * R-011 — the manifest default on-air position per template, recorded by the
- * Library at `.vcg` import (the ONE moment the app holds the unpacked
- * scene). The Inspector's position picker seeds from it; `TemplateInfo`
- * deliberately does not carry it. Display-only residual: a template imported
- * by a PREVIOUS page session lists from the bridge registry without its
- * scene, so the picker seeds from the centered fallback — the APPLIED
- * default is always correct regardless (the on-air runtime reads it from
- * the scene inside the served HTML).
+ * R-011 — a local fallback for templates whose catalogue record has no authored
+ * placement. Current imports carry the default in the template's channel-scoped
+ * Live Source metadata, including when the template has no live plates.
  */
 const defaults = new Map<string, Position>();
 
@@ -21,6 +16,6 @@ export function recordDefaultPosition(templateId: string, position: Position | u
 }
 
 /** The template's manifest default, or the centered fallback. */
-export function defaultPositionOf(templateId: string): Position {
-  return defaults.get(templateId) ?? CENTERED;
+export function defaultPositionOf(templateId: string, authored?: Position): Position {
+  return authored ?? defaults.get(templateId) ?? CENTERED;
 }

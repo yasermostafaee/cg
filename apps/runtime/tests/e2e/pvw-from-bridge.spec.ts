@@ -911,7 +911,10 @@ test('R-117 drafts Position in PVW and moves the resident page on Update on air'
   await expect(layer).toHaveAttribute('aria-label', /ON AIR$/);
   const inspector = page.getByRole('complementary', { name: 'Inspector' });
   const x = inspector.getByRole('textbox', { name: 'Position offset X', exact: true });
+  const y = inspector.getByRole('textbox', { name: 'Position offset Y', exact: true });
+  const reset = inspector.getByRole('button', { name: 'Reset to default', exact: true });
   await expect(x).toBeEnabled();
+  await expect(reset).toBeDisabled();
 
   const add = engine.lastCgAdd(slot);
   if (add === undefined || !add.template.startsWith('http') || add.data === null)
@@ -939,7 +942,7 @@ test('R-117 drafts Position in PVW and moves the resident page on Update on air'
     const before = wire();
     await inspector.getByRole('button', { name: 'Anchor top-left', exact: true }).click();
     await x.fill('320');
-    await inspector.getByRole('textbox', { name: 'Position offset Y', exact: true }).fill('40');
+    await y.fill('40');
     await inspector.getByRole('textbox', { name: 'anchor', exact: true }).fill('Draft text');
     const previewStage = pvw.frameLocator('iframe[data-rehearsal-frame]').locator('.cg-stage');
     const moved = 'matrix(1, 0, 0, 1, 320, 40)';
@@ -962,6 +965,40 @@ test('R-117 drafts Position in PVW and moves the resident page on Update on air'
     await expect(airStage).toHaveCSS('transform', moved);
     await expect(airStage.locator('[data-cg-element-id="el-name"]')).toContainText('Draft text');
     await expect(layer).toHaveAttribute('aria-label', /ON AIR$/);
+
+    // Audio can reassert its settled level after the earlier programme update.
+    const positionWire = () => wire().filter((line) => !line.startsWith('MIXER 1-99 VOLUME '));
+    const beforeReset = positionWire();
+    await reset.click();
+    await expect(inspector.getByRole('button', { name: 'Anchor bottom-right' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(x).toHaveValue('-10');
+    await expect(y).toHaveValue('-20');
+    await expect(previewStage).toHaveCSS('transform', initialPosition);
+    await expect(airStage).toHaveCSS('transform', moved);
+    expect(positionWire()).toEqual(beforeReset);
+
+    await inspector.getByRole('button', { name: 'Discard staged edits' }).click();
+    await expect(previewStage).toHaveCSS('transform', moved);
+    await expect(x).toHaveValue('320');
+    expect(positionWire()).toEqual(beforeReset);
+
+    await reset.click();
+    await inspector.getByRole('button', { name: 'Apply staged edits to the on-air row' }).click();
+    await expect(inspector.getByLabel('Position has unapplied changes')).toHaveCount(0);
+    expect(positionWire().slice(beforeReset.length)).toEqual([
+      expect.stringMatching(/^CG 1-99 UPDATE /),
+    ]);
+    const resetData = engine.lastCgUpdate(slot)?.data;
+    if (resetData == null) throw new Error('The on-air reset was not decoded');
+    expect(JSON.parse(resetData)).toMatchObject({
+      __cg: { position: { anchor: 'bottom-right', offset: { x: -10, y: -20 } } },
+    });
+    await updateAir(resetData);
+    await expect(airStage).toHaveCSS('transform', initialPosition);
+    await expect(airStage.locator('[data-cg-element-id="el-name"]')).toContainText('Draft text');
   } finally {
     await air.close();
   }

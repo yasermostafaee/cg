@@ -3,9 +3,12 @@ import { StrictMode, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
-import type { StackItemState, StackItemStatus } from '@cg/shared-schema';
+import type { Position, StackItemState, StackItemStatus } from '@cg/shared-schema';
 import { PositionPicker } from '../src/renderer/features/inspector/PositionPicker.js';
-import { __resetDraftsForTest } from '../src/renderer/features/inspector/draftStore.js';
+import {
+  __resetDraftsForTest,
+  positionDraftOf,
+} from '../src/renderer/features/inspector/draftStore.js';
 import { applyDraft } from '../src/renderer/features/inspector/applyDraft.js';
 import { recordDefaultPosition } from '../src/renderer/features/stack/defaultPositionStore.js';
 
@@ -55,17 +58,103 @@ function stubBridge(): { setPosition: Mock; update: Mock } {
   return { setPosition, update };
 }
 
-async function render(state: StackItemState): Promise<HTMLDivElement> {
+async function render(state: StackItemState, templatePosition?: Position): Promise<HTMLDivElement> {
   container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
   await act(async () => {
-    root.render(createElement(StrictMode, null, createElement(PositionPicker, { item: state })));
+    root.render(
+      createElement(
+        StrictMode,
+        null,
+        createElement(PositionPicker, { item: state, templatePosition }),
+      ),
+    );
   });
   return container;
 }
 
 describe('PositionPicker — R-011', () => {
+  const reset = (el: HTMLElement): HTMLButtonElement | undefined =>
+    [...el.querySelectorAll('button')].find((button) => button.textContent === 'Reset to default');
+
+  it('stages the template anchor and offsets, then applies the off-air reset only on Update', async () => {
+    const { setPosition, update } = stubBridge();
+    const authored = { anchor: 'bottom-right', offset: { x: -10, y: -20 } } as const;
+    const subject = {
+      ...item('loaded'),
+      position: { anchor: 'center', offset: { x: 5, y: 6 } },
+    } as const;
+    const el = await render(subject, authored);
+    expect(reset(el)?.disabled).toBe(false);
+    await act(async () => reset(el)?.click());
+    expect(positionDraftOf(subject.itemId)).toEqual({
+      anchor: authored.anchor,
+      x: '-10',
+      y: '-20',
+    });
+    expect(reset(el)?.disabled).toBe(true);
+    expect(setPosition).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+    await act(async () => {
+      await applyDraft(subject);
+    });
+    expect(setPosition).toHaveBeenCalledTimes(1);
+    expect(setPosition).toHaveBeenCalledWith({ itemId: subject.itemId, position: authored });
+  });
+
+  it('shows a reset to the already applied default as clean and keeps an unsupported on-air reset locked', async () => {
+    const { setPosition } = stubBridge();
+    const authored = { anchor: 'bottom-right', offset: { x: -10, y: -20 } } as const;
+    const subject = item('loaded');
+    const el = await render(subject, authored);
+    await act(async () =>
+      el.querySelector<HTMLButtonElement>('button[aria-label="Anchor top-left"]')?.click(),
+    );
+    expect(reset(el)?.disabled).toBe(false);
+    await act(async () => reset(el)?.click());
+    expect(el.querySelector('[aria-label="Position has unapplied changes"]')).toBeNull();
+    expect(reset(el)?.disabled).toBe(true);
+    expect(setPosition).not.toHaveBeenCalled();
+
+    container?.remove();
+    container = null;
+    const locked = await render(
+      { ...item('on-air'), position: { anchor: 'center', offset: { x: 5, y: 6 } } },
+      authored,
+    );
+    expect(reset(locked)?.disabled).toBe(true);
+  });
+
+  it('keeps a staged reset when an earlier off-air position update finishes', async () => {
+    const { setPosition } = stubBridge();
+    const authored = { anchor: 'bottom-right', offset: { x: -10, y: -20 } } as const;
+    const subject = item('loaded');
+    const el = await render(subject, authored);
+    await act(async () =>
+      el.querySelector<HTMLButtonElement>('button[aria-label="Anchor top-left"]')?.click(),
+    );
+    let acknowledge: (() => void) | undefined;
+    setPosition.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          acknowledge = () => resolve({ ok: true });
+        }),
+    );
+    const inFlight = applyDraft(subject);
+    await vi.waitFor(() => expect(setPosition).toHaveBeenCalledTimes(1));
+    await act(async () => reset(el)?.click());
+    await act(async () => {
+      acknowledge?.();
+      await inFlight;
+    });
+    expect(positionDraftOf(subject.itemId)).toEqual({
+      anchor: authored.anchor,
+      x: '-10',
+      y: '-20',
+    });
+  });
+
   it('seeds from the recorded manifest default', async () => {
     stubBridge();
     recordDefaultPosition('tpl-pos', { anchor: 'bottom-right', offset: { x: -10, y: -20 } });
