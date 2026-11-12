@@ -3616,6 +3616,46 @@ input.cg-field.cg-book-page {
   font-size: var(--r-text-sm);
   color: var(--r-text-secondary);
 }
+.cg-frame-auto-layout {
+  flex: 1 0 100%;
+  min-inline-size: 0;
+  padding-block-start: var(--r-space-1);
+  border-block-start: 1px solid var(--r-border);
+}
+.cg-frame-auto-layout > summary {
+  padding-block: var(--r-space-1);
+  cursor: pointer;
+  color: var(--r-text);
+  font-size: var(--r-text-sm);
+  font-weight: var(--r-weight-semibold);
+}
+.cg-frame-auto-layout__fields {
+  display: grid;
+  justify-items: start;
+  gap: var(--r-space-2);
+  min-inline-size: 0;
+  margin: 0;
+  padding: var(--r-space-1) 0;
+  border: 0;
+  font-size: var(--r-text-sm);
+  color: var(--r-text-secondary);
+}
+.cg-frame-auto-layout__fields label:not(.cg-position-aspect) {
+  display: grid;
+  gap: var(--r-space-1);
+}
+.cg-frame-auto-layout__fields .cg-field {
+  max-inline-size: 100%;
+}
+.cg-frame-auto-layout__gaps,
+.cg-frame-auto-layout__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--r-space-2);
+}
+.cg-frame-auto-layout__gaps input {
+  inline-size: 7rem;
+}
 
 /* ── Checkbox ───────────────────────────────────────────────────────────── */
 

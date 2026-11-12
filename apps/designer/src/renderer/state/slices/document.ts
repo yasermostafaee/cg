@@ -241,6 +241,7 @@ export const documentSlice = {
       'lifecycle',
       'playout',
       'allowLivePlateOverlap',
+      'allowOperatorAutoLayout',
       'editorBackdrop',
       'name',
       'layers',

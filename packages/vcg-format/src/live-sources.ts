@@ -559,6 +559,7 @@ export function buildTemplateLiveSources(scene: Scene): {
   looks?: TemplateLookCarrier[];
   defaultLookId?: string;
   platePaintOrder?: string[];
+  allowOperatorAutoLayout?: true;
   foregroundOverlay?: true;
 } {
   const lookCarrier = collectLookCarrier(scene);
@@ -575,6 +576,7 @@ export function buildTemplateLiveSources(scene: Scene): {
     sources: lookCarrier === null ? collectLiveSources(scene) : lookCarrier.sources,
     arrangements: collectArrangements(scene),
     ...(order.length > 1 && { platePaintOrder: order }),
+    ...(scene.allowOperatorAutoLayout === true && { allowOperatorAutoLayout: true as const }),
     ...(foregroundOverlay ? { foregroundOverlay: true as const } : {}),
     ...(lookCarrier === null
       ? {}

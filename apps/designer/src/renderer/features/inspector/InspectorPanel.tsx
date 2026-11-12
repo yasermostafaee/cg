@@ -12,7 +12,7 @@ import { DynamicDataSection, FixedFileSourceSection } from './DynamicDataSection
 import { KeyframeInspector } from './KeyframeInspector.js';
 import { MultiSelectSection } from './MultiSelectSection.js';
 import { LooksSection } from './LooksSection.js';
-import { LivePlateOverlapRow } from './LivePlateControlSection.js';
+import { LivePlateCompositionSettings } from './LivePlateControlSection.js';
 import { PlayoutSection } from './PlayoutSection.js';
 import { selectedElements } from './shared-properties.js';
 import { StyleSection } from './StyleSection.js';
@@ -74,8 +74,9 @@ export function InspectorPanel({
 }
 
 function SceneInspector({ scene }: { scene: Scene }): JSX.Element {
-  const showPlateOverlap =
+  const showPlateSettings =
     scene.allowLivePlateOverlap === true ||
+    scene.allowOperatorAutoLayout === true ||
     flattenElements(scene).some(({ element }) => element.type === 'video-placeholder');
   return (
     <aside className={s.panel} aria-label="Inspector">
@@ -86,7 +87,7 @@ function SceneInspector({ scene }: { scene: Scene }): JSX.Element {
       <FrameRateRow scene={scene} />
       <Row label="elements" value={String(countElements(scene))} />
       <BackgroundControl editorBackdrop={scene.editorBackdrop} variant="full" />
-      {showPlateOverlap && <LivePlateOverlapRow checked={scene.allowLivePlateOverlap === true} />}
+      {showPlateSettings && <LivePlateCompositionSettings composition={scene} />}
       <PlayoutSection scene={scene} />
       {/* `multibox-layout-switch` C2 — beside Playout, because an arrangement is a property
           of the COMPOSITION: the thing that becomes the `.vcg` on one layer. */}

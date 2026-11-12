@@ -574,6 +574,10 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await expect(exportButton).toHaveAttribute('data-export-blocked', 'errors');
     const allow = app.inspector.getByRole('checkbox', { name: 'Allow live plate overlap' });
     const selectedControls = app.inspector.locator('[data-section="CG Control"]');
+    const autoLayoutName = 'Allow Auto layout in CG Control';
+    await expect(
+      selectedControls.getByRole('checkbox', { name: autoLayoutName }),
+    ).not.toBeChecked();
     await expect(
       selectedControls.getByRole('checkbox', { name: 'Allow live plate overlap' }),
     ).not.toBeChecked();
@@ -592,8 +596,14 @@ test.describe('Live Source (D-137 phase 1)', () => {
       true,
     );
     await multiControls.getByRole('combobox', { name: 'Fit', exact: true }).selectOption('cover');
+    await multiControls.getByRole('checkbox', { name: autoLayoutName }).check();
 
     await app.deselect();
+    const autoLayout = app.inspector.getByRole('checkbox', { name: autoLayoutName });
+    await expect(autoLayout).toBeChecked();
+    await autoLayout.uncheck();
+    await expect(autoLayout).not.toBeChecked();
+    await autoLayout.check();
     await expect(allow).toBeChecked();
     await allow.uncheck();
     await expect(exportButton).toHaveAttribute('data-export-blocked', 'errors');
@@ -606,9 +616,11 @@ test.describe('Live Source (D-137 phase 1)', () => {
     const [download] = await Promise.all([app.page.waitForEvent('download'), exportButton.click()]);
     const { scene, manifest } = await unpack(await readFile(await download.path()));
     expect(scene.allowLivePlateOverlap).toBe(true);
+    expect(scene.allowOperatorAutoLayout).toBe(true);
     expect(manifest.compatibility.minRuntimeVersion).toBe('1.2.3');
     const carrier = buildTemplateLiveSources(scene);
     expect(carrier.platePaintOrder).toEqual(['front', 'back']);
+    expect(carrier.allowOperatorAutoLayout).toBe(true);
     expect(carrier.sources.map((source) => source.fitMode)).toEqual(['cover', 'cover']);
     const permission = (id: string) =>
       carrier.sources.find((source) => source.sourceId === id)?.operatorFrame;

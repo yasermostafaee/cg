@@ -22,6 +22,7 @@ export * from './looks.js';
 export * from './float-noise.js';
 export * from './live-fit.js';
 export * from './live-geometry.js';
+export * from './live-source-auto-layout.js';
 export * from './scene.js';
 export * from './page-lists.js';
 export * from './field-patterns.js';

@@ -6106,6 +6106,18 @@ restores the prior placements. Whole-template Position and input crop are preser
 It is enabled only when that preset's effective crop differs from the authored framing. Update
 applies it, and Discard restores the prior crop.
 
+**Operator Auto layout:** The author enables **Allow Auto layout in CG Control** on the output
+composition. A preset with at least two live plates exposes **Auto layout** under Position when
+every plate permits both move and resize. The control uses the same aspect-aware arrangement as
+Designer, with separate gaps, row placement choices and **Swap frame order**. Arrange or Swap
+stages all frame placements together in PVW. Update applies the draft for the current preset and
+Discard returns to its applied arrangement.
+
+To attach a styled title, put one live plate and its Text element inside a child composition, then
+add that composition to the output or preset. Set Background and Padding on Text and add a Data key
+if the operator edits the title. To draw it over the picture, set Live foreground → Live order →
+Above inputs. That artwork moves with its frame during drag, resize and Swap.
+
 ## [~] D-179 — Rebuild and re-audit the Persian production starter gallery ⟨priority: high — owner re-review reopened 2026-11-04⟩ — `openspec/changes/rebuild-production-starter-gallery/`
 
 **What:** keep the gallery Persian-only and demonstrate the real production workflows: Iran Premier

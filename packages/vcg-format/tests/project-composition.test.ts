@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import type { Composition, Element, Layer, Scene } from '@cg/shared-schema';
+import {
+  requiredRuntimeVersionForScene,
+  SceneSchema,
+  type Composition,
+  type Element,
+  type Layer,
+  type Scene,
+} from '@cg/shared-schema';
 import { compositionPackageId, projectCompositionForExport } from '../src/index.js';
 
 const transform = {
@@ -84,6 +91,25 @@ describe('projectCompositionForExport', () => {
     expect(projected?.id).toBe(compositionPackageId(source.id, 'root'));
     expect(projected).not.toHaveProperty('entryCompositionId');
     expect(source.entryCompositionId).toBe('root');
+  });
+
+  it('projects Auto layout permission only from the composition being exported', () => {
+    const original = project();
+    const authored = SceneSchema.parse({
+      ...original,
+      compositions: original.compositions?.map((candidate) =>
+        candidate.id === 'nested' ? { ...candidate, allowOperatorAutoLayout: true } : candidate,
+      ),
+    });
+
+    const parent = projectCompositionForExport(authored, 'root');
+    const child = projectCompositionForExport(authored, 'nested');
+    expect(parent?.allowOperatorAutoLayout).toBeUndefined();
+    expect(parent?.compositions?.[0]?.allowOperatorAutoLayout).toBe(true);
+    expect(child?.allowOperatorAutoLayout).toBe(true);
+    expect(requiredRuntimeVersionForScene(child!)).toBe(
+      requiredRuntimeVersionForScene(projectCompositionForExport(original, 'nested')!),
+    );
   });
 
   it('returns null for a missing selection without changing the project', () => {

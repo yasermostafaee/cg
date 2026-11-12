@@ -1909,6 +1909,221 @@ test('R-117 Move toggles dragging while both stopped PVW templates remain outlin
   await expect(upper).toBeVisible();
 });
 
+test('Auto layout stages both frame boxes and keeps each styled title with its input', async ({
+  page,
+}) => {
+  const handle = await boot(true);
+  const engine = mock;
+  if (engine === null) throw new Error('Test engine is unavailable');
+  await handle.runtime.whenServerHealthy(15_000);
+  const templateId = 'tpl-auto-layout';
+  const itemId = 'auto-layout-item';
+  const { scene: base } = await unpack(await buildPositionedVcg(templateId));
+  const layer = base.layers[0];
+  const title = layer?.children.find((element) => element.type === 'text');
+  if (layer === undefined || title === undefined) throw new Error('Missing test title');
+  const transform = (x: number, y: number, w: number, h: number) => ({
+    ...title.transform,
+    position: { x, y },
+    size: { w, h },
+    anchor: { x: 0, y: 0 },
+  });
+  const plates = ['first', 'second'] as const;
+  const node = { opacity: 1, visible: true, locked: false, zIndex: 0 };
+  const scene = SceneSchema.parse({
+    ...base,
+    allowOperatorAutoLayout: true,
+    fields: [],
+    bindings: [],
+    layers: [
+      {
+        ...layer,
+        children: plates.map((id, index) => ({
+          ...node,
+          id: `box-${id}`,
+          name: `Box ${id}`,
+          type: 'composition',
+          compositionId: `doc-${id}`,
+          transform: transform(200 + index * 650, 220 + index * 30, 480, 270),
+        })),
+      },
+    ],
+    compositions: plates.map((id) => ({
+      id: `doc-${id}`,
+      name: `Box ${id}`,
+      resolution: { width: 480, height: 270 },
+      frameRange: base.frameRange,
+      editorBackdrop: 'transparent',
+      layers: [
+        {
+          ...layer,
+          id: `layer-${id}`,
+          children: [
+            {
+              ...node,
+              id: `plate-${id}`,
+              name: `Plate ${id}`,
+              type: 'video-placeholder',
+              routeKey: id,
+              operatorMove: true,
+              operatorPlacement: 'proportional',
+              transform: transform(0, 0, 480, 270),
+            },
+            {
+              ...title,
+              id: `title-${id}`,
+              text: id === 'first' ? 'Studio One' : 'Studio Two',
+              direction: 'ltr',
+              align: 'start',
+              fitMode: 'fixed',
+              backgroundColor: '#123456',
+              padding: { top: 8, right: 12, bottom: 8, left: 12 },
+              liveForeground: false,
+              transform: transform(20, 190, 230, 52),
+              zIndex: 1,
+            },
+          ],
+        },
+      ],
+    })),
+  });
+  const { html } = await new ExporterSingleFile({
+    cgJsIife,
+    cgCss,
+    fontsCss: '',
+    assets: { get: () => Promise.resolve(null), bytes: () => Promise.resolve(null) },
+  }).produce(scene);
+  handle.runtime.templateImport(
+    { ...TEMPLATE, templateId, liveSources: buildTemplateLiveSources(scene) },
+    html,
+    1,
+  );
+  const slot = { channel: 1, layer: 59 };
+  expect(
+    handle.runtime.setSourceCatalog({
+      layerRange: { start: 60, end: 79 },
+      sources: plates.map((id) => ({
+        id: `source-${id}`,
+        name: id,
+        format: '1080i5000',
+        producer: { kind: 'ndi', source: `AUTO-LAYOUT (${id})` },
+      })),
+    }),
+  ).toMatchObject({ ok: true });
+  expect(
+    handle.runtime.setSourceAssignments({
+      assignments: plates.map((plateId) => ({
+        templateId,
+        plateId,
+        sourceId: `source-${plateId}`,
+      })),
+    }),
+  ).toMatchObject({ ok: true });
+  expect(await handle.runtime.loadFixed(slot, itemId, templateId, {})).toMatchObject({
+    accepted: true,
+  });
+  await openConsole(page, handle.url);
+  await showMonitors(page);
+  const row = page.getByRole('region', { name: 'Layers' }).locator('[data-layer="59"]');
+  await row.locator('[data-row-body]').click();
+  await row.getByRole('button', { name: 'ON PVW', exact: true }).click();
+  const pvw = page.getByRole('region', { name: 'PREVIEW (PVW)' });
+  const frame = pvw.frameLocator('iframe[data-rehearsal-frame]');
+  const read = () =>
+    frame.locator('.cg-stage').evaluate((stage) => {
+      const at = (id: string) => {
+        const node = stage.querySelector(`[data-cg-element-id="${id}"]`);
+        if (node === null) throw new Error(`Missing frame artwork ${id}`);
+        const { x, y, width, height } = node.getBoundingClientRect();
+        return { x, y, width, height };
+      };
+      return {
+        a: at('plate-first'),
+        b: at('plate-second'),
+        titleA: at('title-first'),
+        titleB: at('title-second'),
+      };
+    });
+  await expect(frame.locator('[data-cg-element-id="title-first"]')).toHaveText('Studio One');
+  const original = await read();
+  const inspector = page.getByRole('complementary', { name: 'Inspector' });
+  const layout = inspector
+    .locator('details')
+    .filter({ has: page.getByText('Auto layout', { exact: true }) });
+  await layout.locator('summary').click();
+  await layout.getByRole('combobox', { name: 'Arrangement' }).selectOption('vertical');
+  await layout.getByRole('textbox', { name: 'Vertical gap (px)' }).fill('36');
+  const programmeCommands = () =>
+    engine.receivedCommands().filter(({ line }) => /^(CG|MIXER) /.test(line));
+  const before = programmeCommands();
+  const arrange = layout.getByRole('button', { name: 'Arrange frames' });
+  await layout.getByRole('button', { name: 'Swap frame order' }).click();
+  await expect.poll(async () => (await read()).a.y).toBeGreaterThan((await read()).b.y);
+  const staged = await read();
+  expect(staged.a.x).toBeCloseTo(staged.b.x, 2);
+  await expect(row.getByText('● draft', { exact: true })).toBeVisible();
+  expect(staged.a.width / staged.a.height).toBeCloseTo(16 / 9, 3);
+  for (const [box, caption] of [
+    [staged.a, staged.titleA],
+    [staged.b, staged.titleB],
+  ] as const) {
+    expect((caption.x - box.x) / box.width).toBeCloseTo(20 / 480, 3);
+    expect((caption.y - box.y) / box.height).toBeCloseTo(190 / 270, 3);
+  }
+  await expect(frame.locator('[data-cg-element-id="title-first"]')).toHaveCSS(
+    'background-color',
+    'rgb(18, 52, 86)',
+  );
+  await expect(frame.locator('[data-cg-element-id="title-second"]')).toHaveCSS(
+    'padding-left',
+    '12px',
+  );
+  expect(programmeCommands()).toEqual(before);
+  await inspector.getByRole('button', { name: 'Discard staged edits' }).click();
+  await expect.poll(async () => (await read()).a.x).toBeCloseTo(original.a.x, 2);
+  await arrange.click();
+  await inspector.getByRole('button', { name: 'Apply staged edits', exact: true }).click();
+  const saved = () =>
+    handle.runtime.stackSnapshot().find((item) => item.itemId === itemId)?.framePlacements;
+  await expect.poll(() => saved()?.length).toBe(2);
+  expect(programmeCommands()).toEqual(before);
+  await row.getByRole('button', { name: 'PLAY', exact: true }).click();
+  await expect(row).toHaveAttribute('aria-label', /ON AIR$/);
+  expect(JSON.parse(engine.lastCgAdd(slot)?.data ?? '{}')).toMatchObject({
+    __cg: { framePlacements: saved() },
+  });
+  await expect
+    .poll(() => programmeCommands().some(({ line }) => line.includes('\\\"plates\\\"')))
+    .toBe(true);
+  const beforeSwap = programmeCommands();
+  const wireStart = engine.receivedCommands().length;
+  const swap = layout.getByRole('button', { name: 'Swap frame order' });
+  await expect(swap).toBeEnabled();
+  await swap.click();
+  await expect.poll(async () => (await read()).a.y).toBeLessThan((await read()).b.y);
+  expect(programmeCommands()).toEqual(beforeSwap);
+  await inspector.getByRole('button', { name: 'Apply staged edits to the on-air row' }).click();
+  await expect
+    .poll(() => {
+      const [first, second] = plates.map((id) =>
+        saved()?.find(({ frameKey }) => frameKey.endsWith(`/plate-${id}`)),
+      );
+      return first !== undefined && second !== undefined && first.rect.y < second.rect.y;
+    })
+    .toBe(true);
+  expect(
+    programmeCommands()
+      .slice(beforeSwap.length)
+      .filter(({ line }) => line.startsWith('CG 1-59 UPDATE') && line.includes('framePlacements')),
+  ).toHaveLength(1);
+  expect(
+    engine
+      .receivedCommands()
+      .slice(wireStart)
+      .some(({ line }) => /^PLAY 1-[67]\d /.test(line)),
+  ).toBe(false);
+});
+
 test('D-213 Take seats two opted-in plates in the authored paint order', async ({ page }) => {
   const handle = await boot(true);
   const engine = mock;

@@ -557,6 +557,10 @@
         {
           "fa": "در Designer تنظیمات Fit، Allow move و Resize در بخش CG Control برای یک یا چند قاب لایو در دسترس‌اند.",
           "en": "Designer groups Fit, Allow move and Resize under CG Control for single and multiple live plates."
+        },
+        {
+          "fa": "با اجازهٔ طراح، Auto layout در Inspector چیدمان و Swap قاب‌های پریست فعال را در PVW پیش‌نمایش می‌دهد. عنوان متصل همراه قاب جابه‌جا می‌شود.",
+          "en": "With the designer's permission, Inspector Auto layout previews arrangements and seat swaps in the active preset. Attached titles move with their frames."
         }
       ],
       "fixes": [

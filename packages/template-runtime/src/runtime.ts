@@ -591,7 +591,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     layers.some(({ children }) =>
       children.some(
         (element) =>
-          element.type === 'video-placeholder' && element.operatorPlacement !== undefined,
+          element.type === 'video-placeholder' &&
+          (element.operatorPlacement !== undefined || element.operatorMove === true),
       ),
     ),
   );

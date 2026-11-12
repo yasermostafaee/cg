@@ -63,3 +63,25 @@ An opted-in frame in a one-plate composition SHALL travel with the artwork in th
 - **WHEN** the operator discards the reset **THEN** PVW restores the last applied placements
 - **AND** the reset preserves whole-template Position and input crop
 - **AND** the restoration remains available when a frame's resize is locked
+
+### Requirement: Designers can authorize operator Auto layout
+
+Designer SHALL offer **Allow Auto layout in CG Control** for the open composition, off by
+default. CG Control SHALL offer **Auto layout** in Position only for an authorized template with
+at least two plates in its active preset, all with move and resize permission.
+The layout SHALL share Designer's aspect-aware geometry, horizontal and vertical gaps,
+two-plate arrangements, fuller row choices and spatial Swap. It SHALL preserve the template's
+layer order and the authored ratio of proportional frames.
+
+#### Scenario: Preview an authorized arrangement
+
+- **WHEN** the operator arranges or swaps the frames in an authorized preset
+- **THEN** CG Control stages the complete arrangement together in PVW and marks the layer draft
+- **AND** Update applies the draft through the existing frame placement path and Discard restores it
+- **AND** the arrangement affects only the active preset's frames
+
+#### Scenario: Keep a title attached to its frame
+
+- **GIVEN** each child composition holds one live plate and its title with authored text styling
+- **WHEN** the operator moves the frame or swaps its spatial position
+- **THEN** that frame's title moves with the plate and retains its text, background and padding

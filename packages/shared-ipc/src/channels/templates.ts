@@ -168,6 +168,8 @@ export const TemplateLiveSourcesSchema = z.object({
   defaultLookId: z.string().min(1).optional(),
   /** The authored bottom-to-top order for an overlap-enabled layout without presets. */
   platePaintOrder: z.array(IdSchema).optional(),
+  /** The author allows the local Auto Layout tool within existing frame permissions. */
+  allowOperatorAutoLayout: z.literal(true).optional(),
   /** D-201 — this template needs its marked authored elements on a transparent page above plates. */
   foregroundOverlay: z.literal(true).optional(),
 });

@@ -196,19 +196,35 @@ export function stageFramePlacement(
   placement: LiveFramePlacement,
   baseline: LiveFramePlacement['rect'],
 ): void {
+  stageFramePlacements(itemId, [{ placement, baseline }]);
+}
+
+/** Stage a complete arrangement without publishing a partially moved preset to Preview. */
+export function stageFramePlacements(
+  itemId: string,
+  updates: readonly {
+    placement: LiveFramePlacement;
+    baseline: LiveFramePlacement['rect'];
+  }[],
+): void {
   const draft = framePlacementDrafts.get(itemId);
   const next = new Map(draft?.edits);
-  const key = framePlacementKey(placement);
-  const applying = applyingFramePlacements.get(itemId)?.edits.get(key);
-  if (
-    sameFrameRect(placement.rect, baseline) &&
-    (applying === undefined || sameFrameRect(placement.rect, applying.rect))
-  ) {
-    if (!next.delete(key)) return;
-  } else {
-    next.set(key, placement);
+  const applyingEdits = applyingFramePlacements.get(itemId)?.edits;
+  let changed = false;
+  for (const { placement, baseline } of updates) {
+    const key = framePlacementKey(placement);
+    const applying = applyingEdits?.get(key);
+    if (
+      sameFrameRect(placement.rect, baseline) &&
+      (applying === undefined || sameFrameRect(placement.rect, applying.rect))
+    ) {
+      if (next.delete(key)) changed = true;
+    } else {
+      next.set(key, placement);
+      changed = true;
+    }
   }
-  putFramePlacementDraft(itemId, { edits: next, reset: draft?.reset });
+  if (changed) putFramePlacementDraft(itemId, { edits: next, reset: draft?.reset });
 }
 
 /** Restore the authored geometry in PVW. A reset of committed edits is staged until Update. */

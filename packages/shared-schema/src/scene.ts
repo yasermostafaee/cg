@@ -326,6 +326,8 @@ const CompositionObjectSchema = z
     lookGroups: LookGroupsSchema.optional(),
     /** Deliberately composite overlapping Live plates in this output's paint order. */
     allowLivePlateOverlap: z.boolean().optional(),
+    /** Let CG Control propose frame layouts under each plate's own permissions. */
+    allowOperatorAutoLayout: z.boolean().optional(),
   })
   .superRefine(refineLifecycle);
 /**
@@ -646,6 +648,7 @@ const SceneObjectSchema = z
     /** LOOKS (§14) — see the composition-side field; this is the projection/runtime home. */
     lookGroups: LookGroupsSchema.optional(),
     allowLivePlateOverlap: z.boolean().optional(),
+    allowOperatorAutoLayout: z.boolean().optional(),
     metadata: SceneMetadataSchema,
   })
   .superRefine(refineLifecycle);

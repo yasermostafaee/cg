@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { withCgControl } from '@cg/shared-schema';
 import { createRuntime } from '../src/runtime.js';
 import { lowerThirdScene } from './fixtures.js';
 
@@ -91,5 +92,89 @@ describe('D-201 — synchronized live-input foreground pass', () => {
         (node) => node.dataset['cgElementId'],
       ),
     ).toEqual(['name', 'circle']);
+  });
+
+  it('moves a move-only frame and its bound title as one artwork without resizing either', async () => {
+    const scene = markedScene();
+    const layer = scene.layers[0];
+    const title = layer?.children.find((element) => element.id === 'name');
+    if (layer === undefined || title?.type !== 'text') throw new Error('fixture drift');
+    scene.compositions = [
+      {
+        id: 'frame-doc',
+        name: 'Live frame',
+        resolution: scene.resolution,
+        frameRange: scene.frameRange,
+        editorBackdrop: 'transparent',
+        fields: scene.fields,
+        bindings: scene.bindings,
+        layers: [
+          {
+            ...layer,
+            id: 'frame-layer',
+            children: [
+              {
+                id: 'plate',
+                name: 'Live input',
+                type: 'video-placeholder',
+                routeKey: 'guest',
+                operatorMove: true,
+                transform: title.transform,
+                opacity: 1,
+                visible: true,
+                locked: false,
+                zIndex: 0,
+              },
+              { ...title, padding: 12, backgroundColor: '#133358', zIndex: 1 },
+            ],
+          },
+        ],
+      },
+    ];
+    layer.children = [
+      {
+        id: 'box',
+        name: 'box',
+        type: 'composition',
+        compositionId: 'frame-doc',
+        transform: {
+          ...title.transform,
+          position: { x: 0, y: 0 },
+          size: { w: scene.resolution.width, h: scene.resolution.height },
+        },
+        opacity: 1,
+        visible: true,
+        locked: false,
+        zIndex: 0,
+      },
+    ];
+    scene.fields = [];
+    scene.bindings = [];
+    const runtime = createRuntime(scene, { skipFontLoad: true, installGlobals: false });
+    const artwork = document.querySelector<HTMLElement>('[data-cg-frame-artwork="box"]');
+    const plate = artwork?.querySelector<HTMLElement>('[data-cg-element-id="plate"]');
+    const caption = artwork?.querySelector<HTMLElement>('[data-cg-element-id="name"]');
+    if (artwork === null || plate == null || caption == null)
+      throw new Error('missing frame artwork');
+    expect(plate.style.width).toBe('760px');
+    expect(caption.style.paddingLeft).toBe('12px');
+    const background = caption.style.backgroundColor;
+    expect(background).not.toBe('');
+
+    await runtime.update(
+      withCgControl(
+        { box: { anchor: 'خبر تهران' } },
+        {
+          framePlacements: [
+            { frameKey: 'box/plate', rect: { x: 210, y: 855, width: 760, height: 60 } },
+          ],
+        },
+      ),
+    );
+    expect(artwork.style.transform).toBe('matrix(1,0,0,1,90,35)');
+    expect(plate.style.width).toBe('760px');
+    expect(caption.style.paddingLeft).toBe('12px');
+    expect(caption.style.backgroundColor).toBe(background);
+    expect(caption.textContent).toContain('خبر تهران');
   });
 });

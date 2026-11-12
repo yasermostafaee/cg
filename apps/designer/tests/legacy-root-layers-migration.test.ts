@@ -83,6 +83,13 @@ describe('B-068 — ensureCompositions migrates a legacy root-layers scene', () 
     expect(playoutOf(comp).mode).toBe('static');
   });
 
+  it('moves the root Auto layout permission with its composition and leaves old projects off', () => {
+    expect(migrate(legacyScene({ allowOperatorAutoLayout: true })).allowOperatorAutoLayout).toBe(
+      true,
+    );
+    expect(migrate(legacyScene())).not.toHaveProperty('allowOperatorAutoLayout');
+  });
+
   it('still carries resolution / frameRange / activeRange / editorBackdrop / layers', () => {
     const scene = legacyScene({ lifecycle: { outPoint: 60 } });
 

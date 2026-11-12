@@ -2,6 +2,7 @@ import {
   DEFAULT_LIVE_FIT_MODE,
   LIVE_FIT_MODES,
   type LiveFitMode,
+  type Scene,
   type VideoPlaceholderElement,
 } from '@cg/shared-schema';
 import { Crop, Scan } from 'lucide-react';
@@ -70,8 +71,8 @@ export function LivePlateControlSection({
   const resize = commonChoice(plates.map((plate) => plate.operatorPlacement ?? 'locked'));
   const allAllowMove = plates.every(allowsMove);
   const someAllowMove = plates.some(allowsMove);
-  const allowOverlap = useDesignerSelector(
-    ({ scene }) => scene !== null && activeDocOf(scene).allowLivePlateOverlap === true,
+  const composition = useDesignerSelector(({ scene }) =>
+    scene === null ? undefined : activeDocOf(scene),
   );
 
   return (
@@ -138,27 +139,41 @@ export function LivePlateControlSection({
           });
         }}
       />
-      <LivePlateOverlapRow checked={allowOverlap} />
+      {composition !== undefined && <LivePlateCompositionSettings composition={composition} />}
     </CollapseSection>
   );
 }
 
-export function LivePlateOverlapRow({ checked }: { checked: boolean }): JSX.Element {
+const compositionSettings = [
+  { field: 'allowLivePlateOverlap', label: 'Allow live plate overlap' },
+  { field: 'allowOperatorAutoLayout', label: 'Allow Auto layout in CG Control' },
+] as const;
+
+export function LivePlateCompositionSettings({
+  composition,
+}: {
+  composition: Pick<Scene, (typeof compositionSettings)[number]['field']>;
+}): JSX.Element {
   return (
-    <label
-      className={s.row}
-      title="Applies to the open composition. When exporting a parent composition, enable this on that parent."
-    >
-      <span className={s.label}>Allow live plate overlap</span>
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) =>
-          designerStore.updateScene({
-            allowLivePlateOverlap: event.currentTarget.checked ? true : undefined,
-          })
-        }
-      />
-    </label>
+    <>
+      {compositionSettings.map(({ field, label }) => (
+        <label
+          key={field}
+          className={s.row}
+          title="Applies to the open composition. When exporting a parent composition, enable this on that parent."
+        >
+          <span className={s.label}>{label}</span>
+          <input
+            type="checkbox"
+            checked={composition[field] === true}
+            onChange={(event) =>
+              designerStore.updateScene({
+                [field]: event.currentTarget.checked ? true : undefined,
+              })
+            }
+          />
+        </label>
+      ))}
+    </>
   );
 }

@@ -42,6 +42,7 @@ export interface EditDocFields {
   lifecycle?: Lifecycle | undefined;
   playout?: Playout | undefined;
   allowLivePlateOverlap?: boolean | undefined;
+  allowOperatorAutoLayout?: boolean | undefined;
   editorBackdrop: Scene['editorBackdrop'];
   /** `multibox-layout-switch` — this document's arrangements (see `Composition.arrangements`). */
   arrangements?: Arrangement[] | undefined;
@@ -264,6 +265,7 @@ export function editSceneOf(scene: Scene | null, id: string | null): Scene | nul
     lifecycle: c.lifecycle,
     playout: c.playout,
     allowLivePlateOverlap: c.allowLivePlateOverlap,
+    allowOperatorAutoLayout: c.allowOperatorAutoLayout,
     editorBackdrop: c.editorBackdrop,
     layers: c.layers,
     // D-025 — fields/bindings are per-composition; surface the active comp's own
@@ -387,6 +389,9 @@ export function ensureCompositions(scene: Scene): { scene: Scene; activeId: stri
       ...(scene.playout !== undefined ? { playout: scene.playout } : {}),
       ...(scene.allowLivePlateOverlap !== undefined && {
         allowLivePlateOverlap: scene.allowLivePlateOverlap,
+      }),
+      ...(scene.allowOperatorAutoLayout !== undefined && {
+        allowOperatorAutoLayout: scene.allowOperatorAutoLayout,
       }),
       editorBackdrop: scene.editorBackdrop,
       layers: rootLayers,

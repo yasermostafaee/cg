@@ -37,6 +37,7 @@ import {
   stagePreviewCrop,
   subscribeDrafts,
 } from './draftStore.js';
+import { autoLayoutFrames, FrameAutoLayout } from './FrameAutoLayout.js';
 
 export function LiveFrameAdjustments({
   item,
@@ -83,6 +84,8 @@ export function LiveFrameAdjustments({
     ((frameDraft?.edits.size ?? 0) > 0 || (hasAppliedFrames && frameDraft?.reset === undefined));
   const showAspect =
     capabilities?.previewResizeMode === true && frames.some((frame) => frame.resize === 'free');
+  const layoutFrames =
+    capabilities?.liveFramePlacement === true ? autoLayoutFrames(live, lookId) : [];
   const fits = lookPlateFits(live, lookId);
   const rects = lookPlateRects(live, lookId);
   const fitOverride = assignmentsOnChannel(currentSourceAssignments(), channel).assignments.some(
@@ -169,7 +172,7 @@ export function LiveFrameAdjustments({
     }
   }
 
-  if (!showResetFrames && !showResetCrop && !showAspect) return null;
+  if (!showResetFrames && !showResetCrop && !showAspect && layoutFrames.length === 0) return null;
   return (
     <>
       {showResetFrames && (
@@ -202,6 +205,16 @@ export function LiveFrameAdjustments({
           />
           Preserve frame aspect ratio
         </label>
+      )}
+      {layoutFrames.length > 0 && (
+        <FrameAutoLayout
+          key={JSON.stringify([item.itemId, lookId])}
+          item={item}
+          live={live}
+          lookId={lookId}
+          frames={layoutFrames}
+          enabled={canEdit && (!onAir || item.onAirFramePlacement === true)}
+        />
       )}
     </>
   );

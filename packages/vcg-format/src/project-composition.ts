@@ -33,6 +33,7 @@ export function projectCompositionForExport(
     arrangements: composition.arrangements ?? [],
     lookGroups: composition.lookGroups ?? [],
     allowLivePlateOverlap: composition.allowLivePlateOverlap,
+    allowOperatorAutoLayout: composition.allowOperatorAutoLayout,
   };
 
   // The selected composition is now the root. Keeping the project entry pointer

@@ -194,6 +194,17 @@ it('resolves the operator frame by active Look or the standalone declaration', (
   expect(lookOperatorFrames(withoutLooks(), undefined)).toEqual({});
 });
 
+it('accepts an explicit Auto Layout authorization and preserves omission on older carriers', () => {
+  const legacy = withLooks();
+  expect(TemplateLiveSourcesSchema.parse(legacy)).not.toHaveProperty('allowOperatorAutoLayout');
+  expect(
+    TemplateLiveSourcesSchema.parse({ ...legacy, allowOperatorAutoLayout: true }),
+  ).toMatchObject({ allowOperatorAutoLayout: true });
+  expect(
+    TemplateLiveSourcesSchema.safeParse({ ...legacy, allowOperatorAutoLayout: false }).success,
+  ).toBe(false);
+});
+
 describe('D-178 — lookPlateFocuses resolves focus through both carrier shapes', () => {
   it('uses the active look and can differ for one source between looks', () => {
     expect(lookPlateFocuses(withLooks(), 'grid')['guest-1']).toEqual({ x: 0.2, y: 0.8 });

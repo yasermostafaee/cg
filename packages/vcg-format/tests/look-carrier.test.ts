@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   platesSharingASource,
+  requiredRuntimeVersionForScene,
   type Element,
   type LiveRevealMask,
   type Scene,
@@ -632,6 +633,29 @@ describe('per-look maps: absence is NO ENTRY, and the empty look is valid', () =
 });
 
 describe('buildTemplateLiveSources — the assembly, and the coexistence control', () => {
+  it('carries the Auto Layout opt-in for plain layouts and presets without changing their permissions', () => {
+    const standalone = scene({
+      rootChildren: [{ ...plate('one', 'one', 0, 0, 480, 270), operatorPlacement: 'proportional' }],
+      compositions: [],
+    });
+    for (const authored of [standalone, twoLookScene()]) {
+      const baseline = buildTemplateLiveSources(authored);
+      expect(baseline).not.toHaveProperty('allowOperatorAutoLayout');
+      expect(buildTemplateLiveSources({ ...authored, allowOperatorAutoLayout: false })).toEqual(
+        baseline,
+      );
+
+      const enabled = { ...authored, allowOperatorAutoLayout: true };
+      expect(buildTemplateLiveSources(enabled)).toEqual({
+        ...baseline,
+        allowOperatorAutoLayout: true,
+      });
+      expect(requiredRuntimeVersionForScene(enabled)).toBe(
+        requiredRuntimeVersionForScene(authored),
+      );
+    }
+  });
+
   it('emits bottom-to-top paint order only for overlap-enabled layouts', () => {
     const s = scene({
       rootChildren: [
