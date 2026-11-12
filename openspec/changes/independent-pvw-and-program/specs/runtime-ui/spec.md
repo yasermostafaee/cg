@@ -26,12 +26,30 @@ On a capable Bridge, CG Control SHALL make the ON PVW and Play controls independ
 - **WHEN** the operator edits Position **THEN** PVW follows the draft and programme keeps the applied position until Update on air
 - **WHEN** Bridge has no confirmed in-place position capability **THEN** Position remains locked while the layer is on air
 
+#### Scenario: Move a live layout on air
+
+- **GIVEN** Bridge confirms in-place Position for the resident page and its visible live seats
+- **WHEN** the operator drafts Position **THEN** the artwork and live frames move together in PVW
+- **WHEN** the operator presses Update on air **THEN** the programme artwork and occupied frames
+  follow the applied position and the input producers stay resident
+- **WHEN** Bridge refuses the requested move **THEN** the draft remains available for correction or Discard
+- **WHEN** the Update also changes source bindings or a crop **THEN** the console applies
+  changed fields and bindings, then the crop, then Position for the verified seats, keeping any
+  rejected or unsent drafts
+
 #### Scenario: Reset Position to the template's authored placement
 
 - **WHEN** the operator presses Reset to default in the editable Position section
 - **THEN** the authored anchor and both offsets are staged and PVW follows immediately
 - **AND** Update or Update on air applies the reset, and Discard returns to the applied placement
 - **WHEN** Position is locked **THEN** Reset to default is unavailable
+
+#### Scenario: See a Position draft in Layers
+
+- **WHEN** a Position draft differs from the row's applied placement, with or without other drafts
+- **THEN** the row shows its existing draft badge, and an on-air row includes the edit in its Update action
+- **WHEN** the operator discards or applies the draft and no other drafts remain
+- **THEN** the row's draft badge clears
 
 ### Requirement: Every retained template on PVW has a local placement outline
 
@@ -59,6 +77,12 @@ whose outlines coincide.
 - **AND** the applied position and playout commands stay unchanged until Update or Update on air
 - **WHEN** the operator switches **Move template** off or switches to **Crop input** or **Edit frames** **THEN** the outlines and completed Position drafts remain and further template dragging is unavailable
 - **WHEN** a row's Position is locked **THEN** its outline remains visible and its position gesture is unavailable
+
+#### Scenario: Find the Preview editing tools
+
+- **WHEN** the PVW toolbar shows its editing tools
+- **THEN** **Move template** comes before **Crop input**, followed by **Edit frames** when available
+- **AND** the order stays the same in compact layouts
 
 ### Requirement: The Layers toolbar offers Stop All and Clear All
 

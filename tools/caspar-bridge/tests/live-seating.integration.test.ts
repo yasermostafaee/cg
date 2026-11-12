@@ -13,6 +13,7 @@ import {
 } from '@cg/shared-ipc';
 import {
   CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER,
+  CG_LIVE_POSITION_PAGE_MARKER,
   RetainedStackItemSchema,
   retainedFromStackItem,
   type LiveFitMode,
@@ -1081,6 +1082,182 @@ it('moves the same on-air page and picture in place and rolls back after a refus
   });
   expect(JSON.parse(mock!.lastCgUpdate({ channel: 1, layer: 10 })?.data ?? '{}')).toEqual({
     __cg: { framePlacements: [MOVED_FRAME] },
+  });
+});
+
+const LIVE_POSITION_HTML = FRAME_HTML.replace('</head>', CG_LIVE_POSITION_PAGE_MARKER + '</head>');
+const WHOLE_POSITION = { anchor: 'center', offset: { x: 192, y: 108 } } as const;
+
+it('moves an on-air Live layer and its fields without restarting the foreground or inactive seats, keeping saved Pan', async () => {
+  const itemId = 'item-1';
+  const info = template(
+    [
+      { id: 'guest-1', rect: BOX, fitMode: 'cover' },
+      { id: 'guest-2', rect: BOX, fitMode: 'cover' },
+    ],
+    true,
+  );
+  const r = await boot({
+    template: {
+      ...info,
+      liveSources: {
+        ...info.liveSources!,
+        defaultLookId: 'one',
+        looks: [
+          {
+            id: 'one',
+            name: 'One',
+            entered: { mode: 'cut' },
+            rects: { 'guest-1': BOX },
+            fits: { 'guest-1': 'cover' },
+            operatorFrames: { 'guest-1': FRAME },
+          },
+          {
+            id: 'two',
+            name: 'Two',
+            entered: { mode: 'cut' },
+            rects: { 'guest-2': BOX },
+            fits: { 'guest-2': 'cover' },
+          },
+        ],
+      },
+    },
+    assignments: assign([
+      ['guest-1', 'src-a'],
+      ['guest-2', 'src-b'],
+    ]),
+    html: LIVE_POSITION_HTML,
+  });
+  await r.load(itemId, 'lower-third', { headline: 'before' });
+  const frame = { ...MOVED_FRAME, lookId: 'one' };
+  await expect(r.setFramePlacements(itemId, [frame])).resolves.toEqual({ accepted: true });
+  expect(r.enterPreview(itemId)).toEqual({ ok: true });
+  const focus = { x: 0.75, y: 0.25, zoom: 2 };
+  const save = () => {
+    const [target] = r.previewPlateCrop(itemId).targets;
+    if (target === undefined) throw new Error('Expected the selected look to have a Pan target');
+    expect(r.previewPlateCrop(itemId, undefined, [{ token: target.token, focus }]).ok).toBe(true);
+    return target.token;
+  };
+  const firstToken = save();
+  await expect(r.setActiveLook(itemId, 'two')).resolves.toEqual({ ok: true });
+  const secondToken = save();
+  await expect(r.setActiveLook(itemId, 'one')).resolves.toEqual({ ok: true });
+  await expect(r.take(itemId)).resolves.toMatchObject({ accepted: true });
+  const row = () => r.stackSnapshot().find((item) => item.itemId === itemId);
+  await expect.poll(row).toMatchObject({ status: 'on-air', onAirPosition: true });
+  const records = r.liveLayers().get(itemId) ?? [];
+  const active = records.find(({ held }) => held !== true);
+  const parked = records.find(({ held }) => held === true);
+  if (active === undefined || parked === undefined)
+    throw new Error('Expected visible and parked seats');
+  const before = (await recvLines()).length;
+  await expect(
+    r.update(itemId, { headline: 'after' }, 'merge', undefined, WHOLE_POSITION),
+  ).resolves.toEqual({
+    accepted: true,
+  });
+  expect(
+    (await recvLines()).slice(before).filter((line) => /^(CG |MIXER |PLAY |CLEAR )/.test(line)),
+  ).toEqual([
+    expect.stringMatching(/^MIXER 1-30 FILL .* DEFER$/),
+    expect.stringMatching(/^MIXER 1-30 CLIP .* DEFER$/),
+    expect.stringMatching(/^CG 1-10 UPDATE /),
+    'MIXER 1 COMMIT',
+  ]);
+  expect(JSON.parse(mock!.lastCgUpdate({ channel: 1, layer: 10 })?.data ?? '{}')).toEqual({
+    headline: 'after',
+    __cg: { position: WHOLE_POSITION },
+  });
+  const after = r.liveLayers().get(itemId) ?? [];
+  expect(after.find(({ held }) => held === true)).toEqual(parked);
+  const moved = after.find(({ held }) => held !== true);
+  expect(moved).toMatchObject({
+    slot: active.slot,
+    producer: active.producer,
+  });
+  for (const key of ['fill', 'clip'] as const) {
+    expect(moved?.[key].x).toBeCloseTo(active[key].x + 0.1, 7);
+    expect(moved?.[key].y).toBeCloseTo(active[key].y + 0.1, 7);
+    expect(moved?.[key].width).toBe(active[key].width);
+    expect(moved?.[key].height).toBe(active[key].height);
+  }
+  expect(row()).toMatchObject({
+    fields: { headline: 'after' },
+    position: WHOLE_POSITION,
+    framePlacements: [frame],
+  });
+  const retained = RetainedStackItemSchema.parse(retainedFromStackItem(row()!));
+  expect(retained.previewPlateCrops).toHaveLength(2);
+  expect(retained.previewPlateCrops?.map(({ token }) => token)).not.toContain(firstToken);
+  expect(retained.previewPlateCrops?.map(({ token }) => token)).not.toContain(secondToken);
+  expect((await r.previewPlateCropOnAir(itemId)).targets).toMatchObject([{ focus }]);
+
+  await expect(r.setActiveLook(itemId, 'two')).resolves.toEqual({ ok: true });
+  expect((await r.previewPlateCropOnAir(itemId)).targets).toMatchObject([{ focus }]);
+  await expect(r.stopItem(itemId)).resolves.toMatchObject({ accepted: true });
+  await expect(r.take(itemId)).resolves.toMatchObject({ accepted: true });
+  await expect
+    .poll(async () => (await r.previewPlateCropOnAir(itemId)).targets)
+    .toMatchObject([{ focus }]);
+});
+
+it('restores Position, fields and mixer geometry after a refused commit, and rejects unsafe geometry before writing', async () => {
+  const itemId = 'item-1';
+  const r = await boot({
+    template: {
+      ...template([{ id: 'guest-1', rect: BOX }]),
+      fields: [
+        { id: 'headline', label: 'Headline', type: 'text', required: false, default: 'authored' },
+      ],
+    },
+    html: LIVE_POSITION_HTML,
+  });
+  expect(await loadAndTake(r, itemId)).toMatchObject({ accepted: true });
+  const row = () => r.stackSnapshot()[0];
+  await expect.poll(row).toMatchObject({ onAirPosition: true });
+  const slot = { channel: 1, layer: 30 };
+  const beforeFit = mock!.layerState(slot);
+  const before = (await recvLines()).length;
+  await expect(
+    r.update(itemId, { headline: 'changed' }, 'merge', {}, WHOLE_POSITION),
+  ).resolves.toMatchObject({
+    accepted: false,
+    errorCode: 'live-position-bindings-conflict',
+  });
+  await expect(
+    r.update(itemId, {}, 'merge', undefined, { ...WHOLE_POSITION, offset: { x: 2000, y: 0 } }),
+  ).resolves.toMatchObject({
+    accepted: false,
+    errorCode: 'live-position-unavailable',
+  });
+  expect(
+    (await recvLines()).slice(before).filter((line) => /^(CG |MIXER |PLAY |CLEAR )/.test(line)),
+  ).toEqual([]);
+
+  const mixer = defaultHandlers().get('MIXER')!;
+  let refused = false;
+  mock!.setHandler('MIXER', (request, context, connection) => {
+    if (!refused && request.raw === 'MIXER 1 COMMIT') {
+      refused = true;
+      return { kind: 'err', code: 502, verb: 'MIXER' };
+    }
+    return mixer(request, context, connection);
+  });
+  await expect(
+    r.update(itemId, { headline: 'changed' }, 'merge', undefined, WHOLE_POSITION),
+  ).resolves.toMatchObject({
+    accepted: false,
+    errorCode: 'amcp-502',
+    message: expect.stringContaining('previous position was restored'),
+  });
+  expect(refused).toBe(true);
+  expect(row()).toMatchObject({ fields: {}, onAirPosition: true });
+  expect(row()?.position).toBeUndefined();
+  expect(mock!.layerState(slot)).toEqual(beforeFit);
+  expect(JSON.parse(mock!.lastCgUpdate({ channel: 1, layer: 10 })?.data ?? '{}')).toEqual({
+    headline: 'authored',
+    __cg: { position: CENTRED },
   });
 });
 

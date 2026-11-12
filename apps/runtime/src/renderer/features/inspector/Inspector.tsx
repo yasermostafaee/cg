@@ -51,7 +51,7 @@ import {
   TakeRefusalText,
 } from '../layers/takeRefusalLine.js';
 import { currentSourceCatalog } from '../sources/sourceStore.js';
-import { defaultPositionOf } from '../stack/defaultPositionStore.js';
+import { appliedPositionOf, defaultPositionOf } from '../stack/defaultPositionStore.js';
 import {
   REHEARSE_STATE_COLOR,
   REHEARSE_STATE_WORD,
@@ -663,7 +663,7 @@ export function Inspector({
       would leave the bar reporting itself clean with a placement still to send — and
       DISCARD, which now drops it, would throw it away with nothing having said it was there.
     */
-    item.position ?? templatePosition,
+    appliedPositionOf(item, templatePosition),
     /*
       🔴 …and the TIMING (`DELTA B4`). It stages like every other edit now and `Update` spends
       it, so the bar has to see it: a pass count staged against a bar reporting itself clean is

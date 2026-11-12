@@ -10,7 +10,7 @@ import { timingPatchToSend } from './timingToSend.js';
 import { reportCommandError } from '../status/commandFeedback.js';
 import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
 import { commitSourceAssignments, currentSourceAssignments } from '../sources/sourceStore.js';
-import { defaultPositionOf } from '../stack/defaultPositionStore.js';
+import { appliedPositionOf } from '../stack/defaultPositionStore.js';
 import { recordSentPasses } from './timingSent.js';
 import { patternRefusalsOf } from './patternCheck.js';
 import {
@@ -73,8 +73,7 @@ export function applyDraft(
     reportCommandError(`Not sent: ${first.label} — ${first.line}`);
     return Promise.resolve({ accepted: false, errorCode: 'pattern' });
   }
-  const appliedPosition =
-    item.position ?? defaultPositionOf(item.templateId, template?.liveSources?.defaultPosition);
+  const appliedPosition = appliedPositionOf(item, template?.liveSources?.defaultPosition);
   const sentPosition =
     item.onAirPosition === true && isPositionDirty(item.itemId, appliedPosition)
       ? positionDraftOf(item.itemId)
@@ -110,18 +109,7 @@ export function applyDraft(
     lookBindings.size === 0
       ? undefined
       : buildLookBindingsPayload(item.itemId, item.lookSourceOverride);
-  const fields = (): Promise<{ accepted: boolean; errorCode?: string | undefined }> =>
-    sendUpdate(
-      item,
-      sent,
-      sentPosition !== undefined && Object.keys(sent).length === 0
-        ? {}
-        : buildApplyPayload(item.itemId, item.fields),
-      bindingsPayload,
-      lookBindings,
-      sentPosition,
-    );
-  // Off-air placement keeps the legacy set-position route. Live placement rides the field update.
+  // Off-air placement keeps the legacy set-position route.
   const position = (): Promise<boolean> => sendPosition(item, appliedPosition);
   /*
     🔴 **AND THE TIMING RIDES THE SAME PRESS — `DELTA B4`.** It was committed on BLUR, which
@@ -164,6 +152,27 @@ export function applyDraft(
     crop.finish();
     return Promise.resolve({ accepted: false });
   }
+  // A changed binding can replace a seat, and a crop token belongs to the current geometry.
+  // Settle those edits before moving the page and its seats. Acknowledgements clear their own drafts.
+  const deferredPosition =
+    bindingsPayload !== undefined || crop.drafts.some((draft) => draft.kind === 'guide')
+      ? sentPosition
+      : undefined;
+  const combinedPosition = deferredPosition === undefined ? sentPosition : undefined;
+  const noFieldDrafts = Object.keys(sent).length === 0;
+  const fields = (): Promise<{ accepted: boolean; errorCode?: string | undefined }> =>
+    deferredPosition !== undefined && noFieldDrafts && bindingsPayload === undefined
+      ? Promise.resolve({ accepted: true })
+      : sendUpdate(
+          item,
+          sent,
+          combinedPosition !== undefined && noFieldDrafts
+            ? {}
+            : buildApplyPayload(item.itemId, item.fields),
+          bindingsPayload,
+          lookBindings,
+          combinedPosition,
+        );
   return preflight
     .reduce<Promise<boolean>>(
       (prior, half) => prior.then((ok) => half().then((mine) => ok && mine)),
@@ -173,6 +182,10 @@ export function applyDraft(
       const res = await fields();
       if (!res.accepted) return res;
       const cropsAccepted = await applyPreviewCropDrafts(item, crop);
+      if (cropsAccepted && deferredPosition !== undefined) {
+        const moved = await sendUpdate(item, {}, {}, undefined, undefined, deferredPosition);
+        if (!moved.accepted) return moved;
+      }
       if (frame.placements.length > 0) {
         try {
           const placed = await window.cg.stack.setFramePlacements({

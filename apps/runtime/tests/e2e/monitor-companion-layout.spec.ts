@@ -3,7 +3,10 @@ import { expect, test, buildValidVcg } from './fixtures/runtime.js';
 
 const MAIN_CHROME = '[data-app-header], footer[aria-label="Status bar"]';
 
-async function expectHeaderActionsClear(panel: Locator): Promise<void> {
+async function expectHeaderActionsClear(
+  panel: Locator,
+  expectedTools: string[] = [],
+): Promise<void> {
   const header = panel.locator('.cg-panel-header--monitor');
   const geometry = await header.evaluate((element) => {
     const frame = element.getBoundingClientRect();
@@ -23,10 +26,10 @@ async function expectHeaderActionsClear(panel: Locator): Promise<void> {
         rects.slice(i + 1).every((other) => !intersect(rect, other)),
       ),
     };
-    const tools = element.querySelectorAll(
-      '[data-monitor-pan], [data-monitor-move], [data-monitor-frames]',
-    );
-    const iconAndTextFit = [...tools].every((tool) => {
+    const tools = [
+      ...element.querySelectorAll('[data-monitor-pan], [data-monitor-move], [data-monitor-frames]'),
+    ];
+    const iconAndTextFit = tools.every((tool) => {
       const icon = tool.querySelector('svg')?.getBoundingClientRect();
       const label = tool.lastChild;
       if (icon === undefined || label === null) return false;
@@ -36,9 +39,20 @@ async function expectHeaderActionsClear(panel: Locator): Promise<void> {
       const button = tool.getBoundingClientRect();
       return inside(button, icon) && inside(button, text) && !intersect(icon, text);
     });
-    return { ...actions, iconAndTextFit };
+    const toolOrder = tools
+      .map((tool) => ({ label: tool.textContent?.trim(), box: tool.getBoundingClientRect() }))
+      .sort(({ box: a }, { box: b }) =>
+        Math.abs(a.top - b.top) > 0.5 ? a.top - b.top : a.left - b.left,
+      )
+      .map(({ label }) => label);
+    return { ...actions, iconAndTextFit, toolOrder };
   });
-  expect(geometry).toEqual({ insideHeader: true, distinctHitboxes: true, iconAndTextFit: true });
+  expect(geometry).toEqual({
+    insideHeader: true,
+    distinctHitboxes: true,
+    iconAndTextFit: true,
+    toolOrder: expectedTools,
+  });
 }
 
 for (const name of ['PROGRAM (PGM)', 'PREVIEW (PVW)']) {
@@ -58,6 +72,8 @@ for (const name of ['PROGRAM (PGM)', 'PREVIEW (PVW)']) {
     const normal = await monitor.boundingBox();
     expect(normal).not.toBeNull();
     await expect(mainChrome).toHaveCount(2);
+    const expectedTools = name === 'PREVIEW (PVW)' ? ['Move template', 'Crop input'] : [];
+    if (name === 'PREVIEW (PVW)') await expectHeaderActionsClear(panel, expectedTools);
     await page.getByRole('button', { name: `Show ${name} fullscreen` }).click();
     await expect(mainChrome).toHaveCount(0);
     await expect(panel.locator('[data-monitor-pan]')).toHaveCount(name === 'PREVIEW (PVW)' ? 1 : 0);
@@ -86,7 +102,7 @@ for (const name of ['PROGRAM (PGM)', 'PREVIEW (PVW)']) {
 
     for (const width of [1900, 1440, 840]) {
       await page.setViewportSize({ width, height: 922 });
-      await expectHeaderActionsClear(panel);
+      await expectHeaderActionsClear(panel, expectedTools);
       const [picture, row, rowBox, editor, inspectorPanel, input] = await Promise.all([
         monitor.boundingBox(),
         layer.boundingBox(),
@@ -108,7 +124,7 @@ for (const name of ['PROGRAM (PGM)', 'PREVIEW (PVW)']) {
     }
 
     await page.setViewportSize({ width: 620, height: 922 });
-    await expectHeaderActionsClear(panel);
+    await expectHeaderActionsClear(panel, expectedTools);
     await page.setViewportSize({ width: 840, height: 922 });
 
     await field.fill('Edited while monitoring');

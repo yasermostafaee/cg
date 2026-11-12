@@ -522,23 +522,6 @@ export function PreviewPanel({
           </MonitorHeadFact>
           <Button
             variant="ghost"
-            active={panOpen}
-            aria-label="Crop input in Preview"
-            aria-pressed={panOpen}
-            data-monitor-pan=""
-            disabled={!panAvailable}
-            title={
-              panAvailable
-                ? 'Adjust which part of the input appears inside the frame'
-                : 'Play a Crop edges plate in Preview to crop its input'
-            }
-            onClick={() => toggleEditTool('pan')}
-          >
-            <Icon icon={Crop} size={13} />
-            Crop input
-          </Button>
-          <Button
-            variant="ghost"
             active={moveOpen}
             aria-label="Move template in Preview"
             aria-pressed={moveOpen}
@@ -553,6 +536,23 @@ export function PreviewPanel({
           >
             <Icon icon={Hand} size={13} />
             Move template
+          </Button>
+          <Button
+            variant="ghost"
+            active={panOpen}
+            aria-label="Crop input in Preview"
+            aria-pressed={panOpen}
+            data-monitor-pan=""
+            disabled={!panAvailable}
+            title={
+              panAvailable
+                ? 'Adjust which part of the input appears inside the frame'
+                : 'Play a Crop edges plate in Preview to crop its input'
+            }
+            onClick={() => toggleEditTool('pan')}
+          >
+            <Icon icon={Crop} size={13} />
+            Crop input
           </Button>
           {frameEditAvailable && (
             <Button

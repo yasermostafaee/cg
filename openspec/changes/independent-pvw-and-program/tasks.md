@@ -21,3 +21,17 @@
 - [x] Gate whole-template dragging behind the PVW **Move template** toggle and keep outlines available.
 - [x] Verify in Windows Chromium that **Move template** starts off, toggles dragging, and preserves completed drafts for Update or Discard.
 - [ ] Record the carrying Linux Playwright result for the **Move template** toggle.
+- [x] Show a Position-only draft in the layer row's existing badge and on-air Update action.
+      All 46 focused Runtime tests passed.
+- [x] Verify the row's draft badge during Position editing, Discard and Update in Windows Chromium.
+- [x] Move supported resident live layouts with their visible seats during Update on air.
+- [x] Verify that a mixed on-air Update applies fields and source bindings, the staged crop and
+      Position in order and retains rejected or unsent drafts. All 30 focused Runtime tests passed.
+- [x] Verify whole-template Position in Windows Chromium with a real test Bridge and mock engine.
+      The focused seven cases passed, including live seat translation and supported-page guards.
+- [x] Verify five focused Bridge cases covering visible and parked seats, paired foreground,
+      saved crops across Looks, rollback and fully off-raster refusal.
+- [ ] Verify Position for a live layout on the target station and record carrying Linux Playwright.
+- [x] Put **Move template** before **Crop input**, followed by **Edit frames** when available.
+- [x] Verify the new PVW tool order in normal and compact layouts in Windows Chromium. Six focused
+      cases passed, including the real-Bridge live Position and crop scenarios.

@@ -1059,6 +1059,7 @@ test('R-117 drafts Position in PVW and moves the resident page on Update on air'
   await openConsole(page, handle.url);
   await showMonitors(page);
   const layer = row(page);
+  const rowDraft = layer.getByText('● draft', { exact: true });
   await layer.locator('[data-row-body]').click();
   await layer.getByRole('button', { name: 'ON PVW', exact: true }).click();
   const pvw = page.getByRole('region', { name: 'PREVIEW (PVW)' });
@@ -1071,6 +1072,7 @@ test('R-117 drafts Position in PVW and moves the resident page on Update on air'
   const reset = inspector.getByRole('button', { name: 'Reset to default', exact: true });
   await expect(x).toBeEnabled();
   await expect(reset).toBeDisabled();
+  await expect(rowDraft).toHaveCount(0);
 
   const add = engine.lastCgAdd(slot);
   if (add === undefined || !add.template.startsWith('http') || add.data === null)
@@ -1099,6 +1101,7 @@ test('R-117 drafts Position in PVW and moves the resident page on Update on air'
     await inspector.getByRole('button', { name: 'Anchor top-left', exact: true }).click();
     await x.fill('320');
     await y.fill('40');
+    await expect(rowDraft).toBeVisible();
     await inspector.getByRole('textbox', { name: 'anchor', exact: true }).fill('Draft text');
     const previewStage = pvw.frameLocator('iframe[data-rehearsal-frame]').locator('.cg-stage');
     const moved = 'matrix(1, 0, 0, 1, 320, 40)';
@@ -1107,6 +1110,7 @@ test('R-117 drafts Position in PVW and moves the resident page on Update on air'
     await expect(airStage).toHaveCSS('transform', initialPosition);
     await inspector.getByRole('button', { name: 'Apply staged edits to the on-air row' }).click();
     await expect(inspector.getByLabel('Position has unapplied changes')).toHaveCount(0);
+    await expect(rowDraft).toHaveCount(0);
 
     const applied = wire().slice(before.length);
     expect(applied).toHaveLength(1);
@@ -1132,6 +1136,7 @@ test('R-117 drafts Position in PVW and moves the resident page on Update on air'
     );
     await expect(x).toHaveValue('-10');
     await expect(y).toHaveValue('-20');
+    await expect(rowDraft).toBeVisible();
     await expect(previewStage).toHaveCSS('transform', initialPosition);
     await expect(airStage).toHaveCSS('transform', moved);
     expect(positionWire()).toEqual(beforeReset);
@@ -1139,11 +1144,18 @@ test('R-117 drafts Position in PVW and moves the resident page on Update on air'
     await inspector.getByRole('button', { name: 'Discard staged edits' }).click();
     await expect(previewStage).toHaveCSS('transform', moved);
     await expect(x).toHaveValue('320');
+    await expect(rowDraft).toHaveCount(0);
     expect(positionWire()).toEqual(beforeReset);
 
     await reset.click();
-    await inspector.getByRole('button', { name: 'Apply staged edits to the on-air row' }).click();
+    await expect(rowDraft).toBeVisible();
+    await layer.scrollIntoViewIfNeeded();
+    await layer.click({ button: 'right' });
+    const updateRow = page.getByRole('menu').getByRole('menuitem', { name: 'UPDATE', exact: true });
+    await expect(updateRow).toBeEnabled();
+    await updateRow.click();
     await expect(inspector.getByLabel('Position has unapplied changes')).toHaveCount(0);
+    await expect(rowDraft).toHaveCount(0);
     expect(positionWire().slice(beforeReset.length)).toEqual([
       expect.stringMatching(/^CG 1-99 UPDATE /),
     ]);
@@ -1160,7 +1172,7 @@ test('R-117 drafts Position in PVW and moves the resident page on Update on air'
   }
 });
 
-test('Frames drafts the authored box and title in stopped PVW, then applies on the next Take', async ({
+test('Frames drafts the authored box and whole-template Position moves the retained live seat', async ({
   page,
 }) => {
   const handle = await boot(true);
@@ -1261,6 +1273,9 @@ test('Frames drafts the authored box and title in stopped PVW, then applies on t
   await plateRow.locator('[data-row-body]').click();
   await plateRow.getByRole('button', { name: 'ON PVW', exact: true }).click();
   const pvw = page.getByRole('region', { name: 'PREVIEW (PVW)' });
+  await expect(
+    pvw.locator('[data-monitor-move], [data-monitor-pan], [data-monitor-frames]'),
+  ).toHaveText(['Move template', 'Crop input', 'Edit frames']);
   const moveTemplate = pvw.getByRole('button', { name: 'Move template in Preview', exact: true });
   await moveTemplate.click();
   await expect(moveTemplate).toHaveAttribute('aria-pressed', 'true');
@@ -1372,6 +1387,80 @@ test('Frames drafts the authored box and title in stopped PVW, then applies on t
     await expect
       .poll(async () => (await airTitle.boundingBox())?.x ?? 0)
       .toBeGreaterThan(beforeAir.x);
+
+    const inspector = page.getByRole('complementary', { name: 'Inspector' });
+    const offsetX = inspector.getByRole('textbox', { name: 'Position offset X' });
+    const offsetY = inspector.getByRole('textbox', { name: 'Position offset Y' });
+    const rowDraft = plateRow.getByText('● draft', { exact: true });
+    await expect(offsetX).toBeEnabled();
+    await expect(offsetY).toBeEnabled();
+    await expect(rowDraft).toHaveCount(0);
+    const dx = 120;
+    const dy = 54;
+    const x = Number(await offsetX.inputValue()) + dx;
+    const y = Number(await offsetY.inputValue()) + dy;
+    const previousPreview = await readBox();
+    const previousAir = await airTitle.boundingBox();
+    if (previousAir === null) throw new Error('The programme title is missing before Position');
+
+    const start = engine.receivedCommands().length;
+    const positionWire = () =>
+      engine
+        .receivedCommands()
+        .slice(start)
+        .map(({ line }) => line)
+        .filter((line) =>
+          /^(CG |PLAY |LOADBG |CLEAR |MIXER 1 COMMIT|MIXER 1-\d+ (FILL|CLIP) )/.test(line),
+        );
+    await offsetX.fill(String(x));
+    await offsetY.fill(String(y));
+    await expect(rowDraft).toBeVisible();
+    await expect
+      .poll(async () => (await readBox()).caption.x)
+      .toBeGreaterThan(previousPreview.caption.x);
+    const previewAfter = await readBox();
+    expect(previewAfter.caption.x - previousPreview.caption.x).toBeCloseTo(
+      previewAfter.picture.x - previousPreview.picture.x,
+      1,
+    );
+    expect(positionWire()).toEqual([]);
+    expect(await airTitle.boundingBox()).toEqual(previousAir);
+
+    await inspector.getByRole('button', { name: 'Apply staged edits to the on-air row' }).click();
+    await expect(rowDraft).toHaveCount(0);
+    const applied = positionWire();
+    expect(applied).toEqual([
+      expect.stringMatching(/^MIXER 1-\d+ FILL .* DEFER$/),
+      expect.stringMatching(/^MIXER 1-\d+ CLIP .* DEFER$/),
+      expect.stringMatching(/^CG 1-59 UPDATE /),
+      'MIXER 1 COMMIT',
+    ]);
+    for (const mixer of ['FILL', 'CLIP']) {
+      const geometry = (commands: string[]) => {
+        const parts = commands.find((command) => command.includes(` ${mixer} `))?.split(' ');
+        if (parts === undefined) throw new Error(`Missing ${mixer} geometry`);
+        return {
+          seat: parts[1],
+          x: Number(parts[3]),
+          y: Number(parts[4]),
+          size: parts.slice(5, 7),
+        };
+      };
+      const before = geometry(wire);
+      const after = geometry(applied);
+      expect(after.seat).toBe(before.seat);
+      expect(after.size).toEqual(before.size);
+      expect(after.x - before.x).toBeCloseTo(dx / 1920, 4);
+      expect(after.y - before.y).toBeCloseTo(dy / 1080, 4);
+    }
+    const positionData = engine.lastCgUpdate(slot)?.data;
+    if (positionData == null) throw new Error('The programme page did not receive Position');
+    expect(JSON.parse(positionData)).toMatchObject({ __cg: { position: { offset: { x, y } } } });
+    await tellAir(positionData);
+    await expect
+      .poll(async () => (await airTitle.boundingBox())?.x ?? 0)
+      .toBeCloseTo(previousAir.x + dx, 1);
+    await expect(plateRow).toHaveAttribute('aria-label', /ON AIR$/);
   } finally {
     await air.close();
   }
@@ -1452,6 +1541,7 @@ test('R-117 Move toggles dragging while both stopped PVW templates remain outlin
   const inspector = page.getByRole('complementary', { name: 'Inspector' });
   const x = inspector.getByRole('textbox', { name: 'Position offset X' });
   const y = inspector.getByRole('textbox', { name: 'Position offset Y' });
+  const rowDraft = layer(98).getByText('● draft', { exact: true });
   const appliedPosition = (itemId: string) =>
     handle.runtime.stackSnapshot(1).find((item) => item.itemId === itemId)?.position;
   const programmeCommands = () =>
@@ -1476,6 +1566,7 @@ test('R-117 Move toggles dragging while both stopped PVW templates remain outlin
   expect(await lower.boundingBox()).toEqual(beforeLower);
   expect(await upper.boundingBox()).toEqual(beforeUpper);
   await expect(inspector.getByLabel('Position has unapplied changes')).toHaveCount(0);
+  await expect(rowDraft).toHaveCount(0);
   expect(appliedPosition('lower-pvw-template')).toEqual(initial);
   expect(programmeCommands()).toEqual(before);
 
@@ -1488,6 +1579,7 @@ test('R-117 Move toggles dragging while both stopped PVW templates remain outlin
   const dy = String(initial.offset.y + Math.round(moveY / fit));
   await expect(x).toHaveValue(dx);
   await expect(y).toHaveValue(dy);
+  await expect(rowDraft).toBeVisible();
   await expect(inspector.getByRole('button', { name: 'Anchor bottom-right' })).toHaveAttribute(
     'aria-pressed',
     'true',
@@ -1515,6 +1607,7 @@ test('R-117 Move toggles dragging while both stopped PVW templates remain outlin
 
   await inspector.getByRole('button', { name: 'Apply staged edits', exact: true }).click();
   await expect(inspector.getByLabel('Position has unapplied changes')).toHaveCount(0);
+  await expect(rowDraft).toHaveCount(0);
   expect(appliedPosition('lower-pvw-template')).toEqual({
     anchor: initial.anchor,
     offset: { x: Number(dx), y: Number(dy) },

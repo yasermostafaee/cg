@@ -75,6 +75,7 @@ import {
 } from '@cg/shared-ipc';
 import { useRehearse } from '../../hooks/useRehearse.js';
 import { airTally, isOnAir, onChannel } from '../stack/onAir.js';
+import { appliedPositionOf } from '../stack/defaultPositionStore.js';
 import { draftsVersion, isItemDirty, subscribeDrafts } from '../inspector/draftStore.js';
 import { appliedPlateSources } from '../inspector/livePlates.js';
 import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
@@ -1266,20 +1267,7 @@ export function LayersPanel({
                   itemChannelOf(item, slots, defaultsChannel),
                 ),
                 item.lookSourceOverride,
-                /*
-                  🔴 The POSITION is absent here and the TIMING is present, which looks
-                  inconsistent and is not.
-
-                  A position has to be RESOLVED against the template's default before
-                  it can be compared (`defaultPositionOf`), and this row does not hold
-                  that; passing `undefined` is the honest reading of "this caller
-                  cannot answer" rather than a claim of clean. Filed as `B-250`.
-
-                  The timing needs no resolution — `timingOverride` IS the applied
-                  truth, on the item this row already has — so there is nothing to stop
-                  this chip agreeing with the Inspector's about it.
-                */
-                undefined,
+                appliedPositionOf(item, template?.liveSources?.defaultPosition),
                 item.timingOverride,
               )
             }

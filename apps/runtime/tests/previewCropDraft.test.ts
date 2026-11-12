@@ -7,11 +7,13 @@ import {
   appliedPracticeCropOf,
   clearDraft,
   isItemDirty,
+  positionDraftOf,
   previewCropDraftOf,
   pruneDrafts,
   snapshotFramePlacementDraft,
   stageField,
   stageFramePlacement,
+  stagePosition,
   stagePreviewCrop,
   type PreviewCropDraft,
 } from '../src/renderer/features/inspector/draftStore.js';
@@ -79,6 +81,39 @@ it('B-433 commits on-air fields and explicitly applies the guide crop to the liv
   expect(previewCropDraftOf(itemId, guide.key)).toBeUndefined();
   expect(appliedPracticeCropOf(itemId, practice.key)).toEqual(practice.focus);
 });
+
+it.each([true, false])(
+  'settles Pan before live Position (Pan confirmed: %s)',
+  async (confirmed) => {
+    const { update, previewPlateCrop } = bridge();
+    previewPlateCrop.mockResolvedValue({ ok: confirmed, targets: [], applied: [guide.token] });
+    const position = { anchor: 'center', x: '40', y: '20' } as const;
+    stagePreviewCrop(itemId, guide, baseline);
+    stagePosition(itemId, position);
+
+    await expect(
+      applyDraft({ ...row, status: 'on-air', onAirPosition: true }),
+    ).resolves.toMatchObject({ accepted: confirmed });
+
+    expect(previewPlateCrop).toHaveBeenCalledOnce();
+    if (confirmed) {
+      expect(update).toHaveBeenCalledOnce();
+      expect(update).toHaveBeenCalledWith({
+        itemId,
+        fields: {},
+        mergeMode: 'merge',
+        position: { anchor: 'center', offset: { x: 40, y: 20 } },
+      });
+      expect(previewPlateCrop.mock.invocationCallOrder[0]).toBeLessThan(
+        update.mock.invocationCallOrder[0]!,
+      );
+    } else {
+      expect(update).not.toHaveBeenCalled();
+    }
+    expect(previewCropDraftOf(itemId, guide.key)).toEqual(confirmed ? undefined : guide);
+    expect(positionDraftOf(itemId)).toEqual(confirmed ? undefined : position);
+  },
+);
 
 it('stages framing locally, clears a return to the applied focus and includes framing in Discard', () => {
   const { previewPlateCrop } = bridge();

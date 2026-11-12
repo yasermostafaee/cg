@@ -11,7 +11,9 @@ import { clearPortals } from './support/dialog.js';
 import { connectionsStub } from './support/reachability.js';
 import {
   __resetDraftsForTest,
+  clearDraft,
   stagePlateSource,
+  stagePosition,
 } from '../src/renderer/features/inspector/draftStore.js';
 import {
   __resetSourcesForTest,
@@ -100,7 +102,7 @@ const ITEM: StackItemState = {
   slot: { channel: 1, layer: LAYER, server: 'primary' },
 };
 
-function stubBridge(): void {
+function stubBridge(template = TEMPLATE, item = ITEM): void {
   const stub = {
     link: {
       status: () => 'live',
@@ -109,7 +111,7 @@ function stubBridge(): void {
       onResyncingChanged: () => () => undefined,
     },
     connections: connectionsStub('both-up'),
-    templates: { list: () => Promise.resolve([TEMPLATE]), onChanged: () => () => undefined },
+    templates: { list: () => Promise.resolve([template]), onChanged: () => () => undefined },
     fixedLayers: {
       // A REAL bank shape. It carried a long-obsolete `layers: [...]` form that nothing
       // read, so it went unnoticed until `isLowBankLayer` needed the bed half. One
@@ -157,7 +159,7 @@ function stubBridge(): void {
       onAssignmentsChanged: () => () => undefined,
     },
     stack: {
-      snapshot: () => Promise.resolve([ITEM]),
+      snapshot: () => Promise.resolve([item]),
       onStateChanged: () => () => undefined,
       onRestoreSkips: () => () => undefined,
       onRestoreMigrations: () => () => undefined,
@@ -278,4 +280,40 @@ describe('B-139 — a plate staged as NOT ASSIGNED is applicable from the row', 
       'UPDATE must be ENABLED so the un-assignment can be applied from the row',
     ).toBe(false);
   });
+});
+
+it('B-250 — an unapplied Position shows a draft and enables UPDATE on the row', async () => {
+  stubBridge(
+    {
+      ...TEMPLATE,
+      liveSources: {
+        resolution: { width: 1920, height: 1080 },
+        defaultPosition: { anchor: 'bottom-right', offset: { x: -24, y: 16 } },
+        sources: [],
+      },
+    },
+    { ...ITEM, onAirPosition: true },
+  );
+  initSources(window.cg as never);
+  const panel = await renderPanel();
+  const row = panel.querySelector<HTMLElement>(`[data-layer="${String(LAYER)}"]`);
+  if (row === null) throw new Error('The declared layer is missing');
+
+  await act(async () => {
+    stagePosition(ITEM.itemId, { anchor: 'bottom-right', x: '-24', y: '16' });
+  });
+  expect(draftChip(row)).toBeNull();
+
+  await act(async () => {
+    stagePosition(ITEM.itemId, { anchor: 'bottom-right', x: '-20', y: '16' });
+  });
+  expect(draftChip(row)?.textContent).toContain('● draft');
+  await openRowMenu(panel);
+  expect(updateVerb()?.disabled).toBe(false);
+
+  await act(async () => {
+    clearDraft(ITEM.itemId);
+  });
+  expect(draftChip(row)).toBeNull();
+  expect(updateVerb()?.disabled).toBe(true);
 });

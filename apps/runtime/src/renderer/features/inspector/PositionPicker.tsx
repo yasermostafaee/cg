@@ -6,7 +6,7 @@ import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { NumericInput } from '../../ui/NumericInput.js';
-import { defaultPositionOf } from '../stack/defaultPositionStore.js';
+import { appliedPositionOf, defaultPositionOf } from '../stack/defaultPositionStore.js';
 import {
   draftsVersion,
   offsetNumber,
@@ -223,7 +223,7 @@ export function PositionPicker({
   // shows what the graphic actually does. The override comes from the item's
   // published state — never a renderer-local store, which would go stale on
   // reload/reconnect and miss delete-on-remove.
-  const seed = item.position ?? templatePosition;
+  const seed = appliedPositionOf(item, templatePosition);
   /*
    * `RUNTIME-REDESIGN-01` PHASE 5 — THE DRAFT LIVES IN THE STORE, NOT HERE.
    *

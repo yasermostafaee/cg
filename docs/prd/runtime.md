@@ -5128,11 +5128,24 @@ is no verified ownership map.
 - WHEN a bound row is already playing THEN ON PVW is available and does not mute, reload, start or stop any CasparCG producer.
 - WHEN a row is on PVW and Play is pressed THEN Take uses the applied values; PVW and its draft stay available.
 - WHEN the operator edits the Inspector THEN PVW reflects the draft without sending it to air. Update on air commits it; Update on an off-air row stores it without a playout command.
+- WHEN a Position draft differs from the applied placement THEN Layers shows the existing draft
+  badge for that row, even if Position is the only edit. The on-air row's Update action includes
+  Position. Applying or discarding the draft clears the badge when no other drafts remain.
 - WHEN an older Bridge does not advertise independent PVW THEN its existing rehearsal protections remain in force. An off-air Update waiting for its reply does not end legacy rehearsal or restore its layer volume.
 - WHEN Layers shows a bound row THEN the ON PVW column precedes Play, and the toolbar offers Stop All and Clear All. Row Remove remains available under its existing guard.
-- WHEN a row is confirmed on air on a single-primary station with a supported resident page and no Live Source plates THEN its Position anchor and offsets can be drafted in PVW. Update on air carries them with the field update and moves the resident page in place. Unsupported pages, rows with Live Source plates and stations with a configured backup keep their on-air Position lock.
+- WHEN Bridge verifies a supported resident page on a single-primary station THEN its Position
+  anchor and offsets can be drafted in PVW and applied with Update on air.
+- WHEN the resident row has Live Source plates and Bridge verifies all of its visible seats THEN
+  Update on air moves the artwork and occupied frames together, retaining the input producers and
+  crop. A configured backup, unverified ownership or a move that sends a visible seat entirely
+  outside the raster prevents the corresponding on-air Position update. When the Update also
+  changes source bindings or an input crop, the console applies changed fields and bindings first,
+  then the crop, then Position against the verified seats. A draft that fails or has not been sent
+  remains available.
 - WHEN a row is ON PVW THEN its retained page has a labelled template outline in the Preview raster, including before Preview Play and after Preview Stop. Use the authored visual element boxes where measurable, with the page footprint as a fallback.
 - WHEN **Move template** is off in PVW THEN template outlines remain visible and dragging does not change Position. The tool starts off and is available when an eligible template is ready.
+- WHEN the PVW toolbar shows its editing tools THEN **Move template** comes before **Crop input**,
+  followed by **Edit frames** when available. Keep the order in compact layouts.
 - WHEN the operator enables **Move template** and drags an editable template in PVW THEN select its row and stage its Position offsets in Inspector. Preserve the current anchor when known. The outline and preview follow the move in channel coordinates and the existing Update or Update on air action applies it.
 - WHEN the operator switches **Move template** off or switches to **Crop input** or **Edit frames** THEN template dragging stops and completed Position drafts remain available for Update or Discard. The same Position locks apply to Inspector and Preview.
 - WHEN the operator presses **Reset to default** in an editable Position section THEN the

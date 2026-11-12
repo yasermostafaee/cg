@@ -22,7 +22,9 @@ import {
   CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER,
   DEFAULT_LIVE_CROP_FOCUS,
   MAX_PREVIEW_PLATE_CROPS,
+  defaultNestedValues,
   framePlacementFits,
+  isFieldNamespace,
   isRestorable,
   intersectNormalizedRects,
   livePlateMaskRegions,
@@ -465,6 +467,19 @@ interface ResidentOutputPage {
   readonly generation: number;
 }
 
+interface PositionProposal {
+  readonly position: Position;
+  readonly cropTokens: Map<string, string>;
+}
+
+interface ResidentGeometryChange {
+  readonly kind: 'frame-placement' | 'live-position';
+  readonly plan: LiveSeatingPlan;
+  readonly update: FieldValues;
+  readonly rollback: FieldValues;
+  readonly record: () => void;
+}
+
 /** A private owner of the server's shared DEFER buffer for one channel. */
 interface MixerBatch {
   channel?: number;
@@ -748,6 +763,30 @@ function isSeatUnchanged(
     liveSeatId(prior) === placement.seatId &&
     prior.producer === placement.producerArg
   );
+}
+
+/** Restore touched values, including authored defaults that were absent from an older row. */
+function positionRollbackFields(
+  written: FieldValues,
+  previous: FieldValues,
+  defaults: FieldValues,
+): FieldValues {
+  const rollback: FieldValues = {};
+  for (const [key, value] of Object.entries(written)) {
+    const before = previous[key];
+    const fallback = defaults[key];
+    if (isFieldNamespace(value)) {
+      rollback[key] = positionRollbackFields(
+        value,
+        isFieldNamespace(before) ? before : {},
+        isFieldNamespace(fallback) ? fallback : {},
+      );
+      continue;
+    }
+    const restore = before === undefined ? fallback : before;
+    if (restore !== undefined) rollback[key] = restore;
+  }
+  return rollback;
 }
 
 function isSameVisibleCropSeat(
@@ -5238,34 +5277,63 @@ export class CasparRuntime {
   ): Promise<{ accepted: boolean; errorCode?: string; message?: string; command?: string }> {
     const { itemId } = item;
     const page = this.#liveFramePage(item);
-    const baseline = this.#liveLayers.get(itemId);
+    if (page === undefined || this.#liveLayers.get(itemId) === undefined) {
+      return {
+        accepted: false,
+        errorCode: 'frame-placement-on-air-unavailable',
+        message: 'The current programme page cannot apply frame placement in place.',
+      };
+    }
+    return this.#applyResidentGeometry(item, page, {
+      kind: 'frame-placement',
+      plan: this.#planLiveSeating(
+        itemId,
+        page.slot,
+        this.activeLookId(itemId),
+        'already-live',
+        'pinned',
+        undefined,
+        placements,
+      ),
+      update: withCgControl({}, { framePlacements: placements }),
+      rollback: withCgControl({}, { framePlacements: this.#framePlacements.get(itemId) ?? [] }),
+      record: () => this.#recordFramePlacements(itemId, placements),
+    });
+  }
+
+  /** Move the page and its existing seats without reloading or changing a producer's transport. */
+  async #applyResidentGeometry(
+    item: StackItemState,
+    page: ResidentOutputPage,
+    edit: ResidentGeometryChange,
+  ): Promise<{ accepted: boolean; errorCode?: string; message?: string; command?: string }> {
+    const { itemId } = item;
+    const movingPosition = edit.kind === 'live-position';
+    const baselineRef = this.#liveLayers.get(itemId);
+    const baseline = baselineRef ?? [];
+    const framePage = this.#liveFramePages.get(itemId);
+    const positionPage = this.#livePositionPages.get(itemId);
     const take = this.#takeTokens.get(itemId);
     const foreground = this.#foregroundPages.get(itemId);
     const unavailable = {
       accepted: false,
-      errorCode: 'frame-placement-on-air-unavailable',
-      message: 'The current programme page cannot apply frame placement in place.',
+      errorCode: movingPosition
+        ? 'live-position-unavailable'
+        : 'frame-placement-on-air-unavailable',
+      message: movingPosition
+        ? 'Position can move the existing on-air plates while their inputs remain visible.'
+        : 'The current programme page cannot apply frame placement in place.',
     };
-    if (page === undefined || baseline === undefined) return unavailable;
     const lookId = this.activeLookId(itemId);
-    const prior = this.#framePlacements.get(itemId) ?? [];
     const previousPlan = this.#planLiveSeating(itemId, page.slot, lookId, 'already-live', 'pinned');
-    const proposed = this.#planLiveSeating(
-      itemId,
-      page.slot,
-      lookId,
-      'already-live',
-      'pinned',
-      undefined,
-      placements,
-    );
+    const proposed = edit.plan;
     const visible = baseline.filter(({ held }) => held !== true);
     if (
       !previousPlan.ok ||
       !proposed.ok ||
       previousPlan.placements.length !== visible.length ||
       proposed.placements.length !== visible.length ||
-      proposed.unresolved.size > 0
+      (!movingPosition && proposed.unresolved.size > 0)
     )
       return unavailable;
 
@@ -5291,6 +5359,12 @@ export class CasparRuntime {
       )
         return unavailable;
       if (
+        movingPosition &&
+        intersectNormalizedRects(after.fit.clip, { x: 0, y: 0, width: 1, height: 1 }) === null
+      ) {
+        return unavailable;
+      }
+      if (
         !sameMixerRect(record.fill, after.fit.fill, 1e-8) ||
         !sameMixerRect(record.clip, after.fit.clip, 1e-8)
       ) {
@@ -5303,10 +5377,11 @@ export class CasparRuntime {
       return (
         current !== null &&
         current.lastIntentSeq === item.lastIntentSeq &&
-        this.#liveFramePage(current) === page &&
+        (movingPosition ? this.#livePositionPage(current) : this.#liveFramePage(current)) ===
+          page &&
         this.#takeTokens.get(itemId) === take &&
         this.#foregroundPages.get(itemId) === foreground &&
-        this.#liveLayers.get(itemId) === baseline &&
+        this.#liveLayers.get(itemId) === baselineRef &&
         this.activeLookId(itemId) === lookId &&
         visible.every(({ slot }) => this.#isVerifiedCropSlot(slot))
       );
@@ -5317,15 +5392,14 @@ export class CasparRuntime {
     };
     const write = (line: string) =>
       this.#send(line, this.#nextSeq(), 'urgent', { signal: cancel.signal });
-    const pageUpdate = (framePlacements: LiveFramePlacement[]) =>
-      this.#builder.update(page.slot, withCgControl({}, { framePlacements }));
+    const pageUpdate = (fields: FieldValues) => this.#builder.update(page.slot, fields);
     const touched: LiveLayerRecord[] = [];
     const batch: MixerBatch = {};
     const stageFit = async (record: LiveLayerRecord, fit: LivePlatePlacement['fit']) => {
       for (const line of this.#builder.mixerFit(record.slot, fit)) {
         if (!stillOwnsOutput()) return { ok: false, errorCode: 'not-live' };
         const sent = await this.#sendDeferredMixer(batch, record.slot.channel, line, cancel.signal);
-        if (!sent.ok || !sent.onPrimary) return sent;
+        if (!sent.ok || !sent.onPrimary) return { ...sent, ok: false };
       }
       return { ok: true };
     };
@@ -5351,7 +5425,7 @@ export class CasparRuntime {
       }
       if (refusal === undefined && stillOwnsOutput()) {
         pageAttempted = true;
-        const told = await write(pageUpdate(placements));
+        const told = await write(pageUpdate(edit.update));
         if (!told.ok || !told.onPrimary) refusal = told;
         else if (changes.size > 0) {
           const hold = this.#lookMixerHoldMsFor(page.slot.channel);
@@ -5373,13 +5447,13 @@ export class CasparRuntime {
           );
           this.#publishLiveLayers();
         }
-        this.#recordFramePlacements(itemId, placements);
+        edit.record();
         return { accepted: true };
       }
 
       let restored = stillOwnsOutput();
       if (restored && pageAttempted) {
-        const oldPage = await write(pageUpdate(prior));
+        const oldPage = await write(pageUpdate(edit.rollback));
         restored = oldPage.ok && oldPage.onPrimary;
       }
       // Before the first COMMIT, overwrite partial staging with the old fit. After an
@@ -5392,17 +5466,26 @@ export class CasparRuntime {
       }
       const rollbackCommit = await this.#commitStagedMixer(batch, { clearsOrphan: restored });
       restored = restored && rollbackCommit.landed && stillOwnsOutput();
-      if (!restored && this.#liveFramePages.get(itemId) === page) {
-        this.#liveFramePages.delete(itemId);
+      if (!restored) {
+        if (framePage !== undefined && this.#liveFramePages.get(itemId) === framePage)
+          this.#liveFramePages.delete(itemId);
+        if (positionPage !== undefined && this.#livePositionPages.get(itemId) === positionPage)
+          this.#livePositionPages.delete(itemId);
         this.#markDirty(itemId);
       }
       return {
         accepted: false,
-        errorCode: refusal?.errorCode ?? 'frame-placement-not-confirmed',
+        errorCode:
+          refusal?.errorCode ??
+          (movingPosition ? 'live-position-not-confirmed' : 'frame-placement-not-confirmed'),
         ...(refusal?.command !== undefined && { command: refusal.command }),
-        message: restored
-          ? 'CasparCG refused the frame placement. The previous placement was restored.'
-          : 'Frame placement could not be confirmed. Check the current programme picture.',
+        message: movingPosition
+          ? restored
+            ? 'CasparCG refused Position. The previous position was restored.'
+            : 'Position could not be confirmed. Check the current programme picture.'
+          : restored
+            ? 'CasparCG refused the frame placement. The previous placement was restored.'
+            : 'Frame placement could not be confirmed. Check the current programme picture.',
       };
     } finally {
       this.#reconciler.off('item-changed', invalidate);
@@ -6789,7 +6872,9 @@ export class CasparRuntime {
     const apply = () =>
       position === undefined
         ? this.#updateImpl(itemId, fields, mergeMode, lookBindings)
-        : this.#updateLivePosition(itemId, fields, mergeMode, lookBindings, position);
+        : this.#withLiveSeatLock(itemId, () =>
+            this.#updateLivePosition(itemId, fields, mergeMode, lookBindings, position),
+          );
     return this.#audited('update', this.#itemDetail(itemId), () =>
       // Queue a book with its turns and a position-capable page with its other field updates.
       this.#hasBook(itemId) ||
@@ -6816,8 +6901,6 @@ export class CasparRuntime {
       !this.#loaded.has(itemId) ||
       this.#slots.get(itemId) !== page.slot ||
       this.#templates.heldVersion(itemId) !== page.version ||
-      this.#foregroundPages.has(itemId) ||
-      (this.#liveLayers.get(itemId)?.length ?? 0) !== 0 ||
       this.#pendingRestore.has(itemId) ||
       this.#restoreBlocked.has(itemId) ||
       this.#adapter.primarySession !== page.session ||
@@ -6828,14 +6911,42 @@ export class CasparRuntime {
       return undefined;
     }
     const observed = page.session.osc.occupancy.occupied(this.#occupancyStaleMs);
-    return observed.some(
-      ({ channel, layer, producer }) =>
-        channel === page.slot.channel &&
-        layer === page.slot.layer &&
-        oscProducerKind(producer) === 'html',
+    const hasHtml = (slot: CommandSlot) =>
+      observed.some(
+        ({ channel, layer, producer }) =>
+          channel === slot.channel && layer === slot.layer && oscProducerKind(producer) === 'html',
+      );
+    if (!hasHtml(page.slot)) return undefined;
+    const info = this.#templates.infoOf(page.version);
+    if (info === null) return undefined;
+    const foreground = this.#foregroundPages.get(itemId);
+    const seats = this.#liveLayers.get(itemId) ?? [];
+    if (liveSourceCarrierState(info) !== 'declared') {
+      return foreground === undefined && seats.length === 0 ? page : undefined;
+    }
+    const visible = seats.filter(({ held }) => held !== true);
+    // A plate plan reads the listed carrier, which must still be the page that owns the output.
+    if (
+      this.#templates.versionOn(page.slot.channel, item.templateId) !== page.version ||
+      !this.#takeTokens.has(itemId) ||
+      visible.some(
+        ({ slot }) =>
+          !this.#isVerifiedCropSlot(slot) ||
+          !observed.some(
+            ({ channel, layer, producer }) =>
+              channel === slot.channel &&
+              layer === slot.layer &&
+              oscProducerKind(producer) !== 'html',
+          ),
+      )
     )
-      ? page
-      : undefined;
+      return undefined;
+    if (info.liveSources?.foregroundOverlay === true) {
+      return foreground !== undefined && this.#isVerifiedCropSlot(foreground) && hasHtml(foreground)
+        ? page
+        : undefined;
+    }
+    return foreground === undefined ? page : undefined;
   }
 
   async #updateLivePosition(
@@ -6852,7 +6963,14 @@ export class CasparRuntime {
       errorCode: 'live-position-unavailable',
       message: 'The current programme page cannot apply Position in place.',
     };
-    if (item === null || page === undefined || lookBindings !== undefined) return unavailable;
+    if (item === null || page === undefined) return unavailable;
+    if (lookBindings !== undefined) {
+      return {
+        accepted: false,
+        errorCode: 'live-position-bindings-conflict',
+        message: 'Apply the input changes separately, then apply the Position draft.',
+      };
+    }
 
     const info = this.#templates.infoOf(page.version);
     if (info === null) return unavailable;
@@ -6886,6 +7004,73 @@ export class CasparRuntime {
 
     const control: CgControl = { position, ...(pageTurn !== undefined && { page: pageTurn }) };
     const payload = mergeMode === 'merge' && Object.keys(fields).length === 0 ? fields : merged;
+    const record = (cropTokens?: ReadonlyMap<string, string>) => {
+      if (cropTokens !== undefined && cropTokens.size > 0) {
+        const prior = this.#previewPlateCrops.get(itemId) ?? [];
+        this.#previewPlateCrops.set(
+          itemId,
+          prior.map((crop) => ({
+            ...crop,
+            token: cropTokens.get(crop.token) ?? crop.token,
+          })),
+        );
+      }
+      const seq = this.#nextSeq();
+      this.#positions.set(itemId, position);
+      this.#reconciler.applyIntent({ kind: 'update', itemId, fields, mergeMode }, seq);
+      for (const [fieldId, index] of pages) {
+        if (index !== (this.#pageIndexes.get(itemId)?.[fieldId] ?? 0))
+          this.#setPageIndex(itemId, fieldId, index);
+      }
+      this.#reconciler.applyAck(seq, true);
+    };
+
+    if (liveSourceCarrierState(info) === 'declared') {
+      const lookId = this.activeLookId(itemId);
+      const proposal: PositionProposal = { position, cropTokens: new Map() };
+      const currentFrames = this.#framePlacements.get(itemId);
+      const planAt = (look: string | undefined) =>
+        this.#planLiveSeating(
+          itemId,
+          page.slot,
+          look,
+          'already-live',
+          'pinned',
+          undefined,
+          currentFrames,
+          proposal,
+        );
+      const plan = planAt(lookId);
+      if ((this.#previewPlateCrops.get(itemId)?.length ?? 0) > 0) {
+        // Rekey saved Pan for the other authored looks too. Their parked seats receive no writes.
+        for (const look of info.liveSources?.looks ?? []) {
+          if (look.id !== lookId) planAt(look.id);
+        }
+      }
+      const rollbackFields = positionRollbackFields(
+        payload,
+        item.fields,
+        defaultNestedValues({ fields: info.fields, groups: info.groups ?? [] }),
+      );
+      const priorPage =
+        first === undefined
+          ? undefined
+          : await this.#pageTurnFor(itemId, first[0], {
+              info,
+              fields: item.fields,
+              index: this.#pageIndexes.get(itemId)?.[first[0]] ?? 0,
+            });
+      return this.#applyResidentGeometry(item, page, {
+        kind: 'live-position',
+        plan,
+        update: withCgControl(payload, control),
+        rollback: withCgControl(rollbackFields, {
+          position: this.#effectivePosition(itemId, info.liveSources?.defaultPosition),
+          ...(priorPage !== undefined && { page: priorPage }),
+        }),
+        record: () => record(proposal.cropTokens),
+      });
+    }
     // The regular reconciler update eagerly stages its fields. For live Position publish the
     // fields and position only after the same resident page has accepted their one CG UPDATE.
     const cancel = new AbortController();
@@ -6912,14 +7097,7 @@ export class CasparRuntime {
       };
     if (!result.onPrimary || !samePage()) return unavailable;
 
-    const seq = this.#nextSeq();
-    this.#positions.set(itemId, position);
-    this.#reconciler.applyIntent({ kind: 'update', itemId, fields, mergeMode }, seq);
-    for (const [fieldId, index] of pages) {
-      if (index !== (this.#pageIndexes.get(itemId)?.[fieldId] ?? 0))
-        this.#setPageIndex(itemId, fieldId, index);
-    }
-    this.#reconciler.applyAck(seq, true);
+    record();
     return { accepted: true };
   }
 
@@ -8182,6 +8360,7 @@ export class CasparRuntime {
     rect: { x: number; y: number; width: number; height: number };
     sceneResolution: { width: number; height: number };
     carriedDefaultPosition?: Position | undefined;
+    positionOverride?: Position | undefined;
     sourceAspect: number | null;
     /**
      * `C-028` — the RESOLVED fit mode (`resolvePlateFitMode`). Passed in for the same
@@ -8197,7 +8376,9 @@ export class CasparRuntime {
       rect: input.rect,
       sceneResolution: input.sceneResolution,
       raster: this.#channelSettings.rasterFor(input.channel),
-      position: this.#effectivePosition(input.itemId, input.carriedDefaultPosition),
+      position:
+        input.positionOverride ??
+        this.#effectivePosition(input.itemId, input.carriedDefaultPosition),
       sourceAspect: input.sourceAspect,
       fitMode: input.fitMode,
       cropFocus: input.cropFocus,
@@ -8483,6 +8664,7 @@ export class CasparRuntime {
     levelTwo: LevelTwoSource,
     proposedCrops?: ReadonlyMap<string, LiveCropFocus>,
     framePlacements = this.#framePlacements.get(itemId),
+    positionProposal?: PositionProposal,
   ): LiveSeatingPlan {
     const templateId = this.#reconciler.get(itemId)?.templateId ?? itemId;
     // `CHANNEL-TEMPLATES-01` — the carrier of the version the row's channel lists.
@@ -8771,6 +8953,7 @@ export class CasparRuntime {
         rect,
         sceneResolution: carrier.resolution,
         carriedDefaultPosition: carrier.defaultPosition,
+        positionOverride: positionProposal?.position,
         sourceAspect: aspect.aspect,
         fitMode: fitMode.mode,
       };
@@ -8785,8 +8968,11 @@ export class CasparRuntime {
         box !== undefined && authoredRect !== undefined && !sameMixerRect(authoredRect, rect)
           ? this.liveSourceFitFor({ ...fitInput, rect: authoredRect, sourceAspect: null })
           : box;
-      const token =
-        box?.clip == null
+      const tokenFor = (
+        cropBox: LiveSourceFit | undefined,
+        identityBox: LiveSourceFit | undefined,
+      ) =>
+        cropBox?.clip == null
           ? undefined
           : createHash('sha256')
               .update(
@@ -8800,13 +8986,34 @@ export class CasparRuntime {
                   seat.producerArg,
                   fitMode.mode,
                   cropAspect,
-                  cropIdentityBox,
+                  identityBox,
                   this.#channelSettings.rasterFor(slot.channel),
                   masks[frame.plateId],
                 ]),
               )
               .digest('hex');
-      const stagedCrop = this.#previewPlateCrops.get(itemId)?.find((crop) => crop.token === token);
+      const token = tokenFor(box, cropIdentityBox);
+      // A whole-template move changes a legacy token's output geometry, not its source-relative Pan.
+      let appliedToken = token;
+      if (positionProposal !== undefined && box !== undefined) {
+        const appliedFit = { ...fitInput, positionOverride: undefined, sourceAspect: null };
+        const appliedBox = this.liveSourceFitFor(appliedFit);
+        const identity =
+          authoredRect !== undefined && !sameMixerRect(authoredRect, rect)
+            ? this.liveSourceFitFor({ ...appliedFit, rect: authoredRect })
+            : appliedBox;
+        appliedToken = tokenFor(appliedBox, identity);
+      }
+      const stagedCrop = this.#previewPlateCrops
+        .get(itemId)
+        ?.find((crop) => crop.token === appliedToken);
+      if (
+        positionProposal !== undefined &&
+        stagedCrop !== undefined &&
+        token !== undefined &&
+        token !== stagedCrop.token
+      )
+        positionProposal.cropTokens.set(stagedCrop.token, token);
       const liveCrop = this.#liveCropFocuses.get(itemId)?.get(cropKey(frame.lookId, frame.plateId));
       const landedFocus = liveCrop?.producer === seat.producerArg ? liveCrop.focus : undefined;
       const savedFocus =
@@ -8920,6 +9127,7 @@ export class CasparRuntime {
           rect: liveRevealSceneRect(upperRect, rect),
           sceneResolution: carrier.resolution,
           carriedDefaultPosition: carrier.defaultPosition,
+          positionOverride: positionProposal?.position,
           sourceAspect: null,
         });
         if (maskFit.clip === null) continue;
@@ -8956,6 +9164,7 @@ export class CasparRuntime {
           rect: liveRevealSceneRect(rect, region),
           sceneResolution: carrier.resolution,
           carriedDefaultPosition: carrier.defaultPosition,
+          positionOverride: positionProposal?.position,
           sourceAspect: null,
         }).clip;
         if (window === null) return [];
@@ -18955,8 +19164,7 @@ export class CasparRuntime {
         this.#adapter.primarySession === session &&
         this.#amcpGeneration === generation &&
         info !== null &&
-        liveSourceCarrierState(info) === 'none' &&
-        info.liveSources?.foregroundOverlay !== true &&
+        liveSourceCarrierState(info) !== 'unknown' &&
         this.#templates.htmlOf(versionId)?.slice(0, 1024).includes(CG_LIVE_POSITION_PAGE_MARKER)
       ) {
         this.#livePositionPages.set(itemId, { slot, version: versionId, session, generation });

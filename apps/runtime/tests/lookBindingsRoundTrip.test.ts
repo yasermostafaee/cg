@@ -7,7 +7,12 @@ import { applyDraft } from '../src/renderer/features/inspector/applyDraft.js';
 import {
   __resetDraftsForTest,
   effectiveLookBinding,
+  positionDraftOf,
+  snapshotDraft,
+  snapshotLookBindingDraft,
+  stageField,
   stageLookBinding,
+  stagePosition,
 } from '../src/renderer/features/inspector/draftStore.js';
 
 /**
@@ -214,3 +219,51 @@ it('§3c — staging BLANK removes the binding, which is how a composition is un
   // An empty map is no composition at all — the row must not read as composed.
   expect(itemOf(latest()).lookSourceOverride).toBeUndefined();
 });
+
+it.each(['none', 'binding', 'position'] as const)(
+  'settles bindings and captions before moving live seats (refused step: %s)',
+  async (refused) => {
+    const item: StackItemState = {
+      itemId: 'item-1',
+      templateId: 'debate',
+      status: 'on-air',
+      pending: false,
+      onAirPosition: true,
+      fields: { title: 'Previous caption' },
+    };
+    const update = vi
+      .fn<RuntimeBridge['stack']['update']>()
+      .mockResolvedValueOnce({ accepted: refused !== 'binding' })
+      .mockResolvedValueOnce({ accepted: refused !== 'position' });
+    vi.stubGlobal('window', { cg: { stack: { update } } });
+    const position = { anchor: 'center', x: '40', y: '20' } as const;
+    stageLookBinding(item.itemId, 'solo', 'l-1', 'in-studio-3');
+    stageField(item.itemId, ['title'], 'Current caption');
+    stagePosition(item.itemId, position);
+
+    await expect(applyDraft(item)).resolves.toMatchObject({ accepted: refused === 'none' });
+
+    expect(update).toHaveBeenNthCalledWith(1, {
+      itemId: item.itemId,
+      fields: { title: 'Current caption' },
+      mergeMode: 'merge',
+      lookBindings: { solo: { 'l-1': 'in-studio-3' } },
+    });
+    if (refused === 'binding') {
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(snapshotDraft(item.itemId)).toEqual({ title: 'Current caption' });
+      expect(snapshotLookBindingDraft(item.itemId).get('solo')?.get('l-1')).toBe('in-studio-3');
+    } else {
+      expect(update).toHaveBeenCalledTimes(2);
+      expect(update).toHaveBeenNthCalledWith(2, {
+        itemId: item.itemId,
+        fields: {},
+        mergeMode: 'merge',
+        position: { anchor: 'center', offset: { x: 40, y: 20 } },
+      });
+      expect(snapshotDraft(item.itemId)).toEqual({});
+      expect(snapshotLookBindingDraft(item.itemId).size).toBe(0);
+    }
+    expect(positionDraftOf(item.itemId)).toEqual(refused === 'none' ? undefined : position);
+  },
+);
