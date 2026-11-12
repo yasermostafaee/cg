@@ -2741,7 +2741,11 @@ test('Edit masks drafts authored windows in PVW and updates the existing on-air 
     await expect.poll(async () => Number(await clip.getAttribute('x'))).toBeGreaterThan(maskRect.x);
   };
   const programmeCommands = () =>
-    engine.receivedCommands().filter(({ line }) => /^(CG|MIXER|PLAY|CLEAR) /.test(line));
+    engine
+      .receivedCommands()
+      .filter(({ line }) =>
+        /^(?:CG |PLAY |CLEAR |MIXER 1(?: COMMIT$|-\d+ (?:CLIP|FILL|OPACITY) ))/.test(line),
+      );
   const saved = () =>
     handle.runtime.stackSnapshot().find((item) => item.itemId === itemId)?.maskPlacements;
   const before = programmeCommands();
