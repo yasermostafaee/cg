@@ -60,8 +60,8 @@ describe('PAGE-REBUILD-01 — the page runtime fingerprint', () => {
       rebuilds its pages with the new shell on its next upgrade.
     */
     expect({ revision: EXPORTER_SHELL_REVISION, shell: await shellHash() }).toEqual({
-      revision: 4,
-      shell: '184a43c6211e0fbf9aa88efeaee215b046b299c0e69b29e772faf09ccb2ac23d',
+      revision: 5,
+      shell: '4ae212e98f94793d1dd6c4c5f2952b75f93df24ac2f38d0c893ef5c76c859bb6',
     });
   });
 

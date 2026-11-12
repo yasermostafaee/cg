@@ -66,4 +66,6 @@
 - [x] Windows Chromium verified the immediate PVW clip, Discard, off-air save, the next Take,
       and a live linked reveal resize with the existing input seats. Page tests verified the
       same-window identity, untouched windows, per-Look geometry and legacy fallback.
+- [x] Advance the exporter shell revision for the mask-placement page marker so the existing
+      template rebuild mechanism recognizes the new page shell.
 - [ ] Record the carrying Linux Playwright result and verify the edited masks on the target engine.

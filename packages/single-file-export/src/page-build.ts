@@ -11,7 +11,7 @@ import { cgCss, cgJsIife, cgJsLottieIife } from './cg-runtime.js';
  *
  * Bumping it makes every CG Control on the next release rebuild every page it can.
  */
-export const EXPORTER_SHELL_REVISION = 4;
+export const EXPORTER_SHELL_REVISION = 5;
 
 /**
  * 🔴 `PAGE-REBUILD-01` — **THE FINGERPRINT OF EVERYTHING A PAGE IS BUILT FROM BESIDE ITS OWN
