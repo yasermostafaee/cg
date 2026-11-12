@@ -561,6 +561,10 @@
         {
           "fa": "با اجازهٔ طراح، Auto layout در Inspector چیدمان و Swap قاب‌های پریست فعال را در PVW پیش‌نمایش می‌دهد. عنوان متصل همراه قاب جابه‌جا می‌شود.",
           "en": "With the designer's permission, Inspector Auto layout previews arrangements and seat swaps in the active preset. Attached titles move with their frames."
+        },
+        {
+          "fa": "Auto layout در Designer برای انتخاب ترکیبی لایه‌های تصویری هم در دسترس است. هنگام چیدمان و Swap در پریست، عنوان و طراحی هر قاب همراه آن جابه‌جا می‌شوند.",
+          "en": "Designer Auto layout supports mixed visual selections. When arranging or swapping frames in a preset, each frame's title and artwork move with it."
         }
       ],
       "fixes": [

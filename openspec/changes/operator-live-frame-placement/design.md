@@ -31,3 +31,15 @@ The action stages an all-presets reset and PVW renders the authored frame rectan
 uses the normal frame placement acknowledgement. On a verified resident row, the page and
 its existing live seats return to the authored geometry in place. Discard cancels the reset.
 The row's whole-template Position and input crop are separate and are retained.
+
+## Designer Auto layout
+
+Reuse the existing row, gap and order calculation in the Designer multi-selection Inspector.
+Use the current geometry of each eligible visual layer. A direct plate uses its declared aspect
+when set. A composition with one live plate uses the projected plate as its layout bounds and
+transforms the whole instance, so its title and artwork keep their relative positions and
+proportions. Other compositions use their instance bounds. Ordinary visuals keep their rotation
+and proportions.
+
+Apply the transforms through the existing geometry edit and undo paths. Swap changes spatial
+order while preserving layer order. Audio and locked elements are excluded from the calculation.

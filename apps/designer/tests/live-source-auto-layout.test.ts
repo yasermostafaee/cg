@@ -1,9 +1,43 @@
 import { describe, expect, it } from 'vitest';
-import { defaultLiveSource } from '../src/renderer/state/element-defaults.js';
 import {
-  calculateLiveSourceAutoLayout,
+  calculateLiveSourceAutoLayout as calculateLayout,
+  flattenElements,
   liveSourceRowCounts,
+  sceneRect,
+  type CompositionElement,
+  type Layer,
+  type LiveSourceLayoutBias,
+  type LiveSourceLayoutItem,
+  type LiveSourceLayoutOptions,
+  type Resolution,
+  type Scene,
+  type VideoPlaceholderElement,
+} from '@cg/shared-schema';
+import {
+  defaultAudio,
+  defaultLiveSource,
+  defaultShape,
+  defaultText,
+} from '../src/renderer/state/element-defaults.js';
+import {
+  autoLayoutTargets,
+  autoLayoutTransform,
+  plateLayoutSource,
 } from '../src/renderer/features/inspector/live-source-auto-layout.js';
+
+function calculateLiveSourceAutoLayout(
+  elements: readonly VideoPlaceholderElement[],
+  resolution: Resolution,
+  bias: LiveSourceLayoutBias,
+  options?: LiveSourceLayoutOptions,
+): readonly LiveSourceLayoutItem[] {
+  return calculateLayout(
+    elements.map((element) => plateLayoutSource(element, element.transform)),
+    resolution,
+    bias,
+    options,
+  );
+}
 
 describe('Live Source auto layout (B-360)', () => {
   it('chooses balanced rows and lets the fuller row sit at either edge', () => {
@@ -104,5 +138,113 @@ describe('Live Source auto layout (B-360)', () => {
     expect(swapped.map((item) => item.id)).toEqual(['wide', 'portrait']);
     expect(normal[1]!.x - (normal[0]!.x + normal[0]!.width)).toBeCloseTo(60);
     expect(swapped[1]!.x - (swapped[0]!.x + swapped[0]!.width)).toBeCloseTo(60);
+  });
+});
+
+describe('mixed Designer Auto layout', () => {
+  const resolution = { width: 1920, height: 1080 };
+  const frameRange = { in: 0, out: 50 };
+
+  function layer(id: string, children: Layer['children']): Layer {
+    return { id, name: id, children, visible: true, locked: false, blendMode: 'normal' };
+  }
+
+  function preset(children: Layer['children'], compositions: Scene['compositions'] = []): Scene {
+    return {
+      schemaVersion: 1,
+      id: 'preset',
+      name: 'Preset',
+      templateType: 'custom',
+      resolution,
+      frameRate: 25,
+      safeAreas: { title: 10, action: 5 },
+      frameRange,
+      editorBackdrop: 'transparent',
+      metadata: { createdAt: '2026-11-12T00:00:00.000Z', updatedAt: '2026-11-12T00:00:00.000Z' },
+      layers: [layer('preset-layer', children)],
+      fields: [],
+      bindings: [],
+      fonts: [],
+      compositions,
+    };
+  }
+
+  it('fits an offset plate through a scaled, anchored composition instance', () => {
+    const plate = defaultLiveSource('plate', 80, 120);
+    const child = {
+      id: 'child',
+      name: 'Titled frame',
+      resolution,
+      frameRange,
+      editorBackdrop: 'transparent',
+      layers: [layer('child-layer', [plate])],
+    };
+    const rectangle = defaultShape('rectangle', 210, 75);
+    const instance: CompositionElement = {
+      ...rectangle,
+      id: 'instance',
+      type: 'composition',
+      compositionId: child.id,
+      transform: {
+        ...rectangle.transform,
+        anchor: { x: 0.5, y: 0.3 },
+        size: { w: 1440, h: 810 },
+        scale: { x: 0.8, y: 0.6 },
+      },
+    };
+    const audio = defaultAudio('audio', 'audio-asset', 2000);
+    const locked = { ...defaultShape('locked', 60, 60), locked: true };
+    const children = [rectangle, instance, audio, locked];
+    const scene = preset(children, [child]);
+    const targets = autoLayoutTargets(scene, children, ({ transform }) => transform);
+    expect(targets.map(({ id }) => id)).toEqual(['rectangle', 'instance']);
+    const target = targets.find(({ id }) => id === 'instance')!;
+    const slot = calculateLayout(targets, resolution, 'more-top').find(
+      ({ id }) => id === 'instance',
+    )!;
+    const adjusted = {
+      ...instance,
+      transform: { ...instance.transform, ...autoLayoutTransform(target, slot) },
+    };
+    const [flattenedPlate] = flattenElements({
+      ...scene,
+      layers: [layer('preset-layer', [adjusted])],
+    }).filter(({ element }) => element.id === plate.id);
+    expect(flattenedPlate?.rect.x).toBeCloseTo(slot.x);
+    expect(flattenedPlate?.rect.y).toBeCloseTo(slot.y);
+    expect(flattenedPlate?.rect.width).toBeCloseTo(slot.width);
+    expect(flattenedPlate?.rect.height).toBeCloseTo(slot.height);
+  });
+
+  it('keeps the right-edge pin and rotation of an auto-sized RTL title', () => {
+    const original = defaultText('title', 600, 240);
+    const title = {
+      ...original,
+      text: 'عنوان فارسی',
+      direction: 'rtl' as const,
+      fitMode: 'autosize' as const,
+      transform: { ...original.transform, size: { w: 155, h: 46 }, rotation: 25 },
+    };
+    const rectangle = defaultShape('rectangle', 80, 60);
+    const children = [title, rectangle];
+    const targets = autoLayoutTargets(preset(children), children, ({ transform }) => transform);
+    const target = targets[0]!;
+    const slot = calculateLayout(targets, resolution, 'more-top')[0]!;
+    const transform = { ...title.transform, ...autoLayoutTransform(target, slot) };
+    const bounds = sceneRect(
+      {
+        ...title,
+        transform: {
+          ...transform,
+          position: { x: transform.position.x - transform.size.w, y: transform.position.y },
+        },
+      },
+      [],
+    );
+    expect(transform.rotation).toBe(25);
+    expect(bounds.x).toBeCloseTo(slot.x);
+    expect(bounds.y).toBeCloseTo(slot.y);
+    expect(bounds.width).toBeCloseTo(slot.width);
+    expect(bounds.height).toBeCloseTo(slot.height);
   });
 });

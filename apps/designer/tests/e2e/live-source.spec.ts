@@ -1135,6 +1135,170 @@ test.describe('Live Source (D-137 phase 1)', () => {
     expect(wideAfter.width / wideAfter.height).toBeCloseTo(16 / 9, 2);
   });
 
+  test('Auto layout arranges and swaps titled live compositions inside one preset', async ({
+    app,
+  }) => {
+    await app.newProject('Preset Auto layout');
+    const frameSpecs = [
+      {
+        name: 'Guest A',
+        source: 'guest-a',
+        title: 'استودیو الف',
+        x: 80,
+        y: 60,
+        color: '204060',
+        background: 'rgb(32, 64, 96)',
+      },
+      {
+        name: 'Guest B',
+        source: 'guest-b',
+        title: 'استودیو ب',
+        x: 500,
+        y: 280,
+        color: '604020',
+        background: 'rgb(96, 64, 32)',
+      },
+    ];
+    const titleIds: string[] = [];
+    for (const frame of frameSpecs) {
+      await app.newComposition(frame.name);
+      await app.openComposition(frame.name);
+      await app.addLiveSource();
+      await app.setLiveSourceId(frame.source);
+      await app.setInspectorNumber('X position', frame.x);
+      await app.setInspectorNumber('Y position', frame.y);
+
+      const [plateId] = await app.timelineRowIds();
+      await app.addTextElement({ x: 300, y: 200 });
+      const titleId = (await app.timelineRowIds()).find((id) => id !== plateId);
+      if (titleId === undefined) throw new Error('The title needs a timeline row');
+      titleIds.push(titleId);
+      await app.selectTool('Select');
+      await app.canvas.dblclick({ position: { x: 330, y: 215 } });
+      const editor = app.page.locator('[contenteditable="true"]');
+      await editor.fill(frame.title);
+      await editor.press('Enter');
+      await app.setInspectorNumber('X position', frame.x + 52);
+      await app.setInspectorNumber('Y position', frame.y + 20);
+      await app.inspector.getByRole('button', { name: 'Toggle Text Padding' }).click();
+      await app.setInspectorNumber('padding', 16);
+      await app.inspector.getByRole('button', { name: 'Background fill' }).click();
+      const background = app.page.getByRole('textbox', { name: 'Hex colour value' });
+      await background.fill(frame.color);
+      await background.press('Enter');
+      await app.page.keyboard.press('Escape');
+    }
+
+    const plate = (source: string) => app.canvasFrame.locator(`[data-cg-live-source="${source}"]`);
+    const title = (index: number) =>
+      app.canvasFrame.locator(`[data-cg-element-id="${titleIds[index]!}"]`);
+    await app.openComposition('comp1');
+    await app.addMultiFrameGroup();
+    await app.addLook();
+    await app.addLook();
+    await app.openComposition('preset-2');
+    await app.nestCompositionInstance('Guest A');
+    await expect(plate('guest-a')).toBeVisible();
+    const soloBefore = await plate('guest-a').boundingBox();
+
+    await app.openComposition('preset-1');
+    await app.nestCompositionInstance('Guest A');
+    const [firstRef] = await app.timelineRowIds();
+    await app.nestCompositionInstance('Guest B');
+    const layerOrder = await app.timelineRowIds();
+    const secondRef = layerOrder.find((id) => id !== firstRef);
+    if (firstRef === undefined || secondRef === undefined) {
+      throw new Error('Both nested compositions need timeline rows');
+    }
+    await app.selectElementById(secondRef);
+    await app.setInspectorNumber('X position', 360);
+    await app.setInspectorNumber('Y position', 160);
+    await app.page
+      .locator(`.cg-tl-row[data-element-id="${firstRef}"]`)
+      .click({ modifiers: ['Shift'] });
+
+    const readGeometry = () =>
+      app.canvasFrame.locator('.cg-stage').evaluateAll(
+        ([stage], markers) => {
+          if (stage === undefined) return [];
+          const bounds = (element: Element) => {
+            const { x, y, width, height } = element.getBoundingClientRect();
+            return { x, y, width, height };
+          };
+          return markers.flatMap(({ source, titleId }) => {
+            const picture = stage.querySelector(`[data-cg-live-source="${source}"]`);
+            const label = stage.querySelector(`[data-cg-element-id="${titleId}"]`);
+            return picture === null || label === null
+              ? []
+              : [{ picture: bounds(picture), label: bounds(label) }];
+          });
+        },
+        frameSpecs.map(({ source }, index) => ({ source, titleId: titleIds[index]! })),
+      );
+    await expect.poll(readGeometry).toHaveLength(2);
+    const before = await readGeometry();
+    const arrange = app.multiInspector.getByRole('button', { name: 'Arrange evenly' });
+    const swap = app.multiInspector.getByRole('button', { name: 'Swap frame order' });
+    await expect(arrange).toBeVisible();
+    await arrange.click();
+    await expect
+      .poll(async () => {
+        const [a, b] = await readGeometry();
+        return a === undefined || b === undefined ? Infinity : Math.abs(a.picture.y - b.picture.y);
+      })
+      .toBeLessThan(0.1);
+    const arranged = await readGeometry();
+    const [left, right] = arranged.map(({ picture }) => picture).sort((a, b) => a.x - b.x);
+    expect(right!.x).toBeGreaterThan(left!.x + left!.width);
+    expect(left!.width).toBeCloseTo(right!.width, 1);
+    expect(left!.width / left!.height).toBeCloseTo(16 / 9, 2);
+    const aWasLeft = arranged[0]!.picture.x < arranged[1]!.picture.x;
+
+    await swap.click();
+    await expect
+      .poll(async () => {
+        const [a, b] = await readGeometry();
+        return a === undefined || b === undefined ? null : a.picture.x < b.picture.x;
+      })
+      .toBe(!aWasLeft);
+    const swapped = await readGeometry();
+    for (const [index, { label, picture }] of swapped.entries()) {
+      const original = before[index]!;
+      expect((label.x - picture.x) / picture.width).toBeCloseTo(
+        (original.label.x - original.picture.x) / original.picture.width,
+        2,
+      );
+      expect((label.y - picture.y) / picture.height).toBeCloseTo(
+        (original.label.y - original.picture.y) / original.picture.height,
+        2,
+      );
+      await expect(title(index)).toHaveText(frameSpecs[index]!.title);
+      await expect(title(index)).toHaveCSS('padding-left', '16px');
+      await expect(title(index)).toHaveCSS('background-color', frameSpecs[index]!.background);
+    }
+    await expect.poll(() => app.timelineRowIds()).toEqual(layerOrder);
+
+    await app.undo();
+    await expect.poll(readGeometry).toEqual(arranged);
+    await app.openComposition('preset-2');
+    await expect.poll(() => plate('guest-a').boundingBox()).toEqual(soloBefore);
+
+    await app.openComposition('comp1');
+    const exportButton = app.page.getByRole('button', { name: 'Export .vcg', exact: true });
+    await expect(exportButton).not.toHaveAttribute('data-export-blocked', 'errors');
+    const [download] = await Promise.all([app.page.waitForEvent('download'), exportButton.click()]);
+    const { scene } = await unpack(await readFile(await download.path()));
+    const carrier = buildTemplateLiveSources(scene);
+    const layout = carrier.looks?.find(({ name }) => name === 'preset-1')?.rects;
+    const a = layout?.['guest-a'];
+    const b = layout?.['guest-b'];
+    expect(a).toBeDefined();
+    expect(b).toBeDefined();
+    expect(a!.y).toBeCloseTo(b!.y, 1);
+    expect(a!.x < b!.x).toBe(aWasLeft);
+    expect(a!.width / a!.height).toBeCloseTo(16 / 9, 2);
+  });
+
   /**
    * 🔴 `B-148` — ONE source on TWO plates, in a template without looks, blocks the export and
    * names both. The comment above used to credit `look-source-duplicate` with this, which only

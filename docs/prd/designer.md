@@ -6768,6 +6768,17 @@ CG Control after swapping left/right inputs is not an acceptable operating workf
 - WHEN no foreground overlay is needed THEN the template uses the existing single-page path and
   consumes no extra static-CG layer
 
+**Designer Auto layout follow-up** · `openspec/changes/operator-live-frame-placement/`
+
+- WHEN editing a preset containing multiple child compositions that each hold a live plate and
+  its title THEN Auto layout uses the frame bounds and Arrange or Swap moves the title with the
+  frame, preserving its styling, bindings and relative position
+- WHEN selecting two or more eligible visual layers THEN Auto layout supports mixed selections
+  such as a live plate, an ordinary composition, a shape and a Repeater, preserving proportions
+  and layer order with one Undo per layout action
+- WHEN audio or locked layers are selected with eligible visuals THEN Auto layout leaves those
+  layers alone
+
 **Target station observation, 2026-11-10:** CH 1 on 21.32 retained the `chan-ghab` background
 and both live producers while its foreground layer 78 was empty. The on-air row still appeared
 healthy in CG Control. The prior event that removed the foreground and station recovery remain open.

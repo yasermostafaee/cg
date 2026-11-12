@@ -4407,7 +4407,7 @@ all-Live, mixed-kind and all-unlocked cases.
 
 **Repro / Actual:** add several Live Sources and try to make a balanced multi-frame composition.
 Every plate had to be resized and positioned separately; no command made the inter-frame gaps or
-the outer centring agree. **Fix:** a Live-Source-only multi-selection now exposes `Auto layout`.
+the outer centring agree. **Fix:** `Auto layout` was introduced for a multi-selection of Live Sources.
 It evaluates the available row counts against the selected plates' declared aspects, chooses the
 layout that gives every plate the largest common height, centres the complete group, and lets the
 author set horizontal and vertical gaps
@@ -4422,6 +4422,9 @@ keyframe-aware. **Acceptance:** `live-source-auto-layout.test.ts` pins row choic
 portrait three-column choice, independent gaps, vertical pairs, seat swapping and mixed-aspect fitting;
 `multi-select-inspector.test.ts` pins one-step Undo; Playwright `live-source.spec.ts` measures the
 rendered 2+1 geometry in Chromium.
+
+D-201's authoring follow-up extends Auto layout to visual selections, including compositions with
+a live frame and its title. See `openspec/changes/operator-live-frame-placement/`.
 
 ## [x] B-361 — The blue selection outline was lost against the red overlap mark ⟨priority: medium — selected overlapping frames were hard to identify⟩ — FILED 2026-11-01 by the owner · `openspec/changes/prepare-0-12-6-installers/`
 

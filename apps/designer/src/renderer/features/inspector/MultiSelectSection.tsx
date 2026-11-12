@@ -1,15 +1,31 @@
-import { useState } from 'react';
+import { useMemo, useState, useSyncExternalStore } from 'react';
 import {
+  calculateLiveSourceAutoLayout,
+  liveSourceAutoLayoutRowCounts,
   type AnimatableProperty,
   type Element,
   type Fill,
+  type LiveSourceLayoutBias,
+  type LiveSourceLayoutOptions,
+  type TwoPlateLayout,
   type VideoPlaceholderElement,
 } from '@cg/shared-schema';
 import { LayoutGrid } from 'lucide-react';
-import { designerStore, editSceneOf, useDesignerSelector } from '../../state/store.js';
+import {
+  designerStore,
+  editSceneOf,
+  shallowEqual,
+  useDesignerSelector,
+} from '../../state/store.js';
+import { renderedTransformAt } from '../../state/slices/arrangements.js';
 import { isAspectLocked } from '../../state/slices/view.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
+import {
+  getMeasureVersion,
+  measureElementSceneSize,
+  subscribeMeasure,
+} from '../canvas/measure-element.js';
 import { CollapseSection } from './CollapseSection.js';
 import { ColorField, NumberField, SelectField } from './controls.js';
 import { FillField } from './FillPopover.js';
@@ -21,13 +37,7 @@ import {
   type SharedSection,
 } from './shared-properties.js';
 import { clearOrphanColourTrack } from './fill-commit.js';
-import {
-  calculateLiveSourceAutoLayout,
-  liveSourceAutoLayoutRowCounts,
-  type LiveSourceLayoutBias,
-  type LiveSourceLayoutOptions,
-  type TwoPlateLayout,
-} from './live-source-auto-layout.js';
+import { autoLayoutTargets, autoLayoutTransform } from './live-source-auto-layout.js';
 import {
   ASPECT_CUSTOM,
   ASPECT_PRESETS,
@@ -89,8 +99,32 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
   )
     ? elements
     : null;
-  const resolution = useDesignerSelector(
-    (state) => editSceneOf(state.scene, state.activeCompositionId)?.resolution ?? null,
+  const { project, activeCompositionId, activeArrangementId, currentFrame } = useDesignerSelector(
+    (state) => ({
+      project: state.scene,
+      activeCompositionId: state.activeCompositionId,
+      activeArrangementId: state.activeArrangementId,
+      currentFrame: state.currentFrame,
+    }),
+    shallowEqual,
+  );
+  const scene = useMemo(
+    () => editSceneOf(project, activeCompositionId),
+    [project, activeCompositionId],
+  );
+  const resolution = scene?.resolution ?? null;
+  const measureVersion = useSyncExternalStore(subscribeMeasure, getMeasureVersion);
+  const layoutTargets = useMemo(
+    () =>
+      scene === null
+        ? []
+        : autoLayoutTargets(scene, elements, (element) => {
+            const transform = renderedTransformAt(element, currentFrame);
+            if (element.type !== 'text' || element.fitMode !== 'autosize') return transform;
+            const size = measureElementSceneSize(element.id);
+            return size === null ? transform : { ...transform, size };
+          }),
+    [scene, elements, currentFrame, activeArrangementId, measureVersion],
   );
   const shortSide = Math.min(resolution?.width ?? 0, resolution?.height ?? 0);
   const [horizontalGap, setHorizontalGap] = useState(() => Math.round(shortSide * 0.025));
@@ -105,18 +139,18 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
     reverse: reverseLayoutOrder,
   };
   const currentRows =
-    liveSources !== null && resolution !== null
-      ? liveSourceAutoLayoutRowCounts(liveSources, resolution, layoutBias, layoutOptions)
+    layoutTargets.length >= 2 && resolution !== null
+      ? liveSourceAutoLayoutRowCounts(layoutTargets, resolution, layoutBias, layoutOptions)
       : [];
   const hasHorizontalNeighbours = currentRows.some((count) => count > 1);
   const hasVerticalNeighbours = currentRows.length > 1;
   const topRows =
-    liveSources !== null && resolution !== null
-      ? liveSourceAutoLayoutRowCounts(liveSources, resolution, 'more-top', layoutOptions)
+    layoutTargets.length >= 2 && resolution !== null
+      ? liveSourceAutoLayoutRowCounts(layoutTargets, resolution, 'more-top', layoutOptions)
       : [];
   const bottomRows =
-    liveSources !== null && resolution !== null
-      ? liveSourceAutoLayoutRowCounts(liveSources, resolution, 'more-bottom', layoutOptions)
+    layoutTargets.length >= 2 && resolution !== null
+      ? liveSourceAutoLayoutRowCounts(layoutTargets, resolution, 'more-bottom', layoutOptions)
       : [];
   const hasRemainderChoice = String(topRows) !== String(bottomRows);
   const hasLockedLiveSource = useDesignerSelector((state) =>
@@ -138,9 +172,6 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
     const v = byKey.get(key)?.value;
     return typeof v === 'number' ? v : 0;
   };
-  // D-054 — the playhead drives keyframe-vs-static per member (via commitAnimatable),
-  // and the aggregate diamond's state; subscribe so it tracks playback.
-  const currentFrame = useDesignerSelector((st) => st.currentFrame);
   // Number fields apply LIVE during the gesture (drag-scrub / typing) with no
   // per-tick boundary, KEYFRAME-AWARE (Option B — a member with a track keyframes at
   // the playhead, others write static), then set ONE history boundary at the commit
@@ -175,27 +206,32 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
     overrides: Partial<LiveSourceLayoutOptions> = {},
     history: 'discrete' | 'live' = 'discrete',
   ): void => {
-    if (liveSources === null || resolution === null) return;
+    if (layoutTargets.length < 2 || resolution === null) return;
     setLayoutBias(bias);
-    const layout = calculateLiveSourceAutoLayout(liveSources, resolution, bias, {
+    const layout = calculateLiveSourceAutoLayout(layoutTargets, resolution, bias, {
       horizontalGap,
       verticalGap,
       twoPlateLayout,
       reverse,
       ...overrides,
     });
+    const targetsById = new Map(layoutTargets.map((target) => [target.id, target]));
     const writeLayout = (): void => {
       for (const item of layout) {
-        // B-360 — an auto layout is deliberately axis-aligned and normalised. Writing
-        // through commitAnimatable keeps existing position/size tracks authoritative:
-        // tracked properties receive a keyframe at the playhead; static ones stay static.
-        designerStore.commitAnimatable(item.id, 'rotation', 0);
-        designerStore.commitAnimatable(item.id, 'scale.x', 1);
-        designerStore.commitAnimatable(item.id, 'scale.y', 1);
-        designerStore.commitAnimatable(item.id, 'size.w', item.width);
-        designerStore.commitAnimatable(item.id, 'size.h', item.height);
-        designerStore.commitAnimatable(item.id, 'position.x', item.x);
-        designerStore.commitAnimatable(item.id, 'position.y', item.y);
+        const target = targetsById.get(item.id);
+        if (target === undefined) continue;
+        const { position, size, scale, rotation } = autoLayoutTransform(target, item);
+        if (rotation !== undefined) designerStore.commitAnimatable(item.id, 'rotation', rotation);
+        if (scale !== undefined) {
+          designerStore.commitAnimatable(item.id, 'scale.x', scale.x);
+          designerStore.commitAnimatable(item.id, 'scale.y', scale.y);
+        }
+        if (size !== undefined) {
+          designerStore.commitAnimatable(item.id, 'size.w', size.w);
+          designerStore.commitAnimatable(item.id, 'size.h', size.h);
+        }
+        designerStore.commitAnimatable(item.id, 'position.x', position.x);
+        designerStore.commitAnimatable(item.id, 'position.y', position.y);
       }
     };
     // Selects and buttons are isolated one-shot commands. Gap fields are live
@@ -272,34 +308,36 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
   return (
     <aside className={s.panel} aria-label="Inspector" data-testid="multi-select-inspector">
       <h2 className={s.headingFirst}>{elements.length} ELEMENTS SELECTED</h2>
-      {shared.length === 0 ? (
+      {shared.length === 0 && layoutTargets.length < 2 ? (
         <p className={s.empty}>No shared editable properties for this mix.</p>
       ) : (
         <>
-          <CollapseSection title="Transform" pinned>
-            <div className={tx.col}>
-              {(has('position.x') || has('position.y')) && (
-                <div className="cg-input-group">
-                  {has('position.x') && <Seg {...tf('position.x')} />}
-                  {has('position.y') && <Seg {...tf('position.y')} />}
-                </div>
-              )}
-              {(has('size.w') || has('size.h')) && (
-                <div className="cg-input-group">
-                  {has('size.w') && <Seg {...tf('size.w')} />}
-                  {has('size.h') && <Seg {...tf('size.h')} />}
-                </div>
-              )}
-              {(has('scale.x') || has('scale.y')) && (
-                <div className="cg-input-group">
-                  {has('scale.x') && <Seg {...tf('scale.x')} />}
-                  {has('scale.y') && <Seg {...tf('scale.y')} />}
-                </div>
-              )}
-              {has('rotation') && <SingleField {...tf('rotation')} />}
-              {has('opacity') && <SingleField {...tf('opacity')} />}
-            </div>
-          </CollapseSection>
+          {shared.length > 0 && (
+            <CollapseSection title="Transform" pinned>
+              <div className={tx.col}>
+                {(has('position.x') || has('position.y')) && (
+                  <div className="cg-input-group">
+                    {has('position.x') && <Seg {...tf('position.x')} />}
+                    {has('position.y') && <Seg {...tf('position.y')} />}
+                  </div>
+                )}
+                {(has('size.w') || has('size.h')) && (
+                  <div className="cg-input-group">
+                    {has('size.w') && <Seg {...tf('size.w')} />}
+                    {has('size.h') && <Seg {...tf('size.h')} />}
+                  </div>
+                )}
+                {(has('scale.x') || has('scale.y')) && (
+                  <div className="cg-input-group">
+                    {has('scale.x') && <Seg {...tf('scale.x')} />}
+                    {has('scale.y') && <Seg {...tf('scale.y')} />}
+                  </div>
+                )}
+                {has('rotation') && <SingleField {...tf('rotation')} />}
+                {has('opacity') && <SingleField {...tf('opacity')} />}
+              </div>
+            </CollapseSection>
+          )}
           {liveSources !== null && (
             <LiveSourceAppearanceSections
               elements={liveSources}
@@ -307,9 +345,9 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
               onCommitBoundary={commitBoundary}
             />
           )}
-          {liveSources !== null && resolution !== null && (
+          {layoutTargets.length >= 2 && resolution !== null && (
             <CollapseSection title="Auto layout" defaultExpanded>
-              {liveSources.length === 2 && (
+              {layoutTargets.length === 2 && (
                 <SelectField
                   label="layout"
                   value={twoPlateLayout}
@@ -399,7 +437,7 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
                     applyAutoLayout(layoutBias, reverse);
                   }}
                   title={
-                    liveSources.length === 2 && twoPlateLayout === 'vertical'
+                    layoutTargets.length === 2 && twoPlateLayout === 'vertical'
                       ? 'Exchange the top and bottom frames'
                       : 'Exchange frame positions without changing layer order'
                   }

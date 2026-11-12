@@ -33,3 +33,15 @@
       applies a single frame-placement update while retaining the seated inputs.
 - [x] Verify a move-only frame moves its linked title without changing its authored frame size.
 - [ ] Record the carrying Linux Playwright result for Auto layout and title movement.
+
+## Designer Auto layout
+
+- [x] Arrange two or more selected visual layers with the existing layout, gap and swap controls.
+- [x] Use the live plate bounds of a single-plate composition instance while keeping its artwork attached.
+- [x] Windows Chromium verified titled child compositions in a preset, arrangement and Swap,
+      preserved title background and padding, independent reuse in another preset, and exported geometry.
+- [x] Windows Chromium verified a mixed selection of a plate, composition, rotated shape and
+      Repeater, proportional sizing, unchanged layer order and one-step Undo per action.
+- [x] Focused geometry tests verified the non-zero composition anchor, auto-sized RTL title
+      and exclusion of audio and locked layers.
+- [ ] Record the carrying Linux Playwright result for Designer Auto layout.
