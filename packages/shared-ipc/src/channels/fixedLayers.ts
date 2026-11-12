@@ -264,6 +264,12 @@ const FixedLayerBankShape = z.object({
 });
 export type FixedLayerBank = z.infer<typeof FixedLayerBankShape>;
 
+export const LayerShortcutSettingsSchema = FixedLayerBankShape.pick({
+  shortcuts: true,
+  nextShortcuts: true,
+  spaceShortcut: true,
+}).strict();
+
 export function layerShortcutBindings(
   bank: Pick<FixedLayerBank, 'shortcuts' | 'nextShortcuts' | 'spaceShortcut'>,
 ): LayerShortcutBindings {

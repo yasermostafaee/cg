@@ -10,3 +10,11 @@
 - [ ] Record the carrying Linux Playwright result.
 
 Windows Chromium with the real Bridge and test engine passed the focused acceptance scenario.
+
+## Keyboard shortcuts
+
+- [x] Save exact shortcut settings with the selected channel's profile.
+- [x] Restore valid shortcut settings through the Bridge's fixed-bank validation and persistence.
+- [x] Keep old files and operator row loads compatible and report skipped shortcut settings.
+- [x] Verify defaults, roles and compatibility with the Bridge and Windows Chromium.
+- [ ] Record the carrying Linux Playwright result for profile shortcuts.

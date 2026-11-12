@@ -3,8 +3,9 @@
 ### Requirement: Operators can save and load prepared layer profiles
 
 CG Control SHALL export a versioned JSON profile of the active channel's bound fixed layers in
-stack order, including referenced template IDs, applied fields and position. Loading a profile
-SHALL show the destination channel and ask before replacing prepared layers.
+stack order, including referenced template IDs, applied fields, position, and the selected
+channel's keyboard shortcut settings. Loading a profile SHALL show the destination channel and
+ask before replacing prepared layers.
 
 #### Scenario: Save the profile from CG Control
 
@@ -25,6 +26,23 @@ SHALL show the destination channel and ask before replacing prepared layers.
 
 - **WHEN** a layer on the destination channel is on air or transitioning
 - **THEN** loading the profile is refused before replacing any row
+
+#### Scenario: Restore the selected channel's shortcuts
+
+- **WHEN** a station admin loads a profile that carries keyboard shortcut settings
+- **THEN** the Bridge validates the assignments against the destination channel's configured layers and chord conflicts
+- **AND** a valid configuration replaces the destination's Play, Next, Stop, Clear and Space settings
+- **AND** the absence of individual maps restores their saved state, including virtual defaults when all settings were absent
+- **AND** explicitly empty maps and a cleared Space assignment are preserved in the file
+- **AND** the other channels keep their own shortcuts
+
+#### Scenario: Load rows without restoring shortcuts
+
+- **WHEN** a profile omits keyboard shortcut settings
+- **THEN** the destination channel keeps its current shortcuts
+- **WHEN** the profile includes shortcuts and the settings are malformed, incompatible, unsupported by the Bridge, or the user is an operator without station admin access
+- **THEN** the destination channel keeps its current shortcuts
+- **AND** valid prepared rows still load and CG Control reports why the shortcuts were skipped
 
 #### Scenario: Leave occupied layers available for inspection
 

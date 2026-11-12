@@ -58,6 +58,7 @@ import {
   firstBank,
   fixedBanksSlots,
   FixedLayerBankSchema,
+  LayerShortcutSettingsSchema,
   isLowBankLayer,
   layerAlias,
   lowBankEnd,
@@ -3732,7 +3733,11 @@ export class CasparRuntime {
     };
   }
 
-  async loadLayerProfile(channel: number, profile: LayerProfile): Promise<StackLoadProfileResult> {
+  async loadLayerProfile(
+    channel: number,
+    profile: LayerProfile,
+    canRestoreShortcuts: boolean,
+  ): Promise<StackLoadProfileResult> {
     const bank = this.#bankFor(channel);
     const issues: StackLoadProfileResult['issues'] = [];
     if (bank === null || !this.#isDeclaredChannel(channel)) {
@@ -3797,7 +3802,51 @@ export class CasparRuntime {
       const layer = skip.slot?.layer;
       if (layer !== undefined) issues.push({ layer, reason: skip.reason });
     }
-    return { loaded: restored.restored, issues };
+    if (profile.layerShortcuts === undefined) return { loaded: restored.restored, issues };
+    const shortcuts = canRestoreShortcuts
+      ? this.#restoreProfileShortcuts(channel, profile.layerShortcuts)
+      : { status: 'admin-required' as const };
+    return { loaded: restored.restored, issues, shortcuts };
+  }
+
+  #restoreProfileShortcuts(
+    channel: number,
+    input: unknown,
+  ): NonNullable<StackLoadProfileResult['shortcuts']> {
+    const settings = LayerShortcutSettingsSchema.safeParse(input);
+    if (!settings.success) {
+      return {
+        status: 'invalid',
+        message: settings.error.issues[0]?.message ?? 'Invalid layer shortcuts.',
+      };
+    }
+    const current = this.#fixedBanks;
+    const bank = bankForChannel(current, channel);
+    if (bank === null)
+      return { status: 'invalid', message: 'This channel has no configured layers.' };
+
+    const {
+      shortcuts: _shortcuts,
+      nextShortcuts: _nextShortcuts,
+      spaceShortcut: _spaceShortcut,
+      ...layout
+    } = bank;
+    const merged = FixedLayerBankSchema.safeParse({ ...layout, ...settings.data });
+    if (!merged.success) {
+      return {
+        status: 'invalid',
+        message: merged.error.issues[0]?.message ?? 'Invalid layer shortcuts.',
+      };
+    }
+    const next = current.map((entry) => (entry.channel === channel ? merged.data : entry));
+    const result = this.#applyBanks(
+      next,
+      () => validateFixedBanksChange(current, next, this.#bankChangeOptions()),
+      channel,
+    );
+    return result.ok
+      ? { status: 'restored' }
+      : { status: 'invalid', message: result.message ?? 'Could not restore the layer shortcuts.' };
   }
 
   /**
@@ -7405,8 +7454,12 @@ export class CasparRuntime {
   #applyBanks(
     next: readonly FixedLayerBank[],
     validate: () => readonly LayerSlot[],
+    replaceShortcutsOn?: number,
   ): { ok: boolean; reason?: FixedLayersErrorCode; message?: string; layer?: number } {
-    const banks = next.map((bank) => this.#withRetainedBankShortcuts(bank));
+    // A profile replaces the destination's entire shortcut settings, including absent fields.
+    const banks = next.map((bank) =>
+      bank.channel === replaceShortcutsOn ? bank : this.#withRetainedBankShortcuts(bank),
+    );
     for (const bank of banks) {
       if (bank.nextShortcuts === undefined && bank.spaceShortcut === undefined) continue;
       const parsed = FixedLayerBankSchema.safeParse(bank);

@@ -5265,7 +5265,14 @@ export function buildRoutes(
       StackLoadProfileChannel,
       'operator',
       'operator',
-      (r: { channel: number; profile: LayerProfile }) => b.loadLayerProfile(r.channel, r.profile),
+      async (r: { channel: number; profile: LayerProfile }) => {
+        const canRestoreShortcuts =
+          authMode === 'off' ||
+          holdsPermissionClass(currentAuthSession()?.token?.principal.roles ?? [], 'station-admin');
+        const result = await b.loadLayerProfile(r.channel, r.profile, canRestoreShortcuts);
+        if (result.shortcuts?.status === 'restored') persistBanks();
+        return result;
+      },
     ),
     route(StackSnapshotChannel, 'read', 'read', (r?: { channel: number }) =>
       b.stackSnapshot(r?.channel),

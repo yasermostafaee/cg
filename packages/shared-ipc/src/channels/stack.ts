@@ -61,6 +61,8 @@ const LayerProfileItemSchema = RetainedStackItemSchema.pick({
 export const LayerProfileSchema = z.object({
   kind: z.literal('apasai-cg-layer-profile'),
   version: z.literal(1),
+  /** Validated independently on load so a shortcut error cannot discard otherwise valid rows. */
+  layerShortcuts: z.unknown().optional(),
   items: z
     .array(LayerProfileItemSchema)
     .max(100)
@@ -77,6 +79,13 @@ export const StackLoadProfileChannel = defineChannel(
   z.object({
     loaded: z.number().int().nonnegative(),
     refusal: z.enum(['on-air', 'not-declared', 'no-loadable-rows']).optional(),
+    shortcuts: z
+      .discriminatedUnion('status', [
+        z.object({ status: z.literal('restored') }),
+        z.object({ status: z.literal('admin-required') }),
+        z.object({ status: z.literal('invalid'), message: z.string() }),
+      ])
+      .optional(),
     issues: z.array(
       z.object({
         layer: z.number().int().positive(),

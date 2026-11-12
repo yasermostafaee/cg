@@ -31,6 +31,20 @@ const issueCopy: Readonly<Record<string, string>> = {
   'layer-occupied': 'Clear this layer before replacing it with a profile.',
 };
 
+function loadNotice(result: StackLoadProfileResult, includesShortcuts: boolean): string {
+  const loaded = `Loaded ${String(result.loaded)} ${result.loaded === 1 ? 'layer' : 'layers'}.`;
+  if (result.shortcuts?.status === 'admin-required') {
+    return `${loaded} Shortcuts skipped. Station admin access is required.`;
+  }
+  if (result.shortcuts?.status === 'invalid') {
+    return `${loaded} Shortcuts skipped. ${result.shortcuts.message}`;
+  }
+  if (includesShortcuts && result.shortcuts === undefined) {
+    return `${loaded} Shortcuts skipped. This CG Bridge cannot restore them.`;
+  }
+  return loaded;
+}
+
 export function LayerProfiles({
   bank,
   snapshot,
@@ -67,6 +81,11 @@ export function LayerProfiles({
       const profile = LayerProfileSchema.parse({
         kind: 'apasai-cg-layer-profile',
         version: 1,
+        layerShortcuts: {
+          shortcuts: bank.shortcuts,
+          nextShortcuts: bank.nextShortcuts,
+          spaceShortcut: bank.spaceShortcut,
+        },
         items,
       });
       const outcome = await saveFile(
@@ -108,7 +127,10 @@ export function LayerProfiles({
     try {
       const response = await window.cg.stack.loadProfile({ channel, profile: selected.profile });
       setResult(response);
-      if (response.refusal === undefined) setSelected(null);
+      if (response.refusal === undefined) {
+        setNotice(loadNotice(response, selected.profile.layerShortcuts !== undefined));
+        setSelected(null);
+      }
     } catch (error) {
       setProblem(error instanceof Error ? error.message : 'Could not load the profile.');
     } finally {
@@ -142,12 +164,7 @@ export function LayerProfiles({
                 ? { role: 'notice', text: notice }
                 : result?.refusal !== undefined
                   ? { role: 'refusal', text: refusalCopy[result.refusal] }
-                  : result !== null
-                    ? {
-                        role: 'notice',
-                        text: `Loaded ${String(result.loaded)} ${result.loaded === 1 ? 'layer' : 'layers'}.`,
-                      }
-                    : []
+                  : []
           }
           onClose={() => {
             if (!busy) setOpen(false);
@@ -181,10 +198,15 @@ export function LayerProfiles({
             }}
           />
           {selected !== null && (
-            <p>
-              Load <IsolatedName>{selected.name}</IsolatedName> and replace prepared layers on
-              channel {String(channel)}?
-            </p>
+            <>
+              <p>
+                Load <IsolatedName>{selected.name}</IsolatedName> and replace prepared layers on
+                channel {String(channel)}?
+              </p>
+              {selected.profile.layerShortcuts !== undefined && (
+                <p>This profile includes keyboard shortcuts.</p>
+              )}
+            </>
           )}
           {result !== null && result.issues.length > 0 && (
             <ul>

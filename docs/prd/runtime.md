@@ -1073,11 +1073,16 @@ prepared stack lives only in one browser's retention.
 - WHEN loading a profile THEN show which channel is affected and ask before replacing its prepared
   layers. A layer on air or transitioning prevents the load. Each newly restored row is Ready.
 - WHEN the operator exports THEN the file captures the stack: items referencing library
-  templates by id, field values, position overrides, fixed-layer bindings, order
+  templates by id, field values, position overrides, fixed-layer bindings, order, and the
+  selected channel's keyboard shortcut settings
 - WHEN the operator selects Save profile in CG Control THEN a file chooser opens and the
   dialog confirms the filename after writing. Closing the chooser cancels the save. Browsers
   without a file chooser start a download and show that status.
 - WHEN the operator imports THEN the stack is rebuilt from the file
+- WHEN a station admin imports a profile with shortcut settings THEN those settings replace the
+  destination channel's keyboard shortcuts. Profiles saved with virtual defaults restore defaults.
+- WHEN an older profile omits shortcut settings THEN the destination channel keeps its current
+  shortcuts. When shortcuts cannot be restored, valid rows still load and CG Control reports why.
 - WHEN a referenced template is missing from the library THEN a legible PER-ITEM error is shown
   and the REST of the rundown still loads — never a silent drop and never a whole-file failure
 - WHEN the file carries Persian text THEN it round-trips verbatim
