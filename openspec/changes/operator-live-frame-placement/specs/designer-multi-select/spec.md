@@ -42,6 +42,7 @@ composition and SHALL be undoable as one edit per action.
 
 Designer SHALL provide a ratio lock for a composition instance containing one live plate.
 It SHALL start enabled. Opening an existing instance SHALL preserve its authored transform.
+Legacy Arrangement cells SHALL continue to use their Arrangement sizing controls.
 
 #### Scenario: Resize a titled frame instance
 

@@ -53,7 +53,8 @@ order while preserving layer order. Audio and locked elements are excluded from 
 Designer uses its per-instance aspect lock for compositions containing one live plate. The
 referenced raster supplies the ratio. A resize compensates for the instance's existing scale.
 Restore fits that ratio inside the current footprint around the instance anchor in one undo step.
-Existing transforms load as authored.
+Existing transforms load as authored. A composition displayed through a legacy Arrangement cell
+continues to use the Arrangement's sizing rules.
 
 CG Control resolves the visible frame set again when the active preset changes. Its Auto layout
 inputs are kept by preset while inspecting the row, and the existing placement draft carries

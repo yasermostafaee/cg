@@ -174,7 +174,7 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
           return aspect === undefined ? [] : [[element.id, aspect] as const];
         }),
       ),
-    [elements, project],
+    [activeArrangementId, elements, project],
   );
   const hasLockedComposition = useDesignerSelector((state) =>
     [...compositionAspects.keys()].some((id) => isAspectLocked(state, id)),

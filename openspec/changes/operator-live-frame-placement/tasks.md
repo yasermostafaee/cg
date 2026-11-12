@@ -58,4 +58,6 @@
 - [x] The owner's `2ghab-composition.cgproj` opened with its saved transforms. Restoring both
       instances recovered 16:9 and retained the titles. Re-export verified the root permission
       and both 16:9 frames in the second preset.
+- [x] The ten B-175 Designer tests verified that active Arrangement cells keep their existing
+      resize behavior. Windows Chromium rechecked titled instances inside a managed preset.
 - [ ] Record the carrying Linux Playwright result for Designer Auto layout.

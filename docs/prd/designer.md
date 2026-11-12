@@ -6787,7 +6787,8 @@ CG Control after swapping left/right inputs is not an acceptable operating workf
   and layer order with one Undo per layout action
 - WHEN a composition instance contains a single live plate THEN its ratio lock keeps the child
   composition's proportions during numeric and Canvas resize. The author can unlock it or restore
-  a previously stretched instance. Opening a saved project preserves its transforms.
+  a previously stretched instance. Opening a saved project preserves its transforms. Active cells
+  in a legacy Arrangement use the Arrangement's own sizing rules.
 - WHEN exporting a composition containing presets THEN its **Allow Auto layout in CG Control**
   permission authorizes the tool, and the active preset's frame count and permissions determine
   whether it is offered.

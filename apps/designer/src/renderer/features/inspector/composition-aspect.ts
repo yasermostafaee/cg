@@ -1,13 +1,15 @@
 import { flattenElements, type Element, type Scene, type Transform } from '@cg/shared-schema';
+import { activeCellFor } from '../../state/slices/arrangements.js';
 import { designerStore } from '../../state/store.js';
 import { ASPECT_TOLERANCE, effectiveAspect, sizeRatioForAspect } from './aspect-presets.js';
 
-/** The referenced raster's ratio for an instance that carries one rendered live frame. */
+/** The raster ratio for a single-live-frame instance whose transform owns its geometry. */
 export function liveFrameCompositionAspect(
   scene: Scene | null,
   element: Element,
 ): number | undefined {
   if (element.type !== 'composition' || scene === null) return undefined;
+  if (activeCellFor(scene, element.id) !== null) return undefined;
   const composition = scene.compositions?.find(({ id }) => id === element.compositionId);
   if (composition === undefined) return undefined;
   const flattened = flattenElements({ ...scene, layers: composition.layers });
