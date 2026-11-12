@@ -818,9 +818,16 @@ export function stageFieldBatch(
  * now withdraws its draft instead, so Update leaves that field exactly as it is on air.
  */
 export function unstageField(itemId: string, path: FieldPath): void {
+  unstageFieldBatch(itemId, [path]);
+}
+
+/** Withdraw every path of a linked edit together. */
+export function unstageFieldBatch(itemId: string, paths: readonly FieldPath[]): void {
   const item = drafts.get(itemId);
-  if (item === undefined || !hasDraftAt(item, path)) return;
-  deleteAt(item, path);
+  if (item === undefined) return;
+  const present = paths.filter((path) => hasDraftAt(item, path));
+  if (present.length === 0) return;
+  for (const path of present) deleteAt(item, path);
   if (Object.keys(item).length === 0) drafts.delete(itemId);
   bump();
 }

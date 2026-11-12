@@ -4,6 +4,10 @@
 
 Inspector SHALL show the current Look's managed instance group and the shared fields. It SHALL use the same Look selection as the source bindings. Field drafts SHALL remain in the row when the selection changes. When the catalogue cannot identify all Look owners, Inspector SHALL recover them from the same channel's coherent retained page when available. If ownership remains unverified, Inspector SHALL keep all fields accessible.
 
+Inspector SHALL share an edit to the same authored bound title on a reused live frame across
+the presets containing that frame. Preset-local fields and titles on other frames SHALL remain
+independent. An edit SHALL use the existing row draft, Update and Discard controls.
+
 #### Scenario: Switch between two presets with their own fields
 
 - **GIVEN** both presets and a shared group instantiate the same composition
@@ -15,6 +19,15 @@ Inspector SHALL show the current Look's managed instance group and the shared fi
 
 - **WHEN** the operator edits a field in one preset, selects a different preset, and returns
 - **THEN** the draft remains available to Update or Discard
+
+#### Scenario: Edit a title on a frame reused by several presets
+
+- **GIVEN** several presets reuse a composition holding one live plate and its bound title
+- **WHEN** the operator edits the title in any preset and switches to another that includes the frame
+- **THEN** the title shows the same draft value
+- **AND** Update applies the title to all occurrences, including on the running template when on air
+- **AND** Discard restores the last applied values
+- **AND** titles for different frames and fields owned by a single preset remain independent
 
 #### Scenario: Open an imported template on an older Bridge
 

@@ -5108,11 +5108,16 @@ and the station's layer assignments.
 ## [~] R-113 — Show the selected preset's dynamic fields in Inspector ⟨priority: medium — the owner, 2026-11-10⟩ — `openspec/changes/show-inspector-fields-for-selected-look/`
 
 **What:** Show the selected Look's fields and shared fields. Match ownership by the managed composition instance.
+Give a title bound in a reused single-frame composition one value across the presets containing that frame.
 
 **Acceptance:** Switching Look tabs changes the field list and preserves drafts. Root fields and other
 shared groups remain visible. If the catalogue lacks ownership metadata, use a coherent
 Look map from the same channel's retained template page. Keep all fields accessible when there
 is no verified ownership map.
+
+- WHEN the same authored title travels with a reused live frame in multiple presets THEN editing
+  it updates every occurrence on that row. Apply and Discard use the ordinary field controls.
+- WHEN a preset contains its own title or a different frame THEN its field value remains independent.
 
 ## [~] R-114 — Rename text file delimiters ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/rename-text-delimiters/`
 

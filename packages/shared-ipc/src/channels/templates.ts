@@ -461,6 +461,8 @@ export const TemplateInfoSchema = z.object({
    * absent/`[]` means a flat, single-composition template, exactly as before.
    */
   groups: z.array(CompositionFieldGroupSchema).optional(),
+  /** Existing field paths that carry one live-frame title in mutually exclusive presets. */
+  sharedFrameTitles: z.array(z.array(z.array(z.string().min(1)).min(3)).min(2)).optional(),
   /**
    * R-028 (5.4) — does this template have a NEXT step (a reachable, visible
    * sequence element)? Derived ONCE at import, the moment the app holds the

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TemplateInfo } from '@cg/shared-ipc';
-import { retainedLookOwnership } from '../src/renderer/features/inspector/retainedLookOwnership.js';
+import { retainedLookFields } from '../src/renderer/features/inspector/retainedLookOwnership.js';
 
 const entered = { mode: 'cut' } as const;
 const looks = [
@@ -51,18 +51,19 @@ function page(literal: string): string {
 
 describe('retained legacy Look ownership', () => {
   it('uses exact authored instance ids with repeated names and independent ordering', () => {
-    expect(retainedLookOwnership(info, page(JSON.stringify(scene)))).toEqual(
-      new Map([
+    expect(retainedLookFields(info, page(JSON.stringify(scene)))).toEqual({
+      ownership: new Map([
         ['first', 'instance-1'],
         ['second', 'instance-2'],
       ]),
-    );
+      sharedFrameTitles: [],
+    });
   });
 
   it('refuses executable expressions, unrelated scripts and malformed source', () => {
-    expect(retainedLookOwnership(info, page('(() => ({lookGroups: []}))()'))).toBeNull();
-    expect(retainedLookOwnership(info, '<script>var scene = {};</script>')).toBeNull();
-    expect(retainedLookOwnership(info, page('{broken}'))).toBeNull();
+    expect(retainedLookFields(info, page('(() => ({lookGroups: []}))()'))).toBeNull();
+    expect(retainedLookFields(info, '<script>var scene = {};</script>')).toBeNull();
+    expect(retainedLookFields(info, page('{broken}'))).toBeNull();
   });
 
   it('refuses incoherent look IDs, default or duplicate ownership', () => {
@@ -76,17 +77,17 @@ describe('retained legacy Look ownership', () => {
       },
     ]) {
       const different = { ...scene, lookGroups: [group] };
-      expect(retainedLookOwnership(info, page(JSON.stringify(different)))).toBeNull();
+      expect(retainedLookFields(info, page(JSON.stringify(different)))).toBeNull();
     }
   });
 
   it('refuses missing instances and mismatched field paths', () => {
     const withoutInstances = { ...scene, layers: [{ children: [] }] };
-    expect(retainedLookOwnership(info, page(JSON.stringify(withoutInstances)))).toBeNull();
+    expect(retainedLookFields(info, page(JSON.stringify(withoutInstances)))).toBeNull();
     const inconsistent = {
       ...info,
       groups: info.groups?.map((group) => ({ ...group, name: 'different-namespace' })),
     };
-    expect(retainedLookOwnership(inconsistent, page(JSON.stringify(scene)))).toBeNull();
+    expect(retainedLookFields(inconsistent, page(JSON.stringify(scene)))).toBeNull();
   });
 });

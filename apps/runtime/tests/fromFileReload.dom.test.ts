@@ -7,6 +7,7 @@ import {
   isItemDirty,
   stagedValue,
   stageField,
+  unstageFieldBatch,
 } from '../src/renderer/features/inspector/draftStore.js';
 import {
   __resetFromFileForTest,
@@ -65,6 +66,26 @@ const PATH = ['crawl'] as const;
 const live = (...ids: string[]) => ({ ready: true as const, liveItemIds: new Set(ids) });
 
 describe('initial load (choose file) — stages like a hand edit', () => {
+  it('stages and withdraws one file-backed title across its preset paths', async () => {
+    const paths = [
+      ['preset-1', 'guest', 'title'],
+      ['preset-2', 'guest', 'title'],
+    ];
+    const first = paths[0]!;
+    attachFileSource('item-1', first, fakeSource(['عنوان', 'عنوان تازه']), {
+      split: false,
+      delimiter: '\n',
+    });
+    await expect(stageFromFile(item(), first, 'text', undefined, paths)).resolves.toBe(true);
+    for (const path of paths) expect(stagedValue('item-1', path)).toBe('عنوان');
+    await expect(reloadFromFile(item(), first, 'text', undefined, paths)).resolves.toEqual({
+      accepted: true,
+    });
+    for (const path of paths) expect(stagedValue('item-1', path)).toBe('عنوان تازه');
+    unstageFieldBatch('item-1', paths);
+    for (const path of paths) expect(stagedValue('item-1', path)).toBeUndefined();
+  });
+
   it('whole-file mode stages ONE list item holding the entire content verbatim', async () => {
     const source = fakeSource(['خبر اول *** خبر دوم']);
     attachFileSource('item-1', PATH, source, { split: false, delimiter: '\\n' });

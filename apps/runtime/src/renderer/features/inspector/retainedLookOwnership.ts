@@ -1,6 +1,7 @@
 import { TEMPLATE_PAGE_ALLOWANCE_BYTES, type TemplateInfo } from '@cg/shared-ipc';
-import { LookGroupsSchema } from '@cg/shared-schema';
+import { LookGroupsSchema, SceneSchema } from '@cg/shared-schema';
 import { z } from 'zod';
+import { sharedFrameTitlesOf, type SharedFrameTitles } from './sharedFrameTitles.js';
 
 const sceneOwnership = z.object({
   lookGroups: LookGroupsSchema.length(1),
@@ -39,15 +40,18 @@ function sceneFromPage(html: string): unknown {
   }
 }
 
-/** Recover only the missing ownership from the retained page of the same channel listing. */
-export function retainedLookOwnership(
-  info: TemplateInfo,
-  html: string,
-): ReadonlyMap<string, string> | null {
+export interface RetainedLookFields {
+  ownership: ReadonlyMap<string, string>;
+  sharedFrameTitles: SharedFrameTitles;
+}
+
+/** Recover missing field relationships from the retained page of the same channel listing. */
+export function retainedLookFields(info: TemplateInfo, html: string): RetainedLookFields | null {
   const carrier = info.liveSources;
   if (carrier?.looks === undefined || carrier.looks.length < 2) return null;
   const looks = carrier.looks;
-  const parsed = sceneOwnership.safeParse(sceneFromPage(html));
+  const scene = sceneFromPage(html);
+  const parsed = sceneOwnership.safeParse(scene);
   if (!parsed.success) return null;
   const group = parsed.data.lookGroups[0];
   if (
@@ -83,5 +87,13 @@ export function retainedLookOwnership(
       return null;
     resolved.set(look.id, instanceId);
   }
-  return resolved;
+  const namesAgree = looks.every(
+    (look) => group.looks.find((authored) => authored.id === look.id)?.name === look.name,
+  );
+  const fullScene =
+    info.sharedFrameTitles === undefined && namesAgree ? SceneSchema.safeParse(scene) : undefined;
+  return {
+    ownership: resolved,
+    sharedFrameTitles: fullScene?.success ? sharedFrameTitlesOf(fullScene.data) : [],
+  };
 }

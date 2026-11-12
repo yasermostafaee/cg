@@ -1,7 +1,7 @@
 import type { FieldValue, ListItemField, StackItemState } from '@cg/shared-schema';
 import { structuredRowsXlsxToCsv } from '@cg/vcg-format';
 import { reportCommandError } from '../status/commandFeedback.js';
-import { effectiveValue, stageField, valueAt, type FieldPath } from './draftStore.js';
+import { effectiveValue, stageFieldBatch, valueAt, type FieldPath } from './draftStore.js';
 import { contentToFieldValue, type FromFileFieldKind } from './fromFileContent.js';
 import { fromFileState, setFromFileError } from './fromFileStore.js';
 import { preserveLockedListItemFields, toListItems, withStableListItemIds } from './listField.js';
@@ -80,6 +80,7 @@ export async function stageFromFile(
   path: FieldPath,
   kind: FromFileFieldKind,
   itemFields?: readonly ListItemField[],
+  writePaths: readonly FieldPath[] = [path],
 ): Promise<boolean> {
   /*
    * Snapshot the TARGET before the asynchronous file read.
@@ -98,6 +99,7 @@ export async function stageFromFile(
    */
   const itemId = item.itemId;
   const targetPath = [...path];
+  const targets = writePaths.map((fieldPath) => [...fieldPath]);
   const appliedValue = valueAt(item.fields, targetPath);
   const currentList =
     kind === 'list' ? toListItems(effectiveValue(itemId, targetPath, appliedValue)) : undefined;
@@ -121,7 +123,10 @@ export async function stageFromFile(
     reportCommandError(message);
     return false;
   }
-  stageField(itemId, targetPath, stagedValue);
+  stageFieldBatch(
+    itemId,
+    targets.map((path) => ({ path, value: stagedValue })),
+  );
   return true;
 }
 
@@ -157,7 +162,8 @@ export async function reloadFromFile(
   path: FieldPath,
   kind: FromFileFieldKind,
   itemFields?: readonly ListItemField[],
+  writePaths?: readonly FieldPath[],
 ): Promise<{ accepted: boolean }> {
-  const staged = await stageFromFile(item, path, kind, itemFields);
+  const staged = await stageFromFile(item, path, kind, itemFields, writePaths);
   return { accepted: staged };
 }

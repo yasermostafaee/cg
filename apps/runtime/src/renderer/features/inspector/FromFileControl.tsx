@@ -48,7 +48,7 @@ import {
 import { FromFilePreviewDialog } from './FromFilePreviewDialog.js';
 import { toListItems } from './listField.js';
 import { StructuredRowsDialog } from './StructuredRowsDialog.js';
-import { unstageField } from './draftStore.js';
+import { unstageFieldBatch } from './draftStore.js';
 import { saveStructuredWorkbook, structuredWorkbookFilename } from './structuredWorkbook.js';
 
 const styles = {
@@ -105,6 +105,7 @@ const styles = {
 export function FromFileControl({
   item,
   path,
+  writePaths,
   kind,
   fieldId,
   authoredPath,
@@ -118,6 +119,7 @@ export function FromFileControl({
 }: {
   item: StackItemState;
   path: FieldPath;
+  writePaths?: readonly FieldPath[] | undefined;
   kind: FromFileFieldKind;
   fieldId: string;
   /** R-102 — the author's Bridge default; it remains replaceable unless locked. */
@@ -179,7 +181,7 @@ export function FromFileControl({
         format: lockFile ? authoredFormat : (state?.format ?? authoredFormat),
       },
     );
-    if (removedAutoLoadedDraft) unstageField(itemId, path);
+    if (removedAutoLoadedDraft) unstageFieldBatch(itemId, writePaths ?? [path]);
   }, [
     authoredDelimiter,
     authoredFormat,
@@ -191,6 +193,7 @@ export function FromFileControl({
     lockedSplit,
     path,
     pathKey,
+    writePaths,
     state?.delimiter,
     state?.format,
     state?.source.bridgePath,
@@ -222,7 +225,7 @@ export function FromFileControl({
     // The authored file is the field's starting input, so its current bytes must
     // become the starting draft without making the operator press Reload first.
     // This stages only; Update remains the single write that can reach on air.
-    void stageFromFile({ itemId, fields: appliedFields }, path, kind, itemFields);
+    void stageFromFile({ itemId, fields: appliedFields }, path, kind, itemFields, writePaths);
   }, [
     appliedFields,
     authoredAutoLoadSignature,
@@ -232,6 +235,7 @@ export function FromFileControl({
     kind,
     path,
     pathKey,
+    writePaths,
     // The authored source can attach after the Inspector opens and restoration finishes.
     state?.source,
   ]);
@@ -261,7 +265,7 @@ export function FromFileControl({
       ...(currentSchemaSignature === undefined ? {} : { schemaSignature: currentSchemaSignature }),
     });
     // Initial load STAGES like a hand edit; the operator applies with Update.
-    await stageFromFile({ itemId, fields: appliedFields }, path, kind, itemFields);
+    await stageFromFile({ itemId, fields: appliedFields }, path, kind, itemFields, writePaths);
   };
 
   const saveExcel = async (): Promise<void> => {
@@ -460,7 +464,9 @@ export function FromFileControl({
           <AsyncButton
             variant="secondary"
             aria-label={`Reload ${fieldId} from file`}
-            run={() => reloadFromFile({ itemId, fields: appliedFields }, path, kind, itemFields)}
+            run={() =>
+              reloadFromFile({ itemId, fields: appliedFields }, path, kind, itemFields, writePaths)
+            }
             onError={() => undefined}
           >
             <Icon icon={RefreshCw} />

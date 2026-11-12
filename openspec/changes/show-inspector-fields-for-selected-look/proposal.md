@@ -6,6 +6,7 @@ A live layout can expose separate fields in each preset. Showing all those group
 
 - Show the selected Look's dynamic fields alongside common fields in Inspector.
 - Keep edits for other Looks in the row draft when the operator changes selection.
+- Share edits of the same bound title in a reused live-frame composition across its Looks.
 - Carry the managed composition instance ID in the template catalogue and recover it from the retained page on legacy Bridges.
 
 ## Capabilities

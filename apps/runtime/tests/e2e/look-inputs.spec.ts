@@ -6,7 +6,7 @@ import {
   type Scene,
 } from '@cg/shared-schema';
 import { cgCss, cgJsIife, ExporterSingleFile } from '@cg/single-file-export';
-import { buildTemplateLiveSources } from '@cg/vcg-format';
+import { buildTemplateLiveSources, pack } from '@cg/vcg-format';
 import { expect, test } from './fixtures/runtime.js';
 
 /**
@@ -88,7 +88,7 @@ const lookFixtureLayer = (id: string, children: Element[]): Composition['layers'
   children,
 });
 
-async function registerLegacyLookTemplate(page: Page): Promise<void> {
+function lookFieldScene(): Scene {
   const shared = lookFieldScope(['common-top', 'common-bottom']);
   const looks = [1, 2, 3].map((index) => ({
     id: `look-${String(index)}`,
@@ -131,7 +131,7 @@ async function registerLegacyLookTemplate(page: Page): Promise<void> {
     ),
   }));
   const date = '2026-11-10T00:00:00Z';
-  const scene: Scene = {
+  return {
     schemaVersion: 1,
     id: 'source-legacy-looks',
     name: 'Legacy Looks',
@@ -149,12 +149,21 @@ async function registerLegacyLookTemplate(page: Page): Promise<void> {
     lookGroups: [{ id: 'looks', looks, defaultLookId: 'look-1' }],
     metadata: { createdAt: date, updatedAt: date },
   };
+}
+
+async function generatedLookPage(scene: Scene): Promise<string> {
   const { html } = await new ExporterSingleFile({
     cgJsIife,
     cgCss,
     fontsCss: '',
     assets: { get: () => Promise.resolve(null), bytes: () => Promise.resolve(null) },
   }).produce(scene);
+  return html;
+}
+
+async function registerLegacyLookTemplate(page: Page): Promise<void> {
+  const scene = lookFieldScene();
+  const html = await generatedLookPage(scene);
   const fields = aggregateBoundCompositionFields(scene, scene);
   const liveSources = buildTemplateLiveSources(scene);
   const template = {
@@ -398,6 +407,133 @@ test('LOOK INPUTS lists every look with its own frames, and the flat template ke
   await expect(app.inspector.locator('[aria-label="Look inputs"]')).toHaveCount(0);
   await expect(app.inspector.locator('[aria-label="Live plates"]')).toBeVisible();
 });
+
+for (const legacy of [false, true]) {
+  test(`a reused frame has one title across presets (${legacy ? 'retained page' : 'VCG import'})`, async ({
+    app,
+  }) => {
+    const scene = lookFieldScene();
+    const frameFields = lookFieldScope(['frame-title']);
+    const frame: Composition = {
+      id: 'guest-frame',
+      name: 'Guest frame',
+      resolution: lookFixtureResolution,
+      frameRange: lookFixtureRange,
+      editorBackdrop: 'transparent',
+      layers: [
+        lookFixtureLayer('frame-artwork', [
+          {
+            ...lookFixtureElement,
+            id: 'frame-plate',
+            name: 'Frame plate',
+            type: 'video-placeholder',
+            routeKey: 'plate-1',
+            transform: lookFixtureTransform(0, 0, 1920, 1080),
+          },
+          ...frameFields.elements.map((element) => ({ ...element, zIndex: 1 })),
+        ]),
+      ],
+      fields: frameFields.fields,
+      bindings: frameFields.bindings,
+    };
+    for (const preset of (scene.compositions ?? []).slice(0, 2)) {
+      const layer = preset.layers[0]!;
+      const plate = layer.children[0]!;
+      layer.children[0] = {
+        ...lookFixtureElement,
+        id: `${preset.id}-guest`,
+        type: 'composition',
+        name: 'Guest',
+        compositionId: frame.id,
+        transform: plate.transform,
+      };
+    }
+    scene.compositions?.push(frame);
+
+    const templateId = scene.id;
+    if (legacy) {
+      const html = await generatedLookPage(scene);
+      await app.page.evaluate(
+        ({ templateId, html }) => {
+          const get = window.cg.templates.get;
+          const page = window.cg.templates.page;
+          window.cg.templates.get = async (request) => {
+            const info = await get(request);
+            if (info?.templateId !== templateId) return info;
+            const { sharedFrameTitles: _titles, ...legacyInfo } = info;
+            return legacyInfo;
+          };
+          window.cg.templates.page = (id, channel) =>
+            id === templateId
+              ? Promise.resolve({ kind: 'page', html, source: 'bridge' })
+              : page(id, channel);
+        },
+        { templateId, html },
+      );
+    }
+    const bytes = await pack({
+      scene,
+      manifestExtras: {
+        id: templateId,
+        name: scene.name,
+        authoring: {
+          designerVersion: '0.0.0',
+          createdAt: scene.metadata.createdAt,
+          exportedAt: scene.metadata.updatedAt,
+        },
+        compatibility: { minRuntimeVersion: '0.0.0', minCasparCGVersion: '2.3.0' },
+        fontDeps: [],
+        assetIndex: [],
+      },
+      indexHtml: '<!doctype html><html><body></body></html>',
+      cgJs: '',
+      cgCss: '',
+    });
+    const row = await app.importVcg('shared-frame-titles.vcg', bytes, 59);
+    await app.selectLayerRow(row);
+
+    const selectPreset = (number: number) =>
+      app.inspector.locator(`[data-look-tab="look-${String(number)}"]`).click();
+    const title = app.inspector.getByRole('textbox', { name: 'frame-title', exact: true });
+    const local = (preset: number) =>
+      app.inspector.getByRole('textbox', { name: `plate-2-${String(preset)}`, exact: true });
+    await expect(title).toHaveValue('frame-title');
+    await title.fill('تایتل تازه');
+    await local(1).fill('متن فقط در پریست یک');
+    await selectPreset(2);
+    await expect(title).toHaveValue('تایتل تازه');
+    await expect(local(2)).toHaveValue('plate-2-2');
+    await selectPreset(3);
+    await expect(title).toHaveCount(0);
+    await selectPreset(2);
+    await app.discardEdits();
+    await expect(title).toHaveValue('frame-title');
+    await app.layerRow(row).getByRole('button', { name: 'PLAY' }).click();
+    await expect(app.layerRow(row)).toContainText('ON AIR');
+    const appliedFields = () =>
+      app.page.evaluate(
+        async (id) =>
+          (await window.cg.stack.snapshot()).find((item) => item.templateId === id)?.fields,
+        templateId,
+      );
+    await title.fill('عنوان ذخیره‌شده');
+    expect(await appliedFields()).toMatchObject({
+      'Preset 1': { Guest: { 'frame-title': 'frame-title' } },
+      'Preset 2': { Guest: { 'frame-title': 'frame-title' } },
+    });
+    await app.inspector
+      .getByRole('button', { name: 'Apply staged edits to the on-air row' })
+      .click();
+    await expect(app.inspector.getByLabel('unapplied edits', { exact: true })).toHaveCount(0);
+    expect(await appliedFields()).toMatchObject({
+      'Preset 1': { Guest: { 'frame-title': 'عنوان ذخیره‌شده' } },
+      'Preset 2': { Guest: { 'frame-title': 'عنوان ذخیره‌شده' } },
+    });
+    await selectPreset(1);
+    await expect(title).toHaveValue('عنوان ذخیره‌شده');
+    await expect(local(1)).toHaveValue('plate-2-1');
+  });
+}
 
 test('the selected look shows only its own dynamic fields alongside shared fields', async ({
   app,

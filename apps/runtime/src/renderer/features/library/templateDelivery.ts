@@ -45,6 +45,7 @@ import {
 import { pickTemplateName, templateDisplayName } from './templateName.js';
 import { bytesToBase64 } from './packageBytes.js';
 import { collectListFieldTargets, type ListFieldTargets } from '../inspector/listFieldTargets.js';
+import { sharedFrameTitlesOf } from '../inspector/sharedFrameTitles.js';
 import { countdownTargetFieldsOf } from './countdownTargetFields.js';
 
 /**
@@ -357,6 +358,7 @@ export async function produceTemplateDelivery(
   // `sourceFileName` is the file the operator actually picked. It outranks the manifest at
   // display (see `templateName.ts`), and this is the one hop where it is still in hand.
   const name = pickTemplateName(manifest.name, scene.name);
+  const liveSources = buildTemplateLiveSources(scene);
   const template: TemplateInfo = {
     templateId: manifest.id,
     ...(name !== undefined ? { name } : {}),
@@ -364,6 +366,9 @@ export async function produceTemplateDelivery(
     templateType: scene.templateType,
     fields: [...aggregate.fields],
     groups: [...aggregate.groups],
+    ...((liveSources.looks?.length ?? 0) > 1 && {
+      sharedFrameTitles: sharedFrameTitlesOf(scene),
+    }),
     // R-028 (5.4) — derived HERE, the one moment the app holds the unpacked
     // scene, by the canonical predicate the Designer's transport also uses.
     // It rides `TemplateInfo` (not a browser-local store like R-011/R-018) so
@@ -419,7 +424,7 @@ export async function produceTemplateDelivery(
     // field-by-field here. It gained a fourth field with the arrangement carrier
     // (`multibox-layout-switch` 5.2), and a block built by hand at a call site is one
     // whose NEXT field gets added here and forgotten at the next call site.
-    liveSources: buildTemplateLiveSources(scene),
+    liveSources,
   };
 
   try {

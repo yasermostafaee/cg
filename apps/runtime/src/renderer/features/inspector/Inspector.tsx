@@ -75,7 +75,8 @@ import { fieldPatternRefusal } from './patternCheck.js';
 import { bookOf, type RowBook } from '../layers/bookOf.js';
 import { LivePlatesSection } from './LivePlatesSection.js';
 import { LooksBindingsSection } from './LooksBindingsSection.js';
-import { retainedLookOwnership } from './retainedLookOwnership.js';
+import { retainedLookFields, type RetainedLookFields } from './retainedLookOwnership.js';
+import { indexSharedFrameTitles, type SharedFrameTitleIndex } from './sharedFrameTitles.js';
 import { TimingSection } from './TimingSection.js';
 import { appliedPlateSources } from './livePlates.js';
 import { boundChannelOf, itemChannelOf } from '../channels/itemChannel.js';
@@ -89,8 +90,10 @@ import {
   isFieldDirty,
   isItemDirty,
   stageField,
+  stageFieldBatch,
   subscribeDrafts,
   unstageField,
+  unstageFieldBatch,
   valueAt,
   type FieldPath,
 } from './draftStore.js';
@@ -397,7 +400,7 @@ export function Inspector({
     templateId: string;
     channel: number | undefined;
     info: TemplateInfo | null;
-    legacyOwnership: ReadonlyMap<string, string> | null;
+    retained: RetainedLookFields | null;
   } | null>(null);
   const [pinnedLook, setPinnedLook] = useState<{ itemId: string; lookId: string } | null>(null);
   const selectedItemId = item?.itemId;
@@ -470,9 +473,9 @@ export function Inspector({
       const current = (): boolean => !cancelled && request === generation;
       const publish = (
         info: TemplateInfo | null,
-        legacyOwnership: ReadonlyMap<string, string> | null = null,
+        retained: RetainedLookFields | null = null,
       ): void => {
-        if (current()) setLookup({ templateId, channel: templateChannel, info, legacyOwnership });
+        if (current()) setLookup({ templateId, channel: templateChannel, info, retained });
       };
       // The Bridge owns live metadata. The adapter can answer offline from the local copy.
       void window.cg.templates
@@ -487,21 +490,27 @@ export function Inspector({
               publish(null);
               return;
             }
-            publish(info);
-            const looks = info?.liveSources?.looks ?? [];
+            const looks = info.liveSources?.looks ?? [];
             if (
               looks.length < 2 ||
-              looks.every((look) => look.instanceId !== undefined) ||
+              (info.sharedFrameTitles !== undefined &&
+                looks.every((look) => look.instanceId !== undefined)) ||
               !(info.groups ?? []).some((group) => aggregateHasFields(group.aggregate)) ||
               typeof window.cg.templates.page !== 'function'
-            )
+            ) {
+              publish(info);
               return;
-            // Legacy Bridge schemas strip instance ids, but keep the exact scene in this page.
+            }
+            // Older Bridge schemas can omit field relationships, but keep the authored scene.
             // A browser-local fallback may be a different version than this catalogue response.
-            const page = await window.cg.templates.page(templateId, templateChannel);
-            if (!current() || page.kind !== 'page' || page.source !== 'bridge') return;
-            const ownership = retainedLookOwnership(info, page.html);
-            if (ownership !== null) publish(info, ownership);
+            const page = await window.cg.templates
+              .page(templateId, templateChannel)
+              .catch(() => null);
+            const retained =
+              page?.kind === 'page' && page.source === 'bridge'
+                ? retainedLookFields(info, page.html)
+                : null;
+            publish(info, retained);
           },
           () => publish(null),
         )
@@ -603,7 +612,7 @@ export function Inspector({
   const editingLook =
     looks.find((look) => pinnedLook?.itemId === itemId && pinnedLook.lookId === look.id) ??
     (lookCarrier === undefined ? undefined : activeLookOf(lookCarrier, item.activeLookId));
-  const legacyOwnership = currentLookup?.legacyOwnership;
+  const legacyOwnership = currentLookup?.retained?.ownership;
   const instanceOf = (look: (typeof looks)[number]): string | undefined =>
     look.instanceId ?? legacyOwnership?.get(look.id);
   // Without complete ownership, every group remains available.
@@ -628,6 +637,10 @@ export function Inspector({
    *    `sequenceItemHeading` (`R-037`: `<composition> — item N`; `R-040`: a stub on a collision).
    */
   const fieldGroups = (resolvedInfo?.groups ?? []).filter((g) => aggregateHasFields(g.aggregate));
+  const frameTitles = indexSharedFrameTitles(
+    resolvedInfo?.sharedFrameTitles ?? currentLookup?.retained?.sharedFrameTitles ?? [],
+    fieldGroups,
+  );
   const visibleGroups = fieldGroups.filter((group) => !inactiveLookInstances.has(group.instanceId));
   const sequenceRowSets = sequenceRowsPageSets(visibleGroups);
   const combinedGroupNames = new Set(
@@ -883,6 +896,7 @@ export function Inspector({
                   path={[group.name]}
                   item={item}
                   applied={item.fields}
+                  frameTitles={frameTitles}
                 />
               ))}
             </>
@@ -1095,11 +1109,13 @@ function FieldGroup({
   path,
   item,
   applied,
+  frameTitles,
 }: {
   group: CompositionFieldGroup;
   path: FieldPath;
   item: StackItemState;
   applied: FieldValues;
+  frameTitles: SharedFrameTitleIndex;
 }): JSX.Element {
   const itemId = item.itemId;
   return (
@@ -1115,6 +1131,7 @@ function FieldGroup({
           path={[...path, f.id]}
           item={item}
           applied={valueAt(applied, [...path, f.id])}
+          titlePaths={frameTitles.get(JSON.stringify([...path, f.id]))}
         />
       ))}
       {/* Same field-less filter as the root: a noise heading is noise at every depth. */}
@@ -1127,6 +1144,7 @@ function FieldGroup({
             path={[...path, child.name]}
             item={item}
             applied={applied}
+            frameTitles={frameTitles}
           />
         ))}
     </section>
@@ -1141,6 +1159,7 @@ function FieldEditor({
   book = null,
   bookName,
   bookFit,
+  titlePaths,
 }: {
   field: DynamicField | null;
   path: FieldPath;
@@ -1152,6 +1171,7 @@ function FieldEditor({
   bookName?: string | undefined;
   /** `RUN-NEXT-VERSION-03` delta A — the sequence's picture fit (`TemplateInfo.pageLists[].fit`). */
   bookFit?: ImageFit | undefined;
+  titlePaths?: readonly FieldPath[] | undefined;
 }): JSX.Element {
   useSyncExternalStore(subscribeFromFile, fromFileVersion);
   const itemId = item.itemId;
@@ -1164,10 +1184,22 @@ function FieldEditor({
   const label = isBook && field !== null ? bookTitle(field, bookName) : (field?.label ?? fieldId);
   const value = effectiveValue(itemId, path, applied);
   const kind = field?.type ?? inferKind(value);
-  const dirty = isFieldDirty(itemId, path, applied);
+  const dirty =
+    titlePaths?.some((target) => isFieldDirty(itemId, target, valueAt(item.fields, target))) ??
+    isFieldDirty(itemId, path, applied);
   const patternLine = fieldPatternRefusal(field, value);
-  const stage = (next: FieldValue): void => stageField(itemId, path, next);
-  const unstage = (): void => unstageField(itemId, path);
+  const stage = (next: FieldValue): void => {
+    if (titlePaths === undefined) stageField(itemId, path, next);
+    else
+      stageFieldBatch(
+        itemId,
+        titlePaths.map((path) => ({ path, value: next })),
+      );
+  };
+  const unstage = (): void => {
+    if (titlePaths === undefined) unstageField(itemId, path);
+    else unstageFieldBatch(itemId, titlePaths);
+  };
   /*
    * R-018 + TEXT-FILE-OPT-01 — a field sources its value from a text file only when
    * its AUTHOR granted it one. The kind test is still the outer condition, but it is
@@ -1197,7 +1229,8 @@ function FieldEditor({
     fromFileKind === undefined ? null : (
       <FromFileControl
         item={item}
-        path={path}
+        path={titlePaths?.[0] ?? path}
+        writePaths={titlePaths}
         kind={fromFileKind}
         fieldId={fieldId}
         {...(authoredPath !== undefined ? { authoredPath } : {})}
