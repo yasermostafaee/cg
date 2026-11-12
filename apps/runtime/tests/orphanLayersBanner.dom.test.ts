@@ -135,13 +135,18 @@ describe('OrphanLayersBanner — R-009', () => {
     expect(el.textContent).toBe('');
   });
 
-  it('names each orphan channel-layer with the not-on-your-stack message', async () => {
+  it('identifies untracked HTML occupancy and directs the operator to Program', async () => {
     stubBridge();
     const el = await renderBanner([orphan(1, 60), orphan(2, 65)]);
-    const alert = el.querySelector('[role="alert"]');
-    expect(alert).not.toBeNull();
-    expect(el.textContent).toContain('Layer 1-60 is on air but not on your stack');
-    expect(el.textContent).toContain('Layer 2-65 is on air but not on your stack');
+    const alert = el.querySelector(
+      '[role="alert"][aria-label="HTML producers outside your stack"]',
+    );
+    expect(alert?.textContent).toContain(
+      'Layer 1-60 has an HTML producer outside your stack. Check Program before clearing.',
+    );
+    expect(alert?.textContent).toContain(
+      'Layer 2-65 has an HTML producer outside your stack. Check Program before clearing.',
+    );
   });
 
   it('confirming in the modal sends exactly one layers.clear for that layer', async () => {
@@ -157,6 +162,9 @@ describe('OrphanLayersBanner — R-009', () => {
     });
 
     expect(openDialog()?.textContent).toContain('Clear layer 1-60');
+    expect(openDialog()?.textContent).toContain(
+      'This removes the producer from layer 1-60. Check Program before clearing.',
+    );
     expect(nativeConfirm).not.toHaveBeenCalled();
     expect(clear).not.toHaveBeenCalled();
 
@@ -228,9 +236,9 @@ describe('OrphanLayersBanner — B-056 owned-slot occupancy variant', () => {
   it('renders BOTH strips when orphans and owned warnings coexist — R-009 rows unchanged', async () => {
     stubBridge();
     const el = await renderBanner([orphan(2, 65)], [warning]);
-    expect(el.querySelector('[aria-label="Orphaned on-air layers"]')).not.toBeNull();
+    expect(el.querySelector('[aria-label="HTML producers outside your stack"]')).not.toBeNull();
     expect(el.querySelector('[aria-label="Owned-layer occupancy warnings"]')).not.toBeNull();
-    expect(el.textContent).toContain('Layer 2-65 is on air but not on your stack');
+    expect(el.textContent).toContain('Layer 2-65 has an HTML producer outside your stack');
     expect(
       el.querySelector<HTMLButtonElement>('button[aria-label="Clear layer 2-65"]'),
     ).not.toBeNull();
@@ -350,9 +358,9 @@ describe('OrphanLayersBanner — R-015 video layers read as NORMAL; `B-292`: ins
     stubBridge();
     const el = await renderBanner([orphan(1, 60), video(1, 90)]);
     // The html orphan's R-009 surface is byte-for-byte alive…
-    const alert = el.querySelector('[aria-label="Orphaned on-air layers"]');
+    const alert = el.querySelector('[aria-label="HTML producers outside your stack"]');
     expect(alert?.getAttribute('role')).toBe('alert');
-    expect(el.textContent).toContain('Layer 1-60 is on air but not on your stack');
+    expect(el.textContent).toContain('Layer 1-60 has an HTML producer outside your stack');
     expect(labels(alert ?? el)).toEqual(['Clear layer 1-60']);
     // …and the video row stays neutral, in its own strip, with its own Clear.
     expect(el.textContent).toContain('Layer 1-90 is carrying video (ffmpeg)');
@@ -396,7 +404,9 @@ describe('OrphanLayersBanner — R-015 video layers read as NORMAL; `B-292`: ins
     });
     const dialog = openDialog();
     expect(dialog?.textContent).toContain('Clear 2 layers?');
-    expect(dialog?.textContent).toContain('2-70, 2-71');
+    expect(dialog?.textContent).toContain(
+      'This removes the producers from layers 2-70, 2-71. Check Program before clearing.',
+    );
     expect(dialog?.textContent, 'the layer above the bands is not in the batch').not.toContain(
       '2-120',
     );
@@ -598,7 +608,7 @@ describe('OrphanLayersBanner — FIELD-FIXES-01 L: CG’s bands, and a dismissal
   const videoStrip = (el: ParentNode): Element | null =>
     el.querySelector('[aria-label="Layers in use by other systems"]');
   const graphicStrip = (el: ParentNode): Element | null =>
-    el.querySelector('[aria-label="Orphaned on-air layers"]');
+    el.querySelector('[aria-label="HTML producers outside your stack"]');
   async function dismissIn(strip: Element | null): Promise<void> {
     const button = strip?.querySelector<HTMLButtonElement>(
       'button[aria-label="Dismiss this notice"]',
@@ -627,7 +637,7 @@ describe('OrphanLayersBanner — FIELD-FIXES-01 L: CG’s bands, and a dismissal
     const loud = await mount(inside);
     expect(videoStrip(loud.el)?.textContent).toContain('Layer 1-90 is carrying video (ffmpeg)');
     expect(graphicStrip(loud.el)?.textContent).toContain(
-      'Layer 1-60 is on air but not on your stack',
+      'Layer 1-60 has an HTML producer outside your stack',
     );
     expect(orphanWarningChannels(inside, [], {})).toEqual([1]);
   });

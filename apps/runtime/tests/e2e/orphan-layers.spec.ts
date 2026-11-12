@@ -24,7 +24,9 @@ test('a seeded orphan surfaces the banner naming the layer; confirm-gated Clear 
   const page = app.page;
 
   // Idle-quiet first: the default boot (no seed) shows neither surface.
-  await expect(page.getByRole('alert', { name: 'Orphaned on-air layers' })).toHaveCount(0);
+  await expect(page.getByRole('alert', { name: 'HTML producers outside your stack' })).toHaveCount(
+    0,
+  );
   await expect(page.getByRole('status', { name: 'Layers in use by other systems' })).toHaveCount(0);
 
   // Re-boot with the seeded orphan + video layers (init scripts apply on the next navigation).
@@ -33,9 +35,11 @@ test('a seeded orphan surfaces the banner naming the layer; confirm-gated Clear 
   });
   await page.reload();
 
-  const banner = page.getByRole('alert', { name: 'Orphaned on-air layers' });
+  const banner = page.getByRole('alert', { name: 'HTML producers outside your stack' });
   await expect(banner).toBeVisible();
-  await expect(banner).toContainText('Layer 1-60 is on air but not on your stack');
+  await expect(banner).toContainText(
+    'Layer 1-60 has an HTML producer outside your stack. Check Program before clearing.',
+  );
 
   // R-015 — the video layer inside the bands reads as NORMAL: a status strip, not an alert,
   // naming the kind. (L — the one on layer 5 is not in it at all.) `B-292` SUPERSEDED "with no
@@ -50,6 +54,9 @@ test('a seeded orphan surfaces the banner naming the layer; confirm-gated Clear 
   const confirmClear = page.getByRole('dialog', { name: 'Clear layer 1-60?' });
   await banner.getByRole('button', { name: 'Clear layer 1-60' }).click();
   await expect(confirmClear).toBeVisible();
+  await expect(confirmClear).toContainText(
+    'This removes the producer from layer 1-60. Check Program before clearing.',
+  );
   await confirmClear.getByRole('button', { name: 'Cancel' }).click();
   await expect(confirmClear).toHaveCount(0);
   await expect(banner).toBeVisible();
@@ -58,7 +65,9 @@ test('a seeded orphan surfaces the banner naming the layer; confirm-gated Clear 
   // neutral, untouched by the html layer's Clear (R-015).
   await banner.getByRole('button', { name: 'Clear layer 1-60' }).click();
   await confirmClear.getByRole('button', { name: 'Clear layer', exact: true }).click();
-  await expect(page.getByRole('alert', { name: 'Orphaned on-air layers' })).toHaveCount(0);
+  await expect(page.getByRole('alert', { name: 'HTML producers outside your stack' })).toHaveCount(
+    0,
+  );
   await expect(videoStrip).toBeVisible();
 
   // `B-292` — and its own CLEAR takes it, behind the same confirm (the real bridge's half, with a
@@ -91,7 +100,7 @@ test('🔴 FIELD-FIXES-01 L — layer 5 is the Playout’s: no notice, no mark, 
   await page.reload();
   await declareSecondChannel(page);
 
-  const graphicStrip = page.getByRole('alert', { name: 'Orphaned on-air layers' });
+  const graphicStrip = page.getByRole('alert', { name: 'HTML producers outside your stack' });
   const videoStrip = page.getByRole('status', { name: 'Layers in use by other systems' });
   const markOnOne = page.locator('#channel-1 [data-tab-signal]');
 

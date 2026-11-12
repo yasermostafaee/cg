@@ -68,6 +68,10 @@
         {
           "fa": "در Position اینسپکتور، Reset to default موقعیت پیش‌فرض قالب را برای اعمال با Update برمی‌گرداند.",
           "en": "Reset to default in the Inspector’s Position section restores the template’s default position for the next Update."
+        },
+        {
+          "fa": "اعلان لایهٔ خارج از استک وجود HTML producer را گزارش می‌کند. وضعیت تصویر را در Program می‌توان بررسی کرد.",
+          "en": "The untracked-layer notice reports the HTML producer and directs operators to Program to check the output."
         }
       ],
       "planned": [],

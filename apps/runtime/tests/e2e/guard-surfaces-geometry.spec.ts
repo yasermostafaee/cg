@@ -104,7 +104,7 @@ test('the warn and neutral notice strips take the reference box and pairs from t
   });
   await app.page.reload();
 
-  const warn = app.page.getByRole('alert', { name: 'Orphaned on-air layers' });
+  const warn = app.page.getByRole('alert', { name: 'HTML producers outside your stack' });
   const neutral = app.page.getByRole('status', { name: 'Layers in use by other systems' });
   await expect(warn).toBeVisible();
   await expect(neutral).toBeVisible();

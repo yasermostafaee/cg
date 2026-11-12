@@ -318,9 +318,15 @@ follow-up, not a restyle.
   scale). Symptom-level for now; measure comfortable field metrics during the
   change.
 
-## [x] R-009 — surface orphaned/unknown on-air layers to the operator, with an explicit per-layer Clear control ⟨priority: medium⟩ — merged via `surface-orphan-layers`, archived
+## [x] R-009 — surface layer occupancy outside the stack with an explicit per-layer Clear control ⟨priority: medium⟩ — merged via `surface-orphan-layers`, archived
 
 <!-- change: openspec/changes/archive/2026-07-10-surface-orphan-layers/ -->
+
+**Occupancy wording follow-up** — `openspec/changes/clarify-orphan-layer-occupancy/`.
+An HTML warning names the channel-layer and says it has an HTML producer outside the operator's
+stack. OSC reports producer kind and location. Output visibility and producer origin are unknown.
+The warning asks the operator to check Program before clearing. Clear confirmations name the
+affected layers and describe removal of their producers.
 
 > **CLOSED — implemented + mock/integration-validated 2026-07-11.** Built as
 > the operator-decided PERIODIC OCCUPANCY SWEEP, with the instrument
@@ -357,7 +363,7 @@ the operator, with an explicit, per-layer **Clear** affordance. Wire the
 already-emitted-but-unheard signals — `Reconciler`'s `unexpected-onair` and
 `LayerManager.observe`/`collision` (both currently have no production caller;
 see C-010) — over a new `@cg/shared-ipc` publish channel into a Runtime warning
-surface ("layer 1-60 is on air but not on your stack"), where the operator can
+surface that names the occupied layer, where the operator can
 Clear that layer deliberately.
 
 **Why:** `reconnect-reconciliation` (B-048) deliberately ships **no blind
@@ -376,7 +382,7 @@ the operator, not to a heuristic.
 - WHEN the operator invokes Clear on a surfaced layer THEN the bridge sends
   `CLEAR <ch>-<layer>` and the warning resolves on the observed empty
   transition
-- WHEN nothing foreign is on air THEN no warning surface is shown (no idle
+- WHEN no untracked producer is observed in the applicable layer range THEN no warning surface is shown (no idle
   noise)
   **Notes:** interest-gating today drops OSC for never-loaded layers — the
   design must widen interest (or add a periodic occupancy sweep) WITHOUT

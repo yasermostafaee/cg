@@ -308,7 +308,7 @@ test.describe('R-087 — the NOT CONNECTED banner', () => {
       (window as unknown as { CG_E2E_ORPHAN: boolean }).CG_E2E_ORPHAN = true;
     });
     await page.reload();
-    const banner = page.getByRole('alert', { name: 'Orphaned on-air layers' });
+    const banner = page.getByRole('alert', { name: 'HTML producers outside your stack' });
     await expect(banner).toBeVisible();
     const measured: string[] = [];
     const clear = banner.getByRole('button', { name: 'Clear layer 1-60' });

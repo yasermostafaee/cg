@@ -509,7 +509,7 @@ describe('a channel’s messages stay in its view (`MULTI-CHANNEL-01` §2 L)', (
       ?.getAttribute('data-tab-signal');
 
   const orphanBanner = (): Element | null =>
-    document.querySelector('[role="alert"][aria-label="Orphaned on-air layers"]');
+    document.querySelector('[role="alert"][aria-label="HTML producers outside your stack"]');
 
   it('🔴 foreign content on channel 2 is absent from channel 1’s view; channel 2’s tab carries the amber mark — control: it is in channel 2’s view', async () => {
     await boot([1, 2]);

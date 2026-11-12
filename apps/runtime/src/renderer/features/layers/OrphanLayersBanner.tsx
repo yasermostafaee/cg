@@ -121,17 +121,15 @@ const styles = {
 } as const;
 
 /**
- * R-009 — orphaned/unknown on-air layers. Fed by the bridge's periodic
+ * R-009 — layer occupancy outside the stack. Fed by the bridge's periodic
  * occupancy sweep (a passive OSC tap compared against owned slots): each row
  * names a layer that has a producer but is NOT on the operator's stack.
  *
  * R-015 — the set SPLITS by observed producer kind, because the two kinds
  * mean opposite things to a graphics operator:
  *
- *   - `html` — plausibly OUR OWN graphic riding through a dead bridge
- *     session (this system only ever places HTML producers). Keeps the
- *     warning strip and the explicit, confirm-gated Clear — R-009's case,
- *     unchanged.
+ *   - `html` — an HTML producer outside the stack. The observation supplies
+ *     its kind and location. The warning strip offers confirm-gated Clear.
  *   - anything else (`ffmpeg`, `decklink`, … — "not html" fails safe) —
  *     another system's output: a video, a program feed. Rendered as NEUTRAL
  *     information, never an alert.
@@ -273,7 +271,7 @@ export function OrphanLayersBanner({
     void (async () => {
       const ok = await confirm({
         title: `Clear layer ${name}?`,
-        body: 'This removes whatever is on that layer from air.',
+        body: `This removes the producer from layer ${name}. Check Program before clearing.`,
         confirmLabel: 'Clear layer',
         tone: 'clear',
       });
@@ -299,7 +297,7 @@ export function OrphanLayersBanner({
     void (async () => {
       const ok = await confirm({
         title: `Clear ${count} layers?`,
-        body: `This removes whatever is on layers ${names.join(', ')} from air.`,
+        body: `This removes the producers from layers ${names.join(', ')}. Check Program before clearing.`,
         confirmLabel: `Clear ${count} layers`,
         tone: 'clear',
       });
@@ -325,9 +323,7 @@ export function OrphanLayersBanner({
         variant="caution"
         aria-label={`Clear layer ${name}`}
         disabled={clearRefusal !== undefined}
-        title={
-          clearRefusal ?? `Send CLEAR ${name} — removes whatever is on that layer from the output`
-        }
+        title={clearRefusal ?? `Send CLEAR ${name} to remove the producer from this layer`}
         onClick={() => {
           clearOne(o);
         }}
@@ -396,7 +392,7 @@ export function OrphanLayersBanner({
         <div
           style={{ ...styles.strip, ...styles.dismissible }}
           role="alert"
-          aria-label="Orphaned on-air layers"
+          aria-label="HTML producers outside your stack"
         >
           <div style={styles.lines}>
             {htmlOrphans.map((o) => {
@@ -404,10 +400,8 @@ export function OrphanLayersBanner({
               return (
                 <div key={name} style={styles.row}>
                   <span>
-                    ⚠ Layer {name} is on air but not on your stack{' '}
-                    <span style={styles.detail}>
-                      ({o.producer} producer — likely left by a previous session)
-                    </span>
+                    ⚠ Layer {name} has an HTML producer outside your stack.{' '}
+                    <span style={styles.detail}>Check Program before clearing.</span>
                   </span>
                   {clearButton(o)}
                 </div>
