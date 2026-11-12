@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { StackItemState } from '@cg/shared-schema';
 import { MockRuntime } from '../src/platform/MockRuntime.js';
-import { bookOf, bookPageOf } from '../src/renderer/features/layers/bookOf.js';
+import { bookOf, rehearsalBookOf } from '../src/renderer/features/layers/bookOf.js';
 import { layerRowActions } from '../src/renderer/features/layers/layerRowActions.js';
 import { buttonActions } from '../src/renderer/ui/rowAction.js';
 import { bindingFor, itemWith, rowDeps, templateWith } from './support/layerRow.js';
@@ -81,10 +81,9 @@ describe('R-100 — bookOf, the one reading of a row’s book', () => {
       pageRewinds: ['pages'],
     });
     const replacement = { id: 'replacement', kind: 'image', assetId: 'authored' };
-    expect(bookPageOf(BOOK, row, { pages: [replacement] })).toMatchObject({
+    expect(rehearsalBookOf(BOOK, row, { pages: [replacement] })).toMatchObject({
       index: 0,
-      id: 'replacement',
-      assetId: 'authored',
+      pages: [{ id: 'replacement', assetId: 'authored' }],
       rewound: true,
     });
   });

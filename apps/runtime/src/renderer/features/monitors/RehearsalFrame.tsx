@@ -7,7 +7,7 @@ import {
   withCgControl,
   type LiveFramePlacement,
 } from '@cg/shared-schema';
-import type { ChannelRaster } from '@cg/shared-ipc';
+import { pageTarget, type ChannelRaster } from '@cg/shared-ipc';
 import {
   applyOperatorPosition,
   canApplyOperatorPosition,
@@ -21,8 +21,9 @@ import { measureRehearsalBounds } from './rehearsalBounds.js';
 import type { PlatePlacement } from './livePlateGeometry.js';
 import { paintPvwPlatePictures } from './pvwPlatePictures.js';
 import type { PvwSourceFrame } from './usePvwSourceFrames.js';
-import type { BookPage } from '../layers/bookOf.js';
+import type { RehearsalBook } from '../layers/bookOf.js';
 import { MISSING_PICTURE_URL, pageExtOf, pictureDataUrl } from '../book/pagePictures.js';
+import { recordPreviewBookPage } from '../book/previewBookPage.js';
 
 /**
  * R-022 — ONE rehearsing row's frame: the retained self-contained page, in a
@@ -158,8 +159,8 @@ interface Props {
   activeLookId: string | undefined;
   /** `PASSES-CYCLE-ONLY-26` Part B — the operator's effective pass timing, or undefined. */
   timing: TimingToSend | undefined;
-  /** `RUN-NEXT-VERSION-03` 1.1 — the page a take would show (`bookPageOf`), or undefined. */
-  book?: BookPage | undefined;
+  /** The effective book and the row's initial page. */
+  book?: RehearsalBook | undefined;
   livePlates: readonly PlatePlacement[];
   framePlacements?: LiveFramePlacement[] | undefined;
   sourceFrames: ReadonlyMap<string, PvwSourceFrame>;
@@ -167,6 +168,11 @@ interface Props {
   /** Told whenever this frame's readiness flips, so the stage can gate its transport. */
   onReadyChange?: (itemId: string, ready: boolean) => void;
   onBoundsChange?: (itemId: string, bounds: RehearsalFrameBounds | null) => void;
+}
+
+function rehearsalPageKey(book: RehearsalBook, index: number): string {
+  const picture = book.pages[index];
+  return JSON.stringify([book.fieldId, index, picture?.media, picture?.id, picture?.assetId]);
 }
 
 export function RehearsalFrame({
@@ -210,13 +216,27 @@ export function RehearsalFrame({
     back (`pagePictures`), as a `data:` URL (the page's CSP admits `data:` and never `blob:`). A
     picture neither holds is drawn as a placeholder, and the Inspector says which page.
   */
-  const pageSha = book?.media;
+  const [localPage, setLocalPage] = useState<{ book: string; html: string; index: number }>();
+  const bookIdentity = book?.identity;
+  const localIndex =
+    localPage !== undefined && localPage.book === bookIdentity && localPage.html === html
+      ? localPage.index
+      : undefined;
+  useEffect(() => {
+    setLocalPage((current) =>
+      current !== undefined && current.book === bookIdentity && current.html === html
+        ? current
+        : undefined,
+    );
+  }, [bookIdentity, html]);
+
+  const pageIndex = localIndex ?? book?.index;
+  const pageSha = pageIndex === undefined ? undefined : book?.pages[pageIndex]?.media;
+  const pageId = pageIndex === undefined ? undefined : book?.pages[pageIndex]?.id;
   const bookField = book?.fieldId;
   const bookKey =
-    book === undefined
-      ? null
-      : JSON.stringify([book.fieldId, book.index, pageSha, book.id, book.assetId]);
-  const pageRewound = book?.rewound === true;
+    book === undefined || pageIndex === undefined ? null : rehearsalPageKey(book, pageIndex);
+  const pageRewound = localIndex === undefined && book?.rewound === true;
   const rewindPage = useRef<{ doc: Document; field: string; key: string; changed: boolean }>();
   const pendingBookPlay = useRef<{ key: string; doc: Document }>();
   const [picture, setPicture] = useState<{ sha: string; url: string } | null>(null);
@@ -238,16 +258,17 @@ export function RehearsalFrame({
    * wire. `undefined` while the picture is read.
    */
   const page = useMemo((): Extract<CgPage, { index: number }> | undefined => {
-    if (book === undefined) return undefined;
-    if (book.media === undefined) return { field: book.fieldId, index: book.index };
-    if (picture?.sha !== book.media) return undefined;
+    if (bookField === undefined || pageIndex === undefined) return undefined;
+    if (pageSha === undefined) return { field: bookField, index: pageIndex };
+    if (picture?.sha !== pageSha) return undefined;
     return {
-      field: book.fieldId,
-      index: book.index,
-      media: { [book.media]: pageMediaPath(book.media, pageExtOf(picture.url)) },
+      field: bookField,
+      index: pageIndex,
+      media: { [pageSha]: pageMediaPath(pageSha, pageExtOf(picture.url)) },
     };
-  }, [book, picture]);
+  }, [bookField, pageIndex, pageSha, picture]);
   const pageKey = page === undefined ? null : bookKey;
+  useEffect(() => () => recordPreviewBookPage(itemId), [itemId, html, bookField]);
 
   const templateWindow = useCallback((): TemplateWindow | null => {
     return (frameRef.current?.contentWindow as TemplateWindow | null | undefined) ?? null;
@@ -319,34 +340,53 @@ export function RehearsalFrame({
   const timingKey = timing === undefined ? null : JSON.stringify(timing);
 
   const playNow = useCallback(() => {
+    const win = templateWindow();
+    if (win?.play === undefined) return;
     offerPicture();
-    templateWindow()?.play?.(playPayload());
-  }, [offerPicture, playPayload, templateWindow]);
+    win.play(playPayload());
+    if (page !== undefined) {
+      recordPreviewBookPage(itemId, { fieldId: page.field, index: page.index, id: pageId });
+    }
+  }, [offerPicture, playPayload, templateWindow, page, pageId, itemId]);
 
   useImperativeHandle(
     handleRef,
     () => ({
       play: () => {
         const doc = frameRef.current?.contentDocument;
-        if (pageRewound && pageKey === null && bookKey !== null && doc != null) {
-          // An explicit Play on a just-rewound picture waits for its bytes. Omitting
-          // the page payload here would restart the resident page at its old index.
+        setLocalPage(undefined);
+        if (
+          localIndex !== undefined &&
+          book !== undefined &&
+          localIndex !== book.index &&
+          doc != null
+        ) {
+          // Play restarts Preview from the row's current page after the local turn.
+          pendingBookPlay.current = { key: rehearsalPageKey(book, book.index), doc };
+          return;
+        }
+        if (pageKey === null && bookKey !== null && doc != null) {
+          // Wait for the picture before restarting a book at its selected page.
           pendingBookPlay.current = { key: bookKey, doc };
           return;
         }
         pendingBookPlay.current = undefined;
         playNow();
       },
-      /*
-        🔴 `RUN-NEXT-VERSION-03` 1.3 — A BOOK ROW'S NEXT IS THE ROW'S PAGE TURN. The page's local
-        `next()` stepped a copy the bridge never heard of — the counter stayed, and a loaded picture,
-        whose address the frame did not have, never came in. So PVW's NEXT on a book the operator turns
-        does exactly what the row's NEXT does (`stack.page`), and the frame follows the page the bridge
-        then holds (`book.index`, above). Any other row's NEXT is the template's own step, as before.
-      */
       next: () => {
         if (book !== undefined && book.step) {
-          void window.cg.stack.page({ itemId, field: book.fieldId, to: 'next' });
+          pendingBookPlay.current = undefined;
+          setLocalPage((previous) => {
+            const index =
+              previous !== undefined && previous.book === book.identity && previous.html === html
+                ? previous.index
+                : book.index;
+            return {
+              book: book.identity,
+              html,
+              index: pageTarget(index, book.pages.length, book.wrap, 'next'),
+            };
+          });
           return;
         }
         templateWindow()?.next?.();
@@ -356,7 +396,7 @@ export function RehearsalFrame({
         templateWindow()?.stop?.();
       },
     }),
-    [templateWindow, playNow, pageRewound, pageKey, bookKey, book, itemId],
+    [templateWindow, playNow, pageKey, bookKey, book, html, localIndex],
   );
 
   // Re-arm on a template change: a fresh document has not booted yet.
@@ -451,8 +491,13 @@ export function RehearsalFrame({
     if (win?.update === undefined) return;
     offerRef.current();
     win.update(JSON.stringify(withCgControl({} as FieldValues, { page: pageRef.current })));
+    recordPreviewBookPage(itemId, {
+      fieldId: pageRef.current.field,
+      index: pageRef.current.index,
+      id: pageId,
+    });
     if (rewindPage.current !== undefined) rewindPage.current.changed = true;
-  }, [ready, html, bookField, bookKey, pageKey, pageRewound, templateWindow]);
+  }, [ready, html, bookField, bookKey, pageKey, pageRewound, templateWindow, itemId, pageId]);
 
   useEffect(() => {
     const pending = pendingBookPlay.current;

@@ -35,8 +35,8 @@ pages needed a tool in CG Control, not in the Designer; and a book with a text p
 - **1.7 — The Designer's `Add text` shows its result.** Each click selects the new item (the card's strip marks
   it and its text box takes the focus), the canvas shows it (`runtime.showSequenceItem`), the card's count moves (a
   book's text pages are pages), and each click is one undo step.
-- **1.3 — PVW's NEXT turns the book.** On a book row it is the row's own page turn (`stack.page`), and
-  PVW follows the bridge's page; on any other row it is the template's step, as before.
+- **1.3 — PVW's NEXT turns the book locally.** Preview advances through the effective picture list
+  with a browser-local index. The Layers row and Inspector continue to control the programme book.
 - **Delta A (the owner, 2026-10-22) — the book block.** The strip shows only pages that exist (no empty box on
   the first or last page) and nothing moves as a page turns; every face, in the strip and in `Manage pages…`, is
   drawn as the air shows it — the channel's frame shape on PVW's checker, the picture at the sequence's own fit
@@ -53,7 +53,7 @@ pages needed a tool in CG Control, not in the Designer; and a book with a text p
   through an edit, superseding "else page 1" for an edit; ADDED), `designer-sequence-element` (MODIFIED),
   `designer-composition-export` (MODIFIED — the export refusal names `Manage pages…`).
 - **Code:** `@cg/shared-ipc` (`pages.get`), CG Bridge (`getPage`, route, scope), `@cg/template-runtime`
-  (`page-pictures-host`, the fill, `alt`, `showSequenceItem`), CG Control (`pagePictures`, `bookPageOf`, PVW's
+  (`page-pictures-host`, the fill, `alt`, `showSequenceItem`), CG Control (`pagePictures`, `rehearsalBookOf`, PVW's
   frame, the mock), the Designer (the sequence card, `sequenceItemFocus`, the canvas's `sequence-item`).
 - **Wire:** one new read channel; `TemplateInfo.pageLists[]` gains optional `fit` (delta A) and authored `advance`
   metadata; delta B adds `stack.set-page-advance`, relative `__cg.page` turns, `__cg.pageAdvance`, and the token-bound

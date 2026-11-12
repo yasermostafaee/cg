@@ -3,7 +3,7 @@ import { act, createElement, createRef } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as pagePictures from '../src/renderer/features/book/pagePictures.js';
-import type { BookPage } from '../src/renderer/features/layers/bookOf.js';
+import type { RehearsalBook } from '../src/renderer/features/layers/bookOf.js';
 import {
   RehearsalFrame,
   type RehearsalFrameHandle,
@@ -16,14 +16,24 @@ vi.mock('../src/renderer/features/book/pagePictures.js', async (original) => ({
 
 const { MISSING_PICTURE_URL, pictureDataUrl } = pagePictures;
 const picture = 'data:image/png;base64,AA==';
-const first: BookPage = {
+const red = 'a'.repeat(64);
+const blue = 'b'.repeat(64);
+const replacement = 'c'.repeat(64);
+const first: RehearsalBook = {
   fieldId: 'pages',
   index: 0,
   step: true,
-  media: 'a'.repeat(64),
+  wrap: false,
+  identity: 'book',
+  pages: [{ media: red }, {}, { media: blue }],
 };
-const third: BookPage = { ...first, index: 2, media: 'b'.repeat(64) };
-const rewound: BookPage = { ...first, rewound: true };
+const third: RehearsalBook = { ...first, index: 2 };
+const rewound: RehearsalBook = { ...first, rewound: true };
+const draft: RehearsalBook = {
+  ...rewound,
+  identity: 'replacement-book',
+  pages: [{ id: 'replacement', media: replacement }, ...rewound.pages.slice(1)],
+};
 
 describe('PVW book rewinds', () => {
   let container: HTMLDivElement;
@@ -49,7 +59,7 @@ describe('PVW book rewinds', () => {
     vi.unstubAllGlobals();
   });
 
-  const render = (book: BookPage | undefined, headline = 'On preview') =>
+  const render = (book: RehearsalBook | undefined, headline = 'On preview') =>
     act(async () => {
       root.render(
         createElement(RehearsalFrame, {
@@ -92,7 +102,7 @@ describe('PVW book rewinds', () => {
     await boot();
     await render(third);
     expect(pageUpdates()).toEqual([expect.objectContaining({ index: 2 })]);
-    expect(offer).toHaveBeenLastCalledWith(third.media, picture);
+    expect(offer).toHaveBeenLastCalledWith(blue, picture);
 
     await render(rewound, 'Edited in preview');
     expect(pageUpdates()).toEqual([expect.objectContaining({ index: 2 })]);
@@ -100,8 +110,8 @@ describe('PVW book rewinds', () => {
     expect(offer).toHaveBeenCalledTimes(1);
     expect(play).not.toHaveBeenCalled();
 
-    handle.current?.play();
-    expect(offer).toHaveBeenLastCalledWith(first.media, picture);
+    await act(async () => handle.current?.play());
+    expect(offer).toHaveBeenLastCalledWith(red, picture);
     expect(JSON.parse(play.mock.calls[0]![0])).toMatchObject({
       __cg: { page: { field: 'pages', index: 0 } },
     });
@@ -118,30 +128,31 @@ describe('PVW book rewinds', () => {
     await boot();
     await render(third);
     await render(rewound);
-    const draft = { ...rewound, id: 'replacement', media: 'c'.repeat(64) };
     await render(draft);
     expect(pageUpdates()).toHaveLength(2);
-    expect(offer).toHaveBeenLastCalledWith(draft.media, picture);
+    expect(offer).toHaveBeenLastCalledWith(replacement, picture);
 
     await render(rewound);
     expect(pageUpdates()).toHaveLength(3);
-    expect(offer).toHaveBeenLastCalledWith(first.media, picture);
+    expect(offer).toHaveBeenLastCalledWith(red, picture);
   });
 
   it('does not push a rewind when a different first picture was already staged', async () => {
     await render(undefined);
     await boot();
     await render(third);
-    const draft = { ...rewound, id: 'replacement', media: 'c'.repeat(64) };
     await render(draft);
     expect(pageUpdates()).toEqual([expect.objectContaining({ index: 2 })]);
-    expect(offer).toHaveBeenLastCalledWith(third.media, picture);
+    expect(offer).toHaveBeenLastCalledWith(blue, picture);
 
     // A deliberate edit after Stop changes the currently staged destination.
-    const updatedDraft = { ...draft, id: 'replacement-again' };
+    const updatedDraft = {
+      ...draft,
+      pages: [{ id: 'replacement-again', media: replacement }, ...draft.pages.slice(1)],
+    };
     await render(updatedDraft);
     expect(pageUpdates()).toHaveLength(2);
-    expect(offer).toHaveBeenLastCalledWith(draft.media, picture);
+    expect(offer).toHaveBeenLastCalledWith(replacement, picture);
   });
 
   it('waits for a cold rewind picture on deliberate Play and uses the placeholder on failure', async () => {
@@ -153,12 +164,12 @@ describe('PVW book rewinds', () => {
     );
     await render(rewound);
     await boot();
-    handle.current?.play();
+    await act(async () => handle.current?.play());
     expect(play).not.toHaveBeenCalled();
 
     await act(async () => fail(new Error('Picture could not be read')));
     expect(pageUpdates()).toEqual([]);
-    expect(offer).toHaveBeenCalledWith(first.media, MISSING_PICTURE_URL);
+    expect(offer).toHaveBeenCalledWith(red, MISSING_PICTURE_URL);
     expect(play).toHaveBeenCalledTimes(1);
     expect(JSON.parse(play.mock.calls[0]![0])).toMatchObject({
       __cg: { page: { field: 'pages', index: 0 } },
@@ -174,7 +185,7 @@ describe('PVW book rewinds', () => {
     );
     await render(rewound);
     await boot();
-    handle.current?.play();
+    await act(async () => handle.current?.play());
     if (action === 'Stop') {
       handle.current?.stop();
       expect(stop).toHaveBeenCalledTimes(1);
@@ -184,5 +195,26 @@ describe('PVW book rewinds', () => {
     }
     await act(async () => resolvePicture(picture));
     expect(play).not.toHaveBeenCalled();
+  });
+
+  it('advances rapid Preview turns locally and reseeds Play from the row', async () => {
+    await render(first);
+    await boot();
+    await act(async () => {
+      handle.current?.next();
+      handle.current?.next();
+    });
+    expect(pageUpdates().at(-1)).toMatchObject({ index: 2 });
+    expect(offer).toHaveBeenLastCalledWith(blue, picture);
+
+    const programPage = { ...first, index: 1 };
+    await render(programPage);
+    expect(pageUpdates().at(-1)).toMatchObject({ index: 2 });
+
+    await act(async () => handle.current?.play());
+    expect(JSON.parse(play.mock.calls[0]![0])).toMatchObject({
+      __cg: { page: { field: 'pages', index: 1 } },
+    });
+    expect(pageUpdates().at(-1)).toMatchObject({ index: 1 });
   });
 });

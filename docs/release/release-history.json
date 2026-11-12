@@ -573,6 +573,10 @@
           "en": "In CG Control, finishing or stopping a picture Sequence resets its page counter to 1 for the next Play."
         },
         {
+          "fa": "Next در PVW فقط صفحهٔ پیش‌نمایش Sequence را جلو می‌برد. صفحهٔ on air و تصویر جاری Inspector سر جای خود می‌مانند.",
+          "en": "Preview Next advances the preview Sequence page only. The on-air page and the Inspector's current picture stay on the applied page."
+        },
+        {
           "fa": "پنجرهٔ Profiles پس از بارگذاری موفق بسته می‌شود و نتیجه در CG Control دیده می‌شود.",
           "en": "The Profiles dialog closes after a successful load and reports the result in CG Control."
         },

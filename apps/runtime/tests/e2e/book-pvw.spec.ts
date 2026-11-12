@@ -233,45 +233,116 @@ test('🔴 1.1 — PVW draws the loaded pictures, not their names; a turn moves 
   await expectPvw(page, BLUE);
 });
 
-/*
-  🔴 `RUN-NEXT-VERSION-03` 1.3 — the owner (2026-10-21 15:44): the preview bar's NEXT turned the
-  template's own pictures but not the ones loaded with Load folder. It called the page's local `next()`:
-  a step the bridge never heard of, onto a page whose picture the frame did not have. It now turns the
-  row's book exactly as the row's Next does — and PVW follows the bridge's page.
-*/
-test('🔴 1.3 — the preview bar’s NEXT turns the loaded pages, exactly as the row’s Next does', async ({
+test('1.3 — Preview Next turns only the rehearsal picture, including while the row is on air', async ({
   page,
 }) => {
   test.setTimeout(120_000);
   const handle = await boot();
+  const engine = mock;
+  if (engine === null) throw new Error('AMCP mock did not start');
   await openConsole(page, handle.url);
   await showMonitors(page);
   await importAndLoad(page, await buildBookVcg(TEMPLATE_ID));
-  await row(page).getByRole('button', { name: 'ON PVW', exact: true }).click();
+  const layer = row(page);
+  const book = inspector(page);
+  await layer.getByRole('button', { name: 'ON PVW', exact: true }).click();
   await expect(page.locator('iframe[data-rehearsal-frame]')).toHaveCount(1);
   const pvwBar = page.locator('[data-pvw-controls]');
-  await expect(pvwBar.getByRole('button', { name: 'PLAY', exact: true })).toBeEnabled();
-  await pvwBar.getByRole('button', { name: 'PLAY', exact: true }).click();
+  const previewNext = pvwBar.getByRole('button', { name: 'NEXT', exact: true });
+  const previewPlay = pvwBar.getByRole('button', { name: 'PLAY', exact: true });
+  await expect(previewPlay).toBeEnabled();
+  await previewPlay.click();
 
-  const chooser = await openBookPageChooser(page, inspector(page), 'Pictures…');
+  const chooser = await openBookPageChooser(page, book, 'Pictures…');
   await chooser.setFiles([
     { name: 'page1.png', mimeType: 'image/png', buffer: solidPng(64, 36, RED) },
     { name: 'page2.png', mimeType: 'image/png', buffer: solidPng(64, 36, GREEN) },
     { name: 'page3.png', mimeType: 'image/png', buffer: solidPng(64, 36, BLUE) },
   ]);
   await bookPagesDialog(page).getByRole('button', { name: 'Done', exact: true }).click();
-  await inspector(page).getByRole('button', { name: 'Apply staged edits' }).click();
-  await expect(inspector(page).getByTestId('book-counter')).toHaveText('1 / 3');
+  await book.getByRole('button', { name: 'Apply staged edits' }).click();
+  const inspectorCounter = book.getByTestId('book-counter');
+  const layerCounter = layer.locator('[data-page-counter]');
+  const inspectorPicture = book.locator('[data-book-thumb="current"] img');
+  const expectInspectorPicture = (colour: RGB) =>
+    expect
+      .poll(async () => near(await sampleRgb(page, inspectorPicture, 0.5, 0.5), colour))
+      .toBe(true);
+  await expect(inspectorCounter).toHaveText('1 / 3');
+  await expectInspectorPicture(RED);
   await expectPvw(page, RED);
 
-  // PVW's own NEXT: the row's book turns (the counter says so) and PVW shows that page.
-  await pvwBar.getByRole('button', { name: 'NEXT', exact: true }).click();
-  await expect(inspector(page).getByTestId('book-counter')).toHaveText('2 / 3');
+  const beforeTake = programmeCommands(engine);
+  await previewNext.click();
   await expectPvw(page, GREEN);
-  await pvwBar.getByRole('button', { name: 'NEXT', exact: true }).click();
-  await expect(inspector(page).getByTestId('book-counter')).toHaveText('3 / 3');
-  await expectPvw(page, BLUE);
-  await expect(row(page).locator('[data-page-counter]')).toHaveText('3 / 3');
+  await expect(inspectorCounter).toHaveText('1 / 3');
+  await expect(layerCounter).toHaveText('1 / 3');
+  expect(programmeCommands(engine)).toEqual(beforeTake);
+
+  await layer.getByRole('button', { name: 'PLAY', exact: true }).click();
+  await expect(layer).toHaveAttribute('aria-label', /ON AIR$/);
+  await expect(layer.getByRole('button', { name: 'OFF PVW', exact: true })).toBeVisible();
+  const add = engine.lastCgAdd(SLOT);
+  if (add === undefined) throw new Error('Programme page was not loaded');
+  const take = latestTake(engine);
+  expect(take.pageIndex).toBe(0);
+
+  // Drive the served programme page with the same payloads the Bridge sent to the mock engine.
+  const air = await page.context().newPage();
+  try {
+    await air.goto(add.template);
+    await air.waitForFunction(
+      () => typeof (window as unknown as { play?: unknown }).play === 'function',
+    );
+    await air.evaluate(
+      (payload) => (window as unknown as { play: (value: string) => void }).play(payload),
+      take.data,
+    );
+    const currentPicture = air.locator('img[data-cg-page-media]:visible').first();
+    const expectPgm = (colour: RGB) =>
+      expect
+        .poll(async () => near(await sampleRgb(air, currentPicture, 0.5, 0.5), colour))
+        .toBe(true);
+    await expectPgm(RED);
+    await expectPvw(page, GREEN);
+    await previewPlay.click();
+    await expectPvw(page, RED);
+
+    const beforeNext = programmeCommands(engine);
+    await previewNext.click();
+    await expectPvw(page, GREEN);
+    await previewNext.click();
+    await expectPvw(page, BLUE);
+    await expect(inspectorCounter).toHaveText('1 / 3');
+    await expect(layerCounter).toHaveText('1 / 3');
+    await expectInspectorPicture(RED);
+    expect(programmeCommands(engine)).toEqual(beforeNext);
+    await expectPgm(RED);
+
+    await book.getByRole('button', { name: /^Manage pages of/ }).click();
+    const pages = bookPagesDialog(page);
+    await expect(pages.locator('[data-page-tile="1"] [data-page-mark="air"]')).toBeVisible();
+    await expect(pages.locator('[data-page-tile="3"] [data-page-mark="pvw"]')).toBeVisible();
+    await pages.getByRole('button', { name: 'Cancel', exact: true }).click();
+
+    await layer.getByRole('button', { name: 'NEXT', exact: true }).click();
+    await expect.poll(() => programmeCommands(engine)).toHaveLength(beforeNext.length + 1);
+    expect(programmeCommands(engine).at(-1)).toMatch(/^CG 1-99 UPDATE 0 /);
+    const turn = engine.lastCgUpdate(SLOT)?.data;
+    if (turn === undefined || turn === null) throw new Error('Programme turn payload is missing');
+    expect(readCgControl(JSON.parse(turn))?.page).toMatchObject({ field: 'pages', turn: 'next' });
+    await air.evaluate(
+      (payload) => (window as unknown as { update: (value: string) => void }).update(payload),
+      turn,
+    );
+    await expectPgm(GREEN);
+    await expectPvw(page, BLUE);
+    await expect(inspectorCounter).toHaveText('2 / 3');
+    await expect(layerCounter).toHaveText('2 / 3');
+    await expectInspectorPicture(GREEN);
+  } finally {
+    await air.close();
+  }
 });
 
 /*

@@ -50,6 +50,11 @@ while the counter resets. The marker does not travel to the producer or persist 
 page turn, deliberate picture replacement or preview Play updates PVW from its book again. The STOP path does not
 issue a picture update or start playback.
 
+The preview toolbar keeps its page cursor in the mounted browser frame. It derives page references
+from the same effective list as the preview fields and uses the shared page target calculation.
+Preview Play reseeds from the row. A read-only browser snapshot supplies the PVW marker in Manage
+pages, and the On air marker still reads the applied row.
+
 ## 6. Picture pickers in Manage pages
 
 The Sequence Inspector opens Manage pages for both adding and replacing pictures. The dialog's two

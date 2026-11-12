@@ -39,6 +39,7 @@ import {
   type PictureFile,
 } from './loadPictures.js';
 import type { Raster } from './fitPicture.js';
+import { usePreviewBookPage } from './previewBookPage.js';
 
 /**
  * 🔴 `RUN-NEXT-VERSION-03` 1.5 — **`Manage pages…`: THE OPERATOR'S TOOL FOR A BOOK.** The owner: arranging,
@@ -60,6 +61,8 @@ import type { Raster } from './fitPicture.js';
  * (`pageAfterBookChange`, the bridge's own rule).
  */
 export interface ManagePagesModalProps {
+  itemId: string;
+  fieldId: string;
   /** The book's name. */
   title: string;
   /** The pages the dialog opens on: the row's book as staged (or applied, or the template's own). */
@@ -70,7 +73,7 @@ export interface ManagePagesModalProps {
   current: number;
   /** The row is on air: the current applied page is marked `On air`. */
   onAir: boolean;
-  /** The row is in PVW: the current page of the opened book is marked `PVW`. */
+  /** The row is in PVW. */
   inPvw: boolean;
   /** The row's channel frame — what an added picture is fitted to, and every page's frame shape. */
   raster: Raster;
@@ -84,6 +87,8 @@ export interface ManagePagesModalProps {
 }
 
 export function ManagePagesModal({
+  itemId,
+  fieldId,
   title,
   pages,
   appliedPages,
@@ -105,7 +110,10 @@ export function ManagePagesModal({
   const [dropping, setDropping] = useState(false);
 
   const onAirId = onAir ? appliedPages[current]?.id : undefined;
-  const pvwId = inPvw ? pages[Math.min(current, pages.length - 1)]?.id : undefined;
+  const previewPage = usePreviewBookPage(itemId, fieldId);
+  const pvwId = inPvw
+    ? (previewPage?.id ?? pages[Math.min(previewPage?.index ?? current, pages.length - 1)]?.id)
+    : undefined;
 
   /** Pictures picked (a folder, or files) or dropped: appended, or replacing the pictures (1.6). */
   async function add(

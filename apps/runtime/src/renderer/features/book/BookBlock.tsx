@@ -205,6 +205,8 @@ export function BookBlock({
       {refusal !== null && <Notice noticeRole="refusal" text={refusal} />}
       {managing && (
         <ManagePagesModal
+          itemId={itemId}
+          fieldId={fieldId}
           title={title}
           pages={pages}
           appliedPages={appliedPages}

@@ -1,4 +1,4 @@
-import { pageIdsOf, pageRefsOf, type TemplateInfo } from '@cg/shared-ipc';
+import { pageIdsOf, pageRefsOf, type PageRef, type TemplateInfo } from '@cg/shared-ipc';
 import type { FieldValues, StackItemState } from '@cg/shared-schema';
 
 /**
@@ -41,32 +41,28 @@ export function bookOf(template: TemplateInfo | null, item: StackItemState | nul
 }
 
 /**
- * 🔴 `RUN-NEXT-VERSION-03` 1.1 — **THE PAGE A TAKE WOULD SHOW, for PVW.** The bridge's own reading
- * (`#pageControl`), mirrored for the console's rehearsal: the template's FIRST page list, the page
- * the bridge holds the row on (`item.pages`), and the picture that page names when it is an operator
- * picture. Read from the values PVW is rehearsing (the staged book over the applied one), so a book
- * loaded and not yet sent is what PVW shows — at the row's page, clamped to it. `null` for a template
- * with no page list, or a book with no pages: PVW then sends no page, as a take sends none.
+ * The rehearsal book uses the staged list over the applied one. Its initial page comes
+ * from the row, while Preview's Next advances within this list in the browser.
  */
-export interface BookPage {
+export interface RehearsalBook {
   fieldId: string;
-  /** 0-based. */
+  /** The row's initial page, 0-based and clamped to the effective list. */
   index: number;
   /** `false` — the author's sequence runs by itself (`D-163`): the console does not turn it. */
   step: boolean;
-  /** The operator picture this page names (its SHA-256); `undefined` for an authored page. */
-  media: string | undefined;
-  id?: string;
-  assetId?: string;
+  wrap: boolean;
+  pages: readonly (PageRef & { id?: string })[];
+  /** Ordered page identities and picture references, independent of unrelated field edits. */
+  identity: string;
   /** The index was reset at programme exit and is only for the next Play. */
   rewound?: true;
 }
 
-export function bookPageOf(
+export function rehearsalBookOf(
   template: TemplateInfo | null,
   item: StackItemState | null,
   fields: FieldValues,
-): BookPage | null {
+): RehearsalBook | null {
   const entry = template?.pageLists?.[0];
   if (template === null || item === null || entry === undefined) return null;
   const value: unknown = fields[entry.fieldId];
@@ -74,16 +70,24 @@ export function bookPageOf(
   const raw = Array.isArray(value) ? value : declared?.type === 'list' ? declared.default : [];
   const refs = pageRefsOf(raw);
   if (refs.length === 0) return null;
+  const ids = pageIdsOf(raw);
+  const pages = refs.map((picture, index) => {
+    const id = ids[index];
+    return { ...picture, ...(id !== undefined && { id }) };
+  });
   const index = Math.min(item.pages?.[entry.fieldId] ?? 0, refs.length - 1);
-  const id = pageIdsOf([raw[index]])[0];
-  const picture = refs[index];
   return {
     fieldId: entry.fieldId,
     index,
     step: entry.step !== false,
-    media: picture?.media,
-    ...(id !== undefined && { id }),
-    ...(picture?.assetId !== undefined && { assetId: picture.assetId }),
+    wrap: entry.wrap,
+    pages,
+    identity: JSON.stringify([
+      entry.fieldId,
+      entry.step,
+      entry.wrap,
+      pages.map(({ id, media, assetId }) => [id, media, assetId]),
+    ]),
     ...(item.pageRewinds?.includes(entry.fieldId) === true && { rewound: true as const }),
   };
 }

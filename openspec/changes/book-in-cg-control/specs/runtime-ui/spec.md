@@ -73,9 +73,10 @@ be in the row's menu, so a book row keeps the same buttons, in the same columns,
 
 ### Requirement: PVW SHALL draw a book's loaded pictures, never their names
 
-PVW SHALL tell each rehearsing frame the page a take of its row would show — the template's first page
-list, at the page the bridge holds the row on, clamped to the book PVW is rehearsing (staged over
-applied) — in the bridge's own `__cg.page` form, on PLAY and whenever the page or its picture changes.
+PVW SHALL start each rehearsing frame at the page a take of its row would show. It SHALL use the
+template's first page list, staged over applied, with the row's index clamped to that list. PVW SHALL
+send the frame the selected preview index in `__cg.page` form on PLAY and whenever the page or
+its picture changes.
 The PGM STOP rewind SHALL leave the current picture on a playing PVW unchanged.
 For an operator picture it SHALL first hand the page that picture through the page's own runtime
 (`CG.providePagePicture`): the bytes this console sent, else the bridge's copy read back once by its
@@ -89,9 +90,9 @@ be filled when it arrives.
 - **THEN** PVW draws the first picture's pixels, its `<img>` has an empty `alt`, and no file name is
   painted
 
-#### Scenario: PVW follows a turn
+#### Scenario: PVW follows the row before a local preview turn
 
-- **WHEN** the book is applied and turned with Next, then Go to page 3
+- **WHEN** the book is applied and turned with Inspector Next, then Go to page 3
 - **THEN** PVW draws page 2's picture, then page 3's
 
 #### Scenario: After a reload
@@ -222,14 +223,20 @@ picture past their end SHALL move to the end, in their order.
 - **WHEN** a book of picture 1, a text page, pictures 2 and 3 is loaded with two new pictures and applied
 - **THEN** its pages are the first new picture, the text page, the second new picture, and the counter reads `1 / 3`
 
-### Requirement: PVW's NEXT SHALL turn a book row exactly as the row's Next does
+### Requirement: PVW's NEXT SHALL turn pages in the local preview
 
-On a rehearsing row whose template has a book the operator turns, the preview bar's NEXT SHALL send
-the row's own page turn (`stack.page`, `next`) — the bridge's page number moves, the row and the
-Inspector say so — and PVW SHALL show the page the bridge then holds. On any other row, NEXT SHALL stay
-the template's own step (`CG NEXT`'s entry point).
+For a numbered book, the preview bar's NEXT SHALL advance the browser's own page within the
+effective page list, respecting its wrap policy. It SHALL send the picture and page control to the
+preview frame only. The applied index, the Layers and Inspector counters and the programme page
+SHALL stay at their applied values. The local page SHALL survive a programme turn. Preview PLAY
+and replacing the effective list SHALL return the preview to the row's current page. Other
+templates' NEXT SHALL keep using the local page's step entry point.
 
-#### Scenario: PVW's NEXT on a loaded book
+#### Scenario: PVW's NEXT while the book is also on air
 
-- **WHEN** a three-page book is loaded and applied, played on PVW, and PVW's NEXT is pressed twice
-- **THEN** the Inspector and the row read `2 / 3`, then `3 / 3`, and PVW shows page 2, then page 3
+- **GIVEN** a three-picture book is applied and playing in PVW and PGM at page 1
+- **WHEN** PVW's NEXT is pressed twice
+- **THEN** PVW shows pages 2 and 3, the Inspector and row still read `1 / 3`, and programme stays on page 1
+- **AND** Manage pages marks page 1 On air and page 3 PVW
+- **WHEN** the operator presses the Layers row's NEXT
+- **THEN** the programme and its counters advance to page 2, and PVW stays on page 3

@@ -12,7 +12,7 @@
 - [x] 1.1.3 The page: `alt=""` on a page picture; `CG.providePagePicture` (host pictures, `data:` only);
       a turn fills every page picture of its hash that has no source.
 - [x] 1.1.4 CG Control: `pagePictures` (the bytes sent, else `pages.get`, held as Blobs; `data:` URLs for
-      the frame), `bookPageOf`, PVW's page push and PLAY payload.
+      the frame), `rehearsalBookOf`, PVW's page push and PLAY payload.
 - [x] 1.1.5 Tests: e2e `book-pvw.spec.ts` (a real bridge; real pictures; PVW sampled) — RED on `HEAD`
       (PVW never red), green after; `sequence-pages.test.ts` (no alt; late fill; host picture; a `data:`
       address from the wire dropped); `book-pages.integration.test.ts` (read back; no-page; nothing on the
@@ -142,15 +142,15 @@
       the predicate); `sequence-pages.test.ts` in the page runtime (`showSequenceItem` — red without it).
 - [x] 1.7.7 Linux `e2e` discharged on the pushed commit — run URL: https://github.com/yasermostafaee/cg/actions/runs/39698919913 — `7eec321b` (carries every commit of this run), completed `success`, its E2E job RAN (Designer 343 passed, CG Control 367 passed)
 
-## 1.3 — PVW's NEXT turns the loaded pages (FULL lane: a verb that reaches the bridge)
+## 1.3 — PVW's NEXT turns the loaded pages independently
 
-- [x] 1.3.1 Cause, proved: PVW's NEXT called the page's local `next()` (`RehearsalFrame.tsx`, the frame
-      handle's `next`) — a step the bridge never heard of (the counter stayed `1 / 3`), onto a page whose
-      picture the frame did not have, so the driver kept the page on screen.
-- [x] 1.3.2 A book row's NEXT on PVW is `stack.page` (`next`), as the row's NEXT (`layerRowActions`);
-      PVW follows the bridge's page. Any other row: unchanged.
-- [x] 1.3.3 Test: e2e `book-pvw.spec.ts` › 1.3 — RED on the 1.1 commit (`1 / 3` after PVW's NEXT), green.
-- [x] 1.3.4 Linux `e2e` discharged on the pushed commit — run URL: https://github.com/yasermostafaee/cg/actions/runs/39698919913 — `7eec321b` (carries every commit of this run), completed `success`, its E2E job RAN (Designer 343 passed, CG Control 367 passed)
+- [x] Reproduce the shared page turn in Windows Chromium. Preview Next turned the book and changed
+      the Inspector counter before the fix.
+- [x] Turn through the effective picture list in the local frame and retain the row's programme
+      page and counter. Provide each picture through the existing preview picture path.
+- [x] Windows Chromium verified the off-air and simultaneous PVW/PGM flows, separate page markers
+      and normal layer Next with real images. The related book suite passed 12 cases.
+- [ ] Record the carrying Linux Playwright result.
 
 ## Delta A — the book block: no empty boxes, thumbnails as on air, one Load button (`DELTA-RUN-NEXT-VERSION-03-A`)
 

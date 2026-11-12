@@ -30,7 +30,7 @@ import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
 import { boundChannelOf } from '../channels/itemChannel.js';
 import { useLiveLayers } from '../../hooks/useLiveLayers.js';
 import { plateAudioState } from '../layers/plateAudio.js';
-import { bookPageOf } from '../layers/bookOf.js';
+import { rehearsalBookOf } from '../layers/bookOf.js';
 import {
   buildApplyPayload,
   framePlacementsWithDraft,
@@ -277,8 +277,7 @@ export function PreviewPanel({
             previewPlateCrops: item.previewPlateCrops,
             previewCropOnAir: isOnAirStatus(item),
             previewCropPending: item.pending || item.status === 'exiting',
-            // `RUN-NEXT-VERSION-03` 1.1 / 1.3 — the page a take of these values would show.
-            book: bookPageOf(info, item, fields) ?? undefined,
+            book: rehearsalBookOf(info, item, fields) ?? undefined,
             liveSources: live,
             // `B-151` — the bridge's published look drives BOTH halves of the preview.
             activeLookId: item.activeLookId,
