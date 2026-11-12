@@ -2842,6 +2842,13 @@ names a bound source one way everywhere (`SourceLabel`), and Station setup lists
 inputs read-only beside the plate band. The contract and the Playout's answers are in
 [`docs/integration/playout/`](../integration/playout/README.md).
 
+**Media availability follow-up** — `openspec/changes/reconcile-playout-media-availability/`.
+A D11 search or Recent page that lists a bound clip refreshes its available state and playback
+path. By-ID checks request enough entries for the batch and use complete replies to establish
+absence. A late read cannot overwrite a newer observation of the same bound clip. In the Media
+picker, a matching current search result supplies the status for that exact ID even when the
+Bridge still exposes an older saved entry.
+
 **Why.** The Playout owns the cables and the library; a second hand-kept list drifted from it and
 could name an input the Playout had already given to air (their answer §1.1: the exclusive
 inputs are not listed at all, because a second producer on them blacks the Playout's own air).
@@ -2855,6 +2862,8 @@ inputs are not listed at all, because a second producer on them blacks the Playo
   and marked unavailable, every binding to it is kept, and a take that would seat it is refused
   before any AMCP with `source-unavailable` and one sentence naming the row, the plate and the
   source. Nothing is ever deleted because of a Playout read.
+- WHEN D11 search or Recent lists a bound clip again THEN it is available, its current clip path
+  is persisted, and its binding timestamp and station playback settings are kept.
 - WHEN a media `PLAY` is answered 404 THEN the bridge reads that item once by `ids=` (1.5 s bound)
   and retries the `PLAY` once with a changed `clip`; otherwise the take fails all-or-nothing.
 - WHEN a plate plays a Playout NDI input THEN the wire is `PLAY <ch>-<L> [NDI] "<source>"` (the

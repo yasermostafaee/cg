@@ -3,6 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  BoundMediaStateSchema,
   MAX_MEDIA_THUMBNAIL_BYTES,
   MEDIA_THUMBNAIL_DATA_URL_PREFIX,
   PlayoutInputsStateSchema,
@@ -66,11 +67,16 @@ function httpProvider(playout: FakePlayout): HttpPlayoutSources {
 
 function reader(
   playout: FakePlayout,
-  options: { inputsPath?: string; boundMediaPath?: string; clock?: { now: number } } = {},
+  options: {
+    inputsPath?: string;
+    boundMediaPath?: string;
+    clock?: { now: number };
+    provider?: HttpPlayoutSources;
+  } = {},
 ): PlayoutSources {
   const clock = options.clock;
   const r = new PlayoutSources({
-    provider: httpProvider(playout),
+    provider: options.provider ?? httpProvider(playout),
     signedIn: () => true,
     hostIsOurs: () => true,
     channelFor: (_h, c) => c,
@@ -301,6 +307,94 @@ describe('D11 over HTTP', () => {
       FAKE_MEDIA_IDS.titraj20,
       FAKE_MEDIA_IDS.studio1,
     ]);
+  });
+
+  it('a Recent result restores a missing bound clip and keeps its playback settings', async () => {
+    const playout = await fakePlayout();
+    const boundMediaPath = path.join(tmpDir(), 'media.json');
+    const r = reader(playout, { boundMediaPath });
+    const clip = playout.mediaItem(FAKE_MEDIA_IDS.studio1);
+    if (clip === undefined) throw new Error('The test clip is missing');
+    const sourceId = mediaSourceId(clip.id);
+    const source = () => r.catalog().sources.find(({ id }) => id === sourceId);
+    const persisted = () =>
+      BoundMediaStateSchema.parse(JSON.parse(fs.readFileSync(boundMediaPath, 'utf8'))).items[0];
+
+    expect(await r.ensureBound(sourceId)).toEqual({ ok: true });
+    const playback = { loop: true, whenHidden: 'pause' } as const;
+    expect(r.setMediaPlayback(sourceId, playback)).toEqual({ name: clip.name });
+    const lastBoundAt = persisted()?.lastBoundAt;
+    expect(lastBoundAt).toBeDefined();
+    expect(playout.removeMedia(clip.id)).toBe(true);
+    await r.refresh(0);
+    expect(source()?.status).toBe('unavailable');
+    expect(persisted()?.unavailable).toBe(true);
+
+    const restored = { ...clip, clip: 'C:/restored/studio.mov' };
+    playout.setMedia([restored]);
+    expect(await r.searchMedia({ q: '', sort: 'recent' })).toMatchObject({
+      ok: true,
+      items: [{ id: sourceId, name: clip.name }],
+    });
+    expect(source()?.status).toBeUndefined();
+    expect(source()?.producer).toEqual({ kind: 'media', file: restored.clip });
+    expect(persisted()).toMatchObject({ ...playback, lastBoundAt, clip: restored.clip });
+    expect(persisted()?.unavailable).toBeUndefined();
+    expect(await r.ensureBound(sourceId)).toEqual({ ok: true });
+  });
+
+  it('an incomplete by-ID page updates hits and a late omission cannot override a newer result', async () => {
+    const playout = await fakePlayout();
+    const first = playout.mediaItem(FAKE_MEDIA_IDS.studio1);
+    const second = playout.mediaItem(FAKE_MEDIA_IDS.khabar1405);
+    if (first === undefined || second === undefined) throw new Error('The test clips are missing');
+    const firstId = mediaSourceId(first.id);
+    const secondId = mediaSourceId(second.id);
+    let byIds: ((url: URL) => Promise<Response>) | undefined;
+    const provider = new HttpPlayoutSources(
+      { inputsUrl: playout.inputsUrl, mediaUrl: playout.mediaUrl },
+      () => 'test-bearer',
+      async (input, init) => {
+        const url = new URL(String(input));
+        return url.searchParams.has('ids') && byIds !== undefined ? byIds(url) : fetch(input, init);
+      },
+    );
+    const r = reader(playout, { provider });
+    const source = (sourceId: string) => r.catalog().sources.find(({ id }) => id === sourceId);
+    expect(await r.ensureBound(firstId)).toEqual({ ok: true });
+    expect(await r.ensureBound(secondId)).toEqual({ ok: true });
+
+    const moved = { ...first, clip: 'C:/cache/changed-studio.mov' };
+    byIds = (url) => {
+      expect(url.searchParams.get('ids')).toBe(`${first.id},${second.id}`);
+      expect(url.searchParams.get('limit')).toBe('2');
+      return Promise.resolve(Response.json({ items: [moved], total: 2, nextCursor: 'page-2' }));
+    };
+    await r.refresh(0);
+    expect(source(firstId)?.producer).toEqual({ kind: 'media', file: moved.clip });
+    expect(source(secondId)?.status).toBeUndefined();
+
+    let release = (): void => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let started = false;
+    byIds = async () => {
+      started = true;
+      await gate;
+      return Response.json({ items: [], total: 0, nextCursor: null });
+    };
+    const delayed = r.refresh(0);
+    try {
+      await waitFor(() => started);
+      expect(await r.searchMedia({ q: 'Studio', sort: 'recent' })).toMatchObject({ ok: true });
+      expect(source(firstId)?.producer).toEqual({ kind: 'media', file: first.clip });
+    } finally {
+      release();
+      await delayed;
+    }
+    expect(source(firstId)?.status).toBeUndefined();
+    expect(source(secondId)?.status).toBe('unavailable');
   });
 });
 

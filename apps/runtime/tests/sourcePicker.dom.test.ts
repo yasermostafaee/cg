@@ -141,10 +141,10 @@ let host: HTMLElement | null = null;
 const searches: { q: string; cursor?: string }[] = [];
 let searchDown = false;
 
-function installBridge(): void {
+function installBridge(catalog = CATALOG, library = LIBRARY): void {
   const bridge = {
     sources: {
-      config: () => Promise.resolve(CATALOG),
+      config: () => Promise.resolve(catalog),
       assignments: () => Promise.resolve({ assignments: [] }),
       onConfigChanged: () => () => undefined,
       onAssignmentsChanged: () => () => undefined,
@@ -160,7 +160,7 @@ function installBridge(): void {
             message: 'The Playout did not answer.',
           });
         }
-        const matched = LIBRARY.filter((m) => m.name.toLowerCase().includes(req.q.toLowerCase()));
+        const matched = library.filter((m) => m.name.toLowerCase().includes(req.q.toLowerCase()));
         const start = req.cursor === undefined ? 0 : Number(req.cursor);
         const limit = req.limit ?? 50;
         return Promise.resolve({
@@ -572,6 +572,31 @@ describe('Media — searched on the Playout’s side, a page at a time', () => {
     expect(headings.slice(0, 2)).toEqual(['Recent', 'All media']);
     expect(panel.querySelector('[data-picker-media="md-m-recent"]')?.textContent).toContain(
       'تیتراژ خبر ۲۰',
+    );
+  });
+
+  it('shows a recently bound clip that the current Media search found as available', async () => {
+    const recent = CATALOG.sources.find((source) => source.id === 'md-m-recent')!;
+    const staleCatalog: SourceCatalog = {
+      ...CATALOG,
+      sources: [
+        ...CATALOG.sources.filter((source) => source.id !== recent.id),
+        { ...recent, status: 'unavailable' },
+        { ...recent, id: 'md-m-missing', name: 'Missing clip', status: 'unavailable' },
+      ],
+    };
+    __resetSourcesForTest();
+    installBridge(staleCatalog, [{ id: recent.id, name: recent.name }, ...LIBRARY]);
+    await settle();
+    const panel = await openPicker(await render({}));
+    await pickerTab(panel, 'Media');
+    await settle();
+
+    const rows = panel.querySelectorAll('[data-picker-media="md-m-recent"]');
+    expect(rows.length).toBe(2);
+    for (const row of rows) expect(row.textContent).not.toContain('Unavailable');
+    expect(panel.querySelector('[data-picker-media="md-m-missing"]')?.textContent).toContain(
+      'Unavailable',
     );
   });
 

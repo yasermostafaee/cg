@@ -186,7 +186,7 @@ export class HttpPlayoutSources implements PlayoutSourcesProvider {
     if (bearer === null) return { kind: 'failed' };
     try {
       const res = await this.#fetch(
-        `${this.#mediaUrl}?ids=${ids.map(encodeURIComponent).join(',')}`,
+        `${this.#mediaUrl}?ids=${ids.map(encodeURIComponent).join(',')}&limit=${String(ids.length)}`,
         {
           method: 'GET',
           headers: { Authorization: `Bearer ${bearer}` },
@@ -336,6 +336,8 @@ export class PlayoutSources {
   #inputs: PlayoutInputsState;
   #etag: string | null = null;
   readonly #media = new Map<string, BoundMediaItem>();
+  readonly #mediaObservationById = new Map<string, number>();
+  #mediaObservation = 0;
   readonly #recent = new Map<string, PlayoutMediaItem>();
   #layerRange: LiveSourceLayerRange | undefined;
   #catalog: SourceCatalog;
@@ -508,9 +510,8 @@ export class PlayoutSources {
   }
 
   /**
-   * Re-read bound items by `ids=`, at most 100 per call. A SUCCESSFUL read updates each item it lists
-   * (its `clip` above all, which moves between cache and original) and marks the ones it leaves out
-   * `unavailable`; a failed one changes nothing. Answers whether every call succeeded.
+   * Re-read bound items by `ids=`, at most 100 per call. Positive matches update their bound
+   * entries. Only a complete page can establish that a requested item is missing.
    */
   async #readBound(ids: readonly string[], timeoutMs: number): Promise<boolean> {
     const provider = this.#provider;
@@ -520,25 +521,37 @@ export class PlayoutSources {
     for (let at = 0; at < ids.length; at += IDS_PER_CALL) {
       const batch = ids.slice(at, at + IDS_PER_CALL);
       this.#mediaReads += 1;
+      const observation = ++this.#mediaObservation;
       const result = await provider.readMediaByIds(batch, timeoutMs);
-      const page = result.kind === 'ok' ? parsePlayoutMediaPage(result.body) : null;
+      if (result.kind === 'failed') {
+        allOk = false;
+        continue;
+      }
+      const page = parsePlayoutMediaPage(result.body);
       if (page === null) {
         allOk = false;
         continue;
       }
       const listed = new Map(page.items.map((i) => [i.id, i] as const));
+      // Read the envelope directly here. The tolerant search parser can drop an unreadable item
+      // and substitute missing pagination fields, which are unsuitable as evidence of absence.
+      const envelope = result.body as {
+        items: unknown[];
+        total?: unknown;
+        nextCursor?: unknown;
+      };
+      const complete =
+        (envelope.nextCursor === null || envelope.nextCursor === undefined) &&
+        (envelope.total === undefined || envelope.total === envelope.items.length) &&
+        envelope.items.length === listed.size &&
+        page.items.every((item) => batch.includes(item.id));
       for (const id of batch) {
-        const held = this.#media.get(id);
-        if (held === undefined) continue;
         const fresh = listed.get(id);
-        const next =
-          fresh === undefined
-            ? { ...held, unavailable: true as const }
-            : toBoundMedia(fresh, held.lastBoundAt, boundMediaPlayback(held));
-        if (JSON.stringify(next) !== JSON.stringify(held)) {
-          this.#media.set(id, next);
-          changed = true;
+        if (fresh === undefined && !complete) {
+          allOk = false;
+          continue;
         }
+        changed = this.#observeBoundMedia(id, fresh, observation) || changed;
       }
     }
     if (changed) {
@@ -548,12 +561,30 @@ export class PlayoutSources {
     return allOk;
   }
 
+  #observeBoundMedia(
+    id: string,
+    fresh: PlayoutMediaItem | undefined,
+    observation: number,
+  ): boolean {
+    const held = this.#media.get(id);
+    if (held === undefined || observation < (this.#mediaObservationById.get(id) ?? 0)) return false;
+    this.#mediaObservationById.set(id, observation);
+    const next =
+      fresh === undefined
+        ? { ...held, unavailable: true as const }
+        : toBoundMedia(fresh, held.lastBoundAt, boundMediaPlayback(held));
+    if (JSON.stringify(next) === JSON.stringify(held)) return false;
+    this.#media.set(id, next);
+    return true;
+  }
+
   /** Search D11 on the Playout's side; the answer is kept for binding, the `clip` never sent on. */
   async searchMedia(query: MediaQuery): Promise<MediaSearchAnswer> {
     const provider = this.#provider;
     if (provider === null) {
       return { ok: false, reason: 'playout-unreachable', message: 'The Playout did not answer.' };
     }
+    const observation = ++this.#mediaObservation;
     const result = await provider.searchMedia(query);
     if (result.kind === 'failed') {
       return {
@@ -569,7 +600,15 @@ export class PlayoutSources {
     if (page === null) {
       return { ok: false, reason: 'playout-unreachable', message: 'The Playout did not answer.' };
     }
-    for (const item of page.items) this.#remember(item);
+    let changed = false;
+    for (const item of page.items) {
+      this.#remember(item);
+      changed = this.#observeBoundMedia(item.id, item, observation) || changed;
+    }
+    if (changed) {
+      this.#saveMedia();
+      this.#rebuild();
+    }
     return {
       ok: true,
       items: page.items.map((i) => ({

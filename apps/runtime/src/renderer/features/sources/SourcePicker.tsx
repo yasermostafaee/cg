@@ -740,7 +740,7 @@ function MediaTab({
 
   const rows = useMemo<VirtualRow[]>(() => {
     const out: VirtualRow[] = [];
-    const inResults = new Set(media.items.map((m) => m.id));
+    const inResults = new Map(media.items.map((item) => [item.id, item]));
     // `Recent`: the media bound most recently on this station, for an empty query only.
     const bound = catalog.sources.filter((s) => s.origin === 'media');
     const recent =
@@ -749,7 +749,7 @@ function MediaTab({
             .sort((a, b) => (b.media?.lastBoundAt ?? '').localeCompare(a.media?.lastBoundAt ?? ''))
             .slice(0, RECENT_MAX)
         : [];
-    const shownIds = new Set([...inResults, ...recent.map((r) => r.id)]);
+    const shownIds = new Set([...inResults.keys(), ...recent.map((r) => r.id)]);
     // The current binding, pinned at the top when it is not otherwise in view.
     if (isMediaId(value) && !shownIds.has(value)) {
       const current = labelledSource(value);
@@ -780,7 +780,7 @@ function MediaTab({
         out.push(
           mediaRow(
             `recent:${r.id}`,
-            {
+            inResults.get(r.id) ?? {
               id: r.id,
               name: r.name,
               durationMs: r.media?.durationMs,
