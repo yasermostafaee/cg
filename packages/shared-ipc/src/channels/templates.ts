@@ -16,12 +16,16 @@ import {
   PositionSchema,
   ResolutionSchema,
   framePlacementFits,
+  liveRevealMaskFromRects,
+  liveRevealRects,
+  maskRectsWithPlacements,
 } from '@cg/shared-schema';
 import type {
   LiveCropFocus,
   LiveFitMode,
   LiveFramePlacement,
   LiveFrameTarget,
+  LiveMaskPlacement,
   LivePlateMask,
   LiveRevealMask,
   LiveSourceRect,
@@ -104,6 +108,7 @@ export const TemplateLookSchema = z.object({
   platePaintOrder: z.array(IdSchema).optional(),
   /** routeKey → operator placement target for the exact plate in this Look. */
   operatorFrames: z.record(z.string(), LiveFrameTargetSchema).optional(),
+  operatorMaskEdits: z.array(IdSchema).optional(),
   /**
    * ⭐ `B-178` — routeKey → the AUTHOR's fit mode while this look is active, from the plate
    * ELEMENT that serves that routeKey here.
@@ -247,6 +252,20 @@ export function lookOperatorFrames(
   return frames;
 }
 
+/** Plate identifiers whose authored mask windows can be edited in this look. */
+export function lookOperatorMasks(
+  live: TemplateLiveSources,
+  activeLookId: string | undefined,
+): ReadonlySet<string> {
+  const look = activeLookOf(live, activeLookId);
+  if (look !== undefined) return new Set(look.operatorMaskEdits);
+  return new Set(
+    live.sources
+      .filter((source) => source.operatorMaskEdit === true)
+      .map(({ sourceId }) => sourceId),
+  );
+}
+
 /** Apply exact Look-instance edits to the authored plate rects used by Preview and output. */
 export function framePlacementRects(
   carrier: TemplateLiveSources,
@@ -329,13 +348,30 @@ export function lookPlateFocuses(
 export function lookPlateReveals(
   live: TemplateLiveSources,
   activeLookId: string | undefined,
+  placements: readonly LiveMaskPlacement[] = [],
 ): Record<string, LiveRevealMask> {
   const look = activeLookOf(live, activeLookId);
-  if (look !== undefined) return { ...look.reveals };
-  const stated = live.sources.filter(
-    (s): s is typeof s & { revealMask: LiveRevealMask } => s.revealMask !== undefined,
-  );
-  return Object.fromEntries(stated.map((s) => [s.sourceId, s.revealMask] as const));
+  const reveals =
+    look !== undefined
+      ? { ...look.reveals }
+      : Object.fromEntries(
+          live.sources.flatMap(({ sourceId, revealMask }) =>
+            revealMask === undefined ? [] : [[sourceId, revealMask] as const],
+          ),
+        );
+  if (placements.length === 0) return reveals;
+  for (const plateId of lookOperatorMasks(live, activeLookId)) {
+    const reveal = reveals[plateId];
+    if (reveal === undefined) continue;
+    const rects = maskRectsWithPlacements(liveRevealRects(reveal), placements, {
+      lookId: look?.id,
+      plateId,
+      kind: 'reveal',
+    });
+    const placed = liveRevealMaskFromRects(reveal.targetSourceId, rects);
+    if (placed !== undefined) reveals[plateId] = placed;
+  }
+  return reveals;
 }
 
 /** Lower to upper; absence keeps legacy seat ordering. */
@@ -359,13 +395,31 @@ export function usesLivePlatePaintOrder(live: TemplateLiveSources | undefined): 
 export function lookPlateMasks(
   live: TemplateLiveSources,
   activeLookId: string | undefined,
+  placements: readonly LiveMaskPlacement[] = [],
 ): Record<string, LivePlateMask> {
   const look = activeLookOf(live, activeLookId);
-  if (look !== undefined) return { ...look.masks };
-  const stated = live.sources.filter(
-    (s): s is typeof s & { liveMask: LivePlateMask } => s.liveMask !== undefined,
-  );
-  return Object.fromEntries(stated.map((s) => [s.sourceId, s.liveMask] as const));
+  const masks =
+    look !== undefined
+      ? { ...look.masks }
+      : Object.fromEntries(
+          live.sources.flatMap(({ sourceId, liveMask }) =>
+            liveMask === undefined ? [] : [[sourceId, liveMask] as const],
+          ),
+        );
+  if (placements.length === 0) return masks;
+  for (const plateId of lookOperatorMasks(live, activeLookId)) {
+    const mask = masks[plateId];
+    if (mask === undefined) continue;
+    masks[plateId] = {
+      ...mask,
+      rects: maskRectsWithPlacements(mask.rects, placements, {
+        lookId: look?.id,
+        plateId,
+        kind: 'mask',
+      }),
+    };
+  }
+  return masks;
 }
 
 export const TemplateInfoSchema = z.object({

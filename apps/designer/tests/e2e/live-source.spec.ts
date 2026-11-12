@@ -431,8 +431,14 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await expect(guides.first()).toHaveAttribute('data-cg-live-plate-mask', 'outside');
     await expect.poll(() => fallback.locator('clipPath rect').count()).toBeGreaterThan(2);
     await expect(errorPill(app)).toHaveCount(0);
+    const permission = app.inspector.getByRole('checkbox', {
+      name: 'Allow mask editing in CG Control',
+    });
+    await expect(permission).not.toBeChecked();
+    await permission.check();
     const { html } = await app.exportHtml();
     expect(html).toContain('"liveMask":{"mode":"outside","rects":');
+    expect(html).toContain('"allowOperatorMaskEdit":true');
     await maskControls.getByRole('button', { name: 'Remove plate mask' }).click();
     await expect(guides).toHaveCount(1);
     await maskControls.getByRole('button', { name: 'Remove plate mask' }).click();

@@ -6,14 +6,14 @@ import { Icon } from '../../ui/Icon.js';
 import { stageFramePlacement } from '../inspector/draftStore.js';
 import type { PlatePlacement } from './livePlateGeometry.js';
 
-const corners = [
+export const placementCorners = [
   { key: 'nw', name: 'top left', x: -1, y: -1 },
   { key: 'ne', name: 'top right', x: 1, y: -1 },
   { key: 'sw', name: 'bottom left', x: -1, y: 1 },
   { key: 'se', name: 'bottom right', x: 1, y: 1 },
 ] as const;
 
-type Corner = (typeof corners)[number];
+type Corner = (typeof placementCorners)[number];
 type FrameEdit = NonNullable<PlatePlacement['frameEdit']>;
 type Rect = LiveFramePlacement['rect'];
 
@@ -148,7 +148,7 @@ export function PreviewFramePlacement({
         </Button>
       )}
       {canResize &&
-        corners.map((corner) => (
+        placementCorners.map((corner) => (
           <Button
             key={corner.key}
             variant="neutral"

@@ -7,3 +7,5 @@ active channel. The console remembers the last folder it could read.
 The main Templates catalogue shows previews for imported packages in its visible rows. Selecting
 a template shows a larger preview in Details. The Bridge can read a PNG saved for the listed
 version or recover a preview from a retained package.
+Older folder-backed picture Sequences with bounded authored JPEG pages recover a picture even when
+their VCG contains no embedded PNG.

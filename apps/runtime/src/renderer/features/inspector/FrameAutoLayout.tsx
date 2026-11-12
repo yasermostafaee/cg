@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   framePlacementRects,
   lookOperatorFrames,
@@ -16,6 +16,7 @@ import {
   type StackItemState,
   type TwoPlateLayout,
 } from '@cg/shared-schema';
+import { parseLocalizedNumber } from '@cg/text-shaping';
 import { Button } from '../../ui/Button.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import {
@@ -30,12 +31,24 @@ interface Frame {
   authored: LiveSourceRect;
 }
 
+interface GapControl {
+  text: string;
+  amount: number;
+}
+
+type GapAxis = 'horizontalGap' | 'verticalGap';
+
 interface LayoutControls {
-  horizontalGap: string;
-  verticalGap: string;
+  horizontalGap: GapControl;
+  verticalGap: GapControl;
   twoPlateLayout: TwoPlateLayout;
   bias: LiveSourceLayoutBias;
   reverse: boolean;
+}
+
+function readGap(text: string): number | null {
+  // A trailing decimal mark is still being typed, even if it has an integer prefix.
+  return text.trimEnd().endsWith('.') ? null : parseLocalizedNumber(text);
 }
 
 /** Reflow the whole preset, or leave it alone if an authored frame has to stay fixed. */
@@ -78,18 +91,27 @@ export function FrameAutoLayout({
   const [controlsByLook, setControlsByLook] = useState<
     ReadonlyMap<string | undefined, LayoutControls>
   >(() => new Map());
+  const gapScope = useMemo(() => ({ live, lookId, enabled }), [live, lookId, enabled]);
+  const activeGapScope = useRef<typeof gapScope>();
+  useLayoutEffect(() => {
+    activeGapScope.current = gapScope;
+    return () => {
+      activeGapScope.current = undefined;
+    };
+  }, [gapScope]);
   if (frames.length < 2) return null;
 
   const defaultGap = Math.round(Math.min(live.resolution.width, live.resolution.height) * 0.025);
+  const defaultGapControl = { text: String(defaultGap), amount: defaultGap };
   const defaults: LayoutControls = {
-    horizontalGap: String(defaultGap),
-    verticalGap: String(defaultGap),
+    horizontalGap: defaultGapControl,
+    verticalGap: defaultGapControl,
     twoPlateLayout: 'horizontal',
     bias: 'more-top',
     reverse: false,
   };
-  const { horizontalGap, verticalGap, twoPlateLayout, bias, reverse } =
-    controlsByLook.get(lookId) ?? defaults;
+  const controls = controlsByLook.get(lookId) ?? defaults;
+  const { horizontalGap, verticalGap, twoPlateLayout, bias, reverse } = controls;
   function updateControls(changes: Partial<LayoutControls>): void {
     setControlsByLook((current) =>
       new Map(current).set(lookId, { ...(current.get(lookId) ?? defaults), ...changes }),
@@ -111,8 +133,8 @@ export function FrameAutoLayout({
     return { id, aspect: rect.width / rect.height };
   });
   const options: LiveSourceLayoutOptions = {
-    horizontalGap: horizontalGap === '' ? defaultGap : Number(horizontalGap),
-    verticalGap: verticalGap === '' ? defaultGap : Number(verticalGap),
+    horizontalGap: horizontalGap.amount,
+    verticalGap: verticalGap.amount,
     twoPlateLayout,
     reverse,
   };
@@ -131,6 +153,17 @@ export function FrameAutoLayout({
     ...options,
     reverse: !reverse,
   });
+  const hasHorizontalGap =
+    rows.some((count) => count > 1) ||
+    (frames.length > 2 && horizontalGap.text !== defaultGapControl.text);
+  const hasVerticalGap =
+    rows.length > 1 || (frames.length > 2 && verticalGap.text !== defaultGapControl.text);
+  const invalidGap = (gap: GapControl): boolean => {
+    const entered = readGap(gap.text);
+    return entered !== null && entered !== gap.amount;
+  };
+  const hasInvalidGap =
+    (hasHorizontalGap && invalidGap(horizontalGap)) || (hasVerticalGap && invalidGap(verticalGap));
 
   function arrange(next: readonly LiveSourceLayoutItem[]): void {
     const byPlate = new Map(frames.map((frame) => [frame.id, frame]));
@@ -145,6 +178,23 @@ export function FrameAutoLayout({
       ];
     });
     if (updates.length === frames.length) stageFramePlacements(item.itemId, updates);
+  }
+
+  function changeGap(axis: GapAxis, text: string): void {
+    // A captured pointer gesture can outlive the preset or its edit permission.
+    if (!enabled || activeGapScope.current !== gapScope) return;
+    const entered = readGap(text);
+    const max = axis === 'horizontalGap' ? live.resolution.width : live.resolution.height;
+    const next =
+      entered === null || !Number.isFinite(entered) || entered < 0 || entered > max
+        ? []
+        : calculateLiveSourceAutoLayout(geometry, live.resolution, bias, {
+            ...options,
+            [axis]: entered,
+          });
+    const accepted = entered !== null && next.length === frames.length;
+    updateControls({ [axis]: { text, amount: accepted ? entered : controls[axis].amount } });
+    if (accepted) arrange(next);
   }
 
   return (
@@ -187,45 +237,51 @@ export function FrameAutoLayout({
           </label>
         )}
         <div className="cg-frame-auto-layout__gaps">
-          {rows.some((count) => count > 1) && (
+          {hasHorizontalGap && (
             <label htmlFor={`${gapId}-horizontal`}>
               Horizontal gap (px)
               <NumericInput
                 id={`${gapId}-horizontal`}
                 className="cg-field"
-                allow="digits"
-                value={horizontalGap}
-                onValueChange={(value) => updateControls({ horizontalGap: value })}
+                decimal
+                allow="number"
+                scrub={{ step: 1, min: 0, max: live.resolution.width }}
+                disabled={!enabled}
+                value={horizontalGap.text}
+                onValueChange={(value) => changeGap('horizontalGap', value)}
               />
             </label>
           )}
-          {rows.length > 1 && (
+          {hasVerticalGap && (
             <label htmlFor={`${gapId}-vertical`}>
               Vertical gap (px)
               <NumericInput
                 id={`${gapId}-vertical`}
                 className="cg-field"
-                allow="digits"
-                value={verticalGap}
-                onValueChange={(value) => updateControls({ verticalGap: value })}
+                decimal
+                allow="number"
+                scrub={{ step: 1, min: 0, max: live.resolution.height }}
+                disabled={!enabled}
+                value={verticalGap.text}
+                onValueChange={(value) => changeGap('verticalGap', value)}
               />
             </label>
           )}
         </div>
-        {layout.length !== frames.length && (
-          <span role="status">Reduce the gaps to fit the frames.</span>
+        {(hasInvalidGap || layout.length !== frames.length) && (
+          <span role="status">Enter gaps that fit the frames.</span>
         )}
         <div className="cg-frame-auto-layout__actions">
           <Button
             variant="neutral"
-            disabled={layout.length !== frames.length}
+            disabled={hasInvalidGap || layout.length !== frames.length}
             onClick={() => arrange(layout)}
           >
             Arrange frames
           </Button>
           <Button
             variant="neutral"
-            disabled={swapped.length !== frames.length}
+            disabled={hasInvalidGap || swapped.length !== frames.length}
             title="Exchange frame positions without changing layer order"
             onClick={() => {
               updateControls({ reverse: !reverse });

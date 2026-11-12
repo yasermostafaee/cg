@@ -49,4 +49,6 @@
 - [x] Keep saved frame placements with **Keep current data** and clear them with **Use file defaults**.
 - [x] Bridge and Runtime regression tests verified the newly listed geometry, held programme
       and next Take. Windows Chromium also verified both existing Shared folder Reload paths.
+- [x] A compatible replacement keeps frame updates on the held programme page. Windows Chromium
+      verified that the new title appears in PVW while the held page accepts the new frame geometry.
 - [ ] Verify the frame reset after Reload on the target station.

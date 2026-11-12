@@ -16,5 +16,8 @@ slot's own box. This gives a scriptless frame the actual Shared folder tile view
 browser's intrinsic iframe size from clipping the lower part of the graphic.
 
 Legacy packages use the same representative still as Designer export, including scoped defaults,
-the sampled Preset and authored Live fallbacks. The Bridge reads only bounded PNG assets from the
-package for that still. The renderer and Bridge use the same representative Sequence picture rule.
+the sampled Preset and authored Live fallbacks. The Bridge reads bounded PNG or JPEG assets from the
+package for that still. PNG remains implicit in the response for older packages and Bridges. A JPEG
+entry carries its MIME alongside the image bytes. Paths, encoded size, decoded dimensions and content
+hashes are checked before the browser receives an asset. The renderer and Bridge use the same
+representative Sequence picture rule.

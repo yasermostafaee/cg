@@ -19,7 +19,10 @@ const MIXED = '__cg_mixed__';
 const resizeOptions = ['locked', 'proportional', 'free'] as const;
 
 type PlatePatch = Partial<
-  Pick<VideoPlaceholderElement, 'fitMode' | 'operatorMove' | 'operatorPlacement'>
+  Pick<
+    VideoPlaceholderElement,
+    'fitMode' | 'operatorMove' | 'operatorPlacement' | 'allowOperatorMaskEdit'
+  >
 >;
 
 function commonChoice<T extends string>(values: readonly T[]): T | typeof MIXED {
@@ -71,6 +74,8 @@ export function LivePlateControlSection({
   const resize = commonChoice(plates.map((plate) => plate.operatorPlacement ?? 'locked'));
   const allAllowMove = plates.every(allowsMove);
   const someAllowMove = plates.some(allowsMove);
+  const allAllowMaskEdit = plates.every((plate) => plate.allowOperatorMaskEdit === true);
+  const someAllowMaskEdit = plates.some((plate) => plate.allowOperatorMaskEdit === true);
   const composition = useDesignerSelector(({ scene }) =>
     scene === null ? undefined : activeDocOf(scene),
   );
@@ -138,6 +143,12 @@ export function LivePlateControlSection({
             };
           });
         }}
+      />
+      <CheckRow
+        label="Allow mask editing in CG Control"
+        checked={allAllowMaskEdit}
+        indeterminate={someAllowMaskEdit && !allAllowMaskEdit}
+        onChange={(allow) => onCommit(() => ({ allowOperatorMaskEdit: allow ? true : undefined }))}
       />
       {composition !== undefined && <LivePlateCompositionSettings composition={composition} />}
     </CollapseSection>

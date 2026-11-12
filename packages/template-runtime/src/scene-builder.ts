@@ -1,7 +1,6 @@
 import {
   elementDigitsOf,
   followsComposition,
-  livePlateMaskRegions,
   liveRevealRects,
   pathVisualBBox,
   repeaterRowLimit,
@@ -42,6 +41,7 @@ import { TEXT_NODE_DATASET } from './text-render-node.js';
 import { markTextFit } from './text-fit.js';
 import { populateTickerStaticRow } from './ticker-driver.js';
 import { itemsInDigits, stampTypedDigits } from './typed-digits.js';
+import { drawPlateMaskClip } from './mask-placement.js';
 import {
   hasStepCountdown,
   STEP_EL_DATASET,
@@ -1733,21 +1733,16 @@ const SMPTE_BARS = ['#c0c0c0', '#c0c000', '#00c0c0', '#00c000', '#c000c0', '#c00
 
 let nextPlateClipId = 0;
 
-function clipPlateFallback(fallback: HTMLElement, mask: LivePlateMask, doc: Document): void {
+function clipPlateFallback(fallback: HTMLElement, mask: LivePlateMask, editableKey?: string): void {
+  const doc = fallback.ownerDocument;
   const svg = doc.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('aria-hidden', 'true');
   svg.style.cssText = 'position:absolute;width:0;height:0;pointer-events:none';
   const clip = doc.createElementNS(SVG_NS, 'clipPath');
   clip.id = 'cg-plate-clip-' + String(++nextPlateClipId);
   clip.setAttribute('clipPathUnits', 'objectBoundingBox');
-  for (const region of livePlateMaskRegions(mask)) {
-    const rect = doc.createElementNS(SVG_NS, 'rect');
-    rect.setAttribute('x', String(region.x));
-    rect.setAttribute('y', String(region.y));
-    rect.setAttribute('width', String(region.width));
-    rect.setAttribute('height', String(region.height));
-    clip.appendChild(rect);
-  }
+  if (editableKey !== undefined) clip.setAttribute('data-cg-editable-mask', editableKey);
+  drawPlateMaskClip(clip, mask);
   svg.appendChild(clip);
   fallback.appendChild(svg);
   fallback.style.clipPath = 'url(#' + clip.id + ')';
@@ -1889,7 +1884,13 @@ function buildLiveSource(element: VideoPlaceholderElement, ctx: BuildCtx): HTMLE
   el.style.overflow = 'hidden';
   if (element.showFallback !== false || ctx.mode === 'author' || isPvwRehearsal(ctx.doc)) {
     const fallback = buildLiveFallback(element, ctx.doc);
-    if (element.liveMask !== undefined) clipPlateFallback(fallback, element.liveMask, ctx.doc);
+    if (element.liveMask !== undefined) {
+      clipPlateFallback(
+        fallback,
+        element.liveMask,
+        element.allowOperatorMaskEdit === true ? ctx.instancePrefix + element.id : undefined,
+      );
+    }
     el.appendChild(fallback);
   }
 

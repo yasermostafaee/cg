@@ -36,6 +36,10 @@
           "en": "The PVW toolbar shows Move template, Crop input, then Edit frames when available. Move template starts off."
         },
         {
+          "fa": "با اجازهٔ طراح، Edit masks در PVW جای پنجرهٔ ماسک و اندازهٔ آن را با درگ تغییر می‌دهد. Update on air وقتی همان ورودی‌ها و لایه‌های میکسر کافی‌اند، تغییر را روی خروجی فعال اعمال می‌کند.",
+          "en": "With the designer's permission, Edit masks in PVW moves and resizes existing mask windows. Update on air applies changes that can use the same live inputs and mixer layers."
+        },
+        {
           "fa": "در Shared folder می‌توان بندانگشتی و انتخاب فعلی را دید و با Up به پوشهٔ بالاتر رفت. قالب‌های واردشده از این مسیر را می‌توان از فایل اصلی Reload کرد.",
           "en": "Shared folder shows package previews and highlights the selection. Use Up to go to the parent folder. Templates imported here can reload from their original shared path."
         },
@@ -100,6 +104,14 @@
         {
           "fa": "Reload با گزینهٔ Use file defaults، جای و اندازهٔ قاب‌ها را از تمپلیت تازه می‌گیرد. صفحه‌ای که روی air است تا Take بعدی باقی می‌ماند.",
           "en": "Reload with Use file defaults restores authored frame geometry. The running programme page stays in place until the next Take."
+        },
+        {
+          "fa": "پس از Reload یا ایمپورت جایگزین سازگار، Update on air جای و اندازهٔ قاب‌ها و برش ورودی را روی همان خروجی فعال اعمال می‌کند.",
+          "en": "After a compatible Reload or replacement import, Update on air applies frame position, size and input crop on the running output."
+        },
+        {
+          "fa": "فاصلهٔ قاب‌ها در Auto layout با تایپ یا درگ تنظیم می‌شود و نتیجه همان لحظه در PVW دیده می‌شود. Update on air تغییر را به PGM می‌فرستد.",
+          "en": "Type or drag Auto layout gaps and see the result immediately in PVW. Update on air applies it to Programme."
         },
         {
           "fa": "قسمت‌های شفاف بندانگشتی تمپلیت‌ها روی پس‌زمینهٔ شطرنجی دیده می‌شوند.",
@@ -581,8 +593,8 @@
           "en": "The Profiles dialog closes after a successful load and reports the result in CG Control."
         },
         {
-          "fa": "بندانگشتی‌های Shared folder داخل قاب درست دیده می‌شوند. بندانگشتی Sequence تصویری، قاب لایو و پریست منتخب در Export اصلاح شده است.",
-          "en": "Shared folder thumbnails fit their tiles. Exported thumbnails show a picture Sequence, live plates and one representative preset."
+          "fa": "بندانگشتی‌های Shared folder داخل قاب درست دیده می‌شوند. بندانگشتی Sequence تصویری، قاب لایو و پریست منتخب در Export اصلاح شده است. بسته‌های قدیمی مثل تلاوت قرآن، تصویر JPEG صفحهٔ اول را در فهرست تمپلیت‌ها نشان می‌دهند.",
+          "en": "Shared folder thumbnails fit their tiles. Exported thumbnails show a picture Sequence, live plates and one representative preset. Older packages such as Quran recitation show the first JPEG page in the template list."
         },
         {
           "fa": "گزینهٔ هم‌پوشانی قاب‌ها هنگام انتخاب قاب هم در Inspector در دسترس است و خطای هم‌پوشانی به خروجی در حال ویرایش مربوط است.",

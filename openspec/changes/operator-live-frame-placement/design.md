@@ -26,6 +26,12 @@ Update on air requires a verified resident page and unchanged producer seats. It
 and mixer updates while holding the row's live-seat lock and restores the prior geometry on a
 refusal. The operator still needs to verify frame alignment on the target engine.
 
+Reload and replacement can list a new version while the row still holds its running page.
+For in-place edits, Bridge compares the held and listed live frame metadata, including
+geometry, routing, frame keys, permissions and foreground pairing. The Inspector's Auto
+layout permission is independent. Compatible versions use the same existing producers.
+A different frame layout requires a Take of the listed version before editing its on-air frames.
+
 **Reset frames** is available in Inspector → Position for the selected eligible row.
 The action stages an all-presets reset and PVW renders the authored frame rectangles. Update
 uses the normal frame placement acknowledgement. On a verified resident row, the page and
@@ -47,3 +53,5 @@ order while preserving layer order. Audio and locked elements are excluded from 
 CG Control resolves the visible frame set again when the active preset changes. Its Auto layout
 inputs are kept by preset while inspecting the row, and the existing placement draft carries
 the preset ID. The Inspector derives each preset's available layouts from its own frame count.
+Gap controls use the shared numeric scrub input. A valid edit stages a full layout immediately.
+An incomplete value or a gap that cannot fit the frames preserves the last valid draft.

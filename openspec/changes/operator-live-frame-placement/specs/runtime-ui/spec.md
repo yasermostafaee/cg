@@ -53,6 +53,15 @@ An opted-in frame in a one-plate composition SHALL travel with the artwork in th
 - **AND** Discard restores the last applied placement
 - **AND** an off-air Update saves the placement for the next Take
 
+#### Scenario: Edit the running frame after replacing its template
+
+- **GIVEN** the live row holds a verified running page on the primary engine
+- **WHEN** Reload or Import replaces the listed template with compatible live frame metadata
+- **THEN** Update on air applies the frame geometry using the running page and its existing inputs
+- **AND** the new artwork appears on the next Take
+- **WHEN** a replacement changes the live frame layout
+- **THEN** the operator must take the new page before editing its frames on air
+
 #### Scenario: Reset frames to their authored positions and sizes
 
 - **GIVEN** an eligible live row is selected
@@ -88,6 +97,13 @@ layer order and the authored ratio of proportional frames.
 - **AND** a preset with fewer than two eligible frames has no Auto layout controls
 - **AND** returning to a preset in the Inspector restores its arrangement settings and Swap order
 - **AND** drafted and applied frame positions stay associated with their own presets
+
+#### Scenario: Adjust the gap while watching Preview
+
+- **WHEN** the operator types, drags or steps a valid gap for the active preset
+- **THEN** PVW immediately shows the resulting arrangement as a draft
+- **AND** incomplete values and gaps that cannot fit preserve the last valid draft
+- **AND** Update on air is required to apply the arrangement to Programme
 
 #### Scenario: Keep a title attached to its frame
 

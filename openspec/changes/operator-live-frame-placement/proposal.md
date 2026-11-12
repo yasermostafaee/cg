@@ -10,4 +10,5 @@ In Designer, extend the existing **Auto layout** to visual timeline selections. 
 compositions containing a live frame and its title so authors can arrange and swap them while
 editing a preset. The same controls work for mixed selections such as a plate, a composition,
 a shape and a Repeater. In CG Control, the available layouts and settings follow each preset
-separately.
+separately. Typing or dragging a valid gap reflows that preset in PVW. Allow frame edits on
+the running page after a template replacement when the live frame layout remains compatible.

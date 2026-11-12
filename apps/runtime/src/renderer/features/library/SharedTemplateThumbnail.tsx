@@ -7,19 +7,21 @@ export type SharedTemplatePreview = TemplateThumbnail | null;
 type ScenePreview = Extract<TemplateThumbnail, { kind: 'scene' }>;
 
 function renderStill(
-  { scene, images }: ScenePreview,
+  { scene, images, imageMimes }: ScenePreview,
   { BASELINE_CSS, buildThumbnailScene }: typeof StaticScene,
 ): string | undefined {
   try {
     const doc = document.implementation.createHTMLDocument('');
     const container = buildThumbnailScene(scene, doc);
     const pictures = new Map(Object.entries(images ?? {}));
+    const mimes = new Map(Object.entries(imageMimes ?? {}));
     for (const image of container.querySelectorAll('img')) {
-      const bytes = pictures.get(image.dataset['cgAssetId'] ?? '');
+      const assetId = image.dataset['cgAssetId'] ?? '';
+      const bytes = pictures.get(assetId);
       if (bytes === undefined) {
         image.remove();
       } else {
-        image.src = `data:image/png;base64,${bytes}`;
+        image.src = `data:${mimes.get(assetId) ?? 'image/png'};base64,${bytes}`;
       }
     }
     for (const media of container.querySelectorAll('video, audio')) media.remove();

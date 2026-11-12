@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { AssetEntry, Scene } from '@cg/shared-schema';
+import { CG_LIVE_MASK_PLACEMENT_PAGE_MARKER, type AssetEntry, type Scene } from '@cg/shared-schema';
 import { buildVcgIndexHtml } from '../src/vcg-page.js';
 
 const scene = {
@@ -47,6 +47,7 @@ describe('buildVcgIndexHtml', () => {
     expect(html).toContain('outputPass');
     expect(html).toContain('const outputPass = casparOutputPass(globalThis.location.search)');
     expect(html).toContain('installCasparGlobals(runtime)');
+    expect(html.slice(0, 1024)).toContain(CG_LIVE_MASK_PLACEMENT_PAGE_MARKER);
   });
 
   it('does not import the Lottie player when the caller says none is needed', () => {

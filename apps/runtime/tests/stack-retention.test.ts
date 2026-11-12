@@ -753,6 +753,17 @@ it('🔴 every OPEN-AXIS field a published row carries survives retainedFromStac
       },
     ],
     framePlacementsPendingReset: true,
+    maskPlacements: [
+      {
+        lookId: 'solo',
+        plateId: 'l-1',
+        kind: 'mask',
+        index: 0,
+        authored: { x: 0.125, y: 0.25, width: 0.25, height: 0.25 },
+        rect: { x: 0.5, y: 0.25, width: 0.25, height: 0.25 },
+      },
+    ],
+    onAirMaskPlacement: true,
     // `TIMING-BUILD-21` §2(a) — the row's passes/delay override. Added here the day the field
     // was added, because this guard refuses to run against a fixture that does not populate
     // every carriable key: an unpopulated field would make the assertion below pass vacuously.
@@ -815,4 +826,6 @@ it('🔴 every OPEN-AXIS field a published row carries survives retainedFromStac
   expect(dropped, 'these fields were published and did not survive retention').toEqual([]);
   expect(retained?.framePlacements).toEqual(populated.framePlacements);
   expect(retained?.framePlacementsPendingReset).toBe(true);
+  expect(retained?.maskPlacements).toEqual(populated.maskPlacements);
+  expect(retained).not.toHaveProperty('onAirMaskPlacement');
 });

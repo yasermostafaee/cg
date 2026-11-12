@@ -1,12 +1,15 @@
 import type { FieldValues } from './fields.js';
 import { LiveFramePlacementsSchema, type LiveFramePlacement } from './frame-placement.js';
 import { LIVE_FIT_MODES, type LiveFitMode } from './live-fit.js';
+import { LiveMaskPlacementsSchema, type LiveMaskPlacement } from './mask-placement.js';
 import { PositionSchema, type Position } from './scene.js';
 
 /** A generated output page advertises that it can reposition its resident stage. */
 export const CG_LIVE_POSITION_PAGE_MARKER = '<meta name="cg-live-position" content="1">';
 export const CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER =
   '<meta name="cg-live-frame-placement" content="1">';
+export const CG_LIVE_MASK_PLACEMENT_PAGE_MARKER =
+  '<meta name="cg-live-mask-placement" content="1">';
 
 /**
  * `multibox-layout-switch` `tasks.md` 6.7 — **the BRIDGE→PAGE control channel, carried inside
@@ -183,6 +186,8 @@ export interface CgControl {
   position?: Position;
   /** Replace the row's placements. An empty array restores the authored frames. */
   framePlacements?: LiveFramePlacement[];
+  /** Replace the row's mask placements. An empty array restores the authored windows. */
+  maskPlacements?: LiveMaskPlacement[];
   /**
    * `D-163` — a page turn of a page list (see {@link CgPage}). Absent means "this payload turns no
    * page", never "go to page 1".
@@ -297,12 +302,16 @@ export function readCgControl(payload: unknown): CgControl | undefined {
   const placements = LiveFramePlacementsSchema.safeParse(
     (raw as Record<string, unknown>)['framePlacements'],
   );
+  const masks = LiveMaskPlacementsSchema.safeParse(
+    (raw as Record<string, unknown>)['maskPlacements'],
+  );
   // Unknown members are DROPPED rather than carried through, which is what lets a newer
   // bridge talk to an older page and the reverse: a payload from a build that still sends
   // `from` or `plates` is read for its `look` and the rest is ignored.
   return {
     ...(typeof look === 'string' && look !== '' ? { look } : {}),
     ...(placements.success ? { framePlacements: placements.data } : {}),
+    ...(masks.success ? { maskPlacements: masks.data } : {}),
     ...readPosition((raw as Record<string, unknown>)['position']),
     /*
       `SELF-STOP-24` — the same shape test the look gets, and the empty-string rejection is

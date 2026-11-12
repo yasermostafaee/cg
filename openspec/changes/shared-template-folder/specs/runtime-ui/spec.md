@@ -18,6 +18,8 @@ CG Control SHALL clearly highlight the selected package and show the current fol
 the parent of the current folder and stop at the configured shared root. For visible package rows,
 CG Control SHALL show an available embedded thumbnail or a bounded still of the authored scene.
 Both forms SHALL fit their whole frame in the Shared folder preview slot.
+The authored still SHALL include a legacy picture Sequence's first authored JPEG page when the
+package carries that image within the preview bounds.
 CG Bridge SHALL read preview data within the shared root and SHALL keep preview failures independent
 of listing and import. The browser SHALL treat preview content as data.
 
@@ -62,6 +64,13 @@ availability SHALL be independent of import, selection, reload and load.
 
 - **WHEN** a package with a valid embedded PNG exceeds the source retention limit
 - **THEN** its listed version can still show the saved thumbnail
+
+#### Scenario: An older JPEG picture Sequence has no embedded thumbnail
+
+- **GIVEN** a shared or retained VCG contains a picture Sequence with a bounded JPEG first page
+  and no embedded thumbnail
+- **WHEN** CG Control lists it in Shared folder or Templates
+- **THEN** the preview depicts the authored picture in the listing and selected template Details
 
 #### Scenario: The catalogue stays usable without preview data
 

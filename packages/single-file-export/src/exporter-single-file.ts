@@ -1,5 +1,6 @@
 import {
   CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER,
+  CG_LIVE_MASK_PLACEMENT_PAGE_MARKER,
   CG_LIVE_POSITION_PAGE_MARKER,
   playoutOf,
   withoutEditorBackdrop,
@@ -466,6 +467,7 @@ function buildSingleFileHtml(parts: HtmlParts): string {
     <meta charset="utf-8" />
     ${CG_LIVE_POSITION_PAGE_MARKER}
     ${CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER}
+    ${CG_LIVE_MASK_PLACEMENT_PAGE_MARKER}
     <meta name="viewport" content="width=${w}, initial-scale=1" />
     <!-- Permissive CSP: a single self-contained file needs inline script/style
          and data: fonts. The .vcg keeps a strict 'self' CSP (it's http-served);

@@ -54,3 +54,16 @@
       passed on `40974e03`, including Add and direct editing without a Redraw tool.
 - [x] 6.4 Default to editing the selected mask and verify pressed styling, Add, Escape and Canvas selection. All 24 Designer Live Source cases passed in local Chromium.
 - [x] 6.5 Use Add for new windows and direct editing for existing windows. Both focused Chromium cases passed, covering both mask groups, cancellation and Undo.
+
+## 7. PVW mask editing
+
+- [x] Carry the per-plate Designer permission and window identity through export and Bridge.
+      Windows Chromium verified the permission is initially off and reaches the exported page.
+- [x] Draft bounded move and resize for own-plate and linked reveal windows in PVW.
+- [x] Bridge verified the off-air save, live Update on unchanged Mask and linked reveal seats,
+      stable input crop, rollback on a refused commit and Revert topology refusal. The off-air
+      edit was carried by the next Take.
+- [x] Windows Chromium verified the immediate PVW clip, Discard, off-air save, the next Take,
+      and a live linked reveal resize with the existing input seats. Page tests verified the
+      same-window identity, untouched windows, per-Look geometry and legacy fallback.
+- [ ] Record the carrying Linux Playwright result and verify the edited masks on the target engine.

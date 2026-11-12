@@ -60,3 +60,17 @@ corner handles live on the Designer Canvas overlay, above the preview guides. A 
 normalized coordinates clamped to the plate. Release updates only the selected window as one undo
 entry. Escape or pointer cancellation discards the draft. Escape or a click outside the editor
 leaves it, and that click follows the normal Canvas selection path. Both kinds share the editor.
+
+## Edit authored windows in CG Control
+
+**Allow mask editing in CG Control** is a per-plate Designer permission. Each override identifies
+the preset, plate, kind and window index, and carries the authored rectangle as its identity.
+Overrides whose identity or permission changed are ignored. The existing mask mode, window count
+and linked source stay part of the authored template.
+
+The PVW tool stages normalized windows separately from input crop and frame placement. It draws
+the draft with the same mask geometry used by Bridge and the page fallback. Update on a stopped
+layer saves the change. Take passes it to the page and calculates the existing mask seat plan.
+An on-air Update uses the verified resident page, the live-seat lock and the existing deferred
+mixer geometry transaction. A change in the number or identity of live seats must be applied
+off air before Take. Rollback restores the prior page and mixer geometry on refusal.

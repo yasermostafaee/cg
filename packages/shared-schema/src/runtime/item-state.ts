@@ -4,6 +4,7 @@ import { FieldValuesSchema } from '../fields.js';
 import { PositionSchema } from '../scene.js';
 import { LiveCropFocusSchema } from '../live-fit.js';
 import { LiveFramePlacementsSchema } from '../frame-placement.js';
+import { LiveMaskPlacementsSchema } from '../mask-placement.js';
 import {
   LivePlateVolumesSchema,
   LiveSourceFrozenAssignmentSchema,
@@ -281,6 +282,8 @@ export const StackItemStateSchema = z.object({
   framePlacementsPendingReset: z.literal(true).optional(),
   /** A confirmed resident page can accept frame geometry in place. */
   onAirFramePlacement: z.literal(true).optional(),
+  maskPlacements: LiveMaskPlacementsSchema.optional(),
+  onAirMaskPlacement: z.literal(true).optional(),
   /**
    * `FIELD-FIXES-01` B — why this row's last take was refused (see {@link TakeRefusalSchema}).
    * ABSENT on every row whose last take landed, or that has been cleared since.
@@ -681,6 +684,7 @@ export const RetainedStackItemSchema = z.object({
   previewPlateCrops: PreviewPlateCropsSchema.optional(),
   framePlacements: LiveFramePlacementsSchema.optional(),
   framePlacementsPendingReset: z.literal(true).optional(),
+  maskPlacements: LiveMaskPlacementsSchema.optional(),
 });
 export type RetainedStackItem = z.infer<typeof RetainedStackItemSchema>;
 
@@ -736,5 +740,6 @@ export function retainedFromStackItem(item: StackItemState): RetainedStackItem {
     ...(item.previewPlateCrops !== undefined && { previewPlateCrops: item.previewPlateCrops }),
     ...(item.framePlacements !== undefined && { framePlacements: item.framePlacements }),
     ...(item.framePlacementsPendingReset === true && { framePlacementsPendingReset: true }),
+    ...(item.maskPlacements !== undefined && { maskPlacements: item.maskPlacements }),
   };
 }

@@ -29,3 +29,11 @@ Windows Chromium with the real Bridge and test engine passed the focused accepta
 - [x] Verify artwork and checkerboard pixels with a Bridge-local package in Windows Chromium.
       Three scenarios passed, including a legacy book with a bound picture and an embedded 320×180 preview.
 - [ ] Record the carrying Linux Playwright result.
+
+## Legacy JPEG Sequence previews
+
+- [x] Read bounded, verified JPEG assets for a representative still without changing the embedded PNG path.
+- [x] Windows Chromium verified the legacy JPEG artwork in Shared folder, the imported catalogue and
+      Details. The bounded reader also recovered the 2040 × 980 first JPEG in both original local
+      Quran packages, which carry no embedded thumbnail.
+- [ ] Record the carrying Linux Playwright result.

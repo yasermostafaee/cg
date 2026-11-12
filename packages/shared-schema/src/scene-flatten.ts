@@ -380,7 +380,7 @@ export function liveForegroundKeys(scene: Scene): ReadonlySet<string> {
     if (element.type === 'video-placeholder') {
       if (!element.visible || element.routeKey === undefined) continue;
       const rects =
-        element.liveMask === undefined
+        element.liveMask === undefined || element.allowOperatorMaskEdit === true
           ? [flat.rect]
           : livePlateMaskRegions(element.liveMask).map((rect) =>
               liveRevealSceneRect(flat.rect, rect),

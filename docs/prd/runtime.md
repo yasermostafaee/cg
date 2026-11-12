@@ -4987,6 +4987,9 @@ package. Other consoles on the channel can use these previews. A missing preview
 selectable with its icon. A Bridge without the preview capability keeps the existing catalogue.
 Shared folder, catalogue rows and Details use a checkerboard behind the transparent areas of
 both embedded and generated previews. The artwork keeps its authored colors.
+For a legacy picture Sequence with no embedded thumbnail, the authored still uses its first
+authored PNG or JPEG page when that image fits the preview bounds. This includes older
+folder-backed Quran exports whose pages are JPEGs.
 
 **What:** a direct **Templates** button in the main CG Control header opens the current channel's
 catalogue without requiring an empty layer and without inventing a Load destination. When CG Control

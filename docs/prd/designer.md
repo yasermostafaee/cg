@@ -6097,7 +6097,10 @@ saved resize choice. When Allow move is off, the PVW frame body keeps a neutral 
 only enabled resize corners show a resize cursor.
 Discard restores the applied frame. Off-air Update saves it for
 Take, and Update on air moves the resident page and its existing picture together on a verified
-primary. **Crop input** keeps the source selection inside the frame. Target-engine verification is tracked in
+primary. Reload or a replacement import keeps in-place edits available when the running and
+listed versions share the same live frame layout. A changed layout needs a Take of the new
+version before its frames can be edited on air. **Crop input** keeps the source selection inside
+the frame. Target-engine verification is tracked in
 `openspec/changes/operator-live-frame-placement/`.
 In Inspector → Position, **Reset frames** stages the authored frame positions and sizes across
 the eligible row's presets. PVW shows the reset immediately. Update applies it and Discard
@@ -6105,14 +6108,17 @@ restores the prior placements. Whole-template Position and input crop are preser
 **Reset crop** in the same section stages the selected preset's authored input framing.
 It is enabled only when that preset's effective crop differs from the authored framing. Update
 applies it, and Discard restores the prior crop.
+An on-air crop-only update reframes the existing source directly. Reset crop can still apply
+after a Reload or replacement import with matching live framing.
 
 **Operator Auto layout:** The author enables **Allow Auto layout in CG Control** on the output
 composition. It uses the same compact Inspector checkbox as the live plate overlap option.
 A preset with at least two live plates exposes **Auto layout** under Position when
 every plate permits both move and resize. The control uses the same aspect-aware arrangement as
 Designer, with separate gaps, row placement choices and **Swap frame order**. Arrange or Swap
-stages all frame placements for the active preset together in PVW. Update saves each staged
-placement to its own preset and Discard restores the applied arrangements.
+stages all frame placements for the active preset together in PVW. Typing or dragging a valid
+gap reflows the active preset immediately. Update saves each staged placement to its own preset
+and Discard restores the applied arrangements.
 For a multi-preset template, the Inspector uses the active preset's frame count and keeps the
 direction, gaps and Swap order for each preset while inspecting the row.
 
@@ -6807,6 +6813,10 @@ part of an input, or leave a transparent opening in the picture for another grap
 - WHEN the author edits a mask on the Canvas THEN dragging its body moves it and dragging a corner resizes it within the plate, with one undoable edit per drag
 - WHEN the author selects an existing mask or finishes drawing one THEN direct editing is active by default and its Inspector icon shows the active state
 - WHEN the author cancels an in-progress mask drag THEN the saved window keeps its geometry
+- WHEN the author allows mask editing in CG Control THEN **Edit masks** can move and resize those
+  authored windows in PVW within their plate, with independent draft and applied state per preset
+- WHEN Update on air retains the running input seats THEN the mask and fallback geometry apply in
+  place. A change that needs different input layers is applied off air before the next Take.
 - WHEN the last linked reveal is removed THEN the plate returns to ordinary overlap validation
 - WHEN plates overlap without that explicit relation and **Allow live plate overlap** is off
   THEN both remain red and export is blocked

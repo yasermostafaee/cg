@@ -5,6 +5,7 @@ import {
   LayerSlotSchema,
   LiveCropFocusSchema,
   LiveFramePlacementsSchema,
+  LiveMaskPlacementsSchema,
   LiveSourceLookOverrideSchema,
   MAX_PREVIEW_PLATE_CROPS,
   PositionSchema,
@@ -619,6 +620,20 @@ export const StackSetFramePlacementsChannel = defineChannel(
           : reset === 'all' || placements.length > 0,
       'Supply frame placements or request an explicit reset.',
     ),
+  z.object({
+    accepted: z.boolean(),
+    errorCode: z.string().optional(),
+    message: z.string().optional(),
+  }),
+);
+
+/** Upsert edited windows of authored masks. */
+export const StackSetMaskPlacementsChannel = defineChannel(
+  'stack.setMaskPlacements',
+  z.object({
+    itemId: IdSchema,
+    placements: LiveMaskPlacementsSchema,
+  }),
   z.object({
     accepted: z.boolean(),
     errorCode: z.string().optional(),

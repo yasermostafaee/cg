@@ -177,4 +177,31 @@ describe('D-201 — synchronized live-input foreground pass', () => {
     expect(caption.style.backgroundColor).toBe(background);
     expect(caption.textContent).toContain('خبر تهران');
   });
+
+  it.each([true, false])(
+    'uses the full plate for foreground ordering with mask editing %s',
+    (allowed) => {
+      const scene = structuredClone(lowerThirdScene);
+      const children = scene.layers[0]?.children;
+      const title = children?.find((element) => element.id === 'name');
+      if (children === undefined || title?.type !== 'text') throw new Error('Missing test title');
+      children.push({
+        id: 'plate',
+        name: 'Plate',
+        type: 'video-placeholder',
+        routeKey: 'guest',
+        zIndex: title.zIndex - 1,
+        visible: true,
+        locked: false,
+        opacity: 1,
+        transform: structuredClone(title.transform),
+        allowOperatorMaskEdit: allowed,
+        liveMask: { mode: 'inside', rects: [{ x: 0, y: 0, width: 0.25, height: 1 }] },
+      });
+      title.transform.position.x += 400;
+      createRuntime(scene, { outputPass: 'foreground', skipFontLoad: true, installGlobals: false });
+      expect(document.querySelector('[data-cg-element-id="name"]') !== null).toBe(allowed);
+      expect(document.querySelector('[data-cg-live-fallback]')).toBeNull();
+    },
+  );
 });

@@ -101,6 +101,13 @@ it('publishes all arranged frame drafts together and keeps a draft from another 
   });
   try {
     stageFramePlacements(itemId, updates);
+    stageFramePlacements(
+      itemId,
+      updates.map(({ placement, baseline }) => ({
+        placement: { ...placement, rect: { ...placement.rect } },
+        baseline,
+      })),
+    );
     expect(published).toEqual([[previous, ...updates.map(({ placement }) => placement)]]);
   } finally {
     unsubscribe();

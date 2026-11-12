@@ -12,6 +12,7 @@ import {
   SHARED_TEMPLATE_IMAGES_MAX_BYTES,
   SHARED_TEMPLATE_MAX_PREVIEW_IMAGES,
   SHARED_TEMPLATE_THUMBNAIL_MAX_BYTES,
+  probeImage,
   type SharedTemplateThumbnail,
 } from '@cg/shared-ipc';
 
@@ -28,7 +29,8 @@ const MAX_MANIFEST_BYTES = 192 * 1024;
 const MAX_RENDER_NODES = 320;
 const SCENE_ENTRY = 'template.json';
 const MANIFEST_ENTRY = 'manifest.json';
-const PNG_ASSET = /^assets\/image\/[0-9a-f]{64}\.png$/i;
+const PREVIEW_IMAGE_ASSET = /^assets\/image\/[0-9a-f]{64}\.(png|jpe?g)$/i;
+const MAX_PREVIEW_IMAGE_PIXELS = 3840 * 2160;
 const THUMBNAIL_ENTRY = 'thumbnails/320.png';
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const CRC_TABLE = Uint32Array.from({ length: 256 }, (_, index) => {
@@ -117,7 +119,7 @@ function previewMembers(bytes: Buffer, count: number): Map<string, ZipMember> | 
       name === THUMBNAIL_ENTRY ||
       name === SCENE_ENTRY ||
       name === MANIFEST_ENTRY ||
-      PNG_ASSET.test(name)
+      PREVIEW_IMAGE_ASSET.test(name)
     ) {
       if (members.has(name) || bytes.readUInt16LE(cursor + 34) !== 0) return undefined;
       members.set(name, {
@@ -279,32 +281,37 @@ async function previewImages(
   members: ReadonlyMap<string, ZipMember>,
   offset: number,
   imageIds: ReadonlySet<string>,
-): Promise<Record<string, string> | undefined> {
-  if (imageIds.size === 0) return undefined;
+): Promise<Pick<Extract<SharedTemplateThumbnail, { kind: 'scene' }>, 'images' | 'imageMimes'>> {
+  if (imageIds.size === 0) return {};
   const manifestJson = await readMember(
     file,
     members.get(MANIFEST_ENTRY),
     offset,
     MAX_MANIFEST_BYTES,
   );
-  if (manifestJson === undefined) return undefined;
+  if (manifestJson === undefined) return {};
   let assets;
   try {
     const manifest = ManifestSchema.safeParse(JSON.parse(manifestJson.toString('utf8')));
-    if (!manifest.success) return undefined;
+    if (!manifest.success) return {};
     assets = manifest.data.assetIndex;
   } catch {
-    return undefined;
+    return {};
   }
   let remaining = SHARED_TEMPLATE_IMAGES_MAX_BYTES;
+  let remainingPixels = MAX_PREVIEW_IMAGE_PIXELS;
   let attempts = 0;
   const images = new Map<string, string>();
+  const imageMimes = new Map<string, 'image/jpeg'>();
   for (const asset of assets) {
-    if (attempts >= SHARED_TEMPLATE_MAX_PREVIEW_IMAGES || remaining === 0) break;
+    if (attempts >= SHARED_TEMPLATE_MAX_PREVIEW_IMAGES || remaining === 0 || remainingPixels === 0)
+      break;
+    const extension = PREVIEW_IMAGE_ASSET.exec(asset.path)?.[1]?.toLowerCase();
+    const expectedMime =
+      extension === undefined ? null : extension === 'png' ? 'image/png' : 'image/jpeg';
     if (
       asset.kind !== 'image' ||
-      asset.mime !== 'image/png' ||
-      !PNG_ASSET.test(asset.path) ||
+      asset.mime !== expectedMime ||
       !imageIds.has(asset.id) ||
       images.has(asset.id) ||
       asset.bytes > remaining
@@ -313,18 +320,30 @@ async function previewImages(
     }
     attempts += 1;
     const bytes = await readMember(file, members.get(asset.path), offset, remaining);
+    const probe = bytes === undefined ? null : probeImage(bytes);
     if (
       bytes === undefined ||
       bytes.length !== asset.bytes ||
-      !isPreviewPng(bytes) ||
+      probe === null ||
+      probe.mime !== expectedMime ||
+      probe.width > 4096 ||
+      probe.height > 4096 ||
+      probe.width * probe.height > remainingPixels ||
+      (probe.mime === 'image/png' && !isPreviewPng(bytes)) ||
+      (probe.mime === 'image/jpeg' && bytes.readUInt16BE(bytes.length - 2) !== 0xffd9) ||
       createHash('sha256').update(bytes).digest('hex') !== asset.sha256.toLowerCase()
     ) {
       continue;
     }
     images.set(asset.id, bytes.toString('base64'));
+    if (probe.mime === 'image/jpeg') imageMimes.set(asset.id, probe.mime);
     remaining -= bytes.length;
+    remainingPixels -= probe.width * probe.height;
   }
-  return images.size > 0 ? Object.fromEntries(images) : undefined;
+  return {
+    ...(images.size > 0 && { images: Object.fromEntries(images) }),
+    ...(imageMimes.size > 0 && { imageMimes: Object.fromEntries(imageMimes) }),
+  };
 }
 
 export async function readSharedVcgThumbnail(
@@ -351,8 +370,8 @@ export async function readSharedVcgThumbnail(
     if (!parsed.success) return null;
     const imageIds = staticPreviewImageIds(parsed.data);
     if (imageIds === undefined) return null;
-    const images = await previewImages(file, members, directory.offset, imageIds);
-    return { kind: 'scene', scene: parsed.data, ...(images === undefined ? {} : { images }) };
+    const assets = await previewImages(file, members, directory.offset, imageIds);
+    return { kind: 'scene', scene: parsed.data, ...assets };
   } catch {
     return null;
   }

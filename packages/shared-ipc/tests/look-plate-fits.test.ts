@@ -3,13 +3,16 @@ import {
   TemplateLiveSourcesSchema,
   framePlacementRects,
   lookOperatorFrames,
+  lookOperatorMasks,
   lookPlateFocuses,
   lookPlateFits,
+  lookPlateMasks,
   lookPlateReveals,
   lookPlateRects,
   type LiveSourceRect,
   type TemplateLiveSources,
 } from '../src/index.js';
+import type { LiveMaskPlacement } from '@cg/shared-schema';
 
 /**
  * ⭐ **`B-178` — `lookPlateFits`, the per-look answer to "how is this picture fitted".**
@@ -203,6 +206,61 @@ it('accepts an explicit Auto Layout authorization and preserves omission on olde
   expect(
     TemplateLiveSourcesSchema.safeParse({ ...legacy, allowOperatorAutoLayout: false }).success,
   ).toBe(false);
+});
+
+it('moves only the authorized mask window in its own Look and preserves authored defaults', () => {
+  const live = withLooks();
+  const grid = live.looks?.[0];
+  const solo = live.looks?.[1];
+  if (grid === undefined || solo === undefined) throw new Error('missing Look fixture');
+  const authored = { x: 0.125, y: 0.25, width: 0.25, height: 0.25 };
+  const sibling = { ...authored, x: 0.5 };
+  const rect = { ...authored, x: 0.25, width: 0.125 };
+  const mask = { mode: 'outside', rects: [authored, sibling] } as const;
+  grid.masks = { 'guest-1': { ...mask, rects: [...mask.rects] } };
+  solo.masks = grid.masks;
+  grid.operatorMaskEdits = ['guest-1'];
+  const parsed = TemplateLiveSourcesSchema.parse(live);
+  const edit = {
+    lookId: 'grid',
+    plateId: 'guest-1',
+    kind: 'mask',
+    index: 0,
+    authored,
+    rect,
+  } satisfies LiveMaskPlacement;
+  expect(lookOperatorMasks(parsed, 'grid')).toEqual(new Set(['guest-1']));
+  expect(lookOperatorMasks(parsed, 'solo').size).toBe(0);
+  expect(lookPlateMasks(parsed, undefined, [edit])['guest-1']).toEqual({
+    mode: 'outside',
+    rects: [rect, sibling],
+  });
+  expect(lookPlateMasks(parsed, 'grid')['guest-1']).toEqual(mask);
+  expect(lookPlateMasks(parsed, 'grid', [{ ...edit, index: 1 }])['guest-1']).toEqual(mask);
+  expect(lookPlateMasks(parsed, 'solo', [{ ...edit, lookId: 'solo' }])['guest-1']).toEqual(mask);
+});
+
+it('edits a standalone linked reveal without changing its lower input or siblings', () => {
+  const live = withoutLooks();
+  const plate = live.sources[0];
+  const reveal = plate?.revealMask;
+  if (plate === undefined || reveal === undefined) throw new Error('missing reveal fixture');
+  const sibling = { x: 0.25, y: 0.25, width: 0.25, height: 0.25 };
+  plate.revealMask = { ...reveal, additionalRects: [sibling] };
+  const rect = { ...reveal.rect, x: 0.125, width: 0.5 };
+  const edit = {
+    plateId: plate.sourceId,
+    kind: 'reveal',
+    index: 0,
+    authored: reveal.rect,
+    rect,
+  } satisfies LiveMaskPlacement;
+  expect(lookPlateReveals(live, undefined, [edit])[plate.sourceId]).toEqual(plate.revealMask);
+  plate.operatorMaskEdit = true;
+  expect(lookPlateReveals(live, undefined, [edit])[plate.sourceId]).toEqual({
+    ...plate.revealMask,
+    rect,
+  });
 });
 
 describe('D-178 — lookPlateFocuses resolves focus through both carrier shapes', () => {

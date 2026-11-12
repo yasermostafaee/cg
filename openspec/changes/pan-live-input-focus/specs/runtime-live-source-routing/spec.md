@@ -132,9 +132,18 @@ it. A legacy rehearsal requires leaving PVW before Take. Independent browser-onl
 - **GIVEN** the PVW row also owns the verified live cover-fit plate in PGM
 - **WHEN** the operator drags or resizes the crop **THEN** it becomes an Inspector draft without changing the programme
 - **WHEN** the operator presses Update on air **THEN** the seated source is reframed inside its existing clip without a producer restart or volume change
+- **AND** a crop-only change needs no graphics field update
 - **AND** the Inspector clears the crop draft only after Bridge confirms it
 - **WHEN** the row, preset, input or seat has changed or the engine refuses the crop **THEN** Bridge reports the refusal and CG Control keeps the draft
 - **WHEN** Pan stays open across a Take **THEN** it checks the seated source as soon as the row settles
+
+#### Scenario: Crop after replacing a listed template
+
+- **GIVEN** Reload or replacement import preserves the live framing of a verified on-air seat
+- **WHEN** the operator applies a crop edit or **Reset crop**
+- **THEN** the existing input is reframed in place
+- **WHEN** the listed template changes the authored framing
+- **THEN** resetting to the new framing requires a Take of that template
 
 #### Scenario: An unavailable or stale crop cannot affect another input
 

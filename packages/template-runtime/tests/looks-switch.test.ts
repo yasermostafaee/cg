@@ -1,6 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Window } from 'happy-dom';
-import { CG_CONTROL_KEY, withCgControl, type Element, type Scene } from '@cg/shared-schema';
+import {
+  CG_CONTROL_KEY,
+  livePlateMaskRegions,
+  withCgControl,
+  type Element,
+  type LiveMaskPlacement,
+  type LivePlateMask,
+  type Scene,
+} from '@cg/shared-schema';
 import { createRuntime } from '../src/runtime.js';
 import type { RuntimeBootOptions } from '../src/types.js';
 
@@ -554,6 +562,78 @@ describe('PGM fallback during a preset cut', () => {
     );
     expect(runtime.activeLookId()).toBe('look-pair');
   });
+});
+
+describe('operator mask windows in the rehearsal and background pages', () => {
+  it.each([{ pvw: true }, { outputPass: 'background' as const }])(
+    'honours the active preset, exact authored window and permission in %o',
+    async (options) => {
+      const authored = { x: 0.125, y: 0.125, width: 0.25, height: 0.25 };
+      const other = { x: 0.75, y: 0.75, width: 0.125, height: 0.125 };
+      const moved = { ...authored, x: 0.5 };
+      const authoredMask: LivePlateMask = { mode: 'outside', rects: [authored, other] };
+      const editedMask: LivePlateMask = { ...authoredMask, rects: [moved, other] };
+      const fixture = scene();
+      for (const id of ['comp-six', 'comp-pair', 'comp-solo']) {
+        const source = fixture.compositions?.find((entry) => entry.id === id)?.layers[0]
+          ?.children[0];
+        if (source?.type !== 'video-placeholder') throw new Error('Missing test plate');
+        source.liveMask = authoredMask;
+        source.allowOperatorMaskEdit = id !== 'comp-solo';
+        if (options.pvw === true) source.showFallback = false;
+      }
+      const { runtime, root } = boot(fixture, { ...options, skipFontLoad: true });
+      const clip = (id: string) => root.querySelector(`[data-cg-live-fallback="${id}"] clipPath`);
+      const regions = (id: string) =>
+        [...(clip(id)?.querySelectorAll('rect') ?? [])].map((rect) => ({
+          x: Number(rect.getAttribute('x')),
+          y: Number(rect.getAttribute('y')),
+          width: Number(rect.getAttribute('width')),
+          height: Number(rect.getAttribute('height')),
+        }));
+      const edit = (lookId: string, original = authored): LiveMaskPlacement => ({
+        lookId,
+        plateId: 'guest-1',
+        kind: 'mask',
+        index: 0,
+        authored: original,
+        rect: moved,
+      });
+      const sixClip = clip('six-p1');
+      expect(regions('six-p1')).toEqual(livePlateMaskRegions(authoredMask));
+      await runtime.ready;
+      try {
+        await runtime.play(
+          withCgControl(
+            {},
+            { maskPlacements: [edit('look-six'), edit('look-pair'), edit('look-solo')] },
+          ),
+        );
+        expect(clip('six-p1')).toBe(sixClip);
+        expect(regions('six-p1')).toEqual(livePlateMaskRegions(editedMask));
+        expect(regions('pair-p1')).toEqual(livePlateMaskRegions(authoredMask));
+
+        await runtime.update(withCgControl({}, { look: 'look-pair' }));
+        expect(regions('six-p1')).toEqual(livePlateMaskRegions(authoredMask));
+        expect(regions('pair-p1')).toEqual(livePlateMaskRegions(editedMask));
+        await runtime.update(withCgControl({}, { maskPlacements: [edit('look-pair', other)] }));
+        expect(regions('pair-p1')).toEqual(livePlateMaskRegions(authoredMask));
+        await runtime.update(
+          withCgControl({}, { look: 'look-solo', maskPlacements: [edit('look-solo')] }),
+        );
+        expect(regions('solo-p1')).toEqual(livePlateMaskRegions(authoredMask));
+
+        await runtime.update(
+          withCgControl({}, { look: 'look-six', maskPlacements: [edit('look-six')] }),
+        );
+        expect(regions('six-p1')).toEqual(livePlateMaskRegions(editedMask));
+        await runtime.update(withCgControl({}, { maskPlacements: [] }));
+        expect(regions('six-p1')).toEqual(livePlateMaskRegions(authoredMask));
+      } finally {
+        runtime.remove();
+      }
+    },
+  );
 });
 
 /*

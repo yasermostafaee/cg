@@ -594,6 +594,36 @@ describe('D-202 — per-look reveal relation, from the upper plate element', () 
     });
     expect(buildTemplateLiveSources(s).sources[0]?.revealMask).toEqual(reveal);
   });
+
+  it('exports mask permissions for the matching plate instance only', () => {
+    const base = {
+      ...plate('picture', 'guest-1', 0, 0, 640, 360),
+      liveMask: { mode: 'inside', rects: [{ x: 0.125, y: 0.25, width: 0.5, height: 0.5 }] },
+    } satisfies VideoPlaceholderElement;
+    const enabled = { ...base, allowOperatorMaskEdit: true };
+    const flat = buildTemplateLiveSources(
+      scene({
+        rootChildren: [enabled, { ...base, id: 'locked', routeKey: 'guest-2' }],
+        compositions: [],
+      }),
+    );
+    expect(flat.sources.map(({ operatorMaskEdit }) => operatorMaskEdit)).toEqual([true, undefined]);
+    const nested = buildTemplateLiveSources(
+      scene({
+        rootChildren: [
+          instance('first', 'enabled', 0, 0, 1920, 1080),
+          instance('second', 'locked', 0, 0, 1920, 1080),
+        ],
+        compositions: [comp('enabled', [enabled]), comp('locked', [{ ...base, id: 'locked' }])],
+        lookGroups: [{ id: 'group', looks: [look('a', 'first'), look('b', 'second')] }],
+      }),
+    );
+    expect(nested.looks?.map(({ operatorMaskEdits }) => operatorMaskEdits)).toEqual([
+      ['guest-1'],
+      undefined,
+    ]);
+    expect(nested.sources[0]?.operatorMaskEdit).toBeUndefined();
+  });
 });
 
 describe('per-look maps: absence is NO ENTRY, and the empty look is valid', () => {

@@ -10,3 +10,5 @@
 - [ ] Record the carrying Linux Playwright result.
 - [x] Verify folder Sequence and live plate artwork in exported PNG pixels in Windows Chromium.
       The representative preset test verifies visible plate count, the tie break and shared artwork.
+- [x] Windows Chromium verified that exporting the actual Quran starter embeds its first full-screen
+      picture in the 320 × 180 PNG.

@@ -172,6 +172,7 @@ import {
   StackPgmPlateCropChannel,
   StackPreviewPlateCropChannel,
   StackSetFramePlacementsChannel,
+  StackSetMaskPlacementsChannel,
   StackSetPlateVolumesChannel,
   StackSilenceAllLivePlatesChannel,
   StackSilenceChannelLivePlatesChannel,
@@ -5248,6 +5249,13 @@ export function buildRoutes(
       (r: ChannelRequest<typeof StackSetFramePlacementsChannel>) =>
         b.setFramePlacements(r.itemId, r.placements, r.reset),
     ),
+    route(
+      StackSetMaskPlacementsChannel,
+      'operator',
+      'operator',
+      (r: ChannelRequest<typeof StackSetMaskPlacementsChannel>) =>
+        b.setMaskPlacements(r.itemId, r.placements),
+    ),
     /*
       `MEDIA-PLATES-01` §1.D — Play/Pause and Restart for one media plate of an on-air row. It names
       its row, so the station fence, the principal's grant on that row's channel and a lock covering
@@ -6077,6 +6085,7 @@ export function buildRoutes(
     livePlatePaintOrder: true as const,
     liveCropReset: true as const,
     previewResizeMode: true as const,
+    previewMaskPlacement: true as const,
     /*
       🔴 `C-037` / ADR 0010 rule 9 — the auth MODE and the SIGN-IN ADDRESS, answered to a
       socket that has not signed in, because that is the socket that needs them. `B-153`'s own

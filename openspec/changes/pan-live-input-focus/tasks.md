@@ -131,3 +131,10 @@
 
 - [x] Show Crop input only for an eligible Crop edges plate on PVW. Windows Chromium verified
       the empty and contain-only cases and the disabled state before Preview Play.
+
+## 14. Reframe after a compatible template replacement
+
+- [x] Windows Chromium verified Crop input and Reset crop after a replacement import while the
+      original input stays on air. A crop-only Update sends mixer geometry without an empty CG UPDATE.
+- [x] Bridge verified that changed authored framing refuses a live reset before a mixer write
+      and compatible framing still supports a rollback after a mixer refusal.

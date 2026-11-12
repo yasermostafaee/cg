@@ -60,6 +60,11 @@ export const SharedTemplateThumbnailSchema = z.discriminatedUnion('kind', [
     kind: z.literal('scene'),
     scene: SceneSchema,
     images: PreviewImagesSchema.optional(),
+    // PNG is implicit for older Bridges. Other preview image types are named per asset.
+    imageMimes: z
+      .record(z.string(), z.literal('image/jpeg'))
+      .refine((mimes) => Object.keys(mimes).length <= SHARED_TEMPLATE_MAX_PREVIEW_IMAGES)
+      .optional(),
   }),
 ]);
 export type SharedTemplateThumbnail = z.infer<typeof SharedTemplateThumbnailSchema>;

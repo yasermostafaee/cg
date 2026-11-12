@@ -230,6 +230,8 @@ export function collectLiveSources(scene: Scene): LiveSourceDeclaration[] {
       sourceId: el.routeKey,
       rect: flat.rect,
       ...(operatorFrame !== undefined && { operatorFrame }),
+      ...(el.allowOperatorMaskEdit === true &&
+        (el.liveMask !== undefined || el.revealMask !== undefined) && { operatorMaskEdit: true }),
       ...(el.expectedAspect !== undefined ? { expectedAspect: el.expectedAspect } : {}),
       // `C-028` — omitted when absent rather than defaulted to `contain` here. The
       // default belongs at the ONE resolution point (the bridge's mode chain), and a
@@ -274,6 +276,7 @@ export interface TemplateLookCarrier {
   rects: Record<string, LiveSourceRect>;
   platePaintOrder?: string[] | undefined;
   operatorFrames?: Record<string, LiveFrameTarget> | undefined;
+  operatorMaskEdits?: string[] | undefined;
   /**
    * ⭐ `B-178` — **the AUTHOR's fit mode for each source IN THIS LOOK**, taken from the plate
    * ELEMENT that serves that `routeKey` here.
@@ -396,6 +399,7 @@ export function collectLookCarrier(scene: Scene): {
   );
   const masksByLook = new Map<string, Record<string, LivePlateMask>>();
   const operatorFramesByLook = new Map<string, Record<string, LiveFrameTarget>>();
+  const operatorMaskEditsByLook = new Map<string, string[]>();
   const fallbacksByLook = new Map<string, string[]>();
   const firstPlateFor = new Map<string, string>();
   /**
@@ -452,6 +456,14 @@ export function collectLookCarrier(scene: Scene): {
         const frames = operatorFramesByLook.get(look.id) ?? {};
         frames[routeKey] = operatorFrame;
         operatorFramesByLook.set(look.id, frames);
+      }
+      if (
+        el.allowOperatorMaskEdit === true &&
+        (el.liveMask !== undefined || el.revealMask !== undefined)
+      ) {
+        const editable = operatorMaskEditsByLook.get(look.id) ?? [];
+        editable.push(routeKey);
+        operatorMaskEditsByLook.set(look.id, editable);
       }
       /*
         ⚠ WRITTEN ONLY WHEN THE AUTHOR STATED ONE. An absent entry is the third state —
@@ -540,6 +552,9 @@ export function collectLookCarrier(scene: Scene): {
         rects: rectsByLook.get(l.id) ?? {},
         ...(order.length > 1 && { platePaintOrder: order }),
         ...(operatorFramesByLook.has(l.id) && { operatorFrames: operatorFramesByLook.get(l.id) }),
+        ...(operatorMaskEditsByLook.has(l.id) && {
+          operatorMaskEdits: operatorMaskEditsByLook.get(l.id),
+        }),
         fits: fitsByLook.get(l.id) ?? {},
         focuses: focusesByLook.get(l.id) ?? {},
         reveals: revealsByLook.get(l.id) ?? {},

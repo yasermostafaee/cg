@@ -6,6 +6,7 @@ import {
   positionQuery,
   withCgControl,
   type LiveFramePlacement,
+  type LiveMaskPlacement,
 } from '@cg/shared-schema';
 import { pageTarget, type ChannelRaster } from '@cg/shared-ipc';
 import {
@@ -163,6 +164,7 @@ interface Props {
   book?: RehearsalBook | undefined;
   livePlates: readonly PlatePlacement[];
   framePlacements?: LiveFramePlacement[] | undefined;
+  maskPlacements?: LiveMaskPlacement[] | undefined;
   sourceFrames: ReadonlyMap<string, PvwSourceFrame>;
   handleRef?: Ref<RehearsalFrameHandle>;
   /** Told whenever this frame's readiness flips, so the stage can gate its transport. */
@@ -189,6 +191,7 @@ export function RehearsalFrame({
   book,
   livePlates,
   framePlacements,
+  maskPlacements,
   sourceFrames,
   handleRef,
   onReadyChange,
@@ -300,9 +303,10 @@ export function RehearsalFrame({
         withCgControl(fields, {
           ...(activeLookId !== undefined && { look: activeLookId }),
           ...(framePlacements !== undefined && { framePlacements }),
+          ...(maskPlacements !== undefined && { maskPlacements }),
         }),
       ),
-    [fields, activeLookId, framePlacements],
+    [fields, activeLookId, framePlacements, maskPlacements],
   );
 
   /*
@@ -328,12 +332,13 @@ export function RehearsalFrame({
         withCgControl(fields, {
           ...(activeLookId !== undefined && { look: activeLookId }),
           ...(framePlacements !== undefined && { framePlacements }),
+          ...(maskPlacements !== undefined && { maskPlacements }),
           ...(timing !== undefined && { timing }),
           // `RUN-NEXT-VERSION-03` 1.1 — a take carries its page (`#pageControl`); so does PVW's.
           ...(page !== undefined && { page }),
         }),
       ),
-    [fields, activeLookId, framePlacements, timing, page],
+    [fields, activeLookId, framePlacements, maskPlacements, timing, page],
   );
 
   /** The timing's VALUE as a stable key — an object identity would re-fire on every render. */

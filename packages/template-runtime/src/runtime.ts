@@ -31,6 +31,7 @@ import {
   type CgLiveFallback,
   type CgPage,
   type LiveFramePlacement,
+  type LiveMaskPlacement,
   type Look,
   type SequenceElement,
 } from '@cg/shared-schema';
@@ -50,6 +51,7 @@ import {
 } from './bindings.js';
 import { applyArrangementToNodes } from './arrangement-view.js';
 import { createFramePlacementRenderer } from './frame-placement.js';
+import { createMaskPlacementRenderer } from './mask-placement.js';
 import { LookMediaPark } from './look-media.js';
 import {
   pagedRepeaterItems,
@@ -587,16 +589,19 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const outputPass = mode === 'output' ? (options.outputPass ?? 'full') : 'full';
   const holdsLiveFallback =
     mode === 'output' && outputPass !== 'foreground' && !isPvwRehearsal(doc);
-  const hasFramePlacement = [scene, ...(scene.compositions ?? [])].some(({ layers }) =>
+  const hasOperatorGeometry = [scene, ...(scene.compositions ?? [])].some(({ layers }) =>
     layers.some(({ children }) =>
       children.some(
         (element) =>
           element.type === 'video-placeholder' &&
-          (element.operatorPlacement !== undefined || element.operatorMove === true),
+          (element.operatorPlacement !== undefined ||
+            element.operatorMove === true ||
+            (element.allowOperatorMaskEdit === true && element.liveMask !== undefined)),
       ),
     ),
   );
-  const flattened = hasFramePlacement ? flattenElements(scene) : [];
+  const flattened = hasOperatorGeometry ? flattenElements(scene) : [];
+  const lookGroup = lookGroupOf(scene);
   const frameTargets = collectOperatorFrameTargets(scene, flattened);
   const built = buildScene(
     scene,
@@ -613,7 +618,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     flattened,
     frameTargets,
   );
+  const renderMaskPlacements = createMaskPlacementRenderer(built.container, flattened, lookGroup);
   let framePlacements: readonly LiveFramePlacement[] = [];
+  let maskPlacements: readonly LiveMaskPlacement[] = [];
 
   /**
    * ⭐ **`multibox-layout-switch` `tasks.md` 4.3 — UNIT B′'s re-punch pass.**
@@ -694,7 +701,6 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // internals when the A′ machinery is deleted — the PUBLIC seam (`setActiveLook`) does not
   // change then. ⚠ Consequence of the shared seam, accepted for the window: a later
   // `setArrangementView(undefined)` clears the look state too. No template authors both.
-  const lookGroup = lookGroupOf(scene);
   let currentLookId: string | undefined;
   /**
    * `B-150` — content inside a look that is not on screen is PARKED. See `look-media.ts`
@@ -732,6 +738,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     // there for why it cannot be done at this line without acquiring a second answer.
     repunch({ visibility: visibilityOfLook(look.id) });
     renderFramePlacements(framePlacements, look.id);
+    renderMaskPlacements(maskPlacements, look.id);
   };
   /**
    * `tasks.md` 6.7 — ENTER A LOOK BY ID. **The one implementation, two entry points.**
@@ -3481,9 +3488,13 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         look is active".
       */
       if (control?.framePlacements !== undefined) framePlacements = control.framePlacements;
+      if (control?.maskPlacements !== undefined) maskPlacements = control.maskPlacements;
       const enteredLook = control?.look !== undefined && enterLook(control.look);
       if (!enteredLook && control?.framePlacements !== undefined) {
         renderFramePlacements(framePlacements, currentLookId);
+      }
+      if (!enteredLook && control?.maskPlacements !== undefined) {
+        renderMaskPlacements(maskPlacements, currentLookId);
       }
       bus.emit('play.end');
     },
@@ -3595,11 +3606,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       const staleRelease = phase?.phase === 'release' && lastFallbackPhaseId !== phase.id;
       const previousLook = currentLookId;
       const nextPlacements = staleRelease ? undefined : control?.framePlacements;
+      const nextMasks = staleRelease ? undefined : control?.maskPlacements;
       if (nextPlacements !== undefined) framePlacements = nextPlacements;
+      if (nextMasks !== undefined) maskPlacements = nextMasks;
       const enteredLook = !staleRelease && control?.look !== undefined && enterLook(control.look);
       if (!enteredLook) {
         repunch(arrangementView);
         if (nextPlacements !== undefined) renderFramePlacements(framePlacements, currentLookId);
+        if (nextMasks !== undefined) renderMaskPlacements(maskPlacements, currentLookId);
       }
       if (phase?.phase === 'hold' && (control?.look === undefined || enteredLook)) {
         holdLiveFallback(phase);

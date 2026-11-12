@@ -32,6 +32,9 @@ export interface RehearsalSubject {
   previewPlateCrops?: StackItemState['previewPlateCrops'];
   framePlacements?: StackItemState['framePlacements'];
   appliedFramePlacements?: StackItemState['framePlacements'];
+  maskPlacements?: StackItemState['maskPlacements'];
+  appliedMaskPlacements?: StackItemState['maskPlacements'];
+  canEditMasks?: boolean;
   canEditFrames?: boolean;
   /** Pan checks the live seat when the row's Inspector offers Update on air. */
   previewCropOnAir?: boolean;

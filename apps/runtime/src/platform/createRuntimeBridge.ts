@@ -311,6 +311,8 @@ export function createMockBridge(): RuntimeBridge {
       pgmPlateCrop: () => Promise.resolve({ ok: true, targets: [] }),
       setFramePlacements: () =>
         Promise.resolve({ accepted: false, message: 'Frame placement requires CG Bridge.' }),
+      setMaskPlacements: () =>
+        Promise.resolve({ accepted: false, message: 'Mask placement requires CG Bridge.' }),
       previewPlateCrop: () =>
         Promise.resolve({
           ok: false,

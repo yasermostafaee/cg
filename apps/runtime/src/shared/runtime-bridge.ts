@@ -79,6 +79,7 @@ import type {
   StackLoadChannel,
   StackLoadProfileChannel,
   StackSetFramePlacementsChannel,
+  StackSetMaskPlacementsChannel,
   StackOutChannel,
   StackStopChannel,
   StackClearAllChannel,
@@ -218,6 +219,7 @@ export interface AuthCapabilities {
   readonly liveFramePlacementReset?: true;
   readonly liveCropReset?: true;
   readonly previewResizeMode?: true;
+  readonly previewMaskPlacement?: true;
   readonly livePlatePaintOrder?: true;
   readonly sharedTemplateFolder?: true;
   readonly templateThumbnails?: true;
@@ -558,6 +560,9 @@ export interface RuntimeBridge {
     setFramePlacements(
       req: ChannelRequest<typeof StackSetFramePlacementsChannel>,
     ): Promise<ChannelResponse<typeof StackSetFramePlacementsChannel>>;
+    setMaskPlacements(
+      req: ChannelRequest<typeof StackSetMaskPlacementsChannel>,
+    ): Promise<ChannelResponse<typeof StackSetMaskPlacementsChannel>>;
     /**
      * `add-multibox-audio` — the same intent for SEVERAL plates of one row, as ONE action.
      *

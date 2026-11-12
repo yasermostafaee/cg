@@ -5,7 +5,12 @@ import { join } from 'node:path';
 import type { Browser, Locator, Page } from '@playwright/test';
 import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
-import { LayerProfileSchema, type ConnectionConfig, type FixedLayerBank } from '@cg/shared-ipc';
+import {
+  LayerProfileSchema,
+  type ConnectionConfig,
+  type FixedLayerBank,
+  type TemplateInfo,
+} from '@cg/shared-ipc';
 import { SceneSchema, type VideoPlaceholderElement } from '@cg/shared-schema';
 import { cgCss, cgJsIife, ExporterSingleFile } from '@cg/single-file-export';
 import { buildTemplateLiveSources, pack, sha256Hex, unpack } from '@cg/vcg-format';
@@ -17,7 +22,6 @@ import {
   openVcgFileChooser,
   test,
 } from './fixtures/runtime.js';
-import { solidPng } from './fixtures/pictures.js';
 
 /**
  * 🔴 `RELEASE-091-01` §1 (`B-288`) — **PVW RENDERS THE PAGE THE BRIDGE SERVES CASPARCG, IN A BROWSER
@@ -259,32 +263,30 @@ test('D-178 / B-433 — PVW crop reaches the first Take and Update on air refram
   if (engine === null) throw new Error('Test engine is unavailable');
   await handle.runtime.whenServerHealthy(15_000);
   const cropItem = 'pvw-crop-item';
-  handle.runtime.templateImport(
-    {
-      templateId: 'tpl-pvw-crop',
-      name: 'PVW crop fixture',
-      templateType: 'custom',
-      fields: [],
-      liveSources: {
-        resolution: { width: 1920, height: 1080 },
-        defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
-        sources: [
-          {
-            elementId: 'guest-el',
-            sourceId: 'guest',
-            dynamic: false,
-            fitMode: 'cover',
-            rect: { x: 720, y: 270, width: 480, height: 540 },
-          },
-        ],
-      },
+  const template: TemplateInfo = {
+    templateId: 'tpl-pvw-crop',
+    name: 'PVW crop fixture',
+    templateType: 'custom',
+    fields: [],
+    liveSources: {
+      resolution: { width: 1920, height: 1080 },
+      defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
+      sources: [
+        {
+          elementId: 'guest-el',
+          sourceId: 'guest',
+          dynamic: false,
+          fitMode: 'cover',
+          rect: { x: 720, y: 270, width: 480, height: 540 },
+        },
+      ],
     },
-    HTML.replace(
-      '</body>',
-      '<div data-cg-live-source="guest" style="position:absolute;left:720px;top:270px;width:480px;height:540px"></div></body>',
-    ),
-    1,
+  };
+  const html = HTML.replace(
+    '</body>',
+    '<div data-cg-live-source="guest" style="position:absolute;left:720px;top:270px;width:480px;height:540px"></div></body>',
   );
+  const imported = handle.runtime.templateImport(template, html, 1);
   expect(
     await handle.runtime.loadFixed({ channel: 1, layer: 59 }, cropItem, 'tpl-pvw-crop', {}),
   ).toMatchObject({ accepted: true });
@@ -415,6 +417,25 @@ test('D-178 / B-433 — PVW crop reaches the first Take and Update on air refram
 
   await expect(plateRow).toHaveAttribute('aria-label', /ON AIR$/);
   await expect(pvw.getByRole('button', { name: 'Pan source picture in guest' })).toBeEnabled();
+  const reloadWireStart = engine.receivedCommands().length;
+  const revisedMarker = 'pvw-crop-revised';
+  const reloaded = await page.evaluate((request) => window.cg.templates.import(request), {
+    channel: 1,
+    template: { ...template, name: 'PVW crop fixture revised' },
+    html: html.replace(MARK, revisedMarker),
+  });
+  expect(reloaded).toMatchObject({ registered: true, templateId: template.templateId });
+  expect(reloaded.versionId).toBeDefined();
+  expect(reloaded.versionId).not.toBe(imported.versionId);
+  await expect(
+    pvw.frameLocator('iframe[data-rehearsal-frame]').locator('.cg-stage'),
+  ).toHaveAttribute('data-mark', revisedMarker);
+  // A refreshed rehearsal page has its own transport. Start it and reopen the guide.
+  await pvw.getByRole('button', { name: 'PLAY', exact: true }).click();
+  await expect(pan).toBeEnabled();
+  if ((await pan.getAttribute('aria-pressed')) !== 'true') await pan.click();
+  await expect(pvw.getByRole('button', { name: 'Pan source picture in guest' })).toBeEnabled();
+  await expect(saved).toBeVisible();
   const before = engine.layerState(slot);
   if (before?.fill === undefined || before.clip === undefined)
     throw new Error('Missing on-air plate geometry');
@@ -507,6 +528,15 @@ test('D-178 / B-433 — PVW crop reaches the first Take and Update on air refram
   expect(engine.layerState(slot)?.clip).toEqual(beforeClip);
   expect(engine.layerState(slot)?.opacity).toBe(1);
   await expect(resetCrop).toBeDisabled();
+  expect(onAirUpdate.some((line) => /^CG 1-59 UPDATE /.test(line))).toBe(false);
+  expect(
+    engine
+      .receivedCommands()
+      .slice(reloadWireStart)
+      .some(({ line }) =>
+        /^(?:PLAY |CLEAR |CG \d+-\d+ (?:ADD|PLAY|STOP|REMOVE|CLEAR) )/.test(line),
+      ),
+  ).toBe(false);
 });
 
 test('R-024 saves and reloads a layer profile and refuses to replace an on-air row', async ({
@@ -845,13 +875,18 @@ test('R-108 imported Templates show row thumbnails and the larger selected previ
           if (ctx === null) throw new Error('Cannot decode preview pixels');
           ctx.drawImage(bitmap, 0, 0);
           const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-          return colors.map((color) => {
+          return colors.map((color, index) => {
             ctx.fillStyle = color;
             ctx.fillRect(0, 0, 1, 1);
             const [red, green, blue] = ctx.getImageData(0, 0, 1, 1).data;
             let count = 0;
+            const tolerance = index < 2 ? 0 : 3;
             for (let at = 0; at < pixels.length; at += 4) {
-              if (pixels[at] === red && pixels[at + 1] === green && pixels[at + 2] === blue)
+              if (
+                Math.abs((pixels[at] ?? 0) - (red ?? 0)) <= tolerance &&
+                Math.abs((pixels[at + 1] ?? 0) - (green ?? 0)) <= tolerance &&
+                Math.abs((pixels[at + 2] ?? 0) - (blue ?? 0)) <= tolerance
+              )
                 count++;
             }
             return count;
@@ -895,9 +930,22 @@ test('R-108 imported Templates show row thumbnails and the larger selected previ
       throw new Error('Book fixture is missing');
     sequence.transform.position = { x: 900, y: 660 };
     sequence.transform.size = { w: 800, h: 360 };
-    const picture = solidPng(64, 36, [32, 116, 216]);
+    // Match the dimensions and MIME of the owner's retained 87-page Quran VCG.
+    const picture = Buffer.from(
+      await page.evaluate(() => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 2040;
+        canvas.height = 980;
+        const context = canvas.getContext('2d');
+        if (context === null) throw new Error('Cannot make a legacy JPEG fixture');
+        context.fillStyle = '#2074d8';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        return canvas.toDataURL('image/jpeg').split(',')[1] ?? '';
+      }),
+      'base64',
+    );
     const sha256 = sha256Hex(picture);
-    const picturePath = `assets/image/${sha256}.png`;
+    const picturePath = `assets/image/${sha256}.jpg`;
     const assetId = 'bound-preview-picture';
     pages.default = [
       { id: 'preview-title', text: 'Opening title' },
@@ -914,7 +962,7 @@ test('R-108 imported Templates show row thumbnails and the larger selected previ
             kind: 'image',
             bytes: picture.length,
             sha256,
-            mime: 'image/png',
+            mime: 'image/jpeg',
           },
         ],
       },
@@ -937,11 +985,12 @@ test('R-108 imported Templates show row thumbnails and the larger selected previ
     const legacyCaption = legacyFrame.locator('[data-cg-element-id="el-name"]');
     const bookImage = `img[data-cg-asset-id="${assetId}"]`;
     await expect(legacyCaption).toBeVisible();
+    await expect(legacyFrame.locator(bookImage)).toHaveAttribute('src', /^data:image\/jpeg/);
     await expect
       .poll(() =>
         legacyFrame.locator(bookImage).evaluate((image: HTMLImageElement) => image.naturalWidth),
       )
-      .toBe(64);
+      .toBe(2040);
     expect(
       await legacyPreview.evaluate((frame) => {
         const slot = frame.parentElement;
@@ -1015,7 +1064,7 @@ test('R-108 imported Templates show row thumbnails and the larger selected previ
             .locator(bookImage)
             .evaluate((image: HTMLImageElement) => image.naturalWidth),
         )
-        .toBe(64);
+        .toBe(2040);
       await checkPreviewPixels(fresh, detail.locator(stillFrame), bookArtwork);
       await select(fresh, oldEntryId);
       await expect(detail.locator('img, iframe')).toHaveCount(0);
@@ -1993,11 +2042,8 @@ test('Auto layout stages both frame boxes and keeps each styled title with its i
     fontsCss: '',
     assets: { get: () => Promise.resolve(null), bytes: () => Promise.resolve(null) },
   }).produce(scene);
-  handle.runtime.templateImport(
-    { ...TEMPLATE, templateId, liveSources: buildTemplateLiveSources(scene) },
-    html,
-    1,
-  );
+  const template = { ...TEMPLATE, templateId, liveSources: buildTemplateLiveSources(scene) };
+  const originalImport = handle.runtime.templateImport(template, html, 1);
   const slot = { channel: 1, layer: 59 };
   expect(
     handle.runtime.setSourceCatalog({
@@ -2052,7 +2098,13 @@ test('Auto layout stages both frame boxes and keeps each styled title with its i
     .filter({ has: page.getByText('Auto layout', { exact: true }) });
   await layout.locator('summary').click();
   await layout.getByRole('combobox', { name: 'Arrangement' }).selectOption('vertical');
-  await layout.getByRole('textbox', { name: 'Vertical gap (px)' }).fill('36');
+  const verticalGap = layout.getByRole('textbox', { name: 'Vertical gap (px)' });
+  const stackedGap = async () => {
+    const { a, b } = await read();
+    return Math.max(a.y, b.y) - Math.min(a.y + a.height, b.y + b.height);
+  };
+  await verticalGap.fill('36');
+  await expect.poll(stackedGap).toBeCloseTo(36, 1);
   const programmeCommands = () =>
     engine.receivedCommands().filter(({ line }) => /^(CG|MIXER) /.test(line));
   const before = programmeCommands();
@@ -2089,7 +2141,9 @@ test('Auto layout stages both frame boxes and keeps each styled title with its i
   expect(programmeCommands()).toEqual(before);
   await row.getByRole('button', { name: 'PLAY', exact: true }).click();
   await expect(row).toHaveAttribute('aria-label', /ON AIR$/);
-  expect(JSON.parse(engine.lastCgAdd(slot)?.data ?? '{}')).toMatchObject({
+  const resident = engine.lastCgAdd(slot);
+  if (resident?.data == null) throw new Error('Missing resident programme page');
+  expect(JSON.parse(resident.data)).toMatchObject({
     __cg: { framePlacements: saved() },
   });
   await expect
@@ -2097,8 +2151,53 @@ test('Auto layout stages both frame boxes and keeps each styled title with its i
     .toBe(true);
   const beforeSwap = programmeCommands();
   const wireStart = engine.receivedCommands().length;
+  const sourceGeometry = () =>
+    [60, 61].map((layer) => engine.layerState({ channel: 1, layer })?.clip);
+  const beforeSourceGeometry = sourceGeometry();
   const swap = layout.getByRole('button', { name: 'Swap frame order' });
   await expect(swap).toBeEnabled();
+  const revisionName = 'Studio layout · revised';
+  const revisedTitle = 'Studio One revised';
+  const revised = await page.evaluate((request) => window.cg.templates.import(request), {
+    channel: 1,
+    template: { ...template, name: revisionName },
+    html: html.replace('Studio One', revisedTitle),
+  });
+  expect(revised).toMatchObject({ registered: true, templateId });
+  expect(revised.versionId).toBeDefined();
+  expect(revised.versionId).not.toBe(originalImport.versionId);
+  await expect(row.getByText(revisionName, { exact: true })).toBeVisible();
+  await expect(frame.locator('[data-cg-element-id="title-first"]')).toHaveText(revisedTitle);
+  await expect(swap).toBeEnabled();
+  expect(programmeCommands()).toEqual(beforeSwap);
+  const savedBeforeGap = saved();
+  await verticalGap.fill('۴۸');
+  await expect(verticalGap).toHaveValue('48');
+  await expect.poll(stackedGap).toBeCloseTo(48, 1);
+  for (const incomplete of ['', '40.']) {
+    await verticalGap.fill(incomplete);
+    await expect.poll(stackedGap).toBeCloseTo(48, 1);
+  }
+  await verticalGap.fill('9999');
+  await expect(layout.getByRole('status')).toBeVisible();
+  await expect.poll(stackedGap).toBeCloseTo(48, 1);
+  await verticalGap.fill('48');
+  await verticalGap.blur();
+  const field = await verticalGap.boundingBox();
+  if (field === null) throw new Error('The gap input is not laid out');
+  const dragX = field.x + field.width / 2;
+  const dragY = field.y + field.height / 2;
+  await page.mouse.move(dragX, dragY);
+  await page.mouse.down();
+  try {
+    await page.mouse.move(dragX + 24, dragY, { steps: 4 });
+    await expect(verticalGap).toHaveValue('72');
+    await expect.poll(stackedGap).toBeCloseTo(72, 1);
+  } finally {
+    await page.mouse.up();
+  }
+  expect(saved()).toEqual(savedBeforeGap);
+  expect(programmeCommands()).toEqual(beforeSwap);
   await swap.click();
   await expect.poll(async () => (await read()).a.y).toBeLessThan((await read()).b.y);
   expect(programmeCommands()).toEqual(beforeSwap);
@@ -2114,14 +2213,46 @@ test('Auto layout stages both frame boxes and keeps each styled title with its i
   expect(
     programmeCommands()
       .slice(beforeSwap.length)
-      .filter(({ line }) => line.startsWith('CG 1-59 UPDATE') && line.includes('framePlacements')),
-  ).toHaveLength(1);
+      .filter(({ line }) => line.startsWith('CG 1-59 UPDATE'))
+      .map(({ line }) => line),
+  ).toEqual([expect.stringContaining('framePlacements')]);
   expect(
     engine
       .receivedCommands()
       .slice(wireStart)
-      .some(({ line }) => /^PLAY 1-[67]\d /.test(line)),
+      .some(({ line }) =>
+        /^(?:PLAY |CLEAR |CG \d+-\d+ (?:ADD|PLAY|STOP|REMOVE|CLEAR) )/.test(line),
+      ),
   ).toBe(false);
+  expect(sourceGeometry()).not.toEqual(beforeSourceGeometry);
+  const updated = engine.lastCgUpdate(slot)?.data;
+  if (updated == null) throw new Error('The resident page received no placement update');
+  const air = await page.context().newPage();
+  try {
+    await air.setViewportSize({ width: 1920, height: 1080 });
+    await air.goto(resident.template);
+    await air.waitForFunction(
+      () => typeof (window as unknown as { update?: unknown }).update === 'function',
+    );
+    const tellAir = (data: string) =>
+      air.evaluate(
+        (payload) => (window as unknown as { update: (value: string) => void }).update(payload),
+        data,
+      );
+    const airFrame = (id: string) => air.locator(`[data-cg-element-id="plate-${id}"]`);
+    const firstY = async () => (await airFrame('first').boundingBox())?.y ?? NaN;
+    const secondY = async () => (await airFrame('second').boundingBox())?.y ?? NaN;
+    await expect(air.locator('[data-cg-element-id="title-first"]')).toHaveText('Studio One');
+    await tellAir(resident.data);
+    await expect.poll(async () => (await firstY()) - (await secondY())).toBeGreaterThan(0);
+    await tellAir(updated);
+    await expect.poll(async () => (await firstY()) - (await secondY())).toBeLessThan(0);
+    const firstBox = await airFrame('first').boundingBox();
+    if (firstBox === null) throw new Error('The resident page has no first frame');
+    expect((await secondY()) - firstBox.y - firstBox.height).toBeCloseTo(72, 1);
+  } finally {
+    await air.close();
+  }
 });
 
 test('Auto layout retains separate controls and drafts for each active preset', async ({
@@ -2296,7 +2427,6 @@ test('Auto layout retains separate controls and drafts for each active preset', 
   ]);
   await arrangement.selectOption('more-bottom');
   await horizontalGap.fill('54');
-  await arrange.click();
   await expect
     .poll(async () => {
       const [top, lowerLeft, lowerRight] = await read();
@@ -2495,6 +2625,185 @@ test('D-213 Take seats two opted-in plates in the authored paint order', async (
   expect(layerOf(back)).toBeGreaterThanOrEqual(60);
   expect(layerOf(front)).toBeGreaterThan(layerOf(back));
   expect(layerOf(front)).toBeLessThanOrEqual(79);
+});
+
+test('Edit masks drafts authored windows in PVW and updates the existing on-air seats', async ({
+  page,
+}) => {
+  const handle = await boot(true);
+  const engine = mock;
+  if (engine === null) throw new Error('Test engine is unavailable');
+  await handle.runtime.whenServerHealthy(15_000);
+  const templateId = 'tpl-operator-masks';
+  const itemId = 'operator-masks-item';
+  const { scene } = await unpack(await buildPositionedVcg(templateId));
+  const layer = scene.layers[0];
+  const transform = layer?.children[0]?.transform;
+  if (layer === undefined || transform === undefined) throw new Error('Missing template fixture');
+  const plate = (id: string, x: number, zIndex: number): VideoPlaceholderElement => ({
+    id,
+    name: id,
+    type: 'video-placeholder',
+    routeKey: id,
+    transform: {
+      ...transform,
+      position: { x, y: 220 },
+      size: { w: 800, h: 450 },
+      anchor: { x: 0, y: 0 },
+    },
+    opacity: 1,
+    visible: true,
+    locked: false,
+    zIndex,
+  });
+  const maskRect = { x: 0.1, y: 0.18, width: 0.35, height: 0.5 };
+  const revealRect = { x: 0.09, y: 0.2, width: 0.3, height: 0.42 };
+  scene.allowLivePlateOverlap = true;
+  scene.fields = [];
+  scene.bindings = [];
+  layer.children = [
+    {
+      ...plate('lower', 140, 0),
+      allowOperatorMaskEdit: true,
+      liveMask: { mode: 'inside', rects: [maskRect] },
+    },
+    {
+      ...plate('upper', 530, 1),
+      allowOperatorMaskEdit: true,
+      operatorMove: true,
+      revealMask: { targetSourceId: 'lower', rect: revealRect },
+    },
+  ];
+  const { html } = await new ExporterSingleFile({
+    cgJsIife,
+    cgCss,
+    fontsCss: '',
+    assets: { get: () => Promise.resolve(null), bytes: () => Promise.resolve(null) },
+  }).produce(scene);
+  const ids = ['lower', 'upper'];
+  expect(
+    handle.runtime.setSourceCatalog({
+      layerRange: { start: 60, end: 79 },
+      sources: ids.map((id) => ({
+        id: `source-${id}`,
+        name: id,
+        format: '1080i5000',
+        producer: { kind: 'ndi', source: `MASK-TEST (${id})` },
+      })),
+    }),
+  ).toMatchObject({ ok: true });
+  handle.runtime.templateImport(
+    { ...TEMPLATE, templateId, liveSources: buildTemplateLiveSources(scene) },
+    html,
+    1,
+  );
+  expect(
+    handle.runtime.setSourceAssignments({
+      assignments: ids.map((plateId) => ({ templateId, plateId, sourceId: `source-${plateId}` })),
+    }),
+  ).toMatchObject({ ok: true });
+  const slot = { channel: 1, layer: 59 };
+  expect(await handle.runtime.loadFixed(slot, itemId, templateId, {})).toMatchObject({
+    accepted: true,
+  });
+  await openConsole(page, handle.url);
+  await showMonitors(page);
+  const row = page.getByRole('region', { name: 'Layers' }).locator('[data-layer="59"]');
+  await row.locator('[data-row-body]').click();
+  await row.getByRole('button', { name: 'ON PVW', exact: true }).click();
+  const pvw = page.getByRole('region', { name: 'PREVIEW (PVW)' });
+  const inspector = page.getByRole('complementary', { name: 'Inspector' });
+  const editFrames = pvw.getByRole('button', { name: 'Edit frames in Preview' });
+  const editMasks = pvw.getByRole('button', { name: 'Edit masks in Preview' });
+  await editFrames.click();
+  await expect(pvw.getByRole('button', { name: 'Move frame for upper' })).toBeVisible();
+  await editMasks.click();
+  await expect(editFrames).toHaveAttribute('aria-pressed', 'false');
+  await expect(pvw.getByRole('button', { name: 'Move frame for upper' })).toHaveCount(0);
+  const mask = pvw.locator('[data-mask-placement="mask"]');
+  const reveal = pvw.locator('[data-mask-placement="reveal"]');
+  await expect(mask).toBeVisible();
+  await expect(reveal).toBeVisible();
+  const clip = pvw
+    .frameLocator('iframe[data-rehearsal-frame]')
+    .locator('[data-cg-editable-mask] rect');
+  await expect(clip).toHaveAttribute('x', String(maskRect.x));
+  const maskBox = await mask.boundingBox();
+  if (maskBox === null) throw new Error('Missing Preview mask bounds');
+  const dragMask = async () => {
+    const x = maskBox.x + maskBox.width / 2;
+    const y = maskBox.y + maskBox.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + 18, y + 4, { steps: 4 });
+    await page.mouse.up();
+    await expect.poll(async () => (await mask.boundingBox())?.x).toBeCloseTo(maskBox.x + 18, 0);
+    await expect.poll(async () => Number(await clip.getAttribute('x'))).toBeGreaterThan(maskRect.x);
+  };
+  const programmeCommands = () =>
+    engine.receivedCommands().filter(({ line }) => /^(CG|MIXER|PLAY|CLEAR) /.test(line));
+  const saved = () =>
+    handle.runtime.stackSnapshot().find((item) => item.itemId === itemId)?.maskPlacements;
+  const before = programmeCommands();
+  await dragMask();
+  await expect(row.getByText('● draft', { exact: true })).toBeVisible();
+  expect(saved()).toBeUndefined();
+  expect(programmeCommands()).toEqual(before);
+  await inspector.getByRole('button', { name: 'Discard staged edits' }).click();
+  await expect(clip).toHaveAttribute('x', String(maskRect.x));
+  await expect.poll(async () => (await mask.boundingBox())?.x).toBeCloseTo(maskBox.x, 0);
+  await dragMask();
+  await inspector.getByRole('button', { name: 'Apply staged edits', exact: true }).click();
+  await expect.poll(() => saved()?.[0]?.kind).toBe('mask');
+  expect(programmeCommands()).toEqual(before);
+
+  await row.getByRole('button', { name: 'PLAY', exact: true }).click();
+  await expect(row).toHaveAttribute('aria-label', /ON AIR$/);
+  const carried = () => {
+    const updated = engine.lastCgUpdate(slot)?.data;
+    const added = engine.lastCgAdd(slot)?.data;
+    return [updated, added].map((payload) =>
+      payload == null ? undefined : JSON.parse(payload).__cg?.maskPlacements,
+    );
+  };
+  await expect.poll(carried).toContainEqual(saved());
+  await expect(editMasks).toHaveAttribute('aria-pressed', 'true');
+  const resize = pvw.getByRole('button', { name: 'Resize reveal 1 for upper from bottom right' });
+  const originalReveal = await reveal.boundingBox();
+  const corner = await resize.boundingBox();
+  if (originalReveal === null || corner === null) throw new Error('Missing reveal resize handle');
+  const onAir = programmeCommands();
+  const x = corner.x + corner.width / 2;
+  const y = corner.y + corner.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + 12, y - 10, { steps: 4 });
+  await page.mouse.up();
+  await expect
+    .poll(async () => (await reveal.boundingBox())?.width)
+    .toBeGreaterThan(originalReveal.width);
+  await expect
+    .poll(async () => (await reveal.boundingBox())?.height)
+    .toBeLessThan(originalReveal.height);
+  await expect(row.getByText('● draft', { exact: true })).toBeVisible();
+  expect(saved()).toHaveLength(1);
+  expect(programmeCommands()).toEqual(onAir);
+  await inspector.getByRole('button', { name: 'Apply staged edits to the on-air row' }).click();
+  await expect.poll(() => saved()?.length).toBe(2);
+  await expect(row.getByText('● draft', { exact: true })).toHaveCount(0);
+  const update = programmeCommands()
+    .slice(onAir.length)
+    .map(({ line }) => line);
+  expect(update.filter((line) => line.startsWith('CG 1-59 UPDATE'))).toEqual([
+    expect.stringContaining('maskPlacements'),
+  ]);
+  expect(update).toContain('MIXER 1 COMMIT');
+  expect(
+    update.some((line) =>
+      /^(?:PLAY |CLEAR |CG \d+-\d+ (?:ADD|PLAY|STOP|REMOVE|CLEAR) )/.test(line),
+    ),
+  ).toBe(false);
+  expect(carried()).toContainEqual(saved());
 });
 
 test('R-108 — a reloaded package refreshes the already-bound row in PVW', async ({ page }) => {

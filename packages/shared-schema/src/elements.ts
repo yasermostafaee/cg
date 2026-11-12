@@ -1563,6 +1563,8 @@ export const VideoPlaceholderElementSchema = ElementBaseSchema.extend({
   operatorPlacement: LiveFrameResizeSchema.optional(),
   /** Absent preserves legacy movement for a frame with an authored resize policy. */
   operatorMove: z.boolean().optional(),
+  /** Allow CG Control to move and resize this plate's authored mask windows. */
+  allowOperatorMaskEdit: z.boolean().optional(),
   /**
    * R-105 — what the graphics bed paints underneath this live picture. Absent preserves the
    * long-standing Designer choice: Bars. `posterAssetId` supplies the image branch's asset.

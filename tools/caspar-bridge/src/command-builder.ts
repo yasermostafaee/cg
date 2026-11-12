@@ -11,6 +11,7 @@ import {
   type CgSound,
   type FieldValues,
   type LiveFramePlacement,
+  type LiveMaskPlacement,
 } from '@cg/shared-schema';
 import type { NormalizedRect } from './live-layers.js';
 
@@ -37,6 +38,7 @@ export interface TakeControl {
   /** `RUN-NEXT-VERSION-02` Q9 — the row's template-sound mute, when the row has ever set it. */
   readonly sound?: CgSound;
   readonly framePlacements?: LiveFramePlacement[];
+  readonly maskPlacements?: LiveMaskPlacement[];
 }
 
 /**
@@ -178,6 +180,7 @@ export class CommandBuilder {
     plates?: Readonly<Record<string, CgPlateFit>>,
     liveFallback?: CgLiveFallback,
     framePlacements?: LiveFramePlacement[],
+    maskPlacements?: LiveMaskPlacement[],
   ): string {
     /*
       🔴 **`single-clock-look-switch` — the old mask-oriented `from` argument is GONE.**
@@ -196,6 +199,7 @@ export class CommandBuilder {
       ...(plates !== undefined && Object.keys(plates).length > 0 && { plates: { ...plates } }),
       ...(liveFallback !== undefined && { liveFallback }),
       ...(framePlacements !== undefined && { framePlacements }),
+      ...(maskPlacements !== undefined && { maskPlacements }),
     };
     return `CG ${target(slot)} UPDATE ${String(FLASH_LAYER)} ${quote(
       serialize(withCgControl(fields, control)),
@@ -264,6 +268,7 @@ export class CommandBuilder {
       ...(control.sound !== undefined && { sound: control.sound }),
       ...(control.plates !== undefined && { plates: control.plates }),
       ...(control.framePlacements !== undefined && { framePlacements: control.framePlacements }),
+      ...(control.maskPlacements !== undefined && { maskPlacements: control.maskPlacements }),
     };
     return `CG ${target(slot)} UPDATE ${String(FLASH_LAYER)} ${quote(
       serialize(withCgControl(fields, ordered)),

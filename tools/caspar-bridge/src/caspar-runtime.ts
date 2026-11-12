@@ -20,7 +20,9 @@ import {
 import {
   CG_LIVE_POSITION_PAGE_MARKER,
   CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER,
+  CG_LIVE_MASK_PLACEMENT_PAGE_MARKER,
   DEFAULT_LIVE_CROP_FOCUS,
+  LiveRevealRectSchema,
   MAX_PREVIEW_PLATE_CROPS,
   defaultNestedValues,
   framePlacementFits,
@@ -28,11 +30,13 @@ import {
   isRestorable,
   intersectNormalizedRects,
   livePlateMaskRegions,
+  liveMaskPlacementKey,
   liveRevealRects,
   liveRevealSceneRect,
   liveSourceFit,
   positionQuery,
   resolveDefaultPosition,
+  sameLiveMaskRect,
   type LiveSourceFit,
 } from '@cg/shared-schema';
 import type {
@@ -44,6 +48,7 @@ import type {
   FieldValues,
   LiveCropFocus,
   LiveFramePlacement,
+  LiveMaskPlacement,
   LiveFitMode,
   LivePlateVolumes,
   LiveSourceDeclaration,
@@ -143,6 +148,7 @@ import {
   lookPlateReveals,
   lookPlateRects,
   lookOperatorFrames,
+  lookOperatorMasks,
   framePlacementRects,
   type FramePlacementReset,
   type TemplateLiveSources,
@@ -198,6 +204,7 @@ import {
   type StationStray,
 } from '@cg/shared-ipc';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import type { LayerProfile, StackLoadProfileResult } from '@cg/shared-ipc';
 import {
   inAnyLayerBand,
@@ -488,7 +495,7 @@ interface PositionProposal {
 }
 
 interface ResidentGeometryChange {
-  readonly kind: 'frame-placement' | 'live-position';
+  readonly kind: 'frame-placement' | 'live-position' | 'mask-placement';
   readonly plan: LiveSeatingPlan;
   readonly update: FieldValues;
   readonly rollback: FieldValues;
@@ -541,6 +548,26 @@ function allowedFramePlacement(
   const [routeKey, { resize, move }] = found;
   const authored = lookPlateRects(carrier, lookId)[routeKey];
   return authored !== undefined && framePlacementFits(placement, authored, resize, move !== false);
+}
+
+function allowedMaskPlacement(carrier: TemplateLiveSources, placement: LiveMaskPlacement): boolean {
+  const { lookId, plateId, kind, index, authored } = placement;
+  if (
+    activeLookOf(carrier, lookId)?.id !== lookId ||
+    !lookOperatorMasks(carrier, lookId).has(plateId) ||
+    !LiveRevealRectSchema.safeParse(placement.rect).success
+  ) {
+    return false;
+  }
+  const reveal = lookPlateReveals(carrier, lookId)[plateId];
+  const windows =
+    kind === 'mask'
+      ? lookPlateMasks(carrier, lookId)[plateId]?.rects
+      : reveal === undefined
+        ? undefined
+        : liveRevealRects(reveal);
+  const window = windows?.[index];
+  return window !== undefined && sameLiveMaskRect(window, authored);
 }
 
 function maskSeatPrefix(plateId: string): string {
@@ -1893,6 +1920,7 @@ export class CasparRuntime {
   readonly #previewPlateCrops = new Map<string, NonNullable<StackItemState['previewPlateCrops']>>();
   readonly #framePlacements = new Map<string, LiveFramePlacement[]>();
   readonly #framePlacementsPendingReset = new Set<string>();
+  readonly #maskPlacements = new Map<string, LiveMaskPlacement[]>();
   /**
    * B-039 — itemIds whose slot currently has a LIVE producer (a `CG ADD` succeeded
    * and no later `CLEAR` destroyed it). The prescriptive signal: `take` plays when
@@ -3422,6 +3450,10 @@ export class CasparRuntime {
       const framePlacements = this.#framePlacements.get(item.itemId);
       const framePlacementsPendingReset = this.#framePlacementsPendingReset.has(item.itemId);
       const onAirFramePlacement = this.#liveFramePage(item) !== undefined;
+      const maskPlacements = this.#maskPlacements.get(item.itemId);
+      const onAirMaskPlacement =
+        onAirFramePlacement &&
+        this.#liveFramePage(item, CG_LIVE_MASK_PLACEMENT_PAGE_MARKER) !== undefined;
       // §14 (LOOKS) Stage E — and the ACTIVE LOOK, through the ONE resolver rather than
       // off `#activeLooks` directly. The map holds only what an operator explicitly
       // picked; `activeLookId()` answers what the row is actually SHOWING (the pick, else
@@ -3493,6 +3525,8 @@ export class CasparRuntime {
         framePlacements === undefined &&
         !framePlacementsPendingReset &&
         !onAirFramePlacement &&
+        maskPlacements === undefined &&
+        !onAirMaskPlacement &&
         activeLookId === undefined &&
         // 🔴 `TIMING-WIRE-22` (e) — BOTH HALVES, and this is the half that bites. A row whose
         // ONLY override is a pass count would take the fast path above and be published without
@@ -3524,6 +3558,8 @@ export class CasparRuntime {
         ...(framePlacements !== undefined && { framePlacements }),
         ...(framePlacementsPendingReset && { framePlacementsPendingReset: true as const }),
         ...(onAirFramePlacement && { onAirFramePlacement: true as const }),
+        ...(maskPlacements !== undefined && { maskPlacements }),
+        ...(onAirMaskPlacement && { onAirMaskPlacement: true as const }),
         ...(activeLookId !== undefined && { activeLookId }),
         ...(timingOverride !== undefined && { timingOverride }),
         ...(pages !== undefined && { pages }),
@@ -4353,6 +4389,9 @@ export class CasparRuntime {
       if (item.framePlacementsPendingReset === true) {
         this.#framePlacementsPendingReset.add(item.itemId);
       }
+      if (item.maskPlacements !== undefined) {
+        this.#maskPlacements.set(item.itemId, item.maskPlacements);
+      }
       /*
         §14 (LOOKS) Stage E — and the ACTIVE LOOK, re-applied HERE for the same reason as
         its three neighbours: BEFORE any adopt-vs-re-ADD decision runs, so whatever this
@@ -4592,6 +4631,7 @@ export class CasparRuntime {
     this.#previewPlateCrops.delete(itemId);
     this.#framePlacements.delete(itemId);
     this.#framePlacementsPendingReset.delete(itemId);
+    this.#maskPlacements.delete(itemId);
     this.#plateVolumes.delete(itemId);
     this.#activeLooks.delete(itemId);
     this.#passTimings.delete(itemId);
@@ -5344,13 +5384,131 @@ export class CasparRuntime {
     );
   }
 
-  #hasFramePlacementMarker(version: string): boolean {
-    return (
-      this.#templates
-        .htmlOf(version)
-        ?.slice(0, 1024)
-        .includes(CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER) === true
+  async setMaskPlacements(
+    itemId: string,
+    placements: LiveMaskPlacement[],
+  ): Promise<{ accepted: boolean; errorCode?: string; message?: string }> {
+    return this.#audited('update', this.#itemDetail(itemId), () =>
+      this.#withPageQueue(itemId, () =>
+        this.#withLiveSeatLock(itemId, async () => {
+          const item = this.#reconciler.get(itemId);
+          const slot = this.#slots.get(itemId);
+          if (item === null || slot === undefined)
+            return { accepted: false, errorCode: 'unknown-item' };
+          if (item.pending) {
+            return {
+              accepted: false,
+              errorCode: 'mask-placement-unavailable',
+              message: 'Wait for the layer to finish its current action before editing its mask.',
+            };
+          }
+          const version = this.#templates.versionOn(slot.channel, item.templateId);
+          const carrier =
+            version === null ? undefined : this.#templates.infoOf(version)?.liveSources;
+          if (
+            version === null ||
+            carrier === undefined ||
+            !this.#hasFramePlacementMarker(version, CG_LIVE_MASK_PLACEMENT_PAGE_MARKER)
+          ) {
+            return {
+              accepted: false,
+              errorCode: 'mask-placement-unavailable',
+              message: 'This template does not support mask placement. Reload a current export.',
+            };
+          }
+          const keys = new Set(placements.map(liveMaskPlacementKey));
+          if (
+            keys.size === 0 ||
+            keys.size !== placements.length ||
+            placements.some((placement) => !allowedMaskPlacement(carrier, placement))
+          ) {
+            return {
+              accepted: false,
+              errorCode: 'invalid-mask-placement',
+              message:
+                'A mask or its editing permission changed. Check the current template in Preview.',
+            };
+          }
+          const frames = this.#framePlacementsPendingReset.has(itemId)
+            ? []
+            : this.#framePlacements.get(itemId);
+          for (const { lookId, plateId, kind, rect } of placements) {
+            if (kind !== 'reveal') continue;
+            const reveal = lookPlateReveals(carrier, lookId)[plateId];
+            const rects = framePlacementRects(carrier, lookId, frames);
+            const upper = rects[plateId];
+            const lower = reveal === undefined ? undefined : rects[reveal.targetSourceId];
+            if (
+              upper === undefined ||
+              lower === undefined ||
+              intersectNormalizedRects(liveRevealSceneRect(upper, rect), lower) === null
+            ) {
+              return {
+                accepted: false,
+                errorCode: 'invalid-mask-placement',
+                message: 'The linked mask must overlap the lower frame.',
+              };
+            }
+          }
+
+          const previous = this.#maskPlacements.get(itemId) ?? [];
+          const merged = new Map(
+            previous
+              .filter((placement) => allowedMaskPlacement(carrier, placement))
+              .map((placement) => [liveMaskPlacementKey(placement), placement]),
+          );
+          for (const placement of placements) {
+            const key = liveMaskPlacementKey(placement);
+            if (sameLiveMaskRect(placement.authored, placement.rect)) merged.delete(key);
+            else merged.set(key, placement);
+          }
+          const next = [...merged.values()];
+          if (isDeepStrictEqual(next, previous)) return { accepted: true };
+          const record = () => {
+            this.#maskPlacements.set(itemId, next);
+            this.#markDirty(itemId);
+          };
+          if (
+            this.#ownsLiveSeats(itemId) ||
+            this.#pendingRestore.has(itemId) ||
+            this.#restoreBlocked.has(itemId)
+          ) {
+            const page = this.#liveFramePage(item, CG_LIVE_MASK_PLACEMENT_PAGE_MARKER);
+            if (page === undefined || this.#liveLayers.get(itemId) === undefined) {
+              return {
+                accepted: false,
+                errorCode: 'mask-placement-on-air-unavailable',
+                message:
+                  'The programme page cannot apply this mask in place. Check the current template and input seats.',
+              };
+            }
+            return this.#applyResidentGeometry(item, page, {
+              kind: 'mask-placement',
+              plan: this.#planLiveSeating(
+                itemId,
+                slot,
+                this.activeLookId(itemId),
+                'already-live',
+                'pinned',
+                undefined,
+                this.#framePlacements.get(itemId),
+                undefined,
+                next,
+              ),
+              update: withCgControl({}, { maskPlacements: next }),
+              rollback: withCgControl({}, { maskPlacements: previous }),
+              record,
+            });
+          }
+          record();
+          return { accepted: true };
+        }),
+      ),
     );
+  }
+
+  #hasFramePlacementMarker(version: string, marker = CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER): boolean {
+    return this.#templates.htmlOf(version)?.slice(0, 1024).includes(marker) === true;
   }
 
   #recordFramePlacements(itemId: string, placements: LiveFramePlacement[]): void {
@@ -5359,7 +5517,35 @@ export class CasparRuntime {
     this.#markDirty(itemId);
   }
 
-  #liveFramePage(item: StackItemState): ResidentOutputPage | undefined {
+  /** A catalogue replacement may change artwork while the held page keeps its live geometry. */
+  #compatibleLiveCarrier(
+    heldVersion: string | undefined,
+    listedVersion: string | null,
+  ): TemplateLiveSources | undefined {
+    if (heldVersion === undefined || listedVersion === null) return undefined;
+    const held = this.#templates.infoOf(heldVersion)?.liveSources;
+    if (held === undefined) return undefined;
+    if (listedVersion === heldVersion) return held;
+    const listed = this.#templates.infoOf(listedVersion)?.liveSources;
+    if (listed === undefined) return undefined;
+    // Inspector permissions and display labels leave the resident geometry contract intact.
+    const frameContract = (carrier: TemplateLiveSources) => ({
+      ...carrier,
+      allowOperatorAutoLayout: undefined,
+      arrangements: carrier.arrangements?.map((arrangement) => ({
+        ...arrangement,
+        name: undefined,
+      })),
+      looks: carrier.looks?.map((look) => ({ ...look, name: undefined })),
+    });
+    return isDeepStrictEqual(frameContract(held), frameContract(listed)) ? held : undefined;
+  }
+
+  #liveFramePage(
+    item: StackItemState,
+    marker = CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER,
+    requireCompatibleCatalogue = true,
+  ): ResidentOutputPage | undefined {
     const { itemId } = item;
     const page = this.#liveFramePages.get(itemId);
     if (
@@ -5370,14 +5556,15 @@ export class CasparRuntime {
       !this.#loaded.has(itemId) ||
       this.#slots.get(itemId) !== page.slot ||
       this.#templates.heldVersion(itemId) !== page.version ||
-      this.#templates.versionOn(page.slot.channel, item.templateId) !== page.version ||
       this.#pendingRestore.has(itemId) ||
       this.#restoreBlocked.has(itemId) ||
       this.#adapter.primarySession !== page.session ||
       this.#amcpGeneration !== page.generation ||
       page.session.state !== 'healthy' ||
       !this.#takeTokens.has(itemId) ||
-      !this.#isVerifiedCropSlot(page.slot)
+      !this.#isVerifiedCropSlot(page.slot) ||
+      (marker !== CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER &&
+        !this.#hasFramePlacementMarker(page.version, marker))
     )
       return undefined;
 
@@ -5387,7 +5574,16 @@ export class CasparRuntime {
         ({ channel, layer, producer }) =>
           channel === slot.channel && layer === slot.layer && oscProducerKind(producer) === 'html',
       );
-    const carrier = this.#templates.infoOf(page.version)?.liveSources;
+    const listedVersion = requireCompatibleCatalogue
+      ? this.#templates.versionOn(page.slot.channel, item.templateId)
+      : page.version;
+    if (
+      listedVersion !== page.version &&
+      (listedVersion === null || !this.#hasFramePlacementMarker(listedVersion, marker))
+    ) {
+      return undefined;
+    }
+    const carrier = this.#compatibleLiveCarrier(page.version, listedVersion);
     if (carrier === undefined || !hasHtml(page.slot)) return undefined;
     if (carrier.foregroundOverlay === true) {
       const foreground = this.#foregroundPages.get(itemId);
@@ -5409,10 +5605,19 @@ export class CasparRuntime {
     const { itemId } = item;
     const page = this.#liveFramePage(item);
     if (page === undefined || this.#liveLayers.get(itemId) === undefined) {
+      const known = this.#liveFramePages.get(itemId);
+      const reloadedLayout =
+        known !== undefined &&
+        this.#compatibleLiveCarrier(
+          known.version,
+          this.#templates.versionOn(known.slot.channel, item.templateId),
+        ) === undefined;
       return {
         accepted: false,
         errorCode: 'frame-placement-on-air-unavailable',
-        message: 'The current programme page cannot apply frame placement in place.',
+        message: reloadedLayout
+          ? 'The listed template has a different live frame layout. Take that template before editing its frames on air.'
+          : 'The current programme page cannot apply frame placement in place.',
       };
     }
     return this.#applyResidentGeometry(item, page, {
@@ -5440,6 +5645,7 @@ export class CasparRuntime {
   ): Promise<{ accepted: boolean; errorCode?: string; message?: string; command?: string }> {
     const { itemId } = item;
     const movingPosition = edit.kind === 'live-position';
+    const movingMask = edit.kind === 'mask-placement';
     const baselineRef = this.#liveLayers.get(itemId);
     const baseline = baselineRef ?? [];
     const framePage = this.#liveFramePages.get(itemId);
@@ -5450,12 +5656,17 @@ export class CasparRuntime {
       accepted: false,
       errorCode: movingPosition
         ? 'live-position-unavailable'
-        : 'frame-placement-on-air-unavailable',
+        : movingMask
+          ? 'mask-placement-on-air-unavailable'
+          : 'frame-placement-on-air-unavailable',
       message: movingPosition
         ? 'Position can move the existing on-air plates while their inputs remain visible.'
-        : 'The current programme page cannot apply frame placement in place.',
+        : movingMask
+          ? 'This mask changes the live input layers. Apply it off air before the next Take.'
+          : 'The current programme page cannot apply frame placement in place.',
     };
     const lookId = this.activeLookId(itemId);
+    const lookSelection = this.#activeLooks.get(itemId);
     const previousPlan = this.#planLiveSeating(itemId, page.slot, lookId, 'already-live', 'pinned');
     const proposed = edit.plan;
     if (!proposed.ok && proposed.errorCode === LIVE_PLATE_LAYER_ORDER) {
@@ -5506,17 +5717,24 @@ export class CasparRuntime {
       }
     }
 
-    const stillOwnsOutput = () => {
+    const stillOwnsOutput = (requireCompatibleCatalogue = true) => {
       const current = this.#reconciler.get(itemId);
+      if (current === null || current.lastIntentSeq !== item.lastIntentSeq) return false;
+      const currentPage = movingPosition
+        ? this.#livePositionPage(current)
+        : this.#liveFramePage(
+            current,
+            movingMask ? CG_LIVE_MASK_PLACEMENT_PAGE_MARKER : CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER,
+            requireCompatibleCatalogue,
+          );
       return (
-        current !== null &&
-        current.lastIntentSeq === item.lastIntentSeq &&
-        (movingPosition ? this.#livePositionPage(current) : this.#liveFramePage(current)) ===
-          page &&
+        currentPage === page &&
         this.#takeTokens.get(itemId) === take &&
         this.#foregroundPages.get(itemId) === foreground &&
         this.#liveLayers.get(itemId) === baselineRef &&
-        this.activeLookId(itemId) === lookId &&
+        (requireCompatibleCatalogue
+          ? this.activeLookId(itemId) === lookId
+          : this.#activeLooks.get(itemId) === lookSelection) &&
         visible.every(({ slot }) => this.#isVerifiedCropSlot(slot))
       );
     };
@@ -5529,9 +5747,14 @@ export class CasparRuntime {
     const pageUpdate = (fields: FieldValues) => this.#builder.update(page.slot, fields);
     const touched: LiveLayerRecord[] = [];
     const batch: MixerBatch = {};
-    const stageFit = async (record: LiveLayerRecord, fit: LivePlatePlacement['fit']) => {
+    const stageFit = async (
+      record: LiveLayerRecord,
+      fit: LivePlatePlacement['fit'],
+      requireCompatibleCatalogue = true,
+    ) => {
       for (const line of this.#builder.mixerFit(record.slot, fit)) {
-        if (!stillOwnsOutput()) return { ok: false, errorCode: 'not-live' };
+        if (!stillOwnsOutput(requireCompatibleCatalogue))
+          return { ok: false, errorCode: 'not-live' };
         const sent = await this.#sendDeferredMixer(batch, record.slot.channel, line, cancel.signal);
         if (!sent.ok || !sent.onPrimary) return { ...sent, ok: false };
       }
@@ -5585,7 +5808,8 @@ export class CasparRuntime {
         return { accepted: true };
       }
 
-      let restored = stillOwnsOutput();
+      // Reload can interrupt a transaction while the same page and seats remain on air.
+      let restored = stillOwnsOutput(false);
       if (restored && pageAttempted) {
         const oldPage = await write(pageUpdate(edit.rollback));
         restored = oldPage.ok && oldPage.onPrimary;
@@ -5593,13 +5817,13 @@ export class CasparRuntime {
       // Before the first COMMIT, overwrite partial staging with the old fit. After an
       // unconfirmed COMMIT, re-stage that fit under a new lease while the same seats remain.
       for (const record of touched) {
-        if (!stillOwnsOutput()) break;
+        if (!stillOwnsOutput(false)) break;
         if (batch.channel === undefined) await this.#leaseMixerChannel(batch, record.slot.channel);
-        const old = await stageFit(record, record);
+        const old = await stageFit(record, record, false);
         restored = restored && old.ok;
       }
       const rollbackCommit = await this.#commitStagedMixer(batch, { clearsOrphan: restored });
-      restored = restored && rollbackCommit.landed && stillOwnsOutput();
+      restored = restored && rollbackCommit.landed && stillOwnsOutput(false);
       if (!restored) {
         if (framePage !== undefined && this.#liveFramePages.get(itemId) === framePage)
           this.#liveFramePages.delete(itemId);
@@ -5609,17 +5833,19 @@ export class CasparRuntime {
       }
       return {
         accepted: false,
-        errorCode:
-          refusal?.errorCode ??
-          (movingPosition ? 'live-position-not-confirmed' : 'frame-placement-not-confirmed'),
+        errorCode: refusal?.errorCode ?? `${edit.kind}-not-confirmed`,
         ...(refusal?.command !== undefined && { command: refusal.command }),
         message: movingPosition
           ? restored
             ? 'CasparCG refused Position. The previous position was restored.'
             : 'Position could not be confirmed. Check the current programme picture.'
-          : restored
-            ? 'CasparCG refused the frame placement. The previous placement was restored.'
-            : 'Frame placement could not be confirmed. Check the current programme picture.',
+          : movingMask
+            ? restored
+              ? 'The engine refused the mask edit. The previous mask was restored.'
+              : 'The mask edit could not be confirmed. Check the current programme picture.'
+            : restored
+              ? 'CasparCG refused the frame placement. The previous placement was restored.'
+              : 'Frame placement could not be confirmed. Check the current programme picture.',
       };
     } finally {
       this.#reconciler.off('item-changed', invalidate);
@@ -6265,6 +6491,7 @@ export class CasparRuntime {
       const epochBefore = this.#sourceCatalog.inputsEpoch;
       const cropsBefore = this.#previewPlateCrops.get(itemId);
       const placementsBefore = this.#framePlacements.get(itemId);
+      const masksBefore = this.#maskPlacements.get(itemId);
       const confirmed = await this.#ensureRouteEpoch();
       // The read is an await: re-ask what the take's first lines asked before it.
       if (this.#isLegacyRehearsal(itemId)) return { accepted: false, errorCode: 'rehearsing' };
@@ -6274,6 +6501,7 @@ export class CasparRuntime {
         this.#sourceCatalog.inputsEpoch !== epochBefore ||
         this.#previewPlateCrops.get(itemId) !== cropsBefore ||
         this.#framePlacements.get(itemId) !== placementsBefore ||
+        this.#maskPlacements.get(itemId) !== masksBefore ||
         this.#framePlacementsPendingReset.has(itemId) !== pendingFrameReset
       ) {
         pendingFrameReset = this.#framePlacementsPendingReset.has(itemId);
@@ -8928,6 +9156,7 @@ export class CasparRuntime {
     proposedCrops?: ReadonlyMap<string, LiveCropFocus>,
     framePlacements = this.#framePlacements.get(itemId),
     positionProposal?: PositionProposal,
+    maskPlacements = this.#maskPlacements.get(itemId),
   ): LiveSeatingPlan {
     const templateId = this.#reconciler.get(itemId)?.templateId ?? itemId;
     // `CHANNEL-TEMPLATES-01` — the carrier of the version the row's channel lists.
@@ -9013,8 +9242,12 @@ export class CasparRuntime {
     }
     const authoredRects = lookPlateRects(carrier, lookId);
     const desired = framePlacementRects(carrier, lookId, framePlacements);
-    const masks = lookPlateMasks(carrier, lookId);
-    const reveals = lookPlateReveals(carrier, lookId);
+    const authoredMasks = lookPlateMasks(carrier, lookId);
+    const masks =
+      maskPlacements === undefined
+        ? authoredMasks
+        : lookPlateMasks(carrier, lookId, maskPlacements);
+    const reveals = lookPlateReveals(carrier, lookId, maskPlacements);
     const exactEdges = exactPlateEdges(masks, reveals);
     const previewCropTargets: PreviewPlateCropTarget[] = [];
     const entering = framesOfLook(bindings, lookId);
@@ -9251,7 +9484,7 @@ export class CasparRuntime {
                   cropAspect,
                   identityBox,
                   this.#channelSettings.rasterFor(slot.channel),
-                  masks[frame.plateId],
+                  authoredMasks[frame.plateId],
                 ]),
               )
               .digest('hex');
@@ -10535,23 +10768,17 @@ export class CasparRuntime {
           };
         }
         const item = this.#reconciler.get(itemId);
-        const carrier =
-          item === null
-            ? undefined
-            : this.#templates.getOn(row.slot.channel, item.templateId)?.liveSources;
+        let resetCarrier: TemplateLiveSources | undefined;
         if (edits.some(({ reset }) => reset === true)) {
-          const listedVersion =
-            item === null
-              ? undefined
-              : this.#templates.versionOn(row.slot.channel, item.templateId);
-          if (
-            carrier === undefined ||
-            listedVersion === undefined ||
-            this.#templates.heldVersion(itemId) !== listedVersion
-          ) {
+          resetCarrier = this.#compatibleLiveCarrier(
+            this.#templates.heldVersion(itemId),
+            item === null ? null : this.#templates.versionOn(row.slot.channel, item.templateId),
+          );
+          if (resetCarrier === undefined) {
             return {
               ...stale,
-              message: 'The on-air template version changed. Take it again to reset its crop.',
+              message:
+                'The listed template has different live framing. Take it before resetting its crop.',
             };
           }
         }
@@ -10565,7 +10792,7 @@ export class CasparRuntime {
             accepted.has(edit.token)
           )
             return stale;
-          const crop = resolveCropEdit(edit, target, row.lookId, carrier);
+          const crop = resolveCropEdit(edit, target, row.lookId, resetCarrier);
           accepted.set(edit.token, crop);
           focuses.set(target.plateId, crop.focus);
         }
@@ -10941,6 +11168,7 @@ export class CasparRuntime {
         plateFits,
         liveFallback,
         this.#framePlacements.get(itemId),
+        this.#maskPlacements.get(itemId),
       ),
       this.#nextSeq(),
       'urgent',
@@ -16649,6 +16877,7 @@ export class CasparRuntime {
     this.#previewPlateCrops.delete(itemId);
     this.#framePlacements.delete(itemId);
     this.#framePlacementsPendingReset.delete(itemId);
+    this.#maskPlacements.delete(itemId);
     // 6.5f — and the audio intent. A re-used itemId inheriting a RAISED plate is
     // the worst of the three: it puts a microphone on air that nobody asked for.
     this.#plateVolumes.delete(itemId);
@@ -17265,6 +17494,14 @@ export class CasparRuntime {
       // A re-import can change the template's display name — the rows naming it
       // must follow (published through the same change-compare as always).
       this.#publishFixedStateIfChanged();
+      for (const [itemId, page] of this.#liveFramePages) {
+        if (
+          changed.includes(page.slot.channel) &&
+          this.#reconciler.get(itemId)?.templateId === templateId
+        ) {
+          this.#markDirty(itemId);
+        }
+      }
     }
     return targets.length === 0
       ? { registered: false, templateId }
@@ -19892,8 +20129,10 @@ export class CasparRuntime {
     // page, or tells a resident one, leaves it muted (or unmuted) as the operator last asked.
     const soundMuted = this.#soundMutes.get(itemId);
     const plateFits = this.#plateFits.get(itemId);
+    const maskPlacements = this.#maskPlacements.get(itemId);
     const shared: Omit<TakeControl, 'take'> = {
       ...(framePlacements !== undefined && { framePlacements }),
+      ...(maskPlacements !== undefined && { maskPlacements }),
       ...(activeLook !== undefined && { look: activeLook.id }),
       ...(plateFits !== undefined &&
         Object.keys(plateFits).length > 0 && {

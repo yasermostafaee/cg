@@ -15,6 +15,7 @@ import { recordSentPasses } from './timingSent.js';
 import { patternRefusalsOf } from './patternCheck.js';
 import {
   beginFramePlacementApply,
+  beginMaskPlacementApply,
   beginPreviewCropApply,
   buildApplyPayload,
   buildLookBindingsPayload,
@@ -152,21 +153,29 @@ export function applyDraft(
     crop.finish();
     return Promise.resolve({ accepted: false });
   }
+  const masks = beginMaskPlacementApply(item.itemId);
+  if (masks === null) {
+    crop.finish();
+    frame.finish();
+    return Promise.resolve({ accepted: false });
+  }
   // A changed binding can replace a seat, and a crop token belongs to the current geometry.
   // Settle those edits before moving the page and its seats. Acknowledgements clear their own drafts.
-  const deferredPosition =
-    bindingsPayload !== undefined || crop.drafts.some((draft) => draft.kind === 'guide')
-      ? sentPosition
-      : undefined;
+  const updateCrop = crop.drafts.some((draft) => draft.kind === 'guide');
+  const deferredPosition = bindingsPayload !== undefined || updateCrop ? sentPosition : undefined;
   const combinedPosition = deferredPosition === undefined ? sentPosition : undefined;
   const noFieldDrafts = Object.keys(sent).length === 0;
-  const resetGeometry =
-    frame.reset || crop.drafts.some((draft) => draft.kind === 'guide' && draft.reset === true);
+  const updateFrames = frame.reset || frame.placements.length > 0;
+  const geometryUpdate =
+    updateFrames ||
+    masks.placements.length > 0 ||
+    (updateCrop && isOnAirStatus(item)) ||
+    crop.drafts.some((draft) => draft.kind === 'guide' && draft.reset === true);
   const fields = (): Promise<{ accepted: boolean; errorCode?: string | undefined }> =>
     noFieldDrafts &&
     bindingsPayload === undefined &&
     combinedPosition === undefined &&
-    (deferredPosition !== undefined || resetGeometry)
+    (deferredPosition !== undefined || geometryUpdate)
       ? Promise.resolve({ accepted: true })
       : sendUpdate(
           item,
@@ -191,7 +200,7 @@ export function applyDraft(
         const moved = await sendUpdate(item, {}, {}, undefined, undefined, deferredPosition);
         if (!moved.accepted) return moved;
       }
-      if (frame.reset || frame.placements.length > 0) {
+      if (updateFrames) {
         try {
           const placed = await window.cg.stack.setFramePlacements({
             itemId: item.itemId,
@@ -210,11 +219,30 @@ export function applyDraft(
           return { accepted: false };
         }
       }
+      if (ok && cropsAccepted && masks.placements.length > 0) {
+        try {
+          const placed = await window.cg.stack.setMaskPlacements({
+            itemId: item.itemId,
+            placements: masks.placements,
+          });
+          if (!placed.accepted) {
+            reportCommandError(placed.message ?? 'CG Bridge could not apply the mask placement.');
+            return placed;
+          }
+          masks.accept();
+        } catch (error) {
+          reportCommandError(
+            error instanceof Error ? error.message : 'Mask placement update failed.',
+          );
+          return { accepted: false };
+        }
+      }
       return ok && cropsAccepted ? res : { ...res, accepted: false };
     })
     .finally(() => {
       crop.finish();
       frame.finish();
+      masks.finish();
     });
 }
 

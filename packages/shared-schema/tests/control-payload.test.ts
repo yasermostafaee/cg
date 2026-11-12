@@ -100,6 +100,29 @@ describe('stripCgControl — half of the collision proof', () => {
 });
 
 describe('readCgControl — defensive, because this arrives over AMCP', () => {
+  it('carries mask edits, preserves an explicit reset and drops invalid windows', () => {
+    const authored = { x: 0.125, y: 0.25, width: 0.25, height: 0.25 };
+    const edit = {
+      lookId: 'solo',
+      plateId: 'guest-1',
+      kind: 'mask',
+      index: 0,
+      authored,
+      rect: { ...authored, x: 0.5 },
+    } as const;
+    expect(readCgControl(withCgControl({}, { maskPlacements: [edit] }))).toEqual({
+      maskPlacements: [edit],
+    });
+    expect(readCgControl(withCgControl({}, { maskPlacements: [] }))).toEqual({
+      maskPlacements: [],
+    });
+    expect(
+      readCgControl({
+        [CG_CONTROL_KEY]: { maskPlacements: [{ ...edit, rect: { ...authored, x: 0.875 } }] },
+      }),
+    ).toEqual({});
+  });
+
   it.each([
     null,
     { anchor: 'top-middle', offset: { x: 0, y: 0 } },

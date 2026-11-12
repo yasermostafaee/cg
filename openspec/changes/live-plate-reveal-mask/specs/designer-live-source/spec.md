@@ -28,6 +28,13 @@ the complement of that union inside the plate. The same rule SHALL clip the plat
 - **THEN** the region inside that rectangle remains visible
 - **AND** the plate is transparent outside it
 
+#### Scenario: Allow mask editing in CG Control
+
+- **GIVEN** a live plate has an authored mask or linked reveal
+- **WHEN** the author enables **Allow mask editing in CG Control**
+- **THEN** the exported instance grants window movement and resize in its own preset
+- **AND** new plates start with the permission disabled
+
 #### Scenario: Revert and remove a mask
 
 - **GIVEN** a plate with two windows

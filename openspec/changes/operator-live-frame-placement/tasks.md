@@ -36,6 +36,11 @@
       controls and gaps, round-trip Swap, and saving the separate placements without off-air playout.
 - [x] Windows Chromium measured both composition checkboxes at the standard 14 × 14 CSS pixels
       and verified their values in the exported VCG.
+- [x] Windows Chromium verified typing and dragging gaps reflows PVW while the active preset's
+      applied geometry stays fixed until Update. Partial and out-of-range input preserve the draft.
+- [x] Windows Chromium verified replacement import followed by one placement update to the
+      held page and the same input seats. Bridge tests also verified a preset rename and refusal
+      before commands when the authored frame rectangle or key changes.
 - [ ] Record the carrying Linux Playwright result for Auto layout and title movement.
 
 ## Designer Auto layout

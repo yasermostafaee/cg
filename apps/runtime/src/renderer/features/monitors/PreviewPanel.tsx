@@ -9,9 +9,15 @@ import {
   Frame,
   Hand,
   Play,
+  Scan,
   SquareDashed,
 } from 'lucide-react';
-import { lookOperatorFrames, REFERENCE_RASTER, sourceAspect } from '@cg/shared-ipc';
+import {
+  lookOperatorFrames,
+  lookOperatorMasks,
+  REFERENCE_RASTER,
+  sourceAspect,
+} from '@cg/shared-ipc';
 import { isOnAirStatus } from '@cg/shared-schema';
 import { Panel } from '../../ui/Panel.js';
 import { useAuthCapabilities } from '../../hooks/useAuthCapabilities.js';
@@ -37,6 +43,7 @@ import {
   snapshotFramePlacementDraft,
   draftsVersion,
   effectivePosition,
+  maskPlacementsWithDraft,
   subscribeDrafts,
 } from '../inspector/draftStore.js';
 import {
@@ -132,7 +139,7 @@ const PVW_TRANSPORT_TITLE = {
   stop: 'Stop every preview graphic; keep all layers on PVW',
 } as const;
 
-type PreviewEditTool = 'pan' | 'move' | 'frames';
+type PreviewEditTool = 'pan' | 'move' | 'frames' | 'masks';
 
 export function PreviewPanel({
   companionActions,
@@ -152,6 +159,7 @@ export function PreviewPanel({
   const [editTool, setEditTool] = useState<{ tool: PreviewEditTool; channel: number | null }>();
   const capabilities = useAuthCapabilities();
   const supportsFramePlacement = capabilities?.liveFramePlacement === true;
+  const supportsMaskPlacement = capabilities?.previewMaskPlacement === true;
   const resizeModes = capabilities?.previewResizeMode === true;
   const preserveFrameAspect = usePreserveFrameAspect();
   const [panSession, setPanSession] = useState(0);
@@ -214,6 +222,8 @@ export function PreviewPanel({
           const frameDraft = snapshotFramePlacementDraft(item.itemId);
           const appliedFrames =
             item.framePlacementsPendingReset === true ? [] : item.framePlacements;
+          const hasEditableMasks =
+            live !== undefined && lookOperatorMasks(live, item.activeLookId).size > 0;
           const fields = buildApplyPayload(item.itemId, item.fields);
           return {
             itemId: r.itemId,
@@ -274,6 +284,18 @@ export function PreviewPanel({
               !item.pending &&
               item.status !== 'exiting' &&
               (!isOnAirStatus(item) || item.onAirFramePlacement === true),
+            maskPlacements: maskPlacementsWithDraft(
+              item.itemId,
+              item.maskPlacements ?? (supportsMaskPlacement && hasEditableMasks ? [] : undefined),
+            ),
+            appliedMaskPlacements: item.maskPlacements,
+            canEditMasks:
+              supportsMaskPlacement &&
+              canEditPosition &&
+              hasEditableMasks &&
+              !item.pending &&
+              item.status !== 'exiting' &&
+              (!isOnAirStatus(item) || item.onAirMaskPlacement === true),
             previewPlateCrops: item.previewPlateCrops,
             previewCropOnAir: isOnAirStatus(item),
             previewCropPending: item.pending || item.status === 'exiting',
@@ -400,6 +422,7 @@ export function PreviewPanel({
       liveLayers,
       canEditPosition,
       supportsFramePlacement,
+      supportsMaskPlacement,
     ],
   );
 
@@ -471,6 +494,10 @@ export function PreviewPanel({
   const moveOpen = moveAvailable && activeTool === 'move';
   const frameEditAvailable = subjects.some((subject) => subject.canEditFrames === true);
   const frameEditOpen = frameEditAvailable && activeTool === 'frames';
+  const maskEditAvailable = subjects.some(
+    (subject) => subject.canEditMasks === true && pageByItem.get(subject.itemId)?.kind === 'page',
+  );
+  const maskEditOpen = maskEditAvailable && activeTool === 'masks';
   useEffect(() => {
     setEditTool((current) =>
       current !== undefined &&
@@ -581,6 +608,20 @@ export function PreviewPanel({
               <span className="cg-pvw-tool-label">Edit frames</span>
             </Button>
           )}
+          {maskEditAvailable && (
+            <Button
+              variant="ghost"
+              active={maskEditOpen}
+              aria-label="Edit masks in Preview"
+              aria-pressed={maskEditOpen}
+              data-monitor-masks=""
+              title="Move or resize an authored mask in Preview"
+              onClick={() => toggleEditTool('masks')}
+            >
+              <Icon icon={Scan} size={13} />
+              <span className="cg-pvw-tool-label">Edit masks</span>
+            </Button>
+          )}
           {companionActions}
         </>
       }
@@ -677,6 +718,7 @@ export function PreviewPanel({
             panOpen={panOpen}
             moveOpen={moveOpen}
             frameEditOpen={frameEditOpen}
+            maskEditOpen={maskEditOpen}
             preserveFrameAspect={resizeModes && preserveFrameAspect}
             panSession={panSession}
             panSourceAspects={panSourceAspects}

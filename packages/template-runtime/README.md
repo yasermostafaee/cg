@@ -153,6 +153,11 @@ until Bridge's mixer commit lands. The runtime hides the fallback child of each 
 route and matches a release to the hold ID. A bounded timer restores the authored
 fallback if the release is lost. Rehearsal and foreground passes ignore the hold.
 
+`CgControl.maskPlacements` replaces the fallback's editable clip windows by exact plate, preset and
+authored window. The SVG clip is updated in place while the fallback and the plate stay mounted.
+An empty placement list restores the authored windows. Foreground classification uses the full
+area of an editable own-mask plate so an expanded window cannot cover higher artwork.
+
 That constraint is why the plate's optional `stroke` renders as a CSS **`outline`**
 rather than the `border` every other box kind gets. An outline is painted outside the
 box and takes **no layout**, so the hole stays exactly `transform` under any box model

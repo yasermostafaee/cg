@@ -14,6 +14,7 @@ import {
   activeLookOf,
   framePlacementRects,
   lookOperatorFrames,
+  lookOperatorMasks,
   lookPlateFits,
   lookPlateFocuses,
   lookPlateMasks,
@@ -22,17 +23,25 @@ import {
   resolvePlateSourcesForLook,
 } from '@cg/shared-ipc';
 import type { ChannelRaster, SourceAssignments, TemplateLiveSources } from '@cg/shared-ipc';
+import { liveRevealRects } from '@cg/shared-schema';
 import type {
   LiveCropFocus,
   LiveFramePlacement,
   LiveFrameTarget,
   LiveFitMode,
+  LiveMaskPlacement,
   LivePlateMask,
   LiveRevealMask,
+  LiveRevealRect,
   Position,
 } from '@cg/shared-schema';
 // The ONE audio vocabulary, shared with the LIVE PLATES strip and the layer row's summary.
 import type { PlateAudioState } from '../layers/plateAudio.js';
+
+export interface MaskEdit {
+  placement: LiveMaskPlacement;
+  baseline: LiveRevealRect;
+}
 
 /**
  * R-049 — WHERE each Live Source plate sits on the rehearsal frame, and WHAT the
@@ -96,6 +105,7 @@ export interface PlatePlacement {
   focus?: LiveCropFocus;
   mask?: LivePlateMask;
   reveal?: LiveRevealMask;
+  maskEdits?: readonly MaskEdit[];
   frameEdit?: {
     frameKey: string;
     resize: LiveFrameTarget['resize'];
@@ -227,6 +237,8 @@ export function platePlacements(
   activeLookId: string | undefined,
   framePlacements?: readonly LiveFramePlacement[],
   appliedFramePlacements?: readonly LiveFramePlacement[],
+  maskPlacements?: readonly LiveMaskPlacement[],
+  appliedMaskPlacements?: readonly LiveMaskPlacement[],
 ): PlatePlacement[] {
   const s = outputScale(raster);
   const pad = outputLetterbox(raster);
@@ -257,8 +269,13 @@ export function platePlacements(
   const lookId = activeLookOf(live, activeLookId)?.id;
   const authoredFits = lookPlateFits(live, activeLookId);
   const focuses = lookPlateFocuses(live, activeLookId);
-  const masks = lookPlateMasks(live, activeLookId);
-  const reveals = lookPlateReveals(live, activeLookId);
+  const masks = lookPlateMasks(live, activeLookId, maskPlacements);
+  const reveals = lookPlateReveals(live, activeLookId, maskPlacements);
+  const editableMasks = lookOperatorMasks(live, activeLookId);
+  const authoredMasks = lookPlateMasks(live, activeLookId);
+  const authoredReveals = lookPlateReveals(live, activeLookId);
+  const appliedMasks = lookPlateMasks(live, activeLookId, appliedMaskPlacements);
+  const appliedReveals = lookPlateReveals(live, activeLookId, appliedMaskPlacements);
   const overrideFits = new Map<string, LiveFitMode>();
   if (sources.frozenAssignment === undefined) {
     for (const assignment of assignmentsOnChannel(sources.assignments, sources.channel)
@@ -305,6 +322,23 @@ export function platePlacements(
     const sourceName = catalogId === null ? null : sources.nameOf(catalogId);
     const fitMode = overrideFits.get(plate.sourceId) ?? authoredFits[plate.sourceId];
     const frameTarget = frameTargets[plate.sourceId];
+    const plateId = plate.sourceId;
+    const maskEdits = editableMasks.has(plateId)
+      ? [
+          ...maskEditsOf(
+            { lookId, plateId, kind: 'mask' },
+            authoredMasks[plateId]?.rects ?? [],
+            masks[plateId]?.rects ?? [],
+            appliedMasks[plateId]?.rects ?? [],
+          ),
+          ...maskEditsOf(
+            { lookId, plateId, kind: 'reveal' },
+            revealWindows(authoredReveals[plateId]),
+            revealWindows(reveals[plateId]),
+            revealWindows(appliedReveals[plateId]),
+          ),
+        ]
+      : [];
     return [
       {
         elementId: plate.elementId,
@@ -323,6 +357,7 @@ export function platePlacements(
         ...(focuses[plate.sourceId] !== undefined && { focus: focuses[plate.sourceId] }),
         ...(masks[plate.sourceId] !== undefined && { mask: masks[plate.sourceId] }),
         ...(reveals[plate.sourceId] !== undefined && { reveal: reveals[plate.sourceId] }),
+        ...(maskEdits.length > 0 && { maskEdits }),
         sourceName,
         sourceId: sourceName === null ? null : catalogId,
         // `undefined` when the caller supplied no lookup, and `undefined` again when it has
@@ -336,4 +371,20 @@ export function platePlacements(
       },
     ];
   });
+}
+
+function revealWindows(reveal: LiveRevealMask | undefined): LiveRevealRect[] {
+  return reveal === undefined ? [] : liveRevealRects(reveal);
+}
+
+function maskEditsOf(
+  scope: Pick<LiveMaskPlacement, 'lookId' | 'plateId' | 'kind'>,
+  authoredWindows: readonly LiveRevealRect[],
+  current: readonly LiveRevealRect[],
+  applied: readonly LiveRevealRect[],
+): MaskEdit[] {
+  return authoredWindows.map((authored, index) => ({
+    placement: { ...scope, index, authored, rect: current[index] ?? authored },
+    baseline: applied[index] ?? authored,
+  }));
 }

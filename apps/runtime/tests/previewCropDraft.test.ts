@@ -84,6 +84,21 @@ it('B-433 commits on-air fields and explicitly applies the guide crop to the liv
   expect(appliedPracticeCropOf(itemId, practice.key)).toEqual(practice.focus);
 });
 
+it('sends only the crop batch for an on-air framing edit', async () => {
+  const { update, previewPlateCrop } = bridge();
+  previewPlateCrop.mockResolvedValue({ ok: true, targets: [], applied: [guide.token] });
+  stagePreviewCrop(itemId, guide, baseline);
+
+  await expect(applyDraft({ ...row, status: 'on-air' })).resolves.toMatchObject({ accepted: true });
+  expect(update).not.toHaveBeenCalled();
+  expect(previewPlateCrop).toHaveBeenCalledWith({
+    itemId,
+    allowOnAir: true,
+    edits: [{ token: guide.token, focus: guide.focus, lookId: guide.lookId }],
+  });
+  expect(previewCropDraftOf(itemId, guide.key)).toBeUndefined();
+});
+
 it.each([true, false])(
   'settles Pan before live Position (Pan confirmed: %s)',
   async (confirmed) => {
@@ -214,7 +229,7 @@ it('keeps an edit made during Update, including a return to the previously appli
 });
 
 it('sends only edited frame keys and keeps a return to the prior rectangle during Update', async () => {
-  const { setFramePlacements } = bridge();
+  const { update, setFramePlacements } = bridge();
   const authored = { x: 0, y: 0, width: 200, height: 100 };
   const moved = { frameKey: 'plate-1', rect: { ...authored, x: 30 } };
   const unrelated = { frameKey: 'plate-2', rect: { ...authored, x: 400 } };
@@ -225,10 +240,16 @@ it('sends only edited frame keys and keeps a return to the prior rectangle durin
     }),
   );
   stageFramePlacement(itemId, moved, authored);
-  const pending = applyDraft({ ...row, framePlacements: [unrelated] });
+  const pending = applyDraft({
+    ...row,
+    status: 'on-air',
+    onAirFramePlacement: true,
+    framePlacements: [unrelated],
+  });
   await vi.waitFor(() =>
     expect(setFramePlacements).toHaveBeenCalledWith({ itemId, placements: [moved] }),
   );
+  expect(update).not.toHaveBeenCalled();
 
   const latest = { ...moved, rect: authored };
   stageFramePlacement(itemId, latest, authored);

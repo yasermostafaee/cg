@@ -75,6 +75,7 @@ export const BridgeCapabilitiesChannel = defineChannel(
     liveFramePlacementReset: z.literal(true).optional(),
     liveCropReset: z.literal(true).optional(),
     previewResizeMode: z.literal(true).optional(),
+    previewMaskPlacement: z.literal(true).optional(),
     /** The Bridge can enforce authored layer order for overlapping Live plates. */
     livePlatePaintOrder: z.literal(true).optional(),
     /**

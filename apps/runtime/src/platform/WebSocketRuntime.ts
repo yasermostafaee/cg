@@ -227,6 +227,7 @@ const OPTIONAL_CHANNELS = new Set([
   ipcChannels.RehearseEnterPreviewChannel.name,
   ipcChannels.StackLoadProfileChannel.name,
   ipcChannels.StackSetFramePlacementsChannel.name,
+  ipcChannels.StackSetMaskPlacementsChannel.name,
   ipcChannels.SharedTemplateFolderChannel.name,
   ipcChannels.SharedTemplateReadChannel.name,
   ipcChannels.SharedTemplateThumbnailChannel.name,
@@ -1129,6 +1130,10 @@ export class WebSocketRuntime implements RuntimeBridge {
         ...(caps.liveFramePlacementReset === true && { liveFramePlacementReset: true }),
         ...(caps.liveCropReset === true && { liveCropReset: true }),
         ...(caps.previewResizeMode === true && { previewResizeMode: true }),
+        ...(caps.previewMaskPlacement === true &&
+          routed.has(ipcChannels.StackSetMaskPlacementsChannel.name) && {
+            previewMaskPlacement: true,
+          }),
         ...(caps.livePlatePaintOrder === true && { livePlatePaintOrder: true }),
         ...(routed.has(ipcChannels.SharedTemplateFolderChannel.name) &&
         routed.has(ipcChannels.SharedTemplateReadChannel.name)
@@ -1957,6 +1962,8 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#invoke(ipcChannels.StackLoadProfileChannel, req),
     setFramePlacements: (req: ChannelRequest<typeof ipcChannels.StackSetFramePlacementsChannel>) =>
       this.#invoke(ipcChannels.StackSetFramePlacementsChannel, req),
+    setMaskPlacements: (req: ChannelRequest<typeof ipcChannels.StackSetMaskPlacementsChannel>) =>
+      this.#invoke(ipcChannels.StackSetMaskPlacementsChannel, req),
     load: (req: ChannelRequest<typeof StackLoadChannel>) => this.#invoke(StackLoadChannel, req),
     take: (req: ChannelRequest<typeof StackTakeChannel>) => this.#invoke(StackTakeChannel, req),
     update: (req: ChannelRequest<typeof StackUpdateChannel>) =>
@@ -2107,6 +2114,7 @@ export class WebSocketRuntime implements RuntimeBridge {
         ...(i.previewPlateCrops !== undefined && { previewPlateCrops: i.previewPlateCrops }),
         ...(i.framePlacements !== undefined && { framePlacements: i.framePlacements }),
         ...(i.framePlacementsPendingReset === true && { framePlacementsPendingReset: true }),
+        ...(i.maskPlacements !== undefined && { maskPlacements: i.maskPlacements }),
       }),
     );
   }

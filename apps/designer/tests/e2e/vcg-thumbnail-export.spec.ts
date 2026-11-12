@@ -132,6 +132,15 @@ test('Export (.vcg) shows the first authored picture from an Add folder Sequence
   }
 });
 
+test('Export (.vcg) embeds the first full-screen Quran starter picture', async ({ app }) => {
+  await app.page.getByTestId('starter-card').filter({ hasText: 'نمایش تلاوت قرآن' }).click();
+  await app.expectStudio();
+  const { thumbnail } = await exportThumbnail(app.page);
+  const picture = await thumbnailPixels(app.page, thumbnail, [[255, 250, 240]]);
+  expect(picture).toMatchObject({ width: 320, height: 180, transparentPixels: 0 });
+  expect(picture.counts[0]).toBeGreaterThan(1000);
+});
+
 test('Export (.vcg) depicts a Live plate whose fallback is disabled on air', async ({ app }) => {
   await app.newProject('Live plate thumbnail');
   await app.addLiveSource({ x: 200, y: 160 });

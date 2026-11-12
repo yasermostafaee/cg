@@ -61,6 +61,7 @@ export const LiveSourceDeclarationSchema = z.object({
   rect: LiveSourceRectSchema,
   /** Operator placement metadata for a template without Looks. */
   operatorFrame: LiveFrameTargetSchema.optional(),
+  operatorMaskEdit: z.literal(true).optional(),
   /**
    * `multibox-layout-switch` `tasks.md` 5.2 — **where this plate's hole sits INSIDE its own
    * BOX, as fractions of the box (0..1 on each axis).**

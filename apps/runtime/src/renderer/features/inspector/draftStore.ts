@@ -1,10 +1,13 @@
 import {
   isFieldNamespace,
+  liveMaskPlacementKey,
   sameLiveCropFocus,
+  sameLiveMaskRect,
   type FieldValue,
   type FieldValues,
   type LiveCropFocus,
   type LiveFramePlacement,
+  type LiveMaskPlacement,
   type Position,
   type PositionAnchor,
   type StackItemTimingOverride,
@@ -220,6 +223,8 @@ export function stageFramePlacements(
     ) {
       if (next.delete(key)) changed = true;
     } else {
+      const previous = next.get(key);
+      if (previous !== undefined && sameFrameRect(previous.rect, placement.rect)) continue;
       next.set(key, placement);
       changed = true;
     }
@@ -292,6 +297,82 @@ export function beginFramePlacementApply(itemId: string): {
     },
   };
 }
+
+type MaskPlacementDraft = ReadonlyMap<string, LiveMaskPlacement>;
+const maskPlacementDrafts = new Map<string, MaskPlacementDraft>();
+const applyingMaskPlacements = new Map<string, MaskPlacementDraft>();
+
+export function stageMaskPlacement(
+  itemId: string,
+  placement: LiveMaskPlacement,
+  baseline: LiveMaskPlacement['rect'],
+): void {
+  const key = liveMaskPlacementKey(placement);
+  const current = maskPlacementDrafts.get(itemId);
+  const previous = current?.get(key);
+  const applying = applyingMaskPlacements.get(itemId)?.get(key);
+  const matchesApplied =
+    sameLiveMaskRect(placement.rect, baseline) &&
+    (applying === undefined || sameLiveMaskRect(placement.rect, applying.rect));
+  const unchanged =
+    previous !== undefined &&
+    sameLiveMaskRect(previous.authored, placement.authored) &&
+    sameLiveMaskRect(previous.rect, placement.rect);
+  if (matchesApplied ? previous === undefined : unchanged) return;
+  const next = new Map(current);
+  if (matchesApplied) next.delete(key);
+  else next.set(key, placement);
+  if (next.size === 0) maskPlacementDrafts.delete(itemId);
+  else maskPlacementDrafts.set(itemId, next);
+  bump();
+}
+
+export function maskPlacementsWithDraft(
+  itemId: string,
+  applied: LiveMaskPlacement[] | undefined,
+): LiveMaskPlacement[] | undefined {
+  const draft = maskPlacementDrafts.get(itemId);
+  if (draft === undefined) return applied;
+  const merged = new Map(
+    (applied ?? []).map((placement) => [liveMaskPlacementKey(placement), placement]),
+  );
+  for (const [key, placement] of draft) merged.set(key, placement);
+  return [...merged.values()];
+}
+
+export function beginMaskPlacementApply(itemId: string): {
+  placements: LiveMaskPlacement[];
+  accept: () => void;
+  finish: () => void;
+} | null {
+  if (applyingMaskPlacements.has(itemId)) return null;
+  const sent = maskPlacementDrafts.get(itemId);
+  if (sent !== undefined) applyingMaskPlacements.set(itemId, sent);
+  return {
+    placements: [...(sent?.values() ?? [])],
+    accept() {
+      const current = maskPlacementDrafts.get(itemId);
+      if (
+        sent === undefined ||
+        current === undefined ||
+        applyingMaskPlacements.get(itemId) !== sent
+      )
+        return;
+      const remaining = new Map(current);
+      for (const [key, placement] of sent) {
+        if (remaining.get(key) === placement) remaining.delete(key);
+      }
+      if (remaining.size === current.size) return;
+      if (remaining.size === 0) maskPlacementDrafts.delete(itemId);
+      else maskPlacementDrafts.set(itemId, remaining);
+      bump();
+    },
+    finish() {
+      if (applyingMaskPlacements.get(itemId) === sent) applyingMaskPlacements.delete(itemId);
+    },
+  };
+}
+
 const appliedPracticeCrops = new Map<string, Map<string, LiveCropFocus>>();
 const applyingPreviewCrops = new Map<string, ReadonlyMap<string, PreviewCropDraft>>();
 
@@ -949,7 +1030,11 @@ export function isItemDirty(
     there.
   */
   if (isTimingDirty(itemId, appliedTiming)) return true;
-  return previewCropDrafts.has(itemId) || framePlacementDrafts.has(itemId);
+  return (
+    previewCropDrafts.has(itemId) ||
+    framePlacementDrafts.has(itemId) ||
+    maskPlacementDrafts.has(itemId)
+  );
 }
 
 /**
@@ -1005,6 +1090,7 @@ export function clearDraft(itemId: string): void {
   const hadTiming = timingDrafts.delete(itemId);
   const hadPreviewCrops = previewCropDrafts.delete(itemId);
   const hadFramePlacement = framePlacementDrafts.delete(itemId);
+  const hadMaskPlacement = maskPlacementDrafts.delete(itemId);
   if (
     hadFields ||
     hadPlates ||
@@ -1012,7 +1098,8 @@ export function clearDraft(itemId: string): void {
     hadPosition ||
     hadTiming ||
     hadPreviewCrops ||
-    hadFramePlacement
+    hadFramePlacement ||
+    hadMaskPlacement
   )
     bump();
 }
@@ -1177,6 +1264,8 @@ export function pruneDrafts(snapshot: StackPruneInput): void {
     previewCropDrafts,
     framePlacementDrafts,
     applyingFramePlacements,
+    maskPlacementDrafts,
+    applyingMaskPlacements,
     appliedPracticeCrops,
     applyingPreviewCrops,
   ] as {
@@ -1203,6 +1292,8 @@ export function __resetDraftsForTest(): void {
   previewCropDrafts.clear();
   framePlacementDrafts.clear();
   applyingFramePlacements.clear();
+  maskPlacementDrafts.clear();
+  applyingMaskPlacements.clear();
   appliedPracticeCrops.clear();
   applyingPreviewCrops.clear();
   bump();

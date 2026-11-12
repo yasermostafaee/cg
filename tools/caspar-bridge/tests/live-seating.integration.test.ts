@@ -13,12 +13,14 @@ import {
 } from '@cg/shared-ipc';
 import {
   CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER,
+  CG_LIVE_MASK_PLACEMENT_PAGE_MARKER,
   CG_LIVE_POSITION_PAGE_MARKER,
   RetainedStackItemSchema,
   retainedFromStackItem,
   type LiveFitMode,
   type LiveFramePlacement,
   type LiveFrameTarget,
+  type LiveMaskPlacement,
   type LiveRevealMask,
 } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
@@ -133,6 +135,7 @@ const MOVED_FRAME: LiveFramePlacement = {
 };
 const AUTHORED_FRAME: LiveFramePlacement = { frameKey: FRAME.frameKey, rect: BOX };
 const FRAME_HTML = `<!doctype html><html><head>${CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER}</head><body>served</body></html>`;
+const MASK_HTML = FRAME_HTML.replace('</head>', `${CG_LIVE_MASK_PLACEMENT_PAGE_MARKER}</head>`);
 
 function catalog(over: Partial<SourceCatalog> = {}): SourceCatalog {
   return {
@@ -1112,16 +1115,16 @@ it('resets a seated crop to authored framing and drops saved Pan only after the 
   const info = template([
     { id: 'guest-1', rect: { x: 720, y: 270, width: 480, height: 540 }, fitMode: 'cover' },
   ]);
-  const live = info.liveSources!;
-  const r = await boot({
-    template: {
-      ...info,
-      liveSources: {
-        ...live,
-        sources: live.sources.map((source) => ({ ...source, cropFocus: authored })),
-      },
+  const live = info.liveSources;
+  if (live === undefined) throw new Error('Missing crop carrier');
+  const withFocus = (cropFocus: { x: number; y: number }) => ({
+    ...info,
+    liveSources: {
+      ...live,
+      sources: live.sources.map((source) => ({ ...source, cropFocus })),
     },
   });
+  const r = await boot({ template: withFocus(authored) });
   expect(await loadAndTake(r, itemId)).toMatchObject({ accepted: true });
   const slot = { channel: 1, layer: 30 };
   const initial = mock?.layerState(slot);
@@ -1140,6 +1143,20 @@ it('resets a seated crop to authored framing and drops saved Pan only after the 
   expect(priorFill).not.toEqual(initial.fill);
   expect(r.stackSnapshot()[0]?.previewPlateCrops).toEqual([saved]);
 
+  const reset = { ...saved, reset: true as const };
+  const changedFocus = withFocus({ ...authored, x: 0.4 });
+  expect(r.templateImport(changedFocus, '<html>Revised crop</html>').registered).toBe(true);
+  const beforeRefusal = (await recvLines()).length;
+  expect(await r.previewPlateCropOnAir(itemId, [reset])).toMatchObject({
+    ok: false,
+    message: 'The listed template has different live framing. Take it before resetting its crop.',
+  });
+  expect((await recvLines()).slice(beforeRefusal)).toEqual([]);
+  expect(mock.layerState(slot)?.fill).toEqual(priorFill);
+  expect(r.templateImport(withFocus(authored), '<html>Revised artwork</html>').registered).toBe(
+    true,
+  );
+
   let refused = false;
   mock.setHandler('MIXER', (request, context, connection) => {
     if (!refused && request.raw.startsWith('MIXER 1-30 FILL ')) {
@@ -1148,7 +1165,6 @@ it('resets a seated crop to authored framing and drops saved Pan only after the 
     }
     return mixer(request, context, connection);
   });
-  const reset = { ...saved, reset: true as const };
   expect(await r.previewPlateCropOnAir(itemId, [reset])).toMatchObject({ ok: false });
   expect(refused).toBe(true);
   expect(mock.layerState(slot)?.fill).toEqual(priorFill);
@@ -1358,6 +1374,111 @@ it('R-108 keeps current programme frames during Reload defaults and uses the new
   expect(r.stackSnapshot()[0]?.framePlacementsPendingReset).toBeUndefined();
 });
 
+it('keeps editing the held programme frame after Reload changes artwork and a preset label', async () => {
+  const info = template([{ id: 'guest-1', rect: BOX }]);
+  if (info.liveSources === undefined) throw new Error('Missing frame carrier');
+  const look = {
+    id: 'single',
+    name: 'Single',
+    entered: { mode: 'cut' as const },
+    rects: { 'guest-1': BOX },
+    operatorFrames: { 'guest-1': FRAME },
+  };
+  const liveSources = { ...info.liveSources, defaultLookId: look.id, looks: [look] };
+  const original = { ...info, liveSources };
+  const placement = { ...MOVED_FRAME, lookId: look.id };
+  const r = await boot({ template: original, html: FRAME_HTML });
+  const itemId = 'item-1';
+  const graphic = { channel: 1, layer: 10 };
+  const plate = { channel: 1, layer: BAND.start };
+  const row = () => r.stackSnapshot().find((item) => item.itemId === itemId);
+  expect(await loadAndTake(r, itemId)).toMatchObject({ accepted: true });
+  await expect.poll(row).toMatchObject({ onAirFramePlacement: true });
+  const residentAdd = mock?.lastCgAdd(graphic);
+  expect(residentAdd).toBeDefined();
+
+  const revisedHtml = FRAME_HTML.replace('served', 'revised title artwork');
+  const before = (await recvLines()).length;
+  expect(
+    r.templateImport(
+      {
+        ...original,
+        name: 'Revised title artwork',
+        liveSources: {
+          ...liveSources,
+          looks: [{ ...look, name: 'Guest' }],
+          allowOperatorAutoLayout: true,
+        },
+      },
+      revisedHtml,
+    ).registered,
+  ).toBe(true);
+  expect(r.templateGet(original.templateId, graphic.channel)?.name).toBe('Revised title artwork');
+  expect(r.templateHtml(original.templateId, graphic.channel)).toBe(revisedHtml);
+  await expect(r.setFramePlacements(itemId, [placement])).resolves.toEqual({ accepted: true });
+
+  expect(
+    (await recvLines()).slice(before).filter((line) => /^(CG|MIXER|PLAY|CLEAR) /.test(line)),
+  ).toEqual([
+    'MIXER 1-30 FILL 0.5 0.5 0.25 0.25 DEFER',
+    'MIXER 1-30 CLIP 0.5 0.5 0.25 0.25 DEFER',
+    expect.stringContaining('CG 1-10 UPDATE '),
+    'MIXER 1 COMMIT',
+  ]);
+  expect(mock?.lastCgAdd(graphic)).toEqual(residentAdd);
+  expect(mock?.layerState(plate)?.clip).toEqual({ x: 0.5, y: 0.5, width: 0.25, height: 0.25 });
+  expect(JSON.parse(mock?.lastCgUpdate(graphic)?.data ?? '{}')).toEqual({
+    __cg: { framePlacements: [placement] },
+  });
+  expect(row()).toMatchObject({ framePlacements: [placement], onAirFramePlacement: true });
+});
+
+it.each([
+  {
+    change: 'the authored rectangle',
+    rect: { ...BOX, x: 192, y: 108 },
+    frame: FRAME,
+  },
+  {
+    change: 'the frame instance key',
+    rect: BOX,
+    frame: { ...FRAME, frameKey: 'guest/el-guest-1', artworkKey: 'guest' },
+  },
+])('keeps the held programme untouched when Reload changes $change', async ({ rect, frame }) => {
+  const original = template([{ id: 'guest-1', rect: BOX, operatorFrame: FRAME }]);
+  const r = await boot({ template: original, html: FRAME_HTML });
+  const itemId = 'item-1';
+  const graphic = { channel: 1, layer: 10 };
+  const plate = { channel: 1, layer: BAND.start };
+  const row = () => r.stackSnapshot().find((item) => item.itemId === itemId);
+  expect(await loadAndTake(r, itemId)).toMatchObject({ accepted: true });
+  await expect.poll(row).toMatchObject({ onAirFramePlacement: true });
+  await expect(r.setFramePlacements(itemId, [MOVED_FRAME])).resolves.toEqual({ accepted: true });
+  const residentAdd = mock?.lastCgAdd(graphic);
+  const appliedClip = mock?.layerState(plate)?.clip;
+  const before = (await recvLines()).length;
+
+  const revised = template([{ id: 'guest-1', rect, operatorFrame: frame }]);
+  expect(r.templateImport(revised, FRAME_HTML.replace('served', 'revised layout')).registered).toBe(
+    true,
+  );
+  await expect(
+    r.setFramePlacements(itemId, [{ ...AUTHORED_FRAME, frameKey: frame.frameKey }]),
+  ).resolves.toMatchObject({
+    accepted: false,
+    errorCode: 'frame-placement-on-air-unavailable',
+    message:
+      'The listed template has a different live frame layout. Take that template before editing its frames on air.',
+  });
+  expect(
+    (await recvLines()).slice(before).filter((line) => /^(CG|MIXER|PLAY|CLEAR) /.test(line)),
+  ).toEqual([]);
+  expect(mock?.lastCgAdd(graphic)).toEqual(residentAdd);
+  expect(mock?.layerState(plate)?.clip).toEqual(appliedClip);
+  expect(row()?.framePlacements).toEqual([MOVED_FRAME]);
+  expect(row()?.onAirFramePlacement).toBeUndefined();
+});
+
 it('moves the same on-air page and picture in place and rolls back after a refused CLIP', async () => {
   const r = await boot({
     template: template([{ id: 'guest-1', rect: BOX, operatorFrame: FRAME }]),
@@ -1443,6 +1564,42 @@ it('moves the same on-air page and picture in place and rolls back after a refus
   expect(JSON.parse(mock!.lastCgUpdate({ channel: 1, layer: 10 })?.data ?? '{}')).toEqual({
     __cg: { framePlacements: [] },
   });
+});
+
+it('restores staged mixer geometry when Reload changes the layout during an on-air edit', async () => {
+  const original = template([{ id: 'guest-1', rect: BOX, operatorFrame: FRAME }]);
+  const r = await boot({ template: original, html: FRAME_HTML });
+  const itemId = 'item-1';
+  expect(await loadAndTake(r, itemId)).toMatchObject({ accepted: true });
+  await expect.poll(() => r.stackSnapshot()[0]).toMatchObject({ onAirFramePlacement: true });
+  const engine = mock;
+  const mixer = defaultHandlers().get('MIXER');
+  if (engine === null || mixer === undefined) throw new Error('Missing mixer');
+  const plate = { channel: 1, layer: 30 };
+  const previous = engine.layerState(plate);
+  let replaced = false;
+  engine.setHandler('MIXER', (request, context, connection) => {
+    if (!replaced && request.raw === 'MIXER 1-30 FILL 0.5 0.5 0.25 0.25 DEFER') {
+      replaced = true;
+      const revised = template([{ id: 'guest-1', rect: { ...BOX, x: 192 }, operatorFrame: FRAME }]);
+      r.templateImport(revised, FRAME_HTML.replace('served', 'different layout'));
+    }
+    return mixer(request, context, connection);
+  });
+  const before = (await recvLines()).length;
+  await expect(r.setFramePlacements(itemId, [MOVED_FRAME])).resolves.toMatchObject({
+    accepted: false,
+    message: expect.stringContaining('previous placement was restored'),
+  });
+  expect(replaced).toBe(true);
+  expect((await recvLines()).slice(before)).toEqual([
+    'MIXER 1-30 FILL 0.5 0.5 0.25 0.25 DEFER',
+    'MIXER 1-30 FILL 0.25 0.25 0.5 0.5 DEFER',
+    'MIXER 1-30 CLIP 0.25 0.25 0.5 0.5 DEFER',
+    'MIXER 1 COMMIT',
+  ]);
+  expect(engine.layerState(plate)).toEqual(previous);
+  expect(r.stackSnapshot()[0]?.framePlacements).toBeUndefined();
 });
 
 const LIVE_POSITION_HTML = FRAME_HTML.replace('</head>', CG_LIVE_POSITION_PAGE_MARKER + '</head>');
@@ -1865,6 +2022,193 @@ it('D-202 — Mask and Revert crop a single producer and mute its routed fragmen
   expect(at(maskWire, 'CLEAR 1-33')).toBeGreaterThan(committed);
   expect(maskWire).not.toContain('CLEAR 1-30');
   expect(maskWire).not.toContain('CLEAR 1-34');
+});
+
+const maskWindow = { x: 0.25, y: 0.25, width: 0.5, height: 0.5 };
+
+function editableMaskTemplate(mode: 'inside' | 'outside'): TemplateInfo {
+  const info = template([{ id: 'guest-1', rect: BOX, fitMode: 'cover' }]);
+  const live = info.liveSources;
+  if (live === undefined) throw new Error('Missing mask carrier');
+  return {
+    ...info,
+    liveSources: {
+      ...live,
+      sources: live.sources.map((source) => ({
+        ...source,
+        operatorMaskEdit: true,
+        liveMask: { mode, rects: [maskWindow] },
+      })),
+    },
+  };
+}
+
+it('D-202 — saves an edited mask for Take and updates the same on-air input with rollback', async () => {
+  const r = await boot({ template: editableMaskTemplate('inside'), html: MASK_HTML });
+  const itemId = 'item-1';
+  const graphic = { channel: 1, layer: 10 };
+  const plate = { channel: 1, layer: 30 };
+  const original: LiveMaskPlacement = {
+    plateId: 'guest-1',
+    kind: 'mask',
+    index: 0,
+    authored: maskWindow,
+    rect: { ...maskWindow, x: 0.125 },
+  };
+  expect(await r.load(itemId, 'lower-third', {})).toEqual({ accepted: true });
+  const beforeSave = (await recvLines()).length;
+  await expect(r.setMaskPlacements(itemId, [original])).resolves.toEqual({ accepted: true });
+  expect((await recvLines()).slice(beforeSave)).toEqual([]);
+  expect(await r.take(itemId)).toMatchObject({ accepted: true });
+  await expect.poll(() => r.stackSnapshot()[0]).toMatchObject({ onAirMaskPlacement: true });
+  const initial = mock?.layerState(plate);
+  expect(initial?.clip).toEqual({ x: 0.3125, y: 0.375, width: 0.25, height: 0.25 });
+  expect(JSON.parse(mock?.lastCgUpdate(graphic)?.data ?? '{}')).toMatchObject({
+    __cg: { maskPlacements: [original] },
+  });
+  const [target] = (await r.previewPlateCropOnAir(itemId)).targets;
+  if (target === undefined) throw new Error('Missing crop target for the masked plate');
+  const focus = { x: 0.25, y: 0.5, zoom: 2 };
+  await expect(
+    r.previewPlateCropOnAir(itemId, [{ token: target.token, focus }]),
+  ).resolves.toMatchObject({
+    ok: true,
+  });
+  const panned = mock?.layerState(plate);
+
+  const moved = { ...original, rect: { ...maskWindow, x: 0.5, height: 0.25 } };
+  const beforeMove = (await recvLines()).length;
+  await expect(
+    r.setMaskPlacements(itemId, [{ ...moved, authored: { ...maskWindow, x: 0.125 } }]),
+  ).resolves.toMatchObject({ accepted: false, errorCode: 'invalid-mask-placement' });
+  await expect(r.setMaskPlacements(itemId, [moved])).resolves.toEqual({ accepted: true });
+  expect((await recvLines()).slice(beforeMove)).toEqual([
+    expect.stringMatching(/^MIXER 1-30 FILL .* DEFER$/),
+    'MIXER 1-30 CLIP 0.5 0.375 0.25 0.125 DEFER',
+    expect.stringMatching(/^CG 1-10 UPDATE /),
+    'MIXER 1 COMMIT',
+  ]);
+  expect(mock?.layerState(plate)).toMatchObject({
+    fill: panned?.fill,
+    volume: initial?.volume,
+    clip: { x: 0.5, y: 0.375, width: 0.25, height: 0.125 },
+  });
+  expect((await r.previewPlateCropOnAir(itemId)).targets).toMatchObject([
+    { token: target.token, focus },
+  ]);
+  expect(JSON.parse(mock?.lastCgUpdate(graphic)?.data ?? '{}')).toEqual({
+    __cg: { maskPlacements: [moved] },
+  });
+  const state = r.stackSnapshot()[0];
+  if (state === undefined) throw new Error('Missing mask row');
+  expect(RetainedStackItemSchema.parse(retainedFromStackItem(state)).maskPlacements).toEqual([
+    moved,
+  ]);
+
+  const engine = mock;
+  const mixer = defaultHandlers().get('MIXER');
+  if (engine === null || mixer === undefined) throw new Error('Missing mixer');
+  let refuseCommit = true;
+  engine.setHandler('MIXER', (request, context, connection) => {
+    if (refuseCommit && request.raw === 'MIXER 1 COMMIT') {
+      refuseCommit = false;
+      return { kind: 'err', code: 502, verb: 'MIXER' };
+    }
+    return mixer(request, context, connection);
+  });
+  await expect(r.setMaskPlacements(itemId, [original])).resolves.toMatchObject({
+    accepted: false,
+    message: 'The engine refused the mask edit. The previous mask was restored.',
+  });
+  expect(engine.layerState(plate)?.clip).toEqual({ x: 0.5, y: 0.375, width: 0.25, height: 0.125 });
+  expect(JSON.parse(engine.lastCgUpdate(graphic)?.data ?? '{}')).toEqual({
+    __cg: { maskPlacements: [moved] },
+  });
+  expect(r.stackSnapshot()[0]?.maskPlacements).toEqual([moved]);
+});
+
+it('D-202 — moves a linked reveal on its existing muted seat', async () => {
+  const info = template([
+    { id: 'upper', rect: BOX, revealMask: { targetSourceId: 'lower', rect: maskWindow } },
+    { id: 'lower', rect: BOX },
+  ]);
+  const live = info.liveSources;
+  if (live === undefined) throw new Error('Missing linked mask carrier');
+  const r = await boot({
+    template: {
+      ...info,
+      liveSources: {
+        ...live,
+        sources: live.sources.map((source) => ({
+          ...source,
+          ...(source.sourceId === 'upper' && { operatorMaskEdit: true as const }),
+        })),
+      },
+    },
+    html: MASK_HTML,
+    assignments: assign([
+      ['upper', 'src-b'],
+      ['lower', 'src-a'],
+    ]),
+  });
+  const itemId = 'item-1';
+  expect(await loadAndTake(r, itemId)).toMatchObject({ accepted: true });
+  await expect.poll(() => r.stackSnapshot()[0]).toMatchObject({ onAirMaskPlacement: true });
+  const reveal = { channel: 1, layer: 32 };
+  const before = (await recvLines()).length;
+  await expect(
+    r.setMaskPlacements(itemId, [
+      {
+        plateId: 'upper',
+        kind: 'reveal',
+        index: 0,
+        authored: maskWindow,
+        rect: { ...maskWindow, x: 0.5 },
+      },
+    ]),
+  ).resolves.toEqual({ accepted: true });
+  expect(mock?.layerState(reveal)).toMatchObject({
+    clip: { x: 0.5, y: 0.375, width: 0.25, height: 0.25 },
+    volume: 0,
+  });
+  expect((await recvLines()).slice(before)).toEqual([
+    'MIXER 1-32 FILL 0.25 0.25 0.5 0.5 DEFER',
+    'MIXER 1-32 CLIP 0.5 0.375 0.25 0.25 DEFER',
+    expect.stringMatching(/^CG 1-10 UPDATE /),
+    'MIXER 1 COMMIT',
+  ]);
+});
+
+it('D-202 — keeps the live mask when a Revert edit changes the number of fragments', async () => {
+  const r = await boot({
+    template: editableMaskTemplate('outside'),
+    html: MASK_HTML,
+    catalog: catalog({ layerRange: { start: 30, end: 34 } }),
+  });
+  const itemId = 'item-1';
+  expect(await loadAndTake(r, itemId)).toMatchObject({ accepted: true });
+  await expect.poll(() => r.stackSnapshot()[0]).toMatchObject({ onAirMaskPlacement: true });
+  const beforeSeats = r.liveLayers().get(itemId);
+  expect(beforeSeats).toHaveLength(4);
+  const before = (await recvLines()).length;
+  const moved: LiveMaskPlacement = {
+    plateId: 'guest-1',
+    kind: 'mask',
+    index: 0,
+    authored: maskWindow,
+    rect: { ...maskWindow, x: 0 },
+  };
+  await expect(r.setMaskPlacements(itemId, [moved])).resolves.toMatchObject({
+    accepted: false,
+    errorCode: 'mask-placement-on-air-unavailable',
+  });
+  expect((await recvLines()).slice(before)).toEqual([]);
+  expect(r.liveLayers().get(itemId)).toEqual(beforeSeats);
+  expect(r.stackSnapshot()[0]?.maskPlacements).toBeUndefined();
+  expect(await r.stopItem(itemId)).toMatchObject({ accepted: true });
+  await expect(r.setMaskPlacements(itemId, [moved])).resolves.toEqual({ accepted: true });
+  expect(await r.take(itemId)).toMatchObject({ accepted: true });
+  expect(r.liveLayers().get(itemId)).toHaveLength(3);
 });
 
 it('three plates become three layers against ONE item, and all three come down together', async () => {

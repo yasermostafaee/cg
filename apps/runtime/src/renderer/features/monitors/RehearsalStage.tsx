@@ -14,7 +14,7 @@ import type { CSSProperties } from 'react';
 // them stubbed out and back), because nothing else in the package is reachable
 // from them and both imports go through subpaths rather than the entry index.
 import { activeLookOf, type ChannelRaster } from '@cg/shared-ipc';
-import { outputScale } from '@cg/shared-schema';
+import { liveMaskPlacementKey, outputScale } from '@cg/shared-schema';
 import { colors, cssVars } from '../../theme.js';
 import { LivePlateOverlay, anyRegionTooSmallForCaveat } from './LivePlateOverlay.js';
 import { platePlacements, type PlatePlacement } from './livePlateGeometry.js';
@@ -31,6 +31,7 @@ import {
 } from './RehearsalFrame.js';
 import { canMoveTemplateOutline, PreviewTemplateOutlines } from './PreviewTemplateOutlines.js';
 import { PreviewFramePlacement } from './PreviewFramePlacement.js';
+import { PreviewMaskPlacement } from './PreviewMaskPlacement.js';
 import { frameBox, frameZIndex, overlayZIndex, type RehearsalSubject } from './rehearsalFrames.js';
 import type { PvwPage } from '../../../shared/pvwPage.js';
 import { usePvwSourceFrames } from './usePvwSourceFrames.js';
@@ -276,6 +277,7 @@ interface Props {
   panOpen?: boolean;
   moveOpen?: boolean;
   frameEditOpen?: boolean;
+  maskEditOpen?: boolean;
   preserveFrameAspect?: boolean;
   panSession?: number;
   panSourceAspects?: ReadonlyMap<string, number | null>;
@@ -367,6 +369,7 @@ export function RehearsalStage({
   panOpen = false,
   moveOpen = false,
   frameEditOpen = false,
+  maskEditOpen = false,
   preserveFrameAspect = false,
   panSession = 0,
   panSourceAspects,
@@ -485,6 +488,8 @@ export function RehearsalStage({
           subject.activeLookId,
           subject.framePlacements,
           subject.appliedFramePlacements,
+          subject.maskPlacements,
+          subject.appliedMaskPlacements,
         ).map((p) => ({
           ...p,
           itemId: subject.itemId,
@@ -732,6 +737,7 @@ export function RehearsalStage({
             rowName={subject.rowName}
             activeLookId={subject.activeLookId}
             framePlacements={subject.framePlacements}
+            maskPlacements={subject.maskPlacements}
             timing={subject.timing}
             book={subject.book}
             livePlates={picturePlacements.filter(
@@ -768,9 +774,9 @@ export function RehearsalStage({
           fit={fit}
           zIndex={overlayZIndex(renderable.length)}
           moveOpen={moveOpen}
-          onSelectItem={panOpen || frameEditOpen ? undefined : onSelectItem}
+          onSelectItem={panOpen || frameEditOpen || maskEditOpen ? undefined : onSelectItem}
         />
-        {frameEditOpen && (
+        {(frameEditOpen || maskEditOpen) && (
           <div
             className="cg-pan-draft-layer"
             style={
@@ -781,17 +787,26 @@ export function RehearsalStage({
               } as CSSProperties
             }
           >
-            {placements.map((plate) => {
+            {placements.flatMap((plate) => {
               const subject = renderable.find(
                 ({ subject }) => subject.itemId === plate.itemId,
               )?.subject;
-              if (
-                plate.frameEdit === undefined ||
-                subject?.canEditFrames !== true ||
-                !readyIds.has(plate.itemId)
-              )
-                return null;
-              return (
+              if (!readyIds.has(plate.itemId)) return [];
+              if (maskEditOpen) {
+                if (subject?.canEditMasks !== true) return [];
+                return (plate.maskEdits ?? []).map((mask) => (
+                  <PreviewMaskPlacement
+                    key={JSON.stringify([plate.itemId, liveMaskPlacementKey(mask.placement)])}
+                    itemId={plate.itemId}
+                    plate={plate}
+                    mask={mask}
+                    fit={fit}
+                    onSelect={() => onSelectItem?.(plate.itemId)}
+                  />
+                ));
+              }
+              if (plate.frameEdit === undefined || subject?.canEditFrames !== true) return [];
+              return [
                 <PreviewFramePlacement
                   key={JSON.stringify([
                     plate.itemId,
@@ -804,8 +819,8 @@ export function RehearsalStage({
                   pixelsPerScenePixel={fit * outputScale(raster)}
                   preserveAspect={preserveFrameAspect}
                   onSelect={() => onSelectItem?.(plate.itemId)}
-                />
-              );
+                />,
+              ];
             })}
           </div>
         )}
