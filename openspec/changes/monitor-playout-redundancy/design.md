@@ -28,3 +28,9 @@ station transfer. Both responses named the same owner and transfer ID with engin
 The public OpenAPI describes playlist/runtime sync and Playout's own preset
 verbs. Before routing external CG writes, establish the command fence on the former owner and
 synchronization of direct AMCP changes in the CG banks.
+
+Read-only checks on both linked engines confirmed the ownership observations on Playout 2.19.0.
+Its OpenAPI describes a preset ID and string overrides for its own CG Take. Synchronization of
+external AMCP graphics, ownership fencing during transfer and reconciliation after a timeout
+remain open. The monitoring owner serves as a display signal. The Playout repository review and
+an isolated test are the next steps for routing external CG commands.
