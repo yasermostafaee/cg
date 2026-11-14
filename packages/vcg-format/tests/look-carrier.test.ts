@@ -717,6 +717,7 @@ describe('buildTemplateLiveSources — the assembly, and the coexistence control
     const upper = {
       ...plate('upper', 'plate-4', 0, 0, 640, 360),
       zIndex: 2,
+      allowOperatorMaskEdit: true,
       liveMask: { mode: 'inside', rects: [{ x: 0.04, y: 0.07, width: 0.91, height: 0.17 }] },
     } satisfies Element;
     const guest = plate('guest', 'plate-1', 0, 0, 640, 360);
@@ -754,6 +755,57 @@ describe('buildTemplateLiveSources — the assembly, and the coexistence control
     ]);
     expect(carrier.looks?.[1]?.masks?.['plate-4']).toEqual(upper.liveMask);
     expect(carrier.looks?.[2]?.masks?.['plate-4']).toEqual(upper.liveMask);
+    expect(carrier.looks?.map(({ maskElementIds }) => maskElementIds)).toEqual([
+      undefined,
+      { 'plate-4': upper.id },
+      { 'plate-4': upper.id },
+    ]);
+  });
+
+  it('links only visible winning instances of an authorized own mask with an unambiguous ID', () => {
+    const masked = {
+      ...plate('masked', 'guest-1', 0, 0, 640, 360),
+      allowOperatorMaskEdit: true,
+      liveMask: { mode: 'inside', rects: [{ x: 0.125, y: 0.25, width: 0.25, height: 0.25 }] },
+    } satisfies VideoPlaceholderElement;
+    const nested = instance('box', 'plate', 0, 0, 640, 360);
+    const first = instance('first', 'plate', 0, 0, 1920, 1080);
+    const withLooks = (duplicate: boolean) =>
+      scene({
+        rootChildren: [
+          { ...first, visible: false },
+          instance('hidden', 'hidden-comp', 0, 0, 1920, 1080),
+          instance('separate', 'separate-comp', 0, 0, 1920, 1080),
+          instance('winner', 'winner-comp', 0, 0, 1920, 1080),
+        ],
+        compositions: [
+          comp('plate', [masked]),
+          comp('hidden-comp', [{ ...nested, visible: false }]),
+          comp('separate-comp', [{ ...masked, id: duplicate ? masked.id : 'separate-mask' }]),
+          comp('winner-comp', [plate('plain', 'guest-1', 0, 0, 640, 360), nested]),
+        ],
+        lookGroups: [
+          {
+            id: 'looks',
+            defaultLookId: 'first',
+            looks: [
+              look('first', 'first'),
+              look('hidden', 'hidden'),
+              look('separate', 'separate'),
+              look('winner', 'winner'),
+            ],
+          },
+        ],
+      });
+    const maskIds = (s: Scene) =>
+      buildTemplateLiveSources(s).looks?.map(({ maskElementIds }) => maskElementIds);
+    expect(maskIds(withLooks(false))).toEqual([
+      { 'guest-1': 'masked' },
+      undefined,
+      { 'guest-1': 'separate-mask' },
+      undefined,
+    ]);
+    expect(maskIds(withLooks(true))).toEqual([undefined, undefined, undefined, undefined]);
   });
 
   it('carries a different authored paint order for each overlapping preset', () => {

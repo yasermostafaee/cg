@@ -1,9 +1,9 @@
 import { useRef, type KeyboardEvent, type PointerEvent } from 'react';
 import { Move } from 'lucide-react';
-import type { LiveRevealRect } from '@cg/shared-schema';
+import { sameLiveMaskRect, type LiveRevealRect } from '@cg/shared-schema';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
-import { stageMaskPlacement } from '../inspector/draftStore.js';
+import { beginMaskPlacementGesture, stageMaskPlacements } from '../inspector/draftStore.js';
 import type { MaskEdit, PlatePlacement } from './livePlateGeometry.js';
 import { placementCorners } from './PreviewFramePlacement.js';
 
@@ -16,7 +16,8 @@ interface MaskDrag {
   width: number;
   height: number;
   corner: Corner | undefined;
-  seed: MaskEdit;
+  seed: LiveRevealRect;
+  gesture: ReturnType<typeof beginMaskPlacementGesture>;
 }
 
 function clamp(value: number, lower: number, upper: number): number {
@@ -58,21 +59,17 @@ export function PreviewMaskPlacement({
   const { placement } = mask;
   const { rect, kind, index } = placement;
   const name = `${kind} ${index + 1} for ${plate.sourceName ?? plate.plateId}`;
-  const stage = (seed: MaskEdit, nextRect: LiveRevealRect): void => {
-    stageMaskPlacement(itemId, { ...seed.placement, rect: nextRect }, seed.baseline);
-  };
   const edit = (
-    seed: MaskEdit,
+    original: LiveRevealRect,
     dx: number,
     dy: number,
     width: number,
     height: number,
     corner?: Corner,
-  ): void => {
-    const original = seed.placement.rect;
+  ): LiveRevealRect => {
     const [x, w] = editAxis(original.x, original.width, dx / width, corner?.x, 1 / plate.width);
     const [y, h] = editAxis(original.y, original.height, dy / height, corner?.y, 1 / plate.height);
-    stage(seed, { x, y, width: w, height: h });
+    return { x, y, width: w, height: h };
   };
   const start = (event: PointerEvent<HTMLElement>, corner?: Corner): void => {
     if (event.button !== 0 || drag.current !== undefined || fit <= 0) return;
@@ -86,14 +83,15 @@ export function PreviewMaskPlacement({
       width: fit * plate.width,
       height: fit * plate.height,
       corner,
-      seed: mask,
+      seed: rect,
+      gesture: beginMaskPlacementGesture(itemId, mask.edits),
     };
   };
   const finish = (event: PointerEvent<HTMLElement>, cancelled = false): void => {
     const current = drag.current;
     if (current?.pointerId !== event.pointerId) return;
     drag.current = undefined;
-    if (cancelled) stage(current.seed, current.seed.placement.rect);
+    if (cancelled) current.gesture.cancel();
   };
   const keyboard = (event: KeyboardEvent<HTMLButtonElement>, corner?: Corner): void => {
     const step = event.shiftKey ? 10 : 1;
@@ -103,7 +101,8 @@ export function PreviewMaskPlacement({
     event.preventDefault();
     event.stopPropagation();
     onSelect();
-    edit(mask, dx, dy, fit * plate.width, fit * plate.height, corner);
+    const moved = edit(rect, dx, dy, fit * plate.width, fit * plate.height, corner);
+    if (!sameLiveMaskRect(moved, rect)) stageMaskPlacements(itemId, mask.edits, moved);
   };
 
   return (
@@ -123,7 +122,7 @@ export function PreviewMaskPlacement({
       onPointerMove={(event) => {
         const current = drag.current;
         if (current?.pointerId !== event.pointerId) return;
-        edit(
+        const moved = edit(
           current.seed,
           event.clientX - current.x,
           event.clientY - current.y,
@@ -131,6 +130,8 @@ export function PreviewMaskPlacement({
           current.height,
           current.corner,
         );
+        if (sameLiveMaskRect(moved, current.seed)) current.gesture.cancel();
+        else current.gesture.stage(moved);
       }}
       onPointerUp={(event) => finish(event)}
       onPointerCancel={(event) => finish(event, true)}

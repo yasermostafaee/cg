@@ -2129,6 +2129,96 @@ it('D-202 — saves an edited mask for Take and updates the same on-air input wi
   expect(r.stackSnapshot()[0]?.maskPlacements).toEqual([moved]);
 });
 
+it('shares one authored mask across its preset instances without changing a different plate', async () => {
+  const info = editableMaskTemplate('inside');
+  const live = info.liveSources!;
+  const ids = ['first', 'second', 'different'];
+  const secondBox = { x: 960, y: 540, width: 480, height: 270 };
+  const looks = ids.map((id) => ({
+    id,
+    name: id,
+    entered: { mode: 'cut' as const },
+    rects: { 'guest-1': id === 'first' ? BOX : secondBox },
+    masks: { 'guest-1': { mode: 'inside' as const, rects: [maskWindow] } },
+    operatorMaskEdits: ['guest-1'],
+  }));
+  const original = { ...info, liveSources: { ...live, defaultLookId: 'first', looks } };
+  const current = {
+    ...info,
+    liveSources: {
+      ...original.liveSources,
+      looks: looks.map((look) => ({
+        ...look,
+        maskElementIds: { 'guest-1': look.id === 'different' ? 'other-plate' : 'shared-plate' },
+      })),
+    },
+  };
+  const r = await boot({ template: original, html: MASK_HTML });
+  const itemId = 'item-1';
+  const plate = { channel: 1, layer: 30 };
+  const graphic = { channel: 1, layer: 10 };
+  expect(await loadAndTake(r, itemId)).toMatchObject({ accepted: true });
+  await expect.poll(() => r.stackSnapshot()[0]).toMatchObject({ onAirMaskPlacement: true });
+  r.templateImport(current, MASK_HTML.replace('served', 'metadata upgrade'));
+
+  const first: LiveMaskPlacement = {
+    lookId: 'first',
+    plateId: 'guest-1',
+    kind: 'mask',
+    index: 0,
+    authored: maskWindow,
+    rect: { ...maskWindow, x: 0.125 },
+  };
+  const second = { ...first, lookId: 'second' };
+  const before = (await recvLines()).length;
+  await expect(r.setMaskPlacements(itemId, [first])).resolves.toEqual({ accepted: true });
+  expect((await recvLines()).slice(before)).toEqual([
+    expect.stringMatching(/^MIXER 1-30 FILL .* DEFER$/),
+    'MIXER 1-30 CLIP 0.3125 0.375 0.25 0.25 DEFER',
+    expect.stringMatching(/^CG 1-10 UPDATE /),
+    'MIXER 1 COMMIT',
+  ]);
+  const state = r.stackSnapshot()[0];
+  if (state === undefined) throw new Error('Missing mask row');
+  expect(RetainedStackItemSchema.parse(retainedFromStackItem(state)).maskPlacements).toEqual([
+    first,
+    second,
+  ]);
+  expect(JSON.parse(mock?.lastCgUpdate(graphic)?.data ?? '{}')).toEqual({
+    __cg: { maskPlacements: [first, second] },
+  });
+
+  const afterSave = (await recvLines()).length;
+  await expect(r.setMaskPlacements(itemId, [first, second])).resolves.toEqual({ accepted: true });
+  await expect(
+    r.setMaskPlacements(itemId, [first, { ...second, rect: { ...maskWindow, x: 0.5 } }]),
+  ).resolves.toMatchObject({ accepted: false });
+  expect((await recvLines()).slice(afterSave)).toEqual([]);
+  expect(r.stackSnapshot()[0]?.maskPlacements).toEqual([first, second]);
+
+  await expect(r.setActiveLook(itemId, 'different')).resolves.toMatchObject({ ok: true });
+  expect(mock?.layerState(plate)?.clip).toEqual({
+    x: 0.5625,
+    y: 0.5625,
+    width: 0.125,
+    height: 0.125,
+  });
+  await expect(r.setActiveLook(itemId, 'second')).resolves.toMatchObject({ ok: true });
+  expect(mock?.layerState(plate)?.clip).toEqual({
+    x: 0.53125,
+    y: 0.5625,
+    width: 0.125,
+    height: 0.125,
+  });
+
+  await expect(r.setMaskPlacements(itemId, [{ ...second, rect: maskWindow }])).resolves.toEqual({
+    accepted: true,
+  });
+  expect(r.stackSnapshot()[0]?.maskPlacements).toEqual([]);
+  await expect(r.setActiveLook(itemId, 'first')).resolves.toMatchObject({ ok: true });
+  expect(mock?.layerState(plate)?.clip).toEqual({ x: 0.375, y: 0.375, width: 0.25, height: 0.25 });
+});
+
 it('D-202 — moves a linked reveal on its existing muted seat', async () => {
   const info = template([
     { id: 'upper', rect: BOX, revealMask: { targetSourceId: 'lower', rect: maskWindow } },

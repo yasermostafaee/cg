@@ -13,6 +13,7 @@ import {
   assignmentsOnChannel,
   activeLookOf,
   framePlacementRects,
+  linkedMaskPlacements,
   lookOperatorFrames,
   lookOperatorMasks,
   lookPlateFits,
@@ -23,7 +24,7 @@ import {
   resolvePlateSourcesForLook,
 } from '@cg/shared-ipc';
 import type { ChannelRaster, SourceAssignments, TemplateLiveSources } from '@cg/shared-ipc';
-import { liveRevealRects } from '@cg/shared-schema';
+import { liveMaskPlacementKey, liveRevealRects, sameLiveMaskRect } from '@cg/shared-schema';
 import type {
   LiveCropFocus,
   LiveFramePlacement,
@@ -37,10 +38,11 @@ import type {
 } from '@cg/shared-schema';
 // The ONE audio vocabulary, shared with the LIVE PLATES strip and the layer row's summary.
 import type { PlateAudioState } from '../layers/plateAudio.js';
+import type { MaskPlacementEdit } from '../inspector/draftStore.js';
 
 export interface MaskEdit {
   placement: LiveMaskPlacement;
-  baseline: LiveRevealRect;
+  edits: readonly MaskPlacementEdit[];
 }
 
 /**
@@ -274,8 +276,9 @@ export function platePlacements(
   const editableMasks = lookOperatorMasks(live, activeLookId);
   const authoredMasks = lookPlateMasks(live, activeLookId);
   const authoredReveals = lookPlateReveals(live, activeLookId);
-  const appliedMasks = lookPlateMasks(live, activeLookId, appliedMaskPlacements);
-  const appliedReveals = lookPlateReveals(live, activeLookId, appliedMaskPlacements);
+  const appliedMaskEdits = new Map(
+    appliedMaskPlacements?.map((placement) => [liveMaskPlacementKey(placement), placement]),
+  );
   const overrideFits = new Map<string, LiveFitMode>();
   if (sources.frozenAssignment === undefined) {
     for (const assignment of assignmentsOnChannel(sources.assignments, sources.channel)
@@ -326,16 +329,18 @@ export function platePlacements(
     const maskEdits = editableMasks.has(plateId)
       ? [
           ...maskEditsOf(
+            live,
             { lookId, plateId, kind: 'mask' },
             authoredMasks[plateId]?.rects ?? [],
             masks[plateId]?.rects ?? [],
-            appliedMasks[plateId]?.rects ?? [],
+            appliedMaskEdits,
           ),
           ...maskEditsOf(
+            live,
             { lookId, plateId, kind: 'reveal' },
             revealWindows(authoredReveals[plateId]),
             revealWindows(reveals[plateId]),
-            revealWindows(appliedReveals[plateId]),
+            appliedMaskEdits,
           ),
         ]
       : [];
@@ -378,13 +383,24 @@ function revealWindows(reveal: LiveRevealMask | undefined): LiveRevealRect[] {
 }
 
 function maskEditsOf(
+  live: TemplateLiveSources,
   scope: Pick<LiveMaskPlacement, 'lookId' | 'plateId' | 'kind'>,
   authoredWindows: readonly LiveRevealRect[],
   current: readonly LiveRevealRect[],
-  applied: readonly LiveRevealRect[],
+  applied: ReadonlyMap<string, LiveMaskPlacement>,
 ): MaskEdit[] {
-  return authoredWindows.map((authored, index) => ({
-    placement: { ...scope, index, authored, rect: current[index] ?? authored },
-    baseline: applied[index] ?? authored,
-  }));
+  return authoredWindows.map((authored, index) => {
+    const placement = { ...scope, index, authored, rect: current[index] ?? authored };
+    const edits = linkedMaskPlacements(live, placement).map((linked) => {
+      const old = applied.get(liveMaskPlacementKey(linked));
+      return {
+        placement: linked,
+        baseline:
+          old !== undefined && sameLiveMaskRect(old.authored, linked.authored)
+            ? old.rect
+            : linked.authored,
+      };
+    });
+    return { placement, edits };
+  });
 }

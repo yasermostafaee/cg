@@ -4386,3 +4386,5 @@ B-433 through B-437 are already present in the tracked bug headings. The next fr
 - B-441 — Preview template outlines should follow the exported canvas, `docs/prd/bugs-runtime.md`.
 
 - B-442 — Short Sequence boxes clip the Persian glyph ink of a fitting line, `docs/prd/bugs-runtime.md`.
+
+- B-443 — Edits to a reused plate mask stay in one preset, `docs/prd/bugs-runtime.md`.

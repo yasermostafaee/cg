@@ -302,29 +302,81 @@ type MaskPlacementDraft = ReadonlyMap<string, LiveMaskPlacement>;
 const maskPlacementDrafts = new Map<string, MaskPlacementDraft>();
 const applyingMaskPlacements = new Map<string, MaskPlacementDraft>();
 
-export function stageMaskPlacement(
-  itemId: string,
-  placement: LiveMaskPlacement,
-  baseline: LiveMaskPlacement['rect'],
-): void {
-  const key = liveMaskPlacementKey(placement);
-  const current = maskPlacementDrafts.get(itemId);
-  const previous = current?.get(key);
-  const applying = applyingMaskPlacements.get(itemId)?.get(key);
-  const matchesApplied =
-    sameLiveMaskRect(placement.rect, baseline) &&
-    (applying === undefined || sameLiveMaskRect(placement.rect, applying.rect));
-  const unchanged =
-    previous !== undefined &&
-    sameLiveMaskRect(previous.authored, placement.authored) &&
-    sameLiveMaskRect(previous.rect, placement.rect);
-  if (matchesApplied ? previous === undefined : unchanged) return;
-  const next = new Map(current);
-  if (matchesApplied) next.delete(key);
-  else next.set(key, placement);
+export interface MaskPlacementEdit {
+  placement: LiveMaskPlacement;
+  baseline: LiveMaskPlacement['rect'];
+}
+
+function putMaskPlacementDraft(itemId: string, next: MaskPlacementDraft): void {
   if (next.size === 0) maskPlacementDrafts.delete(itemId);
   else maskPlacementDrafts.set(itemId, next);
   bump();
+}
+
+export function stageMaskPlacements(
+  itemId: string,
+  edits: readonly MaskPlacementEdit[],
+  rect: LiveMaskPlacement['rect'],
+): void {
+  const current = maskPlacementDrafts.get(itemId);
+  const next = new Map(current);
+  const applying = applyingMaskPlacements.get(itemId);
+  let changed = false;
+  for (const { placement, baseline } of edits) {
+    const key = liveMaskPlacementKey(placement);
+    const previous = next.get(key);
+    const pending = applying?.get(key);
+    const matchesApplied =
+      sameLiveMaskRect(rect, baseline) &&
+      (pending === undefined || sameLiveMaskRect(rect, pending.rect));
+    if (matchesApplied) {
+      if (next.delete(key)) changed = true;
+    } else if (
+      previous === undefined ||
+      !sameLiveMaskRect(previous.authored, placement.authored) ||
+      !sameLiveMaskRect(previous.rect, rect)
+    ) {
+      next.set(key, { ...placement, rect });
+      changed = true;
+    }
+  }
+  if (changed) putMaskPlacementDraft(itemId, next);
+}
+
+/** A cancelled drag restores each preset's own pre-drag draft, even when they differed. */
+export function beginMaskPlacementGesture(
+  itemId: string,
+  edits: readonly MaskPlacementEdit[],
+): { stage: (rect: LiveMaskPlacement['rect']) => void; cancel: () => void } {
+  const before = maskPlacementDrafts.get(itemId);
+  let staged = before;
+  return {
+    stage(rect) {
+      stageMaskPlacements(itemId, edits, rect);
+      staged = maskPlacementDrafts.get(itemId);
+    },
+    cancel() {
+      if (staged === before) return;
+      const current = maskPlacementDrafts.get(itemId);
+      if (current === undefined && staged !== undefined) return;
+      const next = new Map(current);
+      const applying = applyingMaskPlacements.get(itemId);
+      let changed = false;
+      for (const { placement, baseline } of edits) {
+        const key = liveMaskPlacementKey(placement);
+        const original = before?.get(key);
+        const latest = staged?.get(key);
+        if (original === latest || current?.get(key) !== latest) continue;
+        const pending = applying?.get(key);
+        if (original !== undefined) next.set(key, original);
+        else if (pending !== undefined && !sameLiveMaskRect(pending.rect, baseline))
+          next.set(key, { ...placement, rect: baseline });
+        else next.delete(key);
+        changed = true;
+      }
+      if (changed) putMaskPlacementDraft(itemId, next);
+    },
+  };
 }
 
 export function maskPlacementsWithDraft(
@@ -363,9 +415,7 @@ export function beginMaskPlacementApply(itemId: string): {
         if (remaining.get(key) === placement) remaining.delete(key);
       }
       if (remaining.size === current.size) return;
-      if (remaining.size === 0) maskPlacementDrafts.delete(itemId);
-      else maskPlacementDrafts.set(itemId, remaining);
-      bump();
+      putMaskPlacementDraft(itemId, remaining);
     },
     finish() {
       if (applyingMaskPlacements.get(itemId) === sent) applyingMaskPlacements.delete(itemId);

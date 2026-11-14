@@ -234,9 +234,10 @@ rehearsal without changing the HTML. The renderer shows the chosen Live Source b
 Designer and that frame, and applies the authored Show fallback on air setting in the programme page.
 Bridge scopes a temporary fallback hold to plates whose coverage changes during a PGM look
 switch. It releases the matching hold after the primary mixer commit and an output tick.
-For editable own masks, the retained page redraws the SVG clip on its existing fallback node from
-the same preset-scoped mask placements used by Bridge. The foreground pass reserves the editable
-plate's full extent when classifying higher artwork.
+For editable own masks, PVW and Bridge use the carrier's authored plate identity to expand an edit
+to each eligible preset. The retained page redraws the active preset's SVG clip on its existing
+fallback node from the same normalized placements Bridge uses for the mixer. The foreground pass
+reserves the editable plate's full extent when classifying higher artwork.
 
 **Countdown steps (`D-141`, `DELTA-RUN-NEXT-VERSION-01-A` … `-F`) are compiled by the runtime, from
 the scene.** A countdown flips one attribute on its scope root per step crossing; `step-css.ts` turns

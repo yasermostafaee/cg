@@ -282,6 +282,8 @@ export interface TemplateLookCarrier {
   platePaintOrder?: string[] | undefined;
   operatorFrames?: Record<string, LiveFrameTarget> | undefined;
   operatorMaskEdits?: string[] | undefined;
+  /** Route key → authored plate identity for sharing own-mask edits across presets. */
+  maskElementIds?: Record<string, string> | undefined;
   /**
    * ⭐ `B-178` — **the AUTHOR's fit mode for each source IN THIS LOOK**, taken from the plate
    * ELEMENT that serves that `routeKey` here.
@@ -440,6 +442,7 @@ export function collectLookCarrier(scene: Scene): {
   const masksByLook = new Map<string, Record<string, LivePlateMask>>();
   const operatorFramesByLook = new Map<string, Record<string, LiveFrameTarget>>();
   const operatorMaskEditsByLook = new Map<string, string[]>();
+  const maskElementIdsByLook = new Map<string, Record<string, string>>();
   const fallbacksByLook = new Map<string, string[]>();
   const firstPlateFor = new Map<string, string>();
   /**
@@ -470,6 +473,14 @@ export function collectLookCarrier(scene: Scene): {
 
   const flattened = flattenElements(scene, 'document');
   const operatorFrames = collectOperatorFrameTargets(scene, flattened);
+  // The same composition rendered in different presets reuses the authored element object.
+  // Older scenes can contain duplicate IDs on distinct plate definitions; leave these unlinked.
+  const plateElements = new Map<string, FlatElement['element'] | null>();
+  for (const { element } of flattened) {
+    if (element.type !== 'video-placeholder') continue;
+    const prior = plateElements.get(element.id);
+    plateElements.set(element.id, prior === undefined || prior === element ? element : null);
+  }
   for (const flat of flattened) {
     const el = flat.element;
     if (el.type !== 'video-placeholder') continue;
@@ -504,6 +515,17 @@ export function collectLookCarrier(scene: Scene): {
         const editable = operatorMaskEditsByLook.get(look.id) ?? [];
         editable.push(routeKey);
         operatorMaskEditsByLook.set(look.id, editable);
+      }
+      if (
+        el.allowOperatorMaskEdit === true &&
+        el.liveMask !== undefined &&
+        el.visible &&
+        plateElements.get(el.id) === el &&
+        flat.ancestry.every((ancestor) => ancestor.visible || ancestor.id === owner?.instanceId)
+      ) {
+        const ids = maskElementIdsByLook.get(look.id) ?? {};
+        ids[routeKey] = el.id;
+        maskElementIdsByLook.set(look.id, ids);
       }
       /*
         ⚠ WRITTEN ONLY WHEN THE AUTHOR STATED ONE. An absent entry is the third state —
@@ -605,6 +627,7 @@ export function collectLookCarrier(scene: Scene): {
         ...(operatorMaskEditsByLook.has(l.id) && {
           operatorMaskEdits: operatorMaskEditsByLook.get(l.id),
         }),
+        ...(maskElementIdsByLook.has(l.id) && { maskElementIds: maskElementIdsByLook.get(l.id) }),
         fits: fitsByLook.get(l.id) ?? {},
         focuses: focusesByLook.get(l.id) ?? {},
         reveals,

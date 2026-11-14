@@ -11,7 +11,7 @@ import {
   type FixedLayerBank,
   type TemplateInfo,
 } from '@cg/shared-ipc';
-import { SceneSchema, type VideoPlaceholderElement } from '@cg/shared-schema';
+import { SceneSchema, type LiveRevealRect, type VideoPlaceholderElement } from '@cg/shared-schema';
 import { cgCss, cgJsIife, ExporterSingleFile } from '@cg/single-file-export';
 import { buildTemplateLiveSources, pack, sha256Hex, unpack } from '@cg/vcg-format';
 import {
@@ -3068,6 +3068,231 @@ test('Edit masks drafts authored windows in PVW and updates the existing on-air 
     ),
   ).toBe(false);
   expect(carried()).toContainEqual(saved());
+});
+
+test('B-443 shares one authored plate mask across its presets through PVW and Update on air', async ({
+  page,
+}) => {
+  const handle = await boot(true);
+  const engine = mock;
+  if (engine === null) throw new Error('Test engine is unavailable');
+  await handle.runtime.whenServerHealthy(15_000);
+  const templateId = 'tpl-shared-mask';
+  const itemId = 'shared-mask-item';
+  const { scene: base } = await unpack(await buildPositionedVcg(templateId));
+  const layer = base.layers[0];
+  if (layer === undefined) throw new Error('Missing test layer');
+  const authored = { x: 0.18, y: 0.2, width: 0.45, height: 0.4 };
+  const node = { visible: true, locked: false, opacity: 1, zIndex: 0 };
+  const transform = (x: number, y: number, w: number, h: number) => ({
+    position: { x, y },
+    size: { w, h },
+    anchor: { x: 0, y: 0 },
+    scale: { x: 1, y: 1 },
+    rotation: 0,
+  });
+  const plate = (id: string) => ({
+    ...node,
+    id,
+    name: id,
+    type: 'video-placeholder',
+    routeKey: 'plate-4',
+    transform: transform(0, 0, 640, 360),
+    allowOperatorMaskEdit: true,
+    liveMask: { mode: 'inside', rects: [authored] },
+  });
+  const presets = [
+    { id: 'first', x: 130, w: 640, h: 360 },
+    { id: 'second', x: 620, w: 960, h: 540 },
+    { id: 'separate', x: 510, w: 640, h: 360 },
+  ];
+  const scene = SceneSchema.parse({
+    ...base,
+    defaultPosition: undefined,
+    fields: [],
+    bindings: [],
+    lookGroups: [
+      {
+        id: 'mask-presets',
+        defaultLookId: 'first',
+        looks: presets.map(({ id }) => ({ id, name: id, instanceId: 'instance-' + id })),
+      },
+    ],
+    layers: [
+      {
+        ...layer,
+        children: presets.map(({ id }) => ({
+          ...node,
+          id: 'instance-' + id,
+          name: id,
+          type: 'composition',
+          compositionId: 'comp-' + id,
+          transform: transform(0, 0, 1920, 1080),
+        })),
+      },
+    ],
+    compositions: [
+      ...presets.map(({ id, x, w, h }) => ({
+        id: 'comp-' + id,
+        name: id,
+        resolution: base.resolution,
+        frameRange: base.frameRange,
+        editorBackdrop: 'transparent',
+        layers: [
+          {
+            ...layer,
+            id: 'layer-' + id,
+            children: [
+              {
+                ...node,
+                id: 'plate-instance-' + id,
+                name: id,
+                type: 'composition',
+                compositionId: id === 'separate' ? 'independent-plate' : 'shared-plate',
+                transform: transform(x, 230, w, h),
+              },
+            ],
+          },
+        ],
+      })),
+      ...['shared-plate', 'independent-plate'].map((id) => ({
+        id,
+        name: id,
+        resolution: { width: 640, height: 360 },
+        frameRange: base.frameRange,
+        editorBackdrop: 'transparent',
+        layers: [{ ...layer, id: 'layer-' + id, children: [plate('authored-' + id)] }],
+      })),
+    ],
+  });
+  const liveSources = buildTemplateLiveSources(scene);
+  const { html } = await new ExporterSingleFile({
+    cgJsIife,
+    cgCss,
+    fontsCss: '',
+    assets: { get: () => Promise.resolve(null), bytes: () => Promise.resolve(null) },
+  }).produce(scene);
+  handle.runtime.templateImport({ ...TEMPLATE, templateId, liveSources }, html, 1);
+  expect(
+    handle.runtime.setSourceCatalog({
+      layerRange: { start: 60, end: 79 },
+      sources: [
+        {
+          id: 'shared-mask-input',
+          name: 'Studio',
+          format: '1080i5000',
+          producer: { kind: 'ndi', source: 'MASK-TEST (Studio)' },
+        },
+      ],
+    }),
+  ).toMatchObject({ ok: true });
+  expect(
+    handle.runtime.setSourceAssignments({
+      assignments: [{ templateId, plateId: 'plate-4', sourceId: 'shared-mask-input' }],
+    }),
+  ).toMatchObject({ ok: true });
+  const slot = { channel: 1, layer: 59 };
+  expect(await handle.runtime.loadFixed(slot, itemId, templateId, {})).toMatchObject({
+    accepted: true,
+  });
+  const state = () => handle.runtime.stackSnapshot().find((item) => item.itemId === itemId);
+  const saved = () => state()?.maskPlacements ?? [];
+  const written = () =>
+    engine.receivedCommands().filter(({ line }) => /^(CG|MIXER|PLAY|CLEAR) /.test(line));
+
+  await openConsole(page, handle.url);
+  await showMonitors(page);
+  const row = page.getByRole('region', { name: 'Layers' }).locator('[data-layer="59"]');
+  const pvw = page.getByRole('region', { name: 'PREVIEW (PVW)' });
+  const inspector = page.getByRole('complementary', { name: 'Inspector' });
+  await row.locator('[data-row-body]').click();
+  await row.getByRole('button', { name: 'ON PVW', exact: true }).click();
+  await pvw.getByRole('button', { name: 'PLAY', exact: true }).click();
+  await pvw.getByRole('button', { name: 'Edit masks in Preview' }).click();
+  const guide = pvw.locator('[data-mask-plate="plate-4"]');
+  const rect = async (clip: Locator): Promise<LiveRevealRect> =>
+    clip.evaluate((node) => ({
+      x: Number(node.getAttribute('x')),
+      y: Number(node.getAttribute('y')),
+      width: Number(node.getAttribute('width')),
+      height: Number(node.getAttribute('height')),
+    }));
+  // Clip IDs are instance-scoped. Read the active plate's fallback after each preset change.
+  const activeClip = pvw
+    .frameLocator('iframe[data-rehearsal-frame]')
+    .locator('[data-cg-live-source="plate-4"]:visible [data-cg-editable-mask] rect');
+  const switchPreset = async (id: string) => {
+    const tab = row.locator('[data-look-id="' + id + '"]');
+    await tab.click();
+    await expect(tab).toHaveAttribute('aria-pressed', 'true');
+    await expect.poll(() => state()?.activeLookId).toBe(id);
+    await expect(activeClip).toHaveCount(1);
+  };
+  const move = pvw.getByRole('button', { name: 'Move mask 1 for Studio' });
+  const resize = pvw.getByRole('button', { name: 'Resize mask 1 for Studio from bottom right' });
+
+  await expect.poll(() => rect(activeClip)).toEqual(authored);
+  const firstWidth = (await guide.boundingBox())?.width ?? 0;
+  const offAir = written();
+  await move.press('Shift+ArrowRight');
+  await expect.poll(async () => (await rect(activeClip)).x).toBeGreaterThan(authored.x);
+  const draft = await rect(activeClip);
+  await switchPreset('second');
+  await expect.poll(() => rect(activeClip)).toEqual(draft);
+  expect((await guide.boundingBox())?.width).toBeGreaterThan(firstWidth);
+  await switchPreset('separate');
+  await expect.poll(() => rect(activeClip)).toEqual(authored);
+  expect(saved()).toEqual([]);
+  expect(written()).toEqual(offAir);
+  await inspector.getByRole('button', { name: 'Discard staged edits' }).click();
+  await switchPreset('first');
+  await expect.poll(() => rect(activeClip)).toEqual(authored);
+  await switchPreset('second');
+  await expect.poll(() => rect(activeClip)).toEqual(authored);
+  await resize.press('Shift+ArrowRight');
+  await expect.poll(async () => (await rect(activeClip)).width).toBeGreaterThan(authored.width);
+  const resized = await rect(activeClip);
+  await inspector.getByRole('button', { name: 'Apply staged edits', exact: true }).click();
+  await expect
+    .poll(() =>
+      saved()
+        .map(({ lookId, rect }) => [lookId, rect])
+        .sort(),
+    )
+    .toEqual([
+      ['first', resized],
+      ['second', resized],
+    ]);
+  expect(written()).toEqual(offAir);
+  await row.getByRole('button', { name: 'PLAY', exact: true }).click();
+  await expect(row).toHaveAttribute('aria-label', /ON AIR$/);
+  const beforeDraft = written();
+  await move.press('Shift+ArrowDown');
+  await expect.poll(async () => (await rect(activeClip)).y).toBeGreaterThan(resized.y);
+  const moved = await rect(activeClip);
+  expect(written()).toEqual(beforeDraft);
+  await inspector.getByRole('button', { name: 'Apply staged edits to the on-air row' }).click();
+  await expect.poll(() => saved().map(({ rect }) => rect)).toEqual([moved, moved]);
+  await expect(row.getByText('● draft', { exact: true })).toHaveCount(0);
+  const updated = written()
+    .slice(beforeDraft.length)
+    .map(({ line }) => line);
+  expect(updated).toContainEqual(expect.stringContaining('maskPlacements'));
+  expect(updated).toContain('MIXER 1 COMMIT');
+  expect(updated.some((line) => /^(PLAY|CLEAR) |^CG .* (ADD|PLAY|STOP|REMOVE) /.test(line))).toBe(
+    false,
+  );
+
+  await switchPreset('first');
+  await expect.poll(() => rect(activeClip)).toEqual(moved);
+  const firstCut = written()
+    .slice(beforeDraft.length)
+    .map(({ line }) => line);
+  const payloads = firstCut.filter((line) => line.includes('maskPlacements'));
+  expect(payloads.at(-1)).toContain('first');
+  expect(payloads.at(-1)).toContain('second');
+  await switchPreset('separate');
+  await expect.poll(() => rect(activeClip)).toEqual(authored);
 });
 
 test('R-108 — a reloaded package refreshes the already-bound row in PVW', async ({ page }) => {

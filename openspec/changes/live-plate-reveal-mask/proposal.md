@@ -16,6 +16,7 @@ removed. Existing projects can also reveal part of a second, explicitly linked i
 - Count each copy as an additional seat and refuse atomically when the live-source band lacks room.
 - Add an own-plate mask with independently editable windows and a Revert option.
 - Seat one input per own-plate mask. Route any extra disjoint fragments from that seat and mute them.
+- Share each editable own-plate mask window across presets that reuse its authored plate.
 
 ## Capabilities
 

@@ -63,10 +63,15 @@ leaves it, and that click follows the normal Canvas selection path. Both kinds s
 
 ## Edit authored windows in CG Control
 
-**Allow mask editing in CG Control** is a per-plate Designer permission. Each override identifies
-the preset, plate, kind and window index, and carries the authored rectangle as its identity.
-Overrides whose identity or permission changed are ignored. The existing mask mode, window count
-and linked source stay part of the authored template.
+**Allow mask editing in CG Control** is a per-plate Designer permission. Concrete placements
+identify the preset, plate, kind, window index and authored rectangle. For own masks, the
+carrier identifies the authored element in each preset. PVW and Bridge expand an edit into each
+matching editable appearance of that authored element and keep the original per-preset placement
+format. The geometry is normalized inside each plate, so frame placement and size may differ.
+Legacy linked reveals keep their preset scope because their lower targets and intersections
+belong to the preset. A kept package gains the optional carrier identity when CG Control rebuilds
+it. A carrier without identity can still edit the active preset. Existing saved placements keep
+their geometry until a new edit of that window applies to the group.
 
 The PVW tool stages normalized windows separately from input crop and frame placement. It draws
 the draft with the same mask geometry used by Bridge and the page fallback. Update on a stopped

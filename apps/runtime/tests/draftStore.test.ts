@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import type { FieldValues, ListItem } from '@cg/shared-schema';
+import type { FieldValues, ListItem, LiveMaskPlacement } from '@cg/shared-schema';
 import {
   __resetDraftsForTest,
+  beginMaskPlacementApply,
+  beginMaskPlacementGesture,
   buildApplyPayload,
   clearDraft,
   clearStagedMatching,
@@ -9,14 +11,17 @@ import {
   hasStaged,
   isFieldDirty,
   isItemDirty,
+  maskPlacementsWithDraft,
   effectivePosition,
   positionDraftOf,
   pruneDrafts,
   snapshotDraft,
   stageField,
   stageFieldBatch,
+  stageMaskPlacements,
   stagePosition,
   stagedValue,
+  subscribeDrafts,
   unstageField,
 } from '../src/renderer/features/inspector/draftStore.js';
 
@@ -46,6 +51,75 @@ const B = 'item-b';
 
 /** A stack snapshot that HAS arrived, carrying these ids. */
 const live = (...ids: string[]) => ({ ready: true as const, liveItemIds: new Set(ids) });
+
+describe('linked mask placement drafts', () => {
+  const authored = { x: 0, y: 0, width: 0.25, height: 0.25 };
+  const one: LiveMaskPlacement = {
+    lookId: 'look-1',
+    plateId: 'shared',
+    kind: 'mask',
+    index: 0,
+    authored,
+    rect: authored,
+  };
+  const two = { ...one, lookId: 'look-2' };
+  const priorOne = { ...authored, x: 0.1 };
+  const priorTwo = { ...authored, x: 0.2 };
+  const edits = [
+    { placement: one, baseline: priorOne },
+    { placement: two, baseline: priorTwo },
+  ];
+  const applied = [
+    { ...one, rect: priorOne },
+    { ...two, rect: priorTwo },
+  ];
+
+  it('stages linked presets together and removes only scopes already at the requested rect', () => {
+    const observed: (LiveMaskPlacement[] | undefined)[] = [];
+    const unsubscribe = subscribeDrafts(() => observed.push(maskPlacementsWithDraft(A, applied)));
+    try {
+      stageMaskPlacements(A, edits, priorOne);
+      expect(observed).toEqual([[applied[0], { ...two, rect: priorOne }]]);
+      const apply = beginMaskPlacementApply(A);
+      expect(apply?.placements).toEqual([{ ...two, rect: priorOne }]);
+      apply?.finish();
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it('restores divergent drafts when a linked drag returns to its starting point', () => {
+    const firstDraft = { ...authored, x: 0.3 };
+    const secondDraft = { ...authored, x: 0.4 };
+    const moved = { ...authored, y: 0.3 };
+    stageMaskPlacements(A, [edits[0]!], firstDraft);
+    stageMaskPlacements(A, [edits[1]!], secondDraft);
+    const gesture = beginMaskPlacementGesture(A, edits);
+    gesture.stage(moved);
+    expect(maskPlacementsWithDraft(A, applied)).toEqual([
+      { ...one, rect: moved },
+      { ...two, rect: moved },
+    ]);
+    gesture.cancel();
+    expect(maskPlacementsWithDraft(A, applied)).toEqual([
+      { ...one, rect: firstDraft },
+      { ...two, rect: secondDraft },
+    ]);
+  });
+
+  it('keeps a correction when a cancelled drag had already been sent to Bridge', () => {
+    const gesture = beginMaskPlacementGesture(
+      A,
+      edits.map(({ placement }) => ({ placement, baseline: authored })),
+    );
+    gesture.stage({ ...authored, x: 0.6 });
+    const apply = beginMaskPlacementApply(A);
+    gesture.cancel();
+    apply?.accept();
+    apply?.finish();
+    expect(beginMaskPlacementApply(A)?.placements).toEqual([one, two]);
+  });
+});
 
 describe('staging + effective value', () => {
   it('stages a field and reads it back; effectiveValue prefers the draft', () => {

@@ -24,7 +24,14 @@ corner inside its plate. The mask type, mode, target, and remaining windows SHAL
 - **WHEN** the operator moves or resizes a window in PVW
 - **THEN** the effective picture updates in PVW and the row marks the change as a draft
 - **AND** Discard restores the applied geometry and Update off air saves it for the next Take
-- **AND** another preset keeps its own authored or applied windows
+
+#### Scenario: One authored mask follows a reused plate across presets
+
+- **GIVEN** two presets show the same editable authored own-plate mask at different plate sizes
+- **WHEN** the operator moves or resizes one of its windows in PVW
+- **THEN** both presets preview that normalized draft and Discard restores each applied value
+- **AND** Update persists both appearances for Take and preset switches
+- **AND** distinct authored plates sharing a source and legacy linked reveals keep their own windows
 
 #### Scenario: Update the mask on a verified live row
 

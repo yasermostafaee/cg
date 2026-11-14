@@ -149,6 +149,7 @@ import {
   lookPlateRects,
   lookOperatorFrames,
   lookOperatorMasks,
+  linkedMaskPlacements,
   framePlacementRects,
   type FramePlacementReset,
   type TemplateLiveSources,
@@ -5433,10 +5434,28 @@ export class CasparRuntime {
                 'A mask or its editing permission changed. Check the current template in Preview.',
             };
           }
+          const edits = new Map<string, LiveMaskPlacement>();
+          for (const placement of placements) {
+            for (const linked of linkedMaskPlacements(carrier, placement)) {
+              const key = liveMaskPlacementKey(linked);
+              const earlier = edits.get(key);
+              if (
+                !allowedMaskPlacement(carrier, linked) ||
+                (earlier !== undefined && !sameLiveMaskRect(earlier.rect, linked.rect))
+              ) {
+                return {
+                  accepted: false,
+                  errorCode: 'invalid-mask-placement',
+                  message: 'A shared mask has conflicting edits. Check its window in Preview.',
+                };
+              }
+              edits.set(key, linked);
+            }
+          }
           const frames = this.#framePlacementsPendingReset.has(itemId)
             ? []
             : this.#framePlacements.get(itemId);
-          for (const { lookId, plateId, kind, rect } of placements) {
+          for (const { lookId, plateId, kind, rect } of edits.values()) {
             if (kind !== 'reveal') continue;
             const reveal = lookPlateReveals(carrier, lookId)[plateId];
             const rects = framePlacementRects(carrier, lookId, frames);
@@ -5461,8 +5480,7 @@ export class CasparRuntime {
               .filter((placement) => allowedMaskPlacement(carrier, placement))
               .map((placement) => [liveMaskPlacementKey(placement), placement]),
           );
-          for (const placement of placements) {
-            const key = liveMaskPlacementKey(placement);
+          for (const [key, placement] of edits) {
             if (sameLiveMaskRect(placement.authored, placement.rect)) merged.delete(key);
             else merged.set(key, placement);
           }
@@ -5544,6 +5562,8 @@ export class CasparRuntime {
         ...look,
         name: undefined,
         allowOperatorAutoLayout: undefined,
+        // The existing page already consumes individual placements for each preset.
+        maskElementIds: undefined,
       })),
     });
     return isDeepStrictEqual(frameContract(held), frameContract(listed)) ? held : undefined;

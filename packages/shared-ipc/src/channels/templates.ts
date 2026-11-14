@@ -20,6 +20,7 @@ import {
   liveRevealRects,
   maskRectsWithPlacements,
   resolveOperatorAutoLayout,
+  sameLiveMaskRect,
 } from '@cg/shared-schema';
 import type {
   LiveCropFocus,
@@ -112,6 +113,8 @@ export const TemplateLookSchema = z.object({
   /** routeKey → operator placement target for the exact plate in this Look. */
   operatorFrames: z.record(z.string(), LiveFrameTargetSchema).optional(),
   operatorMaskEdits: z.array(IdSchema).optional(),
+  /** Route key → authored plate identity. Older carriers keep per-preset edits. */
+  maskElementIds: z.record(z.string(), IdSchema).optional(),
   /**
    * ⭐ `B-178` — routeKey → the AUTHOR's fit mode while this look is active, from the plate
    * ELEMENT that serves that routeKey here.
@@ -431,6 +434,46 @@ export function lookPlateMasks(
     };
   }
   return masks;
+}
+
+/** Expand an own-mask edit to other presets showing the same authorized authored window. */
+export function linkedMaskPlacements(
+  carrier: TemplateLiveSources,
+  placement: LiveMaskPlacement,
+): LiveMaskPlacement[] {
+  const result = [placement];
+  const { lookId, plateId, kind, index, authored } = placement;
+  if (kind !== 'mask' || lookId === undefined) return result;
+
+  const origin = carrier.looks?.find((look) => look.id === lookId);
+  const elementId = origin?.maskElementIds?.[plateId];
+  const mode = origin?.masks?.[plateId]?.mode;
+  if (typeof elementId !== 'string' || mode === undefined) return result;
+
+  const matches = (look: TemplateLook): boolean => {
+    const plate = look.rects[plateId];
+    const mask = look.masks?.[plateId];
+    const window = mask?.rects[index];
+    return (
+      look.maskElementIds?.[plateId] === elementId &&
+      plate !== undefined &&
+      plate.width > 0 &&
+      plate.height > 0 &&
+      look.operatorMaskEdits?.includes(plateId) === true &&
+      mask?.mode === mode &&
+      window !== undefined &&
+      sameLiveMaskRect(window, authored)
+    );
+  };
+  if (origin === undefined || !matches(origin)) return result;
+
+  const seen = new Set([lookId]);
+  for (const look of carrier.looks ?? []) {
+    if (seen.has(look.id)) continue;
+    seen.add(look.id);
+    if (matches(look)) result.push({ ...placement, lookId: look.id });
+  }
+  return result;
 }
 
 export const TemplateInfoSchema = z.object({

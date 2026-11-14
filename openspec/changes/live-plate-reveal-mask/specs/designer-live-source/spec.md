@@ -39,7 +39,8 @@ the complement of that union inside the plate. The same rule SHALL clip the plat
 
 - **GIVEN** a live plate has an authored mask or linked reveal
 - **WHEN** the author enables **Allow mask editing in CG Control**
-- **THEN** the exported instance grants window movement and resize in its own preset
+- **THEN** each exported occurrence of the plate grants window movement and resize
+- **AND** the export identifies editable own masks from the same authored plate across presets
 - **AND** new plates start with the permission disabled
 
 #### Scenario: Revert and remove a mask

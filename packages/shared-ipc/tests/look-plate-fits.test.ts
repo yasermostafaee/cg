@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   TemplateLiveSourcesSchema,
   framePlacementRects,
+  linkedMaskPlacements,
   lookAllowsOperatorAutoLayout,
   lookOperatorFrames,
   lookOperatorMasks,
@@ -260,6 +261,68 @@ it('moves only the authorized mask window in its own Look and preserves authored
   expect(lookPlateMasks(parsed, 'grid')['guest-1']).toEqual(mask);
   expect(lookPlateMasks(parsed, 'grid', [{ ...edit, index: 1 }])['guest-1']).toEqual(mask);
   expect(lookPlateMasks(parsed, 'solo', [{ ...edit, lookId: 'solo' }])['guest-1']).toEqual(mask);
+  expect(linkedMaskPlacements(parsed, edit)).toEqual([edit]);
+});
+
+it('links an own mask by authored plate, mode and window while retaining per-preset coordinates', () => {
+  const live = withLooks();
+  const grid = live.looks?.[0];
+  const solo = live.looks?.[1];
+  if (grid === undefined || solo === undefined) throw new Error('missing Look fixture');
+  const authored = { x: 0.125, y: 0.25, width: 0.25, height: 0.25 };
+  const sibling = { ...authored, x: 0.5 };
+  const rect = { ...authored, x: 0.25, width: 0.125 };
+  const mask = { mode: 'inside', rects: [authored, sibling] } as const;
+  const plateId = 'guest-1';
+  grid.masks = { [plateId]: { ...mask, rects: [...mask.rects] } };
+  grid.maskElementIds = { [plateId]: 'authored-plate' };
+  grid.operatorMaskEdits = [plateId];
+  const peer = { ...grid, id: 'peer', rects: solo.rects };
+  const parsed = TemplateLiveSourcesSchema.parse({
+    ...live,
+    looks: [
+      grid,
+      peer,
+      { ...peer, id: 'unrelated', maskElementIds: { [plateId]: 'independent-plate' } },
+      { ...peer, id: 'read-only', operatorMaskEdits: [] },
+      { ...peer, id: 'absent', rects: {} },
+      { ...peer, id: 'collapsed', rects: { [plateId]: { ...RECT, width: 0 } } },
+      { ...peer, id: 'revert', masks: { [plateId]: { ...mask, mode: 'outside' } } },
+      {
+        ...peer,
+        id: 'different-window-order',
+        masks: { [plateId]: { ...mask, rects: [sibling, authored] } },
+      },
+      { ...peer, id: 'legacy', maskElementIds: undefined },
+      peer,
+    ],
+  });
+  const edit = {
+    lookId: 'grid',
+    plateId,
+    kind: 'mask',
+    index: 0,
+    authored,
+    rect,
+  } satisfies LiveMaskPlacement;
+  const edits = linkedMaskPlacements(parsed, edit);
+  expect(edits).toEqual([edit, { ...edit, lookId: 'peer' }]);
+  expect(lookPlateRects(parsed, 'grid')[plateId]).toEqual(RECT);
+  expect(lookPlateRects(parsed, 'peer')[plateId]).toEqual(OTHER);
+  for (const lookId of ['grid', 'peer']) {
+    expect(lookPlateMasks(parsed, lookId, edits)[plateId]?.rects).toEqual([rect, sibling]);
+  }
+  expect(lookPlateMasks(parsed, 'unrelated', edits)[plateId]).toEqual(mask);
+  for (const seed of [
+    { ...edit, lookId: 'legacy' },
+    { ...edit, lookId: 'read-only' },
+    { ...edit, lookId: 'stale-id' },
+    { ...edit, lookId: undefined },
+    { ...edit, authored: sibling },
+    { ...edit, kind: 'reveal' as const },
+  ]) {
+    expect(linkedMaskPlacements(parsed, seed)).toEqual([seed]);
+  }
 });
 
 it('edits a standalone linked reveal without changing its lower input or siblings', () => {

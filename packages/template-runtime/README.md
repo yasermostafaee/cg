@@ -154,7 +154,8 @@ route and matches a release to the hold ID. A bounded timer restores the authore
 fallback if the release is lost. Rehearsal and foreground passes ignore the hold.
 
 `CgControl.maskPlacements` replaces the fallback's editable clip windows by exact plate, preset and
-authored window. The SVG clip is updated in place while the fallback and the plate stay mounted.
+authored window. A shared plate arrives as one placement per eligible preset. The SVG clip is
+updated in place while the fallback and the plate stay mounted.
 An empty placement list restores the authored windows. Foreground classification uses the full
 area of an editable own-mask plate so an expanded window cannot cover higher artwork.
 

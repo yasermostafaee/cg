@@ -6829,7 +6829,8 @@ part of an input, or leave a transparent opening in the picture for another grap
 - WHEN the author selects an existing mask or finishes drawing one THEN direct editing is active by default and its Inspector icon shows the active state
 - WHEN the author cancels an in-progress mask drag THEN the saved window keeps its geometry
 - WHEN the author allows mask editing in CG Control THEN **Edit masks** can move and resize those
-  authored windows in PVW within their plate, with independent draft and applied state per preset
+  authored windows in PVW within their plate. The same authored window follows the plate across
+  presets that reuse it. Distinct plates and existing linked reveals keep their own edits.
 - WHEN Update on air retains the running input seats THEN the mask and fallback geometry apply in
   place. A change that needs different input layers is applied off air before the next Take.
 - WHEN the last linked reveal is removed THEN the plate returns to ordinary overlap validation

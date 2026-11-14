@@ -82,3 +82,15 @@
 - [x] Verify inside-mask placement in Designer and a staged move updating the PVW label in Chromium.
 - [x] Verify the Revert label region, including a fully masked plate with no visible region.
 - [ ] Record the carrying Linux Playwright result for label placement.
+
+## 10. B-443 — Shared authored masks across presets
+
+- [x] Carry the identity of an editable authored own mask in the verified template carrier.
+- [x] Share its staged and applied placements across presets, including Move, Resize and Discard.
+      Chromium covered two differently sized presets sharing one plate and an independent plate
+      with the same source key and mask rectangle.
+- [x] Verify the supplied project, old VCG import, distinct authored plates and retained on-air seats.
+      The real `3ghab-mask.vcg` carried one normalized edit into presets 2 and 3 and used the
+      same producer layer. The Bridge regression covered a compatible reload, conflicting edits
+      and restoring both shared windows to the authored rectangle.
+- [ ] Record the carrying Linux Playwright result and check on the target engine.

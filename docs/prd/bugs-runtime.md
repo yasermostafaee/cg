@@ -14123,3 +14123,13 @@ outline for missing assignments. Show Crop edges below the plate name when the a
 **Repro / Actual:** In the owner's `cr.vcg`, the authored 1920×1080 output holds a 48px composition and a 45px Sequence. Its 32px Persian text has a fitting layout line box but glyphs extend under the Sequence clip at rest. The exported root canvas dimensions stay intact.
 
 **Expected / regression:** WHEN the text ink fits within the authored Sequence height THEN its whole line is visible at rest in Preview and in the rendered output. Keep the authored viewport and its transition clip for sliding text, page images and compositions.
+
+## [~] B-443 — Edits to a reused plate mask stay in one preset ⟨priority: high — owner, 2026-11-14⟩ — `openspec/changes/live-plate-reveal-mask/`
+
+**Repro / Actual:** In `3ghab-mask.vcg`, presets 2 and 3 reuse the same masked plate from a shared
+composition. Moving or resizing its mask in CG Control currently changes only the selected preset.
+
+**Expected / regression:** A window edit follows the same authored plate across its editable
+preset appearances. PVW, Discard, Update and Take resolve the same normalized geometry against
+each preset's own frame size. An independently authored plate using the same input and a legacy
+linked reveal each retain their own geometry.
