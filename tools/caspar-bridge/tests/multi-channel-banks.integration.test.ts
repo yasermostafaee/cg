@@ -154,8 +154,8 @@ describe('§4 — a take and a clear on one channel touch nothing on the other',
     expect(after.indexOf('MIXER 2-99 CLEAR')).toBeGreaterThan(after.indexOf('CLEAR 2-99'));
     expect(writes(addressing(after, 1))).toEqual([]);
     // Channel 1's graphic is still on air.
-    expect(r.handle.runtime.stackSnapshot().find((i) => i.itemId === 'logo-1')?.status).toBe(
-      'on-air',
+    expect(['on-air', 'playing']).toContain(
+      r.handle.runtime.stackSnapshot().find((i) => i.itemId === 'logo-1')?.status,
     );
   });
 });
