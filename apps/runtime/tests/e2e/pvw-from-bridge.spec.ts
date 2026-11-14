@@ -7,6 +7,7 @@ import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import {
   LayerProfileSchema,
+  fixedBankSlots,
   type ConnectionConfig,
   type FixedLayerBank,
   type TemplateInfo,
@@ -145,6 +146,16 @@ async function showMonitors(page: Page): Promise<void> {
 
 const row = (page: Page) => page.locator(`[data-layer="${String(ROW)}"]`).first();
 const frames = (page: Page) => page.locator('iframe[data-rehearsal-frame]');
+
+/** AMCP health can precede Bridge's one-off volume reset on the declared rows. */
+async function waitForStartupVolumes(engine: MockHandle): Promise<void> {
+  const last = fixedBankSlots(BANK).at(-1);
+  if (last === undefined) throw new Error('Missing declared rows in the test bank');
+  const command = `MIXER ${last.channel}-${last.layer} VOLUME 1`;
+  await expect
+    .poll(() => engine.receivedCommands().some(({ line }) => line === command), { timeout: 15_000 })
+    .toBe(true);
+}
 
 /** A second browser PROFILE: a fresh context shares no storage with the first. */
 async function freshProfile(browser: Browser, page: Page): Promise<Page> {
@@ -1538,6 +1549,7 @@ test('Frames drafts the authored box and whole-template Position moves the retai
   const engine = mock;
   if (engine === null) throw new Error('Test engine is unavailable');
   await handle.runtime.whenServerHealthy(15_000);
+  await waitForStartupVolumes(engine);
   const itemId = 'editable-live-frame';
   const templateId = 'tpl-pvw-crop';
   const { scene: base } = await unpack(await buildPositionedVcg(templateId));
@@ -1924,6 +1936,7 @@ test('Frames drafts the authored box and whole-template Position moves the retai
     await duration.fill('۵۰۰');
     await expect(duration).toHaveValue('500');
     await expect(rowDraft).toHaveCount(0);
+    await page.bringToFront();
     const beforeEffect = await readBox();
     await dragControl(move, 30, 0);
     await expect
@@ -2307,6 +2320,7 @@ test('Auto layout stages both frame boxes and keeps each styled title with its i
   const engine = mock;
   if (engine === null) throw new Error('Test engine is unavailable');
   await handle.runtime.whenServerHealthy(15_000);
+  await waitForStartupVolumes(engine);
   const templateId = 'tpl-auto-layout';
   const itemId = 'auto-layout-item';
   const { scene: base } = await unpack(await buildPositionedVcg(templateId));
