@@ -69,6 +69,13 @@ Fade disabled. The effect duration SHALL be configurable from 100 to 1000 ms.
 - **AND** the remaining frame stays above departing content during the movement
 - **AND** the shared title moves with its frame or stays hidden during the movement, then adopts the destination preset's authored visibility
 
+#### Scenario: The engine connection drops during a preset change
+
+- **WHEN** the same engine reconnects after an interrupted preset effect
+- **THEN** its prior native arrangement and any surviving artwork passes are restored
+- **AND** seats created only for the interrupted arrival are muted, hidden and cleared
+- **AND** removed or replaced artwork remains under its current owner
+
 #### Scenario: Change the input without moving its frame
 
 - **WHEN** the operator changes an input with Input effect set to Cut or Fade

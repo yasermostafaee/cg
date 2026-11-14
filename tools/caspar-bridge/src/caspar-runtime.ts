@@ -24,6 +24,7 @@ import {
   CG_LIVE_MASK_PLACEMENT_PAGE_MARKER,
   CG_LIVE_PRESET_DEPARTURE_PAGE_MARKER,
   CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER,
+  CG_LIVE_PRESET_RECOVERY_PAGE_MARKER,
   CG_LIVE_PRESET_TRANSITION_PAGE_MARKER,
   DEFAULT_LIVE_CROP_FOCUS,
   LiveRevealRectSchema,
@@ -586,6 +587,13 @@ interface ProvisionalInputSeat {
   cleanupPending: boolean;
 }
 
+interface ProvisionalPresetSeat {
+  readonly itemId: string;
+  readonly slot: CommandSlot;
+  readonly session: ServerSession;
+  cleanupPending: boolean;
+}
+
 interface PresetFrameEffect extends LiveMixerTransitionGuard {
   readonly run: () => Promise<FrameEffectReply>;
   readonly tellLook: (
@@ -593,7 +601,7 @@ interface PresetFrameEffect extends LiveMixerTransitionGuard {
     hold?: CgLiveFallback,
   ) => Promise<FrameEffectReply>;
   readonly restore: () => Promise<boolean>;
-  readonly dispose: () => Promise<void>;
+  readonly dispose: (settled: boolean) => Promise<void>;
 }
 
 /** A private owner of the server's shared DEFER buffer for one channel. */
@@ -2144,6 +2152,7 @@ export class CasparRuntime {
   /** Seats started hidden, before the action can commit them to the live ledger. */
   readonly #pendingSeatLayers = new Set<string>();
   readonly #provisionalInputSeats = new Map<string, ProvisionalInputSeat>();
+  readonly #provisionalPresetSeats = new Map<string, ProvisionalPresetSeat>();
   /**
    * Reconnect-reconciliation — layers this process has CLEARed at least once
    * (adoption, out, remove), i.e. layers whose producer state the bridge KNOWS.
@@ -2187,6 +2196,10 @@ export class CasparRuntime {
   // A held version alone can survive a restart, and #loaded also permits a backup-only ADD.
   readonly #livePositionPages = new Map<string, ResidentOutputPage>();
   readonly #liveFramePages = new Map<string, ResidentOutputPage>();
+  readonly #pendingPresetArtworkRestores = new Map<
+    string,
+    (generation: number) => Promise<boolean>
+  >();
   /**
    * R-048 / C-015 phase 6 (6.9) — itemId → plateId → catalog source id: this
    * ROW's live-source substitutions.
@@ -3454,6 +3467,7 @@ export class CasparRuntime {
     this.#reconciler.on('item-removed', (info) => {
       this.#livePositionPages.delete(info.itemId);
       this.#liveFramePages.delete(info.itemId);
+      this.#pendingPresetArtworkRestores.delete(info.itemId);
       this.#markDirty(info.itemId);
     });
 
@@ -9329,6 +9343,9 @@ export class CasparRuntime {
    */
   #liveLayerKeys(includePending = false): Set<string> {
     const keys = new Set<string>(includePending ? this.#pendingSeatLayers : []);
+    if (includePending) {
+      for (const key of this.#provisionalPresetSeats.keys()) keys.add(key);
+    }
     for (const records of this.#liveLayers.values()) {
       for (const record of records) keys.add(adoptionKey(record.slot));
     }
@@ -10960,7 +10977,7 @@ export class CasparRuntime {
       return unavailable(
         'Fade for a source change requires a single connected engine. Choose Cut on this station.',
       );
-    if (this.#inputFadeCleanupPending(channel))
+    if (this.#inputFadeCleanupPending(channel) || this.#presetSeatCleanupPending(channel))
       return unavailable(
         'The previous Fade is still recovering. Check the programme picture and retry.',
       );
@@ -11239,6 +11256,64 @@ export class CasparRuntime {
           )
         : true;
       if (cleared) this.#releaseProvisionalInputSeat(key, seat);
+    } finally {
+      await this.#commitStagedMixer(batch);
+    }
+  }
+
+  #presetSeatCleanupPending(channel: number): boolean {
+    return [...this.#provisionalPresetSeats.values()].some(
+      (seat) => seat.slot.channel === channel && seat.cleanupPending,
+    );
+  }
+
+  /** A fresh arrival can have a reveal queued on the engine's shared DEFER buffer. */
+  async #cleanupPresetSeats(channel: number, batch: MixerBatch = {}): Promise<void> {
+    await this.#leaseMixerChannel(batch, channel);
+    try {
+      const session = this.#adapter.primarySession;
+      const pending: [string, ProvisionalPresetSeat][] = [];
+      for (const [key, seat] of this.#provisionalPresetSeats) {
+        if (seat.slot.channel !== channel || !seat.cleanupPending) continue;
+        if (
+          session !== seat.session ||
+          this.#sessions.B !== undefined ||
+          !this.#isOwnConfiguredLayer(channel, seat.slot.layer) ||
+          this.#holdsSeatedPlate(seat.slot) ||
+          this.#emptiedLayers.has(key)
+        ) {
+          // The coordinate changed owners, or this process already confirmed its clear.
+          this.#provisionalPresetSeats.delete(key);
+          continue;
+        }
+        pending.push([key, seat]);
+      }
+      if (pending.length === 0 || !isLiveState(session.state)) return;
+
+      for (const [, { slot }] of pending) {
+        for (const line of [
+          this.#builder.mixerVolume(slot, 0),
+          this.#builder.mixerOpacity(slot, 0),
+        ]) {
+          if (this.#adapter.primarySession !== session) return;
+          const sent = await this.#sendDeferredMixer(batch, channel, line);
+          if (!sent.ok || !sent.onPrimary) return;
+        }
+      }
+      // Commit behind any orphaned reveal and keep the lease until the temporary seats are cleared.
+      if (!(await this.#sendMixerCommit(channel)).landed) return;
+      delete batch.staged;
+      for (const [key, seat] of pending) {
+        if (this.#adapter.primarySession !== session) return;
+        if (this.#provisionalPresetSeats.get(key) !== seat) continue;
+        const cleared = await this.#clearAfterRefusal(
+          seat.slot,
+          { outcome: 'landed', heldBefore: false },
+          'plate',
+          true,
+        );
+        if (cleared) this.#provisionalPresetSeats.delete(key);
+      }
     } finally {
       await this.#commitStagedMixer(batch);
     }
@@ -12473,6 +12548,40 @@ export class CasparRuntime {
     const placements = this.#framePlacements.get(itemId);
     const masks = this.#maskPlacements.get(itemId);
     const pageSlots = foreground === undefined ? [page.slot] : [page.slot, foreground];
+    const presetEffectId = this.#hasFramePlacementMarker(
+      page.version,
+      CG_LIVE_PRESET_RECOVERY_PAGE_MARKER,
+    )
+      ? randomUUID()
+      : undefined;
+    const restoreLook = (slot: CommandSlot) =>
+      presetEffectId === undefined
+        ? this.#builder.updateLook(
+            slot,
+            fromLook,
+            {},
+            previousFits,
+            undefined,
+            placements,
+            masks,
+            true,
+          )
+        : this.#builder.update(
+            slot,
+            withCgControl(
+              {},
+              {
+                restorePresetEffectId: presetEffectId,
+                restorePresetEffect: {
+                  look: fromLook,
+                  ...(previousFits !== undefined && { plates: previousFits }),
+                  ...(placements !== undefined && { framePlacements: placements }),
+                  ...(masks !== undefined && { maskPlacements: masks }),
+                  frameTransition: null,
+                },
+              },
+            ),
+          );
     const affected = [
       ...new Set([
         ...changes.keys(),
@@ -12481,6 +12590,16 @@ export class CasparRuntime {
       ]),
     ];
     const hiddenSlots = new Set(effect.departure?.records.map(({ slot }) => adoptionKey(slot)));
+    const baselineSlots = new Set(baseline.map(({ slot }) => adoptionKey(slot)));
+    const freshSeats = new Map<string, ProvisionalPresetSeat>();
+    for (const { slot } of effect.arrival?.records ?? []) {
+      const key = adoptionKey(slot);
+      // Existing held seats are restored from their ledger, never cleared by this transaction.
+      if (baselineSlots.has(key)) continue;
+      const seat = { itemId, slot, session: page.session, cleanupPending: false };
+      freshSeats.set(key, seat);
+      this.#provisionalPresetSeats.set(key, seat);
+    }
     const touched = new Set<LiveLayerRecord>();
     const batch: MixerBatch = {};
     const cancel = new AbortController();
@@ -12515,7 +12634,9 @@ export class CasparRuntime {
       if (changed === itemId && !stillOwnsOutput()) cancel.abort();
     };
     const connectionChanged = () => {
-      if (!stillOwnsOutput()) cancel.abort();
+      if (stillOwnsOutput()) return;
+      for (const seat of freshSeats.values()) seat.cleanupPending = true;
+      cancel.abort();
     };
     const wait = async (ms: number): Promise<boolean> => {
       if (!current()) return false;
@@ -12586,14 +12707,34 @@ export class CasparRuntime {
           stage,
           tell: (phase) =>
             sendPages((slot) =>
-              this.#builder.update(slot, withCgControl({}, { frameTransition: phase })),
+              this.#builder.update(
+                slot,
+                withCgControl(
+                  {},
+                  {
+                    frameTransition: phase,
+                    ...(presetEffectId !== undefined && { presetEffectId }),
+                  },
+                ),
+              ),
             ),
         }),
       tellLook: async (fits, fallback) => {
         const arrival = effect.arrival;
         if (arrival === undefined)
           return sendPages((slot) =>
-            this.#builder.updateLook(slot, toLook, {}, fits, fallback, placements, masks, true),
+            this.#builder.updateLook(
+              slot,
+              toLook,
+              {},
+              fits,
+              fallback,
+              placements,
+              masks,
+              true,
+              undefined,
+              presetEffectId,
+            ),
           );
         const period = this.#channelFrameMsFor(channel);
         const hold = Math.min(250, this.#lookMixerHoldMsFor(channel));
@@ -12618,6 +12759,7 @@ export class CasparRuntime {
             masks,
             true,
             artworkPhase(0, 0),
+            presetEffectId,
           ),
         );
         if (!told.ok) return told;
@@ -12651,7 +12793,13 @@ export class CasparRuntime {
         const rendered = await sendPages((slot) =>
           this.#builder.update(
             slot,
-            withCgControl({}, { frameTransition: artworkPhase(enter, 1) }),
+            withCgControl(
+              {},
+              {
+                frameTransition: artworkPhase(enter, 1),
+                ...(presetEffectId !== undefined && { presetEffectId }),
+              },
+            ),
           ),
         );
         if (!rendered.ok) return rendered;
@@ -12663,20 +12811,7 @@ export class CasparRuntime {
       restore: async () => {
         let restored = stillOwnsOutput(true);
         if (restored && pageAttempted) {
-          const old = await sendPages(
-            (slot) =>
-              this.#builder.updateLook(
-                slot,
-                fromLook,
-                {},
-                previousFits,
-                undefined,
-                placements,
-                masks,
-                true,
-              ),
-            true,
-          );
+          const old = await sendPages(restoreLook, true);
           restored = old.ok;
         }
         for (const record of touched) {
@@ -12703,15 +12838,72 @@ export class CasparRuntime {
           this.#liveFramePages.delete(itemId);
           this.#markDirty(itemId);
         }
+        if (
+          !restored &&
+          pageAttempted &&
+          presetEffectId !== undefined &&
+          this.#adapter.primarySession === page.session &&
+          (page.session.state !== 'healthy' || this.#amcpGeneration !== page.generation)
+        ) {
+          const sameRow = () => {
+            const row = this.#reconciler.get(itemId);
+            return (
+              this.#adapter.primarySession === page.session &&
+              this.#slots.get(itemId) === page.slot &&
+              this.#foregroundPages.get(itemId) === foreground &&
+              this.#takeTokens.get(itemId) === take &&
+              this.#templates.heldVersion(itemId) === page.version &&
+              this.activeLookId(itemId) === fromLook &&
+              row !== null &&
+              row.lastIntentSeq === item.lastIntentSeq &&
+              (isOnAirStatus(row) || row.status === 'unverified') &&
+              row.status !== 'exiting'
+            );
+          };
+          if (sameRow()) {
+            this.#pendingPresetArtworkRestores.set(itemId, async (generation) => {
+              if (!sameRow()) return true;
+              const connected = () =>
+                page.session.state === 'healthy' && this.#amcpGeneration === generation;
+              if (!connected()) return false;
+              const observed = new Map(this.#observedProducers(page.session));
+              // The guarded control envelope has no effect on an unrelated or legacy page,
+              // even if it replaced the same HTML slot during the connection loss.
+              if (!pageSlots.every((slot) => observed.has(adoptionKey(slot)))) {
+                const snapshot = await this.#occupancyFromInfo(channel, 1000);
+                if (snapshot.state === 'unknown') return false;
+                for (const { layer, producer } of snapshot.layers)
+                  observed.set(adoptionKey({ channel, layer }), producer);
+              }
+              for (const slot of pageSlots) {
+                if (!sameRow()) return true;
+                if (!connected()) return false;
+                const producer = observed.get(adoptionKey(slot));
+                if (producer === undefined || oscProducerKind(producer) !== 'html') continue;
+                const sent = await this.#send(restoreLook(slot), this.#nextSeq(), 'urgent');
+                if ((!sent.ok || !sent.onPrimary) && !connected()) return false;
+              }
+              return true;
+            });
+            // A fast reconnect can finish while the transaction is still unwinding.
+            if (page.session.state === 'healthy') void this.#restorePresetArtworkOnHealthy();
+          }
+        }
         return restored;
       },
-      dispose: async () => {
+      dispose: async (settled) => {
         if (this.#frameTransitionInterrupts.get(itemId) === cancel)
           this.#frameTransitionInterrupts.delete(itemId);
         this.#reconciler.off('item-changed', invalidate);
         this.#reconciler.off('item-removed', invalidate);
         page.session.off('state-change', connectionChanged);
-        await this.#commitStagedMixer(batch);
+        for (const [key, seat] of freshSeats) {
+          if (this.#provisionalPresetSeats.get(key) !== seat) continue;
+          if (settled) this.#provisionalPresetSeats.delete(key);
+          else seat.cleanupPending = true;
+        }
+        if (!settled && freshSeats.size > 0) await this.#cleanupPresetSeats(channel, batch);
+        else await this.#commitStagedMixer(batch);
       },
     };
   }
@@ -13691,6 +13883,7 @@ export class CasparRuntime {
       }
     }
     const releaseClaims = this.#claimSeatLayers(plan);
+    let settled = false;
     try {
       let preSeated: ReadonlyMap<string, SeatResult> | undefined;
       if (opts.mode === 'switch') {
@@ -13772,10 +13965,11 @@ export class CasparRuntime {
         return { ...applied, message: presetEffectFailureMessage(restored) };
       }
       if (applied.ok) this.#plateFits.set(itemId, { ...plan.plateFits });
+      settled = applied.ok;
       return applied;
     } finally {
       try {
-        await opts.presetEffect?.()?.dispose();
+        await opts.presetEffect?.()?.dispose(settled);
       } finally {
         releaseClaims();
       }
@@ -14025,7 +14219,8 @@ export class CasparRuntime {
    */
   async #flushOrphanedStaging(): Promise<void> {
     for (const channel of [...this.#orphanedMixerChannels]) {
-      if (this.#inputFadeCleanupPending(channel)) continue;
+      if (this.#inputFadeCleanupPending(channel) || this.#presetSeatCleanupPending(channel))
+        continue;
       const batch: MixerBatch = {};
       await this.#leaseMixerChannel(batch, channel);
       batch.staged = this.#orphanedMixerChannels.has(channel);
@@ -14046,10 +14241,28 @@ export class CasparRuntime {
     for (const [key, seat] of this.#provisionalInputSeats) {
       if (seat.cleanupPending) await this.#restoreProvisionalInputSeat(key, seat);
     }
+    const pendingPresetChannels = new Set(
+      [...this.#provisionalPresetSeats.values()]
+        .filter((seat) => seat.cleanupPending)
+        .map(({ slot }) => slot.channel),
+    );
+    for (const channel of pendingPresetChannels) await this.#cleanupPresetSeats(channel);
     await this.#flushOrphanedStaging();
     if (newConnection) await this.#resendLiveMixerState();
+    await this.#restorePresetArtworkOnHealthy();
     // `ROUTE-PLATES-01` rule 5 — then D10 again, bounded, for the route plates the ledger holds.
     if (newConnection) await this.#routeEpochAfterReconnect();
+  }
+
+  /** The resident page itself verifies the interrupted effect before it restores the prior look. */
+  async #restorePresetArtworkOnHealthy(): Promise<void> {
+    const generation = this.#amcpGeneration;
+    for (const [itemId, recover] of this.#pendingPresetArtworkRestores) {
+      await this.#withLiveSeatLock(itemId, async () => {
+        if (this.#pendingPresetArtworkRestores.get(itemId) !== recover) return;
+        if (await recover(generation)) this.#pendingPresetArtworkRestores.delete(itemId);
+      });
+    }
   }
 
   /**
@@ -14082,7 +14295,8 @@ export class CasparRuntime {
           isInCgBands(r.slot.layer),
         );
         for (const channel of new Set(records.map((r) => r.slot.channel))) {
-          if (this.#inputFadeCleanupPending(channel)) continue;
+          if (this.#inputFadeCleanupPending(channel) || this.#presetSeatCleanupPending(channel))
+            continue;
           const batch: MixerBatch = {};
           try {
             for (const record of records.filter((r) => r.slot.channel === channel)) {
@@ -15440,7 +15654,9 @@ export class CasparRuntime {
       */
       const settled = next
         .filter((r) => failed === undefined || liveSeatId(r) !== liveSeatId(failed.record))
-        .concat(settledFailed);
+        .concat(settledFailed)
+        // An interrupted preset's fresh arrivals remain reserved for mute and clear.
+        .filter((r) => this.#provisionalPresetSeats.get(key(r))?.itemId !== itemId);
       const bySlot = new Map<string, LiveLayerRecord>();
       for (const r of previous) bySlot.set(key(r), r);
       for (const r of settled) bySlot.set(key(r), r);
@@ -18872,6 +19088,7 @@ export class CasparRuntime {
     this.#foregroundPages.clear();
     this.#livePositionPages.clear();
     this.#liveFramePages.clear();
+    this.#pendingPresetArtworkRestores.clear();
     this.#adopted.clear();
     // The last failover described the old server pair — a new era starts clean.
     this.#lastFailover = undefined;

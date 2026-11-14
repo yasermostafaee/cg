@@ -29,6 +29,7 @@ import {
   readCgControl,
   sequenceStepsByOperator,
   stripCgControl,
+  type CgControl,
   type CgLiveFallback,
   type CgPage,
   type FrameTransitionPhase,
@@ -648,6 +649,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   let framePlacements: readonly LiveFramePlacement[] = [];
   let maskPlacements: readonly LiveMaskPlacement[] = [];
   let frameTransitionHold: { nodes: HTMLElement[]; timer: unknown } | undefined;
+  let presetEffectId: string | undefined;
 
   /**
    * ⭐ **`multibox-layout-switch` `tasks.md` 4.3 — UNIT B′'s re-punch pass.**
@@ -978,6 +980,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // exit settles the whole template's state/visibility once per exit.
   const rootOnExitStart = (): void => {
     if (machine.state === 'on-air' || machine.state === 'playing') {
+      presetEffectId = undefined;
       cancelFrameTransition();
       machine.transition('exiting');
       bus.emit('stop.start');
@@ -3400,6 +3403,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         throw new Error('Runtime removed; play() unavailable');
       }
       await ready;
+      presetEffectId = undefined;
       cancelFrameTransition();
       releaseLiveFallback();
       lastFallbackPhaseId = null;
@@ -3637,6 +3641,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
 
     setActiveLook(lookId: string): boolean {
       if (machine.state === 'removed') return false;
+      presetEffectId = undefined;
       return enterLook(lookId);
     },
 
@@ -3684,8 +3689,27 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         a field and a field can never be silently fed a look id — true even for a hand-edited
         scene the export preflight never saw.
       */
-      const control = readCgControl(data);
-      const values = stripCgControl(data as Record<string, unknown>);
+      const receivedControl = readCgControl(data);
+      const isPresetRestore = receivedControl?.restorePresetEffectId !== undefined;
+      const control: CgControl | undefined = isPresetRestore
+        ? receivedControl.restorePresetEffect
+        : receivedControl;
+      if (isPresetRestore) {
+        if (receivedControl.restorePresetEffectId !== presetEffectId || control === undefined)
+          return;
+        presetEffectId = undefined;
+        cancelFrameTransition();
+      } else if (control?.take !== undefined) {
+        presetEffectId = undefined;
+      } else if (
+        control?.presetEffectId !== undefined &&
+        (machine.state === 'on-air' || machine.state === 'playing')
+      ) {
+        presetEffectId = control.presetEffectId;
+      } else if (control?.look !== undefined && control.liveFallback?.phase !== 'release') {
+        presetEffectId = undefined;
+      }
+      const values = isPresetRestore ? {} : stripCgControl(data as Record<string, unknown>);
       // A move on its own has no field work: in particular, do not restamp a
       // paged repeater or reapply the operator's countdown target.
       if (
@@ -3698,7 +3722,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         bus.emit('update');
         return;
       }
-      const mode = opts.mode ?? 'merge';
+      const mode = isPresetRestore ? 'merge' : (opts.mode ?? 'merge');
       if (mode === 'replace') {
         currentValues = { ...(values as NestedFieldValues) };
       } else {
@@ -3787,6 +3811,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
 
     async stop(_opts?: StopOptions): Promise<void> {
       if (machine.state === 'removed') return;
+      presetEffectId = undefined;
       cancelFrameTransition();
       if (machine.state !== 'on-air' && machine.state !== 'playing') return;
       // D-105 — QUICK exit: remove the content IMMEDIATELY (before the background
@@ -3828,6 +3853,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
 
     async out(_opts?: StopOptions): Promise<void> {
       if (machine.state === 'removed') return;
+      presetEffectId = undefined;
       cancelFrameTransition();
       if (machine.state !== 'on-air' && machine.state !== 'playing') return;
       // D-105 — COORDINATED animated exit: fade the content off FIRST, await it,
@@ -3932,6 +3958,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
 
     remove(): void {
       if (machine.state === 'removed') return;
+      presetEffectId = undefined;
       cancelFrameTransition();
       releaseLiveFallback();
       for (const watchdog of outroWatchdogs) watchdog.cancel();

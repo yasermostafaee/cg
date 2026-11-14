@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   withCgControl,
   type FrameTransitionPhase,
@@ -648,6 +648,51 @@ describe('D-201 — synchronized live-input foreground pass', () => {
       if (incomingTitle !== null) expect(getComputedStyle(incomingTitle).display).toBe('none');
       if (fallback !== null)
         expect(fallback.hasAttribute('data-cg-frame-transition-hidden')).toBe(false);
+
+      const update = vi.fn();
+      runtime.on('update', update);
+      const bind = async (presetEffectId: string): Promise<void> => {
+        await runtime.update(withCgControl({}, { look: 'duo', presetEffectId }));
+        update.mockClear();
+      };
+      const restore = (restorePresetEffectId: string) =>
+        runtime.update(
+          withCgControl(
+            { ignored: 'value' },
+            {
+              restorePresetEffectId,
+              restorePresetEffect: { look: 'solo', frameTransition: null },
+            },
+          ),
+        );
+      await bind('effect-1');
+      await restore('other-effect');
+      expect(update).not.toHaveBeenCalled();
+      expect(runtime.activeLookId()).toBe('duo');
+      await restore('effect-1');
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(runtime.activeLookId()).toBe('solo');
+      update.mockClear();
+      await restore('effect-1');
+      expect(update).not.toHaveBeenCalled();
+
+      // A normal explicit preset, a Take, or a Stop supersedes a pending recovery.
+      await bind('effect-2');
+      await runtime.update(withCgControl({}, { look: 'duo' }));
+      update.mockClear();
+      await restore('effect-2');
+      expect(runtime.activeLookId()).toBe('duo');
+      expect(update).not.toHaveBeenCalled();
+      await bind('effect-3');
+      await runtime.play(withCgControl({}, { look: 'duo' }));
+      await restore('effect-3');
+      expect(runtime.activeLookId()).toBe('duo');
+      expect(update).not.toHaveBeenCalled();
+      await bind('effect-4');
+      await runtime.stop();
+      await restore('effect-4');
+      expect(runtime.activeLookId()).toBe('duo');
+      expect(update).not.toHaveBeenCalled();
       runtime.remove();
     },
   );

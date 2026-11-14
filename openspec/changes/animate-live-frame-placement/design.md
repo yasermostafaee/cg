@@ -41,6 +41,12 @@ The runtime's phase payload addresses an artwork group by its fully qualified in
 fences it by preset ID. When the destination hides an outgoing shared title, the runtime keeps
 that title hidden through the move and then applies the destination's authored visibility.
 
+On a connection loss, the Bridge reserves any seats the arrival actually started. On recovery it
+mutes and hides those seats before the shared mixer buffer is committed, clears them, and
+reasserts the prior mixer ledger. A guarded update restores the previous preset on the surviving
+artwork passes. The page accepts recovery only for the effect it received. A new take, Stop, or
+loss of the resident pages ends that ownership.
+
 ## Rehearsal
 
 Preview uses the exact exported page and the same phase planner. The Inspector can choose a PVW

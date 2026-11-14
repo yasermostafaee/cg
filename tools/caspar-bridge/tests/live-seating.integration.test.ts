@@ -18,6 +18,7 @@ import {
   CG_LIVE_POSITION_PAGE_MARKER,
   CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER,
   CG_LIVE_PRESET_DEPARTURE_PAGE_MARKER,
+  CG_LIVE_PRESET_RECOVERY_PAGE_MARKER,
   CG_LIVE_PRESET_TRANSITION_PAGE_MARKER,
   RetainedStackItemSchema,
   retainedFromStackItem,
@@ -190,17 +191,27 @@ const PRESET_ARTWORK_FADE_HTML = PRESET_DEPARTURE_HTML.replace(
   '</head>',
   `${CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER}</head>`,
 );
+const PRESET_RECOVERY_HTML = PRESET_ARTWORK_FADE_HTML.replace(
+  '</head>',
+  `${CG_LIVE_PRESET_RECOVERY_PAGE_MARKER}</head>`,
+);
 
 const DEPARTURE_BAND = { start: BAND.start, end: BAND.end + 1 };
+const PRESET_RECOVERY_BAND = { start: 60, end: 63 };
 const DEPARTURE_ARTWORK = 'duo/right-group';
 const FULL_FRAME = { x: 0, y: 0, width: 1920, height: 1080 };
 
-async function bootPresetDeparture(html: string, withRetainedInGroup = false) {
+async function bootPresetDeparture(
+  html: string,
+  withRetainedInGroup = false,
+  additionalArrivalFragment = false,
+) {
   const base = presetEffectTemplate();
   const live = base.liveSources!;
   const [solo, duo] = live.looks!;
   const left = { x: 0, y: 270, width: 960, height: 540 };
   const right = { x: 960, y: 270, width: 960, height: 540 };
+  const nativeBand = html === PRESET_RECOVERY_HTML ? PRESET_RECOVERY_BAND : DEPARTURE_BAND;
   const makeInput = (id: string): SourceCatalog['sources'][number] => ({
     id,
     name: id,
@@ -222,7 +233,15 @@ async function bootPresetDeparture(html: string, withRetainedInGroup = false) {
             ...duo!,
             rects: { 'guest-1': left, 'guest-2': right, 'guest-3': right },
             masks: {
-              'guest-3': { mode: 'inside', rects: [{ x: 0.1, y: 0.6, width: 0.8, height: 0.2 }] },
+              'guest-3': {
+                mode: 'inside',
+                rects: [
+                  { x: 0.1, y: 0.6, width: 0.8, height: 0.2 },
+                  ...(additionalArrivalFragment
+                    ? [{ x: 0.1, y: 0.1, width: 0.8, height: 0.2 }]
+                    : []),
+                ],
+              },
             },
             platePaintOrder: ['guest-1', 'guest-2', 'guest-3'],
             transitionPaintOrder: ['guest-1', 'guest-2', 'guest-3'],
@@ -240,7 +259,9 @@ async function bootPresetDeparture(html: string, withRetainedInGroup = false) {
     html,
     catalog: catalog({
       sources: ['src-a', 'src-b', 'src-c'].map(makeInput),
-      layerRange: DEPARTURE_BAND,
+      layerRange: additionalArrivalFragment
+        ? { ...nativeBand, end: nativeBand.end + 1 }
+        : nativeBand,
     }),
     assignments: assign([
       ['guest-1', 'src-a'],
@@ -1964,6 +1985,130 @@ it('fades all exiting mask seats before moving the retained seat and fades retur
       ),
     });
   }
+});
+
+it.each([false, true])(
+  'guards interrupted preset recovery on reconnect (producer removed: %s)',
+  async (removed) => {
+    const r = await bootPresetDeparture(PRESET_RECOVERY_HTML);
+    const itemId = 'item-1';
+    expect(await r.setActiveLook(itemId, 'solo')).toEqual({ ok: true });
+    const original = r
+      .liveLayers()
+      .get(itemId)!
+      .map(({ slot }) => [slot, mock!.layerState(slot)] as const);
+    const background = { channel: 1, layer: 10 };
+    const pageSlots = [background, { channel: 1, layer: PRESET_RECOVERY_BAND.end }];
+    const cg = defaultHandlers().get('CG')!;
+    let recoverId: unknown;
+    mock!.setHandler('CG', (request, context, connection) => {
+      const replied = cg(request, context, connection);
+      if (
+        recoverId === undefined &&
+        request.raw.includes('presetTransitionCommit') &&
+        request.raw.includes('presetEffectId') &&
+        request.raw.includes('duo')
+      ) {
+        recoverId = JSON.parse(mock!.lastCgUpdate(background)?.data ?? '{}').__cg?.presetEffectId;
+        if (removed) {
+          for (const slot of pageSlots)
+            context.setLayer(slot, { producer: 'empty', filePath: '', onAir: false });
+        }
+        // The producer received the destination write, but Bridge never saw the reply.
+        mock!.closeAllAmcpConnections();
+      }
+      return replied;
+    });
+    const before = (await recvLines()).length;
+    expect(await r.setActiveLook(itemId, 'duo', PRESET_EFFECT)).toMatchObject({ ok: false });
+    expect(recoverId).toEqual(expect.any(String));
+    await r.whenServerHealthy(HEALTH_MS);
+    if (removed) {
+      expect(r.stackSnapshot()[0]?.onAirPresetTransition).toBeUndefined();
+      expect(
+        (await recvLines()).slice(before).some((line) => line.includes('restorePresetEffectId')),
+      ).toBe(false);
+      expect(pageSlots.map((slot) => mock!.layerState(slot)?.producer)).toEqual(['empty', 'empty']);
+      return;
+    }
+
+    await expect
+      .poll(
+        () => pageSlots.map((slot) => JSON.parse(mock!.lastCgUpdate(slot)?.data ?? '{}').__cg),
+        {
+          timeout: HEALTH_MS,
+        },
+      )
+      .toEqual(
+        pageSlots.map(() => ({
+          restorePresetEffectId: recoverId,
+          restorePresetEffect: expect.objectContaining({ look: 'solo', frameTransition: null }),
+        })),
+      );
+    expect(r.stackSnapshot()[0]?.activeLookId).toBe('solo');
+    for (const [slot, state] of original) expect(mock!.layerState(slot)).toEqual(state);
+    expect(mock!.stagedMixerCount(1)).toBe(0);
+  },
+);
+
+it('cleans up only the fresh preset arrival fragment after its reveal commit loses the reply', async () => {
+  const r = await bootPresetDeparture(PRESET_RECOVERY_HTML, false, true);
+  const itemId = 'item-1';
+  expect(await r.setActiveLook(itemId, 'solo')).toEqual({ ok: true });
+  const previous = r.liveLayers().get(itemId)!;
+  expect(previous).toHaveLength(3);
+  const original = previous.map(({ slot }) => [slot, mock!.layerState(slot)] as const);
+  const layerIds = new Set(previous.map(({ slot }) => slot.layer));
+  const mixer = defaultHandlers().get('MIXER')!;
+  let revealedLayer: number | undefined;
+  let disconnected = false;
+  let opacityAtDisconnect: number | undefined;
+  mock!.setHandler('MIXER', (request, context, connection) => {
+    const replied = mixer(request, context, connection);
+    const fade = /^MIXER 1-(\d+) OPACITY 1 [1-9]\d* linear DEFER$/.exec(request.raw);
+    if (fade !== null) {
+      const layer = Number(fade[1]);
+      if (!layerIds.has(layer) && context.getLayer({ channel: 1, layer }).producer === 'route') {
+        revealedLayer = layer;
+      }
+    }
+    if (!disconnected && revealedLayer !== undefined && request.raw === 'MIXER 1 COMMIT') {
+      disconnected = true;
+      opacityAtDisconnect = context.getLayer({ channel: 1, layer: revealedLayer }).opacity;
+      mock!.closeAllAmcpConnections();
+    }
+    return replied;
+  });
+  const before = (await recvLines()).length;
+  expect(await r.setActiveLook(itemId, 'duo', PRESET_EFFECT)).toMatchObject({ ok: false });
+  expect(disconnected).toBe(true);
+  expect(opacityAtDisconnect).toBe(1);
+  if (revealedLayer === undefined) throw new Error('The staged arrival fragment did not reveal');
+  const slot = { channel: 1, layer: revealedLayer };
+  await r.whenServerHealthy(HEALTH_MS);
+  await expect.poll(() => mock!.layerState(slot)?.producer, { timeout: HEALTH_MS }).toBe('empty');
+  const lines = (await recvLines()).slice(before);
+  const reveal = lines.findIndex(
+    (line) => line.startsWith(`MIXER 1-${slot.layer} OPACITY 1 `) && line.endsWith('linear DEFER'),
+  );
+  const landed = lines.indexOf('MIXER 1 COMMIT', reveal + 1);
+  const hide = lines.findIndex(
+    (line, i) =>
+      i > landed &&
+      /^MIXER 1-\d+ OPACITY 0(?: |$)/.test(line) &&
+      line.startsWith(`MIXER 1-${slot.layer} `),
+  );
+  const clear = lines.indexOf(`CLEAR 1-${slot.layer}`, landed + 1);
+  expect(reveal).toBeGreaterThanOrEqual(0);
+  expect(landed).toBeGreaterThan(reveal);
+  expect(hide).toBeGreaterThan(landed);
+  expect(clear).toBeGreaterThan(hide);
+  for (const [oldSlot, state] of original) {
+    expect(lines).not.toContain(`CLEAR 1-${oldSlot.layer}`);
+    await expect.poll(() => mock!.layerState(oldSlot), { timeout: HEALTH_MS }).toEqual(state);
+  }
+  expect(r.stackSnapshot()[0]?.activeLookId).toBe('solo');
+  expect(mock!.stagedMixerCount(1)).toBe(0);
 });
 
 it('retains Cut on an older resident page and when the same authored plate changes input', async () => {

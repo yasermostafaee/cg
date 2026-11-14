@@ -5212,3 +5212,4 @@ Send CG commands to the active engine after its external-graphics transfer contr
 - WHEN a preset adds or removes frames THEN the incoming and outgoing frames, masks and titles animate. Shared frames stay above departing frames during movement. Title visibility follows the destination preset.
 - WHEN a plate has a mask THEN its operator Crop is unavailable. Its mask and the Crop of an eligible unmasked neighbor remain editable.
 - WHEN swapping an input in the same plate THEN Cut or Fade applies. If a Fade is refused THEN the working input remains applied.
+- WHEN the same engine reconnects after a preset effect was interrupted THEN the previous arrangement and its resident artwork recover together, and only temporary arriving seats are muted and cleared.

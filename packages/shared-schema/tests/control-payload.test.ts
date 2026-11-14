@@ -35,6 +35,53 @@ describe('the round trip — the bridge writes, the page reads', () => {
     expect(readCgControl(received)?.look).toBe('solo');
   });
 
+  it('round-trips the preset effect owner and keeps a malformed rollback fenced', () => {
+    expect(readCgControl(withCgControl({}, { look: 'duo', presetEffectId: 'effect-1' }))).toEqual({
+      look: 'duo',
+      presetEffectId: 'effect-1',
+    });
+    expect(
+      readCgControl(
+        withCgControl(
+          {},
+          {
+            restorePresetEffectId: 'effect-1',
+            restorePresetEffect: {
+              look: 'solo',
+              frameTransition: null,
+            },
+          },
+        ),
+      ),
+    ).toEqual({
+      restorePresetEffectId: 'effect-1',
+      restorePresetEffect: {
+        look: 'solo',
+        frameTransition: null,
+      },
+    });
+    expect(
+      readCgControl({
+        [CG_CONTROL_KEY]: {
+          look: 'solo',
+          restorePresetEffectId: 7,
+        },
+      }),
+    ).toEqual({ restorePresetEffectId: '' });
+    expect(
+      readCgControl({
+        [CG_CONTROL_KEY]: {
+          look: 'unsafe-sibling',
+          restorePresetEffectId: 'effect-1',
+          restorePresetEffect: { look: 'solo', frameTransition: null, take: 'unsafe-take' },
+        },
+      }),
+    ).toEqual({
+      restorePresetEffectId: 'effect-1',
+      restorePresetEffect: { look: 'solo', frameTransition: null },
+    });
+  });
+
   it('round-trips the named hold and release without exposing them to authored fields', () => {
     const phases = [
       { phase: 'hold', id: 'preset-cut-1', plateIds: ['guest-1', 'guest-2'] },

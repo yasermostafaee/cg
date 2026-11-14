@@ -190,6 +190,7 @@ export class CommandBuilder {
     maskPlacements?: LiveMaskPlacement[],
     presetTransitionCommit = false,
     frameTransition?: FrameTransitionPhase,
+    presetEffectId?: string,
   ): string {
     /*
       🔴 **`single-clock-look-switch` — the old mask-oriented `from` argument is GONE.**
@@ -209,6 +210,7 @@ export class CommandBuilder {
       ...(liveFallback !== undefined && { liveFallback }),
       ...(framePlacements !== undefined && { framePlacements }),
       ...(maskPlacements !== undefined && { maskPlacements }),
+      ...(presetEffectId !== undefined && { presetEffectId }),
       ...(presetTransitionCommit && {
         frameTransition: frameTransition ?? null,
         presetTransitionCommit: true,

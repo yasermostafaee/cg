@@ -34,5 +34,8 @@
       Windows Chromium verifies the Bounce replay in PVW. Bridge integration verifies the native
       mixer phases for both effects and the final recentered geometry.
 - [x] Verify the expanded transitions with eight focused Windows Chromium cases.
+- [x] Drop the engine connection during a preset change. Verify surviving pages recover their
+      prior preset, missing pages are not recreated, and an already-visible temporary mask
+      fragment is muted, hidden and cleared on reconnect.
 - [ ] Record the Linux Playwright result for the expanded transitions.
 - [ ] Build the updated local Windows installers after the expanded transitions pass.

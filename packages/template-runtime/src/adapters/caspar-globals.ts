@@ -47,12 +47,14 @@ export function installCasparGlobals(
     if (
       verb === 'update' &&
       (control.presetTransitionCommit === true ||
+        control.restorePresetEffectId !== undefined ||
         (control.frameTransition !== undefined &&
           _take === undefined &&
           values !== undefined &&
           Object.keys(values).length === 0 &&
           Object.keys(control).every(
-            (key) => key === 'frameTransition' || key === 'framePlacements',
+            (key) =>
+              key === 'frameTransition' || key === 'framePlacements' || key === 'presetEffectId',
           )))
     ) {
       return;

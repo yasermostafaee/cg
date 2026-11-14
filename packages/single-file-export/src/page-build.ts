@@ -11,8 +11,8 @@ import { cgCss, cgJsIife, cgJsLottieIife } from './cg-runtime.js';
  *
  * Bumping it makes every CG Control on the next release rebuild every page it can.
  */
-// Rebuild retained pages so they can hide departing artwork during live preset transitions.
-export const EXPORTER_SHELL_REVISION = 10;
+// Rebuild retained pages for verified artwork recovery after a preset-transition interruption.
+export const EXPORTER_SHELL_REVISION = 11;
 
 /**
  * 🔴 `PAGE-REBUILD-01` — **THE FINGERPRINT OF EVERYTHING A PAGE IS BUILT FROM BESIDE ITS OWN

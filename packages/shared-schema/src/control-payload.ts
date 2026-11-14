@@ -17,6 +17,8 @@ export const CG_LIVE_PRESET_DEPARTURE_PAGE_MARKER =
   '<meta name="cg-live-preset-departure" content="1">';
 export const CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER =
   '<meta name="cg-live-preset-artwork-fade" content="1">';
+export const CG_LIVE_PRESET_RECOVERY_PAGE_MARKER =
+  '<meta name="cg-live-preset-recovery" content="1">';
 export const CG_LIVE_MASK_PLACEMENT_PAGE_MARKER =
   '<meta name="cg-live-mask-placement" content="1">';
 
@@ -199,6 +201,15 @@ export interface CgControl {
   frameTransition?: FrameTransitionPhase | null;
   /** An authoritative preset update addressed directly to both resident passes. */
   presetTransitionCommit?: true;
+  /** Identifies the transition that owns temporary native geometry and page artwork. */
+  presetEffectId?: string;
+  /** Apply this rollback only on the resident page that accepted that transition. */
+  restorePresetEffectId?: string;
+  /** An opaque rollback envelope. Older pages ignore its control members. */
+  restorePresetEffect?: Pick<CgControl, 'plates' | 'framePlacements' | 'maskPlacements'> & {
+    look: string;
+    frameTransition: null;
+  };
   /** Replace the row's mask placements. An empty array restores the authored windows. */
   maskPlacements?: LiveMaskPlacement[];
   /**
@@ -310,8 +321,45 @@ export function readCgControl(payload: unknown): CgControl | undefined {
   if (typeof payload !== 'object' || payload === null) return undefined;
   const raw = (payload as Record<string, unknown>)[CG_CONTROL_KEY];
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined;
-  const look = (raw as Record<string, unknown>)['look'];
-  const take = (raw as Record<string, unknown>)['take'];
+  const control = raw as Record<string, unknown>;
+  const { presetEffectId, restorePresetEffectId, restorePresetEffect } = control;
+  if ('restorePresetEffectId' in control || 'restorePresetEffect' in control) {
+    // The rollback must stay fenced even if its token or contents are malformed.
+    if (
+      !validEffectId(restorePresetEffectId) ||
+      typeof restorePresetEffect !== 'object' ||
+      restorePresetEffect === null ||
+      Array.isArray(restorePresetEffect)
+    ) {
+      return { restorePresetEffectId: '' };
+    }
+    const { look, plates, framePlacements, maskPlacements, frameTransition } = readCgControlMembers(
+      restorePresetEffect as Record<string, unknown>,
+    );
+    if (look === undefined || frameTransition !== null) return { restorePresetEffectId: '' };
+    return {
+      restorePresetEffectId,
+      restorePresetEffect: {
+        look,
+        frameTransition,
+        ...(plates !== undefined && { plates }),
+        ...(framePlacements !== undefined && { framePlacements }),
+        ...(maskPlacements !== undefined && { maskPlacements }),
+      },
+    };
+  }
+  return {
+    ...readCgControlMembers(control),
+    ...(validEffectId(presetEffectId) && { presetEffectId }),
+  };
+}
+
+function validEffectId(id: unknown): id is string {
+  return typeof id === 'string' && id.length > 0 && id.length <= 256;
+}
+
+function readCgControlMembers(raw: Record<string, unknown>): CgControl {
+  const { look, take } = raw;
   const placements = LiveFramePlacementsSchema.safeParse(
     (raw as Record<string, unknown>)['framePlacements'],
   );
