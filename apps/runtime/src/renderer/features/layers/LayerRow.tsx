@@ -44,6 +44,7 @@ import {
 } from './takeRefusalLine.js';
 import { currentSourceCatalog } from '../sources/sourceStore.js';
 import { frameTransitionPreference } from '../inspector/frameTransitionPreference.js';
+import { inputTransitionRequest } from '../inspector/inputTransitionPreference.js';
 import {
   ROW_GEOMETRY,
   VERBS_GRID,
@@ -1434,7 +1435,12 @@ export function LayerRow({
           template={template}
           channel={slot.channel}
           onSwap={(plateId, sourceId) =>
-            window.cg.stack.swapLiveSource({ itemId: item.itemId, plateId, sourceId })
+            window.cg.stack.swapLiveSource({
+              itemId: item.itemId,
+              plateId,
+              sourceId,
+              ...inputTransitionRequest(),
+            })
           }
           onClose={() => {
             setSwapOpen(false);

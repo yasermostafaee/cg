@@ -5196,7 +5196,7 @@ Send CG commands to the active engine after its external-graphics transfer contr
 
 ## [~] R-119 — Animate on-air live frame placement ⟨priority: high — owner, 2026-11-14⟩ — `openspec/changes/animate-live-frame-placement/`
 
-**What:** Let the operator select Cut, Linear, Ease in, Ease out or Ease in/out and independently enable Fade when applying a live frame move, resize or preset switch on air.
+**What:** Let the operator select Cut, Linear, Ease in, Ease out, Ease in/out, Bounce or Elastic and independently enable Fade for live frame placement and preset switches. Let the operator use Cut or Fade for an input change in the same frame.
 
 **Why:** Operators need to reframe a running shot without restarting its input or abruptly changing the layout.
 
@@ -5208,3 +5208,7 @@ Send CG commands to the active engine after its external-graphics transfer contr
 - WHEN a running template lacks effect support THEN regular frame placement remains available under its existing guards.
 - WHEN switching between presets that share the same authored plate and running input THEN the shared frame moves and resizes from the outgoing placement to the incoming placement without starting the source again. The same applies to the reverse switch.
 - WHEN a verified departing masked group would be painted in the wrong order during the reverse movement THEN the entire group exits before the shared frame moves. Returning to the previous preset restores its mask and plate order.
+- WHEN previewing a preset or input change THEN the selected effect runs on PVW independently of PGM. Direct dragging and sizing stay immediate.
+- WHEN a preset adds or removes frames THEN the incoming and outgoing frames, masks and titles animate. Shared frames stay above departing frames during movement. Title visibility follows the destination preset.
+- WHEN a plate has a mask THEN its operator Crop is unavailable. Its mask and the Crop of an eligible unmasked neighbor remain editable.
+- WHEN swapping an input in the same plate THEN Cut or Fade applies. If a Fade is refused THEN the working input remains applied.

@@ -63,6 +63,7 @@ it('🔴 §5.4 — the mock shim forwards EVERY field of stack.swap-live-source'
     plateId: sentinel('plateId'),
     sourceId: sentinel('sourceId'),
     lookId: sentinel('lookId'),
+    inputTransition: { mode: sentinel('inputTransition') as 'fade', durationMs: 400 },
   });
 
   expect(spy).toHaveBeenCalledTimes(1);
@@ -89,6 +90,7 @@ it('🔴 §5.4 — the mock shim forwards EVERY field of stack.update', () => {
     mergeMode: sentinel('mergeMode') as 'merge',
     lookBindings: { look: { plate: sentinel('lookBindings') } },
     position: { anchor: sentinel('position') as 'center', offset: { x: 0, y: 0 } },
+    inputTransition: { mode: sentinel('inputTransition') as 'fade', durationMs: 400 },
   });
 
   expect(spy).toHaveBeenCalledTimes(1);

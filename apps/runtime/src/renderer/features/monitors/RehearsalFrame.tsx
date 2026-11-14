@@ -1,14 +1,32 @@
-import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { CSSProperties, Ref } from 'react';
 import type { CgPage, FieldValues, FitRect, Position } from '@cg/shared-schema';
 import {
   pageMediaPath,
   positionQuery,
+  CG_LIVE_FRAME_TRANSITION_PAGE_MARKER,
+  CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER,
   withCgControl,
+  type FrameTransitionPhase,
   type LiveFramePlacement,
   type LiveMaskPlacement,
 } from '@cg/shared-schema';
-import { pageTarget, type ChannelRaster } from '@cg/shared-ipc';
+import {
+  activeLookOf,
+  framePlacementRects,
+  lookOperatorFrames,
+  pageTarget,
+  type ChannelRaster,
+  type TemplateLiveSources,
+} from '@cg/shared-ipc';
 import {
   applyOperatorPosition,
   canApplyOperatorPosition,
@@ -20,11 +38,19 @@ import type { TimingToSend } from '../inspector/timingToSend.js';
 import { frameBox } from './rehearsalFrames.js';
 import { measureRehearsalBounds } from './rehearsalBounds.js';
 import type { PlatePlacement } from './livePlateGeometry.js';
-import { paintPvwPlatePictures } from './pvwPlatePictures.js';
+import { paintPvwPlatePictures, paintPvwSourceDissolve } from './pvwPlatePictures.js';
 import type { PvwSourceFrame } from './usePvwSourceFrames.js';
 import type { RehearsalBook } from '../layers/bookOf.js';
 import { MISSING_PICTURE_URL, pageExtOf, pictureDataUrl } from '../book/pagePictures.js';
 import { recordPreviewBookPage } from '../book/previewBookPage.js';
+import { frameTransitionPreference } from '../inspector/frameTransitionPreference.js';
+import { inputTransitionPreference } from '../inspector/inputTransitionPreference.js';
+import {
+  rehearsalPlacementPhases,
+  rehearsalPresetPlan,
+  retainPresetArtwork,
+  runRehearsalEffect,
+} from './rehearsalPresetEffects.js';
 
 /**
  * R-022 — ONE rehearsing row's frame: the retained self-contained page, in a
@@ -118,6 +144,7 @@ export interface RehearsalFrameHandle {
   play: () => void;
   next: () => void;
   stop: () => void;
+  replayEffect: () => void;
 }
 
 /** Both rectangles are in the frame's channel raster, before PVW fit. */
@@ -163,6 +190,11 @@ interface Props {
   /** The effective book and the row's initial page. */
   book?: RehearsalBook | undefined;
   livePlates: readonly PlatePlacement[];
+  liveSources?: TemplateLiveSources | undefined;
+  playing?: boolean;
+  canReplayEffect?: boolean;
+  replayBaseline?: LiveFramePlacement[] | undefined;
+  onTransitionChange?: (itemId: string, active: boolean) => void;
   framePlacements?: LiveFramePlacement[] | undefined;
   maskPlacements?: LiveMaskPlacement[] | undefined;
   sourceFrames: ReadonlyMap<string, PvwSourceFrame>;
@@ -191,6 +223,11 @@ export function RehearsalFrame({
   timing,
   book,
   livePlates,
+  liveSources,
+  playing = false,
+  canReplayEffect = false,
+  replayBaseline,
+  onTransitionChange,
   framePlacements,
   maskPlacements,
   sourceFrames,
@@ -209,6 +246,16 @@ export function RehearsalFrame({
     overridden: boolean;
   } | null>(null);
   const lastContent = useRef<{ doc: Document; relative: FitRect } | null>(null);
+  const composed = useRef<{
+    doc: Document;
+    lookId: string | undefined;
+    payload: string;
+    livePlates: readonly PlatePlacement[];
+    framePlacements: LiveFramePlacement[] | undefined;
+  }>();
+  const runningEffect = useRef<{ cancel: () => void }>();
+  const dissolveCleanup = useRef<() => void>();
+  const replayEffectRef = useRef<() => void>();
 
   /*
     🔴 `RUN-NEXT-VERSION-03` 1.1 — **THE PAGE'S PICTURE, AS THE AIR NAMES IT.**
@@ -360,6 +407,8 @@ export function RehearsalFrame({
     handleRef,
     () => ({
       play: () => {
+        runningEffect.current?.cancel();
+        dissolveCleanup.current?.();
         const doc = frameRef.current?.contentDocument;
         setLocalPage(undefined);
         if (
@@ -398,7 +447,10 @@ export function RehearsalFrame({
         }
         templateWindow()?.next?.();
       },
+      replayEffect: () => replayEffectRef.current?.(),
       stop: () => {
+        runningEffect.current?.cancel();
+        dissolveCleanup.current?.();
         pendingBookPlay.current = undefined;
         templateWindow()?.stop?.();
       },
@@ -425,19 +477,159 @@ export function RehearsalFrame({
     };
   }, [onReadyChange, itemId, ready]);
 
-  // Push the operator's CURRENT values whenever they change, so an edit is
-  // visible immediately — that responsiveness is most of what rehearse is for.
-  // It goes through `window.update` with a JSON string, which is byte-for-byte
-  // the payload shape `CG UPDATE` delivers on air.
-  //
-  // `B-151` — and whenever the LOOK changes, which is what makes a switch reach the page at
-  // all. `payload` closes over both, so this one effect carries the field edit and the look
-  // through the same call the plant makes; a separate look push would be a second transport
-  // and could land out of order with the values it belongs to.
+  // Keep the old page and its pictures mounted until the transition reaches the new preset.
+  // Commits remain local calls into the same authored page used by programme output.
+  const sourceFramesRef = useRef(sourceFrames);
+  sourceFramesRef.current = sourceFrames;
+  const livePlatesRef = useRef(livePlates);
+  livePlatesRef.current = livePlates;
+  useLayoutEffect(() => {
+    if (!ready || loadedHtml.current !== html) return;
+    const doc = frameRef.current?.contentDocument;
+    const update = templateWindow()?.update;
+    if (doc == null || update === undefined) return;
+    const look = liveSources === undefined ? undefined : activeLookOf(liveSources, activeLookId);
+    const lookId = look?.id ?? activeLookId;
+    const current = composed.current?.doc === doc ? composed.current : undefined;
+    const previousLook = liveSources?.looks?.find(({ id }) => id === current?.lookId);
+    const push = () => {
+      update(payload);
+      composed.current = {
+        doc,
+        lookId,
+        payload,
+        livePlates: livePlatesRef.current,
+        framePlacements,
+      };
+      paintPvwPlatePictures(doc, livePlatesRef.current, sourceFramesRef.current);
+    };
+    if (current?.payload === payload && current.lookId === lookId) return;
+    runningEffect.current?.cancel();
+    const effect = frameTransitionPreference();
+    const plan =
+      visible &&
+      playing &&
+      html.includes(CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER) &&
+      current !== undefined &&
+      liveSources !== undefined &&
+      look !== undefined &&
+      previousLook !== undefined &&
+      previousLook.id !== look.id &&
+      (effect.motion !== 'cut' || effect.fade)
+        ? rehearsalPresetPlan(
+            {
+              look: previousLook,
+              rects: framePlacementRects(liveSources, previousLook.id, current.framePlacements),
+              plates: current.livePlates,
+            },
+            {
+              look,
+              rects: framePlacementRects(liveSources, look.id, framePlacements),
+              plates: livePlatesRef.current,
+            },
+            effect,
+          )
+        : undefined;
+    if (plan === undefined) {
+      update(payload);
+      composed.current = {
+        doc,
+        lookId,
+        payload,
+        livePlates: livePlatesRef.current,
+        framePlacements,
+      };
+      return;
+    }
+    dissolveCleanup.current?.();
+    const restore = retainPresetArtwork(doc, plan);
+    let committed = false;
+    const phaseStep = (phase: FrameTransitionPhase) => () => sendFramePhase(update, phase);
+    const entries = plan.exit.map(phaseStep);
+    entries.push(() => {
+      restore();
+      push();
+      committed = true;
+      return 0;
+    });
+    entries.push(...plan.enter.map(phaseStep));
+    onTransitionChange?.(itemId, true);
+    const cancel = runRehearsalEffect(entries, () => {
+      restore();
+      if (!committed) push();
+      runningEffect.current = undefined;
+      update(JSON.stringify(withCgControl({}, { frameTransition: null })));
+      onTransitionChange?.(itemId, false);
+    });
+    runningEffect.current = { cancel };
+    return cancel;
+    // Placement values are already part of the serialized payload; object identity here
+    // would interrupt the transition on an unrelated stack update.
+  }, [
+    ready,
+    payload,
+    templateWindow,
+    html,
+    visible,
+    playing,
+    activeLookId,
+    liveSources,
+    itemId,
+    onTransitionChange,
+  ]);
+
   useEffect(() => {
-    if (!ready) return;
-    templateWindow()?.update?.(payload);
-  }, [ready, payload, templateWindow]);
+    if (
+      !ready ||
+      !visible ||
+      !playing ||
+      !canReplayEffect ||
+      liveSources === undefined ||
+      !html.includes(CG_LIVE_FRAME_TRANSITION_PAGE_MARKER)
+    )
+      return;
+    replayEffectRef.current = () => {
+      const update = templateWindow()?.update;
+      if (update === undefined || runningEffect.current !== undefined) return;
+      const lookId = activeLookOf(liveSources, activeLookId)?.id;
+      const phases = rehearsalPlacementPhases(
+        lookId,
+        lookOperatorFrames(liveSources, lookId),
+        framePlacementRects(liveSources, lookId, replayBaseline),
+        framePlacementRects(liveSources, lookId, framePlacements),
+        frameTransitionPreference(),
+      );
+      if (phases.length === 0) return;
+      dissolveCleanup.current?.();
+      onTransitionChange?.(itemId, true);
+      runningEffect.current = {
+        cancel: runRehearsalEffect(
+          phases.map((phase) => () => sendFramePhase(update, phase)),
+          () => {
+            runningEffect.current = undefined;
+            update(JSON.stringify(withCgControl({}, { frameTransition: null })));
+            onTransitionChange?.(itemId, false);
+          },
+        ),
+      };
+    };
+    return () => {
+      replayEffectRef.current = undefined;
+    };
+  }, [
+    ready,
+    visible,
+    playing,
+    canReplayEffect,
+    html,
+    liveSources,
+    templateWindow,
+    activeLookId,
+    replayBaseline,
+    framePlacements,
+    onTransitionChange,
+    itemId,
+  ]);
 
   /*
     🔴 `PASSES-CYCLE-ONLY-26` Part B — **THE TIMING'S OWN PUSH, keyed on its VALUE.**
@@ -626,8 +818,24 @@ export function RehearsalFrame({
   useEffect(() => {
     if (!visible || !ready) return;
     const doc = frameRef.current?.contentDocument;
-    if (doc !== undefined && doc !== null) paintPvwPlatePictures(doc, livePlates, sourceFrames);
-  }, [visible, ready, livePlates, sourceFrames]);
+    if (doc == null || runningEffect.current !== undefined) return;
+    if (composed.current?.doc === doc) composed.current.livePlates = livePlates;
+    const input = inputTransitionPreference();
+    if (playing && input.mode === 'fade') {
+      paintPvwSourceDissolve(doc, livePlates, sourceFrames, input.durationMs, dissolveCleanup);
+    } else {
+      dissolveCleanup.current?.();
+      paintPvwPlatePictures(doc, livePlates, sourceFrames);
+    }
+  }, [visible, ready, playing, livePlates, sourceFrames]);
+
+  useEffect(
+    () => () => {
+      runningEffect.current?.cancel();
+      dissolveCleanup.current?.();
+    },
+    [html],
+  );
 
   return (
     /*
@@ -679,4 +887,12 @@ export function RehearsalFrame({
       }}
     />
   );
+}
+
+function sendFramePhase(
+  update: NonNullable<TemplateWindow['update']>,
+  phase: FrameTransitionPhase,
+): number {
+  update(JSON.stringify(withCgControl({}, { frameTransition: phase })));
+  return phase.durationMs + (phase.delayMs ?? 0);
 }

@@ -2,6 +2,7 @@ import { useEffect, useId, useState, useSyncExternalStore } from 'react';
 import {
   activeLookOf,
   assignmentsOnChannel,
+  lookMaskedPlateIds,
   lookOperatorFrames,
   lookPlateFits,
   lookPlateFocuses,
@@ -44,10 +45,14 @@ export function LiveFrameAdjustments({
   item,
   live,
   channel,
+  rehearsing,
+  previewLookId,
 }: {
   item: StackItemState;
   live: TemplateLiveSources;
   channel: number;
+  rehearsing?: boolean | undefined;
+  previewLookId?: string | undefined;
 }): JSX.Element | null {
   const capabilities = useAuthCapabilities();
   const canOperate = useCanOperate();
@@ -63,8 +68,12 @@ export function LiveFrameAdjustments({
   const sourceRevision = useSyncExternalStore(subscribeSources, sourcesVersion, sourcesVersion);
 
   const onAir = isOnAirStatus(item);
-  const frameEffect = item.onAirFrameTransition === true;
-  const presetEffect = item.onAirPresetTransition === true && (live.looks?.length ?? 0) > 1;
+  const previewFrameEffect =
+    rehearsing === true &&
+    Object.keys(lookOperatorFrames(live, previewLookId ?? item.activeLookId)).length > 0;
+  const frameEffect = item.onAirFrameTransition === true || previewFrameEffect;
+  const presetEffect =
+    (live.looks?.length ?? 0) > 1 && (rehearsing || !onAir || item.onAirPresetTransition === true);
   const canEdit =
     canOperate &&
     !item.pending &&
@@ -93,17 +102,20 @@ export function LiveFrameAdjustments({
       : undefined;
   const fits = lookPlateFits(live, lookId);
   const rects = lookPlateRects(live, lookId);
+  const masked = lookMaskedPlateIds(live, lookId);
+  const cropEligible = (plateId: string): boolean =>
+    rects[plateId] !== undefined && !masked.has(plateId);
   const fitOverride = assignmentsOnChannel(currentSourceAssignments(), channel).assignments.some(
     (entry) =>
       entry.templateId === item.templateId &&
       entry.fitMode === 'cover' &&
-      rects[entry.plateId] !== undefined,
+      cropEligible(entry.plateId),
   );
   const showResetCrop =
     capabilities?.liveCropReset === true &&
-    (Object.values(fits).includes('cover') ||
+    (Object.entries(fits).some(([plateId, fit]) => fit === 'cover' && cropEligible(plateId)) ||
       fitOverride ||
-      (item.previewPlateCrops?.length ?? 0) > 0);
+      ((item.previewPlateCrops?.length ?? 0) > 0 && Object.keys(rects).some(cropEligible)));
 
   // Saved tokens are opaque and can belong to any preset. Read the current targets from Bridge,
   // then compare each token-matched draft or applied focus to the author's setting.
@@ -150,6 +162,7 @@ export function LiveFrameAdjustments({
   const defaults = lookPlateFocuses(live, lookId);
   const targets = cropRead?.key === cropKey && cropRead.live === live ? cropRead.targets : [];
   const cropResets = targets.flatMap((target) => {
+    if (masked.has(target.plateId)) return [];
     const focus = defaults[target.plateId] ?? DEFAULT_LIVE_CROP_FOCUS;
     const draft = previewCropDraftOf(item.itemId, target.token);
     if (
@@ -210,7 +223,7 @@ export function LiveFrameAdjustments({
           Preserve frame aspect ratio
         </label>
       )}
-      {onAir && (frameEffect || presetEffect) && (
+      {(frameEffect || presetEffect) && (
         <FrameEffectControls
           disabled={!canEdit}
           {...(presetEffect && {

@@ -2619,7 +2619,11 @@ test('R-119 hides all fragments of a departing masked frame before the shared fr
   page,
 }) => exercisePresetSwitch(page, true));
 
-async function exercisePresetSwitch(page: Page, crossing: boolean): Promise<void> {
+test('R-119 rehearses presets, linked titles, and source fades locally beside programme', ({
+  page,
+}) => exercisePresetSwitch(page, true, true));
+
+async function exercisePresetSwitch(page: Page, crossing: boolean, preview = false): Promise<void> {
   const handle = await boot(true);
   const engine = mock;
   if (engine === null) throw new Error('Test engine is unavailable');
@@ -2680,7 +2684,12 @@ async function exercisePresetSwitch(page: Page, crossing: boolean): Promise<void
           {
             ...layer,
             id: 'solo-layer',
-            children: [instance('solo-common', 'common', 0, 0, 1920, 1080)],
+            children: [
+              {
+                ...instance('solo-common', 'common', 0, 0, 1920, 1080),
+                ...(preview && { hiddenTextIds: ['common-title'] }),
+              },
+            ],
           },
         ],
       },
@@ -2819,6 +2828,15 @@ async function exercisePresetSwitch(page: Page, crossing: boolean): Promise<void
   await effect.getByRole('combobox', { name: 'Motion' }).selectOption('ease-in-out');
   await effect.getByRole('checkbox', { name: 'Fade' }).check();
   await effect.getByRole('textbox', { name: 'Duration (ms)' }).fill('500');
+  if (preview) {
+    await verifyLocalPresetEffects(page, row);
+    expect(requests).toEqual([]);
+    expect(handle.runtime.activeLookId(itemId)).toBe('solo');
+    expect(
+      programmeCommands(beforeChoice).some((line) => /^(CG |PLAY |CLEAR |MIXER )/.test(line)),
+    ).toBe(false);
+    return;
+  }
   expect(requests).toEqual([]);
   expect(
     programmeCommands(beforeChoice).some((line) => /^(CG |PLAY |CLEAR |MIXER )/.test(line)),
@@ -2845,14 +2863,14 @@ async function exercisePresetSwitch(page: Page, crossing: boolean): Promise<void
     await expect.poll(() => handle.runtime.activeLookId(itemId)).toBe(lookId);
     const wire = programmeCommands(start);
     if (departing.length > 0) {
-      const departurePage = wire.findIndex((line) => line.includes('hidePresetArtworkKeys'));
+      const departurePage = wire.findIndex((line) => line.includes('opacityArtwork'));
       expect(departurePage).toBeGreaterThanOrEqual(0);
       expect(wire[departurePage]).toContain('show-duo/duo-extra');
       const departureCommit = wire.indexOf('MIXER 1 COMMIT', departurePage);
       expect(departureCommit).toBeGreaterThan(departurePage);
-      // The prelude hides both resident pages' artwork before the native mask fragments depart.
+      // Both resident pages fade the artwork alongside its native mask fragments.
       expect(
-        wire.slice(0, departureCommit).filter((line) => line.includes('hidePresetArtworkKeys')),
+        wire.slice(0, departureCommit).filter((line) => line.includes('opacityArtwork')),
       ).toHaveLength(2);
       const firstSharedMove = wire.findIndex((line) =>
         new RegExp(`^MIXER 1-${String(commonSlot.layer)} FILL .* [1-9]\\d* \\w+ DEFER$`, 'i').test(
@@ -2863,7 +2881,7 @@ async function exercisePresetSwitch(page: Page, crossing: boolean): Promise<void
       for (const { slot } of departing) {
         expect(wire.slice(0, departureCommit)).toContainEqual(
           expect.stringMatching(
-            new RegExp(`^MIXER 1-${String(slot.layer)} OPACITY 0 .+ DEFER$`, 'i'),
+            new RegExp(`^MIXER 1-${String(slot.layer)} OPACITY 0 [1-9]\\d* linear DEFER$`, 'i'),
           ),
         );
       }
@@ -2872,8 +2890,17 @@ async function exercisePresetSwitch(page: Page, crossing: boolean): Promise<void
       const returned = visibleExtra();
       expect(returned.map(({ clip }) => clip)).toEqual(masksBeforeReturn);
       expect(returned.every(({ slot }) => engine.layerState(slot)?.opacity === 1)).toBe(true);
+      const firstArrival = wire.findIndex((line) => line.includes('opacityArtwork'));
+      expect(firstArrival).toBeGreaterThan(0);
+      for (const { slot } of returned) {
+        const enter = new RegExp(
+          `^MIXER 1-${String(slot.layer)} OPACITY 1 [1-9]\\d* linear DEFER$`,
+          'i',
+        );
+        expect(wire.findIndex((line) => enter.test(line))).toBeGreaterThan(firstArrival);
+      }
     }
-    for (const easing of ['easeinquad', 'easeoutquad']) {
+    for (const easing of ['easeinoutquad']) {
       expect(wire).toContainEqual(
         expect.stringMatching(
           new RegExp(`^MIXER 1-${String(commonSlot.layer)} FILL .* \\d+ ${easing} DEFER$`, 'i'),
@@ -2918,6 +2945,139 @@ async function exercisePresetSwitch(page: Page, crossing: boolean): Promise<void
       }),
     ),
   );
+}
+
+async function verifyLocalPresetEffects(page: Page, row: Locator): Promise<void> {
+  await showMonitors(page);
+  await page.evaluate(() => {
+    const snapshots = new Map(
+      ['common', 'extra'].map((sourceId, index) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 160;
+        canvas.height = 90;
+        const context = canvas.getContext('2d');
+        if (context === null) throw new Error('Canvas context is unavailable');
+        context.fillStyle = index === 0 ? '#00ff00' : '#ff0000';
+        context.fillRect(0, 0, 160, 90);
+        return [sourceId, canvas.toDataURL('image/jpeg').split(',')[1]];
+      }),
+    );
+    window.cg.sourcePreviews.pvw = ({ sourceIds }) =>
+      Promise.resolve({
+        frames: sourceIds.map((sourceId) => ({
+          sourceId,
+          signal: 'present' as const,
+          jpegBase64: snapshots.get(sourceId),
+          width: 160,
+          height: 90,
+        })),
+      });
+  });
+  await row.getByRole('button', { name: 'ON PVW', exact: true }).click();
+  const pv = page.getByRole('region', { name: 'PREVIEW (PVW)' });
+  await pv.getByRole('button', { name: 'PLAY', exact: true }).click();
+  const body = page.frameLocator('iframe[data-rehearsal-frame]').locator('body');
+  const preset = (name: string) => body.locator(`[data-cg-element-id="show-${name}"]`);
+  const frame = (name: string) => preset(name).locator('[data-cg-live-source="common"]');
+  const title = (name: string) => preset(name).locator('[data-cg-element-id="common-title"]');
+  const picture = (presetName: string) => frame(presetName).locator('[data-cg-pvw-picture-part]');
+  await expect(picture('solo')).toHaveAttribute('data-source-id', 'common');
+  await expect(title('solo')).toBeHidden();
+  const inspector = page.getByRole('complementary', { name: 'Inspector' });
+  const tabs = inspector.getByRole('group', { name: 'Look to edit' });
+  await tabs.locator('[data-look-tab="duo"]').click();
+  await expect(tabs.locator('[data-look-tab="solo"]')).toContainText('ON AIR NOW');
+  await expect(tabs.locator('[data-look-tab="duo"]')).toContainText('SHOWING IN PVW');
+  await expect(title('duo')).toBeVisible();
+  await expect(picture('duo')).toHaveAttribute('data-source-id', 'common');
+  await expect(preset('duo').locator('[data-cg-live-source="extra"]')).toBeVisible();
+
+  await body.evaluate((element) => {
+    const outgoing = element.querySelector<HTMLElement>(
+      '[data-cg-preset-departure-key="show-duo/duo-extra"]',
+    );
+    const shared = element.querySelector<HTMLElement>(
+      '[data-cg-frame-artwork="show-duo/duo-common"]',
+    );
+    const commonTitle = shared?.querySelector<HTMLElement>('[data-cg-element-id="common-title"]');
+    if (!outgoing || !shared || !commonTitle) throw new Error('Preset test nodes missing');
+    element.dataset['sawRetainedMotion'] = 'false';
+    element.dataset['sawDepartingFade'] = 'false';
+    element.dataset['sawMovedHiddenTitle'] = 'false';
+    const view = element.ownerDocument.defaultView;
+    if (view === null) return;
+    const observe = () => {
+      const opacity = Number(view.getComputedStyle(outgoing).opacity);
+      if (opacity > 0 && opacity < 1) element.dataset['sawDepartingFade'] = 'true';
+      const transform = shared.style.transform;
+      if (
+        transform !== '' &&
+        transform !== 'matrix(1, 0, 0, 1, 0, 0)' &&
+        view.getComputedStyle(shared).zIndex !== 'auto'
+      ) {
+        element.dataset['sawRetainedMotion'] = 'true';
+        if (view.getComputedStyle(commonTitle).display === 'none')
+          element.dataset['sawMovedHiddenTitle'] = 'true';
+      }
+      if (element.dataset['sawMovedHiddenTitle'] !== 'true') view.requestAnimationFrame(observe);
+    };
+    view.requestAnimationFrame(observe);
+  });
+  await tabs.locator('[data-look-tab="solo"]').click();
+  await expect(picture('solo')).toHaveAttribute('data-source-id', 'common');
+  await expect(body).toHaveAttribute('data-saw-departing-fade', 'true');
+  await expect(body).toHaveAttribute('data-saw-retained-motion', 'true');
+  await expect(body).toHaveAttribute('data-saw-moved-hidden-title', 'true');
+  await expect(title('solo')).toBeHidden();
+
+  // At equal geometry the old source stays visible until the incoming snapshot arrives.
+  await inspector.getByRole('combobox', { name: 'Input transition' }).selectOption('fade');
+  await inspector.getByRole('combobox', { name: 'Input for common in look Solo' }).click();
+  await page.locator('[data-picker-input="extra"]').click();
+  await expect(picture('solo')).toHaveAttribute('data-source-id', 'extra');
+  await expect(frame('solo').locator('[data-cg-pvw-source-dissolve]')).toHaveCount(1);
+  await expect(frame('solo').locator('[data-cg-pvw-source-dissolve]')).toHaveCount(0);
+
+  await inspector.getByRole('combobox', { name: 'Motion' }).selectOption('bounce');
+  await inspector.getByRole('checkbox', { name: 'Fade' }).uncheck();
+  await pv.getByRole('button', { name: 'Edit frames in Preview' }).click();
+  const move = pv.getByRole('button', { name: 'Move frame for extra' });
+  const left = (id: string) =>
+    frame(id).evaluate((element) => element.getBoundingClientRect().left);
+  const authoredLeft = await left('solo');
+  await move.press('Shift+ArrowRight');
+  await move.press('Shift+ArrowRight');
+  await move.press('Shift+ArrowRight');
+  await expect.poll(() => left('solo')).toBeGreaterThan(authoredLeft);
+  const draftLeft = await left('solo');
+  const replay = pv.getByRole('button', { name: 'Preview frame effect' });
+  await replay.scrollIntoViewIfNeeded();
+  await body.evaluate((element) => {
+    const plate = element.querySelector<HTMLElement>(
+      '[data-cg-element-id="show-solo"] [data-cg-live-source="common"]',
+    );
+    if (plate === null) throw new Error('Replay test node is missing');
+    const target = plate.getBoundingClientRect().left;
+    let rewound = false;
+    let peak = -Infinity;
+    const view = element.ownerDocument.defaultView;
+    if (view === null) return;
+    const deadline = view.performance.now() + 1_500;
+    const observe = () => {
+      const position = plate.getBoundingClientRect().left;
+      rewound ||= position < target - 5;
+      if (rewound) peak = Math.max(peak, position);
+      if (peak > target - 0.25 && position < peak - 0.5) {
+        element.dataset['sawReplayRebound'] = 'true';
+        return;
+      }
+      if (view.performance.now() < deadline) view.requestAnimationFrame(observe);
+    };
+    view.requestAnimationFrame(observe);
+  });
+  await replay.click();
+  await expect(body).toHaveAttribute('data-saw-replay-rebound', 'true');
+  await expect.poll(() => left('solo')).toBeCloseTo(draftLeft, 1);
 }
 
 test('Auto layout follows the active preset permission and retains separate controls and drafts', async ({
@@ -3370,11 +3530,13 @@ test('Edit masks drafts authored windows in PVW and updates the existing on-air 
   layer.children = [
     {
       ...plate('lower', 140, 0),
+      fitMode: 'cover',
       allowOperatorMaskEdit: true,
       liveMask: { mode: 'inside', rects: [maskRect] },
     },
     {
       ...plate('upper', 530, 1),
+      fitMode: 'cover',
       allowOperatorMaskEdit: true,
       operatorMove: true,
       revealMask: { targetSourceId: 'lower', rect: revealRect },
@@ -3422,6 +3584,7 @@ test('Edit masks drafts authored windows in PVW and updates the existing on-air 
   const editFrames = pvw.getByRole('button', { name: 'Edit frames in Preview' });
   const editMasks = pvw.getByRole('button', { name: 'Edit masks in Preview' });
   await pvw.getByRole('button', { name: 'PLAY', exact: true }).click();
+  await expect(pvw.getByRole('button', { name: 'Crop input in Preview' })).toHaveCount(0);
   await editFrames.click();
   await expect(pvw.getByRole('button', { name: 'Move frame for upper' })).toBeVisible();
   await editMasks.click();

@@ -61,6 +61,10 @@ Ticker text measurements are isolated from composition visibility and ancestor t
 temporary document-level probe uses the ticker's typography, then leaves the DOM. The same layout
 coordinates therefore feed both a standalone ticker and one inside a hidden or scaled composition.
 
+Live preset transitions share one motion phase planner in `@cg/shared-schema`. The Bridge uses
+channel frames for native picture and mask tweens and sends matching endpoints to the resident
+background and foreground pages. CG Control uses the planner in the local rehearsal frame.
+
 [`@cg/template-runtime`](../../packages/template-runtime)'s `createRuntime(scene)`:
 
 - **builds** the DOM tree from the scene (scene-builder),

@@ -267,7 +267,6 @@ import { DEFAULT_LAYER_POLICY, type LayerPolicy, type LayerSlot } from '@cg/casp
 import {
   CONSOLE_ADDRESS_MAX_LENGTH,
   retainedFromStackItem,
-  type Position,
   type RetainedStackItem,
 } from '@cg/shared-schema';
 import { loadPersistedStack, savePersistedStack } from './stack-store.js';
@@ -5182,13 +5181,7 @@ export function buildRoutes(
       StackUpdateChannel,
       'operator',
       'operator',
-      async (r: {
-        itemId: string;
-        fields: never;
-        mergeMode: 'merge' | 'replace';
-        lookBindings?: Readonly<Record<string, Readonly<Record<string, string>>>>;
-        position?: Position;
-      }) => {
+      async (r: ChannelRequest<typeof StackUpdateChannel>) => {
         // `PLAYOUT-SOURCES-01` §1.B — a media id the row newly binds is bound from the bridge's own
         // reads first; a refusal refuses the whole update, BM-2's atomic rule.
         if (r.lookBindings !== undefined && r.position === undefined) {
@@ -5199,7 +5192,14 @@ export function buildRoutes(
             return { accepted: false, errorCode: 'source-unusable', message: bound.message };
           }
         }
-        return b.update(r.itemId, r.fields, r.mergeMode, r.lookBindings, r.position);
+        return b.update(
+          r.itemId,
+          r.fields,
+          r.mergeMode,
+          r.lookBindings,
+          r.position,
+          r.inputTransition,
+        );
       },
     ),
     // C-012 — the graceful stop (outro runs, producer stays resident).
@@ -5253,13 +5253,13 @@ export function buildRoutes(
       StackSwapLiveSourceChannel,
       'operator',
       'operator',
-      async (r: { itemId: string; plateId: string; sourceId: string | null; lookId?: string }) => {
+      async (r: ChannelRequest<typeof StackSwapLiveSourceChannel>) => {
         // `PLAYOUT-SOURCES-01` §1.B — a media item is bound from the bridge's own reads first.
         if (r.sourceId !== null) {
           const bound = await bindMedia([r.sourceId]);
           if (!bound.ok) return { ok: false, reason: 'source-unusable', message: bound.message };
         }
-        return b.swapLiveSource(r.itemId, r.plateId, r.sourceId, r.lookId);
+        return b.swapLiveSource(r.itemId, r.plateId, r.sourceId, r.lookId, r.inputTransition);
       },
     ),
     // §14 (LOOKS) Stage E — the operator picks a look on the row. ONE seam: the bridge

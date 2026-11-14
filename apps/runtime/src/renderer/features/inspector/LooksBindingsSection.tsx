@@ -23,6 +23,8 @@ import { reportCommandError } from '../status/commandFeedback.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { SourceDefaultsLink } from './SourceDefaultsLink.js';
 import { claimsAir } from '../stack/onAir.js';
+import { InputEffectControls } from './InputEffectControls.js';
+import { inputTransitionRequest } from './inputTransitionPreference.js';
 
 /**
  * ⭐ **SESSION BM-2 (`design.md` §12.9.1b) — WHAT THIS ROW SHOWS IN EACH LOOK.**
@@ -318,7 +320,6 @@ export function LooksBindingsSection({
   if (carrier === undefined || editingLook === undefined) return null;
 
   const liveLookId = activeLookOf(carrier, item.activeLookId)?.id;
-  const badge = badgeFor(claimsAir(item), rehearsing, previewOnly);
   const defaults = appliedPlateSources(item.templateId, carrier.sources ?? [], channel);
   const patches = item.sourceOverride ?? {};
   /*
@@ -426,6 +427,7 @@ export function LooksBindingsSection({
         />
       </div>
       <LiveInputCheckCard surface={surface} />
+      <InputEffectControls />
       {/*
         🔴 **§3d — "above" USED TO POINT AT THE LIVE PLATES SECTION, WHICH IS NOW GONE HERE.**
 
@@ -453,6 +455,7 @@ export function LooksBindingsSection({
         {looks.map((look) => {
           const isLive = look.id === liveLookId;
           const isActive = look.id === editingLook.id;
+          const badge = badgeFor(isLive && claimsAir(item), isActive && rehearsing, previewOnly);
           return (
             <Button
               key={look.id}
@@ -466,7 +469,7 @@ export function LooksBindingsSection({
             >
               {/* The look's name is the TEMPLATE AUTHOR'S string — isolated, never bare. */}
               <IsolatedName>{look.name}</IsolatedName>
-              {isLive && badge.text !== null && (
+              {badge.text !== null && (
                 <span
                   /*
                     SESSION BP — ONE decision, read three ways. `badgeFor` returns the words,
@@ -639,6 +642,7 @@ export function LooksBindingsSection({
                               itemId: item.itemId,
                               plateId: plate.sourceId,
                               sourceId: null,
+                              ...inputTransitionRequest(),
                             })
                             .then((res) => {
                               if (!res.ok)

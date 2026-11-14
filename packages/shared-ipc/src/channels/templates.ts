@@ -443,6 +443,17 @@ export function lookPlateMasks(
   return masks;
 }
 
+/** An operator can reframe a plate beneath a mask, but cannot crop the mask's owning input. */
+export function lookMaskedPlateIds(
+  live: TemplateLiveSources,
+  lookId: string | undefined,
+): ReadonlySet<string> {
+  return new Set([
+    ...Object.keys(lookPlateMasks(live, lookId)),
+    ...Object.keys(lookPlateReveals(live, lookId)),
+  ]);
+}
+
 /** Expand an own-mask edit to other presets showing the same authorized authored window. */
 export function linkedMaskPlacements(
   carrier: TemplateLiveSources,

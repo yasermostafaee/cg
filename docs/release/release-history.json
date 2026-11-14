@@ -653,8 +653,12 @@
       },
       "features": [
         {
-          "fa": "در Position می‌توان برای جابه‌جایی و تغییر اندازهٔ قاب زنده و انتقال قاب مشترک بین پریست‌ها، Cut، Linear یا Ease را همراه Fade اختیاری انتخاب کرد.",
-          "en": "Position offers Cut, Linear or Ease with optional Fade for live frame moves, resizes and shared frames when switching presets."
+          "fa": "Position برای حرکت قاب و گذار پریست، Cut، Linear، Ease، Bounce و Elastic را همراه Fade اختیاری ارائه می‌کند. افکت پریست و حرکت قاب را می‌توان روی PVW تمرین کرد.",
+          "en": "Position offers Cut, Linear, Ease, Bounce and Elastic with optional Fade. Operators can rehearse preset switches and frame movement in PVW."
+        },
+        {
+          "fa": "Input effect گذار Cut یا Fade را برای تعویض ورودی داخل همان قاب تعیین می‌کند.",
+          "en": "Input effect offers Cut or Fade when switching the input inside the same plate."
         },
         {
           "fa": "در Designer تنظیمات Fit، Allow move و Resize در بخش CG Control برای یک یا چند قاب لایو در دسترس‌اند.",
@@ -675,8 +679,8 @@
       ],
       "fixes": [
         {
-          "fa": "در برگشت از پریست چندقاب به تک‌قاب، گروه ماسک‌دارِ خروجی کنار می‌رود و قاب مشترک با افکت انتخاب‌شده بزرگ می‌شود. با برگشت به پریست قبلی، ترتیب قاب‌ها و ماسک حفظ می‌شود.",
-          "en": "When returning from a multi-frame preset to a single frame, the departing masked group clears before the shared frame expands with the selected effect. Returning to the wider layout restores the plate order and masks."
+          "fa": "ورود و خروج قاب‌ها هنگام گذار پریست افکت دارد. قاب مشترک همراه عنوان و ماسک حرکت می‌کند و تنظیم نمایش عنوان در پریست مقصد اعمال می‌شود. Crop input برای قاب ماسک‌دار در دسترس نیست.",
+          "en": "Preset transitions animate arriving and departing plates. Shared plates move with their titles and masks and use the destination preset's title visibility. Crop input is unavailable for masked plates."
         },
         {
           "fa": "در CG Control، پایان پخش یا Stop شمارهٔ صفحهٔ Sequence تصویری را برای اجرای بعدی به ۱ برمی‌گرداند.",

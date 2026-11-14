@@ -18,6 +18,8 @@ const MOTION_LABELS: Record<FrameTransition['motion'], string> = {
   'ease-in': 'Ease in',
   'ease-out': 'Ease out',
   'ease-in-out': 'Ease in/out',
+  bounce: 'Bounce',
+  elastic: 'Elastic',
 };
 
 export function FrameEffectControls({

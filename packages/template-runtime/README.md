@@ -22,6 +22,10 @@ first.
 
 ## Public surface
 
+Live preset effects address artwork by its full composition instance path. The placement renderer
+applies transient transforms and opacity to wrappers around the author's content. The next
+preset's regular visibility, field values and placement take over at commit.
+
 Almost everything consumers use is re-exported from [`src/index.ts`](./src/index.ts) — the two
 deliberate exceptions are the subpaths listed after the table:
 

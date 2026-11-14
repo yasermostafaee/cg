@@ -1,6 +1,7 @@
 import { isOnAirStatus, ownsLiveSeats } from '@cg/shared-schema';
 import type {
   AuditEntry,
+  InputTransition,
   Position,
   StackItemState,
   StackItemStatus,
@@ -767,6 +768,7 @@ export class MockRuntime {
      */
     lookBindings?: Readonly<Record<string, Readonly<Record<string, string>>>>,
     position?: Position,
+    _inputTransition?: InputTransition,
   ): { accepted: boolean; errorCode?: string; message?: string } {
     const item = this.#find(itemId);
     if (item === null) return { accepted: false, errorCode: 'unknown-item' };
@@ -1332,6 +1334,7 @@ export class MockRuntime {
     sourceId: string | null,
     /** Session BM — absent is the emergency patch (every look); present is one look's binding. */
     lookId?: string,
+    _inputTransition?: InputTransition,
   ): { ok: boolean; reason?: string; message?: string } {
     const item = this.#find(itemId);
     if (item === null) return { ok: false, reason: 'unknown-item' };

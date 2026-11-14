@@ -7,6 +7,7 @@ import { Modal, ModalAction } from '../../ui/Modal.js';
 import { ChoiceLabel, SourcePicker } from '../sources/SourcePicker.js';
 import { LiveInputCheckCard } from '../monitors/LiveInputCheckCard.js';
 import { useInputCheckSurface } from '../monitors/liveInputCheckContext.js';
+import { InputEffectControls } from '../inspector/InputEffectControls.js';
 import {
   currentSourceAssignments,
   sourcesVersion,
@@ -125,6 +126,7 @@ export function LiveSourceSwapDialog({
       }
     >
       <LiveInputCheckCard surface={surface} />
+      <InputEffectControls />
       {plates.map((plate, i) => {
         const assigned = assignedFor(plate.sourceId);
         const swapped = override[plate.sourceId];

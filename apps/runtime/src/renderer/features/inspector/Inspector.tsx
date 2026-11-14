@@ -86,6 +86,8 @@ import { LiveFrameAdjustments } from './LiveFrameAdjustments.js';
 import { Tag } from '../../ui/Tag.js';
 import {
   draftsVersion,
+  previewLookPin,
+  setPreviewLookPin,
   effectiveValue,
   isFieldDirty,
   isItemDirty,
@@ -609,8 +611,13 @@ export function Inspector({
   const schema = resolvedInfo?.fields ?? null;
   const lookCarrier = resolvedInfo?.liveSources;
   const looks = lookCarrier?.looks ?? [];
+  const previewPin = rehearsing === true ? previewLookPin(itemId) : undefined;
   const editingLook =
-    looks.find((look) => pinnedLook?.itemId === itemId && pinnedLook.lookId === look.id) ??
+    looks.find((look) => look.id === previewPin) ??
+    looks.find(
+      (look) =>
+        rehearsing !== true && pinnedLook?.itemId === itemId && pinnedLook.lookId === look.id,
+    ) ??
     (lookCarrier === undefined ? undefined : activeLookOf(lookCarrier, item.activeLookId));
   const legacyOwnership = currentLookup?.retained?.ownership;
   const instanceOf = (look: (typeof looks)[number]): string | undefined =>
@@ -839,7 +846,13 @@ export function Inspector({
           adjustments={
             lookCarrier !== undefined &&
             lookCarrier.sources.length > 0 && (
-              <LiveFrameAdjustments item={item} live={lookCarrier} channel={itemChannel} />
+              <LiveFrameAdjustments
+                item={item}
+                live={lookCarrier}
+                channel={itemChannel}
+                rehearsing={rehearsing}
+                previewLookId={previewPin}
+              />
             )
           }
         />
@@ -855,7 +868,17 @@ export function Inspector({
           previewOnly={previewOnly}
           channel={itemChannel}
           editingLook={editingLook}
-          onEditLook={(lookId) => setPinnedLook({ itemId, lookId })}
+          onEditLook={(lookId) => {
+            if (rehearsing === true) {
+              const applied =
+                lookCarrier === undefined
+                  ? undefined
+                  : activeLookOf(lookCarrier, item.activeLookId)?.id;
+              setPreviewLookPin(itemId, lookId === applied ? undefined : lookId);
+            } else {
+              setPinnedLook({ itemId, lookId });
+            }
+          }}
         />
         {/* `TIMING-WIRE-22` §4 — the template's timing: `mode`/`hold` as FACTS, and the
             operator's passes/gap as controls. Renders nothing for a template imported before

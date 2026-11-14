@@ -9,12 +9,14 @@ import {
   Frame,
   Hand,
   Play,
+  Sparkles,
   Scan,
   SquareDashed,
 } from 'lucide-react';
 import {
   lookOperatorFrames,
   lookOperatorMasks,
+  activeLookOf,
   REFERENCE_RASTER,
   sourceAspect,
 } from '@cg/shared-ipc';
@@ -39,11 +41,14 @@ import { plateAudioState } from '../layers/plateAudio.js';
 import { rehearsalBookOf } from '../layers/bookOf.js';
 import {
   buildApplyPayload,
+  buildLookBindingsPayload,
   framePlacementsWithDraft,
   snapshotFramePlacementDraft,
   draftsVersion,
   effectivePosition,
   maskPlacementsWithDraft,
+  previewLookPin,
+  prunePreviewLookPins,
   subscribeDrafts,
 } from '../inspector/draftStore.js';
 import {
@@ -60,6 +65,7 @@ import { SourcePicker } from '../sources/SourcePicker.js';
 import { LiveInputCheckCard } from './LiveInputCheckCard.js';
 import { PVW_INPUT_SURFACE, useLiveInputCheck } from './liveInputCheckContext.js';
 import { usePreserveFrameAspect } from './previewResizePreferences.js';
+import { useFrameTransitionPreference } from '../inspector/frameTransitionPreference.js';
 
 /**
  * PREVIEW — the PVW box.
@@ -164,6 +170,7 @@ export function PreviewPanel({
   const supportsMaskPlacement = capabilities?.previewMaskPlacement === true;
   const resizeModes = capabilities?.previewResizeMode === true;
   const preserveFrameAspect = usePreserveFrameAspect();
+  const frameEffect = useFrameTransitionPreference();
   const [panSession, setPanSession] = useState(0);
   const slots = useFixedSlots();
   // `RELEASE-091-01` §1 — each rehearsing row's page: the bridge's first, this browser's copy only
@@ -177,6 +184,9 @@ export function PreviewPanel({
   // defeat the point — the operator is here to see the edit before it reaches
   // air.
   const draftVersion = useSyncExternalStore(subscribeDrafts, draftsVersion, draftsVersion);
+  useEffect(() => {
+    prunePreviewLookPins(new Set(rehearsals.map(({ itemId }) => itemId)));
+  }, [rehearsals]);
 
   /**
    * R-049 — the template registry and the sources store, joined for the live-plate
@@ -218,14 +228,20 @@ export function PreviewPanel({
           const alias = slots.find((s) => s.layer === r.layer && s.channel === r.channel)?.alias;
           const info = templates.get(item.templateId, r.channel) ?? null;
           const live = info?.liveSources;
+          const pinned = previewLookPin(item.itemId);
+          const lookSelection =
+            pinned !== undefined && live?.looks?.some(({ id }) => id === pinned)
+              ? pinned
+              : item.activeLookId;
+          const activeLookId =
+            live === undefined ? undefined : activeLookOf(live, lookSelection)?.id;
           const hasEditableFrame =
-            live !== undefined &&
-            Object.keys(lookOperatorFrames(live, item.activeLookId)).length > 0;
+            live !== undefined && Object.keys(lookOperatorFrames(live, activeLookId)).length > 0;
           const frameDraft = snapshotFramePlacementDraft(item.itemId);
           const appliedFrames =
             item.framePlacementsPendingReset === true ? [] : item.framePlacements;
           const hasEditableMasks =
-            live !== undefined && lookOperatorMasks(live, item.activeLookId).size > 0;
+            live !== undefined && lookOperatorMasks(live, activeLookId).size > 0;
           const fields = buildApplyPayload(item.itemId, item.fields);
           return {
             itemId: r.itemId,
@@ -279,6 +295,11 @@ export function PreviewPanel({
               frameDraft,
             ),
             appliedFramePlacements: frameDraft?.reset === undefined ? appliedFrames : [],
+            previewFrameReplay:
+              frameDraft !== undefined &&
+              ((frameDraft.reset !== undefined &&
+                appliedFrames?.some(({ lookId }) => lookId === activeLookId) === true) ||
+                [...frameDraft.edits.values()].some(({ lookId }) => lookId === activeLookId)),
             canEditFrames:
               supportsFramePlacement &&
               canEditPosition &&
@@ -300,11 +321,15 @@ export function PreviewPanel({
               (!isOnAirStatus(item) || item.onAirMaskPlacement === true),
             previewPlateCrops: item.previewPlateCrops,
             previewCropOnAir: isOnAirStatus(item),
+            previewCropScopeMatchesAir:
+              !isOnAirStatus(item) ||
+              live === undefined ||
+              activeLookId === activeLookOf(live, item.activeLookId)?.id,
+            previewReplayBaseline: appliedFrames,
             previewCropPending: item.pending || item.status === 'exiting',
             book: rehearsalBookOf(info, item, fields) ?? undefined,
             liveSources: live,
-            // `B-151` — the bridge's published look drives BOTH halves of the preview.
-            activeLookId: item.activeLookId,
+            activeLookId,
             /*
             🔴 `PASSES-CYCLE-ONLY-26` Part B (`R-065`) — **THE OPERATOR'S PASS TIMING, through
             the SAME builder a press uses.**
@@ -337,22 +362,8 @@ export function PreviewPanel({
              * ⚠ The id→name join stays here (`nameOf`), because only this panel can see the
              * sources store; the stage below stays presentational.
              *
-             * 🔴 THE APPLIED BINDING, NOT THE DRAFT — and this is the ONE place
-             * this panel deliberately diverges from the "show what the operator
-             * has typed" rule the field values above follow.
-             *
-             * Fields are shown as drafted because rehearse exists to preview an
-             * edit before it reaches air. A plate binding is different in kind:
-             * an unassigned plate REFUSES the take (C-015's empty-mapping
-             * acceptance), and a binding that has been staged but not applied is
-             * still unassigned as far as the take is concerned. Painting a staged
-             * pick as bound would tell the operator the take will work at the
-             * exact moment it will not — which is the failure PVW is their last
-             * chance to catch.
-             *
-             * ⚠ That rule is unchanged and is why the store is read here rather than the
-             * draft: `currentSourceAssignments()` is the APPLIED level 2, and levels 3 and 4
-             * come off the item as the BRIDGE published them. Nothing staged reaches this.
+             * The rehearsed preset shows the same row binding draft as Apply. Template-wide
+             * defaults and emergency overrides retain their normal order of precedence.
              *
              * A binding whose catalog entry has gone reads as UNASSIGNED (`nameOf` answers
              * `null`), matching `pruneAssignmentsForCatalog`'s own reading of a dangling
@@ -366,9 +377,7 @@ export function PreviewPanel({
               ...(item.frozenAssignment !== undefined && {
                 frozenAssignment: item.frozenAssignment,
               }),
-              ...(item.lookSourceOverride !== undefined && {
-                lookBindings: item.lookSourceOverride,
-              }),
+              lookBindings: buildLookBindingsPayload(item.itemId, item.lookSourceOverride),
               ...(item.sourceOverride !== undefined && { overrides: item.sourceOverride }),
               nameOf: (catalogId) => catalog.sources.find((s) => s.id === catalogId)?.name ?? null,
               /*
@@ -676,6 +685,16 @@ export function PreviewPanel({
             </Button>
           ))}
         </span>
+        {(frameEffect.motion !== 'cut' || frameEffect.fade) && transport?.canReplayEffect && (
+          <Button
+            variant="secondary"
+            aria-label="Preview frame effect"
+            title="Preview frame effect"
+            onClick={transport.replayEffect}
+          >
+            <Icon icon={Sparkles} size={12} />
+          </Button>
+        )}
         {/*
           THE SCOPE, in the reference's own words. It is not decoration: the three buttons
           above drive EVERY rehearsing frame, never the selected one, and an operator who

@@ -3,6 +3,7 @@ import {
   FieldValuesSchema,
   FrameTransitionSchema,
   IdSchema,
+  InputTransitionSchema,
   LayerSlotSchema,
   LiveCropFocusSchema,
   LiveFramePlacementsSchema,
@@ -166,6 +167,8 @@ export const StackUpdateChannel = defineChannel(
      * any other surface must not silently drop a row's composition.
      */
     lookBindings: LiveSourceLookOverrideSchema.optional(),
+    /** An optional dissolve when a binding changes the input already shown in a live plate. */
+    inputTransition: InputTransitionSchema.optional(),
     /** In-place placement on a resident programme page advertising onAirPosition. */
     position: PositionSchema.optional(),
   }),
@@ -382,6 +385,7 @@ export const StackSwapLiveSourceChannel = defineChannel(
      * (`live-look-bindings.ts`).
      */
     lookId: z.string().min(1).optional(),
+    inputTransition: InputTransitionSchema.optional(),
   }),
   z.object({
     ok: z.boolean(),

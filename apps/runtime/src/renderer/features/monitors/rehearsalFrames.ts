@@ -32,6 +32,8 @@ export interface RehearsalSubject {
   previewPlateCrops?: StackItemState['previewPlateCrops'];
   framePlacements?: StackItemState['framePlacements'];
   appliedFramePlacements?: StackItemState['framePlacements'];
+  previewFrameReplay?: boolean;
+  previewReplayBaseline?: StackItemState['framePlacements'];
   maskPlacements?: StackItemState['maskPlacements'];
   appliedMaskPlacements?: StackItemState['maskPlacements'];
   canEditMasks?: boolean;
@@ -39,6 +41,8 @@ export interface RehearsalSubject {
   /** Pan checks the live seat when the row's Inspector offers Update on air. */
   previewCropOnAir?: boolean;
   previewCropPending?: boolean;
+  /** Bridge crop tokens only describe the running programme preset. */
+  previewCropScopeMatchesAir?: boolean;
   /**
    * R-049 — the template's Live Source carrier, when this browser's registry
    * holds one. `undefined` covers BOTH "this template declares none" and "the

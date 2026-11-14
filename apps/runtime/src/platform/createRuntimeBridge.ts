@@ -292,7 +292,14 @@ export function createMockBridge(): RuntimeBridge {
       take: (req) => Promise.resolve(mock.take(req.itemId)),
       update: (req) =>
         Promise.resolve(
-          mock.update(req.itemId, req.fields, req.mergeMode, req.lookBindings, req.position),
+          mock.update(
+            req.itemId,
+            req.fields,
+            req.mergeMode,
+            req.lookBindings,
+            req.position,
+            req.inputTransition,
+          ),
         ),
       stop: (req) => Promise.resolve(mock.stop(req.itemId)),
       // R-028 (5.4) — advance the template's sequence.
@@ -332,7 +339,15 @@ export function createMockBridge(): RuntimeBridge {
       // R-048 — the per-plate live-source swap.
       swapLiveSource: (req) =>
         // Session BM: `lookId` absent is R-048 (every look); present is one look’s binding.
-        Promise.resolve(mock.swapLiveSource(req.itemId, req.plateId, req.sourceId, req.lookId)),
+        Promise.resolve(
+          mock.swapLiveSource(
+            req.itemId,
+            req.plateId,
+            req.sourceId,
+            req.lookId,
+            req.inputTransition,
+          ),
+        ),
       // §14 (LOOKS) Stage E — the row’s look picker.
       setActiveLook: (req) => Promise.resolve(mock.setActiveLook(req.itemId, req.lookId)),
       setPassTiming: (req) =>

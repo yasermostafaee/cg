@@ -14,7 +14,11 @@ import type { CSSProperties } from 'react';
 // them stubbed out and back), because nothing else in the package is reachable
 // from them and both imports go through subpaths rather than the entry index.
 import { activeLookOf, type ChannelRaster } from '@cg/shared-ipc';
-import { liveMaskPlacementKey, outputScale } from '@cg/shared-schema';
+import {
+  CG_LIVE_FRAME_TRANSITION_PAGE_MARKER,
+  liveMaskPlacementKey,
+  outputScale,
+} from '@cg/shared-schema';
 import { colors, cssVars } from '../../theme.js';
 import { LivePlateOverlay, anyRegionTooSmallForCaveat } from './LivePlateOverlay.js';
 import { platePlacements, type PlatePlacement } from './livePlateGeometry.js';
@@ -292,6 +296,8 @@ interface Props {
 
 export interface RehearsalTransport {
   drive: (verb: 'play' | 'next' | 'stop') => void;
+  replayEffect: () => void;
+  canReplayEffect: boolean;
   ready: boolean;
   count: number;
   panVisible: boolean;
@@ -383,6 +389,18 @@ export function RehearsalStage({
   const [fit, setFit] = useState(1);
 
   const handles = useRef(new Map<string, RehearsalFrameHandle>());
+  const [transitioningItems, setTransitioningItems] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const onTransitionChange = useCallback((itemId: string, active: boolean) => {
+    setTransitioningItems((previous) => {
+      if (previous.has(itemId) === active) return previous;
+      const updated = new Set(previous);
+      if (active) updated.add(itemId);
+      else updated.delete(itemId);
+      return updated;
+    });
+  }, []);
   const [readyIds, setReadyIds] = useState<ReadonlySet<string>>(() => new Set());
   const onReadyChange = useCallback((itemId: string, ready: boolean) => {
     setReadyIds((prev) => {
@@ -524,13 +542,24 @@ export function RehearsalStage({
       ),
       fit,
     );
+  const scopedCropItems = new Set(
+    renderable
+      .filter(({ subject }) => subject.previewCropScopeMatchesAir !== false)
+      .map(({ subject }) => subject.itemId),
+  );
   const panPlates = placements.filter(
-    (plate) => plate.cropEdges === true && plateInRaster(plate, raster),
+    (plate) =>
+      scopedCropItems.has(plate.itemId) &&
+      plate.cropEdges === true &&
+      plate.mask === undefined &&
+      plate.reveal === undefined &&
+      plateInRaster(plate, raster),
   );
   const panVisible = panPlates.length > 0;
   const panAvailable = playing && panVisible;
   const panRows = panAvailable
     ? renderable.flatMap(({ subject }) => {
+        if (transitioningItems.has(subject.itemId)) return [];
         const plates = panPlates
           .filter((plate) => plate.itemId === subject.itemId)
           .map((plate) => ({
@@ -598,6 +627,7 @@ export function RehearsalStage({
     const focus = previewFocusesByItem.get(plate.itemId)?.get(plate.elementId);
     return focus === undefined ? plate : { ...plate, focus };
   });
+  const editablePlacements = placements.filter(({ itemId }) => !transitioningItems.has(itemId));
 
   // The FIT scale — preview only. Measured rather than assumed, so the rehearsal
   // stays whole at any panel width, including mid divider-drag.
@@ -637,6 +667,17 @@ export function RehearsalStage({
   // would arm PLAY while a frame was still blank, and a take-off that ran some
   // of the composite is the same partial surface in motion.
   const allReady = renderable.length > 0 && renderable.every((r) => readyIds.has(r.subject.itemId));
+  const canReplayEffect =
+    allReady &&
+    playing &&
+    transitioningItems.size === 0 &&
+    renderable.some(
+      ({ subject, html }) =>
+        subject.previewFrameReplay === true && html.includes(CG_LIVE_FRAME_TRANSITION_PAGE_MARKER),
+    );
+  const replayEffect = useCallback(() => {
+    for (const handle of handles.current.values()) handle.replayEffect();
+  }, []);
 
   /**
    * THE TRANSPORT DRIVES EVERY REHEARSING FRAME, not the selected one.
@@ -667,6 +708,8 @@ export function RehearsalStage({
   useEffect(() => {
     onTransport?.({
       drive: driveAll,
+      replayEffect,
+      canReplayEffect,
       ready: allReady,
       count: renderable.length,
       panVisible,
@@ -676,7 +719,17 @@ export function RehearsalStage({
     return () => {
       onTransport?.(null);
     };
-  }, [onTransport, driveAll, allReady, renderable.length, panVisible, panAvailable, moveItemId]);
+  }, [
+    onTransport,
+    driveAll,
+    replayEffect,
+    canReplayEffect,
+    allReady,
+    renderable.length,
+    panVisible,
+    panAvailable,
+    moveItemId,
+  ]);
 
   if (renderable.length === 0) {
     // Nothing to draw: the one line per row that has no page, or — while the pages are still being
@@ -739,6 +792,11 @@ export function RehearsalStage({
             position={subject.position}
             rowName={subject.rowName}
             activeLookId={subject.activeLookId}
+            liveSources={subject.liveSources}
+            playing={playing}
+            canReplayEffect={subject.previewFrameReplay === true}
+            replayBaseline={subject.previewReplayBaseline}
+            onTransitionChange={onTransitionChange}
             framePlacements={subject.framePlacements}
             maskPlacements={subject.maskPlacements}
             timing={subject.timing}
@@ -765,7 +823,7 @@ export function RehearsalStage({
         {missingLines !== null && <div style={styles.missingOverlay}>{missingLines}</div>}
         {playing && (
           <LivePlateOverlay
-            placements={placements}
+            placements={editablePlacements}
             sourceFrames={sourceFrames}
             raster={raster}
             fit={fit}
@@ -791,7 +849,7 @@ export function RehearsalStage({
               } as CSSProperties
             }
           >
-            {placements.flatMap((plate) => {
+            {editablePlacements.flatMap((plate) => {
               const subject = renderable.find(
                 ({ subject }) => subject.itemId === plate.itemId,
               )?.subject;

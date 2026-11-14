@@ -418,6 +418,7 @@ describe('D-201 — synchronized live-input foreground pass', () => {
       const soloBox = { ...box };
       const duoBox = {
         ...box,
+        hiddenTextIds: ['name'],
         transform: { ...box.transform, scale: { x: 0.5, y: 0.75 }, position: { x: 520, y: 60 } },
       };
       const departingBox = {
@@ -567,6 +568,32 @@ describe('D-201 — synchronized live-input foreground pass', () => {
             frameTransition: {
               ...phase,
               authoredPreset: true,
+              destinationLookId: 'duo',
+              frames: phase.frames.map((frame) => ({ ...frame, to: frame.from, toOpacity: 1 })),
+              opacityArtwork: [
+                {
+                  key: 'solo-root/departing-box',
+                  lookId: 'solo',
+                  fromOpacity: 1,
+                  toOpacity: 0,
+                },
+              ],
+              hidePresetArtworkKeys: [],
+            },
+          },
+        ),
+      );
+      advanceTo(400);
+      expect(departing.style.opacity).toBe('0.5');
+      const outgoingTitle = artwork.querySelector('[data-cg-element-id="name"]');
+      expect(outgoingTitle?.hasAttribute(hiddenMarker) ?? outputPass === 'background').toBe(true);
+      await runtime.update(
+        withCgControl(
+          {},
+          {
+            frameTransition: {
+              ...phase,
+              authoredPreset: true,
               durationMs: 0,
               frames: phase.frames.map((frame) => ({ ...frame, to: frame.from, toOpacity: 1 })),
             },
@@ -589,7 +616,7 @@ describe('D-201 — synchronized live-input foreground pass', () => {
       await runtime.update(
         withCgControl({}, { frameTransition: { ...phase, authoredPreset: true } }),
       );
-      advanceTo(400);
+      advanceTo(600);
       expect(runtime.activeLookId()).toBe('solo');
       expect(duo.style.display).toBe('none');
       expect(artwork.style.transform).toBe('matrix(0.75,0,0,0.875,260,30)');
@@ -597,7 +624,7 @@ describe('D-201 — synchronized live-input foreground pass', () => {
       expect(departing.hasAttribute(hiddenMarker)).toBe(true);
       if (fallback !== null)
         expect(fallback.hasAttribute('data-cg-frame-transition-hidden')).toBe(true);
-      advanceTo(600);
+      advanceTo(800);
       expect(artwork.style.transform).toBe('matrix(0.5,0,0,0.75,520,60)');
 
       await runtime.update(
@@ -617,6 +644,8 @@ describe('D-201 — synchronized live-input foreground pass', () => {
       expect(artwork.style.opacity).toBe('');
       expect(destination.style.transform).toBe('');
       expect(departing.hasAttribute(hiddenMarker)).toBe(false);
+      const incomingTitle = destination.querySelector('[data-cg-element-id="name"]');
+      if (incomingTitle !== null) expect(getComputedStyle(incomingTitle).display).toBe('none');
       if (fallback !== null)
         expect(fallback.hasAttribute('data-cg-frame-transition-hidden')).toBe(false);
       runtime.remove();

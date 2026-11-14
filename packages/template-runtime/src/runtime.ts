@@ -615,6 +615,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const presetDepartureKeys = new Set<string>();
   for (const { key, ancestorKeys } of flattened) {
     if (!presetFrameTargets.has(key)) continue;
+    presetDepartureKeys.add(key);
     for (const ancestor of ancestorKeys.slice(1)) presetDepartureKeys.add(ancestor);
   }
   const built = buildScene(
@@ -624,7 +625,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     paintEditorBackdrop,
     outputPass === 'full' ? undefined : liveForegroundKeys(scene),
     frameArtworkKeys,
-    presetDepartureKeys,
+    canRenderPresetEffects ? presetDepartureKeys : undefined,
   );
   applyOutputPass(built.container, outputPass);
   root.appendChild(built.container);
@@ -632,6 +633,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     Array.from(built.container.querySelectorAll<HTMLElement>('[data-cg-preset-departure-key]')).map(
       (node) => [node.dataset['cgPresetDepartureKey'], node] as const,
     ),
+  );
+  const presetTitles = Array.from(
+    built.container.querySelectorAll<HTMLElement>('[data-cg-preset-title-key]'),
   );
   const framePlacement = createFramePlacementRenderer(
     built.container,
@@ -3029,21 +3033,52 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         : [];
     // A departing subtree belongs to the outgoing preset and must never cover a frame
     // that is still moving in this phase. Keys resolve to exact instances in each output pass.
-    if (phase.authoredPreset === true && phase.hidePresetArtworkKeys !== undefined) {
-      const instance = lookGroup?.looks.find(({ id }) => id === currentLookId)?.instanceId;
-      if (instance !== undefined) {
-        for (const key of phase.hidePresetArtworkKeys) {
-          const prefix = key + '/';
-          const node = departureArtwork.get(key);
-          if (
-            node !== undefined &&
-            key.startsWith(instance + '/') &&
-            !phase.frames.some(
-              ({ frameKey, lookId }) => lookId === currentLookId && frameKey.startsWith(prefix),
+    const instance = phase.authoredPreset
+      ? lookGroup?.looks.find(({ id }) => id === currentLookId)?.instanceId
+      : undefined;
+    const isCurrentArtwork = (key: string): boolean =>
+      instance !== undefined && key.startsWith(instance + '/');
+    const opacityArtwork = phase.opacityArtwork?.filter(({ key }) => isCurrentArtwork(key));
+    if (instance !== undefined) {
+      for (const key of phase.hidePresetArtworkKeys ?? []) {
+        const prefix = key + '/';
+        const node = departureArtwork.get(key);
+        if (
+          node !== undefined &&
+          isCurrentArtwork(key) &&
+          !phase.frames.some(
+            ({ frameKey, lookId }) => lookId === currentLookId && frameKey.startsWith(prefix),
+          )
+        ) {
+          nodes.push(node);
+        }
+      }
+      const destination = lookGroup?.looks.find(({ id }) => id === phase.destinationLookId);
+      if (destination !== undefined && destination.instanceId !== instance) {
+        const destinationTitles = new Set(
+          presetTitles
+            .filter(
+              (node) =>
+                node.dataset['cgPresetTitleKey']?.startsWith(destination.instanceId + '/') &&
+                node.dataset['cgInstanceHiddenText'] === undefined,
             )
-          ) {
-            nodes.push(node);
-          }
+            .map((node) => node.dataset['cgElementId']),
+        );
+        const animatedArtwork = phase.frames.flatMap(({ frameKey, lookId }) => {
+          const key = presetFrameTargets.get(frameKey)?.artworkKey;
+          return lookId === currentLookId && key !== undefined ? [key] : [];
+        });
+        for (const node of presetTitles) {
+          const key = node.dataset['cgPresetTitleKey'];
+          if (key === undefined || !isCurrentArtwork(key)) continue;
+          if (opacityArtwork?.some(({ key: group }) => departureArtwork.get(group)?.contains(node)))
+            continue;
+          if (
+            destinationTitles.has(node.dataset['cgElementId']) &&
+            animatedArtwork.some((artwork) => key.startsWith(artwork + '/'))
+          )
+            continue;
+          nodes.push(node);
         }
       }
     }
@@ -3055,7 +3090,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         (phase.delayMs ?? 0) + phase.durationMs + LIVE_FALLBACK_WATCHDOG_MS,
       ),
     };
-    framePlacement.animate(phase, currentLookId);
+    framePlacement.animate({ ...phase, opacityArtwork }, currentLookId);
   }
 
   const contentRoots = (): HTMLElement[] =>

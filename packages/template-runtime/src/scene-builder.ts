@@ -208,13 +208,15 @@ function buildLayer(layer: Layer, ctx: BuildCtx): HTMLElement {
     if (elementNode === null) continue;
     if (instanceHiddenText) elementNode.dataset['cgInstanceHiddenText'] = '';
     const instanceKey = ctx.instancePrefix + element.id;
-    if (ctx.presetDepartureKeys?.has(instanceKey) === true) {
-      elementNode.dataset['cgPresetDepartureKey'] = instanceKey;
-    }
+    if (element.type === 'text' && ctx.presetDepartureKeys !== undefined)
+      elementNode.dataset['cgPresetTitleKey'] = instanceKey;
     let contentNode = elementNode;
-    if (ctx.frameArtworkKeys?.has(instanceKey) === true) {
+    const hasFrameArtwork = ctx.frameArtworkKeys?.has(instanceKey) === true;
+    const hasPresetArtwork = ctx.presetDepartureKeys?.has(instanceKey) === true;
+    if (hasFrameArtwork || hasPresetArtwork) {
       const wrapper = ctx.doc.createElement('div');
-      wrapper.dataset['cgFrameArtwork'] = instanceKey;
+      if (hasFrameArtwork) wrapper.dataset['cgFrameArtwork'] = instanceKey;
+      if (hasPresetArtwork) wrapper.dataset['cgPresetDepartureKey'] = instanceKey;
       wrapper.style.left = '0';
       wrapper.style.top = '0';
       wrapper.style.width = '100%';

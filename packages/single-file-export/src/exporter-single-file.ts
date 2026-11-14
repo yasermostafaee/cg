@@ -3,6 +3,7 @@ import {
   CG_LIVE_FRAME_TRANSITION_PAGE_MARKER,
   CG_LIVE_MASK_PLACEMENT_PAGE_MARKER,
   CG_LIVE_POSITION_PAGE_MARKER,
+  CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER,
   CG_LIVE_PRESET_DEPARTURE_PAGE_MARKER,
   CG_LIVE_PRESET_TRANSITION_PAGE_MARKER,
   playoutOf,
@@ -473,6 +474,7 @@ function buildSingleFileHtml(parts: HtmlParts): string {
     ${CG_LIVE_FRAME_TRANSITION_PAGE_MARKER}
     ${CG_LIVE_PRESET_TRANSITION_PAGE_MARKER}
     ${CG_LIVE_PRESET_DEPARTURE_PAGE_MARKER}
+    ${CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER}
     ${CG_LIVE_MASK_PLACEMENT_PAGE_MARKER}
     <meta name="viewport" content="width=${w}, initial-scale=1" />
     <!-- Permissive CSP: a single self-contained file needs inline script/style

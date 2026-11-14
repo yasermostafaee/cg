@@ -899,11 +899,14 @@ describe('buildTemplateLiveSources — the assembly, and the coexistence control
       { elementId: 'picture', frameKey: 'duo/small/picture', artworkId: 'guest-doc' },
     ]);
     expect(block.looks?.map((preset) => preset.transitionDepartureGroups)).toEqual([
-      { 'solo/big': ['guest-1'] },
+      { 'solo/big': ['guest-1'], 'solo/big/picture': ['guest-1'] },
       {
         'duo/small': ['guest-1'],
+        'duo/small/picture': ['guest-1'],
         'duo/masked-group': ['guest-2', 'guest-4'],
+        'duo/masked-group/second-picture': ['guest-2'],
         'duo/masked-group/overlay': ['guest-4'],
+        'duo/masked-group/overlay/masked-picture': ['guest-4'],
       },
     ]);
   });

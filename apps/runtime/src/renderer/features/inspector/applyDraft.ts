@@ -14,6 +14,7 @@ import { appliedPositionOf } from '../stack/defaultPositionStore.js';
 import { recordSentPasses } from './timingSent.js';
 import { patternRefusalsOf } from './patternCheck.js';
 import { frameTransitionPreference } from './frameTransitionPreference.js';
+import { inputTransitionRequest } from './inputTransitionPreference.js';
 import {
   beginFramePlacementApply,
   beginMaskPlacementApply,
@@ -521,7 +522,7 @@ function sendUpdate(
       itemId: item.itemId,
       fields,
       mergeMode: 'merge',
-      ...(lookBindings !== undefined && { lookBindings }),
+      ...(lookBindings !== undefined && { lookBindings, ...inputTransitionRequest() }),
       ...(sentPosition !== undefined && { position: positionFromDraft(sentPosition) }),
     })
     .then(

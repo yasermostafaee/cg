@@ -141,6 +141,8 @@ const BEFORE_AND_AFTER = {
     'cg.runtime.foreign-notice.dismissed.v1',
     // R-119: per-console effect and duration. Missing or invalid values use Cut with Fade off.
     'cg.runtime.frame-transition.v1',
+    // Dissolve settings are shared by the input picker and Preview on this console.
+    'cg.runtime.input-transition.v1',
     /*
       🔴 `PLAYOUT-FEATURES-01` E (`R-076`) — NEW: whether THIS console plays the programme's sound
       (`usePgmAudio.ts`), `{ on, volume? }`. A missing volume is 100%. A per-console preference, like the shell layout: what one operator

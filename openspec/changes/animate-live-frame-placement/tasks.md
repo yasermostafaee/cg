@@ -23,3 +23,16 @@
 - [x] Capture the masked switch on a local reference engine at 25 fps. The departing picture
       and mask disappear together before the retained frame grows to full raster.
 - [x] Build and verify the three local Windows 1.2.5 installers from `e798ca3b`.
+- [x] Rehearse preset and source transitions in PVW and verify no playout commands are sent.
+- [x] Animate arriving and departing plates. Confirm the owner's `3ghab-crop.vcg` in both
+      directions on the local reference engine, including the mask fragments and the retained
+      shot's movement. Verify title visibility by preset in the rendered pages.
+- [x] Verify Cut and Fade for an input swap, rollback on refusal, and cleanup after AMCP reconnect.
+      A local reference-engine capture shows a dissolve in both directions inside the same frame.
+- [x] Disable operator Crop for mask-owning plates while retaining Crop on eligible unmasked plates.
+- [x] Verify Bounce and Elastic move phases and their Fade combinations in the phase planner.
+      Windows Chromium verifies the Bounce replay in PVW. Bridge integration verifies the native
+      mixer phases for both effects and the final recentered geometry.
+- [x] Verify the expanded transitions with eight focused Windows Chromium cases.
+- [ ] Record the Linux Playwright result for the expanded transitions.
+- [ ] Build the updated local Windows installers after the expanded transitions pass.

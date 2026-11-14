@@ -189,6 +189,7 @@ export class CommandBuilder {
     framePlacements?: LiveFramePlacement[],
     maskPlacements?: LiveMaskPlacement[],
     presetTransitionCommit = false,
+    frameTransition?: FrameTransitionPhase,
   ): string {
     /*
       🔴 **`single-clock-look-switch` — the old mask-oriented `from` argument is GONE.**
@@ -208,7 +209,10 @@ export class CommandBuilder {
       ...(liveFallback !== undefined && { liveFallback }),
       ...(framePlacements !== undefined && { framePlacements }),
       ...(maskPlacements !== undefined && { maskPlacements }),
-      ...(presetTransitionCommit && { frameTransition: null, presetTransitionCommit: true }),
+      ...(presetTransitionCommit && {
+        frameTransition: frameTransition ?? null,
+        presetTransitionCommit: true,
+      }),
     };
     return `CG ${target(slot)} UPDATE ${String(FLASH_LAYER)} ${quote(
       serialize(withCgControl(fields, control)),

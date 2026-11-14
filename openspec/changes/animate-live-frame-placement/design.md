@@ -19,23 +19,43 @@ phase when ownership is retained. Stop, Clear and emergency silence take priorit
 phases.
 
 The duration setting is 100–1000 ms. The console stores the selection in browser local storage.
+Bounce and Elastic use a bounded sequence of native linear and quadratic tweens. Rebounds stay
+between authored endpoints, so clip dimensions are always valid.
 A new console or an invalid preference uses Cut with Fade off and a duration of 400 ms.
 Cut without Fade uses the existing immediate placement path.
 Off-air Update stores only the placement. Existing pages keep Cut until a compatible page is on air.
 
 ## Preset switches
 
-For a live preset switch, the same effect preference applies from the row's preset picker.
-The existing switch verifies the incoming sources and prerolls any new seats before the effect
-starts. A shared plate must have the same authored definition, artwork and verified running
-seat in both presets. Its outgoing artwork, native picture and mask fragments follow the same
-phase endpoints. Fade applies to the shared frame. The regular preset commit brings in the
-remaining frames and parks outgoing-only frames once the shared frame reaches its destination.
-If native layer order would make the shared frame cross a departing group incorrectly, the
-Bridge first hides that group's picture, mask fragments, fallback and nested artwork while
-the shared frame holds its pose. It then starts the selected effect at the configured duration.
-The terminal mixer batch parks the group and restores its usual parked opacity. A refused
-switch restores the previously applied view while the Bridge still owns the output.
-The transition requires compatible resident pages and a verified group containing only departing
-plates. The switch uses Cut if the paint order is still unsafe or there is no verified shared
-frame. Existing manual frame permissions still constrain operator edits.
+The Bridge verifies the incoming sources and prerolls new seats while hidden. A moving shared
+plate uses the same authored definition, artwork and verified running seat in both presets.
+The configured duration is divided between the applicable exit, motion and entrance stages.
+An outgoing group fades as a unit while the retained frame holds. If the existing native layer
+order would obscure a retained frame, the overlapping group is hidden before the shared motion.
+The switch parks departing seats with their normal opacity and then fades in the arriving group
+at its destination. An unsafe or unverifiable change continues to use the existing guarded
+preset path. A refused effect restores applied geometry and opacity while the row still owns
+the output. Existing manual frame permissions continue to constrain operator edits.
+
+The runtime's phase payload addresses an artwork group by its fully qualified instance key and
+fences it by preset ID. When the destination hides an outgoing shared title, the runtime keeps
+that title hidden through the move and then applies the destination's authored visibility.
+
+## Rehearsal
+
+Preview uses the exact exported page and the same phase planner. The Inspector can choose a PVW
+preset independently of the row's programme preset. Preview frame effect rehearses an applied
+placement to a draft. A local dissolve holds the current picture until the incoming snapshot is
+available, then fades to it inside the same plate. Browser-local changes leave programme output
+under the existing on-air verbs.
+
+## Input changes and masks
+
+Input effect defaults to Cut. Fade prerolls one replacement into a verified spare seat in the
+same band, keeping the working source visible. The visual dissolve precedes the audio handover.
+The binding transaction owns cleanup and rollback, including a dropped connection to the same
+engine. Fade requires an independently seated unmasked picture, a suitable free layer and one
+configured engine. Cut remains available for mirrored output and other ineligible cases.
+
+The Bridge omits mask-owning plates from the crop targets, and the Preview and Inspector use
+the same eligibility. The authored fit and focus continue to guide a masked plate's picture.

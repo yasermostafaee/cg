@@ -75,7 +75,8 @@ export function previewCropTarget(
   plate: PreviewPanPlacement,
   read: PreviewCropRead | undefined,
 ): PreviewPlateCropTarget | undefined {
-  if (plate.sourceId === null) return undefined;
+  if (plate.sourceId === null || plate.mask !== undefined || plate.reveal !== undefined)
+    return undefined;
   return read?.targets.find(
     (target) =>
       target.plateId === plate.plateId &&

@@ -131,6 +131,7 @@ async function readsRightToLeft(target: Locator, first: string, last: string): P
 async function swapDialogOnAir(
   page: Page,
   bank: FixedLayerBank,
+  inputCount = 2,
 ): Promise<{ mock: MockHandle; row: Locator; dialog: Locator }> {
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 10, channels: 1 });
@@ -149,7 +150,20 @@ async function swapDialogOnAir(
     stackPath: path.join(scratch, 'bridge-stack.json'),
     templatesDir: path.join(scratch, 'templates'),
   });
-  bridge.runtime.templateImport(TWO_BOX, HTML);
+  const carrier = TWO_BOX.liveSources!;
+  bridge.runtime.templateImport(
+    inputCount === 1
+      ? {
+          ...TWO_BOX,
+          liveSources: {
+            ...carrier,
+            sources: carrier.sources.slice(0, 1),
+            looks: [{ ...carrier.looks![0]!, rects: { l1: LEFT } }],
+          },
+        }
+      : TWO_BOX,
+    HTML,
+  );
   await page.setViewportSize({ width: 1400, height: 900 });
   await page.addInitScript(`window.__CG_BRIDGE_URL__ = ${JSON.stringify(bridge.url)};`);
   await page.goto('/');
@@ -205,20 +219,26 @@ async function swapDialogOnAir(
     .receivedCommands()
     .map(({ line }) => line)
     .filter((line) => /^PLAY 1-(6\d|7\d) /.test(line));
-  expect(producerStarts).toEqual(['PLAY 1-60 DECKLINK DEVICE 1', 'PLAY 1-61 "route://1-60"']);
+  expect(producerStarts).toEqual(
+    inputCount === 1
+      ? ['PLAY 1-60 DECKLINK DEVICE 1']
+      : ['PLAY 1-60 DECKLINK DEVICE 1', 'PLAY 1-61 "route://1-60"'],
+  );
   expect(mock.layerState(PHYSICAL_SEAT)).toMatchObject({
     producer: 'decklink',
     onAir: true,
     opacity: 1,
   });
-  expect(mock.layerState(COPY_SEAT)).toMatchObject({
-    producer: 'route',
-    onAir: true,
-    opacity: 1,
-    volume: 0,
-  });
   expect(mock.layerRenderedRect(PHYSICAL_SEAT)).toEqual(LEFT_RENDERED);
-  expect(mock.layerRenderedRect(COPY_SEAT)).toEqual(RIGHT_RENDERED);
+  if (inputCount === 2) {
+    expect(mock.layerState(COPY_SEAT)).toMatchObject({
+      producer: 'route',
+      onAir: true,
+      opacity: 1,
+      volume: 0,
+    });
+    expect(mock.layerRenderedRect(COPY_SEAT)).toEqual(RIGHT_RENDERED);
+  }
 
   // ── the row's SOURCE, from its menu ──
   /*
@@ -367,4 +387,35 @@ test('🔴 B-308 — a refused swap names the plate `Plate 1`, never its id; the
   expect(mock.layerState(PHYSICAL_SEAT)).toEqual(originalPhysical);
   expect(mock.layerState(COPY_SEAT)).toEqual(originalCopy);
   expect(mock.layerState(NEW_SEAT)).toMatchObject({ producer: 'empty', onAir: false });
+});
+
+test('R-119 selects Fade for a source change and dissolves inside the live frame', async ({
+  page,
+}) => {
+  const { mock, dialog } = await swapDialogOnAir(page, BANK, 1);
+  const transition = dialog.getByRole('combobox', { name: 'Input transition' });
+  await expect(transition).toHaveValue('cut');
+  await transition.selectOption('fade');
+  await expect(dialog.getByLabel('Duration (ms)')).toHaveValue('400');
+
+  const before = mock.receivedCommands().length;
+  await dialog.getByRole('combobox', { name: 'Live source for Plate 1' }).click();
+  await page.locator('[data-picker-input]').filter({ hasText: 'CAM 2' }).first().click();
+  const wire = () =>
+    mock
+      .receivedCommands()
+      .slice(before)
+      .map(({ line }) => line);
+  await expect.poll(wire).toContain('CLEAR 1-60');
+  await expect(dialog.locator('[data-swap-plate="l1"]')).toContainText('swapped for this row');
+
+  const lines = wire();
+  const staged = lines.indexOf('MIXER 1-61 OPACITY 0 DEFER');
+  const started = lines.indexOf('PLAY 1-61 DECKLINK DEVICE 2');
+  const faded = lines.findIndex((line) => /^MIXER 1-61 OPACITY 1 \d+ linear DEFER$/.test(line));
+  expect(staged).toBeGreaterThanOrEqual(0);
+  expect(started).toBeGreaterThan(staged);
+  expect(faded).toBeGreaterThan(started);
+  expect(lines.indexOf('CLEAR 1-60')).toBeGreaterThan(faded);
+  expect(mock.layerRenderedRect(COPY_SEAT)).toEqual(LEFT_RENDERED);
 });

@@ -36,6 +36,12 @@ export function createFramePlacementRenderer(
       (wrapper) => [wrapper.dataset['cgFrameArtwork'], wrapper] as const,
     ),
   );
+  const groupWrappers = new Map(
+    Array.from(
+      container.querySelectorAll<HTMLElement>('[data-cg-preset-departure-key]'),
+      (wrapper) => [wrapper.dataset['cgPresetDepartureKey'], wrapper] as const,
+    ),
+  );
 
   function matrixFor(
     placement: LiveFramePlacement,
@@ -84,6 +90,7 @@ export function createFramePlacementRenderer(
         wrapper.style.transform = '';
         wrapper.style.opacity = '';
       }
+      for (const wrapper of groupWrappers.values()) wrapper.style.opacity = '';
       for (const placement of placements) {
         if (placement.lookId !== lookId) continue;
         const value = matrixFor(placement);
@@ -113,7 +120,11 @@ export function createFramePlacementRenderer(
               ];
         },
       );
-      if (motion.length === 0) return;
+      const groups = (phase.opacityArtwork ?? []).flatMap(({ key, lookId: id, ...opacity }) => {
+        const wrapper = groupWrappers.get(key);
+        return id === lookId && wrapper !== undefined ? [{ wrapper, ...opacity }] : [];
+      });
+      if (motion.length === 0 && groups.length === 0) return;
       const startAt = now() + (phase.delayMs ?? 0);
       const active: { handle?: number } = {};
       const render = (time: number): void => {
@@ -128,6 +139,10 @@ export function createFramePlacementRenderer(
         const eased = frameTransitionProgress(phase.easing, progress);
         for (const { wrapper, from, to, fromOpacity, toOpacity } of motion) {
           paint(wrapper, interpolateMatrix(from, to, eased));
+          const opacity = interpolate(fromOpacity, toOpacity, eased);
+          wrapper.style.opacity = opacity === 1 ? '' : String(opacity);
+        }
+        for (const { wrapper, fromOpacity, toOpacity } of groups) {
           const opacity = interpolate(fromOpacity, toOpacity, eased);
           wrapper.style.opacity = opacity === 1 ? '' : String(opacity);
         }

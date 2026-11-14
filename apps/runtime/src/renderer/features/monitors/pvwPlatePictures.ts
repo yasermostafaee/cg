@@ -66,11 +66,84 @@ function sameBox(node: HTMLElement, plate: PlatePlacement): boolean {
   );
 }
 
+const pendingInputPicture = new WeakMap<HTMLElement, string>();
+
+/** Keep a previous source in the same plate until a replacement snapshot can be dissolved in. */
+export function paintPvwSourceDissolve(
+  doc: Document,
+  plates: readonly PlatePlacement[],
+  frames: ReadonlyMap<string, PvwSourceFrame>,
+  durationMs: number,
+  active: { current: (() => void) | undefined },
+): void {
+  const changing = new Map(
+    plates.filter(({ sourceId }) => sourceId !== null).map((plate) => [plate.plateId, plate]),
+  );
+  const outgoing = Array.from(
+    doc.querySelectorAll<HTMLElement>('[data-cg-pvw-picture-part][data-cg-pvw-picture-kind="own"]'),
+  ).flatMap((part) => {
+    const node = part.parentElement;
+    const id = node?.dataset['cgLiveSource'];
+    const plate = id === undefined ? undefined : changing.get(id);
+    if (
+      node === null ||
+      plate === undefined ||
+      plate.sourceId === null ||
+      part.dataset['sourceId'] === plate.sourceId ||
+      !sameBox(node, plate)
+    )
+      return [];
+    return [{ part, node, sourceId: plate.sourceId }];
+  });
+  const pending = new Set(
+    outgoing.filter(({ sourceId }) => !frames.has(sourceId)).map(({ part }) => part),
+  );
+  for (const { part, sourceId } of outgoing) {
+    if (!pending.has(part)) {
+      pendingInputPicture.delete(part);
+    } else if (pendingInputPicture.get(part) !== sourceId) {
+      pendingInputPicture.set(part, sourceId);
+      // A source can be outside the monitor's snapshot budget or have no preview service.
+      setTimeout(() => {
+        if (pendingInputPicture.get(part) !== sourceId) return;
+        pendingInputPicture.delete(part);
+        part.remove();
+      }, 2_500);
+    }
+  }
+  const incoming = outgoing.filter(
+    ({ sourceId }) => frames.get(sourceId)?.jpegBase64 !== undefined,
+  );
+  if (incoming.length > 0) active.current?.();
+  const clones = incoming.map(({ part, node }) => {
+    const copy = part.cloneNode(true) as HTMLElement;
+    delete copy.dataset['cgPvwPicturePart'];
+    copy.dataset['cgPvwSourceDissolve'] = '';
+    return { copy, node };
+  });
+  paintPvwPlatePictures(doc, plates, frames, pending);
+  if (clones.length === 0) return;
+  const animations = clones.map(({ copy, node }) => {
+    node.append(copy);
+    return { copy, animation: copy.animate?.([{ opacity: 1 }, { opacity: 0 }], durationMs) };
+  });
+  const cleanup = () => {
+    for (const { copy, animation } of animations) {
+      animation?.cancel();
+      copy.remove();
+    }
+    if (active.current === cleanup) active.current = undefined;
+  };
+  active.current = cleanup;
+  void Promise.all(animations.map(({ animation }) => animation?.finished)).then(cleanup, cleanup);
+}
+
 /** Mount preview-only pixels in the exact plate node, preserving the page's own paint order. */
 export function paintPvwPlatePictures(
   doc: Document,
   plates: readonly PlatePlacement[],
   frames: ReadonlyMap<string, PvwSourceFrame>,
+  pending?: ReadonlySet<HTMLElement>,
 ): void {
   const retained = new Map(
     Array.from(doc.querySelectorAll<HTMLDivElement>('[data-cg-pvw-picture-part]')).map((part) => [
@@ -79,7 +152,7 @@ export function paintPvwPlatePictures(
     ]),
   );
   if (frames.size === 0) {
-    for (const part of retained.values()) part.remove();
+    for (const part of retained.values()) if (pending?.has(part) !== true) part.remove();
     return;
   }
   const nodes = Array.from(doc.querySelectorAll<HTMLElement>('[data-cg-live-source]'));
@@ -91,6 +164,7 @@ export function paintPvwPlatePictures(
     key: string,
     fit: NonNullable<ReturnType<typeof pictureFor>>,
     window: FitRect,
+    kind: 'own' | 'reveal',
   ): void {
     const visible = intersectNormalizedRects(fit.visible, window);
     if (visible === null) return;
@@ -103,6 +177,7 @@ export function paintPvwPlatePictures(
     if (!reusable) {
       prior?.remove();
       part.dataset['cgPvwPicturePart'] = key;
+      part.dataset['cgPvwPictureKind'] = kind;
       part.dataset['sourceId'] = fit.sourceId;
       part.dataset['geometryRevision'] = fit.geometryRevision;
       part.style.cssText = 'position:absolute;overflow:hidden;pointer-events:none';
@@ -114,6 +189,7 @@ export function paintPvwPlatePictures(
       part.append(image);
       node.append(part);
     }
+    pendingInputPicture.delete(part);
     retained.delete(key);
     placeWithin(part, visible, plate);
     const image = part.querySelector('img');
@@ -136,7 +212,7 @@ export function paintPvwPlatePictures(
           ? [plate]
           : livePlateMaskRegions(plate.mask).map((rect) => liveRevealSceneRect(plate, rect));
       for (const [index, window] of windows.entries()) {
-        addPicture(plate, node, JSON.stringify([plate.plateId, 'own', index]), own, window);
+        addPicture(plate, node, JSON.stringify([plate.plateId, 'own', index]), own, window, 'own');
       }
     }
     if (plate.reveal === undefined) continue;
@@ -149,8 +225,9 @@ export function paintPvwPlatePictures(
         JSON.stringify([plate.plateId, 'reveal', index]),
         lower,
         liveRevealSceneRect(plate, rect),
+        'reveal',
       );
     }
   }
-  for (const part of retained.values()) part.remove();
+  for (const part of retained.values()) if (pending?.has(part) !== true) part.remove();
 }

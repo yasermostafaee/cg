@@ -510,6 +510,7 @@ export function collectLookCarrier(scene: Scene): {
       const artworkKeys = flat.ancestorKeys
         .slice(1)
         .filter((key) => byKey.get(key)?.type === 'composition');
+      if (presetFrames.has(flat.key)) artworkKeys.push(flat.key);
       if (artworkKeys.length > 0) {
         const groups = transitionGroupsByLook.get(owner.id) ?? new Map<string, Set<string>>();
         for (const key of artworkKeys) {

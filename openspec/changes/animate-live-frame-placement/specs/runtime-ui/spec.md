@@ -2,7 +2,7 @@
 
 ### Requirement: Operators can animate updates to live frame placement
 
-CG Control SHALL offer Cut, Linear, Ease in, Ease out and Ease in/out for eligible on-air live
+CG Control SHALL offer Cut, Linear, Ease in, Ease out, Ease in/out, Bounce and Elastic for eligible on-air live
 frame placement updates. Fade SHALL be independently selectable. The default SHALL be Cut with
 Fade disabled. The effect duration SHALL be configurable from 100 to 1000 ms.
 
@@ -40,6 +40,20 @@ Fade disabled. The effect duration SHALL be configurable from 100 to 1000 ms.
 - **AND** it retains its input and existing audio policy
 - **AND** the switch completes with only the incoming preset visible
 
+#### Scenario: Rehearse a preset selection
+
+- **GIVEN** Preview is playing a live layout
+- **WHEN** the operator changes its staged preset or input with an effect selected
+- **THEN** PVW rehearses the change locally
+- **AND** the applied PGM preset and inputs remain unchanged until an on-air action
+
+#### Scenario: Rehearse a drafted frame move
+
+- **GIVEN** Preview is playing a plate with a frame placement draft
+- **WHEN** the operator runs Preview frame effect
+- **THEN** the plate rehearses the selected effect from the applied placement to the draft
+- **AND** direct dragging and resizing keep their immediate feedback
+
 #### Scenario: A shared frame crosses a departing masked group
 
 - **GIVEN** a verified outgoing artwork group contains only departing plates and the resident pages support hiding it
@@ -48,7 +62,21 @@ Fade disabled. The effect duration SHALL be configurable from 100 to 1000 ms.
 - **AND** the shared frame moves with the selected effect and keeps playing its input
 - **AND** the departing group's normal opacity and geometry remain available on return to the outgoing preset
 
-#### Scenario: A switch has no safely retained frame
+#### Scenario: Plate counts change and a title has per-preset visibility
 
-- **WHEN** no shared authored plate uses the same verified seat in both presets, or motion cannot preserve paint order after hiding verified departing groups
-- **THEN** the preset picker follows the existing Cut workflow
+- **WHEN** a preset transition adds or removes a verified plate
+- **THEN** its picture, mask and attached artwork enter or exit together
+- **AND** the remaining frame stays above departing content during the movement
+- **AND** the shared title moves with its frame or stays hidden during the movement, then adopts the destination preset's authored visibility
+
+#### Scenario: Change the input without moving its frame
+
+- **WHEN** the operator changes an input with Input effect set to Cut or Fade
+- **THEN** the change uses the selected effect inside the same frame
+- **AND** a refused Fade preserves the previously applied source
+
+#### Scenario: Reframe beside a masked plate
+
+- **WHEN** a plate owns an authored mask
+- **THEN** operator Crop is unavailable for that plate in Preview and Programme
+- **AND** an eligible unmasked plate keeps its own Crop control

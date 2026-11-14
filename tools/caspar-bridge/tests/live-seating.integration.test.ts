@@ -16,6 +16,7 @@ import {
   CG_LIVE_FRAME_TRANSITION_PAGE_MARKER,
   CG_LIVE_MASK_PLACEMENT_PAGE_MARKER,
   CG_LIVE_POSITION_PAGE_MARKER,
+  CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER,
   CG_LIVE_PRESET_DEPARTURE_PAGE_MARKER,
   CG_LIVE_PRESET_TRANSITION_PAGE_MARKER,
   RetainedStackItemSchema,
@@ -184,6 +185,10 @@ const PRESET_EFFECT = { motion: 'ease-in-out', fade: true, durationMs: 160 } as 
 const PRESET_DEPARTURE_HTML = PRESET_EFFECT_HTML.replace(
   '</head>',
   `${CG_LIVE_PRESET_DEPARTURE_PAGE_MARKER}</head>`,
+);
+const PRESET_ARTWORK_FADE_HTML = PRESET_DEPARTURE_HTML.replace(
+  '</head>',
+  `${CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER}</head>`,
 );
 
 const DEPARTURE_BAND = { start: BAND.start, end: BAND.end + 1 };
@@ -1684,6 +1689,8 @@ it.each([
   { motion: 'linear', fade: false, durationMs: 160, commits: 1, opacity: [] },
   { motion: 'cut', fade: true, durationMs: 160, commits: 3, opacity: [0, 0, 1] },
   { motion: 'ease-in-out', fade: true, durationMs: 160, commits: 2, opacity: [0, 1] },
+  { motion: 'bounce', fade: false, durationMs: 400, commits: 3, opacity: [] },
+  { motion: 'elastic', fade: false, durationMs: 400, commits: 5, opacity: [] },
 ] satisfies (FrameTransition & { commits: number; opacity: number[] })[])(
   'uses deferred native frame effects without replacing the seated input ($motion, fade $fade)',
   async ({ commits, opacity, ...transition }) => {
@@ -1910,6 +1917,53 @@ it('restores prior mask geometry and opacity if the first motion after departure
   });
   expect(r.stackSnapshot()[0]?.activeLookId).toBe('duo');
   for (const [slot, state] of original ?? []) expect(mock!.layerState(slot)).toEqual(state);
+});
+
+it('fades all exiting mask seats before moving the retained seat and fades returning seats in', async () => {
+  const r = await bootPresetDeparture(PRESET_ARTWORK_FADE_HTML);
+  const itemId = 'item-1';
+  const visible = (r.liveLayers().get(itemId) ?? []).filter(({ held }) => held !== true);
+  const retained = visible.find(({ sourceId }) => sourceId === 'guest-1');
+  const extras = visible.filter(({ sourceId }) => sourceId !== 'guest-1');
+  if (retained === undefined || extras.length !== 2) throw new Error('Missing test seats');
+  const start = (await recvLines()).length;
+  expect(await r.setActiveLook(itemId, 'solo', PRESET_EFFECT)).toEqual({ ok: true });
+  const exitWire = (await recvLines()).slice(start);
+  const exitPage = exitWire.findIndex((line) => line.includes('opacityArtwork'));
+  const move = exitWire.findIndex(
+    (line) => line.includes('easeinoutquad') && line.includes(' FILL '),
+  );
+  expect(exitPage).toBeGreaterThan(0);
+  expect(exitWire[exitPage]).toContain(DEPARTURE_ARTWORK);
+  expect(exitWire.indexOf('MIXER 1 COMMIT', exitPage)).toBeLessThan(move);
+  for (const { slot } of extras) {
+    expect(
+      exitWire.findIndex((line) =>
+        new RegExp(`^MIXER 1-${String(slot.layer)} OPACITY 0 [1-9]\\d* linear DEFER$`).test(line),
+      ),
+    ).toBeGreaterThanOrEqual(0);
+  }
+  expect(
+    exitWire.some((line) => line.startsWith(`MIXER 1-${String(retained.slot.layer)} OPACITY 0 `)),
+  ).toBe(false);
+  expect(await r.setActiveLook(itemId, 'duo', PRESET_EFFECT)).toEqual({ ok: true });
+  const enterWire = (await recvLines()).slice(start + exitWire.length);
+  for (const { slot, clip } of extras) {
+    const hold = enterWire.findIndex((line) =>
+      line.startsWith(`MIXER 1-${String(slot.layer)} OPACITY 0 0 linear`),
+    );
+    const fade = enterWire.findIndex((line) =>
+      new RegExp(`^MIXER 1-${String(slot.layer)} OPACITY 1 [1-9]\\d* linear DEFER$`).test(line),
+    );
+    expect(hold).toBeGreaterThanOrEqual(0);
+    expect(fade).toBeGreaterThan(hold);
+    expect(mock?.layerState(slot)).toMatchObject({
+      opacity: 1,
+      clip: Object.fromEntries(
+        Object.entries(clip).map(([key, value]) => [key, Number(value.toFixed(6))]),
+      ),
+    });
+  }
 });
 
 it('retains Cut on an older resident page and when the same authored plate changes input', async () => {
@@ -2572,6 +2626,52 @@ it('D-202 — Mask and Revert crop a single producer and mute its routed fragmen
 
 const maskWindow = { x: 0.25, y: 0.25, width: 0.5, height: 0.5 };
 
+it('keeps the underlying unmasked plate croppable when the upper plate owns a mask', async () => {
+  const rect = { x: 720, y: 270, width: 480, height: 540 };
+  const info = template([
+    { id: 'lower', rect, fitMode: 'cover' },
+    { id: 'upper', rect, fitMode: 'cover' },
+  ]);
+  const live = info.liveSources!;
+  const r = await boot({
+    template: {
+      ...info,
+      liveSources: {
+        ...live,
+        platePaintOrder: ['lower', 'upper'],
+        sources: live.sources.map((source) =>
+          source.sourceId === 'upper'
+            ? { ...source, liveMask: { mode: 'inside', rects: [maskWindow] } }
+            : source,
+        ),
+      },
+    },
+    assignments: assign([
+      ['lower', 'src-a'],
+      ['upper', 'src-b'],
+    ]),
+    html: MASK_HTML,
+  });
+  const itemId = 'item-1';
+  expect(await r.load(itemId, 'lower-third', {})).toMatchObject({ accepted: true });
+  expect(r.previewPlateCrop(itemId).targets.map(({ plateId }) => plateId)).toEqual(['lower']);
+  expect(await r.take(itemId)).toMatchObject({ accepted: true });
+  const [target] = (await r.previewPlateCropOnAir(itemId)).targets;
+  expect(target?.plateId).toBe('lower');
+  expect((await r.pgmPlateCrop(itemId)).targets.map(({ id }) => id)).toEqual(['lower']);
+  if (target === undefined) throw new Error('Missing crop target for the lower plate');
+  const upper = r
+    .liveLayers()
+    .get(itemId)
+    ?.find(({ sourceId }) => sourceId === 'upper');
+  if (upper === undefined) throw new Error('Missing upper plate');
+  const previous = mock!.layerState(upper.slot);
+  expect(
+    await r.previewPlateCropOnAir(itemId, [{ token: target.token, focus: { x: 0.7, y: 0.5 } }]),
+  ).toMatchObject({ ok: true });
+  expect(mock!.layerState(upper.slot)).toEqual(previous);
+});
+
 function editableMaskTemplate(mode: 'inside' | 'outside'): TemplateInfo {
   const info = template([{ id: 'guest-1', rect: BOX, fitMode: 'cover' }]);
   const live = info.liveSources;
@@ -2602,6 +2702,7 @@ it('D-202 — saves an edited mask for Take and updates the same on-air input wi
     rect: { ...maskWindow, x: 0.125 },
   };
   expect(await r.load(itemId, 'lower-third', {})).toEqual({ accepted: true });
+  expect(r.previewPlateCrop(itemId)).toMatchObject({ ok: true, targets: [] });
   const beforeSave = (await recvLines()).length;
   await expect(r.setMaskPlacements(itemId, [original])).resolves.toEqual({ accepted: true });
   expect((await recvLines()).slice(beforeSave)).toEqual([]);
@@ -2612,15 +2713,15 @@ it('D-202 — saves an edited mask for Take and updates the same on-air input wi
   expect(JSON.parse(mock?.lastCgUpdate(graphic)?.data ?? '{}')).toMatchObject({
     __cg: { maskPlacements: [original] },
   });
-  const [target] = (await r.previewPlateCropOnAir(itemId)).targets;
-  if (target === undefined) throw new Error('Missing crop target for the masked plate');
-  const focus = { x: 0.25, y: 0.5, zoom: 2 };
+  expect(await r.previewPlateCropOnAir(itemId)).toMatchObject({ ok: true, targets: [] });
+  expect(await r.pgmPlateCrop(itemId)).toMatchObject({ ok: true, targets: [] });
+  const beforeCrop = (await recvLines()).length;
   await expect(
-    r.previewPlateCropOnAir(itemId, [{ token: target.token, focus }]),
+    r.previewPlateCropOnAir(itemId, [{ token: 'removed-draft', focus: { x: 0.25, y: 0.5 } }]),
   ).resolves.toMatchObject({
-    ok: true,
+    ok: false,
   });
-  const panned = mock?.layerState(plate);
+  expect((await recvLines()).slice(beforeCrop)).toEqual([]);
 
   const moved = { ...original, rect: { ...maskWindow, x: 0.5, height: 0.25 } };
   const beforeMove = (await recvLines()).length;
@@ -2635,13 +2736,11 @@ it('D-202 — saves an edited mask for Take and updates the same on-air input wi
     'MIXER 1 COMMIT',
   ]);
   expect(mock?.layerState(plate)).toMatchObject({
-    fill: panned?.fill,
+    fill: initial?.fill,
     volume: initial?.volume,
     clip: { x: 0.5, y: 0.375, width: 0.25, height: 0.125 },
   });
-  expect((await r.previewPlateCropOnAir(itemId)).targets).toMatchObject([
-    { token: target.token, focus },
-  ]);
+  expect((await r.previewPlateCropOnAir(itemId)).targets).toEqual([]);
   expect(JSON.parse(mock?.lastCgUpdate(graphic)?.data ?? '{}')).toEqual({
     __cg: { maskPlacements: [moved] },
   });
@@ -3143,6 +3242,228 @@ it('remove() takes the plates with the item', async () => {
 
   expect(r.liveLayers().has('item-1')).toBe(false);
   expect(await recvLines()).toContain(`MIXER 1-${String(BAND.start)} CLEAR`);
+});
+
+const INPUT_FADE = { mode: 'fade' as const, durationMs: 160 };
+
+it('dissolves a direct input swap in both layer directions without replacing the old producer first', async () => {
+  const r = await boot({
+    template: template([{ id: 'guest-1', rect: BOX }]),
+    catalog: catalog({ layerRange: { start: BAND.start, end: BAND.start + 1 } }),
+  });
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  expect(await r.setLivePlateVolume('item-1', 'guest-1', 0.4)).toMatchObject({ ok: true });
+  const mark = (await recvLines()).length;
+  expect(await r.swapLiveSource('item-1', 'guest-1', 'src-b', undefined, INPUT_FADE)).toEqual({
+    ok: true,
+  });
+  const first = (await recvLines()).slice(mark);
+  const staged = at(first, 'PLAY 1-31 ');
+  const tweenIn = first.findIndex((line) => /^MIXER 1-31 OPACITY 1 \d+ linear DEFER$/.test(line));
+  expect(staged).toBeGreaterThan(at(first, 'MIXER 1-31 OPACITY 0'));
+  expect(tweenIn).toBeGreaterThan(staged);
+  expect(at(first, 'MIXER 1-30 VOLUME 0 DEFER')).toBeGreaterThan(tweenIn);
+  expect(at(first, 'CLEAR 1-30')).toBeGreaterThan(tweenIn);
+  expect(first.some((line) => /^CG \d+-\d+ (ADD|PLAY)/.test(line))).toBe(false);
+  expect(mock!.layerState({ channel: 1, layer: 31 })).toMatchObject({
+    opacity: 1,
+    volume: 0.4,
+  });
+
+  const secondMark = (await recvLines()).length;
+  expect(await r.swapLiveSource('item-1', 'guest-1', null, undefined, INPUT_FADE)).toEqual({
+    ok: true,
+  });
+  const second = (await recvLines()).slice(secondMark);
+  const mountUnder = at(second, 'PLAY 1-30 ');
+  const tweenOut = second.findIndex((line) => /^MIXER 1-31 OPACITY 0 \d+ linear DEFER$/.test(line));
+  expect(mountUnder).toBeGreaterThan(at(second, 'MIXER 1-30 OPACITY 0'));
+  expect(tweenOut).toBeGreaterThan(mountUnder);
+  expect(at(second, 'CLEAR 1-31')).toBeGreaterThan(tweenOut);
+  expect(r.liveLayers().get('item-1')).toMatchObject([{ slot: { layer: 30 } }]);
+  expect(mock!.layerState({ channel: 1, layer: 30 })).toMatchObject({ opacity: 1, volume: 0.4 });
+});
+
+it('keeps the input on air when Fade cannot pre-seat the incoming source', async () => {
+  const r = await boot({ template: template([{ id: 'guest-1', rect: BOX }]) });
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  const previous = r.liveLayers().get('item-1');
+  const before = (await recvLines()).length;
+  expect(
+    await r.swapLiveSource('item-1', 'guest-1', 'src-bad', undefined, INPUT_FADE),
+  ).toMatchObject({
+    ok: false,
+  });
+  expect(r.liveLayers().get('item-1')).toEqual(previous);
+  expect(r.stackSnapshot()[0]?.sourceOverride).toBeUndefined();
+  expect(mock!.layerState({ channel: 1, layer: 30 })).toMatchObject({ opacity: 1 });
+  expect((await recvLines()).slice(before).some((line) => /^CLEAR 1-30/.test(line))).toBe(false);
+});
+
+it('fades a change of contained source aspect without exceeding the authored frame', async () => {
+  const station = catalog();
+  const r = await boot({
+    template: template([{ id: 'guest-1', rect: BOX }]),
+    catalog: {
+      ...station,
+      sources: station.sources.map((source) =>
+        source.id === 'src-b' ? { ...source, aspect: 4 / 3, format: undefined } : source,
+      ),
+    },
+  });
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  const before = (await recvLines()).length;
+  expect(await r.swapLiveSource('item-1', 'guest-1', 'src-b', undefined, INPUT_FADE)).toMatchObject(
+    {
+      ok: true,
+    },
+  );
+  const writes = (await recvLines()).slice(before);
+  expect(writes.some((line) => /^MIXER 1-30 OPACITY 0 \d+ linear DEFER$/.test(line))).toBe(true);
+  expect(writes.some((line) => /^MIXER 1-31 OPACITY 1 \d+ linear DEFER$/.test(line))).toBe(true);
+  expect(mock!.layerRenderedRect({ channel: 1, layer: 31 })).toEqual({
+    x: 0.3125,
+    y: 0.25,
+    width: 0.375,
+    height: 0.5,
+  });
+});
+
+it('refuses Fade with no spare layer and can still replace directly with Cut', async () => {
+  const r = await boot({
+    template: template([{ id: 'guest-1', rect: BOX }]),
+    catalog: catalog({ layerRange: { start: BAND.start, end: BAND.start } }),
+  });
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  const before = (await recvLines()).length;
+  expect(await r.swapLiveSource('item-1', 'guest-1', 'src-b', undefined, INPUT_FADE)).toMatchObject(
+    {
+      ok: false,
+      reason: 'input-fade-unavailable',
+    },
+  );
+  expect((await recvLines()).slice(before).some((line) => /^(PLAY |MIXER )/.test(line))).toBe(
+    false,
+  );
+  expect(await r.swapLiveSource('item-1', 'guest-1', 'src-b')).toMatchObject({ ok: true });
+  expect(r.liveLayers().get('item-1')).toMatchObject([{ slot: { layer: 30 } }]);
+});
+
+it('dissolves staged inputs on Update and resumes the prior picture on a refused final mixer commit', async () => {
+  const base = template([{ id: 'guest-1', rect: BOX }]);
+  const r = await boot({
+    template: {
+      ...base,
+      liveSources: {
+        ...base.liveSources!,
+        defaultLookId: 'solo',
+        looks: [{ id: 'solo', name: 'Solo', entered: { mode: 'cut' }, rects: { 'guest-1': BOX } }],
+      },
+    },
+  });
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  expect(await r.setLivePlateVolume('item-1', 'guest-1', 0.4)).toMatchObject({ ok: true });
+  const before = (await recvLines()).length;
+  const next = { solo: { 'guest-1': 'src-b' } };
+  const fields = { headline: 'New source' };
+  const first = await r.update('item-1', fields, 'merge', next, undefined, INPUT_FADE);
+  expect(first).toMatchObject({ accepted: true });
+  expect(
+    (await recvLines()).slice(before).some((line) => /OPACITY 1 \d+ linear DEFER/.test(line)),
+  ).toBe(true);
+  expect(r.stackSnapshot()[0]?.lookSourceOverride).toEqual(next);
+  const baseline = r.liveLayers().get('item-1');
+  const mixer = defaultHandlers().get('MIXER')!;
+  let commits = 0;
+  mock!.setHandler('MIXER', (request, context, connection) => {
+    if (request.raw === 'MIXER 1 COMMIT' && ++commits === 3)
+      return { kind: 'err', code: 502, verb: 'MIXER' };
+    return mixer(request, context, connection);
+  });
+  const reverted = await r.update(
+    'item-1',
+    { headline: 'Refused source' },
+    'merge',
+    {},
+    undefined,
+    INPUT_FADE,
+  );
+  expect(reverted).toMatchObject({ accepted: false, errorCode: 'amcp-502' });
+  expect(r.liveLayers().get('item-1')).toEqual(baseline);
+  expect(r.stackSnapshot()[0]).toMatchObject({ fields, lookSourceOverride: next });
+  expect(mock!.layerState({ channel: 1, layer: 31 })).toMatchObject({ opacity: 1, volume: 0.4 });
+});
+
+it('clears the hidden replacement when Stop interrupts an in-progress input Fade', async () => {
+  const r = await boot({ template: template([{ id: 'guest-1', rect: BOX }]) });
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  const fade = r.swapLiveSource('item-1', 'guest-1', 'src-b', undefined, {
+    mode: 'fade',
+    durationMs: 800,
+  });
+  await expect
+    .poll(async () => (await recvLines()).some((line) => /OPACITY 1 \d+ linear DEFER/.test(line)))
+    .toBe(true);
+  expect(await r.stopItem('item-1')).toMatchObject({ accepted: true });
+  expect(await fade).toMatchObject({ ok: false });
+  expect(r.liveLayers().has('item-1')).toBe(false);
+  const lines = await recvLines();
+  expect(lines).toContain('CLEAR 1-30');
+  expect(lines).toContain('CLEAR 1-31');
+  expect(r.stackSnapshot()[0]?.sourceOverride).toBeUndefined();
+});
+
+it('restores the old feed and cancels a staged input Fade when the same engine reconnects', async () => {
+  const r = await boot({
+    template: template([{ id: 'guest-1', rect: BOX }]),
+    catalog: catalog({ layerRange: { start: BAND.start, end: BAND.start + 1 } }),
+  });
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  expect(await r.swapLiveSource('item-1', 'guest-1', 'src-b', undefined, INPUT_FADE)).toEqual({
+    ok: true,
+  });
+  const mixer = defaultHandlers().get('MIXER')!;
+  let disconnected = false;
+  mock!.setHandler('MIXER', (request, context, connection) => {
+    const result = mixer(request, context, connection);
+    if (!disconnected && /^MIXER 1-31 OPACITY 0 \d+ linear DEFER$/.test(request.raw)) {
+      disconnected = true;
+      mock!.closeAllAmcpConnections();
+    }
+    return result;
+  });
+  expect(await r.swapLiveSource('item-1', 'guest-1', null, undefined, INPUT_FADE)).toMatchObject({
+    ok: false,
+  });
+  expect(disconnected).toBe(true);
+  await r.whenServerHealthy(HEALTH_MS);
+  await expect.poll(() => mock!.layerState({ channel: 1, layer: 30 })?.producer).toBe('empty');
+  expect(mock!.layerState({ channel: 1, layer: 31 })).toMatchObject({ onAir: true, opacity: 1 });
+  expect(mock!.stagedMixerCount(1)).toBe(0);
+  expect(r.stackSnapshot()[0]?.sourceOverride).toMatchObject({ 'guest-1': 'src-b' });
+  expect(await r.swapLiveSource('item-1', 'guest-1', null, undefined, INPUT_FADE)).toEqual({
+    ok: true,
+  });
+});
+
+it('keeps Cut available when source Fade cannot be confirmed on a mirrored station', async () => {
+  const r = await boot({
+    template: template([{ id: 'guest-1', rect: BOX }]),
+    redundant: true,
+  });
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  const before = (await recvLines()).length;
+  expect(await r.swapLiveSource('item-1', 'guest-1', 'src-b', undefined, INPUT_FADE)).toMatchObject(
+    {
+      ok: false,
+      reason: 'input-fade-unavailable',
+      message: expect.stringContaining('Choose Cut'),
+    },
+  );
+  expect((await recvLines()).slice(before).some((line) => /^(PLAY |MIXER )/.test(line))).toBe(
+    false,
+  );
+  expect(await r.swapLiveSource('item-1', 'guest-1', 'src-b')).toMatchObject({ ok: true });
 });
 
 it('a template with NO carrier takes exactly as before and seats nothing', async () => {
