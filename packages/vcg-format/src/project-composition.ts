@@ -1,4 +1,8 @@
-import { compositionClosure, type Scene } from '@cg/shared-schema';
+import {
+  compositionClosure,
+  discardMissingSceneElementBindings,
+  type Scene,
+} from '@cg/shared-schema';
 import { compositionPackageId } from './package-id.js';
 
 /**
@@ -39,9 +43,9 @@ export function projectCompositionForExport(
   // The selected composition is now the root. Keeping the project entry pointer
   // would either leave a dangling id or misname a nested composition as the entry.
   const { entryCompositionId: _projectEntry, ...rootIsTheEntry } = projected;
-  return {
+  return discardMissingSceneElementBindings({
     ...rootIsTheEntry,
     id: compositionPackageId(scene.id, compositionId),
     compositions: (scene.compositions ?? []).filter((candidate) => closure.has(candidate.id)),
-  };
+  });
 }

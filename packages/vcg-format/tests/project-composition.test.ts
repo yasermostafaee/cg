@@ -114,6 +114,57 @@ describe('projectCompositionForExport', () => {
     );
   });
 
+  it('removes cross-composition wires in the export without removing published fields', () => {
+    const original = project();
+    const [root, nested] = original.compositions ?? [];
+    const layer = nested?.layers[0];
+    if (root === undefined || nested === undefined || layer === undefined) {
+      throw new Error('Missing source composition or nested layer');
+    }
+    const localElement = {
+      ...instance('local-target', 'sibling'),
+      valueRules: {
+        input: { kind: 'field', fieldId: 'rule-input' },
+        rules: [
+          {
+            condition: { comparator: '=', value: 'hide' },
+            effect: { elementId: 'local-target', property: 'visible', value: false },
+          },
+        ],
+      },
+    } satisfies Element;
+    layer.children.push(localElement);
+    const field = (id: string) =>
+      ({ id, label: id, required: false, type: 'text', default: id }) as const;
+    nested.fields = ['unused', 'multi-wire', 'unbound', 'rule-input'].map(field);
+    nested.bindings = [
+      { fieldId: 'unused', target: { kind: 'text', elementId: 'nested-instance' } },
+      { fieldId: 'multi-wire', target: { kind: 'visible', elementId: 'nested-instance' } },
+      { fieldId: 'multi-wire', target: { kind: 'visible', elementId: localElement.id } },
+      { fieldId: 'rule-input', target: { kind: 'text', elementId: 'nested-instance' } },
+    ];
+    root.fields = [field('root-unused'), field('root-unbound')];
+    root.bindings = [
+      { fieldId: 'root-unused', target: { kind: 'text', elementId: localElement.id } },
+    ];
+
+    const projected = projectCompositionForExport(original, 'root');
+    const exportedChild = projected?.compositions?.find(({ id }) => id === 'nested');
+
+    expect(projected?.fields.map(({ id }) => id)).toEqual(['root-unbound']);
+    expect(projected?.bindings).toEqual([]);
+    expect(exportedChild?.fields?.map(({ id }) => id)).toEqual([
+      'multi-wire',
+      'unbound',
+      'rule-input',
+    ]);
+    expect(exportedChild?.bindings).toEqual([
+      { fieldId: 'multi-wire', target: { kind: 'visible', elementId: localElement.id } },
+    ]);
+    expect(root?.bindings).toHaveLength(1);
+    expect(nested?.bindings).toHaveLength(4);
+  });
+
   it('returns null for a missing selection without changing the project', () => {
     const source = project();
     expect(projectCompositionForExport(source, 'missing')).toBeNull();

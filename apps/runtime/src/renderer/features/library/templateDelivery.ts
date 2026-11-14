@@ -15,6 +15,7 @@ import {
 import {
   aggregateBoundCompositionFields,
   CG_RUNTIME_VERSION,
+  discardMissingSceneElementBindings,
   hasNextStep,
   hasSoundEffects,
   pageListsOf,
@@ -320,7 +321,9 @@ export async function produceTemplateDelivery(
     Designer's export makes is made again here, before anything is derived — the field form, the
     page lists the bridge turns, and the page itself — so every one of them agrees.
   */
-  const scene = withPageLists(unpacked);
+  // Older duplicated compositions can carry bindings to elements in the original. Repair
+  // their field definitions before both the operator metadata and programme page are derived.
+  const scene = withPageLists(discardMissingSceneElementBindings(unpacked));
   const thumbnailPng = files.get('thumbnails/320.png');
 
   // B-067 — the operator's field form must be the template's FULL field closure, not the

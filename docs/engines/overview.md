@@ -259,6 +259,9 @@ STEPS"). D-141 v1's zones migrate into steps on load (`migrateCountdownZones`).
 - **Schema is the contract.** Both the editor and the runtime depend on
   `@cg/shared-schema`; neither encodes the data model independently. Change the
   schema and both sides adapt.
+- Designer's composition load, VCG projection and CG Control import share the binding repair in
+  `@cg/shared-schema`. It checks targets inside their owning document before the export or import
+  builds its field metadata and rendered page.
 - **The runtime is the renderer of record.** The Designer does not have a second,
   "preview-only" renderer — it embeds the real runtime. This is deliberate: it
   removes preview/playout drift.

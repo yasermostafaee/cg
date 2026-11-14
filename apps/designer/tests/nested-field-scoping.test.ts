@@ -4,6 +4,7 @@ import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
 import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
 import { defaultField } from '../src/renderer/features/fields/field-defaults.js';
+import { defaultText } from '../src/renderer/state/element-defaults.js';
 
 afterEach(() => {
   designerStore._reset();
@@ -41,6 +42,84 @@ describe('D-025 — fields are scoped per composition', () => {
 
     designerStore.setActiveComposition(b);
     expect(activeFields().map((f) => f.id)).toEqual(['clockTime']);
+  });
+});
+
+describe('D-025 — binding targets in a composition copy', () => {
+  it('remaps nested element targets and preserves advanced bindings and field definitions', () => {
+    fresh();
+    const original = designerStore.get().activeCompositionId!;
+    const title = defaultText('original-title', 20, 30);
+    designerStore.addElement(title);
+    const scene = designerStore.get().scene!;
+    const [composition] = scene.compositions ?? [];
+    const [layer] = composition!.layers;
+    const { id, name, transform, visible, locked, zIndex, opacity } = title;
+    designerStore.setScene(
+      {
+        ...scene,
+        compositions: [
+          {
+            ...composition!,
+            layers: [
+              {
+                ...layer!,
+                children: [
+                  {
+                    id: id + '-group',
+                    name,
+                    type: 'container',
+                    transform,
+                    visible,
+                    locked,
+                    zIndex,
+                    opacity,
+                    clip: false,
+                    children: [title],
+                  },
+                ],
+              },
+            ],
+            fields: [
+              defaultField('title', 'text'),
+              defaultField('background', 'color'),
+              defaultField('unbound', 'text'),
+            ],
+            bindings: [
+              {
+                fieldId: 'title',
+                target: { kind: 'text', elementId: title.id, placeholder: '{{title}}' },
+                transform: 'uppercase',
+              },
+              { fieldId: 'background', target: { kind: 'scene-background' } },
+            ],
+          },
+        ],
+      },
+      null,
+    );
+
+    const copy = designerStore.duplicateComposition(original);
+    expect(copy).not.toBeNull();
+    const [authored, duplicate] = designerStore.get().scene?.compositions ?? [];
+    const group = duplicate?.layers[0]?.children[0];
+    if (group?.type !== 'container') throw new Error('Missing copied group');
+    const copiedTitle = group.children[0];
+    expect(copiedTitle?.id).not.toBe(title.id);
+    expect(duplicate?.fields).toEqual(authored?.fields);
+    expect(duplicate?.bindings).toEqual([
+      {
+        fieldId: 'title',
+        target: { kind: 'text', elementId: copiedTitle?.id, placeholder: '{{title}}' },
+        transform: 'uppercase',
+      },
+      { fieldId: 'background', target: { kind: 'scene-background' } },
+    ]);
+    expect(authored?.bindings?.[0]?.target).toEqual({
+      kind: 'text',
+      elementId: title.id,
+      placeholder: '{{title}}',
+    });
   });
 });
 

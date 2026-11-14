@@ -4968,3 +4968,9 @@ The valid mask from Plate 1 to Plate 2 in the reported project survives.
 **Repro / Actual:** Double-click the project title in the Designer toolbar and delete the selected text. The inline field shrinks.
 
 **Expected / regression:** While the empty draft is focused, the field stays large enough to enter a replacement and clears the adjacent Save control. Measure the field and confirm a new Persian title in Chromium.
+
+## [~] B-439 — Duplicated compositions retain disconnected Data keys ⟨priority: high — owner, 2026-11-14⟩ — `openspec/changes/repair-duplicated-composition-data-keys/`
+
+**Repro / Actual:** Duplicate a composition containing a Data-key-bound text element, then enter another key on the copied text. In `3ghab.cgproj`, copies `plate2` and `plate3` retain the `p1-t1` binding to an element ID found only in `plate1`. Both phantom fields appear in the exported template's operator form.
+
+**Expected / regression:** Duplicating remaps bindings to the copied elements. Editing the copy's key renames its field and preserves the original. Opening or exporting the affected project and importing its existing VCG recover the valid titles and preserve authored fields without a binding.

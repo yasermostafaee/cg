@@ -583,12 +583,71 @@ export function uniqueInstanceName(base: string, taken: readonly string[]): stri
   }
 }
 
+/** Elements owned by this scope, including grouped elements but excluding nested compositions. */
+function* ownedElements(elements: readonly Element[]): Generator<Element> {
+  for (const element of elements) {
+    yield element;
+    if (element.type === 'container') yield* ownedElements(element.children);
+  }
+}
+
 /** Which composition directly contains `elementId`, if any. */
 function compOwningElement(
   comps: readonly Composition[],
   elementId: string,
 ): Composition | undefined {
-  return comps.find((c) => c.layers.some((l) => l.children.some((el) => el.id === elementId)));
+  return comps.find((composition) => {
+    for (const layer of composition.layers) {
+      for (const element of ownedElements(layer.children)) {
+        if (element.id === elementId) return true;
+      }
+    }
+    return false;
+  });
+}
+
+function discardMissingElementBindings<T extends FieldDoc>(doc: T): T {
+  const bindings = doc.bindings ?? [];
+  if (bindings.length === 0) return doc;
+
+  const elementIds = new Set<string>();
+  const ruleFieldIds = new Set<string>();
+  for (const layer of doc.layers) {
+    for (const element of ownedElements(layer.children)) {
+      elementIds.add(element.id);
+      if (element.valueRules !== undefined) ruleFieldIds.add(element.valueRules.input.fieldId);
+    }
+  }
+
+  const missingTargetFields = new Set<string>();
+  const retainedBindings = bindings.filter(({ fieldId, target }) => {
+    if (target.kind === 'scene-background' || elementIds.has(target.elementId)) return true;
+    missingTargetFields.add(fieldId);
+    return false;
+  });
+  if (retainedBindings.length === bindings.length) return doc;
+
+  const retainedFieldIds = new Set(retainedBindings.map(({ fieldId }) => fieldId));
+  const fields = doc.fields?.filter(
+    ({ id }) => !missingTargetFields.has(id) || retainedFieldIds.has(id) || ruleFieldIds.has(id),
+  );
+  return { ...doc, bindings: retainedBindings, ...(fields === undefined ? {} : { fields }) };
+}
+
+/**
+ * Repair old copies whose bindings still point at the source composition's element IDs.
+ * Only fields that lose their last consumer are removed. Already unbound fields, live wires,
+ * and fields used by value rules remain available.
+ *
+ * Run after migrating legacy project-global fields, whose targets have yet to be relocated.
+ */
+export function discardMissingSceneElementBindings(scene: Scene): Scene {
+  const root = discardMissingElementBindings(scene);
+  const compositions = scene.compositions?.map(discardMissingElementBindings);
+  const changed = compositions?.some(
+    (composition, index) => composition !== scene.compositions?.[index],
+  );
+  return changed ? { ...root, compositions } : root;
 }
 
 /** Exact wire identity; transforms change the value, not which field/target pair is wired. */

@@ -38,7 +38,7 @@ function cloneElementWithNewIds(el: Element): Element {
   base.id = freshElementId();
   base.name = `${el.name} copy`;
   if (base.type === 'container') {
-    base.children = base.children.map(reassignIdsDeep);
+    base.children = base.children.map((child) => reassignIdsDeep(child));
   }
   return withFreshPlateKeys(base);
 }

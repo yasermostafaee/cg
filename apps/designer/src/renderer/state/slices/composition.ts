@@ -160,12 +160,21 @@ export const compositionSlice = {
       ...structuredClone(src),
       id: newId,
       name: `${src.name} copy`,
-      layers: src.layers.map((l) => ({
-        ...structuredClone(l),
-        id: `L${String(Date.now())}-${String(Math.floor(Math.random() * 1e6))}`,
-        children: l.children.map(reassignIdsDeep),
-      })),
     };
+    const elementIds = new Map<string, string>();
+    clone.layers = clone.layers.map((layer) => ({
+      ...layer,
+      id: `L${String(Date.now())}-${String(Math.floor(Math.random() * 1e6))}`,
+      children: layer.children.map((element) => reassignIdsDeep(element, elementIds)),
+    }));
+    if (clone.bindings !== undefined) {
+      clone.bindings = clone.bindings.map((binding) => {
+        const { target } = binding;
+        if (target.kind === 'scene-background') return binding;
+        const elementId = elementIds.get(target.elementId);
+        return elementId === undefined ? binding : { ...binding, target: { ...target, elementId } };
+      });
+    }
     set({ scene: { ...current.scene, compositions: [...comps, clone] } });
     return newId;
   },

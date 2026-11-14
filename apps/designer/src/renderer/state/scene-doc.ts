@@ -14,7 +14,10 @@ import type {
   Resolution,
   Scene,
 } from '@cg/shared-schema';
-import { migrateGlobalFieldsToCompositions } from '@cg/shared-schema';
+import {
+  discardMissingSceneElementBindings,
+  migrateGlobalFieldsToCompositions,
+} from '@cg/shared-schema';
 import { projectCompositionForExport } from '@cg/vcg-format';
 import { current } from './store-core.js';
 import { dropFullyOffFrameForExport } from './off-frame.js';
@@ -346,10 +349,11 @@ export function freshElementId(): string {
  * child, so a pasted / duplicated subtree never collides with the original ids.
  * Keeps the name (used for nested children + composition duplication).
  */
-export function reassignIdsDeep(el: Element): Element {
+export function reassignIdsDeep(el: Element, idMap?: Map<string, string>): Element {
   const next = { ...el, id: freshElementId() } as Element;
+  idMap?.set(el.id, next.id);
   if (next.type === 'container') {
-    next.children = next.children.map(reassignIdsDeep);
+    next.children = next.children.map((child) => reassignIdsDeep(child, idMap));
   }
   return next;
 }
@@ -365,7 +369,8 @@ export function ensureCompositions(scene: Scene): { scene: Scene; activeId: stri
   const comps = scene.compositions ?? [];
   if (comps.length > 0) {
     // D-025 — distribute any legacy GLOBAL fields/bindings into the owning comps.
-    const next = migrateGlobalFieldsToCompositions({ ...scene, layers: [] });
+    const migrated = migrateGlobalFieldsToCompositions({ ...scene, layers: [] });
+    const next = discardMissingSceneElementBindings(migrated);
     // D-115 — open the explicitly designated MAIN/entry composition when set + still valid; else
     // fall back to the first composition (the prior list-order default, so old scenes are unchanged).
     const entry = scene.entryCompositionId;
@@ -404,7 +409,7 @@ export function ensureCompositions(scene: Scene): { scene: Scene; activeId: stri
       compositions: [comp],
       layers: [],
     });
-    return { scene: next, activeId: comp.id };
+    return { scene: discardMissingSceneElementBindings(next), activeId: comp.id };
   }
   return { scene: { ...scene, compositions: [], layers: [] }, activeId: null };
 }

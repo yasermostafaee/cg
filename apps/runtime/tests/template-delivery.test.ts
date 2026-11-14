@@ -206,6 +206,53 @@ describe('produceTemplateDelivery', () => {
     expect(template.fields.map((field) => field.id)).toEqual(['anchor']);
   });
 
+  it('B-439 — removes dangling copied keys from the operator schema and delivered scene', async () => {
+    const scene = fixtureScene();
+    const title = scene.layers[0]?.children[1];
+    const currentField = scene.fields[0];
+    if (title?.type !== 'text' || currentField === undefined)
+      throw new Error('Missing title fixture');
+
+    const childId = 'copied-frame';
+    const copiedTitle = { ...title, id: 'copied-title' };
+    const oldKey = 'legacy-dangling-title';
+    const currentKey = 'copied-current-title';
+    scene.compositions = [
+      {
+        id: childId,
+        name: 'Copied frame',
+        resolution: scene.resolution,
+        frameRange: scene.frameRange,
+        editorBackdrop: 'transparent',
+        layers: [{ ...scene.layers[0]!, id: 'copied-layer', children: [copiedTitle] }],
+        fields: [
+          { ...currentField, id: oldKey },
+          { ...currentField, id: currentKey },
+        ],
+        bindings: [
+          { fieldId: oldKey, target: { kind: 'text', elementId: title.id } },
+          { fieldId: currentKey, target: { kind: 'text', elementId: copiedTitle.id } },
+        ],
+      },
+    ];
+    scene.layers[0]?.children.push({
+      ...title,
+      id: 'copied-frame-instance',
+      name: 'copied',
+      type: 'composition',
+      compositionId: childId,
+    });
+
+    const { template, html } = await produceTemplateDelivery(
+      await buildVcgWithImage('tpl-dangling', 'dangling-check', '0.0.0', PNG_1X1, scene),
+    );
+
+    expect(template.fields.map((field) => field.id)).toEqual(['anchor']);
+    expect(template.groups?.[0]?.aggregate.fields.map((field) => field.id)).toEqual([currentKey]);
+    expect(html).toContain(currentKey);
+    expect(html).not.toContain(oldKey);
+  });
+
   it('renders a self-contained HTML with the runtime + scene inlined and no external refs', async () => {
     const { template, html } = await produceTemplateDelivery(await buildVcgWithImage('tpl-x'));
 
