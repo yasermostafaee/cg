@@ -11,4 +11,9 @@
       fade-in of the live input and its tied foreground title, with the correct final geometry.
 - [ ] Record the carrying Linux Playwright result.
 - [ ] Verify picture, title, fallback and mask alignment on the target Playout Engine.
+- [x] Carry effect selection and authored frame identity into the on-air preset switch.
+- [x] Verify both directions between a one-frame and a two-frame preset, with the shared producer
+      retained. Windows Chromium and a Bridge smoke test with the owner's `3ghab-composition.vcg`
+      passed. The masked variant used Cut when a move crossed the departing plate with reversed
+      native paint order.
 - [ ] Build the Windows installers locally after verification.

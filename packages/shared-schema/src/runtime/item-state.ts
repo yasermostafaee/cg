@@ -284,6 +284,8 @@ export const StackItemStateSchema = z.object({
   onAirFramePlacement: z.literal(true).optional(),
   /** The verified running page and Bridge support on-air placement effects. */
   onAirFrameTransition: z.literal(true).optional(),
+  /** The verified running page and Bridge support live preset effects. */
+  onAirPresetTransition: z.literal(true).optional(),
   maskPlacements: LiveMaskPlacementsSchema.optional(),
   onAirMaskPlacement: z.literal(true).optional(),
   /**

@@ -37,6 +37,7 @@ describe('live frame transitions', () => {
   it('round-trips a phase and rejects invalid effect properties independently of other updates', () => {
     const from = { x: 0, y: 0, width: 200, height: 100 };
     const frameTransition: FrameTransitionPhase = {
+      authoredPreset: true,
       durationMs: 200,
       easing: 'easeinquad',
       frames: [
@@ -55,6 +56,18 @@ describe('live frame transitions', () => {
     expect(readCgControl(withCgControl({}, { frameTransition: null }))).toEqual({
       frameTransition: null,
     });
+    expect(
+      readCgControl(
+        withCgControl(
+          {},
+          {
+            look: 'solo',
+            frameTransition: null,
+            presetTransitionCommit: true,
+          },
+        ),
+      ),
+    ).toEqual({ look: 'solo', frameTransition: null, presetTransitionCommit: true });
     expect(
       readCgControl({
         [CG_CONTROL_KEY]: { look: 'two', frameTransition: { ...frameTransition, durationMs: -1 } },

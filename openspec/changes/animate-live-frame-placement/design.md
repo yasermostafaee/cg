@@ -22,3 +22,15 @@ The duration setting is 100–1000 ms. The console stores the selection in brows
 A new console or an invalid preference uses Cut with Fade off and a duration of 400 ms.
 Cut without Fade uses the existing immediate placement path.
 Off-air Update stores only the placement. Existing pages keep Cut until a compatible page is on air.
+
+## Preset switches
+
+For a live preset switch, the same effect preference applies from the row's preset picker.
+The existing switch verifies the incoming sources and prerolls any new seats before the effect
+starts. A shared plate must have the same authored definition, artwork and verified running
+seat in both presets. Its outgoing artwork, native picture and mask fragments follow the same
+phase endpoints. Fade applies to the shared frame. The regular preset commit brings in the
+remaining frames and parks outgoing-only frames once the shared frame reaches its destination.
+When a switch has no safely retained frame or its active mixer layers cannot preserve the
+authored order through the move, it uses Cut. Existing manual frame permissions still
+constrain operator edits.

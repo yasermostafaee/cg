@@ -1,6 +1,7 @@
 import {
   activeRangeOf,
   collectOperatorFrameTargets,
+  collectPresetFrameTargets,
   elementLoopsOnHold,
   flattenElements,
   followsComposition,
@@ -590,6 +591,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const outputPass = mode === 'output' ? (options.outputPass ?? 'full') : 'full';
   const holdsLiveFallback =
     mode === 'output' && outputPass !== 'foreground' && !isPvwRehearsal(doc);
+  const lookGroup = lookGroupOf(scene);
+  const canRenderPresetEffects = mode === 'output' && (lookGroup?.looks.length ?? 0) > 1;
   const hasOperatorGeometry = [scene, ...(scene.compositions ?? [])].some(({ layers }) =>
     layers.some(({ children }) =>
       children.some(
@@ -601,16 +604,21 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       ),
     ),
   );
-  const flattened = hasOperatorGeometry ? flattenElements(scene) : [];
-  const lookGroup = lookGroupOf(scene);
+  const flattened = hasOperatorGeometry || canRenderPresetEffects ? flattenElements(scene) : [];
   const frameTargets = collectOperatorFrameTargets(scene, flattened);
+  const presetFrameTargets = canRenderPresetEffects
+    ? collectPresetFrameTargets(scene, flattened)
+    : new Map();
+  const frameArtworkKeys = new Set<string>();
+  for (const { artworkKey } of frameTargets.values()) frameArtworkKeys.add(artworkKey);
+  for (const { artworkKey } of presetFrameTargets.values()) frameArtworkKeys.add(artworkKey);
   const built = buildScene(
     scene,
     doc,
     mode,
     paintEditorBackdrop,
     outputPass === 'full' ? undefined : liveForegroundKeys(scene),
-    new Set(Array.from(frameTargets.values(), ({ artworkKey }) => artworkKey)),
+    frameArtworkKeys,
   );
   applyOutputPass(built.container, outputPass);
   root.appendChild(built.container);
@@ -618,6 +626,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     built.container,
     flattened,
     frameTargets,
+    presetFrameTargets,
     options.clock,
   );
   const renderMaskPlacements = createMaskPlacementRenderer(built.container, flattened, lookGroup);

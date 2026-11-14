@@ -14,6 +14,7 @@ import {
   LiveSourceRectSchema,
   LookTransitionSchema,
   PositionSchema,
+  PresetTransitionFrameSchema,
   ResolutionSchema,
   framePlacementFits,
   liveRevealMaskFromRects,
@@ -102,7 +103,7 @@ export const TemplateLookSchema = z.object({
   name: z.string().min(1),
   /** The managed composition instance whose nested fields belong to this look. */
   instanceId: z.string().min(1).optional(),
-  /** Cut-only in v1 (`design.md` §14.4 parks the other modes with the animated phase). */
+  /** Authored entry behavior. Console transition preferences travel on the switch request. */
   entered: LookTransitionSchema,
   /** The effective CG Control Auto layout permission for this preset. */
   allowOperatorAutoLayout: z.boolean().optional(),
@@ -112,6 +113,10 @@ export const TemplateLookSchema = z.object({
   platePaintOrder: z.array(IdSchema).optional(),
   /** routeKey → operator placement target for the exact plate in this Look. */
   operatorFrames: z.record(z.string(), LiveFrameTargetSchema).optional(),
+  /** routeKey → shared authored frame identity for verified preset transitions. */
+  transitionFrames: z.record(z.string(), PresetTransitionFrameSchema).optional(),
+  /** Authored bottom-to-top order used when a transition makes disjoint plates cross. */
+  transitionPaintOrder: z.array(IdSchema).optional(),
   operatorMaskEdits: z.array(IdSchema).optional(),
   /** Route key → authored plate identity. Older carriers keep per-preset edits. */
   maskElementIds: z.record(z.string(), IdSchema).optional(),

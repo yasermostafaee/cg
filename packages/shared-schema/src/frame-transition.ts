@@ -12,10 +12,19 @@ export const FrameTransitionSchema = z.object({
 });
 export type FrameTransition = z.infer<typeof FrameTransitionSchema>;
 
+/** The authored plate and artwork retained between two preset instances. */
+export const PresetTransitionFrameSchema = z.object({
+  frameKey: z.string().min(1),
+  elementId: z.string().min(1),
+  artworkId: z.string().min(1),
+});
+export type PresetTransitionFrame = z.infer<typeof PresetTransitionFrameSchema>;
+
 const EasingSchema = z.enum(['linear', 'easeinquad', 'easeoutquad', 'easeinoutquad']);
 type Easing = z.infer<typeof EasingSchema>;
 
 export const FrameTransitionPhaseSchema = z.object({
+  authoredPreset: z.literal(true).optional(),
   durationMs: z.number().finite().min(0).max(2_000),
   delayMs: z.number().finite().min(0).max(250).optional(),
   easing: EasingSchema,

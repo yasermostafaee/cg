@@ -121,20 +121,28 @@ describe('installCasparGlobals', () => {
       },
     );
     const release = withCgControl({}, { frameTransition: null, framePlacements });
+    const preset = withCgControl(
+      {},
+      { look: 'duo', frameTransition: null, framePlacements, presetTransitionCommit: true },
+    );
 
     try {
       for (const { win, update } of [background, foreground]) {
         win.update?.(JSON.stringify(phase));
         win.update?.(JSON.stringify(release));
-        expect(update.mock.calls).toEqual([[phase], [release]]);
+        win.update?.(JSON.stringify(preset));
+        expect(update.mock.calls).toEqual([[phase], [release], [preset]]);
       }
       expect(postMessage).not.toHaveBeenCalled();
 
       const manualUpdate = withCgControl({ anchor: 'مهمان' }, { framePlacements });
+      const classicLook = withCgControl({}, { look: 'solo', framePlacements });
       background.win.update?.(JSON.stringify(manualUpdate));
+      background.win.update?.(JSON.stringify(classicLook));
       background.win.next?.();
       expect(postMessage.mock.calls).toEqual([
         [{ verb: 'update', fields: manualUpdate }],
+        [{ verb: 'update', fields: classicLook }],
         [{ verb: 'next', fields: undefined }],
       ]);
     } finally {

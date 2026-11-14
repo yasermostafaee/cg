@@ -1,6 +1,7 @@
 import {
   allowsLivePlateOverlap,
   collectOperatorFrameTargets,
+  collectPresetFrameTargets,
   defaultLookOf,
   deriveLookSources,
   flattenElements,
@@ -22,6 +23,7 @@ import type {
   LiveSourceDeclaration,
   LiveSourceRect,
   LookTransition,
+  PresetTransitionFrame,
   Scene,
 } from '@cg/shared-schema';
 import { materializePresetAutoLayout } from './preset-auto-layout.js';
@@ -281,6 +283,8 @@ export interface TemplateLookCarrier {
   rects: Record<string, LiveSourceRect>;
   platePaintOrder?: string[] | undefined;
   operatorFrames?: Record<string, LiveFrameTarget> | undefined;
+  transitionFrames?: Record<string, PresetTransitionFrame> | undefined;
+  transitionPaintOrder?: string[] | undefined;
   operatorMaskEdits?: string[] | undefined;
   /** Route key → authored plate identity for sharing own-mask edits across presets. */
   maskElementIds?: Record<string, string> | undefined;
@@ -441,6 +445,7 @@ export function collectLookCarrier(scene: Scene): {
   );
   const masksByLook = new Map<string, Record<string, LivePlateMask>>();
   const operatorFramesByLook = new Map<string, Record<string, LiveFrameTarget>>();
+  const transitionFramesByLook = new Map<string, Record<string, PresetTransitionFrame>>();
   const operatorMaskEditsByLook = new Map<string, string[]>();
   const maskElementIdsByLook = new Map<string, Record<string, string>>();
   const fallbacksByLook = new Map<string, string[]>();
@@ -473,6 +478,8 @@ export function collectLookCarrier(scene: Scene): {
 
   const flattened = flattenElements(scene, 'document');
   const operatorFrames = collectOperatorFrameTargets(scene, flattened);
+  const presetFrames = collectPresetFrameTargets(scene, flattened);
+  const byKey = new Map(flattened.map(({ key, element }) => [key, element]));
   // The same composition rendered in different presets reuses the authored element object.
   // Older scenes can contain duplicate IDs on distinct plate definitions; leave these unlinked.
   const plateElements = new Map<string, FlatElement['element'] | null>();
@@ -507,6 +514,17 @@ export function collectLookCarrier(scene: Scene): {
         const frames = operatorFramesByLook.get(look.id) ?? {};
         frames[routeKey] = operatorFrame;
         operatorFramesByLook.set(look.id, frames);
+      }
+      const presetFrame = presetFrames.get(flat.key);
+      const artwork = presetFrame === undefined ? undefined : byKey.get(presetFrame.artworkKey);
+      if (presetFrame !== undefined && artwork !== undefined && plateElements.get(el.id) === el) {
+        const frames = transitionFramesByLook.get(look.id) ?? {};
+        frames[routeKey] = {
+          frameKey: presetFrame.frameKey,
+          elementId: el.id,
+          artworkId: artwork.type === 'composition' ? artwork.compositionId : artwork.id,
+        };
+        transitionFramesByLook.set(look.id, frames);
       }
       if (
         el.allowOperatorMaskEdit === true &&
@@ -602,17 +620,13 @@ export function collectLookCarrier(scene: Scene): {
     looks: group.looks.map((l) => {
       const rects = rectsByLook.get(l.id) ?? {};
       const reveals = revealsByLook.get(l.id) ?? {};
-      const order = relevantPlateOrder(
-        plateIdsInPaintOrder(
-          painted.filter((flat) => {
-            const owner = ownerOf(flat);
-            return owner === undefined || owner === l;
-          }),
-        ),
-        rects,
-        reveals,
-        operatorFramesByLook.has(l.id),
+      const paintOrder = plateIdsInPaintOrder(
+        painted.filter((flat) => {
+          const owner = ownerOf(flat);
+          return owner === undefined || owner === l;
+        }),
       );
+      const order = relevantPlateOrder(paintOrder, rects, reveals, operatorFramesByLook.has(l.id));
       return {
         id: l.id,
         name: l.name,
@@ -624,6 +638,10 @@ export function collectLookCarrier(scene: Scene): {
         rects,
         ...(order !== undefined && { platePaintOrder: order }),
         ...(operatorFramesByLook.has(l.id) && { operatorFrames: operatorFramesByLook.get(l.id) }),
+        ...(transitionFramesByLook.has(l.id) && {
+          transitionFrames: transitionFramesByLook.get(l.id),
+          transitionPaintOrder: paintOrder,
+        }),
         ...(operatorMaskEditsByLook.has(l.id) && {
           operatorMaskEdits: operatorMaskEditsByLook.get(l.id),
         }),

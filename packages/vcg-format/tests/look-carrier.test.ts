@@ -870,6 +870,31 @@ describe('buildTemplateLiveSources — the assembly, and the coexistence control
     expect(block.sources.every((source) => source.operatorFrame === undefined)).toBe(true);
   });
 
+  it('links a locked authored plate across presets through its reused title composition', () => {
+    const block = buildTemplateLiveSources(
+      scene({
+        rootChildren: [
+          instance('solo', 'solo-doc', 0, 0, 1920, 1080),
+          instance('duo', 'duo-doc', 0, 0, 1920, 1080),
+        ],
+        compositions: [
+          comp('solo-doc', [instance('big', 'guest-doc', 0, 0, 1920, 1080)]),
+          comp('duo-doc', [
+            instance('small', 'guest-doc', 80, 300, 840, 480),
+            plate('second-picture', 'guest-2', 1000, 300, 840, 480),
+          ]),
+          comp('guest-doc', [plate('picture', 'guest-1', 0, 0, 1920, 1080)]),
+        ],
+        lookGroups: [{ id: 'group', looks: [look('solo', 'solo'), look('duo', 'duo')] }],
+      }),
+    );
+    expect(block.looks?.map((preset) => preset.operatorFrames)).toEqual([undefined, undefined]);
+    expect(block.looks?.map((preset) => preset.transitionFrames?.['guest-1'])).toEqual([
+      { elementId: 'picture', frameKey: 'solo/big/picture', artworkId: 'guest-doc' },
+      { elementId: 'picture', frameKey: 'duo/small/picture', artworkId: 'guest-doc' },
+    ]);
+  });
+
   it('carries move-only and resize-only frame permissions independently', () => {
     const s = scene({
       rootChildren: [

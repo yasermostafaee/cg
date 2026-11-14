@@ -2612,6 +2612,239 @@ test('Auto layout stages both frame boxes and keeps each styled title with its i
   }
 });
 
+test('R-119 applies the selected effect to both directions of a live preset switch', async ({
+  page,
+}) => {
+  const handle = await boot(true);
+  const engine = mock;
+  if (engine === null) throw new Error('Test engine is unavailable');
+  await handle.runtime.whenServerHealthy(15_000);
+  const templateId = 'tpl-preset-transition';
+  const itemId = 'item-preset-transition';
+  const { scene: base } = await unpack(await buildPositionedVcg(templateId));
+  const layer = base.layers[0];
+  if (layer === undefined) throw new Error('Missing test layer');
+  const transform = (x: number, y: number, w: number, h: number) => ({
+    position: { x, y },
+    size: { w, h },
+    anchor: { x: 0, y: 0 },
+    scale: { x: 1, y: 1 },
+    rotation: 0,
+  });
+  const node = { opacity: 1, visible: true, locked: false, zIndex: 0 };
+  const instance = (
+    id: string,
+    compositionId: string,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+  ) => ({
+    ...node,
+    id,
+    name: id,
+    type: 'composition',
+    compositionId,
+    transform: transform(x, y, w, h),
+  });
+  const presets = [
+    { id: 'solo', name: 'Solo', instanceId: 'show-solo' },
+    { id: 'duo', name: 'Duo', instanceId: 'show-duo' },
+  ];
+  const scene = SceneSchema.parse({
+    ...base,
+    fields: [],
+    bindings: [],
+    defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
+    lookGroups: [{ id: 'live-presets', defaultLookId: 'solo', looks: presets }],
+    layers: [
+      {
+        ...layer,
+        children: presets.map(({ id, instanceId }) => instance(instanceId, id, 0, 0, 1920, 1080)),
+      },
+    ],
+    compositions: [
+      {
+        id: 'solo',
+        name: 'Solo',
+        resolution: base.resolution,
+        frameRange: base.frameRange,
+        editorBackdrop: 'transparent',
+        layers: [
+          {
+            ...layer,
+            id: 'solo-layer',
+            children: [instance('solo-common', 'common', 0, 0, 1920, 1080)],
+          },
+        ],
+      },
+      {
+        id: 'duo',
+        name: 'Duo',
+        resolution: base.resolution,
+        frameRange: base.frameRange,
+        editorBackdrop: 'transparent',
+        layers: [
+          {
+            ...layer,
+            id: 'duo-layer',
+            children: [
+              instance('duo-common', 'common', 160, 300, 800, 450),
+              instance('duo-extra', 'extra', 1000, 300, 800, 450),
+            ],
+          },
+        ],
+      },
+      ...['common', 'extra'].map((id) => ({
+        id,
+        name: id,
+        resolution: base.resolution,
+        frameRange: base.frameRange,
+        editorBackdrop: 'transparent',
+        layers: [
+          {
+            ...layer,
+            id: id + '-layer',
+            children: [
+              {
+                ...node,
+                id: id + '-plate',
+                name: id,
+                type: 'video-placeholder',
+                routeKey: id,
+                operatorMove: true,
+                operatorPlacement: 'proportional',
+                transform: transform(0, 0, 1920, 1080),
+              },
+            ],
+          },
+        ],
+      })),
+    ],
+  });
+  const { html } = await new ExporterSingleFile({
+    cgJsIife,
+    cgCss,
+    fontsCss: '',
+    assets: { get: () => Promise.resolve(null), bytes: () => Promise.resolve(null) },
+  }).produce(scene);
+  handle.runtime.templateImport(
+    { ...TEMPLATE, templateId, liveSources: buildTemplateLiveSources(scene) },
+    html,
+    1,
+  );
+  const sources = ['common', 'extra'].map((id) => ({
+    id,
+    name: id,
+    format: '1080i5000' as const,
+    producer: { kind: 'ndi' as const, source: 'PRESETS (' + id + ')' },
+  }));
+  expect(
+    handle.runtime.setSourceCatalog({ layerRange: { start: 60, end: 79 }, sources }),
+  ).toMatchObject({ ok: true });
+  expect(
+    handle.runtime.setSourceAssignments({
+      assignments: sources.map(({ id }) => ({ templateId, plateId: id, sourceId: id })),
+    }),
+  ).toMatchObject({ ok: true });
+  expect(
+    await handle.runtime.loadFixed({ channel: 1, layer: 59 }, itemId, templateId, {}),
+  ).toMatchObject({ accepted: true });
+
+  const requests: unknown[] = [];
+  page.on('websocket', (socket) => {
+    socket.on('framesent', ({ payload }) => {
+      if (typeof payload === 'string' && payload.includes('stack.set-active-look')) {
+        requests.push(JSON.parse(payload) as unknown);
+      }
+    });
+  });
+  await openConsole(page, handle.url);
+  const row = page.getByRole('region', { name: 'Layers' }).locator('[data-layer="59"]');
+  await row.locator('[data-row-body]').click();
+  const effect = page.getByRole('group', { name: 'Frame and preset effects' });
+  await expect(effect).toHaveCount(0);
+  await row.getByRole('button', { name: 'PLAY', exact: true }).click();
+  await expect(row).toHaveAttribute('aria-label', /ON AIR$/);
+  const common = handle.runtime
+    .liveLayers()
+    .get(itemId)
+    ?.find(({ sourceId }) => sourceId === 'common');
+  if (common === undefined) throw new Error('Missing common seat');
+  const commonSlot = common.slot;
+  const programmeCommands = (start: number) =>
+    engine
+      .receivedCommands()
+      .slice(start)
+      .map(({ line }) => line);
+  const beforeChoice = engine.receivedCommands().length;
+  await effect.getByRole('combobox', { name: 'Motion' }).selectOption('ease-in-out');
+  await effect.getByRole('checkbox', { name: 'Fade' }).check();
+  await effect.getByRole('textbox', { name: 'Duration (ms)' }).fill('500');
+  expect(requests).toEqual([]);
+  expect(
+    programmeCommands(beforeChoice).some((line) => /^(CG |PLAY |CLEAR |MIXER )/.test(line)),
+  ).toBe(false);
+  await expect(row.getByText('● draft', { exact: true })).toHaveCount(0);
+
+  for (const lookId of ['duo', 'solo']) {
+    const start = engine.receivedCommands().length;
+    const preset = row.locator('[data-look-id="' + lookId + '"]');
+    await preset.click();
+    await expect(preset).toHaveAttribute('aria-pressed', 'true');
+    await expect.poll(() => handle.runtime.activeLookId(itemId)).toBe(lookId);
+    const wire = programmeCommands(start);
+    for (const easing of ['easeinquad', 'easeoutquad']) {
+      expect(wire).toContainEqual(
+        expect.stringMatching(
+          new RegExp(`^MIXER 1-${String(commonSlot.layer)} FILL .* \\d+ ${easing} DEFER$`, 'i'),
+        ),
+      );
+    }
+    const clip = engine.layerState(commonSlot)?.clip;
+    if (clip === undefined) throw new Error('Missing clip for the common input');
+    const expected =
+      lookId === 'duo'
+        ? { x: 160 / 1920, y: 300 / 1080, width: 800 / 1920, height: 450 / 1080 }
+        : { x: 0, y: 0, width: 1, height: 1 };
+    expect(clip.x).toBeCloseTo(expected.x, 5);
+    expect(clip.y).toBeCloseTo(expected.y, 5);
+    expect(clip.width).toBeCloseTo(expected.width, 5);
+    expect(clip.height).toBeCloseTo(expected.height, 5);
+    expect(
+      wire.some((line) =>
+        new RegExp('^(?:PLAY|LOADBG|STOP|CLEAR) 1-' + String(commonSlot.layer) + '(?: |$)').test(
+          line,
+        ),
+      ),
+    ).toBe(false);
+    expect(wire.some((line) => /^CG 1-59 (?:ADD|PLAY|STOP) /.test(line))).toBe(false);
+    expect(
+      handle.runtime
+        .liveLayers()
+        .get(itemId)
+        ?.find(({ sourceId }) => sourceId === 'common')?.slot,
+    ).toEqual(commonSlot);
+  }
+
+  expect(requests).toEqual([
+    expect.objectContaining({
+      payload: expect.objectContaining({
+        itemId,
+        lookId: 'duo',
+        transition: { motion: 'ease-in-out', fade: true, durationMs: 500 },
+      }),
+    }),
+    expect.objectContaining({
+      payload: expect.objectContaining({
+        itemId,
+        lookId: 'solo',
+        transition: { motion: 'ease-in-out', fade: true, durationMs: 500 },
+      }),
+    }),
+  ]);
+});
+
 test('Auto layout follows the active preset permission and retains separate controls and drafts', async ({
   page,
 }) => {

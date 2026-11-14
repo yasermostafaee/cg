@@ -20,7 +20,13 @@ const MOTION_LABELS: Record<FrameTransition['motion'], string> = {
   'ease-in-out': 'Ease in/out',
 };
 
-export function FrameEffectControls({ disabled }: { disabled: boolean }): JSX.Element {
+export function FrameEffectControls({
+  disabled,
+  label = 'Frame effect',
+}: {
+  disabled: boolean;
+  label?: string;
+}): JSX.Element {
   const controlId = useId();
   const { motion, fade, durationMs } = useFrameTransitionPreference();
   const [typedDuration, setTypedDuration] = useState<string | null>(null);
@@ -35,7 +41,7 @@ export function FrameEffectControls({ disabled }: { disabled: boolean }): JSX.El
 
   return (
     <fieldset className="cg-position-effect" disabled={disabled}>
-      <legend>Frame effect</legend>
+      <legend>{label}</legend>
       <label>
         Motion
         <select

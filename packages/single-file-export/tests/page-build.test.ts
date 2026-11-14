@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER,
   CG_LIVE_FRAME_TRANSITION_PAGE_MARKER,
+  CG_LIVE_PRESET_TRANSITION_PAGE_MARKER,
   type Scene,
 } from '@cg/shared-schema';
 import { sha256Hex } from '@cg/vcg-format';
@@ -69,8 +70,8 @@ describe('PAGE-REBUILD-01 — the page runtime fingerprint', () => {
       rebuilds its pages with the new shell on its next upgrade.
     */
     expect({ revision: EXPORTER_SHELL_REVISION, shell: await shellHash() }).toEqual({
-      revision: 7,
-      shell: 'e407abea5df77cd309b1f321af13164e2ea67350757b52d8d2474fffb751331a',
+      revision: 8,
+      shell: '7b51ed6bd681ae96ff722d924227aeb15290fca76e1edd2dd9ebf0ddb1165f19',
     });
   });
 
@@ -78,11 +79,12 @@ describe('PAGE-REBUILD-01 — the page runtime fingerprint', () => {
     expect(await shellHash()).toBe(await shellHash());
   });
 
-  it('keeps both live frame capability markers in the first 1024 bytes of export', async () => {
+  it('keeps the live frame capability markers in the first 1024 bytes of export', async () => {
     for (const html of [await exportedShell(), buildVcgIndexHtml(SCENE, [], [], false)]) {
       const head = html.slice(0, 1024);
       expect(head).toContain(CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER);
       expect(head).toContain(CG_LIVE_FRAME_TRANSITION_PAGE_MARKER);
+      expect(head).toContain(CG_LIVE_PRESET_TRANSITION_PAGE_MARKER);
     }
   });
 });

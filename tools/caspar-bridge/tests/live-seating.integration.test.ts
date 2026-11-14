@@ -16,6 +16,7 @@ import {
   CG_LIVE_FRAME_TRANSITION_PAGE_MARKER,
   CG_LIVE_MASK_PLACEMENT_PAGE_MARKER,
   CG_LIVE_POSITION_PAGE_MARKER,
+  CG_LIVE_PRESET_TRANSITION_PAGE_MARKER,
   RetainedStackItemSchema,
   retainedFromStackItem,
   type FrameTransition,
@@ -139,6 +140,46 @@ const AUTHORED_FRAME: LiveFramePlacement = { frameKey: FRAME.frameKey, rect: BOX
 const FRAME_HTML = `<!doctype html><html><head>${CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER}</head><body>served</body></html>`;
 const MASK_HTML = FRAME_HTML.replace('</head>', `${CG_LIVE_MASK_PLACEMENT_PAGE_MARKER}</head>`);
 const EFFECT_HTML = FRAME_HTML.replace('</head>', `${CG_LIVE_FRAME_TRANSITION_PAGE_MARKER}</head>`);
+const PRESET_EFFECT_HTML = FRAME_HTML.replace(
+  '</head>',
+  `${CG_LIVE_PRESET_TRANSITION_PAGE_MARKER}</head>`,
+);
+
+function presetEffectTemplate(): TemplateInfo {
+  const base = template(
+    [
+      { id: 'guest-1', rect: BOX },
+      { id: 'guest-2', rect: BOX },
+    ],
+    true,
+  );
+  const frame = { frameKey: 'solo-guest', elementId: 'common-guest', artworkId: 'guest-comp' };
+  return {
+    ...base,
+    liveSources: {
+      ...base.liveSources!,
+      defaultLookId: 'solo',
+      looks: [
+        {
+          id: 'solo',
+          name: 'Solo',
+          entered: { mode: 'cut' },
+          rects: { 'guest-1': BOX },
+          transitionFrames: { 'guest-1': frame },
+        },
+        {
+          id: 'duo',
+          name: 'Duo',
+          entered: { mode: 'cut' },
+          rects: { 'guest-1': MOVED_FRAME.rect, 'guest-2': BOX },
+          transitionFrames: { 'guest-1': { ...frame, frameKey: 'duo-guest' } },
+        },
+      ],
+    },
+  };
+}
+
+const PRESET_EFFECT = { motion: 'ease-in-out', fade: true, durationMs: 160 } as const;
 
 function catalog(over: Partial<SourceCatalog> = {}): SourceCatalog {
   return {
@@ -1662,6 +1703,166 @@ it('rolls back both programme passes if the foreground refuses a frame phase', a
     });
   }
   expect(r.stackSnapshot()[0]?.framePlacements).toBeUndefined();
+});
+
+it('animates the retained authored seat in both directions and cuts the new plate in at the end', async () => {
+  const r = await boot({
+    template: presetEffectTemplate(),
+    html: PRESET_EFFECT_HTML,
+    assignments: assign([
+      ['guest-1', 'src-a'],
+      ['guest-2', 'src-b'],
+    ]),
+  });
+  const itemId = 'item-1';
+  expect(await loadAndTake(r, itemId)).toMatchObject({ accepted: true });
+  await expect.poll(() => r.stackSnapshot()[0]).toMatchObject({ onAirPresetTransition: true });
+  const sharedLayer = 30;
+  const slots = [10, BAND.end];
+  for (const [from, to, finalClip] of [
+    ['solo', 'duo', { x: 0.5, y: 0.5, width: 0.25, height: 0.25 }],
+    ['duo', 'solo', { x: 0.25, y: 0.25, width: 0.5, height: 0.5 }],
+  ] as const) {
+    const before = (await recvLines()).length;
+    expect(await r.setActiveLook(itemId, to, PRESET_EFFECT)).toEqual({ ok: true });
+    const writes = (await recvLines()).slice(before);
+    expect(writes).not.toEqual(
+      expect.arrayContaining([expect.stringMatching(/^(?:PLAY|CLEAR) 1-30(?: |$)/)]),
+    );
+    for (const transform of ['FILL', 'CLIP', 'OPACITY']) {
+      expect(
+        writes.filter(
+          (line) =>
+            line.startsWith(`MIXER 1-${sharedLayer} ${transform} `) && line.includes('quad DEFER'),
+        ),
+      ).toHaveLength(2);
+    }
+    for (const layer of slots) {
+      const phases = writes.filter(
+        (line) => line.startsWith(`CG 1-${layer} UPDATE `) && line.includes('authoredPreset'),
+      );
+      expect(phases).toHaveLength(2);
+      expect(phases.every((line) => line.includes(`${from}-guest`))).toBe(true);
+      expect(JSON.parse(mock!.lastCgUpdate({ channel: 1, layer })?.data ?? '{}')).toMatchObject({
+        __cg: { look: to, frameTransition: null, presetTransitionCommit: true },
+      });
+    }
+    expect(r.stackSnapshot()[0]?.activeLookId).toBe(to);
+    expect(mock!.layerState({ channel: 1, layer: sharedLayer })).toMatchObject({
+      clip: finalClip,
+      opacity: 1,
+    });
+  }
+});
+
+it('retains Cut on an older resident page and when the same authored plate changes input', async () => {
+  for (const [html, changed] of [
+    [FRAME_HTML, false],
+    [PRESET_EFFECT_HTML, true],
+  ] as const) {
+    const r = await boot({
+      template: presetEffectTemplate(),
+      html,
+      ...(changed && {
+        catalog: catalog({ layerRange: { start: BAND.start, end: BAND.end + 1 } }),
+      }),
+      assignments: assign([
+        ['guest-1', 'src-a'],
+        ['guest-2', 'src-b'],
+      ]),
+    });
+    const itemId = 'item-1';
+    if (changed) {
+      await r.load(itemId, 'lower-third', {});
+      expect(await r.swapLiveSource(itemId, 'guest-1', 'src-c', 'duo')).toMatchObject({ ok: true });
+      expect(await r.take(itemId)).toMatchObject({ accepted: true });
+      await expect.poll(() => r.stackSnapshot()[0]).toMatchObject({ onAirPresetTransition: true });
+    } else {
+      expect(await loadAndTake(r, itemId)).toMatchObject({ accepted: true });
+      expect(r.stackSnapshot()[0]?.onAirPresetTransition).toBeUndefined();
+    }
+    const before = (await recvLines()).length;
+    expect(await r.setActiveLook(itemId, 'duo', PRESET_EFFECT)).toEqual({ ok: true });
+    expect((await recvLines()).slice(before).some((line) => line.includes('authoredPreset'))).toBe(
+      false,
+    );
+    expect(r.stackSnapshot()[0]?.activeLookId).toBe('duo');
+  }
+});
+
+it('restores the native seat and both page passes when the final preset packet is partly refused', async () => {
+  const r = await boot({
+    template: presetEffectTemplate(),
+    html: PRESET_EFFECT_HTML,
+    assignments: assign([
+      ['guest-1', 'src-a'],
+      ['guest-2', 'src-b'],
+    ]),
+  });
+  const itemId = 'item-1';
+  expect(await loadAndTake(r, itemId)).toMatchObject({ accepted: true });
+  await expect.poll(() => r.stackSnapshot()[0]).toMatchObject({ onAirPresetTransition: true });
+  const plate = { channel: 1, layer: 30 };
+  const previous = mock!.layerState(plate);
+  const normalCg = defaultHandlers().get('CG')!;
+  let refused = false;
+  mock!.setHandler('CG', (request, context, connection) => {
+    if (
+      !refused &&
+      request.raw.startsWith(`CG 1-${BAND.end} UPDATE `) &&
+      request.raw.includes('presetTransitionCommit') &&
+      request.raw.includes('duo')
+    ) {
+      refused = true;
+      return { kind: 'err', code: 502, verb: 'CG' };
+    }
+    return normalCg(request, context, connection);
+  });
+  expect(await r.setActiveLook(itemId, 'duo', PRESET_EFFECT)).toMatchObject({
+    ok: false,
+    reason: 'amcp-502',
+  });
+  expect(refused).toBe(true);
+  expect(mock!.layerState(plate)).toEqual(previous);
+  for (const layer of [10, BAND.end]) {
+    expect(JSON.parse(mock!.lastCgUpdate({ channel: 1, layer })?.data ?? '{}')).toMatchObject({
+      __cg: { look: 'solo', frameTransition: null, presetTransitionCommit: true },
+    });
+  }
+  expect(r.stackSnapshot()[0]?.activeLookId).toBe('solo');
+});
+
+it('keeps the entering plate hidden if the final preset mixer commit is refused', async () => {
+  const r = await boot({
+    template: presetEffectTemplate(),
+    html: PRESET_EFFECT_HTML,
+    assignments: assign([
+      ['guest-1', 'src-a'],
+      ['guest-2', 'src-b'],
+    ]),
+  });
+  const itemId = 'item-1';
+  expect(await loadAndTake(r, itemId)).toMatchObject({ accepted: true });
+  await expect.poll(() => r.stackSnapshot()[0]).toMatchObject({ onAirPresetTransition: true });
+  const shared = { channel: 1, layer: 30 };
+  const entering = { channel: 1, layer: 31 };
+  const previousShared = mock!.layerState(shared);
+  const previousEntering = mock!.layerState(entering);
+  const normalMixer = defaultHandlers().get('MIXER')!;
+  let commits = 0;
+  mock!.setHandler('MIXER', (request, context, connection) => {
+    if (request.raw === 'MIXER 1 COMMIT' && ++commits === 3)
+      return { kind: 'err', code: 502, verb: 'MIXER' };
+    return normalMixer(request, context, connection);
+  });
+  expect(await r.setActiveLook(itemId, 'duo', PRESET_EFFECT)).toMatchObject({
+    ok: false,
+    reason: 'amcp-502',
+  });
+  expect(commits).toBeGreaterThan(3);
+  expect(mock!.layerState(shared)).toEqual(previousShared);
+  expect(mock!.layerState(entering)).toEqual(previousEntering);
+  expect(r.stackSnapshot()[0]?.activeLookId).toBe('solo');
 });
 
 it('keeps Cut available when the resident page has no frame transition support', async () => {

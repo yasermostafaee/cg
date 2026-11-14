@@ -11,6 +11,8 @@ export const CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER =
   '<meta name="cg-live-frame-placement" content="1">';
 export const CG_LIVE_FRAME_TRANSITION_PAGE_MARKER =
   '<meta name="cg-live-frame-transition" content="1">';
+export const CG_LIVE_PRESET_TRANSITION_PAGE_MARKER =
+  '<meta name="cg-live-preset-transition" content="1">';
 export const CG_LIVE_MASK_PLACEMENT_PAGE_MARKER =
   '<meta name="cg-live-mask-placement" content="1">';
 
@@ -191,6 +193,8 @@ export interface CgControl {
   framePlacements?: LiveFramePlacement[];
   /** Animate the running artwork for this phase. Null restores the applied placement. */
   frameTransition?: FrameTransitionPhase | null;
+  /** An authoritative preset update addressed directly to both resident passes. */
+  presetTransitionCommit?: true;
   /** Replace the row's mask placements. An empty array restores the authored windows. */
   maskPlacements?: LiveMaskPlacement[];
   /**
@@ -320,6 +324,9 @@ export function readCgControl(payload: unknown): CgControl | undefined {
     ...(typeof look === 'string' && look !== '' ? { look } : {}),
     ...(placements.success ? { framePlacements: placements.data } : {}),
     ...(frameTransition.success ? { frameTransition: frameTransition.data } : {}),
+    ...((raw as Record<string, unknown>)['presetTransitionCommit'] === true
+      ? { presetTransitionCommit: true }
+      : {}),
     ...(masks.success ? { maskPlacements: masks.data } : {}),
     ...readPosition((raw as Record<string, unknown>)['position']),
     /*

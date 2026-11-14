@@ -30,7 +30,15 @@ verbs. Before routing external CG writes, establish the command fence on the for
 synchronization of direct AMCP changes in the CG banks.
 
 Read-only checks on both linked engines confirmed the ownership observations on Playout 2.19.0.
-Its OpenAPI describes a preset ID and string overrides for its own CG Take. Synchronization of
-external AMCP graphics, ownership fencing during transfer and reconciliation after a timeout
-remain open. The monitoring owner serves as a display signal. The Playout repository review and
-an isolated test are the next steps for routing external CG commands.
+The Playout team's `cg-redundancy-contract-2.19.0.fa.md` reports 125 passing scoped tests and
+control transfer probes with two and four logical HTTP hosts. After transfer, the old owner's
+Transport endpoint rejected a write while its CG Update still accepted it into a local
+in-memory store. The new owner had no CG state, and no native command executed in the probe.
+The current mirror covers Playlist and Transport and can target only the selected peer after
+takeover. The report names the reviewed binaries and distinguishes these tests from an
+isolated test containing native engines and live PGM.
+
+Use the monitoring owner as a display signal. Moving the CG command route requires a
+Playout contract that validates the owner at execution, provides a queryable command result
+for timeouts and proves the promoted replicas applied the external graphic state. Preserve
+the current Bridge command route until those capabilities are available and verified.

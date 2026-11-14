@@ -5270,7 +5270,8 @@ export function buildRoutes(
       StackSetActiveLookChannel,
       'operator',
       'operator',
-      (r: { itemId: string; lookId: string }) => b.setActiveLook(r.itemId, r.lookId),
+      (r: ChannelRequest<typeof StackSetActiveLookChannel>) =>
+        b.setActiveLook(r.itemId, r.lookId, r.transition),
     ),
     // `TIMING-WIRE-22` (c) — a CONFIGURATION verb: it carries no Take, and changes what the
     // graphic already on the channel will do next.

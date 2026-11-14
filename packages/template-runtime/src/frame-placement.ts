@@ -22,6 +22,7 @@ export function createFramePlacementRenderer(
   container: HTMLElement,
   flattened: readonly FlatElement[],
   targets: ReadonlyMap<string, LiveFrameTarget>,
+  presetTargets: ReadonlyMap<string, LiveFrameTarget>,
   clock?: RuntimeClock,
 ): FramePlacementRenderer {
   const view = container.ownerDocument.defaultView;
@@ -38,15 +39,26 @@ export function createFramePlacementRenderer(
 
   function matrixFor(
     placement: LiveFramePlacement,
+    authoredPreset = false,
   ): { wrapper: HTMLElement; matrix: Affine } | null {
-    const target = targets.get(placement.frameKey);
+    const target = (authoredPreset ? presetTargets : targets).get(placement.frameKey);
     if (target === undefined) return null;
     const plate = authored.get(target.frameKey);
     const artwork = authored.get(target.artworkKey);
     const wrapper = wrappers.get(target.artworkKey);
     if (plate === undefined || artwork === undefined || wrapper === undefined) return null;
-    if (!framePlacementFits(placement, plate.rect, target.resize, target.move !== false))
+    // A preset phase interpolates between already authored layouts. Its endpoints can
+    // differ even when Designer locks the operator's arbitrary resize and move.
+    if (
+      !framePlacementFits(
+        placement,
+        plate.rect,
+        authoredPreset ? 'free' : target.resize,
+        authoredPreset || target.move !== false,
+      )
+    ) {
       return null;
+    }
     const matrix = placementTransform(plate, artwork, placement.rect);
     return matrix === null ? null : { wrapper, matrix };
   }
@@ -83,8 +95,11 @@ export function createFramePlacementRenderer(
       const motion = phase.frames.flatMap(
         ({ frameKey, lookId: frameLook, from, to, fromOpacity, toOpacity }) => {
           if (frameLook !== lookId) return [];
-          const start = matrixFor({ frameKey, lookId: frameLook, rect: from });
-          const end = matrixFor({ frameKey, lookId: frameLook, rect: to });
+          const start = matrixFor(
+            { frameKey, lookId: frameLook, rect: from },
+            phase.authoredPreset,
+          );
+          const end = matrixFor({ frameKey, lookId: frameLook, rect: to }, phase.authoredPreset);
           return start === null || end === null
             ? []
             : [

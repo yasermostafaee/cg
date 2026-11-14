@@ -5196,7 +5196,7 @@ Send CG commands to the active engine after its external-graphics transfer contr
 
 ## [~] R-119 — Animate on-air live frame placement ⟨priority: high — owner, 2026-11-14⟩ — `openspec/changes/animate-live-frame-placement/`
 
-**What:** Let the operator select Cut, Linear, Ease in, Ease out or Ease in/out and independently enable Fade when applying a live frame move or resize on air.
+**What:** Let the operator select Cut, Linear, Ease in, Ease out or Ease in/out and independently enable Fade when applying a live frame move, resize or preset switch on air.
 
 **Why:** Operators need to reframe a running shot without restarting its input or abruptly changing the layout.
 
@@ -5206,3 +5206,4 @@ Send CG commands to the active engine after its external-graphics transfer contr
 - WHEN Fade is enabled with Cut THEN the frame fades out, switches geometry, then fades in. WHEN Fade is enabled with motion THEN opacity dips while the frame moves.
 - WHEN the effect runs THEN the seated image, mask and attached artwork follow the same placement and the input and its audio continue. Stop, Clear and emergency silence retain priority.
 - WHEN a running template lacks effect support THEN regular frame placement remains available under its existing guards.
+- WHEN switching between presets that share the same authored plate and running input THEN the shared frame moves and resizes from the outgoing placement to the incoming placement without starting the source again. The same applies to the reverse switch.

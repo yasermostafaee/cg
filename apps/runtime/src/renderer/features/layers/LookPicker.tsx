@@ -191,9 +191,7 @@ const styles = {
  * `B-168` — what the label's tooltip says, in one sentence and naming the contrast that makes
  * it worth saying: the fields beside it wait, this does not.
  */
-const IMMEDIATE_TITLE =
-  'Pressing a look applies it IMMEDIATELY — on an on-air row that is a cut. It does not wait ' +
-  'for UPDATE, unlike the per-look inputs in the Inspector.';
+const IMMEDIATE_TITLE = 'Selecting a preset starts the switch immediately.';
 
 /** Half the thumbnail's seam, so two adjacent frames read as two cells and not one box. */
 const FRAME_SEAM_PX = LOOK_STRIP_PX.thumbGap / 2;
@@ -249,7 +247,7 @@ interface Props {
    *
    * There is ONE control and one call: `stack.set-active-look`, whose effect follows the
    * ROW's state — a rehearsing row is off air, so the bridge records the look and sends
-   * nothing; an on-air row gets the cut. A duplicate picker above PVW was built and removed
+   * nothing; an on-air switch starts immediately. A duplicate picker above PVW was built and removed
    * on the owner's correction, because _"the same LOOK buttons on the row already worked for
    * PVW too"_ and two controls for one operation is this repo's two-spellings defect.
    *

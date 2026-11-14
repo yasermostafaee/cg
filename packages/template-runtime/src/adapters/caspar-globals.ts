@@ -46,11 +46,14 @@ export function installCasparGlobals(
     // Mirroring them as well would restart a phase wherever the broadcasts reach the foreground.
     if (
       verb === 'update' &&
-      control.frameTransition !== undefined &&
-      _take === undefined &&
-      values !== undefined &&
-      Object.keys(values).length === 0 &&
-      Object.keys(control).every((key) => key === 'frameTransition' || key === 'framePlacements')
+      (control.presetTransitionCommit === true ||
+        (control.frameTransition !== undefined &&
+          _take === undefined &&
+          values !== undefined &&
+          Object.keys(values).length === 0 &&
+          Object.keys(control).every(
+            (key) => key === 'frameTransition' || key === 'framePlacements',
+          )))
     ) {
       return;
     }

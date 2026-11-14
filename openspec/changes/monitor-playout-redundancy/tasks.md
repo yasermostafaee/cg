@@ -14,6 +14,8 @@
 
 ## 2. Commands to the active engine
 
+- [x] Review the Playout team's 2.19.0 contract report. The tested build has no execution fence
+      or replica state for external CG. Its proposed external command API is prospective.
 - [ ] Confirm the new Playout contract for direct AMCP graphics synchronization and transfer
       fencing, including epoch relationships and in-flight commands.
 - [ ] Integrate the confirmed active-only route and test Take, Update, Stop and transfer with a

@@ -63,6 +63,8 @@ export function LiveFrameAdjustments({
   const sourceRevision = useSyncExternalStore(subscribeSources, sourcesVersion, sourcesVersion);
 
   const onAir = isOnAirStatus(item);
+  const frameEffect = item.onAirFrameTransition === true;
+  const presetEffect = item.onAirPresetTransition === true && (live.looks?.length ?? 0) > 1;
   const canEdit =
     canOperate &&
     !item.pending &&
@@ -208,7 +210,14 @@ export function LiveFrameAdjustments({
           Preserve frame aspect ratio
         </label>
       )}
-      {onAir && item.onAirFrameTransition === true && <FrameEffectControls disabled={!canEdit} />}
+      {onAir && (frameEffect || presetEffect) && (
+        <FrameEffectControls
+          disabled={!canEdit}
+          {...(presetEffect && {
+            label: frameEffect ? 'Frame and preset effects' : 'Preset effect',
+          })}
+        />
+      )}
       {layout?.kind === 'permissions' && (
         <p className="cg-frame-auto-layout cg-frame-auto-layout__notice" role="status">
           Auto layout unavailable. In Designer, enable Allow move and unlock Resize for every frame

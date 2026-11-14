@@ -2,7 +2,7 @@ import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useState } from 'react';
 import { useCanOperate } from '../../hooks/useCanOperate.js';
 import { LAYER_SHORTCUT_VERBS, type FixedSlotState, type TemplateInfo } from '@cg/shared-ipc';
-import type { StackItemState, StackItemStatus } from '@cg/shared-schema';
+import { isOnAirStatus, type StackItemState, type StackItemStatus } from '@cg/shared-schema';
 import { colors, cssVars } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
@@ -43,6 +43,7 @@ import {
   TakeRefusalText,
 } from './takeRefusalLine.js';
 import { currentSourceCatalog } from '../sources/sourceStore.js';
+import { frameTransitionPreference } from '../inspector/frameTransitionPreference.js';
 import {
   ROW_GEOMETRY,
   VERBS_GRID,
@@ -404,7 +405,7 @@ export function LayerRow({
    * optimistic state, no direct plate call — because the picker reads `item.activeLookId`
    * straight back off the published stack, so what it shows is what the bridge did.
    */
-  const switchLook = async (itemId: string, lookId: string): Promise<void> => {
+  const switchLook = async (item: StackItemState, lookId: string): Promise<void> => {
     /*
       🔴 THE REJECTION IS CAUGHT, not only the `ok: false`.
 
@@ -415,7 +416,19 @@ export function LayerRow({
       look, saw the segment move, and was told nothing at all.
     */
     try {
-      const res = await window.cg.stack.setActiveLook({ itemId, lookId });
+      const effect = frameTransitionPreference();
+      const transition =
+        !legacyPreview &&
+        isOnAirStatus(item) &&
+        item.onAirPresetTransition === true &&
+        (effect.motion !== 'cut' || effect.fade)
+          ? effect
+          : undefined;
+      const res = await window.cg.stack.setActiveLook({
+        itemId: item.itemId,
+        lookId,
+        ...(transition !== undefined && { transition }),
+      });
       // `LOOK-SWITCH-01` — a refused PLATE is said on this row (`takeRefusalLine`, below), in this
       // channel's view only, so no banner repeats it (`lookSwitchBanner`).
       const banner = lookSwitchBanner(res);
@@ -1349,7 +1362,7 @@ export function LayerRow({
           // The row's own state decides what the press changes, and says so on the control.
           target={legacyPreview ? 'preview' : 'air'}
           onPick={(lookId) => {
-            void switchLook(item.itemId, lookId);
+            void switchLook(item, lookId);
           }}
         />
       )}

@@ -593,16 +593,14 @@ describe('B-151 — the picker names its TARGET, because one control serves two'
     expect(el.textContent).toContain('NOW');
   });
 
-  it('🔴 B-168: the reason names the CONTRAST — it does not wait for UPDATE', async () => {
+  it('B-168: the preset tooltip identifies the immediate action', async () => {
     // "Applies immediately" alone is not the useful half. The operator's question is why this
     // control differs from the fields beside it, so the sentence has to name UPDATE.
     const { el } = await render();
     const label = [...el.querySelectorAll('[title]')]
       .map((n) => n.getAttribute('title') ?? '')
-      .find((t) => t.includes('IMMEDIATELY'));
-    expect(label).toBeDefined();
-    expect(label).toMatch(/does not wait for UPDATE/i);
-    expect(label).toMatch(/cut/i);
+      .find((t) => /immediately/i.test(t));
+    expect(label).toBe('Selecting a preset starts the switch immediately.');
   });
 });
 

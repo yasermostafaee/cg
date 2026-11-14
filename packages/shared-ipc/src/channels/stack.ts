@@ -475,6 +475,7 @@ export const StackSetActiveLookChannel = defineChannel(
     itemId: IdSchema,
     /** A look id the template AUTHORS. The bridge refuses `unknown-look` otherwise. */
     lookId: z.string().min(1),
+    transition: FrameTransitionSchema.optional(),
   }),
   z.object({
     ok: z.boolean(),

@@ -31,3 +31,16 @@ Fade disabled. The effect duration SHALL be configurable from 100 to 1000 ms.
 
 - **WHEN** the resident page supports frame placement without effects
 - **THEN** CG Control keeps its existing immediate placement workflow
+
+#### Scenario: A shared frame moves between live presets
+
+- **GIVEN** the same authored plate and artwork use the same seated input in a one-frame and a two-frame preset
+- **WHEN** the operator selects either preset on air with motion enabled
+- **THEN** the common plate travels from the outgoing position and size to the incoming position and size
+- **AND** it retains its input and existing audio policy
+- **AND** the switch completes with only the incoming preset visible
+
+#### Scenario: A switch has no safely retained frame
+
+- **WHEN** no shared authored plate uses the same verified seat in both presets, or its motion would reverse the active paint order
+- **THEN** the preset picker follows the existing Cut workflow

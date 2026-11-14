@@ -319,4 +319,154 @@ describe('D-201 — synchronized live-input foreground pass', () => {
       expect(document.querySelector('[data-cg-live-fallback]')).toBeNull();
     },
   );
+
+  it.each(['background', 'foreground'] as const)(
+    'keeps the outgoing %s preset visible during an authored reframe, then commits its destination',
+    async (outputPass) => {
+      const scene = movableFrameScene();
+      const baseLayer = scene.layers[0];
+      const frameDoc = scene.compositions?.[0];
+      const box = baseLayer?.children[0];
+      const plate = frameDoc?.layers[0]?.children[0];
+      if (
+        baseLayer === undefined ||
+        frameDoc === undefined ||
+        box?.type !== 'composition' ||
+        plate?.type !== 'video-placeholder'
+      )
+        throw new Error('Missing frame fixture');
+      delete plate.operatorMove;
+      const soloBox = { ...box };
+      const duoBox = {
+        ...box,
+        transform: { ...box.transform, scale: { x: 0.5, y: 0.75 }, position: { x: 520, y: 60 } },
+      };
+      const presets = [
+        { id: 'solo', instanceId: 'solo-root', name: 'Solo', frame: soloBox, second: [] },
+        {
+          id: 'duo',
+          instanceId: 'duo-root',
+          name: 'Duo',
+          frame: duoBox,
+          second: [{ ...plate, id: 'second', routeKey: 'second' }],
+        },
+      ];
+      for (const { id, name, frame, second } of presets) {
+        scene.compositions?.push({
+          ...frameDoc,
+          id,
+          name,
+          layers: [{ ...baseLayer, children: [frame, ...second] }],
+        });
+      }
+      baseLayer.children = presets.map(({ id, instanceId }) => ({
+        ...box,
+        id: instanceId,
+        name: instanceId,
+        compositionId: id,
+      }));
+      scene.lookGroups = [
+        {
+          id: 'presets',
+          defaultLookId: 'solo',
+          looks: presets.map(({ id, instanceId, name }) => ({
+            id,
+            instanceId,
+            name,
+            entered: { mode: 'cut' },
+          })),
+        },
+      ];
+
+      let time = 0;
+      let handle = 0;
+      const pending = new Map<number, FrameRequestCallback>();
+      const advanceTo = (target: number): void => {
+        time = target;
+        const round = [...pending.values()];
+        pending.clear();
+        for (const raf of round) raf(time);
+      };
+      const runtime = createRuntime(scene, {
+        outputPass,
+        skipFontLoad: true,
+        installGlobals: false,
+        clock: {
+          now: () => time,
+          raf: (cb) => {
+            pending.set(++handle, cb);
+            return handle;
+          },
+          cancel: (id) => {
+            pending.delete(id);
+          },
+        },
+      });
+      const solo = document.querySelector<HTMLElement>('[data-cg-element-id="solo-root"]');
+      const duo = document.querySelector<HTMLElement>('[data-cg-element-id="duo-root"]');
+      const artwork = solo?.querySelector<HTMLElement>('[data-cg-frame-artwork="solo-root/box"]');
+      const destination = duo?.querySelector<HTMLElement>('[data-cg-frame-artwork="duo-root/box"]');
+      if (solo == null || duo == null || artwork == null || destination == null)
+        throw new Error('Missing preset or frame artwork');
+      const fallback = artwork.querySelector('[data-cg-live-fallback]');
+      expect(fallback !== null).toBe(outputPass === 'background');
+      expect(artwork.querySelector('[data-cg-element-id="name"]') !== null).toBe(
+        outputPass === 'foreground',
+      );
+
+      const from = { x: 120, y: 820, width: 760, height: 60 };
+      const to = { x: 580, y: 675, width: 380, height: 45 };
+      const phase: FrameTransitionPhase = {
+        durationMs: 400,
+        easing: 'linear',
+        hideFallbackPlateIds: ['guest'],
+        frames: [
+          {
+            frameKey: 'solo-root/box/plate',
+            lookId: 'solo',
+            from,
+            to,
+            fromOpacity: 1,
+            toOpacity: 0.6,
+          },
+        ],
+      };
+      await runtime.play({});
+      await runtime.update(withCgControl({}, { frameTransition: phase }));
+      advanceTo(200);
+      expect(artwork.style.transform).toBe('');
+      await runtime.update(
+        withCgControl({}, { frameTransition: { ...phase, authoredPreset: true } }),
+      );
+      advanceTo(400);
+      expect(runtime.activeLookId()).toBe('solo');
+      expect(duo.style.display).toBe('none');
+      expect(artwork.style.transform).toBe('matrix(0.75,0,0,0.875,260,30)');
+      expect(artwork.style.opacity).toBe('0.8');
+      if (fallback !== null)
+        expect(fallback.hasAttribute('data-cg-frame-transition-hidden')).toBe(true);
+      advanceTo(600);
+      expect(artwork.style.transform).toBe('matrix(0.5,0,0,0.75,520,60)');
+
+      await runtime.update(
+        withCgControl(
+          {},
+          {
+            look: 'duo',
+            frameTransition: null,
+            presetTransitionCommit: true,
+          },
+        ),
+      );
+      expect(runtime.activeLookId()).toBe('duo');
+      expect(solo.style.display).toBe('none');
+      expect(duo.style.display).not.toBe('none');
+      expect(artwork.style.transform).toBe('');
+      expect(artwork.style.opacity).toBe('');
+      expect(destination.style.transform).toBe('');
+      if (fallback !== null)
+        expect(fallback.hasAttribute('data-cg-frame-transition-hidden')).toBe(false);
+      runtime.remove();
+    },
+  );
 });
