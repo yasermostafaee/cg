@@ -299,6 +299,7 @@ export function StyleSection({ element, selectedKeyframe }: Props): JSX.Element 
             />
           </div>
           <CompositionProportions element={element} />
+          <CompositionTextVisibility element={element} />
         </CollapseSection>
         <FilterSection
           element={element}
@@ -351,6 +352,44 @@ function CompositionProportions({ element }: { element: CompositionElement }): J
         Restore composition ratio
       </Button>
     </>
+  );
+}
+
+function CompositionTextVisibility({
+  element,
+}: {
+  element: CompositionElement;
+}): JSX.Element | null {
+  const child = useDesignerSelector((state) =>
+    state.scene?.compositions?.find(({ id }) => id === element.compositionId),
+  );
+  const texts = child?.layers.flatMap((layer) =>
+    layer.visible
+      ? layer.children.filter((candidate) => candidate.type === 'text' && candidate.visible)
+      : [],
+  );
+  if (texts === undefined || texts.length === 0) return null;
+
+  const hiddenTextIds = element.hiddenTextIds ?? [];
+  return (
+    <div role="group" aria-label="Show text in this instance">
+      <span className={fieldCss.label}>Show text in this instance</span>
+      {texts.map((text) => (
+        <CheckRow
+          key={text.id}
+          label={text.name || 'Text'}
+          checked={!hiddenTextIds.includes(text.id)}
+          onChange={(show) => {
+            const next = show
+              ? hiddenTextIds.filter((id) => id !== text.id)
+              : [...hiddenTextIds, text.id];
+            designerStore.updateElement(element.id, {
+              hiddenTextIds: next.length > 0 ? next : undefined,
+            });
+          }}
+        />
+      ))}
+    </div>
   );
 }
 

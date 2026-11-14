@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { AudioElementSchema, ClockElementSchema, type Element } from '../src/elements.js';
+import {
+  AudioElementSchema,
+  ClockElementSchema,
+  CompositionElementSchema,
+  type Element,
+} from '../src/elements.js';
 import {
   CG_RUNTIME_VERSION,
   requiredRuntimeVersionForScene,
@@ -193,6 +198,32 @@ describe('CG_RUNTIME_VERSION', () => {
       available: '1.2.1',
     });
     expect(runtimeShortfall(minVersion)).toBeNull();
+  });
+
+  it('requires 1.2.5 only for instances with hidden text ids', () => {
+    const instance = CompositionElementSchema.parse({
+      id: 'frame-instance',
+      name: 'Frame',
+      type: 'composition',
+      compositionId: 'frame',
+      transform: {
+        position: { x: 0, y: 0 },
+        size: { w: 1920, h: 1080 },
+        scale: { x: 1, y: 1 },
+        rotation: 0,
+        anchor: { x: 0, y: 0 },
+      },
+      visible: true,
+      locked: false,
+      opacity: 1,
+      zIndex: 0,
+    });
+    expect(versionFor(instance)).toBe('1.1.0');
+    expect(versionFor({ ...instance, hiddenTextIds: [] })).toBe('1.1.0');
+    const authored = versionFor({ ...instance, hiddenTextIds: ['caption'] });
+    expect(authored).toBe('1.2.5');
+    expect(runtimeShortfall(authored, '1.2.4')).toEqual({ required: '1.2.5', available: '1.2.4' });
+    expect(runtimeShortfall(authored)).toBeNull();
   });
 
   it('🔴 is NOT the 0.0.0 this item exists to remove', () => {

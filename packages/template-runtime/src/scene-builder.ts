@@ -1,6 +1,7 @@
 import {
   elementDigitsOf,
   followsComposition,
+  isCompositionTextHidden,
   largestLivePlateMaskRegion,
   liveRevealRects,
   pathVisualBBox,
@@ -98,6 +99,7 @@ interface BuildCtx {
   foregroundKeys?: ReadonlySet<string> | undefined;
   frameArtworkKeys?: ReadonlySet<string> | undefined;
   instancePrefix: string;
+  instance?: CompositionElement;
 }
 
 function newScope(container: HTMLElement, source: LifecycleSource): FieldScope {
@@ -197,8 +199,11 @@ function buildLayer(layer: Layer, ctx: BuildCtx): HTMLElement {
     const built = plan.shown.has(element.id)
       ? ({ ...element, visible: true } as typeof element)
       : element;
-    const elementNode = buildElement(built, ctx);
+    const instanceHiddenText = isCompositionTextHidden(ctx.instance, element);
+    const drawn = instanceHiddenText ? { ...built, visible: false } : built;
+    const elementNode = buildElement(drawn, ctx);
     if (elementNode === null) continue;
+    if (instanceHiddenText) elementNode.dataset['cgInstanceHiddenText'] = '';
     const instanceKey = ctx.instancePrefix + element.id;
     let contentNode = elementNode;
     if (ctx.frameArtworkKeys?.has(instanceKey) === true) {
@@ -423,6 +428,7 @@ function buildComposition(element: CompositionElement, ctx: BuildCtx): HTMLEleme
     visited: new Set([...ctx.visited, element.compositionId]),
     resolutionWidth: comp.resolution.width,
     instancePrefix: ctx.instancePrefix + element.id + '/',
+    instance: element,
   };
   for (const layer of comp.layers) {
     inner.appendChild(buildLayer(layer, childCtx));

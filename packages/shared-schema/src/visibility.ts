@@ -1,3 +1,5 @@
+import type { CompositionElement, Element } from './elements.js';
+
 /**
  * 🔴 **THE ONE RESOLVED-VISIBILITY FUNCTION** — `multibox-layout-switch` `tasks.md` 4.1, and
  * D4's home (`design.md` §13.7.2).
@@ -120,4 +122,12 @@ export function resolveVisibilityOf(
       active: context?.transitioning ?? false,
     },
   });
+}
+
+/** A composition instance can hide its own direct text without dropping its field binding. */
+export function isCompositionTextHidden(
+  instance: Pick<CompositionElement, 'hiddenTextIds'> | undefined,
+  element: Element,
+): boolean {
+  return element.type === 'text' && instance?.hiddenTextIds?.includes(element.id) === true;
 }

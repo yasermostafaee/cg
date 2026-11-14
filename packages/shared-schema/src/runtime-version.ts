@@ -51,8 +51,9 @@ import type { Scene } from './scene.js';
  * 1.2.0 adds authored clock separator styling, a countup range and delayed Follow video Outros.
  * 1.2.1 applies normalisation gain on audio elements.
  * 1.2.3 carries authored paint order for overlapping Live plates.
+ * 1.2.5 applies the direct text visibility of individual composition instances.
  */
-export const CG_RUNTIME_VERSION = '1.2.3';
+export const CG_RUNTIME_VERSION = '1.2.5';
 
 /** Declare the minimum runtime that can reproduce all authored behavior in a package. */
 export function requiredRuntimeVersionForScene(
@@ -65,6 +66,8 @@ export function requiredRuntimeVersionForScene(
       matches(element) || (element.type === 'container' && element.children.some(visit));
     return compositions.some((comp) => comp.layers.some((layer) => layer.children.some(visit)));
   };
+  if (hasElement((element) => element.type === 'composition' && !!element.hiddenTextIds?.length))
+    return '1.2.5';
   if (
     requiresLivePlatePaintOrder ||
     hasElement(

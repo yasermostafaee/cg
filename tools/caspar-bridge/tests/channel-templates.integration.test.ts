@@ -168,10 +168,16 @@ describe('CHANNEL-TEMPLATES-01 — an operator holding CH 2 only acts on CH 2 an
       const row = rt.stackSnapshot().find((i) => i.itemId === 'row-ch1');
       return row === undefined
         ? undefined
-        : { templateId: row.templateId, status: row.status, slot: row.slot, fields: row.fields };
+        : {
+            templateId: row.templateId,
+            // The periodic producer observation may advance a confirmed take to playing.
+            onAir: row.status === 'on-air' || row.status === 'playing',
+            slot: row.slot,
+            fields: row.fields,
+          };
     };
     const rowBefore = rowOf();
-    expect(rowBefore).toMatchObject({ templateId: 'news', status: 'on-air' });
+    expect(rowBefore).toMatchObject({ templateId: 'news', onAir: true });
     const defaultsBefore = rt.sourceAssignments();
     const op = await s.signedIn(CH2_OPERATOR);
 

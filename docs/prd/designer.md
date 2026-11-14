@@ -6964,3 +6964,17 @@ overlap in Designer and in output, including nested frames and each preset.
   If the order cannot be represented or safely changed with the available producer layers,
   preflight or Bridge refuses with the affected preset and a precise reason.
 - WHEN output is refused THEN the current programme remains in force.
+
+## [~] D-214 — Set a shared frame title's visibility per preset ⟨priority: high — owner, 2026-11-14⟩ — `openspec/changes/set-instance-title-visibility/`
+
+**What:** Let the Designer hide a text layer in one composition instance while reusing the
+same live frame and title in another preset.
+
+**Acceptance**
+
+- WHEN the author selects a nested frame instance THEN its Inspector lists the direct text
+  layers that can be hidden on this instance.
+- WHEN the title is hidden in the solo preset THEN only that preset loses the title. The other
+  presets still show it with the same data key, and the frame remains available for switching.
+- WHEN the project is saved, reopened or exported THEN the authored visibility survives and
+  appears in Designer, PVW and on air.
