@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER,
   CG_LIVE_FRAME_TRANSITION_PAGE_MARKER,
+  CG_LIVE_PRESET_DEPARTURE_PAGE_MARKER,
   CG_LIVE_PRESET_TRANSITION_PAGE_MARKER,
   type Scene,
 } from '@cg/shared-schema';
@@ -70,8 +71,8 @@ describe('PAGE-REBUILD-01 — the page runtime fingerprint', () => {
       rebuilds its pages with the new shell on its next upgrade.
     */
     expect({ revision: EXPORTER_SHELL_REVISION, shell: await shellHash() }).toEqual({
-      revision: 8,
-      shell: '7b51ed6bd681ae96ff722d924227aeb15290fca76e1edd2dd9ebf0ddb1165f19',
+      revision: 9,
+      shell: 'c3267d7e345d6e5cbdedcb5692460d37cfc97853899e3a0fb397e418fad80b56',
     });
   });
 
@@ -85,6 +86,7 @@ describe('PAGE-REBUILD-01 — the page runtime fingerprint', () => {
       expect(head).toContain(CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER);
       expect(head).toContain(CG_LIVE_FRAME_TRANSITION_PAGE_MARKER);
       expect(head).toContain(CG_LIVE_PRESET_TRANSITION_PAGE_MARKER);
+      expect(head).toContain(CG_LIVE_PRESET_DEPARTURE_PAGE_MARKER);
     }
   });
 });

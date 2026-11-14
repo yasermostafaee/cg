@@ -27,6 +27,9 @@ export const BASELINE_CSS = `
 [data-cg-live-fallback][data-cg-frame-transition-hidden] {
   display: none;
 }
+[data-cg-preset-departure-key][data-cg-frame-transition-hidden] {
+  display: none !important;
+}
 [data-cg-instance-hidden-text] {
   display: none !important;
 }

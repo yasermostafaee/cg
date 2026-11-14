@@ -14,6 +14,9 @@
 - [x] Carry effect selection and authored frame identity into the on-air preset switch.
 - [x] Verify both directions between a one-frame and a two-frame preset, with the shared producer
       retained. Windows Chromium and a Bridge smoke test with the owner's `3ghab-composition.vcg`
-      passed. The masked variant used Cut when a move crossed the departing plate with reversed
-      native paint order.
+      passed.
+- [x] Verify the owner's masked `3ghab-crop.vcg` from preset 2 to 1 with the real Bridge and
+      mock AMCP. In the Windows Chromium regression, both pages hide the departing group before
+      the shared frame moves, its input and volume continue, and the reverse restores the clips.
+- [x] Verify refusal during the masked switch restores the outgoing artwork and mixer state.
 - [ ] Build the Windows installers locally after verification.

@@ -40,6 +40,8 @@ export const FrameTransitionPhaseSchema = z.object({
     .min(1)
     .max(128),
   hideFallbackPlateIds: z.array(z.string().min(1)).max(128).optional(),
+  /** Exact authored instance paths of outgoing artwork held hidden during a preset switch. */
+  hidePresetArtworkKeys: z.array(z.string().min(1)).max(128).optional(),
 });
 export type FrameTransitionPhase = z.infer<typeof FrameTransitionPhaseSchema>;
 

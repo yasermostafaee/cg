@@ -881,9 +881,14 @@ describe('buildTemplateLiveSources — the assembly, and the coexistence control
           comp('solo-doc', [instance('big', 'guest-doc', 0, 0, 1920, 1080)]),
           comp('duo-doc', [
             instance('small', 'guest-doc', 80, 300, 840, 480),
-            plate('second-picture', 'guest-2', 1000, 300, 840, 480),
+            instance('masked-group', 'secondary-doc', 1000, 300, 840, 480),
           ]),
           comp('guest-doc', [plate('picture', 'guest-1', 0, 0, 1920, 1080)]),
+          comp('secondary-doc', [
+            plate('second-picture', 'guest-2', 0, 0, 1920, 1080),
+            instance('overlay', 'overlay-doc', 0, 0, 1920, 1080),
+          ]),
+          comp('overlay-doc', [plate('masked-picture', 'guest-4', 0, 0, 1920, 1080)]),
         ],
         lookGroups: [{ id: 'group', looks: [look('solo', 'solo'), look('duo', 'duo')] }],
       }),
@@ -892,6 +897,14 @@ describe('buildTemplateLiveSources — the assembly, and the coexistence control
     expect(block.looks?.map((preset) => preset.transitionFrames?.['guest-1'])).toEqual([
       { elementId: 'picture', frameKey: 'solo/big/picture', artworkId: 'guest-doc' },
       { elementId: 'picture', frameKey: 'duo/small/picture', artworkId: 'guest-doc' },
+    ]);
+    expect(block.looks?.map((preset) => preset.transitionDepartureGroups)).toEqual([
+      { 'solo/big': ['guest-1'] },
+      {
+        'duo/small': ['guest-1'],
+        'duo/masked-group': ['guest-2', 'guest-4'],
+        'duo/masked-group/overlay': ['guest-4'],
+      },
     ]);
   });
 

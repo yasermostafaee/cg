@@ -117,6 +117,8 @@ export const TemplateLookSchema = z.object({
   transitionFrames: z.record(z.string(), PresetTransitionFrameSchema).optional(),
   /** Authored bottom-to-top order used when a transition makes disjoint plates cross. */
   transitionPaintOrder: z.array(IdSchema).optional(),
+  /** Nested composition path → all plates potentially seated under that artwork. */
+  transitionDepartureGroups: z.record(z.string(), z.array(IdSchema)).optional(),
   operatorMaskEdits: z.array(IdSchema).optional(),
   /** Route key → authored plate identity. Older carriers keep per-preset edits. */
   maskElementIds: z.record(z.string(), IdSchema).optional(),

@@ -285,6 +285,7 @@ export interface TemplateLookCarrier {
   operatorFrames?: Record<string, LiveFrameTarget> | undefined;
   transitionFrames?: Record<string, PresetTransitionFrame> | undefined;
   transitionPaintOrder?: string[] | undefined;
+  transitionDepartureGroups?: Record<string, string[]> | undefined;
   operatorMaskEdits?: string[] | undefined;
   /** Route key → authored plate identity for sharing own-mask edits across presets. */
   maskElementIds?: Record<string, string> | undefined;
@@ -446,6 +447,7 @@ export function collectLookCarrier(scene: Scene): {
   const masksByLook = new Map<string, Record<string, LivePlateMask>>();
   const operatorFramesByLook = new Map<string, Record<string, LiveFrameTarget>>();
   const transitionFramesByLook = new Map<string, Record<string, PresetTransitionFrame>>();
+  const transitionGroupsByLook = new Map<string, Map<string, Set<string>>>();
   const operatorMaskEditsByLook = new Map<string, string[]>();
   const maskElementIdsByLook = new Map<string, Record<string, string>>();
   const fallbacksByLook = new Map<string, string[]>();
@@ -504,6 +506,20 @@ export function collectLookCarrier(scene: Scene): {
       dynamicFor.set(routeKey, dynamicRoles.get(el.id)?.has('fill') ?? false);
     }
     const owner = ownerOf(flat);
+    if (owner !== undefined && flat.ancestorKeys[0] === owner.instanceId) {
+      const artworkKeys = flat.ancestorKeys
+        .slice(1)
+        .filter((key) => byKey.get(key)?.type === 'composition');
+      if (artworkKeys.length > 0) {
+        const groups = transitionGroupsByLook.get(owner.id) ?? new Map<string, Set<string>>();
+        for (const key of artworkKeys) {
+          const plates = groups.get(key) ?? new Set<string>();
+          plates.add(routeKey);
+          groups.set(key, plates);
+        }
+        transitionGroupsByLook.set(owner.id, groups);
+      }
+    }
     const inLooks = owner === undefined ? group.looks : [owner];
     for (const look of inLooks) {
       const rects = rectsByLook.get(look.id);
@@ -627,6 +643,7 @@ export function collectLookCarrier(scene: Scene): {
         }),
       );
       const order = relevantPlateOrder(paintOrder, rects, reveals, operatorFramesByLook.has(l.id));
+      const departureGroups = transitionGroupsByLook.get(l.id);
       return {
         id: l.id,
         name: l.name,
@@ -641,6 +658,11 @@ export function collectLookCarrier(scene: Scene): {
         ...(transitionFramesByLook.has(l.id) && {
           transitionFrames: transitionFramesByLook.get(l.id),
           transitionPaintOrder: paintOrder,
+          ...(departureGroups !== undefined && {
+            transitionDepartureGroups: Object.fromEntries(
+              [...departureGroups].map(([key, plates]) => [key, [...plates]]),
+            ),
+          }),
         }),
         ...(operatorMaskEditsByLook.has(l.id) && {
           operatorMaskEdits: operatorMaskEditsByLook.get(l.id),

@@ -675,6 +675,10 @@
       ],
       "fixes": [
         {
+          "fa": "در برگشت از پریست چندقاب به تک‌قاب، گروه ماسک‌دارِ خروجی کنار می‌رود و قاب مشترک با افکت انتخاب‌شده بزرگ می‌شود. با برگشت به پریست قبلی، ترتیب قاب‌ها و ماسک حفظ می‌شود.",
+          "en": "When returning from a multi-frame preset to a single frame, the departing masked group clears before the shared frame expands with the selected effect. Returning to the wider layout restores the plate order and masks."
+        },
+        {
           "fa": "در CG Control، پایان پخش یا Stop شمارهٔ صفحهٔ Sequence تصویری را برای اجرای بعدی به ۱ برمی‌گرداند.",
           "en": "In CG Control, finishing or stopping a picture Sequence resets its page counter to 1 for the next Play."
         },

@@ -40,7 +40,15 @@ Fade disabled. The effect duration SHALL be configurable from 100 to 1000 ms.
 - **AND** it retains its input and existing audio policy
 - **AND** the switch completes with only the incoming preset visible
 
+#### Scenario: A shared frame crosses a departing masked group
+
+- **GIVEN** a verified outgoing artwork group contains only departing plates and the resident pages support hiding it
+- **WHEN** motion would cross that group in reversed native paint order
+- **THEN** its plates, mask fragments and nested artwork become hidden before the shared frame moves
+- **AND** the shared frame moves with the selected effect and keeps playing its input
+- **AND** the departing group's normal opacity and geometry remain available on return to the outgoing preset
+
 #### Scenario: A switch has no safely retained frame
 
-- **WHEN** no shared authored plate uses the same verified seat in both presets, or its motion would reverse the active paint order
+- **WHEN** no shared authored plate uses the same verified seat in both presets, or motion cannot preserve paint order after hiding verified departing groups
 - **THEN** the preset picker follows the existing Cut workflow

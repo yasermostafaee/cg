@@ -5207,3 +5207,4 @@ Send CG commands to the active engine after its external-graphics transfer contr
 - WHEN the effect runs THEN the seated image, mask and attached artwork follow the same placement and the input and its audio continue. Stop, Clear and emergency silence retain priority.
 - WHEN a running template lacks effect support THEN regular frame placement remains available under its existing guards.
 - WHEN switching between presets that share the same authored plate and running input THEN the shared frame moves and resizes from the outgoing placement to the incoming placement without starting the source again. The same applies to the reverse switch.
+- WHEN a verified departing masked group would be painted in the wrong order during the reverse movement THEN the entire group exits before the shared frame moves. Returning to the previous preset restores its mask and plate order.

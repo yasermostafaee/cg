@@ -22,6 +22,7 @@ import {
   CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER,
   CG_LIVE_FRAME_TRANSITION_PAGE_MARKER,
   CG_LIVE_MASK_PLACEMENT_PAGE_MARKER,
+  CG_LIVE_PRESET_DEPARTURE_PAGE_MARKER,
   CG_LIVE_PRESET_TRANSITION_PAGE_MARKER,
   DEFAULT_LIVE_CROP_FOCUS,
   LiveRevealRectSchema,
@@ -514,6 +515,11 @@ interface LiveFrameEffect {
   readonly frames: FrameTransitionPhase['frames'];
   readonly plateIds: readonly string[];
   readonly authoredPreset?: true;
+  readonly departure?: {
+    readonly artworkKeys: string[];
+    readonly plateIds: string[];
+    readonly records: readonly LiveLayerRecord[];
+  };
 }
 
 interface FrameEffectReply {
@@ -540,6 +546,7 @@ interface LiveFrameEffectTransport {
 }
 
 interface PresetFrameEffect {
+  readonly hiddenSlots: ReadonlySet<string>;
   readonly current: () => boolean;
   readonly run: () => Promise<FrameEffectReply>;
   readonly tellLook: (
@@ -750,29 +757,46 @@ function clipsCanCross(
   return first < last;
 }
 
-function frameEffectCrossesPaintOrder(
+function frameEffectPaintOrderBlockers(
   visible: readonly LiveLayerRecord[],
   changes: ReadonlyMap<LiveLayerRecord, LivePlatePlacement['fit']>,
   order: readonly string[] | undefined,
-): boolean {
+): Set<string> {
   const ranks = new Map(order?.map((plateId, rank) => [plateId, rank]));
+  const blockers = new Set<string>();
   for (const [record, fit] of changes) {
     const ownRank = ranks.get(record.sourceId);
     if (ownRank === undefined || record.revealOverlay === true) continue;
-    if (
-      visible.some((other) => {
-        if (other === record || other.revealOverlay === true) return false;
-        const otherRank = ranks.get(other.sourceId);
-        if (otherRank === undefined || otherRank === ownRank) return false;
-        const nativeOrder = record.slot.layer < other.slot.layer;
-        if (nativeOrder === ownRank < otherRank) return false;
-        const target = changes.get(other)?.clip ?? other.clip;
-        return clipsCanCross(record.clip, fit.clip, other.clip, target);
-      })
-    )
-      return true;
+    for (const other of visible) {
+      if (other === record || other.revealOverlay === true) continue;
+      const otherRank = ranks.get(other.sourceId);
+      if (otherRank === undefined || otherRank === ownRank) continue;
+      const nativeOrder = record.slot.layer < other.slot.layer;
+      if (nativeOrder === ownRank < otherRank) continue;
+      const target = changes.get(other)?.clip ?? other.clip;
+      if (clipsCanCross(record.clip, fit.clip, other.clip, target)) blockers.add(other.sourceId);
+    }
   }
-  return false;
+  return blockers;
+}
+
+/** Resolve the closest complete outgoing artwork groups whose departures make the sweep safe. */
+function presetDepartureGroups(
+  groups: Readonly<Record<string, readonly string[]>>,
+  blockers: ReadonlySet<string>,
+  outgoing: ReadonlySet<string>,
+): { artworkKeys: string[]; plateIds: string[] } | undefined {
+  const eligible = Object.entries(groups).filter(
+    ([, routes]) => routes.length > 0 && routes.every((route) => outgoing.has(route)),
+  );
+  const selected = eligible.filter(
+    ([key, routes]) =>
+      routes.some((route) => blockers.has(route)) &&
+      !eligible.some(([parent]) => key.startsWith(parent + '/')),
+  );
+  const removed = new Set(selected.flatMap(([, routes]) => routes));
+  if ([...blockers].some((route) => !removed.has(route))) return undefined;
+  return { artworkKeys: selected.map(([key]) => key), plateIds: [...removed] };
 }
 
 function presetEffectFailureMessage(restored: boolean): string {
@@ -5947,7 +5971,7 @@ export class CasparRuntime {
     if (effect !== undefined && effect.transition.motion !== 'cut') {
       const carrier = this.#templates.infoOf(page.version)?.liveSources;
       const order = carrier === undefined ? undefined : lookPlatePaintOrder(carrier, lookId);
-      if (frameEffectCrossesPaintOrder(visible, changes, order)) {
+      if (frameEffectPaintOrderBlockers(visible, changes, order).size > 0) {
         return {
           accepted: false,
           errorCode: 'frame-transition-layer-order',
@@ -6199,6 +6223,36 @@ export class CasparRuntime {
     );
     const hold = Math.min(250, this.#lookMixerHoldMsFor(channel));
     const interrupted = { ok: false, errorCode: 'frame-transition-interrupted' };
+    const departure = effect.departure;
+    const hidden = [...effect.plateIds, ...(departure?.plateIds ?? [])];
+    const hide = {
+      hideFallbackPlateIds: hidden,
+      ...(departure !== undefined && { hidePresetArtworkKeys: departure.artworkKeys }),
+    };
+    if (departure !== undefined) {
+      if (!(await wait(0))) return interrupted;
+      await this.#leaseMixerChannel(batch, channel);
+      if (!(await wait(0)) || this.#orphanedMixerChannels.has(channel))
+        return { ok: false, errorCode: 'frame-transition-unavailable' };
+      for (const record of departure.records) {
+        const staged = await stage(record, record, { frames: 0, easing: 'linear', opacity: 0 });
+        if (!staged.ok) return staged;
+      }
+      const told = await tell({
+        authoredPreset: true,
+        durationMs: 0,
+        ...(hold > 0 && { delayMs: hold }),
+        easing: 'linear',
+        frames: effect.frames.map((frame) => ({ ...frame, to: frame.from })),
+        ...hide,
+      });
+      if (!told.ok) return told;
+      if (!(await wait(hold))) return interrupted;
+      const committed = await this.#commitStagedMixer(batch, { retainOnFailure: true });
+      if (!committed.landed) return { ...committed, ok: false };
+      // The outgoing group must be hidden before any shared plate enters its area.
+      if (!(await wait(period))) return interrupted;
+    }
     let progress = 0;
     let opacity = 1;
     for (const step of steps) {
@@ -6238,7 +6292,7 @@ export class CasparRuntime {
           fromOpacity: opacity,
           toOpacity: step.opacity,
         })),
-        hideFallbackPlateIds: [...effect.plateIds],
+        ...hide,
       });
       if (!told.ok) return told;
       if (!(await wait(hold))) return interrupted;
@@ -11686,21 +11740,78 @@ export class CasparRuntime {
       for (const [record, fit] of fits) changes.set(record, fit);
     }
     if (frames.length === 0 || frames.length > 128) return undefined;
-    if (
-      transition.motion !== 'cut' &&
-      frameEffectCrossesPaintOrder(
-        visible,
-        changes,
-        fromLook.transitionPaintOrder ?? lookPlatePaintOrder(carrier, fromLookId),
-      )
-    )
-      return undefined;
+    let departure: LiveFrameEffect['departure'];
+    if (transition.motion !== 'cut') {
+      const order = fromLook.transitionPaintOrder ?? lookPlatePaintOrder(carrier, fromLookId);
+      const blockers = frameEffectPaintOrderBlockers(visible, changes, order);
+      if (blockers.size > 0) {
+        departure = this.#preparePresetDeparture(item, fromLook, toLook, plan, visible, blockers);
+        if (departure === undefined || plateIds.length + departure.plateIds.length > 128)
+          return undefined;
+      }
+    }
     return this.#runPresetFrameTransaction(item, page, baseline, fromLook.id, toLook.id, changes, {
       transition,
       frames,
       plateIds,
       authoredPreset: true,
+      ...(departure !== undefined && { departure }),
     });
+  }
+
+  #preparePresetDeparture(
+    item: StackItemState,
+    fromLook: TemplateLook,
+    toLook: TemplateLook,
+    plan: Extract<LiveSeatingPlan, { ok: true }>,
+    visible: readonly LiveLayerRecord[],
+    blockers: ReadonlySet<string>,
+  ): LiveFrameEffect['departure'] {
+    if (
+      fromLook.transitionDepartureGroups === undefined ||
+      this.#liveFramePage(item, CG_LIVE_PRESET_DEPARTURE_PAGE_MARKER) === undefined
+    )
+      return undefined;
+    const onDestination = new Set(plan.placements.map(({ slot }) => adoptionKey(slot)));
+    const destinationSeats = new Set(plan.placements.map(({ seatId }) => seatId));
+    for (const { sharedInputFrom } of plan.placements) {
+      if (sharedInputFrom !== undefined) destinationSeats.add(sharedInputFrom);
+    }
+    const parkedBySlot = new Map(plan.parked.map((seat) => [adoptionKey(seat.slot), seat]));
+    const outgoing = new Set(
+      Object.keys(fromLook.rects).filter(
+        (route) => toLook.rects[route] === undefined && !plan.unresolved.has(route),
+      ),
+    );
+    const groups = presetDepartureGroups(fromLook.transitionDepartureGroups, blockers, outgoing);
+    if (groups === undefined || groups.artworkKeys.length > 128 || groups.plateIds.length > 128)
+      return undefined;
+    const routeKeys = new Set(groups.plateIds);
+    // A legacy reveal can copy a plate into a second plate's artwork. They
+    // have to leave together or the old reveal would outlive its intended mask.
+    if (
+      Object.entries(fromLook.reveals ?? {}).some(
+        ([upper, reveal]) => routeKeys.has(upper) !== routeKeys.has(reveal.targetSourceId),
+      )
+    )
+      return undefined;
+    const records = visible.filter((record) => routeKeys.has(record.sourceId));
+    if (
+      records.length === 0 ||
+      records.some((record) => {
+        const key = adoptionKey(record.slot);
+        const parked = parkedBySlot.get(key);
+        return (
+          onDestination.has(key) ||
+          destinationSeats.has(liveSeatId(record)) ||
+          (parked !== undefined && !isSeatUnchanged('switch', record, parked)) ||
+          !this.#isVerifiedCropSlot(record.slot) ||
+          (record.epoch !== undefined && !this.#routeEpochIsCurrent(record.epoch))
+        );
+      })
+    )
+      return undefined;
+    return { ...groups, records };
   }
 
   #runPresetFrameTransaction(
@@ -11720,7 +11831,8 @@ export class CasparRuntime {
     const placements = this.#framePlacements.get(itemId);
     const masks = this.#maskPlacements.get(itemId);
     const pageSlots = foreground === undefined ? [page.slot] : [page.slot, foreground];
-    const mixerSlots = [...changes.keys()].map(({ slot }) => slot);
+    const affected = [...changes.keys(), ...(effect.departure?.records ?? [])];
+    const hiddenSlots = new Set(effect.departure?.records.map(({ slot }) => adoptionKey(slot)));
     const touched = new Set<LiveLayerRecord>();
     const batch: MixerBatch = {};
     const cancel = new AbortController();
@@ -11743,11 +11855,11 @@ export class CasparRuntime {
         this.#foregroundPages.get(itemId) === foreground &&
         sameSeats &&
         this.activeLookId(itemId) === fromLook &&
-        mixerSlots.every((slot) => this.#isVerifiedCropSlot(slot)) &&
-        (rollback ||
-          [...changes.keys()].every(
-            ({ epoch }) => epoch === undefined || this.#routeEpochIsCurrent(epoch),
-          ))
+        affected.every(
+          ({ slot, epoch }) =>
+            this.#isVerifiedCropSlot(slot) &&
+            (rollback || epoch === undefined || this.#routeEpochIsCurrent(epoch)),
+        )
       );
     };
     const current = () => !cancel.signal.aborted && stillOwnsOutput();
@@ -11816,6 +11928,7 @@ export class CasparRuntime {
     this.#reconciler.on('item-removed', invalidate);
     page.session.on('state-change', connectionChanged);
     return {
+      hiddenSlots,
       current,
       run: () =>
         this.#runLiveFrameEffect(channel, effect, changes, {
@@ -11858,7 +11971,9 @@ export class CasparRuntime {
             {
               frames: 0,
               easing: 'linear',
-              ...(effect.transition.fade && { opacity: wireOpacityOf(record) }),
+              ...((effect.transition.fade || hiddenSlots.has(adoptionKey(record.slot))) && {
+                opacity: wireOpacityOf(record),
+              }),
             },
             true,
           );
@@ -14647,8 +14762,10 @@ export class CasparRuntime {
     const seatOnSlot = new Map<string, string>();
     for (const p of [...placements, ...parked]) seatOnSlot.set(adoptionKey(p.slot), p.seatId);
     const releases: LivePlateRelease[] = [];
+    let departureSettled = true;
     for (const record of previous) {
       if (placed.has(liveSeatId(record))) continue;
+      const earlyHidden = presetEffect?.hiddenSlots.has(key(record)) === true;
       // A DIFFERENT seat now holds this coordinate ⇒ replaced in place, not released. Its own
       // seat continuing on it (a park) is not that, and must fall through to be parked.
       const taker = seatOnSlot.get(key(record));
@@ -14723,7 +14840,7 @@ export class CasparRuntime {
           record.slot.channel,
           this.#builder.mixerVolume(record.slot, CREATED_MUTED_VOLUME),
         );
-        muted = sent.ok;
+        muted = sent.ok && (!earlyHidden || sent.onPrimary);
         /*
           🔴 `ROUTE-PLATES-01` (C2) — A HELD PLAYOUT ROUTE IS ALSO HIDDEN: `OPACITY 0`, staged with
           the mute, and still PLAYING — never `PAUSE`, and `BLEND` is left at normal. It rides the
@@ -14739,7 +14856,7 @@ export class CasparRuntime {
             record.slot.channel,
             this.#builder.mixerOpacity(record.slot, 0),
           );
-          muted = hidden.ok;
+          muted = hidden.ok && (!earlyHidden || hidden.onPrimary);
         }
       }
       /*
@@ -14769,7 +14886,7 @@ export class CasparRuntime {
           // `B-198` — the PARK is the departing half of the switch, so it stages with the
           // arriving half and lands on the same frame. This is the seam the defect lived in.
           const sent = await this.#sendDeferredMixer(batch, record.slot.channel, line);
-          if (sent.ok) continue;
+          if (sent.ok && (!earlyHidden || sent.onPrimary)) continue;
           // Under-claims on failure, the same safe direction the mute takes: the next
           // reconcile re-sends both. A refused `CLIP` after an acked `FILL` still renders
           // nothing — that is why the FILL is the half that moves.
@@ -14777,11 +14894,25 @@ export class CasparRuntime {
           break;
         }
       }
-      next.push({
+      const parkedRecord = {
         ...record,
         held: muted,
         ...(fitParked && { fill: parked.fill, clip: parked.clip }),
-      });
+      };
+      if (earlyHidden) {
+        // Reopen a normally opaque parked seat only inside the batch that puts it
+        // off screen. Leaving the temporary opacity set would black out its next reveal.
+        departureSettled &&= muted && fitParked;
+        if (departureSettled && wireOpacityOf(parkedRecord) === 1) {
+          const reopened = await this.#sendDeferredMixer(
+            batch,
+            record.slot.channel,
+            this.#builder.mixerOpacity(record.slot, 1),
+          );
+          departureSettled = reopened.ok && reopened.onPrimary;
+        }
+      }
+      next.push(parkedRecord);
       /*
         `MEDIA-PLATES-01` §1.C — A HELD CLIP SET TO `pause` IS PAUSED once the commit has hidden it:
         on the way out, once (a clip already paused is left alone), and again under a take, which
@@ -14815,7 +14946,9 @@ export class CasparRuntime {
     const committed =
       presetEffect !== undefined && !presetEffect.current()
         ? { landed: false, errorCode: 'not-live' }
-        : await this.#commitStagedMixer(batch, { retainOnFailure: presetEffect !== undefined });
+        : !departureSettled
+          ? { landed: false, errorCode: 'preset-departure-not-confirmed' }
+          : await this.#commitStagedMixer(batch, { retainOnFailure: presetEffect !== undefined });
     if (presetEffect !== undefined && !committed.landed) {
       // The destination reveal may still be staged in CasparCG. Overwrite it under
       // the same lease, using any audio intent changed by an immediate mute.

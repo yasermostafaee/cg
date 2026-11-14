@@ -16,6 +16,7 @@ import {
   CG_LIVE_FRAME_TRANSITION_PAGE_MARKER,
   CG_LIVE_MASK_PLACEMENT_PAGE_MARKER,
   CG_LIVE_POSITION_PAGE_MARKER,
+  CG_LIVE_PRESET_DEPARTURE_PAGE_MARKER,
   CG_LIVE_PRESET_TRANSITION_PAGE_MARKER,
   RetainedStackItemSchema,
   retainedFromStackItem,
@@ -180,6 +181,73 @@ function presetEffectTemplate(): TemplateInfo {
 }
 
 const PRESET_EFFECT = { motion: 'ease-in-out', fade: true, durationMs: 160 } as const;
+const PRESET_DEPARTURE_HTML = PRESET_EFFECT_HTML.replace(
+  '</head>',
+  `${CG_LIVE_PRESET_DEPARTURE_PAGE_MARKER}</head>`,
+);
+
+const DEPARTURE_BAND = { start: BAND.start, end: BAND.end + 1 };
+const DEPARTURE_ARTWORK = 'duo/right-group';
+const FULL_FRAME = { x: 0, y: 0, width: 1920, height: 1080 };
+
+async function bootPresetDeparture(html: string, withRetainedInGroup = false) {
+  const base = presetEffectTemplate();
+  const live = base.liveSources!;
+  const [solo, duo] = live.looks!;
+  const left = { x: 0, y: 270, width: 960, height: 540 };
+  const right = { x: 960, y: 270, width: 960, height: 540 };
+  const makeInput = (id: string): SourceCatalog['sources'][number] => ({
+    id,
+    name: id,
+    format: '1080i5000',
+    producer: { kind: 'ndi', source: id },
+  });
+  const r = await boot({
+    template: {
+      ...base,
+      liveSources: {
+        ...live,
+        sources: [
+          ...live.sources,
+          { elementId: 'mask-guest', sourceId: 'guest-3', rect: right, dynamic: false },
+        ],
+        looks: [
+          { ...solo!, rects: { 'guest-1': FULL_FRAME } },
+          {
+            ...duo!,
+            rects: { 'guest-1': left, 'guest-2': right, 'guest-3': right },
+            masks: {
+              'guest-3': { mode: 'inside', rects: [{ x: 0.1, y: 0.6, width: 0.8, height: 0.2 }] },
+            },
+            platePaintOrder: ['guest-1', 'guest-2', 'guest-3'],
+            transitionPaintOrder: ['guest-1', 'guest-2', 'guest-3'],
+            transitionDepartureGroups: {
+              [DEPARTURE_ARTWORK]: [
+                'guest-2',
+                'guest-3',
+                ...(withRetainedInGroup ? ['guest-1'] : []),
+              ],
+            },
+          },
+        ],
+      },
+    },
+    html,
+    catalog: catalog({
+      sources: ['src-a', 'src-b', 'src-c'].map(makeInput),
+      layerRange: DEPARTURE_BAND,
+    }),
+    assignments: assign([
+      ['guest-1', 'src-a'],
+      ['guest-2', 'src-b'],
+      ['guest-3', 'src-c'],
+    ]),
+  });
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  await expect.poll(() => r.stackSnapshot()[0]).toMatchObject({ onAirPresetTransition: true });
+  expect(await r.setActiveLook('item-1', 'duo')).toEqual({ ok: true });
+  return r;
+}
 
 function catalog(over: Partial<SourceCatalog> = {}): SourceCatalog {
   return {
@@ -1753,6 +1821,95 @@ it('animates the retained authored seat in both directions and cuts the new plat
       opacity: 1,
     });
   }
+});
+
+it('hides a complete departing mask group before the shared resize, then restores opacity on reverse', async () => {
+  const r = await bootPresetDeparture(PRESET_DEPARTURE_HTML);
+  const itemId = 'item-1';
+  const visible = () => (r.liveLayers().get(itemId) ?? []).filter(({ held }) => held !== true);
+  const shared = visible().find(({ sourceId }) => sourceId === 'guest-1')!;
+  const departing = visible().filter(({ sourceId }) => sourceId !== 'guest-1');
+  expect(departing).toHaveLength(2);
+  expect(departing[0]?.slot.layer).toBeLessThan(shared.slot.layer);
+  const snapshots = departing.map(({ slot }) => mock!.layerState(slot));
+  for (const { sourceId } of departing)
+    expect(await r.setLivePlateVolume(itemId, sourceId, 0.5)).toMatchObject({ ok: true });
+  const before = (await recvLines()).length;
+  expect(await r.setActiveLook(itemId, 'solo', { ...PRESET_EFFECT, fade: false })).toEqual({
+    ok: true,
+  });
+  const writes = (await recvLines()).slice(before);
+  const earlyCommit = writes.indexOf('MIXER 1 COMMIT');
+  const tween = writes.findIndex(
+    (line) =>
+      line.startsWith(`MIXER 1-${shared.slot.layer} FILL `) && line.includes('easeinoutquad'),
+  );
+  expect(earlyCommit).toBeGreaterThan(0);
+  expect(tween).toBeGreaterThan(earlyCommit);
+  for (const { slot } of departing) {
+    expect(at(writes, `MIXER 1-${slot.layer} OPACITY 0 0 linear DEFER`)).toBeGreaterThanOrEqual(0);
+    expect(at(writes, `MIXER 1-${slot.layer} OPACITY 0 0 linear DEFER`)).toBeLessThan(earlyCommit);
+    expect(at(writes, `MIXER 1-${slot.layer} VOLUME 0`)).toBeGreaterThan(tween);
+    expect(at(writes, `MIXER 1-${slot.layer} OPACITY 1 DEFER`)).toBeGreaterThan(tween);
+  }
+  const phases = writes.filter((line) => line.includes('authoredPreset'));
+  expect(phases).toHaveLength(4);
+  expect(phases.every((line) => line.includes(DEPARTURE_ARTWORK))).toBe(true);
+  expect(phases[0]).toContain('durationMs');
+  expect(visible().map(({ sourceId }) => sourceId)).toEqual(['guest-1']);
+  expect(mock!.layerState(shared.slot)).toMatchObject({
+    opacity: 1,
+    clip: { x: 0, y: 0, width: 1, height: 1 },
+  });
+
+  expect(await r.setActiveLook(itemId, 'duo', { ...PRESET_EFFECT, fade: false })).toEqual({
+    ok: true,
+  });
+  expect(
+    (await recvLines())
+      .slice(before)
+      .some((line) => line.startsWith('PLAY ') || line.startsWith('CLEAR ')),
+  ).toBe(false);
+  for (const [{ slot }, snapshot] of departing.map(
+    (record, index) => [record, snapshots[index]] as const,
+  ))
+    expect(mock!.layerState(slot)).toMatchObject({ opacity: 1, clip: snapshot?.clip, volume: 0.5 });
+});
+
+it.each([
+  [PRESET_EFFECT_HTML, false],
+  [PRESET_DEPARTURE_HTML, true],
+])(
+  'uses Cut when the departure page or an outgoing-only group is unavailable (%#)',
+  async (html, mixed) => {
+    const r = await bootPresetDeparture(html, mixed);
+    const before = (await recvLines()).length;
+    expect(await r.setActiveLook('item-1', 'solo', PRESET_EFFECT)).toEqual({ ok: true });
+    expect((await recvLines()).slice(before).some((line) => line.includes('authoredPreset'))).toBe(
+      false,
+    );
+  },
+);
+
+it('restores prior mask geometry and opacity if the first motion after departure is refused', async () => {
+  const r = await bootPresetDeparture(PRESET_DEPARTURE_HTML);
+  const itemId = 'item-1';
+  const original = r
+    .liveLayers()
+    .get(itemId)
+    ?.map(({ slot }) => [slot, mock!.layerState(slot)] as const);
+  const normal = defaultHandlers().get('MIXER')!;
+  mock!.setHandler('MIXER', (request, context, connection) => {
+    if (request.raw.includes('FILL') && request.raw.includes('easeinoutquad'))
+      return { kind: 'err', code: 502, verb: 'MIXER' };
+    return normal(request, context, connection);
+  });
+  expect(await r.setActiveLook(itemId, 'solo', { ...PRESET_EFFECT, fade: false })).toMatchObject({
+    ok: false,
+    reason: 'amcp-502',
+  });
+  expect(r.stackSnapshot()[0]?.activeLookId).toBe('duo');
+  for (const [slot, state] of original ?? []) expect(mock!.layerState(slot)).toEqual(state);
 });
 
 it('retains Cut on an older resident page and when the same authored plate changes input', async () => {

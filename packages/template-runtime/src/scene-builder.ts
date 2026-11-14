@@ -98,6 +98,7 @@ interface BuildCtx {
   paintEditorBackdrop: boolean;
   foregroundKeys?: ReadonlySet<string> | undefined;
   frameArtworkKeys?: ReadonlySet<string> | undefined;
+  presetDepartureKeys?: ReadonlySet<string> | undefined;
   instancePrefix: string;
   instance?: CompositionElement;
 }
@@ -130,6 +131,7 @@ export function buildScene(
   paintEditorBackdrop = true,
   foregroundKeys?: ReadonlySet<string>,
   frameArtworkKeys?: ReadonlySet<string>,
+  presetDepartureKeys?: ReadonlySet<string>,
 ): BuildSceneResult {
   const container = doc.createElement('div');
   container.className = 'cg-stage';
@@ -163,6 +165,7 @@ export function buildScene(
     paintEditorBackdrop,
     foregroundKeys,
     frameArtworkKeys,
+    presetDepartureKeys,
     instancePrefix: '',
   };
 
@@ -205,6 +208,9 @@ function buildLayer(layer: Layer, ctx: BuildCtx): HTMLElement {
     if (elementNode === null) continue;
     if (instanceHiddenText) elementNode.dataset['cgInstanceHiddenText'] = '';
     const instanceKey = ctx.instancePrefix + element.id;
+    if (ctx.presetDepartureKeys?.has(instanceKey) === true) {
+      elementNode.dataset['cgPresetDepartureKey'] = instanceKey;
+    }
     let contentNode = elementNode;
     if (ctx.frameArtworkKeys?.has(instanceKey) === true) {
       const wrapper = ctx.doc.createElement('div');

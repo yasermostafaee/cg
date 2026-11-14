@@ -612,6 +612,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const frameArtworkKeys = new Set<string>();
   for (const { artworkKey } of frameTargets.values()) frameArtworkKeys.add(artworkKey);
   for (const { artworkKey } of presetFrameTargets.values()) frameArtworkKeys.add(artworkKey);
+  const presetDepartureKeys = new Set<string>();
+  for (const { key, ancestorKeys } of flattened) {
+    if (!presetFrameTargets.has(key)) continue;
+    for (const ancestor of ancestorKeys.slice(1)) presetDepartureKeys.add(ancestor);
+  }
   const built = buildScene(
     scene,
     doc,
@@ -619,9 +624,15 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     paintEditorBackdrop,
     outputPass === 'full' ? undefined : liveForegroundKeys(scene),
     frameArtworkKeys,
+    presetDepartureKeys,
   );
   applyOutputPass(built.container, outputPass);
   root.appendChild(built.container);
+  const departureArtwork = new Map(
+    Array.from(built.container.querySelectorAll<HTMLElement>('[data-cg-preset-departure-key]')).map(
+      (node) => [node.dataset['cgPresetDepartureKey'], node] as const,
+    ),
+  );
   const framePlacement = createFramePlacementRenderer(
     built.container,
     flattened,
@@ -3016,6 +3027,26 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
             built.container.querySelectorAll<HTMLElement>('[data-cg-live-fallback]'),
           ).filter((node) => affected.has(node.parentElement?.dataset['cgLiveSource'] ?? ''))
         : [];
+    // A departing subtree belongs to the outgoing preset and must never cover a frame
+    // that is still moving in this phase. Keys resolve to exact instances in each output pass.
+    if (phase.authoredPreset === true && phase.hidePresetArtworkKeys !== undefined) {
+      const instance = lookGroup?.looks.find(({ id }) => id === currentLookId)?.instanceId;
+      if (instance !== undefined) {
+        for (const key of phase.hidePresetArtworkKeys) {
+          const prefix = key + '/';
+          const node = departureArtwork.get(key);
+          if (
+            node !== undefined &&
+            key.startsWith(instance + '/') &&
+            !phase.frames.some(
+              ({ frameKey, lookId }) => lookId === currentLookId && frameKey.startsWith(prefix),
+            )
+          ) {
+            nodes.push(node);
+          }
+        }
+      }
+    }
     for (const node of nodes) node.setAttribute('data-cg-frame-transition-hidden', '');
     frameTransitionHold = {
       nodes,

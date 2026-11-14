@@ -2612,9 +2612,14 @@ test('Auto layout stages both frame boxes and keeps each styled title with its i
   }
 });
 
-test('R-119 applies the selected effect to both directions of a live preset switch', async ({
+test('R-119 applies the selected effect to both directions of a live preset switch', ({ page }) =>
+  exercisePresetSwitch(page, false));
+
+test('R-119 hides all fragments of a departing masked frame before the shared frame crosses it', ({
   page,
-}) => {
+}) => exercisePresetSwitch(page, true));
+
+async function exercisePresetSwitch(page: Page, crossing: boolean): Promise<void> {
   const handle = await boot(true);
   const engine = mock;
   if (engine === null) throw new Error('Test engine is unavailable');
@@ -2623,7 +2628,8 @@ test('R-119 applies the selected effect to both directions of a live preset swit
   const itemId = 'item-preset-transition';
   const { scene: base } = await unpack(await buildPositionedVcg(templateId));
   const layer = base.layers[0];
-  if (layer === undefined) throw new Error('Missing test layer');
+  const title = layer?.children.find((element) => element.type === 'text');
+  if (layer === undefined || title === undefined) throw new Error('Missing test title');
   const transform = (x: number, y: number, w: number, h: number) => ({
     position: { x, y },
     size: { w, h },
@@ -2690,7 +2696,11 @@ test('R-119 applies the selected effect to both directions of a live preset swit
             id: 'duo-layer',
             children: [
               instance('duo-common', 'common', 160, 300, 800, 450),
-              instance('duo-extra', 'extra', 1000, 300, 800, 450),
+              {
+                ...instance('duo-extra', 'extra', 1000, 300, 800, 450),
+                // Disjoint in Duo. Authored behind Common, this seat may sit above it natively.
+                zIndex: crossing ? -1 : 0,
+              },
             ],
           },
         ],
@@ -2715,7 +2725,26 @@ test('R-119 applies the selected effect to both directions of a live preset swit
                 operatorMove: true,
                 operatorPlacement: 'proportional',
                 transform: transform(0, 0, 1920, 1080),
+                ...(crossing &&
+                  id === 'extra' && {
+                    liveMask: {
+                      mode: 'outside',
+                      rects: [{ x: 0.4, y: 0.4, width: 0.2, height: 0.2 }],
+                    },
+                  }),
               },
+              ...(crossing
+                ? [
+                    {
+                      ...title,
+                      id: id + '-title',
+                      text: id,
+                      liveForeground: true,
+                      transform: transform(20, 900, 600, 90),
+                      zIndex: 1,
+                    },
+                  ]
+                : []),
             ],
           },
         ],
@@ -2728,11 +2757,13 @@ test('R-119 applies the selected effect to both directions of a live preset swit
     fontsCss: '',
     assets: { get: () => Promise.resolve(null), bytes: () => Promise.resolve(null) },
   }).produce(scene);
-  handle.runtime.templateImport(
-    { ...TEMPLATE, templateId, liveSources: buildTemplateLiveSources(scene) },
-    html,
-    1,
-  );
+  const liveSources = buildTemplateLiveSources(scene);
+  if (crossing)
+    expect(liveSources.looks?.find(({ id }) => id === 'duo')?.transitionPaintOrder).toEqual([
+      'extra',
+      'common',
+    ]);
+  handle.runtime.templateImport({ ...TEMPLATE, templateId, liveSources }, html, 1);
   const sources = ['common', 'extra'].map((id) => ({
     id,
     name: id,
@@ -2772,6 +2803,13 @@ test('R-119 applies the selected effect to both directions of a live preset swit
     ?.find(({ sourceId }) => sourceId === 'common');
   if (common === undefined) throw new Error('Missing common seat');
   const commonSlot = common.slot;
+  if (crossing) {
+    expect(await handle.runtime.setLivePlateVolume(itemId, 'common', 0.3)).toMatchObject({
+      ok: true,
+      sent: true,
+    });
+    expect(engine.layerState(commonSlot)?.volume).toBe(0.3);
+  }
   const programmeCommands = (start: number) =>
     engine
       .receivedCommands()
@@ -2787,13 +2825,54 @@ test('R-119 applies the selected effect to both directions of a live preset swit
   ).toBe(false);
   await expect(row.getByText('● draft', { exact: true })).toHaveCount(0);
 
-  for (const lookId of ['duo', 'solo']) {
+  const visibleExtra = () =>
+    (handle.runtime.liveLayers().get(itemId) ?? []).filter(
+      ({ sourceId, held }) => sourceId === 'extra' && held !== true,
+    );
+  const lookSequence = crossing ? ['duo', 'solo', 'duo'] : ['duo', 'solo'];
+  const masksBeforeReturn: LiveRevealRect[] = [];
+  for (const lookId of lookSequence) {
+    const departing = crossing && lookId === 'solo' ? visibleExtra() : [];
+    if (crossing && lookId === 'solo') {
+      expect(departing.length).toBeGreaterThan(1);
+      expect(departing.every(({ slot }) => slot.layer > commonSlot.layer)).toBe(true);
+      masksBeforeReturn.push(...departing.map(({ clip }) => clip));
+    }
     const start = engine.receivedCommands().length;
     const preset = row.locator('[data-look-id="' + lookId + '"]');
     await preset.click();
     await expect(preset).toHaveAttribute('aria-pressed', 'true');
     await expect.poll(() => handle.runtime.activeLookId(itemId)).toBe(lookId);
     const wire = programmeCommands(start);
+    if (departing.length > 0) {
+      const departurePage = wire.findIndex((line) => line.includes('hidePresetArtworkKeys'));
+      expect(departurePage).toBeGreaterThanOrEqual(0);
+      expect(wire[departurePage]).toContain('show-duo/duo-extra');
+      const departureCommit = wire.indexOf('MIXER 1 COMMIT', departurePage);
+      expect(departureCommit).toBeGreaterThan(departurePage);
+      // The prelude hides both resident pages' artwork before the native mask fragments depart.
+      expect(
+        wire.slice(0, departureCommit).filter((line) => line.includes('hidePresetArtworkKeys')),
+      ).toHaveLength(2);
+      const firstSharedMove = wire.findIndex((line) =>
+        new RegExp(`^MIXER 1-${String(commonSlot.layer)} FILL .* [1-9]\\d* \\w+ DEFER$`, 'i').test(
+          line,
+        ),
+      );
+      expect(firstSharedMove).toBeGreaterThan(departureCommit);
+      for (const { slot } of departing) {
+        expect(wire.slice(0, departureCommit)).toContainEqual(
+          expect.stringMatching(
+            new RegExp(`^MIXER 1-${String(slot.layer)} OPACITY 0 .+ DEFER$`, 'i'),
+          ),
+        );
+      }
+      expect(visibleExtra()).toEqual([]);
+    } else if (crossing && masksBeforeReturn.length > 0) {
+      const returned = visibleExtra();
+      expect(returned.map(({ clip }) => clip)).toEqual(masksBeforeReturn);
+      expect(returned.every(({ slot }) => engine.layerState(slot)?.opacity === 1)).toBe(true);
+    }
     for (const easing of ['easeinquad', 'easeoutquad']) {
       expect(wire).toContainEqual(
         expect.stringMatching(
@@ -2811,6 +2890,7 @@ test('R-119 applies the selected effect to both directions of a live preset swit
     expect(clip.y).toBeCloseTo(expected.y, 5);
     expect(clip.width).toBeCloseTo(expected.width, 5);
     expect(clip.height).toBeCloseTo(expected.height, 5);
+    if (crossing) expect(engine.layerState(commonSlot)?.volume).toBe(0.3);
     expect(
       wire.some((line) =>
         new RegExp('^(?:PLAY|LOADBG|STOP|CLEAR) 1-' + String(commonSlot.layer) + '(?: |$)').test(
@@ -2827,23 +2907,18 @@ test('R-119 applies the selected effect to both directions of a live preset swit
     ).toEqual(commonSlot);
   }
 
-  expect(requests).toEqual([
-    expect.objectContaining({
-      payload: expect.objectContaining({
-        itemId,
-        lookId: 'duo',
-        transition: { motion: 'ease-in-out', fade: true, durationMs: 500 },
+  expect(requests).toEqual(
+    lookSequence.map((lookId) =>
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          itemId,
+          lookId,
+          transition: { motion: 'ease-in-out', fade: true, durationMs: 500 },
+        }),
       }),
-    }),
-    expect.objectContaining({
-      payload: expect.objectContaining({
-        itemId,
-        lookId: 'solo',
-        transition: { motion: 'ease-in-out', fade: true, durationMs: 500 },
-      }),
-    }),
-  ]);
-});
+    ),
+  );
+}
 
 test('Auto layout follows the active preset permission and retains separate controls and drafts', async ({
   page,

@@ -31,6 +31,11 @@ starts. A shared plate must have the same authored definition, artwork and verif
 seat in both presets. Its outgoing artwork, native picture and mask fragments follow the same
 phase endpoints. Fade applies to the shared frame. The regular preset commit brings in the
 remaining frames and parks outgoing-only frames once the shared frame reaches its destination.
-When a switch has no safely retained frame or its active mixer layers cannot preserve the
-authored order through the move, it uses Cut. Existing manual frame permissions still
-constrain operator edits.
+If native layer order would make the shared frame cross a departing group incorrectly, the
+Bridge first hides that group's picture, mask fragments, fallback and nested artwork while
+the shared frame holds its pose. It then starts the selected effect at the configured duration.
+The terminal mixer batch parks the group and restores its usual parked opacity. A refused
+switch restores the previously applied view while the Bridge still owns the output.
+The transition requires compatible resident pages and a verified group containing only departing
+plates. The switch uses Cut if the paint order is still unsafe or there is no verified shared
+frame. Existing manual frame permissions still constrain operator edits.

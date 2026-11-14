@@ -13,6 +13,8 @@ export const CG_LIVE_FRAME_TRANSITION_PAGE_MARKER =
   '<meta name="cg-live-frame-transition" content="1">';
 export const CG_LIVE_PRESET_TRANSITION_PAGE_MARKER =
   '<meta name="cg-live-preset-transition" content="1">';
+export const CG_LIVE_PRESET_DEPARTURE_PAGE_MARKER =
+  '<meta name="cg-live-preset-departure" content="1">';
 export const CG_LIVE_MASK_PLACEMENT_PAGE_MARKER =
   '<meta name="cg-live-mask-placement" content="1">';
 

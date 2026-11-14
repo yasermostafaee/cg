@@ -420,8 +420,37 @@ describe('D-201 — synchronized live-input foreground pass', () => {
         ...box,
         transform: { ...box.transform, scale: { x: 0.5, y: 0.75 }, position: { x: 520, y: 60 } },
       };
+      const departingBox = {
+        ...box,
+        id: 'departing-box',
+        compositionId: 'departing-frame',
+      };
+      const departingLayer = frameDoc.layers[0];
+      const departingTitle = departingLayer?.children.find(({ id }) => id === 'name');
+      if (departingLayer === undefined || departingTitle?.type !== 'text')
+        throw new Error('Missing title fixture');
+      scene.compositions?.push({
+        ...frameDoc,
+        id: 'departing-frame',
+        layers: [
+          {
+            ...departingLayer,
+            children: [
+              { ...plate, id: 'departing-a', routeKey: 'departing-a' },
+              { ...plate, id: 'departing-b', routeKey: 'departing-b' },
+              { ...departingTitle, id: 'departing-title' },
+            ],
+          },
+        ],
+      });
       const presets = [
-        { id: 'solo', instanceId: 'solo-root', name: 'Solo', frame: soloBox, second: [] },
+        {
+          id: 'solo',
+          instanceId: 'solo-root',
+          name: 'Solo',
+          frame: soloBox,
+          second: [departingBox],
+        },
         {
           id: 'duo',
           instanceId: 'duo-root',
@@ -485,8 +514,18 @@ describe('D-201 — synchronized live-input foreground pass', () => {
       const duo = document.querySelector<HTMLElement>('[data-cg-element-id="duo-root"]');
       const artwork = solo?.querySelector<HTMLElement>('[data-cg-frame-artwork="solo-root/box"]');
       const destination = duo?.querySelector<HTMLElement>('[data-cg-frame-artwork="duo-root/box"]');
-      if (solo == null || duo == null || artwork == null || destination == null)
+      const departing = solo?.querySelector<HTMLElement>(
+        '[data-cg-preset-departure-key="solo-root/departing-box"]',
+      );
+      if (
+        solo == null ||
+        duo == null ||
+        artwork == null ||
+        destination == null ||
+        departing == null
+      )
         throw new Error('Missing preset or frame artwork');
+      const hiddenMarker = 'data-cg-frame-transition-hidden';
       const fallback = artwork.querySelector('[data-cg-live-fallback]');
       expect(fallback !== null).toBe(outputPass === 'background');
       expect(artwork.querySelector('[data-cg-element-id="name"]') !== null).toBe(
@@ -499,6 +538,12 @@ describe('D-201 — synchronized live-input foreground pass', () => {
         durationMs: 400,
         easing: 'linear',
         hideFallbackPlateIds: ['guest'],
+        hidePresetArtworkKeys: [
+          'solo-root/departing-box',
+          'solo-root/box',
+          'solo-root',
+          'duo-root/box',
+        ],
         frames: [
           {
             frameKey: 'solo-root/box/plate',
@@ -514,6 +559,33 @@ describe('D-201 — synchronized live-input foreground pass', () => {
       await runtime.update(withCgControl({}, { frameTransition: phase }));
       advanceTo(200);
       expect(artwork.style.transform).toBe('');
+      expect(departing.hasAttribute(hiddenMarker)).toBe(false);
+      await runtime.update(
+        withCgControl(
+          {},
+          {
+            frameTransition: {
+              ...phase,
+              authoredPreset: true,
+              durationMs: 0,
+              frames: phase.frames.map((frame) => ({ ...frame, to: frame.from, toOpacity: 1 })),
+            },
+          },
+        ),
+      );
+      expect(departing.hasAttribute(hiddenMarker)).toBe(true);
+      expect(getComputedStyle(departing).display).toBe('none');
+      expect(
+        solo
+          .querySelector('[data-cg-preset-departure-key="solo-root/box"]')
+          ?.hasAttribute(hiddenMarker),
+      ).toBe(false);
+      expect(
+        duo
+          .querySelector('[data-cg-preset-departure-key="duo-root/box"]')
+          ?.hasAttribute(hiddenMarker),
+      ).toBe(false);
+      expect(solo.hasAttribute(hiddenMarker)).toBe(false);
       await runtime.update(
         withCgControl({}, { frameTransition: { ...phase, authoredPreset: true } }),
       );
@@ -522,6 +594,7 @@ describe('D-201 — synchronized live-input foreground pass', () => {
       expect(duo.style.display).toBe('none');
       expect(artwork.style.transform).toBe('matrix(0.75,0,0,0.875,260,30)');
       expect(artwork.style.opacity).toBe('0.8');
+      expect(departing.hasAttribute(hiddenMarker)).toBe(true);
       if (fallback !== null)
         expect(fallback.hasAttribute('data-cg-frame-transition-hidden')).toBe(true);
       advanceTo(600);
@@ -543,6 +616,7 @@ describe('D-201 — synchronized live-input foreground pass', () => {
       expect(artwork.style.transform).toBe('');
       expect(artwork.style.opacity).toBe('');
       expect(destination.style.transform).toBe('');
+      expect(departing.hasAttribute(hiddenMarker)).toBe(false);
       if (fallback !== null)
         expect(fallback.hasAttribute('data-cg-frame-transition-hidden')).toBe(false);
       runtime.remove();
