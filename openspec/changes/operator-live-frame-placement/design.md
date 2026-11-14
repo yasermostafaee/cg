@@ -59,8 +59,8 @@ continues to use the Arrangement's sizing rules.
 CG Control resolves the visible frame set again when the active preset changes. Its Auto layout
 inputs are kept by preset while inspecting the row, and the existing placement draft carries
 the preset ID. The Inspector derives each preset's available layouts from its own frame count.
-Gap controls use the shared numeric scrub input. A valid edit stages a full layout immediately.
-An incomplete value or a gap that cannot fit the frames preserves the last valid draft.
+An Arrangement selection calculates and stages the full layout from the change event, like a valid gap edit.
+Gap controls use the shared numeric scrub input. An incomplete value or a gap that cannot fit the frames preserves the last valid draft. Arrange frames can reapply the current settings, including on grids that have no Arrangement choice.
 
 Designer stores the permission on the managed preset record and shows its checkbox in the
 registered preset's composition Inspector. New presets default off. A saved preset with no

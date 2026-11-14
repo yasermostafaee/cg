@@ -190,6 +190,19 @@ export function FrameAutoLayout({
     if (updates.length === frames.length) stageFramePlacements(item.itemId, updates);
   }
 
+  function changeArrangement(
+    changes: Partial<Pick<LayoutControls, 'twoPlateLayout' | 'bias'>>,
+  ): void {
+    if (!enabled) return;
+    updateControls(changes);
+    arrange(
+      calculateLiveSourceAutoLayout(geometry, live.resolution, changes.bias ?? bias, {
+        ...options,
+        twoPlateLayout: changes.twoPlateLayout ?? twoPlateLayout,
+      }),
+    );
+  }
+
   function changeGap(axis: GapAxis, text: string): void {
     // A captured pointer gesture can outlive the preset or its edit permission.
     if (!enabled || activeGapScope.current !== gapScope) return;
@@ -218,7 +231,7 @@ export function FrameAutoLayout({
               className="cg-field"
               value={twoPlateLayout}
               onChange={(event) =>
-                updateControls({
+                changeArrangement({
                   twoPlateLayout:
                     event.currentTarget.value === 'vertical' ? 'vertical' : 'horizontal',
                 })
@@ -236,7 +249,7 @@ export function FrameAutoLayout({
               className="cg-field"
               value={bias}
               onChange={(event) =>
-                updateControls({
+                changeArrangement({
                   bias: event.currentTarget.value === 'more-bottom' ? 'more-bottom' : 'more-top',
                 })
               }

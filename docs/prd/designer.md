@@ -6797,6 +6797,7 @@ CG Control after swapping left/right inputs is not an acceptable operating workf
 - WHEN the active preset contains at least two frames THEN that preset's permission and each frame's
   movement and resize permissions determine whether Arrange is available. If the preset is
   authorized but a frame is locked, CG Control shows the reason.
+- WHEN the operator selects an Arrangement in CG Control THEN the active preset reflows in PVW immediately and Update applies the draft.
 - WHEN an existing output has a legacy Auto layout permission THEN previously unset presets inherit
   it until the author chooses their individual settings.
 - WHEN audio or locked layers are selected with eligible visuals THEN Auto layout leaves those

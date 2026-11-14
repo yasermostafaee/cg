@@ -2097,12 +2097,15 @@ test('Auto layout stages both frame boxes and keeps each styled title with its i
     .locator('details')
     .filter({ has: page.getByText('Auto layout', { exact: true }) });
   await layout.locator('summary').click();
-  await layout.getByRole('combobox', { name: 'Arrangement' }).selectOption('vertical');
+  const arrangement = layout.getByRole('combobox', { name: 'Arrangement' });
   const verticalGap = layout.getByRole('textbox', { name: 'Vertical gap (px)' });
   const stackedGap = async () => {
     const { a, b } = await read();
     return Math.max(a.y, b.y) - Math.min(a.y + a.height, b.y + b.height);
   };
+  await arrangement.selectOption('vertical');
+  await expect.poll(stackedGap).toBeCloseTo(27, 1);
+  await expect(row.getByText('● draft', { exact: true })).toBeVisible();
   await verticalGap.fill('36');
   await expect.poll(stackedGap).toBeCloseTo(36, 1);
   const programmeCommands = () =>
@@ -2171,6 +2174,18 @@ test('Auto layout stages both frame boxes and keeps each styled title with its i
   await expect(swap).toBeEnabled();
   expect(programmeCommands()).toEqual(beforeSwap);
   const savedBeforeGap = saved();
+  await arrangement.selectOption('horizontal');
+  await expect
+    .poll(async () => {
+      const { a, b } = await read();
+      return Math.max(a.x, b.x) - Math.min(a.x + a.width, b.x + b.width);
+    })
+    .toBeCloseTo(27, 1);
+  expect(saved()).toEqual(savedBeforeGap);
+  expect(sourceGeometry()).toEqual(beforeSourceGeometry);
+  expect(programmeCommands()).toEqual(beforeSwap);
+  await arrangement.selectOption('vertical');
+  await expect.poll(stackedGap).toBeCloseTo(36, 1);
   await verticalGap.fill('۴۸');
   await expect(verticalGap).toHaveValue('48');
   await expect.poll(stackedGap).toBeCloseTo(48, 1);
@@ -2449,7 +2464,6 @@ test('Auto layout follows the active preset permission and retains separate cont
     'More frames on bottom',
   ]);
   await arrangement.selectOption('more-bottom');
-  await horizontalGap.fill('54');
   await expect
     .poll(async () => {
       const [top, lowerLeft, lowerRight] = await read();
@@ -2462,6 +2476,15 @@ test('Auto layout follows the active preset permission and retains separate cont
       );
     })
     .toBe(true);
+  await horizontalGap.fill('54');
+  await expect
+    .poll(async () => {
+      const [, lowerLeft, lowerRight] = await read();
+      return lowerLeft === undefined || lowerRight === undefined
+        ? NaN
+        : lowerRight.x - lowerLeft.x - lowerLeft.width;
+    })
+    .toBeCloseTo(54, 1);
   const tripleDraft = await read();
 
   await choosePreset('quad', 4);

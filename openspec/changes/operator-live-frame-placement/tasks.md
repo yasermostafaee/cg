@@ -36,6 +36,9 @@
       controls and gaps, round-trip Swap, and saving the separate placements without off-air playout.
 - [x] Windows Chromium measured the preset permission checkbox at the standard 14 × 14 CSS pixels
       and checked the exported VCG values.
+- [x] Windows Chromium verified that changing Arrangement reflows two- and three-frame presets
+      in PVW. On-air frame geometry and AMCP remain unchanged until Update.
+- [ ] Record the carrying Linux Playwright result for immediate Arrangement.
 - [x] Windows Chromium verified typing and dragging gaps reflows PVW while the active preset's
       applied geometry stays fixed until Update. Partial and out-of-range input preserve the draft.
 - [x] Windows Chromium verified replacement import followed by one placement update to the

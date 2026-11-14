@@ -132,6 +132,12 @@ layer order and the authored ratio of proportional frames.
 - **AND** returning to a preset in the Inspector restores its arrangement settings and Swap order
 - **AND** drafted and applied frame positions stay associated with their own presets
 
+#### Scenario: Choose an arrangement while watching Preview
+
+- **WHEN** the operator changes the Arrangement for an authorized preset
+- **THEN** PVW immediately shows the new layout as a draft
+- **AND** applying the change to Programme still requires Update on air
+
 #### Scenario: Adjust the gap while watching Preview
 
 - **WHEN** the operator types, drags or steps a valid gap for the active preset
