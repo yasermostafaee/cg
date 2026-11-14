@@ -425,8 +425,10 @@ jobs:
     # 2026-10-22 (`RUN-NEXT-VERSION-03`): the Runtime suite ran out of its 14.0 (run 39629476965); the
     # Designer suite then exhausted both its 11-minute CI budget (run 42364749060) and a 14-minute
     # one-worker slow-runner control without a failed assertion. 35 → 40 on 2026-11-07 keeps the
-    # now 17 + 17 suite budgets below the outer cap with setup/build room.
-    timeout-minutes: 40
+    # now 17 + 17 suite budgets below the outer cap with setup/build room. Run 43636673813
+    # reached the Runtime budget with 44 tests still to run. 44 minutes leaves setup and build
+    # room for the 17-minute Designer and 21-minute Runtime suites.
+    timeout-minutes: 44
 
     steps:
       - name: Checkout

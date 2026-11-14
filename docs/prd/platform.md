@@ -2759,6 +2759,10 @@ was unobtainable.
    `timeout-minutes` and redo the arithmetic in the runtime config, which owns it); it is NEVER to
    delete or skip specs until the suite fits.
 
+   Run 43636673813 reached the 17-minute Runtime deadline with 44 of 461 cases still to run.
+   The observed pace projects about 18.8 minutes. Runtime now has 21 minutes, Designer has 17,
+   and the job cap is 44 minutes, with six minutes for startup, build and reporting.
+
 2. **`--log-order=stream`** on `test:e2e` and `gate:e2e:run`. Output appears as it is produced
    instead of at a completion that may never come, so a hung suite is legible WHILE it hangs.
    `bounded-turbo-cli.mjs` forwards argv verbatim (it rewrites only `--concurrency`), so this needs

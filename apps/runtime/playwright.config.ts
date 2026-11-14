@@ -142,8 +142,12 @@ function resolveWorkers(): number | undefined {
  * A one-worker Windows control then exhausted a 14-minute trial after four timing retries (`385
  * passed`, `32 did not run`). The budgets are now 17 + 17 = 34 against ~37.4 usable inside the
  * 40-minute cap; the cap still cannot hide a suite overrun and retains setup/build room.
+ *
+ * Run 43636673813 reached the 17-minute Runtime deadline with 44 tests still to run out of 461.
+ * The observed rate projects roughly 18.8 minutes for the full suite. Allow 21 minutes for
+ * Runtime and retain 17 for Designer, with a 44-minute job cap for setup and build.
  */
-const CI_GLOBAL_TIMEOUT_MS = 17 * 60_000;
+const CI_GLOBAL_TIMEOUT_MS = 21 * 60_000;
 
 export default defineConfig({
   globalTimeout: process.env.CI ? CI_GLOBAL_TIMEOUT_MS : undefined,
