@@ -500,6 +500,7 @@ export function createMockBridge(): RuntimeBridge {
     */
     pgmReturn: {
       feedUrl: () => Promise.resolve(programMonitor === null ? null : '/favicon.svg'),
+      topology: () => Promise.resolve(null),
       // `PLAYOUT-FEATURES-01` E — no relay, so no sound either.
       audioUrl: () => Promise.resolve(null),
       status: () => Promise.resolve([...(programMonitor?.statuses ?? [])]),

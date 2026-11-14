@@ -284,7 +284,7 @@ const BRIDGE_SURFACE: {
     */
     emptiedAir: ['notice', 'restore', 'dismiss', 'onNoticeChanged'],
     // C-016 — the programme return. The mock has no relay: `feedUrl` is `null`, nothing is watched.
-    pgmReturn: ['feedUrl', 'audioUrl', 'status', 'onStatusChanged'],
+    pgmReturn: ['feedUrl', 'audioUrl', 'status', 'onStatusChanged', 'topology'],
     livePreview: ['start', 'status', 'stop', 'url'],
     sourcePreviews: ['pvw', 'thumbnails'],
     playlistGain: ['get', 'set'],
