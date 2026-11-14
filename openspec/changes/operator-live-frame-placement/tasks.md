@@ -38,7 +38,7 @@
       and checked the exported VCG values.
 - [x] Windows Chromium verified that changing Arrangement reflows two- and three-frame presets
       in PVW. On-air frame geometry and AMCP remain unchanged until Update.
-- [ ] Record the carrying Linux Playwright result for immediate Arrangement.
+- [x] [Linux Playwright](https://github.com/yasermostafaee/cg/actions/runs/43579192169/job/132400126389) ran its E2E step successfully on `b7883bc0`. It carried immediate Arrangement.
 - [x] Windows Chromium verified typing and dragging gaps reflows PVW while the active preset's
       applied geometry stays fixed until Update. Partial and out-of-range input preserve the draft.
 - [x] Windows Chromium verified replacement import followed by one placement update to the

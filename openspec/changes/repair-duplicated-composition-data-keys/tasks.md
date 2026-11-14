@@ -4,4 +4,4 @@
 - [x] Recover legacy bindings in Designer open and VCG export and CG Control import.
 - [x] Windows Chromium exported the supplied `3ghab.cgproj` with three valid keys and imported
       the existing `3ghab.vcg` with the same three title values.
-- [ ] Verify the carrying Linux Playwright run.
+- [x] [Linux Playwright](https://github.com/yasermostafaee/cg/actions/runs/43579192169/job/132400126389) ran its E2E step successfully on `b7883bc0`.
