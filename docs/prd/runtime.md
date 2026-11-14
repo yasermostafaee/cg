@@ -5192,7 +5192,8 @@ Send CG commands to the active engine after its external-graphics transfer contr
 - WHEN the channel has four linked engines THEN Programme can show their named returns in a two-by-two grid.
 - WHEN Playout confirms a control owner THEN identify that engine and let Follow use its programme audio.
 - WHEN ownership is unknown THEN show no active designation and keep Follow silent.
-- WHEN verified Playout transfers the channel and synchronizes external CG THEN later CG commands reach the active engine only and the existing graphic remains available on the promoted engine.
+- WHEN an opt-in channel is served by External CG v2 and ownership is confirmed THEN CG commands reach only the active engine's managed API.
+- WHEN a prepared replica becomes the owner THEN the existing graphic remains available and the former owner's fence cannot change that output. Verify with the real CG Bridge and Control.
 
 ## [~] R-119 — Animate on-air live frame placement ⟨priority: high — owner, 2026-11-14⟩ — `openspec/changes/animate-live-frame-placement/`
 

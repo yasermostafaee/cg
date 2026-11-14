@@ -38,7 +38,24 @@ The current mirror covers Playlist and Transport and can target only the selecte
 takeover. The report names the reviewed binaries and distinguishes these tests from an
 isolated test containing native engines and live PGM.
 
-Use the monitoring owner as a display signal. Moving the CG command route requires a
-Playout contract that validates the owner at execution, provides a queryable command result
-for timeouts and proves the promoted replicas applied the external graphic state. Preserve
-the current Bridge command route until those capabilities are available and verified.
+## External CG v2, 2026-11-15
+
+The Playout team's external-cg-v2-implementation.fa.md describes an opt-in Engine/Core
+candidate based on 2.19.0. Its isolated tests use two or four real Core processes, real
+HTML and recorded programme output. They exercise replica state and stale-owner rejection.
+The full Windows Service, physical outputs and the real CG Bridge/Control pair remain
+acceptance work.
+
+On opted-in channels, Bridge commands must use the authoritative self-confirmed owner
+from the External CG v2 API and send the returned fence unchanged. Programme monitor
+ownership stays a display signal. The write path sends one durable command ID for an
+absolute graphics state, queries its result after ambiguity and never retries that
+state at a second owner. Raw AMCP writes are refused on migrated channels. Legacy
+stations retain the existing Bridge command route.
+
+The API prepares a hashed template bundle on every member. Warm takeover uses an applied
+replica. Cold recovery needs an absolute applyState adapter that resumes without replay.
+The v2 mask is a normalized rectangle and Stop cuts picture and sound. Current multiple
+mask fragments, coordinated preset effects and authored outros require an explicit
+contract and matching acceptance tests. Two members both have to vote for a new owner.
+A four-member group has quorum with three members, and auto-acquire is disabled by default.

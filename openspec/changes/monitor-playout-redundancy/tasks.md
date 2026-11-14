@@ -16,7 +16,11 @@
 
 - [x] Review the Playout team's 2.19.0 contract report. The tested build has no execution fence
       or replica state for external CG. Its proposed external command API is prospective.
-- [ ] Confirm the new Playout contract for direct AMCP graphics synchronization and transfer
-      fencing, including epoch relationships and in-flight commands.
-- [ ] Integrate the confirmed active-only route and test Take, Update, Stop and transfer with a
-      running external graphic on an isolated redundant channel.
+- [x] Review external-cg-v2-implementation.fa.md. The Engine/Core candidate exercises
+      managed API transfer with real Core processes. Enabled channels refuse raw AMCP writes.
+- [ ] Verify the candidate OpenAPI and actual exchange examples, including target mapping,
+      fences, durable command IDs, ambiguous results and replica readiness.
+- [ ] Integrate the managed route and verify Take, Update, Next, Stop, Clear and transfer with
+      the real CG Bridge and Control on an isolated redundant channel.
+- [ ] Verify the managed export adapter with real graphics and collect acceptance for cold
+      recovery, masked multi-plate presets, authored outros and physical programme output.

@@ -10,8 +10,8 @@ return of each of those engines and identify the control owner when the status c
 - Discover linked engines for the selected channel, up to four including the configured engine.
 - Show named programme pictures separately and offer one console-local sound source.
 - Keep the existing monitor path available for legacy Playout and Bridge configurations.
-- Track active-only CG command routing as a separate acceptance step requiring the Playout
-  contract for external graphics and a transfer test.
+- Track active-only CG command routing through the opt-in External CG v2 API. Accept it after
+  a transfer test with the real CG Bridge, Control and compatible Playout builds.
 
 ## Capabilities
 
