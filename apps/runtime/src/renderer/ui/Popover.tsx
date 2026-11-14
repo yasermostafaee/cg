@@ -37,9 +37,8 @@ import { useFocusTrap } from './focusTrap.js';
  * ── WHERE IT GOES ───────────────────────────────────────────────────────────────────────
  *
  * Below the field, at least `minWidth` wide and at most `maxHeight` tall; ABOVE it when there is
- * no room below; clamped inside the viewport. It closes on a press outside, on Escape, and when
- * the page under it scrolls or resizes (a panel chasing a field that moved is a panel pointing
- * at the wrong thing — `ContextMenu`'s reasoning) — but never for a scroll INSIDE itself.
+ * no room below; clamped inside the viewport. It closes on a press outside, on Escape, when a
+ * scroll moves its anchor or when the window resizes. Scrolling inside the panel keeps it open.
  */
 
 const EDGE = 8;
@@ -83,6 +82,7 @@ export function Popover({
   children,
 }: PopoverProps): JSX.Element {
   const panel = useRef<HTMLDivElement>(null);
+  const anchorAtOpen = useRef<DOMRect | null>(null);
   const [placement, setPlacement] = useState<Placement | null>(null);
   const layer = useFocusTrap(panel, true, {
     // Focus goes back to the FIELD, not to whatever held it when the panel opened: a pointer press
@@ -103,6 +103,7 @@ export function Popover({
     const el = panel.current;
     if (field === null || el === null) return;
     const rect = field.getBoundingClientRect();
+    anchorAtOpen.current = rect;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const width = Math.min(Math.max(rect.width, minWidth), Math.max(vw - EDGE * 2, 0));
@@ -132,7 +133,22 @@ export function Popover({
     };
     const onScroll = (e: Event): void => {
       if (e.target instanceof Node && panel.current?.contains(e.target) === true) return;
-      onClose();
+      const field = anchor.current;
+      const initial = anchorAtOpen.current;
+      const current = field?.getBoundingClientRect();
+      // The browser may deliver a scroll-to-field event after the click that opened the panel.
+      // Its placement already accounts for that scroll; only dismiss if the field has since moved.
+      if (
+        field?.isConnected !== true ||
+        initial === null ||
+        current === undefined ||
+        current.left !== initial.left ||
+        current.top !== initial.top ||
+        current.width !== initial.width ||
+        current.height !== initial.height
+      ) {
+        onClose();
+      }
     };
     document.addEventListener('keydown', onKeyDown, true);
     window.addEventListener('scroll', onScroll, true);
@@ -142,7 +158,7 @@ export function Popover({
       window.removeEventListener('scroll', onScroll, true);
       window.removeEventListener('resize', onClose);
     };
-  }, [onClose, layer]);
+  }, [anchor, onClose, layer]);
 
   return createPortal(
     <div

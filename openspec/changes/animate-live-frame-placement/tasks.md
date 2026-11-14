@@ -37,5 +37,7 @@
 - [x] Drop the engine connection during a preset change. Verify surviving pages recover their
       prior preset, missing pages are not recreated, and an already-visible temporary mask
       fragment is muted, hidden and cleared on reconnect.
+- [x] Verify the Inspector source picker stays open when a delayed scroll event follows its
+      click on a small viewport, and that Preview sends no programme commands after Bridge startup.
 - [ ] Record the Linux Playwright result for the expanded transitions.
 - [ ] Build the updated local Windows installers after the expanded transitions pass.

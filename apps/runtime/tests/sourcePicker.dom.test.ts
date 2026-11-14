@@ -665,6 +665,31 @@ describe('the keyboard, and a choice returned ONCE', () => {
     expect(document.activeElement).toBe(field);
   });
 
+  it('keeps the picker open for a pending scroll that was already measured', async () => {
+    const field = await render({});
+    const bounds = vi
+      .spyOn(field, 'getBoundingClientRect')
+      .mockReturnValue(new DOMRect(20, 420, 200, 30));
+    const panel = await openPicker(field);
+    const list = panel.querySelector('[data-picker-list]');
+
+    await act(async () => {
+      field.parentElement?.dispatchEvent(new Event('scroll'));
+    });
+    expect(document.querySelector('[data-popover]')).toBe(panel);
+
+    bounds.mockReturnValue(new DOMRect(20, 400, 200, 30));
+    await act(async () => {
+      list?.dispatchEvent(new Event('scroll'));
+    });
+    expect(document.querySelector('[data-popover]')).toBe(panel);
+
+    await act(async () => {
+      field.parentElement?.dispatchEvent(new Event('scroll'));
+    });
+    expect(document.querySelector('[data-popover]')).toBeNull();
+  });
+
   it('choosing the value already bound returns nothing — only a change is a choice', async () => {
     const onChange = vi.fn();
     const field = await render({ value: 'in-studio1', onChange });
