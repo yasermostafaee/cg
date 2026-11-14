@@ -13,10 +13,12 @@ import {
 } from '@cg/shared-ipc';
 import {
   CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER,
+  CG_LIVE_FRAME_TRANSITION_PAGE_MARKER,
   CG_LIVE_MASK_PLACEMENT_PAGE_MARKER,
   CG_LIVE_POSITION_PAGE_MARKER,
   RetainedStackItemSchema,
   retainedFromStackItem,
+  type FrameTransition,
   type LiveFitMode,
   type LiveFramePlacement,
   type LiveFrameTarget,
@@ -136,6 +138,7 @@ const MOVED_FRAME: LiveFramePlacement = {
 const AUTHORED_FRAME: LiveFramePlacement = { frameKey: FRAME.frameKey, rect: BOX };
 const FRAME_HTML = `<!doctype html><html><head>${CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER}</head><body>served</body></html>`;
 const MASK_HTML = FRAME_HTML.replace('</head>', `${CG_LIVE_MASK_PLACEMENT_PAGE_MARKER}</head>`);
+const EFFECT_HTML = FRAME_HTML.replace('</head>', `${CG_LIVE_FRAME_TRANSITION_PAGE_MARKER}</head>`);
 
 function catalog(over: Partial<SourceCatalog> = {}): SourceCatalog {
   return {
@@ -1566,6 +1569,189 @@ it('moves the same on-air page and picture in place and rolls back after a refus
   expect(JSON.parse(mock!.lastCgUpdate({ channel: 1, layer: 10 })?.data ?? '{}')).toEqual({
     __cg: { framePlacements: [] },
   });
+});
+
+it.each([
+  { motion: 'linear', fade: false, durationMs: 160, commits: 1, opacity: [] },
+  { motion: 'cut', fade: true, durationMs: 160, commits: 3, opacity: [0, 0, 1] },
+  { motion: 'ease-in-out', fade: true, durationMs: 160, commits: 2, opacity: [0, 1] },
+] satisfies (FrameTransition & { commits: number; opacity: number[] })[])(
+  'uses deferred native frame effects without replacing the seated input ($motion, fade $fade)',
+  async ({ commits, opacity, ...transition }) => {
+    const r = await boot({
+      template: template(
+        [{ id: 'guest-1', rect: BOX, fitMode: 'cover', operatorFrame: FRAME }],
+        true,
+      ),
+      html: EFFECT_HTML,
+    });
+    const itemId = 'item-1';
+    expect(await loadAndTake(r, itemId)).toMatchObject({ accepted: true });
+    await expect.poll(() => r.stackSnapshot()[0]).toMatchObject({ onAirFrameTransition: true });
+    const before = (await recvLines()).length;
+    expect(await r.setFramePlacements(itemId, [MOVED_FRAME], undefined, transition)).toEqual({
+      accepted: true,
+    });
+    const writes = (await recvLines()).slice(before);
+    expect(writes.filter((line) => line === 'MIXER 1 COMMIT')).toHaveLength(commits);
+    expect(
+      writes.filter((line) => /MIXER 1-30 FILL .+ \d+ (linear|ease\w+) DEFER/.test(line)),
+    ).toHaveLength(commits);
+    expect(
+      writes.filter((line) => /MIXER 1-30 CLIP .+ \d+ (linear|ease\w+) DEFER/.test(line)),
+    ).toHaveLength(commits);
+    expect(
+      writes
+        .filter((line) => line.startsWith('MIXER 1-30 OPACITY '))
+        .map((line) => Number(line.split(' ')[3])),
+    ).toEqual(opacity);
+    expect(
+      writes.some((line) =>
+        /^(?:PLAY |CLEAR |CG .+ (?:ADD|PLAY|STOP) |MIXER .+ VOLUME )/.test(line),
+      ),
+    ).toBe(false);
+    for (const layer of [10, BAND.end]) {
+      const phases = writes.filter(
+        (line) => line.startsWith(`CG 1-${String(layer)} UPDATE `) && line.includes('durationMs'),
+      );
+      expect(phases).toHaveLength(commits);
+      expect(phases.every((line) => line.includes('hideFallbackPlateIds'))).toBe(true);
+      expect(JSON.parse(mock!.lastCgUpdate({ channel: 1, layer })?.data ?? '{}')).toEqual({
+        __cg: { framePlacements: [MOVED_FRAME], frameTransition: null },
+      });
+    }
+    expect(mock!.layerState({ channel: 1, layer: 30 })).toMatchObject({
+      opacity: 1,
+      clip: { x: 0.5, y: 0.5, width: 0.25, height: 0.25 },
+    });
+    expect(r.stackSnapshot()[0]?.framePlacements).toEqual([MOVED_FRAME]);
+  },
+);
+
+it('rolls back both programme passes if the foreground refuses a frame phase', async () => {
+  const r = await boot({
+    template: template([{ id: 'guest-1', rect: BOX, operatorFrame: FRAME }], true),
+    html: EFFECT_HTML,
+  });
+  const itemId = 'item-1';
+  expect(await loadAndTake(r, itemId)).toMatchObject({ accepted: true });
+  await expect.poll(() => r.stackSnapshot()[0]).toMatchObject({ onAirFrameTransition: true });
+  const plate = { channel: 1, layer: 30 };
+  const previous = mock!.layerState(plate);
+  const normalCg = defaultHandlers().get('CG')!;
+  let refused = false;
+  mock!.setHandler('CG', (request, context, connection) => {
+    if (request.raw.startsWith('CG 1-32 UPDATE ') && request.raw.includes('durationMs')) {
+      refused = true;
+      return { kind: 'err', code: 502, verb: 'CG' };
+    }
+    return normalCg(request, context, connection);
+  });
+  expect(
+    await r.setFramePlacements(itemId, [MOVED_FRAME], undefined, {
+      motion: 'ease-in-out',
+      fade: true,
+      durationMs: 200,
+    }),
+  ).toMatchObject({ accepted: false, errorCode: 'amcp-502' });
+  expect(refused).toBe(true);
+  expect(mock!.layerState(plate)).toEqual(previous);
+  for (const layer of [10, BAND.end]) {
+    expect(JSON.parse(mock!.lastCgUpdate({ channel: 1, layer })?.data ?? '{}')).toEqual({
+      __cg: { framePlacements: [], frameTransition: null },
+    });
+  }
+  expect(r.stackSnapshot()[0]?.framePlacements).toBeUndefined();
+});
+
+it('keeps Cut available when the resident page has no frame transition support', async () => {
+  const r = await boot({
+    template: template([{ id: 'guest-1', rect: BOX, operatorFrame: FRAME }]),
+    html: FRAME_HTML,
+  });
+  const itemId = 'item-1';
+  expect(await loadAndTake(r, itemId)).toMatchObject({ accepted: true });
+  await expect.poll(() => r.stackSnapshot()[0]).toMatchObject({ onAirFramePlacement: true });
+  expect(r.stackSnapshot()[0]?.onAirFrameTransition).toBeUndefined();
+  const before = (await recvLines()).length;
+  expect(
+    await r.setFramePlacements(itemId, [MOVED_FRAME], undefined, {
+      motion: 'linear',
+      fade: false,
+      durationMs: 200,
+    }),
+  ).toMatchObject({ accepted: false, errorCode: 'frame-transition-unavailable' });
+  expect((await recvLines()).slice(before).some((line) => /^(?:CG|MIXER) /.test(line))).toBe(false);
+  expect(await r.setFramePlacements(itemId, [MOVED_FRAME])).toEqual({ accepted: true });
+});
+
+it('restores the previous frame and opacity when emergency silence interrupts a fade', async () => {
+  const r = await boot({
+    template: template([{ id: 'guest-1', rect: BOX, operatorFrame: FRAME }]),
+    html: EFFECT_HTML,
+  });
+  const itemId = 'item-1';
+  expect(await loadAndTake(r, itemId)).toMatchObject({ accepted: true });
+  await expect.poll(() => r.stackSnapshot()[0]).toMatchObject({ onAirFrameTransition: true });
+  expect(await r.setLivePlateVolume(itemId, 'guest-1', 0.5)).toMatchObject({
+    ok: true,
+    sent: true,
+  });
+  const plate = { channel: 1, layer: 30 };
+  const previous = mock!.layerState(plate);
+  const before = (await recvLines()).length;
+  const edit = r.setFramePlacements(itemId, [MOVED_FRAME], undefined, {
+    motion: 'cut',
+    fade: true,
+    durationMs: 1000,
+  });
+  await expect.poll(() => mock!.layerState(plate)?.opacity, { interval: 15 }).toBe(0);
+  expect(await r.silenceAllLivePlates()).toMatchObject({ ok: true, silenced: 1 });
+  expect(await edit).toMatchObject({ accepted: false, errorCode: 'frame-transition-interrupted' });
+  expect(mock!.layerState(plate)).toMatchObject({
+    fill: previous?.fill,
+    clip: previous?.clip,
+    opacity: 1,
+    volume: 0,
+  });
+  expect(JSON.parse(mock!.lastCgUpdate({ channel: 1, layer: 10 })?.data ?? '{}')).toEqual({
+    __cg: { framePlacements: [], frameTransition: null },
+  });
+  const writes = (await recvLines()).slice(before);
+  expect(writes.indexOf('MIXER 1-30 VOLUME 0')).toBeLessThan(
+    writes.indexOf('MIXER 1-30 OPACITY 1 0 linear DEFER'),
+  );
+  expect(
+    writes.some(
+      (line) => line.startsWith('MIXER 1-30 OPACITY 1 ') && !line.includes(' 0 linear DEFER'),
+    ),
+  ).toBe(false);
+});
+
+it('stops a resident row during fade without a delayed phase relighting it', async () => {
+  const r = await boot({
+    template: template([{ id: 'guest-1', rect: BOX, operatorFrame: FRAME }]),
+    html: EFFECT_HTML,
+  });
+  const itemId = 'item-1';
+  expect(await loadAndTake(r, itemId)).toMatchObject({ accepted: true });
+  await expect.poll(() => r.stackSnapshot()[0]).toMatchObject({ onAirFrameTransition: true });
+  const plate = { channel: 1, layer: 30 };
+  const edit = r.setFramePlacements(itemId, [MOVED_FRAME], undefined, {
+    motion: 'cut',
+    fade: true,
+    durationMs: 1000,
+  });
+  await expect.poll(() => mock!.layerState(plate)?.opacity, { interval: 15 }).toBe(0);
+  const before = (await recvLines()).length;
+  expect(await r.stopItem(itemId)).toMatchObject({ accepted: true });
+  expect(await edit).toMatchObject({ accepted: false, errorCode: 'frame-transition-interrupted' });
+  const tail = (await recvLines()).slice(before);
+  expect(tail).toContain('CG 1-10 STOP 0');
+  expect(tail.some((line) => line.includes('frameTransition') || line.includes('OPACITY'))).toBe(
+    false,
+  );
+  expect(r.stackSnapshot()[0]?.framePlacements).toBeUndefined();
 });
 
 it('restores staged mixer geometry when Reload changes the layout during an on-air edit', async () => {

@@ -5193,3 +5193,16 @@ Send CG commands to the active engine after its external-graphics transfer contr
 - WHEN Playout confirms a control owner THEN identify that engine and let Follow use its programme audio.
 - WHEN ownership is unknown THEN show no active designation and keep Follow silent.
 - WHEN verified Playout transfers the channel and synchronizes external CG THEN later CG commands reach the active engine only and the existing graphic remains available on the promoted engine.
+
+## [~] R-119 — Animate on-air live frame placement ⟨priority: high — owner, 2026-11-14⟩ — `openspec/changes/animate-live-frame-placement/`
+
+**What:** Let the operator select Cut, Linear, Ease in, Ease out or Ease in/out and independently enable Fade when applying a live frame move or resize on air.
+
+**Why:** Operators need to reframe a running shot without restarting its input or abruptly changing the layout.
+
+**Acceptance:**
+
+- WHEN an eligible on-air row has a frame placement draft THEN the operator can choose motion, Fade and duration in Position. PVW follows the draft immediately and Update on air runs the chosen effect.
+- WHEN Fade is enabled with Cut THEN the frame fades out, switches geometry, then fades in. WHEN Fade is enabled with motion THEN opacity dips while the frame moves.
+- WHEN the effect runs THEN the seated image, mask and attached artwork follow the same placement and the input and its audio continue. Stop, Clear and emergency silence retain priority.
+- WHEN a running template lacks effect support THEN regular frame placement remains available under its existing guards.

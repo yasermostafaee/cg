@@ -10,6 +10,7 @@ import {
   type CgPassTiming,
   type CgSound,
   type FieldValues,
+  type FrameTransitionPhase,
   type LiveFramePlacement,
   type LiveMaskPlacement,
 } from '@cg/shared-schema';
@@ -19,6 +20,12 @@ import type { NormalizedRect } from './live-layers.js';
 export interface CommandSlot {
   readonly channel: number;
   readonly layer: number;
+}
+
+/** Duration is measured in channel frames. */
+export interface MixerTween {
+  readonly frames: number;
+  readonly easing: FrameTransitionPhase['easing'];
 }
 
 /**
@@ -424,10 +431,10 @@ export class CommandBuilder {
    * `PLAY`; the reveal (`OPACITY 1`) rides the action's one commit. **Showing is `OPACITY`, not
    * `PLAY`.** Below 0.001 the kernel draws nothing (`image_kernel.cpp`).
    *
-   * One value, like {@link mixerVolume}: the seat sends `0` and the reveal `1`, never a tween.
+   * Seat and reveal send a single value. An in-place frame transition can tween that value.
    */
-  mixerOpacity(slot: CommandSlot, opacity: number): string {
-    return `MIXER ${target(slot)} OPACITY ${String(opacity)}`;
+  mixerOpacity(slot: CommandSlot, opacity: number, tween?: MixerTween): string {
+    return `MIXER ${target(slot)} OPACITY ${String(opacity)}${mixerTweenArgs(tween)}`;
   }
 
   /**
@@ -624,10 +631,12 @@ export class CommandBuilder {
   mixerFit(
     slot: CommandSlot,
     fit: { fill: NormalizedRect; clip: NormalizedRect },
+    tween?: MixerTween,
   ): [fill: string, clip: string] {
+    const args = mixerTweenArgs(tween);
     return [
-      `MIXER ${target(slot)} FILL ${rect(fit.fill)}`,
-      `MIXER ${target(slot)} CLIP ${rect(fit.clip)}`,
+      `MIXER ${target(slot)} FILL ${rect(fit.fill)}${args}`,
+      `MIXER ${target(slot)} CLIP ${rect(fit.clip)}${args}`,
     ];
   }
 
@@ -740,6 +749,10 @@ export class CommandBuilder {
   mixerCommit(channel: number): string {
     return `MIXER ${String(channel)} COMMIT`;
   }
+}
+
+function mixerTweenArgs(tween: MixerTween | undefined): string {
+  return tween === undefined ? '' : ` ${String(tween.frames)} ${tween.easing}`;
 }
 
 /**

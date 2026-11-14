@@ -1,4 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { withCgControl } from '@cg/shared-schema';
+import { Window as HappyWindow } from 'happy-dom';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRuntime } from '../src/runtime.js';
 import { installCasparGlobals } from '../src/adapters/caspar-globals.js';
 import { lowerThirdScene } from './fixtures.js';
@@ -83,6 +85,62 @@ describe('installCasparGlobals', () => {
     await new Promise((r) => setTimeout(r, 0));
     const nameEl = document.querySelector<HTMLElement>('[data-cg-element-id="name"]');
     expect(nameEl?.textContent).toBe('از آبجکت');
+  });
+
+  it('applies explicit transition packets directly to each resident pass without mirroring them', () => {
+    const postMessage = vi.fn();
+    const installPass = (pass: 'background' | 'foreground') => {
+      const win = new HappyWindow({
+        url: `http://localhost/template?cgpass=${pass}&cgsync=paired`,
+      }) as unknown as Window & typeof globalThis;
+      Object.defineProperty(win, 'BroadcastChannel', {
+        value: class {
+          postMessage = postMessage;
+          addEventListener = vi.fn();
+          close = vi.fn();
+        },
+      });
+      const runtime = createRuntime(lowerThirdScene, { skipFontLoad: true });
+      const update = vi.spyOn(runtime, 'update').mockResolvedValue(undefined);
+      return { win, update, uninstall: installCasparGlobals(runtime, win) };
+    };
+    const background = installPass('background');
+    const foreground = installPass('foreground');
+    const from = { x: 10, y: 20, width: 100, height: 80 };
+    const to = { ...from, x: 70 };
+    const frameKey = 'frame-1';
+    const framePlacements = [{ frameKey, rect: to }];
+    const phase = withCgControl(
+      {},
+      {
+        frameTransition: {
+          durationMs: 400,
+          easing: 'linear',
+          frames: [{ frameKey, from, to, fromOpacity: 1, toOpacity: 1 }],
+        },
+      },
+    );
+    const release = withCgControl({}, { frameTransition: null, framePlacements });
+
+    try {
+      for (const { win, update } of [background, foreground]) {
+        win.update?.(JSON.stringify(phase));
+        win.update?.(JSON.stringify(release));
+        expect(update.mock.calls).toEqual([[phase], [release]]);
+      }
+      expect(postMessage).not.toHaveBeenCalled();
+
+      const manualUpdate = withCgControl({ anchor: 'مهمان' }, { framePlacements });
+      background.win.update?.(JSON.stringify(manualUpdate));
+      background.win.next?.();
+      expect(postMessage.mock.calls).toEqual([
+        [{ verb: 'update', fields: manualUpdate }],
+        [{ verb: 'next', fields: undefined }],
+      ]);
+    } finally {
+      background.uninstall();
+      foreground.uninstall();
+    }
   });
 
   it('drops malformed JSON without throwing', async () => {

@@ -5325,7 +5325,7 @@ export function buildRoutes(
       'operator',
       'operator',
       (r: ChannelRequest<typeof StackSetFramePlacementsChannel>) =>
-        b.setFramePlacements(r.itemId, r.placements, r.reset),
+        b.setFramePlacements(r.itemId, r.placements, r.reset, r.transition),
     ),
     route(
       StackSetMaskPlacementsChannel,

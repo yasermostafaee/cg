@@ -1524,6 +1524,8 @@ test('Frames drafts the authored box and whole-template Position moves the retai
   await showMonitors(page);
   const plateRow = page.getByRole('region', { name: 'Layers' }).locator('[data-layer="59"]');
   await plateRow.locator('[data-row-body]').click();
+  const frameEffect = page.getByRole('group', { name: 'Frame effect' });
+  await expect(frameEffect).toHaveCount(0);
   const pvw = page.getByRole('region', { name: 'PREVIEW (PVW)' });
   const pan = pvw.getByRole('button', { name: 'Crop input in Preview', exact: true });
   await expect(pan).toHaveCount(0);
@@ -1795,6 +1797,45 @@ test('Frames drafts the authored box and whole-template Position moves the retai
     await tellAir(resetData);
     await expect.poll(async () => (await airPlate.boundingBox())?.width ?? 0).toBeCloseTo(400, 1);
     await expect(plateRow).toHaveAttribute('aria-label', /ON AIR$/);
+
+    const motion = frameEffect.getByRole('combobox', { name: 'Motion' });
+    const fade = frameEffect.getByRole('checkbox', { name: 'Fade' });
+    const duration = frameEffect.getByRole('textbox', { name: 'Duration (ms)' });
+    await expect(motion).toHaveValue('cut');
+    await expect(fade).not.toBeChecked();
+    await expect(duration).toHaveCount(0);
+    const effectStart = engine.receivedCommands().length;
+    const effectWire = () =>
+      engine
+        .receivedCommands()
+        .slice(effectStart)
+        .map(({ line }) => line)
+        .filter((line) => /^(CG |PLAY |CLEAR |MIXER )/.test(line));
+    await motion.selectOption('ease-in-out');
+    await fade.check();
+    await expect(duration).toHaveValue('400');
+    await duration.fill('۵۰۰');
+    await expect(duration).toHaveValue('500');
+    await expect(rowDraft).toHaveCount(0);
+    const beforeEffect = await readBox();
+    await dragControl(move, 30, 0);
+    await expect
+      .poll(async () => (await readBox()).picture.x)
+      .toBeGreaterThan(beforeEffect.picture.x);
+    await expect(rowDraft).toBeVisible();
+    expect(effectWire()).toEqual([]);
+    await inspector.getByRole('button', { name: 'Apply staged edits to the on-air row' }).click();
+    await expect(rowDraft).toHaveCount(0);
+    expect(effectWire()).toContainEqual(expect.stringMatching(/^CG 1-59 UPDATE .*frameTransition/));
+    for (const tween of ['easeinquad', 'easeoutquad']) {
+      expect(effectWire()).toContainEqual(
+        expect.stringMatching(new RegExp(`^MIXER 1-\\d+ FILL .* \\d+ ${tween} DEFER$`, 'i')),
+      );
+    }
+    expect(effectWire()).toContainEqual(expect.stringMatching(/^MIXER 1-\d+ OPACITY .* DEFER$/));
+    expect(
+      effectWire().some((line) => /^(PLAY |CLEAR |CG \d+-\d+ (?:ADD|PLAY|STOP) )/.test(line)),
+    ).toBe(false);
   } finally {
     await air.close();
   }

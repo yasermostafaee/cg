@@ -282,6 +282,8 @@ export const StackItemStateSchema = z.object({
   framePlacementsPendingReset: z.literal(true).optional(),
   /** A confirmed resident page can accept frame geometry in place. */
   onAirFramePlacement: z.literal(true).optional(),
+  /** The verified running page and Bridge support on-air placement effects. */
+  onAirFrameTransition: z.literal(true).optional(),
   maskPlacements: LiveMaskPlacementsSchema.optional(),
   onAirMaskPlacement: z.literal(true).optional(),
   /**

@@ -1,5 +1,6 @@
 import type { FieldValues } from './fields.js';
 import { LiveFramePlacementsSchema, type LiveFramePlacement } from './frame-placement.js';
+import { FrameTransitionPhaseSchema, type FrameTransitionPhase } from './frame-transition.js';
 import { LIVE_FIT_MODES, type LiveFitMode } from './live-fit.js';
 import { LiveMaskPlacementsSchema, type LiveMaskPlacement } from './mask-placement.js';
 import { PositionSchema, type Position } from './scene.js';
@@ -8,6 +9,8 @@ import { PositionSchema, type Position } from './scene.js';
 export const CG_LIVE_POSITION_PAGE_MARKER = '<meta name="cg-live-position" content="1">';
 export const CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER =
   '<meta name="cg-live-frame-placement" content="1">';
+export const CG_LIVE_FRAME_TRANSITION_PAGE_MARKER =
+  '<meta name="cg-live-frame-transition" content="1">';
 export const CG_LIVE_MASK_PLACEMENT_PAGE_MARKER =
   '<meta name="cg-live-mask-placement" content="1">';
 
@@ -186,6 +189,8 @@ export interface CgControl {
   position?: Position;
   /** Replace the row's placements. An empty array restores the authored frames. */
   framePlacements?: LiveFramePlacement[];
+  /** Animate the running artwork for this phase. Null restores the applied placement. */
+  frameTransition?: FrameTransitionPhase | null;
   /** Replace the row's mask placements. An empty array restores the authored windows. */
   maskPlacements?: LiveMaskPlacement[];
   /**
@@ -302,6 +307,9 @@ export function readCgControl(payload: unknown): CgControl | undefined {
   const placements = LiveFramePlacementsSchema.safeParse(
     (raw as Record<string, unknown>)['framePlacements'],
   );
+  const frameTransition = FrameTransitionPhaseSchema.nullable().safeParse(
+    (raw as Record<string, unknown>)['frameTransition'],
+  );
   const masks = LiveMaskPlacementsSchema.safeParse(
     (raw as Record<string, unknown>)['maskPlacements'],
   );
@@ -311,6 +319,7 @@ export function readCgControl(payload: unknown): CgControl | undefined {
   return {
     ...(typeof look === 'string' && look !== '' ? { look } : {}),
     ...(placements.success ? { framePlacements: placements.data } : {}),
+    ...(frameTransition.success ? { frameTransition: frameTransition.data } : {}),
     ...(masks.success ? { maskPlacements: masks.data } : {}),
     ...readPosition((raw as Record<string, unknown>)['position']),
     /*

@@ -1,5 +1,9 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { DEFAULT_LIVE_CROP_FOCUS, type StackItemState } from '@cg/shared-schema';
+import {
+  DEFAULT_LIVE_CROP_FOCUS,
+  FRAME_TRANSITION_DEFAULT_MS,
+  type StackItemState,
+} from '@cg/shared-schema';
 import type { RuntimeBridge } from '../src/shared/runtime-bridge.js';
 import { applyDraft } from '../src/renderer/features/inspector/applyDraft.js';
 import {
@@ -20,6 +24,7 @@ import {
   type PreviewCropDraft,
 } from '../src/renderer/features/inspector/draftStore.js';
 import * as feedback from '../src/renderer/features/status/commandFeedback.js';
+import { setFrameTransitionPreference } from '../src/renderer/features/inspector/frameTransitionPreference.js';
 
 const row: StackItemState = {
   itemId: 'item-1',
@@ -61,6 +66,11 @@ const dirty = () => isItemDirty(itemId, row.fields, new Map());
 
 afterEach(() => {
   __resetDraftsForTest();
+  setFrameTransitionPreference({
+    motion: 'cut',
+    fade: false,
+    durationMs: FRAME_TRANSITION_DEFAULT_MS,
+  });
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -295,4 +305,39 @@ it('previews authored frame placement and sends a reset with any edits made afte
   expect(setFramePlacements).toHaveBeenCalledWith({ itemId, placements: [latest], reset: 'all' });
   expect(update).not.toHaveBeenCalled();
   expect(snapshotFramePlacementDraft(itemId)).toBeUndefined();
+});
+
+it('uses one frame effect snapshot for the on-air Update even when the console choice changes', async () => {
+  const { update, setFramePlacements } = bridge();
+  setFramePlacements.mockResolvedValue({ accepted: true });
+  const transition = { motion: 'ease-in-out', fade: true, durationMs: 500 } as const;
+  setFrameTransitionPreference(transition);
+  const authored = { x: 100, y: 80, width: 320, height: 180 };
+  const moved = { frameKey: 'frame-1', rect: { ...authored, x: 140 } };
+  expect(dirty()).toBe(false);
+  stageFramePlacement(itemId, moved, authored);
+  stageField(itemId, ['title'], 'after');
+  update.mockImplementationOnce(async () => {
+    setFrameTransitionPreference({ motion: 'linear', fade: false, durationMs: 250 });
+    return { accepted: true };
+  });
+  await expect(
+    applyDraft({ ...row, status: 'on-air', onAirFramePlacement: true, onAirFrameTransition: true }),
+  ).resolves.toMatchObject({ accepted: true });
+  expect(update).toHaveBeenCalledWith({ itemId, fields: { title: 'after' }, mergeMode: 'merge' });
+  expect(setFramePlacements).toHaveBeenCalledWith({ itemId, placements: [moved], transition });
+});
+
+it.each([
+  { ...row, onAirFrameTransition: true as const },
+  { ...row, status: 'on-air' as const, onAirFramePlacement: true as const },
+])('does not send effects with frames that are not transition-capable on air', async (item) => {
+  const { setFramePlacements } = bridge();
+  setFramePlacements.mockResolvedValue({ accepted: true });
+  setFrameTransitionPreference({ motion: 'cut', fade: true });
+  const authored = { x: 100, y: 80, width: 320, height: 180 };
+  const moved = { frameKey: 'frame-1', rect: { ...authored, x: 140 } };
+  stageFramePlacement(itemId, moved, authored);
+  await expect(applyDraft(item)).resolves.toMatchObject({ accepted: true });
+  expect(setFramePlacements).toHaveBeenCalledWith({ itemId, placements: [moved] });
 });

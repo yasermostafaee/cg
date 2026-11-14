@@ -30,6 +30,7 @@ export * from './list-limits.js';
 export * from './scene-flatten.js';
 export * from './operator-frame-placement.js';
 export * from './frame-placement.js';
+export * from './frame-transition.js';
 export * from './mask-placement.js';
 export * from './look-sources.js';
 export * from './composition-fields.js';

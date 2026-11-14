@@ -30,6 +30,7 @@ import {
   stripCgControl,
   type CgLiveFallback,
   type CgPage,
+  type FrameTransitionPhase,
   type LiveFramePlacement,
   type LiveMaskPlacement,
   type Look,
@@ -613,14 +614,16 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   );
   applyOutputPass(built.container, outputPass);
   root.appendChild(built.container);
-  const renderFramePlacements = createFramePlacementRenderer(
+  const framePlacement = createFramePlacementRenderer(
     built.container,
     flattened,
     frameTargets,
+    options.clock,
   );
   const renderMaskPlacements = createMaskPlacementRenderer(built.container, flattened, lookGroup);
   let framePlacements: readonly LiveFramePlacement[] = [];
   let maskPlacements: readonly LiveMaskPlacement[] = [];
+  let frameTransitionHold: { nodes: HTMLElement[]; timer: unknown } | undefined;
 
   /**
    * ⭐ **`multibox-layout-switch` `tasks.md` 4.3 — UNIT B′'s re-punch pass.**
@@ -737,7 +740,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     // The park follows from INSIDE `repunch`, off this same `visibility` map — see the note
     // there for why it cannot be done at this line without acquiring a second answer.
     repunch({ visibility: visibilityOfLook(look.id) });
-    renderFramePlacements(framePlacements, look.id);
+    applyFramePlacements();
     renderMaskPlacements(maskPlacements, look.id);
   };
   /**
@@ -951,6 +954,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // exit settles the whole template's state/visibility once per exit.
   const rootOnExitStart = (): void => {
     if (machine.state === 'on-air' || machine.state === 'playing') {
+      cancelFrameTransition();
       machine.transition('exiting');
       bus.emit('stop.start');
     }
@@ -2979,6 +2983,41 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     };
   }
 
+  function clearFrameTransitionHold(): void {
+    if (frameTransitionHold === undefined) return;
+    cancelTimeout(frameTransitionHold.timer);
+    for (const node of frameTransitionHold.nodes) {
+      node.removeAttribute('data-cg-frame-transition-hidden');
+    }
+    frameTransitionHold = undefined;
+  }
+  function applyFramePlacements(): void {
+    clearFrameTransitionHold();
+    framePlacement.apply(framePlacements, currentLookId);
+  }
+  function cancelFrameTransition(): void {
+    if (frameTransitionHold !== undefined) applyFramePlacements();
+  }
+  function animateFrameTransition(phase: FrameTransitionPhase): void {
+    clearFrameTransitionHold();
+    const affected = new Set(phase.hideFallbackPlateIds);
+    const nodes =
+      holdsLiveFallback && affected.size > 0
+        ? Array.from(
+            built.container.querySelectorAll<HTMLElement>('[data-cg-live-fallback]'),
+          ).filter((node) => affected.has(node.parentElement?.dataset['cgLiveSource'] ?? ''))
+        : [];
+    for (const node of nodes) node.setAttribute('data-cg-frame-transition-hidden', '');
+    frameTransitionHold = {
+      nodes,
+      timer: scheduleTimeout(
+        applyFramePlacements,
+        (phase.delayMs ?? 0) + phase.durationMs + LIVE_FALLBACK_WATCHDOG_MS,
+      ),
+    };
+    framePlacement.animate(phase, currentLookId);
+  }
+
   const contentRoots = (): HTMLElement[] =>
     Array.from(built.container.querySelectorAll<HTMLElement>('[data-cg-content]'));
   /**
@@ -3286,6 +3325,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         throw new Error('Runtime removed; play() unavailable');
       }
       await ready;
+      cancelFrameTransition();
       releaseLiveFallback();
       lastFallbackPhaseId = null;
       // The stopped Canvas may expose an expired clock for editing. A Take is always real:
@@ -3491,7 +3531,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       if (control?.maskPlacements !== undefined) maskPlacements = control.maskPlacements;
       const enteredLook = control?.look !== undefined && enterLook(control.look);
       if (!enteredLook && control?.framePlacements !== undefined) {
-        renderFramePlacements(framePlacements, currentLookId);
+        applyFramePlacements();
       }
       if (!enteredLook && control?.maskPlacements !== undefined) {
         renderMaskPlacements(maskPlacements, currentLookId);
@@ -3606,15 +3646,22 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       const staleRelease = phase?.phase === 'release' && lastFallbackPhaseId !== phase.id;
       const previousLook = currentLookId;
       const nextPlacements = staleRelease ? undefined : control?.framePlacements;
+      const frameTransition = staleRelease ? undefined : control?.frameTransition;
       const nextMasks = staleRelease ? undefined : control?.maskPlacements;
       if (nextPlacements !== undefined) framePlacements = nextPlacements;
       if (nextMasks !== undefined) maskPlacements = nextMasks;
       const enteredLook = !staleRelease && control?.look !== undefined && enterLook(control.look);
       if (!enteredLook) {
         repunch(arrangementView);
-        if (nextPlacements !== undefined) renderFramePlacements(framePlacements, currentLookId);
+        if (
+          frameTransition === null ||
+          (frameTransition === undefined && nextPlacements !== undefined)
+        )
+          applyFramePlacements();
         if (nextMasks !== undefined) renderMaskPlacements(maskPlacements, currentLookId);
       }
+      if (frameTransition != null && machine.state !== 'exiting')
+        animateFrameTransition(frameTransition);
       if (phase?.phase === 'hold' && (control?.look === undefined || enteredLook)) {
         holdLiveFallback(phase);
       } else if (phase?.phase === 'release') {
@@ -3665,6 +3712,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
 
     async stop(_opts?: StopOptions): Promise<void> {
       if (machine.state === 'removed') return;
+      cancelFrameTransition();
       if (machine.state !== 'on-air' && machine.state !== 'playing') return;
       // D-105 — QUICK exit: remove the content IMMEDIATELY (before the background
       // moves), then play the background outro and settle cleared. Lifecycle scenes
@@ -3705,6 +3753,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
 
     async out(_opts?: StopOptions): Promise<void> {
       if (machine.state === 'removed') return;
+      cancelFrameTransition();
       if (machine.state !== 'on-air' && machine.state !== 'playing') return;
       // D-105 — COORDINATED animated exit: fade the content off FIRST, await it,
       // then (unless a stop()/play()/out() superseded this exit during the fade)
@@ -3808,6 +3857,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
 
     remove(): void {
       if (machine.state === 'removed') return;
+      cancelFrameTransition();
       releaseLiveFallback();
       for (const watchdog of outroWatchdogs) watchdog.cancel();
       // D-125 §D6.4.4 — remove() is the PANIC path and stays a SYNCHRONOUS hard kill: it

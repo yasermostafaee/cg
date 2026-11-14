@@ -13,6 +13,7 @@ import { commitSourceAssignments, currentSourceAssignments } from '../sources/so
 import { appliedPositionOf } from '../stack/defaultPositionStore.js';
 import { recordSentPasses } from './timingSent.js';
 import { patternRefusalsOf } from './patternCheck.js';
+import { frameTransitionPreference } from './frameTransitionPreference.js';
 import {
   beginFramePlacementApply,
   beginMaskPlacementApply,
@@ -166,6 +167,14 @@ export function applyDraft(
   const combinedPosition = deferredPosition === undefined ? sentPosition : undefined;
   const noFieldDrafts = Object.keys(sent).length === 0;
   const updateFrames = frame.reset || frame.placements.length > 0;
+  const effect = frameTransitionPreference();
+  const transition =
+    updateFrames &&
+    isOnAirStatus(item) &&
+    item.onAirFrameTransition === true &&
+    (effect.motion !== 'cut' || effect.fade)
+      ? effect
+      : undefined;
   const geometryUpdate =
     updateFrames ||
     masks.placements.length > 0 ||
@@ -206,6 +215,7 @@ export function applyDraft(
             itemId: item.itemId,
             placements: frame.placements,
             ...(frame.reset && { reset: 'all' as const }),
+            ...(transition !== undefined && { transition }),
           });
           if (!placed.accepted) {
             reportCommandError(placed.message ?? 'CG Bridge could not apply the frame placement.');

@@ -24,6 +24,9 @@ export const BASELINE_CSS = `
 .cg-removed .cg-stage {
   display: none;
 }
+[data-cg-live-fallback][data-cg-frame-transition-hidden] {
+  display: none;
+}
 `;
 
 /** Inject the baseline CSS once, idempotent. */

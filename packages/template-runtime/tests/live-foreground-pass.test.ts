@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { withCgControl } from '@cg/shared-schema';
+import {
+  withCgControl,
+  type FrameTransitionPhase,
+  type LiveFramePlacement,
+} from '@cg/shared-schema';
 import { createRuntime } from '../src/runtime.js';
 import { lowerThirdScene } from './fixtures.js';
 
@@ -94,7 +98,7 @@ describe('D-201 — synchronized live-input foreground pass', () => {
     ).toEqual(['name', 'circle']);
   });
 
-  it('moves a move-only frame and its bound title as one artwork without resizing either', async () => {
+  const movableFrameScene = () => {
     const scene = markedScene();
     const layer = scene.layers[0];
     const title = layer?.children.find((element) => element.id === 'name');
@@ -150,6 +154,11 @@ describe('D-201 — synchronized live-input foreground pass', () => {
     ];
     scene.fields = [];
     scene.bindings = [];
+    return scene;
+  };
+
+  it('moves a move-only frame and its bound title as one artwork without resizing either', async () => {
+    const scene = movableFrameScene();
     const runtime = createRuntime(scene, { skipFontLoad: true, installGlobals: false });
     const artwork = document.querySelector<HTMLElement>('[data-cg-frame-artwork="box"]');
     const plate = artwork?.querySelector<HTMLElement>('[data-cg-element-id="plate"]');
@@ -177,6 +186,112 @@ describe('D-201 — synchronized live-input foreground pass', () => {
     expect(caption.style.backgroundColor).toBe(background);
     expect(caption.textContent).toContain('خبر تهران');
   });
+
+  it.each(['background', 'foreground'] as const)(
+    'moves and fades the %s frame before committing a final placement',
+    async (outputPass) => {
+      let time = 0;
+      let nextHandle = 0;
+      const pending = new Map<number, FrameRequestCallback>();
+      const timers = new Map<number, { callback: () => void; at: number }>();
+      const advanceTo = (target: number): void => {
+        time = target;
+        for (const [handle, { callback, at }] of timers) {
+          if (at > time) continue;
+          timers.delete(handle);
+          callback();
+        }
+        const round = [...pending.values()];
+        pending.clear();
+        for (const callback of round) callback(time);
+      };
+      const runtime = createRuntime(movableFrameScene(), {
+        outputPass,
+        skipFontLoad: true,
+        installGlobals: false,
+        clock: {
+          now: () => time,
+          raf: (callback) => {
+            const handle = ++nextHandle;
+            pending.set(handle, callback);
+            return handle;
+          },
+          cancel: (handle) => {
+            pending.delete(handle);
+          },
+          setTimeout: (callback, delay) => {
+            const handle = ++nextHandle;
+            timers.set(handle, { callback, at: time + delay });
+            return handle;
+          },
+          clearTimeout: (handle) => {
+            if (typeof handle === 'number') timers.delete(handle);
+          },
+        },
+      });
+      const artwork = document.querySelector<HTMLElement>('[data-cg-frame-artwork="box"]');
+      if (artwork === null) throw new Error('Missing frame wrapper');
+      const fallback = artwork.querySelector('[data-cg-live-fallback]');
+      expect(fallback !== null).toBe(outputPass === 'background');
+      const caption = artwork.querySelector('[data-cg-element-id="name"]');
+      expect(caption !== null).toBe(outputPass === 'foreground');
+      const from = { x: 120, y: 820, width: 760, height: 60 };
+      const to = { ...from, x: 320 };
+      const target: LiveFramePlacement = { frameKey: 'box/plate', rect: to };
+      const phase: FrameTransitionPhase = {
+        durationMs: 400,
+        delayMs: 40,
+        easing: 'easeinquad',
+        frames: [{ frameKey: 'box/plate', from, to, fromOpacity: 1, toOpacity: 0 }],
+        hideFallbackPlateIds: ['guest'],
+      };
+      const send = async (
+        transition: FrameTransitionPhase | null,
+        placements?: LiveFramePlacement[],
+      ) =>
+        runtime.update(
+          withCgControl(
+            {},
+            {
+              frameTransition: transition,
+              ...(placements === undefined ? {} : { framePlacements: placements }),
+            },
+          ),
+        );
+
+      await runtime.play({});
+      await send(phase);
+      if (fallback !== null)
+        expect(fallback.hasAttribute('data-cg-frame-transition-hidden')).toBe(true);
+      advanceTo(20);
+      expect(artwork.style.transform).toBe('matrix(1,0,0,1,0,0)');
+      advanceTo(240);
+      expect(artwork.style.transform).toBe('matrix(1,0,0,1,50,0)');
+      expect(artwork.style.opacity).toBe('0.75');
+      advanceTo(440);
+      expect(artwork.style.transform).toBe('matrix(1,0,0,1,200,0)');
+      expect(artwork.style.opacity).toBe('0');
+      await send(null, [target]);
+      expect(artwork.style.transform).toBe('matrix(1,0,0,1,200,0)');
+      expect(artwork.style.opacity).toBe('');
+      if (fallback !== null)
+        expect(fallback.hasAttribute('data-cg-frame-transition-hidden')).toBe(false);
+
+      await send({ ...phase, delayMs: 0, durationMs: 0 });
+      expect(artwork.style.opacity).toBe('0');
+      advanceTo(2_500);
+      expect(artwork.style.opacity).toBe('');
+      expect(artwork.style.transform).toBe('matrix(1,0,0,1,200,0)');
+      await send(phase);
+      await runtime.stop();
+      expect(artwork.style.opacity).toBe('');
+      if (fallback !== null)
+        expect(fallback.hasAttribute('data-cg-frame-transition-hidden')).toBe(false);
+      advanceTo(3_000);
+      expect(artwork.style.transform).toBe('matrix(1,0,0,1,200,0)');
+      runtime.remove();
+    },
+  );
 
   it.each([true, false])(
     'uses the full plate for foreground ordering with mask editing %s',

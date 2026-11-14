@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   FieldValuesSchema,
+  FrameTransitionSchema,
   IdSchema,
   LayerSlotSchema,
   LiveCropFocusSchema,
@@ -612,6 +613,7 @@ export const StackSetFramePlacementsChannel = defineChannel(
       itemId: IdSchema,
       placements: LiveFramePlacementsSchema,
       reset: z.enum(['all', 'reload-defaults']).optional(),
+      transition: FrameTransitionSchema.optional(),
     })
     .refine(
       ({ placements, reset }) =>

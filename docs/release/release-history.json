@@ -653,6 +653,10 @@
       },
       "features": [
         {
+          "fa": "در Position می‌توان جابه‌جایی و تغییر اندازهٔ قاب زنده را با Cut، Linear یا Ease و Fade اختیاری روی خروجی فعال اعمال کرد.",
+          "en": "Position can apply live frame moves and resizes on air with Cut, Linear or Ease and optional Fade."
+        },
+        {
           "fa": "در Designer تنظیمات Fit، Allow move و Resize در بخش CG Control برای یک یا چند قاب لایو در دسترس‌اند.",
           "en": "Designer groups Fit, Allow move and Resize under CG Control for single and multiple live plates."
         },

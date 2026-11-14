@@ -41,10 +41,20 @@ export function installCasparGlobals(
   const forward = (verb: PairedPageVerb, fields?: Partial<FieldValues>): void => {
     if (pass !== 'background' || channel === undefined) return;
     const { take: _take, ...control } = readCgControl(fields) ?? {};
-    const safe =
-      fields === undefined
-        ? undefined
-        : withCgControl(stripCgControl(fields) as FieldValues, control);
+    const values = fields === undefined ? undefined : (stripCgControl(fields) as FieldValues);
+    // Bridge addresses both resident pages directly for transition phases and their final release.
+    // Mirroring them as well would restart a phase wherever the broadcasts reach the foreground.
+    if (
+      verb === 'update' &&
+      control.frameTransition !== undefined &&
+      _take === undefined &&
+      values !== undefined &&
+      Object.keys(values).length === 0 &&
+      Object.keys(control).every((key) => key === 'frameTransition' || key === 'framePlacements')
+    ) {
+      return;
+    }
+    const safe = values === undefined ? undefined : withCgControl(values, control);
     channel.postMessage({ verb, fields: safe });
   };
   if (pass === 'foreground') {

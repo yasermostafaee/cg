@@ -38,6 +38,7 @@ import {
   subscribeDrafts,
 } from './draftStore.js';
 import { FrameAutoLayout, frameAutoLayoutAvailability } from './FrameAutoLayout.js';
+import { FrameEffectControls } from './FrameEffectControls.js';
 
 export function LiveFrameAdjustments({
   item,
@@ -207,6 +208,7 @@ export function LiveFrameAdjustments({
           Preserve frame aspect ratio
         </label>
       )}
+      {onAir && item.onAirFrameTransition === true && <FrameEffectControls disabled={!canEdit} />}
       {layout?.kind === 'permissions' && (
         <p className="cg-frame-auto-layout cg-frame-auto-layout__notice" role="status">
           Auto layout unavailable. In Designer, enable Allow move and unlock Resize for every frame
