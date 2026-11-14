@@ -14105,3 +14105,9 @@ outline for missing assignments. Show Crop edges below the plate name when the a
 **Repro / Actual:** The installed standalone station offered channel 2 and failed Take on layer 98 with `add-mute-failed`. Read-only queries on the connected CasparCG 2.5.0 listed channel 1 only. `MIXER 1-98 VOLUME` answered 201 and `MIXER 2-98 VOLUME` answered 400. Channel 1 reports a Screen consumer and no running DeckLink consumer.
 
 **Expected / regression:** WHEN a standalone bank names a channel absent from verified AMCP `INFO` THEN the console excludes it from operation and a stale Take is refused before AMCP writes with the channel-specific reason. WHEN a configured channel exists on CasparCG THEN it remains operable independently of the DeckLink and return-monitor diagnostics. Playout channel policy is unchanged.
+
+## [~] B-440 — Template Details count excludes nested fields ⟨priority: medium — owner, 2026-11-14⟩ — `openspec/changes/count-template-operator-fields/`
+
+**Repro / Actual:** Select the imported `3ghab.vcg` in the template picker. Details reads zero text fields even though the presets expose titles from nested live-frame compositions.
+
+**Expected / regression:** The catalogue and its Details count all operator fields across nested namespaces. A title shared across presets counts once. Independent fields using the same ID in different namespaces count separately.

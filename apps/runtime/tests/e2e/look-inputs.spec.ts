@@ -88,8 +88,8 @@ const lookFixtureLayer = (id: string, children: Element[]): Composition['layers'
   children,
 });
 
-function lookFieldScene(): Scene {
-  const shared = lookFieldScope(['common-top', 'common-bottom']);
+function lookFieldScene(presetNotesOnly = false): Scene {
+  const shared = lookFieldScope(presetNotesOnly ? [] : ['common-top', 'common-bottom']);
   const looks = [1, 2, 3].map((index) => ({
     id: `look-${String(index)}`,
     name: `Preset ${String(index)}`,
@@ -97,7 +97,10 @@ function lookFieldScene(): Scene {
     entered: { mode: 'cut' as const },
   }));
   const compositions: Composition[] = looks.map((look, index) => {
-    const scope = lookFieldScope([`plate-1-${String(index + 1)}`, `plate-2-${String(index + 1)}`]);
+    const fieldIds = presetNotesOnly
+      ? ['preset-note']
+      : [`plate-1-${String(index + 1)}`, `plate-2-${String(index + 1)}`];
+    const scope = lookFieldScope(presetNotesOnly && index === 2 ? [] : fieldIds);
     const plates: Element[] = [1, 2].map((plate) => ({
       ...lookFixtureElement,
       id: `${look.id}-plate-${String(plate)}`,
@@ -416,7 +419,7 @@ for (const legacy of [false, true]) {
   test(`a reused frame has one title across presets (${legacy ? 'retained page' : 'VCG import'})`, async ({
     app,
   }) => {
-    const scene = lookFieldScene();
+    const scene = lookFieldScene(true);
     const frameFields = lookFieldScope(['frame-title']);
     const frame: Composition = {
       id: 'guest-frame',
@@ -494,19 +497,32 @@ for (const legacy of [false, true]) {
       cgCss: '',
     });
     const row = await app.importVcg('shared-frame-titles.vcg', bytes, 59);
+    if (!legacy) {
+      await app.page.getByRole('button', { name: 'Open templates', exact: true }).click();
+      const catalogue = app.page.getByRole('dialog', { name: /^Templates/ });
+      const listing = catalogue.getByRole('button', {
+        name: 'Select shared frame titles',
+        exact: true,
+      });
+      // One shared frame title and two independent values with the same preset-local field id.
+      await expect(listing.getByText('3 fields', { exact: true })).toBeVisible();
+      await listing.click();
+      const details = catalogue.getByRole('complementary', { name: 'Template details' });
+      await expect(details.locator('dt:text-is("Text fields") + dd')).toHaveText('3');
+      await catalogue.locator('[data-modal-role="cancel"]').click();
+    }
     await app.selectLayerRow(row);
 
     const selectPreset = (number: number) =>
       app.inspector.locator(`[data-look-tab="look-${String(number)}"]`).click();
     const title = app.inspector.getByRole('textbox', { name: 'frame-title', exact: true });
-    const local = (preset: number) =>
-      app.inspector.getByRole('textbox', { name: `plate-2-${String(preset)}`, exact: true });
+    const local = app.inspector.getByRole('textbox', { name: 'preset-note', exact: true });
     await expect(title).toHaveValue('frame-title');
     await title.fill('تایتل تازه');
-    await local(1).fill('متن فقط در پریست یک');
+    await local.fill('متن فقط در پریست یک');
     await selectPreset(2);
     await expect(title).toHaveValue('تایتل تازه');
-    await expect(local(2)).toHaveValue('plate-2-2');
+    await expect(local).toHaveValue('preset-note');
     await selectPreset(3);
     await expect(title).toHaveCount(0);
     await selectPreset(2);
@@ -535,7 +551,7 @@ for (const legacy of [false, true]) {
     });
     await selectPreset(1);
     await expect(title).toHaveValue('عنوان ذخیره‌شده');
-    await expect(local(1)).toHaveValue('plate-2-1');
+    await expect(local).toHaveValue('preset-note');
   });
 }
 

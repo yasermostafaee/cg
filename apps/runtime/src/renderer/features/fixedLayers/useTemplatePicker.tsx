@@ -30,6 +30,7 @@ import {
   type TemplateInfo,
   type TemplateReference,
 } from '@cg/shared-ipc';
+import type { AggregatedFields } from '@cg/shared-schema';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { Modal, ModalAction, type ModalMessage } from '../../ui/Modal.js';
@@ -44,6 +45,8 @@ import {
 import { pickFile } from '../../ui/pickFile.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { importVcgToStation } from './fixedSlotLoad.js';
+import { fieldPathKey } from '../inspector/listFieldTargets.js';
+import { indexSharedFrameTitles } from '../inspector/sharedFrameTitles.js';
 import type { ChooseOnClash, ImportClashChoice } from '../library/importVcgFile.js';
 import { requestRowFocus } from '../layers/rowFocus.js';
 import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
@@ -1626,7 +1629,7 @@ export function useTemplatePicker(
                             {kindOf(selected) === 'bed' ? 'Live layout' : selected.templateType}
                           </dd>
                           <dt>Text fields</dt>
-                          <dd>{String(selected.fields.length)}</dd>
+                          <dd>{String(operatorFieldCount(selected))}</dd>
                           <dt>Plates</dt>
                           <dd>{String(selected.liveSources?.sources.length ?? 0)}</dd>
                           {/* `UI-POLISH-01` C — `Manage`'s usage line, here now that `Manage` is gone. */}
@@ -1726,6 +1729,23 @@ function matchesQuery(template: TemplateInfo, query: string): boolean {
   return `${templateDisplayName(template)} ${template.templateType}`
     .toLocaleLowerCase()
     .includes(q);
+}
+
+/** Count each operator value across the template, including nested preset fields. */
+function operatorFieldCount(template: TemplateInfo): number {
+  const groups = template.groups ?? [];
+  const sharedTitles = indexSharedFrameTitles(template.sharedFrameTitles ?? [], groups);
+  const values = new Set<string>();
+  function visit(aggregate: AggregatedFields, prefix: readonly string[]): void {
+    for (const field of aggregate.fields) {
+      const path = fieldPathKey([...prefix, field.id]);
+      const sharedPath = sharedTitles.get(path)?.[0];
+      values.add(sharedPath === undefined ? path : fieldPathKey(sharedPath));
+    }
+    for (const group of aggregate.groups) visit(group.aggregate, [...prefix, group.name]);
+  }
+  visit({ fields: template.fields, groups }, []);
+  return values.size;
 }
 
 /** Singular and plural template metadata labels. */
@@ -1910,7 +1930,7 @@ function PickerRow({
           <span className="cg-tpl-meta">
             <span>{templateKind === 'bed' ? 'Live layout' : t.templateType}</span>
             <span aria-hidden="true">·</span>
-            <span>{count(t.fields.length, 'field')}</span>
+            <span>{count(operatorFieldCount(t), 'field')}</span>
             {plates > 0 && (
               <>
                 <span aria-hidden="true">·</span>
