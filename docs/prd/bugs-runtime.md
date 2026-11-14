@@ -14133,3 +14133,11 @@ composition. Moving or resizing its mask in CG Control currently changes only th
 preset appearances. PVW, Discard, Update and Take resolve the same normalized geometry against
 each preset's own frame size. An independently authored plate using the same input and a legacy
 linked reveal each retain their own geometry.
+
+## [~] B-444 — Maximizing Program interrupts Preview rehearsal ⟨priority: high — owner, 2026-11-14⟩ — `openspec/changes/monitor-selected-layer-companion/`
+
+**Repro / Actual:** Play a rehearsal in PVW, maximize PGM, then restore the two-monitor layout.
+The row stays ON PVW, but the rehearsal has stopped and requires Play again.
+
+**Expected / regression:** Maximizing and restoring PGM keeps the active PVW page and playback
+state. On return, the same rehearsal continues from its current state. No playout command is sent.

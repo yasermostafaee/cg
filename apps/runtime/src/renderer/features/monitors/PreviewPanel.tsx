@@ -145,10 +145,12 @@ export function PreviewPanel({
   companionActions,
   canEditPosition = false,
   onSelectItem,
+  hidden = false,
 }: {
   companionActions?: ReactNode;
   canEditPosition?: boolean;
   onSelectItem?: ((itemId: string) => void) | undefined;
+  hidden?: boolean;
 }): JSX.Element {
   const engine = useEngineName();
   const rehearsals = useRehearse();
@@ -629,6 +631,7 @@ export function PreviewPanel({
       style={{
         flex: 1,
         minWidth: 0,
+        ...(hidden && { display: 'none' }),
         containerType: 'inline-size',
         containerName: 'pvw',
         background: cssVars['--r-monitor-bg'],
@@ -713,6 +716,7 @@ export function PreviewPanel({
             pageByItem={pageByItem}
             templateNames={templateNames}
             raster={raster}
+            visible={!hidden}
             onTransport={setTransport}
             onSelectItem={onSelectItem}
             panOpen={panOpen}

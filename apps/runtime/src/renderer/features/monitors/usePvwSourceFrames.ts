@@ -11,6 +11,7 @@ const EXPIRE_MS = 2500;
 export function usePvwSourceFrames(
   channel: number | undefined,
   visibleSources: readonly string[],
+  enabled = true,
 ): ReadonlyMap<string, PvwSourceFrame> {
   const [viewId] = useState(uuid);
   const queue = useRef<Promise<void>>(Promise.resolve());
@@ -27,7 +28,7 @@ export function usePvwSourceFrames(
   useEffect(() => {
     const { channel, sourceIds } = scope;
     const pvw = window.cg?.sourcePreviews?.pvw;
-    if (pvw === undefined || channel === undefined || sourceIds.length === 0) return;
+    if (!enabled || pvw === undefined || channel === undefined || sourceIds.length === 0) return;
     const requested = new Set(sourceIds);
     let closed = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -66,7 +67,8 @@ export function usePvwSourceFrames(
         await pvw({ channel, viewId, sourceIds: [] }).catch(() => undefined);
       });
     };
-  }, [scope, viewId]);
+  }, [enabled, scope, viewId]);
 
+  // Hiding the pane releases its stream without discarding the last picture for the same scope.
   return snapshot?.scope === scope ? snapshot.frames : EMPTY_FRAMES;
 }

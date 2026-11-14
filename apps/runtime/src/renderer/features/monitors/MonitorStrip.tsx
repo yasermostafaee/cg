@@ -220,13 +220,13 @@ export function MonitorStrip({
         show; now it shows all of them, and the selection's remaining job — which
         row an edit applies to — belongs to the Inspector and never to this panel.
       */}
-      {showPvw && (
-        <PreviewPanel
-          companionActions={companionActions}
-          canEditPosition={canEditPreviewPosition}
-          onSelectItem={onSelectPreviewItem}
-        />
-      )}
+      {/* Keep the local rehearsal page mounted while fullscreen PGM hides this pane. */}
+      <PreviewPanel
+        hidden={!showPvw}
+        companionActions={showPvw ? companionActions : undefined}
+        canEditPosition={canEditPreviewPosition}
+        onSelectItem={onSelectPreviewItem}
+      />
       {showPgm && (
         <MonitorPanel
           id="pgm"

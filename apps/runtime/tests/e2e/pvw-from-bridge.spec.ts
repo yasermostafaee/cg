@@ -255,6 +255,113 @@ test('🔴 a template imported in profile A is rehearsed in a fresh profile B, f
   await c.context().close();
 });
 
+test('B-444: maximizing and restoring PROGRAM leaves the same PREVIEW animation playing', async ({
+  page,
+}) => {
+  const handle = await boot();
+  const engine = mock;
+  if (engine === null) throw new Error('Test engine is unavailable');
+  await handle.runtime.whenServerHealthy(15_000);
+  const id = 'pvw-continues-behind-pgm';
+  const { scene } = await unpack(await buildValidVcg(id));
+  const endFrame = 4500;
+  scene.frameRange.out = endFrame;
+  const animated = scene.layers[0]?.children.find(({ id: elementId }) => elementId === 'el-name');
+  if (animated === undefined) throw new Error('Missing animation fixture');
+  animated.animation = {
+    tracks: {
+      opacity: {
+        keyframes: [
+          { frame: 0, value: 0.25, easing: 'linear' },
+          { frame: endFrame, value: 1, easing: 'linear' },
+        ],
+      },
+    },
+  };
+  const { html } = await new ExporterSingleFile({
+    cgJsIife,
+    cgCss,
+    fontsCss: '',
+    assets: { get: () => Promise.resolve(null), bytes: () => Promise.resolve(null) },
+  }).produce(scene);
+  handle.runtime.templateImport({ ...TEMPLATE, templateId: id }, html, 1);
+  expect(await handle.runtime.loadFixed({ channel: 1, layer: ROW }, id, id, {})).toMatchObject({
+    accepted: true,
+  });
+  await openConsole(page, handle.url);
+  await showMonitors(page);
+  await row(page).getByRole('button', { name: 'PLAY', exact: true }).click();
+  await expect(row(page)).toHaveAttribute('aria-label', /ON AIR$/);
+  const baseline = engine.receivedCommands().length;
+
+  const preview = page.getByRole('region', { name: 'PREVIEW (PVW)', exact: true });
+  const program = page.getByRole('region', { name: 'PROGRAM (PGM)', exact: true });
+  const initially = await program.boundingBox();
+  if (initially === null) throw new Error('Missing Program monitor');
+  await row(page).getByRole('button', { name: 'ON PVW', exact: true }).click();
+  const play = preview.getByRole('button', { name: 'PLAY', exact: true });
+  await expect(play).toBeEnabled();
+
+  const frame = frames(page);
+  await expect(frame).toHaveCount(1);
+  const documentBefore = await frame.evaluateHandle(
+    (element) => (element as HTMLIFrameElement).contentDocument,
+  );
+  const sameDocument = () =>
+    frame.evaluate(
+      (element, original) => (element as HTMLIFrameElement).contentDocument === original,
+      documentBefore,
+    );
+  const body = frame.contentFrame().locator('body');
+  await body.evaluate((element) => {
+    const runtime = (
+      element.ownerDocument.defaultView as unknown as {
+        cg?: { on(event: 'play.start' | 'stop.start', listener: () => void): void };
+      } | null
+    )?.cg;
+    if (runtime === undefined) throw new Error('Template runtime did not boot');
+    for (const event of ['play.start', 'stop.start'] as const) {
+      runtime.on(event, () => {
+        element.setAttribute(event, String(Number(element.getAttribute(event) ?? 0) + 1));
+      });
+    }
+  });
+  const graphic = frame.contentFrame().locator('[data-cg-element-id="el-name"]');
+  const opacity = () => graphic.evaluate((element) => Number(getComputedStyle(element).opacity));
+  await play.click();
+  await expect(body).toHaveAttribute('play.start', '1');
+  await expect.poll(opacity).toBeGreaterThan(0.25);
+
+  await page.getByRole('button', { name: 'Show PROGRAM (PGM) fullscreen' }).click();
+  await expect(preview).toBeHidden();
+  await expect
+    .poll(async () => (await program.boundingBox())?.width ?? 0)
+    .toBeGreaterThan(initially.width * 1.4);
+  await expect(program.locator('[data-monitor-air-count]')).toHaveText('1 row on air');
+  await expect(frame).toHaveCount(1);
+  expect(await sameDocument()).toBe(true);
+
+  await page.getByRole('button', { name: 'Exit fullscreen PROGRAM (PGM)' }).click();
+  await expect(preview).toBeVisible();
+  await expect
+    .poll(async () => (await program.boundingBox())?.width ?? 0)
+    .toBeCloseTo(initially.width, 0);
+  expect(await sameDocument()).toBe(true);
+  const afterRestore = await opacity();
+  await expect.poll(opacity).toBeGreaterThan(afterRestore);
+  await expect(body).toHaveAttribute('play.start', '1');
+  expect(await body.getAttribute('stop.start')).toBeNull();
+  await expect(program.locator('[data-monitor-air-count]')).toHaveText('1 row on air');
+  await expect(row(page)).toHaveAttribute('aria-label', /ON AIR$/);
+  expect(
+    engine
+      .receivedCommands()
+      .slice(baseline)
+      .map(({ line }) => line)
+      .filter((line) => /^(CG|PLAY|LOADBG|CLEAR|MIXER) /.test(line)),
+  ).toEqual([]);
+});
+
 test('D-178 / B-433 — PVW crop reaches the first Take and Update on air reframes the existing seat', async ({
   page,
 }) => {

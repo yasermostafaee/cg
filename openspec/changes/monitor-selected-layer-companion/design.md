@@ -21,6 +21,10 @@ the list and Inspector by presentation conditions; it does not need a second sel
   the window. Both the picture and the Inspector remain in their allocated space.
 - Hide the main header and status footer while any panel is maximized. Keep its controls and
   active alerts in view.
+- Keep the Preview panel mounted in its existing strip slot while Program is maximized. Hide
+  its root for the focused layout so the existing rehearsal iframe and playback state survive
+  the round trip. Release the live source preview subscription while hidden, and request fresh
+  frames on restore without replacing the rehearsal document.
 
 ## Non-goals
 

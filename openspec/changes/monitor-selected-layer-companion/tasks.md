@@ -23,3 +23,5 @@
 - [x] 2.6 Verify browser reload without a layer selection and measure header controls for
       overflow and overlap in both monitor contexts. Focused Chromium cases passed.
 - [x] 2.7 [Carrying Linux E2E](https://github.com/yasermostafaee/cg/actions/runs/42689856329/job/129406540835) passed on `9dd4b023` for the revised headers.
+- [x] 2.8 Windows Chromium verified that maximizing and restoring PGM retains the same playing
+      PVW document and sends no playout command. Four companion layout cases also passed.

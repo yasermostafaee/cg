@@ -166,6 +166,7 @@ interface Props {
   framePlacements?: LiveFramePlacement[] | undefined;
   maskPlacements?: LiveMaskPlacement[] | undefined;
   sourceFrames: ReadonlyMap<string, PvwSourceFrame>;
+  visible?: boolean;
   handleRef?: Ref<RehearsalFrameHandle>;
   /** Told whenever this frame's readiness flips, so the stage can gate its transport. */
   onReadyChange?: (itemId: string, ready: boolean) => void;
@@ -193,6 +194,7 @@ export function RehearsalFrame({
   framePlacements,
   maskPlacements,
   sourceFrames,
+  visible = true,
   handleRef,
   onReadyChange,
   onBoundsChange,
@@ -570,7 +572,7 @@ export function RehearsalFrame({
   }, [itemId, html, onBoundsChange]);
 
   useEffect(() => {
-    if (!ready || loadedHtml.current !== html || onBoundsChange === undefined) return;
+    if (!visible || !ready || loadedHtml.current !== html || onBoundsChange === undefined) return;
     const doc = frameRef.current?.contentDocument;
     if (doc == null) return;
     const measured = measureRehearsalBounds(doc);
@@ -608,6 +610,7 @@ export function RehearsalFrame({
       canPosition: canApplyOperatorPosition(templateWindow(), doc),
     });
   }, [
+    visible,
     ready,
     html,
     itemId,
@@ -621,10 +624,10 @@ export function RehearsalFrame({
 
   // The template's own update and position are in place before the parent matches its plate DOM.
   useEffect(() => {
-    if (!ready) return;
+    if (!visible || !ready) return;
     const doc = frameRef.current?.contentDocument;
     if (doc !== undefined && doc !== null) paintPvwPlatePictures(doc, livePlates, sourceFrames);
-  }, [ready, livePlates, sourceFrames]);
+  }, [visible, ready, livePlates, sourceFrames]);
 
   return (
     /*

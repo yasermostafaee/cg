@@ -13,6 +13,7 @@ internally, but the operator cannot see the row or edit it until leaving fullscr
 - Keep Pan's icon and label together and wrap the monitor actions when space is limited.
 - Place the compact selected row below the picture and the optional Inspector in its own right column.
 - Give any maximized panel the space from the app header and footer.
+- Keep the current PVW rehearsal when PGM is maximized and restored.
 
 ## Capabilities
 

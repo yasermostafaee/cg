@@ -48,3 +48,10 @@ the maximized monitor picture.
 
 - **WHEN** the monitor header is narrow and Pan and companion layout controls are present
 - **THEN** each control has its own visible hitbox
+
+#### Scenario: Program is maximized during a Preview rehearsal
+
+- **GIVEN** a row is playing in PVW
+- **WHEN** the operator maximizes PGM and restores the split view
+- **THEN** PVW continues the same rehearsal without another Play
+- **AND** the layout controls send no playout commands

@@ -274,6 +274,7 @@ interface Props {
   templateNames: ReadonlyMap<string, string | null>;
   /** The channel's real raster (R-030). Every iframe is sized to it. */
   raster: ChannelRaster;
+  visible?: boolean;
   panOpen?: boolean;
   moveOpen?: boolean;
   frameEditOpen?: boolean;
@@ -366,6 +367,7 @@ export function RehearsalStage({
   pageByItem,
   templateNames,
   raster,
+  visible = true,
   panOpen = false,
   moveOpen = false,
   frameEditOpen = false,
@@ -509,6 +511,7 @@ export function RehearsalStage({
             : [],
         )
       : [],
+    visible,
   );
   const hasSourcePicture = [...sourceFrames.values()].some(
     (frame) => frame.jpegBase64 !== undefined,
@@ -744,6 +747,7 @@ export function RehearsalStage({
               (plate) => plate.channel === channel && plate.itemId === subject.itemId,
             )}
             sourceFrames={sourceFrames}
+            visible={visible}
             onReadyChange={onReadyChange}
             onBoundsChange={onBoundsChange}
             handleRef={(handle) => {
@@ -830,6 +834,7 @@ export function RehearsalStage({
             itemId={subject.itemId}
             scopeKey={key}
             enabled={
+              visible &&
               subject.previewCropPending !== true &&
               (panOpen ||
                 hasPreviewCropReset(subject.itemId) ||
