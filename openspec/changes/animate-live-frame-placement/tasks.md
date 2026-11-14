@@ -9,7 +9,8 @@
       through the real Bridge with a mock AMCP engine.
 - [x] A local reference-engine file capture at 25 fps verified move, resize, fade-out and
       fade-in of the live input and its tied foreground title, with the correct final geometry.
-- [ ] Record the carrying Linux Playwright result.
+- [x] [Linux Playwright](https://github.com/yasermostafaee/cg/actions/runs/43623019929/job/132532721505)
+      completed its E2E step successfully on `e798ca3b`.
 - [ ] Verify picture, title, fallback and mask alignment on the target Playout Engine.
 - [x] Carry effect selection and authored frame identity into the on-air preset switch.
 - [x] Verify both directions between a one-frame and a two-frame preset, with the shared producer
@@ -19,4 +20,6 @@
       mock AMCP. In the Windows Chromium regression, both pages hide the departing group before
       the shared frame moves, its input and volume continue, and the reverse restores the clips.
 - [x] Verify refusal during the masked switch restores the outgoing artwork and mixer state.
-- [ ] Build the Windows installers locally after verification.
+- [x] Capture the masked switch on a local reference engine at 25 fps. The departing picture
+      and mask disappear together before the retained frame grows to full raster.
+- [x] Build and verify the three local Windows 1.2.5 installers from `e798ca3b`.
