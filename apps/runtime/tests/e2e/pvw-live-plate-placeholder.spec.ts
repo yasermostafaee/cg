@@ -953,9 +953,16 @@ test('PVW composites distinct source snapshots under authored shapes and inside 
   const sourcePicture = (id: string) => plate(id).locator('[data-cg-pvw-picture-part] img');
   await expect(sourcePicture('guest-1')).toHaveJSProperty('naturalWidth', 160);
   await expect(sourcePicture('guest-2')).toHaveJSProperty('naturalWidth', 160);
+  const maskedLabel = marker(page, 'guest-1').locator('[data-live-plate-label]');
+  await expect(maskedLabel).toBeVisible();
   const a = await plate('guest-1').boundingBox();
   const b = await plate('guest-2').boundingBox();
-  if (a === null || b === null) throw new Error('Live plates are missing');
+  const label = await maskedLabel.boundingBox();
+  if (a === null || b === null || label === null)
+    throw new Error('Live plates or label are missing');
+  // The identifier sits in the visible half of the mask. Sample the source below it.
+  const greenY = a.y + a.height * 0.88;
+  expect(greenY).toBeGreaterThan(label.y + label.height);
   const colors = await page.evaluate(
     async ({ screenshot, points }) => {
       const image = new Image();
@@ -969,9 +976,9 @@ test('PVW composites distinct source snapshots under authored shapes and inside 
       return points.map(([x, y]) => Array.from(ctx.getImageData(x!, y!, 1, 1).data));
     },
     {
-      screenshot: (await page.screenshot()).toString('base64'),
+      screenshot: (await page.screenshot({ scale: 'css' })).toString('base64'),
       points: [
-        [a.x + a.width * 0.1, a.y + a.height * 0.65],
+        [a.x + a.width * 0.1, greenY],
         [a.x + a.width * 0.18, a.y + a.height * 0.2],
         [a.x + a.width * 0.7, a.y + a.height * 0.65],
         [b.x + b.width * 0.1, b.y + b.height * 0.65],

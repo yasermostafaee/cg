@@ -298,10 +298,11 @@ test('1.3 — Preview Next turns only the rehearsal picture, including while the
       (payload) => (window as unknown as { play: (value: string) => void }).play(payload),
       take.data,
     );
-    const currentPicture = air.locator('img[data-cg-page-media]:visible').first();
+    // The book fills this stage. Each turn replaces its image while the stage stays mounted.
+    const programmeStage = air.locator('.cg-stage');
     const expectPgm = (colour: RGB) =>
       expect
-        .poll(async () => near(await sampleRgb(air, currentPicture, 0.5, 0.5), colour))
+        .poll(async () => near(await sampleRgb(air, programmeStage, 0.5, 0.5), colour))
         .toBe(true);
     await expectPgm(RED);
     await expectPvw(page, GREEN);
