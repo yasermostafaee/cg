@@ -659,6 +659,7 @@ describe('the census: every route that names a channel, classified', () => {
         one the sign-in does not hold).
       */
       'pgmReturn.ticket': ['req.channel'],
+      'pgmReturn.topology': ['req.channel'],
       'playoutLayers.clear': ['req.channel'],
       /*
         `PLAYOUT-SOURCES-01` §1.F — `sources.set-config` carries the plate BAND only now, so the
@@ -733,6 +734,7 @@ describe('the census: every route that names a channel, classified', () => {
       'livePreview.ticket',
       // `CENTRAL-BRIDGE-01` (D9) — a programme-return ticket for one channel.
       'pgmReturn.ticket',
+      'pgmReturn.topology',
       'playlistGain.get',
       'playlistGain.set',
       'playoutLayers.clear',

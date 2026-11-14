@@ -346,6 +346,7 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         'pgmReturn.status',
         // `CENTRAL-BRIDGE-01` (D9) — a read: the picture's ticket. A locked console still watches air.
         'pgmReturn.ticket',
+        'pgmReturn.topology',
         'playoutLayers.state',
         'rehearse.state',
         // `DESKTOP-APPS-01-D` d — a read of the tap before a channel is declared.

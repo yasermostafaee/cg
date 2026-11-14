@@ -19,6 +19,7 @@ export type TicketGrant =
       /** Missing is the legacy primary-only grant: engine A. */
       readonly engine?: PgmEngine;
       readonly channel: number;
+      readonly resourceKey?: string;
       /** `PLAYOUT-FEATURES-01` E — the sound's ticket opens the sound only. Absent = the picture. */
       readonly stream?: 'picture' | 'audio';
     }

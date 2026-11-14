@@ -270,6 +270,13 @@ STEPS"). D-141 v1's zones migrate into steps on load (`migrateCountdownZones`).
   changes under [`openspec/`](../../openspec); the engine docs describe _how it's
   built_. Don't duplicate behaviour between them.
 
+## Programme-return transport
+
+CG Bridge's `playout-pgm-topology.ts` joins a signed-in channel mapping to Playout's reciprocal
+channel links. `PlayoutPgmMonitors` owns the demand-driven picture and sound relays for each
+verified member. Opaque resource keys keep stream tickets and status events attached to the
+same physical mapping. The Monitor Strip consumes that data through the Runtime Bridge.
+
 ## Where the engines live
 
 | Engine / package                                          | Responsibility                                                                                                                                                                                                                                                                                   |

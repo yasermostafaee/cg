@@ -293,7 +293,7 @@ function scopedNames(table: Readonly<Record<string, ScopeEntry>>): string[] {
     .filter(([, e]) => e.kind === 'scoped')
     .map(([n]) => n)
     .filter((n) => n !== ipc.LivePlateReleasedChannel.name) // no channel field: its own test
-    .filter((n) => n !== ipc.AuditAppendedChannel.name); // ONE row, one channel: its own test
+    .filter((n) => n !== ipc.AuditAppendedChannel.name && n !== ipc.PgmTopologyChannel.name); // one channel, tested below
 }
 
 describe('CENTRAL-BRIDGE-01 (D4) — a channel-1 console is told nothing of channel 2', () => {
@@ -336,6 +336,25 @@ describe('CENTRAL-BRIDGE-01 (D4) — a channel-1 console is told nothing of chan
       });
     }
   }
+
+  it('returns only the requested logical channel topology to a console whose grant still holds it', () => {
+    const name = ipc.PgmTopologyChannel.name;
+    expect(ROUTE_SCOPE[name]?.kind).toBe('scoped');
+    const topology = (channel: number) =>
+      ipc.PgmTopologySchema.parse({
+        channel,
+        members: [
+          { engine: 'C', name: 'Reserve C', physicalChannel: 3, resourceKey: 'return-key' },
+        ],
+        active: null,
+      });
+    const one = topology(1);
+    const two = topology(2);
+    expect(scopePayload(ROUTE_SCOPE, name, one, HOLDS_ONE, NO_ITEMS)).toBe(one);
+    expect(scopePayload(ROUTE_SCOPE, name, two, HOLDS_ONE, NO_ITEMS)).toBe(TELL_NOTHING);
+    expect(scopePayload(ROUTE_SCOPE, name, null, HOLDS_ONE, NO_ITEMS)).toBeNull();
+    expect(scopePayload(ROUTE_SCOPE, name, two, null, NO_ITEMS)).toBe(two);
+  });
 
   it('`R-083` — a pushed audit row is told where its channel is held, and a row on no channel to all', () => {
     expect(PUBLISH_SCOPE[ipc.AuditAppendedChannel.name]?.kind).toBe('scoped');

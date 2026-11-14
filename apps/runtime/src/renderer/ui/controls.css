@@ -914,6 +914,7 @@
 .cg-pgm-audio-select {
   height: var(--r-pgm-strip-toggle);
   min-width: 4.25rem;
+  max-width: 8.5rem;
   padding: 0 1.15rem 0 0.35rem;
   border: 1px solid var(--r-field-line);
   border-radius: var(--r-pvw-transport-radius);
@@ -921,6 +922,22 @@
   color: var(--r-text);
   font: inherit;
   font-size: 0.68rem;
+}
+
+.cg-pgm-source-controls[data-pgm-topology-controls] [data-pgm-display-mode='both'] {
+  width: auto;
+}
+
+.cg-pgm-tile-label {
+  max-width: calc(100% - 0.9rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cg-pgm-tile-active {
+  margin-inline-start: 0.4rem;
+  color: var(--r-accent);
 }
 
 /* `R-104` — two programme returns stay side by side until each tile would be too small to read. */

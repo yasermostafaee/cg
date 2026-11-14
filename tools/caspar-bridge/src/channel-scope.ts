@@ -21,6 +21,8 @@ import {
   LivePlateReleasedChannel,
   PgmReturnStatusChangedChannel,
   PgmReturnStatusChannel,
+  PgmTopologyChannel,
+  type PgmTopology,
   PlayoutLayersStateChangedChannel,
   PlayoutLayersStateChannel,
   RehearseStateChangedChannel,
@@ -310,6 +312,9 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'channels.catalogue': PER_SOCKET,
   // `CENTRAL-BRIDGE-01` (D9) — issued only for a channel this socket's sign-in holds (the handler).
   'pgmReturn.ticket': PER_SOCKET,
+  [PgmTopologyChannel.name]: scoped<PgmTopology | null>((topology, holds) =>
+    topology === null || holds(topology.channel) ? topology : TELL_NOTHING,
+  ),
   // ── reads of configuration, health and the library ──
   'app.info': STATION_WIDE,
   'audit.health': STATION_WIDE,

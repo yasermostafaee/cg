@@ -39,6 +39,7 @@ export const PgmReturnTicketChannel = defineChannel(
     /** Missing is the legacy primary-only request: engine A. */
     engine: PgmEngineSchema.optional(),
     stream: z.enum(['picture', 'audio']).optional(),
+    resourceKey: z.string().min(1).optional(),
   }),
   TicketPathSchema,
 );

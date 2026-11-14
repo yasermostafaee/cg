@@ -5180,3 +5180,16 @@ is no verified ownership map.
 - WHEN the operator presses **Reset position** in an editable Position section THEN the
   template's authored anchor and offsets are staged and PVW follows immediately. **Discard**
   restores the applied position. **Update** or **Update on air** applies the reset.
+
+## [~] R-118 — Monitor up to four linked Apasai Playout engines ⟨priority: high — owner, 2026-11-14⟩ — `openspec/changes/monitor-playout-redundancy/`
+
+**What:** Show separate PGM pictures and signals for the configured engine and up to three reserves
+of the selected channel. Identify the verified active engine and listen to a single programme return.
+Send CG commands to the active engine after its external-graphics transfer contract is verified.
+
+**Acceptance:**
+
+- WHEN the channel has four linked engines THEN Programme can show their named returns in a two-by-two grid.
+- WHEN Playout confirms a control owner THEN identify that engine and let Follow use its programme audio.
+- WHEN ownership is unknown THEN show no active designation and keep Follow silent.
+- WHEN verified Playout transfers the channel and synchronizes external CG THEN later CG commands reach the active engine only and the existing graphic remains available on the promoted engine.

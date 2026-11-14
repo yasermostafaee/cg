@@ -34,6 +34,10 @@ const fetchStatus = (): Promise<readonly PgmReturnStatus[]> => window.cg.pgmRetu
 const subscribeStatus = (handler: (next: readonly PgmReturnStatus[]) => void): Unsubscribe =>
   window.cg.pgmReturn.onStatusChanged(handler);
 
+export function useProgramReturnStatuses(): readonly PgmReturnStatus[] {
+  return useBridgeSnapshot(fetchStatus, subscribeStatus, NOTHING_WATCHED);
+}
+
 /** A failed picture request is asked again after 2 s, 4 s, 8 s … up to 30 s. */
 const RETRY_BASE_MS = 2000;
 const RETRY_MAX_MS = 30_000;
@@ -53,15 +57,20 @@ const RETRY_MAX_MS = 30_000;
 export function useProgramReturn(
   channel: number | null,
   engine: PgmEngine = 'A',
-  resourceKey = '',
+  statuses: readonly PgmReturnStatus[] = NOTHING_WATCHED,
+  resourceKey?: string,
+  legacyBinding = '',
 ): ProgramReturn {
   const link = useLink();
   const live = link === 'live';
-  const statuses = useBridgeSnapshot(fetchStatus, subscribeStatus, NOTHING_WATCHED);
+  const binding = JSON.stringify([channel, engine, resourceKey, legacyBinding]);
   const state =
     channel === null
       ? undefined
-      : statuses.find((s) => (s.engine ?? 'A') === engine && s.channel === channel)?.state;
+      : statuses.find(
+          (s) =>
+            (s.engine ?? 'A') === engine && s.channel === channel && s.resourceKey === resourceKey,
+        )?.state;
 
   const [mount, setMount] = useState(0);
   const retries = useRef(0);
@@ -71,7 +80,7 @@ export function useProgramReturn(
     is ASKED FOR, per request: on every mount and after every failure. A refusal is a failed request
     (the back-off below asks again); nothing is shown while no URL is held.
   */
-  const [ticketed, setTicketed] = useState<string | null>(null);
+  const [ticketed, setTicketed] = useState<{ binding: string; url: string } | null>(null);
 
   /*
     A request made over a link that then dropped died with the bridge (the relay is served by the
@@ -110,9 +119,13 @@ export function useProgramReturn(
     setTicketed(null);
     if (channel === null || !live) return;
     let current = true;
-    window.cg.pgmReturn.feedUrl(channel, engine).then(
+    const request =
+      resourceKey === undefined
+        ? window.cg.pgmReturn.feedUrl(channel, engine)
+        : window.cg.pgmReturn.feedUrl(channel, engine, resourceKey);
+    request.then(
       (url) => {
-        if (current) setTicketed(url);
+        if (current && url !== null) setTicketed({ binding, url });
       },
       () => {
         if (current) onError();
@@ -121,13 +134,13 @@ export function useProgramReturn(
     return () => {
       current = false;
     };
-  }, [channel, engine, live, mount, onError, resourceKey]);
+  }, [channel, engine, live, mount, onError, binding, resourceKey]);
 
   // The mount number rides the query so each request is its own resource, never a cached one.
   const src =
-    ticketed === null || !live
+    ticketed === null || !live || ticketed.binding !== binding
       ? null
-      : `${ticketed}${ticketed.includes('?') ? '&' : '?'}v=${String(mount)}`;
+      : `${ticketed.url}${ticketed.url.includes('?') ? '&' : '?'}v=${String(mount)}`;
   const signal: ProgramSignal =
     !live || state === undefined
       ? 'none'

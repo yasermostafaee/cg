@@ -15,6 +15,7 @@ import { Panel } from '../../ui/Panel.js';
 import { Popover } from '../../ui/Popover.js';
 import { RangeInput } from '../../ui/RangeInput.js';
 import { MonitorHead, MonitorHeadFact, MonitorSignalStrip } from '../../ui/MonitorHead.js';
+import { IsolatedName, isolateText } from '../../ui/OperatorNames.js';
 import type { PanelId } from '../../hooks/useShellLayout.js';
 import type { ProgramReturn, ProgramSignal } from '../../hooks/useProgramReturn.js';
 import type { PgmAudio } from '../../hooks/usePgmAudio.js';
@@ -22,6 +23,7 @@ import { LoudnessBadge, VuMeter } from './VuMeter.js';
 import { playlistTag, type ChannelAir } from '../channels/channelAir.js';
 import type {
   ProgramAudioChoice,
+  ProgramDisplayMode,
   ProgramMonitorPreferences,
 } from './useProgramMonitorPreferences.js';
 
@@ -144,6 +146,15 @@ export const PROGRAM_SIGNAL_WORDS: Readonly<Record<ProgramSignal, string>> = {
   none: 'No return signal',
 };
 
+export interface ProgrammeMonitorTarget {
+  readonly engine: PgmEngine;
+  readonly physicalChannel: number | null;
+  readonly name?: string;
+  readonly resourceKey?: string;
+  readonly meterEngine?: Extract<PgmEngine, 'A' | 'B'> | undefined;
+  readonly active?: boolean;
+}
+
 interface Props {
   id: Extract<PanelId, 'pgm' | 'pvw'>;
   /** PROGRAM — the header text and the accessible name. */
@@ -160,11 +171,9 @@ interface Props {
    */
   onAirRows: number;
   /** The visible physical returns, each keyed by stable engine identity. */
-  returns: readonly {
-    readonly engine: PgmEngine;
-    readonly physicalChannel: number | null;
-    readonly programReturn: ProgramReturn;
-  }[];
+  returns: readonly (ProgrammeMonitorTarget & { readonly programReturn: ProgramReturn })[];
+  /** Undefined for a legacy station using A/B configuration. */
+  topologyTargets?: readonly ProgrammeMonitorTarget[] | undefined;
   /** `PLAYOUT-FEATURES-01` E — the programme's SOUND at this console, lifted beside the return. */
   programSound: PgmAudio;
   monitorPreferences: ProgramMonitorPreferences;
@@ -252,6 +261,7 @@ export function MonitorPanel({
   programSound,
   monitorPreferences,
   backupAvailable,
+  topologyTargets,
   air,
   backupLine = null,
   companionActions,
@@ -264,24 +274,52 @@ export function MonitorPanel({
     returns.length > 1
       ? `${String(liveCount)} of ${String(returns.length)} return signals`
       : PROGRAM_SIGNAL_WORDS[returns[0]?.programReturn.signal ?? 'none'];
+  const legacy = topologyTargets === undefined;
+  const pictureModes = new Set<ProgramDisplayMode>(
+    legacy ? ['A', 'B'] : topologyTargets.map(({ engine }) => engine),
+  );
+  if (legacy || pictureModes.size > 1) {
+    if (monitorPreferences.display !== 'both') pictureModes.add(monitorPreferences.display);
+    pictureModes.add('both');
+  }
+  const selectName = (engine: PgmEngine): string => {
+    const name = topologyTargets?.find((target) => target.engine === engine)?.name;
+    return name === undefined ? engine : `${engine} · ${isolateText(name)}`;
+  };
+  const selectedAudio = monitorPreferences.audioEngine;
+  const audioModes = new Set<PgmEngine>(
+    legacy ? ['A', 'B'] : topologyTargets.map(({ engine }) => engine),
+  );
+  if (monitorPreferences.audio !== 'follow') audioModes.add(monitorPreferences.audio);
+  const grid = returns.length > 2;
   const displayControls = (
-    <div style={styles.controls} className="cg-pgm-source-controls">
+    <div
+      style={styles.controls}
+      className="cg-pgm-source-controls"
+      data-pgm-topology-controls={legacy ? undefined : ''}
+    >
       <div style={styles.controls} role="group" aria-label="Programme picture source">
-        {(['A', 'B', 'both'] as const).map((mode) => (
+        {[...pictureModes].map((mode) => (
           <Button
             key={mode}
             variant="ghost"
             aria-pressed={monitorPreferences.display === mode}
             data-toggle-on={monitorPreferences.display === mode ? '' : undefined}
             data-pgm-display-mode={mode}
-            title={mode === 'both' ? 'Show A and B' : `Show server ${mode}`}
+            title={
+              mode === 'both'
+                ? legacy
+                  ? 'Show A and B'
+                  : 'Show all programme returns'
+                : `Show server ${selectName(mode)}`
+            }
             onClick={() => monitorPreferences.setDisplay(mode)}
           >
-            {mode === 'both' ? 'A+B' : mode}
+            {mode === 'both' ? (legacy ? 'A+B' : 'All') : mode}
           </Button>
         ))}
       </div>
-      {monitorPreferences.display === 'both' && (
+      {monitorPreferences.display === 'both' && (legacy || returns.length === 2) && (
         <div style={styles.controls} role="group" aria-label="Programme picture layout">
           {(['horizontal', 'vertical'] as const).map((layout) => (
             <Button
@@ -291,7 +329,7 @@ export function MonitorPanel({
               aria-pressed={monitorPreferences.layout === layout}
               data-toggle-on={monitorPreferences.layout === layout ? '' : undefined}
               data-pgm-layout-choice={layout}
-              title={`${layout === 'horizontal' ? 'Horizontal' : 'Vertical'} A+B layout`}
+              title={`${layout === 'horizontal' ? 'Horizontal' : 'Vertical'} ${legacy ? 'A+B' : 'programme'} layout`}
               onClick={() => monitorPreferences.setLayout(layout)}
             >
               <Icon icon={layout === 'horizontal' ? Columns2 : Rows2} size={13} />
@@ -306,15 +344,18 @@ export function MonitorPanel({
       <select
         className="cg-pgm-audio-select"
         aria-label="Programme sound source"
-        title="Local programme sound and meter source"
+        title={legacy ? 'Local programme sound and meter source' : 'Local programme sound source'}
         value={monitorPreferences.audio}
         onChange={(event) =>
           monitorPreferences.setAudio(event.currentTarget.value as ProgramAudioChoice)
         }
       >
         <option value="follow">Follow</option>
-        <option value="A">A</option>
-        <option value="B">B</option>
+        {[...audioModes].map((engine) => (
+          <option key={engine} value={engine}>
+            {selectName(engine)}
+          </option>
+        ))}
       </select>
       <Button
         variant="ghost"
@@ -322,7 +363,11 @@ export function MonitorPanel({
         data-toggle-on={programSound.on ? '' : undefined}
         data-pgm-audio={programSound.status}
         aria-label="Programme sound"
-        title={`Programme sound from ${monitorPreferences.audioEngine} — this console only`}
+        title={
+          selectedAudio === null
+            ? 'No active programme sound source'
+            : `Programme sound from ${selectName(selectedAudio)} — this console only`
+        }
         onClick={programSound.toggle}
       >
         <Icon icon={programSound.on ? Volume2 : VolumeX} size={13} />
@@ -330,7 +375,13 @@ export function MonitorPanel({
       <ProgramVolume sound={programSound} />
     </div>
   );
-  const meterChannel = monitorPreferences.audioEngine === 'A' || backupAvailable ? channel : null;
+  const meterMember = topologyTargets?.find(
+    ({ engine, physicalChannel }) => engine === selectedAudio && physicalChannel !== null,
+  );
+  const meterEngine = legacy ? (selectedAudio ?? 'A') : (meterMember?.meterEngine ?? null);
+  const meterChannel = (legacy ? selectedAudio === 'A' || backupAvailable : meterEngine !== null)
+    ? channel
+    : null;
   return (
     <Panel
       id={id}
@@ -383,7 +434,9 @@ export function MonitorPanel({
           `PLAYOUT-FEATURES-01` E — the selected Playout engine's short-term loudness for this channel.
           An unmapped B stays unknown because it is not read — never a reading at the floor.
         */
-        reading={<LoudnessBadge channel={meterChannel} engine={monitorPreferences.audioEngine} />}
+        reading={
+          meterEngine !== null && <LoudnessBadge channel={meterChannel} engine={meterEngine} />
+        }
         /*
           🔴 `PLAYOUT-FEATURES-01` E — THE PROGRAMME'S SOUND, at THIS console only: off by default, a
           pressed toggle while on (`data-toggle-on`, as PVW's guides), remembered per console.
@@ -407,13 +460,19 @@ export function MonitorPanel({
         <div
           style={{
             ...styles.pictures,
-            flexDirection: monitorPreferences.layout === 'vertical' ? 'column' : 'row',
+            ...(grid
+              ? {
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                  gridTemplateRows: 'repeat(2, minmax(0, 1fr))',
+                }
+              : { flexDirection: monitorPreferences.layout === 'vertical' ? 'column' : 'row' }),
           }}
           className="cg-pgm-pictures"
           data-pgm-picture-count={returns.length}
-          data-pgm-layout={monitorPreferences.layout}
+          data-pgm-layout={grid ? 'grid' : monitorPreferences.layout}
         >
-          {returns.map(({ engine, physicalChannel, programReturn }) => {
+          {returns.map(({ engine, physicalChannel, programReturn, name, active }) => {
             const { src, signal, onError } = programReturn;
             const tileWords = PROGRAM_SIGNAL_WORDS[signal];
             return (
@@ -421,12 +480,20 @@ export function MonitorPanel({
                 key={engine}
                 style={styles.screen}
                 role="img"
-                aria-label={`${title} ${engine} CH ${String(physicalChannel ?? '—')} — ${tileWords}`}
+                aria-label={`${title} ${selectName(engine)} CH ${String(physicalChannel ?? '—')}${active === true ? ' Active' : ''} — ${tileWords}`}
                 data-pgm-screen={engine}
+                data-pgm-active={active === true ? '' : undefined}
               >
-                <bdi style={styles.tileLabel} dir="ltr">
+                <span style={styles.tileLabel} className="cg-pgm-tile-label" dir="ltr">
                   {engine} · CH {physicalChannel ?? '—'}
-                </bdi>
+                  {name !== undefined && (
+                    <>
+                      {' '}
+                      · <IsolatedName title={name}>{name}</IsolatedName>
+                    </>
+                  )}
+                  {active === true && <span className="cg-pgm-tile-active">Active</span>}
+                </span>
                 {src !== null && (
                   <ProgramPicture
                     key={src}
@@ -446,7 +513,7 @@ export function MonitorPanel({
           })}
         </div>
         {/* `PLAYOUT-FEATURES-01` E — the programme meter, the Playout's own levels, beside the picture. */}
-        <VuMeter channel={meterChannel} engine={monitorPreferences.audioEngine} />
+        {meterEngine !== null && <VuMeter channel={meterChannel} engine={meterEngine} />}
       </div>
       {/*
         🔴 `RELEASE-0113-01` (`B-316`, `R-089`) — WHERE THIS CHANNEL'S LINES GO ON THE BACKUP ENGINE, in this

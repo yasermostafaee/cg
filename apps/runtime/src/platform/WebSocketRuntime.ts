@@ -2384,23 +2384,34 @@ export class WebSocketRuntime implements RuntimeBridge {
     feedUrl: async (
       channel: number,
       engine: ipcChannels.PgmEngine = 'A',
+      resourceKey?: string,
     ): Promise<string | null> => {
-      const { path } = await this.#invoke(ipcChannels.PgmReturnTicketChannel, { channel, engine });
+      const { path } = await this.#invoke(ipcChannels.PgmReturnTicketChannel, {
+        channel,
+        engine,
+        ...(resourceKey === undefined ? {} : { resourceKey }),
+      });
       return this.#bridgeHttpUrl(path);
     },
     // `PLAYOUT-FEATURES-01` E — the SOUND, behind a ticket for the sound.
     audioUrl: async (
       channel: number,
       engine: ipcChannels.PgmEngine = 'A',
+      resourceKey?: string,
     ): Promise<string | null> => {
       const { path } = await this.#invoke(ipcChannels.PgmReturnTicketChannel, {
         channel,
         engine,
         stream: 'audio',
+        ...(resourceKey === undefined ? {} : { resourceKey }),
       });
       return this.#bridgeHttpUrl(path);
     },
     status: () => this.#invoke(PgmReturnStatusChannel, undefined),
+    topology: async (channel: number) =>
+      (await this.#optionalChannelMissing(ipcChannels.PgmTopologyChannel.name))
+        ? null
+        : this.#invoke(ipcChannels.PgmTopologyChannel, { channel }),
     onStatusChanged: (handler: (status: readonly PgmReturnStatus[]) => void) =>
       this.#pgmReturnSubs.add(handler),
   };

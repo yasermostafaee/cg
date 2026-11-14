@@ -3,11 +3,12 @@ import { useShellLayoutContext } from '../../hooks/shellLayoutContext.js';
 import { useBackupChannels } from '../../hooks/useBackupChannels.js';
 import { useConnections } from '../../hooks/useConnections.js';
 import { useChannelAir, useChannelBankState } from '../channels/useSelectedChannel.js';
-import { useProgramReturn } from '../../hooks/useProgramReturn.js';
+import { useProgramReturn, useProgramReturnStatuses } from '../../hooks/useProgramReturn.js';
+import { useProgramTopology } from '../../hooks/useProgramTopology.js';
 import { usePgmAudio } from '../../hooks/usePgmAudio.js';
 import { useStackSnapshot } from '../../hooks/useStack.js';
 import { airTally, onChannel } from '../stack/onAir.js';
-import { MonitorPanel } from './MonitorPanel.js';
+import { MonitorPanel, type ProgrammeMonitorTarget } from './MonitorPanel.js';
 import { PreviewPanel } from './PreviewPanel.js';
 import { useProgramMonitorPreferences } from './useProgramMonitorPreferences.js';
 import { Button } from '../../ui/Button.js';
@@ -75,7 +76,13 @@ export function MonitorStrip({
   */
   const backupState = useBackupChannels();
   const health = useConnections();
-  const currentPrimary: PgmEngine = health?.currentPrimary === 'B' ? 'B' : 'A';
+  const topology = useProgramTopology(showPgm ? viewChannel : null);
+  const legacy = topology === null;
+  const currentPrimary = legacy
+    ? health?.currentPrimary === 'B'
+      ? 'B'
+      : 'A'
+    : (topology?.active ?? null);
   const backupLine = ((): {
     text: string;
     title?: string;
@@ -95,27 +102,56 @@ export function MonitorStrip({
         : {}),
     };
   })();
-  const backupAvailable = backupLine?.mapped === true && backupLine.channel !== undefined;
   const monitorPreferences = useProgramMonitorPreferences(currentPrimary);
+  const targets: readonly ProgrammeMonitorTarget[] = legacy
+    ? [
+        { engine: 'A', physicalChannel: viewChannel },
+        { engine: 'B', physicalChannel: backupLine?.channel ?? null },
+      ]
+    : (topology?.members ?? []).map((member) => ({
+        ...member,
+        active: member.engine === topology?.active,
+      }));
+
+  // Keep a saved explicit selection visible even when its physical return is unavailable.
+  const selectedTarget =
+    targets.length === 1 || monitorPreferences.display === 'both'
+      ? undefined
+      : (targets.find(({ engine }) => engine === monitorPreferences.display) ?? {
+          engine: monitorPreferences.display,
+          physicalChannel: null,
+        });
+  const visibleTargets = selectedTarget === undefined ? targets : [selectedTarget];
+  const visible = new Set(visibleTargets.map(({ engine }) => engine));
+  const statuses = useProgramReturnStatuses();
+  const visibleTarget = (engine: PgmEngine) =>
+    showPgm && visible.has(engine) ? targets.find((target) => target.engine === engine) : undefined;
   /*
     `C-016` — the programme return, lifted here beside the air count for the same reason. A
     PROGRAM pane that is not rendered asks for NOTHING: the channel is `null` while it is folded
     away, so no picture is requested and the bridge pulls nothing from the Playout for it.
   */
-  const showA = monitorPreferences.display === 'A' || monitorPreferences.display === 'both';
-  const showB = monitorPreferences.display === 'B' || monitorPreferences.display === 'both';
-  const programReturnA = useProgramReturn(showPgm && showA ? viewChannel : null, 'A');
-  const programReturnB = useProgramReturn(
-    showPgm && showB && backupAvailable ? viewChannel : null,
-    'B',
-    backupLine?.text ?? '',
-  );
-  // `PLAYOUT-FEATURES-01` E — and its SOUND, on the same rule: a folded PROGRAM plays nothing.
-  const audioAvailable = monitorPreferences.audioEngine === 'A' || backupAvailable;
-  const programSound = usePgmAudio(
-    showPgm && audioAvailable ? viewChannel : null,
-    monitorPreferences.audioEngine,
-  );
+  const a = visibleTarget('A');
+  const b = visibleTarget('B');
+  const c = visibleTarget('C');
+  const d = visibleTarget('D');
+  const availableChannel = (target: ProgrammeMonitorTarget | undefined): number | null =>
+    target?.physicalChannel != null ? viewChannel : null;
+  const returns = {
+    A: useProgramReturn(availableChannel(a), 'A', statuses, a?.resourceKey),
+    B: useProgramReturn(
+      availableChannel(b),
+      'B',
+      statuses,
+      b?.resourceKey,
+      legacy ? backupLine?.text : undefined,
+    ),
+    C: useProgramReturn(availableChannel(c), 'C', statuses, c?.resourceKey),
+    D: useProgramReturn(availableChannel(d), 'D', statuses, d?.resourceKey),
+  };
+  const audioTarget = targets.find(({ engine }) => engine === monitorPreferences.audioEngine);
+  const audioChannel = showPgm ? availableChannel(audioTarget) : null;
+  const programSound = usePgmAudio(audioChannel, audioTarget?.engine, audioTarget?.resourceKey);
   const effectiveCompanionMode = hasSelectedLayer ? companionMode : 'monitor';
   const companionActions =
     focus === 'pgm' || focus === 'pvw' ? (
@@ -198,31 +234,16 @@ export function MonitorStrip({
           word="PROGRAM"
           channel={viewChannel}
           onAirRows={onAirRows}
-          returns={[
-            ...(showA
-              ? [
-                  {
-                    engine: 'A' as const,
-                    physicalChannel: viewChannel,
-                    programReturn: programReturnA,
-                  },
-                ]
-              : []),
-            ...(showB
-              ? [
-                  {
-                    engine: 'B' as const,
-                    physicalChannel: backupLine?.channel ?? null,
-                    programReturn: programReturnB,
-                  },
-                ]
-              : []),
-          ]}
+          returns={visibleTargets.map((target) => ({
+            ...target,
+            programReturn: returns[target.engine],
+          }))}
           programSound={programSound}
           monitorPreferences={monitorPreferences}
-          backupAvailable={backupAvailable}
+          backupAvailable={legacy && audioTarget?.engine === 'B' && audioChannel !== null}
+          topologyTargets={legacy ? undefined : targets}
           air={air}
-          backupLine={backupLine}
+          backupLine={legacy ? backupLine : null}
           companionActions={companionActions}
         />
       )}

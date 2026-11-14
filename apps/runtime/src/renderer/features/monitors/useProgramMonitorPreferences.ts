@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
-import type { PgmEngine } from '@cg/shared-ipc';
+import { PgmEngineSchema, type PgmEngine } from '@cg/shared-ipc';
 
-export type ProgramDisplayMode = 'A' | 'B' | 'both';
+export type ProgramDisplayMode = PgmEngine | 'both';
 export type ProgramAudioChoice = 'follow' | PgmEngine;
 export type ProgramPictureLayout = 'horizontal' | 'vertical';
 
@@ -22,8 +22,8 @@ function read(): Required<StoredPreferences> {
     const audio = parsed.audio;
     const layout = parsed.layout;
     return {
-      display: display === 'B' || display === 'both' ? display : 'A',
-      audio: audio === 'A' || audio === 'B' ? audio : 'follow',
+      display: display === 'both' ? display : (PgmEngineSchema.safeParse(display).data ?? 'A'),
+      audio: PgmEngineSchema.safeParse(audio).data ?? 'follow',
       layout: layout === 'vertical' ? 'vertical' : 'horizontal',
     };
   } catch {
@@ -42,14 +42,16 @@ function write(value: Required<StoredPreferences>): void {
 export interface ProgramMonitorPreferences {
   readonly display: ProgramDisplayMode;
   readonly audio: ProgramAudioChoice;
-  readonly audioEngine: PgmEngine;
+  readonly audioEngine: PgmEngine | null;
   readonly layout: ProgramPictureLayout;
   setDisplay(mode: ProgramDisplayMode): void;
   setAudio(choice: ProgramAudioChoice): void;
   setLayout(layout: ProgramPictureLayout): void;
 }
 
-export function useProgramMonitorPreferences(currentPrimary: PgmEngine): ProgramMonitorPreferences {
+export function useProgramMonitorPreferences(
+  currentPrimary: PgmEngine | null,
+): ProgramMonitorPreferences {
   const [stored, setStored] = useState(read);
   const update = useCallback((next: Required<StoredPreferences>): void => {
     setStored(next);

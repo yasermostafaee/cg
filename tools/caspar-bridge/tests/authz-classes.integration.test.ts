@@ -285,6 +285,7 @@ describe('C-038 — the census: every route, classified', () => {
         air too, but only a channel the sign-in holds (the handler) and this station declares (the fence).
       */
       'pgmReturn.ticket',
+      'pgmReturn.topology',
       'playoutLayers.state',
       'rehearse.state',
       /*

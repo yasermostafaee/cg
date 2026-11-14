@@ -32,7 +32,7 @@ export const PGM_RETURN_STATES = ['connecting', 'live', 'stalled', 'unavailable'
 export type PgmReturnState = (typeof PGM_RETURN_STATES)[number];
 
 /** The physical programme engine. Missing on an old primary-only payload means A. */
-export const PGM_ENGINES = ['A', 'B'] as const;
+export const PGM_ENGINES = ['A', 'B', 'C', 'D'] as const;
 export const PgmEngineSchema = z.enum(PGM_ENGINES);
 export type PgmEngine = z.infer<typeof PgmEngineSchema>;
 
@@ -41,6 +41,7 @@ export const PgmReturnStatusSchema = z.object({
   engine: PgmEngineSchema.optional(),
   channel: z.number().int().positive(),
   state: z.enum(PGM_RETURN_STATES),
+  resourceKey: z.string().optional(),
 });
 
 export type PgmReturnStatus = z.infer<typeof PgmReturnStatusSchema>;
@@ -61,6 +62,32 @@ export const PgmReturnStatusChangedChannel = definePublishChannel(
   PgmReturnStatusListSchema,
 );
 
+/** Verified Playout links for the selected logical channel. */
+export const PgmTopologySchema = z.object({
+  channel: z.number().int().positive(),
+  members: z
+    .array(
+      z.object({
+        engine: PgmEngineSchema,
+        name: z.string().trim().min(1),
+        physicalChannel: z.number().int().positive().nullable(),
+        resourceKey: z.string().min(1),
+        meterEngine: z.enum(['A', 'B']).optional(),
+      }),
+    )
+    .min(1)
+    .max(PGM_ENGINES.length),
+  active: PgmEngineSchema.nullable(),
+});
+
+export type PgmTopology = z.infer<typeof PgmTopologySchema>;
+
+export const PgmTopologyChannel = defineChannel(
+  'pgmReturn.topology',
+  z.object({ channel: z.number().int().positive() }),
+  PgmTopologySchema.nullable(),
+);
+
 /**
  * The relay's path on the console's origin — the ONE spelling both the bridge's route and the
  * console's `<img>` use, so the two cannot come to disagree about where the picture is.
@@ -70,7 +97,7 @@ export const PGM_RETURN_PATH_PREFIX = '/pgm/';
 export function pgmReturnPath(channel: number, engine: PgmEngine = 'A'): string {
   return engine === 'A'
     ? `${PGM_RETURN_PATH_PREFIX}${String(channel)}`
-    : `${PGM_RETURN_PATH_PREFIX}B/${String(channel)}`;
+    : `${PGM_RETURN_PATH_PREFIX}${engine}/${String(channel)}`;
 }
 
 /**

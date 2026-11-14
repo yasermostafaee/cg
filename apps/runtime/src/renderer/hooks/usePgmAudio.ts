@@ -69,7 +69,11 @@ function audioContextCtor(): AudioContextCtor | null {
   return g.AudioContext ?? null;
 }
 
-export function usePgmAudio(channel: number | null, engine: PgmEngine = 'A'): PgmAudio {
+export function usePgmAudio(
+  channel: number | null,
+  engine: PgmEngine = 'A',
+  resourceKey?: string,
+): PgmAudio {
   const live = useLink() === 'live';
   const [preference, setPreference] = useState(readPreference);
   const { on, volume } = preference;
@@ -143,17 +147,24 @@ export function usePgmAudio(channel: number | null, engine: PgmEngine = 'A'): Pg
     if (!on || !running || !live || channel === null) return undefined;
     const ctx = context.current;
     if (ctx === null) return undefined;
+    // Disconnect queued samples from the old source before switching the decoder.
+    const streamGain = gain.current === null ? null : ctx.createGain();
+    if (streamGain !== null && gain.current !== null) streamGain.connect(gain.current);
     const player = new PgmAudioPlayer({
-      url: () => window.cg.pgmReturn.audioUrl(channel, engine),
+      url: () =>
+        resourceKey === undefined
+          ? window.cg.pgmReturn.audioUrl(channel, engine)
+          : window.cg.pgmReturn.audioUrl(channel, engine, resourceKey),
       out: ctx as unknown as PcmOut,
-      destination: gain.current,
+      destination: streamGain ?? gain.current,
       onState: setState,
     });
     player.start();
     return () => {
+      streamGain?.disconnect();
       player.stop();
     };
-  }, [on, running, live, channel, engine]);
+  }, [on, running, live, channel, engine, resourceKey]);
 
   useEffect(
     () => () => {
@@ -164,6 +175,12 @@ export function usePgmAudio(channel: number | null, engine: PgmEngine = 'A'): Pg
     [],
   );
 
-  const status: PgmAudioStatus = !on ? 'off' : !running ? 'waiting' : state;
+  const status: PgmAudioStatus = !on
+    ? 'off'
+    : !running
+      ? 'waiting'
+      : !live || channel === null
+        ? 'stopped'
+        : state;
   return { on, status, volume, toggle, setVolume };
 }

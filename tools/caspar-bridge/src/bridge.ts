@@ -87,6 +87,8 @@ import {
   EmptiedAirRestoreChannel,
   PgmReturnStatusChangedChannel,
   PgmReturnStatusChannel,
+  PgmTopologyChannel,
+  PgmEngineSchema,
   PgmReturnTicketChannel,
   LIVE_PREVIEW_HTTP_PREFIX,
   LivePreviewStartChannel,
@@ -109,6 +111,7 @@ import {
   PgmMetersChangedChannel,
   type PgmEngine,
   type PgmReturnStatus,
+  type PgmTopology,
   LOCK_ENGAGED_REFUSAL,
   LockEngageChannel,
   LockReleaseChannel,
@@ -327,6 +330,8 @@ import { pinnedIPv4, playoutFetchForSession } from './playout-http.js';
 import { BridgeSession } from './bridge-session.js';
 import { PgmReturnRelay, type PgmReturnTuning } from './pgm-return.js';
 import { PgmAudioRelay } from './pgm-audio.js';
+import { PlayoutPgmMonitors } from './playout-pgm-monitors.js';
+import type { readPlayoutPgmTopology } from './playout-pgm-topology.js';
 import { LivePreviewService, type LivePreviewTarget } from './live-preview.js';
 import { SourcePreviewService } from './source-preview-service.js';
 import { PlaylistGainService, playlistFrameUsage } from './playlist-gain-service.js';
@@ -669,6 +674,7 @@ export interface BridgeOptions {
   pgmReturn?: {
     readonly tuning?: Partial<PgmReturnTuning>;
     readonly portFor?: (channel: number) => number;
+    readonly readTopology?: typeof readPlayoutPgmTopology;
   };
   /**
    * TEST-ONLY seam — clock and `fetch` for the Playout reads, so a suite can drive expiry
@@ -2999,6 +3005,61 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     ...(options.pgmReturn?.tuning !== undefined ? { tuning: options.pgmReturn.tuning } : {}),
   };
   const pgmReturn = new PgmReturnRelay({ resolveTarget: pgmTarget, ...pgmSeams });
+  const pgmMonitors =
+    auth.playout === null
+      ? null
+      : new PlayoutPgmMonitors(
+          new URL('/', auth.playout.channelsUrl),
+          pgmSeams,
+          options.pgmReturn?.readTopology,
+        );
+  const primaryPgmHost = hostIsOursFor(playoutName, () => [runtime.config().servers.A.host]);
+  function programmeCodeFor(channel: number): string | null {
+    if (!runtime.isDeclaredChannel(channel)) return null;
+    const rows = playoutCatalogue
+      ?.rows()
+      ?.filter((row) => row.casparChannel === channel && primaryPgmHost(row.casparHost));
+    return rows?.length === 1 ? (rows[0]?.id ?? null) : null;
+  }
+  function checkProgrammeChannels(): void {
+    pgmMonitors?.retainChannels(programmeCodeFor);
+  }
+  const stopProgrammeCatalogueCheck = playoutCatalogue?.onChanged(checkProgrammeChannels);
+  const stopProgrammeConfigCheck = runtime.configChanged.subscribe(checkProgrammeChannels);
+  const stopProgrammeBankCheck = runtime.fixedConfigChanged.subscribe(checkProgrammeChannels);
+  async function readProgrammeTopology(channel: number): Promise<PgmTopology | null> {
+    if (pgmMonitors === null) return null;
+    const code = programmeCodeFor(channel);
+    const topology =
+      code === null
+        ? pgmMonitors.unavailableFor(channel)
+        : await pgmMonitors.topology(channel, code);
+    if (topology === null) return null;
+    // A separately configured B may predate the Playout channel link API.
+    if (topology.members.length === 1 && runtime.config().servers.B !== undefined) return null;
+    const backupAddress = backupEngine?.address() ?? null;
+    const backupOrigin = backupAddress === null ? null : new URL(backupAddress).origin;
+    return {
+      ...topology,
+      members: topology.members.map((member) => {
+        if (member.physicalChannel === null) return member;
+        const origin = pgmMonitors.sourceOrigin(channel, member.engine, member.resourceKey);
+        if (
+          playoutMeters !== null &&
+          origin === pgmMonitors.origin.origin &&
+          member.physicalChannel === channel
+        )
+          return { ...member, meterEngine: 'A' };
+        if (
+          backupPlayoutMeters !== null &&
+          origin === backupOrigin &&
+          member.physicalChannel === backupChannels.channelOnB(channel)
+        )
+          return { ...member, meterEngine: 'B' };
+        return member;
+      }),
+    };
+  }
   /*
     🔴 `PLAYOUT-FEATURES-01` E (`R-076`) — THE PROGRAMME'S SOUND: the core's `GET /audio.wav` on the SAME port
     as the picture (never `935x`, the preview's), read by one well-behaved client per channel under the
@@ -3097,6 +3158,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     backupPlayoutMeters?.restart();
   });
   const programmeReturnStatus = (): PgmReturnStatus[] => [
+    ...(pgmMonitors?.status() ?? []),
     ...pgmReturn.status().map((status) => ({ ...status, engine: 'A' as const })),
     ...backupPgmReturn.status().flatMap((status) => {
       const channel = backupChannels.stationChannelOf(status.channel);
@@ -3268,6 +3330,9 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     catalogueRows: () => playoutCatalogue?.rows() ?? null,
     refreshCatalogue: () => playoutCatalogue?.refresh() ?? Promise.resolve(),
     pgmReturnStatus: programmeReturnStatus,
+    pgmTopology: readProgrammeTopology,
+    hasPgmSource: (channel, engine, resourceKey) =>
+      pgmMonitors?.hasSource(channel, engine, resourceKey) === true,
     backupPgmChannel: (channel) => backupChannels.channelOnB(channel),
     connectionCheck,
     ...(standalone && {
@@ -3365,8 +3430,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       pathname.startsWith(PGM_RETURN_PATH_PREFIX)
     ) {
       // `PLAYOUT-FEATURES-01` E — `/pgm/<n>/sound` is the sound, behind a ticket for the SOUND.
-      const match = /^\/pgm\/(?:(B)\/)?([1-9]\d{0,3})(\/sound)?$/.exec(pathname);
-      const engine: PgmEngine = match?.[1] === 'B' ? 'B' : 'A';
+      const match = /^\/pgm\/(?:([BCD])\/)?([1-9]\d{0,3})(\/sound)?$/.exec(pathname);
+      const engine = PgmEngineSchema.parse(match?.[1] ?? 'A');
       const channel = match?.[2] === undefined ? Number.NaN : Number(match[2]);
       const stream = match?.[3] === undefined ? 'picture' : 'audio';
       const grant = tickets.redeem(
@@ -3377,12 +3442,19 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
           g.channel === channel &&
           (g.stream ?? 'picture') === stream,
       );
-      if (grant === null) {
+      if (grant?.kind !== 'pgm') {
         res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' });
         res.end('forbidden');
         return;
       }
-      const physicalChannel = engine === 'A' ? channel : backupChannels.channelOnB(channel);
+      if (grant.resourceKey !== undefined) {
+        if (!pgmMonitors?.serve(req, res, channel, engine, grant.resourceKey, stream)) {
+          res.writeHead(404).end();
+        }
+        return;
+      }
+      const physicalChannel =
+        engine === 'A' ? channel : engine === 'B' ? backupChannels.channelOnB(channel) : null;
       if (physicalChannel === null) {
         res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
         res.end('no mapped backup programme for this channel');
@@ -3596,7 +3668,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
         Beside `wirePublishes` rather than in it: that function forwards `CasparRuntime`'s
         emitters (the `B-247` guard's subject), and the relay is not the runtime.
       */
-      ...[pgmReturn, backupPgmReturn].map((relay) =>
+      ...[pgmReturn, backupPgmReturn, ...(pgmMonitors === null ? [] : [pgmMonitors])].map((relay) =>
         relay.subscribe(() => {
           if (!mayBeTold(authGateState(session, playoutAuth))) return;
           // `R-104` — either physical relay republishes the one engine-tagged logical list.
@@ -4006,6 +4078,10 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       // `C-016` — every upstream feed socket and every relayed viewer.
       pgmReturn.dispose();
       backupPgmReturn.dispose();
+      stopProgrammeCatalogueCheck?.();
+      stopProgrammeConfigCheck();
+      stopProgrammeBankCheck();
+      pgmMonitors?.dispose();
       // `PLAYOUT-FEATURES-01` E — and the sound's, and the meters stream.
       pgmAudio.dispose();
       backupPgmAudio.dispose();
@@ -4782,6 +4858,8 @@ export function buildRoutes(
      * nothing watched — what a bridge with no relay is.
      */
     pgmReturnStatus?: () => PgmReturnStatus[];
+    pgmTopology?: (channel: number) => Promise<PgmTopology | null>;
+    hasPgmSource?: (channel: number, engine: PgmEngine, resourceKey: string) => boolean;
     /** `R-104` — logical N to the mapped physical channel on B, or null. */
     backupPgmChannel?: (channel: number) => number | null;
     /**
@@ -5505,6 +5583,12 @@ export function buildRoutes(
     */
     route(PgmReturnStatusChannel, 'read', 'read', () => pgmReturnStatus()),
     route(
+      PgmTopologyChannel,
+      'read',
+      'read',
+      (req: { channel: number }) => paths.pgmTopology?.(req.channel) ?? null,
+    ),
+    route(
       LivePreviewStartChannel,
       'operator',
       'operator',
@@ -5593,9 +5677,18 @@ export function buildRoutes(
         channel: number;
         engine?: PgmEngine | undefined;
         stream?: 'picture' | 'audio' | undefined;
+        resourceKey?: string | undefined;
       }) => {
         const engine = req.engine ?? 'A';
-        if (engine === 'B' && backupPgmChannel(req.channel) === null) {
+        if (req.resourceKey !== undefined) {
+          if (paths.hasPgmSource?.(req.channel, engine, req.resourceKey) !== true) {
+            throw new Error('This programme return is unavailable.');
+          }
+        } else if (
+          (engine === 'B' && backupPgmChannel(req.channel) === null) ||
+          engine === 'C' ||
+          engine === 'D'
+        ) {
           throw new Error(`No backup programme channel is mapped for CH ${String(req.channel)}.`);
         }
         // `PLAYOUT-FEATURES-01` E — the SOUND's ticket opens `/pgm/<n>/sound` and nothing else.
@@ -5605,6 +5698,7 @@ export function buildRoutes(
             engine,
             channel: req.channel,
             stream: 'audio',
+            ...(req.resourceKey === undefined ? {} : { resourceKey: req.resourceKey }),
           });
           return { path: `${pgmAudioPath(req.channel, engine)}?ticket=${ticket}` };
         }
@@ -5613,6 +5707,7 @@ export function buildRoutes(
             kind: 'pgm',
             engine,
             channel: req.channel,
+            ...(req.resourceKey === undefined ? {} : { resourceKey: req.resourceKey }),
           })}`,
         };
       },
