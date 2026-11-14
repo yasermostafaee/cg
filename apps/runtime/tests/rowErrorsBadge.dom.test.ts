@@ -51,6 +51,7 @@ async function render(
 ): Promise<{
   el: HTMLElement;
   dismiss: ReturnType<typeof vi.fn>;
+  update: (items: readonly StackItemState[]) => Promise<void>;
 }> {
   const dismiss = vi.fn(() => Promise.resolve({ accepted: true }));
   (window as unknown as { cg: unknown }).cg = { stack: { dismissError: dismiss } };
@@ -58,27 +59,30 @@ async function render(
   document.body.append(container);
   root = createRoot(container);
   const r = root;
-  await act(async () => {
-    r.render(
-      createElement(
-        StrictMode,
-        null,
+  const update = async (items: readonly StackItemState[]): Promise<void> => {
+    await act(async () => {
+      r.render(
         createElement(
-          EngineNameContext.Provider,
-          { value: engineName },
-          createElement(RowErrorsBadge, {
-            items,
-            nameOf: (item: StackItemState) => ({
-              names: [item.itemId === 'bed' ? 'Bed 59' : 'Layer 90', '2ghab'],
-              layer: item.slot === undefined ? null : `1-${String(item.slot.layer)}`,
-              title: item.itemId,
+          StrictMode,
+          null,
+          createElement(
+            EngineNameContext.Provider,
+            { value: engineName },
+            createElement(RowErrorsBadge, {
+              items,
+              nameOf: (item: StackItemState) => ({
+                names: [item.itemId === 'bed' ? 'Bed 59' : 'Layer 90', '2ghab'],
+                layer: item.slot === undefined ? null : `1-${String(item.slot.layer)}`,
+                title: item.itemId,
+              }),
             }),
-          }),
+          ),
         ),
-      ),
-    );
-  });
-  return { el: container, dismiss };
+      );
+    });
+  };
+  await update(items);
+  return { el: container, dismiss, update };
 }
 
 describe('B-301 — the Layers badge', () => {
@@ -97,6 +101,24 @@ describe('B-301 — the Layers badge', () => {
   it('CONTROL — with no row in error the badge is absent', async () => {
     const { el } = await render([row('leftover', { slot: undefined })]);
     expect(el.querySelector('[data-layers-tally-error]')).toBeNull();
+  });
+
+  it('returns closed when a new error appears after the open list emptied', async () => {
+    const { el, update } = await render([row('first')]);
+    const badge = (): HTMLButtonElement | null => el.querySelector('[data-layers-tally-error]');
+    await act(async () => {
+      badge()?.click();
+    });
+    const list = (): Element | null => document.querySelector('[data-row-errors]');
+    expect(list()).not.toBeNull();
+
+    await update([]);
+    expect(badge()).toBeNull();
+    expect(list()).toBeNull();
+
+    await update([row('next')]);
+    expect(badge()?.getAttribute('aria-expanded')).toBe('false');
+    expect(list()).toBeNull();
   });
 
   it('names APASAI Playout Engine in both row-error paths', async () => {

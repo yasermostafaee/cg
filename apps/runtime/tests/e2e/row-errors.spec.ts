@@ -68,10 +68,12 @@ test('🔴 a real row error counts, is listed by its row and coordinate, and is 
   await expect(list).toHaveCount(0);
   await expect(row).not.toContainText('ERROR');
 
-  // CONTROL — refused again, the badge counts it again; a take that LANDS clears it.
+  // A later refusal brings the badge back with the list closed. A take that lands clears it.
   await refuse();
   await row.getByRole('button', { name: 'PLAY' }).click();
   await expect(badge(page)).toHaveText('1 in error');
+  await expect(badge(page)).toHaveAttribute('aria-expanded', 'false');
+  await expect(list).toHaveCount(0);
   await row.getByRole('button', { name: 'PLAY' }).click();
   await expect(row).toContainText('ON AIR');
   await expect(badge(page)).toHaveCount(0);

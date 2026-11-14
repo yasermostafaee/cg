@@ -13130,6 +13130,9 @@ errors are two refused Loads. **Regression test:** a broken `.vcg` import fails 
 the badge at 0; a refused Load leaves the badge at 0; control: a real row error counts, and clears when
 fixed.
 
+When the last row error clears, close the list and discard its disclosure state. A later error updates
+the badge and opens its list only when the operator presses it.
+
 ## [~] B-302 — The source picker's tabs sat flush against the popover's edge ⟨priority: low⟩ — FILED 2026-10-03 by `CONSOLE-POLISH-01` (v3) §3 · `openspec/changes/console-polish/`
 
 **Repro:** open any plate's source field (Look inputs, Source defaults, the on-air swap). **Expected:** the

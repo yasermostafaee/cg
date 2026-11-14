@@ -10,6 +10,13 @@ import { Popover } from '../../ui/Popover.js';
 import { isRowError } from '../stack/onAir.js';
 import { takeRefusalLine } from './takeRefusalLine.js';
 
+interface RowErrorsBadgeProps {
+  /** The view's items (already this channel's). */
+  items: readonly StackItemState[];
+  /** A row's name in the operator's words (`operatorRowName`, from the panel that holds its inputs). */
+  nameOf: (item: StackItemState) => OperatorRowName;
+}
+
 /**
  * 🔴 `B-301` (`CONSOLE-POLISH-01` §2) — **THE LAYERS BADGE COUNTS CURRENT ROW ERRORS, LISTS THEM, AND
  * EACH CAN BE DISMISSED.**
@@ -25,21 +32,17 @@ import { takeRefusalLine } from './takeRefusalLine.js';
  * each can be DISMISSED: the bridge drops the error ack, the row reads the status it settled to, and
  * every console is told. Nothing is sent to CasparCG.
  */
-export function RowErrorsBadge({
-  items,
-  nameOf,
-}: {
-  /** The view's items (already this channel's). */
-  items: readonly StackItemState[];
-  /** A row's name in the operator's words (`operatorRowName`, from the panel that holds its inputs). */
-  nameOf: (item: StackItemState) => OperatorRowName;
-}): JSX.Element | null {
-  const engineName = useEngineName();
+export function RowErrorsBadge({ items, nameOf }: RowErrorsBadgeProps): JSX.Element | null {
   const errors = items.filter(isRowError);
+  // Once the list is empty, unmount the popover state so the next error starts closed.
+  return errors.length === 0 ? null : <ErrorsTally items={errors} nameOf={nameOf} />;
+}
+
+function ErrorsTally({ items: errors, nameOf }: RowErrorsBadgeProps): JSX.Element {
+  const engineName = useEngineName();
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLButtonElement>(null);
   const id = useId();
-  if (errors.length === 0) return null;
   const count = String(errors.length);
   return (
     <>

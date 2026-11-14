@@ -64,6 +64,8 @@ was stashed before each push so the gate judged only what was pushed.
 
 ## 5. `B-301` — row errors
 
+- [ ] Verify a later row error does not reopen the list after its last prior entry clears.
+
 - [x] 5.1 The Loads check before they create; a refused Load leaves nothing
 - [x] 5.2 Restored slotless error items dropped at start, logged
 - [x] 5.3 The badge counts row errors (`isRowError`); its list; `stack.dismiss-error`

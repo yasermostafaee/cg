@@ -191,6 +191,7 @@ the badge SHALL not be shown.
 - **WHEN** a take of a loaded row is refused by CasparCG **THEN** the badge reads `1 in error` and its list
   names that row **AND WHEN** the error is dismissed, or the row is taken again successfully **THEN** the badge
   is gone
+- **AND** if another error appears after the list empties, the badge returns with the list closed.
 
 ### Requirement: The source picker's tabs SHALL start where its rows start
 
