@@ -14111,3 +14111,9 @@ outline for missing assignments. Show Crop edges below the plate name when the a
 **Repro / Actual:** Select the imported `3ghab.vcg` in the template picker. Details reads zero text fields even though the presets expose titles from nested live-frame compositions.
 
 **Expected / regression:** The catalogue and its Details count all operator fields across nested namespaces. A title shared across presets counts once. Independent fields using the same ID in different namespaces count separately.
+
+## [~] B-441 — Preview template outlines should follow the exported canvas ⟨priority: urgent — owner, 2026-11-14⟩ — `openspec/changes/independent-pvw-and-program/`
+
+**Repro / Actual:** A full-HD template with artwork limited to a small part of the scene draws its ON PVW outline around the reported visual element bounds. The owner also reported that parts of some crawls were missing in Preview and Program.
+
+**Expected / regression:** A full-frame export shows a full authored outline, including transparent areas. A deliberately smaller export shows its smaller stage at its authored placement. Verify the same page's actual paint in Preview and on the playout path independently of the outline.

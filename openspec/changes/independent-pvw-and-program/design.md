@@ -32,3 +32,7 @@ the draft differs from the applied placement and clears when all drafts are reso
 
 Place ON PVW before Play in the column headings and each row. The Layers toolbar has Stop All and
 Clear All. Remove remains an individual row action, with the existing guards and confirmation.
+
+The placement outline reads the exported stage dimensions and its channel position. Retained
+visual bounds identify each drag target and label so full-stage outlines remain independently
+operable when they coincide. No outline geometry enters the renderer or programme transport.

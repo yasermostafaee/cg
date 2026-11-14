@@ -131,6 +131,7 @@ function restorePrior(itemId: string, drag: Drag): void {
 function TemplateOutline({
   outline,
   rect,
+  contentRect,
   label,
   concealLabel,
   raster,
@@ -140,6 +141,7 @@ function TemplateOutline({
 }: {
   outline: PreviewOutline;
   rect: FitRect;
+  contentRect: FitRect;
   label: FitRect;
   concealLabel: boolean;
   raster: ChannelRaster;
@@ -232,8 +234,15 @@ function TemplateOutline({
         data-pvw-position-editable={moveable ? 'true' : undefined}
         style={boxStyle(rect)}
         aria-hidden
-        {...gesture}
       />
+      {moveable && (
+        <div
+          className="cg-pvw-template-hit"
+          style={boxStyle(contentRect)}
+          aria-hidden
+          {...gesture}
+        />
+      )}
       <div
         className="cg-pvw-template-label"
         data-pvw-label-over-picture={concealLabel ? '' : undefined}
@@ -295,21 +304,25 @@ export function PreviewTemplateOutlines({
   const width = raster.width * fit;
   const height = raster.height * fit;
   const labels: FitRect[] = [];
+  // The authored stage owns the outline. Artwork keeps the Move hit areas and labels distinct
+  // when several graphics share a full-size stage.
   const boxes = outlines.map((outline) => ({
     outline,
-    rect: displayRect(outline.bounds.content, fit),
+    rect: displayRect(outline.bounds.stage, fit),
+    contentRect: displayRect(outline.bounds.content, fit),
   }));
-  const artwork = boxes.map(({ rect }) => rect);
+  const artwork = boxes.map(({ contentRect }) => contentRect);
   return (
     <div className="cg-pvw-template-outlines" style={{ ...frameBox({ width, height }, 1), zIndex }}>
-      {boxes.map(({ outline, rect }) => {
-        const label = labelBounds(rect, width, height, labels, artwork);
+      {boxes.map(({ outline, rect, contentRect }) => {
+        const label = labelBounds(contentRect, width, height, labels, artwork);
         labels.push(label);
         return (
           <TemplateOutline
             key={outline.subject.itemId}
             outline={outline}
             rect={rect}
+            contentRect={contentRect}
             label={label}
             concealLabel={artwork.some((content) => intersects(label, content))}
             raster={raster}

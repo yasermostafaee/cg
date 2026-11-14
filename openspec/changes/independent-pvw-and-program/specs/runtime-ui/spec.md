@@ -54,8 +54,9 @@ On a capable Bridge, CG Control SHALL make the ON PVW and Play controls independ
 ### Requirement: Every retained template on PVW has a local placement outline
 
 CG Control SHALL show a labelled outline for each ON PVW template with a renderable retained page.
-It SHALL use the page's laid-out visual element boxes and fall back to the authored stage footprint
-when no such boxes are available. The outline SHALL follow the page's position in the channel raster.
+It SHALL outline the authored stage footprint at its position in the channel raster. Transparent
+areas SHALL remain inside the outline. Visual element bounds MAY be used to let the operator
+select or drag a template from its artwork when stage footprints overlap.
 It SHALL remain visible when Preview transport is stopped. The same labels SHALL identify rows
 whose outlines coincide.
 
@@ -66,6 +67,14 @@ whose outlines coincide.
 - **AND** the Preview page remains pending until Play
 - **WHEN** Preview stops **THEN** the outlines remain while those rows stay ON PVW
 - **WHEN** a row leaves PVW **THEN** its outline is removed
+
+#### Scenario: Use the exported canvas for the outline
+
+- **GIVEN** a full-frame export includes a lower third on a transparent canvas
+- **WHEN** the template is on PVW
+- **THEN** its outline follows the full canvas, including with Preview stopped
+- **AND** a smaller authored composition keeps its own dimensions
+- **AND** coincident outlines have independently selectable template labels
 
 #### Scenario: Drag a template to draft its Position
 

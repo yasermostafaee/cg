@@ -37,3 +37,9 @@
       cases passed, including the real-Bridge live Position and crop scenarios.
 - [x] Verify the one-row PVW tools with the Inspector open in normal 1280px and maximized
       620px layouts. Windows Chromium confirmed the icon-only controls keep their hitboxes.
+
+- [x] B-441: trace exported composition dimensions through the rendered stage and the PVW outline.
+- [x] Windows Chromium verified full and small authored stage outlines, coincident full-canvas
+      labels and independent Move template gestures with a test Bridge.
+- [ ] Verify reported lower-third pixels in the supplied affected template on the target engine.
+- [ ] Record the carrying Linux Playwright result for B-441.

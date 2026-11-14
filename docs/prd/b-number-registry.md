@@ -4380,3 +4380,7 @@ Next free after these entries: B-433, D-210, R-115, P-079 and C-049.
 - `B-438` — keep the inline project-title field usable when cleared — [bugs-designer.md](bugs-designer.md).
 
 B-433 through B-437 are already present in the tracked bug headings. The next free bug number is B-439.
+
+### 2026-11-14 — full export outlines
+
+- B-441 — Preview template outlines should follow the exported canvas, `docs/prd/bugs-runtime.md`.

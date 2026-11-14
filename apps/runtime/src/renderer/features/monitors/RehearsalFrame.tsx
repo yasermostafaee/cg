@@ -591,8 +591,7 @@ export function RehearsalFrame({
         },
       };
     }
-    // Stop can hide every visual's layout. The last measured outline still follows stage
-    // placement, without borrowing a rectangle from a different page loaded into this iframe.
+    // When Stop hides the visuals, keep their last drag area relative to this page's stage.
     const prior = lastContent.current?.doc === doc ? lastContent.current.relative : undefined;
     onBoundsChange(itemId, {
       stage,

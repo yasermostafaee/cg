@@ -555,7 +555,8 @@
     inset 0 0 0 1px var(--r-rehearsing),
     inset 0 0 0 2px var(--r-video-ground);
 }
-.cg-pvw-template-outline[data-pvw-position-editable] {
+.cg-pvw-template-hit {
+  position: absolute;
   pointer-events: auto;
   cursor: move;
   touch-action: none;
@@ -565,9 +566,11 @@
   z-index: 1;
 }
 /* Labels may occupy picture only when the operator interacts with that template. */
-.cg-pvw-template-outline:not(:hover)
-  + .cg-pvw-template-label[data-pvw-label-over-picture]:not(:hover):not(:has(:focus-visible)) {
+.cg-pvw-template-label[data-pvw-label-over-picture]:not(:hover):not(:has(:focus-visible)) {
   opacity: 0;
+}
+.cg-pvw-template-hit:hover + .cg-pvw-template-label[data-pvw-label-over-picture] {
+  opacity: 1;
 }
 .cg-pvw-template-label .cg-pvw-template-grip,
 .cg-pvw-template-fact {

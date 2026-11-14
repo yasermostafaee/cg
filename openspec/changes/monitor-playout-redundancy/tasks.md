@@ -8,7 +8,8 @@
 - [x] Add named Programme tiles, a four-engine grid and single-stream sound selection.
 - [x] Windows passed 96 scoped Bridge tests, the shared IPC contract tests, and 17 Chromium
       Playwright scenarios covering legacy A/B, four-engine programme monitoring and the footer.
-- [ ] Verify the carrying Linux Playwright result.
+- [x] [Linux Playwright](https://github.com/yasermostafaee/cg/actions/runs/43584111382/job/132414872512)
+      ran its E2E step successfully on `26575458`.
 - [ ] Verify the four-engine monitor on a station with three linked reserves.
 
 ## 2. Commands to the active engine
