@@ -1,6 +1,6 @@
 {
   "name": "@cg/designer",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "private": true,
   "description": "Visual editor for broadcast HTML graphics (.vcg) — browser SPA.",
   "type": "module",

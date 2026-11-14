@@ -3,6 +3,45 @@
   "product": "APASAI CG",
   "releases": [
     {
+      "version": "1.2.5",
+      "title": {
+        "fa": "نسخهٔ ۱.۲.۵",
+        "en": "Release 1.2.5"
+      },
+      "date": "2026-11-14",
+      "status": "prepared",
+      "summary": {
+        "fa": "نمایش موتورهای مرتبط Playout در PGM، اصلاح کلیدهای تمپلیت و نمایش پیشرفت واقعی کپی در نصب ویندوز.",
+        "en": "Linked Playout programme monitoring, template field fixes and measured file copy progress in Windows Setup."
+      },
+      "features": [
+        {
+          "fa": "با All در PGM می‌توان خروجی حداکثر چهار موتور مرتبط را با نام و شمارهٔ کانال دید. نشان Active و صدای Follow از وضعیت تأییدشدهٔ Playout استفاده می‌کنند.",
+          "en": "Programme All shows up to four linked engines with their names and channel numbers. The Active badge and Follow sound use verified Playout ownership."
+        },
+        {
+          "fa": "در راه‌انداز ویندوز، مرحلهٔ Copying files حجم نوشته‌شده و حجم کل را نشان می‌دهد. هنگام آماده‌سازی فایل‌ها نشانگر فعالیت نمایش داده می‌شود.",
+          "en": "Windows Setup shows written and total bytes during Copying files and an activity indicator while files are being prepared."
+        }
+      ],
+      "fixes": [
+        {
+          "fa": "کپی کامپوزیشن اتصال متن‌ها به Data key را حفظ می‌کند. در پروژه‌ها و بسته‌های قدیمی کلیدهای بدون هدفِ باقی‌مانده از کپی پاک می‌شوند.",
+          "en": "Copying a composition preserves its text bindings. Older projects and packages drop dangling binding targets left by copies."
+        },
+        {
+          "fa": "جزئیات تمپلیت در CG Control فیلدهای کامپوزیشن‌های تو‌در‌تو را هم می‌شمارد. فیلدهای مشترک میان پریست‌ها یک‌بار شمارش می‌شوند.",
+          "en": "CG Control template Details includes nested fields and counts shared fields only once across presets."
+        },
+        {
+          "fa": "تغییر Arrangement قاب‌ها بلافاصله در PVW دیده می‌شود. برای اعمال روی خروجی فعال، Update on air را بزنید.",
+          "en": "Arrangement changes immediately reflow frames in PVW. Use Update on air to apply the change to the running output."
+        }
+      ],
+      "planned": [],
+      "downloadBaseUrl": null
+    },
+    {
       "version": "1.2.4",
       "title": {
         "fa": "نسخهٔ ۱.۲.۴",
