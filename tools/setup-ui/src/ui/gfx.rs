@@ -108,6 +108,8 @@ pub struct Frame<'a> {
     pub step_t: [f32; MAX_STEPS],
     /// The Done/Failed mark, drawing in, 0 → 1.
     pub mark_t: f32,
+    /// Position of the activity segment, fixed in reduced motion.
+    pub activity_t: f32,
     /// Windows 11 draws the window's border (DWM); Windows 10 gets ours.
     pub dwm_border: bool,
     /// Device pixels per DIP.
@@ -910,11 +912,25 @@ fn page_item(p: &mut Painter, f: &Frame, item: &Item) {
             p.fill_round(*rect, 5.0, palette::FIELD_BG, 1.0);
             p.border_round(*rect, 5.0, palette::BORDER, 1.0);
         }
-        Item::Bar { rect, fraction } => {
+        Item::Bar {
+            rect,
+            fraction,
+            waiting,
+        } => {
             p.fill_round(*rect, 2.0, palette::SPLASH_RAIL, 1.0);
-            let w = rect.w * fraction.clamp(0.0, 1.0);
+            let w = rect.w
+                * if *waiting {
+                    0.18
+                } else {
+                    fraction.clamp(0.0, 1.0)
+                };
             if w > 0.5 {
-                let filled = Rect::new(rect.x, rect.y, w, rect.h);
+                let offset = if *waiting {
+                    (rect.w - w) * f.activity_t
+                } else {
+                    0.0
+                };
+                let filled = Rect::new(rect.x + offset, rect.y, w, rect.h);
                 // The splash's glow under its fill (`--r-splash-glow`, 14 px), in soft steps.
                 for (d, a) in [(6.0, 0.03), (4.0, 0.06), (2.0, 0.12)] {
                     p.fill_round(
@@ -941,8 +957,8 @@ fn page_item(p: &mut Painter, f: &Frame, item: &Item) {
                         D2D1_EXTEND_MODE_CLAMP,
                     ) {
                         let props = D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES {
-                            startPoint: v(rect.x, 0.0),
-                            endPoint: v(rect.x + w, 0.0),
+                            startPoint: v(filled.x, 0.0),
+                            endPoint: v(filled.right(), 0.0),
                         };
                         if let Ok(brush) = p.rt.CreateLinearGradientBrush(&props, None, &coll) {
                             p.rt.FillRoundedRectangle(&rr(filled, 2.0), &brush);

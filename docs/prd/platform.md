@@ -4015,6 +4015,10 @@ keyboard and UI Automation, sharp at 150 % and 200 %, still under reduced motion
 unavailable THEN the first screen opens all the same; WHEN packed THEN each installer is at most 15 MB
 larger than its engine.
 
+**Copy progress (2026-11-14).** Interactive Setup shows activity during unmeasured preparation
+and displays measured destination bytes while copying. See
+[`show-installer-copy-progress`](../../openspec/changes/show-installer-copy-progress).
+
 **Built in code (2026-10-04).** `tools/setup-ui` (46 unit tests), `tools/release/src/pack-installers.mjs`,
 `desktop.yml` (built 32-bit, packed, the smokes and the `setup-window` job). The uninstallers stay the
 engines' classic pages (`design.md` §4). **Verified (2026-10-04, `11ff890c`):** Desktop run

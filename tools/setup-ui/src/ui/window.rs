@@ -852,8 +852,13 @@ impl App {
             moving = true;
         }
         if self.model.page == Page::Installing {
-            // The bar and its percentage move every frame.
-            self.rebuild();
+            if self.model.progress.waiting && !self.reduced_motion {
+                // Painting the activity segment needs no new layout or accessibility tree.
+                self.invalidate();
+                moving = true;
+            } else {
+                self.rebuild();
+            }
         }
         moving
     }
@@ -909,6 +914,12 @@ impl App {
             page_t: ease(self.progress_of(Some(self.page_at), 220)),
             step_t,
             mark_t: self.progress_of(self.mark_at, 600),
+            activity_t: if self.reduced_motion {
+                0.5
+            } else {
+                let phase = (self.page_at.elapsed().as_secs_f32() / 1.4) % 2.0;
+                (1.0 - (phase - 1.0).abs()).clamp(0.0, 1.0)
+            },
             dwm_border: self.win11,
             scale,
         };
@@ -1638,6 +1649,8 @@ impl App {
             if let Some(outcome) = finished {
                 if outcome.ok {
                     self.model.progress.fraction = 1.0;
+                    self.model.progress.waiting = false;
+                    self.model.progress.copy = None;
                     self.pending_outcome = Some(outcome);
                 } else {
                     self.finish(outcome);
@@ -1697,6 +1710,15 @@ impl Job {
         } else {
             0
         };
+        let files: Vec<_> = self
+            .main_files
+            .iter()
+            .map(|(relative, expected)| {
+                let path = self.dir.join(relative);
+                let before = win::file_state(&path);
+                (path, *expected, before)
+            })
+            .collect();
         let started = win::now();
         let line = format!("\"{}\" {}", engine.display(), self.args);
         let child: Child = match engine::spawn(&engine, &line, false) {
@@ -1713,16 +1735,22 @@ impl Job {
             }
         };
         log_line(log, "engine started");
-        let expected: u64 = self.main_files.iter().map(|(_, b)| *b).sum();
+        let expected: u64 = files.iter().map(|(_, bytes, _)| *bytes).sum();
         let mut bridge_text = String::new();
         let mut offset = log_start;
         let mut last: Option<Progress> = None;
         let code = loop {
-            let exited = child.poll(100);
-            let copied: u64 = self
-                .main_files
+            let copy_step = last.as_ref().map(|progress| progress.words);
+            let interval = match copy_step {
+                None | Some("Preparing files" | "Copying files") => 25,
+                _ => 100,
+            };
+            let exited = child.poll(interval);
+            let copied: u64 = files
                 .iter()
-                .map(|(p, _)| win::bytes_written_since(&self.dir.join(p), started))
+                .map(|(path, bytes, before)| {
+                    win::bytes_written_since(path, started, *before).min(*bytes)
+                })
                 .sum();
             let progress = if self.product == ProductId::Bridge {
                 if let Some((more, end)) = win::read_from(&bridge_log, offset) {
@@ -1763,9 +1791,11 @@ impl Job {
                     ),
                 );
             }
-            last = Some(progress.clone());
-            shared.lock().unwrap().progress = Some(progress);
-            post();
+            if last.as_ref() != Some(&progress) {
+                last = Some(progress.clone());
+                shared.lock().unwrap().progress = Some(progress);
+                post();
+            }
             if let Some(code) = exited {
                 break code;
             }

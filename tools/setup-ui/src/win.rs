@@ -266,13 +266,14 @@ pub fn file_state(path: &Path) -> Option<(u64, u64)> {
     }
 }
 
-/// The bytes of a file the engine has written SINCE `since` (a FILETIME): its size once its change
-/// time is past the start, else none. NSIS stamps a file with its build time, so the change time —
-/// which every write and every stamping moves — is the only honest "written in this run".
-pub fn bytes_written_since(path: &Path, since: u64) -> u64 {
+/// The current file length once its state differs from the pre-install snapshot and its change
+/// time reaches `since` (a FILETIME). NSIS preserves the build's last-write time when extracting.
+pub fn bytes_written_since(path: &Path, since: u64, before: Option<(u64, u64)>) -> u64 {
     match file_state(path) {
-        // One second's grace for the clock's granularity.
-        Some((size, changed)) if changed + 10_000_000 >= since => size,
+        // Allow a coarse change clock without counting an unchanged file from an earlier install.
+        Some(state) if Some(state) != before && state.1.saturating_add(10_000_000) >= since => {
+            state.0
+        }
         _ => 0,
     }
 }
@@ -498,4 +499,45 @@ pub fn var_bstr(s: &str) -> Variant {
         (*out.Anonymous.Anonymous).Anonymous.bstrVal = std::mem::ManuallyDrop::new(BSTR::from(s));
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{bytes_written_since, file_state};
+    use std::fs::{self, OpenOptions};
+    use std::io::Write;
+    use std::os::windows::fs::OpenOptionsExt;
+    use std::path::PathBuf;
+
+    struct TempDir(PathBuf);
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn observes_current_bytes_during_an_exclusive_install_write() {
+        let dir = TempDir(crate::engine::temp_dir().unwrap());
+        let path = dir.0.join("program.exe");
+        fs::write(&path, b"previous version").unwrap();
+        let before = file_state(&path).unwrap();
+        // The old file falls within the resolution allowance and must still be ignored.
+        let started = before.1 + 1;
+        assert_eq!(bytes_written_since(&path, started, Some(before)), 0);
+
+        let mut writer = OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .share_mode(0)
+            .open(&path)
+            .unwrap();
+        assert_eq!(bytes_written_since(&path, started, Some(before)), 0);
+        let block = [0; 4096];
+        writer.write_all(&block).unwrap();
+        assert_eq!(bytes_written_since(&path, started, Some(before)), 4096);
+        writer.write_all(&block).unwrap();
+        assert_eq!(bytes_written_since(&path, started, Some(before)), 8192);
+    }
 }

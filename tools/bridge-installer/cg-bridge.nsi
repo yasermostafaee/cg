@@ -44,7 +44,8 @@ Name "${PRODUCT} ${VERSION}"
 OutFile "CG-Bridge_${VERSION}_x64-setup.exe"
 InstallDir "$PROGRAMFILES64\${PRODUCT}"
 RequestExecutionLevel admin
-SetCompressor /SOLID lzma
+; Independent LZMA blocks write directly to the files that Setup measures.
+SetCompressor lzma
 ShowInstDetails show
 ShowUninstDetails show
 BrandingText "APASAI ${PRODUCT} ${VERSION}"

@@ -403,7 +403,9 @@ impl IRawElementProviderSimple_Impl for Element_Impl {
             (Key::Widget(_), Some(WidgetKind::TextField { .. })) => id == UIA_ValuePatternId,
             (Key::Widget(_), Some(WidgetKind::Radio(_))) => id == UIA_SelectionItemPatternId,
             (Key::Widget(_), Some(_)) => id == UIA_InvokePatternId,
-            (Key::Bar, _) => id == UIA_RangeValuePatternId,
+            (Key::Bar, _) => {
+                id == UIA_RangeValuePatternId && self.live(|a| Some(!a.model.progress.waiting))?
+            }
             _ => false,
         };
         if supported {
@@ -634,7 +636,12 @@ impl IRangeValueProvider_Impl for Element_Impl {
         ))
     }
     fn Value(&self) -> Result<f64> {
-        self.live(|a| Some((f64::from(a.model.shown) * 100.0).floor()))
+        self.live(|a| {
+            if a.model.progress.waiting {
+                return None;
+            }
+            Some((f64::from(a.model.shown) * 100.0).floor())
+        })
     }
     fn IsReadOnly(&self) -> Result<BOOL> {
         Ok(BOOL(1))

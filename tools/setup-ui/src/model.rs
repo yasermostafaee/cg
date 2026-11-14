@@ -182,6 +182,8 @@ impl Model {
                 step: 1,
                 of: 1,
                 words: "Preparing",
+                waiting: false,
+                copy: None,
                 engine_started: false,
             },
             shown: 0.0,

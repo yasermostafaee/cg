@@ -60,6 +60,7 @@ pub fn render(g: &Gfx, shot: &Shot, scale: f32, out: &Path) -> Result<()> {
             page_t: 1.0,
             step_t: [1.0; crate::model::MAX_STEPS],
             mark_t: 1.0,
+            activity_t: 0.5,
             dwm_border: true,
             scale,
         };

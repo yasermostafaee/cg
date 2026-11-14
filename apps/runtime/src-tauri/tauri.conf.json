@@ -39,7 +39,9 @@
       "nsis": {
         "installMode": "currentUser",
         "languages": ["English"],
-        "displayLanguageSelector": false
+        "displayLanguageSelector": false,
+        "compression": "none",
+        "installerHooks": "../../../tools/setup-ui/streaming-compression.nsh"
       }
     }
   }

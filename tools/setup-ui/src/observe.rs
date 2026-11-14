@@ -7,9 +7,26 @@
 //!   from what it does: the WebView2 runtime registering itself, the main program's bytes landing
 //!   on disk, Installed apps naming the new version, and the engine exiting.
 //!
-//! Within a step the bar moves only where something measurable moves (bytes copied); every other
-//! step moves it once, when it is done. The window then eases the DISPLAYED value toward this
-//! number — the same doctrine as the splash's rail.
+//! A measured stage advances with bytes copied. Unmeasurable engine stages report activity
+//! while retaining the last measured fraction, for example while NSIS expands its payload
+//! before destination files have any bytes.
+
+/// Observed bytes for the current destination-file copy stage.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CopyBytes {
+    pub written: u64,
+    pub total: u64,
+}
+
+impl CopyBytes {
+    fn partial(written: u64, total: u64) -> Option<Self> {
+        (written > 0 && written < total).then_some(Self { written, total })
+    }
+
+    fn fraction(self) -> f32 {
+        self.written as f32 / self.total as f32
+    }
+}
 
 /// What the window shows while installing.
 #[derive(Debug, Clone, PartialEq)]
@@ -21,6 +38,10 @@ pub struct Progress {
     pub of: usize,
     /// The step running now, in words.
     pub words: &'static str,
+    /// The engine is working on a stage that exposes no measurable increments yet.
+    pub waiting: bool,
+    /// The destination copy currently exposes measured byte counts.
+    pub copy: Option<CopyBytes>,
     /// The engine has started changing the machine: Cancel is no longer possible.
     pub engine_started: bool,
 }
@@ -141,7 +162,8 @@ pub fn bridge(
     let lines = logged_steps(log);
     let has = |label: &str| lines.iter().any(|(l, _)| *l == label);
     let mut done = 0usize;
-    let mut within = 0.0f32;
+    let mut within = prepared;
+    let mut copy = None;
     if prepared >= 1.0 && engine_started {
         done = 1;
         for (i, step) in BRIDGE.iter().enumerate().skip(1) {
@@ -160,11 +182,11 @@ pub fn bridge(
                 break;
             }
         }
-        if BRIDGE.get(done).map(|s| s.words) == Some("Copying files") && expected > 0 {
-            within = copied as f32 / expected as f32;
-        }
-    } else {
-        within = prepared;
+        copy = BRIDGE
+            .get(done)
+            .filter(|step| step.words == "Copying files")
+            .and_then(|_| CopyBytes::partial(copied, expected));
+        within = copy.map_or(0.0, CopyBytes::fraction);
     }
     let (fraction, done) = weigh(BRIDGE, done, within);
     let step = (done + 1).min(BRIDGE.len());
@@ -172,7 +194,9 @@ pub fn bridge(
         fraction,
         step,
         of: BRIDGE.len(),
-        words: BRIDGE[step - 1].words,
+        words: copy_stage_words(BRIDGE[step - 1].words, copy),
+        waiting: engine_started && copy.is_none() && fraction < 1.0,
+        copy,
         engine_started,
     }
 }
@@ -272,6 +296,14 @@ const APP: &[Step] = &[
     },
 ];
 
+fn copy_stage_words(words: &'static str, copy: Option<CopyBytes>) -> &'static str {
+    if words == "Copying files" && copy.is_none() {
+        "Preparing files"
+    } else {
+        words
+    }
+}
+
 /// CG Control's or CG Designer's progress.
 pub fn app(s: AppSignals) -> Progress {
     let steps = if s.webview2_needed {
@@ -282,6 +314,7 @@ pub fn app(s: AppSignals) -> Progress {
     let copied_all = s.main_expected > 0 && s.main_copied >= s.main_expected;
     let mut done = 0usize;
     let mut within = s.prepared;
+    let mut copy = None;
     if s.prepared >= 1.0 && s.engine_started {
         done = 1;
         within = 0.0;
@@ -295,8 +328,9 @@ pub fn app(s: AppSignals) -> Progress {
         if done == copy_index {
             if copied_all || s.registered {
                 done = copy_index + 1;
-            } else if s.main_expected > 0 {
-                within = s.main_copied as f32 / s.main_expected as f32;
+            } else {
+                copy = CopyBytes::partial(s.main_copied, s.main_expected);
+                within = copy.map_or(0.0, CopyBytes::fraction);
             }
         }
         if done == copy_index + 1 && s.registered {
@@ -309,7 +343,9 @@ pub fn app(s: AppSignals) -> Progress {
         fraction,
         step,
         of: steps.len(),
-        words: steps[step - 1].words,
+        words: copy_stage_words(steps[step - 1].words, copy),
+        waiting: s.engine_started && copy.is_none() && fraction < 1.0,
+        copy,
         engine_started: s.engine_started,
     }
 }
@@ -318,6 +354,7 @@ pub fn app(s: AppSignals) -> Progress {
 pub fn app_failure(at: &Progress, product: &str) -> String {
     match at.words {
         "Installing the WebView2 runtime" => "The WebView2 runtime could not be installed.".into(),
+        "Preparing files" => format!("Setup could not prepare {product}'s files."),
         "Copying files" => format!("{product}'s files could not be written."),
         "Preparing" => "Setup could not start its installer.".into(),
         _ => format!("{product} could not be registered."),
@@ -384,6 +421,17 @@ mod tests {
     fn the_bridge_bar_follows_the_logged_steps() {
         let start = bridge("", 1.0, 0, 1000, true);
         assert_eq!((start.step, start.words), (2, "Stopping the service"));
+        assert!(start.waiting);
+        let preparing = bridge(
+            "[stopping the service (if it runs)] exit 0\r\n",
+            1.0,
+            0,
+            1000,
+            true,
+        );
+        assert_eq!((preparing.step, preparing.words), (3, "Preparing files"));
+        assert!(preparing.waiting);
+        assert_eq!(preparing.copy, None);
         let stopped = bridge(
             "[stopping the service (if it runs)] exit 0\r\n",
             1.0,
@@ -392,6 +440,15 @@ mod tests {
             true,
         );
         assert_eq!(stopped.words, "Copying files");
+        assert!(!stopped.waiting);
+        assert_eq!(
+            stopped.copy,
+            Some(CopyBytes {
+                written: 400,
+                total: 1000
+            })
+        );
+        assert!(stopped.fraction > preparing.fraction);
         let half = stopped.fraction;
         let more = bridge(
             "[stopping the service (if it runs)] exit 0\r\n",
@@ -410,6 +467,8 @@ mod tests {
         let done = bridge(&format!("{LOG}[data folder access] exit 0\r\n[data folder access (contents)] exit 0\r\n[shared files folder access] exit 0\r\n[importing an older state (once)] exit 0\r\n[firewall rules] exit 0\r\n[checking the ports] exit 0\r\n[starting the service] exit 0\r\n==== done\r\n"), 1.0, 1000, 1000, true);
         assert_eq!(done.fraction, 1.0);
         assert_eq!(done.step, done.of);
+        assert!(!done.waiting);
+        assert_eq!(done.copy, None);
     }
 
     #[test]
@@ -418,6 +477,8 @@ mod tests {
         assert_eq!(p.words, "Preparing");
         assert!(p.fraction > 0.0 && p.fraction < 0.05);
         assert!(!p.engine_started);
+        assert!(!p.waiting);
+        assert_eq!(p.copy, None);
     }
 
     #[test]
@@ -454,16 +515,40 @@ mod tests {
             main_expected: 100,
             ..AppSignals::default()
         };
-        assert_eq!(app(s).words, "Installing the WebView2 runtime");
-        let waiting = app(s).fraction;
+        let webview = app(s);
+        assert_eq!(webview.words, "Installing the WebView2 runtime");
+        assert!(webview.waiting);
+        assert_eq!(webview.copy, None);
         s.webview2_present = true;
+        let preparing = app(s);
+        assert_eq!(preparing.words, "Preparing files");
+        assert!(preparing.waiting);
+        assert_eq!(preparing.copy, None);
+        assert!(preparing.fraction > webview.fraction);
+        assert_eq!(
+            app_failure(&preparing, "CG Designer"),
+            "Setup could not prepare CG Designer's files."
+        );
         s.main_copied = 50;
-        assert_eq!(app(s).words, "Copying files");
-        assert!(app(s).fraction > waiting);
+        let copying = app(s);
+        assert_eq!(copying.words, "Copying files");
+        assert!(!copying.waiting);
+        assert_eq!(
+            copying.copy,
+            Some(CopyBytes {
+                written: 50,
+                total: 100
+            })
+        );
+        assert!(copying.fraction > preparing.fraction);
         s.main_copied = 100;
         assert_eq!(app(s).words, "Registering");
+        assert!(app(s).waiting);
+        assert_eq!(app(s).copy, None);
         s.registered = true;
         assert_eq!(app(s).words, "Creating shortcuts");
+        assert!(app(s).waiting);
+        assert_eq!(app(s).copy, None);
         assert!(
             app(s).fraction < 1.0,
             "the engine's exit, not a guess, ends the bar"
@@ -479,7 +564,9 @@ mod tests {
             ..Default::default()
         };
         let p = app(s);
-        assert_eq!((p.step, p.of, p.words), (2, 4, "Copying files"));
+        assert_eq!((p.step, p.of, p.words), (2, 4, "Preparing files"));
+        assert!(p.waiting);
+        assert_eq!(p.copy, None);
     }
 
     #[test]

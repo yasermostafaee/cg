@@ -7,6 +7,17 @@
 
 use crate::icons::Icon;
 use crate::model::{format_bytes, Model, Page, StepState};
+
+fn format_copy_bytes(bytes: u64) -> String {
+    const MB: u64 = 1024 * 1024;
+    if bytes < 1024 {
+        format!("{bytes} B")
+    } else if bytes < MB {
+        format!("{} KB", bytes / 1024)
+    } else {
+        format!("{:.1} MB", (bytes.saturating_mul(10) / MB) as f64 / 10.0)
+    }
+}
 use crate::palette::{self, Rgb};
 use crate::product::{ProductId, PUBLISHER, WEBVIEW2_LINE};
 use crate::server::{
@@ -124,6 +135,7 @@ pub enum Item {
     Bar {
         rect: Rect,
         fraction: f32,
+        waiting: bool,
     },
     /// The Done/Failed mark.
     Mark {
@@ -824,6 +836,7 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
             b.items.push(Item::Bar {
                 rect: Rect::new(X0, 196.0, CONTENT_W, 4.0),
                 fraction: m.shown,
+                waiting: m.progress.waiting,
             });
             b.text(
                 Rect::new(X0, 212.0, CONTENT_W / 2.0, 14.0),
@@ -831,15 +844,28 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
                 Style::Readout,
                 palette::SPLASH_READOUT,
             );
-            b.items.push(Item::Text {
-                rect: Rect::new(X0 + CONTENT_W / 2.0, 212.0, CONTENT_W / 2.0, 14.0),
-                text: format!("{}%", (m.shown * 100.0).floor() as u32),
-                style: Style::Readout,
-                color: palette::SPLASH_READOUT,
-                role: Role::Text,
-                right: true,
-                wrap: false,
-            });
+            let detail = match m.progress.copy {
+                Some(copy) => Some(format!(
+                    "{} / {}",
+                    format_copy_bytes(copy.written),
+                    format_copy_bytes(copy.total)
+                )),
+                None if !m.progress.waiting => {
+                    Some(format!("{}%", (m.shown * 100.0).floor() as u32))
+                }
+                None => None,
+            };
+            if let Some(text) = detail {
+                b.items.push(Item::Text {
+                    rect: Rect::new(X0 + CONTENT_W / 2.0, 212.0, CONTENT_W / 2.0, 14.0),
+                    text,
+                    style: Style::Readout,
+                    color: palette::SPLASH_READOUT,
+                    role: Role::Text,
+                    right: true,
+                    wrap: false,
+                });
+            }
             let can_cancel = !m.progress.engine_started && !m.cancelling;
             footer(
                 &mut b,
@@ -1124,12 +1150,47 @@ mod tests {
         let s = build(&m, &Fake);
         assert!(s.texts().contains(&"Stopping the service"));
         assert!(s.texts().contains(&"STEP 2 OF 11"));
-        assert!(s.texts().contains(&"42%"));
+        assert!(!s.texts().contains(&"42%"));
+        assert!(s
+            .items
+            .iter()
+            .any(|item| matches!(item, Item::Bar { waiting: true, .. })));
         assert!(!s.widget(WidgetId::Cancel).unwrap().enabled);
         assert!(!s.widget(WidgetId::CloseWindow).unwrap().enabled);
         assert_eq!(s.escape, None);
         m.progress.engine_started = false;
         assert!(build(&m, &Fake).widget(WidgetId::Cancel).unwrap().enabled);
+    }
+
+    #[test]
+    fn copying_shows_measured_bytes_between_waiting_and_registration() {
+        const MB: u64 = 1024 * 1024;
+        let mut m = model(&CONTROL, Facts::default());
+        m.page = Page::Installing;
+        let mut signals = crate::observe::AppSignals {
+            prepared: 1.0,
+            engine_started: true,
+            main_expected: 80 * MB,
+            ..Default::default()
+        };
+        m.progress = crate::observe::app(signals);
+        let preparing = build(&m, &Fake);
+        assert!(preparing.texts().contains(&"Preparing files"));
+        assert!(preparing
+            .items
+            .iter()
+            .any(|item| matches!(item, Item::Bar { waiting: true, .. })));
+
+        signals.main_copied = 24 * MB;
+        m.progress = crate::observe::app(signals);
+        m.shown = m.progress.fraction;
+        let copying = build(&m, &Fake);
+        assert!(copying.texts().contains(&"Copying files"));
+        assert!(copying.texts().contains(&"24.0 MB / 80.0 MB"));
+        assert!(copying
+            .items
+            .iter()
+            .any(|item| matches!(item, Item::Bar { waiting: false, .. })));
     }
 
     #[test]

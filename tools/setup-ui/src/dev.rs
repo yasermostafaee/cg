@@ -86,16 +86,16 @@ pub fn preview(args: &[String]) -> u32 {
             observe::bridge(
                 "[stopping the service (if it runs)] exit 0\r\n",
                 1.0,
-                40,
-                100,
+                40 << 20,
+                100 << 20,
                 true,
             )
         } else {
             observe::app(observe::AppSignals {
                 prepared: 1.0,
                 engine_started: true,
-                main_copied: 42,
-                main_expected: 100,
+                main_copied: 12 << 20,
+                main_expected: 36 << 20,
                 ..Default::default()
             })
         };

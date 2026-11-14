@@ -223,9 +223,7 @@ async function captureInstalling(file) {
   while (Date.now() < deadline) {
     const pg = page(TITLE, 5);
     if (!pg.ok) return false;
-    const pct = pg.elements.find((e) => /^\d+%$/.test(e.name));
-    if (pg.byId.progress !== undefined && pct !== undefined && Number.parseInt(pct.name, 10) > 0)
-      return shot(TITLE, file).ok;
+    if (pg.byId.progress !== undefined) return shot(TITLE, file).ok;
     if (pg.byId.finish !== undefined || pg.byId.close !== undefined) return false;
     await sleep(150);
   }
