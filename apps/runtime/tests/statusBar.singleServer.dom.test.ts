@@ -91,27 +91,27 @@ async function renderStatusBar(health: ConnectionHealth): Promise<HTMLDivElement
 }
 
 function failoverButton(el: HTMLElement): HTMLButtonElement {
-  const btn = el.querySelector<HTMLButtonElement>('button[aria-label="Manual failover"]');
+  const btn = el.querySelector<HTMLButtonElement>('button[aria-label="Manual CG failover"]');
   if (btn === null) throw new Error('failover button not rendered');
   return btn;
 }
 
 describe('StatusBar — B-046 single-server state', () => {
-  it('renders NO BACKUP and disables manual failover when health has no backup', async () => {
+  it('renders NO CG BACKUP and disables manual failover when health has no backup', async () => {
     const el = await renderStatusBar(singleServerHealth());
-    expect(el.textContent).toContain('NO BACKUP');
+    expect(el.textContent).toContain('NO CG BACKUP');
     expect(el.textContent).not.toContain('BACKUP B');
     const btn = failoverButton(el);
     expect(btn.disabled).toBe(true);
-    expect(btn.title).toBe('No backup configured');
+    expect(btn.title).toBe('No CG backup configured');
   });
 
   it('renders the backup card and enables manual failover when a backup is declared', async () => {
     const el = await renderStatusBar(twoServerHealth());
     expect(el.textContent).toContain('BACKUP B');
-    expect(el.textContent).not.toContain('NO BACKUP');
+    expect(el.textContent).not.toContain('NO CG BACKUP');
     const btn = failoverButton(el);
     expect(btn.disabled).toBe(false);
-    expect(btn.title).toBe('Switch primary to B');
+    expect(btn.title).toBe('Switch CG primary to B');
   });
 });

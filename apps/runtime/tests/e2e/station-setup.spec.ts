@@ -299,7 +299,7 @@ test('§1 — one settings door in the whole console, and no second one in the L
   // POSITIVE CONTROL: the neighbours that are NOT settings doors are untouched, so this is not
   // passing because a bar failed to render — one in the header, one still on the status bar.
   await expect(page.getByRole('button', { name: 'Open audit log' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Manual failover' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Manual CG failover' })).toBeVisible();
 });
 
 test('§1 — the surviving deep links still land on their own tab', async ({ app }) => {

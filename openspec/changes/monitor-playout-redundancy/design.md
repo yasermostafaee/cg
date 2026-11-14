@@ -17,7 +17,7 @@ Return picture and WAV reuse the bridge's separate, demand-driven relays.
 The display uses the existing local monitor sound selector. Follow is silent when no active
 owner can be verified. Existing A/B meter streams stay visible when the return's verified
 engine and physical channel match the meter source. Each verified return also has independent
-programme sound.
+programme sound. Footer connection and failover labels name the CG Bridge command plane.
 
 ## Observed contract, 2026-11-14
 

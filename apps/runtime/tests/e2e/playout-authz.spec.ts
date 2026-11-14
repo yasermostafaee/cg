@@ -218,7 +218,7 @@ test('🔴 a VIEWER gets a console with no verbs, and one sentence saying why', 
   */
   await expect(page.getByRole('button', { name: 'Stop all on-air items' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Clear all rows holding a layer' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Manual failover' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Manual CG failover' })).toHaveCount(0);
   // …and the lock, which a viewer must not be able to engage against an operator.
   await expect(page.getByRole('button', { name: 'Lock' })).toHaveCount(0);
 
@@ -258,7 +258,7 @@ test('🔴 an OPERATOR on the same station keeps every verb — the positive con
   await expect(page.getByLabel('Operating state')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Stop all on-air items' })).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'Clear all rows holding a layer' })).toHaveCount(1);
-  await expect(page.getByRole('button', { name: 'Manual failover' })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Manual CG failover' })).toHaveCount(1);
 
   // …and the granted channel is NOT marked.
   const strip = page.getByRole('tablist', { name: 'Channels' });

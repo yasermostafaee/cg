@@ -60,7 +60,7 @@ test('§A1 — an AsyncButton and a Button seat their icon identically', async (
       };
     }, label);
 
-  const failover = await compose('FAILOVER');
+  const failover = await compose('CG FAILOVER');
   const lock = await compose('Lock');
 
   expect(failover.gap, 'FAILOVER has no gap between its icon and its word').toBeGreaterThan(0);

@@ -6,7 +6,8 @@
 - [x] Read per-channel links, verify each mapping and keep a distinct programme relay per member.
 - [x] Reuse the authorized ticket transport and revoke former mapping resources on change.
 - [x] Add named Programme tiles, a four-engine grid and single-stream sound selection.
-- [ ] Verify scoped Bridge and Runtime tests.
+- [x] Windows passed 96 scoped Bridge tests, the shared IPC contract tests, and 17 Chromium
+      Playwright scenarios covering legacy A/B, four-engine programme monitoring and the footer.
 - [ ] Verify the carrying Linux Playwright result.
 - [ ] Verify the four-engine monitor on a station with three linked reserves.
 

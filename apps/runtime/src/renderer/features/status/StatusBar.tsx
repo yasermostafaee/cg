@@ -500,7 +500,7 @@ export function StatusBar({
             */}
             <span style={healthDotStyle(primary)}>●</span>{' '}
             <span style={stale || primaryDeaf ? styles.stale : styles.primary}>
-              PRIMARY {health.primary.label}
+              CG PRIMARY {health.primary.label}
             </span>{' '}
             <span style={primary.style}>{primary.text}</span>
           </Tag>
@@ -526,12 +526,12 @@ export function StatusBar({
                 be able to tell the pair apart without reading either word.
               */}
               <span style={healthDotStyle(backup)}>○</span>{' '}
-              <span style={styles.backup}>BACKUP {health.backup.label}</span>{' '}
+              <span style={styles.backup}>CG BACKUP {health.backup.label}</span>{' '}
               <span style={backup.style}>{backup.text}</span>
             </Tag>
           ) : (
             <Tag className="cg-pill">
-              <span style={styles.backup}>○ NO BACKUP</span>
+              <span style={styles.backup}>○ NO CG BACKUP</span>
             </Tag>
           )}
           {/*
@@ -655,7 +655,9 @@ export function StatusBar({
             </Tag>
           )}
           {/* The strategy is CONFIG, not health — it does not go stale with the link. */}
-          <Tag className="cg-pill">{health.strategy}</Tag>
+          <Tag className="cg-pill" title="CG Bridge command strategy">
+            {health.strategy}
+          </Tag>
         </>
       )}
       {/*
@@ -693,19 +695,19 @@ export function StatusBar({
           It keeps its disabled state and its `title`, which is where "why can I not
           press this" actually belongs.
         */
-          aria-label="Manual failover"
+          aria-label="Manual CG failover"
           disabled={health.backup === undefined}
           title={
             health.backup === undefined
-              ? 'No backup configured'
-              : `Switch primary to ${health.currentPrimary === 'A' ? 'B' : 'A'}`
+              ? 'No CG backup configured'
+              : `Switch CG primary to ${health.currentPrimary === 'A' ? 'B' : 'A'}`
           }
           run={() =>
             window.cg.connections.failover({ reason: 'manual' }).then((r) => ({ accepted: r.ok }))
           }
         >
           <Icon icon={ArrowLeftRight} />
-          FAILOVER
+          CG FAILOVER
         </AsyncButton>
       )}
       {/*
