@@ -101,22 +101,6 @@ async function uninstall(a) {
   );
 }
 
-/** Capture the page once the bar is moving (or the page has moved on). */
-async function captureInstalling(a, file) {
-  const deadline = Date.now() + 120_000;
-  while (Date.now() < deadline) {
-    const pg = page(title(a), 5);
-    if (!pg.ok) return false;
-    const pct = pg.elements.find((e) => /^\d+%$/.test(e.name));
-    if (pg.byId.progress !== undefined && pct !== undefined && Number.parseInt(pct.name, 10) > 0) {
-      return shot(title(a), file).ok;
-    }
-    if (pg.byId.finish !== undefined || pg.byId.close !== undefined) return false;
-    await sleep(150);
-  }
-  return false;
-}
-
 /**
  * THE SILENT PATHS ARE THE ENGINE'S: the engine alone (today's installer, the exact file appended
  * behind CG Setup) and the installer, given the same `/S`, exit the same — over an installed copy
@@ -172,10 +156,11 @@ async function fresh(a) {
     pg.names.join(' | '),
   );
   shot(title(a), path.join(OUT, `${a.key}-location.png`));
-  uia(title(a), 'invoke', 'install');
+  const progress = uia(title(a), 'shot-progress', path.join(OUT, `${a.key}-installing.png`), 120);
   check(
-    `${a.name}: Installing shows a moving bar, captured`,
-    await captureInstalling(a, path.join(OUT, `${a.key}-installing.png`)),
+    `${a.name}: Installing shows a progress bar with a status, captured`,
+    progress.ok,
+    progress.status ?? progress.error,
   );
   pg = until(title(a), 'is installed', 300);
   check(

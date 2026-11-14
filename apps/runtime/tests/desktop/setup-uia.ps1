@@ -16,6 +16,7 @@
 #     focus                 bring the window to the foreground (UIA SetFocus, then the Win32 call)
 #     keys    <sendkeys>    focus the window, then type (System.Windows.Forms.SendKeys syntax)
 #     shot    <file.png>    capture the window and a margin around it (its shadow and corners)
+#     shot-progress <file.png>  invoke Install and capture the visible progress bar
 #     rect                  the window's bounds, in screen pixels
 param(
   [Parameter(Mandatory = $true)][string]$Title,
@@ -148,9 +149,19 @@ switch ($Cmd) {
     $r = $w.Current.BoundingRectangle
     Out-Json @{ ok = $true; x = $r.X; y = $r.Y; width = $r.Width; height = $r.Height }
   }
-  'shot' {
+  { $_ -eq 'shot' -or $_ -eq 'shot-progress' } {
     Bring $w
-    Start-Sleep -Milliseconds 500
+    $status = $null
+    if ($Cmd -eq 'shot-progress') {
+      $install = Element $w 'install' -Enabled
+      $install.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+      $progress = Element $w 'progress'
+      $status = $progress.Current.ItemStatus
+      if ($progress.Current.ControlType.ProgrammaticName -ne 'ControlType.ProgressBar' -or
+          [string]::IsNullOrWhiteSpace($status)) { Fail 'Installing has no progress bar with a status' }
+    } else {
+      Start-Sleep -Milliseconds 500
+    }
     $r = $w.Current.BoundingRectangle
     $m = 28
     $bmp = New-Object System.Drawing.Bitmap ([int]$r.Width + 2 * $m), ([int]$r.Height + 2 * $m)
@@ -166,8 +177,13 @@ switch ($Cmd) {
       [void][CgSetupWin]::PrintWindow($h, $dc, 2)
       $g.ReleaseHdc($dc)
     }
+    if ($Cmd -eq 'shot-progress') {
+      # A fast install can change the page while the screenshot is being taken.
+      $condition = New-Object System.Windows.Automation.PropertyCondition($AE::AutomationIdProperty, 'progress')
+      if (-not $w.FindFirst($Scope::Descendants, $condition)) { Fail 'Installing ended before the progress bar was captured' }
+    }
     $bmp.Save($Arg, [System.Drawing.Imaging.ImageFormat]::Png)
-    Out-Json @{ ok = $true; how = $how; width = [int]$r.Width; height = [int]$r.Height }
+    Out-Json @{ ok = $true; how = $how; width = [int]$r.Width; height = [int]$r.Height; status = $status }
   }
   default { Fail "unknown command $Cmd" }
 }
