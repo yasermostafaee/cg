@@ -39,5 +39,6 @@
       fragment is muted, hidden and cleared on reconnect.
 - [x] Verify the Inspector source picker stays open when a delayed scroll event follows its
       click on a small viewport, and that Preview sends no programme commands after Bridge startup.
-- [ ] Record the Linux Playwright result for the expanded transitions.
-- [ ] Build the updated local Windows installers after the expanded transitions pass.
+- [x] [Linux Playwright](https://github.com/yasermostafaee/cg/actions/runs/43648905013/job/132612786379) passed on `ef17ab9a`, including input selection, Preview, both preset directions and the Layers error list.
+- [x] Build and verify the three local Windows 1.2.5 installers from `ef17ab9a` in
+      `installers/1.2.5/ef17ab9a`, including the setup payload and SHA-256 for every asset.

@@ -64,7 +64,8 @@ was stashed before each push so the gate judged only what was pushed.
 
 ## 5. `B-301` — row errors
 
-- [ ] Verify a later row error does not reopen the list after its last prior entry clears.
+- [x] Verify a later row error does not reopen the list after its last prior entry clears.
+      The DOM regression and the [Linux Playwright case](https://github.com/yasermostafaee/cg/actions/runs/43648905013/job/132612786379) passed on `ef17ab9a`.
 
 - [x] 5.1 The Loads check before they create; a refused Load leaves nothing
 - [x] 5.2 Restored slotless error items dropped at start, logged
