@@ -6,7 +6,7 @@ import { liveSourceIssues } from '../src/renderer/state/live-source-preflight.js
  * `multibox-layout-switch` C2 (`tasks.md` 5.6) — **the overlap rule applied WITHIN an
  * arrangement, and NOT across arrangements.**
  *
- * By default, two intersecting holes in the same arrangement are invalid. Reusing the same
+ * When overlap is disabled, two intersecting holes in the same arrangement are invalid. Reusing the same
  * screen area in different arrangements is a normal case because they never display together.
  */
 
@@ -68,6 +68,7 @@ function scene(children: Element[], arrangements: unknown[]): Scene {
     id: 'scene-1',
     name: 's',
     templateType: 'custom',
+    allowLivePlateOverlap: false,
     resolution: { width: 1920, height: 1080 },
     frameRate: 50,
     safeAreas: { title: 10, action: 5 },

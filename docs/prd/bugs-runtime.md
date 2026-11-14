@@ -14117,3 +14117,9 @@ outline for missing assignments. Show Crop edges below the plate name when the a
 **Repro / Actual:** A full-HD template with artwork limited to a small part of the scene draws its ON PVW outline around the reported visual element bounds. The owner also reported that parts of some crawls were missing in Preview and Program.
 
 **Expected / regression:** A full-frame export shows a full authored outline, including transparent areas. A deliberately smaller export shows its smaller stage at its authored placement. Verify the same page's actual paint in Preview and on the playout path independently of the outline.
+
+## [~] B-442 — Short Sequence boxes clip the Persian glyph ink of a fitting line ⟨priority: urgent — owner, 2026-11-14⟩ — `openspec/changes/keep-sequence-glyphs-inside-window/`
+
+**Repro / Actual:** In the owner's `cr.vcg`, the authored 1920×1080 output holds a 48px composition and a 45px Sequence. Its 32px Persian text has a fitting layout line box but glyphs extend under the Sequence clip at rest. The exported root canvas dimensions stay intact.
+
+**Expected / regression:** WHEN the text ink fits within the authored Sequence height THEN its whole line is visible at rest in Preview and in the rendered output. Keep the authored viewport and its transition clip for sliding text, page images and compositions.

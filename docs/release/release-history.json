@@ -11,8 +11,8 @@
       "date": "2026-11-14",
       "status": "prepared",
       "summary": {
-        "fa": "نمایش موتورهای مرتبط Playout در PGM، اصلاح کلیدهای تمپلیت و نمایش پیشرفت واقعی کپی در نصب ویندوز.",
-        "en": "Linked Playout programme monitoring, template field fixes and measured file copy progress in Windows Setup."
+        "fa": "نمایش موتورهای مرتبط Playout در PGM، اصلاح خروجی ماسک و زیرنویس، و پیشرفت واقعی کپی در نصب ویندوز.",
+        "en": "Linked Playout programme monitoring, corrected mask and subtitle exports, and measured file copy progress in Windows Setup."
       },
       "features": [
         {
@@ -22,6 +22,10 @@
         {
           "fa": "در راه‌انداز ویندوز، مرحلهٔ Copying files حجم نوشته‌شده و حجم کل را نشان می‌دهد. هنگام آماده‌سازی فایل‌ها نشانگر فعالیت نمایش داده می‌شود.",
           "en": "Windows Setup shows written and total bytes during Copying files and an activity indicator while files are being prepared."
+        },
+        {
+          "fa": "هم‌پوشانی قاب‌های زنده پیش‌فرض فعال است. برای محدودکردن هر کامپوزیشن، تیک Allow live plate overlap را بردارید.",
+          "en": "Live plates can overlap by default. Clear Allow live plate overlap to restrict a composition."
         }
       ],
       "fixes": [
@@ -36,6 +40,14 @@
         {
           "fa": "تغییر Arrangement قاب‌ها بلافاصله در PVW دیده می‌شود. برای اعمال روی خروجی فعال، Update on air را بزنید.",
           "en": "Arrangement changes immediately reflow frames in PVW. Use Update on air to apply the change to the running output."
+        },
+        {
+          "fa": "کادر تمپلیت در PVW اندازهٔ خروجی Designer را نشان می‌دهد. حروف زیرنویس تک‌خطی در زمان نمایش ثابت داخل کادر Sequence کامل می‌مانند.",
+          "en": "The PVW outline follows the Designer export size. Resting single-line text stays visible inside its authored Sequence window."
+        },
+        {
+          "fa": "در Designer ماسک از بخش Plate mask تنظیم می‌شود. نام قاب ماسک‌خورده در Designer و PVW روی قسمت قابل‌مشاهده می‌آید. ماسک‌های Reveal ذخیره‌شده در پروژه‌های قبلی همچنان در خروجی کار می‌کنند.",
+          "en": "Designer uses Plate mask for authoring. Designer and PVW label the visible part of a masked plate. Previously saved Reveal masks keep their exported behavior."
         }
       ],
       "planned": [],

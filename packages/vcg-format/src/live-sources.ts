@@ -1,8 +1,11 @@
 import {
+  allowsLivePlateOverlap,
   collectOperatorFrameTargets,
   defaultLookOf,
   deriveLookSources,
   flattenElements,
+  intersectNormalizedRects,
+  lessThanBeyondNoise,
   liveForegroundKeys,
   lookGroupOf,
   resolveDefaultPosition,
@@ -312,6 +315,41 @@ function plateIdsInPaintOrder(flattened: readonly FlatElement[]): string[] {
   return [...ids];
 }
 
+/** Static disjoint plates can keep using the legacy carrier on older bridges. */
+function relevantPlateOrder(
+  order: string[],
+  rects: Readonly<Record<string, LiveSourceRect>>,
+  reveals: Readonly<Record<string, LiveRevealMask>>,
+  geometryCanChange: boolean,
+): string[] | undefined {
+  if (order.length < 2) return undefined;
+  if (geometryCanChange) return order;
+
+  for (const [index, lower] of order.entries()) {
+    const lowerRect = rects[lower];
+    if (lowerRect === undefined) continue;
+    for (const upper of order.slice(index + 1)) {
+      const upperRect = rects[upper];
+      if (
+        upperRect === undefined ||
+        reveals[upper]?.targetSourceId === lower ||
+        reveals[lower]?.targetSourceId === upper
+      ) {
+        continue;
+      }
+      const overlap = intersectNormalizedRects(lowerRect, upperRect);
+      if (
+        overlap !== null &&
+        lessThanBeyondNoise(overlap.x, overlap.x + overlap.width) &&
+        lessThanBeyondNoise(overlap.y, overlap.y + overlap.height)
+      ) {
+        return order;
+      }
+    }
+  }
+  return undefined;
+}
+
 /**
  * `multibox-layout-switch` §14 (LOOKS) phase 1C — **the SOURCE-KEYED carrier for a scene
  * with a multi-frame group.**
@@ -363,7 +401,7 @@ export function collectLookCarrier(scene: Scene): {
   const lookByInstance = new Map(group.looks.map((l) => [l.instanceId, l] as const));
   const ownerOf = (flat: FlatElement) =>
     flat.ancestry.map(({ id }) => lookByInstance.get(id)).find((look) => look !== undefined);
-  const painted = scene.allowLivePlateOverlap === true ? flattenElements(scene, 'paint') : [];
+  const painted = allowsLivePlateOverlap(scene) ? flattenElements(scene, 'paint') : [];
   /*
     🔴 `B-188` — THE SOURCE LIST IS DERIVED, AND THIS IS ITS ONE DEFINITION'S ONE CALL SITE.
 
@@ -540,11 +578,18 @@ export function collectLookCarrier(scene: Scene): {
   return {
     sources,
     looks: group.looks.map((l) => {
-      const order = plateIdsInPaintOrder(
-        painted.filter((flat) => {
-          const owner = ownerOf(flat);
-          return owner === undefined || owner === l;
-        }),
+      const rects = rectsByLook.get(l.id) ?? {};
+      const reveals = revealsByLook.get(l.id) ?? {};
+      const order = relevantPlateOrder(
+        plateIdsInPaintOrder(
+          painted.filter((flat) => {
+            const owner = ownerOf(flat);
+            return owner === undefined || owner === l;
+          }),
+        ),
+        rects,
+        reveals,
+        operatorFramesByLook.has(l.id),
       );
       return {
         id: l.id,
@@ -554,15 +599,15 @@ export function collectLookCarrier(scene: Scene): {
         ...(l.allowOperatorAutoLayout !== undefined && {
           allowOperatorAutoLayout: l.allowOperatorAutoLayout,
         }),
-        rects: rectsByLook.get(l.id) ?? {},
-        ...(order.length > 1 && { platePaintOrder: order }),
+        rects,
+        ...(order !== undefined && { platePaintOrder: order }),
         ...(operatorFramesByLook.has(l.id) && { operatorFrames: operatorFramesByLook.get(l.id) }),
         ...(operatorMaskEditsByLook.has(l.id) && {
           operatorMaskEdits: operatorMaskEditsByLook.get(l.id),
         }),
         fits: fitsByLook.get(l.id) ?? {},
         focuses: focusesByLook.get(l.id) ?? {},
-        reveals: revealsByLook.get(l.id) ?? {},
+        reveals,
         ...(masksByLook.has(l.id) && { masks: masksByLook.get(l.id) }),
         ...(fallbacksByLook.has(l.id) && { fallbacks: fallbacksByLook.get(l.id) }),
       };
@@ -585,18 +630,29 @@ export function buildTemplateLiveSources(authored: Scene): {
   const scene = materializePresetAutoLayout(authored);
   const lookCarrier = collectLookCarrier(scene);
   const foregroundOverlay = liveForegroundKeys(scene).size > 0;
+  const sources = lookCarrier?.sources ?? collectLiveSources(scene);
+  const arrangements = collectArrangements(scene);
   const order =
-    lookCarrier === null && scene.allowLivePlateOverlap === true
-      ? plateIdsInPaintOrder(flattenElements(scene, 'paint'))
-      : [];
+    lookCarrier === null && allowsLivePlateOverlap(scene)
+      ? relevantPlateOrder(
+          plateIdsInPaintOrder(flattenElements(scene, 'paint')),
+          Object.fromEntries(sources.map(({ sourceId, rect }) => [sourceId, rect])),
+          Object.fromEntries(
+            sources.flatMap(({ sourceId, revealMask }) =>
+              revealMask === undefined ? [] : [[sourceId, revealMask]],
+            ),
+          ),
+          arrangements.length > 0 || sources.some((source) => source.operatorFrame !== undefined),
+        )
+      : undefined;
   return {
     resolution: scene.resolution,
     defaultPosition: resolveDefaultPosition(scene),
     // With a multi-frame group the carrier is SOURCE-KEYED (one declaration per declared
     // source); the per-element emission would double-seat a source two looks share.
-    sources: lookCarrier === null ? collectLiveSources(scene) : lookCarrier.sources,
-    arrangements: collectArrangements(scene),
-    ...(order.length > 1 && { platePaintOrder: order }),
+    sources,
+    arrangements,
+    ...(order !== undefined && { platePaintOrder: order }),
     ...(scene.allowOperatorAutoLayout === true && { allowOperatorAutoLayout: true as const }),
     ...(foregroundOverlay ? { foregroundOverlay: true as const } : {}),
     ...(lookCarrier === null

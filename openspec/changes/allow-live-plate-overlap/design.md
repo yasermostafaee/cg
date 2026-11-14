@@ -1,12 +1,12 @@
 ## Authoring
 
-The composition carries an optional `allowLivePlateOverlap` setting. Absence means off.
+The composition carries an optional `allowLivePlateOverlap` setting. Absence allows overlap. An unchecked control stores false.
 The Composition Inspector and the selected plates' **CG Control** section edit the open
 composition. Preflight overlap checks use that composition's reachable plates.
 The exported composition's setting applies to co-visible plates in its render tree, including
 each nested instance and the plates visible with each preset. Designer and export use the
 authored paint order of those instances. A valid linked Reveal retains its mask and explicit
-layering behavior. The opt-in leaves the other preflight checks in force.
+layering behavior. Other preflight checks remain in force.
 
 ## Programme
 

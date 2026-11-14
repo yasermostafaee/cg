@@ -1,6 +1,7 @@
 import {
   DEFAULT_LIVE_FIT_MODE,
   LIVE_FIT_MODES,
+  allowsLivePlateOverlap,
   type LiveFitMode,
   type Scene,
   type VideoPlaceholderElement,
@@ -169,10 +170,10 @@ export function LivePlateCompositionSettings({
       <input
         type="checkbox"
         className={dds.checkbox}
-        checked={composition.allowLivePlateOverlap === true}
+        checked={allowsLivePlateOverlap(composition)}
         onChange={(event) =>
           designerStore.updateScene({
-            allowLivePlateOverlap: event.currentTarget.checked ? true : undefined,
+            allowLivePlateOverlap: event.currentTarget.checked,
           })
         }
       />

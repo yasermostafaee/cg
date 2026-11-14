@@ -1978,6 +1978,180 @@ test('R-117 PVW outlines use authored stages and Move grabs graphics independent
   await expect(upper).toBeVisible();
 });
 
+test('Exported Sequence fits resting descenders and clips the vertical Push', async ({ page }) => {
+  const handle = await boot();
+  const engine = mock;
+  if (engine === null) throw new Error('Test engine is unavailable');
+  await handle.runtime.whenServerHealthy(15_000);
+  const id = 'sequence-descenders';
+  const { scene: base } = await unpack(await buildPositionedVcg(id));
+  const layer = base.layers[0];
+  if (layer === undefined) throw new Error('The fixture layer is missing');
+  const first = 'بپ یتپ';
+  const second = 'یپ پتب';
+  const font = await readFile(
+    new URL('../../public/fonts/vazirmatn/vazirmatn-arabic-400-normal.woff2', import.meta.url),
+  );
+  // Keep the bundled glyphs and reproduce the custom face's uneven baseline with CSS metrics.
+  const fontsCss =
+    '@font-face{font-family:SequenceProbe;ascent-override:135%;descent-override:0%;line-gap-override:0%;' +
+    `src:url(data:font/woff2;base64,${font.toString('base64')}) format("woff2")}`;
+  const scene = SceneSchema.parse({
+    ...base,
+    defaultPosition: undefined,
+    fonts: [],
+    fields: [],
+    bindings: [],
+    layers: [
+      {
+        ...layer,
+        children: [
+          {
+            id: 'sequence-host',
+            name: 'Sequence',
+            type: 'sequence',
+            transform: {
+              position: { x: 1000, y: 950 },
+              size: { w: 700, h: 45 },
+              anchor: { x: 0, y: 0 },
+              scale: { x: 1, y: 1 },
+              rotation: 0,
+            },
+            opacity: 1,
+            visible: true,
+            locked: false,
+            zIndex: 0,
+            font: {
+              family: 'SequenceProbe',
+              weight: 400,
+              style: 'normal',
+              size: 32,
+              lineHeight: 1.4,
+              letterSpacing: 0,
+            },
+            color: '#ff00ff',
+            align: 'start',
+            verticalAlign: 'middle',
+            direction: 'rtl',
+            items: [
+              { id: 'first', text: first },
+              { id: 'second', text: second },
+            ],
+            advance: 'manual',
+            transitionIn: 'bottom',
+            transitionOut: 'top',
+            transitionTiming: 'simultaneous',
+            transitionMs: 2_000,
+          },
+        ],
+      },
+    ],
+  });
+  const { html } = await new ExporterSingleFile({
+    cgJsIife,
+    cgCss,
+    fontsCss,
+    assets: { get: () => Promise.resolve(null), bytes: () => Promise.resolve(null) },
+  }).produce(scene);
+  handle.runtime.templateImport({ ...TEMPLATE, templateId: id, name: id }, html, 1);
+  const slot = { channel: 1, layer: ROW };
+  expect(await handle.runtime.loadFixed(slot, id, id, {})).toMatchObject({ accepted: true });
+  await openConsole(page, handle.url);
+  await row(page).getByRole('button', { name: 'PLAY', exact: true }).click();
+  await expect(row(page)).toHaveAttribute('aria-label', /ON AIR$/);
+  const add = engine.lastCgAdd(slot);
+  if (add === undefined || !add.template.startsWith('http') || add.data === null)
+    throw new Error('The programme page was not served on Take');
+
+  const air = await page.context().newPage();
+  try {
+    await air.setViewportSize({ width: 1920, height: 1080 });
+    await air.clock.install();
+    await air.goto(add.template);
+    await expect(air.locator('html')).toHaveAttribute('data-cg-ready', '1');
+    expect(
+      await air.evaluate(async () => (await document.fonts.load('32px SequenceProbe')).length),
+    ).toBe(1);
+    await air.clock.pauseAt(Date.now() + 10_000);
+    await air.evaluate((data) => {
+      (window as unknown as { play: (value: string) => void }).play(data);
+    }, add.data);
+    await air.clock.runFor(2_200);
+    await expect(air.locator('body')).not.toHaveClass(/\bcg-pending\b/);
+
+    const host = air.locator('[data-cg-element-id="sequence-host"]');
+    await expect(host).toBeVisible();
+    const items = host.locator('[data-cg-sequence-item]');
+    const hostBox = await host.boundingBox();
+    if (hostBox === null) throw new Error('The sequence box did not render');
+    const pad = 50;
+    const clip = {
+      x: hostBox.x + hostBox.width - 160,
+      y: hostBox.y - pad,
+      width: 160,
+      height: hostBox.height + 2 * pad,
+    };
+    const readInk = async () => {
+      const png = await air.screenshot({ clip, scale: 'css' });
+      return air.evaluate(
+        async ({ encoded, clipTop, clipBottom }) => {
+          const image = new Image();
+          image.src = `data:image/png;base64,${encoded}`;
+          await image.decode();
+          const canvas = document.createElement('canvas');
+          canvas.width = image.naturalWidth;
+          canvas.height = image.naturalHeight;
+          const ctx = canvas.getContext('2d');
+          if (ctx === null) throw new Error('Cannot read programme pixels');
+          ctx.drawImage(image, 0, 0);
+          const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+          const count = { inside: 0, outside: 0 };
+          for (let y = 0; y < canvas.height; y++) {
+            for (let x = 0; x < canvas.width; x++) {
+              const i = (y * canvas.width + x) * 4;
+              const [red, green, blue] = pixels.subarray(i, i + 3);
+              if ((green ?? 255) < 150 && (red ?? 0) > 220 && (blue ?? 0) > 220) {
+                if (y >= clipTop && y < clipBottom) count.inside++;
+                else count.outside++;
+              }
+            }
+          }
+          return count;
+        },
+        { encoded: png.toString('base64'), clipTop: pad, clipBottom: pad + hostBox.height },
+      );
+    };
+    const unclippedInk = async () => {
+      await host.evaluate((node) => (node.style.overflow = 'visible'));
+      try {
+        return await readInk();
+      } finally {
+        await host.evaluate((node) => (node.style.overflow = 'hidden'));
+      }
+    };
+    const expectFullRestingInk = async (text: string) => {
+      await expect(items).toHaveText([text]);
+      const visible = await readInk();
+      expect(visible.inside).toBeGreaterThan(100);
+      expect(visible.outside).toBe(0);
+      expect(await unclippedInk()).toEqual(visible);
+    };
+
+    await expectFullRestingInk(first);
+    await air.evaluate(() => (window as unknown as { next: () => void }).next());
+    await air.clock.runFor(1_000);
+    await expect(items).toHaveText([first, second]);
+    const pushing = await readInk();
+    expect(pushing.inside).toBeGreaterThan(100);
+    expect(pushing.outside).toBe(0);
+    expect((await unclippedInk()).outside).toBeGreaterThan(100);
+    await air.clock.runFor(1_100);
+    await expectFullRestingInk(second);
+  } finally {
+    await air.close();
+  }
+});
+
 test('Auto layout stages both frame boxes and keeps each styled title with its input', async ({
   page,
 }) => {
@@ -2553,7 +2727,9 @@ test('Auto layout follows the active preset permission and retains separate cont
   expect(sent()).toEqual(beforeUpdate);
 });
 
-test('D-213 Take seats two opted-in plates in the authored paint order', async ({ page }) => {
+test('D-213 Take seats a masked foreground plate above the lower plate by default', async ({
+  page,
+}) => {
   const handle = await boot(true);
   const engine = mock;
   if (engine === null) throw new Error('Test engine is unavailable');
@@ -2564,7 +2740,7 @@ test('D-213 Take seats two opted-in plates in the authored paint order', async (
   const layer = scene.layers[0];
   const transform = layer?.children[0]?.transform;
   if (layer === undefined || transform === undefined) throw new Error('Missing template fixture');
-  scene.allowLivePlateOverlap = true;
+  scene.defaultPosition = undefined;
   scene.fields = [];
   scene.bindings = [];
   const plate = (id: string, x: number, y: number, zIndex: number): VideoPlaceholderElement => ({
@@ -2586,7 +2762,12 @@ test('D-213 Take seats two opted-in plates in the authored paint order', async (
   // The source ids sort in the opposite direction to the authored order.
   layer.children = [
     { ...plate('z-back', 600, 350, 0), operatorMove: true },
-    { ...plate('a-front', 740, 420, 1), operatorMove: false, operatorPlacement: 'free' },
+    {
+      ...plate('a-front', 740, 420, 1),
+      operatorMove: false,
+      operatorPlacement: 'free',
+      liveMask: { mode: 'inside', rects: [{ x: 0.1, y: 0.2, width: 0.8, height: 0.4 }] },
+    },
   ];
   const liveSources = buildTemplateLiveSources(scene);
   expect(liveSources.platePaintOrder).toEqual(['z-back', 'a-front']);
@@ -2691,6 +2872,9 @@ test('D-213 Take seats two opted-in plates in the authored paint order', async (
   expect(layerOf(back)).toBeGreaterThanOrEqual(60);
   expect(layerOf(front)).toBeGreaterThan(layerOf(back));
   expect(layerOf(front)).toBeLessThanOrEqual(79);
+  expect(wire).toContain(
+    `MIXER 1-${String(layerOf(front))} CLIP 0.40625 0.444444 0.166667 0.111111 DEFER`,
+  );
 });
 
 test('Edit masks drafts authored windows in PVW and updates the existing on-air seats', async ({
@@ -2781,6 +2965,7 @@ test('Edit masks drafts authored windows in PVW and updates the existing on-air 
   const inspector = page.getByRole('complementary', { name: 'Inspector' });
   const editFrames = pvw.getByRole('button', { name: 'Edit frames in Preview' });
   const editMasks = pvw.getByRole('button', { name: 'Edit masks in Preview' });
+  await pvw.getByRole('button', { name: 'PLAY', exact: true }).click();
   await editFrames.click();
   await expect(pvw.getByRole('button', { name: 'Move frame for upper' })).toBeVisible();
   await editMasks.click();
@@ -2796,6 +2981,14 @@ test('Edit masks drafts authored windows in PVW and updates the existing on-air 
   await expect(clip).toHaveAttribute('x', String(maskRect.x));
   const maskBox = await mask.boundingBox();
   if (maskBox === null) throw new Error('Missing Preview mask bounds');
+  const label = pvw.locator('[data-live-plate="lower"] [data-live-plate-label]');
+  const expectLabelInMask = async () => {
+    const [labelBox, maskBounds] = await Promise.all([label.boundingBox(), mask.boundingBox()]);
+    if (labelBox === null || maskBounds === null) throw new Error('Missing plate label or mask');
+    expect(labelBox.x + labelBox.width / 2).toBeCloseTo(maskBounds.x + maskBounds.width / 2, 0);
+    expect(labelBox.y + labelBox.height / 2).toBeCloseTo(maskBounds.y + maskBounds.height / 2, 0);
+  };
+  // The live label uses the same draft as the guide, also after the operator moves it.
   const dragMask = async () => {
     const x = maskBox.x + maskBox.width / 2;
     const y = maskBox.y + maskBox.height / 2;
@@ -2805,6 +2998,7 @@ test('Edit masks drafts authored windows in PVW and updates the existing on-air 
     await page.mouse.up();
     await expect.poll(async () => (await mask.boundingBox())?.x).toBeCloseTo(maskBox.x + 18, 0);
     await expect.poll(async () => Number(await clip.getAttribute('x'))).toBeGreaterThan(maskRect.x);
+    await expectLabelInMask();
   };
   const programmeCommands = () =>
     engine

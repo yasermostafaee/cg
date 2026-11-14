@@ -1,6 +1,7 @@
 import {
   elementDigitsOf,
   followsComposition,
+  largestLivePlateMaskRegion,
   liveRevealRects,
   pathVisualBBox,
   repeaterRowLimit,
@@ -37,6 +38,7 @@ import type {
 import type { BuildSceneResult, FieldScope, LifecycleSource, RenderMode } from './types.js';
 import { clockInitialText, renderClockText } from './clock-driver.js';
 import { makeSequenceItemNode } from './sequence-driver.js';
+import { watchSequenceTextInk } from './sequence-text-ink.js';
 import { TEXT_NODE_DATASET } from './text-render-node.js';
 import { markTextFit } from './text-fit.js';
 import { populateTickerStaticRow } from './ticker-driver.js';
@@ -963,6 +965,7 @@ function buildSequence(element: SequenceElement, ctx: BuildCtx): HTMLElement {
   // `justify-items` (the `align` enum maps 1:1). Default 'middle' = the prior centring.
   el.style.alignItems = vAlignToGrid(element.verticalAlign ?? 'middle');
   el.style.justifyItems = element.align;
+  watchSequenceTextInk(el);
 
   // Static initial render: item 1 through the shared factory (empty items ⇒ an
   // empty box). The driver re-renders the same markup on reset(). D-083 — a
@@ -1934,6 +1937,8 @@ function buildLiveSource(element: VideoPlaceholderElement, ctx: BuildCtx): HTMLE
     }
   }
 
+  const labelRegion = largestLivePlateMaskRegion(element.liveMask);
+  if (element.liveMask !== undefined && labelRegion === null) return el;
   const label = ctx.doc.createElement('div');
   label.dataset['cgLiveSourceLabel'] = '';
   /*
@@ -1951,10 +1956,10 @@ function buildLiveSource(element: VideoPlaceholderElement, ctx: BuildCtx): HTMLE
   */
   label.textContent = element.routeKey ?? 'no source';
   label.style.position = 'absolute';
-  label.style.left = '50%';
-  label.style.top = '50%';
+  label.style.left = `${String(labelRegion === null ? 50 : (labelRegion.x + labelRegion.width / 2) * 100)}%`;
+  label.style.top = `${String(labelRegion === null ? 50 : (labelRegion.y + labelRegion.height / 2) * 100)}%`;
   label.style.transform = 'translate(-50%, -50%) scale(var(--cg-author-guide-scale, 2))';
-  label.style.maxWidth = 'calc(90% / var(--cg-author-guide-scale, 2))';
+  label.style.maxWidth = `calc(${String((labelRegion?.width ?? 1) * 90)}% / var(--cg-author-guide-scale, 2))`;
   label.style.padding = '4px 7px';
   label.style.background = 'rgba(4, 12, 24, 0.86)';
   label.style.border = '1px solid rgba(255, 255, 255, 0.82)';

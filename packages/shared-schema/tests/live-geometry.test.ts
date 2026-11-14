@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { framePlacementFits } from '../src/frame-placement.js';
 import {
   intersectNormalizedRects,
+  largestLivePlateMaskRegion,
   livePlateMaskRegions,
   liveRevealSceneRect,
   liveSourceFit,
@@ -174,6 +175,24 @@ describe('D-202 — reveal geometry', () => {
     expect(
       livePlateMaskRegions({ mode: 'outside', rects: [{ x: 0, y: 0, width: 1, height: 1 }] }),
     ).toEqual([]);
+  });
+
+  it('places the plate label in the biggest visible mask region', () => {
+    const small = { x: 0.125, y: 0.125, width: 0.125, height: 0.125 };
+    const large = { x: 0, y: 0.5, width: 1, height: 0.5 };
+    expect(largestLivePlateMaskRegion({ mode: 'inside', rects: [small, large] })).toEqual(large);
+    expect(largestLivePlateMaskRegion({ mode: 'outside', rects: [large] })).toEqual({
+      x: 0,
+      y: 0,
+      width: 1,
+      height: 0.5,
+    });
+    expect(
+      largestLivePlateMaskRegion({
+        mode: 'outside',
+        rects: [{ x: 0, y: 0, width: 1, height: 1 }],
+      }),
+    ).toBeNull();
   });
 
   it('maps a normalized window through its upper plate', () => {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { LIVE_REVEAL_MAX_RECTS, liveRevealMaskFromRects, liveRevealRects } from '@cg/shared-schema';
+import { LIVE_REVEAL_MAX_RECTS } from '@cg/shared-schema';
 import type {
   AnchorPoint,
   Element,
@@ -366,7 +366,7 @@ export function CanvasOverlay({
   // D-193 — the compatible element under the bind cursor. It is presentation-only;
   // the binding is still committed solely by pointer-down through resolveBinding.
   const [bindHoverId, setBindHoverId] = useState<string | null>(null);
-  const [revealDraft, setRevealDraft] = useState<{
+  const [maskDraft, setMaskDraft] = useState<{
     draw: NonNullable<typeof maskDraw>;
     start: { x: number; y: number };
     end: { x: number; y: number };
@@ -433,11 +433,10 @@ export function CanvasOverlay({
     selectedEl?.type === 'video-placeholder' &&
     selectedEl.visible &&
     !selectedEl.locked &&
-    (selectedEl.liveMask !== undefined || selectedEl.revealMask !== undefined)
+    selectedEl.liveMask !== undefined
       ? selectedEl
       : null;
   const defaultMaskPlateId = defaultMaskPlate?.id ?? null;
-  const defaultMaskLinked = defaultMaskPlate !== null && defaultMaskPlate.liveMask === undefined;
   const previousMaskPlate = useRef<string | null>(null);
   const maskPlate =
     maskEdit !== null &&
@@ -448,13 +447,7 @@ export function CanvasOverlay({
       ? selectedEl
       : null;
   const maskRect =
-    maskEdit === null || maskPlate === null
-      ? undefined
-      : maskEdit.linked
-        ? maskPlate.revealMask === undefined
-          ? undefined
-          : liveRevealRects(maskPlate.revealMask)[maskEdit.index]
-        : maskPlate.liveMask?.rects[maskEdit.index];
+    maskEdit === null || maskPlate === null ? undefined : maskPlate.liveMask?.rects[maskEdit.index];
   const maskBounds =
     maskPlate === null
       ? null
@@ -482,25 +475,18 @@ export function CanvasOverlay({
     previousMaskPlate.current = defaultMaskPlateId;
     const lostEdit =
       (tool === 'live-mask-edit' && !maskEditAvailable) ||
-      ((tool === 'live-reveal' || tool === 'live-mask') && !maskDrawAvailable);
+      (tool === 'live-mask' && !maskDrawAvailable);
     if (
       changedPlate &&
       defaultMaskPlateId !== null &&
       bindModeFieldId === null &&
       (tool === 'cursor' || lostEdit)
     ) {
-      designerStore.editLiveMask(defaultMaskPlateId, defaultMaskLinked, 0);
+      designerStore.editLiveMask(defaultMaskPlateId, 0);
     } else if (lostEdit) {
       designerStore.setTool('cursor');
     }
-  }, [
-    defaultMaskPlateId,
-    defaultMaskLinked,
-    tool,
-    maskEditAvailable,
-    maskDrawAvailable,
-    bindModeFieldId,
-  ]);
+  }, [defaultMaskPlateId, tool, maskEditAvailable, maskDrawAvailable, bindModeFieldId]);
   // D-041 — the selected elements for the multi-selection gizmo (size > 1).
   const selectedEls = selection.size > 1 ? allElements.filter((e) => selection.has(e.id)) : [];
   // Inline editing follows the same painted pose as the double-click target.
@@ -571,12 +557,9 @@ export function CanvasOverlay({
         }
         return;
       }
-      if (
-        (tool === 'live-reveal' || tool === 'live-mask' || tool === 'live-mask-edit') &&
-        e.key === 'Escape'
-      ) {
+      if ((tool === 'live-mask' || tool === 'live-mask-edit') && e.key === 'Escape') {
         e.preventDefault();
-        setRevealDraft(null);
+        setMaskDraft(null);
         designerStore.setTool('cursor');
         return;
       }
@@ -619,18 +602,11 @@ export function CanvasOverlay({
   function beginMaskDraw(
     plate: Extract<Element, { type: 'video-placeholder' }>,
     start: { x: number; y: number },
-    drawTool: 'live-reveal' | 'live-mask',
   ): void {
     const draw = designerStore.get().liveMaskDraw;
     if (draw?.plateId !== plate.id) return;
-    const reveal = plate.revealMask;
-    const ownMask = plate.liveMask;
-    const rects =
-      drawTool === 'live-reveal'
-        ? reveal === undefined
-          ? []
-          : liveRevealRects(reveal)
-        : [...(ownMask?.rects ?? [])];
+    const mask = plate.liveMask;
+    const rects = [...(mask?.rects ?? [])];
     if (rects.length >= LIVE_REVEAL_MAX_RECTS) return;
     const rendered = {
       ...plate,
@@ -642,10 +618,10 @@ export function CanvasOverlay({
       y: Math.max(box.minY, Math.min(box.maxY, point.y)),
     });
     const first = clamp(start);
-    setRevealDraft({ draw, start: first, end: first });
+    setMaskDraft({ draw, start: first, end: first });
     const onMove = (event: PointerEvent): void => {
       if (designerStore.get().liveMaskDraw === draw) {
-        setRevealDraft({
+        setMaskDraft({
           draw,
           start: first,
           end: clamp(viewportToScene(event.clientX, event.clientY)),
@@ -656,7 +632,7 @@ export function CanvasOverlay({
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onCancel);
-      setRevealDraft((draft) => (draft?.draw === draw ? null : draft));
+      setMaskDraft((draft) => (draft?.draw === draw ? null : draft));
       if (designerStore.get().liveMaskDraw === draw) designerStore.setTool('cursor');
     };
     const onCancel = (): void => finish();
@@ -674,9 +650,7 @@ export function CanvasOverlay({
       if (
         latest?.type === 'video-placeholder' &&
         !latest.locked &&
-        (drawTool === 'live-reveal'
-          ? reveal !== undefined && latest.revealMask === reveal
-          : latest.liveMask === ownMask) &&
+        latest.liveMask === mask &&
         width >= 1 &&
         height >= 1 &&
         box.maxX > box.minX &&
@@ -691,12 +665,10 @@ export function CanvasOverlay({
           width: Math.min(1 - x, width / (box.maxX - box.minX)),
           height: Math.min(1 - y, height / (box.maxY - box.minY)),
         });
-        const maskPatch =
-          drawTool === 'live-reveal' && reveal !== undefined
-            ? { revealMask: liveRevealMaskFromRects(reveal.targetSourceId, rects) }
-            : { liveMask: { mode: ownMask?.mode ?? 'inside', rects } as const };
-        designerStore.updateElement(plate.id, maskPatch as Partial<Element>);
-        designerStore.editLiveMask(plate.id, drawTool === 'live-reveal', savedIndex);
+        designerStore.updateElement(plate.id, {
+          liveMask: { mode: mask?.mode ?? 'inside', rects },
+        });
+        designerStore.editLiveMask(plate.id, savedIndex);
       }
     };
     window.addEventListener('pointermove', onMove);
@@ -718,21 +690,11 @@ export function CanvasOverlay({
     const found = locate(state.scene, maskPlate.id);
     const plate = found?.layer.children[found.elIdx];
     if (plate?.type !== 'video-placeholder' || plate.locked || !plate.visible) return;
-    if (maskEdit.linked) {
-      const reveal = plate.revealMask;
-      if (reveal === undefined || reveal !== maskPlate.revealMask) return;
-      const rects = liveRevealRects(reveal);
-      rects[maskEdit.index] = rect;
-      designerStore.updateElement(plate.id, {
-        revealMask: liveRevealMaskFromRects(reveal.targetSourceId, rects),
-      });
-    } else {
-      const own = plate.liveMask;
-      if (own === undefined || own !== maskPlate.liveMask) return;
-      const rects = [...own.rects];
-      rects[maskEdit.index] = rect;
-      designerStore.updateElement(plate.id, { liveMask: { ...own, rects } });
-    }
+    const mask = plate.liveMask;
+    if (mask === undefined || mask !== maskPlate.liveMask) return;
+    const rects = [...mask.rects];
+    rects[maskEdit.index] = rect;
+    designerStore.updateElement(plate.id, { liveMask: { ...mask, rects } });
   }
 
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>): void {
@@ -766,14 +728,9 @@ export function CanvasOverlay({
     if (tool === 'live-mask-edit') {
       designerStore.setTool('cursor');
     }
-    if (tool === 'live-reveal' || tool === 'live-mask') {
-      if (
-        selectedEl?.type === 'video-placeholder' &&
-        maskDrawAvailable &&
-        (tool === 'live-mask' || selectedEl.revealMask !== undefined) &&
-        !selectedEl.locked
-      ) {
-        beginMaskDraw(selectedEl, scenePoint, tool);
+    if (tool === 'live-mask') {
+      if (selectedEl?.type === 'video-placeholder' && maskDrawAvailable && !selectedEl.locked) {
+        beginMaskDraw(selectedEl, scenePoint);
       } else {
         designerStore.showNotice('Select an editable Plate first.');
         designerStore.setTool('cursor');
@@ -1131,7 +1088,6 @@ export function CanvasOverlay({
           selectedEl.visible &&
           !selectedEl.locked &&
           tool !== 'pen' &&
-          tool !== 'live-reveal' &&
           tool !== 'live-mask' &&
           tool !== 'live-mask-edit' &&
           editingPathId === null &&
@@ -1160,16 +1116,16 @@ export function CanvasOverlay({
         {tool === 'pen' && penPointer !== null && penDraftPoints().length > 0 && (
           <PenDraftFeedback points={penDraftPoints()} pointer={penPointer} scale={scale} />
         )}
-        {revealDraft !== null && revealDraft.draw === maskDraw && (
+        {maskDraft !== null && maskDraft.draw === maskDraw && (
           <div
-            data-testid="live-reveal-draft"
+            data-testid="live-mask-draft"
             style={{
               position: 'absolute',
               pointerEvents: 'none',
-              left: Math.min(revealDraft.start.x, revealDraft.end.x) * scale,
-              top: Math.min(revealDraft.start.y, revealDraft.end.y) * scale,
-              width: Math.abs(revealDraft.end.x - revealDraft.start.x) * scale,
-              height: Math.abs(revealDraft.end.y - revealDraft.start.y) * scale,
+              left: Math.min(maskDraft.start.x, maskDraft.end.x) * scale,
+              top: Math.min(maskDraft.start.y, maskDraft.end.y) * scale,
+              width: Math.abs(maskDraft.end.x - maskDraft.start.x) * scale,
+              height: Math.abs(maskDraft.end.y - maskDraft.start.y) * scale,
               border: '2px dashed #00e5ff',
               background: 'rgba(0, 229, 255, 0.18)',
               boxSizing: 'border-box',
@@ -1182,7 +1138,7 @@ export function CanvasOverlay({
           maskBox !== null &&
           maskRect !== undefined && (
             <MaskEditorOverlay
-              key={`${maskEdit.plateId}:${String(maskEdit.linked)}:${String(maskEdit.index)}`}
+              key={`${maskEdit.plateId}:${String(maskEdit.index)}`}
               rect={maskRect}
               box={maskBox}
               scale={scale}
@@ -1200,11 +1156,7 @@ export function CanvasOverlay({
       {bindModeFieldId !== null && (
         <div className={s.toolHint}>BIND → {bindModeFieldId} (Esc to cancel)</div>
       )}
-      {(tool === 'live-reveal' || tool === 'live-mask') && (
-        <div className={s.toolHint}>
-          {tool === 'live-mask' ? 'DRAG MASK WINDOW' : 'DRAG REVEAL WINDOW'} · Esc to cancel
-        </div>
-      )}
+      {tool === 'live-mask' && <div className={s.toolHint}>DRAG MASK WINDOW · Esc to cancel</div>}
       {tool === 'live-mask-edit' && (
         <div className={s.toolHint}>EDIT MASK WINDOW · Esc to exit</div>
       )}

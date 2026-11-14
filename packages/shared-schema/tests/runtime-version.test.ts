@@ -185,7 +185,8 @@ describe('CG_RUNTIME_VERSION', () => {
   });
 
   it('requires runtime 1.2.3 for authored live plate overlap', () => {
-    const minVersion = requiredRuntimeVersionForScene({ layers: [], allowLivePlateOverlap: true });
+    expect(requiredRuntimeVersionForScene({ layers: [] })).toBe('1.1.0');
+    const minVersion = requiredRuntimeVersionForScene({ layers: [] }, true);
     expect(minVersion).toBe('1.2.3');
     expect(runtimeShortfall(minVersion, '1.2.1')).toEqual({
       required: '1.2.3',

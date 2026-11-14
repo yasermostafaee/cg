@@ -244,8 +244,7 @@ async function update(a) {
     pg.byId.install?.name,
   );
   shot(title(a), path.join(OUT, `${a.key}-update-location.png`));
-  uia(title(a), 'invoke', 'install');
-  await captureInstalling(a, path.join(OUT, `${a.key}-update-installing.png`));
+  uia(title(a), 'shot-progress', path.join(OUT, `${a.key}-update-installing.png`), 120);
   pg = until(title(a), 'is updated', 300);
   check(
     `${a.name} (update): Done — "${a.name} is updated"`,

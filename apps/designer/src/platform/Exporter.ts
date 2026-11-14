@@ -1,4 +1,4 @@
-import { pack, sha256Hex } from '@cg/vcg-format';
+import { buildTemplateLiveSources, pack, sha256Hex } from '@cg/vcg-format';
 import {
   CG_CONTROL_KEY,
   requiredRuntimeVersionForScene,
@@ -14,6 +14,7 @@ import {
 } from '@cg/shared-schema';
 import {
   TEMPLATE_MEDIA_MAX_BYTES,
+  usesLivePlatePaintOrder,
   type AssetMeta,
   type ExportIssue,
   type ExportProgress,
@@ -557,7 +558,10 @@ export class Exporter {
           for what the number means and the narrow rule for bumping it.
         */
         compatibility: {
-          minRuntimeVersion: requiredRuntimeVersionForScene(scene),
+          minRuntimeVersion: requiredRuntimeVersionForScene(
+            scene,
+            usesLivePlatePaintOrder(buildTemplateLiveSources(scene)),
+          ),
           minCasparCGVersion: '2.3.0',
         },
         fontDeps: scene.fonts,

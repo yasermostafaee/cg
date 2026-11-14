@@ -32,8 +32,7 @@ export type DesignerTool =
   // entry and no factory in `element-defaults.ts`, so "standalone creation
   // unchanged" described a creation path that did not exist.
   | 'live-source'
-  // D-202 — contextual tool launched from a selected upper Plate's Inspector.
-  | 'live-reveal'
+  // D-202 — mask tools for the selected Plate.
   | 'live-mask'
   | 'live-mask-edit'
   | 'hand';
@@ -101,7 +100,7 @@ export interface DesignerStoreState {
   view: DesignerView;
   tool: DesignerTool;
   liveMaskDraw: { plateId: string } | null;
-  liveMaskEdit: { plateId: string; linked: boolean; index: number } | null;
+  liveMaskEdit: { plateId: string; index: number } | null;
   /** Element IDs currently selected. */
   selection: ReadonlySet<string>;
   /** When set, the canvas shows an inline TextEditor for this element. */

@@ -195,6 +195,19 @@ export function livePlateMaskRegions(mask: LivePlateMask): NormalizedRect[] {
   return regions;
 }
 
+/** Where to put the plate's identifier without labelling a transparent mask opening. */
+export function largestLivePlateMaskRegion(mask: LivePlateMask | undefined): NormalizedRect | null {
+  if (mask === undefined) return { x: 0, y: 0, width: 1, height: 1 };
+  const regions = mask.mode === 'inside' ? mask.rects : livePlateMaskRegions(mask);
+  let largest: NormalizedRect | null = null;
+  for (const region of regions) {
+    if (largest === null || region.width * region.height > largest.width * largest.height) {
+      largest = region;
+    }
+  }
+  return largest;
+}
+
 /**
  * The hole in RASTER pixels, before any aspect fit — the chain's core, factored out
  * so the fit and the clamp read against the same numbers.

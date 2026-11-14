@@ -75,6 +75,7 @@ function scene(children: Element[]): Scene {
     id: 'scene-d157',
     name: 'd157',
     templateType: 'custom',
+    allowLivePlateOverlap: false,
     resolution: { width: 1920, height: 1080 },
     frameRate: 50,
     safeAreas: { title: 10, action: 5 },

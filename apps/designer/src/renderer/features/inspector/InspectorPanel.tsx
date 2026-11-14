@@ -87,7 +87,7 @@ function SceneInspector({ scene }: { scene: Scene }): JSX.Element {
       <FrameRateRow scene={scene} />
       <Row label="elements" value={String(countElements(scene))} />
       <BackgroundControl editorBackdrop={scene.editorBackdrop} variant="full" />
-      {(hasLivePlates || scene.allowLivePlateOverlap === true) && (
+      {(hasLivePlates || scene.allowLivePlateOverlap !== undefined) && (
         <LivePlateCompositionSettings composition={scene} />
       )}
       <PresetAutoLayoutSetting />

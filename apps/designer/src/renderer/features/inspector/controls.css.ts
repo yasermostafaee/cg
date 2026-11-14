@@ -22,13 +22,13 @@ export const rowBare = style({
 
 export const inlineActions = style({ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' });
 
-export const revealSection = style({
+export const plateMaskSection = style({
   marginBlock: '0.6rem',
   paddingBlock: '0.4rem',
   borderBlock: `1px solid ${colors.border}`,
 });
 
-export const revealSectionHeader = style({
+export const plateMaskSectionHeader = style({
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'center',

@@ -9,6 +9,7 @@ import type {
 } from '@cg/shared-schema';
 import {
   LiveSourceIdSchema,
+  allowsLivePlateOverlap,
   applyArrangementGeometry,
   flattenElements,
   lessThanBeyondNoise,
@@ -255,7 +256,7 @@ function plateRef(el: Element, box?: Aabb): string {
 /** The four Live Source preflight checks, over the whole project. */
 export function liveSourceIssues(scene: Scene): ExportIssue[] {
   const issues: ExportIssue[] = [];
-  const allowOverlap = scene.allowLivePlateOverlap === true;
+  const allowOverlap = allowsLivePlateOverlap(scene);
 
   // D-202 — validate relationships independently of overlap so a dangling or cyclic mask never
   // turns into a silent no-op merely because its plates happen not to touch in the current look.

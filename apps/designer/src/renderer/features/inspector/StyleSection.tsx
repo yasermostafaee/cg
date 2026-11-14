@@ -11,8 +11,6 @@ import {
   followWindowMs,
   followsComposition,
   ImageFitSchema,
-  liveRevealMaskFromRects,
-  liveRevealRects,
   NumberFieldDigitsSchema,
   playoutOf,
   SequenceEdgeSchema,
@@ -929,7 +927,6 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
         />
         <AspectRow element={element} />
         <PlateMaskRows key={'mask-' + element.id} element={element} />
-        <PlateMaskRows key={'reveal-' + element.id} element={element} linked />
         <LivePlateFallbackPicker
           plates={[element]}
           onCommit={(patch) => designerStore.updateElement(element.id, patch)}
@@ -1165,63 +1162,21 @@ function currentPlate(element: VideoPlaceholderElement): VideoPlaceholderElement
   return (found?.layer.children[found.elIdx] as VideoPlaceholderElement | undefined) ?? element;
 }
 
-/** D-202 — edit the windows of a plate mask or a linked reveal. */
-function PlateMaskRows({
-  element,
-  linked = false,
-}: {
-  element: VideoPlaceholderElement;
-  linked?: boolean;
-}): JSX.Element {
+function PlateMaskRows({ element }: { element: VideoPlaceholderElement }): JSX.Element {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const editIndex = useDesignerSelector(({ liveMaskEdit }) =>
-    liveMaskEdit?.plateId === element.id && liveMaskEdit.linked === linked
-      ? liveMaskEdit.index
-      : null,
+    liveMaskEdit?.plateId === element.id ? liveMaskEdit.index : null,
   );
   const editing = editIndex !== null;
-  const scene = designerStore.get().scene;
-  const plates: VideoPlaceholderElement[] = [];
-  const collect = (children: readonly Element[]): void => {
-    for (const child of children) {
-      if (child.type === 'video-placeholder') plates.push(child);
-      else if (child.type === 'container') collect(child.children);
-    }
-  };
-  if (linked && scene !== null) for (const layer of activeLayersOf(scene)) collect(layer.children);
-  const candidates = plates.filter(
-    (plate) => plate.id !== element.id && plate.routeKey !== undefined,
-  );
-  const options = ['', ...candidates.map((plate) => plate.routeKey as string)] as const;
-  const labels = [
-    '— no reveal —',
-    ...candidates.map((plate) => `${plate.name || 'Plate'} — ${plate.routeKey as string}`),
-  ];
-  const reveal = element.revealMask;
-  const rects = linked
-    ? reveal === undefined
-      ? []
-      : liveRevealRects(reveal)
-    : (element.liveMask?.rects ?? []);
-  const kind = linked ? 'reveal mask' : 'plate mask';
-  const heading = linked ? 'Reveal masks' : 'Plate mask';
+  const rects = element.liveMask?.rects ?? [];
   const activeIndex = Math.min(editIndex ?? selectedIndex, rects.length - 1);
   const rect = rects[activeIndex];
   const writeRects = (nextRects: LiveRevealRect[]): void => {
-    const latest = currentPlate(element);
-    if (linked) {
-      if (latest.revealMask === undefined) return;
-      designerStore.updateElement(element.id, {
-        revealMask: liveRevealMaskFromRects(latest.revealMask.targetSourceId, nextRects),
-      } as Partial<Element>);
-    } else {
-      designerStore.updateElement(element.id, {
-        liveMask:
-          nextRects.length === 0
-            ? undefined
-            : { mode: latest.liveMask?.mode ?? 'inside', rects: nextRects },
-      } as Partial<Element>);
-    }
+    const mask = currentPlate(element).liveMask;
+    designerStore.updateElement(element.id, {
+      liveMask:
+        nextRects.length === 0 ? undefined : { mode: mask?.mode ?? 'inside', rects: nextRects },
+    } as Partial<Element>);
   };
   const commitRect = (key: 'x' | 'y' | 'width' | 'height', percent: number): void => {
     if (rect === undefined) return;
@@ -1236,7 +1191,7 @@ function PlateMaskRows({
   const draw = (): void => {
     setSelectedIndex(rects.length);
     designerStore.setSelection([element.id]);
-    designerStore.drawLiveMask(element.id, linked);
+    designerStore.drawLiveMask(element.id);
   };
   const remove = (): void => {
     const remaining = rects.filter((_, index) => index !== activeIndex);
@@ -1244,23 +1199,19 @@ function PlateMaskRows({
     writeRects(remaining);
     setSelectedIndex(nextIndex);
     if (editing) {
-      if (remaining.length > 0) designerStore.editLiveMask(element.id, linked, nextIndex);
+      if (remaining.length > 0) designerStore.editLiveMask(element.id, nextIndex);
       else designerStore.setTool('cursor');
     }
   };
   return (
-    <div className={fieldCss.revealSection} role="group" aria-label={heading}>
-      <div className={fieldCss.revealSectionHeader}>
-        <span>{heading}</span>
+    <div className={fieldCss.plateMaskSection} role="group" aria-label="Plate mask">
+      <div className={fieldCss.plateMaskSectionHeader}>
+        <span>Plate mask</span>
         <div className={fieldCss.inlineActions}>
           <Control
             size="sm"
-            disabled={
-              element.locked ||
-              (linked && rect === undefined) ||
-              rects.length >= LIVE_REVEAL_MAX_RECTS
-            }
-            aria-label={'Add ' + kind}
+            disabled={element.locked || rects.length >= LIVE_REVEAL_MAX_RECTS}
+            aria-label="Add plate mask"
             onClick={draw}
             title={`Drag a new window on this Plate (up to ${LIVE_REVEAL_MAX_RECTS} masks).`}
           >
@@ -1269,12 +1220,12 @@ function PlateMaskRows({
           <Control
             size="sm"
             disabled={element.locked || rect === undefined}
-            aria-label={'Edit ' + kind + ' on Canvas'}
+            aria-label="Edit plate mask on Canvas"
             aria-pressed={editing}
             selected={editing}
             onClick={() => {
               if (editing) designerStore.setTool('cursor');
-              else designerStore.editLiveMask(element.id, linked, activeIndex);
+              else designerStore.editLiveMask(element.id, activeIndex);
             }}
             title="Drag the mask to move it or drag a corner to resize it."
           >
@@ -1283,7 +1234,7 @@ function PlateMaskRows({
           <Control
             size="sm"
             disabled={element.locked || rect === undefined}
-            aria-label={'Remove ' + kind}
+            aria-label="Remove plate mask"
             onClick={remove}
             title="Remove the selected mask."
           >
@@ -1291,35 +1242,7 @@ function PlateMaskRows({
           </Control>
         </div>
       </div>
-      {linked && (
-        <SelectField
-          label="reveal lower plate"
-          value={reveal?.targetSourceId ?? ''}
-          options={options}
-          labels={labels}
-          withheld={
-            candidates.length === 0
-              ? 'Add and assign another Plate first; it will be the lower live input.'
-              : undefined
-          }
-          onCommit={(targetSourceId) => {
-            const current = currentPlate(element).revealMask;
-            if (targetSourceId === '' || current === undefined) setSelectedIndex(0);
-            designerStore.updateElement(element.id, {
-              revealMask:
-                targetSourceId === ''
-                  ? undefined
-                  : current === undefined
-                    ? { targetSourceId, rect: { x: 0.05, y: 0.7, width: 0.9, height: 0.25 } }
-                    : { ...current, targetSourceId },
-            } as Partial<Element>);
-            if (targetSourceId !== '' && current === undefined) {
-              designerStore.editLiveMask(element.id, true, 0);
-            }
-          }}
-        />
-      )}
-      {!linked && element.liveMask !== undefined && (
+      {element.liveMask !== undefined && (
         <CheckRow
           label="Revert"
           checked={element.liveMask.mode === 'outside'}
@@ -1337,17 +1260,17 @@ function PlateMaskRows({
       {rect !== undefined && (
         <>
           <SelectField
-            label={kind}
+            label="plate mask"
             value={String(activeIndex)}
             options={rects.map((_, index) => String(index))}
             labels={rects.map((_, index) => `Mask ${index + 1}`)}
             onCommit={(index) => {
               setSelectedIndex(Number(index));
-              if (!element.locked) designerStore.editLiveMask(element.id, linked, Number(index));
+              if (!element.locked) designerStore.editLiveMask(element.id, Number(index));
             }}
           />
           <NumberField
-            label={linked ? 'reveal X' : 'mask X'}
+            label="mask X"
             value={rect.x * 100}
             min={0}
             max={100}
@@ -1356,7 +1279,7 @@ function PlateMaskRows({
             onCommit={(value) => commitRect('x', value)}
           />
           <NumberField
-            label={linked ? 'reveal Y' : 'mask Y'}
+            label="mask Y"
             value={rect.y * 100}
             min={0}
             max={100}
@@ -1365,7 +1288,7 @@ function PlateMaskRows({
             onCommit={(value) => commitRect('y', value)}
           />
           <NumberField
-            label={linked ? 'reveal width' : 'mask width'}
+            label="mask width"
             value={rect.width * 100}
             min={0.1}
             max={100}
@@ -1374,7 +1297,7 @@ function PlateMaskRows({
             onCommit={(value) => commitRect('width', value)}
           />
           <NumberField
-            label={linked ? 'reveal height' : 'mask height'}
+            label="mask height"
             value={rect.height * 100}
             min={0.1}
             max={100}

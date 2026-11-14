@@ -6942,7 +6942,7 @@ affected element when available and can be activated with the keyboard.
 
 ## [~] D-213 — Allow live plates to overlap in authored order ⟨priority: high — owner, 2026-11-12⟩ — `openspec/changes/allow-live-plate-overlap/`
 
-**What:** **Allow live plate overlap** is an opt-in setting on a Designer composition. It appears
+**What:** **Allow live plate overlap** is enabled by default on a Designer composition. Unchecking it restricts that composition. It appears
 under **CG Control** when one or more live plates are selected and in the Composition Inspector
 with nothing selected. Validation follows the open output and its nested plates. When the option is
 enabled, co-visible live plates can overlap and their authored back-to-front order governs the
@@ -6950,8 +6950,13 @@ overlap in Designer and in output, including nested frames and each preset.
 
 **Acceptance**
 
-- WHEN the option is off or absent THEN ordinary overlap stays export-blocking and valid linked
+- WHEN the option is explicitly off THEN ordinary overlap blocks export and valid linked
   reveals keep their existing behavior.
+- WHEN the setting is absent and a foreground plate has a valid mask over another plate THEN
+  export succeeds and keeps the upper picture inside its own mask.
+- WHEN the author selects a plate THEN the Inspector offers the single-plate mask controls.
+  New overlaps are configured with **Allow live plate overlap**. Saved linked reveals remain
+  playable and survive editing and re-exporting the project.
 - WHEN the option is enabled THEN Preview and export carry the authored paint order of co-visible
   plates, including instances nested in the composition.
 - WHEN different presets require different layering THEN each preset uses its own authored order.

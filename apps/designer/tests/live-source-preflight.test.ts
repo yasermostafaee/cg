@@ -269,29 +269,39 @@ describe('D-137 — a rotated hole is refused', () => {
 });
 
 describe('D-137 — overlapping holes are reported against BOTH elements', () => {
-  it('two overlapping Live Sources raise two issues, one per element', () => {
-    const issues = liveSourceIssues(scene([live('guest-1', 100, 100), live('guest-2', 300, 200)]));
+  it('two overlapping Live Sources raise two issues when overlap is disabled', () => {
+    const issues = liveSourceIssues({
+      ...scene([live('guest-1', 100, 100), live('guest-2', 300, 200)]),
+      allowLivePlateOverlap: false,
+    });
     const overlap = issues.filter((i) => i.code === 'live-source-overlap');
     expect(overlap.map((i) => i.elementId).sort()).toEqual(['guest-1', 'guest-2']);
   });
 
-  it('allows ordinary overlap when enabled while preserving other preflight errors', () => {
+  it('allows ordinary overlap by default while preserving other preflight errors', () => {
     const composition = scene([
       live('guest-1', 100, 100),
       live('guest-2', 300, 200),
       live('guest-3', 5000, 100),
     ]);
-    expect(codes({ ...composition, allowLivePlateOverlap: true })).toEqual([
-      'live-source-off-frame',
-    ]);
+    expect(codes(composition)).toEqual(['live-source-off-frame']);
     expect(codes({ ...composition, allowLivePlateOverlap: false })).toContain(
       'live-source-overlap',
     );
   });
 
-  it('validates corner overlap only in the composition being exported and its nested plates', () => {
+  it('applies the output opt-out to a nested own-mask plate that overlaps another plate', () => {
     const nested = {
-      ...scene([live('corner-a', 100, 100), live('corner-b', 720, 440)]),
+      ...scene([
+        live('corner-a', 100, 100),
+        live('corner-b', 100, 100, {
+          zIndex: 2,
+          liveMask: {
+            mode: 'inside',
+            rects: [{ x: 0.04, y: 0.07, width: 0.91, height: 0.17 }],
+          },
+        }),
+      ]),
       id: 'nested',
       allowLivePlateOverlap: true,
     };
@@ -307,8 +317,12 @@ describe('D-137 — overlapping holes are reported against BOTH elements', () =>
       transform: tf(0, 0, 1920, 1080),
     };
     const parent = { ...scene([child]), compositions: [nested] };
-    expect(codes(parent).filter((code) => code === 'live-source-overlap')).toHaveLength(2);
-    expect(codes({ ...parent, allowLivePlateOverlap: true })).not.toContain('live-source-overlap');
+    expect(codes(parent)).not.toContain('live-source-overlap');
+    expect(
+      codes({ ...parent, allowLivePlateOverlap: false }).filter(
+        (code) => code === 'live-source-overlap',
+      ),
+    ).toHaveLength(2);
   });
 
   it('D-202 — exempts only an explicitly linked pair whose reveal reaches the lower plate', () => {
@@ -321,13 +335,17 @@ describe('D-137 — overlapping holes are reported against BOTH elements', () =>
     });
     const lower = live('lower', 300, 200);
     expect(
-      liveSourceIssues(scene([upper, lower])).filter((i) => i.code === 'live-source-overlap'),
+      liveSourceIssues({
+        ...scene([upper, lower]),
+        allowLivePlateOverlap: false,
+      }).filter((i) => i.code === 'live-source-overlap'),
     ).toEqual([]);
 
     const third = live('third', 350, 220);
-    const thirdParty = liveSourceIssues(scene([upper, lower, third])).filter(
-      (i) => i.code === 'live-source-overlap',
-    );
+    const thirdParty = liveSourceIssues({
+      ...scene([upper, lower, third]),
+      allowLivePlateOverlap: false,
+    }).filter((i) => i.code === 'live-source-overlap');
     expect(thirdParty.some((i) => i.elementId === 'third')).toBe(true);
   });
 
@@ -418,7 +436,12 @@ describe('D-137 — overlapping holes are reported against BOTH elements', () =>
 
   it('edge-touching is NOT an overlap — zero shared area is not a collision', () => {
     // 640 wide at x=0 ends exactly where x=640 begins.
-    expect(codes(scene([live('guest-1', 0, 0), live('guest-2', 640, 0)]))).toEqual([]);
+    expect(
+      codes({
+        ...scene([live('guest-1', 0, 0), live('guest-2', 640, 0)]),
+        allowLivePlateOverlap: false,
+      }),
+    ).toEqual([]);
   });
 
   it('holes in DIFFERENT compositions never collide with each other', () => {
@@ -480,7 +503,7 @@ describe('D-137 — overlapping holes are reported against BOTH elements', () =>
         },
       ],
     } as unknown as Scene;
-    const issues = liveSourceIssues(aliased);
+    const issues = liveSourceIssues({ ...aliased, allowLivePlateOverlap: false });
     expect(issues.filter((i) => i.code === 'live-source-off-frame')).toHaveLength(1);
     expect(issues.filter((i) => i.code === 'live-source-overlap')).toHaveLength(2);
   });
@@ -605,21 +628,26 @@ describe('1.5g — the frame is not geometry: overlapping FRAMES is not a fault'
     // holes, which two 40px frames close and then some (each frame reaches 40px out,
     // so they overlap by 60px). Under a border-box reading — or any check that added
     // the stroke to the rect — this is a collision. It is not one.
-    const issues = liveSourceIssues(
-      scene([live('guest-1', 0, 0, { stroke: FRAME }), live('guest-2', 660, 0, { stroke: FRAME })]),
-    );
+    const issues = liveSourceIssues({
+      ...scene([
+        live('guest-1', 0, 0, { stroke: FRAME }),
+        live('guest-2', 660, 0, { stroke: FRAME }),
+      ]),
+      allowLivePlateOverlap: false,
+    });
     expect(issues.filter((i) => i.code === 'live-source-overlap')).toEqual([]);
   });
 
   it('two plates whose HOLES overlap IS a fault — frames or no frames', () => {
     // The other half, and the reason the test above is not just "nothing is ever a
     // fault": the real collision is still reported, against both elements.
-    const issues = liveSourceIssues(
-      scene([
+    const issues = liveSourceIssues({
+      ...scene([
         live('guest-1', 100, 100, { stroke: FRAME }),
         live('guest-2', 300, 200, { stroke: FRAME }),
       ]),
-    );
+      allowLivePlateOverlap: false,
+    });
     expect(
       issues
         .filter((i) => i.code === 'live-source-overlap')
@@ -634,12 +662,14 @@ describe('1.5g — the frame is not geometry: overlapping FRAMES is not a fault'
     // one far larger than the plate — cannot change a single verdict, message or
     // element id. This is the assertion a future "helpfully" stroke-aware AABB
     // breaks, and it names the reason in its own failure.
-    const layout = (over: Record<string, unknown>): Scene =>
-      scene([
+    const layout = (over: Record<string, unknown>): Scene => ({
+      ...scene([
         live('guest-1', 0, 0, over), // clear
         live('guest-2', 660, 0, over), // 20px from guest-1's hole
         live('guest-3', 700, 300, over), // overlaps guest-2's hole
-      ]);
+      ]),
+      allowLivePlateOverlap: false,
+    });
     const bare = liveSourceIssues(layout({}));
     for (const width of [0, 1, 40, 5000]) {
       expect(liveSourceIssues(layout({ stroke: { width, color: '#ffffff' } }))).toEqual(bare);

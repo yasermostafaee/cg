@@ -309,7 +309,9 @@ describe('B-181 — an aspect-LOCKED corner snaps the BOX EDGE, not the pointer'
     dragHandleTo(host, 'br', GRAB_BR, AIM);
 
     expect(committed('plate').x + committed('plate').w).toBe(NEIGHBOUR_LEFT); // really flush …
-    const overlaps = liveSourceIssues(projected()).filter((i) => i.code === 'live-source-overlap');
+    const overlaps = liveSourceIssues({ ...projected(), allowLivePlateOverlap: false }).filter(
+      (i) => i.code === 'live-source-overlap',
+    );
     expect(overlaps).toEqual([]); // … and the rule accepts it.
   });
 

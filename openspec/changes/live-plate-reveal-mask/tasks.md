@@ -4,7 +4,7 @@
 
 - [x] 1.1 Allocate D-202 after reserving D-201 for live foreground overlays
 - [x] 1.2 Add the bounded optional relation to scene, carrier and IPC schemas
-- [x] 1.3 Keep ordinary overlap blocking and reject missing, self and cyclic relations
+- [x] 1.3 Block ordinary overlap when explicitly restricted and reject missing, self and cyclic relations
 
 ## 2. Authoring and output
 
@@ -69,3 +69,16 @@
 - [x] Advance the exporter shell revision for the mask-placement page marker so the existing
       template rebuild mechanism recognizes the new page shell.
 - [ ] Record the carrying Linux Playwright result and verify the edited masks on the target engine.
+
+## 8. Retire linked reveal authoring
+
+- [x] Remove the linked reveal controls and their automatic edit mode in Designer.
+- [x] Chromium verified Plate Mask and Revert and preserved both linked windows in an older export.
+- [ ] Record the carrying Linux Playwright result.
+
+## 9. Plate identifier placement
+
+- [x] Place the plate ID on the largest visible region in Designer and CG Control PVW.
+- [x] Verify inside-mask placement in Designer and a staged move updating the PVW label in Chromium.
+- [x] Verify the Revert label region, including a fully masked plate with no visible region.
+- [ ] Record the carrying Linux Playwright result for label placement.

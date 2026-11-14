@@ -694,10 +694,66 @@ describe('buildTemplateLiveSources — the assembly, and the coexistence control
       ],
       compositions: [],
     });
-    expect(buildTemplateLiveSources(s).platePaintOrder).toBeUndefined();
-    const enabled = buildTemplateLiveSources({ ...s, allowLivePlateOverlap: true });
+    const enabled = buildTemplateLiveSources(s);
+    expect(
+      buildTemplateLiveSources({ ...s, allowLivePlateOverlap: false }).platePaintOrder,
+    ).toBeUndefined();
     expect(enabled.sources.map(({ sourceId }) => sourceId)).toEqual(['front', 'back']);
     expect(enabled.platePaintOrder).toEqual(['back', 'front']);
+  });
+
+  it('keeps disjoint static plates compatible and orders plates that operators can move', () => {
+    const left = plate('left', 'left', 0, 0, 640, 360);
+    const right = plate('right', 'right', 640, 0, 640, 360);
+    const layout = (rootChildren: Element[]) => scene({ rootChildren, compositions: [] });
+    expect(buildTemplateLiveSources(layout([left, right])).platePaintOrder).toBeUndefined();
+    expect(
+      buildTemplateLiveSources(layout([left, { ...right, operatorMove: true }])).platePaintOrder,
+    ).toEqual(['left', 'right']);
+  });
+
+  it('carries the own-plate mask and authored order in each preset of a nested layout', () => {
+    const lower = plate('lower', 'plate-2', 0, 0, 640, 360);
+    const upper = {
+      ...plate('upper', 'plate-4', 0, 0, 640, 360),
+      zIndex: 2,
+      liveMask: { mode: 'inside', rects: [{ x: 0.04, y: 0.07, width: 0.91, height: 0.17 }] },
+    } satisfies Element;
+    const guest = plate('guest', 'plate-1', 0, 0, 640, 360);
+    const extra = plate('extra', 'plate-3', 0, 540, 640, 360);
+    const box = instance('plate-2-box', 'stack', 960, 0, 640, 360);
+    const s = scene({
+      rootChildren: [
+        instance('first', 'first-comp', 0, 0, 1920, 1080),
+        instance('second', 'second-comp', 0, 0, 1920, 1080),
+        instance('third', 'third-comp', 0, 0, 1920, 1080),
+      ],
+      compositions: [
+        comp('first-comp', [guest]),
+        comp('second-comp', [{ ...guest, id: 'second-guest' }, box]),
+        comp('third-comp', [
+          { ...guest, id: 'third-guest' },
+          { ...box, id: 'third-plate-2-box' },
+          extra,
+        ]),
+        { ...comp('stack', [lower, upper]), resolution: { width: 640, height: 360 } },
+      ],
+      lookGroups: [
+        {
+          id: 'order',
+          looks: [look('first', 'first'), look('second', 'second'), look('third', 'third')],
+        },
+      ],
+    });
+    const carrier = buildTemplateLiveSources(s);
+    expect(carrier.platePaintOrder).toBeUndefined();
+    expect(carrier.looks?.map(({ platePaintOrder }) => platePaintOrder)).toEqual([
+      undefined,
+      ['plate-1', 'plate-2', 'plate-4'],
+      ['plate-1', 'plate-2', 'plate-4', 'plate-3'],
+    ]);
+    expect(carrier.looks?.[1]?.masks?.['plate-4']).toEqual(upper.liveMask);
+    expect(carrier.looks?.[2]?.masks?.['plate-4']).toEqual(upper.liveMask);
   });
 
   it('carries a different authored paint order for each overlapping preset', () => {
@@ -717,7 +773,7 @@ describe('buildTemplateLiveSources — the assembly, and the coexistence control
       ],
       lookGroups: [{ id: 'order', looks: [look('first', 'first'), look('second', 'second')] }],
     });
-    const enabled = buildTemplateLiveSources({ ...s, allowLivePlateOverlap: true });
+    const enabled = buildTemplateLiveSources(s);
     expect(enabled.platePaintOrder).toBeUndefined();
     expect(enabled.looks?.map(({ platePaintOrder }) => platePaintOrder)).toEqual([
       ['one', 'two'],

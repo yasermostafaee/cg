@@ -1,5 +1,7 @@
 import { readFile } from 'node:fs/promises';
-import { buildTemplateLiveSources, unpack } from '@cg/vcg-format';
+import type { Scene } from '@cg/shared-schema';
+import { buildTemplateLiveSources, packProject, unpack } from '@cg/vcg-format';
+import { defaultLiveSource } from '../../src/renderer/state/element-defaults.js';
 import { test, expect } from './fixtures/designer.js';
 import type { DesignerApp } from './fixtures/designer.js';
 
@@ -241,103 +243,104 @@ test.describe('Live Source (D-137 phase 1)', () => {
     expect(html).not.toContain('data-cg-live-source-label');
   });
 
-  test('D-202 — add, edit and remove individual masks on one upper plate', async ({ app }) => {
-    await app.newProject('MultiplePlateMasks');
-    await app.addLiveSource({ x: 200, y: 160 });
-    await app.addLiveSource({ x: 230, y: 190 });
-    await expect(holes(app)).toHaveCount(2);
-    const [upperId, lowerId] = await app.timelineRowIds();
-    await app.selectElementById(lowerId!);
-    await app.setLiveSourceId('lower');
-    await app.setInspectorNumber('X position', 480);
-    await app.setInspectorNumber('Y position', 300);
-    await app.selectElementById(upperId!);
-    await app.setLiveSourceId('upper');
-    await app.setInspectorNumber('X position', 480);
-    await app.setInspectorNumber('Y position', 300);
-
-    await expect(errorPill(app)).toBeVisible();
-    await app.inspector.getByLabel('reveal lower plate').selectOption('lower');
-    const upper = holes(app).filter({ hasText: 'upper' });
-    const masks = upper.locator('[data-cg-live-reveal-mask]');
-    const edit = app.inspector.getByRole('button', { name: 'Edit reveal mask on Canvas' });
-    await expect(app.inspector.getByRole('button', { name: 'Redraw reveal mask' })).toHaveCount(0);
-    await expect(masks).toHaveCount(1);
-    await expect(errorPill(app)).toHaveCount(0);
-    await expect(edit).toHaveAttribute('aria-pressed', 'true');
-
-    const dragMask = async (top: number, bottom: number): Promise<void> => {
-      const bounds = await upper.boundingBox();
-      if (bounds === null) throw new Error('upper plate is visible');
-      const { x, y, width, height } = bounds;
-      await app.page.mouse.move(x + width * 0.2, y + height * top);
-      await app.page.mouse.down();
-      await app.page.mouse.move(x + width * 0.8, y + height * bottom, { steps: 5 });
-      await app.page.mouse.up();
+  test('D-202 — legacy linked reveals still export without a Reveal masks editor', async ({
+    app,
+    page,
+  }) => {
+    const timestamp = '2026-11-08T00:00:00.000Z';
+    const resolution = { width: 1920, height: 1080 };
+    const frameRange = { in: 0, out: 75 };
+    const revealMask = {
+      targetSourceId: 'lower',
+      rect: { x: 0.05, y: 0.7, width: 0.9, height: 0.25 },
+      additionalRects: [{ x: 0.25, y: 0.2, width: 0.5, height: 0.15 }],
     };
+    const scene: Scene = {
+      schemaVersion: 1,
+      id: 'legacy-reveal-project',
+      name: 'Legacy reveal',
+      templateType: 'custom',
+      resolution,
+      frameRate: 25,
+      frameRange,
+      safeAreas: { title: 10, action: 5 },
+      editorBackdrop: 'transparent',
+      layers: [],
+      fields: [],
+      bindings: [],
+      fonts: [],
+      metadata: { createdAt: timestamp, updatedAt: timestamp },
+      entryCompositionId: 'comp1',
+      compositions: [
+        {
+          id: 'comp1',
+          allowLivePlateOverlap: false,
+          name: 'Main',
+          resolution,
+          frameRange,
+          editorBackdrop: 'transparent',
+          layers: [
+            {
+              id: 'plate-layer',
+              name: 'Plates',
+              visible: true,
+              locked: false,
+              blendMode: 'normal',
+              children: [
+                { ...defaultLiveSource('lower', 480, 300), routeKey: 'lower' },
+                { ...defaultLiveSource('upper', 480, 300), routeKey: 'upper', revealMask },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const bytes = await packProject({
+      scene,
+      index: [],
+      files: new Map(),
+      savedAt: timestamp,
+    });
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: 'Import project', exact: true }).click();
+    await (
+      await chooser
+    ).setFiles({
+      name: 'Legacy reveal.cgproj',
+      mimeType: 'application/zip',
+      buffer: Buffer.from(bytes),
+    });
+    await app.expectStudio();
+    await expect(holes(app)).toHaveCount(2);
+    await app.selectElementById('upper');
 
-    await app.inspector.getByRole('button', { name: 'Add reveal mask' }).click();
-    await expect(edit).toHaveAttribute('aria-pressed', 'false');
-    await dragMask(0.2, 0.4);
-    await expect(masks).toHaveCount(2);
+    const masks = holes(app).filter({ hasText: 'upper' }).locator('[data-cg-live-reveal-mask]');
     await expect(masks).toHaveText(['Mask 1', 'Mask 2']);
+    await expect(masks.first()).toHaveAttribute('style', /left: 5%; top: 70%/);
+    await expect(masks.nth(1)).toHaveAttribute('style', /left: 25%; top: 20%/);
     const maskName = masks.first().getByText('Mask 1', { exact: true });
     await expect.poll(async () => (await maskName.boundingBox())?.height ?? 0).toBeGreaterThan(16);
-    await app.page.getByRole('button', { name: 'Zoom out', exact: true }).click();
+    await page.getByRole('button', { name: 'Zoom out', exact: true }).click();
     await expect.poll(async () => (await maskName.boundingBox())?.height ?? 0).toBeGreaterThan(16);
-    const selector = app.inspector.getByLabel('reveal mask', { exact: true });
-    await expect(selector).toHaveValue('1');
-    await expect(edit).toHaveAttribute('aria-pressed', 'true');
-    await expect
-      .poll(() =>
-        masks.nth(1).evaluate((node) => Number.parseFloat((node as HTMLElement).style.top)),
-      )
-      .toBeCloseTo(20, -1);
-    await app.setInspectorNumber('reveal X', 25);
-    await app.setInspectorNumber('reveal height', 15);
-    await expect(masks.nth(1)).toHaveAttribute('style', /left: 25%;.*height: 15%/);
-    await expect(masks.nth(0)).toHaveAttribute('style', /left: 5%; top: 70%/);
-
-    const editor = app.page.getByTestId('mask-editor');
-    const beforeMove = await editor.boundingBox();
-    if (beforeMove === null) throw new Error('The linked mask editor is not visible');
-    await app.page.mouse.move(
-      beforeMove.x + beforeMove.width / 2,
-      beforeMove.y + beforeMove.height / 2,
-    );
-    await app.page.mouse.down();
-    await app.page.mouse.move(
-      beforeMove.x + beforeMove.width / 2 + 15,
-      beforeMove.y + beforeMove.height / 2,
-      { steps: 5 },
-    );
-    await app.page.mouse.up();
-    await expect(masks.nth(1)).not.toHaveAttribute('style', /left: 25%;/);
-    await expect(masks.nth(0)).toHaveAttribute('style', /left: 5%; top: 70%/);
-    await app.page.keyboard.press('Escape');
-    await expect(edit).toHaveAttribute('aria-pressed', 'false');
-    await app.setInspectorNumber('reveal X', 25);
+    await expect(
+      app.inspector.getByRole('group', { name: 'Plate mask', exact: true }),
+    ).toBeVisible();
+    await expect(app.inspector.getByRole('group', { name: 'Reveal masks' })).toHaveCount(0);
+    await expect(app.inspector.getByLabel('reveal lower plate')).toHaveCount(0);
+    await expect(page.getByTestId('mask-editor')).toHaveCount(0);
+    await expect(errorPill(app)).toHaveCount(0);
 
     const { html } = await app.exportHtml();
-    expect(html).toContain('"additionalRects":[{"x":0.25');
-    await selector.selectOption('0');
-    await app.inspector.getByRole('button', { name: 'Remove reveal mask' }).click();
-    await expect(masks).toHaveCount(1);
-    await expect(masks.first()).toHaveAttribute('style', /left: 25%;.*height: 15%/);
-    await app.inspector.getByRole('button', { name: 'Remove reveal mask' }).click();
-    await expect(masks).toHaveCount(0);
-    await expect(errorPill(app)).toBeVisible();
+    expect(html).toContain('"revealMask":' + JSON.stringify(revealMask));
 
-    await app.undo();
-    await expect(masks).toHaveCount(1);
-    await app.selectElementById(lowerId!);
-    await app.page.keyboard.press('Delete');
+    await app.selectElementById('lower');
+    await page.keyboard.press('Delete');
     await expect(holes(app)).toHaveCount(1);
     await expect(masks).toHaveCount(0);
     await expect(errorPill(app)).toHaveCount(0);
     await app.undo();
     await expect(holes(app)).toHaveCount(2);
-    await expect(masks).toHaveCount(1);
+    await expect(masks).toHaveCount(2);
   });
 
   test('D-202 — a single plate can Mask, Revert and remove its windows', async ({ app }) => {
@@ -545,14 +548,20 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await app.addLiveSource({ x: 230, y: 190 });
     await expect(holes(app)).toHaveCount(2);
 
+    await app.inspector.getByRole('checkbox', { name: 'Allow live plate overlap' }).uncheck();
     await openIssues(app);
     // One message per participant.
     await expect(issueRows(app, /overlaps/)).toHaveCount(2);
   });
 
-  test('D-213 opts an overlapping composition into the authored layer order on export', async ({
+  test('D-213 allows authored overlap by default and remembers an explicit opt-out', async ({
     app,
+    page,
   }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'storage', { configurable: true, value: undefined });
+    });
+    await app.goto();
     await app.newProject('Authored overlap');
     await app.addLiveSource({ x: 200, y: 160 });
     await app.setLiveSourceId('back');
@@ -577,18 +586,22 @@ test.describe('Live Source (D-137 phase 1)', () => {
     const [back, front] = await Promise.all([idOf('back'), idOf('front')]);
     if (back == null || front == null) throw new Error('The two plates need timeline rows');
     const exportButton = app.page.getByRole('button', { name: 'Export .vcg', exact: true });
-    await expect(exportButton).toHaveAttribute('data-export-blocked', 'errors');
+    await expect(exportButton).not.toHaveAttribute('data-export-blocked', 'errors');
     const allow = app.inspector.getByRole('checkbox', { name: 'Allow live plate overlap' });
     const selectedControls = app.inspector.locator('[data-section="CG Control"]');
     const autoLayoutName = 'Allow Auto layout in CG Control';
     await expect(app.inspector.getByRole('checkbox', { name: autoLayoutName })).toHaveCount(0);
     await expect(
       selectedControls.getByRole('checkbox', { name: 'Allow live plate overlap' }),
-    ).not.toBeChecked();
+    ).toBeChecked();
     for (const checkbox of [allowMove, allow]) {
       expect(await checkbox.boundingBox()).toMatchObject({ width: 14, height: 14 });
     }
+    await expect(app.inspector.getByRole('group', { name: 'Reveal masks' })).toHaveCount(0);
+    await allow.uncheck();
+    await expect(exportButton).toHaveAttribute('data-export-blocked', 'errors');
     await allow.check();
+    await expect(app.inspector.getByRole('group', { name: 'Reveal masks' })).toHaveCount(0);
     await expect(exportButton).not.toHaveAttribute('data-export-blocked', 'errors');
     await expect(errorPill(app)).toHaveCount(0);
 
@@ -632,6 +645,23 @@ test.describe('Live Source (D-137 phase 1)', () => {
 
     await app.deselect();
     await allow.uncheck();
+    await expect(exportButton).toHaveAttribute('data-export-blocked', 'errors');
+    const saving = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'SAVE', exact: true }).click();
+    const project = await saving;
+    const projectBytes = await readFile(await project.path());
+    await page.reload();
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: 'Import project', exact: true }).click();
+    await (
+      await chooser
+    ).setFiles({
+      name: project.suggestedFilename(),
+      mimeType: 'application/zip',
+      buffer: projectBytes,
+    });
+    await app.expectStudio();
+    await expect(allow).not.toBeChecked();
     await expect(exportButton).toHaveAttribute('data-export-blocked', 'errors');
   });
 
@@ -711,6 +741,7 @@ test.describe('Live Source (D-137 phase 1)', () => {
       on, so the single `undo()` below would revert that id instead of removing the plate.
     */
     await app.setLiveSourceId('guest-1');
+    await app.inspector.getByRole('checkbox', { name: 'Allow live plate overlap' }).uncheck();
     await app.addLiveSource({ x: 230, y: 190 });
     await expect(holes(app)).toHaveCount(2);
 
@@ -739,6 +770,7 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await app.addLiveSource({ x: 230, y: 190 });
     await app.setElementName('Guest frame');
     await app.setLiveSourceId('guest');
+    await app.inspector.getByRole('checkbox', { name: 'Allow live plate overlap' }).uncheck();
 
     const exportBtn = app.page.getByRole('button', { name: 'Export .vcg' });
     // 🔴 NOT inert. A natively disabled button can show no tooltip at all — which is how the old
@@ -1663,6 +1695,7 @@ test.describe('Live Source — the frame (§9a.1)', () => {
     await x2.fill(String(Number(w1) + 20));
     await x2.press('Enter');
 
+    await app.inspector.getByRole('checkbox', { name: 'Allow live plate overlap' }).uncheck();
     await expect(holes(app)).toHaveCount(2);
     // NOT a fault. The overlap check reads the declared rect and only that.
     await expect(errorPill(app)).toHaveCount(0);

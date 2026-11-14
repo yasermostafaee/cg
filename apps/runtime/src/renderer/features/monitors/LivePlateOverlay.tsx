@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { Volume2, VolumeX } from 'lucide-react';
 import type { ChannelRaster } from '@cg/shared-ipc';
+import { largestLivePlateMaskRegion } from '@cg/shared-schema';
 import { colors, cssVars } from '../../theme.js';
 import { Icon } from '../../ui/Icon.js';
 import { SourceLabel } from '../sources/SourceLabel.js';
@@ -144,10 +145,13 @@ export function regionFitsCaveat(renderedWidthPx: number): boolean {
 
 /** True when ANY region must fall back to the stamp — the stage's half of the same decision. */
 export function anyRegionTooSmallForCaveat(
-  placements: readonly { width: number }[],
+  placements: readonly Pick<PlatePlacement, 'width' | 'mask'>[],
   fit: number,
 ): boolean {
-  return placements.some((p) => !regionFitsCaveat(p.width * fit));
+  return placements.some(
+    ({ width, mask }) =>
+      !regionFitsCaveat(width * (largestLivePlateMaskRegion(mask)?.width ?? 0) * fit),
+  );
 }
 
 /**
@@ -220,7 +224,17 @@ export function LivePlateOverlay({
         const preview = p.sourceId === null ? undefined : sourceFrames?.get(p.sourceId);
         const hasPicture = preview?.jpegBase64 !== undefined;
         const audio = p.audio === undefined ? undefined : AUDIO_GLYPH[p.audio];
-        const roomForLabel = regionFitsCaveat(p.width * fit);
+        const region = largestLivePlateMaskRegion(p.mask);
+        const roomForLabel = regionFitsCaveat(p.width * (region?.width ?? 0) * fit);
+        const showPlateId = p.mask !== undefined || roomForLabel;
+        const labelAnchor: CSSProperties =
+          region === null || p.mask === undefined
+            ? {}
+            : {
+                left: String((region.x + region.width / 2) * 100) + '%',
+                top: String((region.y + region.height / 2) * 100) + '%',
+                maxWidth: String(region.width * fit * 100) + '%',
+              };
         return (
           <div
             key={p.elementId}
@@ -250,24 +264,32 @@ export function LivePlateOverlay({
               overflow: 'hidden',
             }}
           >
-            {hasPicture ? (
-              (roomForLabel || audio !== undefined) && (
+            {region === null ? null : hasPicture ? (
+              (showPlateId || audio !== undefined) && (
                 <div
+                  data-live-plate-label=""
                   style={{
                     ...styles.chip,
-                    left: 'auto',
-                    top: 'auto',
-                    bottom: `${String(4 * inv)}px`,
-                    right: `${String(4 * inv)}px`,
+                    ...(p.mask === undefined
+                      ? { left: 'auto', top: 'auto', bottom: 4 * inv, right: 4 * inv }
+                      : labelAnchor),
                     padding: '2px 4px',
                     gap: '4px',
                     flexDirection: 'row',
                     alignItems: 'center',
-                    transform: `scale(${String(inv)})`,
-                    transformOrigin: 'right bottom',
+                    transform:
+                      (p.mask === undefined ? '' : 'translate(-50%, -50%) ') +
+                      `scale(${String(inv)})`,
+                    transformOrigin: p.mask === undefined ? 'right bottom' : 'center center',
                   }}
                 >
-                  {roomForLabel && <span style={styles.source}>{p.plateId}</span>}
+                  {showPlateId && (
+                    <span
+                      style={{ ...styles.source, overflow: 'hidden', textOverflow: 'ellipsis' }}
+                    >
+                      {p.plateId}
+                    </span>
+                  )}
                   {roomForLabel && p.cropEdges && <span style={styles.fit}>Crop edges</span>}
                   {audio !== undefined && (
                     <span
@@ -281,8 +303,10 @@ export function LivePlateOverlay({
               )
             ) : (
               <div
+                data-live-plate-label=""
                 style={{
                   ...styles.chip,
+                  ...labelAnchor,
                   transform: `translate(-50%, -50%) scale(${String(inv)})`,
                   transformOrigin: 'center center',
                 }}

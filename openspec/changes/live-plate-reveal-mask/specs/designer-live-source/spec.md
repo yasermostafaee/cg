@@ -28,6 +28,13 @@ the complement of that union inside the plate. The same rule SHALL clip the plat
 - **THEN** the region inside that rectangle remains visible
 - **AND** the plate is transparent outside it
 
+#### Scenario: Label the picture left by a plate mask
+
+- **GIVEN** a plate has an authored or staged mask
+- **WHEN** the visible part of the picture changes
+- **THEN** the plate identifier is centred on the largest visible mask window or Revert region
+- **AND** the label remains an authoring or preview aid
+
 #### Scenario: Allow mask editing in CG Control
 
 - **GIVEN** a live plate has an authored mask or linked reveal
@@ -46,25 +53,25 @@ the complement of that union inside the plate. The same rule SHALL clip the plat
 
 ### Requirement: Overlapping live plates are refused unless one explicitly reveals the other
 
-The Designer SHALL keep overlapping Live Source plates export-blocking by default. An upper plate
-MAY name one lower symbolic source and up to eight normalized reveal rectangles. With the
-composition's **Allow live plate overlap** option off, only that linked pair SHALL be exempt,
+The Designer SHALL block overlapping Live Source plates when the composition explicitly disables
+**Allow live plate overlap**. Previously saved linked reveals MAY name one lower symbolic source and
+up to eight normalized reveal rectangles. The Designer SHALL omit the linked reveal authoring controls.
+With the composition's **Allow live plate overlap** option off, only that linked pair SHALL be exempt,
 and only while every reveal rectangle intersects the lower plate in the same document/look.
 Missing targets, self-links and cycles SHALL remain blocking errors in either mode.
 
-#### Scenario: Author draws an intentional reveal
+#### Scenario: Author intentional overlaps
 
-- **GIVEN** two overlapping Live Source plates with distinct symbolic ids
-- **WHEN** the author selects the lower plate for the upper and draws a valid reveal window
-- **THEN** that pair no longer raises the ordinary overlap error
-- **AND** other overlaps remain independently blocking while **Allow live plate overlap** is off
+- **WHEN** an author selects a plate in Designer
+- **THEN** the Inspector offers **Allow live plate overlap** and single-plate masking
+- **AND** the Inspector omits linked reveal creation and editing
 
-#### Scenario: Each mask can be edited or removed
+#### Scenario: Reopen a project with a linked reveal
 
-- **GIVEN** an upper plate with two masks for the same lower plate
-- **WHEN** the author moves, resizes, edits the percentages of or removes one mask
-- **THEN** the other mask keeps its geometry
-- **AND** removing the final mask restores ordinary overlap validation
+- **GIVEN** a saved project has a valid linked reveal with two windows
+- **WHEN** the author opens and re-exports it
+- **THEN** both linked windows and their output remain the same
+- **AND** unrelated overlaps remain independently blocking while **Allow live plate overlap** is off
 
 #### Scenario: Deleting a Plate clears masks that point to it
 

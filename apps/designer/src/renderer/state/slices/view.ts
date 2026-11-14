@@ -61,19 +61,19 @@ export const viewSlice = {
     set({ tool, liveMaskDraw: null, liveMaskEdit: null });
   },
 
-  drawLiveMask(plateId: string, linked: boolean): void {
+  drawLiveMask(plateId: string): void {
     set({
-      tool: linked ? 'live-reveal' : 'live-mask',
+      tool: 'live-mask',
       liveMaskDraw: { plateId },
       liveMaskEdit: null,
     });
   },
 
-  editLiveMask(plateId: string, linked: boolean, index: number): void {
+  editLiveMask(plateId: string, index: number): void {
     set({
       tool: 'live-mask-edit',
       liveMaskDraw: null,
-      liveMaskEdit: { plateId, linked, index },
+      liveMaskEdit: { plateId, index },
     });
   },
 

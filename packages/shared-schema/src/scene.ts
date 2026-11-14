@@ -324,7 +324,7 @@ const CompositionObjectSchema = z
      * wide — phase 2 deletes arrangements (`tasks.md` §1b's deletion clause).
      */
     lookGroups: LookGroupsSchema.optional(),
-    /** Deliberately composite overlapping Live plates in this output's paint order. */
+    /** Composite overlapping Live plates by default; false opts this output out. */
     allowLivePlateOverlap: z.boolean().optional(),
     /** Let CG Control propose frame layouts under each plate's own permissions. */
     allowOperatorAutoLayout: z.boolean().optional(),
@@ -654,6 +654,11 @@ const SceneObjectSchema = z
   .superRefine(refineLifecycle);
 export const SceneSchema = SceneObjectSchema;
 export type Scene = z.infer<typeof SceneObjectSchema>;
+
+/** The output's policy also applies to the live plates nested in it. */
+export function allowsLivePlateOverlap(document: Pick<Scene, 'allowLivePlateOverlap'>): boolean {
+  return document.allowLivePlateOverlap !== false;
+}
 
 /**
  * B-129 — the scene as an EXPORTER must emit it: every backdrop forced transparent,

@@ -56,7 +56,8 @@ export const CG_RUNTIME_VERSION = '1.2.3';
 
 /** Declare the minimum runtime that can reproduce all authored behavior in a package. */
 export function requiredRuntimeVersionForScene(
-  scene: Pick<Scene, 'layers' | 'compositions' | 'allowLivePlateOverlap'>,
+  scene: Pick<Scene, 'layers' | 'compositions'>,
+  requiresLivePlatePaintOrder = false,
 ): string {
   const compositions = [scene, ...(scene.compositions ?? [])];
   const hasElement = (matches: (element: Element) => boolean): boolean => {
@@ -65,7 +66,7 @@ export function requiredRuntimeVersionForScene(
     return compositions.some((comp) => comp.layers.some((layer) => layer.children.some(visit)));
   };
   if (
-    scene.allowLivePlateOverlap === true ||
+    requiresLivePlatePaintOrder ||
     hasElement(
       (el) =>
         el.type === 'video-placeholder' &&

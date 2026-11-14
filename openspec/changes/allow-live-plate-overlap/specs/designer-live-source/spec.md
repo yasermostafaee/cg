@@ -1,12 +1,13 @@
 ## ADDED Requirements
 
-### Requirement: A composition can opt into authored live plate overlap
+### Requirement: A composition can restrict authored live plate overlap
 
 The Designer SHALL offer **Allow live plate overlap** in the Composition Inspector and under
 **CG Control** when one or more live plates are selected. Both controls SHALL edit the open
 composition's setting. Overlaps in unrelated compositions SHALL leave this output's export
-available. The option SHALL be off when absent or unchecked. With the option off, ordinary
-overlapping plates SHALL remain an export-blocking error. Valid linked reveals SHALL remain supported.
+available. The option SHALL be on when absent and SHALL remain off when explicitly unchecked.
+With the option off, ordinary overlapping plates SHALL remain an export-blocking error. Valid saved
+linked reveals SHALL remain supported.
 
 With the option on, Designer SHALL allow co-visible plates in the exported composition to
 overlap and SHALL use the authored paint order, including the order of nested instances.
@@ -14,16 +15,16 @@ The export SHALL describe the order for each visible preset independently. The o
 retain existing geometry, mask and source-identity validation. Authoring preflight SHALL name
 the affected plates and preset if it can determine that their layering cannot be represented.
 
-#### Scenario: Opt in to overlapping plates
+#### Scenario: A masked foreground plate overlaps by default
 
-- **GIVEN** two plates overlap and the composition's option is off
-- **THEN** Designer marks both plates and blocks export
-- **WHEN** the author enables **Allow live plate overlap**
-- **THEN** the valid overlap can export and the foreground plate paints above the other
+- **GIVEN** two plates overlap, the foreground plate has a single-plate mask and the open output has no explicit overlap setting
+- **THEN** export succeeds and the foreground picture paints over the lower plate inside the mask
+- **WHEN** the author unchecks **Allow live plate overlap** in the open output
+- **THEN** ordinary overlap is blocked and saving and reopening preserves that restriction
 
 #### Scenario: Nested frames follow each preset's paint order
 
-- **GIVEN** the composition opts in and its presets show different sets or orders of nested frames
+- **GIVEN** the composition allows overlap and its presets show different sets or orders of nested frames
 - **WHEN** the author switches presets or exports the composition
 - **THEN** each preset uses its own authored front-to-back order for its co-visible plates
 
@@ -90,7 +91,8 @@ collision. A guard chosen in pixels would be a product decision about `D-137`'s 
 The strict inequality itself SHALL be unchanged: exactly touching edges SHALL still NOT be an overlap,
 so flush abutment remains buildable. Only the INPUTS are guarded. An overlap large enough for the
 author to have caused it — `0.01` px is ten orders of magnitude above the floor — SHALL count as
-an overlap. Preflight SHALL report an error when that overlap has no authored exception.
+an overlap. With **Allow live plate overlap** off, preflight SHALL report an error for that overlap
+unless a valid saved linked reveal exempts it.
 
 #### Scenario: Two flush plates inside a scaled composition instance are accepted
 
@@ -102,7 +104,7 @@ an overlap. Preflight SHALL report an error when that overlap has no authored ex
 
 #### Scenario: A genuine sub-pixel overlap still fires
 
-- **GIVEN** the composition has no authored exception for the pair
+- **GIVEN** **Allow live plate overlap** is off and the composition has no linked reveal for the pair
 - **WHEN** two plates in the same scaled instance overlap by 0.01 scene pixels
 - **THEN** the overlap error is raised against BOTH plates, exactly as `D-137` requires
 

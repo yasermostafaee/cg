@@ -1,11 +1,11 @@
 ## Why
 
-Some layouts deliberately place one live frame in front of another. The author needs to opt in
-to this layout and see the same overlap in Designer and on the station.
+Some layouts deliberately place one live frame in front of another. The author can restrict
+overlap for a composition. By default, Designer and the station show the same authored order.
 
 ## What Changes
 
-- Show the unchecked **Allow live plate overlap** option in the Composition Inspector and under
+- Show the default-checked **Allow live plate overlap** option in the Composition Inspector and under
   **CG Control** while editing one or several live plates.
 - Resolve co-visible plates in each preset using the authored paint order, including nested frames.
 - Carry that order into Preview and programme. Refuse an order the station cannot realize safely.
@@ -15,7 +15,7 @@ to this layout and see the same overlap in Designer and on the station.
 
 ### Modified Capabilities
 
-- `designer-live-source`: composition opt-in, paint order and authoring preflight.
+- `designer-live-source`: composition setting, paint order and authoring preflight.
 - `runtime-live-source-routing`: safe placement and preset transitions in authored order.
 
 ## Impact

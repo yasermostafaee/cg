@@ -206,13 +206,14 @@ describe('the LOOKS refusal family appears in the section, in the wording of the
   });
 
   it('🔴 a root plate overlapping a plate of the active look is surfaced, naming the look', () => {
-    const text = render(
-      scene({
+    const text = render({
+      ...scene({
         rootChildren: [instance('inst-a', 'comp-a'), plate('root-1', 'live-2', 100, 100, 640, 360)],
         compositions: [lookComp('comp-a', [plate('a-1', 'live-1', 200, 200, 640, 360)])],
         lookGroups: [GROUP()],
       }),
-    );
+      allowLivePlateOverlap: false,
+    });
     expect(text).toContain('export will refuse');
     expect(text).toContain('when Preset "look-a" is active');
   });

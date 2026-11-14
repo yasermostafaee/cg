@@ -212,6 +212,29 @@ describe("D-137 — 'author' mode paints the bars", () => {
     const label = node(root).querySelector<HTMLElement>('[data-cg-live-source-label]');
     expect(label?.style.direction).toBe('ltr');
   });
+
+  it('centres a masked plate label in its largest visible window', () => {
+    const scene = sceneWith([
+      liveSource({
+        liveMask: {
+          mode: 'inside',
+          rects: [
+            { x: 0, y: 0, width: 0.125, height: 0.125 },
+            { x: 0.5, y: 0.25, width: 0.25, height: 0.5 },
+          ],
+        },
+      }),
+    ]);
+    const label = node(build(scene, 'author').root).querySelector<HTMLElement>(
+      '[data-cg-live-source-label]',
+    );
+    expect(label?.style.left).toBe('62.5%');
+    expect(label?.style.top).toBe('50%');
+    expect(label?.style.maxWidth).toContain('22.5%');
+    expect(
+      node(build(scene, 'output').root).querySelector('[data-cg-live-source-label]'),
+    ).toBeNull();
+  });
 });
 
 describe("R-105 — 'output' mode paints the selected fallback under the live producer", () => {

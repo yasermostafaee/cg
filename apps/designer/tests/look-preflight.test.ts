@@ -265,7 +265,7 @@ describe('B.3 — the visible-set overlap pass, and the v1 single-group refusal'
     const s = twoLookScene({
       rootChildren: [plate('root-1', 'presenter', 320, 180, 1280, 720)],
     });
-    const issues = byCode(s, 'live-source-overlap');
+    const issues = byCode({ ...s, allowLivePlateOverlap: false }, 'live-source-overlap');
     expect(issues.length).toBeGreaterThan(0);
     expect(issues.some((i) => i.message.includes('Preset "look-b"'))).toBe(true);
     // Reported against BOTH participants (the D-137 rule).
@@ -280,7 +280,7 @@ describe('B.3 — the visible-set overlap pass, and the v1 single-group refusal'
       lookAChildren: [plate('a-1', 'guest-1', 320, 180, 1280, 720)],
       lookBChildren: [plate('b-1', 'guest-2', 320, 180, 1280, 720)],
     });
-    expect(byCode(s, 'live-source-overlap')).toEqual([]);
+    expect(byCode({ ...s, allowLivePlateOverlap: false }, 'live-source-overlap')).toEqual([]);
   });
 
   it('a root plate that overlaps NOTHING in either look is clean (positive control)', () => {
@@ -289,7 +289,7 @@ describe('B.3 — the visible-set overlap pass, and the v1 single-group refusal'
       lookBChildren: [plate('b-1', 'guest-1', 0, 0, 960, 540)],
       rootChildren: [plate('root-1', 'presenter', 1280, 720, 640, 360)],
     });
-    expect(byCode(s, 'live-source-overlap')).toEqual([]);
+    expect(byCode({ ...s, allowLivePlateOverlap: false }, 'live-source-overlap')).toEqual([]);
   });
 
   it('🔴 a SECOND multi-frame group is refused in v1, in the same family', () => {

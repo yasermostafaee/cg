@@ -1,4 +1,5 @@
 import type { RuntimeClock } from './types.js';
+import { fitSequenceTextInk } from './sequence-text-ink.js';
 import {
   sampleTransition,
   transitionTotalMs,
@@ -584,7 +585,10 @@ export class SequenceDriver {
         // under the same stable id. Mutating the rendered snapshot lets the runtime's immediately
         // following `applyFieldsToCurrent()` refresh the visible rows without replaying the page.
         if (isTextItem(shown) && isTextItem(replacement)) {
-          if (replacement.text !== shown.text && node !== null) node.textContent = replacement.text;
+          if (replacement.text !== shown.text && node !== null) {
+            node.textContent = replacement.text;
+            fitSequenceTextInk(node);
+          }
           shown.text = replacement.text;
         } else if (
           shown.kind === 'composition' &&
@@ -750,6 +754,7 @@ export class SequenceDriver {
     this.incomingHooks = r;
     this.incomingNode = r.node;
     this.o.host.appendChild(r.node);
+    fitSequenceTextInk(r.node);
     this.activate(r); // D-083 — the incoming item's inner drivers run as it enters
     const shownIndex = this.logical.findIndex((item) => item.id === incoming.id);
     if (shownIndex >= 0) this.o.onItemShown?.(shownIndex);
@@ -1013,6 +1018,7 @@ export class SequenceDriver {
     this.currentNode = prepared.rendered.node;
     this.setItemPaint(this.currentNode, true);
     this.o.host.appendChild(this.currentNode);
+    fitSequenceTextInk(this.currentNode);
     this.prewarmItems(this.current.id);
   }
 
@@ -1104,7 +1110,10 @@ export class SequenceDriver {
     // LIST-BOUND reconcile mutates this snapshot in place via setItems, so on a bound
     // update `applyText` keeps the reconciled text instead of resetting a stale one.
     const applyText = (): void => {
-      node.textContent = this.o.textValueFor?.(item.id) ?? (isTextItem(item) ? item.text : '');
+      const text = this.o.textValueFor?.(item.id) ?? (isTextItem(item) ? item.text : '');
+      if (node.textContent === text) return;
+      node.textContent = text;
+      fitSequenceTextInk(node);
     };
     applyText();
     return { node, show: NOOP, pause: NOOP, resume: NOOP, hide: NOOP, applyFields: applyText };
@@ -1136,7 +1145,9 @@ export function makeSequenceItemNode(
 ): HTMLElement {
   const node = doc.createElement('span');
   node.dataset['cgSequenceItem'] = '1';
+  node.dataset['cgSequenceText'] = '1';
   node.style.gridArea = '1 / 1';
+  node.style.position = 'relative';
   // D-117 — multi-line item text: honor explicit `\n` AND auto-wrap a line longer than the element
   // width onto further lines (capped to the grid cell), `break-word` for an unbreakable long word.
   // The item wraps inside the FIXED box; the per-item transition moves the whole block by the fixed
