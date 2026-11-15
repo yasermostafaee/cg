@@ -11,6 +11,9 @@
 - [x] [Linux Playwright](https://github.com/yasermostafaee/cg/actions/runs/43584111382/job/132414872512)
       ran its E2E step successfully on `26575458`.
 - [ ] Verify the four-engine monitor on a station with three linked reserves.
+- [x] Verify B and Follow use the selected engine meter or its authenticated PCM peaks.
+      Windows Chromium covers distinct stereo peaks, show/hide persistence, the unresolved
+      owner case, and one reader while toggling the speaker and the meter.
 
 ## 2. Commands to the active engine
 

@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { PgmEngine } from '@cg/shared-ipc';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { PgmEngine, PgmMeterReading } from '@cg/shared-ipc';
 import {
   PGM_AUDIO_SAMPLE_RATE,
   PgmAudioPlayer,
   type PcmOut,
   type PgmAudioState,
 } from '../features/monitors/pgmAudioPlayer.js';
+import { MeterStore } from '../features/monitors/meterStore.js';
 import { useLink } from './useLink.js';
 
 /**
@@ -18,8 +19,8 @@ import { useLink } from './useLink.js';
  *   person at this console, not about the station. After a reload the preference is ON but the browser
  *   still wants a gesture, so the sound starts at the first press or key anywhere on the page (`waiting`
  *   until then).
- * - It reads only while ON, while the link to CG Bridge is live and while a channel is on screen; turning
- *   it off stops the stream at once, so CG Bridge releases the core's reader.
+ * - The authenticated Programme stream has one reader while the speaker or its local stereo meter
+ *   needs it. The speaker creates an AudioContext only after it is enabled.
  */
 
 const STORAGE_KEY = 'cg.runtime.pgm-audio.v1';
@@ -31,6 +32,7 @@ export interface PgmAudio {
   readonly on: boolean;
   readonly status: PgmAudioStatus;
   readonly volume: number;
+  readonly watchPeaks?: MeterStore['watchAudio'];
   toggle(): void;
   setVolume(value: number): void;
 }
@@ -69,18 +71,52 @@ function audioContextCtor(): AudioContextCtor | null {
   return g.AudioContext ?? null;
 }
 
+function localPcmMeter() {
+  let receive: ((reading: PgmMeterReading) => void) | undefined;
+  const store = new MeterStore({
+    subscribe: (write) => {
+      receive = write;
+      return () => {
+        receive = undefined;
+      };
+    },
+  });
+  return {
+    watch: store.watchAudio.bind(store),
+    publish: (channel: number, engine: PgmEngine, dbfs: readonly [number, number]) =>
+      receive?.({ kind: 'audio', channel, engine, dbfs: [...dbfs] }),
+  };
+}
+
 export function usePgmAudio(
   channel: number | null,
   engine: PgmEngine = 'A',
   resourceKey?: string,
+  meterWanted = false,
 ): PgmAudio {
   const live = useLink() === 'live';
   const [preference, setPreference] = useState(readPreference);
   const { on, volume } = preference;
   const [state, setState] = useState<PgmAudioState>('stopped');
   const [running, setRunning] = useState(false);
+  const [meter] = useState(localPcmMeter);
   const context = useRef<AudioContext | null>(null);
   const gain = useRef<GainNode | null>(null);
+  const player = useMemo(
+    () =>
+      channel === null
+        ? null
+        : new PgmAudioPlayer({
+            url: () =>
+              resourceKey === undefined
+                ? window.cg.pgmReturn.audioUrl(channel, engine)
+                : window.cg.pgmReturn.audioUrl(channel, engine, resourceKey),
+            onState: setState,
+          }),
+    [channel, engine, resourceKey],
+  );
+  const audible = on && running;
+  const demand = live && (audible || meterWanted);
 
   /** The one context, created on demand — inside the press when there is one. */
   const ensureContext = useCallback((): AudioContext | null => {
@@ -144,27 +180,30 @@ export function usePgmAudio(
   }, [on, running, ensureContext]);
 
   useEffect(() => {
-    if (!on || !running || !live || channel === null) return undefined;
+    if (!meterWanted || player === null || channel === null) return undefined;
+    player.setPeakWriter((dbfs) => meter.publish(channel, engine, dbfs));
+    return () => player.setPeakWriter();
+  }, [channel, engine, meter, meterWanted, player]);
+
+  useEffect(() => {
+    if (!audible || !live || player === null) return undefined;
     const ctx = context.current;
     if (ctx === null) return undefined;
     // Disconnect queued samples from the old source before switching the decoder.
     const streamGain = gain.current === null ? null : ctx.createGain();
     if (streamGain !== null && gain.current !== null) streamGain.connect(gain.current);
-    const player = new PgmAudioPlayer({
-      url: () =>
-        resourceKey === undefined
-          ? window.cg.pgmReturn.audioUrl(channel, engine)
-          : window.cg.pgmReturn.audioUrl(channel, engine, resourceKey),
-      out: ctx as unknown as PcmOut,
-      destination: streamGain ?? gain.current,
-      onState: setState,
-    });
-    player.start();
+    player.setSpeaker(ctx as unknown as PcmOut, streamGain ?? gain.current);
     return () => {
       streamGain?.disconnect();
-      player.stop();
+      player.setSpeaker(null);
     };
-  }, [on, running, live, channel, engine, resourceKey]);
+  }, [audible, live, player]);
+
+  useEffect(() => {
+    if (!demand || player === null) return undefined;
+    player.start();
+    return () => player.stop();
+  }, [demand, player]);
 
   useEffect(
     () => () => {
@@ -182,5 +221,5 @@ export function usePgmAudio(
       : !live || channel === null
         ? 'stopped'
         : state;
-  return { on, status, volume, toggle, setVolume };
+  return { on, status, volume, toggle, setVolume, watchPeaks: meter.watch };
 }

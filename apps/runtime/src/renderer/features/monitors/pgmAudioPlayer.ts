@@ -17,9 +17,12 @@
  * never the core: a new ticket is asked for on every connection.
  */
 
+import { METER_FLOOR_DBFS } from '@cg/shared-ipc';
+
 export const WAV_HEADER_BYTES = 44;
 const FRAME_BYTES = 4;
 export const PGM_AUDIO_SAMPLE_RATE = 48_000;
+const METER_WINDOW_FRAMES = PGM_AUDIO_SAMPLE_RATE / 20;
 
 /** Their numbers (§2.1). */
 export const AUDIO_BUFFER_START_MS = 30;
@@ -55,11 +58,12 @@ export interface PcmOut {
 }
 
 export type PgmAudioState = 'connecting' | 'playing' | 'stopped';
+type StereoPeakWriter = (levels: readonly [number, number]) => void;
 
 export interface PgmAudioPlayerOptions {
   /** A fresh URL (a fresh ticket) for each connection, or `null`: there is no sound to read. */
   readonly url: () => Promise<string | null>;
-  readonly out: PcmOut;
+  readonly out?: PcmOut;
   /** Local speaker gain node. Buffer timing and signal meters still use their existing clocks. */
   readonly destination?: unknown;
   readonly fetchImpl?: typeof fetch;
@@ -71,8 +75,12 @@ export interface PgmAudioPlayerOptions {
 
 export class PgmAudioPlayer {
   readonly #url: () => Promise<string | null>;
-  readonly #out: PcmOut;
-  readonly #destination: unknown;
+  #out: PcmOut | null;
+  #destination: unknown;
+  #onPeaks: StereoPeakWriter | undefined;
+  #peakFrames = 0;
+  #peakLeft = 0;
+  #peakRight = 0;
   readonly #fetch: typeof fetch;
   readonly #now: () => number;
   readonly #onState: (state: PgmAudioState) => void;
@@ -94,8 +102,8 @@ export class PgmAudioPlayer {
 
   constructor(options: PgmAudioPlayerOptions) {
     this.#url = options.url;
-    this.#out = options.out;
-    this.#destination = options.destination ?? options.out.destination;
+    this.#out = options.out ?? null;
+    this.#destination = options.destination ?? options.out?.destination;
     this.#fetch = options.fetchImpl ?? ((input, init) => fetch(input, init));
     this.#now = options.now ?? ((): number => performance.now());
     this.#onState = options.onState ?? ((): void => undefined);
@@ -110,6 +118,18 @@ export class PgmAudioPlayer {
   /** Chunks dropped by the hard cap on this connection. */
   get dropped(): number {
     return this.#dropped;
+  }
+
+  /** The stream can keep metering when its local speaker is detached. */
+  setSpeaker(out: PcmOut | null, destination?: unknown): void {
+    this.#out = out;
+    this.#destination = destination ?? out?.destination;
+    this.#resetPlayback();
+  }
+
+  setPeakWriter(write?: StereoPeakWriter): void {
+    this.#onPeaks = write;
+    this.#resetPeaks();
   }
 
   start(): void {
@@ -135,6 +155,7 @@ export class PgmAudioPlayer {
     const frames = Math.floor(pcm.byteLength / FRAME_BYTES);
     if (frames === 0) return;
     const out = this.#out;
+    if (out === null) return;
     const now = out.currentTime;
     if (this.#nextT < now) {
       // Nothing is scheduled any more: an UNDERRUN (after the first chunk), and a restart a buffer ahead.
@@ -172,12 +193,37 @@ export class PgmAudioPlayer {
 
   /** A new connection: the buffer starts again from 30 ms. */
   resetConnection(): void {
+    this.#resetPlayback();
+    this.#resetPeaks();
+  }
+
+  #resetPlayback(): void {
     this.#bufferMs = AUDIO_BUFFER_START_MS;
     this.#underruns = [];
     this.#nextT = 0;
     this.#scheduledAny = false;
     this.#dropping = false;
     this.#dropped = 0;
+  }
+
+  #resetPeaks(): void {
+    this.#peakFrames = 0;
+    this.#peakLeft = 0;
+    this.#peakRight = 0;
+  }
+
+  #measurePeaks(pcm: Uint8Array, write: StereoPeakWriter): void {
+    const view = new DataView(pcm.buffer, pcm.byteOffset, pcm.byteLength);
+    for (let offset = 0; offset < view.byteLength; offset += FRAME_BYTES) {
+      this.#peakLeft = Math.max(this.#peakLeft, Math.abs(view.getInt16(offset, true)));
+      this.#peakRight = Math.max(this.#peakRight, Math.abs(view.getInt16(offset + 2, true)));
+      this.#peakFrames++;
+      if (this.#peakFrames < METER_WINDOW_FRAMES) continue;
+      const dbfs = (peak: number): number =>
+        Math.max(METER_FLOOR_DBFS, 20 * Math.log10(peak / 32768));
+      write([dbfs(this.#peakLeft), dbfs(this.#peakRight)]);
+      this.#resetPeaks();
+    }
   }
 
   /** Told only when it CHANGES: `playing` would otherwise be said for every 20 ms chunk. */
@@ -234,7 +280,9 @@ export class PgmAudioPlayer {
     if (!res.ok || res.body === null) return;
     const reader = res.body.getReader();
     this.resetConnection();
-    let skip = WAV_HEADER_BYTES;
+    const header = new Uint8Array(WAV_HEADER_BYTES);
+    let skip = header.length;
+    let canMeasure = false;
     let carry = new Uint8Array(0);
     for (;;) {
       const { value, done } = await reader.read();
@@ -242,9 +290,22 @@ export class PgmAudioPlayer {
       let bytes = value;
       if (skip > 0) {
         const n = Math.min(skip, bytes.byteLength);
+        header.set(bytes.subarray(0, n), header.length - skip);
         skip -= n;
         bytes = bytes.subarray(n);
         if (skip > 0) continue;
+        const wav = new DataView(header.buffer);
+        canMeasure =
+          wav.getUint32(0) === 0x52494646 && // RIFF
+          wav.getUint32(8) === 0x57415645 && // WAVE
+          wav.getUint32(12) === 0x666d7420 && // fmt
+          wav.getUint32(16, true) === 16 &&
+          wav.getUint16(20, true) === 1 &&
+          wav.getUint16(22, true) === 2 &&
+          wav.getUint32(24, true) === PGM_AUDIO_SAMPLE_RATE &&
+          wav.getUint16(32, true) === FRAME_BYTES &&
+          wav.getUint16(34, true) === 16 &&
+          wav.getUint32(36) === 0x64617461; // data
       }
       if (carry.byteLength > 0) {
         const joined = new Uint8Array(carry.byteLength + bytes.byteLength);
@@ -257,7 +318,9 @@ export class PgmAudioPlayer {
       if (whole === 0) continue;
       if (this.#failures > 0) this.#failures = 0;
       this.#setState('playing');
-      this.schedule(bytes.subarray(0, whole));
+      const pcm = bytes.subarray(0, whole);
+      if (canMeasure && this.#onPeaks !== undefined) this.#measurePeaks(pcm, this.#onPeaks);
+      this.schedule(pcm);
     }
   }
 }

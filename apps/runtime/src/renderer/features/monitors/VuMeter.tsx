@@ -9,7 +9,7 @@ import {
   meterClip,
   meterPercent,
 } from './meterScale.js';
-import { meterStore } from './meterStore.js';
+import { meterStore, type MeterStore } from './meterStore.js';
 
 /**
  * 🔴 `PLAYOUT-FEATURES-01` E (`R-076`) — **THE PROGRAMME METER, BESIDE THE PROGRAM MONITOR**: eight bars (the
@@ -26,9 +26,11 @@ import { meterStore } from './meterStore.js';
 export function VuMeter({
   channel,
   engine = 'A',
+  watchPeaks,
 }: {
   channel: number | null;
-  engine?: PgmEngine;
+  engine?: PgmEngine | null;
+  watchPeaks?: MeterStore['watchAudio'];
 }): JSX.Element {
   const fills = useRef<(HTMLSpanElement | null)[]>([]);
   useLayoutEffect(() => {
@@ -37,19 +39,34 @@ export function VuMeter({
         if (el !== null) el.style.clipPath = meterClip(dbfs?.[i] ?? METER_FLOOR_DBFS);
       });
     };
-    if (channel === null) {
+    if (channel === null || engine === null) {
       write(null);
       return undefined;
     }
-    return meterStore().watchAudio(channel, write, engine);
-  }, [channel, engine]);
+    return watchPeaks === undefined
+      ? meterStore().watchAudio(channel, write, engine)
+      : watchPeaks(channel, write, engine);
+  }, [channel, engine, watchPeaks]);
+  const source =
+    channel === null || engine === null
+      ? 'unavailable'
+      : watchPeaks === undefined
+        ? 'playout'
+        : 'stereo';
   return (
     <div
       className="cg-vu"
       data-vu-meter=""
-      data-vu-engine={engine}
+      data-vu-engine={engine ?? undefined}
+      data-vu-source={source}
       role="img"
-      aria-label="Programme level, dBFS"
+      aria-label={
+        source === 'unavailable'
+          ? 'Programme level unavailable, dBFS'
+          : source === 'stereo'
+            ? 'Programme stereo level, dBFS'
+            : 'Programme level, dBFS'
+      }
       dir="ltr"
     >
       <span className="cg-vu__unit" aria-hidden="true">
@@ -57,7 +74,7 @@ export function VuMeter({
       </span>
       <div className="cg-vu__body">
         <div className="cg-vu__bars">
-          {Array.from({ length: METER_BARS }, (_, i) => (
+          {Array.from({ length: watchPeaks === undefined ? METER_BARS : 2 }, (_, i) => (
             <span key={i} className="cg-vu__bar" data-vu-bar={i + 1}>
               <span
                 className="cg-vu__fill"

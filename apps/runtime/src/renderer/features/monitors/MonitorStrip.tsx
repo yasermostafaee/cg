@@ -151,7 +151,17 @@ export function MonitorStrip({
   };
   const audioTarget = targets.find(({ engine }) => engine === monitorPreferences.audioEngine);
   const audioChannel = showPgm ? availableChannel(audioTarget) : null;
-  const programSound = usePgmAudio(audioChannel, audioTarget?.engine, audioTarget?.resourceKey);
+  const usePcmMeter =
+    !legacy &&
+    audioChannel !== null &&
+    audioTarget?.meterEngine === undefined &&
+    monitorPreferences.showMeter;
+  const programSound = usePgmAudio(
+    audioChannel,
+    audioTarget?.engine,
+    audioTarget?.resourceKey,
+    usePcmMeter,
+  );
   const effectiveCompanionMode = hasSelectedLayer ? companionMode : 'monitor';
   const companionActions =
     focus === 'pgm' || focus === 'pvw' ? (

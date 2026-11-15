@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { PgmMeterReading, PgmReturnStatus, PgmTopology } from '@cg/shared-ipc';
+import { wavHeader } from '../../../../tools/caspar-bridge/tests/support/fake-pgm-feed.js';
 
 /**
  * `R-104` — the shipped PROGRAM UI with a paired station: independent A/B pictures, one explicit
@@ -22,72 +23,92 @@ interface TestProgrammeAudioState {
 }
 
 async function open(page: Page, seed: ProgramMonitorSeed): Promise<void> {
-  await page.addInitScript((value: ProgramMonitorSeed) => {
-    const w = window as unknown as {
-      CG_E2E: boolean;
-      CG_E2E_FIXED_BANK: boolean;
-      CG_E2E_PROGRAM_MONITOR: ProgramMonitorSeed;
-      __CG_SPLASH_DISABLED__: boolean;
-      __CG_BRIDGE_URL__: string;
-      programmeTopology: PgmTopology;
-      programmeAudio: TestProgrammeAudioState;
-    };
-    w.CG_E2E = true;
-    w.CG_E2E_FIXED_BANK = true;
-    w.CG_E2E_PROGRAM_MONITOR = value;
-    w.__CG_SPLASH_DISABLED__ = true;
-    w.__CG_BRIDGE_URL__ = 'ws://127.0.0.1:1';
-    if (value.topology === undefined) return;
-    w.programmeTopology = value.topology;
-    w.programmeAudio = { active: [], events: [], maxConcurrent: 0, meterSubscriptions: 0 };
-    // Interpose at the RuntimeBridge seam while the app installs its normal test adapter.
-    Object.defineProperty(w, 'cg', {
-      configurable: true,
-      set(bridge: typeof window.cg) {
-        bridge.pgmReturn.topology = (channel) =>
-          Promise.resolve(w.programmeTopology.channel === channel ? w.programmeTopology : null);
-        bridge.pgmReturn.audioUrl = (_channel, engine = 'A', resourceKey) =>
-          Promise.resolve('/pgm-topology-test-audio/' + engine + '/' + (resourceKey ?? 'unbound'));
-        const subscribe = bridge.meters.onReading;
-        bridge.meters.onReading = (handler) => {
-          w.programmeAudio.meterSubscriptions += 1;
-          return subscribe(handler);
-        };
-        Object.defineProperty(w, 'cg', { configurable: true, value: bridge, writable: true });
-      },
-    });
-    const fetchOriginal = window.fetch.bind(window);
-    window.fetch = (input, init) => {
-      if (typeof input !== 'string' || !input.startsWith('/pgm-topology-test-audio/')) {
-        return fetchOriginal(input, init);
-      }
-      const source = input.slice('/pgm-topology-test-audio/'.length);
-      const audio = w.programmeAudio;
-      audio.active.push(source);
-      audio.events.push('start ' + source);
-      audio.maxConcurrent = Math.max(audio.maxConcurrent, audio.active.length);
-      return Promise.resolve(
-        new Response(
-          new ReadableStream<Uint8Array>({
-            start(controller) {
-              init?.signal?.addEventListener(
-                'abort',
-                () => {
-                  audio.active.splice(audio.active.indexOf(source), 1);
-                  audio.events.push('stop ' + source);
-                  controller.close();
-                },
-                { once: true },
-              );
-            },
-          }),
-        ),
-      );
-    };
-  }, seed);
+  const pcm = Buffer.alloc(2400 * 4);
+  for (let offset = 0; offset < pcm.byteLength; offset += 4) {
+    pcm.writeInt16LE(8192, offset);
+    pcm.writeInt16LE(-16384, offset + 2);
+  }
+  await page.addInitScript(
+    ({ value, header, chunk }) => {
+      const w = window as unknown as {
+        CG_E2E: boolean;
+        CG_E2E_FIXED_BANK: boolean;
+        CG_E2E_PROGRAM_MONITOR: ProgramMonitorSeed;
+        __CG_SPLASH_DISABLED__: boolean;
+        __CG_BRIDGE_URL__: string;
+        programmeTopology: PgmTopology;
+        programmeAudio: TestProgrammeAudioState;
+      };
+      w.CG_E2E = true;
+      w.CG_E2E_FIXED_BANK = true;
+      w.CG_E2E_PROGRAM_MONITOR = value;
+      w.__CG_SPLASH_DISABLED__ = true;
+      w.__CG_BRIDGE_URL__ = 'ws://127.0.0.1:1';
+      if (value.topology === undefined) return;
+      w.programmeTopology = value.topology;
+      w.programmeAudio = { active: [], events: [], maxConcurrent: 0, meterSubscriptions: 0 };
+      // Interpose at the RuntimeBridge seam while the app installs its normal test adapter.
+      Object.defineProperty(w, 'cg', {
+        configurable: true,
+        set(bridge: typeof window.cg) {
+          bridge.pgmReturn.topology = (channel) =>
+            Promise.resolve(w.programmeTopology.channel === channel ? w.programmeTopology : null);
+          bridge.pgmReturn.audioUrl = (_channel, engine = 'A', resourceKey) =>
+            Promise.resolve(
+              '/pgm-topology-test-audio/' + engine + '/' + (resourceKey ?? 'unbound'),
+            );
+          const subscribe = bridge.meters.onReading;
+          bridge.meters.onReading = (handler) => {
+            w.programmeAudio.meterSubscriptions += 1;
+            return subscribe(handler);
+          };
+          Object.defineProperty(w, 'cg', { configurable: true, value: bridge, writable: true });
+        },
+      });
+      const fetchOriginal = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        if (typeof input !== 'string' || !input.startsWith('/pgm-topology-test-audio/')) {
+          return fetchOriginal(input, init);
+        }
+        const source = input.slice('/pgm-topology-test-audio/'.length);
+        const audio = w.programmeAudio;
+        audio.active.push(source);
+        audio.events.push('start ' + source);
+        audio.maxConcurrent = Math.max(audio.maxConcurrent, audio.active.length);
+        return Promise.resolve(
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                controller.enqueue(Uint8Array.from(header));
+                const timer = window.setInterval(
+                  () => controller.enqueue(Uint8Array.from(chunk)),
+                  50,
+                );
+                init?.signal?.addEventListener(
+                  'abort',
+                  () => {
+                    window.clearInterval(timer);
+                    audio.active.splice(audio.active.indexOf(source), 1);
+                    audio.events.push('stop ' + source);
+                    controller.close();
+                  },
+                  { once: true },
+                );
+              },
+            }),
+          ),
+        );
+      };
+    },
+    {
+      value: seed,
+      header: [...wavHeader()],
+      chunk: [...pcm],
+    },
+  );
   await page.goto('/');
   const show = page.getByRole('button', { name: 'Show monitors' });
-  if (await show.count()) await show.click();
+  await show.click();
 }
 
 test('A+B keeps physical labels through a B-primary state, shows one stalled feed, and binds one meter source', async ({
@@ -124,9 +145,14 @@ test('A+B keeps physical labels through a B-primary state, shows one stalled fee
   await expect(page.locator('[data-pgm-screen="B"]')).not.toContainText('Return feed stalled');
 
   const soundSource = page.getByLabel('Programme sound source');
+  const vu = page.locator('[data-vu-meter]');
   await expect(soundSource).toHaveValue('follow');
-  await expect(page.locator('[data-vu-meter]')).toHaveCount(1);
-  await expect(page.locator('[data-vu-meter]')).toHaveAttribute('data-vu-engine', 'B');
+  await expect(vu).toHaveCount(1);
+  await expect(vu).toHaveAttribute('data-vu-engine', 'B');
+  await expect(vu.locator('[data-vu-bar="1"] .cg-vu__fill')).toHaveCSS(
+    'clip-path',
+    'inset(20% 0px 0px)',
+  );
   await expect(page.locator('[data-loudness-badge]')).toHaveAttribute('data-loudness-engine', 'B');
   await expect(page.getByRole('button', { name: 'Programme sound' })).toHaveAttribute(
     'title',
@@ -156,6 +182,25 @@ test('A+B keeps physical labels through a B-primary state, shows one stalled fee
   await expect(page.locator('[data-loudness-badge]')).toHaveAttribute('data-loudness-engine', 'A');
   await expect(page.locator('[data-pgm-screen="A"]')).toContainText('A · CH 1');
   await expect(page.locator('[data-pgm-screen="B"]')).toContainText('B · CH 2');
+
+  await soundSource.selectOption('B');
+  await expect(vu).toHaveAttribute('data-vu-engine', 'B');
+  await expect(vu.locator('[data-vu-bar="1"] .cg-vu__fill')).toHaveCSS(
+    'clip-path',
+    'inset(20% 0px 0px)',
+  );
+  const meterButton = page.getByRole('button', { name: 'VU meter', exact: true });
+  await expect(meterButton).toHaveAttribute('aria-pressed', 'true');
+  await meterButton.click();
+  await expect(vu).toHaveCount(0);
+  await expect(page.locator('[data-loudness-badge]')).toHaveText('−23.1 LUFS');
+  await page.reload();
+  await page.getByRole('button', { name: 'Show monitors' }).click();
+  await expect(meterButton).toHaveAttribute('aria-pressed', 'false');
+  await expect(vu).toHaveCount(0);
+  await expect(soundSource).toHaveValue('B');
+  await meterButton.click();
+  await expect(vu).toHaveAttribute('data-vu-engine', 'B');
 });
 
 test('without a channel mapping, reserve controls stay visible and B is a black no-signal tile', async ({
@@ -179,6 +224,14 @@ test('without a channel mapping, reserve controls stay visible and B is a black 
   await expect(page.locator('[data-pgm-screen="B"] [data-pgm-picture]')).toHaveCount(0);
   await expect(page.locator('[data-backup-channel-line="not-mapped"]')).toContainText(
     'Backup: not mapped',
+  );
+  await page.getByLabel('Programme sound source').selectOption('B');
+  const vu = page.getByRole('img', { name: 'Programme level unavailable, dBFS' });
+  await expect(vu).toBeVisible();
+  await expect(vu).toHaveAttribute('data-vu-engine', 'B');
+  await expect(vu.locator('[data-vu-bar="1"] .cg-vu__fill')).toHaveCSS(
+    'clip-path',
+    'inset(100% 0px 0px)',
   );
 });
 
@@ -252,12 +305,14 @@ test('four named programme returns share a 2x2 view and one selected sound strea
     page.evaluate(
       () => (window as unknown as { programmeAudio: TestProgrammeAudioState }).programmeAudio,
     );
-  expect((await audio()).active).toEqual([]);
   const vu = page.locator('[data-vu-meter]');
   const loudness = page.locator('[data-loudness-badge]');
-  await sound.click();
   await expect.poll(async () => (await audio()).active).toEqual(['C/east-3']);
-  await expect(vu).toHaveCount(0);
+  await expect(vu).toHaveAttribute('data-vu-engine', 'C');
+  await expect(vu).toHaveAttribute('data-vu-source', 'stereo');
+  await sound.click();
+  await expect(sound).toHaveAttribute('data-pgm-audio', 'playing');
+  expect((await audio()).active).toEqual(['C/east-3']);
   await expect(loudness).toHaveCount(0);
   expect((await audio()).meterSubscriptions).toBe(0);
   await page.evaluate(() => {
@@ -268,20 +323,30 @@ test('four named programme returns share a 2x2 view and one selected sound strea
   await expect(page.locator('[data-pgm-screen="D"]')).toHaveAttribute('data-pgm-active', '');
   await audioSource.selectOption('A');
   await expect.poll(async () => (await audio()).active).toEqual(['A/main-1']);
-  await expect(vu).toHaveCount(0);
+  await expect(vu).toHaveAttribute('data-vu-engine', 'A');
+  await expect(vu).toHaveAttribute('data-vu-source', 'stereo');
   expect((await audio()).meterSubscriptions).toBe(0);
   await audioSource.selectOption('B');
   await expect.poll(async () => (await audio()).active).toEqual(['B/west-2']);
   await expect(vu).toHaveCount(1);
   await expect(vu).toHaveAttribute('data-vu-engine', 'A');
+  await expect(vu).toHaveAttribute('data-vu-source', 'playout');
   await expect(vu.locator('[data-vu-bar="1"] .cg-vu__fill')).toHaveCSS(
     'clip-path',
     'inset(20% 0px 0px)',
   );
   await expect(loudness).toHaveText('−23.1 LUFS');
+  const toggleMeter = page.getByRole('button', { name: 'VU meter', exact: true });
+  await toggleMeter.click();
+  await expect(vu).toHaveCount(0);
+  expect((await audio()).active).toEqual(['B/west-2']);
+  await expect(loudness).toHaveText('−23.1 LUFS');
+  await toggleMeter.click();
+  await expect(vu).toHaveAttribute('data-vu-engine', 'A');
   await audioSource.selectOption('D');
   await expect.poll(async () => (await audio()).active).toEqual(['D/south-4']);
-  await expect(vu).toHaveCount(0);
+  await expect(vu).toHaveAttribute('data-vu-engine', 'D');
+  await expect(vu).toHaveAttribute('data-vu-source', 'stereo');
   await expect(loudness).toHaveCount(0);
   await page.evaluate(() => {
     const state = window as unknown as { programmeTopology: PgmTopology };
@@ -291,6 +356,14 @@ test('four named programme returns share a 2x2 view and one selected sound strea
   expect((await audio()).active).toEqual(['D/south-4']);
   await audioSource.selectOption('follow');
   await expect.poll(async () => (await audio()).active).toEqual([]);
+  await expect(vu).toBeVisible();
+  await expect(vu).toHaveAttribute('data-vu-source', 'unavailable');
+  await expect(vu).not.toHaveAttribute('data-vu-engine', /.+/);
+  await expect(vu.getByText('dBFS', { exact: true })).toBeVisible();
+  await expect(vu.locator('[data-vu-bar="1"] .cg-vu__fill')).toHaveCSS(
+    'clip-path',
+    'inset(100% 0px 0px)',
+  );
   expect(await audio()).toMatchObject({
     events: [
       'start C/east-3',
@@ -307,4 +380,60 @@ test('four named programme returns share a 2x2 view and one selected sound strea
     maxConcurrent: 1,
     meterSubscriptions: 1,
   });
+});
+
+test('Follow and explicit B show its stereo peaks without a separate meter session or speaker', async ({
+  page,
+}) => {
+  await open(page, {
+    backupChannel: null,
+    topology: {
+      channel: 1,
+      active: 'B',
+      members: [
+        { engine: 'A', name: 'Main', physicalChannel: 1, resourceKey: 'main', meterEngine: 'A' },
+        { engine: 'B', name: 'Reserve', physicalChannel: 2, resourceKey: 'reserve' },
+      ],
+    },
+    readings: [{ kind: 'audio', engine: 'A', channel: 1, dbfs: [0, 0] }],
+  });
+  const vu = page.locator('[data-vu-meter]');
+  const sound = page.getByRole('button', { name: 'Programme sound', exact: true });
+  const source = page.getByLabel('Programme sound source');
+  const meter = page.getByRole('button', { name: 'VU meter', exact: true });
+  const audio = () =>
+    page.evaluate(
+      () => (window as unknown as { programmeAudio: TestProgrammeAudioState }).programmeAudio,
+    );
+  await expect(source).toHaveValue('follow');
+  await expect(sound).toHaveAttribute('aria-pressed', 'false');
+  await expect(vu).toHaveAttribute('data-vu-engine', 'B');
+  await expect(vu).toHaveAttribute('data-vu-source', 'stereo');
+  await expect(vu.locator('[data-vu-bar]')).toHaveCount(2);
+  await expect(vu.locator('[data-vu-bar="1"] .cg-vu__fill')).toHaveCSS(
+    'clip-path',
+    'inset(20.07% 0px 0px)',
+  );
+  await expect(vu.locator('[data-vu-bar="2"] .cg-vu__fill')).toHaveCSS(
+    'clip-path',
+    'inset(10.03% 0px 0px)',
+  );
+  await expect(page.locator('[data-loudness-badge]')).toHaveCount(0);
+  await source.selectOption('B');
+  await sound.click();
+  await expect(sound).toHaveAttribute('data-pgm-audio', 'playing');
+  await sound.click();
+  await expect(sound).toHaveAttribute('data-pgm-audio', 'off');
+  expect(await audio()).toMatchObject({
+    active: ['B/reserve'],
+    events: ['start B/reserve'],
+    meterSubscriptions: 0,
+  });
+  await meter.click();
+  await expect(vu).toHaveCount(0);
+  await expect.poll(async () => (await audio()).active).toEqual([]);
+  await meter.click();
+  await expect(vu).toHaveAttribute('data-vu-engine', 'B');
+  await expect.poll(async () => (await audio()).active).toEqual(['B/reserve']);
+  expect((await audio()).maxConcurrent).toBe(1);
 });

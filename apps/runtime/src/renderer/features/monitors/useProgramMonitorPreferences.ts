@@ -11,6 +11,7 @@ interface StoredPreferences {
   readonly display?: ProgramDisplayMode;
   readonly audio?: ProgramAudioChoice;
   readonly layout?: ProgramPictureLayout;
+  readonly showMeter?: boolean;
 }
 
 function read(): Required<StoredPreferences> {
@@ -25,9 +26,10 @@ function read(): Required<StoredPreferences> {
       display: display === 'both' ? display : (PgmEngineSchema.safeParse(display).data ?? 'A'),
       audio: PgmEngineSchema.safeParse(audio).data ?? 'follow',
       layout: layout === 'vertical' ? 'vertical' : 'horizontal',
+      showMeter: parsed.showMeter !== false,
     };
   } catch {
-    return { display: 'A', audio: 'follow', layout: 'horizontal' };
+    return { display: 'A', audio: 'follow', layout: 'horizontal', showMeter: true };
   }
 }
 
@@ -44,9 +46,11 @@ export interface ProgramMonitorPreferences {
   readonly audio: ProgramAudioChoice;
   readonly audioEngine: PgmEngine | null;
   readonly layout: ProgramPictureLayout;
+  readonly showMeter: boolean;
   setDisplay(mode: ProgramDisplayMode): void;
   setAudio(choice: ProgramAudioChoice): void;
   setLayout(layout: ProgramPictureLayout): void;
+  setShowMeter(show: boolean): void;
 }
 
 export function useProgramMonitorPreferences(
@@ -57,9 +61,7 @@ export function useProgramMonitorPreferences(
     setStored(next);
     write(next);
   }, []);
-  const display = stored.display;
-  const audio = stored.audio;
-  const layout = stored.layout;
+  const { display, audio, layout, showMeter } = stored;
   const audioEngine = audio === 'follow' ? currentPrimary : audio;
   return useMemo(
     () => ({
@@ -67,10 +69,12 @@ export function useProgramMonitorPreferences(
       audio,
       audioEngine,
       layout,
+      showMeter,
       setDisplay: (mode: ProgramDisplayMode) => update({ ...stored, display: mode }),
       setAudio: (choice: ProgramAudioChoice) => update({ ...stored, audio: choice }),
       setLayout: (next: ProgramPictureLayout) => update({ ...stored, layout: next }),
+      setShowMeter: (show: boolean) => update({ ...stored, showMeter: show }),
     }),
-    [audio, audioEngine, display, layout, stored, update],
+    [audio, audioEngine, display, layout, showMeter, stored, update],
   );
 }

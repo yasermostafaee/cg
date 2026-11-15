@@ -16,8 +16,13 @@ Return picture and WAV reuse the bridge's separate, demand-driven relays.
 
 The display uses the existing local monitor sound selector. Follow is silent when no active
 owner can be verified. Existing A/B meter streams stay visible when the return's verified
-engine and physical channel match the meter source. Each verified return also has independent
-programme sound. Footer connection and failover labels name the CG Bridge command plane.
+engine and physical channel match the meter source. If the selected verified return has
+no meter binding, the console measures stereo peaks from that return's authenticated PCM
+stream. It reuses that stream for listening and never substitutes another engine's levels or
+generates a loudness reading from the peak. Hiding the VU releases a PCM stream used only for
+metering. A shown meter keeps its scale with empty bars when no source or data is available.
+The console's saved visibility is separate from the speaker toggle. Footer connection
+and failover labels name the CG Bridge command plane.
 
 ## Observed contract, 2026-11-14
 

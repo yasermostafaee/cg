@@ -25,3 +25,23 @@ unknown. Changing the monitored source SHALL close the previous sound stream.
 - **WHEN** a verified ownership change moves active control to another monitored member
 - **THEN** Follow uses that member's programme sound and the previous sound is disconnected
 - **AND** a temporary disagreement between engine observations leaves Follow silent
+
+### Requirement: The PGM meter follows the selected programme sound source
+
+CG Control SHALL show the selected verified return's actual metered levels. It uses the
+engine's meter when its binding is verified. For a verified programme stream without
+that binding, it uses the stream's stereo PCM peak levels. The meter starts visible
+and can be hidden independently of programme listening.
+
+#### Scenario: Select a reserve or let Follow choose it
+
+- **WHEN** the operator selects a verified reserve or Follow changes ownership to it
+- **THEN** the meter shows only that return's levels
+- **AND** a stereo PCM meter and listening share the selected authenticated stream
+- **AND** when the selected return has no meter data or Follow cannot verify a source, the shown meter keeps an empty scale
+
+#### Scenario: Hide the PGM meter
+
+- **WHEN** the operator toggles the PGM meter
+- **THEN** the vertical meter appears or is hidden without changing programme listening
+- **AND** the console remembers the choice

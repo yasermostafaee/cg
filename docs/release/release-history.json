@@ -665,6 +665,10 @@
           "en": "Preset Fade also affects the shared plate. Linked titles stay hidden until the destination settles. PVW follows a successful row preset without replaying the effect."
         },
         {
+          "fa": "متر PGM صدای B یا موتور انتخاب‌شده با Follow را نشان می‌دهد. می‌توان نمایش VU را مستقل از بلندگو خاموش یا روشن کرد. متر روشن بدون داده خالی می‌ماند.",
+          "en": "The PGM meter shows levels for B or the verified engine selected by Follow. The VU display can be toggled independently of the speaker and shows an empty scale when no level is available."
+        },
+        {
           "fa": "در Designer تنظیمات Fit، Allow move و Resize در بخش CG Control برای یک یا چند قاب لایو در دسترس‌اند.",
           "en": "Designer groups Fit, Allow move and Resize under CG Control for single and multiple live plates."
         },
