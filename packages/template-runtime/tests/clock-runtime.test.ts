@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { ClockElement, Scene } from '@cg/shared-schema';
 import { createRuntime } from '../src/runtime.js';
+import { buildScene } from '../src/scene-builder.js';
 
 /** Fake rAF + timer clock (same pattern as the ticker-runtime tests). */
 function makeClock() {
@@ -173,6 +174,35 @@ beforeEach(() => {
 });
 
 describe('createRuntime — clock content sources (D-027)', () => {
+  it('keeps the whole clock offset when its digits repaint and preserves the custom separator offset', async () => {
+    const clock = makeClock();
+    const scene = clockScene({
+      clock: {
+        mode: 'countdown',
+        format: 'HH-mm-ss',
+        target: { kind: 'duration', ms: 5000 },
+        textOffsetY: -8,
+        separatorOffsetYPx: 3,
+      },
+    });
+    const selector = '[data-cg-clock-time]';
+    const expectOffsets = (span: HTMLElement | null | undefined): void => {
+      expect(span?.style.top).toBe('-8px');
+      const separators = [
+        ...(span?.querySelectorAll<HTMLElement>('[data-cg-clock-separator]') ?? []),
+      ];
+      expect(separators.map((separator) => separator.style.top)).toEqual(['3px', '3px']);
+    };
+
+    expectOffsets(buildScene(scene).elementMap.get('clk')?.querySelector<HTMLElement>(selector));
+    const runtime = createRuntime(scene, { skipFontLoad: true, clock });
+    await runtime.play({});
+    const initial = spanText();
+    await run(clock, 1400);
+    expect(spanText()).not.toBe(initial);
+    expectOffsets(document.querySelector<HTMLElement>(selector));
+  });
+
   it('auto-out + content-driven: a countdown alone governs the hold (exits at 00:00)', async () => {
     const clock = makeClock();
     const runtime = createRuntime(

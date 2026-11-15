@@ -94,6 +94,7 @@ import { isFixedFileFieldId } from '../fields/fixedFileField.js';
 import { CheckRow } from './DynamicDataSection.js';
 import { SharedImagePicker } from '../sharedLibrary/SharedImagePicker.js';
 import { TickerSeparatorControl } from './TickerSeparatorControl.js';
+import { TextVerticalOffsetField } from './TextVerticalOffsetField.js';
 import * as dds from './DynamicDataSection.css.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { elementDataField, typedTextDigits } from '../../state/slices/fields.js';
@@ -2695,6 +2696,7 @@ function TickerSections({
         />
         {/* D-045 — the ticker is a crawl: VERTICAL align only (no horizontal). */}
         <VAlignRow element={element} />
+        <TextVerticalOffsetField element={element} />
       </CollapseSection>
 
       {/* D-056 — content-driven kinds carry only text: text-shadow only (no box
@@ -3087,6 +3089,7 @@ function ClockSections({
             vertical-align group, matching text. Non-keyframable (updateElement, no diamond). */}
         <HAlignRow element={element} />
         <VAlignRow element={element} />
+        <TextVerticalOffsetField element={element} />
         <FillField
           label="text color"
           value={
@@ -3420,6 +3423,7 @@ function SequenceSections({
             vertical-align group, matching text. Non-keyframable (updateElement, no diamond). */}
         <HAlignRow element={element} />
         <VAlignRow element={element} />
+        <TextVerticalOffsetField element={element} />
         <FillField
           label="text color"
           value={

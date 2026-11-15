@@ -653,6 +653,10 @@
       },
       "features": [
         {
+          "fa": "در Designer با Text vertical offset می‌توان نوشتهٔ Text، Ticker، Clock و صفحات متنی Sequence را داخل همان باکس بالا یا پایین برد.",
+          "en": "Designer’s Text vertical offset moves Text, Ticker, Clock and Sequence text pages up or down inside their boxes."
+        },
+        {
           "fa": "در CG Control از New live layout قاب، پریست و پس‌زمینه بسازید. Focus یک قاب را با افکت بزرگ می‌کند، Return چیدمان قبلی را برمی‌گرداند و Duplicate layout برای آماده‌سازی برنامهٔ بعد در زمان پخش یک نسخهٔ مستقل می‌سازد.",
           "en": "Use New live layout in CG Control to create frames, presets and a background. Focus animates into a single frame, Return restores the previous arrangement, and Duplicate layout creates a separate copy to prepare while a programme is running."
         },

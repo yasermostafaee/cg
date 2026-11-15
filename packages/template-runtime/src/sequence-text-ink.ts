@@ -23,6 +23,13 @@ export function fitSequenceTextInk(node: HTMLElement): void {
   if (node.dataset['cgSequenceText'] === undefined) return;
   if (node.isConnected) observers.get(node.ownerDocument)?.observe(node);
   node.style.top = '';
+  // Measure in the original alignment, then add the authored nudge. This also
+  // applies it to detached items and wrapped paragraphs that need no ink fit.
+  const adjustment = measureInkOffset(node) + Number(node.dataset['cgSequenceTextOffsetY'] ?? 0);
+  if (adjustment !== 0) node.style.top = `${String(adjustment)}px`;
+}
+
+function measureInkOffset(node: HTMLElement): number {
   const host = node.parentElement;
   const doc = node.ownerDocument;
   const view = doc.defaultView;
@@ -34,21 +41,21 @@ export function fitSequenceTextInk(node: HTMLElement): void {
     text.trim() === '' ||
     /[\r\n\t]/.test(text)
   )
-    return;
+    return 0;
 
   const height = host.clientHeight;
-  if (height <= 0 || node.offsetHeight <= 0) return;
+  if (height <= 0 || node.offsetHeight <= 0) return 0;
   const style = view.getComputedStyle(node);
   const lineHeight = Number.parseFloat(style.lineHeight);
   // A genuinely overfull line or several wrapped lines keep the authored clip.
-  if (!(lineHeight <= height) || node.offsetHeight > lineHeight + 1) return;
+  if (!(lineHeight <= height) || node.offsetHeight > lineHeight + 1) return 0;
   const context = contextFor(doc);
-  if (context === null) return;
+  if (context === null) return 0;
   context.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
   context.direction = style.direction === 'rtl' ? 'rtl' : 'ltr';
   const { actualBoundingBoxAscent: ascent, actualBoundingBoxDescent: descent } =
     context.measureText(text);
-  if (!Number.isFinite(ascent) || !Number.isFinite(descent) || ascent + descent <= 0) return;
+  if (!Number.isFinite(ascent) || !Number.isFinite(descent) || ascent + descent <= 0) return 0;
 
   // An empty inline-box's bottom is the actual DOM baseline. Offset positions
   // are in CSS pixels, independent of the item's slide or an ancestor's scale.
@@ -62,16 +69,14 @@ export function fitSequenceTextInk(node: HTMLElement): void {
       marker.offsetParent !== node ||
       node.offsetHeight > lineHeight + 1
     )
-      return;
+      return 0;
     baseline = node.offsetTop + marker.offsetTop;
   } finally {
     marker.remove();
   }
   const earliest = Math.ceil(ascent - baseline);
   const latest = Math.floor(height - baseline - descent);
-  if (earliest > latest) return;
-  const adjustment = Math.max(earliest, Math.min(0, latest));
-  if (adjustment !== 0) node.style.top = `${String(adjustment)}px`;
+  return earliest > latest ? 0 : Math.max(earliest, Math.min(0, latest));
 }
 
 function fitSequenceHost(host: HTMLElement): void {

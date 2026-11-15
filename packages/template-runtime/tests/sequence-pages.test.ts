@@ -138,17 +138,21 @@ afterEach(() => {
 describe('D-163 — a picture item is drawn by the image element’s renderer', () => {
   it('an authored page carries its exported URL and the sequence’s ONE fit', async () => {
     const clock = makeClock();
-    const rt = createRuntime(book([authored(1), authored(2)], { imageFit: 'cover' }), {
-      skipFontLoad: true,
-      clock,
-      assetUrls: urls(2),
-      decodeImage: () => Promise.resolve(true),
-    });
+    const rt = createRuntime(
+      book([authored(1), authored(2)], { imageFit: 'cover', textOffsetY: 7 }),
+      {
+        skipFontLoad: true,
+        clock,
+        assetUrls: urls(2),
+        decodeImage: () => Promise.resolve(true),
+      },
+    );
     await rt.play({});
     await flush(clock);
     expect(onStage()).toEqual(['assets/p1.png']);
     const img = document.querySelector<HTMLImageElement>('[data-cg-sequence-page] img')!;
     expect(img.style.objectFit).toBe('cover');
+    expect(img.closest<HTMLElement>('[data-cg-sequence-page]')?.style.top).toBe('');
     // It names no element of the scene: the synthetic id stays out of the DOM.
     expect(img.dataset['cgElementId']).toBeUndefined();
   });

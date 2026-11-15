@@ -1,4 +1,5 @@
 import { TEXT_FIT_MIN_SCALE, type TextElement } from '@cg/shared-schema';
+import { textRenderNode } from './text-render-node.js';
 
 /**
  * 🔴 `TEXT-FIT-01` (`B-147`) — **SHRINK-TO-FIT: the text shrinks until the RENDERED text fits its box.**
@@ -69,6 +70,18 @@ export function fitText(node: HTMLElement): void {
   if (!isFitText(node)) return;
   const base = Number(node.dataset[FIT_BASE]);
   if (!(base > 0)) return;
+  const glyph = textRenderNode(node);
+  const offset = glyph === node ? '' : glyph.style.top;
+  // Relative movement changes scrollHeight. Fit the line at its aligned position before shifting it.
+  if (offset !== '') glyph.style.top = '';
+  try {
+    fitUnshiftedText(node, base);
+  } finally {
+    if (offset !== '') glyph.style.top = offset;
+  }
+}
+
+function fitUnshiftedText(node: HTMLElement, base: number): void {
   releaseOverflow(node);
   setScale(node, base, 1);
   if (node.clientWidth === 0 && node.clientHeight === 0) return; // not laid out yet

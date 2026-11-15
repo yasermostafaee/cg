@@ -19,6 +19,8 @@ const BOX = { w: 400, h: 70 };
 function laidOut(node: HTMLElement, box = BOX): void {
   const size = (): number => Number.parseFloat(node.style.fontSize) || 0;
   const chars = (): number => [...(node.textContent ?? '')].length;
+  const offset = (): number =>
+    Number.parseFloat(node.querySelector<HTMLElement>('[data-cg-text]')?.style.top ?? '') || 0;
   Object.defineProperty(node, 'clientWidth', { configurable: true, get: () => box.w });
   Object.defineProperty(node, 'clientHeight', { configurable: true, get: () => box.h });
   Object.defineProperty(node, 'scrollWidth', {
@@ -27,7 +29,7 @@ function laidOut(node: HTMLElement, box = BOX): void {
   });
   Object.defineProperty(node, 'scrollHeight', {
     configurable: true,
-    get: () => Math.max(box.h, Math.ceil(size() * 1.2)),
+    get: () => Math.max(box.h, Math.ceil(size() * 1.2 + offset())),
   });
 }
 
@@ -206,5 +208,38 @@ describe('TEXT-FIT-01 — wired into the build and the bindings', () => {
 
     apply('کوتاه');
     expect(node.style.fontSize).toBe('50px');
+  });
+
+  it('keeps an authored glyph offset through a bound update without including it in shrink-to-fit', () => {
+    const s = scene(textElement({ textOffsetY: 20, backgroundColor: '#123456' }));
+    const built = buildScene(s, document);
+    document.body.appendChild(built.container);
+    const box = built.elementMap.get('t1');
+    if (box === undefined) throw new Error('missing text box');
+    const glyph = box.querySelector<HTMLElement>('[data-cg-text]');
+    expect(box.style.top).toBe('0px');
+    expect(box.style.backgroundColor).toMatch(/#123456/i);
+    expect(glyph?.style.top).toBe('20px');
+
+    laidOut(box);
+    applyFieldValues(
+      s,
+      { guest: 'عنوان تازه' },
+      built.elementMap,
+      built.textOriginals,
+      built.container,
+    );
+    expect(glyph?.textContent).toBe('عنوان تازه');
+    expect(glyph?.style.top).toBe('20px');
+    expect(box.style.fontSize).toBe('50px');
+    expect(box.scrollHeight).toBeGreaterThan(box.clientHeight);
+  });
+
+  it('keeps autosize glyphs at their natural position when a stored offset is present', () => {
+    const { elementMap } = buildScene(
+      scene(textElement({ fitMode: 'autosize', textOffsetY: -10 })),
+    );
+    expect(elementMap.get('t1')?.querySelector('[data-cg-text]')).toBeNull();
+    expect(elementMap.get('t1')?.textContent).toBe('سارا نادری');
   });
 });

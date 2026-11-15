@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { FieldValues, Scene } from '@cg/shared-schema';
+import type { FieldValues, Scene, TickerElement } from '@cg/shared-schema';
 import { createRuntime } from '../src/runtime.js';
 import { tickerDriverFor } from '../src/ticker-driver.js';
 
@@ -110,6 +110,8 @@ function tickerScene(overrides: {
   playout?: Scene['playout'];
   tickerRepeat?: number | 'infinite';
   cycleBoundary?: 'seamless' | 'drain';
+  textOffsetY?: number;
+  separator?: TickerElement['separator'];
 }): Scene {
   return {
     schemaVersion: 1,
@@ -134,6 +136,8 @@ function tickerScene(overrides: {
             ...tickerElement,
             repeat: overrides.tickerRepeat ?? 'infinite',
             cycleBoundary: overrides.cycleBoundary ?? 'seamless',
+            textOffsetY: overrides.textOffsetY,
+            separator: overrides.separator,
           },
         ],
       },
@@ -545,6 +549,77 @@ describe('createRuntime — two-loop ticker playout (D-028)', () => {
     await run(clock, 500);
     expect(track?.style.transform).toBe('translateX(50px)'); // rtl: moves left→right
   });
+
+  it.each([
+    {
+      separator: ' • ',
+      selector: 'span',
+      separatorText: ' • ',
+      staticSeparatorTransform: '',
+      liveSeparatorTransform: '',
+    },
+    {
+      separator: {
+        kind: 'image' as const,
+        assetId: 'separator-logo',
+        size: { w: 30, h: 24 },
+        source: 'project' as const,
+        offsetY: 4,
+      },
+      selector: 'img',
+      separatorText: '',
+      staticSeparatorTransform: 'translateY(4px)',
+      liveSeparatorTransform: 'translateY(calc(-50% + 4px))',
+    },
+  ])(
+    'keeps the $selector separator independent of the article offset in Canvas and playout',
+    async ({
+      separator,
+      selector,
+      separatorText,
+      staticSeparatorTransform,
+      liveSeparatorTransform,
+    }) => {
+      const clock = makeClock();
+      const runtime = createRuntime(
+        tickerScene({ playout: { mode: 'manual' }, textOffsetY: -8, separator }),
+        { skipFontLoad: true, clock, tickerMeasure },
+      );
+      const band = bandEl();
+      const staticRow = band.querySelector<HTMLElement>('[data-cg-ticker-static]');
+      const assertOffset = (row: HTMLElement | null, separatorTransform: string): void => {
+        const nodes = [...(row?.children ?? [])] as HTMLElement[];
+        const articles = nodes.filter(
+          (node) => node.tagName === 'SPAN' && node.textContent !== separatorText,
+        );
+        expect(articles.length).toBeGreaterThan(0);
+        expect(articles.every((node) => node.style.transform === 'translateY(-8px)')).toBe(true);
+        const separatorNodes = nodes.filter(
+          (node) => node.matches(selector) && node.textContent === separatorText,
+        );
+        expect(separatorNodes.length).toBeGreaterThan(0);
+        expect(separatorNodes.every((node) => node.style.transform === separatorTransform)).toBe(
+          true,
+        );
+      };
+      assertOffset(staticRow, staticSeparatorTransform);
+      tickerDriverFor(band)?.setItems([
+        { id: 'a', text: 'New A' },
+        { id: 'b', text: 'New B' },
+      ]);
+      expect(staticRow?.textContent).toContain('New A');
+      assertOffset(staticRow, staticSeparatorTransform);
+
+      await runtime.play({});
+      const track = band.querySelector<HTMLElement>('.cg-ticker-track');
+      // Advance far enough to recycle spans used for both articles and text separators.
+      await run(clock, 20_000, 500);
+      expect(band.style.top).toBe('0px');
+      expect(track?.style.transform).toBe('translateX(2000px)');
+      assertOffset(track, liveSeparatorTransform);
+      await runtime.stop();
+    },
+  );
 
   it('D-056 — the ticker is full-bleed: band padding does NOT shrink the crawl viewport', async () => {
     const clock = makeClock();

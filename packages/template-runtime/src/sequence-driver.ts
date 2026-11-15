@@ -140,6 +140,8 @@ export interface SequenceDriverOptions {
   repeat: number | 'infinite';
   /** B-016 — composed `background` for a gradient text colour, applied per item node. */
   glyphGradientCss?: string | undefined;
+  /** Authored scene-pixel nudge for text pages, applied after ink fitting. */
+  textOffsetY?: number | undefined;
   /**
    * D-083 — factory for COMPOSITION items: builds the referenced composition's content
    * node + the lifecycle hooks for its inner drivers (a clock ticks, a ticker crawls).
@@ -1130,6 +1132,7 @@ export class SequenceDriver {
       this.o.host.ownerDocument,
       this.o.direction,
       this.o.glyphGradientCss,
+      this.o.textOffsetY,
     );
   }
 }
@@ -1142,12 +1145,17 @@ export function makeSequenceItemNode(
   doc: Document,
   direction: 'ltr' | 'rtl',
   glyphGradientCss?: string,
+  textOffsetY = 0,
 ): HTMLElement {
   const node = doc.createElement('span');
   node.dataset['cgSequenceItem'] = '1';
   node.dataset['cgSequenceText'] = '1';
   node.style.gridArea = '1 / 1';
   node.style.position = 'relative';
+  if (textOffsetY !== 0) {
+    node.dataset['cgSequenceTextOffsetY'] = String(textOffsetY);
+    fitSequenceTextInk(node);
+  }
   // D-117 — multi-line item text: honor explicit `\n` AND auto-wrap a line longer than the element
   // width onto further lines (capped to the grid cell), `break-word` for an unbreakable long word.
   // The item wraps inside the FIXED box; the per-item transition moves the whole block by the fixed

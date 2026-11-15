@@ -6978,3 +6978,18 @@ same live frame and title in another preset.
   presets still show it with the same data key, and the frame remains available for switching.
 - WHEN the project is saved, reopened or exported THEN the authored visibility survives and
   appears in Designer, PVW and on air.
+
+## [~] D-215 — Adjust text vertically inside its box ⟨priority: medium — owner, 2026-11-15⟩ — `openspec/changes/offset-text-in-box/`
+
+**What:** The Designer Inspector provides **Text vertical offset** in signed scene pixels for
+Text, Ticker, Clock and text pages in Sequence. It follows the authored vertical alignment and
+stays with the project and exported template.
+
+**Acceptance**
+
+- WHEN the offset is negative or positive THEN only the text moves up or down respectively in
+  Canvas, Preview and programme output. Fit, clipping, background and padding retain their authored behavior.
+- WHEN a Ticker already has an offset on its separator image THEN the text and separator retain
+  independent offsets. Clock punctuation keeps its own correction and Sequence pictures keep their placement.
+- WHEN a fixed Text box switches to Auto size THEN its offset is held for the next fixed box.
+- WHEN the offset is absent or zero THEN the text uses the original placement.

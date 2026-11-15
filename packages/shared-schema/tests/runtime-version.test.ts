@@ -151,6 +151,14 @@ describe('CG_RUNTIME_VERSION', () => {
     expect(versionFor(clock)).toBe('1.1.0');
     expect(versionFor({ ...clock, countupStartSeconds: 7 })).toBe('1.2.0');
     expect(versionFor({ ...clock, separatorOffsetYPx: 6 })).toBe('1.2.0');
+    const raised = ClockElementSchema.parse({ ...clock, textOffsetY: -8 });
+    expect(raised.textOffsetY).toBe(-8);
+    expect(versionFor(raised)).toBe('1.2.6');
+    expect(versionFor({ ...raised, textOffsetY: 0 })).toBe('1.1.0');
+    expect(runtimeShortfall(versionFor(raised), '1.2.5')).toEqual({
+      required: '1.2.6',
+      available: '1.2.5',
+    });
     expect(requiredRuntimeVersionForScene({ layers: [] })).toBe('1.1.0');
   });
 

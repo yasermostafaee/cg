@@ -2,8 +2,9 @@
  * B-016 / B-017 — the node that carries a text element's GLYPHS (text content,
  * colour, and the glyph shadow).
  *
- * For a SOLID text colour this is the element host itself (rendered exactly as
- * before — `color` + `text-shadow`). For a GRADIENT text colour the gradient
+ * A solid text colour normally renders on the host. When a vertical offset is
+ * authored it renders on an inline child so the box stays in place. For a
+ * GRADIENT text colour the gradient
  * (`background: <gradient>` + `background-clip: text` + `color: transparent`)
  * cannot share the host with the box background (it would overwrite + clip it,
  * B-016) nor sit under a `text-shadow` (which would paint over the clipped
@@ -13,8 +14,7 @@
  * Build (`scene-builder`), the field bindings, and the animation applier all
  * resolve the current glyph node through this one helper — keyed off the DOM
  * marker, so they agree with whatever was built, including across a
- * solid↔gradient switch (the inner node is created/removed on rebuild and every
- * writer follows it; no cached, stale references).
+ * fill or offset change (the inner node is created/removed on rebuild).
  */
 export const TEXT_NODE_DATASET = 'cgText';
 

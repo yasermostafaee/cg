@@ -203,6 +203,9 @@ const FontWeightSchema = z
  */
 export const TEXT_FIT_MIN_SCALE = 0.5;
 
+/** A signed distance in scene pixels, applied to the text after vertical alignment. */
+const TextOffsetYSchema = z.number().finite().optional();
+
 /** Text element. */
 export const TextElementSchema = ElementBaseSchema.extend({
   type: z.literal('text'),
@@ -277,6 +280,7 @@ export const TextElementSchema = ElementBaseSchema.extend({
   wrap: z.boolean().optional(),
   /** D-010-pic-5 — vertical alignment inside the text box. */
   verticalAlign: z.enum(['top', 'middle', 'bottom']).optional(),
+  textOffsetY: TextOffsetYSchema,
   /**
    * `TEXT-DIGITS-01` — the digits the text its AUTHOR typed into this element is drawn in (a value a
    * field binds is drawn by the field's own choice). Absent is `as-typed` — Keyboard — the identity,
@@ -350,6 +354,7 @@ export const TickerElementSchema = ElementBaseSchema.extend({
    * NO horizontal align (it is a crawl). Non-keyframable.
    */
   verticalAlign: z.enum(['top', 'middle', 'bottom']).default('middle'),
+  textOffsetY: TextOffsetYSchema,
   /**
    * READING direction — explicit only (no 'auto': the runtime's auto⇒LTR
    * container fallback is a footgun for a crawl). 'rtl' (Persian default) lays
@@ -594,6 +599,7 @@ export const ClockElementSchema = ElementBaseSchema.extend({
    * 'middle' preserves the prior hardcoded centring (non-breaking). Non-keyframable.
    */
   verticalAlign: z.enum(['top', 'middle', 'bottom']).default('middle'),
+  textOffsetY: TextOffsetYSchema,
   /**
    * `wall` = current local time; `countup` = stopwatch from zero per hold
    * entry; `countdown` = to `target` (required — see the refinement).
@@ -908,6 +914,7 @@ export const SequenceElementSchema = ElementBaseSchema.extend({
    * 'middle' preserves the prior hardcoded centring (non-breaking). Non-keyframable.
    */
   verticalAlign: z.enum(['top', 'middle', 'bottom']).default('middle'),
+  textOffsetY: TextOffsetYSchema,
   /**
    * READING direction — drives per-item bidi isolation only. Transition
    * edges are PHYSICAL and never mirrored (the Persian-natural horizontal

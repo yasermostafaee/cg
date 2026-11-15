@@ -260,6 +260,10 @@ The preview, the `.vcg` and the single-file page therefore run the same compiler
 and neither exporter has a steps code path (see `packages/template-runtime/README.md`, "Countdown
 STEPS"). D-141 v1's zones migrate into steps on load (`migrateCountdownZones`).
 
+The `textOffsetY` scene property moves text ink after alignment in fixed Text, Ticker, Clock and
+Sequence text pages. It is carried by the shared renderer and the static and animated text builders,
+so the Designer Canvas and exported page use the same authored offset.
+
 ## The editor ↔ schema ↔ runtime triangle
 
 ```

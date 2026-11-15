@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type CSSProperties } from 'react';
 import { writeDigitsIntoEditable } from '@cg/gesture';
 import type { TextElement } from '@cg/shared-schema';
 import { detectDirection, writeFieldDigits, ZWNJ } from '@cg/text-shaping';
@@ -108,12 +108,29 @@ export function TextEditor({ element, scale, onCommit }: Props): JSX.Element {
     }
   }
 
-  const w = transform.size.w * transform.scale.x * scale;
-  const h = transform.size.h * transform.scale.y * scale;
-  const x = transform.position.x * scale;
-  const y = transform.position.y * scale;
+  const scaleX = transform.scale.x * scale;
+  const scaleY = transform.scale.y * scale;
+  const offset = element.fitMode === 'autosize' ? 0 : (element.textOffsetY ?? 0);
+  const boxStyle: CSSProperties = {
+    left: transform.position.x * scale,
+    top: transform.position.y * scale,
+    width: transform.size.w * scaleX,
+    height: transform.size.h * scaleY,
+    transform: transform.rotation === 0 ? undefined : `rotate(${String(transform.rotation)}deg)`,
+  };
+  const textStyle: CSSProperties = {
+    color,
+    // Mirror @cg/template-runtime's fallback stack so Persian glyphs use the same face.
+    fontFamily: `${font.family}, Vazirmatn, "Noto Sans Arabic", "Segoe UI", system-ui, -apple-system, "Noto Sans", sans-serif`,
+    fontWeight: font.weight,
+    fontStyle: font.style,
+    fontSize: font.size * scale,
+    lineHeight: font.lineHeight,
+    letterSpacing: font.letterSpacing,
+    textAlign: resolvedTextAlign,
+  };
 
-  return (
+  const editable = (
     <div
       ref={ref}
       contentEditable
@@ -126,30 +143,43 @@ export function TextEditor({ element, scale, onCommit }: Props): JSX.Element {
         }
       }}
       dir={effectiveDir}
-      className={s.editor}
-      style={{
-        left: x,
-        top: y,
-        width: w,
-        height: h,
-        color,
-        // Mirror @cg/template-runtime scene-builder's fallback stack so editing
-        // matches the canvas — Persian/Arabic in a Latin-only family (Verdana,
-        // Georgia, Inter, …) falls back to the bundled Vazirmatn, not a system
-        // face. (Kept as a literal, not imported from the runtime package, to
-        // avoid its `window.cg` global-augmentation clash with the bridge.)
-        fontFamily: `${font.family}, Vazirmatn, "Noto Sans Arabic", "Segoe UI", system-ui, -apple-system, "Noto Sans", sans-serif`,
-        fontWeight: font.weight,
-        fontStyle: font.style,
-        fontSize: font.size * scale,
-        lineHeight: font.lineHeight,
-        letterSpacing: font.letterSpacing,
-        textAlign: resolvedTextAlign,
-        transform:
-          transform.rotation === 0 ? undefined : `rotate(${String(transform.rotation)}deg)`,
-      }}
+      className={offset === 0 ? s.editor : s.offsetContent}
+      style={
+        offset === 0
+          ? { ...textStyle, ...boxStyle }
+          : {
+              ...textStyle,
+              top: offset * scaleY,
+              whiteSpace: element.wrap === false ? 'nowrap' : undefined,
+            }
+      }
     >
       {shownText}
+    </div>
+  );
+  if (offset === 0) return editable;
+
+  const padding = element.padding;
+  return (
+    <div
+      className={s.editor}
+      style={{
+        ...boxStyle,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent:
+          element.verticalAlign === 'middle'
+            ? 'center'
+            : element.verticalAlign === 'bottom'
+              ? 'flex-end'
+              : 'flex-start',
+        paddingTop: (typeof padding === 'number' ? padding : (padding?.top ?? 0)) * scaleY,
+        paddingRight: (typeof padding === 'number' ? padding : (padding?.right ?? 0)) * scaleX,
+        paddingBottom: (typeof padding === 'number' ? padding : (padding?.bottom ?? 0)) * scaleY,
+        paddingLeft: (typeof padding === 'number' ? padding : (padding?.left ?? 0)) * scaleX,
+      }}
+    >
+      {editable}
     </div>
   );
 }

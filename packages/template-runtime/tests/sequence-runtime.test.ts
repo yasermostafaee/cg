@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Composition, Element, Scene, SequenceElement } from '@cg/shared-schema';
 import { createRuntime } from '../src/runtime.js';
+import { buildScene } from '../src/scene-builder.js';
 import { SequenceDriver } from '../src/sequence-driver.js';
 
 /** Fake rAF + timer clock (same pattern as the ticker/clock-runtime tests). */
@@ -218,6 +219,33 @@ beforeEach(() => {
 });
 
 describe('createRuntime — sequence content source + next() dispatch (D-029)', () => {
+  it('keeps the authored text offset on both pages during a vertical transition', async () => {
+    const clock = makeClock();
+    const scene = sequenceScene({
+      playout: { mode: 'manual' },
+      sequence: { advance: 'manual', repeat: 'infinite', textOffsetY: 7 },
+    });
+    const selector = '[data-cg-sequence-text]';
+    const staticHost = buildScene(scene).elementMap.get('seq');
+    expect(staticHost?.querySelector<HTMLElement>(selector)?.style.top).toBe('7px');
+    expect(staticHost?.style.top).toBe('0px');
+
+    const runtime = createRuntime(scene, { skipFontLoad: true, clock });
+    await runtime.play({});
+    await run(clock, 500);
+    await runtime.next?.();
+    await run(clock, 100);
+    const transitioning = [...document.querySelectorAll<HTMLElement>(selector)];
+    expect(transitioning.map((item) => item.style.top)).toEqual(['7px', '7px']);
+    expect(transitioning.every((item) => item.style.transform.includes('translate'))).toBe(true);
+
+    await run(clock, 400);
+    const settled = document.querySelector<HTMLElement>(selector);
+    expect(settled?.textContent).toBe('سپس: دو');
+    expect(settled?.style.top).toBe('7px');
+    expect(settled?.style.transform).toBe('');
+  });
+
   it('auto-out + content-driven: a finite sequence alone governs the hold', async () => {
     const clock = makeClock();
     const runtime = createRuntime(

@@ -730,8 +730,8 @@ function buildText(element: TextElement, ctx: BuildCtx): HTMLElement {
 /**
  * Render a text element's glyphs (text content + colour + glyph shadow).
  *
- * - SOLID colour (or none): exactly as before — `color` + `text-shadow` on the
- *   host, text content directly on the host.
+ * - SOLID colour (or none): `color` + `text-shadow` and content on the host;
+ *   a vertical offset moves them to an inline glyph node inside the fixed box.
  * - GRADIENT colour (linear/radial): a dedicated layout-transparent inner node
  *   (`data-cg-text`) carries the gradient (`background-clip: text` + transparent
  *   colour) and the glyph shadow as `filter: drop-shadow(...)`. This keeps the box
@@ -742,34 +742,43 @@ function buildText(element: TextElement, ctx: BuildCtx): HTMLElement {
 function renderTextGlyphs(el: HTMLElement, element: TextElement, doc: Document): void {
   // `TEXT-DIGITS-01` — the text its author typed, in the element's Digits choice.
   const drawn = writeFieldDigits(element.text, elementDigitsOf(element));
-  if (isGradientFill(element.colorFill)) {
-    const inner = doc.createElement('div');
-    inner.dataset[TEXT_NODE_DATASET] = '1';
-    applyGradientGlyph(inner, element.colorFill);
-    if (element.textShadow) inner.style.filter = dropShadowFilter(element.textShadow);
+  const offsetY = element.fitMode === 'autosize' ? 0 : (element.textOffsetY ?? 0);
+  const gradient = isGradientFill(element.colorFill) ? element.colorFill : undefined;
+  const glyph =
+    gradient !== undefined || offsetY !== 0
+      ? doc.createElement(gradient !== undefined ? 'div' : 'span')
+      : el;
+  if (glyph !== el) {
+    glyph.dataset[TEXT_NODE_DATASET] = '1';
+    el.appendChild(glyph);
+  }
+  if (offsetY !== 0) {
+    glyph.style.position = 'relative';
+    glyph.style.top = `${offsetY}px`;
+  }
+  if (gradient !== undefined) {
+    applyGradientGlyph(glyph, gradient);
+    if (element.textShadow) glyph.style.filter = dropShadowFilter(element.textShadow);
     // B-016 — content-size the inner node so the gradient maps to the text, not the
     // box. The host is a flex column that positions it (horizontal via `align-items`
     // from `align`, vertical via `justify-content` from `verticalAlign`); the inner
     // shrinks to its content (auto width + non-stretch align), capped at the box width
     // so long text still wraps. `justify` stretches it (text-justify needs full width).
-    inner.style.maxWidth = '100%';
+    glyph.style.maxWidth = '100%';
     // B-412 — the gradient glyph wrapper uses flex for alignment, while the
     // authored hide flag remains authoritative.
     el.style.display = element.visible ? 'flex' : 'none';
     el.style.flexDirection = 'column';
     el.style.justifyContent = vAlignToFlex(element.verticalAlign);
     el.style.alignItems = hAlignToFlex(element.align);
-    inner.textContent = drawn;
-    el.appendChild(inner);
-    return;
+  } else {
+    if (element.colorFill?.kind === 'solid') glyph.style.color = element.colorFill.color;
+    if (element.textShadow) {
+      const s = element.textShadow;
+      glyph.style.textShadow = `${s.offsetX}px ${s.offsetY}px ${s.blur}px ${s.color}`;
+    }
   }
-  // Solid (or no) colour fill — the host renders the glyphs, as before.
-  if (element.colorFill !== undefined) el.style.color = element.colorFill.color;
-  if (element.textShadow) {
-    const s = element.textShadow;
-    el.style.textShadow = `${s.offsetX}px ${s.offsetY}px ${s.blur}px ${s.color}`;
-  }
-  el.textContent = drawn;
+  glyph.textContent = drawn;
 }
 
 /**
@@ -848,6 +857,7 @@ function buildTicker(element: TickerElement, ctx: BuildCtx): HTMLElement {
   populateTickerStaticRow(staticRow, itemsInDigits(element.items, tickerDigits), {
     direction: element.direction,
     gap: element.gap,
+    textOffsetY: element.textOffsetY,
     separator:
       typeof element.separator === 'string'
         ? writeFieldDigits(element.separator, tickerDigits)
@@ -908,6 +918,12 @@ function buildClock(element: ClockElement, ctx: BuildCtx): HTMLElement {
   span.style.unicodeBidi = 'isolate';
   span.style.fontVariantNumeric = 'tabular-nums';
   span.style.whiteSpace = 'pre';
+  const textOffsetY = element.textOffsetY ?? 0;
+  if (textOffsetY !== 0) {
+    // The time span stays in the same flex slot. Each separator keeps its own offset.
+    span.style.position = 'relative';
+    span.style.top = `${String(textOffsetY)}px`;
+  }
   if (isGradientFill(element.colorFill)) applyGradientGlyph(span, element.colorFill);
   const initialText = clockInitialText(
     {
@@ -1003,7 +1019,12 @@ function buildSequence(element: SequenceElement, ctx: BuildCtx): HTMLElement {
       // the runtime from the bytes its page turn carried.
       el.appendChild(buildSequenceImageItem(element, first, doc).cell);
     } else {
-      const node = makeSequenceItemNode(doc, element.direction, glyphGradientCss);
+      const node = makeSequenceItemNode(
+        doc,
+        element.direction,
+        glyphGradientCss,
+        element.textOffsetY,
+      );
       // `TEXT-DIGITS-01` — an authored item in the sequence's Digits choice (the driver's too).
       node.textContent = writeFieldDigits(first.text, elementDigitsOf(element));
       el.appendChild(node);

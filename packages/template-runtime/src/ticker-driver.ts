@@ -78,6 +78,8 @@ export interface TickerDriverOptions {
    * to 'middle' (the prior hardcoded centring) when absent.
    */
   verticalAlign?: 'top' | 'middle' | 'bottom' | undefined;
+  /** Signed scene pixels applied after alignment to article text. */
+  textOffsetY?: number | undefined;
   /** Crawl speed, px/s (> 0 by schema). */
   speed: number;
   /** Gap between items, px. */
@@ -121,6 +123,10 @@ const RECYCLE_SLACK_PX = 64;
 function tickerVAlignToFlex(v: 'top' | 'middle' | 'bottom' | undefined): string {
   const a = v ?? 'middle';
   return a === 'middle' ? 'center' : a === 'bottom' ? 'flex-end' : 'flex-start';
+}
+
+function applyTickerTextOffset(node: HTMLElement, offsetY = 0): void {
+  node.style.transform = offsetY === 0 ? '' : `translateY(${offsetY}px)`;
 }
 
 interface FedNode {
@@ -555,6 +561,7 @@ export class TickerDriver {
     // node's flex centering really centres it in the band. (Set per placement
     // — pooled nodes swap roles.)
     node.style.lineHeight = isSep ? '1' : '';
+    applyTickerTextOffset(node, isSep ? undefined : this.o.textOffsetY);
     const fedNode: FedNode = { node, o: this.nextOffset, w, id, text, isSep };
     this.position(fedNode);
     this.fed.push(fedNode);
@@ -661,6 +668,7 @@ export class TickerDriver {
     populateTickerStaticRow(row, this.logical, {
       direction: this.o.direction,
       gap: this.o.gap,
+      textOffsetY: this.o.textOffsetY,
       separator: this.o.separator,
     });
   }
@@ -746,7 +754,12 @@ export class TickerDriver {
 export function populateTickerStaticRow(
   row: HTMLElement,
   items: readonly TickerDriverItem[],
-  opts: { direction: 'ltr' | 'rtl'; gap: number; separator?: TickerSeparator | undefined },
+  opts: {
+    direction: 'ltr' | 'rtl';
+    gap: number;
+    textOffsetY?: number | undefined;
+    separator?: TickerSeparator | undefined;
+  },
 ): void {
   const doc = row.ownerDocument;
   while (row.firstChild !== null) row.removeChild(row.firstChild);
@@ -768,6 +781,8 @@ export function populateTickerStaticRow(
       // let the text separator follow the row's verticalAlign like the items do (and like
       // the live driver's separator nodes), so the static canvas matches the crawl/preview.
       span.style.lineHeight = '1';
+    } else {
+      applyTickerTextOffset(span, opts.textOffsetY);
     }
     if (!first) gapMargin(span);
     span.textContent = text;

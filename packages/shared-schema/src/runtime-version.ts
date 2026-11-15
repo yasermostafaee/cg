@@ -52,8 +52,9 @@ import type { Scene } from './scene.js';
  * 1.2.1 applies normalisation gain on audio elements.
  * 1.2.3 carries authored paint order for overlapping Live plates.
  * 1.2.5 applies the direct text visibility of individual composition instances.
+ * 1.2.6 applies the vertical offset of text inside its box.
  */
-export const CG_RUNTIME_VERSION = '1.2.5';
+export const CG_RUNTIME_VERSION = '1.2.6';
 
 /** Declare the minimum runtime that can reproduce all authored behavior in a package. */
 export function requiredRuntimeVersionForScene(
@@ -66,6 +67,17 @@ export function requiredRuntimeVersionForScene(
       matches(element) || (element.type === 'container' && element.children.some(visit));
     return compositions.some((comp) => comp.layers.some((layer) => layer.children.some(visit)));
   };
+  if (
+    hasElement(
+      (element) =>
+        (element.type === 'ticker' ||
+          element.type === 'clock' ||
+          element.type === 'sequence' ||
+          (element.type === 'text' && element.fitMode !== 'autosize')) &&
+        (element.textOffsetY ?? 0) !== 0,
+    )
+  )
+    return '1.2.6';
   if (hasElement((element) => element.type === 'composition' && !!element.hiddenTextIds?.length))
     return '1.2.5';
   if (

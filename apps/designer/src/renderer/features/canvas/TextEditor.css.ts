@@ -17,3 +17,10 @@ export const editor = style({
   wordWrap: 'break-word',
   transformOrigin: '0 0',
 });
+
+export const offsetContent = style({
+  position: 'relative',
+  minWidth: 0,
+  outline: 'none',
+  cursor: 'text',
+});

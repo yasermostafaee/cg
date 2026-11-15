@@ -20,6 +20,7 @@ import { FontFamilySelect } from './FontFamilySelect.js';
 import { AlignButtonGroup, H_ALIGN_OPTIONS, V_ALIGN_OPTIONS } from './AlignButtonGroup.js';
 import { RealtimeNumberInput } from './controls.js';
 import { TextSettingsButton } from './TextSettingsPopover.js';
+import { TextVerticalOffsetField } from './TextVerticalOffsetField.js';
 import { cx } from '../../cx.js';
 import { Button } from '../../ui/Button.js';
 import * as s from './TextStyleSection.css.js';
@@ -310,6 +311,7 @@ export function TextStyleSection({
             <span className={s.alignSpacer} />
             <TextSettingsButton element={element} />
           </div>
+          <TextVerticalOffsetField element={element} />
         </div>
         {/* TEXT-DIGITS-01 — the one Digits control, for the text typed INTO this element. While a
             Data key binds it the text is the field's value, so the field's own control (Dynamic /

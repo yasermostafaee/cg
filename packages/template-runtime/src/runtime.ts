@@ -1190,6 +1190,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           direction: t.element.direction,
           // D-045 — vertical placement of crawl items within the band (mirrors authoring).
           verticalAlign: t.element.verticalAlign,
+          textOffsetY: t.element.textOffsetY,
           speed: t.element.speed,
           gap: t.element.gap,
           // D-039ext — pass a text separator through; for an image separator, attach the
@@ -1456,6 +1457,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           prewarmCompositionItems: s.element.prewarmCompositionItems,
           repeat: effSeqRepeat,
           glyphGradientCss: s.glyphGradientCss,
+          textOffsetY: s.element.textOffsetY,
           renderComposition,
           // D-083 follow-up — per-item TEXT override is EXPLICIT: an item is operator-editable
           // only when the designer bound it (a `sequence-item-text` binding → a `text` field).
