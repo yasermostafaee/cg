@@ -7,4 +7,4 @@
 ## Verification
 
 - [x] Windows Chromium passed both cases in `text-vertical-offset.spec.ts`. The 302 focused shared model and runtime tests passed.
-- [ ] Record the Linux Playwright run URL.
+- [x] Linux Playwright `E2E` passed on carrying commit [`3629eab7`](https://github.com/yasermostafaee/cg/actions/runs/43704522214/job/132786776989).
