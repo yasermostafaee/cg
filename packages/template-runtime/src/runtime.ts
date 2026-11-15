@@ -614,10 +614,18 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   for (const { artworkKey } of frameTargets.values()) frameArtworkKeys.add(artworkKey);
   for (const { artworkKey } of presetFrameTargets.values()) frameArtworkKeys.add(artworkKey);
   const presetDepartureKeys = new Set<string>();
-  for (const { key, ancestorKeys } of flattened) {
+  const presetTitlePlates = new Map<string, Set<string>>();
+  for (const { key, ancestorKeys, element } of flattened) {
     if (!presetFrameTargets.has(key)) continue;
     presetDepartureKeys.add(key);
-    for (const ancestor of ancestorKeys.slice(1)) presetDepartureKeys.add(ancestor);
+    for (const ancestor of ancestorKeys.slice(1)) {
+      presetDepartureKeys.add(ancestor);
+      if (element.type === 'video-placeholder' && element.routeKey) {
+        const routes = presetTitlePlates.get(ancestor) ?? new Set<string>();
+        routes.add(element.routeKey);
+        presetTitlePlates.set(ancestor, routes);
+      }
+    }
   }
   const built = buildScene(
     scene,
@@ -3056,8 +3064,27 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           nodes.push(node);
         }
       }
+      const holdTitles = new Set(phase.hidePresetTitlePlateIds);
+      if (holdTitles.size > 0) {
+        const affectedArtwork = [...presetTitlePlates]
+          .filter(
+            ([key, plates]) =>
+              isCurrentArtwork(key) && [...plates].every((id) => holdTitles.has(id)),
+          )
+          .map(([key]) => key + '/');
+        for (const node of presetTitles) {
+          const key = node.dataset['cgPresetTitleKey'];
+          if (key !== undefined && affectedArtwork.some((prefix) => key.startsWith(prefix))) {
+            nodes.push(node);
+          }
+        }
+      }
       const destination = lookGroup?.looks.find(({ id }) => id === phase.destinationLookId);
-      if (destination !== undefined && destination.instanceId !== instance) {
+      if (
+        phase.hidePresetTitlePlateIds === undefined &&
+        destination !== undefined &&
+        destination.instanceId !== instance
+      ) {
         const destinationTitles = new Set(
           presetTitles
             .filter(

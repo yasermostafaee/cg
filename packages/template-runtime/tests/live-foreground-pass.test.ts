@@ -465,7 +465,12 @@ describe('D-201 — synchronized live-input foreground pass', () => {
           ...frameDoc,
           id,
           name,
-          layers: [{ ...baseLayer, children: [frame, ...second] }],
+          layers: [
+            {
+              ...baseLayer,
+              children: [frame, ...second, { ...departingTitle, id: 'standalone-title' }],
+            },
+          ],
         });
       }
       baseLayer.children = presets.map(({ id, instanceId }) => ({
@@ -648,6 +653,52 @@ describe('D-201 — synchronized live-input foreground pass', () => {
       if (incomingTitle !== null) expect(getComputedStyle(incomingTitle).display).toBe('none');
       if (fallback !== null)
         expect(fallback.hasAttribute('data-cg-frame-transition-hidden')).toBe(false);
+
+      const titleHold: FrameTransitionPhase = {
+        authoredPreset: true,
+        durationMs: 0,
+        easing: 'linear',
+        frames: [],
+        hidePresetTitlePlateIds: ['guest'],
+      };
+      await runtime.update(
+        withCgControl(
+          {},
+          { look: 'solo', frameTransition: titleHold, presetTransitionCommit: true },
+        ),
+      );
+      expect(runtime.activeLookId()).toBe('solo');
+      expect(outgoingTitle?.hasAttribute(hiddenMarker) ?? outputPass === 'background').toBe(true);
+      expect(
+        solo.querySelector('[data-cg-element-id="standalone-title"]')?.hasAttribute(hiddenMarker),
+      ).not.toBe(true);
+      const multiPlateTitle = departing.querySelector('[data-cg-element-id="departing-title"]');
+      expect(multiPlateTitle?.hasAttribute(hiddenMarker)).not.toBe(true);
+      await runtime.update(
+        withCgControl(
+          {},
+          {
+            frameTransition: {
+              ...titleHold,
+              hidePresetTitlePlateIds: ['departing-a', 'departing-b'],
+            },
+          },
+        ),
+      );
+      expect(multiPlateTitle?.hasAttribute(hiddenMarker) ?? outputPass === 'background').toBe(true);
+      expect(outgoingTitle?.hasAttribute(hiddenMarker)).not.toBe(true);
+      await runtime.update(withCgControl({}, { frameTransition: titleHold }));
+      await runtime.update(withCgControl({}, { frameTransition: null }));
+      expect(outgoingTitle?.hasAttribute(hiddenMarker)).not.toBe(true);
+      if (outgoingTitle !== null) expect(getComputedStyle(outgoingTitle).display).not.toBe('none');
+      await runtime.update(
+        withCgControl(
+          {},
+          { look: 'duo', frameTransition: titleHold, presetTransitionCommit: true },
+        ),
+      );
+      await runtime.update(withCgControl({}, { frameTransition: null }));
+      if (incomingTitle !== null) expect(getComputedStyle(incomingTitle).display).toBe('none');
 
       const update = vi.fn();
       runtime.on('update', update);

@@ -25,6 +25,7 @@ import {
   CG_LIVE_PRESET_DEPARTURE_PAGE_MARKER,
   CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER,
   CG_LIVE_PRESET_RECOVERY_PAGE_MARKER,
+  CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER,
   CG_LIVE_PRESET_TRANSITION_PAGE_MARKER,
   DEFAULT_LIVE_CROP_FOCUS,
   LiveRevealRectSchema,
@@ -579,6 +580,7 @@ interface LiveMixerTransitionGuard {
 interface ProvisionalInputSeat {
   readonly itemId: string;
   readonly outgoing: LiveLayerRecord;
+  readonly heldBefore?: LiveLayerRecord;
   readonly slot: CommandSlot;
   readonly session: ServerSession;
   readonly release: () => void;
@@ -6288,9 +6290,9 @@ export class CasparRuntime {
   ): Promise<FrameEffectReply> {
     const { batch, wait, stage, tell } = transport;
     const period = this.#channelFrameMsFor(channel);
-    // Composed preset transitions have their own opacity stages. A plain
-    // placement/resize keeps the operator's combined Fade and motion.
-    const fade = effect.moveFrames === undefined && effect.transition.fade;
+    // The departing and arriving groups have separate holds; Fade also affects
+    // the retained pictures during their move between those holds.
+    const { fade } = effect.transition;
     const steps = frameTransitionPhases(
       { ...effect.transition, fade },
       effect.moveFrames ?? Math.round(effect.transition.durationMs / period),
@@ -10908,13 +10910,15 @@ export class CasparRuntime {
     const baseline = this.#liveLayers.get(itemId);
     if (baseline === undefined) return undefined;
     const visible = baseline.filter((record) => record.held !== true);
-    const arrivals = plan.placements.filter((placement) =>
-      visible.some(
-        (record) =>
-          record.sourceId === placement.plateId &&
-          !record.revealOverlay &&
-          record.producer !== placement.producerArg,
-      ),
+    const arrivals = plan.placements.filter(
+      (placement) =>
+        placement.revealOverlay !== true &&
+        visible.some(
+          (record) =>
+            record.sourceId === placement.plateId &&
+            !record.revealOverlay &&
+            record.producer !== placement.producerArg,
+        ),
     );
     if (arrivals.length === 0) return undefined;
     const [incoming] = arrivals;
@@ -10926,49 +10930,54 @@ export class CasparRuntime {
       errorCode: 'input-fade-unavailable',
       message,
     });
+    if (arrivals.length !== 1 || incoming === undefined || outgoing === undefined)
+      return unavailable('Fade changes one on-air frame at a time. Choose Cut for this change.');
+
     const allSeats = [...plan.placements, ...plan.parked];
+    const priorBySeat = new Map(baseline.map((record) => [liveSeatId(record), record]));
+    const priorIncoming = priorBySeat.get(incoming.seatId);
+    const commonClip = intersectNormalizedRects(incoming.fit.clip, outgoing.clip);
     const row = this.#reconciler.get(itemId);
     const carrier =
       row === null ? undefined : this.#templates.getOn(slot.channel, row.templateId)?.liveSources;
     const lookId = this.activeLookId(itemId);
-    const masked =
-      incoming === undefined || carrier === undefined
-        ? true
-        : Object.hasOwn(lookPlateMasks(carrier, lookId), incoming.plateId) ||
-          Object.values(lookPlateReveals(carrier, lookId)).some(
-            (reveal) => reveal.targetSourceId === incoming.plateId,
-          );
+    const legacyReveal =
+      carrier !== undefined &&
+      Object.entries(lookPlateReveals(carrier, lookId)).some(
+        ([upper, reveal]) =>
+          upper === incoming.plateId || reveal.targetSourceId === incoming.plateId,
+      );
     if (
-      arrivals.length !== 1 ||
-      incoming === undefined ||
-      outgoing === undefined ||
-      masked ||
-      incoming.revealOverlay === true ||
+      legacyReveal ||
       incoming.sharedInputFrom !== undefined ||
-      intersectNormalizedRects(incoming.fit.clip, outgoing.clip) === null ||
-      !this.#isVerifiedCropSlot(outgoing.slot) ||
       visible.some((r) => r !== outgoing && r.sourceId === outgoing.sourceId) ||
       allSeats.some(
         (p) =>
           p.sharedInputFrom === incoming.seatId ||
-          p.sharedInputFrom === liveSeatId(outgoing) ||
-          (p !== incoming && adoptionKey(p.slot) === adoptionKey(outgoing.slot)),
-      ) ||
-      baseline.some((r) => liveSeatId(r) === incoming.seatId) ||
-      allSeats.some(
-        (p) =>
-          p !== incoming &&
-          !isSeatUnchanged(
-            'switch',
-            baseline.find((r) => liveSeatId(r) === p.seatId),
-            p,
-          ),
+          (!p.held && p.sharedInputFrom === liveSeatId(outgoing)),
       )
-    ) {
+    )
       return unavailable(
-        'Fade needs one independently seated, unmasked input. Choose Cut for this input change.',
+        'This frame uses routed copies or multiple mask regions. Choose Cut for this input change.',
       );
-    }
+    if (
+      commonClip === null ||
+      !this.#isVerifiedCropSlot(outgoing.slot) ||
+      (priorIncoming !== undefined &&
+        (!isSeatUnchanged('switch', priorIncoming, incoming) ||
+          priorIncoming.held !== true ||
+          priorIncoming.transport?.paused === 'hidden' ||
+          !this.#isVerifiedCropSlot(priorIncoming.slot))) ||
+      allSeats.some(
+        (placement) =>
+          placement !== incoming &&
+          (!isSeatUnchanged('switch', priorBySeat.get(placement.seatId), placement) ||
+            (adoptionKey(placement.slot) === adoptionKey(outgoing.slot) && !placement.held)),
+      )
+    )
+      return unavailable(
+        'Fade cannot use the current input layers. Choose Cut for this input change.',
+      );
 
     const { channel } = slot;
     const band = this.#plateBand();
@@ -10994,7 +11003,8 @@ export class CasparRuntime {
       sameEngine() &&
       this.#takeTokens.get(itemId) === takeToken &&
       this.#liveLayers.get(itemId) === baseline &&
-      this.#isVerifiedCropSlot(outgoing.slot);
+      this.#isVerifiedCropSlot(outgoing.slot) &&
+      (priorIncoming === undefined || this.#isVerifiedCropSlot(priorIncoming.slot));
     const current = () =>
       !cancel.signal.aborted &&
       sameOutput() &&
@@ -11032,15 +11042,24 @@ export class CasparRuntime {
     for (const rowSlot of this.#slots.values())
       if (rowSlot.channel === channel) used.add(rowSlot.layer);
     const layers = Array.from({ length: band.end - band.start + 1 }, (_, i) => band.start + i);
+    const inPaintOrder = (layer: number) => layer > previousBelow && layer < nextAbove;
     const free = (layer: number) =>
-      layer > previousBelow &&
-      layer < nextAbove &&
+      inPaintOrder(layer) &&
       !used.has(layer) &&
       !occupied.has(layer) &&
       this.#declaredLayerClass(channel, layer) === null;
     const layer =
-      layers.find((layer) => layer > outgoing.slot.layer && free(layer)) ??
-      layers.reverse().find((layer) => layer < outgoing.slot.layer && free(layer));
+      priorIncoming === undefined
+        ? (layers.find((layer) => layer > outgoing.slot.layer && free(layer)) ??
+          layers.reverse().find((layer) => layer < outgoing.slot.layer && free(layer)))
+        : priorIncoming.slot.layer;
+    if (
+      priorIncoming !== undefined &&
+      (!occupied.has(priorIncoming.slot.layer) || !inPaintOrder(priorIncoming.slot.layer))
+    )
+      return unavailable(
+        'The prepared input is unavailable in the required picture order. Choose Cut for this change.',
+      );
     if (layer === undefined)
       return unavailable(
         'There is no free layer in the picture’s paint order for Fade. Choose Cut for this input change.',
@@ -11057,10 +11076,11 @@ export class CasparRuntime {
     const provisional: ProvisionalInputSeat = {
       itemId,
       outgoing,
+      ...(priorIncoming !== undefined && { heldBefore: priorIncoming }),
       slot: destination,
       session,
       release: releaseClaims,
-      producerMayExist: true,
+      producerMayExist: priorIncoming === undefined,
       restoreOutgoing: false,
       cleanupPending: false,
     };
@@ -11070,15 +11090,18 @@ export class CasparRuntime {
     let settled = false;
     this.#frameTransitionInterrupts.set(itemId, cancel);
     try {
-      const seats = await this.#seatPlates(
-        [{ placement: replacement, hide: true, optional: false }],
-        batch,
-        { signal: cancel.signal, requirePrimary: true },
-      );
-      const seat = seats.get(replacement.seatId);
+      const seats =
+        priorIncoming === undefined
+          ? await this.#seatPlates(
+              [{ placement: replacement, hide: true, optional: false }],
+              batch,
+              { signal: cancel.signal, requirePrimary: true },
+            )
+          : undefined;
+      const seat = seats?.get(replacement.seatId);
       provisional.producerMayExist = seat?.sent === true && seat.outcome !== 'refused';
       if (!current()) return rowLeft;
-      if (seat?.outcome !== 'landed')
+      if (priorIncoming === undefined && seat?.outcome !== 'landed')
         return {
           ok: false,
           errorCode: seat?.errorCode ?? 'input-fade-preroll',
@@ -11086,9 +11109,28 @@ export class CasparRuntime {
         };
 
       const period = this.#channelFrameMsFor(channel);
+      if (priorIncoming !== undefined) {
+        // A producer parked by another preset can start the dissolve without reopening the input.
+        await this.#leaseMixerChannel(batch, channel);
+        if (!current() || this.#orphanedMixerChannels.has(channel)) return rowLeft;
+        for (const line of [
+          this.#builder.mixerVolume(destination, 0),
+          this.#builder.mixerOpacity(destination, 0),
+          ...this.#builder.mixerFit(destination, replacement.fit),
+        ]) {
+          const sent = await this.#sendDeferredMixer(batch, channel, line, cancel.signal);
+          if (!current()) return rowLeft;
+          if (!sent.ok || !sent.onPrimary)
+            return unavailable('The prepared input could not be positioned for Fade.');
+        }
+        if (!(await this.#commitStagedMixer(batch, { retainOnFailure: true })).landed)
+          return unavailable('The engine could not prepare the input for Fade.');
+      }
       const preroll = Math.max(
-        PRE_SEAT_PREROLL_HOLDS * this.#lookMixerHoldMsFor(channel),
-        replacement.producer.kind === 'route' && seat.routePlayedAt !== undefined
+        priorIncoming === undefined
+          ? PRE_SEAT_PREROLL_HOLDS * this.#lookMixerHoldMsFor(channel)
+          : period,
+        replacement.producer.kind === 'route' && seat?.routePlayedAt !== undefined
           ? routeRevealDelayMs(replacement.producer.videoMode)
           : 0,
       );
@@ -11106,7 +11148,6 @@ export class CasparRuntime {
       await this.#leaseMixerChannel(batch, channel);
       if (!current() || this.#orphanedMixerChannels.has(channel)) return rowLeft;
       const tween = { frames, easing: 'linear' as const };
-      const commonClip = intersectNormalizedRects(incoming.fit.clip, outgoing.clip);
       const outgoingOnly = !sameMixerRect(outgoing.clip, commonClip, 1e-8);
       const incomingOnly = !sameMixerRect(incoming.fit.clip, commonClip, 1e-8);
       provisional.restoreOutgoing = !incomingOnTop || outgoingOnly;
@@ -11202,7 +11243,7 @@ export class CasparRuntime {
     seat: ProvisionalInputSeat,
     batch: MixerBatch = {},
   ): Promise<void> {
-    const { slot, outgoing, itemId, session } = seat;
+    const { slot, outgoing, heldBefore, itemId, session } = seat;
     const { channel } = slot;
     await this.#leaseMixerChannel(batch, channel);
     try {
@@ -11216,28 +11257,39 @@ export class CasparRuntime {
         return;
       }
       if (!isLiveState(session.state)) return;
-      if (!seat.producerMayExist && !seat.restoreOutgoing) {
+      if (!seat.producerMayExist && !seat.restoreOutgoing && heldBefore === undefined) {
         if ((await this.#commitStagedMixer(batch)).landed)
           this.#releaseProvisionalInputSeat(key, seat);
         return;
       }
-      const old = this.#liveLayers
-        .get(itemId)
-        ?.find(
+      const ledger = this.#liveLayers.get(itemId);
+      const verifiedSeat = (previous: LiveLayerRecord) =>
+        ledger?.find(
           (record) =>
-            adoptionKey(record.slot) === adoptionKey(outgoing.slot) &&
-            liveSeatId(record) === liveSeatId(outgoing) &&
+            adoptionKey(record.slot) === adoptionKey(previous.slot) &&
+            liveSeatId(record) === liveSeatId(previous) &&
             this.#isVerifiedCropSlot(record.slot),
         );
+      const old = verifiedSeat(outgoing);
+      const parked = heldBefore === undefined ? undefined : verifiedSeat(heldBefore);
       const lines = [
         ...(seat.restoreOutgoing && old !== undefined
           ? [
+              ...this.#builder.mixerFit(old.slot, old),
               this.#builder.mixerOpacity(old.slot, wireOpacityOf(old)),
               this.#builder.mixerVolume(old.slot, wireVolumeOf(old)),
             ]
           : []),
-        this.#builder.mixerVolume(slot, 0),
-        this.#builder.mixerOpacity(slot, 0),
+        ...(heldBefore === undefined
+          ? [this.#builder.mixerVolume(slot, 0), this.#builder.mixerOpacity(slot, 0)]
+          : []),
+        ...(parked?.held === true
+          ? [
+              this.#builder.mixerVolume(slot, wireVolumeOf(parked)),
+              ...this.#builder.mixerFit(slot, parked),
+              this.#builder.mixerOpacity(slot, wireOpacityOf(parked)),
+            ]
+          : []),
       ];
       for (const line of lines) {
         if (this.#adapter.primarySession !== session) return;
@@ -12243,7 +12295,7 @@ export class CasparRuntime {
         toFrame.artworkId !== fromFrame.artworkId ||
         from === undefined ||
         to === undefined ||
-        (sameMixerRect(from, to, 1e-8) && transition.motion !== 'cut')
+        (sameMixerRect(from, to, 1e-8) && !transition.fade)
       )
         continue;
       const group = visible.filter((record) => record.sourceId === plateId);
@@ -12301,7 +12353,7 @@ export class CasparRuntime {
         composed !== undefined &&
         (composed.departure !== undefined || composed.arrival !== undefined)
       ) {
-        const move = transition.motion !== 'cut' && frames.length > 0;
+        const move = (transition.motion !== 'cut' || transition.fade) && frames.length > 0;
         const periods = presetTransitionDurations(
           transition.durationMs / this.#channelFrameMsFor(page.slot.channel),
           { exit: composed.departure !== undefined, move, enter: composed.arrival !== undefined },
@@ -12548,6 +12600,19 @@ export class CasparRuntime {
     const placements = this.#framePlacements.get(itemId);
     const masks = this.#maskPlacements.get(itemId);
     const pageSlots = foreground === undefined ? [page.slot] : [page.slot, foreground];
+    const supportsTitleHold = this.#hasFramePlacementMarker(
+      page.version,
+      CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER,
+    );
+    const movingPlateIds = effect.moveFrames === 0 ? [] : effect.plateIds;
+    const holdTitles = (exclusive: readonly string[] | undefined) => {
+      if (!supportsTitleHold) return {};
+      const ids = [...new Set([...movingPlateIds, ...(exclusive ?? [])])];
+      return ids.length === 0 ? {} : { hidePresetTitlePlateIds: ids };
+    };
+    const priorTitleHold = holdTitles(effect.departure?.plateIds);
+    const destinationTitleHold = holdTitles(effect.arrival?.plateIds);
+    const holdsDestinationTitles = destinationTitleHold.hidePresetTitlePlateIds !== undefined;
     const presetEffectId = this.#hasFramePlacementMarker(
       page.version,
       CG_LIVE_PRESET_RECOVERY_PAGE_MARKER,
@@ -12712,7 +12777,7 @@ export class CasparRuntime {
                 withCgControl(
                   {},
                   {
-                    frameTransition: phase,
+                    frameTransition: { ...phase, ...priorTitleHold },
                     ...(presetEffectId !== undefined && { presetEffectId }),
                   },
                 ),
@@ -12732,7 +12797,15 @@ export class CasparRuntime {
               placements,
               masks,
               true,
-              undefined,
+              holdsDestinationTitles
+                ? {
+                    authoredPreset: true,
+                    durationMs: 0,
+                    easing: 'linear',
+                    frames: [],
+                    ...destinationTitleHold,
+                  }
+                : undefined,
               presetEffectId,
             ),
           );
@@ -12747,6 +12820,7 @@ export class CasparRuntime {
           easing: 'linear',
           frames: [],
           opacityArtwork: presetArtworkOpacity(arrival.artworkKeys, toLook, 0, opacity),
+          ...destinationTitleHold,
         });
         const told = await sendPages((slot) =>
           this.#builder.updateLook(
@@ -12904,6 +12978,32 @@ export class CasparRuntime {
         }
         if (!settled && freshSeats.size > 0) await this.#cleanupPresetSeats(channel, batch);
         else await this.#commitStagedMixer(batch);
+        if (settled && holdsDestinationTitles) {
+          // The mixer ACK accepts the final geometry before the next output tick paints it.
+          await waitForTimer(this.#channelFrameMsFor(channel));
+          // Publishing the new ledger ends the animation guard. The final page
+          // write still has to name the same resident Take, or an emergency
+          // Stop, Clear or reload could be moving that output already.
+          for (const slot of pageSlots) {
+            const row = this.#reconciler.get(itemId);
+            if (
+              row === null ||
+              row.lastIntentSeq !== item.lastIntentSeq ||
+              this.#liveFramePage(row, CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER, false) !== page ||
+              this.#takeTokens.get(itemId) !== take ||
+              this.#foregroundPages.get(itemId) !== foreground
+            )
+              break;
+            await this.#send(
+              this.#builder.update(
+                slot,
+                withCgControl({}, { frameTransition: null, presetTransitionCommit: true }),
+              ),
+              this.#nextSeq(),
+              'urgent',
+            );
+          }
+        }
       },
     };
   }

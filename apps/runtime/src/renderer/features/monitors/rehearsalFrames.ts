@@ -73,22 +73,10 @@ export interface RehearsalSubject {
    * stage stays presentational — that part was always right.
    */
   plateSources: PlateSourceLookup;
-  /**
-   * 🔴 `B-151` — WHICH LOOK THIS ROW IS SHOWING, as the BRIDGE published it
-   * (`StackItemState.activeLookId`), and `undefined` for a row nobody has switched.
-   *
-   * It is on the subject because BOTH halves of the preview need it and they must not
-   * answer it separately: the placeholder overlay resolves its rects from it, and the
-   * rehearsal frame tells the page the same id through the `__cg` payload key the plant
-   * uses. PVW used to have no idea a look existed, so it drew the union of every look's
-   * plates while the page inside it sat on the authored default.
-   *
-   * ⚠ Deliberately NOT a preview-local look state. Switching the previewed look goes
-   * through `stack.set-active-look` like every other switch — which on a rehearsing (off-air)
-   * row records the look and sends NOTHING to CasparCG — so one published fact drives the
-   * overlay, the page, the row's picker and the look the next take enters.
-   */
+  /** Both the overlay and the page show the Inspector cue, otherwise the applied preset. */
   activeLookId: string | undefined;
+  /** Apply programme's confirmed preset directly. Local and off-air cues may animate. */
+  animatePresetChanges?: boolean;
   /**
    * 🔴 `PASSES-CYCLE-ONLY-26` Part B (`R-065`, owner 2026-09-16) — **THE OPERATOR'S PASS COUNT
    * AND GAP, so PVW plays what a take would play.**

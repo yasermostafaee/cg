@@ -47,6 +47,13 @@ Fade disabled. The effect duration SHALL be configurable from 100 to 1000 ms.
 - **THEN** PVW rehearses the change locally
 - **AND** the applied PGM preset and inputs remain unchanged until an on-air action
 
+#### Scenario: Apply a row preset after previewing other presets
+
+- **GIVEN** the row has an independent Inspector preview cue
+- **WHEN** its row preset command succeeds
+- **THEN** Preview follows the applied preset without replaying the on-air effect, unless the operator chose a newer cue
+- **AND** if the command is refused, Preview keeps the existing cue and Programme keeps its applied state
+
 #### Scenario: Rehearse a drafted frame move
 
 - **GIVEN** Preview is playing a plate with a frame placement draft
@@ -65,9 +72,16 @@ Fade disabled. The effect duration SHALL be configurable from 100 to 1000 ms.
 #### Scenario: Plate counts change and a title has per-preset visibility
 
 - **WHEN** a preset transition adds or removes a verified plate
-- **THEN** its picture, mask and attached artwork enter or exit together
+- **THEN** its picture and mask enter or exit together
 - **AND** the remaining frame stays above departing content during the movement
-- **AND** the shared title moves with its frame or stays hidden during the movement, then adopts the destination preset's authored visibility
+- **AND** linked titles remain hidden until settlement and then use the destination preset's authored visibility
+- **AND** unrelated preset titles stay visible
+
+#### Scenario: Fade a shared frame during a preset change
+
+- **WHEN** Fade is enabled for an animated switch with a retained frame
+- **THEN** the picture fades down and returns as its new placement settles
+- **AND** separate PVW and PGM switches use the same channel-frame budget for each visible phase
 
 #### Scenario: The engine connection drops during a preset change
 
@@ -80,6 +94,8 @@ Fade disabled. The effect duration SHALL be configurable from 100 to 1000 ms.
 
 - **WHEN** the operator changes an input with Input effect set to Cut or Fade
 - **THEN** the change uses the selected effect inside the same frame
+- **AND** an eligible source parked for another preset can be reused and any still-needed outgoing source remains parked
+- **AND** a single stable rectangular mask keeps its clip while its input dissolves
 - **AND** a refused Fade preserves the previously applied source
 
 #### Scenario: Reframe beside a masked plate

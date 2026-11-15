@@ -43,6 +43,7 @@ import {
   TakeRefusalText,
 } from './takeRefusalLine.js';
 import { currentSourceCatalog } from '../sources/sourceStore.js';
+import { followAcceptedLayerPreset } from '../inspector/draftStore.js';
 import { frameTransitionPreference } from '../inspector/frameTransitionPreference.js';
 import { inputTransitionRequest } from '../inspector/inputTransitionPreference.js';
 import {
@@ -407,6 +408,7 @@ export function LayerRow({
    * straight back off the published stack, so what it shows is what the bridge did.
    */
   const switchLook = async (item: StackItemState, lookId: string): Promise<void> => {
+    const follow = followAcceptedLayerPreset(item.itemId, lookId);
     /*
       🔴 THE REJECTION IS CAUGHT, not only the `ok: false`.
 
@@ -430,6 +432,7 @@ export function LayerRow({
         lookId,
         ...(transition !== undefined && { transition }),
       });
+      if (res.ok) follow();
       // `LOOK-SWITCH-01` — a refused PLATE is said on this row (`takeRefusalLine`, below), in this
       // channel's view only, so no banner repeats it (`lookSwitchBanner`).
       const banner = lookSwitchBanner(res);

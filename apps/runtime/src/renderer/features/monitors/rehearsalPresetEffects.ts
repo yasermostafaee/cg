@@ -39,6 +39,10 @@ function blendRect(from: LiveSourceRect, to: LiveSourceRect, progress: number): 
   };
 }
 
+function sameRect(a: LiveSourceRect, b: LiveSourceRect): boolean {
+  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+}
+
 type ArtworkOpacity = NonNullable<FrameTransitionPhase['opacityArtwork']>[number];
 type FrameMove = Pick<
   FrameTransitionPhase['frames'][number],
@@ -48,14 +52,15 @@ type FrameMove = Pick<
 function movementPhases(
   moves: readonly FrameMove[],
   effect: FrameTransition,
-  duration: number,
+  ticks: number,
+  periodMs = 1,
 ): FrameTransitionPhase[] {
-  if (duration === 0 || moves.length === 0) return [];
+  if (ticks === 0 || moves.length === 0) return [];
   let progress = 0;
   let opacity = 1;
-  return frameTransitionPhases(effect, duration).map((step) => {
+  return frameTransitionPhases(effect, ticks).map((step) => {
     const phase = {
-      durationMs: step.frames,
+      durationMs: step.frames * periodMs,
       easing: step.easing,
       frames: moves.map(({ from, to, ...frame }) => ({
         ...frame,
@@ -81,9 +86,7 @@ export function rehearsalPlacementPhases(
   const moves = Object.entries(targets).flatMap(([plateId, target]) => {
     const from = before[plateId];
     const to = after[plateId];
-    return from === undefined ||
-      to === undefined ||
-      (from.x === to.x && from.y === to.y && from.width === to.width && from.height === to.height)
+    return from === undefined || to === undefined || sameRect(from, to)
       ? []
       : [{ frameKey: target.frameKey, ...(lookId === undefined ? {} : { lookId }), from, to }];
   });
@@ -92,7 +95,7 @@ export function rehearsalPlacementPhases(
 
 interface PresetPlan {
   exit: FrameTransitionPhase[];
-  enter: FrameTransitionPhase[];
+  enter?: FrameTransitionPhase | undefined;
   retained: string[];
 }
 
@@ -101,12 +104,14 @@ export function rehearsalPresetPlan(
   before: PresetView,
   after: PresetView,
   effect: FrameTransition,
+  periodMs: number,
+  holdTitles: boolean,
 ): PresetPlan | undefined {
   const oldInputs = new Map(before.plates.map(({ plateId, sourceId }) => [plateId, sourceId]));
   const newInputs = new Map(after.plates.map(({ plateId, sourceId }) => [plateId, sourceId]));
   const retainedIds = new Set<string>();
   const retained: string[] = [];
-  const moves = Object.entries(before.look.transitionFrames ?? {}).flatMap(([id, prior]) => {
+  const shared = Object.entries(before.look.transitionFrames ?? {}).flatMap(([id, prior]) => {
     const next = after.look.transitionFrames?.[id];
     const from = before.rects[id];
     const to = after.rects[id];
@@ -132,22 +137,25 @@ export function rehearsalPresetPlan(
   );
   const outgoing = artworkGroups(before.look, departing, { fromOpacity: 1, toOpacity: 0 });
   const incoming = artworkGroups(after.look, arriving, { fromOpacity: 0, toOpacity: 1 });
-  const duration = presetTransitionDurations(effect.durationMs, {
+  const moves = shared.filter(({ from, to }) => effect.fade || !sameRect(from, to));
+  const ticks = presetTransitionDurations(effect.durationMs / periodMs, {
     exit: outgoing.length > 0,
-    move:
-      moves.length > 0 &&
-      (effect.motion !== 'cut' || (effect.fade && outgoing.length === 0 && incoming.length === 0)),
+    move: moves.length > 0 && (effect.motion !== 'cut' || effect.fade),
     enter: incoming.length > 0,
   });
-  if (duration.exit + duration.move + duration.enter === 0) return undefined;
+  if (ticks.exit + ticks.move + ticks.enter === 0) return undefined;
+  const titlePlateIds = [...new Set([...Object.keys(before.rects), ...Object.keys(after.rects)])];
+  const titleHold =
+    holdTitles && titlePlateIds.length > 0 ? { hidePresetTitlePlateIds: titlePlateIds } : {};
   const exit: FrameTransitionPhase[] = [];
-  if (duration.exit > 0) {
+  if (ticks.exit > 0) {
     exit.push({
       authoredPreset: true,
       destinationLookId: after.look.id,
-      durationMs: duration.exit,
+      ...titleHold,
+      durationMs: ticks.exit * periodMs,
       easing: 'linear',
-      frames: moves.map(({ from, ...frame }) => ({
+      frames: shared.map(({ from, ...frame }) => ({
         ...frame,
         from,
         to: from,
@@ -157,46 +165,45 @@ export function rehearsalPresetPlan(
       opacityArtwork: outgoing,
     });
   }
-  const movement = outgoing.length + incoming.length === 0 ? effect : { ...effect, fade: false };
-  for (const phase of movementPhases(moves, movement, duration.move)) {
+  for (const phase of movementPhases(moves, effect, ticks.move, periodMs)) {
     exit.push({
       ...phase,
       authoredPreset: true,
       destinationLookId: after.look.id,
+      ...titleHold,
       ...(outgoing.length > 0 && { hidePresetArtworkKeys: outgoing.map(({ key }) => key) }),
     });
   }
   return {
     exit,
     enter:
-      duration.enter === 0
-        ? []
-        : [
-            {
-              authoredPreset: true,
-              durationMs: duration.enter,
-              easing: 'linear',
-              frames: [],
-              opacityArtwork: incoming,
-            },
-          ],
+      ticks.enter === 0 && titleHold.hidePresetTitlePlateIds === undefined
+        ? undefined
+        : {
+            authoredPreset: true,
+            ...titleHold,
+            durationMs: ticks.enter * periodMs,
+            easing: 'linear',
+            frames: [],
+            ...(ticks.enter > 0 && { opacityArtwork: incoming }),
+          },
     retained,
   };
 }
 
-/** Queue browser-local page updates; replacing or stopping a cue settles the actual target. */
+/** Queue browser-local page updates. A replacement can cancel without committing the old target. */
 export function runRehearsalEffect(
   entries: readonly (() => number)[],
-  settled: () => void,
-): () => void {
+  settled: (commit: boolean) => void,
+): (commit?: boolean) => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let cursor = 0;
   let done = false;
-  const finish = () => {
+  const finish = (commit: boolean) => {
     if (done) return;
     done = true;
     clearTimeout(timer);
-    settled();
+    settled(commit);
   };
   const next = () => {
     while (cursor < entries.length && !done) {
@@ -206,10 +213,10 @@ export function runRehearsalEffect(
         return;
       }
     }
-    finish();
+    finish(true);
   };
   next();
-  return finish;
+  return (commit = false) => finish(commit);
 }
 
 /** Lift only the retained branches above the departing artwork in a local rehearsal. */

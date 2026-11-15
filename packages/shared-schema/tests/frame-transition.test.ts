@@ -57,6 +57,16 @@ describe('live frame transitions', () => {
     },
   );
 
+  it.each(['cut', 'linear', 'ease-in-out'] as const)(
+    '%s uses the exact odd channel-frame budget with Fade',
+    (motion) => {
+      const steps = frameTransitionPhases({ motion, fade: true, durationMs: 400 }, 9);
+      expect(steps.reduce((sum, step) => sum + step.frames, 0)).toBe(9);
+      expect(steps[0]?.opacity).toBe(0);
+      expect(steps.at(-1)?.opacity).toBe(1);
+    },
+  );
+
   it('round-trips a phase and rejects invalid effect properties independently of other updates', () => {
     const from = { x: 0, y: 0, width: 200, height: 100 };
     const frameTransition: FrameTransitionPhase = {
@@ -104,6 +114,16 @@ describe('live frame transitions', () => {
   it('accepts immediate hiding and isolated artwork fades without a retained motion target', () => {
     const base = { durationMs: 0, easing: 'linear', frames: [] };
     expect(FrameTransitionPhaseSchema.safeParse(base).success).toBe(false);
+    const titleHold = { ...base, hidePresetTitlePlateIds: ['guest'] };
+    expect(FrameTransitionPhaseSchema.safeParse(titleHold).success).toBe(false);
+    expect(
+      readCgControl(
+        withCgControl(
+          {},
+          { frameTransition: { ...titleHold, easing: 'linear', authoredPreset: true } },
+        ),
+      )?.frameTransition?.hidePresetTitlePlateIds,
+    ).toEqual(['guest']);
     expect(
       FrameTransitionPhaseSchema.safeParse({
         ...base,

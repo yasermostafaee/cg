@@ -8,11 +8,17 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import {
   LayerProfileSchema,
   fixedBankSlots,
+  videoModeFramePeriodMs,
   type ConnectionConfig,
   type FixedLayerBank,
   type TemplateInfo,
 } from '@cg/shared-ipc';
-import { SceneSchema, type LiveRevealRect, type VideoPlaceholderElement } from '@cg/shared-schema';
+import {
+  SceneSchema,
+  type FrameTransitionPhase,
+  type LiveRevealRect,
+  type VideoPlaceholderElement,
+} from '@cg/shared-schema';
 import { cgCss, cgJsIife, ExporterSingleFile } from '@cg/single-file-export';
 import { buildTemplateLiveSources, pack, sha256Hex, unpack } from '@cg/vcg-format';
 import {
@@ -2635,13 +2641,21 @@ test('R-119 hides all fragments of a departing masked frame before the shared fr
 
 test('R-119 rehearses presets, linked titles, and source fades locally beside programme', ({
   page,
-}) => exercisePresetSwitch(page, true, true));
+}) => exercisePresetSwitch(page, true, 'effects'));
 
-async function exercisePresetSwitch(page: Page, crossing: boolean, preview = false): Promise<void> {
+test('R-119 keeps rapid preset picks coherent after a refused input Fade', ({ page }) =>
+  exercisePresetSwitch(page, true, 'interruption'));
+
+async function exercisePresetSwitch(
+  page: Page,
+  crossing: boolean,
+  preview?: 'effects' | 'interruption',
+): Promise<void> {
   const handle = await boot(true);
   const engine = mock;
   if (engine === null) throw new Error('Test engine is unavailable');
   await handle.runtime.whenServerHealthy(15_000);
+  await waitForStartupVolumes(engine);
   const templateId = 'tpl-preset-transition';
   const itemId = 'item-preset-transition';
   const { scene: base } = await unpack(await buildPositionedVcg(templateId));
@@ -2684,7 +2698,12 @@ async function exercisePresetSwitch(page: Page, crossing: boolean, preview = fal
     layers: [
       {
         ...layer,
-        children: presets.map(({ id, instanceId }) => instance(instanceId, id, 0, 0, 1920, 1080)),
+        children: [
+          ...presets.map(({ id, instanceId }) => instance(instanceId, id, 0, 0, 1920, 1080)),
+          ...(preview === 'effects'
+            ? [{ ...title, id: 'unlinked-title', transform: transform(20, 30, 600, 90) }]
+            : []),
+        ],
       },
     ],
     compositions: [
@@ -2793,8 +2812,19 @@ async function exercisePresetSwitch(page: Page, crossing: boolean, preview = fal
     format: '1080i5000' as const,
     producer: { kind: 'ndi' as const, source: 'PRESETS (' + id + ')' },
   }));
+  const unavailable = {
+    id: 'unavailable-preset-input',
+    name: 'Unavailable preset input',
+    format: '1080i5000' as const,
+    producer: { kind: 'ndi' as const, source: 'OFFLINE' },
+    status: 'unavailable' as const,
+    reason: 'no signal',
+  };
   expect(
-    handle.runtime.setSourceCatalog({ layerRange: { start: 60, end: 79 }, sources }),
+    handle.runtime.setSourceCatalog({
+      layerRange: { start: 60, end: 79 },
+      sources: preview === 'interruption' ? [...sources, unavailable] : sources,
+    }),
   ).toMatchObject({ ok: true });
   expect(
     handle.runtime.setSourceAssignments({
@@ -2806,10 +2836,15 @@ async function exercisePresetSwitch(page: Page, crossing: boolean, preview = fal
   ).toMatchObject({ accepted: true });
 
   const requests: unknown[] = [];
+  const inputUpdates: unknown[] = [];
   page.on('websocket', (socket) => {
     socket.on('framesent', ({ payload }) => {
-      if (typeof payload === 'string' && payload.includes('stack.set-active-look')) {
-        requests.push(JSON.parse(payload) as unknown);
+      if (typeof payload === 'string') {
+        if (payload.includes('stack.set-active-look'))
+          requests.push(JSON.parse(payload) as unknown);
+        if (payload.includes('stack.update') && payload.includes('inputTransition')) {
+          inputUpdates.push(JSON.parse(payload) as unknown);
+        }
       }
     });
   });
@@ -2842,13 +2877,17 @@ async function exercisePresetSwitch(page: Page, crossing: boolean, preview = fal
   await effect.getByRole('combobox', { name: 'Motion' }).selectOption('ease-in-out');
   await effect.getByRole('checkbox', { name: 'Fade' }).check();
   await effect.getByRole('textbox', { name: 'Duration (ms)' }).fill('500');
-  if (preview) {
+  if (preview === 'interruption') {
+    await verifyInterruptedPresetEffects(page, row, requests, inputUpdates);
+    return;
+  }
+  if (preview === 'effects') {
     await verifyLocalPresetEffects(page, row);
     expect(requests).toEqual([]);
     expect(handle.runtime.activeLookId(itemId)).toBe('solo');
     expect(
-      programmeCommands(beforeChoice).some((line) => /^(CG |PLAY |CLEAR |MIXER )/.test(line)),
-    ).toBe(false);
+      programmeCommands(beforeChoice).filter((line) => /^(CG |PLAY |CLEAR |MIXER )/.test(line)),
+    ).toEqual([]);
     return;
   }
   expect(requests).toEqual([]);
@@ -2914,13 +2953,25 @@ async function exercisePresetSwitch(page: Page, crossing: boolean, preview = fal
         expect(wire.findIndex((line) => enter.test(line))).toBeGreaterThan(firstArrival);
       }
     }
-    for (const easing of ['easeinoutquad']) {
+    for (const [easing, opacity] of [
+      ['easeinquad', 0],
+      ['easeoutquad', 1],
+    ] as const) {
       expect(wire).toContainEqual(
         expect.stringMatching(
           new RegExp(`^MIXER 1-${String(commonSlot.layer)} FILL .* \\d+ ${easing} DEFER$`, 'i'),
         ),
       );
+      expect(wire).toContainEqual(
+        expect.stringMatching(
+          new RegExp(
+            `^MIXER 1-${String(commonSlot.layer)} OPACITY ${String(opacity)} \\d+ ${easing} DEFER$`,
+            'i',
+          ),
+        ),
+      );
     }
+    expect(wire.some((line) => line.includes('presetTransitionCommit'))).toBe(true);
     const clip = engine.layerState(commonSlot)?.clip;
     if (clip === undefined) throw new Error('Missing clip for the common input');
     const expected =
@@ -2961,6 +3012,120 @@ async function exercisePresetSwitch(page: Page, crossing: boolean, preview = fal
   );
 }
 
+async function verifyInterruptedPresetEffects(
+  page: Page,
+  row: Locator,
+  requests: readonly unknown[],
+  inputUpdates: readonly unknown[],
+): Promise<void> {
+  await showMonitors(page);
+  await row.getByRole('button', { name: 'ON PVW', exact: true }).click();
+  const pv = page.getByRole('region', { name: 'PREVIEW (PVW)' });
+  await pv.getByRole('button', { name: 'PLAY', exact: true }).click();
+  const graphic = page.frameLocator('iframe[data-rehearsal-frame]');
+  const preset = (id: string) => graphic.locator(`[data-cg-element-id="show-${id}"]`);
+  const inspector = page.getByRole('complementary', { name: 'Inspector' });
+  const cue = (id: string) => inspector.locator(`[data-look-tab="${id}"]`);
+  const apply = (id: string) => row.locator(`[data-look-id="${id}"]`);
+  await expect(preset('solo')).toBeVisible();
+  await inspector.getByRole('textbox', { name: 'Duration (ms)' }).fill('1000');
+  await cue('duo').click();
+  await expect(preset('duo')).toBeVisible();
+  const outgoing = graphic.locator('[data-cg-preset-departure-key="show-duo/duo-extra"]');
+  await expect(outgoing).toHaveCSS('opacity', '1');
+
+  // Reversing a cue during the outgoing phase must not briefly present its abandoned destination.
+  await preset('solo').evaluate((node) => {
+    const observer = new MutationObserver(() => {
+      if (node.getClientRects().length === 0) return;
+      node.setAttribute('data-painted-cancelled-preset', '');
+      observer.disconnect();
+    });
+    observer.observe(node, { attributes: true, attributeFilter: ['style'] });
+    node.ownerDocument.defaultView?.setTimeout(() => observer.disconnect(), 1_000);
+  });
+  await cue('solo').click();
+  await expect
+    .poll(() => outgoing.evaluate((el) => Number(getComputedStyle(el).opacity)))
+    .toBeLessThan(1);
+  await cue('duo').click();
+  await expect(preset('solo')).toBeHidden();
+  await expect(preset('duo')).toBeVisible();
+  await expect(outgoing).toHaveCSS('opacity', '1');
+  await expect(preset('solo')).not.toHaveAttribute('data-painted-cancelled-preset', '');
+  expect(requests).toHaveLength(0);
+
+  const body = graphic.locator('body');
+  await recordPvwPresetPhases(body);
+  // Even a re-press of the applied row preset confirms which preset to follow.
+  await apply('solo').click();
+  await expect(preset('solo')).toBeVisible();
+  await expect(cue('solo')).toHaveAttribute('aria-pressed', 'true');
+  expect(await recordedPvwPresetPhases(body)).toEqual([]);
+
+  await inspector.getByRole('combobox', { name: 'Input transition' }).selectOption('fade');
+  const input = inspector.getByRole('combobox', { name: 'Input for common in look Solo' });
+  await input.click();
+  await page.locator('[data-picker-input="unavailable-preset-input"]').click();
+  await cue('duo').click();
+  await expect(preset('duo')).toBeVisible();
+  await inspector.getByRole('button', { name: 'Apply staged edits to the on-air row' }).click();
+  await expect(page.locator('[data-refusal]')).toContainText('no signal');
+  expect(inputUpdates).toEqual([
+    expect.objectContaining({
+      payload: expect.objectContaining({ inputTransition: { mode: 'fade', durationMs: 400 } }),
+    }),
+  ]);
+  await expect(apply('solo')).toHaveAttribute('aria-pressed', 'true');
+  await expect(preset('duo')).toBeVisible();
+  await expect(inspector.locator('[data-look-tab-dirty="solo"]')).toBeVisible();
+
+  // A later Inspector selection wins while the programme transition is still pending.
+  await apply('duo').click();
+  await cue('solo').click();
+  await expect(apply('duo')).toHaveAttribute('aria-pressed', 'true');
+  await expect(preset('solo')).toBeVisible();
+  await expect(cue('solo')).toContainText('SHOWING IN PVW');
+  await body.evaluate((el) => el.setAttribute('data-pvw-preset-phases', '[]'));
+  await apply('duo').click();
+  await expect(preset('duo')).toBeVisible();
+  await expect(cue('duo')).toHaveAttribute('aria-pressed', 'true');
+  expect(await recordedPvwPresetPhases(body)).toEqual([]);
+}
+
+interface RecordedPvwPresetPhase {
+  look?: string;
+  frameTransition: FrameTransitionPhase;
+}
+
+async function recordPvwPresetPhases(body: Locator): Promise<void> {
+  await body.evaluate((element) => {
+    const view = element.ownerDocument.defaultView as
+      | (Window & { update: (json: string) => void })
+      | null;
+    if (view === null) throw new Error('Preset page is unavailable');
+    const update = view.update;
+    element.setAttribute('data-pvw-preset-phases', '[]');
+    view.update = (json) => {
+      const payload = (JSON.parse(json) as { __cg?: RecordedPvwPresetPhase }).__cg;
+      if (payload?.frameTransition?.authoredPreset === true) {
+        const phases = JSON.parse(
+          element.getAttribute('data-pvw-preset-phases') ?? '[]',
+        ) as RecordedPvwPresetPhase[];
+        phases.push(payload);
+        element.setAttribute('data-pvw-preset-phases', JSON.stringify(phases));
+      }
+      update(json);
+    };
+  });
+}
+
+async function recordedPvwPresetPhases(body: Locator): Promise<RecordedPvwPresetPhase[]> {
+  return JSON.parse(
+    (await body.getAttribute('data-pvw-preset-phases')) ?? '[]',
+  ) as RecordedPvwPresetPhase[];
+}
+
 async function verifyLocalPresetEffects(page: Page, row: Locator): Promise<void> {
   await showMonitors(page);
   await page.evaluate(() => {
@@ -2995,8 +3160,40 @@ async function verifyLocalPresetEffects(page: Page, row: Locator): Promise<void>
   const frame = (name: string) => preset(name).locator('[data-cg-live-source="common"]');
   const title = (name: string) => preset(name).locator('[data-cg-element-id="common-title"]');
   const picture = (presetName: string) => frame(presetName).locator('[data-cg-pvw-picture-part]');
+  const unrelatedTitle = body.locator('[data-cg-element-id="unlinked-title"]');
   await expect(picture('solo')).toHaveAttribute('data-source-id', 'common');
   await expect(title('solo')).toBeHidden();
+  await expect(unrelatedTitle).toBeVisible();
+  await recordPvwPresetPhases(body);
+  await body.evaluate((element) => {
+    const view = element.ownerDocument.defaultView;
+    const arriving = element.querySelector<HTMLElement>(
+      '[data-cg-preset-departure-key="show-duo/duo-extra"]',
+    );
+    const titles = element.querySelectorAll<HTMLElement>(
+      '[data-cg-element-id="show-duo"] [data-cg-preset-title-key]',
+    );
+    const unrelated = element.querySelector<HTMLElement>('[data-cg-element-id="unlinked-title"]');
+    if (view === null || arriving === null || unrelated === null || titles.length < 2)
+      throw new Error('Missing arriving group or its linked titles');
+    const end = view.performance.now() + 2_000;
+    const observe = () => {
+      const opacity = Number(view.getComputedStyle(arriving).opacity);
+      if (opacity > 0 && opacity < 1) {
+        const seenTitle = element.getAttribute('data-holds-arriving-titles') === 'false';
+        element.setAttribute(
+          'data-holds-arriving-titles',
+          String(
+            !seenTitle &&
+              unrelated.getClientRects().length > 0 &&
+              [...titles].every((node) => view.getComputedStyle(node).display === 'none'),
+          ),
+        );
+      }
+      if (view.performance.now() < end) view.requestAnimationFrame(observe);
+    };
+    view.requestAnimationFrame(observe);
+  });
   const inspector = page.getByRole('complementary', { name: 'Inspector' });
   const tabs = inspector.getByRole('group', { name: 'Look to edit' });
   await tabs.locator('[data-look-tab="duo"]').click();
@@ -3005,6 +3202,25 @@ async function verifyLocalPresetEffects(page: Page, row: Locator): Promise<void>
   await expect(title('duo')).toBeVisible();
   await expect(picture('duo')).toHaveAttribute('data-source-id', 'common');
   await expect(preset('duo').locator('[data-cg-live-source="extra"]')).toBeVisible();
+  await expect(body).toHaveAttribute('data-holds-arriving-titles', 'true');
+  const phases = await recordedPvwPresetPhases(body);
+  const arrival = phases.find(({ look }) => look === 'duo')?.frameTransition;
+  expect(arrival?.opacityArtwork).toContainEqual(
+    expect.objectContaining({ key: 'show-duo/duo-extra', fromOpacity: 0, toOpacity: 1 }),
+  );
+  expect(arrival?.hidePresetTitlePlateIds).toEqual(['common', 'extra']);
+  expect(
+    phases.some(({ frameTransition: { frames } }) =>
+      frames.some(({ toOpacity }) => toOpacity === 0),
+    ),
+  ).toBe(true);
+  const observed = await page.evaluate(
+    async () =>
+      (await window.cg.channelSettings.get()).observed.find(({ channel }) => channel === 1)?.mode,
+  );
+  const period = videoModeFramePeriodMs(observed ?? '1080i5000') ?? 40;
+  const total = phases.reduce((sum, { frameTransition }) => sum + frameTransition.durationMs, 0);
+  expect(total).toBeCloseTo(Math.round(500 / period) * period, 4);
 
   await body.evaluate((element) => {
     const outgoing = element.querySelector<HTMLElement>(
@@ -3043,6 +3259,23 @@ async function verifyLocalPresetEffects(page: Page, row: Locator): Promise<void>
   await expect(body).toHaveAttribute('data-saw-retained-motion', 'true');
   await expect(body).toHaveAttribute('data-saw-moved-hidden-title', 'true');
   await expect(title('solo')).toBeHidden();
+  await expect(unrelatedTitle).toBeVisible();
+
+  // Disabling Fade retains the movement and independent arrivals, with no dip of the shared frame.
+  await inspector.getByRole('checkbox', { name: 'Fade' }).uncheck();
+  await body.evaluate((el) => el.setAttribute('data-pvw-preset-phases', '[]'));
+  await tabs.locator('[data-look-tab="duo"]').click();
+  await expect(title('duo')).toBeVisible();
+  const motionOnly = await recordedPvwPresetPhases(body);
+  const movingFrames = motionOnly.flatMap(({ frameTransition }) => frameTransition.frames);
+  expect(movingFrames.some(({ from, to }) => JSON.stringify(from) !== JSON.stringify(to))).toBe(
+    true,
+  );
+  expect(
+    movingFrames.every(({ fromOpacity, toOpacity }) => fromOpacity === 1 && toOpacity === 1),
+  ).toBe(true);
+  await tabs.locator('[data-look-tab="solo"]').click();
+  await expect(picture('solo')).toHaveAttribute('data-source-id', 'common');
 
   // At equal geometry the old source stays visible until the incoming snapshot arrives.
   await inspector.getByRole('combobox', { name: 'Input transition' }).selectOption('fade');
@@ -3053,7 +3286,6 @@ async function verifyLocalPresetEffects(page: Page, row: Locator): Promise<void>
   await expect(frame('solo').locator('[data-cg-pvw-source-dissolve]')).toHaveCount(0);
 
   await inspector.getByRole('combobox', { name: 'Motion' }).selectOption('bounce');
-  await inspector.getByRole('checkbox', { name: 'Fade' }).uncheck();
   await pv.getByRole('button', { name: 'Edit frames in Preview' }).click();
   const move = pv.getByRole('button', { name: 'Move frame for extra' });
   const left = (id: string) =>

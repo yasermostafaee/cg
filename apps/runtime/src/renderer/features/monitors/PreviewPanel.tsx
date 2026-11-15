@@ -19,6 +19,7 @@ import {
   activeLookOf,
   REFERENCE_RASTER,
   sourceAspect,
+  videoModeFramePeriodMs,
 } from '@cg/shared-ipc';
 import { isOnAirStatus } from '@cg/shared-schema';
 import { Panel } from '../../ui/Panel.js';
@@ -185,8 +186,8 @@ export function PreviewPanel({
   // air.
   const draftVersion = useSyncExternalStore(subscribeDrafts, draftsVersion, draftsVersion);
   useEffect(() => {
-    prunePreviewLookPins(new Set(rehearsals.map(({ itemId }) => itemId)));
-  }, [rehearsals]);
+    prunePreviewLookPins(new Set(rehearsals.map(({ itemId }) => itemId)), items);
+  }, [rehearsals, items, draftVersion]);
 
   /**
    * R-049 — the template registry and the sources store, joined for the live-plate
@@ -228,11 +229,9 @@ export function PreviewPanel({
           const alias = slots.find((s) => s.layer === r.layer && s.channel === r.channel)?.alias;
           const info = templates.get(item.templateId, r.channel) ?? null;
           const live = info?.liveSources;
-          const pinned = previewLookPin(item.itemId);
-          const lookSelection =
-            pinned !== undefined && live?.looks?.some(({ id }) => id === pinned)
-              ? pinned
-              : item.activeLookId;
+          const pinned = previewLookPin(item.itemId, item.activeLookId);
+          const cue = live?.looks?.some(({ id }) => id === pinned) ? pinned : undefined;
+          const lookSelection = cue ?? item.activeLookId;
           const activeLookId =
             live === undefined ? undefined : activeLookOf(live, lookSelection)?.id;
           const hasEditableFrame =
@@ -330,6 +329,8 @@ export function PreviewPanel({
             book: rehearsalBookOf(info, item, fields) ?? undefined,
             liveSources: live,
             activeLookId,
+            // An applied on-air switch has already run its effect. Do not replay it after PGM.
+            animatePresetChanges: cue !== undefined || !isOnAirStatus(item),
             /*
             🔴 `PASSES-CYCLE-ONLY-26` Part B (`R-065`) — **THE OPERATOR'S PASS TIMING, through
             the SAME builder a press uses.**
@@ -486,6 +487,9 @@ export function PreviewPanel({
   const channel = subjects[0]?.channel ?? viewChannel ?? 1;
   const raster =
     channelSettings.settings.find((s) => s.channel === channel)?.raster ?? REFERENCE_RASTER;
+  const mode = channelSettings.observed.find((reading) => reading.channel === channel)?.mode;
+  const presetFramePeriodMs =
+    videoModeFramePeriodMs(mode ?? '') ?? videoModeFramePeriodMs('1080i5000') ?? 40;
 
   /*
     🔴 THE CONTROLS ROW'S STATE, held here because the row outlives the stage.
@@ -735,6 +739,7 @@ export function PreviewPanel({
             pageByItem={pageByItem}
             templateNames={templateNames}
             raster={raster}
+            presetFramePeriodMs={presetFramePeriodMs}
             visible={!hidden}
             onTransport={setTransport}
             onSelectItem={onSelectItem}

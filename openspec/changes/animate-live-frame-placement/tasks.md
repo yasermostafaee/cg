@@ -42,3 +42,16 @@
 - [x] [Linux Playwright](https://github.com/yasermostafaee/cg/actions/runs/43648905013/job/132612786379) passed on `ef17ab9a`, including input selection, Preview, both preset directions and the Layers error list.
 - [x] Build and verify the three local Windows 1.2.5 installers from `ef17ab9a` in
       `installers/1.2.5/ef17ab9a`, including the setup payload and SHA-256 for every asset.
+
+- [x] Reproduce the reported source Fade refusal on the full 3ghab-crop layout. Verify the
+      outgoing source remains parked for the other presets and can dissolve back in.
+- [x] Verify a single rectangular mask, and verify refusal preserves a shared or fragmented input.
+- [x] Verify Preview remains independent through a refused Fade and follows a later successful
+      row action. Verify a newer Inspector cue wins over an earlier asynchronous response.
+
+- [x] Capture the owner's original 3ghab at 1080p25. The retained image stays opaque with
+      Fade off and dips on 11 recorded frames with Fade on. The two native movement legs share
+      the same tick budget as unfaded movement.
+- [x] Verify linked title suppression and release in both output passes and preservation of other
+      text. Runtime DOM and Windows Chromium cover title visibility and the confirmed PGM follow.
+- [ ] Run the combined Linux Playwright verification after the follow-up changes.

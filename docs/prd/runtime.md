@@ -5210,7 +5210,9 @@ Send CG commands to the active engine after its external-graphics transfer contr
 - WHEN switching between presets that share the same authored plate and running input THEN the shared frame moves and resizes from the outgoing placement to the incoming placement without starting the source again. The same applies to the reverse switch.
 - WHEN a verified departing masked group would be painted in the wrong order during the reverse movement THEN the entire group exits before the shared frame moves. Returning to the previous preset restores its mask and plate order.
 - WHEN previewing a preset or input change THEN the selected effect runs on PVW independently of PGM. Direct dragging and sizing stay immediate.
-- WHEN a preset adds or removes frames THEN the incoming and outgoing frames, masks and titles animate. Shared frames stay above departing frames during movement. Title visibility follows the destination preset.
+- WHEN a preset adds or removes frames THEN the incoming and outgoing pictures and masks animate. Shared frames stay above departing frames during movement. Once the effect settles, linked titles follow the destination preset's authored visibility.
+- WHEN the operator enables the preset Fade option THEN the shared picture also fades while changing position or size. Independent Preview uses the same channel-frame budget. Preview follows a confirmed programme switch without replaying its effect.
 - WHEN a plate has a mask THEN its operator Crop is unavailable. Its mask and the Crop of an eligible unmasked neighbor remain editable.
-- WHEN swapping an input in the same plate THEN Cut or Fade applies. If a Fade is refused THEN the working input remains applied.
+- WHEN swapping one independently seated input in the same plate THEN Cut or Fade applies. An eligible held input or a single preserved mask rectangle can be used by the Fade. If it is refused THEN the working input remains applied.
+- WHEN a row preset is confirmed THEN the local PVW follows it unless the operator has chosen another Inspector preset since the row request began. A refused update keeps the existing PVW cue.
 - WHEN the same engine reconnects after a preset effect was interrupted THEN the previous arrangement and its resident artwork recover together, and only temporary arriving seats are muted and cleared.

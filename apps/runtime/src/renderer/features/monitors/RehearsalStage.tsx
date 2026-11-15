@@ -278,6 +278,7 @@ interface Props {
   templateNames: ReadonlyMap<string, string | null>;
   /** The channel's real raster (R-030). Every iframe is sized to it. */
   raster: ChannelRaster;
+  presetFramePeriodMs?: number | undefined;
   visible?: boolean;
   panOpen?: boolean;
   moveOpen?: boolean;
@@ -373,6 +374,7 @@ export function RehearsalStage({
   pageByItem,
   templateNames,
   raster,
+  presetFramePeriodMs,
   visible = true,
   panOpen = false,
   moveOpen = false,
@@ -792,6 +794,8 @@ export function RehearsalStage({
             position={subject.position}
             rowName={subject.rowName}
             activeLookId={subject.activeLookId}
+            animatePresetChanges={subject.animatePresetChanges}
+            presetFramePeriodMs={presetFramePeriodMs}
             liveSources={subject.liveSources}
             playing={playing}
             canReplayEffect={subject.previewFrameReplay === true}

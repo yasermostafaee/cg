@@ -157,6 +157,12 @@ until Bridge's mixer commit lands. The runtime hides the fallback child of each 
 route and matches a release to the hold ID. A bounded timer restores the authored
 fallback if the release is lost. Rehearsal and foreground passes ignore the hold.
 
+A preset animation can independently hold the titles linked to its moving live plates via
+the phase's hidePresetTitlePlateIds. The runtime derives their composition scopes from the
+authored preset. It leaves unrelated text in place and keeps the destination title policy
+when the final release removes the hold. Background and foreground receive the same phase,
+including a title-only phase when the look itself is committed.
+
 `CgControl.maskPlacements` replaces the fallback's editable clip windows by exact plate, preset and
 authored window. A shared plate arrives as one placement per eligible preset. The SVG clip is
 updated in place while the fallback and the plate stay mounted.

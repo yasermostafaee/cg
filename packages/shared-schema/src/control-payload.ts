@@ -19,6 +19,8 @@ export const CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER =
   '<meta name="cg-live-preset-artwork-fade" content="1">';
 export const CG_LIVE_PRESET_RECOVERY_PAGE_MARKER =
   '<meta name="cg-live-preset-recovery" content="1">';
+export const CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER =
+  '<meta name="cg-live-preset-title-hold" content="1">';
 export const CG_LIVE_MASK_PLACEMENT_PAGE_MARKER =
   '<meta name="cg-live-mask-placement" content="1">';
 

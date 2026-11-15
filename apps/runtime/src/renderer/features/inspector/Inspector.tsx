@@ -611,7 +611,7 @@ export function Inspector({
   const schema = resolvedInfo?.fields ?? null;
   const lookCarrier = resolvedInfo?.liveSources;
   const looks = lookCarrier?.looks ?? [];
-  const previewPin = rehearsing === true ? previewLookPin(itemId) : undefined;
+  const previewPin = rehearsing === true ? previewLookPin(itemId, item.activeLookId) : undefined;
   const editingLook =
     looks.find((look) => look.id === previewPin) ??
     looks.find(
@@ -870,11 +870,7 @@ export function Inspector({
           editingLook={editingLook}
           onEditLook={(lookId) => {
             if (rehearsing === true) {
-              const applied =
-                lookCarrier === undefined
-                  ? undefined
-                  : activeLookOf(lookCarrier, item.activeLookId)?.id;
-              setPreviewLookPin(itemId, lookId === applied ? undefined : lookId);
+              setPreviewLookPin(itemId, lookId);
             } else {
               setPinnedLook({ itemId, lookId });
             }

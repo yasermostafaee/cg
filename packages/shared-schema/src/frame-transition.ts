@@ -79,13 +79,25 @@ export const FrameTransitionPhaseSchema = z
     hideFallbackPlateIds: z.array(z.string().min(1)).max(128).optional(),
     /** Exact authored instance paths of outgoing artwork held hidden during a preset switch. */
     hidePresetArtworkKeys: z.array(z.string().min(1)).max(128).optional(),
+    /** Hide only titles attached to these live plates in the currently rendered preset. */
+    hidePresetTitlePlateIds: z.array(z.string().min(1)).min(1).max(128).optional(),
   })
   .refine(
-    ({ authoredPreset, destinationLookId, frames, opacityArtwork, hidePresetArtworkKeys }) =>
+    ({
+      authoredPreset,
+      destinationLookId,
+      frames,
+      opacityArtwork,
+      hidePresetArtworkKeys,
+      hidePresetTitlePlateIds,
+    }) =>
       (frames.length > 0 ||
         opacityArtwork !== undefined ||
-        (hidePresetArtworkKeys?.length ?? 0) > 0) &&
-      ((opacityArtwork === undefined && destinationLookId === undefined) ||
+        (hidePresetArtworkKeys?.length ?? 0) > 0 ||
+        hidePresetTitlePlateIds !== undefined) &&
+      ((opacityArtwork === undefined &&
+        destinationLookId === undefined &&
+        hidePresetTitlePlateIds === undefined) ||
         authoredPreset === true),
   );
 export type FrameTransitionPhase = z.infer<typeof FrameTransitionPhaseSchema>;
@@ -196,17 +208,19 @@ export function frameTransitionPhases(
           },
         ];
   }
-  const half = Math.max(1, Math.round(frameCount / 2));
+  const total = Math.max(2, Math.round(frameCount));
+  const firstHalf = Math.round(total / 2);
+  const secondHalf = total - firstHalf;
   if (motion === 'cut') {
     return [
-      { frames: half, easing: 'linear', progress: 0, opacity: 0 },
+      { frames: firstHalf, easing: 'linear', progress: 0, opacity: 0 },
       { frames: 0, easing: 'linear', progress: 1, opacity: 0 },
-      { frames: half, easing: 'linear', progress: 1, opacity: 1 },
+      { frames: secondHalf, easing: 'linear', progress: 1, opacity: 1 },
     ];
   }
   const { midpoint, first, second } = fadeMotion[motion];
   return [
-    { frames: half, easing: first, progress: midpoint, opacity: 0 },
-    { frames: half, easing: second, progress: 1, opacity: 1 },
+    { frames: firstHalf, easing: first, progress: midpoint, opacity: 0 },
+    { frames: secondHalf, easing: second, progress: 1, opacity: 1 },
   ];
 }

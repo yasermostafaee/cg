@@ -4,6 +4,7 @@ import {
   CG_LIVE_FRAME_TRANSITION_PAGE_MARKER,
   CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER,
   CG_LIVE_PRESET_RECOVERY_PAGE_MARKER,
+  CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER,
   CG_LIVE_PRESET_DEPARTURE_PAGE_MARKER,
   CG_LIVE_PRESET_TRANSITION_PAGE_MARKER,
   type Scene,
@@ -73,8 +74,8 @@ describe('PAGE-REBUILD-01 — the page runtime fingerprint', () => {
       rebuilds its pages with the new shell on its next upgrade.
     */
     expect({ revision: EXPORTER_SHELL_REVISION, shell: await shellHash() }).toEqual({
-      revision: 11,
-      shell: '0cb1d6e44103339cba5d18454fbdd5b765b37d2857debf109fbe344232b55417',
+      revision: 12,
+      shell: '950b9c23f4cd848791f885e95706d7d3d298e24d7d31a0142d1d0852b2f50203',
     });
   });
 
@@ -91,6 +92,7 @@ describe('PAGE-REBUILD-01 — the page runtime fingerprint', () => {
       expect(head).toContain(CG_LIVE_PRESET_DEPARTURE_PAGE_MARKER);
       expect(head).toContain(CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER);
       expect(head).toContain(CG_LIVE_PRESET_RECOVERY_PAGE_MARKER);
+      expect(head).toContain(CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER);
     }
   });
 });

@@ -657,8 +657,12 @@
           "en": "Position offers Cut, Linear, Ease, Bounce and Elastic with optional Fade. Operators can rehearse preset switches and frame movement in PVW."
         },
         {
-          "fa": "Input effect گذار Cut یا Fade را برای تعویض ورودی داخل همان قاب تعیین می‌کند.",
-          "en": "Input effect offers Cut or Fade when switching the input inside the same plate."
+          "fa": "Input effect برای تعویض ورودی داخل همان قاب Cut یا Fade دارد. Fade در قاب مستقل دارای ماسک تک‌ناحیه‌ای و با ورودی آمادهٔ پریست دیگر هم کار می‌کند.",
+          "en": "Input effect offers Cut or Fade inside the same plate, including independent single-region masks and eligible inputs prepared for other presets."
+        },
+        {
+          "fa": "در تغییر پریست، Fade روی قاب مشترک هم دیده می‌شود. عنوان‌های وابسته هنگام گذار پنهان می‌شوند و در پایان طبق طراحی پریست برمی‌گردند. PVW پس از تغییر موفق روی لایه، نتیجه را بدون اجرای دوبارهٔ افکت نشان می‌دهد.",
+          "en": "Preset Fade also affects the shared plate. Linked titles stay hidden until the destination settles. PVW follows a successful row preset without replaying the effect."
         },
         {
           "fa": "در Designer تنظیمات Fit، Allow move و Resize در بخش CG Control برای یک یا چند قاب لایو در دسترس‌اند.",

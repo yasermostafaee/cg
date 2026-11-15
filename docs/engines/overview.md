@@ -63,7 +63,10 @@ coordinates therefore feed both a standalone ticker and one inside a hidden or s
 
 Live preset transitions share one motion phase planner in `@cg/shared-schema`. The Bridge uses
 channel frames for native picture and mask tweens and sends matching endpoints to the resident
-background and foreground pages. CG Control uses the planner in the local rehearsal frame.
+background and foreground pages. CG Control uses the same frame budget for a local rehearsal.
+The temporary title hold uses authored composition scopes and ends after the destination settles.
+Preview follows a confirmed programme action directly, while its separate rehearsal still runs
+the effect.
 
 [`@cg/template-runtime`](../../packages/template-runtime)'s `createRuntime(scene)`:
 

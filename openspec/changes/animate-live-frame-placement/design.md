@@ -29,7 +29,10 @@ Off-air Update stores only the placement. Existing pages keep Cut until a compat
 
 The Bridge verifies the incoming sources and prerolls new seats while hidden. A moving shared
 plate uses the same authored definition, artwork and verified running seat in both presets.
-The configured duration is divided between the applicable exit, motion and entrance stages.
+The configured duration is converted to display frames and divided between the applicable
+exit, motion and entrance stages. PVW uses that same frame budget and only reserves a move
+stage when a shared frame actually moves or fades. Selected Fade dips the retained picture
+during that stage. A short dissolve requires at least two output frames.
 An outgoing group fades as a unit while the retained frame holds. If the existing native layer
 order would obscure a retained frame, the overlapping group is hidden before the shared motion.
 The switch parks departing seats with their normal opacity and then fades in the arriving group
@@ -38,8 +41,12 @@ preset path. A refused effect restores applied geometry and opacity while the ro
 the output. Existing manual frame permissions continue to constrain operator edits.
 
 The runtime's phase payload addresses an artwork group by its fully qualified instance key and
-fences it by preset ID. When the destination hides an outgoing shared title, the runtime keeps
-that title hidden through the move and then applies the destination's authored visibility.
+fences it by preset ID. During an animated preset switch, it hides text inside affected frame
+compositions, including a title belonging to a group whose plates are all switching. Preset-wide
+and unrelated text stay visible. The title hold goes into the first destination update so
+it covers both sides of a switch. Release on both passes follows native mixer settlement;
+the destination's authored visibility takes effect. Older exported pages are rebuilt from
+their saved design by the template import/rebuild path.
 
 On a connection loss, the Bridge reserves any seats the arrival actually started. On recovery it
 mutes and hides those seats before the shared mixer buffer is committed, clears them, and
@@ -53,15 +60,20 @@ Preview uses the exact exported page and the same phase planner. The Inspector c
 preset independently of the row's programme preset. Preview frame effect rehearses an applied
 placement to a draft. A local dissolve holds the current picture until the incoming snapshot is
 available, then fades to it inside the same plate. Browser-local changes leave programme output
-under the existing on-air verbs.
+under the existing on-air verbs. An acknowledged row preset action releases only the preview
+cue that was present when the row action began. A newer Inspector selection stays in Preview. Preview following a programme action uses
+the confirmed final arrangement immediately. A refused action keeps the current cue. Rehearsal discards superseded targets and keeps the
+latest updates for the preset it is animating toward.
 
 ## Input changes and masks
 
-Input effect defaults to Cut. Fade prerolls one replacement into a verified spare seat in the
-same band, keeping the working source visible. The visual dissolve precedes the audio handover.
-The binding transaction owns cleanup and rollback, including a dropped connection to the same
-engine. Fade requires an independently seated unmasked picture, a suitable free layer and one
-configured engine. Cut remains available for mirrored output and other ineligible cases.
+Input effect defaults to Cut. Fade uses a verified spare seat or a suitable running input
+parked for another preset. The working source stays visible during preparation. The visual
+dissolve precedes the audio handover. If a different preset still needs the outgoing input, the
+terminal mixer change parks and mutes that input for recall. A single independent mask rectangle
+keeps its authored clip while the picture changes. The binding transaction restores previous
+geometry and audio on refusal, including a dropped connection to the same engine. Shared/routed
+input copies, multi-piece masks, and mirrored output require Cut.
 
 The Bridge omits mask-owning plates from the crop targets, and the Preview and Inspector use
 the same eligibility. The authored fit and focus continue to guide a masked plate's picture.

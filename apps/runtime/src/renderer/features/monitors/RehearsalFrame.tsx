@@ -14,6 +14,7 @@ import {
   positionQuery,
   CG_LIVE_FRAME_TRANSITION_PAGE_MARKER,
   CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER,
+  CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER,
   withCgControl,
   type FrameTransitionPhase,
   type LiveFramePlacement,
@@ -185,6 +186,8 @@ interface Props {
    * delivers, which is the whole fidelity claim rehearse is built on.
    */
   activeLookId: string | undefined;
+  animatePresetChanges?: boolean | undefined;
+  presetFramePeriodMs?: number | undefined;
   /** `PASSES-CYCLE-ONLY-26` Part B — the operator's effective pass timing, or undefined. */
   timing: TimingToSend | undefined;
   /** The effective book and the row's initial page. */
@@ -210,6 +213,13 @@ function rehearsalPageKey(book: RehearsalBook, index: number): string {
   return JSON.stringify([book.fieldId, index, picture?.media, picture?.id, picture?.assetId]);
 }
 
+interface RehearsalPresetCue {
+  doc: Document;
+  lookId: string | undefined;
+  payload: string;
+  commit: (phase?: FrameTransitionPhase) => void;
+}
+
 export function RehearsalFrame({
   itemId,
   html,
@@ -220,6 +230,8 @@ export function RehearsalFrame({
   position,
   rowName,
   activeLookId,
+  animatePresetChanges = true,
+  presetFramePeriodMs,
   timing,
   book,
   livePlates,
@@ -253,7 +265,10 @@ export function RehearsalFrame({
     livePlates: readonly PlatePlacement[];
     framePlacements: LiveFramePlacement[] | undefined;
   }>();
-  const runningEffect = useRef<{ cancel: () => void }>();
+  const runningEffect = useRef<{
+    cancel: (commit?: boolean) => void;
+    preset?: RehearsalPresetCue;
+  }>();
   const dissolveCleanup = useRef<() => void>();
   const replayEffectRef = useRef<() => void>();
 
@@ -345,17 +360,18 @@ export function RehearsalFrame({
     there is no difference — and `CG_CONTROL_KEY`'s strip rule means the page would silently
     tolerate it, so nothing would ever have told us.
   */
+  const placementControl = useMemo(
+    () => ({
+      ...(activeLookId !== undefined && { look: activeLookId }),
+      ...(framePlacements !== undefined && { framePlacements }),
+      ...(maskPlacements !== undefined && { maskPlacements }),
+    }),
+    [activeLookId, framePlacements, maskPlacements],
+  );
   // Compare the payload by value so a bounds publish cannot resend unchanged fields.
   const payload = useMemo(
-    () =>
-      JSON.stringify(
-        withCgControl(fields, {
-          ...(activeLookId !== undefined && { look: activeLookId }),
-          ...(framePlacements !== undefined && { framePlacements }),
-          ...(maskPlacements !== undefined && { maskPlacements }),
-        }),
-      ),
-    [fields, activeLookId, framePlacements, maskPlacements],
+    () => JSON.stringify(withCgControl(fields, placementControl)),
+    [fields, placementControl],
   );
 
   /*
@@ -407,7 +423,7 @@ export function RehearsalFrame({
     handleRef,
     () => ({
       play: () => {
-        runningEffect.current?.cancel();
+        runningEffect.current?.cancel(true);
         dissolveCleanup.current?.();
         const doc = frameRef.current?.contentDocument;
         setLocalPage(undefined);
@@ -449,7 +465,7 @@ export function RehearsalFrame({
       },
       replayEffect: () => replayEffectRef.current?.(),
       stop: () => {
-        runningEffect.current?.cancel();
+        runningEffect.current?.cancel(true);
         dissolveCleanup.current?.();
         pendingBookPlay.current = undefined;
         templateWindow()?.stop?.();
@@ -492,8 +508,12 @@ export function RehearsalFrame({
     const lookId = look?.id ?? activeLookId;
     const current = composed.current?.doc === doc ? composed.current : undefined;
     const previousLook = liveSources?.looks?.find(({ id }) => id === current?.lookId);
-    const push = () => {
-      update(payload);
+    const push = (phase?: FrameTransitionPhase): void => {
+      update(
+        phase === undefined
+          ? payload
+          : JSON.stringify(withCgControl(fields, { ...placementControl, frameTransition: phase })),
+      );
       composed.current = {
         doc,
         lookId,
@@ -503,12 +523,32 @@ export function RehearsalFrame({
       };
       paintPvwPlatePictures(doc, livePlatesRef.current, sourceFramesRef.current);
     };
+    const running = runningEffect.current;
+    const pending = running?.preset;
+    if (
+      pending?.doc === doc &&
+      pending.lookId === lookId &&
+      visible &&
+      playing &&
+      animatePresetChanges
+    ) {
+      // A new field edit or Bridge snapshot updates this cue's destination without replaying it.
+      if (pending.payload !== payload) {
+        pending.payload = payload;
+        pending.commit = push;
+      }
+      return;
+    }
+    if (pending !== undefined || current?.payload !== payload || !visible || !playing) {
+      running?.cancel();
+    }
     if (current?.payload === payload && current.lookId === lookId) return;
-    runningEffect.current?.cancel();
     const effect = frameTransitionPreference();
     const plan =
       visible &&
       playing &&
+      animatePresetChanges &&
+      presetFramePeriodMs !== undefined &&
       html.includes(CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER) &&
       current !== undefined &&
       liveSources !== undefined &&
@@ -528,6 +568,8 @@ export function RehearsalFrame({
               plates: livePlatesRef.current,
             },
             effect,
+            presetFramePeriodMs,
+            html.includes(CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER),
           )
         : undefined;
     if (plan === undefined) {
@@ -543,26 +585,29 @@ export function RehearsalFrame({
     }
     dissolveCleanup.current?.();
     const restore = retainPresetArtwork(doc, plan);
-    let committed = false;
+    const cue: RehearsalPresetCue = { doc, lookId, payload, commit: push };
+    let appliedPayload: string | undefined;
+    const commit = (phase?: FrameTransitionPhase): void => {
+      cue.commit(phase);
+      appliedPayload = cue.payload;
+    };
     const phaseStep = (phase: FrameTransitionPhase) => () => sendFramePhase(update, phase);
     const entries = plan.exit.map(phaseStep);
     entries.push(() => {
       restore();
-      push();
-      committed = true;
-      return 0;
+      // Enter the new preset and hold its titles in the same page update.
+      commit(plan.enter);
+      return plan.enter?.durationMs ?? 0;
     });
-    entries.push(...plan.enter.map(phaseStep));
     onTransitionChange?.(itemId, true);
-    const cancel = runRehearsalEffect(entries, () => {
+    const cancel = runRehearsalEffect(entries, (commitTarget) => {
       restore();
-      if (!committed) push();
+      if (commitTarget && appliedPayload !== cue.payload) commit();
       runningEffect.current = undefined;
       update(JSON.stringify(withCgControl({}, { frameTransition: null })));
       onTransitionChange?.(itemId, false);
     });
-    runningEffect.current = { cancel };
-    return cancel;
+    runningEffect.current = { cancel, preset: cue };
     // Placement values are already part of the serialized payload; object identity here
     // would interrupt the transition on an unrelated stack update.
   }, [
@@ -574,6 +619,8 @@ export function RehearsalFrame({
     playing,
     activeLookId,
     liveSources,
+    animatePresetChanges,
+    presetFramePeriodMs,
     itemId,
     onTransitionChange,
   ]);
