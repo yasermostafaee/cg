@@ -6,6 +6,7 @@ import {
   inputSlideVector,
   type ControlLiveLayout,
   type ControlLiveLayoutPreset,
+  type ControlLiveLayoutTitleStyle,
   type FrameTransition,
   type LiveSourceRect,
   type Resolution,
@@ -14,9 +15,11 @@ import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { usePrefersReducedMotion } from '../../ui/usePrefersReducedMotion.js';
+import { liveLayoutArtwork } from '../../theme.js';
 import { fullJpegRect } from '../monitors/pvwPlatePictures.js';
 import type { PvwSourceFrame } from '../monitors/usePvwSourceFrames.js';
 import { SourceLabel } from '../sources/SourceLabel.js';
+import { controlLiveLayoutTitleGeometry } from './controlLiveLayoutCompiler.js';
 
 type Rects = Readonly<Record<string, LiveSourceRect>>;
 
@@ -78,6 +81,35 @@ function ShotPicture({
         style={cssRect(fullJpegRect(pictureBounds, geometry.activeRect), pictureBounds)}
       />
     </div>
+  );
+}
+
+function ShotTitle({
+  title,
+  style,
+  raster,
+}: {
+  title: string;
+  style: ControlLiveLayoutTitleStyle | undefined;
+  raster: Resolution;
+}): JSX.Element {
+  const geometry = controlLiveLayoutTitleGeometry(raster, style);
+  return (
+    <span
+      className="cg-live-layout-shot-title"
+      style={{
+        ...cssRect(geometry, raster),
+        fontFamily: `"${geometry.fontFamily}", Vazirmatn, "Noto Sans Arabic", sans-serif`,
+        fontSize: `${String((geometry.fontSize / raster.height) * 100)}cqh`,
+        lineHeight: geometry.lineHeight,
+        paddingBlock: `${String((geometry.padding / raster.height) * 100)}cqh`,
+        paddingInline: `${String((geometry.padding / raster.width) * 100)}cqw`,
+        backgroundColor: geometry.backgroundColor,
+        color: liveLayoutArtwork.titleText,
+      }}
+    >
+      <IsolatedName>{title}</IsolatedName>
+    </span>
   );
 }
 
@@ -171,6 +203,7 @@ export function LiveLayoutEditorPreview({
       focused !== undefined && previousSingle !== undefined && focused !== previousSingle;
 
     if (switching && change.mode !== 'motion') {
+      if (change.mode === 'cut') return;
       const direction = inputSlideVector(change.direction);
       const translation = (sign: number): string =>
         `translate(${String(sign * direction.x * 100)}%, ${String(sign * direction.y * 100)}%)`;
@@ -180,15 +213,18 @@ export function LiveLayoutEditorPreview({
         if (id !== focused && id !== previousSingle) continue;
         const incoming = id === focused;
         const box = { ...opacity, zIndex: incoming ? '3' : '2' };
-        const keys = incoming
-          ? [
-              { ...box, transform: translation(1) },
-              { ...box, transform: 'none' },
-            ]
-          : [
-              { ...box, transform: 'none' },
-              { ...box, transform: change.mode === 'push' ? translation(-1) : 'none' },
-            ];
+        const keys =
+          change.mode === 'fade'
+            ? [{ ...box, opacity: incoming ? 0 : 1 }, box]
+            : incoming
+              ? [
+                  { ...box, transform: translation(1) },
+                  { ...box, transform: 'none' },
+                ]
+              : [
+                  { ...box, transform: 'none' },
+                  { ...box, transform: change.mode === 'push' ? translation(-1) : 'none' },
+                ];
         if (typeof shot.animate === 'function') {
           active.current.push(shot.animate(keys, { duration: change.durationMs }));
         }
@@ -239,7 +275,10 @@ export function LiveLayoutEditorPreview({
         data-focused-frame={focused}
         style={{
           aspectRatio: `${String(raster.width)} / ${String(raster.height)}`,
-          backgroundColor: layout.background.kind === 'color' ? layout.background.color : undefined,
+          backgroundColor:
+            layout.background.kind === 'color'
+              ? layout.background.color
+              : liveLayoutArtwork.mediaBackdrop,
         }}
       >
         {backgroundUrl !== undefined && layout.background.kind === 'image' && (
@@ -248,7 +287,7 @@ export function LiveLayoutEditorPreview({
         {backgroundUrl !== undefined && layout.background.kind === 'video' && (
           <video src={backgroundUrl} muted loop playsInline autoPlay aria-hidden="true" />
         )}
-        {layout.frames.map(({ id, title, sourceId }, index) => {
+        {layout.frames.map(({ id, title, titleStyle, sourceId }, index) => {
           const activeShot = visible[id] !== undefined;
           const rect = visible[id] ?? geometry[id] ?? full;
           const preview = sourceId === undefined ? undefined : sourceFrames.get(sourceId);
@@ -281,9 +320,7 @@ export function LiveLayoutEditorPreview({
                 />
               )}
               {!titleHidden && title.trim() !== '' && (
-                <span className="cg-live-layout-shot-title">
-                  <IsolatedName>{title}</IsolatedName>
-                </span>
+                <ShotTitle title={title} style={titleStyle} raster={raster} />
               )}
               {activeSingle === undefined && activeShot && (
                 <div className="cg-live-layout-focus-action">

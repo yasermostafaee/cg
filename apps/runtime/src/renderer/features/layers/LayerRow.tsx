@@ -439,17 +439,21 @@ export function LayerRow({
           ? layout?.effects.switch
           : undefined;
       const focusSlide: InputSlideTransition | undefined =
-        direct !== undefined && direct.mode !== 'motion'
+        direct?.mode === 'push' || direct?.mode === 'slide-over'
           ? { mode: direct.mode, durationMs: direct.durationMs, direction: direct.direction }
           : undefined;
+      const focusEffect =
+        direct?.mode === 'cut' || direct?.mode === 'fade'
+          ? { motion: 'cut' as const, fade: direct.mode === 'fade', durationMs: direct.durationMs }
+          : direct?.mode === 'motion'
+            ? { ...effect, durationMs: direct.durationMs }
+            : effect;
       const onProgramme = !legacyPreview && isOnAirStatus(item);
       const transition =
         onProgramme &&
         (layout !== undefined ||
           (item.onAirPresetTransition === true && (effect.motion !== 'cut' || effect.fade)))
-          ? direct?.mode === 'motion'
-            ? { ...effect, durationMs: direct.durationMs }
-            : effect
+          ? focusEffect
           : undefined;
       const res = await window.cg.stack.setActiveLook({
         itemId: item.itemId,

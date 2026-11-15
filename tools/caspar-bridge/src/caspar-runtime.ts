@@ -563,7 +563,7 @@ interface FocusSwapEffect {
   readonly steps: readonly {
     frames: number;
     easing: MixerFramePhase['easing'];
-    incoming: LivePlatePlacement['fit'];
+    incoming?: LivePlatePlacement['fit'];
     outgoing?: LivePlatePlacement['fit'];
     incomingOpacity?: number;
     outgoingOpacity?: number;
@@ -6590,14 +6590,18 @@ export class CasparRuntime {
         if (!revealed.ok) return revealed;
       }
       const phase = { frames: step.frames, easing: step.easing };
-      const arrived = await stage(incoming, step.incoming, {
-        ...phase,
-        ...(step.incomingOpacity !== undefined && { opacity: step.incomingOpacity }),
-      });
-      if (!arrived.ok) return arrived;
-      if (step.outgoing !== undefined) {
-        const retired = await stage(outgoing, step.outgoing, {
+      if (step.incoming !== undefined || step.incomingOpacity !== undefined) {
+        const arrived = await stage(incoming, step.incoming ?? initial, {
           ...phase,
+          ...(step.incoming === undefined && { opacityOnly: true }),
+          ...(step.incomingOpacity !== undefined && { opacity: step.incomingOpacity }),
+        });
+        if (!arrived.ok) return arrived;
+      }
+      if (step.outgoing !== undefined || step.outgoingOpacity !== undefined) {
+        const retired = await stage(outgoing, step.outgoing ?? outgoing, {
+          ...phase,
+          ...(step.outgoing === undefined && { opacityOnly: true }),
           ...(step.outgoingOpacity !== undefined && { opacity: step.outgoingOpacity }),
         });
         if (!retired.ok) return retired;
@@ -13139,6 +13143,7 @@ export class CasparRuntime {
     plan: Extract<LiveSeatingPlan, { ok: true }>,
     transition: FrameTransition,
     focusSlide?: InputSlideTransition,
+    dissolve = false,
   ): PresetFrameEffect | undefined {
     const item = this.#reconciler.get(itemId);
     if (item === null) return undefined;
@@ -13186,17 +13191,19 @@ export class CasparRuntime {
       Math.round(transition.durationMs / this.#channelFrameMsFor(channel)),
     );
     const movement =
-      focusSlide === undefined
-        ? this.#planFocusMotion(
-            itemId,
-            page.slot,
-            from.presetId,
-            next,
-            outgoing,
-            transition,
-            frames,
-          )
-        : this.#planFocusSlide(channel, next, outgoing, focusSlide, frames);
+      focusSlide !== undefined
+        ? this.#planFocusSlide(channel, next, outgoing, focusSlide, frames)
+        : dissolve
+          ? this.#planFocusDissolve(next, outgoing, frames)
+          : this.#planFocusMotion(
+              itemId,
+              page.slot,
+              from.presetId,
+              next,
+              outgoing,
+              transition,
+              frames,
+            );
     if (movement === undefined) return undefined;
     return this.#runPresetFrameTransaction(item, page, baseline, fromLookId, toLook.id, new Map(), {
       transition,
@@ -13205,6 +13212,32 @@ export class CasparRuntime {
       authoredPreset: true,
       focusSwap: { incoming, outgoing, ...movement },
     });
+  }
+
+  #planFocusDissolve(
+    incoming: LivePlatePlacement,
+    outgoing: LiveLayerRecord,
+    frames: number,
+  ): Pick<FocusSwapEffect, 'initial' | 'steps'> | undefined {
+    const overlap = intersectNormalizedRects(incoming.fit.clip, outgoing.clip);
+    if (overlap === null) return undefined;
+    const incomingOnTop = incoming.slot.layer > outgoing.slot.layer;
+    // In a common aperture only the upper seat needs to fade. Keep the lower
+    // picture opaque so the background does not show through mid-dissolve.
+    // A lower picture's exposed margins also fade when the fitted aspects differ.
+    const fadeIncoming = incomingOnTop || !sameMixerRect(incoming.fit.clip, overlap, 1e-8);
+    const fadeOutgoing = !incomingOnTop || !sameMixerRect(outgoing.clip, overlap, 1e-8);
+    return {
+      initial: incoming.fit,
+      steps: [
+        {
+          frames,
+          easing: 'linear',
+          ...(fadeIncoming && { incomingOpacity: 1 }),
+          ...(fadeOutgoing && { outgoingOpacity: 0 }),
+        },
+      ],
+    };
   }
 
   #planFocusSlide(
@@ -14463,6 +14496,12 @@ export class CasparRuntime {
         toFocus !== undefined &&
         fromFocus.presetId === toFocus.presetId &&
         fromFocus.frameId !== toFocus.frameId;
+      const focusDissolve =
+        directFocus &&
+        focusSlide === undefined &&
+        layout?.effects.switch.mode === 'fade' &&
+        transition?.motion === 'cut' &&
+        transition.fade;
       if (focusSlide !== undefined && !directFocus) {
         return {
           ok: false,
@@ -14647,7 +14686,15 @@ export class CasparRuntime {
               plan,
               directTransition,
               focusSlide,
+              focusDissolve,
             );
+          }
+          if (focusDissolve && effect === undefined) {
+            return {
+              ok: false,
+              errorCode: 'focus-fade-unavailable',
+              message: 'Fade needs two verified frame inputs. Choose Cut for this switch.',
+            };
           }
           if (focusSlide !== undefined && effect === undefined) {
             return {

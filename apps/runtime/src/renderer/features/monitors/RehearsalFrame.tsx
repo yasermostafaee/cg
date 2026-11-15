@@ -568,13 +568,11 @@ export function RehearsalFrame({
     if (canAnimatePreset && controlLiveLayout !== undefined) {
       const from = controlLiveLayoutSoloTarget(controlLiveLayout, previousLook.id);
       const to = controlLiveLayoutFocusTarget(controlLiveLayout, look.id);
-      const change = controlLiveLayout.effects.switch;
       if (
         from !== undefined &&
         to !== undefined &&
         from.presetId === to.presetId &&
-        from.frameId !== to.frameId &&
-        (change.mode !== 'motion' || effect.motion !== 'cut' || effect.fade)
+        from.frameId !== to.frameId
       ) {
         inputEffect.current?.cancel();
         const anchors = framePlacementRects(liveSources, from.presetId, current.framePlacements);

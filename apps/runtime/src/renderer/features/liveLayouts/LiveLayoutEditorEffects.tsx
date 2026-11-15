@@ -1,16 +1,16 @@
-import { useId, useState } from 'react';
+import { useId } from 'react';
 import {
   FRAME_TRANSITION_MAX_MS,
   FRAME_TRANSITION_MIN_MS,
+  ControlLiveLayoutSwitchModeSchema,
   FrameTransitionSchema,
   InputTransitionDirectionSchema,
   type ControlLiveLayout,
   type FrameTransition,
   type InputTransitionDirection,
 } from '@cg/shared-schema';
-import { parseLocalizedNumber } from '@cg/text-shaping';
 import { Checkbox } from '../../ui/Checkbox.js';
-import { NumericInput } from '../../ui/NumericInput.js';
+import { LiveLayoutEditorNumber } from './LiveLayoutEditorNumber.js';
 
 const motions: Record<FrameTransition['motion'], string> = {
   cut: 'Cut',
@@ -28,40 +28,6 @@ const directions: Record<InputTransitionDirection, string> = {
   up: 'From top',
   down: 'From bottom',
 };
-
-function EffectDuration({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  onChange: (durationMs: number) => void;
-}): JSX.Element {
-  const [typed, setTyped] = useState<string>();
-  return (
-    <label>
-      {label}
-      <NumericInput
-        value={typed ?? String(value)}
-        allow="digits"
-        scrub={{ step: 20, min: FRAME_TRANSITION_MIN_MS, max: FRAME_TRANSITION_MAX_MS }}
-        onBlur={() => setTyped(undefined)}
-        onValueChange={(text) => {
-          setTyped(text);
-          const duration = parseLocalizedNumber(text);
-          if (
-            duration !== null &&
-            Number.isSafeInteger(duration) &&
-            duration >= FRAME_TRANSITION_MIN_MS &&
-            duration <= FRAME_TRANSITION_MAX_MS
-          )
-            onChange(duration);
-        }}
-      />
-    </label>
-  );
-}
 
 export function LiveLayoutEditorEffects({
   effects,
@@ -86,6 +52,7 @@ export function LiveLayoutEditorEffects({
           Motion
           <select
             className="cg-field"
+            aria-label="Motion"
             value={focus.motion}
             onChange={(event) => {
               const parsed = FrameTransitionSchema.shape.motion.safeParse(
@@ -105,9 +72,12 @@ export function LiveLayoutEditorEffects({
           <Checkbox id={fadeId} checked={focus.fade} onChange={(fade) => setFocus({ fade })} />
           Fade
         </label>
-        <EffectDuration
+        <LiveLayoutEditorNumber
           label="Focus duration (ms)"
           value={focus.durationMs}
+          min={FRAME_TRANSITION_MIN_MS}
+          max={FRAME_TRANSITION_MAX_MS}
+          step={20}
           onChange={(durationMs) => setFocus({ durationMs })}
         />
       </fieldset>
@@ -117,23 +87,26 @@ export function LiveLayoutEditorEffects({
           Effect
           <select
             className="cg-field"
+            aria-label="Effect"
             value={change.mode}
             onChange={(event) => {
-              const mode = event.currentTarget.value;
-              if (mode === 'motion' || mode === 'push' || mode === 'slide-over')
-                setSwitch({ mode });
+              const mode = ControlLiveLayoutSwitchModeSchema.safeParse(event.currentTarget.value);
+              if (mode.success) setSwitch({ mode: mode.data });
             }}
           >
             <option value="motion">Focus and Return motion</option>
+            <option value="cut">Cut</option>
+            <option value="fade">Fade</option>
             <option value="push">Push</option>
             <option value="slide-over">Slide over</option>
           </select>
         </label>
-        {change.mode !== 'motion' && (
+        {(change.mode === 'push' || change.mode === 'slide-over') && (
           <label>
             Direction
             <select
               className="cg-field"
+              aria-label="Direction"
               value={change.direction}
               onChange={(event) => {
                 const parsed = InputTransitionDirectionSchema.safeParse(event.currentTarget.value);
@@ -148,9 +121,13 @@ export function LiveLayoutEditorEffects({
             </select>
           </label>
         )}
-        <EffectDuration
+        <LiveLayoutEditorNumber
           label="Switch duration (ms)"
           value={change.durationMs}
+          min={FRAME_TRANSITION_MIN_MS}
+          max={FRAME_TRANSITION_MAX_MS}
+          step={20}
+          disabled={change.mode === 'cut'}
           onChange={(durationMs) => setSwitch({ durationMs })}
         />
       </fieldset>

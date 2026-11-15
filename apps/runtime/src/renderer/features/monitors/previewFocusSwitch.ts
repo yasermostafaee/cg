@@ -149,6 +149,9 @@ function directionalMotion(
   effect: Effects['switch'],
   duration: number,
 ): Animation[] {
+  if (effect.mode === 'fade') {
+    return [incoming.node.animate([{ opacity: 0 }, { opacity: 1 }], { duration, fill: 'both' })];
+  }
   const direction = inputSlideVector(effect.direction);
   const shift = (side: number): string =>
     `translate(${String(direction.x * side * 100)}%, ${String(direction.y * side * 100)}%)`;
@@ -216,6 +219,15 @@ export function previewFocusSwitch({
       timer = setTimeout(start, PROBE_PICTURE_MS);
       return;
     }
+    const { effects } = layout;
+    if (
+      effects.switch.mode === 'cut' ||
+      (effects.switch.mode === 'motion' && effects.focus.motion === 'cut' && !effects.focus.fade)
+    ) {
+      commit();
+      finish(true);
+      return;
+    }
     const outgoingNode = artworkNode(doc, before);
     const outgoing =
       outgoingNode === undefined ? undefined : capturePlane(doc, outgoingNode, 'outgoing');
@@ -233,7 +245,6 @@ export function previewFocusSwitch({
       finish(true);
       return;
     }
-    const { effects } = layout;
     viewport = doc.createElement('div');
     viewport.dataset['cgPvwFocusSwitch'] = effects.switch.mode;
     viewport.style.cssText =

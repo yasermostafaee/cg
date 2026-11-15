@@ -21,17 +21,36 @@ import {
 } from './primitives.js';
 
 export const CONTROL_LIVE_LAYOUT_MAX_FRAMES = 4;
+export const CONTROL_LIVE_LAYOUT_TITLE_FONTS = ['Vazirmatn', 'Tahoma', 'Arial', 'Exo 2'] as const;
+export const CONTROL_LIVE_LAYOUT_TITLE_SIZE_MIN_PERCENT = 1;
+export const CONTROL_LIVE_LAYOUT_TITLE_SIZE_MAX_PERCENT = 20;
+export const CONTROL_LIVE_LAYOUT_TITLE_SIZE_DEFAULT_PERCENT = 4.2;
 
 const isFieldNamespaceId = (id: string): boolean =>
   !Object.prototype.hasOwnProperty.call(Object.prototype, id);
 
 const ControlLiveLayoutFrameIdSchema = LiveSourceIdSchema.max(64).refine(isFieldNamespaceId);
 
+export const ControlLiveLayoutTitleStyleSchema = z.object({
+  // Position percentages span the available travel of the entire title box.
+  xPercent: z.number().min(0).max(100).optional(),
+  yPercent: z.number().min(0).max(100).optional(),
+  sizePercent: z
+    .number()
+    .min(CONTROL_LIVE_LAYOUT_TITLE_SIZE_MIN_PERCENT)
+    .max(CONTROL_LIVE_LAYOUT_TITLE_SIZE_MAX_PERCENT)
+    .optional(),
+  fontFamily: z.enum(CONTROL_LIVE_LAYOUT_TITLE_FONTS).optional(),
+  backgroundColor: HexColorSchema.optional(),
+});
+export type ControlLiveLayoutTitleStyle = z.infer<typeof ControlLiveLayoutTitleStyleSchema>;
+
 const ControlLiveLayoutFrameSchema = z.object({
   id: ControlLiveLayoutFrameIdSchema,
   /** Catalog id chosen by the operator. The logical frame id stays stable across all presets. */
   sourceId: z.string().min(1).max(64).optional(),
   title: z.string().max(120),
+  titleStyle: ControlLiveLayoutTitleStyleSchema.optional(),
 });
 export type ControlLiveLayoutFrame = z.infer<typeof ControlLiveLayoutFrameSchema>;
 
@@ -79,10 +98,19 @@ const ControlLiveLayoutBackgroundSchema = z.discriminatedUnion('kind', [
 ]);
 export type ControlLiveLayoutBackground = z.infer<typeof ControlLiveLayoutBackgroundSchema>;
 
+export const ControlLiveLayoutSwitchModeSchema = z.enum([
+  'motion',
+  'cut',
+  'fade',
+  'push',
+  'slide-over',
+]);
+export type ControlLiveLayoutSwitchMode = z.infer<typeof ControlLiveLayoutSwitchModeSchema>;
+
 const ControlLiveLayoutEffectsSchema = z.object({
   focus: FrameTransitionSchema,
   switch: z.object({
-    mode: z.enum(['motion', 'push', 'slide-over']),
+    mode: ControlLiveLayoutSwitchModeSchema,
     direction: InputTransitionDirectionSchema,
     durationMs: z.number().int().min(FRAME_TRANSITION_MIN_MS).max(FRAME_TRANSITION_MAX_MS),
   }),

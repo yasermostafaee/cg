@@ -28,6 +28,7 @@ import { SourcePicker } from '../sources/SourcePicker.js';
 import { LiveLayoutEditorArrange } from './LiveLayoutEditorArrange.js';
 import { LiveLayoutEditorEffects } from './LiveLayoutEditorEffects.js';
 import { LiveLayoutEditorPreview } from './LiveLayoutEditorPreview.js';
+import { LiveLayoutEditorTitleStyle } from './LiveLayoutEditorTitleStyle.js';
 import './live-layout-editor.css';
 
 interface LiveLayoutEditorProps {
@@ -433,6 +434,11 @@ export function LiveLayoutEditor({
 
         <div className="cg-live-layout-workspace">
           <section ref={preview} className="cg-live-layout-preview" aria-label="Layout preview">
+            <LiveLayoutEditorArrange
+              layout={layout}
+              preset={preset}
+              onChange={rebuildArrangement}
+            />
             <div className="cg-live-layout-panel-head">
               <h3>Preview · PVW</h3>
               {focusId !== undefined && (
@@ -450,11 +456,6 @@ export function LiveLayoutEditor({
               backgroundUrl={assetUrl}
               sourceFrames={sourceFrames}
               onFocus={focusFrame}
-            />
-            <LiveLayoutEditorArrange
-              layout={layout}
-              preset={preset}
-              onChange={rebuildArrangement}
             />
             <LiveLayoutEditorEffects
               effects={layout.effects}
@@ -553,6 +554,16 @@ export function LiveLayoutEditor({
                   onChange={(title) => updateFrame((candidate) => ({ ...candidate, title }))}
                 />
               </label>
+              <LiveLayoutEditorTitleStyle
+                style={frame.titleStyle}
+                raster={layout.resolution}
+                onChange={(patch) =>
+                  updateFrame((candidate) => ({
+                    ...candidate,
+                    titleStyle: { ...candidate.titleStyle, ...patch },
+                  }))
+                }
+              />
               <label className="cg-live-layout-toggle" htmlFor={`${fieldsId}-title-preset`}>
                 <Checkbox
                   id={`${fieldsId}-title-preset`}

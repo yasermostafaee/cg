@@ -1,6 +1,8 @@
 import { TEMPLATE_SOURCE_MAX_BYTES } from '@cg/shared-ipc';
 import {
   CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS,
+  CONTROL_LIVE_LAYOUT_TITLE_FONTS,
+  CONTROL_LIVE_LAYOUT_TITLE_SIZE_DEFAULT_PERCENT,
   ControlLiveLayoutSchema,
   CUT_LOOK_TRANSITION,
   controlLiveLayoutFocusLookId,
@@ -14,6 +16,7 @@ import {
   type ControlLiveLayout,
   type ControlLiveLayoutBackground,
   type ControlLiveLayoutFrame,
+  type ControlLiveLayoutTitleStyle,
   type Element,
   type ElementBase,
   type FrameRate,
@@ -195,29 +198,56 @@ function backgroundElements(layout: ControlLiveLayout, fullFrame: LiveSourceRect
   ];
 }
 
-function frameTitle(frame: ControlLiveLayoutFrame, fullFrame: LiveSourceRect): TextElement {
-  const inset = fullFrame.height * 0.035;
-  const height = fullFrame.height * 0.085;
+/** Frame-local title geometry shared by the layout editor and the compiled artwork. */
+export function controlLiveLayoutTitleGeometry(
+  frame: Resolution,
+  style?: ControlLiveLayoutTitleStyle,
+) {
+  const sizePercent = style?.sizePercent ?? CONTROL_LIVE_LAYOUT_TITLE_SIZE_DEFAULT_PERCENT;
+  const fontScale = sizePercent / 100;
+  const inset = frame.height * 0.035;
+  const width = frame.width * 0.66;
+  // Keep the existing default caption band and grow it if the chosen line needs more room.
+  const lineHeight = 1.18;
+  const paddingScale = 0.012;
+  const height = frame.height * Math.max(0.085, fontScale * lineHeight + 2 * paddingScale);
+  const travelX = frame.width - width;
+  const travelY = frame.height - height;
+  const x = style?.xPercent === undefined ? inset : travelX * (style.xPercent / 100);
+  const y = style?.yPercent === undefined ? travelY - inset : travelY * (style.yPercent / 100);
   return {
-    ...elementBase(
-      frame.id + '-title',
-      'Title',
-      { x: inset, y: fullFrame.height - height - inset, width: fullFrame.width * 0.66, height },
-      1,
-    ),
+    x,
+    y,
+    width,
+    height,
+    xPercent: style?.xPercent ?? (100 * x) / travelX,
+    yPercent: style?.yPercent ?? (100 * y) / travelY,
+    sizePercent,
+    fontFamily: style?.fontFamily ?? CONTROL_LIVE_LAYOUT_TITLE_FONTS[0],
+    fontSize: Math.max(1, frame.height * fontScale),
+    lineHeight,
+    padding: Math.max(1, frame.height * paddingScale),
+    backgroundColor: style?.backgroundColor ?? liveLayoutArtwork.titleBackground,
+  };
+}
+
+function frameTitle(frame: ControlLiveLayoutFrame, resolution: Resolution): TextElement {
+  const title = controlLiveLayoutTitleGeometry(resolution, frame.titleStyle);
+  return {
+    ...elementBase(frame.id + '-title', 'Title', title, 1),
     type: 'text',
     text: frame.title,
     font: {
-      family: 'Vazirmatn',
+      family: title.fontFamily,
       weight: 600,
       style: 'normal',
-      size: Math.max(1, fullFrame.height * 0.042),
-      lineHeight: 1.18,
+      size: title.fontSize,
+      lineHeight: title.lineHeight,
       letterSpacing: 0,
     },
     color: liveLayoutArtwork.titleText,
-    backgroundColor: liveLayoutArtwork.titleBackground,
-    padding: Math.max(1, fullFrame.height * 0.012),
+    backgroundColor: title.backgroundColor,
+    padding: title.padding,
     align: 'start',
     direction: 'auto',
     maxLines: 1,
@@ -253,7 +283,7 @@ function frameComposition(
     layers: [layer(frame.id + '-layer', 'Frame', children)],
   };
   if (frame.title.trim() === '') return base;
-  const title = frameTitle(frame, fullFrame);
+  const title = frameTitle(frame, resolution);
   children.push(title);
   return {
     ...base,

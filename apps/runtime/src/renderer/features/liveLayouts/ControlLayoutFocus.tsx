@@ -6,6 +6,7 @@ import {
 } from '@cg/shared-schema';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
+import './control-layout-focus.css';
 
 export function ControlLayoutFocus({
   layout,
@@ -31,27 +32,13 @@ export function ControlLayoutFocus({
     focus?.frameId ?? (preset.frameIds.length === 1 ? preset.frameIds[0] : undefined);
   return (
     <div
+      className="cg-control-layout-focus"
       role="group"
       aria-label={target + ' Focus'}
       data-control-layout-focus={target.toLowerCase()}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 5,
-        flexWrap: 'wrap',
-        gridColumn: '1 / -1',
-        padding: '3px 8px',
-        minWidth: 0,
-      }}
     >
       <span className="cg-monitor-fact">
         {target === 'Preview' ? 'Focus · PVW' : 'Focus · PGM'}
-        {rowName !== undefined && (
-          <>
-            {' '}
-            · <bdi>{rowName}</bdi>
-          </>
-        )}
       </span>
       {layout.frames.map((frame, index) => {
         if (soloFrame === undefined && !preset.frameIds.includes(frame.id)) return null;
@@ -60,7 +47,7 @@ export function ControlLayoutFocus({
         return (
           <Button
             key={frame.id}
-            variant="neutral"
+            variant="icon"
             aria-label={`Focus frame ${index + 1} in ${target}`}
             aria-pressed={active}
             active={active}
@@ -68,14 +55,25 @@ export function ControlLayoutFocus({
             title={label}
             onClick={() => onSelect(controlLiveLayoutFocusLookId(preset.id, frame.id))}
           >
-            <bdi>{label}</bdi>
+            {index + 1}
           </Button>
         );
       })}
       {focus !== undefined && (
-        <Button variant="secondary" disabled={disabled} onClick={() => onSelect(preset.id)}>
-          <Icon icon={CornerUpLeft} size={13} /> Return to <bdi>{preset.name}</bdi>
+        <Button
+          variant="icon"
+          aria-label={`Return to ${preset.name}`}
+          title={`Return to ${preset.name}`}
+          disabled={disabled}
+          onClick={() => onSelect(preset.id)}
+        >
+          <Icon icon={CornerUpLeft} size={14} />
         </Button>
+      )}
+      {rowName !== undefined && (
+        <bdi className="cg-control-layout-focus__row cg-monitor-fact" title={rowName}>
+          {rowName}
+        </bdi>
       )}
     </div>
   );

@@ -628,7 +628,11 @@ function buildText(element: TextElement, ctx: BuildCtx): HTMLElement {
   // fonts, so Persian/Arabic text in a Latin-only family (Verdana, Georgia,
   // Inter, …) falls back to Vazirmatn rather than an unpredictable system face.
   // The authored family still wins for the glyphs it covers.
-  el.style.fontFamily = `${element.font.family}, Vazirmatn, "Noto Sans Arabic", "Segoe UI", system-ui, -apple-system, "Noto Sans", sans-serif`;
+  const family = element.font.family;
+  // A standalone numeric word makes an unquoted family (e.g. Exo 2) invalid CSS.
+  const cssFamily =
+    /(?:^|\s)\d/.test(family) && !/[,"'()\\]/.test(family) ? JSON.stringify(family) : family;
+  el.style.fontFamily = `${cssFamily}, Vazirmatn, "Noto Sans Arabic", "Segoe UI", system-ui, -apple-system, "Noto Sans", sans-serif`;
   el.style.fontWeight = String(element.font.weight);
   el.style.fontStyle = element.font.style;
   el.style.fontSize = `${element.font.size}px`;

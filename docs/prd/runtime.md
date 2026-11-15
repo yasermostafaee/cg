@@ -5238,5 +5238,7 @@ Send CG commands to the active engine after its external-graphics transfer contr
 - WHEN building a live layout THEN the operator can add and remove frames and presets, choose each preset's members and grid arrangement, and bind a title and input to each frame.
 - WHEN choosing a background or layout-wide effect THEN the operator can preview it and reuse it across that layout's presets.
 - WHEN focusing a frame or returning THEN PVW and PGM use the configured effect and Return restores the original preset, positions, titles and inputs.
-- WHEN another frame is selected during Focus THEN the chosen Motion, Push or Slide over plays directly between solo views with their existing inputs.
+- WHEN another frame is selected during Focus THEN the chosen Cut, Fade, Motion, Push or Slide over plays directly between solo views with their existing inputs.
+- WHEN the operator styles a frame title THEN Position, Font, Size and Background follow that frame in every preset.
+- WHEN arranging a preset with at least two frames THEN its horizontal and vertical gaps are visible beside the arrangement tools.
 - WHEN one layout is on air THEN the operator can create and edit another one or duplicate the running layout for the next programme. Designer-authored layouts remain available through the existing workflow.

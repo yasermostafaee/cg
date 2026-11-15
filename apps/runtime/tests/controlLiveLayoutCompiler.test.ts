@@ -13,6 +13,7 @@ import { buildTemplateLiveSources, unpack } from '@cg/vcg-format';
 import {
   buildControlLiveLayoutScene,
   compileControlLiveLayout,
+  controlLiveLayoutTitleGeometry,
   createControlLiveLayout,
   labelControlLiveLayoutFieldGroups,
   readControlLiveLayout,
@@ -133,6 +134,66 @@ describe('CG Control authored live layouts', () => {
       label: 'مجری',
     });
   });
+
+  it('preserves the original title geometry for saved layouts without a title style', () => {
+    const { resolution } = layoutFixture();
+    const { width, height } = resolution;
+    const inset = height * 0.035;
+    const bandHeight = height * 0.085;
+    expect(controlLiveLayoutTitleGeometry(resolution)).toMatchObject({
+      x: inset,
+      y: height - bandHeight - inset,
+      width: width * 0.66,
+      height: bandHeight,
+      fontSize: height * 0.042,
+      fontFamily: 'Vazirmatn',
+      backgroundColor: '#101B28DE',
+      padding: height * 0.012,
+    });
+  });
+
+  it.each(['cut', 'fade'] as const)(
+    'keeps the authored title treatment, frame identity, and %s switch in its saved package',
+    async (mode) => {
+      const base = layoutFixture();
+      const titleStyle = {
+        xPercent: 100,
+        yPercent: 0,
+        sizePercent: 14,
+        fontFamily: 'Exo 2',
+        backgroundColor: '#00000000',
+      } as const;
+      const layout: ControlLiveLayout = {
+        ...base,
+        frames: base.frames.map((frame) =>
+          frame.id === 'frame-left' ? { ...frame, titleStyle } : frame,
+        ),
+        effects: { ...base.effects, switch: { ...base.effects.switch, mode } },
+      };
+      const bytes = await compileControlLiveLayout(layout);
+      expect((await readControlLiveLayout(bytes)).layout).toEqual(layout);
+      const { scene } = await unpack(bytes);
+      const geometry = controlLiveLayoutTitleGeometry(layout.resolution, titleStyle);
+      expect(geometry.x + geometry.width).toBe(layout.resolution.width);
+      expect(geometry.y).toBe(0);
+      expect(geometry.height).toBeGreaterThan(layout.resolution.height * 0.085);
+      const contents = scene.compositions?.find(({ id }) => id === 'layout-frame-frame-left');
+      expect(contents?.layers[0]?.children[1]).toMatchObject({
+        id: 'frame-left-title',
+        font: { family: 'Exo 2', size: geometry.fontSize },
+        transform: {
+          position: { x: geometry.x, y: geometry.y },
+          size: { w: geometry.width, h: geometry.height },
+        },
+        backgroundColor: '#00000000',
+        padding: geometry.padding,
+      });
+      const pair = scene.compositions?.find(({ id }) => id === 'layout-look-preset-pair-contents');
+      expect(pair?.layers[0]?.children).toContainEqual(
+        expect.objectContaining({ compositionId: contents?.id }),
+      );
+    },
+  );
 
   it.each([
     { kind: 'image', name: 'studio.png', mime: 'image/png' },

@@ -1,0 +1,24 @@
+.cg-control-layout-focus {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  grid-column: 1 / -1;
+  padding: 3px 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.cg-control-layout-focus > .cg-btn {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
+}
+
+.cg-control-layout-focus__row {
+  min-width: 0;
+  margin-inline-start: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

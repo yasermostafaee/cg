@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { ArrowLeftRight, Columns2, LayoutGrid, PanelsTopLeft, Rows2 } from 'lucide-react';
 import {
   controlLiveLayoutRects,
@@ -6,10 +5,9 @@ import {
   type ControlLiveLayoutArrangement,
   type ControlLiveLayoutPreset,
 } from '@cg/shared-schema';
-import { parseLocalizedNumber } from '@cg/text-shaping';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
-import { NumericInput } from '../../ui/NumericInput.js';
+import { LiveLayoutEditorNumber } from './LiveLayoutEditorNumber.js';
 
 const choices: readonly {
   value: ControlLiveLayoutArrangement;
@@ -23,40 +21,6 @@ const choices: readonly {
   { value: 'grid-bottom', name: 'Grid · fuller bottom', icon: LayoutGrid, counts: [3] },
   { value: 'host-and-guests', name: 'Host + guests', icon: PanelsTopLeft, counts: [3, 4] },
 ];
-
-type GapAxis = 'horizontalGap' | 'verticalGap';
-
-function GapInput({
-  axis,
-  value,
-  max,
-  onChange,
-}: {
-  axis: GapAxis;
-  value: number;
-  max: number;
-  onChange: (value: number) => void;
-}): JSX.Element {
-  const [typed, setTyped] = useState<string>();
-  return (
-    <label>
-      {axis === 'horizontalGap' ? 'Horizontal gap' : 'Vertical gap'}
-      <NumericInput
-        value={typed ?? String(value)}
-        allow="digits"
-        scrub={{ step: 1, min: 0, max }}
-        onBlur={() => setTyped(undefined)}
-        onValueChange={(text) => {
-          setTyped(text);
-          const pixels = parseLocalizedNumber(text);
-          if (pixels !== null && Number.isSafeInteger(pixels) && pixels >= 0 && pixels <= max) {
-            onChange(pixels);
-          }
-        }}
-      />
-    </label>
-  );
-}
 
 export function LiveLayoutEditorArrange({
   layout,
@@ -102,21 +66,28 @@ export function LiveLayoutEditorArrange({
             </Button>
           ))}
       </div>
-      <div className="cg-live-layout-effect-controls">
-        <GapInput
+      <div
+        className="cg-frame-auto-layout__gaps cg-live-layout-gaps"
+        role="group"
+        aria-label="Frame gaps, pixels"
+      >
+        <LiveLayoutEditorNumber
           key={`${preset.id}-horizontal`}
-          axis="horizontalGap"
+          label="Horizontal gap"
           value={preset.horizontalGap}
+          min={0}
           max={layout.resolution.width}
           onChange={(horizontalGap) => changeGeometry({ horizontalGap })}
         />
-        <GapInput
+        <LiveLayoutEditorNumber
           key={`${preset.id}-vertical`}
-          axis="verticalGap"
+          label="Vertical gap"
           value={preset.verticalGap}
+          min={0}
           max={layout.resolution.height}
           onChange={(verticalGap) => changeGeometry({ verticalGap })}
         />
+        <span aria-hidden="true">px</span>
       </div>
     </section>
   );

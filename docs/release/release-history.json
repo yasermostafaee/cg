@@ -669,6 +669,10 @@
           "en": "Use New live layout in CG Control to create frames, presets and a background. Focus animates into a single frame, Return restores the previous arrangement, and Duplicate layout creates a separate copy to prepare while a programme is running."
         },
         {
+          "fa": "در چیدمان زنده، جای عنوان، اندازه، فونت و پس‌زمینه برای هر قاب مستقل است. فاصله‌ها در Arrange هر پریست و Cut و Fade در افکت تغییر تک‌قاب در دسترس‌اند.",
+          "en": "Live layouts support individual frame title position, size, font and background. Arrange shows the preset's gaps. Cut and Fade are available when switching between solo frames."
+        },
+        {
           "fa": "Position برای حرکت قاب و گذار پریست، Cut، Linear، Ease، Bounce و Elastic را همراه Fade اختیاری ارائه می‌کند. افکت پریست و حرکت قاب را می‌توان روی PVW تمرین کرد.",
           "en": "Position offers Cut, Linear, Ease, Bounce and Elastic with optional Fade. Operators can rehearse preset switches and frame movement in PVW."
         },

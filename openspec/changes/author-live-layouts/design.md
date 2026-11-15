@@ -18,3 +18,9 @@ The row's applied look remains the authoritative programme state.
 
 Use the shared Auto layout calculations. Presets store their own arrangement, membership,
 ordering and spacing. Transition settings are shared by all presets in the saved layout.
+Cut swaps the already-seated solo plate directly. Fade blends two stationary, full-frame seats
+before committing the target. Both retain the same Return destination.
+
+Each frame can retain one caption style. Position and size are relative to its frame so the
+caption scales with the shared frame composition. Designer's fixed text layout renders the style
+in the exported page. The editor preview uses the same title geometry as the compiler.

@@ -10,6 +10,12 @@ CG Control SHALL author multiple frames and presets in the channel's template ca
 - **THEN** they can add and remove frames and presets, attach a station input and title to each frame, and select each preset's membership and arrangement
 - **AND** each preset stores the selected variant of Auto layout and its spacing
 
+#### Scenario: Style the title and arrange the gap
+
+- **WHEN** the operator edits a frame title and switches between its presets
+- **THEN** its position, size, font and background follow that frame
+- **AND** a preset with more than one frame shows its own horizontal and vertical gap controls beside Arrange
+
 #### Scenario: Save shared artwork and effects
 
 - **WHEN** the operator saves a layout with a color, image or video background and effect settings
@@ -34,6 +40,6 @@ The console SHALL let an operator focus a frame and return to its originating pr
 #### Scenario: Switch between solo guests
 
 - **WHEN** the operator chooses another already defined frame during Focus
-- **THEN** they can switch directly to that frame with the saved Motion, Push or Slide over effect
+- **THEN** they can switch directly to that frame with the saved Cut, Fade, Motion, Push or Slide over effect
 - **AND** their originating preset is still the destination of Return
 - **AND** the switch keeps the configured inputs for both frames

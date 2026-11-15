@@ -11,3 +11,9 @@
 - [x] Windows Chromium: `control-live-layout.spec.ts` passed for authoring, independent PVW/PGM, Designer catalogue compatibility, and preparing a second layout while the first is on air.
 - [ ] Record the Linux Playwright run URL.
 - [ ] Verify effects on the target Playout Engine.
+
+## Operator feedback
+
+- [x] Verify Cut and stationary Fade in Chromium and Bridge's A/B mock, with both physical seat orders.
+- [x] Verify editable title position, size, font and background in the editor and compiled layout.
+- [x] Verify per-preset gap controls, native input styling, and compact Focus/Return in Chromium and the standalone HTML review.

@@ -436,7 +436,11 @@ const focusLooks = focusFrameIds.map((frameId) =>
 const focusRect = { ...SCENE, x: 0, y: 0 };
 const focusMotion = { motion: 'ease-in-out', fade: false, durationMs: 160 } as const;
 
-async function bootControlFocus(paired = false, startsWithSolo = false) {
+async function bootControlFocus(
+  paired = false,
+  startsWithSolo = false,
+  switchMode: ControlLiveLayout['effects']['switch']['mode'] = 'motion',
+) {
   const cameras = {
     'guest-1': 'src-a',
     'guest-2': 'src-b',
@@ -465,6 +469,7 @@ async function bootControlFocus(paired = false, startsWithSolo = false) {
     background: { kind: 'color', color: '#102030' },
     effects: structuredClone(CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS),
   };
+  layout.effects.switch.mode = switchMode;
   if (startsWithSolo) {
     layout.presets.push({
       ...layout.presets[0]!,
@@ -645,6 +650,81 @@ it('refuses a Control Focus slide transaction and restores the previously shown 
   expect(mock!.layerState(prior.slot)).toEqual(before);
   expect(mock!.layerRenderedRect(next.slot)).toBeNull();
   expect(mock!.stagedMixerCount(1)).toBe(0);
+});
+
+it('dissolves Control Focus in both mixer layer orders and cuts the reserve to the settled picture', async () => {
+  const r = await bootControlFocus(true, false, 'fade');
+  const records = r.liveLayers().get('item-1')!;
+  const priorRects = records.map((record) => mock!.layerRenderedRect(record.slot));
+  const [lower] = records;
+  const upper = records.at(-1)!;
+  const lowerLook = controlLiveLayoutFocusLookId(focusPreset, lower!.sourceId);
+  const upperLook = controlLiveLayoutFocusLookId(focusPreset, upper.sourceId);
+  expect(lower!.slot.layer).toBeLessThan(upper.slot.layer);
+  expect(await r.setActiveLook('item-1', lowerLook, focusMotion)).toEqual({ ok: true });
+  const fade: FrameTransition = { motion: 'cut', fade: true, durationMs: 160 };
+  const focusBox = { x: 0, y: 0, width: 1, height: 1 };
+  const start = (await recvLines()).length;
+  const replicaStart = backup!.receivedCommands().length;
+
+  for (const [look, appearing, opacity] of [
+    [upperLook, upper, 1],
+    [lowerLook, lower!, 0],
+  ] as const) {
+    const mark = (await recvLines()).length;
+    expect(await r.setActiveLook('item-1', look, fade)).toEqual({ ok: true });
+    expect(mock!.layerRenderedRect(appearing.slot)).toEqual(focusBox);
+    const lines = (await recvLines()).slice(mark);
+    expect(lines.filter((line) => / OPACITY .+ [1-9]\d* linear DEFER$/.test(line))).toEqual([
+      'MIXER 1-' + String(upper.slot.layer) + ' OPACITY ' + String(opacity) + ' 4 linear DEFER',
+    ]);
+    expect(lines.some((line) => / (?:FILL|CLIP) .+ [1-9]\d* linear DEFER$/.test(line))).toBe(false);
+    expect(backup!.layerRenderedRect({ channel: 2, layer: appearing.slot.layer })).toEqual(
+      focusBox,
+    );
+  }
+
+  expect(await r.setActiveLook('item-1', focusPreset, focusMotion)).toEqual({ ok: true });
+  expect(r.activeLookId('item-1')).toBe(focusPreset);
+  expect(records.map((record) => mock!.layerRenderedRect(record.slot))).toEqual(priorRects);
+  expect(
+    records.map((record) => backup!.layerRenderedRect({ channel: 2, layer: record.slot.layer })),
+  ).toEqual(priorRects);
+  expect((await recvLines()).slice(start).some((line) => /^(?:PLAY|CLEAR) /.test(line))).toBe(
+    false,
+  );
+  expect(
+    backup!
+      .receivedCommands()
+      .slice(replicaStart)
+      .some(({ line }) =>
+        / (?:FILL|CLIP|OPACITY) .+ [1-9]\d* (?:linear|easeinoutquad) DEFER$/.test(line),
+      ),
+  ).toBe(false);
+});
+
+it('cuts directly between focused frames without tweening either input', async () => {
+  const r = await bootControlFocus(false, true, 'cut');
+  const next = controlLiveLayoutFocusLookId(soloPreset, focusFrameIds[1]);
+  const cut: FrameTransition = { motion: 'cut', fade: false, durationMs: 160 };
+  const start = (await recvLines()).length;
+  expect(await r.setActiveLook('item-1', next, cut)).toEqual({ ok: true });
+  expect(r.activeLookId('item-1')).toBe(next);
+  expect(
+    r
+      .liveLayers()
+      .get('item-1')!
+      .filter((record) => record.held !== true),
+  ).toMatchObject([{ sourceId: focusFrameIds[1] }]);
+  const lines = (await recvLines()).slice(start);
+  expect(lines.some((line) => /^(?:PLAY|CLEAR) /.test(line))).toBe(false);
+  expect(
+    lines.some((line) =>
+      / (?:FILL|CLIP|OPACITY) .+ [1-9]\d* (?:linear|easeinoutquad) DEFER$/.test(line),
+    ),
+  ).toBe(false);
+  expect(await r.setActiveLook('item-1', soloPreset, focusMotion)).toEqual({ ok: true });
+  expect(r.activeLookId('item-1')).toBe(soloPreset);
 });
 
 it('switches directly from a one-frame preset into Control Focus and returns to that preset', async () => {
