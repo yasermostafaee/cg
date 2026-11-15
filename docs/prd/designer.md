@@ -6993,3 +6993,13 @@ stays with the project and exported template.
   independent offsets. Clock punctuation keeps its own correction and Sequence pictures keep their placement.
 - WHEN a fixed Text box switches to Auto size THEN its offset is held for the next fixed box.
 - WHEN the offset is absent or zero THEN the text uses the original placement.
+
+## [~] D-216 — List project fonts first ⟨priority: medium — owner, 2026-11-15⟩ — `openspec/changes/prioritize-project-fonts/`
+
+**What:** The shared Inspector font selection shows the project's imported fonts at the top.
+
+**Acceptance**
+
+- WHEN the project contains added fonts THEN Project fonts is the first option group in Text,
+  Ticker, Clock and Sequence.
+- WHEN new fonts appear THEN the current font selection remains in force.

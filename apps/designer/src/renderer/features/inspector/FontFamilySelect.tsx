@@ -3,9 +3,8 @@ import { Select } from '../../ui/Select.js';
 import { useSharedFonts } from '../sharedLibrary/useSharedFonts.js';
 
 /**
- * The font-family dropdown shared by the Text and Ticker inspectors:
- * built-in families first, then the project's imported fonts (D-011),
- * with the element's current (unknown) family kept selectable.
+ * The font-family dropdown for Text, Ticker, Clock and Sequence.
+ * Project fonts appear first, with the element's current family kept selectable.
  */
 export const FONT_FAMILIES = [
   'Arial',
@@ -51,15 +50,6 @@ export function FontFamilySelect({
       }}
       aria-label="Font family"
     >
-      {FONT_FAMILIES.includes(value as (typeof FONT_FAMILIES)[number]) ||
-      sceneFonts.some((f) => f.family === value) ? null : (
-        <option value={value}>{value}</option>
-      )}
-      {FONT_FAMILIES.map((f) => (
-        <option key={f} value={f}>
-          {f}
-        </option>
-      ))}
       {projectFonts.length > 0 && (
         <optgroup label="Project fonts">
           {projectFonts.map((f) => (
@@ -69,6 +59,15 @@ export function FontFamilySelect({
           ))}
         </optgroup>
       )}
+      {FONT_FAMILIES.includes(value as (typeof FONT_FAMILIES)[number]) ||
+      sceneFonts.some((f) => f.family === value) ? null : (
+        <option value={value}>{value}</option>
+      )}
+      {FONT_FAMILIES.map((f) => (
+        <option key={f} value={f}>
+          {f}
+        </option>
+      ))}
       {sharedFonts.length > 0 && (
         <optgroup label="Shared Library fonts">
           {sharedFonts.map((font) => (
