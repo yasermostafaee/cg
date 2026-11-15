@@ -17,11 +17,12 @@ import {
   lookOperatorFrames,
   lookOperatorMasks,
   activeLookOf,
+  controlLiveLayoutDefaults,
   REFERENCE_RASTER,
   sourceAspect,
   videoModeFramePeriodMs,
 } from '@cg/shared-ipc';
-import { isOnAirStatus } from '@cg/shared-schema';
+import { controlLiveLayoutFocusTarget, isOnAirStatus } from '@cg/shared-schema';
 import { Panel } from '../../ui/Panel.js';
 import { useAuthCapabilities } from '../../hooks/useAuthCapabilities.js';
 import { effectiveTimingFor } from '../inspector/timingToSend.js';
@@ -49,6 +50,7 @@ import {
   effectivePosition,
   maskPlacementsWithDraft,
   previewLookPin,
+  setPreviewLookPin,
   prunePreviewLookPins,
   subscribeDrafts,
 } from '../inspector/draftStore.js';
@@ -67,6 +69,7 @@ import { LiveInputCheckCard } from './LiveInputCheckCard.js';
 import { PVW_INPUT_SURFACE, useLiveInputCheck } from './liveInputCheckContext.js';
 import { usePreserveFrameAspect } from './previewResizePreferences.js';
 import { useFrameTransitionPreference } from '../inspector/frameTransitionPreference.js';
+import { ControlLayoutFocus } from '../liveLayouts/ControlLayoutFocus.js';
 
 /**
  * PREVIEW — the PVW box.
@@ -152,11 +155,13 @@ export function PreviewPanel({
   companionActions,
   canEditPosition = false,
   onSelectItem,
+  selectedItemId,
   hidden = false,
 }: {
   companionActions?: ReactNode;
   canEditPosition?: boolean;
   onSelectItem?: ((itemId: string) => void) | undefined;
+  selectedItemId?: string | null | undefined;
   hidden?: boolean;
 }): JSX.Element {
   const engine = useEngineName();
@@ -229,11 +234,20 @@ export function PreviewPanel({
           const alias = slots.find((s) => s.layer === r.layer && s.channel === r.channel)?.alias;
           const info = templates.get(item.templateId, r.channel) ?? null;
           const live = info?.liveSources;
+          const controlLiveLayout = info?.controlLiveLayout;
           const pinned = previewLookPin(item.itemId, item.activeLookId);
           const cue = live?.looks?.some(({ id }) => id === pinned) ? pinned : undefined;
-          const lookSelection = cue ?? item.activeLookId;
+          const programmeFocus =
+            controlLiveLayout === undefined
+              ? undefined
+              : controlLiveLayoutFocusTarget(controlLiveLayout, item.activeLookId);
+          const lookSelection = cue ?? programmeFocus?.presetId ?? item.activeLookId;
           const activeLookId =
             live === undefined ? undefined : activeLookOf(live, lookSelection)?.id;
+          const focus =
+            controlLiveLayout === undefined
+              ? undefined
+              : controlLiveLayoutFocusTarget(controlLiveLayout, activeLookId);
           const hasEditableFrame =
             live !== undefined && Object.keys(lookOperatorFrames(live, activeLookId)).length > 0;
           const frameDraft = snapshotFramePlacementDraft(item.itemId);
@@ -328,6 +342,7 @@ export function PreviewPanel({
             previewCropPending: item.pending || item.status === 'exiting',
             book: rehearsalBookOf(info, item, fields) ?? undefined,
             liveSources: live,
+            controlLiveLayout,
             activeLookId,
             // An applied on-air switch has already run its effect. Do not replay it after PGM.
             animatePresetChanges: cue !== undefined || !isOnAirStatus(item),
@@ -373,6 +388,8 @@ export function PreviewPanel({
             plateSources: {
               templateId: item.templateId,
               assignments: currentSourceAssignments(),
+              authoredDefaults: controlLiveLayoutDefaults(controlLiveLayout),
+              bindingLookId: focus?.presetId,
               // `CHANNEL-SOURCES-01` — the rehearsing row's channel's own defaults.
               channel: r.channel,
               ...(item.frozenAssignment !== undefined && {
@@ -535,6 +552,10 @@ export function PreviewPanel({
     caption's own component is mounted.
   */
   const renderableCount = subjects.filter((s) => pageByItem.get(s.itemId)?.kind === 'page').length;
+  const selectedLayout =
+    subjects.find(
+      (subject) => subject.itemId === selectedItemId && subject.controlLiveLayout !== undefined,
+    ) ?? subjects.find((subject) => subject.controlLiveLayout !== undefined);
   // Each row's template in the operator's words — the one naming rule (`templateName`, rule 11).
   const templateNames = new Map(
     subjects.map((s) => {
@@ -711,6 +732,15 @@ export function PreviewPanel({
         <span className="cg-monitor-strip__spacer" />
         <CheckInput channel={viewChannel} />
       </div>
+      {selectedLayout?.controlLiveLayout !== undefined && (
+        <ControlLayoutFocus
+          layout={selectedLayout.controlLiveLayout}
+          current={selectedLayout.activeLookId}
+          target="Preview"
+          rowName={subjects.length > 1 ? selectedLayout.rowName : undefined}
+          onSelect={(lookId) => setPreviewLookPin(selectedLayout.itemId, lookId)}
+        />
+      )}
       <div className="cg-pvw-stage">
         {subjects.length === 0 ? (
           <div

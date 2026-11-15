@@ -1,12 +1,12 @@
 import { useState, useSyncExternalStore } from 'react';
-import type { LiveSourceDeclaration } from '@cg/shared-schema';
+import type { ControlLiveLayout, LiveSourceDeclaration } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { SourcePicker } from '../sources/SourcePicker.js';
 import { MediaPlaybackControl } from '../sources/MediaPlayback.js';
-import { withChannelDefaults } from '@cg/shared-ipc';
+import { controlLiveLayoutDefaults, withChannelDefaults } from '@cg/shared-ipc';
 import {
   commitSourceAssignments,
   currentSourceAssignments,
@@ -58,6 +58,7 @@ export function TemplateDefaultsDialog({
   templateName,
   plates,
   channel,
+  layout,
 }: {
   open: boolean;
   onClose: () => void;
@@ -68,6 +69,7 @@ export function TemplateDefaultsDialog({
   plates: readonly LiveSourceDeclaration[];
   /** `CHANNEL-SOURCES-01` — the channel whose defaults this dialog edits: the row's. */
   channel: number;
+  layout?: ControlLiveLayout | undefined;
 }): JSX.Element | null {
   useSyncExternalStore(subscribeSources, sourcesVersion);
   const { surface, inputCheck } = useInputCheckSurface(channel, open, templateId);
@@ -101,8 +103,9 @@ export function TemplateDefaultsDialog({
 
   if (!open) return null;
 
-  const applied = appliedPlateSources(templateId, plates, channel);
-  const valueOf = (plateId: string): string => draft?.get(plateId) ?? applied.get(plateId) ?? '';
+  const explicit = appliedPlateSources(templateId, plates, channel);
+  const authoredDefaults = controlLiveLayoutDefaults(layout);
+  const valueOf = (plateId: string): string => draft?.get(plateId) ?? explicit.get(plateId) ?? '';
   const stage = (plateId: string, sourceId: string): void => {
     setDraft((prev) => {
       const next = new Map(prev ?? []);
@@ -215,43 +218,51 @@ export function TemplateDefaultsDialog({
           </p>
         ) : (
           <>
-            {plates.map((plate, i) => (
-              <div key={plate.elementId} style={styles.field}>
-                {/*
+            {plates.map((plate, i) => {
+              const authored = authoredDefaults?.[plate.sourceId];
+              const picked = valueOf(plate.sourceId);
+              return (
+                <div key={plate.elementId} style={styles.field}>
+                  {/*
                   ⚠ **`Plate N` IS THE LABEL AND THE PLATE ID IS ON THE `title`** — golden rule
                   11, and the drawing agrees. `plate.sourceId` is the template AUTHOR's
                   identifier for a hole in a layout (`guest-1`); the operator reads a position.
                   The id is RELOCATED rather than deleted: it is what an author correlates
                   against, so it rides the hover.
                 */}
-                <label
-                  htmlFor={`plate-default-${plate.sourceId}`}
-                  style={styles.fieldLabel}
-                  title={plate.sourceId}
-                >
-                  Plate {i + 1}
-                </label>
-                {/*
+                  <label
+                    htmlFor={`plate-default-${plate.sourceId}`}
+                    style={styles.fieldLabel}
+                    title={plate.sourceId}
+                  >
+                    Plate {i + 1}
+                  </label>
+                  {/*
                   🔴 `PLAYOUT-SOURCES-01` §2.A — THE ONE PICKER. It only returns a choice; this
                   dialog's own model is unchanged — the choice is staged, and `Save defaults`
                   commits it. Template-wide, so no channel gates the inputs here.
                 */}
-                <span className="cg-source-field">
-                  <SourcePicker
-                    id={`plate-default-${plate.sourceId}`}
-                    aria-label={`Default source for ${plate.sourceId}`}
-                    data={{ 'data-defaults-select': plate.sourceId }}
-                    value={valueOf(plate.sourceId)}
-                    onChange={(sourceId) => stage(plate.sourceId, sourceId)}
-                    choices={[{ value: '', label: 'None' }]}
-                    previewChannel={channel}
-                    inputCheck={inputCheck}
-                  />
-                  {/* `MEDIA-PLATES-01` §2 — a bound clip's Playback, the clip's own and station-wide. */}
-                  <MediaPlaybackControl sourceId={valueOf(plate.sourceId)} />
-                </span>
-              </div>
-            ))}
+                  <span className="cg-source-field">
+                    <SourcePicker
+                      id={`plate-default-${plate.sourceId}`}
+                      aria-label={`Default source for ${plate.sourceId}`}
+                      data={{ 'data-defaults-select': plate.sourceId }}
+                      value={picked}
+                      onChange={(sourceId) => stage(plate.sourceId, sourceId)}
+                      choices={[
+                        authored === undefined
+                          ? { value: '', label: 'None' }
+                          : { value: '', label: 'Use layout input', names: authored },
+                      ]}
+                      previewChannel={channel}
+                      inputCheck={inputCheck}
+                    />
+                    {/* `MEDIA-PLATES-01` §2 — a bound clip's Playback, the clip's own and station-wide. */}
+                    <MediaPlaybackControl sourceId={picked || authored || ''} />
+                  </span>
+                </div>
+              );
+            })}
             {/*
               §3 — WHAT IT CHANGES AND THAT NO PLAYOUT COMMAND IS SENT, in our words rather
               than the prototype's "Only the sample configuration changes here" — which is

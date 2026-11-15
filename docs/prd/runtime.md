@@ -5228,3 +5228,15 @@ Send CG commands to the active engine after its external-graphics transfer contr
 - WHEN a verified mirror-sync pair is active THEN the engine holding programme runs the input effect and the verified reserve receives the settled input using its own media.
 - WHEN a row preset is confirmed THEN the local PVW follows it unless the operator has chosen another Inspector preset since the row request began. A refused update keeps the existing PVW cue.
 - WHEN the same engine reconnects after a preset effect was interrupted THEN the previous arrangement and its resident artwork recover together, and only temporary arriving seats are muted and cleared.
+
+## [~] R-120 — Author Live layouts in CG Control ⟨priority: high — owner, 2026-11-15⟩ — `openspec/changes/author-live-layouts/`
+
+**What:** Create, edit and duplicate live layouts from CG Control. Store stable frame inputs and titles, reusable preset arrangements, a color/image/video background and layout-wide effects.
+**Why:** Operators need to prepare a programme and move between panel and individual guest shots during a show.
+**Acceptance:**
+
+- WHEN building a live layout THEN the operator can add and remove frames and presets, choose each preset's members and grid arrangement, and bind a title and input to each frame.
+- WHEN choosing a background or layout-wide effect THEN the operator can preview it and reuse it across that layout's presets.
+- WHEN focusing a frame or returning THEN PVW and PGM use the configured effect and Return restores the original preset, positions, titles and inputs.
+- WHEN another frame is selected during Focus THEN the chosen Motion, Push or Slide over plays directly between solo views with their existing inputs.
+- WHEN one layout is on air THEN the operator can create and edit another one or duplicate the running layout for the next programme. Designer-authored layouts remain available through the existing workflow.

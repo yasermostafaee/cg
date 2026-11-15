@@ -1,7 +1,12 @@
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useState, useSyncExternalStore } from 'react';
-import { assignedSourceId, plateLabel, type TemplateInfo } from '@cg/shared-ipc';
-import type { StackItemState } from '@cg/shared-schema';
+import {
+  controlLiveLayoutDefaults,
+  plateLabel,
+  resolvePlateSourcesForLook,
+  type TemplateInfo,
+} from '@cg/shared-ipc';
+import { controlLiveLayoutFocusTarget, type StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
 import { ChoiceLabel, SourcePicker } from '../sources/SourcePicker.js';
@@ -95,12 +100,25 @@ export function LiveSourceSwapDialog({
   useSyncExternalStore(subscribeSources, sourcesVersion);
   const { surface, inputCheck } = useInputCheckSurface(channel);
   const [refusal, setRefusal] = useState<string | null>(null);
-  const assignments = currentSourceAssignments();
   const plates = template.liveSources?.sources ?? [];
   const override = item.sourceOverride ?? {};
-
-  const assignedFor = (plateId: string): string | undefined =>
-    assignedSourceId(assignments, channel, template.templateId, plateId) ?? undefined;
+  const layout = template.controlLiveLayout;
+  const lookId = item.activeLookId ?? template.liveSources?.defaultLookId;
+  const bindingLookId =
+    layout === undefined
+      ? lookId
+      : (controlLiveLayoutFocusTarget(layout, lookId)?.presetId ?? lookId);
+  // Removing the top-level patch restores the preset input or the row's frozen default.
+  const revertedSources = resolvePlateSourcesForLook({
+    templateId: template.templateId,
+    plateIds: plates.map(({ sourceId }) => sourceId),
+    assignments: currentSourceAssignments(),
+    channel,
+    authoredDefaults: controlLiveLayoutDefaults(layout),
+    frozenAssignment: item.frozenAssignment,
+    lookBindings: item.lookSourceOverride,
+    lookId: bindingLookId,
+  });
 
   const change = (plateId: string, value: string): void => {
     setRefusal(null);
@@ -128,7 +146,10 @@ export function LiveSourceSwapDialog({
       <LiveInputCheckCard surface={surface} />
       <InputEffectControls />
       {plates.map((plate, i) => {
-        const assigned = assignedFor(plate.sourceId);
+        const assigned = revertedSources.get(plate.sourceId) ?? null;
+        const hasPresetAssignment =
+          bindingLookId !== undefined &&
+          item.lookSourceOverride?.[bindingLookId]?.[plate.sourceId] !== undefined;
         const swapped = override[plate.sourceId];
         // The one numbering (`plateLabel`); the id stays on the label's `title`.
         const label = plateLabel(plates, plate.sourceId) ?? `Plate ${String(i + 1)}`;
@@ -142,7 +163,11 @@ export function LiveSourceSwapDialog({
               {label}
               <span style={styles.assigned} data-swap-assigned="">
                 <ChoiceLabel
-                  choice={{ value: '', label: 'Template assignment', names: assigned ?? null }}
+                  choice={{
+                    value: '',
+                    label: hasPresetAssignment ? 'Preset assignment' : 'Template assignment',
+                    names: assigned,
+                  }}
                 />
                 {swapped !== undefined && (
                   <span style={styles.overridden}> · swapped for this row</span>
@@ -161,7 +186,13 @@ export function LiveSourceSwapDialog({
               value={swapped ?? ''}
               onChange={(sourceId) => change(plate.sourceId, sourceId)}
               // `B-303` — the words and the name kept apart: the name in its own isolate and direction.
-              choices={[{ value: '', label: 'Use template assignment', names: assigned ?? null }]}
+              choices={[
+                {
+                  value: '',
+                  label: hasPresetAssignment ? 'Use preset assignment' : 'Use template assignment',
+                  names: assigned,
+                },
+              ]}
               channel={item.slot?.channel}
               inputCheck={inputCheck}
             />

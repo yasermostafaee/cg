@@ -2,8 +2,13 @@ import { effectiveLayerShortcutBindings } from '../fixedLayers/layer-shortcuts.j
 import { useEngineName } from '../../ui/engineWording.js';
 import { Fragment, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { silenceHasTarget } from './panicReport.js';
-import { isOnAirStatus, type StackItemState } from '@cg/shared-schema';
 import {
+  controlLiveLayoutFocusTarget,
+  isOnAirStatus,
+  type StackItemState,
+} from '@cg/shared-schema';
+import {
+  controlLiveLayoutDefaults,
   isPlaylistOutput,
   resolvePlateSourcesForLook,
   type EmptiedAirRow,
@@ -107,6 +112,7 @@ interface Props {
   selectedId: string | null;
   onUpdate: (itemId: string) => Promise<{ accepted: boolean; errorCode?: string | undefined }>;
   independentPreview?: boolean;
+  onNewLiveLayout?: (channel: number) => Promise<void>;
   /** R-028 part B — the operator's workspace geometry (see `useShellLayout`). */
   layout: ShellLayout;
   /** Narrow screens only: is the Inspector overlay showing? */
@@ -305,6 +311,7 @@ export function LayersPanel({
   selectedId,
   onUpdate,
   independentPreview = false,
+  onNewLiveLayout,
   layout,
   inspectorOpen,
   onToggleInspector,
@@ -929,19 +936,24 @@ export function LayersPanel({
   function liveSourceEntry(itemId: string, plateId: string): SourceDefinition | null {
     const item = items.find((i) => i.itemId === itemId);
     if (item === undefined) return null;
+    const channel = itemChannelOf(item, slots, defaultsChannel);
+    const layout = templates.get(item.templateId, channel)?.controlLiveLayout;
+    const focus =
+      layout === undefined ? undefined : controlLiveLayoutFocusTarget(layout, item.activeLookId);
     const catalogId = resolvePlateSourcesForLook({
       templateId: item.templateId,
       plateIds: [plateId],
       assignments: sourceAssignments,
+      authoredDefaults: controlLiveLayoutDefaults(layout),
       // `CHANNEL-SOURCES-01` — the row's own channel's defaults.
-      channel: itemChannelOf(item, slots, defaultsChannel),
+      channel,
       ...(item.frozenAssignment !== undefined && { frozenAssignment: item.frozenAssignment }),
       ...(item.lookSourceOverride !== undefined && { lookBindings: item.lookSourceOverride }),
       ...(item.sourceOverride !== undefined && { overrides: item.sourceOverride }),
       // REQUIRED, not optional: `undefined` is the positive statement *this carrier authors
       // no looks*, and spreading the key away would make a missing look indistinguishable
       // from a look the resolver was never told about.
-      lookId: item.activeLookId,
+      lookId: focus?.presetId ?? item.activeLookId,
     }).get(plateId);
     if (catalogId === undefined || catalogId === null) return null;
     return sourceCatalog.sources.find((c) => c.id === catalogId) ?? null;
@@ -1422,6 +1434,11 @@ export function LayersPanel({
       }
       actions={
         <>
+          {canOperate && onNewLiveLayout !== undefined && listReady && bank !== null && (
+            <Button variant="neutral" onClick={() => void onNewLiveLayout(bank.channel)}>
+              New live layout
+            </Button>
+          )}
           {canOperate && capabilities?.layerProfiles === true && listReady && bank !== null && (
             <LayerProfiles key={bank.channel} bank={bank} snapshot={items} />
           )}

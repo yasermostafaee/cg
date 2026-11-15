@@ -48,6 +48,7 @@ import { bytesToBase64 } from './packageBytes.js';
 import { collectListFieldTargets, type ListFieldTargets } from '../inspector/listFieldTargets.js';
 import { sharedFrameTitlesOf } from '../inspector/sharedFrameTitles.js';
 import { countdownTargetFieldsOf } from './countdownTargetFields.js';
+import { labelControlLiveLayoutFieldGroups } from '../liveLayouts/controlLiveLayoutCompiler.js';
 
 /**
  * 🔴 `BOOK-EXPORT-01` (`B-350`) — **A FILE THAT IS NOT A TEMPLATE, IN THE OPERATOR'S WORDS.** Each
@@ -153,6 +154,7 @@ export interface ProduceOptions {
    * built again when the runtime changes. Omitted (a test, a byte-only caller), nothing is kept.
    */
   consoleVersion?: string;
+  expectedControlLayoutSource?: string;
 }
 
 /** The minimal `window.cg` surface this module needs (the extended import channel). */
@@ -364,11 +366,18 @@ export async function produceTemplateDelivery(
   const liveSources = buildTemplateLiveSources(scene);
   const template: TemplateInfo = {
     templateId: manifest.id,
+    ...(scene.controlLiveLayout !== undefined && {
+      controlLiveLayout: scene.controlLiveLayout,
+      controlLiveLayoutSource: sha256Hex(bytes),
+    }),
     ...(name !== undefined ? { name } : {}),
     ...(opts.sourceFileName !== undefined ? { sourceFileName: opts.sourceFileName } : {}),
     templateType: scene.templateType,
     fields: [...aggregate.fields],
-    groups: [...aggregate.groups],
+    groups:
+      scene.controlLiveLayout === undefined
+        ? [...aggregate.groups]
+        : labelControlLiveLayoutFieldGroups(scene.controlLiveLayout, aggregate.groups),
     ...((liveSources.looks?.length ?? 0) > 1 && {
       sharedFrameTitles: sharedFrameTitlesOf(scene),
     }),
@@ -534,14 +543,29 @@ export async function deliverTemplateImport(
     opts.consoleVersion === undefined
       ? undefined
       : pageBuildOf(opts.consoleVersion, opts.fontsCss ?? '');
-  const sourceSha256 = build === undefined ? undefined : await keepPackage(bridge, bytes);
+  const needsSource = template.controlLiveLayout !== undefined;
+  const sourceSha256 =
+    build === undefined && !needsSource ? undefined : await keepPackage(bridge, bytes);
+  if (needsSource && sourceSha256 === undefined) {
+    throw new Error(
+      bytes.byteLength > TEMPLATE_SOURCE_MAX_BYTES
+        ? 'The layout and background are too large to save. Choose a smaller background.'
+        : 'CG Bridge could not save the editable layout.',
+    );
+  }
   const registered = await bridge.templates.import({
     template,
     html,
     ...(opts.channel !== undefined && { channel: opts.channel }),
     ...(build !== undefined && { build }),
     ...(sourceSha256 !== undefined && { sourceSha256 }),
+    ...(opts.expectedControlLayoutSource !== undefined && {
+      expectedControlLayoutSource: opts.expectedControlLayoutSource,
+    }),
   });
+  if (needsSource && !registered.registered) {
+    throw new Error(registered.message ?? 'CG Bridge could not register the layout.');
+  }
   const thumbnail = delivery.thumbnailPng;
   if (
     registered.registered &&

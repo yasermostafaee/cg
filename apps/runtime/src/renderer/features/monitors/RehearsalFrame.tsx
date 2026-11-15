@@ -10,12 +10,15 @@ import {
 import type { CSSProperties, Ref } from 'react';
 import type { CgPage, FieldValues, FitRect, Position } from '@cg/shared-schema';
 import {
+  controlLiveLayoutFocusTarget,
+  controlLiveLayoutSoloTarget,
   pageMediaPath,
   positionQuery,
   CG_LIVE_FRAME_TRANSITION_PAGE_MARKER,
   CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER,
   CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER,
   withCgControl,
+  type ControlLiveLayout,
   type FrameTransitionPhase,
   type LiveFramePlacement,
   type LiveMaskPlacement,
@@ -56,6 +59,7 @@ import {
   retainPresetArtwork,
   runRehearsalEffect,
 } from './rehearsalPresetEffects.js';
+import { previewFocusSwitch } from './previewFocusSwitch.js';
 
 /**
  * R-022 — ONE rehearsing row's frame: the retained self-contained page, in a
@@ -198,6 +202,7 @@ interface Props {
   book?: RehearsalBook | undefined;
   livePlates: readonly PlatePlacement[];
   liveSources?: TemplateLiveSources | undefined;
+  controlLiveLayout?: ControlLiveLayout | undefined;
   playing?: boolean;
   canReplayEffect?: boolean;
   replayBaseline?: LiveFramePlacement[] | undefined;
@@ -240,6 +245,7 @@ export function RehearsalFrame({
   book,
   livePlates,
   liveSources,
+  controlLiveLayout,
   playing = false,
   canReplayEffect = false,
   replayBaseline,
@@ -547,8 +553,8 @@ export function RehearsalFrame({
       running?.cancel();
     }
     if (current?.payload === payload && current.lookId === lookId) return;
-    const effect = frameTransitionPreference();
-    const plan =
+    const effect = controlLiveLayout?.effects.focus ?? frameTransitionPreference();
+    const canAnimatePreset =
       visible &&
       playing &&
       animatePresetChanges &&
@@ -558,8 +564,57 @@ export function RehearsalFrame({
       liveSources !== undefined &&
       look !== undefined &&
       previousLook !== undefined &&
-      previousLook.id !== look.id &&
-      (effect.motion !== 'cut' || effect.fade)
+      previousLook.id !== look.id;
+    if (canAnimatePreset && controlLiveLayout !== undefined) {
+      const from = controlLiveLayoutSoloTarget(controlLiveLayout, previousLook.id);
+      const to = controlLiveLayoutFocusTarget(controlLiveLayout, look.id);
+      const change = controlLiveLayout.effects.switch;
+      if (
+        from !== undefined &&
+        to !== undefined &&
+        from.presetId === to.presetId &&
+        from.frameId !== to.frameId &&
+        (change.mode !== 'motion' || effect.motion !== 'cut' || effect.fade)
+      ) {
+        inputEffect.current?.cancel();
+        const anchors = framePlacementRects(liveSources, from.presetId, current.framePlacements);
+        const cue: RehearsalPresetCue = { doc, lookId, payload, commit: push };
+        let appliedPayload: string | undefined;
+        const commit = (): void => {
+          cue.commit();
+          appliedPayload = cue.payload;
+        };
+        onTransitionChange?.(itemId, true);
+        const cancel = previewFocusSwitch({
+          doc,
+          before: { look: previousLook, frameId: from.frameId, anchor: anchors[from.frameId] },
+          after: { look, frameId: to.frameId, anchor: anchors[to.frameId] },
+          layout: controlLiveLayout,
+          period: presetFramePeriodMs,
+          pictureReady: () => {
+            const sourceId = livePlatesRef.current.find(
+              ({ plateId }) => plateId === to.frameId,
+            )?.sourceId;
+            if (sourceId == null) return true;
+            const picture = sourceFramesRef.current.get(sourceId);
+            return picture?.jpegBase64 !== undefined && !!picture.width && !!picture.height;
+          },
+          commit,
+          settled: (commitTarget) => {
+            if (commitTarget) {
+              if (appliedPayload !== cue.payload) commit();
+              else paintPvwPlatePictures(doc, livePlatesRef.current, sourceFramesRef.current);
+            }
+            runningEffect.current = undefined;
+            onTransitionChange?.(itemId, false);
+          },
+        });
+        runningEffect.current = { cancel, preset: cue };
+        return;
+      }
+    }
+    const plan =
+      canAnimatePreset && (effect.motion !== 'cut' || effect.fade)
         ? rehearsalPresetPlan(
             {
               look: previousLook,
@@ -573,7 +628,7 @@ export function RehearsalFrame({
             },
             effect,
             presetFramePeriodMs,
-            html.includes(CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER),
+            controlLiveLayout === undefined && html.includes(CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER),
           )
         : undefined;
     if (plan === undefined) {
@@ -623,6 +678,7 @@ export function RehearsalFrame({
     playing,
     activeLookId,
     liveSources,
+    controlLiveLayout,
     animatePresetChanges,
     presetFramePeriodMs,
     itemId,

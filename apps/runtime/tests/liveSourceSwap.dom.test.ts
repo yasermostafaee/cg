@@ -4,9 +4,11 @@ import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import type { SourceAssignments, SourceCatalog } from '@cg/shared-ipc';
+import { controlLiveLayoutFocusLookId } from '@cg/shared-schema';
 import { toMenuItems } from '../src/renderer/ui/rowAction.js';
 import { layerRowActions } from '../src/renderer/features/layers/layerRowActions.js';
 import { LiveSourceSwapDialog } from '../src/renderer/features/layers/LiveSourceSwapDialog.js';
+import { createControlLiveLayout } from '../src/renderer/features/liveLayouts/controlLiveLayoutCompiler.js';
 import {
   __resetSourcesForTest,
   initSources,
@@ -75,6 +77,7 @@ async function renderDialog(
   over: Parameters<typeof itemWith>[1] = {},
   channel = 1,
   assignments: SourceAssignments = ASSIGNMENTS,
+  template = TEMPLATE,
 ): Promise<void> {
   initSources({
     sources: {
@@ -98,7 +101,7 @@ async function renderDialog(
     r.render(
       createElement(LiveSourceSwapDialog, {
         item: itemWith('on-air', over),
-        template: TEMPLATE,
+        template,
         channel,
         onSwap,
         onClose: () => undefined,
@@ -214,6 +217,65 @@ describe('6.9 — the dialog names each plate’s assignment, and commits in ONE
     // The unknown id is on the title, never in the text.
     expect(assigned?.textContent).not.toContain('src-gone');
     expect(assigned?.querySelector('[title="src-gone"]')).not.toBeNull();
+  });
+
+  const authoredLayout = createControlLiveLayout();
+  const presetId = authoredLayout.defaultPresetId;
+  const authoredTemplate = {
+    ...TEMPLATE,
+    controlLiveLayout: {
+      ...authoredLayout,
+      frames: [{ id: 'guest-1', sourceId: 'src-b', title: 'Guest' }],
+      presets: authoredLayout.presets.map((preset) => ({ ...preset, frameIds: ['guest-1'] })),
+    },
+  };
+
+  it.each<{
+    assignments: SourceAssignments;
+    frozenAssignment?: Record<string, string>;
+    label: string;
+  }>([
+    { assignments: { assignments: [] }, label: 'Baku' },
+    { assignments: ASSIGNMENTS, label: 'Studio A' },
+    { assignments: ASSIGNMENTS, frozenAssignment: { 'guest-1': 'src-b' }, label: 'Baku' },
+    { assignments: ASSIGNMENTS, frozenAssignment: {}, label: 'none set' },
+  ])(
+    'shows the source a swap would restore ($label)',
+    async ({ assignments, frozenAssignment, label }) => {
+      await renderDialog(
+        () => Promise.resolve({ ok: true }),
+        frozenAssignment === undefined ? {} : { frozenAssignment },
+        1,
+        assignments,
+        authoredTemplate,
+      );
+      expect(openDialog()?.querySelector('[data-swap-assigned]')?.textContent).toBe(
+        `Template assignment (${label})`,
+      );
+    },
+  );
+
+  it('shows the originating preset source when reverting a focused frame override', async () => {
+    const onSwap = vi.fn(() => Promise.resolve({ ok: true }));
+    await renderDialog(
+      onSwap,
+      {
+        activeLookId: controlLiveLayoutFocusLookId(presetId, 'guest-1'),
+        lookSourceOverride: { [presetId]: { 'guest-1': 'src-b' } },
+        frozenAssignment: { 'guest-1': 'src-a' },
+        sourceOverride: { 'guest-1': 'src-a' },
+      },
+      1,
+      ASSIGNMENTS,
+      authoredTemplate,
+    );
+    expect(openDialog()?.querySelector('[data-swap-assigned]')?.textContent).toBe(
+      'Preset assignment (Baku) · swapped for this row',
+    );
+
+    await choosePickerOption(field(), '');
+
+    expect(onSwap).toHaveBeenCalledWith('guest-1', null);
   });
 
   /** `PLAYOUT-SOURCES-01` §2.A — the plate's picker field (the ONE source picker). */

@@ -1309,9 +1309,12 @@ export function unassignedPlateIds(
   channel: number,
   templateId: string,
   plateIds: readonly string[],
+  authoredDefaults?: Readonly<Record<string, string>>,
 ): string[] {
   return plateIds.filter(
-    (plateId) => assignedSourceId(assignments, channel, templateId, plateId) === null,
+    (plateId) =>
+      assignedSourceId(assignments, channel, templateId, plateId) === null &&
+      authoredDefaults?.[plateId] === undefined,
   );
 }
 
@@ -1562,9 +1565,10 @@ export function assignmentInForce(
   frozenAssignment: Readonly<Record<string, string>> | undefined,
   /** `CHANNEL-SOURCES-01` — the row's channel: the defaults answer per channel. */
   channel: number,
+  authoredDefaults?: Readonly<Record<string, string>> | undefined,
 ): Record<string, string> {
   if (frozenAssignment !== undefined) return { ...frozenAssignment };
-  const map: Record<string, string> = {};
+  const map: Record<string, string> = { ...authoredDefaults };
   for (const a of assignmentsOnChannel(assignments, channel).assignments) {
     if (a.templateId === templateId) map[a.plateId] = a.sourceId;
   }
@@ -1582,6 +1586,7 @@ export interface PlateSourceResolution {
   readonly channel: number;
   /** Session BP — the row's frozen level 2, when it has taken. Absent ⇒ not frozen. */
   readonly frozenAssignment?: Readonly<Record<string, string>> | undefined;
+  readonly authoredDefaults?: Readonly<Record<string, string>> | undefined;
   /** The look being resolved; `undefined` for a carrier that authors none. */
   readonly lookId: string | undefined;
   /** Level 3 — `lookId → plateId → catalog id`. */
@@ -1609,6 +1614,7 @@ export function resolvePlateSourcesForLook(
     input.assignments,
     input.frozenAssignment,
     input.channel,
+    input.authoredDefaults,
   );
   const effective = effectiveOverridesForLook(input.lookId, input.lookBindings, input.overrides);
   return new Map(

@@ -9,6 +9,7 @@ import {
 } from './primitives.js';
 import { ArrangementsSchema } from './arrangements.js';
 import { LookGroupsSchema } from './looks.js';
+import { ControlLiveLayoutSchema } from './control-live-layout.js';
 import { ElementSchema, sequenceStepsByOperator, type Element } from './elements.js';
 import { DynamicFieldSchema } from './fields.js';
 import { FieldBindingSchema } from './bindings.js';
@@ -650,6 +651,8 @@ const SceneObjectSchema = z
     allowLivePlateOverlap: z.boolean().optional(),
     allowOperatorAutoLayout: z.boolean().optional(),
     metadata: SceneMetadataSchema,
+    /** Editable source of a live layout authored in CG Control and compiled to this scene. */
+    controlLiveLayout: ControlLiveLayoutSchema.optional(),
   })
   .superRefine(refineLifecycle);
 export const SceneSchema = SceneObjectSchema;

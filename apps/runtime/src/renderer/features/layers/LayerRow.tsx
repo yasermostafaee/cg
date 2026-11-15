@@ -2,7 +2,14 @@ import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useState } from 'react';
 import { useCanOperate } from '../../hooks/useCanOperate.js';
 import { LAYER_SHORTCUT_VERBS, type FixedSlotState, type TemplateInfo } from '@cg/shared-ipc';
-import { isOnAirStatus, type StackItemState, type StackItemStatus } from '@cg/shared-schema';
+import {
+  controlLiveLayoutFocusTarget,
+  controlLiveLayoutSoloTarget,
+  isOnAirStatus,
+  type InputSlideTransition,
+  type StackItemState,
+  type StackItemStatus,
+} from '@cg/shared-schema';
 import { colors, cssVars } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
@@ -40,6 +47,7 @@ import { currentSourceCatalog } from '../sources/sourceStore.js';
 import { followAcceptedLayerPreset } from '../inspector/draftStore.js';
 import { frameTransitionPreference } from '../inspector/frameTransitionPreference.js';
 import { inputTransitionRequest } from '../inspector/inputTransitionPreference.js';
+import { ControlLayoutFocus } from '../liveLayouts/ControlLayoutFocus.js';
 import {
   ROW_GEOMETRY,
   VERBS_GRID,
@@ -387,7 +395,9 @@ export function LayerRow({
     is which. The zero-look case is a broken template and is refused at the TAKE door
     (`looks-none-authored`); it is not this control’s job to explain it.
   */
-  const looks = lookOptionsOf(template?.liveSources);
+  const layout = template?.controlLiveLayout;
+  const looks = lookOptionsOf(template?.liveSources, layout);
+  const [switchingLayout, setSwitchingLayout] = useState(false);
   // The SAME helper every other AMCP-emitting verb on this row uses. Not a look-specific
   // rule: with either hop down the switch cannot leave the browser, so an enabled picker
   // would be the appearance of a capability rather than one (see `lookSwitch.ts`).
@@ -402,6 +412,8 @@ export function LayerRow({
    * straight back off the published stack, so what it shows is what the bridge did.
    */
   const switchLook = async (item: StackItemState, lookId: string): Promise<void> => {
+    if (layout !== undefined && switchingLayout) return;
+    if (layout !== undefined) setSwitchingLayout(true);
     const follow = followAcceptedLayerPreset(item.itemId, lookId);
     /*
       🔴 THE REJECTION IS CAUGHT, not only the `ok: false`.
@@ -413,20 +425,39 @@ export function LayerRow({
       look, saw the segment move, and was told nothing at all.
     */
     try {
-      const effect = frameTransitionPreference();
+      const effect = layout?.effects.focus ?? frameTransitionPreference();
+      const from =
+        layout === undefined
+          ? undefined
+          : controlLiveLayoutSoloTarget(layout, item.activeLookId ?? layout.defaultPresetId);
+      const to = layout === undefined ? undefined : controlLiveLayoutFocusTarget(layout, lookId);
+      const direct =
+        from !== undefined &&
+        to !== undefined &&
+        from.presetId === to.presetId &&
+        from.frameId !== to.frameId
+          ? layout?.effects.switch
+          : undefined;
+      const focusSlide: InputSlideTransition | undefined =
+        direct !== undefined && direct.mode !== 'motion'
+          ? { mode: direct.mode, durationMs: direct.durationMs, direction: direct.direction }
+          : undefined;
+      const onProgramme = !legacyPreview && isOnAirStatus(item);
       const transition =
-        !legacyPreview &&
-        isOnAirStatus(item) &&
-        item.onAirPresetTransition === true &&
-        (effect.motion !== 'cut' || effect.fade)
-          ? effect
+        onProgramme &&
+        (layout !== undefined ||
+          (item.onAirPresetTransition === true && (effect.motion !== 'cut' || effect.fade)))
+          ? direct?.mode === 'motion'
+            ? { ...effect, durationMs: direct.durationMs }
+            : effect
           : undefined;
       const res = await window.cg.stack.setActiveLook({
         itemId: item.itemId,
         lookId,
         ...(transition !== undefined && { transition }),
+        ...(onProgramme && focusSlide !== undefined && { focusSlide }),
       });
-      if (res.ok) follow();
+      if (res.ok && layout === undefined) follow();
       // `LOOK-SWITCH-01` — a refused PLATE is said on this row (`takeRefusalLine`, below), in this
       // channel's view only, so no banner repeats it (`lookSwitchBanner`).
       const banner = lookSwitchBanner(res);
@@ -435,6 +466,8 @@ export function LayerRow({
       reportCommandError(
         lookSwitchRefusal(undefined, err instanceof Error ? err.message : undefined),
       );
+    } finally {
+      if (layout !== undefined) setSwitchingLayout(false);
     }
   };
 
@@ -1339,6 +1372,15 @@ export function LayerRow({
           onPick={(lookId) => {
             void switchLook(item, lookId);
           }}
+        />
+      )}
+      {layout !== undefined && item !== null && state.tone === 'onair' && canOperate && (
+        <ControlLayoutFocus
+          layout={layout}
+          current={item.activeLookId}
+          target="Programme"
+          disabled={switchingLayout || item.pending || lookRefusal !== undefined}
+          onSelect={(lookId) => void switchLook(item, lookId)}
         />
       )}
       {menu !== null && (

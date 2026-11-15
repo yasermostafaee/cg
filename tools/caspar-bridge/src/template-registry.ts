@@ -665,6 +665,11 @@ export class TemplateRegistry {
     return { ok: true, sha256 };
   }
 
+  /** Whether this store has accepted a source package with this digest. */
+  hasSource(sha256: string): boolean {
+    return this.#sources.has(sha256);
+  }
+
   /** The kept package's bytes, or `null` when this store does not hold it. */
   readSource(sha256: string): Buffer | null {
     const entry = this.#sources.get(sha256);

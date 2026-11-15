@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { activeLookOf, type TemplateInfo, type TemplateLook } from '@cg/shared-ipc';
-import type { StackItemState } from '@cg/shared-schema';
+import { controlLiveLayoutFocusTarget, type StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { DraftChip } from '../../ui/DraftChip.js';
@@ -313,14 +313,23 @@ export function LooksBindingsSection({
   // `MEDIA-PLATES-01` — which seats carry a clip, and how each is playing: the bridge's answer.
   const mediaStateOf = useMediaState();
   const carrier = info?.liveSources;
-  const looks = carrier?.looks ?? [];
+  const layout = info?.controlLiveLayout;
+  const allLooks = carrier?.looks ?? [];
+  const looks =
+    layout === undefined
+      ? allLooks
+      : allLooks.filter(({ id }) => controlLiveLayoutFocusTarget(layout, id) === undefined);
+  const focus =
+    layout === undefined ? undefined : controlLiveLayoutFocusTarget(layout, editingLook?.id);
+  const inputLook =
+    focus === undefined ? editingLook : looks.find(({ id }) => id === focus.presetId);
   const { surface, inputCheck } = useInputCheckSurface(channel, looks.length > 0);
   // A template with no LOOKS gets no section — its plates have one answer, and the flat list
   // above already is it. An empty heading is a question the operator did not ask.
-  if (carrier === undefined || editingLook === undefined) return null;
+  if (carrier === undefined || inputLook === undefined) return null;
 
   const liveLookId = activeLookOf(carrier, item.activeLookId)?.id;
-  const defaults = appliedPlateSources(item.templateId, carrier.sources ?? [], channel);
+  const defaults = appliedPlateSources(item.templateId, carrier.sources ?? [], channel, layout);
   const patches = item.sourceOverride ?? {};
   /*
     🔴 THE TWO ON-AIR DIVERGENCE MARKS, read through the SAME joins the `LIVE PLATES`
@@ -454,7 +463,7 @@ export function LooksBindingsSection({
       <div style={styles.lookTabs} role="group" aria-label="Look to edit">
         {looks.map((look) => {
           const isLive = look.id === liveLookId;
-          const isActive = look.id === editingLook.id;
+          const isActive = look.id === inputLook.id;
           const badge = badgeFor(isLive && claimsAir(item), isActive && rehearsing, previewOnly);
           return (
             <Button
@@ -506,7 +515,7 @@ export function LooksBindingsSection({
           );
         })}
       </div>
-      {[editingLook].map((look) => {
+      {[inputLook].map((look) => {
         const rects = look.rects;
         const plates = (carrier.sources ?? []).filter((p) => rects[p.sourceId] !== undefined);
         return (

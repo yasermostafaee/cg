@@ -1135,6 +1135,7 @@ export class WebSocketRuntime implements RuntimeBridge {
             previewMaskPlacement: true,
           }),
         ...(caps.livePlatePaintOrder === true && { livePlatePaintOrder: true }),
+        ...(caps.controlLiveLayouts === true && { controlLiveLayouts: true }),
         ...(routed.has(ipcChannels.SharedTemplateFolderChannel.name) &&
         routed.has(ipcChannels.SharedTemplateReadChannel.name)
           ? { sharedTemplateFolder: true }
@@ -2537,6 +2538,9 @@ export class WebSocketRuntime implements RuntimeBridge {
   };
 
   #requireTemplateFeatures(template: TemplateInfo): void {
+    if (template.controlLiveLayout !== undefined && this.#authCaps?.controlLiveLayouts !== true) {
+      throw new Error('Update CG Bridge to use layouts created in CG Control.');
+    }
     const live = template.liveSources;
     if (ipcChannels.usesLivePlatePaintOrder(live) && this.#authCaps?.livePlatePaintOrder !== true) {
       throw new Error('This template uses overlapping Live plates. Update CG Bridge to import it.');
@@ -2620,9 +2624,11 @@ export class WebSocketRuntime implements RuntimeBridge {
       if (this.#status !== 'live') throw new Error(TEMPLATE_IMPORT_NEEDS_BRIDGE);
       this.#requireTemplateFeatures(req.template);
       const res = await this.#invoke(TemplatesImportChannel, req);
-      await this.#library.import(req.template, req.html, req.channel).catch(() => {
-        /* the display copy is best-effort; the bridge holds the template */
-      });
+      if (res.registered) {
+        await this.#library.import(req.template, req.html, req.channel).catch(() => {
+          /* the display copy is best-effort; the bridge holds the template */
+        });
+      }
       return res;
     },
     remove: async (req: ChannelRequest<typeof TemplatesRemoveChannel>) => {

@@ -64,6 +64,7 @@ export function planInputSlide(
   direction: { readonly x: number; readonly y: number },
   push: boolean,
   frames: number,
+  coverOutgoing = false,
 ): { initial: PictureFit; steps: InputSlideStep[] } {
   const horizontal = direction.x !== 0;
   const coordinate = horizontal ? 'x' : 'y';
@@ -75,28 +76,52 @@ export function planInputSlide(
   // Keep even the empty edge clipped. A zero-area mixer CLIP can drop the clipping
   // at a native tween endpoint and expose the oversized source FILL for one frame.
   const closedEdge = Math.min(aperture[size], 0.00001);
+  const window = (fit: PictureFit, start: number, end: number): NormalizedRect => {
+    const extent = Math.max(closedEdge, end - start);
+    return { ...fit.clip, [coordinate]: Math.min(start, high - extent), [size]: extent };
+  };
   const translate = (fit: PictureFit, offset: number): PictureFit => {
     const start = clamp(fit.clip[coordinate] + offset);
     const end = clamp(fit.clip[coordinate] + fit.clip[size] + offset);
-    const extent = Math.max(closedEdge, end - start);
     return {
       fill: { ...fit.fill, [coordinate]: fit.fill[coordinate] + offset },
-      clip: { ...fit.clip, [coordinate]: Math.min(start, high - extent), [size]: extent },
+      clip: window(fit, start, end),
+    };
+  };
+  // A Focus seat can be below the outgoing seat. Reveal the entering viewport by clipping
+  // the stationary picture at its leading edge so either native layer order yields Slide over.
+  const uncover = (progress: number): PictureFit => {
+    const edge = (distance < 0 ? low : high) - distance * progress;
+    const start = clamp(outgoing.clip[coordinate]);
+    const end = clamp(outgoing.clip[coordinate] + outgoing.clip[size]);
+    return {
+      fill: outgoing.fill,
+      clip:
+        distance < 0
+          ? window(outgoing, Math.max(start, edge), end)
+          : window(outgoing, start, Math.min(end, edge)),
     };
   };
 
   const boundaries = new Set([frames]);
+  const mark = (fraction: number) => {
+    const tick = Math.round(fraction * frames);
+    if (tick > 0 && tick < frames) boundaries.add(tick);
+  };
   const markCrossings = ({ clip }: PictureFit, initialOffset: number) => {
     for (const edge of [low, high]) {
       for (const start of [clip[coordinate], clip[coordinate] + clip[size]]) {
-        const fraction = (start + initialOffset - edge) / distance;
-        const tick = Math.round(fraction * frames);
-        if (tick > 0 && tick < frames) boundaries.add(tick);
+        mark((start + initialOffset - edge) / distance);
       }
     }
   };
   markCrossings(incoming, distance);
   if (push) markCrossings(outgoing, 0);
+  if (coverOutgoing) {
+    const entry = distance < 0 ? low : high;
+    mark((entry - outgoing.clip[coordinate]) / distance);
+    mark((entry - outgoing.clip[coordinate] - outgoing.clip[size]) / distance);
+  }
   let last = 0;
   const steps = [...boundaries]
     .sort((a, b) => a - b)
@@ -106,6 +131,7 @@ export function planInputSlide(
         frames: tick - last,
         incoming: tick === frames ? incoming : translate(incoming, distance * (1 - progress)),
         ...(push && { outgoing: translate(outgoing, -distance * progress) }),
+        ...(coverOutgoing && { outgoing: uncover(progress) }),
       };
       last = tick;
       return step;

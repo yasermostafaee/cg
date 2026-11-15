@@ -152,7 +152,7 @@ export function App(): JSX.Element {
   // `B-257` — the lock screen covers the console only when the lock covers ALL of it. A partly
   // covered console keeps its other channels; the strip names the covered ones.
   const lockCovers = useLockCoverage().kind === 'all';
-  const canEditPreviewPosition = useCanOperate() && !lockCovers;
+  const canOperate = useCanOperate() && !lockCovers;
   const health = useConnections();
   // `RELEASE-0112-01` (`R-085`) — each engine's CG Bridge session, for the status bar's chips.
   const engines = useEngineSessions();
@@ -177,10 +177,15 @@ export function App(): JSX.Element {
   // R-111 — presentation only. Fullscreen changes what surrounds the monitor, never selection.
   const [monitorCompanionMode, setMonitorCompanionMode] = useState<MonitorCompanionMode>('monitor');
   // R-108 — a shell-level catalogue door, independent of whether any layer is empty.
-  const { openTemplateLibrary, pickerDialog: templateLibraryDialog } = useTemplatePicker(
+  const {
+    openTemplateLibrary,
+    openNewLiveLayout,
+    pickerDialog: templateLibraryDialog,
+  } = useTemplatePicker(
     engineName,
     capabilities?.sharedTemplateFolder === true,
     capabilities?.templateThumbnails === true,
+    capabilities?.controlLiveLayouts === true && canOperate,
   );
   const [auditOpen, setAuditOpen] = useState(false);
   // `STATION-SETUP-02` — ONE settings dialog, opened at a section from five surfaces; the
@@ -382,6 +387,7 @@ export function App(): JSX.Element {
       onSelectionChange={setSelectedId}
       selectedId={selectedId}
       independentPreview={capabilities?.independentPreview === true}
+      {...(capabilities?.controlLiveLayouts === true && { onNewLiveLayout: openNewLiveLayout })}
       layout={layout}
       selectedOnly={view === 'companion'}
       shortcutsOnly={view === 'shortcuts'}
@@ -579,8 +585,9 @@ export function App(): JSX.Element {
                       <MonitorStrip
                         companionMode={monitorCompanionMode}
                         hasSelectedLayer={selected !== null}
+                        selectedPreviewItem={selectedId}
                         onCompanionModeChange={setMonitorCompanionMode}
-                        canEditPreviewPosition={canEditPreviewPosition}
+                        canEditPreviewPosition={canOperate}
                         onSelectPreviewItem={setSelectedId}
                       />
                     </div>

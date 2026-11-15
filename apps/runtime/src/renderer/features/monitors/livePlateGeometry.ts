@@ -198,6 +198,9 @@ export interface PlateSourceLookup {
    * producing.
    */
   readonly frozenAssignment?: Readonly<Record<string, string>> | undefined;
+  readonly authoredDefaults?: Readonly<Record<string, string>> | undefined;
+  /** A private Focus look resolves the bindings from its original preset. */
+  readonly bindingLookId?: string | undefined;
   /** Level 3 — the row's per-look composition, `lookId → plateId → catalog id`. */
   readonly lookBindings?: Readonly<Record<string, Readonly<Record<string, string>>>> | undefined;
   /** Level 4 — `R-048`'s emergency patch, in force in EVERY look. */
@@ -304,7 +307,8 @@ export function platePlacements(
     assignments: sources.assignments,
     channel: sources.channel,
     frozenAssignment: sources.frozenAssignment,
-    lookId: activeLookId,
+    lookId: sources.bindingLookId ?? activeLookId,
+    authoredDefaults: sources.authoredDefaults,
     lookBindings: sources.lookBindings,
     overrides: sources.overrides,
   });

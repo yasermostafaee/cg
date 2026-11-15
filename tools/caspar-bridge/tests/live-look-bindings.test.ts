@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { SourceCatalog, TemplateLiveSources, TemplateLook } from '@cg/shared-ipc';
 import { lookPlateRects, resolvePlateSourcesForLook } from '@cg/shared-ipc';
-import type { LiveSourceRect } from '@cg/shared-schema';
+import {
+  CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS,
+  controlLiveLayoutFocusLookId,
+} from '@cg/shared-schema';
+import type { ControlLiveLayout, LiveSourceRect } from '@cg/shared-schema';
 import { framesOfLook, resolveLookBindings } from '../src/live-look-bindings.js';
 
 /** The binding plan is shared across all presets. Its seats are opened by the bridge. */
@@ -70,6 +74,47 @@ function plan(over: Partial<Parameters<typeof resolveLookBindings>[0]> = {}) {
     ...over,
   });
 }
+
+it('keeps the originating preset binding and its native copy when focusing a shared input', () => {
+  const ids = ['l-1', 'l-2'];
+  const layout: ControlLiveLayout = {
+    id: 'studio',
+    name: 'Studio',
+    resolution: FULL,
+    frameRate: 25,
+    frames: ids.map((id) => ({ id, title: id })),
+    presets: [
+      {
+        id: 'two',
+        name: 'Two-up',
+        frameIds: ids,
+        arrangement: 'side-by-side',
+        horizontalGap: 0,
+        verticalGap: 0,
+        reverse: false,
+        hiddenTitles: [],
+        hiddenFocusTitles: [],
+      },
+    ],
+    defaultPresetId: 'two',
+    background: { kind: 'color', color: '#000000' },
+    effects: structuredClone(CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS),
+  };
+  const focus = controlLiveLayoutFocusLookId('two', 'l-2');
+  const p = plan({
+    controlLiveLayout: layout,
+    carrier: carrier({
+      looks: [look(focus, { 'l-2': FULL }), look('two', { 'l-1': CELL(0), 'l-2': CELL(640) })],
+    }),
+    bindings: { two: { 'l-1': 'studio-3-alias', 'l-2': 'studio-3' } },
+  });
+  const original = framesOfLook(p, 'two').get('l-2');
+  const focused = framesOfLook(p, focus).get('l-2');
+  expect(focused).toMatchObject({ plateId: 'l-2', source: { id: 'studio-3' } });
+  expect(focused?.seatId).toBe(original?.seatId);
+  expect(p.seats.get(focused!.seatId)?.routeFrom).toBe('"route://4"');
+  expect(p.seats.size).toBe(2);
+});
 
 describe('the seat count', () => {
   it('🔴 is the DISTINCT INPUTS across every look — not the sum of the looks members', () => {

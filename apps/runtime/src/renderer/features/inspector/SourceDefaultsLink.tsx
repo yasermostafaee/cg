@@ -57,10 +57,8 @@ export function SourceDefaultsLink({
     (`appliedPlateSources`), never re-derived — so the dot, the dialog's blank option and the
     refusal cannot disagree about which plate is owed a source.
   */
-  const needing = plates.filter(
-    (plate) =>
-      (appliedPlateSources(templateId, plates, channel).get(plate.sourceId) ?? null) === null,
-  ).length;
+  const configured = appliedPlateSources(templateId, plates, channel, info?.controlLiveLayout);
+  const needing = plates.filter((plate) => configured.get(plate.sourceId) === null).length;
   const warning =
     needing === 0
       ? undefined
@@ -138,6 +136,7 @@ export function SourceDefaultsLink({
         templateName={displayLabel(info ?? {}) ?? 'Unnamed template'}
         plates={plates}
         channel={channel}
+        layout={info?.controlLiveLayout}
       />
     </>
   );

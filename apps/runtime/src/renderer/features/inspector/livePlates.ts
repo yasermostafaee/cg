@@ -1,5 +1,5 @@
-import { assignedSourceId } from '@cg/shared-ipc';
-import type { LiveSourceDeclaration } from '@cg/shared-schema';
+import { assignmentInForce, controlLiveLayoutDefaults } from '@cg/shared-ipc';
+import type { ControlLiveLayout, LiveSourceDeclaration } from '@cg/shared-schema';
 import { currentSourceAssignments } from '../sources/sourceStore.js';
 
 /**
@@ -23,14 +23,16 @@ export function appliedPlateSources(
   templateId: string,
   plates: readonly LiveSourceDeclaration[],
   channel: number,
+  layout?: ControlLiveLayout,
 ): ReadonlyMap<string, string | null> {
-  const assignments = currentSourceAssignments();
-  return new Map(
-    plates.map((plate) => [
-      plate.sourceId,
-      assignedSourceId(assignments, channel, templateId, plate.sourceId),
-    ]),
+  const defaults = assignmentInForce(
+    templateId,
+    currentSourceAssignments(),
+    undefined,
+    channel,
+    controlLiveLayoutDefaults(layout),
   );
+  return new Map(plates.map((plate) => [plate.sourceId, defaults[plate.sourceId] ?? null]));
 }
 
 /**

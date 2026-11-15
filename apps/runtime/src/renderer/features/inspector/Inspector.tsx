@@ -11,6 +11,7 @@ import {
   authoredFileDelimiter,
   authoredFileFormat,
   bridgeTextSourcePath,
+  controlLiveLayoutFocusTarget,
   fieldAllowsFileSource,
   fieldDigitsOf,
   fieldTypeTakesFileSource,
@@ -605,13 +606,19 @@ export function Inspector({
   const lookCarrier = resolvedInfo?.liveSources;
   const looks = lookCarrier?.looks ?? [];
   const previewPin = rehearsing === true ? previewLookPin(itemId, item.activeLookId) : undefined;
+  const programmeFocus =
+    rehearsing === true && resolvedInfo?.controlLiveLayout !== undefined
+      ? controlLiveLayoutFocusTarget(resolvedInfo.controlLiveLayout, item.activeLookId)
+      : undefined;
   const editingLook =
     looks.find((look) => look.id === previewPin) ??
     looks.find(
       (look) =>
         rehearsing !== true && pinnedLook?.itemId === itemId && pinnedLook.lookId === look.id,
     ) ??
-    (lookCarrier === undefined ? undefined : activeLookOf(lookCarrier, item.activeLookId));
+    (lookCarrier === undefined
+      ? undefined
+      : activeLookOf(lookCarrier, programmeFocus?.presetId ?? item.activeLookId));
   const legacyOwnership = currentLookup?.retained?.ownership;
   const instanceOf = (look: (typeof looks)[number]): string | undefined =>
     look.instanceId ?? legacyOwnership?.get(look.id);
@@ -668,7 +675,12 @@ export function Inspector({
   const dirty = isItemDirty(
     itemId,
     item.fields,
-    appliedPlateSources(item.templateId, resolvedInfo?.liveSources?.sources ?? [], itemChannel),
+    appliedPlateSources(
+      item.templateId,
+      resolvedInfo?.liveSources?.sources ?? [],
+      itemChannel,
+      resolvedInfo?.controlLiveLayout,
+    ),
     // BM-2 — and the per-look composition, which stages here too and is the SAME fact.
     item.lookSourceOverride,
     /*

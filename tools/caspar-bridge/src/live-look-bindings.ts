@@ -4,7 +4,8 @@ import {
   lookPlateRects,
   resolvePlateSourcesForLook,
 } from '@cg/shared-ipc';
-import type { LiveSourceDeclaration } from '@cg/shared-schema';
+import { controlLiveLayoutFocusTarget } from '@cg/shared-schema';
+import type { ControlLiveLayout, LiveSourceDeclaration } from '@cg/shared-schema';
 
 /**
  * `multibox-layout-switch` §14 / session BM — **WHICH INPUT EACH FRAME OF EACH LOOK SHOWS,
@@ -121,6 +122,7 @@ export function resolveLookBindings(input: {
   readonly catalog: SourceCatalog;
   readonly bindings?: LookSourceBindings | undefined;
   readonly overrides?: PlateSourceOverrides | undefined;
+  readonly controlLiveLayout?: ControlLiveLayout | undefined;
   /** `CommandBuilder.sourceArgument` — injected so the identity is the WIRE's, not a copy. */
   readonly argumentOf: (source: SourceDefinition) => string;
 }): LookBindingPlan {
@@ -129,7 +131,20 @@ export function resolveLookBindings(input: {
   const frames: ResolvedFrame[] = [];
   const unresolved: { lookId: string | undefined; plateId: string }[] = [];
 
+  const regular: (string | undefined)[] = [];
+  const focuses: string[] = [];
   for (const lookId of lookIdsOf(input.carrier)) {
+    if (
+      input.controlLiveLayout !== undefined &&
+      lookId !== undefined &&
+      controlLiveLayoutFocusTarget(input.controlLiveLayout, lookId) !== undefined
+    ) {
+      focuses.push(lookId);
+    } else {
+      regular.push(lookId);
+    }
+  }
+  for (const lookId of [...regular, ...focuses]) {
     // The look's OWN membership, through the one carrier-level resolver — never a local
     // re-derivation of "which plates does this look show" (`B-151` is what a second copy of
     // that question cost).
@@ -143,12 +158,16 @@ export function resolveLookBindings(input: {
       preview and the wire cannot answer differently: a test asserts they agree for the same
       input, which two independent implementations would satisfy right up until they did not.
     */
+    const focus =
+      input.controlLiveLayout === undefined || lookId === undefined
+        ? undefined
+        : controlLiveLayoutFocusTarget(input.controlLiveLayout, lookId);
     const resolvedIds = resolvePlateSourcesForLook({
       templateId: input.templateId,
       plateIds: input.carrier.sources.map((d) => d.sourceId),
       assignments: { assignments: [...input.assignments] },
       channel: input.channel,
-      lookId,
+      lookId: focus?.presetId ?? lookId,
       lookBindings: input.bindings,
       overrides: input.overrides,
     });
@@ -167,8 +186,15 @@ export function resolveLookBindings(input: {
       const producerArg = input.argumentOf(source);
       const copyIndex = usesByInput.get(producerArg) ?? 0;
       usesByInput.set(producerArg, copyIndex + 1);
+      // Keep the exact input copy already showing this frame in the originating preset.
+      // A fullscreen look has no sibling to reserve that copy by declaration order.
+      const origin =
+        focus === undefined
+          ? undefined
+          : frames.find((frame) => frame.lookId === focus.presetId && frame.plateId === plateId);
       const seatId =
-        copyIndex === 0 ? producerArg : producerArg + '\u001fcopy:' + String(copyIndex);
+        origin?.seatId ??
+        (copyIndex === 0 ? producerArg : producerArg + '\u001fcopy:' + String(copyIndex));
       const frame: ResolvedFrame = { lookId, plateId, declaration, source, producerArg, seatId };
       frames.push(frame);
 
@@ -178,7 +204,7 @@ export function resolveLookBindings(input: {
           seatId,
           producerArg,
           source,
-          ...(copyIndex > 0 && { routeFrom: producerArg }),
+          ...(seatId !== producerArg && { routeFrom: producerArg }),
           frames: [frame],
         });
       } else {

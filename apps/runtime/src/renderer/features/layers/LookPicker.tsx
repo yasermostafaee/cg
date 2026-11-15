@@ -1,4 +1,5 @@
 import type { TemplateLiveSources } from '@cg/shared-ipc';
+import { controlLiveLayoutFocusTarget, type ControlLiveLayout } from '@cg/shared-schema';
 import { Button } from '../../ui/Button.js';
 import { colors, cssVars, LOOK_STRIP_PX } from '../../theme.js';
 
@@ -100,16 +101,23 @@ export interface LookOption {
  * Returning `null` for the first two collapses them HERE, once, so no call site has to
  * remember which emptiness is which.
  */
-export function lookOptionsOf(live: TemplateLiveSources | undefined): LookOption[] | null {
+export function lookOptionsOf(
+  live: TemplateLiveSources | undefined,
+  layout?: ControlLiveLayout,
+): LookOption[] | null {
   const looks = live?.looks;
   if (live === undefined || looks === undefined || looks.length === 0) return null;
   // A raster is positive by schema; the guard keeps a malformed carrier from producing
   // `Infinity` fractions rather than a blank thumbnail.
   const sceneW = live.resolution.width > 0 ? live.resolution.width : 1;
   const sceneH = live.resolution.height > 0 ? live.resolution.height : 1;
-  return looks.map((l) => ({
-    id: l.id,
-    /*
+  return looks
+    .filter(
+      (look) => layout === undefined || controlLiveLayoutFocusTarget(layout, look.id) === undefined,
+    )
+    .map((l) => ({
+      id: l.id,
+      /*
       🔴 THE AUTHORED NAME. An earlier version labelled these by ORDINAL on the stated
       premise that “the carrier holds ids, not display names” — **which is false**:
       `TemplateLookSchema.name` is `z.string().min(1)`, REQUIRED, and it is what the author
@@ -120,17 +128,17 @@ export function lookOptionsOf(live: TemplateLiveSources | undefined): LookOption
 
       A long name widens the strip rather than the row: the line scrolls inside itself.
     */
-    label: l.name,
-    // THIS LOOK's rects, and only this look's — a source absent from a look has no entry
-    // (`TemplateLiveSourcesSchema.looks`), so a look's frame count is the size of its map.
-    frames: Object.entries(l.rects).map(([plateId, r]) => ({
-      plateId,
-      x: r.x / sceneW,
-      y: r.y / sceneH,
-      w: r.width / sceneW,
-      h: r.height / sceneH,
-    })),
-  }));
+      label: l.name,
+      // THIS LOOK's rects, and only this look's — a source absent from a look has no entry
+      // (`TemplateLiveSourcesSchema.looks`), so a look's frame count is the size of its map.
+      frames: Object.entries(l.rects).map(([plateId, r]) => ({
+        plateId,
+        x: r.x / sceneW,
+        y: r.y / sceneH,
+        w: r.width / sceneW,
+        h: r.height / sceneH,
+      })),
+    }));
 }
 
 /** The operator's word for a look's frame count — the reference's `· N frames` tooltip. */

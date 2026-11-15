@@ -246,6 +246,12 @@ to each eligible preset. The retained page redraws the active preset's SVG clip 
 fallback node from the same normalized placements Bridge uses for the mixer. The foreground pass
 reserves the editable plate's full extent when classifying higher artwork.
 
+CG Control's live layout compiler packages its layout, frame and preset definitions, and embedded
+background as a regular VCG scene and asset bundle. The catalogue retains the source package
+revision for editing and duplication. Each preset gives Focus a stable origin. The PVW frame
+applies its own preview state, and Bridge applies the Programme transition to the already-seated
+inputs and restores that origin's placements on Return.
+
 **Countdown steps (`D-141`, `DELTA-RUN-NEXT-VERSION-01-A` … `-F`) are compiled by the runtime, from
 the scene.** A countdown flips one attribute on its scope root per step crossing; `step-css.ts` turns
 the steps' changes into one stylesheet of inherited custom properties at boot, and `step-effects.ts`

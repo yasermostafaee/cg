@@ -20,6 +20,7 @@ export type MonitorCompanionMode = 'monitor' | 'layer' | 'layer-inspector';
 interface Props {
   companionMode: MonitorCompanionMode;
   hasSelectedLayer: boolean;
+  selectedPreviewItem?: string | null | undefined;
   canEditPreviewPosition?: boolean;
   onSelectPreviewItem?: (itemId: string) => void;
   onCompanionModeChange: (mode: MonitorCompanionMode) => void;
@@ -47,6 +48,7 @@ interface Props {
 export function MonitorStrip({
   companionMode,
   hasSelectedLayer,
+  selectedPreviewItem,
   onCompanionModeChange,
   canEditPreviewPosition = false,
   onSelectPreviewItem,
@@ -226,9 +228,8 @@ export function MonitorStrip({
         operator's staged values) has nothing in common with PROGRAM's, which shows
         the Playout's return (C-016).
 
-        It takes NO `selectedId`. It used to, to pick which single rehearsal to
-        show; now it shows all of them, and the selection's remaining job — which
-        row an edit applies to — belongs to the Inspector and never to this panel.
+        The preview renders every rehearsal. The selection scopes the controls
+        for a Control-authored layout when more than one layout is on Preview.
       */}
       {/* Keep the local rehearsal page mounted while fullscreen PGM hides this pane. */}
       <PreviewPanel
@@ -236,6 +237,7 @@ export function MonitorStrip({
         companionActions={showPvw ? companionActions : undefined}
         canEditPosition={canEditPreviewPosition}
         onSelectItem={onSelectPreviewItem}
+        selectedItemId={selectedPreviewItem}
       />
       {showPgm && (
         <MonitorPanel

@@ -30,6 +30,8 @@ import {
   DEFAULT_LIVE_CROP_FOCUS,
   LiveRevealRectSchema,
   MAX_PREVIEW_PLATE_CROPS,
+  controlLiveLayoutFocusTarget,
+  controlLiveLayoutSoloTarget,
   defaultNestedValues,
   framePlacementFits,
   frameTransitionPhases,
@@ -59,6 +61,7 @@ import type {
   FrameTransition,
   FrameTransitionPhase,
   InputTransition,
+  InputSlideTransition,
   LiveCropFocus,
   LiveFramePlacement,
   LiveMaskPlacement,
@@ -127,6 +130,7 @@ import {
   AUDIT_PAGE_SIZE,
   auditMatches,
   templateDisplayName,
+  controlLiveLayoutDefaults,
   type AuditCursor,
   type AuditFilter,
   type AuditNaming,
@@ -141,6 +145,7 @@ import {
   type ChannelSettingsState,
   EMPTY_SOURCE_ASSIGNMENTS,
   EMPTY_SOURCE_CATALOG,
+  assignmentInForce,
   assignmentsOnChannel,
   copyAssignmentsToChannel,
   checkSourceAssignments,
@@ -548,6 +553,21 @@ interface LiveFrameEffect {
   readonly arrival?: PresetArtworkEffect;
   readonly moveFrames?: number;
   readonly destinationLookId?: string;
+  readonly focusSwap?: FocusSwapEffect;
+}
+
+interface FocusSwapEffect {
+  readonly incoming: LiveLayerRecord;
+  readonly outgoing: LiveLayerRecord;
+  readonly initial: LivePlatePlacement['fit'];
+  readonly steps: readonly {
+    frames: number;
+    easing: MixerFramePhase['easing'];
+    incoming: LivePlatePlacement['fit'];
+    outgoing?: LivePlatePlacement['fit'];
+    incomingOpacity?: number;
+    outgoingOpacity?: number;
+  }[];
 }
 
 interface PresetArtworkEffect {
@@ -6395,6 +6415,8 @@ export class CasparRuntime {
     changes: ReadonlyMap<LiveLayerRecord, LivePlatePlacement['fit']>,
     transport: LiveFrameEffectTransport,
   ): Promise<FrameEffectReply> {
+    if (effect.focusSwap !== undefined)
+      return this.#runFocusSwap(channel, effect.focusSwap, effect.plateIds, transport);
     const { batch, wait, stage, tell } = transport;
     const period = this.#channelFrameMsFor(channel);
     // The departing and arriving groups have separate holds; Fade also affects
@@ -6516,6 +6538,74 @@ export class CasparRuntime {
       if (!(await wait(durationMs + period))) return interrupted;
       progress = step.progress;
       opacity = step.opacity;
+    }
+    return { ok: true };
+  }
+
+  async #runFocusSwap(
+    channel: number,
+    { incoming, outgoing, initial, steps }: FocusSwapEffect,
+    plates: readonly string[],
+    { batch, wait, stage, tell }: LiveFrameEffectTransport,
+  ): Promise<FrameEffectReply> {
+    const period = this.#channelFrameMsFor(channel);
+    const interrupted = { ok: false, errorCode: 'frame-transition-interrupted' };
+    const claimBatch = async () => {
+      await this.#leaseMixerChannel(batch, channel);
+      return (await wait(0)) && !this.#hasOrphanedMixer(channel);
+    };
+    const linear = 'linear' as const;
+
+    if (!(await claimBatch())) return interrupted;
+    const prepared = await stage(incoming, initial, {
+      frames: 0,
+      easing: linear,
+      opacity: 0,
+    });
+    if (!prepared.ok) return prepared;
+    const parked = await this.#commitStagedMixer(batch, { retainOnFailure: true });
+    if (!parked.landed) return { ...parked, ok: false };
+    if (!(await wait(period))) return interrupted;
+
+    const told = await tell({
+      authoredPreset: true,
+      durationMs: 0,
+      easing: linear,
+      frames: [],
+      hideFallbackPlateIds: [...plates],
+      hidePresetTitlePlateIds: [...plates],
+    });
+    if (!told.ok) return told;
+    if (!(await wait(this.#lookMixerHoldMsFor(channel)))) return interrupted;
+
+    for (const [index, step] of steps.entries()) {
+      if (!(await claimBatch())) return interrupted;
+      if (index === 0 && step.incomingOpacity === undefined) {
+        const revealed = await stage(incoming, initial, {
+          frames: 0,
+          easing: linear,
+          opacity: 1,
+          opacityOnly: true,
+        });
+        if (!revealed.ok) return revealed;
+      }
+      const phase = { frames: step.frames, easing: step.easing };
+      const arrived = await stage(incoming, step.incoming, {
+        ...phase,
+        ...(step.incomingOpacity !== undefined && { opacity: step.incomingOpacity }),
+      });
+      if (!arrived.ok) return arrived;
+      if (step.outgoing !== undefined) {
+        const retired = await stage(outgoing, step.outgoing, {
+          ...phase,
+          ...(step.outgoingOpacity !== undefined && { opacity: step.outgoingOpacity }),
+        });
+        if (!retired.ok) return retired;
+      }
+      const commit = await this.#commitStagedMixer(batch, { retainOnFailure: true });
+      if (!commit.landed) return { ...commit, ok: false };
+      const finalTick = index + 1 === steps.length ? 1 : 0;
+      if (!(await wait((step.frames + finalTick) * period))) return interrupted;
     }
     return { ok: true };
   }
@@ -10001,7 +10091,8 @@ export class CasparRuntime {
       SESSION BP — level 2 comes from `#assignmentsFor`, which answers the FROZEN snapshot
       for a row that has one. The seat set and band arithmetic must use the same level 2.
     */
-    const resolvedFrom = this.#assignmentMapFor(itemId, templateId, levelTwo, slot.channel);
+    const assignments = this.#assignmentsFor(itemId, templateId, levelTwo, slot.channel);
+    const resolvedFrom = assignmentInForce(templateId, assignments, undefined, slot.channel);
     /*
       🔴 `PLAYOUT-SOURCES-01` — ONLY SEATABLE ENTRIES CAN RESOLVE A FRAME. An entry the Playout
       stopped offering, one it marks unavailable, and one that is unusable (its rules, or the route
@@ -10021,11 +10112,12 @@ export class CasparRuntime {
     const bindings = resolveLookBindings({
       templateId,
       carrier,
-      assignments: this.#assignmentsFor(itemId, templateId, levelTwo, slot.channel).assignments,
+      assignments: assignments.assignments,
       channel: slot.channel,
       catalog: seatableCatalog,
       bindings: this.#lookSourceBindings.get(itemId),
       overrides: this.#sourceOverrides.get(itemId),
+      controlLiveLayout: template.controlLiveLayout,
       argumentOf: (source) => this.#builder.sourceArgument(source.producer),
     });
     /*
@@ -10039,7 +10131,7 @@ export class CasparRuntime {
       so a row cannot pick up another template's override for a same-named plate.
     */
     const fitOverrides = new Map<string, LiveFitMode>();
-    for (const a of this.#assignmentsFor(itemId, templateId, levelTwo, slot.channel).assignments) {
+    for (const a of assignments.assignments) {
       if (a.templateId !== templateId || a.fitMode === undefined) continue;
       fitOverrides.set(a.plateId, a.fitMode);
     }
@@ -10087,9 +10179,15 @@ export class CasparRuntime {
         // SESSION BP — the SAME level 2 the resolver above used, or the refusal would name
         // a plate as unassigned that the plan resolved (or, worse, stay silent about one it
         // did not). `#assignmentsFor` is the one door.
-        assignments: this.#assignmentsFor(itemId, templateId, levelTwo, slot.channel),
+        assignments,
         catalog: this.#sourceCatalog,
-        overrides: this.#effectiveOverridesFor(itemId, lookId),
+        overrides: this.#effectiveOverridesFor(
+          itemId,
+          template.controlLiveLayout === undefined || lookId === undefined
+            ? lookId
+            : (controlLiveLayoutFocusTarget(template.controlLiveLayout, lookId)?.presetId ??
+                lookId),
+        ),
         // `ROUTE-PLATES-01` — so an entry this row's channel may not show is named as such.
         channel: slot.channel,
         // `B-308` — numbered from the WHOLE declaration; `mustResolve` is a subset of it.
@@ -10890,6 +10988,7 @@ export class CasparRuntime {
       catalog: this.#sourceCatalog,
       bindings: next.bindings,
       overrides: next.overrides,
+      controlLiveLayout: template.controlLiveLayout,
       argumentOf: (source) => this.#builder.sourceArgument(source.producer),
     });
     /*
@@ -10913,6 +11012,7 @@ export class CasparRuntime {
       catalog: this.#sourceCatalog,
       bindings: this.#lookSourceBindings.get(itemId),
       overrides: this.#sourceOverrides.get(itemId),
+      controlLiveLayout: template.controlLiveLayout,
       argumentOf: (source) => this.#builder.sourceArgument(source.producer),
     });
     const frameKey = (frame: {
@@ -12045,7 +12145,22 @@ export class CasparRuntime {
     channel: number,
   ): SourceAssignments {
     const frozen = levelTwo === 'fresh' ? undefined : this.#frozenAssignments.get(itemId);
-    if (frozen === undefined) return assignmentsOnChannel(this.#sourceAssignments, channel);
+    if (frozen === undefined) {
+      const station = assignmentsOnChannel(this.#sourceAssignments, channel);
+      const authored = controlLiveLayoutDefaults(
+        this.#templates.getOn(channel, templateId)?.controlLiveLayout,
+      );
+      if (authored === undefined) return station;
+      const explicit = new Set(
+        station.assignments
+          .filter((value) => value.templateId === templateId)
+          .map((value) => value.plateId),
+      );
+      const fallbacks = Object.entries(authored).flatMap(([plateId, sourceId]) =>
+        explicit.has(plateId) ? [] : [{ templateId, plateId, sourceId }],
+      );
+      return { assignments: [...station.assignments, ...fallbacks] };
+    }
     return {
       assignments: Object.entries(frozen).map(([plateId, sourceId]) => ({
         templateId,
@@ -12075,23 +12190,6 @@ export class CasparRuntime {
     if (!landed) return;
     this.#frozenAssignments.delete(itemId);
     this.#plateFits.delete(itemId);
-  }
-
-  /** The level-2 answer in force for one item, flattened to `{plate → catalog id}`. */
-  #assignmentMapFor(
-    itemId: string,
-    templateId: string,
-    levelTwo: LevelTwoSource,
-    /** `CHANNEL-SOURCES-01` — the row's channel, as for {@link #assignmentsFor}. */
-    channel: number,
-  ): Record<string, string> {
-    const frozen = levelTwo === 'fresh' ? undefined : this.#frozenAssignments.get(itemId);
-    if (frozen !== undefined) return { ...frozen };
-    const map: Record<string, string> = {};
-    for (const a of assignmentsOnChannel(this.#sourceAssignments, channel).assignments) {
-      if (a.templateId === templateId) map[a.plateId] = a.sourceId;
-    }
-    return map;
   }
 
   #effectiveOverridesFor(
@@ -13034,6 +13132,163 @@ export class CasparRuntime {
     });
   }
 
+  #prepareFocusSwap(
+    itemId: string,
+    fromLookId: string,
+    toLook: TemplateLook,
+    plan: Extract<LiveSeatingPlan, { ok: true }>,
+    transition: FrameTransition,
+    focusSlide?: InputSlideTransition,
+  ): PresetFrameEffect | undefined {
+    const item = this.#reconciler.get(itemId);
+    if (item === null) return undefined;
+    const page = this.#presetTransitionPage(item);
+    const baseline = this.#liveLayers.get(itemId);
+    if (page === undefined || baseline === undefined) return undefined;
+    const metadata = this.#templates.infoOf(page.version);
+    const layout = metadata?.controlLiveLayout;
+    if (layout === undefined) return undefined;
+    const from = controlLiveLayoutSoloTarget(layout, fromLookId);
+    const to = controlLiveLayoutFocusTarget(layout, toLook.id);
+    if (from === undefined || to === undefined || from.presetId !== to.presetId) return undefined;
+
+    const visible = baseline.filter((record) => record.held !== true);
+    const [outgoing] = visible;
+    const [next] = plan.placements;
+    if (
+      visible.length !== 1 ||
+      outgoing?.sourceId !== from.frameId ||
+      next?.plateId !== to.frameId ||
+      plan.placements.length !== 1 ||
+      outgoing.revealOverlay === true ||
+      next.revealOverlay === true
+    )
+      return undefined;
+    const before = new Map(baseline.map((record) => [liveSeatId(record), record]));
+    const incoming = before.get(next.seatId);
+    const destinations = [...plan.placements, ...plan.parked];
+    if (
+      !isSeatUnchanged('switch', incoming, next) ||
+      incoming.held !== true ||
+      adoptionKey(outgoing.slot) === adoptionKey(incoming.slot) ||
+      destinations.length !== baseline.length ||
+      destinations.some(
+        (placement) => !isSeatUnchanged('switch', before.get(placement.seatId), placement),
+      ) ||
+      !this.#isVerifiedCropSlot(incoming.slot) ||
+      !this.#isVerifiedCropSlot(outgoing.slot)
+    )
+      return undefined;
+
+    const channel = page.slot.channel;
+    const frames = Math.max(
+      1,
+      Math.round(transition.durationMs / this.#channelFrameMsFor(channel)),
+    );
+    const movement =
+      focusSlide === undefined
+        ? this.#planFocusMotion(
+            itemId,
+            page.slot,
+            from.presetId,
+            next,
+            outgoing,
+            transition,
+            frames,
+          )
+        : this.#planFocusSlide(channel, next, outgoing, focusSlide, frames);
+    if (movement === undefined) return undefined;
+    return this.#runPresetFrameTransaction(item, page, baseline, fromLookId, toLook.id, new Map(), {
+      transition,
+      frames: [],
+      plateIds: [from.frameId, to.frameId],
+      authoredPreset: true,
+      focusSwap: { incoming, outgoing, ...movement },
+    });
+  }
+
+  #planFocusSlide(
+    channel: number,
+    incoming: LivePlatePlacement,
+    outgoing: LiveLayerRecord,
+    transition: InputSlideTransition,
+    frames: number,
+  ): Pick<FocusSwapEffect, 'initial' | 'steps'> | undefined {
+    const raster = this.#channelSettings.rasterFor(channel);
+    const viewport = inputSlideAperture(
+      incoming.inputSlideViewport,
+      incoming.fit.clip,
+      outgoing.clip,
+      raster,
+    );
+    const direction = inputSlideVector(transition.direction);
+    if (
+      viewport === undefined ||
+      !inputSlideFitsAcrossAperture(viewport, [incoming.fit.fill, outgoing.fill], direction, raster)
+    )
+      return undefined;
+    const push = transition.mode === 'push';
+    const plan = planInputSlide(incoming.fit, outgoing, viewport, direction, push, frames, !push);
+    return {
+      initial: plan.initial,
+      steps: plan.steps.map((step) => ({
+        frames: step.frames,
+        easing: 'linear',
+        incoming: step.incoming,
+        ...(step.outgoing !== undefined && { outgoing: step.outgoing }),
+      })),
+    };
+  }
+
+  #planFocusMotion(
+    itemId: string,
+    slot: CommandSlot,
+    origin: string,
+    incoming: LivePlatePlacement,
+    outgoing: LiveLayerRecord,
+    transition: FrameTransition,
+    frames: number,
+  ): Pick<FocusSwapEffect, 'initial' | 'steps'> {
+    const previous = this.#planLiveSeating(itemId, slot, origin, 'already-live', 'pinned');
+    const originalFits = new Map(
+      previous.ok ? previous.placements.map(({ plateId, fit }) => [plateId, fit]) : [],
+    );
+    const inset = (rect: NormalizedRect): NormalizedRect => ({
+      x: rect.x + rect.width * 0.375,
+      y: rect.y + rect.height * 0.375,
+      width: rect.width / 4,
+      height: rect.height / 4,
+    });
+    const originFit = (id: string, fit: LivePlatePlacement['fit']) =>
+      originalFits.get(id) ?? { fill: inset(fit.fill), clip: inset(fit.clip) };
+    const interpolate = (
+      from: LivePlatePlacement['fit'],
+      to: LivePlatePlacement['fit'],
+      progress: number,
+    ) => ({
+      fill: rectAtProgress(from.fill, to.fill, progress),
+      clip: rectAtProgress(from.clip, to.clip, progress),
+    });
+    const initial = originFit(incoming.plateId, incoming.fit);
+    const destination = originFit(outgoing.sourceId, outgoing);
+    const phases = frameTransitionPhases(transition, frames);
+    const total = phases.reduce((sum, phase) => sum + phase.frames, 0);
+    let elapsed = 0;
+    const steps = phases.map((step) => {
+      elapsed += step.frames;
+      const progress = elapsed / total;
+      return {
+        frames: step.frames,
+        easing: step.easing,
+        incoming: interpolate(initial, incoming.fit, step.progress),
+        outgoing: interpolate(outgoing, destination, step.progress),
+        incomingOpacity: step.opacity * progress,
+        outgoingOpacity: step.opacity * (1 - progress),
+      };
+    });
+    return { initial, steps };
+  }
+
   #preparePresetDeparture(
     item: StackItemState,
     fromLook: TemplateLook,
@@ -13287,9 +13542,14 @@ export class CasparRuntime {
         ...changes.keys(),
         ...(effect.departure?.records ?? []),
         ...(effect.arrival?.records ?? []),
+        ...(effect.focusSwap === undefined
+          ? []
+          : [effect.focusSwap.incoming, effect.focusSwap.outgoing]),
       ]),
     ];
     const hiddenSlots = new Set(effect.departure?.records.map(({ slot }) => adoptionKey(slot)));
+    if (effect.focusSwap !== undefined)
+      hiddenSlots.add(adoptionKey(effect.focusSwap.outgoing.slot));
     const baselineSlots = new Set(baseline.map(({ slot }) => adoptionKey(slot)));
     const freshSeats = new Map<string, ProvisionalPresetSeat>();
     for (const { slot } of effect.arrival?.records ?? []) {
@@ -13537,6 +13797,7 @@ export class CasparRuntime {
               frames: 0,
               easing: 'linear',
               ...((effect.transition.fade ||
+                effect.focusSwap !== undefined ||
                 hiddenSlots.has(adoptionKey(record.slot)) ||
                 effect.arrival?.fits?.has(record) === true) && {
                 opacity: baseline.includes(record) ? wireOpacityOf(record) : 0,
@@ -14126,13 +14387,15 @@ export class CasparRuntime {
     itemId: string,
     lookId: string,
     transition?: FrameTransition,
+    focusSlide?: InputSlideTransition,
   ): Promise<{ ok: boolean; reason?: string; message?: string; refusalOnRow?: true }> {
     const templateId = this.#reconciler.get(itemId)?.templateId;
     const slot = this.#slots.get(itemId);
     if (templateId === undefined || slot === undefined) {
       return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
     }
-    const looks = this.#templates.getOn(slot.channel, templateId)?.liveSources?.looks ?? [];
+    const template = this.#templates.getOn(slot.channel, templateId);
+    const looks = template?.liveSources?.looks ?? [];
     const look = looks.find((l) => l.id === lookId);
     if (look === undefined) {
       return {
@@ -14182,6 +14445,31 @@ export class CasparRuntime {
       queue, they could describe a row a queued action has since changed.
     */
     return this.#withLiveSeatLock(itemId, async () => {
+      const previousLookId = this.activeLookId(itemId);
+      const layout = template?.controlLiveLayout;
+      const fromFocus =
+        layout === undefined ? undefined : controlLiveLayoutSoloTarget(layout, previousLookId);
+      const toFocus =
+        layout === undefined ? undefined : controlLiveLayoutFocusTarget(layout, lookId);
+      if (toFocus !== undefined && (fromFocus?.presetId ?? previousLookId) !== toFocus.presetId) {
+        return {
+          ok: false,
+          reason: 'focus-preset-changed',
+          message: 'The current preset has changed. Choose a frame from that preset.',
+        };
+      }
+      const directFocus =
+        fromFocus !== undefined &&
+        toFocus !== undefined &&
+        fromFocus.presetId === toFocus.presetId &&
+        fromFocus.frameId !== toFocus.frameId;
+      if (focusSlide !== undefined && !directFocus) {
+        return {
+          ok: false,
+          reason: 'focus-slide-unavailable',
+          message: 'Select another Focus frame within the current preset.',
+        };
+      }
       /*
       🔴 "DOES THIS ROW OWN LIVE LAYERS" IS ASKED OF THE ONE PREDICATE — `B-216`.
 
@@ -14311,7 +14599,6 @@ export class CasparRuntime {
       skips both the tell and the hold, and the look is recorded after the apply lands, for
       the next take's re-ADD path to carry into the rebuilt page.
     */
-      const previousLookId = this.activeLookId(itemId);
       let pageTold = false;
       const fallback: {
         release?: Extract<CgLiveFallback, { phase: 'release' }>;
@@ -14343,14 +14630,43 @@ export class CasparRuntime {
         lookId: look.id,
         presetEffect: () => effect,
         beforeApply: async (plan, preSeated) => {
-          effect = this.#preparePresetFrameEffect(
-            itemId,
-            previousLookId,
-            look,
-            plan,
-            transition,
-            preSeated,
-          );
+          const directTransition: FrameTransition | undefined =
+            focusSlide === undefined
+              ? transition
+              : { motion: 'linear', fade: false, durationMs: focusSlide.durationMs };
+          if (
+            directFocus &&
+            previousLookId !== undefined &&
+            directTransition !== undefined &&
+            (directTransition.motion !== 'cut' || directTransition.fade)
+          ) {
+            effect = this.#prepareFocusSwap(
+              itemId,
+              previousLookId,
+              look,
+              plan,
+              directTransition,
+              focusSlide,
+            );
+          }
+          if (focusSlide !== undefined && effect === undefined) {
+            return {
+              ok: false,
+              errorCode: 'focus-slide-unavailable',
+              message:
+                'This Focus slide needs two verified frame inputs. Try the Focus motion effect or cut.',
+            };
+          }
+          if (effect === undefined) {
+            effect = this.#preparePresetFrameEffect(
+              itemId,
+              previousLookId,
+              look,
+              plan,
+              transition,
+              preSeated,
+            );
+          }
           pageLoaded = this.#loaded.has(itemId) || effect !== undefined;
           if (!pageLoaded) return { ok: true };
           if (effect !== undefined) {
@@ -17266,6 +17582,10 @@ export class CasparRuntime {
     }
     const template = this.#templates.getOn(itemSlot.channel, templateId);
     const declaration = template?.liveSources?.sources.find((s) => s.sourceId === plateId);
+    const bindingLookId =
+      template?.controlLiveLayout === undefined
+        ? lookId
+        : (controlLiveLayoutFocusTarget(template.controlLiveLayout, lookId)?.presetId ?? lookId);
     if (declaration === undefined) {
       return {
         ok: false,
@@ -17303,17 +17623,17 @@ export class CasparRuntime {
       const currentBindings = this.#lookSourceBindings.get(itemId) ?? {};
       const next: Record<string, string> = { ...current };
       const nextBindings: Record<string, Record<string, string>> = { ...currentBindings };
-      if (lookId === undefined) {
+      if (bindingLookId === undefined) {
         if (sourceId === null) delete next[plateId];
         else next[plateId] = sourceId;
       } else {
-        const forLook: Record<string, string> = { ...(currentBindings[lookId] ?? {}) };
+        const forLook: Record<string, string> = { ...(currentBindings[bindingLookId] ?? {}) };
         if (sourceId === null) delete forLook[plateId];
         else forLook[plateId] = sourceId;
         // An EMPTY per-look map is no binding at all, for the same reason an empty override
         // map is: keeping one would publish a row as composed when it is back on its defaults.
-        if (Object.keys(forLook).length === 0) delete nextBindings[lookId];
-        else nextBindings[lookId] = forLook;
+        if (Object.keys(forLook).length === 0) delete nextBindings[bindingLookId];
+        else nextBindings[bindingLookId] = forLook;
       }
 
       /*
@@ -18209,7 +18529,8 @@ export class CasparRuntime {
     const templateId = this.#reconciler.get(itemId)?.templateId;
     const slot = this.#slots.get(itemId);
     if (templateId === undefined || slot === undefined) return false;
-    const carrier = this.#templates.getOn(slot.channel, templateId)?.liveSources;
+    const template = this.#templates.getOn(slot.channel, templateId);
+    const carrier = template?.liveSources;
     if (carrier === undefined) return false;
     const plan = resolveLookBindings({
       templateId,
@@ -18219,6 +18540,7 @@ export class CasparRuntime {
       catalog: this.#sourceCatalog,
       bindings: this.#lookSourceBindings.get(itemId),
       overrides: this.#sourceOverrides.get(itemId),
+      controlLiveLayout: template?.controlLiveLayout,
       argumentOf: (source) => this.#builder.sourceArgument(source.producer),
     });
     return plan.frames.some((f) => f.plateId === plateId && isPlaylistOutput(f.source));
@@ -20609,8 +20931,8 @@ export class CasparRuntime {
     template: TemplateInfo,
     html: string,
     channel?: number,
-    meta: { build?: PageBuild; sourceSha256?: string } = {},
-  ): { registered: boolean; templateId: string; versionId?: string } {
+    meta: { build?: PageBuild; sourceSha256?: string; expectedControlLayoutSource?: string } = {},
+  ): { registered: boolean; templateId: string; versionId?: string; message?: string } {
     /*
       B-141 — THE FIFTEENTH ACTION, and the one the change's own bookkeeping had
       lost: `import` is neither in the seven playout verbs nor among the three
@@ -20629,7 +20951,13 @@ export class CasparRuntime {
       this.#recordOutcome('import', detail, { outcome: 'failed', errorCode: 'internal-error' });
       throw err;
     }
-    this.#recordOutcome('import', detail, { outcome: 'ok' });
+    this.#recordOutcome(
+      'import',
+      detail,
+      result.registered
+        ? { outcome: 'ok' }
+        : { outcome: 'failed', errorCode: 'registration-refused' },
+    );
     return result;
   }
 
@@ -20637,10 +20965,45 @@ export class CasparRuntime {
     template: TemplateInfo,
     html: string,
     channel: number | undefined,
-    meta: { build?: PageBuild; sourceSha256?: string },
+    meta: { build?: PageBuild; sourceSha256?: string; expectedControlLayoutSource?: string },
   ): ReturnType<CasparRuntime['templateImport']> {
     const templateId = template.templateId;
     const targets: readonly number[] = channel === undefined ? this.#declaredChannels() : [channel];
+    if (
+      template.controlLiveLayout !== undefined &&
+      (meta.sourceSha256 === undefined ||
+        template.controlLiveLayoutSource !== meta.sourceSha256 ||
+        !this.#templates.hasSource(meta.sourceSha256))
+    ) {
+      return { registered: false, templateId, message: 'Save the editable layout package first.' };
+    }
+    if (
+      meta.expectedControlLayoutSource !== undefined &&
+      (channel === undefined ||
+        this.#templates.getOn(channel, templateId)?.controlLiveLayoutSource !==
+          meta.expectedControlLayoutSource)
+    ) {
+      return {
+        registered: false,
+        templateId,
+        message: 'This layout changed. Reopen it to edit the latest version.',
+      };
+    }
+    for (const target of targets) {
+      if (this.#templates.getOn(target, templateId)?.controlLiveLayout === undefined) continue;
+      if (
+        this.stackSnapshot(target).some(
+          (row) =>
+            row.templateId === templateId && (row.pending || this.#ownsLiveSeats(row.itemId)),
+        )
+      ) {
+        return {
+          registered: false,
+          templateId,
+          message: 'Duplicate this layout to prepare a separate version while it is on air.',
+        };
+      }
+    }
     const wasListed = targets.some((c) => this.#templates.hasOn(c, templateId));
     const { changed, versionId } = this.#templates.importOn(targets, template, html, meta);
     if (changed.length > 0) {

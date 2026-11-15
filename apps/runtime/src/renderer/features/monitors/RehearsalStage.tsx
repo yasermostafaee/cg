@@ -795,6 +795,7 @@ export function RehearsalStage({
             rowName={subject.rowName}
             activeLookId={subject.activeLookId}
             animatePresetChanges={subject.animatePresetChanges}
+            controlLiveLayout={subject.controlLiveLayout}
             presetFramePeriodMs={presetFramePeriodMs}
             liveSources={subject.liveSources}
             playing={playing}

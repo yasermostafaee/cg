@@ -12,15 +12,19 @@ import {
 import {
   AlertTriangle,
   CheckCircle2,
+  Copy,
   FileUp,
   FolderOpen,
   Layers,
   LayoutTemplate,
+  Pencil,
+  Plus,
   RefreshCw,
   Search,
   Trash2,
 } from 'lucide-react';
 import {
+  controlLiveLayoutDefaults,
   describeReferencePlace,
   liveSourceCarrierState,
   referenceRowName,
@@ -76,6 +80,7 @@ import {
   type TemplateSourceRecord,
 } from '../library/templateSourceStore.js';
 import { reloadTemplateSource, type ReloadDataPolicy } from '../library/reloadTemplateSource.js';
+import { useControlLiveLayoutEditor } from '../liveLayouts/useControlLiveLayoutEditor.js';
 // `PAGE-REBUILD-01` — the faces every page is built with: part of the runtime a plan is asked for.
 import appFontsCss from '../../fonts.css?inline';
 
@@ -412,6 +417,7 @@ export function useTemplatePicker(
   engine = 'CasparCG',
   sharedFolderAvailable = false,
   templateThumbnailsAvailable = false,
+  controlLiveLayouts = false,
 ): {
   pickTemplate: (
     title: string,
@@ -420,6 +426,7 @@ export function useTemplatePicker(
   ) => Promise<TemplateChoice>;
   /** Open the same catalogue as a management surface, with no row or Load action. */
   openTemplateLibrary: (channel: number) => Promise<void>;
+  openNewLiveLayout: (channel: number) => Promise<void>;
   pickerDialog: JSX.Element | null;
 } {
   const [request, setRequest] = useState<PickRequest | null>(null);
@@ -432,6 +439,27 @@ export function useTemplatePicker(
    * a reason the operator must act on has to land.
    */
   const [message, setMessage] = useState<ModalMessage | null>(null);
+  const layoutEditor = useControlLiveLayoutEditor(
+    (templateId, target) => {
+      if (request?.channel !== target) {
+        reportCommandSuccess('Live layout saved');
+        return;
+      }
+      void window.cg.templates
+        .list({ channel: target })
+        .then((templates) => {
+          setRequest((current) =>
+            current?.channel === target ? { ...current, templates } : current,
+          );
+          setSelected(templates.find((template) => template.templateId === templateId) ?? null);
+        })
+        .catch(() => reportCommandSuccess('Live layout saved'));
+    },
+    (text) => {
+      if (request !== null) setMessage({ role: 'refusal', text });
+      else reportCommandError(text);
+    },
+  );
   /*
     `B-212` — WHERE the items that refused a deletion are, so the dialog can offer the
     way there. _"2 stack item(s) still use this template — remove them (or Remove All)"_ was
@@ -587,6 +615,7 @@ export function useTemplatePicker(
             channel,
             template.templateId,
             (template.liveSources?.sources ?? []).map((s) => s.sourceId),
+            controlLiveLayoutDefaults(template.controlLiveLayout),
           ),
     [channel],
   );
@@ -1466,6 +1495,15 @@ export function useTemplatePicker(
               (`UI-POLISH-01` C — `Manage` itself is retired; delete is on each row.)
             */}
                 <ImportDoor onImport={openImport} busy={importBusy} />
+                {controlLiveLayouts && channel !== undefined && (
+                  <Button
+                    variant="neutral"
+                    disabled={layoutEditor.busy}
+                    onClick={() => void layoutEditor.open(channel)}
+                  >
+                    <Icon icon={Plus} size={14} /> New live layout
+                  </Button>
+                )}
                 {sharedFolderAvailable && (
                   <Button
                     variant="neutral"
@@ -1640,6 +1678,26 @@ export function useTemplatePicker(
                               : `Used by ${count(usage.get(selected.templateId) ?? 0, 'row')}`}
                           </dd>
                         </dl>
+                        {controlLiveLayouts &&
+                          channel !== undefined &&
+                          selected.controlLiveLayout !== undefined && (
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                              <Button
+                                variant="neutral"
+                                disabled={layoutEditor.busy}
+                                onClick={() => void layoutEditor.open(channel, selected)}
+                              >
+                                <Icon icon={Pencil} size={14} /> Edit layout
+                              </Button>
+                              <Button
+                                variant="neutral"
+                                disabled={layoutEditor.busy}
+                                onClick={() => void layoutEditor.open(channel, selected, true)}
+                              >
+                                <Icon icon={Copy} size={14} /> Duplicate layout
+                              </Button>
+                            </div>
+                          )}
                         {request.mode === 'load' &&
                           (() => {
                             const ok = loadable(selected);
@@ -1696,7 +1754,20 @@ export function useTemplatePicker(
       </Modal>
     );
 
-  return { pickTemplate, openTemplateLibrary, pickerDialog };
+  return {
+    pickTemplate,
+    openTemplateLibrary,
+    openNewLiveLayout: (target) => layoutEditor.open(target),
+    pickerDialog:
+      layoutEditor.dialog === null ? (
+        pickerDialog
+      ) : (
+        <>
+          {pickerDialog}
+          {layoutEditor.dialog}
+        </>
+      ),
+  };
 }
 
 /**

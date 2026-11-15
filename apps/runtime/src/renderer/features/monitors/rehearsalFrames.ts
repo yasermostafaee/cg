@@ -6,7 +6,13 @@ import {
   type Rehearsal,
   type TemplateLiveSources,
 } from '@cg/shared-ipc';
-import type { FieldValues, Position, PositionAnchor, StackItemState } from '@cg/shared-schema';
+import type {
+  ControlLiveLayout,
+  FieldValues,
+  Position,
+  PositionAnchor,
+  StackItemState,
+} from '@cg/shared-schema';
 import type { PlateSourceLookup } from './livePlateGeometry.js';
 import type { TimingToSend } from '../inspector/timingToSend.js';
 import type { RehearsalBook } from '../layers/bookOf.js';
@@ -53,6 +59,7 @@ export interface RehearsalSubject {
    * consumed where a take can be refused, not on a preview surface.
    */
   liveSources: TemplateLiveSources | undefined;
+  controlLiveLayout?: ControlLiveLayout | undefined;
   /**
    * 🔴 **SESSION BQ — WHAT THE OVERLAY NEEDS TO RESOLVE A SOURCE NAME, not the names
    * themselves. The change of shape IS the fix.**

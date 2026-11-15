@@ -78,6 +78,7 @@ export const BridgeCapabilitiesChannel = defineChannel(
     previewMaskPlacement: z.literal(true).optional(),
     /** The Bridge can enforce authored layer order for overlapping Live plates. */
     livePlatePaintOrder: z.literal(true).optional(),
+    controlLiveLayouts: z.literal(true).optional(),
     /**
      * Where the BROWSER posts its credentials — the Playout's D1 endpoint
      * (`POST /api/cg/auth/token`), absolute, as configured on this bridge.

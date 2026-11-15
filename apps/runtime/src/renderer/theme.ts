@@ -44,6 +44,14 @@
 
 import type { StackItemStatus } from '@cg/shared-schema';
 
+/** Default artwork carried with a layout authored in CG Control. */
+export const liveLayoutArtwork = {
+  background: '#132b3c',
+  mediaBackdrop: '#101822',
+  titleText: '#FFFFFF',
+  titleBackground: '#101B28DE',
+} as const;
+
 /*
  * ── `RUNTIME-REDESIGN-01` PHASE 2 — THE REFERENCE PALETTE ────────────────────
  *

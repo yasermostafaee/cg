@@ -5271,7 +5271,7 @@ export function buildRoutes(
       'operator',
       'operator',
       (r: ChannelRequest<typeof StackSetActiveLookChannel>) =>
-        b.setActiveLook(r.itemId, r.lookId, r.transition),
+        b.setActiveLook(r.itemId, r.lookId, r.transition, r.focusSlide),
     ),
     // `TIMING-WIRE-22` (c) — a CONFIGURATION verb: it carries no Take, and changes what the
     // graphic already on the channel will do next.
@@ -5851,10 +5851,14 @@ export function buildRoutes(
         channel?: number;
         build?: PageBuild;
         sourceSha256?: string;
+        expectedControlLayoutSource?: string;
       }) =>
         b.templateImport(r.template, r.html, r.channel, {
           ...(r.build !== undefined && { build: r.build }),
           ...(r.sourceSha256 !== undefined && { sourceSha256: r.sourceSha256 }),
+          ...(r.expectedControlLayoutSource !== undefined && {
+            expectedControlLayoutSource: r.expectedControlLayoutSource,
+          }),
         }),
     ),
     // `PAGE-REBUILD-01` (`C-034`) — the verified package kept for a rebuild, read back for one,
@@ -6179,6 +6183,7 @@ export function buildRoutes(
     liveFramePlacement: true as const,
     liveFramePlacementReset: true as const,
     livePlatePaintOrder: true as const,
+    controlLiveLayouts: true as const,
     liveCropReset: true as const,
     previewResizeMode: true as const,
     previewMaskPlacement: true as const,

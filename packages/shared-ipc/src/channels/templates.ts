@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   CompositionFieldGroupSchema,
+  ControlLiveLayoutSchema,
   DynamicFieldSchema,
   IdSchema,
   ImageFitSchema,
@@ -24,6 +25,7 @@ import {
   sameLiveMaskRect,
 } from '@cg/shared-schema';
 import type {
+  ControlLiveLayout,
   LiveCropFocus,
   LiveFitMode,
   LiveFramePlacement,
@@ -494,8 +496,14 @@ export function linkedMaskPlacements(
   return result;
 }
 
+const Sha256HexSchema = z.string().regex(/^[0-9a-f]{64}$/);
+
 export const TemplateInfoSchema = z.object({
   templateId: IdSchema,
+  /** Optional authoring data for a live layout created in CG Control. */
+  controlLiveLayout: ControlLiveLayoutSchema.optional(),
+  /** The kept authoring package for editing or duplicating this exact revision. */
+  controlLiveLayoutSource: Sha256HexSchema.optional(),
   /**
    * R-004 — the human-readable display name (the `.vcg` manifest's `name`; a bundled
    * starter's label). The Library shows this instead of the raw `templateId`, which for a
@@ -673,6 +681,15 @@ export const TemplateInfoSchema = z.object({
 });
 export type TemplateInfo = z.infer<typeof TemplateInfoSchema>;
 
+export function controlLiveLayoutDefaults(
+  layout: ControlLiveLayout | undefined,
+): Record<string, string> | undefined {
+  if (layout === undefined) return undefined;
+  return Object.fromEntries(
+    layout.frames.flatMap(({ id, sourceId }) => (sourceId === undefined ? [] : [[id, sourceId]])),
+  );
+}
+
 /**
  * D-137 / C-015 — what a template's Live Source carrier actually says. THE
  * canonical reading of {@link TemplateInfo.liveSources}, so no caller re-derives
@@ -738,7 +755,6 @@ export function requiredBankFor(template: Pick<TemplateInfo, 'liveSources'>): 'l
 const TemplateChannelSchema = z.number().int().positive();
 
 /** A lowercase SHA-256, hex. */
-const Sha256HexSchema = z.string().regex(/^[0-9a-f]{64}$/);
 
 /**
  * 🔴 `PAGE-REBUILD-01` (`C-034`) — **WHICH TEMPLATE RUNTIME BUILT A PAGE.** CG Control builds every
@@ -864,11 +880,14 @@ export const TemplatesImportChannel = defineChannel(
      * rebuilt. The bridge keeps the reference only when it holds those bytes.
      */
     sourceSha256: Sha256HexSchema.optional(),
+    /** An edit may only replace the listed Control layout revision that was opened. */
+    expectedControlLayoutSource: Sha256HexSchema.optional(),
   }),
   z.object({
     registered: z.boolean(),
     templateId: IdSchema,
     versionId: ListedTemplateVersionSchema.optional(),
+    message: z.string().optional(),
   }),
 );
 

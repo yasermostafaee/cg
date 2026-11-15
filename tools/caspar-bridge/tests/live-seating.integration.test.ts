@@ -21,9 +21,13 @@ import {
   CG_LIVE_PRESET_RECOVERY_PAGE_MARKER,
   CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER,
   CG_LIVE_PRESET_TRANSITION_PAGE_MARKER,
+  CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS,
+  controlLiveLayoutFocusLookId,
+  controlLiveLayoutRects,
   RetainedStackItemSchema,
   retainedFromStackItem,
   type FrameTransition,
+  type ControlLiveLayout,
   type LiveFitMode,
   type LiveFramePlacement,
   type LiveFrameTarget,
@@ -389,10 +393,18 @@ async function boot(options: {
     r.useBackupMedia(() => ({ kind: 'refused', reason: 'no-copy' }));
   r.start();
   await r.startServing();
-  r.templateImport(
-    options.template,
-    options.html ?? '<!doctype html><html><body>served</body></html>',
-  );
+  const html = options.html ?? '<!doctype html><html><body>served</body></html>';
+  if (options.template.controlLiveLayout === undefined) {
+    r.templateImport(options.template, html);
+  } else {
+    const kept = r.templateSourcePut(Buffer.from('authored layout package').toString('base64'));
+    if (!kept.stored || kept.sha256 === undefined) throw new Error('Could not retain layout');
+    expect(
+      r.templateImport({ ...options.template, controlLiveLayoutSource: kept.sha256 }, html, 1, {
+        sourceSha256: kept.sha256,
+      }).registered,
+    ).toBe(true);
+  }
   await r.whenServerHealthy(HEALTH_MS);
   if (options.mirrorChannel !== undefined)
     await expect.poll(() => r.health().backup?.state, { timeout: HEALTH_MS }).toBe('healthy');
@@ -414,6 +426,258 @@ async function loadAndTake(
 
 const at = (lines: readonly string[], needle: string): number =>
   lines.findIndex((l) => l.startsWith(needle));
+
+const focusPreset = 'panel';
+const soloPreset = 'interview';
+const focusFrameIds = ['guest-1', 'guest-2', 'guest-3'] as const;
+const focusLooks = focusFrameIds.map((frameId) =>
+  controlLiveLayoutFocusLookId(focusPreset, frameId),
+);
+const focusRect = { ...SCENE, x: 0, y: 0 };
+const focusMotion = { motion: 'ease-in-out', fade: false, durationMs: 160 } as const;
+
+async function bootControlFocus(paired = false, startsWithSolo = false) {
+  const cameras = {
+    'guest-1': 'src-a',
+    'guest-2': 'src-b',
+    'guest-3': 'src-c',
+  };
+  const layout: ControlLiveLayout = {
+    id: 'lower-third',
+    name: 'Panel discussion',
+    resolution: SCENE,
+    frameRate: 25,
+    frames: focusFrameIds.map((id) => ({ id, title: id, sourceId: cameras[id] })),
+    presets: [
+      {
+        id: focusPreset,
+        name: 'Three-up',
+        frameIds: [...focusFrameIds],
+        arrangement: 'host-and-guests',
+        horizontalGap: 24,
+        verticalGap: 20,
+        hiddenTitles: [],
+        hiddenFocusTitles: [],
+        reverse: false,
+      },
+    ],
+    defaultPresetId: startsWithSolo ? soloPreset : focusPreset,
+    background: { kind: 'color', color: '#102030' },
+    effects: structuredClone(CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS),
+  };
+  if (startsWithSolo) {
+    layout.presets.push({
+      ...layout.presets[0]!,
+      id: soloPreset,
+      name: 'Interview',
+      frameIds: [focusFrameIds[0]],
+    });
+  }
+  const rects = controlLiveLayoutRects(layout, layout.presets[0]!);
+  const base = template(
+    focusFrameIds.map((id) => ({ id, rect: rects[id]! })),
+    true,
+  );
+  const look = (id: string, membership: Record<string, PlateSpec['rect']>) => ({
+    id,
+    name: id,
+    entered: { mode: 'cut' as const },
+    rects: membership,
+    transitionFrames: Object.fromEntries(
+      Object.keys(membership).map((frameId) => [
+        frameId,
+        { frameKey: id + '/' + frameId, elementId: 'el-' + frameId, artworkId: 'art-' + frameId },
+      ]),
+    ),
+    transitionDepartureGroups: Object.fromEntries(
+      Object.keys(membership).map((frameId) => [id + '/' + frameId, [frameId]]),
+    ),
+  });
+  const r = await boot({
+    template: {
+      ...base,
+      controlLiveLayout: layout,
+      liveSources: {
+        ...base.liveSources!,
+        defaultLookId: layout.defaultPresetId,
+        looks: layout.presets.flatMap((preset) => [
+          look(preset.id, controlLiveLayoutRects(layout, preset)),
+          ...focusFrameIds.map((frameId) =>
+            look(controlLiveLayoutFocusLookId(preset.id, frameId), { [frameId]: focusRect }),
+          ),
+        ]),
+      },
+    },
+    catalog: catalog({
+      layerRange: { start: 30, end: 36 },
+      sources: Object.values(cameras).map((id) => ({
+        id,
+        name: id,
+        format: '1080i5000',
+        producer: { kind: 'ndi', source: id },
+      })),
+    }),
+    assignments: { assignments: [] },
+    html: PRESET_TITLE_HOLD_HTML,
+    ...(paired && { mirrorChannel: 2 }),
+  });
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  await expect.poll(() => r.stackSnapshot()[0]?.onAirPresetTransition).toBe(true);
+  return r;
+}
+
+it('moves between bound Control Focus frames and restores the exact prior arrangement', async () => {
+  const r = await bootControlFocus(true);
+  const records = r.liveLayers().get('item-1')!;
+  expect(records).toHaveLength(3);
+  const [first, second, third] = records;
+  const initial = records.map((record) => mock!.layerRenderedRect(record.slot));
+  const mark = (await recvLines()).length;
+  expect(await r.setActiveLook('item-1', focusLooks[0]!, focusMotion)).toEqual({ ok: true });
+  expect(mock!.layerRenderedRect(first!.slot)).toEqual({ x: 0, y: 0, width: 1, height: 1 });
+  expect(
+    (await recvLines()).slice(mark).some((line) => /FILL .+ easeinoutquad DEFER$/.test(line)),
+  ).toBe(true);
+  const motionMark = (await recvLines()).length;
+  expect(await r.setActiveLook('item-1', focusLooks[1]!, focusMotion)).toEqual({ ok: true });
+  expect(mock!.layerRenderedRect(second!.slot)).toEqual({ x: 0, y: 0, width: 1, height: 1 });
+  expect((await recvLines()).slice(motionMark)).toEqual(
+    expect.arrayContaining([
+      expect.stringMatching(
+        new RegExp('MIXER 1-' + second!.slot.layer + ' FILL .+ easeinoutquad DEFER$'),
+      ),
+      expect.stringMatching(
+        new RegExp('MIXER 1-' + first!.slot.layer + ' OPACITY 0 .+ easeinoutquad DEFER$'),
+      ),
+    ]),
+  );
+  const beforePush = (await recvLines()).length;
+  const peerBefore = backup!.receivedCommands().length;
+  expect(
+    await r.setActiveLook('item-1', focusLooks[2]!, undefined, {
+      mode: 'push',
+      direction: 'right',
+      durationMs: 160,
+    }),
+  ).toEqual({ ok: true });
+  expect(mock!.layerRenderedRect(third!.slot)).toEqual({ x: 0, y: 0, width: 1, height: 1 });
+  expect((await recvLines()).slice(beforePush)).toEqual(
+    expect.arrayContaining([
+      expect.stringMatching(
+        new RegExp('MIXER 1-' + second!.slot.layer + ' FILL -1 0 1 1 .+ linear DEFER$'),
+      ),
+      expect.stringMatching(
+        new RegExp('MIXER 1-' + third!.slot.layer + ' FILL 0 0 1 1 .+ linear DEFER$'),
+      ),
+    ]),
+  );
+  const peerLines = backup!
+    .receivedCommands()
+    .slice(peerBefore)
+    .map(({ line }) => line);
+  expect(peerLines.some((line) => /\d+ linear DEFER$/.test(line))).toBe(false);
+  expect(backup!.layerRenderedRect({ channel: 2, layer: third!.slot.layer })).toEqual(
+    mock!.layerRenderedRect(third!.slot),
+  );
+  const beforeSlide = (await recvLines()).length;
+  expect(
+    await r.setActiveLook('item-1', focusLooks[0]!, undefined, {
+      mode: 'slide-over',
+      direction: 'up',
+      durationMs: 160,
+    }),
+  ).toEqual({ ok: true });
+  expect((await recvLines()).slice(beforeSlide)).toEqual(
+    expect.arrayContaining([
+      expect.stringMatching(
+        new RegExp('MIXER 1-' + third!.slot.layer + ' FILL 0 0 1 1 .+ linear DEFER$'),
+      ),
+      expect.stringMatching(
+        new RegExp('MIXER 1-' + first!.slot.layer + ' FILL 0 0 1 1 .+ linear DEFER$'),
+      ),
+    ]),
+  );
+  expect(await r.setActiveLook('item-1', focusPreset, focusMotion)).toEqual({ ok: true });
+  expect(records.map((record) => mock!.layerRenderedRect(record.slot))).toEqual(initial);
+  expect(
+    records.map((record) => backup!.layerRenderedRect({ channel: 2, layer: record.slot.layer })),
+  ).toEqual(initial);
+  expect(r.activeLookId('item-1')).toBe(focusPreset);
+  expect(r.stackSnapshot()[0]?.frozenAssignment).toEqual({
+    'guest-1': 'src-a',
+    'guest-2': 'src-b',
+    'guest-3': 'src-c',
+  });
+  expect(r.stackSnapshot()[0]?.sourceOverride).toBeUndefined();
+  expect(r.stackSnapshot()[0]?.lookSourceOverride).toBeUndefined();
+  expect((await recvLines()).slice(mark).some((line) => /^(?:PLAY|CLEAR) /.test(line))).toBe(false);
+});
+
+it('refuses a Control Focus slide transaction and restores the previously shown frame', async () => {
+  const r = await bootControlFocus();
+  expect(await r.setActiveLook('item-1', focusLooks[0]!, focusMotion)).toEqual({ ok: true });
+  const records = r.liveLayers().get('item-1')!;
+  const prior = records.find((record) => record.sourceId === focusFrameIds[0])!;
+  const next = records.find((record) => record.sourceId === focusFrameIds[1])!;
+  const before = mock!.layerState(prior.slot);
+  const original = defaultHandlers().get('MIXER')!;
+  let refused = false;
+  mock!.setHandler('MIXER', (request, context, connection) => {
+    if (
+      !refused &&
+      request.raw.startsWith('MIXER 1-' + next.slot.layer + ' FILL ') &&
+      request.raw.endsWith('linear DEFER')
+    ) {
+      refused = true;
+      return { kind: 'err', code: 502, verb: 'MIXER' };
+    }
+    return original(request, context, connection);
+  });
+  expect(
+    await r.setActiveLook('item-1', focusLooks[1]!, undefined, {
+      mode: 'push',
+      direction: 'left',
+      durationMs: 160,
+    }),
+  ).toMatchObject({ ok: false });
+  expect(refused).toBe(true);
+  expect(r.activeLookId('item-1')).toBe(focusLooks[0]);
+  expect(mock!.layerState(prior.slot)).toEqual(before);
+  expect(mock!.layerRenderedRect(next.slot)).toBeNull();
+  expect(mock!.stagedMixerCount(1)).toBe(0);
+});
+
+it('switches directly from a one-frame preset into Control Focus and returns to that preset', async () => {
+  const r = await bootControlFocus(false, true);
+  expect(r.activeLookId('item-1')).toBe(soloPreset);
+  const [original] = r
+    .liveLayers()
+    .get('item-1')!
+    .filter((record) => record.held !== true);
+  const originalRect = mock!.layerRenderedRect(original!.slot);
+  const destination = controlLiveLayoutFocusLookId(soloPreset, focusFrameIds[1]);
+  const mark = (await recvLines()).length;
+  expect(
+    await r.setActiveLook('item-1', destination, undefined, {
+      mode: 'slide-over',
+      direction: 'up',
+      durationMs: 160,
+    }),
+  ).toEqual({ ok: true });
+  expect(r.activeLookId('item-1')).toBe(destination);
+  expect(
+    r
+      .liveLayers()
+      .get('item-1')!
+      .filter((record) => record.held !== true),
+  ).toMatchObject([{ sourceId: focusFrameIds[1] }]);
+  expect((await recvLines()).slice(mark)).toEqual(
+    expect.arrayContaining([expect.stringMatching(/MIXER 1-\d+ FILL .+ linear DEFER$/)]),
+  );
+  expect(await r.setActiveLook('item-1', soloPreset, focusMotion)).toEqual({ ok: true });
+  expect(mock!.layerRenderedRect(original!.slot)).toEqual(originalRect);
+  expect(r.activeLookId('item-1')).toBe(soloPreset);
+});
 
 it('🔴 a declared, assigned plate REACHES AIR — the PLAY, the mute and the fit all on the wire', async () => {
   const r = await boot({ template: template([{ id: 'guest-1', rect: BOX }]) });

@@ -12,6 +12,12 @@ export const InputTransitionSchema = z.object({
 export type InputTransition = z.infer<typeof InputTransitionSchema>;
 export type InputTransitionDirection = z.infer<typeof InputTransitionDirectionSchema>;
 
+/** A directional change between two already bound focus frames. */
+export const InputSlideTransitionSchema = InputTransitionSchema.extend({
+  mode: z.enum(['push', 'slide-over']),
+});
+export type InputSlideTransition = z.infer<typeof InputSlideTransitionSchema>;
+
 export const DEFAULT_INPUT_SLIDE_DIRECTION: InputTransitionDirection = 'left';
 
 export function isInputSlideMode(mode: InputTransition['mode']): mode is 'push' | 'slide-over' {
