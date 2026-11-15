@@ -40,4 +40,4 @@
 - [x] Observe the long media warning replacing the template name on the target station.
 - [x] Keep the name and compact status visible and show specific causes on demand.
 - [x] Verify combined missing media and live input warnings in Layers and Inspector. Four Windows Chromium cases and 14 warning tests passed.
-- [ ] Record the carrying Linux Playwright result.
+- [x] [Linux Playwright](https://github.com/yasermostafaee/cg/actions/runs/43667950106/job/132671500381) ran the complete E2E step successfully on `194e37ac`.

@@ -65,4 +65,6 @@
 - [x] Verify missing backup inputs and interruption do not write transient geometry to another engine.
       The paired wire cases verify missing media, mapping, a refused active commit, a reconnect and
       ownership transfer after a deferred mixer write.
-- [ ] Record the carrying Linux Playwright result.
+- [x] [Linux Playwright](https://github.com/yasermostafaee/cg/actions/runs/43667950106/job/132671500381) ran the complete E2E step successfully on `194e37ac`.
+- [x] Built CG Control, CG Designer and CG Bridge installers locally from this verified commit.
+      Verified the packed setup payloads and SHA-256 in `installers/1.2.5/194e37ac`.

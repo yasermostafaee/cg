@@ -44,4 +44,4 @@ Windows Chromium with the real Bridge and test engine passed the focused accepta
 - [x] Show newest packages first, reverse order from the header, and distinguish folders.
 - [x] Verify modification order, selection, navigation and stable dialog dimensions in Windows Chromium.
       All three focused browser tests passed, including imported previews and shared-source reload.
-- [ ] Record the carrying Linux Playwright result.
+- [x] [Linux Playwright](https://github.com/yasermostafaee/cg/actions/runs/43667950106/job/132671500381) ran the complete E2E step successfully on `194e37ac`.

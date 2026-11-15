@@ -52,4 +52,4 @@
 - [x] Verify legacy mirror updates, retained producers and refusal or interruption with two engines.
       Focused Bridge cases verified missing media, an active commit refusal, a backup refusal with
       compensation and a stale same-kind producer without a matching backup PLAY acknowledgement.
-- [ ] Record the carrying Linux Playwright result.
+- [x] [Linux Playwright](https://github.com/yasermostafaee/cg/actions/runs/43667950106/job/132671500381) ran the complete E2E step successfully on `194e37ac`.
