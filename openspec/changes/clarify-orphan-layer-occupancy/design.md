@@ -15,3 +15,9 @@ the page after Stop requires confirmation that its own outro ended.
   operator to Program to check the output.
 - Clear confirmations name each target and describe the removal of its producer. Clear continues
   through the existing per-layer command and its current guards.
+- A bank Clear and an orphan Clear both update a matching bound row when the current primary
+  acknowledges removal. The orphan command must still pass its existing unowned guard at
+  dispatch. Binding may change while the command is in flight.
+- The row retains its binding, drops its cached resident producer and ignores late OSC frames
+  until its next Take. A newer row intent keeps its own result. Acknowledgement from the backup
+  alone does not settle the primary's row.

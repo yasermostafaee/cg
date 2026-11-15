@@ -1,6 +1,6 @@
 import * as dgram from 'node:dgram';
 import { afterEach, expect, it } from 'vitest';
-import { createMock, type MockHandle } from '@cg/amcp-mock';
+import { createMock, defaultHandlers, type MockHandle } from '@cg/amcp-mock';
 import { AmcpTransport, CommandQueue } from '@cg/caspar-client';
 import type { ConnectionConfig, OrphanLayer } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
@@ -73,9 +73,17 @@ async function foreignPlay(mock: MockHandle, line: string): Promise<void> {
   await foreignQueue?.enqueue(line);
 }
 
-async function bootSingle(): Promise<{ emissions: OrphanLayer[][] }> {
+async function bootSingle(
+  clearRepliesBeforeErase = false,
+): Promise<{ emissions: OrphanLayer[][] }> {
   const oscPort = await freeUdpPort();
-  mockA = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30 });
+  mockA = await createMock({
+    amcpPort: 0,
+    oscPort,
+    oscHost: '127.0.0.1',
+    oscHz: 30,
+    clearRepliesBeforeErase,
+  });
   runtime = new CasparRuntime(
     singleServer(mockA.amcpPort, oscPort),
     {},
@@ -117,6 +125,49 @@ it('a foreign producer surfaces within the sweep cadence; Clear resolves it on o
   const countAfterResolve = emissions.length;
   await new Promise((r) => setTimeout(r, SWEEP_MS * 4));
   expect(emissions.length).toBe(countAfterResolve);
+}, 20000);
+
+it('settles a restored row that adopts the leftover graphic while the warning’s Clear is in flight', async () => {
+  await bootSingle(true);
+  const r = runtime!;
+  const m = mockA!;
+  const slot = { channel: 1, layer: 10 };
+  await foreignPlay(m, 'PLAY 1-10 "leftover" HTML');
+  await waitFor(() => r.orphans().some(({ layer }) => layer === slot.layer));
+  const clearHandler = defaultHandlers().get('CLEAR')!;
+  let release: (() => void) | undefined;
+  m.setHandler('CLEAR', async (request, context, connection) => {
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return clearHandler(request, context, connection);
+  });
+  let pushed: string | undefined;
+  r.stackChanged.subscribe((items) => {
+    pushed = items.find(({ itemId }) => itemId === 'retained')?.status;
+  });
+  const clearing = r.clearLayer(slot.channel, slot.layer);
+  try {
+    await waitFor(() => release !== undefined);
+    expect(
+      await r.restore([
+        {
+          itemId: 'retained',
+          templateId: 'lower-third',
+          fields: {},
+          state: 'on-air',
+          slot: { ...slot, server: 'primary' },
+        },
+      ]),
+    ).toMatchObject({ restored: 1 });
+    await waitFor(() => pushed === 'on-air' || pushed === 'playing');
+  } finally {
+    release?.();
+  }
+  expect(await clearing).toEqual({ ok: true });
+  await expect.poll(() => m.layerState(slot)?.producer, { timeout: HEALTH_MS }).toBe('empty');
+  await expect.poll(() => pushed, { timeout: 850 }).toBe('idle');
+  expect(r.stackSnapshot()[0]).toMatchObject({ itemId: 'retained', pending: false });
 }, 20000);
 
 it('an owned layer never surfaces; Clear on an owned layer is refused', async () => {

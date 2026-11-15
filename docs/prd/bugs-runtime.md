@@ -13685,12 +13685,17 @@ failover. No AMCP is added. Play evidence and Stop are untouched, and a backup-o
 second Clear is harmless: accepted, idle, no error. Clear on A leaves B pushed ON AIR, then Clear on B. A re-take goes
 back on air. Stop is still pushed READY with its producer kept. Unit: `reconciler-cleared-producer.test.ts`.
 
+**After a Bridge restart:** The layer-addressed bank Clear could also leave Play green after the
+producer was removed. A warning Clear could do the same if a retained row adopted that precise
+layer before the command finished. Both paths now settle the matching row when the current
+primary acknowledges Clear. Late producer frames and backup-only acknowledgements cannot
+change that wire result, and a newer Take keeps its own result. See
+[`clarify-orphan-layer-occupancy`](../../openspec/changes/clarify-orphan-layer-occupancy/tasks.md).
+
 **Open (not fixed here):**
 
 - A re-take after a Clear rests at the take's ack `playing`, not OSC's `on-air`, with or without this fix (measured by
   ablation). The late frame leaves the change tracker at `html`, so the re-ADD's page is suppressed as a repeat.
-- The bank-scoped clear of a bound row (`B-125`, `#reconcileClearedSlot`) has the same late-frame exposure. That path is
-  reachable only through a race and is not tested.
 - The mock's default CLEAR still erases synchronously. Making the core's order the default would re-run every
   integration test against it, which is a separate item.
 

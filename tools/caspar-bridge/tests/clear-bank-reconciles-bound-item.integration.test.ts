@@ -90,13 +90,20 @@ async function recvLines(m: MockHandle, file: string): Promise<string[]> {
   return readWireLines(file);
 }
 
-async function boot(): Promise<BridgeHandle> {
+async function boot(clearRepliesBeforeErase = false): Promise<BridgeHandle> {
   const oscPort = await freeUdpPort();
   tracePath = path.join(
     fs.mkdtempSync(path.join(os.tmpdir(), 'cg-clear-bank-race-')),
     'amcp-trace.ndjson',
   );
-  mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30, tracePath });
+  mock = await createMock({
+    amcpPort: 0,
+    oscPort,
+    oscHost: '127.0.0.1',
+    oscHz: 30,
+    tracePath,
+    clearRepliesBeforeErase,
+  });
   bridge = await createBridge({
     port: 0,
     connection: singleServer(mock.amcpPort, oscPort),
@@ -172,6 +179,24 @@ it('the reconciliation reaches the STATUS too: no item reports `loaded` over the
     'a row claiming air over a layer the bridge itself just emptied is the whole defect',
   ).toBe('idle');
 }, 25000);
+
+it('keeps a cleared bank row off air when a late producer frame follows the acknowledgement', async () => {
+  const b = await boot(true);
+  const slot = { channel: 1, layer: 74 };
+  const pushed: string[] = [];
+  b.runtime.stackChanged.subscribe((items) => {
+    const row = items.find(({ itemId }) => itemId === 'item-live');
+    if (row !== undefined) pushed.push(row.status);
+  });
+  await seat(b, slot, 'item-live');
+  await expect.poll(() => pushed.at(-1), { timeout: HEALTH_MS }).toBe('on-air');
+
+  expect(await b.runtime.clearBankLayer(slot.channel, slot.layer)).toEqual({ ok: true });
+  await expect.poll(() => mock?.layerState(slot)?.producer, { timeout: HEALTH_MS }).toBe('empty');
+  await expect.poll(() => pushed.at(-1), { timeout: 850 }).toBe('idle');
+  await new Promise((resolve) => setTimeout(resolve, 1100));
+  expect(pushed.at(-1)).toBe('idle');
+});
 
 it('an UNBOUND bank layer clears exactly as before — reconciliation adds nothing to that path', async () => {
   const b = await boot();

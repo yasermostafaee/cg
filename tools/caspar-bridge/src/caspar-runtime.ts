@@ -19035,16 +19035,21 @@ export class CasparRuntime {
       };
     }
     const slot: CommandSlot = { channel, layer };
-    const { ok, onPrimary } = await this.#send(this.#builder.out(slot), this.#nextSeq(), 'urgent');
+    const clearSeq = this.#nextSeq();
+    const primaryQueue = this.#adapter.primarySession.queue;
+    const { ok, onPrimary } = await this.#send(this.#builder.out(slot), clearSeq, 'urgent', {
+      primaryQueue,
+    });
     if (!ok) return { ok: false, reason: 'amcp-error' };
     // Adoption marking mirrors `clearLayer`: a CLEAR we executed on the current
     // primary is an adoption, so the bookkeeping stays consistent with the other two
     // clear paths. It is bookkeeping ONLY — it is never a precondition above.
-    if (onPrimary) this.#markAdoptedOnPrimary(slot);
+    if (onPrimary) {
+      this.#markAdoptedOnPrimary(slot);
+      this.#reconcileClearedSlot(slot, clearSeq);
+    }
     // `B-253` — and the mixer residue goes with the producer (see out()).
     await this.#resetEmptiedLayerMixer(slot, { ok, onPrimary });
-    // B-125 — AFTER the clear landed, never before it. See `#reconcileClearedSlot`.
-    this.#reconcileClearedSlot(slot);
     return { ok: true };
   }
 
@@ -19090,20 +19095,24 @@ export class CasparRuntime {
    * ALREADY been sent and acked. Nothing is claimed here that the wire has not
    * already confirmed.
    *
-   * ⚠ Call this ONLY after a clear that succeeded. On a refusal the layer was
-   * never touched, and reconciling would knock a perfectly resident producer's
-   * row back to `idle` — the exact inverse of the defect, produced by its fix.
+   * A primary acknowledgement covers the cleared slot and older row intents. A late frame from the
+   * erased producer cannot relight Play, and a newer Take continues to own its own result.
    */
-  #reconcileClearedSlot(slot: CommandSlot): void {
+  #reconcileClearedSlot(slot: CommandSlot, clearSeq: number): void {
     for (const [itemId, owned] of this.#slots) {
       if (owned.channel !== slot.channel || owned.layer !== slot.layer) continue;
+      const row = this.#reconciler.get(itemId);
+      if (row === null || (row.lastIntentSeq ?? 0) > clearSeq) continue;
       // B-039 — the producer is destroyed, so a later take must re-ADD rather
       // than `CG PLAY` an empty layer. The slot stays RESERVED (the item is
       // still on the stack, idle) exactly as it does after `out()`.
       this.#loaded.delete(itemId);
+      this.#pendingRestore.delete(itemId);
+      this.#restoreBlocked.delete(itemId);
       // `FIELD-FIXES-01` B — a cleared row no longer carries its refusal line.
       this.#takeRefusals.delete(itemId);
       this.#reconciler.applyIntent({ kind: 'out', itemId, immediate: true }, this.#nextSeq());
+      this.#reconciler.noteProducerCleared(itemId);
     }
   }
 
@@ -19130,8 +19139,8 @@ export class CasparRuntime {
    * (50–99, `inAnyLayerBand`): there a fresh non-`html` observation clears too, because plates made
    * `html` no longer the only kind this system places. Outside them the paragraph above stands.
    *
-   * Touches no slots and no OSC interest (it owns neither); a CLEAR executed
-   * on the current primary counts as adoption (consistent with out/remove).
+   * A CLEAR executed on the current primary counts as adoption (consistent with out/remove).
+   * If a retained row adopts the producer during the command, reconcile that same slot.
    * The warning resolves via the next sweep's observed empty — never
    * optimistically, and NEVER without this explicit operator request.
    */
@@ -19194,8 +19203,15 @@ export class CasparRuntime {
       return { ok: false, reason: 'foreign' };
     }
     const slot: CommandSlot = { channel, layer };
-    const { ok, onPrimary } = await this.#send(this.#builder.out(slot), this.#nextSeq(), 'urgent');
-    if (ok && onPrimary) this.#markAdoptedOnPrimary(slot);
+    const clearSeq = this.#nextSeq();
+    const primaryQueue = this.#adapter.primarySession.queue;
+    const { ok, onPrimary } = await this.#send(this.#builder.out(slot), clearSeq, 'urgent', {
+      primaryQueue,
+    });
+    if (ok && onPrimary) {
+      this.#markAdoptedOnPrimary(slot);
+      this.#reconcileClearedSlot(slot, clearSeq);
+    }
     // `B-253` — within our band only; an orphan outside it is somebody else's mixer.
     await this.#resetEmptiedLayerMixer(slot, { ok, onPrimary });
     return ok ? { ok: true } : { ok: false, reason: 'amcp-error' };

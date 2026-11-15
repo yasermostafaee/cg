@@ -63,6 +63,12 @@ NOT AT ALL when their subset is empty — no idle noise.
   observed empty
 - **WHEN** the operator cancels the confirmation **THEN** nothing is sent
 
+#### Scenario: Clear settles Play for a row attached to the removed producer
+
+- **WHEN** a retained row becomes bound to the listed layer during a confirmed warning Clear and
+  the current primary acknowledges removal **THEN** the row stays loaded in the station layout,
+  the Play indicator loses its green state and late OSC frames cannot restore it.
+
 #### Scenario: A layer left in our band is listed and clearable
 
 - **WHEN** the bridge publishes an orphan inside CG's bands whose producer kind is not `html` (e.g. an

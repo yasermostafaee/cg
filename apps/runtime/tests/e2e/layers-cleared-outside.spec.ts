@@ -2,7 +2,7 @@ import * as dgram from 'node:dgram';
 import * as net from 'node:net';
 import type { Page } from '@playwright/test';
 import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
-import { createMock, type MockHandle } from '@cg/amcp-mock';
+import { createMock, defaultHandlers, type MockHandle } from '@cg/amcp-mock';
 import type { ConnectionConfig, FixedLayerBank, FixedSlotState } from '@cg/shared-ipc';
 import { expect, test } from './fixtures/runtime.js';
 
@@ -60,9 +60,17 @@ function freeUdpPort(): Promise<number> {
   });
 }
 
-async function boot(): Promise<{ handle: BridgeHandle; server: MockHandle }> {
+async function boot(
+  clearRepliesBeforeErase = false,
+): Promise<{ handle: BridgeHandle; server: MockHandle }> {
   const oscPort = await freeUdpPort();
-  const server = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 10 });
+  const server = await createMock({
+    amcpPort: 0,
+    oscPort,
+    oscHost: '127.0.0.1',
+    oscHz: 10,
+    clearRepliesBeforeErase,
+  });
   mock = server;
   const connection: ConnectionConfig = {
     servers: { A: { host: '127.0.0.1', amcpPort: server.amcpPort, oscPort } },
@@ -192,6 +200,51 @@ test('🔴 B-292 — another client CLEARs a row’s layer: the row leaves ON AI
   // The strip is this family's: dismissible, and it goes.
   await strip.getByRole('button', { name: 'Dismiss this notice' }).click();
   await expect(strip).toHaveCount(0);
+});
+
+test('warning Clear switches off green Play when the restored row adopted its producer during Clear', async ({
+  page,
+}) => {
+  const { handle, server } = await boot(true);
+  const slot = { channel: 1, layer: 99 };
+  handle.runtime.templateImport(TEMPLATE, HTML, 1);
+  await openConsole(page, handle.url);
+  expect(await otherClient(server, 'PLAY 1-99 "leftover" HTML')).toMatch(/^202 /);
+
+  const warning = page.getByRole('alert', { name: 'HTML producers outside your stack' });
+  await warning.getByRole('button', { name: 'Clear layer 1-99' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Clear layer 1-99?' });
+  const clear = defaultHandlers().get('CLEAR')!;
+  let release: (() => void) | undefined;
+  server.setHandler('CLEAR', async (request, context, connection) => {
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return clear(request, context, connection);
+  });
+  const play = row(page, 99).getByRole('button', { name: 'PLAY', exact: true });
+  try {
+    await dialog.getByRole('button', { name: 'Clear layer', exact: true }).click();
+    await expect.poll(() => release !== undefined).toBe(true);
+    expect(
+      await handle.runtime.restore([
+        {
+          itemId: 'restored-99',
+          templateId: TEMPLATE.templateId,
+          fields: {},
+          state: 'on-air',
+          slot: { ...slot, server: 'primary' },
+        },
+      ]),
+    ).toMatchObject({ restored: 1 });
+    await expect(play).toHaveClass(/\bis-on\b/);
+  } finally {
+    release?.();
+  }
+  await expect.poll(() => server.layerState(slot)?.producer).toBe('empty');
+  await expect(row(page, 99)).toHaveAttribute('data-item-id', 'restored-99');
+  await expect(play).not.toHaveClass(/\bis-on\b/, { timeout: 850 });
+  await expect(warning).toHaveCount(0);
 });
 
 test('🔴 B-292 — video another client left in our bands is listed and clears from the strip: one CLEAR, then CLEAR ALL LISTED — control: the layer above the bands has no CLEAR and is never sent', async ({
