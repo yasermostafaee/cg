@@ -241,6 +241,7 @@ test('E — the Playout’s levels beside PROGRAM in its own look; the badge’s
     .toBeGreaterThan(0);
   await page.setViewportSize({ width: 1100, height: 700 });
   await expect.poll(() => visibleBars(page)).toBe(8);
+  expect((await page.locator('[data-vu-meter]').boundingBox())?.width).toBeLessThan(100);
   const [w1100, h1100, box1100] = await drawn();
   expect(h1100, 'the picture fills the panel’s height beside eight bars').toBe(box1100);
   await shot(page.locator('[data-pgm-stage]'), 'e-4-meter-eight-bars-at-1100');

@@ -5,7 +5,8 @@ import * as path from 'node:path';
 import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { SourceCatalog } from '@cg/shared-ipc';
-import { controlLiveLayoutFocusLookId } from '@cg/shared-schema';
+import { controlLiveLayoutFocusLookId, type Scene } from '@cg/shared-schema';
+import { pack } from '@cg/vcg-format';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 const inputNames = ['Studio camera', 'Guest line 1', 'Guest line 2'];
@@ -41,6 +42,68 @@ function fieldAppearance(field: Locator): Promise<string[]> {
   return field.evaluate((node) => {
     const style = getComputedStyle(node);
     return [style.backgroundColor, style.borderRadius, style.fontSize, style.height];
+  });
+}
+
+function frameGraphic(): Promise<Uint8Array> {
+  const date = '2026-01-01T00:00:00.000Z';
+  const scene: Scene = {
+    schemaVersion: 1,
+    id: 'test-frame-graphic',
+    name: 'Studio logo',
+    templateType: 'custom',
+    resolution: { width: 320, height: 180 },
+    frameRate: 25,
+    frameRange: { in: 0, out: 1 },
+    editorBackdrop: 'transparent',
+    safeAreas: { action: 3, title: 5 },
+    layers: [
+      {
+        id: 'art',
+        name: 'Art',
+        locked: false,
+        visible: true,
+        blendMode: 'normal',
+        children: [
+          {
+            type: 'shape',
+            shape: 'rect',
+            id: 'frame-graphic-accent',
+            name: 'Accent',
+            transform: {
+              position: { x: 10, y: 10 },
+              size: { w: 300, h: 22 },
+              scale: { x: 1, y: 1 },
+              rotation: 0,
+              anchor: { x: 0, y: 0 },
+            },
+            fill: { kind: 'solid', color: '#ffbf60' },
+            zIndex: 0,
+            visible: true,
+            locked: false,
+            opacity: 1,
+          },
+        ],
+      },
+    ],
+    fields: [],
+    bindings: [],
+    fonts: [],
+    metadata: { createdAt: date, updatedAt: date },
+  };
+  return pack({
+    scene,
+    manifestExtras: {
+      id: scene.id,
+      name: scene.name,
+      authoring: { designerVersion: '1.2.7', createdAt: date, exportedAt: date },
+      compatibility: { minRuntimeVersion: '0.0.0', minCasparCGVersion: '2.3.0' },
+      fontDeps: [],
+      assetIndex: [],
+    },
+    indexHtml: '<!doctype html><html><body></body></html>',
+    cgJs: '',
+    cgCss: '',
   });
 }
 
@@ -118,6 +181,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     const editor = page.getByRole('dialog', { name: 'New live layout' });
     const stage = editor.locator('[data-layout-preview]');
     expect((await editor.boundingBox())?.width ?? 0).toBeGreaterThan(1080);
+    expect((await editor.boundingBox())?.height ?? 0).toBeGreaterThan(900);
     expect((await stage.boundingBox())?.width ?? 0).toBeGreaterThan(640);
     await page.setViewportSize({ width: 600, height: 540 });
     await stage.scrollIntoViewIfNeeded();
@@ -159,6 +223,11 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect(stage.locator('[data-frame-number="1"][data-editing]')).toBeVisible();
     await expect(editor.getByRole('checkbox', { name: 'Frame 2 in preset' })).toBeChecked();
     await editor.getByText('Title style', { exact: true }).click();
+    await expect(editor.getByLabel('Box width (%)', { exact: true })).toHaveValue('100');
+    await expect(editor.getByLabel('Box height (%)', { exact: true })).toHaveValue('12');
+    await expect(editor.getByRole('combobox', { name: 'Title font', exact: true })).toHaveValue(
+      'Exo 2',
+    );
     await editor.getByLabel('Box width (%)', { exact: true }).fill('70');
     await editor.getByLabel('Box height (%)', { exact: true }).fill('13');
     await editor.getByLabel('Title padding (px)', { exact: true }).fill('18');
@@ -291,6 +360,23 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     });
     await expect(editor.getByText('panel.png', { exact: true })).toBeVisible();
     await editor.getByText('Layout effects', { exact: true }).click();
+    await editor.getByRole('combobox', { name: 'Motion', exact: true }).selectOption('linear');
+    await editor.getByLabel('Focus duration (ms)', { exact: true }).fill('1000');
+    await interview.click();
+    const sharedShot = stage.locator('[data-layout-preview-shot][data-frame-number="1"]');
+    await expect
+      .poll(() =>
+        sharedShot.evaluate((node) =>
+          node.getAnimations().some(({ effect }) => {
+            if (!(effect instanceof KeyframeEffect)) return false;
+            const keys = effect.getKeyframes();
+            return keys[0]?.left !== keys.at(-1)?.left || keys[0]?.top !== keys.at(-1)?.top;
+          }),
+        ),
+      )
+      .toBe(true);
+    await expect(sharedShot.locator('img')).toBeVisible();
+    await threeUp.click();
     const soloEffect = editor
       .getByRole('group', { name: 'Switch focused frame' })
       .getByLabel('Effect');
@@ -343,12 +429,66 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect.poll(() => windowRatios(pictureWindows)).toEqual([75, 100]);
     await editor.getByRole('button', { name: 'Crop edges', exact: true }).click();
     await expect.poll(() => windowRatios(pictureWindows)).toEqual([100, 100]);
+    await expect(editor.getByRole('button', { name: 'Locked', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     await editor.getByRole('button', { name: 'Keep aspect', exact: true }).click();
     const move = editor.getByRole('checkbox', { name: 'Allow move', exact: true });
-    await move.uncheck();
+    await expect(move).not.toBeChecked();
     await move.check();
     await editor.getByRole('button', { name: 'Add mask window', exact: true }).click();
     await expect.poll(() => windowRatios(pictureWindows)).toEqual([50, 50]);
+    const maskEdit = editor.getByRole('button', { name: 'Edit mask in preview', exact: true });
+    await maskEdit.click();
+    const maskWindow = thirdShot.locator('[data-layout-mask-window="1"]');
+    await expect(maskWindow.getByRole('button', { name: /Resize mask window 1 from/ })).toHaveCount(
+      8,
+    );
+    await expect
+      .poll(() =>
+        thirdShot.evaluate((node) =>
+          node.getAnimations().some(({ playState }) => playState === 'running'),
+        ),
+      )
+      .toBe(false);
+    const bounds = (await thirdShot.boundingBox())!;
+    const dragMask = async (target: Locator, dx: number, dy: number) => {
+      await target.hover();
+      const box = (await target.boundingBox())!;
+      const x = box.x + box.width / 2;
+      const y = box.y + box.height / 2;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x + dx, y + dy, { steps: 3 });
+      await page.mouse.up();
+    };
+    const maskX = editor.getByLabel('Mask X (%)', { exact: true });
+    const maskY = editor.getByLabel('Mask Y (%)', { exact: true });
+    const maskWidth = editor.getByLabel('Mask width (%)', { exact: true });
+    const maskHeight = editor.getByLabel('Mask height (%)', { exact: true });
+    await dragMask(maskWindow, bounds.width * 0.1, -bounds.height * 0.05);
+    await expect.poll(async () => Number(await maskX.inputValue())).toBeCloseTo(35, 0);
+    await expect.poll(async () => Number(await maskY.inputValue())).toBeCloseTo(20, 0);
+    const right = maskWindow.getByRole('button', {
+      name: 'Resize mask window 1 from right',
+      exact: true,
+    });
+    await dragMask(right, bounds.width * 0.1, 15);
+    await expect.poll(async () => Number(await maskWidth.inputValue())).toBeCloseTo(60, 0);
+    await expect(maskHeight).toHaveValue('50');
+    const topLeft = maskWindow.getByRole('button', {
+      name: 'Resize mask window 1 from top left',
+      exact: true,
+    });
+    await topLeft.press('Shift+ArrowUp');
+    await expect.poll(async () => Number(await maskY.inputValue())).toBeLessThan(20);
+    await maskX.fill('25');
+    await maskY.fill('25');
+    await maskWidth.fill('50');
+    await maskHeight.fill('50');
+    await maskEdit.click();
+    await expect(maskWindow).toBeHidden();
     await editor.getByRole('button', { name: 'Show outside', exact: true }).click();
     await expect(pictureWindows).toHaveCount(4);
     await editor.getByRole('button', { name: 'Show inside', exact: true }).click();
@@ -364,9 +504,46 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await additionalText.getByRole('button', { name: 'Add text', exact: true }).click();
     await additionalText.getByRole('textbox', { name: 'Text 2', exact: true }).fill('سطر دوم 7۸٩');
     await additionalText.getByText('Text style', { exact: true }).click();
+    const textScope = additionalText.getByRole('group', { name: 'Text style scope' });
+    await expect(textScope.getByRole('button', { name: 'All frames' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await additionalText.getByLabel('Title Y (%)', { exact: true }).fill('59');
+    await textScope.getByRole('button', { name: 'Frame 3', exact: true }).click();
+    await expect(additionalText.getByLabel('Title Y (%)', { exact: true })).toHaveValue('59');
     await additionalText.getByLabel('Title Y (%)', { exact: true }).fill('43');
     await expect(thirdShot).toContainText('سطر دوم ۷۸۹');
     await expect(thirdShot).toContainText('علی نظری ۱۲۳');
+    await editor.getByRole('button', { name: 'Add preset', exact: true }).click();
+    await editor.getByRole('textbox', { name: 'Preset name' }).fill('Studio solo');
+    await editor.getByRole('checkbox', { name: 'Frame 2 in preset' }).uncheck();
+    await editor.getByRole('checkbox', { name: 'Frame 3 in preset' }).uncheck();
+    await editor.getByRole('button', { name: 'Edit frame 1', exact: true }).click();
+    const soloFocusTitle = editor.getByRole('checkbox', { name: 'Show title in Focus' });
+    await expect(editor.getByRole('checkbox', { name: 'Show title in preset' })).toBeChecked();
+    await soloFocusTitle.check();
+    await expect(focusedTitle).toBeVisible();
+    await soloFocusTitle.uncheck();
+    await expect(focusedTitle).toHaveCount(0);
+    await editor.getByRole('button', { name: 'Three-up', exact: true }).click();
+    await expect(focusedTitle).toBeVisible();
+    await editor.getByRole('button', { name: 'Edit frame 3', exact: true }).click();
+    await editor.getByText('Frame graphics', { exact: true }).click();
+    const [graphicPicker] = await Promise.all([
+      page.waitForEvent('filechooser'),
+      editor.getByRole('button', { name: 'Add .vcg graphic', exact: true }).click(),
+    ]);
+    await graphicPicker.setFiles({
+      name: 'studio-logo.vcg',
+      mimeType: 'application/zip',
+      buffer: Buffer.from(await frameGraphic()),
+    });
+    const frameArt = thirdShot.locator('[data-layout-frame-graphic]');
+    await expect(frameArt.locator('[data-cg-element-id="frame-graphic-accent"]')).toBeVisible();
+    await editor.getByRole('button', { name: 'Align to mask', exact: true }).click();
+    await expect(editor.getByLabel('Graphic X (%)', { exact: true })).toHaveValue('25');
+    await expect(editor.getByLabel('Graphic width (%)', { exact: true })).toHaveValue('50');
     await editor.getByRole('button', { name: 'Save layout' }).click();
     await expect(editor).toBeHidden();
 
@@ -374,6 +551,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     expect(listed?.controlLiveLayout?.presets.map(({ name }) => name)).toEqual([
       'Three-up',
       'Interview',
+      'Studio solo',
     ]);
     expect(listed?.controlLiveLayout?.presets[0]?.arrangement).toBe('grid-top');
     expect(listed?.controlLiveLayout?.presets[0]).toMatchObject({
@@ -387,8 +565,16 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
       throw new Error('The authored layout package was not retained');
     }
     const authored = listed.controlLiveLayout;
+    expect(authored.presets[0]?.frameAttachments).toMatchObject([
+      {
+        name: 'Studio logo',
+        frameId: authored.frames[2]?.id,
+        rect: { x: 0.25, y: 0.25, width: 0.5, height: 0.5 },
+      },
+    ]);
     expect(authored.presets[1]?.frameIds).toEqual([authored.frames[1]?.id, authored.frames[0]?.id]);
     expect(authored.frames[2]?.focusAlias).toBe('خبرخوان');
+    expect(authored.additionalTextStyles).toMatchObject([{ yPercent: 59 }]);
     expect(authored.frames[2]?.additionalTexts).toMatchObject([
       { text: 'سطر دوم 7۸٩', style: { yPercent: 43 } },
     ]);
@@ -423,6 +609,8 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     });
     expect(authored.frames[0]?.titleStyle?.backgroundColor?.toLowerCase()).toContain('#392822');
     const origin = authored.defaultPresetId;
+    const solo = authored.presets.find(({ name }) => name === 'Studio solo');
+    if (solo === undefined) throw new Error('The authored one-frame preset was not retained');
     const focus = (index: number) =>
       controlLiveLayoutFocusLookId(origin, authored.frames[index]!.id);
     expect(runtime.templateSourceGet(listed.controlLiveLayoutSource).ok).toBe(true);
@@ -465,6 +653,21 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect(
       previewFrame.getByText('سطر دوم ۷۸۹', { exact: true }).filter({ visible: true }),
     ).toBeVisible();
+    await expect(
+      previewFrame.locator('[data-cg-element-id="frame-graphic-accent"]').filter({ visible: true }),
+    ).toBeVisible();
+    await row.click();
+    const inspector = page.getByRole('complementary', { name: 'Inspector' });
+    const previewPreset = (id: string) => inspector.locator(`[data-look-tab="${id}"]`);
+    await previewPreset(solo.id).click();
+    const oneFrameLook = previewFrame.locator(`[data-cg-element-id="layout-look-${solo.id}"]`);
+    await expect(oneFrameLook).toBeVisible();
+    await expect(
+      oneFrameLook.locator(`[data-cg-element-id="${authored.frames[0]!.id}-title"]`),
+    ).toHaveAttribute('data-cg-instance-hidden-text', '');
+    await expect(title).toHaveCount(0);
+    await previewPreset(origin).click();
+    await expect(title).toBeVisible();
     const previewStart = engine.receivedCommands().length;
     await localFocus.getByRole('button', { name: 'Focus frame 1 in Preview' }).click();
     await expect(localFocus.getByRole('button', { name: 'Return to Three-up' })).toBeVisible();
@@ -529,10 +732,62 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
       focusCommands.filter((line) => /^(?:PLAY|CLEAR) 1-(?:6[0-9]|7[0-9])\b/.test(line)),
     ).toEqual([]);
 
+    const inputEffect = inspector.getByRole('combobox', { name: 'Input transition' });
+    await expect(inputEffect.locator('option:checked')).toHaveText('Layout default (Push)');
+    await inputEffect.selectOption('fade');
+    await localFocus.getByRole('button', { name: 'Focus frame 1 in Preview' }).click();
+    await expect(
+      previewFrame.locator(`[data-cg-element-id="layout-look-${focus(0)}"]`),
+    ).toBeVisible();
+    await expect(
+      localFocus.getByRole('button', { name: 'Focus frame 1 in Preview' }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    await localFocus.getByRole('button', { name: 'Focus frame 2 in Preview' }).click();
+    await expect(previewFrame.locator('[data-cg-pvw-focus-switch="fade"]')).toBeVisible();
+    await expect(previewFrame.locator('[data-cg-pvw-focus-switch="fade"]')).toHaveCount(0);
+    await localFocus.getByRole('button', { name: 'Return to Three-up' }).click();
+
+    await programme.getByRole('button', { name: 'Focus frame 1 in Programme' }).click();
+    await expect.poll(active).toBe(focus(0));
+    const fadeStart = engine.receivedCommands().length;
+    await programme.getByRole('button', { name: 'Focus frame 2 in Programme' }).click();
+    await expect.poll(active).toBe(focus(1));
+    expect(
+      engine
+        .receivedCommands()
+        .slice(fadeStart)
+        .some(({ line }) => / OPACITY (?:0|1) 25 linear DEFER$/.test(line)),
+    ).toBe(true);
+    await programme.getByRole('button', { name: 'Return to Three-up' }).click();
+    await expect.poll(active).toBe(origin);
+
+    const presetEffect = inspector
+      .getByRole('group', { name: 'Preset effect', exact: true })
+      .getByRole('combobox');
+    await expect(presetEffect.locator('option:checked')).toHaveText('Layout default (Linear)');
+    await presetEffect.selectOption('cut');
+    const presetStart = engine.receivedCommands().length;
+    await row.locator(`[data-look-id="${solo.id}"]`).click();
+    await expect.poll(active).toBe(solo.id);
+    await row.locator(`[data-look-id="${origin}"]`).click();
+    await expect.poll(active).toBe(origin);
+    await programme.getByRole('button', { name: 'Focus frame 1 in Programme' }).click();
+    await expect.poll(active).toBe(focus(0));
+    expect(
+      engine
+        .receivedCommands()
+        .slice(presetStart)
+        .some(({ line }) => / (?:FILL|CLIP) .* [1-9]\d* linear DEFER$/.test(line)),
+    ).toBe(false);
+    await programme.getByRole('button', { name: 'Return to Three-up' }).click();
+    await expect.poll(active).toBe(origin);
+
     await page.getByRole('button', { name: 'Open templates', exact: true }).click();
     const library = page.getByRole('dialog', { name: 'Templates · CH 1' });
-    await expect(library.getByText('Designer graphics', { exact: true })).toBeVisible();
-    await library.getByText('Studio panel', { exact: true }).first().click();
+    await expect(
+      library.getByRole('button', { name: 'Select Designer graphics', exact: true }),
+    ).toBeVisible();
+    await library.getByRole('button', { name: 'Select Studio panel', exact: true }).click();
     await library.getByRole('button', { name: 'Edit layout' }).click();
     const lockedEdit = page.getByRole('dialog', { name: 'Edit live layout' });
     await lockedEdit.getByRole('textbox', { name: 'Layout name' }).fill('Unsaved change');

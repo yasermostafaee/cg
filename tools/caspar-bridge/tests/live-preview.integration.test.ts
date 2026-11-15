@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import type { LivePreviewHandle, LivePreviewStatus } from '@cg/shared-ipc';
+import {
+  MAX_SOURCE_AUDIO_BATCH,
+  type LivePreviewHandle,
+  type LivePreviewStatus,
+  type SourceAudioReading,
+} from '@cg/shared-ipc';
 import type { AuditEntry } from '@cg/shared-schema';
 import { openClient, type Client } from './support/auth-harness.js';
 import { FakeLivePreview } from './support/fake-live-preview.js';
@@ -57,6 +62,58 @@ async function ready(client: Client, handle: LivePreviewHandle): Promise<void> {
 }
 
 describe('C-023 preview lease through authenticated Bridge routes', () => {
+  it('reads a batch of source audio without opening a feed or retaining stale samples', async () => {
+    const { preview, first, connect, rig } = await fixture();
+    const other = await connect();
+    const sourceId = 'in-li-studio1';
+    const query = { channel: 1, sourceIds: [sourceId, 'in-li-newscam', sourceId, 'unknown'] };
+    const levels = (client: Client) =>
+      ask<{ readings: SourceAudioReading[] }>(client, 'sourcePreviews.audioLevels', query);
+    expect(await levels(first.client)).toEqual({ readings: [] });
+    expect(preview.paths).toEqual([]);
+    await expect(
+      ask(first.client, 'sourcePreviews.audioLevels', { ...query, channel: 2 }),
+    ).rejects.toThrow();
+    await expect(
+      ask(first.client, 'sourcePreviews.audioLevels', {
+        ...query,
+        sourceIds: Array.from({ length: MAX_SOURCE_AUDIO_BATCH + 1 }, () => sourceId),
+      }),
+    ).rejects.toThrow();
+    expect(preview.paths).toEqual([]);
+
+    const before = (await rig.lines()).length;
+    const check = newCheck();
+    await start(first.client, check);
+    await ready(first.client, check);
+    expect(await status(first.client, check)).toMatchObject({ dbFs: [-21, -18] });
+    const upstream = preview.paths.length;
+    const { readings } = await levels(first.client);
+    expect(readings).toHaveLength(1);
+    const reading = readings[0];
+    expect(reading).toMatchObject({ sourceId, state: 'measured', dbFs: [-21, -18] });
+    if (reading?.state !== 'measured') throw new Error('Missing source audio');
+    expect(reading.validForMs).toBeGreaterThan(0);
+    expect(reading.validForMs).toBeLessThanOrEqual(300);
+    expect(await levels(other.client)).toEqual({ readings: [] });
+    await waitUntil(
+      async () => (await levels(first.client)).readings.length === 0,
+      'expired level',
+    );
+    expect(preview.paths).toHaveLength(upstream);
+    expect(preview.starts).toHaveLength(1);
+    expect(preview.audioOpens).toBe(0);
+
+    preview.otherMeter = true;
+    expect(await status(first.client, check)).toMatchObject({ dbFs: null });
+    expect(await levels(first.client)).toEqual({ readings: [] });
+    expect(
+      (await rig.lines())
+        .slice(before)
+        .filter((line) => /^(?:CG|PLAY|STOP|CLEAR|MIXER|LOAD|LOADBG)\b/i.test(line)),
+    ).toEqual([]);
+  });
+
   it('relays the saved input, scopes tickets and meter, and fences a stale console on replacement', async () => {
     const { preview, rig, first, connect } = await fixture();
     const { client: a } = first;

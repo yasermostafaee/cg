@@ -19,6 +19,7 @@
 - [x] 3.4 Add DOM/unit coverage for preference fallback, failover, no mixing, resource release and stale/engine-separated meters.
 - [x] 3.5 Keep A/B/A+B and audio-source controls visible without a configured backup; retain a black no-signal B placeholder while opening no B resource.
 - [x] 3.6 Add a persisted horizontal/vertical A+B layout choice without reconnecting programme resources.
+- [x] 3.7 Add independently persisted selected-source and all-engine compact VU modes. Verify four distinct readings and no changes to the audible route in Chromium.
 
 ## 4. End-to-end and release verification
 

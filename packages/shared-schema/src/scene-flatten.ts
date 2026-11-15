@@ -338,7 +338,9 @@ export function flattenElements(scene: Scene, order: SiblingOrder = 'document'):
           // The composition INSTANCE can hide its whole subtree, and so can the layer
           // INSIDE the composition that a child sits on — both go on the chain.
           walk(
-            layer.children,
+            el.hiddenChildIds === undefined
+              ? layer.children
+              : layer.children.filter((child) => !el.hiddenChildIds?.includes(child.id)),
             [...ancestors, level],
             nextVisited,
             depth + 1,

@@ -9,6 +9,7 @@ import {
 import {
   AudioLines,
   Columns2,
+  LayoutGrid,
   MonitorOff,
   Rows2,
   SlidersHorizontal,
@@ -26,7 +27,7 @@ import { MonitorHead, MonitorHeadFact, MonitorSignalStrip } from '../../ui/Monit
 import { IsolatedName, isolateText } from '../../ui/OperatorNames.js';
 import type { PanelId } from '../../hooks/useShellLayout.js';
 import type { ProgramReturn, ProgramSignal } from '../../hooks/useProgramReturn.js';
-import type { PgmAudio } from '../../hooks/usePgmAudio.js';
+import { usePgmMeterPeaks, type PgmAudio } from '../../hooks/usePgmAudio.js';
 import { LoudnessBadge, VuMeter } from './VuMeter.js';
 import { playlistTag, type ChannelAir } from '../channels/channelAir.js';
 import type {
@@ -259,6 +260,35 @@ function ProgramVolume({ sound }: { sound: PgmAudio }): JSX.Element {
   );
 }
 
+function ProgrammeMemberMeter({
+  member,
+  channel,
+  name,
+  selectedPeaks,
+}: {
+  member: ProgrammeMonitorTarget;
+  channel: number | null;
+  name: string;
+  selectedPeaks?: PgmAudio['watchPeaks'];
+}): JSX.Element {
+  const stereo = member.meterEngine === undefined;
+  const mapped = member.physicalChannel === null ? null : channel;
+  const passivePeaks = usePgmMeterPeaks(
+    stereo && selectedPeaks === undefined ? mapped : null,
+    member.engine,
+    member.resourceKey,
+  );
+  return (
+    <VuMeter
+      channel={mapped}
+      engine={member.meterEngine ?? member.engine}
+      displayEngine={member.engine}
+      label={name}
+      {...(stereo && { watchPeaks: selectedPeaks ?? passivePeaks })}
+    />
+  );
+}
+
 export function MonitorPanel({
   id,
   title,
@@ -299,6 +329,13 @@ export function MonitorPanel({
     legacy ? ['A', 'B'] : topologyTargets.map(({ engine }) => engine),
   );
   if (monitorPreferences.audio !== 'follow') audioModes.add(monitorPreferences.audio);
+  const meterTargets: readonly ProgrammeMonitorTarget[] = topologyTargets ?? [
+    { engine: 'A', physicalChannel: channel, meterEngine: 'A' },
+    ...(backupAvailable || backupLine !== null
+      ? [{ engine: 'B', physicalChannel: backupLine?.channel ?? null, meterEngine: 'B' } as const]
+      : []),
+  ];
+  const showAllMeters = monitorPreferences.meterMode === 'all' && meterTargets.length > 0;
   const grid = returns.length > 2;
   const displayControls = (
     <div
@@ -391,6 +428,18 @@ export function MonitorPanel({
       >
         <Icon icon={AudioLines} size={13} />
       </Button>
+      {(meterTargets.length > 1 || showAllMeters) && (
+        <Button
+          variant="ghost"
+          aria-label="All programme meters"
+          aria-pressed={showAllMeters}
+          data-toggle-on={showAllMeters ? '' : undefined}
+          title={showAllMeters ? 'Show selected source meter' : 'Show meters for all servers'}
+          onClick={() => monitorPreferences.setMeterMode(showAllMeters ? 'selected' : 'all')}
+        >
+          <Icon icon={LayoutGrid} size={13} />
+        </Button>
+      )}
     </div>
   );
   const meterMember = topologyTargets?.find(
@@ -533,14 +582,34 @@ export function MonitorPanel({
           })}
         </div>
         {/* `PLAYOUT-FEATURES-01` E — the programme meter, the Playout's own levels, beside the picture. */}
-        {monitorPreferences.showMeter && (
-          <VuMeter
-            key={stereoMeter === undefined ? undefined : meterMember?.resourceKey}
-            channel={stereoMeter === undefined ? meterChannel : channel}
-            engine={meterEngine ?? selectedAudio}
-            {...(stereoMeter !== undefined && { watchPeaks: stereoMeter })}
-          />
-        )}
+        {monitorPreferences.showMeter &&
+          (showAllMeters ? (
+            <div
+              className="cg-pgm-meter-bank"
+              role="group"
+              aria-label="Programme meters"
+              data-vu-count={meterTargets.length}
+            >
+              {meterTargets.map((member) => (
+                <ProgrammeMemberMeter
+                  key={member.resourceKey ?? member.engine}
+                  member={member}
+                  channel={channel}
+                  name={selectName(member.engine)}
+                  selectedPeaks={
+                    member.engine === selectedAudio ? programSound.watchPeaks : undefined
+                  }
+                />
+              ))}
+            </div>
+          ) : (
+            <VuMeter
+              key={stereoMeter === undefined ? undefined : meterMember?.resourceKey}
+              channel={stereoMeter === undefined ? meterChannel : channel}
+              engine={meterEngine ?? selectedAudio}
+              {...(stereoMeter !== undefined && { watchPeaks: stereoMeter })}
+            />
+          ))}
       </div>
       {/*
         🔴 `RELEASE-0113-01` (`B-316`, `R-089`) — WHERE THIS CHANNEL'S LINES GO ON THE BACKUP ENGINE, in this

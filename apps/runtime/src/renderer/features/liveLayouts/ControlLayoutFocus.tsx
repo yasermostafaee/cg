@@ -48,46 +48,49 @@ export function ControlLayoutFocus({
       aria-label={target + ' Focus'}
       data-control-layout-focus={target.toLowerCase()}
     >
-      <span className="cg-monitor-fact">
+      <span className="cg-control-layout-focus__label cg-monitor-fact">
         {target === 'Preview' ? 'Focus · PVW' : 'Focus · PGM'}
       </span>
-      {frameIds.map((id) => {
-        const option = frames.get(id);
-        if (option === undefined) return null;
-        const { frame, number } = option;
-        const active = id === soloFrame;
-        const alias = frame.focusAlias?.trim() || undefined;
-        const label = frame.title.trim() || `Frame ${number}`;
-        const caption =
-          alias === undefined ? label : alias === label ? alias : `${alias} · ${label}`;
-        const accessibleName = `Focus frame ${number} in ${target}`;
-        return (
+      <span className="cg-control-layout-focus__buttons">
+        {frameIds.map((id) => {
+          const option = frames.get(id);
+          if (option === undefined) return null;
+          const { frame, number } = option;
+          const active = id === soloFrame;
+          const alias = frame.focusAlias?.trim() || undefined;
+          const label = frame.title.trim() || `Frame ${number}`;
+          const caption =
+            alias === undefined ? label : alias === label ? alias : `${alias} · ${label}`;
+          const accessibleName = `Focus frame ${number} in ${target}`;
+          return (
+            <Button
+              key={id}
+              variant="icon"
+              className={alias === undefined ? undefined : 'cg-control-layout-focus__named'}
+              aria-label={alias === undefined ? accessibleName : `${accessibleName} · ${alias}`}
+              aria-pressed={active}
+              active={active}
+              {...(active && target === 'Programme' ? { 'data-focus-onair': '' } : {})}
+              disabled={disabled || active}
+              title={caption}
+              onClick={() => onSelect(controlLiveLayoutFocusLookId(preset.id, id))}
+            >
+              {alias === undefined ? number : <bdi>{alias}</bdi>}
+            </Button>
+          );
+        })}
+        {focus !== undefined && (
           <Button
-            key={id}
             variant="icon"
-            className={alias === undefined ? undefined : 'cg-control-layout-focus__named'}
-            aria-label={alias === undefined ? accessibleName : `${accessibleName} · ${alias}`}
-            aria-pressed={active}
-            active={active}
-            disabled={disabled || active}
-            title={caption}
-            onClick={() => onSelect(controlLiveLayoutFocusLookId(preset.id, id))}
+            aria-label={`Return to ${preset.name}`}
+            title={`Return to ${preset.name}`}
+            disabled={disabled}
+            onClick={() => onSelect(preset.id)}
           >
-            {alias === undefined ? number : <bdi>{alias}</bdi>}
+            <Icon icon={CornerUpLeft} size={14} />
           </Button>
-        );
-      })}
-      {focus !== undefined && (
-        <Button
-          variant="icon"
-          aria-label={`Return to ${preset.name}`}
-          title={`Return to ${preset.name}`}
-          disabled={disabled}
-          onClick={() => onSelect(preset.id)}
-        >
-          <Icon icon={CornerUpLeft} size={14} />
-        </Button>
-      )}
+        )}
+      </span>
       {rowName !== undefined && (
         <bdi className="cg-control-layout-focus__row cg-monitor-fact" title={rowName}>
           {rowName}

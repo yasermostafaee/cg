@@ -144,7 +144,7 @@ export function LiveSourceSwapDialog({
       }
     >
       <LiveInputCheckCard surface={surface} />
-      <InputEffectControls />
+      <InputEffectControls itemId={item.itemId} layout={template.controlLiveLayout} />
       {plates.map((plate, i) => {
         const assigned = revertedSources.get(plate.sourceId) ?? null;
         const hasPresetAssignment =
@@ -163,6 +163,7 @@ export function LiveSourceSwapDialog({
               {label}
               <span style={styles.assigned} data-swap-assigned="">
                 <ChoiceLabel
+                  meterChannel={channel}
                   choice={{
                     value: '',
                     label: hasPresetAssignment ? 'Preset assignment' : 'Template assignment',

@@ -5889,19 +5889,21 @@ export class CasparRuntime {
     item: StackItemState,
     marker = CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER,
     requireCompatibleCatalogue = true,
-    allowPairedPreset = false,
+    allowPaired = marker === CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER ||
+      marker === CG_LIVE_FRAME_TRANSITION_PAGE_MARKER,
   ): ResidentOutputPage | undefined {
     const { itemId } = item;
     const page = this.#liveFramePages.get(itemId);
-    const pairedPreset = allowPairedPreset && this.#sessions.B !== undefined;
+    const paired = this.#sessions.B !== undefined;
+    const pairedEdit = paired && allowPaired && this.#adapter.strategy === 'mirror-sync';
     if (
       page === undefined ||
-      (!allowPairedPreset && this.#sessions.B !== undefined) ||
+      (paired && !pairedEdit) ||
       (item.status !== 'on-air' && item.status !== 'playing') ||
       item.pending ||
       // A reconnect of the reserve also clears #loaded so a later Take re-ADDs both
       // halves. The active page is still proven by its own session, generation and OSC.
-      (!pairedPreset && !this.#loaded.has(itemId)) ||
+      (!pairedEdit && !this.#loaded.has(itemId)) ||
       this.#slots.get(itemId) !== page.slot ||
       this.#templates.heldVersion(itemId) !== page.version ||
       this.#pendingRestore.has(itemId) ||
@@ -6068,8 +6070,8 @@ export class CasparRuntime {
     const { itemId } = item;
     const movingPosition = edit.kind === 'live-position';
     const movingMask = edit.kind === 'mask-placement';
-    const positionTarget =
-      movingPosition && this.#sessions.B !== undefined
+    const activeTarget =
+      !movingMask && this.#sessions.B !== undefined
         ? { primaryOnly: page.session, primaryQueue: page.session.queue }
         : undefined;
     const effect = edit.effect;
@@ -6163,7 +6165,7 @@ export class CasparRuntime {
       if (
         current === null ||
         current.lastIntentSeq !== item.lastIntentSeq ||
-        (positionTarget !== undefined && page.session.queue !== positionTarget.primaryQueue)
+        (activeTarget !== undefined && page.session.queue !== activeTarget.primaryQueue)
       )
         return false;
       const currentPage = movingPosition
@@ -6218,7 +6220,7 @@ export class CasparRuntime {
           this.#nextSeq(),
           'urgent',
           {
-            ...positionTarget,
+            ...activeTarget,
             ...(!rollback && { signal: cancel.signal }),
           },
         );
@@ -6230,7 +6232,7 @@ export class CasparRuntime {
       return failure ?? { ok: true, onPrimary: true };
     };
     const touched = new Set<LiveLayerRecord>();
-    const batch: MixerBatch = { ...positionTarget };
+    const batch: MixerBatch = { ...activeTarget };
     const stageFit = async (
       record: LiveLayerRecord,
       fit: LivePlatePlacement['fit'],
@@ -6323,14 +6325,9 @@ export class CasparRuntime {
           }
         }
       }
-      if (
-        refusal === undefined &&
-        positionTarget !== undefined &&
-        positionPage !== undefined &&
-        stillOwnsOutput()
-      ) {
-        await this.#mirrorResidentPosition(
-          positionPage,
+      if (refusal === undefined && activeTarget !== undefined && stillOwnsOutput()) {
+        await this.#mirrorResidentGeometry(
+          page,
           foreground,
           edit.update,
           changes,
@@ -8159,7 +8156,7 @@ export class CasparRuntime {
   }
 
   /** Update only the established mirror page and matching, occupied portable seats. */
-  async #mirrorResidentPosition(
+  async #mirrorResidentGeometry(
     page: ResidentOutputPage,
     foreground: CommandSlot | undefined,
     payload: FieldValues,
@@ -8192,7 +8189,7 @@ export class CasparRuntime {
       if (pageAttempted && rollback !== undefined && verified()) {
         await send(this.#builder.update(page.slot, rollback));
       }
-      // Next Take can establish new mirror evidence. Programme already accepted this Position.
+      // Next Take can establish new mirror evidence. Programme already accepted the edit.
       if (page.mirror === peer) delete page.mirror;
     };
     for (const [record, fit] of changes) {
@@ -8368,7 +8365,7 @@ export class CasparRuntime {
         item.fields,
         defaultNestedValues({ fields: info.fields, groups: info.groups ?? [] }),
       );
-      await this.#mirrorResidentPosition(
+      await this.#mirrorResidentGeometry(
         page,
         undefined,
         withCgControl(payload, control),
@@ -14419,8 +14416,9 @@ export class CasparRuntime {
   async setActiveLook(
     itemId: string,
     lookId: string,
-    transition?: FrameTransition,
-    focusSlide?: InputSlideTransition,
+    requestedTransition?: FrameTransition,
+    requestedFocusSlide?: InputSlideTransition,
+    focusInputTransition?: InputTransition,
   ): Promise<{ ok: boolean; reason?: string; message?: string; refusalOnRow?: true }> {
     const templateId = this.#reconciler.get(itemId)?.templateId;
     const slot = this.#slots.get(itemId);
@@ -14496,10 +14494,25 @@ export class CasparRuntime {
         toFocus !== undefined &&
         fromFocus.presetId === toFocus.presetId &&
         fromFocus.frameId !== toFocus.frameId;
+      const inputOverride = directFocus ? focusInputTransition : undefined;
+      const focusSlide =
+        inputOverride === undefined
+          ? requestedFocusSlide
+          : isInputSlideMode(inputOverride.mode)
+            ? { ...inputOverride, mode: inputOverride.mode }
+            : undefined;
+      const transition: FrameTransition | undefined =
+        inputOverride === undefined
+          ? requestedTransition
+          : {
+              motion: 'cut',
+              fade: inputOverride.mode === 'fade',
+              durationMs: inputOverride.durationMs,
+            };
       const focusDissolve =
         directFocus &&
         focusSlide === undefined &&
-        layout?.effects.switch.mode === 'fade' &&
+        (inputOverride?.mode ?? layout?.effects.switch.mode) === 'fade' &&
         transition?.motion === 'cut' &&
         transition.fade;
       if (focusSlide !== undefined && !directFocus) {

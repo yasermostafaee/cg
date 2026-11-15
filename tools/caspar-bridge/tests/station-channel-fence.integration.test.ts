@@ -649,6 +649,7 @@ describe('the census: every route that names a channel, classified', () => {
       'livePreview.status': ['req.channel'],
       'livePreview.stop': ['req.channel'],
       'livePreview.ticket': ['req.channel'],
+      'sourcePreviews.audioLevels': ['req.channel'],
       'sourcePreviews.pvw': ['req.channel'],
       'sourcePreviews.thumbnails': ['req.channel'],
       'playlistGain.get': ['req.channel'],
@@ -738,6 +739,7 @@ describe('the census: every route that names a channel, classified', () => {
       'playlistGain.get',
       'playlistGain.set',
       'playoutLayers.clear',
+      'sourcePreviews.audioLevels',
       'sourcePreviews.pvw',
       'sourcePreviews.thumbnails',
       // `MULTI-CHANNEL-01` §2 B — the housekeeping verbs, when they name a channel.

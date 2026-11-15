@@ -1,16 +1,18 @@
 import { useId, useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { List, Plus, Trash2 } from 'lucide-react';
 import type {
   ControlLiveLayout,
   ControlLiveLayoutAdditionalText,
   ControlLiveLayoutFrame,
+  ControlLiveLayoutTitleStyle,
 } from '@cg/shared-schema';
 import { uuid } from '../../lib/uuid.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { TextInput } from '../../ui/TextInput.js';
-import { controlLiveLayoutTitleGeometry } from './controlLiveLayoutCompiler.js';
+import { controlLiveLayoutAdditionalTextStyle } from './controlLiveLayoutCompiler.js';
 import { LiveLayoutEditorTitleStyle } from './LiveLayoutEditorTitleStyle.js';
+import { LiveLayoutEditorSectionHeading } from './LiveLayoutEditorSectionHeading.js';
 
 export function LiveLayoutEditorTexts({
   layout,
@@ -18,6 +20,7 @@ export function LiveLayoutEditorTexts({
   frameNumber,
   readingFont,
   onChange,
+  onSharedStyle,
   onAddFont,
 }: {
   layout: ControlLiveLayout;
@@ -25,22 +28,18 @@ export function LiveLayoutEditorTexts({
   frameNumber: number;
   readingFont: boolean;
   onChange: (texts: ControlLiveLayoutAdditionalText[]) => void;
-  onAddFont: (file: File, textId: string) => void;
+  onSharedStyle: (index: number, patch: ControlLiveLayoutTitleStyle) => void;
+  onAddFont: (file: File, scope: 'shared' | 'frame', text: { id: string; index: number }) => void;
 }): JSX.Element {
   const id = useId();
   const [selectedId, select] = useState<string>();
   const texts = frame.additionalTexts ?? [];
   const selected = texts.find((item) => item.id === selectedId) ?? texts[0];
-  const selectedNumber = selected === undefined ? 2 : texts.indexOf(selected) + 2;
-  const frameStyle = { ...layout.titleStyle, ...frame.titleStyle };
+  const selectedIndex = selected === undefined ? 0 : texts.indexOf(selected);
+  const selectedNumber = selectedIndex + 2;
   function addText(): void {
     const textId = uuid();
-    const { yPercent, heightPercent } = controlLiveLayoutTitleGeometry(
-      layout.resolution,
-      frameStyle,
-    );
-    const y = Math.max(0, yPercent - (texts.length + 1) * (heightPercent + 2));
-    onChange([...texts, { id: textId, text: '', style: { yPercent: y } }]);
+    onChange([...texts, { id: textId, text: '' }]);
     select(textId);
     requestAnimationFrame(() => document.getElementById(id + '-text')?.focus());
   }
@@ -54,7 +53,7 @@ export function LiveLayoutEditorTexts({
 
   return (
     <details className="cg-live-layout-title-style">
-      <summary>Additional text</summary>
+      <LiveLayoutEditorSectionHeading icon={List} label="Additional text" />
       <div className="cg-live-layout-title-scope" role="group" aria-label="Additional texts">
         {texts.map((item, index) => (
           <Button
@@ -96,15 +95,23 @@ export function LiveLayoutEditorTexts({
             frameNumber={frameNumber}
             heading="Text style"
             raster={layout.resolution}
-            shared={frameStyle}
+            shared={controlLiveLayoutAdditionalTextStyle(layout, undefined, selectedIndex)}
+            individualBase={controlLiveLayoutAdditionalTextStyle(
+              layout,
+              frame.titleStyle,
+              selectedIndex,
+            )}
             override={selected.style}
             fonts={layout.fonts ?? []}
             readingFont={readingFont}
+            onSharedChange={(patch) => onSharedStyle(selectedIndex, patch)}
             onOverrideChange={(patch) =>
               changeSelected((current) => ({ ...current, style: { ...current.style, ...patch } }))
             }
             onResetOverride={() => changeSelected(({ style: _override, ...current }) => current)}
-            onAddFont={(file) => onAddFont(file, selected.id)}
+            onAddFont={(file, scope) =>
+              onAddFont(file, scope, { id: selected.id, index: selectedIndex })
+            }
           />
         </>
       )}

@@ -1,0 +1,75 @@
+.cg-live-layout-rect-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.cg-live-layout-rect-box {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px dashed var(--r-accent);
+  cursor: move;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.cg-live-layout-rect-box[data-selected] {
+  z-index: 1;
+  border-style: solid;
+  box-shadow: 0 0 0 1px var(--r-video-ground);
+}
+
+.cg-live-layout-rect-box .cg-btn {
+  position: absolute;
+  inset: auto;
+  top: 50%;
+  left: 50%;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  touch-action: none;
+}
+
+.cg-live-layout-rect-box .cg-live-layout-rect-move {
+  width: 1.5rem;
+  height: 1.5rem;
+  cursor: move;
+}
+
+.cg-live-layout-rect-box .cg-live-layout-rect-handle {
+  width: 0.75rem;
+  height: 0.75rem;
+  background: var(--r-accent);
+  border-color: var(--r-video-ground);
+  border-radius: var(--r-radius-sm);
+}
+
+.cg-live-layout-rect-box [data-mask-handle^='n'] {
+  top: 0;
+  cursor: ns-resize;
+}
+
+.cg-live-layout-rect-box [data-mask-handle^='s'] {
+  top: 100%;
+  cursor: ns-resize;
+}
+
+.cg-live-layout-rect-box [data-mask-handle$='e'] {
+  left: 100%;
+  cursor: ew-resize;
+}
+
+.cg-live-layout-rect-box [data-mask-handle$='w'] {
+  left: 0;
+  cursor: ew-resize;
+}
+
+.cg-live-layout-rect-box :is([data-mask-handle='nw'], [data-mask-handle='se']) {
+  cursor: nwse-resize;
+}
+
+.cg-live-layout-rect-box :is([data-mask-handle='ne'], [data-mask-handle='sw']) {
+  cursor: nesw-resize;
+}

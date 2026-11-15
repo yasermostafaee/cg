@@ -14,6 +14,7 @@ import {
   DEFAULT_LIVE_CROP_FOCUS,
   isOnAirStatus,
   sameLiveCropFocus,
+  type ControlLiveLayout,
   type StackItemState,
 } from '@cg/shared-schema';
 import { useAuthCapabilities } from '../../hooks/useAuthCapabilities.js';
@@ -47,12 +48,14 @@ export function LiveFrameAdjustments({
   channel,
   rehearsing,
   previewLookId,
+  controlLiveLayout,
 }: {
   item: StackItemState;
   live: TemplateLiveSources;
   channel: number;
   rehearsing?: boolean | undefined;
   previewLookId?: string | undefined;
+  controlLiveLayout?: ControlLiveLayout | undefined;
 }): JSX.Element | null {
   const capabilities = useAuthCapabilities();
   const canOperate = useCanOperate();
@@ -223,13 +226,27 @@ export function LiveFrameAdjustments({
           Preserve frame aspect ratio
         </label>
       )}
-      {(frameEffect || presetEffect) && (
-        <FrameEffectControls
-          disabled={!canEdit}
-          {...(presetEffect && {
-            label: frameEffect ? 'Frame and preset effects' : 'Preset effect',
-          })}
-        />
+      {controlLiveLayout === undefined ? (
+        (frameEffect || presetEffect) && (
+          <FrameEffectControls
+            disabled={!canEdit}
+            {...(presetEffect && {
+              label: frameEffect ? 'Frame and preset effects' : 'Preset effect',
+            })}
+          />
+        )
+      ) : (
+        <>
+          {frameEffect && <FrameEffectControls disabled={!canEdit} />}
+          {presetEffect && (
+            <FrameEffectControls
+              key={item.itemId}
+              label="Preset effect"
+              disabled={!canEdit}
+              preset={{ itemId: item.itemId, value: controlLiveLayout.effects.focus }}
+            />
+          )}
+        </>
       )}
       {layout?.kind === 'permissions' && (
         <p className="cg-frame-auto-layout cg-frame-auto-layout__notice" role="status">

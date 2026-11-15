@@ -7,11 +7,15 @@ import {
   LIVE_PREVIEW_MAX_JPEG_BYTES,
   playoutInputIdOf,
   redactUrlCredentials,
+  sourceSeatable,
+  sourceShowableOn,
   type ChannelRequest,
+  type ChannelResponse,
   type LivePreviewHandle,
   type LivePreviewStartChannel,
   type LivePreviewStatus,
   type LivePreviewStream,
+  type SourceAudioLevelsChannel,
   type SourceDefinition,
 } from '@cg/shared-ipc';
 import type { AuthSession } from './auth-session.js';
@@ -55,6 +59,7 @@ interface Check {
   opened: number;
   seen: number;
   renewAt: number;
+  meterUntil: number;
   terminal: boolean;
   feeds: Map<LivePreviewStream, AbortController>;
   refreshing: Promise<LivePreviewStatus> | null;
@@ -146,6 +151,7 @@ export class LivePreviewService {
       opened: now,
       seen: now,
       renewAt: Infinity,
+      meterUntil: 0,
       terminal: false,
       feeds: new Map(),
       refreshing: null,
@@ -221,6 +227,7 @@ export class LivePreviewService {
     if (Date.parse(lease.expiresAt) <= Date.now()) return this.#end(check, EXPIRED);
     check.lease = lease;
     check.renewAt = Date.now() + lease.renewAfterSeconds * 1000;
+    check.meterUntil = 0;
     check.view = status(check.req, check.view.sourceName, {
       state: lease.state === 'ready' ? 'ready' : 'connecting',
     });
@@ -280,8 +287,46 @@ export class LivePreviewService {
     if ([401, 403, 404, 409, 410].includes(meter.status)) {
       return this.#serial(req.channel, () => Promise.resolve(this.#finishReply(check, meter)));
     }
-    check.view = { ...check.view, ...client.levels(meter, lease, performance.now() - started) };
+    const readAt = performance.now();
+    const levels = client.levels(meter, lease, readAt - started);
+    check.meterUntil = readAt + levels.meterValidForMs;
+    check.view = { ...check.view, ...levels };
     return check.view;
+  }
+
+  /** A list reads authorised facts and the current check's cache without opening or keeping a lease. */
+  audioLevels(
+    owner: AuthSession | null,
+    { channel, sourceIds }: ChannelRequest<typeof SourceAudioLevelsChannel>,
+  ): ChannelResponse<typeof SourceAudioLevelsChannel> {
+    const readings: ChannelResponse<typeof SourceAudioLevelsChannel>['readings'] = [];
+    if (this.#closed || owner === null || this.#disconnected.has(owner)) return { readings };
+    const check = this.#owners.get(owner);
+    const current =
+      check !== undefined &&
+      check.req.channel === channel &&
+      this.#active.get(channel) === check &&
+      check.lease?.state === 'ready' &&
+      this.#usable(check)
+        ? check
+        : undefined;
+    for (const sourceId of new Set(sourceIds)) {
+      const source = this.source(sourceId);
+      if (source === undefined || !sourceSeatable(source) || !sourceShowableOn(source, channel))
+        continue;
+      if (current?.req.sourceId === sourceId && canCheckLiveInput(source, channel)) {
+        const { dbFs } = current.view;
+        const validForMs = current.meterUntil - performance.now();
+        if (dbFs !== null && dbFs.length > 0 && validForMs > 0) {
+          readings.push({ sourceId, state: 'measured', dbFs, validForMs });
+          continue;
+        }
+      }
+      if (source.origin === 'media' && source.media?.hasAudio !== undefined) {
+        readings.push({ sourceId, state: source.media.hasAudio ? 'has-audio' : 'no-audio' });
+      }
+    }
+    return { readings };
   }
 
   stop(owner: AuthSession | null, req: LivePreviewHandle): { ok: true } {

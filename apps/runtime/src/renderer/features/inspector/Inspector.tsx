@@ -843,6 +843,7 @@ export function Inspector({
                 channel={itemChannel}
                 rehearsing={rehearsing}
                 previewLookId={previewPin}
+                controlLiveLayout={resolvedInfo?.controlLiveLayout}
               />
             )
           }

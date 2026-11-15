@@ -614,6 +614,7 @@ export class PlayoutSources {
       items: page.items.map((i) => ({
         id: mediaSourceId(i.id),
         name: i.name,
+        ...(i.type === 'still' && { hasAudio: false }),
         ...(i.durationMs !== undefined ? { durationMs: i.durationMs } : {}),
         ...(i.width !== undefined ? { width: i.width } : {}),
         ...(i.height !== undefined ? { height: i.height } : {}),

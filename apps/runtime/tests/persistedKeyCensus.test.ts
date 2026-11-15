@@ -159,6 +159,9 @@ const BEFORE_AND_AFTER = {
     'cg.runtime.playoutSession',
     // Per-console preference for operator-selectable frame resizing. Absence preserves aspect.
     'cg.runtime.preview-resize.v1',
+    // R-120: this console's authored-layout Input and Preset overrides keyed by stack item id.
+    // An absent or unreadable override uses the layout defaults, with no migration.
+    'cg.runtime.row-effects.v1',
     // A per-console relative folder within the Bridge share. Absence opens the root.
     'cg.runtime.shared-template-folder.v1',
     'cg.runtime.shell-layout.v1',

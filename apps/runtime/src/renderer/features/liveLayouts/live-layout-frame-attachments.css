@@ -1,0 +1,38 @@
+.cg-live-layout-attachment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.35rem 0 0.5rem;
+}
+
+.cg-live-layout-attachment-choice {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.cg-live-layout-attachment-choice > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cg-live-layout-attachment-actions > .cg-btn[aria-pressed='true'] {
+  background: var(--r-accent-fill);
+  border-color: var(--r-accent);
+  color: var(--r-accent-ink);
+}
+
+.cg-live-layout-frame-graphic {
+  position: absolute;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.cg-live-layout-attachment-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}

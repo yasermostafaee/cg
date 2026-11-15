@@ -476,8 +476,8 @@ const styles = {
    * `--r-modal-w-ledger`), which are the reference's and are not this item's subject.
    */
   dialogFramed: {
-    height: cssVars['--r-modal-h-frame'],
-    maxHeight: cssVars['--r-modal-h-frame'],
+    height: 'var(--r-modal-h-frame)',
+    maxHeight: 'var(--r-modal-h-frame)',
   },
   /*
     🔴 `SETTINGS-POLISH-04` §1 — AND THE GAP AND THE PADDING, for the same reason and by the
@@ -823,7 +823,7 @@ const WIDTHS: Record<'prose' | 'wide' | 'fixed' | 'ledger' | 'library' | 'record
   wide: cssVars['--r-modal-w-wide'],
   fixed: cssVars['--r-modal-w-fixed'],
   ledger: cssVars['--r-modal-w-ledger'],
-  library: cssVars['--r-modal-w-library'],
+  library: 'var(--r-modal-w-library)',
   record: cssVars['--r-modal-w-record'],
 };
 

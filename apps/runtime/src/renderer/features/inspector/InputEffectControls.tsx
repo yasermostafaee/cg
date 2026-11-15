@@ -6,13 +6,25 @@ import {
   InputTransitionDirectionSchema,
   InputTransitionSchema,
   isInputSlideMode,
+  type ControlLiveLayout,
+  type InputTransition,
   type InputTransitionDirection,
 } from '@cg/shared-schema';
 import { NumericInput } from '../../ui/NumericInput.js';
 import {
+  authoredInputTransition,
   setInputTransitionPreference,
   useInputTransitionPreference,
 } from './inputTransitionPreference.js';
+
+import { setRowEffectOverrides, useRowEffectOverrides } from './rowEffectOverrides.js';
+
+const MODE_LABELS: Record<InputTransition['mode'], string> = {
+  cut: 'Cut',
+  fade: 'Fade',
+  push: 'Push',
+  'slide-over': 'Slide over',
+};
 
 const DIRECTION_LABELS: Record<InputTransitionDirection, string> = {
   left: 'From left',
@@ -21,13 +33,23 @@ const DIRECTION_LABELS: Record<InputTransitionDirection, string> = {
   down: 'From bottom',
 };
 
-export function InputEffectControls(): JSX.Element {
+export function InputEffectControls({
+  itemId,
+  layout,
+}: {
+  itemId: string;
+  layout?: ControlLiveLayout | undefined;
+}): JSX.Element {
   const durationId = useId();
-  const {
-    mode,
-    durationMs,
-    direction = DEFAULT_INPUT_SLIDE_DIRECTION,
-  } = useInputTransitionPreference();
+  const consoleDefault = useInputTransitionPreference();
+  const override = useRowEffectOverrides(itemId)?.input;
+  const effect =
+    layout === undefined ? consoleDefault : (override ?? authoredInputTransition(layout));
+  const { mode, durationMs, direction = DEFAULT_INPUT_SLIDE_DIRECTION } = effect;
+  function changeEffect(change: Partial<InputTransition>): void {
+    if (layout === undefined) setInputTransitionPreference(change);
+    else setRowEffectOverrides(itemId, { input: { ...effect, ...change } });
+  }
   const [typedDuration, setTypedDuration] = useState<string | null>(null);
   return (
     <fieldset className="cg-position-effect">
@@ -37,17 +59,27 @@ export function InputEffectControls(): JSX.Element {
         <select
           aria-label="Input transition"
           className="cg-field"
-          value={mode}
+          value={layout !== undefined && override === undefined ? 'default' : mode}
           onChange={(event) => {
-            const next = InputTransitionSchema.shape.mode.safeParse(event.currentTarget.value);
-            if (next.success) setInputTransitionPreference({ mode: next.data });
+            if (event.currentTarget.value === 'default') {
+              setRowEffectOverrides(itemId, { input: undefined });
+            } else {
+              const next = InputTransitionSchema.shape.mode.safeParse(event.currentTarget.value);
+              if (next.success) changeEffect({ mode: next.data });
+            }
             setTypedDuration(null);
           }}
         >
-          <option value="cut">Cut</option>
-          <option value="fade">Fade</option>
-          <option value="push">Push</option>
-          <option value="slide-over">Slide over</option>
+          {layout !== undefined && (
+            <option value="default">
+              Layout default ({MODE_LABELS[authoredInputTransition(layout).mode]})
+            </option>
+          )}
+          {InputTransitionSchema.shape.mode.options.map((value) => (
+            <option key={value} value={value}>
+              {MODE_LABELS[value]}
+            </option>
+          ))}
         </select>
       </label>
       {isInputSlideMode(mode) && (
@@ -59,7 +91,7 @@ export function InputEffectControls(): JSX.Element {
             value={direction}
             onChange={(event) => {
               const next = InputTransitionDirectionSchema.safeParse(event.currentTarget.value);
-              if (next.success) setInputTransitionPreference({ direction: next.data });
+              if (next.success) changeEffect({ direction: next.data });
             }}
           >
             {InputTransitionDirectionSchema.options.map((value) => (
@@ -82,7 +114,7 @@ export function InputEffectControls(): JSX.Element {
             onValueChange={(value) => {
               setTypedDuration(value);
               const duration = InputTransitionSchema.shape.durationMs.safeParse(Number(value));
-              if (duration.success) setInputTransitionPreference({ durationMs: duration.data });
+              if (duration.success) changeEffect({ durationMs: duration.data });
             }}
             onBlur={() => setTypedDuration(null)}
           />

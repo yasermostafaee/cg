@@ -14,12 +14,14 @@ import {
   readControlLiveLayout,
 } from './controlLiveLayoutCompiler.js';
 import { LiveLayoutEditor } from './LiveLayoutEditor.js';
+import type { ControlLiveLayoutFrameAttachmentSource } from './controlLiveLayoutFrameAttachments.js';
 
 interface EditorRequest {
   channel: number;
   initial: ControlLiveLayout;
   background?: Blob;
   fonts?: ReadonlyMap<string, Blob>;
+  attachments?: ReadonlyMap<string, ControlLiveLayoutFrameAttachmentSource>;
   mode: 'create' | 'edit' | 'duplicate';
   expectedSource?: string;
 }
@@ -66,7 +68,7 @@ export function useControlLiveLayoutEditor(
         const bytes = base64ToBytes(source.base64);
         if (sha256Hex(bytes) !== expectedSource)
           throw new Error('The saved layout package could not be verified.');
-        const { layout, asset, fonts } = await readControlLiveLayout(bytes);
+        const { layout, asset, fonts, attachments } = await readControlLiveLayout(bytes);
         const initial = duplicate
           ? {
               ...layout,
@@ -78,6 +80,7 @@ export function useControlLiveLayoutEditor(
           channel,
           initial,
           fonts,
+          attachments,
           ...(asset === undefined ? {} : { background: asset }),
           mode: duplicate ? 'duplicate' : 'edit',
           ...(duplicate ? {} : { expectedSource }),
@@ -96,9 +99,10 @@ export function useControlLiveLayoutEditor(
     layout: ControlLiveLayout,
     background: Blob | undefined,
     fonts: ReadonlyMap<string, Blob>,
+    attachments: ReadonlyMap<string, ControlLiveLayoutFrameAttachmentSource>,
   ): Promise<void> => {
     if (request === null) return;
-    const bytes = await compileControlLiveLayout(layout, background, fonts);
+    const bytes = await compileControlLiveLayout(layout, background, fonts, attachments);
     const saved = await importTemplateFromBytes(window.cg, bytes, {
       channel: request.channel,
       consoleVersion: APP_VERSION,
@@ -122,6 +126,7 @@ export function useControlLiveLayoutEditor(
           channel={request.channel}
           initial={request.initial}
           initialFonts={request.fonts}
+          initialAttachments={request.attachments}
           {...(request.background === undefined ? {} : { initialBackground: request.background })}
           mode={request.mode}
           onClose={close}

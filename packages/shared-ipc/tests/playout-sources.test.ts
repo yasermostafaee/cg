@@ -137,6 +137,19 @@ describe('D11: parsePlayoutMediaPage', () => {
 });
 
 describe('buildPlayoutSourceCatalog (§1.B)', () => {
+  it('marks a declared still as having no audio and leaves video stream presence unknown', () => {
+    const still = { id: 'still', name: 'Still', clip: 'C:/Media/still.png', type: 'still' };
+    const video = { id: 'video', name: 'Video', clip: 'C:/Media/video.mov', type: 'video' };
+    const catalogue = catalogOf(
+      [],
+      [still, video].map((item) => toBoundMedia(item, '2026-11-15T00:00:00Z')),
+    );
+    const stillSource = catalogue.sources.find(({ id }) => id === 'md-still');
+    const videoSource = catalogue.sources.find(({ id }) => id === 'md-video');
+    expect(stillSource?.media?.hasAudio).toBe(false);
+    expect(videoSource?.media?.hasAudio).toBeUndefined();
+  });
+
   it('prefixes ids, keeps the Playout order, and carries the producer as sent', () => {
     const catalog = catalogOf([studio, camera]);
     expect(catalog.sources.map((s) => s.id)).toEqual(['in-li-1a2b3c4d', 'in-li-cam']);

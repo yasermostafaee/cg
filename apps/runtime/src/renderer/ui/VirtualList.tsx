@@ -33,6 +33,8 @@ export interface VirtualRow {
   /** A stable key — the option's value, or the heading's label. */
   readonly key: string;
   readonly content: ReactNode;
+  /** Use a stable option name when its auxiliary reading changes over time. */
+  readonly ariaLabel?: string;
   /** A separate action in a grid, or a decorative slot alongside a listbox option. */
   readonly trailing?: ReactNode;
   /** An option that cannot be picked: shown, with its reason in `title`. */
@@ -189,6 +191,7 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
               key={`o:${row.key}`}
               id={optionId(id, index)}
               role={withActions ? 'gridcell' : 'option'}
+              aria-label={row.ariaLabel}
               aria-selected={row.selected === true}
               aria-disabled={row.disabled === true}
               className={`cg-vlist-option${active ? ' is-active' : ''}`}

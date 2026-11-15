@@ -371,6 +371,8 @@ export const SourceDefinitionSchema = z.object({
   /** `PLAYOUT-SOURCES-01` — a media item's facts, for the picker's second line. Media only. */
   media: z
     .object({
+      /** Verified stream presence where known. Absent means the catalogue did not report it. */
+      hasAudio: z.boolean().optional(),
       durationMs: z.number().nonnegative().optional(),
       width: z.number().int().positive().optional(),
       height: z.number().int().positive().optional(),
@@ -1355,6 +1357,7 @@ export const SourcesSetConfigChannel = defineChannel(
 export const ConsoleMediaItemSchema = z.object({
   id: SourceDefinitionIdSchema,
   name: z.string().min(1),
+  hasAudio: z.boolean().optional(),
   durationMs: z.number().nonnegative().optional(),
   width: z.number().int().positive().optional(),
   height: z.number().int().positive().optional(),

@@ -539,6 +539,7 @@ export function createMockBridge(): RuntimeBridge {
     },
 
     sourcePreviews: {
+      audioLevels: () => Promise.resolve({ readings: [] }),
       pvw: () => Promise.resolve({ frames: [] }),
       thumbnails: () => Promise.resolve({ frames: [] }),
     },

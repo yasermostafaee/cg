@@ -6,6 +6,7 @@ import {
   type LiveSourceRect,
 } from '@cg/shared-schema';
 import type { TemplateLook } from '@cg/shared-ipc';
+import { presetFrameArtwork } from './rehearsalPresetEffects.js';
 
 type Effects = ControlLiveLayout['effects'];
 interface FrameSide {
@@ -26,10 +27,14 @@ const easings = {
 };
 
 function artworkNode(doc: Document, side: FrameSide): HTMLElement | undefined {
-  const key = side.look.operatorFrames?.[side.frameId]?.artworkKey;
+  // Authoring placement permission is independent of a preset's own animation.
+  const key =
+    side.look.transitionFrames?.[side.frameId]?.frameKey ??
+    side.look.operatorFrames?.[side.frameId]?.frameKey;
   if (key === undefined) return undefined;
-  const wrapper = Array.from(doc.querySelectorAll<HTMLElement>('[data-cg-frame-artwork]')).find(
-    (node) => node.dataset['cgFrameArtwork'] === key,
+  const wrapper = presetFrameArtwork(
+    doc.querySelectorAll<HTMLElement>('[data-cg-frame-artwork]'),
+    key,
   );
   // The layout-transparent wrapper can have zero height. The composed frame
   // under it has the rendered picture bounds and includes its linked title.

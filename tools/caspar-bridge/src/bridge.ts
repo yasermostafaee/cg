@@ -94,6 +94,7 @@ import {
   LivePreviewStartChannel,
   LivePreviewStatusChannel,
   LivePreviewStopChannel,
+  SourceAudioLevelsChannel,
   SourcePreviewPvwChannel,
   SourcePreviewThumbnailsChannel,
   PlaylistGainGetChannel,
@@ -5271,7 +5272,7 @@ export function buildRoutes(
       'operator',
       'operator',
       (r: ChannelRequest<typeof StackSetActiveLookChannel>) =>
-        b.setActiveLook(r.itemId, r.lookId, r.transition, r.focusSlide),
+        b.setActiveLook(r.itemId, r.lookId, r.transition, r.focusSlide, r.focusInputTransition),
     ),
     // `TIMING-WIRE-22` (c) — a CONFIGURATION verb: it carries no Take, and changes what the
     // graphic already on the channel will do next.
@@ -5627,6 +5628,13 @@ export function buildRoutes(
       'operator',
       (req: ChannelRequest<typeof LivePreviewTicketChannel>) =>
         paths.livePreview?.ticket(currentAuthSession(), req, issueTicket) ?? { path: null },
+    ),
+    route(
+      SourceAudioLevelsChannel,
+      'read',
+      'read',
+      (req: ChannelRequest<typeof SourceAudioLevelsChannel>) =>
+        paths.livePreview?.audioLevels(currentAuthSession(), req) ?? { readings: [] },
     ),
     route(
       SourcePreviewPvwChannel,

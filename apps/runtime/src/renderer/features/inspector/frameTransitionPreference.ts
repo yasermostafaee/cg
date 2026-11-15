@@ -2,8 +2,13 @@ import { useSyncExternalStore } from 'react';
 import {
   FRAME_TRANSITION_DEFAULT_MS,
   FrameTransitionSchema,
+  DEFAULT_INPUT_SLIDE_DIRECTION,
+  type ControlLiveLayout,
+  type ControlLiveLayoutEffects,
   type FrameTransition,
 } from '@cg/shared-schema';
+
+import { rowEffectOverrides } from './rowEffectOverrides.js';
 
 const STORAGE_KEY = 'cg.runtime.frame-transition.v1';
 const DEFAULT: FrameTransition = {
@@ -47,4 +52,23 @@ export function setFrameTransitionPreference(change: Partial<FrameTransition>): 
     // Keep the choice for this console session even if storage is unavailable.
   }
   for (const listener of listeners) listener();
+}
+
+export function effectiveLayoutEffects(
+  itemId: string,
+  layout: ControlLiveLayout,
+): ControlLiveLayoutEffects {
+  const override = rowEffectOverrides(itemId);
+  if (override === undefined) return layout.effects;
+  const { input, preset } = override;
+  const authoredSwitch = layout.effects.switch;
+  return {
+    focus: preset ?? layout.effects.focus,
+    switch:
+      input !== undefined
+        ? { ...input, direction: input.direction ?? DEFAULT_INPUT_SLIDE_DIRECTION }
+        : authoredSwitch.mode === 'motion' && preset !== undefined
+          ? { ...authoredSwitch, durationMs: preset.durationMs }
+          : authoredSwitch,
+  };
 }

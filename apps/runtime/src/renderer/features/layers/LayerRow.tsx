@@ -45,8 +45,12 @@ import { BackupStatus } from './BackupStatus.js';
 import { plateLabelOf, takeRefusalLine, TakeRefusalText } from './takeRefusalLine.js';
 import { currentSourceCatalog } from '../sources/sourceStore.js';
 import { followAcceptedLayerPreset } from '../inspector/draftStore.js';
-import { frameTransitionPreference } from '../inspector/frameTransitionPreference.js';
+import {
+  effectiveLayoutEffects,
+  frameTransitionPreference,
+} from '../inspector/frameTransitionPreference.js';
 import { inputTransitionRequest } from '../inspector/inputTransitionPreference.js';
+import { rowEffectOverrides } from '../inspector/rowEffectOverrides.js';
 import { ControlLayoutFocus } from '../liveLayouts/ControlLayoutFocus.js';
 import {
   ROW_GEOMETRY,
@@ -425,7 +429,9 @@ export function LayerRow({
       look, saw the segment move, and was told nothing at all.
     */
     try {
-      const effect = layout?.effects.focus ?? frameTransitionPreference();
+      const layoutEffects =
+        layout === undefined ? undefined : effectiveLayoutEffects(item.itemId, layout);
+      const effect = layoutEffects?.focus ?? frameTransitionPreference();
       const from =
         layout === undefined
           ? undefined
@@ -436,7 +442,7 @@ export function LayerRow({
         to !== undefined &&
         from.presetId === to.presetId &&
         from.frameId !== to.frameId
-          ? layout?.effects.switch
+          ? layoutEffects?.switch
           : undefined;
       const focusSlide: InputSlideTransition | undefined =
         direct?.mode === 'push' || direct?.mode === 'slide-over'
@@ -448,6 +454,8 @@ export function LayerRow({
           : direct?.mode === 'motion'
             ? { ...effect, durationMs: direct.durationMs }
             : effect;
+      const focusInputTransition =
+        direct === undefined ? undefined : rowEffectOverrides(item.itemId)?.input;
       const onProgramme = !legacyPreview && isOnAirStatus(item);
       const transition =
         onProgramme &&
@@ -460,6 +468,7 @@ export function LayerRow({
         lookId,
         ...(transition !== undefined && { transition }),
         ...(onProgramme && focusSlide !== undefined && { focusSlide }),
+        ...(onProgramme && focusInputTransition !== undefined && { focusInputTransition }),
       });
       if (res.ok && layout === undefined) follow();
       // `LOOK-SWITCH-01` — a refused PLATE is said on this row (`takeRefusalLine`, below), in this
@@ -1369,7 +1378,13 @@ export function LayerRow({
             unconfirmable claim down to `attention`.
           */
           onAir={state.tone === 'onair'}
-          refusal={legacyPreview ? undefined : lookRefusal}
+          refusal={
+            switchingLayout
+              ? 'A preset change is in progress.'
+              : legacyPreview
+                ? undefined
+                : lookRefusal
+          }
           rowName={rowName}
           // The row's own state decides what the press changes, and says so on the control.
           target={legacyPreview ? 'preview' : 'air'}
@@ -1459,7 +1474,7 @@ export function LayerRow({
               itemId: item.itemId,
               plateId,
               sourceId,
-              ...inputTransitionRequest(),
+              ...inputTransitionRequest(item.itemId, template.controlLiveLayout),
             })
           }
           onClose={() => {

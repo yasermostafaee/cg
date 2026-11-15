@@ -4,6 +4,7 @@ import type { SourceDefinition } from '@cg/shared-ipc';
 import { Icon } from '../../ui/Icon.js';
 import { directionOf } from '../../ui/OperatorNames.js';
 import { Tag } from '../../ui/Tag.js';
+import { InputAudioMeter } from './InputAudioMeter.js';
 import {
   currentSourceCatalog,
   seenMediaItem,
@@ -45,6 +46,7 @@ export interface LabelledSource {
   readonly name: string;
   readonly origin: 'input' | 'media' | undefined;
   readonly durationMs?: number | undefined;
+  readonly hasAudio?: boolean | undefined;
   readonly unavailable: boolean;
   readonly reason?: string | undefined;
 }
@@ -60,13 +62,20 @@ export function labelledSource(sourceId: string | null | undefined): LabelledSou
       name: entry.name,
       origin: entry.origin,
       durationMs: entry.media?.durationMs,
+      hasAudio: entry.media?.hasAudio,
       unavailable: entry.status === 'unavailable',
       reason: entry.reason,
     };
   }
   const seen = seenMediaItem(sourceId);
   if (seen !== undefined) {
-    return { name: seen.name, origin: 'media', durationMs: seen.durationMs, unavailable: false };
+    return {
+      name: seen.name,
+      origin: 'media',
+      durationMs: seen.durationMs,
+      hasAudio: seen.hasAudio,
+      unavailable: false,
+    };
   }
   return null;
 }
@@ -75,6 +84,7 @@ export function SourceLabel({
   sourceId,
   fallback = 'None',
   meta = true,
+  meterChannel,
 }: {
   /** The bound catalogue id. Empty or unknown renders {@link fallback} — never the id. */
   sourceId: string | null | undefined;
@@ -82,6 +92,7 @@ export function SourceLabel({
   fallback?: string | undefined;
   /** A media item's length after its name. */
   meta?: boolean | undefined;
+  meterChannel?: number | undefined;
 }): JSX.Element {
   useSyncExternalStore(subscribeSources, sourcesVersion);
   const source = labelledSource(sourceId);
@@ -110,6 +121,14 @@ export function SourceLabel({
       </bdi>
       {media && meta && source.durationMs !== undefined && (
         <span className="cg-source-label__meta">{formatMediaDuration(source.durationMs)}</span>
+      )}
+      {meterChannel !== undefined && sourceId && (
+        <InputAudioMeter
+          sourceId={sourceId}
+          channel={source.unavailable ? undefined : meterChannel}
+          name={source.name}
+          hasAudio={source.hasAudio}
+        />
       )}
       {source.unavailable && (
         <Tag className="cg-source-tag cg-source-tag--unavailable" title={source.reason}>

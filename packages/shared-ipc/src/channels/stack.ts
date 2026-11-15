@@ -482,6 +482,8 @@ export const StackSetActiveLookChannel = defineChannel(
     lookId: z.string().min(1),
     transition: FrameTransitionSchema.optional(),
     focusSlide: InputSlideTransitionSchema.optional(),
+    /** Operator choice for a direct switch between two focused frames. */
+    focusInputTransition: InputTransitionSchema.optional(),
   }),
   z.object({
     ok: z.boolean(),

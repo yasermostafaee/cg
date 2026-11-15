@@ -30,6 +30,7 @@ import { TabPanel, TabStrip } from '../../ui/Tabs.js';
 import { Tag } from '../../ui/Tag.js';
 import { TextInput } from '../../ui/TextInput.js';
 import { VirtualList, type VirtualListHandle, type VirtualRow } from '../../ui/VirtualList.js';
+import { InputAudioMeter } from './InputAudioMeter.js';
 import { InputThumbnail } from './InputThumbnail.js';
 import {
   createMediaThumbnailLoader,
@@ -110,7 +111,13 @@ export function choiceText(choice: SourceChoice): string {
  * catalogue at all — wears the `Unavailable` tag every bound source wears (`SourceLabel`); one the
  * catalogue does not know reads `Not listed`, its id on the `title` (golden rule 11).
  */
-export function ChoiceLabel({ choice }: { choice: SourceChoice }): JSX.Element {
+export function ChoiceLabel({
+  choice,
+  meterChannel,
+}: {
+  choice: SourceChoice;
+  meterChannel?: number | undefined;
+}): JSX.Element {
   if (choice.names === undefined) return <span className="cg-choice-label">{choice.label}</span>;
   if (choice.names === null) {
     return <span className="cg-choice-label">{`${choice.label} (none set)`}</span>;
@@ -129,6 +136,14 @@ export function ChoiceLabel({ choice }: { choice: SourceChoice }): JSX.Element {
         {name}
       </bdi>
       {')'}
+      {meterChannel !== undefined && (
+        <InputAudioMeter
+          sourceId={choice.names}
+          channel={offered ? meterChannel : undefined}
+          name={name}
+          hasAudio={source?.hasAudio}
+        />
+      )}
       {!offered && (
         <Tag
           className="cg-source-tag cg-source-tag--unavailable"
@@ -243,11 +258,12 @@ export function SourcePicker({
       >
         {choice !== undefined && (value === '' || !known) ? (
           <span className="cg-source-label" data-source-label="choice">
-            <ChoiceLabel choice={choice} />
+            <ChoiceLabel choice={choice} meterChannel={thumbnailChannel} />
           </span>
         ) : (
           <SourceLabel
             sourceId={value}
+            meterChannel={thumbnailChannel}
             fallback={choices[0] !== undefined ? choiceText(choices[0]) : 'None'}
           />
         )}
@@ -343,7 +359,7 @@ function PickerPanel({
               onClick={() => onPick(c.value)}
             >
               {value === c.value && <Icon icon={Check} size={13} />}
-              <ChoiceLabel choice={c} />
+              <ChoiceLabel choice={c} meterChannel={previewChannel} />
             </Button>
           ))}
         </div>
@@ -373,6 +389,7 @@ function PickerPanel({
             media={media}
             onPick={onPick}
             loadThumbnail={loadThumbnail}
+            channel={previewChannel}
           />
         )}
       </TabPanel>
@@ -494,6 +511,7 @@ function InputsTab({
     return {
       kind: 'option',
       key: source.id,
+      ariaLabel: source.status === 'unavailable' ? `${source.name} Unavailable` : source.name,
       disabled,
       selected,
       ...(loops
@@ -518,6 +536,11 @@ function InputsTab({
           <bdi className="cg-picker-row__name" dir={directionOf(source.name)}>
             {source.name}
           </bdi>
+          <InputAudioMeter
+            sourceId={source.id}
+            channel={offChannel || source.status === 'unavailable' ? undefined : previewChannel}
+            name={source.name}
+          />
           {source.status === 'unavailable' && (
             <Tag className="cg-source-tag cg-source-tag--unavailable">Unavailable</Tag>
           )}
@@ -666,12 +689,14 @@ function mediaRow(
     readonly name: string;
     readonly folder?: string | undefined;
     readonly durationMs?: number | undefined;
+    readonly hasAudio?: boolean | undefined;
     readonly width?: number | undefined;
     readonly height?: number | undefined;
     readonly unavailable?: boolean | undefined;
   },
   value: string,
   loadThumbnail: MediaThumbnailLoader,
+  channel: number | undefined,
 ): VirtualRow {
   const selected = item.id === value;
   const facts = [
@@ -693,6 +718,12 @@ function mediaRow(
             <bdi className="cg-picker-row__name" dir={directionOf(item.name)}>
               {item.name}
             </bdi>
+            <InputAudioMeter
+              sourceId={item.id}
+              channel={item.unavailable === true ? undefined : channel}
+              name={item.name}
+              hasAudio={item.hasAudio}
+            />
             {item.unavailable === true && (
               <Tag className="cg-source-tag cg-source-tag--unavailable">Unavailable</Tag>
             )}
@@ -722,12 +753,14 @@ function MediaTab({
   media,
   onPick,
   loadThumbnail,
+  channel,
 }: {
   listId: string;
   value: string;
   media: MediaState;
   onPick: (value: string) => void;
   loadThumbnail: MediaThumbnailLoader;
+  channel: number | undefined;
 }): JSX.Element {
   const list = useRef<VirtualListHandle>(null);
   const search = useRef<HTMLInputElement>(null);
@@ -763,6 +796,7 @@ function MediaTab({
               id: value,
               name: current.name,
               durationMs: current.durationMs,
+              hasAudio: current.hasAudio,
               folder: entry?.media?.folder,
               width: entry?.media?.width,
               height: entry?.media?.height,
@@ -770,6 +804,7 @@ function MediaTab({
             },
             value,
             loadThumbnail,
+            channel,
           ),
         );
       }
@@ -784,6 +819,7 @@ function MediaTab({
               id: r.id,
               name: r.name,
               durationMs: r.media?.durationMs,
+              hasAudio: r.media?.hasAudio,
               folder: r.media?.folder,
               width: r.media?.width,
               height: r.media?.height,
@@ -791,16 +827,17 @@ function MediaTab({
             },
             value,
             loadThumbnail,
+            channel,
           ),
         );
       }
       out.push({ kind: 'heading', key: 'All media', content: 'All media' });
     }
     for (const item of media.items) {
-      out.push(mediaRow(`all:${item.id}`, item, value, loadThumbnail));
+      out.push(mediaRow(`all:${item.id}`, item, value, loadThumbnail, channel));
     }
     return out;
-  }, [media.items, media.q, catalog, value, loadThumbnail]);
+  }, [media.items, media.q, catalog, value, loadThumbnail, channel]);
 
   const idOf = (index: number): string | null => {
     const key = rows[index]?.key;

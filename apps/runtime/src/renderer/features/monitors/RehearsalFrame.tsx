@@ -51,8 +51,11 @@ import type { PvwSourceFrame } from './usePvwSourceFrames.js';
 import type { RehearsalBook } from '../layers/bookOf.js';
 import { MISSING_PICTURE_URL, pageExtOf, pictureDataUrl } from '../book/pagePictures.js';
 import { recordPreviewBookPage } from '../book/previewBookPage.js';
-import { frameTransitionPreference } from '../inspector/frameTransitionPreference.js';
-import { inputTransitionPreference } from '../inspector/inputTransitionPreference.js';
+import {
+  effectiveLayoutEffects,
+  frameTransitionPreference,
+} from '../inspector/frameTransitionPreference.js';
+import { effectiveInputTransition } from '../inspector/inputTransitionPreference.js';
 import {
   rehearsalPlacementPhases,
   rehearsalPresetPlan,
@@ -553,7 +556,11 @@ export function RehearsalFrame({
       running?.cancel();
     }
     if (current?.payload === payload && current.lookId === lookId) return;
-    const effect = controlLiveLayout?.effects.focus ?? frameTransitionPreference();
+    const layoutEffects =
+      controlLiveLayout === undefined
+        ? undefined
+        : effectiveLayoutEffects(itemId, controlLiveLayout);
+    const effect = layoutEffects?.focus ?? frameTransitionPreference();
     const canAnimatePreset =
       visible &&
       playing &&
@@ -565,7 +572,7 @@ export function RehearsalFrame({
       look !== undefined &&
       previousLook !== undefined &&
       previousLook.id !== look.id;
-    if (canAnimatePreset && controlLiveLayout !== undefined) {
+    if (canAnimatePreset && controlLiveLayout !== undefined && layoutEffects !== undefined) {
       const from = controlLiveLayoutSoloTarget(controlLiveLayout, previousLook.id);
       const to = controlLiveLayoutFocusTarget(controlLiveLayout, look.id);
       if (
@@ -587,7 +594,7 @@ export function RehearsalFrame({
           doc,
           before: { look: previousLook, frameId: from.frameId, anchor: anchors[from.frameId] },
           after: { look, frameId: to.frameId, anchor: anchors[to.frameId] },
-          layout: controlLiveLayout,
+          layout: { ...controlLiveLayout, effects: layoutEffects },
           period: presetFramePeriodMs,
           pictureReady: () => {
             const sourceId = livePlatesRef.current.find(
@@ -925,7 +932,7 @@ export function RehearsalFrame({
     const doc = frameRef.current?.contentDocument;
     if (doc == null || runningEffect.current !== undefined) return;
     if (composed.current?.doc === doc) composed.current.livePlates = livePlates;
-    const input = inputTransitionPreference();
+    const input = effectiveInputTransition(itemId, controlLiveLayout);
     if (playing && input.mode !== 'cut') {
       const durationMs =
         input.mode === 'fade' || presetFramePeriodMs === undefined
@@ -942,7 +949,16 @@ export function RehearsalFrame({
       inputEffect.current?.cancel();
       paintPvwPlatePictures(doc, livePlates, sourceFrames);
     }
-  }, [visible, ready, playing, livePlates, sourceFrames, presetFramePeriodMs]);
+  }, [
+    visible,
+    ready,
+    playing,
+    livePlates,
+    sourceFrames,
+    presetFramePeriodMs,
+    itemId,
+    controlLiveLayout,
+  ]);
 
   useEffect(
     () => () => {

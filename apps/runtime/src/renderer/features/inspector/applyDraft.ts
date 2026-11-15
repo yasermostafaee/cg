@@ -2,6 +2,7 @@ import {
   isOnAirStatus,
   type FieldValue,
   type FieldValues,
+  type InputTransition,
   type Position,
   type StackItemState,
 } from '@cg/shared-schema';
@@ -61,7 +62,9 @@ export function applyDraft(
    */
   playout?: TemplateInfo['playout'] | undefined,
   /** `R-101` — the template's field form, so a staged value its pattern refuses is never sent. */
-  template?: Pick<TemplateInfo, 'fields' | 'groups' | 'liveSources'> | undefined,
+  template?:
+    | Pick<TemplateInfo, 'fields' | 'groups' | 'liveSources' | 'controlLiveLayout'>
+    | undefined,
 ): Promise<{ accepted: boolean; errorCode?: string | undefined }> {
   const sent = snapshotDraft(item.itemId);
   /*
@@ -169,6 +172,7 @@ export function applyDraft(
   const noFieldDrafts = Object.keys(sent).length === 0;
   const updateFrames = frame.reset || frame.placements.length > 0;
   const effect = frameTransitionPreference();
+  const { inputTransition } = inputTransitionRequest(item.itemId, template?.controlLiveLayout);
   const transition =
     updateFrames &&
     isOnAirStatus(item) &&
@@ -196,6 +200,7 @@ export function applyDraft(
           bindingsPayload,
           lookBindings,
           combinedPosition,
+          inputTransition,
         );
   return preflight
     .reduce<Promise<boolean>>(
@@ -516,13 +521,17 @@ function sendUpdate(
   lookBindings?: Record<string, Record<string, string>> | undefined,
   sentBindings?: ReadonlyMap<string, ReadonlyMap<string, string>> | undefined,
   sentPosition?: PositionDraft,
+  inputTransition?: InputTransition,
 ): Promise<{ accepted: boolean; errorCode?: string | undefined }> {
   return window.cg.stack
     .update({
       itemId: item.itemId,
       fields,
       mergeMode: 'merge',
-      ...(lookBindings !== undefined && { lookBindings, ...inputTransitionRequest() }),
+      ...(lookBindings !== undefined && {
+        lookBindings,
+        ...(inputTransition !== undefined && { inputTransition }),
+      }),
       ...(sentPosition !== undefined && { position: positionFromDraft(sentPosition) }),
     })
     .then(

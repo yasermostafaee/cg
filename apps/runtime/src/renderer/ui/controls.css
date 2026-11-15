@@ -963,12 +963,26 @@
   display: flex;
   flex-direction: column;
   flex: 0 0 auto;
-  gap: var(--r-meter-pad);
-  padding: var(--r-meter-pad);
+  gap: calc(var(--r-meter-pad) / 2);
+  padding: calc(var(--r-meter-pad) * 0.75);
   box-sizing: border-box;
   min-height: 0;
   background: var(--r-meter-ground);
   border: 1px solid var(--r-meter-frame);
+}
+.cg-pgm-meter-bank {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  flex: 0 0 auto;
+  gap: calc(var(--r-meter-pad) / 2);
+  min-height: 0;
+}
+.cg-pgm-meter-bank[data-vu-count='1'] {
+  grid-template-columns: minmax(0, 1fr);
+}
+.cg-pgm-meter-bank .cg-vu__bar:nth-child(n + 3) {
+  display: none;
 }
 .cg-vu__unit {
   font-size: var(--r-meter-scale-text);
@@ -980,7 +994,7 @@
   display: flex;
   flex: 1;
   min-height: 0;
-  gap: var(--r-meter-pad);
+  gap: calc(var(--r-meter-pad) * 0.75);
   /* A label sits ON its mark, half above it: the halves at 0 and −60 need this room. */
   padding-block: calc(var(--r-meter-scale-text) / 2);
 }
@@ -990,7 +1004,7 @@
 }
 .cg-vu__bar {
   position: relative;
-  width: var(--r-meter-bar-w);
+  width: calc(var(--r-meter-bar-w) * 0.6);
   box-shadow: inset 0 0 0 1px var(--r-meter-frame);
 }
 .cg-vu__fill {
@@ -1019,7 +1033,7 @@
 }
 .cg-vu__scale {
   position: relative;
-  width: 2.4em;
+  width: 2em;
   font-size: var(--r-meter-scale-text);
   color: var(--r-meter-scale-ink);
   font-variant-numeric: tabular-nums;
@@ -9026,7 +9040,8 @@ input[type='checkbox']:disabled:checked {
  * *"if the label loses contrast on that ground, adjust the LABEL's token, not the green."*
  * The green does the saying; the word stays legible.
  */
-.cg-btn.cg-look-cell[aria-pressed='true'][data-look-onair] {
+.cg-btn.cg-look-cell[aria-pressed='true'][data-look-onair],
+.cg-btn[data-focus-onair][aria-pressed='true'] {
   background: color-mix(in srgb, var(--r-onair) 18%, var(--r-onair-cell-bg));
   border-color: color-mix(in srgb, var(--r-onair-cell-line) 55%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--r-onair-cell-ring) 55%, transparent);

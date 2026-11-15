@@ -13,7 +13,7 @@ import { PreviewPanel } from './PreviewPanel.js';
 import { useProgramMonitorPreferences } from './useProgramMonitorPreferences.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
-import { Columns3, Monitor, PanelRight } from 'lucide-react';
+import { Columns3, Monitor, PanelBottom } from 'lucide-react';
 
 export type MonitorCompanionMode = 'monitor' | 'layer' | 'layer-inspector';
 
@@ -171,7 +171,7 @@ export function MonitorStrip({
         {(
           [
             ['monitor', Monitor, 'Monitor only'],
-            ['layer', PanelRight, 'Monitor and selected layer'],
+            ['layer', PanelBottom, 'Monitor and selected layer'],
             ['layer-inspector', Columns3, 'Monitor, selected layer and Inspector'],
           ] as const
         ).map(([mode, glyph, label]) => {

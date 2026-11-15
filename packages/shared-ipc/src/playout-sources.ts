@@ -545,6 +545,7 @@ export function buildPlayoutSourceCatalog(input: PlayoutCatalogInput): SourceCat
         ? { status: 'unavailable' as const, departed: true as const, reason: MEDIA_GONE_REASON }
         : {}),
       media: {
+        ...(m.type === 'still' && { hasAudio: false }),
         ...(m.durationMs !== undefined ? { durationMs: m.durationMs } : {}),
         ...(m.width !== undefined ? { width: m.width } : {}),
         ...(m.height !== undefined ? { height: m.height } : {}),

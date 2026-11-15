@@ -26,10 +26,14 @@ import { meterStore, type MeterStore } from './meterStore.js';
 export function VuMeter({
   channel,
   engine = 'A',
+  displayEngine,
+  label,
   watchPeaks,
 }: {
   channel: number | null;
   engine?: PgmEngine | null;
+  displayEngine?: PgmEngine;
+  label?: string;
   watchPeaks?: MeterStore['watchAudio'];
 }): JSX.Element {
   const fills = useRef<(HTMLSpanElement | null)[]>([]);
@@ -53,24 +57,24 @@ export function VuMeter({
       : watchPeaks === undefined
         ? 'playout'
         : 'stereo';
+  const level =
+    source === 'unavailable'
+      ? 'Programme level unavailable, dBFS'
+      : source === 'stereo'
+        ? 'Programme stereo level, dBFS'
+        : 'Programme level, dBFS';
   return (
     <div
       className="cg-vu"
       data-vu-meter=""
-      data-vu-engine={engine ?? undefined}
+      data-vu-engine={displayEngine ?? engine ?? undefined}
       data-vu-source={source}
       role="img"
-      aria-label={
-        source === 'unavailable'
-          ? 'Programme level unavailable, dBFS'
-          : source === 'stereo'
-            ? 'Programme stereo level, dBFS'
-            : 'Programme level, dBFS'
-      }
+      aria-label={label === undefined ? level : `${label}, ${level}`}
       dir="ltr"
     >
-      <span className="cg-vu__unit" aria-hidden="true">
-        dBFS
+      <span className="cg-vu__unit" aria-hidden="true" title={label}>
+        {displayEngine === undefined ? 'dBFS' : `${displayEngine} · dBFS`}
       </span>
       <div className="cg-vu__body">
         <div className="cg-vu__bars">

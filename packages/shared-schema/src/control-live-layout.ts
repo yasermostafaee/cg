@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { FontWeightSchema, LivePlateMaskSchema, LiveSourceIdSchema } from './elements.js';
+import {
+  FontWeightSchema,
+  LivePlateMaskSchema,
+  LiveRevealRectSchema,
+  LiveSourceIdSchema,
+} from './elements.js';
 import { FieldDigitsSchema } from './fields.js';
 import {
   FRAME_TRANSITION_DEFAULT_MS,
@@ -118,6 +123,17 @@ const ControlLiveLayoutArrangementSchema = z.enum([
 ]);
 export type ControlLiveLayoutArrangement = z.infer<typeof ControlLiveLayoutArrangementSchema>;
 
+const ControlLiveLayoutFrameAttachmentSchema = z.object({
+  id: ControlLiveLayoutFrameIdSchema,
+  frameId: ControlLiveLayoutFrameIdSchema,
+  sourceId: z.string().regex(/^[a-f0-9]{64}$/),
+  name: z.string().min(1).max(255),
+  rect: LiveRevealRectSchema,
+});
+export type ControlLiveLayoutFrameAttachment = z.infer<
+  typeof ControlLiveLayoutFrameAttachmentSchema
+>;
+
 const ControlLiveLayoutPresetSchema = z.object({
   // Preset ids and frame ids exclude the separator used by the derived Focus ids.
   id: z
@@ -134,6 +150,7 @@ const ControlLiveLayoutPresetSchema = z.object({
   reverse: z.boolean(),
   hiddenTitles: z.array(ControlLiveLayoutFrameIdSchema).max(CONTROL_LIVE_LAYOUT_MAX_FRAMES),
   hiddenFocusTitles: z.array(ControlLiveLayoutFrameIdSchema).max(CONTROL_LIVE_LAYOUT_MAX_FRAMES),
+  frameAttachments: z.array(ControlLiveLayoutFrameAttachmentSchema).optional(),
 });
 export type ControlLiveLayoutPreset = z.infer<typeof ControlLiveLayoutPresetSchema>;
 
@@ -190,6 +207,7 @@ export const ControlLiveLayoutSchema = z
     frameRate: FrameRateSchema,
     frames: z.array(ControlLiveLayoutFrameSchema).min(1).max(CONTROL_LIVE_LAYOUT_MAX_FRAMES),
     titleStyle: ControlLiveLayoutTitleStyleSchema.optional(),
+    additionalTextStyles: z.array(ControlLiveLayoutTitleStyleSchema.nullable()).optional(),
     fonts: z.array(ControlLiveLayoutFontSchema).optional(),
     presets: z.array(ControlLiveLayoutPresetSchema).min(1),
     defaultPresetId: z.string().min(1),
@@ -214,6 +232,9 @@ export const ControlLiveLayoutSchema = z
         issue([...path, 'fontFamily'], 'This title refers to a missing font.');
     };
     validateFont(layout.titleStyle, ['titleStyle']);
+    layout.additionalTextStyles?.forEach((style, index) =>
+      validateFont(style ?? undefined, ['additionalTextStyles', index]),
+    );
     layout.frames.forEach((frame, index) => {
       validateFont(frame.titleStyle, ['frames', index, 'titleStyle']);
       frame.additionalTexts?.forEach((entry, textIndex) =>
@@ -233,6 +254,14 @@ export const ControlLiveLayoutSchema = z
         if (preset[key].some((id) => !frameIds.has(id)))
           issue(['presets', index, key], 'This preset refers to a removed frame.');
       }
+      const attachments = preset.frameAttachments ?? [];
+      if (new Set(attachments.map(({ id }) => id)).size !== attachments.length)
+        issue(['presets', index, 'frameAttachments'], 'Frame attachments must have distinct ids.');
+      if (attachments.some(({ frameId }) => !preset.frameIds.includes(frameId)))
+        issue(
+          ['presets', index, 'frameAttachments'],
+          'Attach a template to a frame in this preset.',
+        );
       if (Object.keys(controlLiveLayoutRects(layout, preset)).length !== preset.frameIds.length)
         issue(['presets', index], `There is no room for the gaps in “${preset.name}”.`);
     }
@@ -273,6 +302,17 @@ export function controlLiveLayoutSoloTarget(
   return preset?.frameIds.length === 1 && frameId !== undefined
     ? { presetId: preset.id, frameId }
     : undefined;
+}
+
+/** A one-frame preset is already solo, and still respects its own title visibility. */
+export function controlLiveLayoutTitleHidden(
+  preset: ControlLiveLayoutPreset,
+  frameId: string,
+  focused: boolean,
+): boolean {
+  const hiddenInFocus = preset.hiddenFocusTitles.includes(frameId);
+  if (focused) return hiddenInFocus;
+  return preset.hiddenTitles.includes(frameId) || (preset.frameIds.length === 1 && hiddenInFocus);
 }
 
 /** Frame ids in effective on-screen arrangement order. */

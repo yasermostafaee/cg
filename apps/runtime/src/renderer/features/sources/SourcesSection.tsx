@@ -11,6 +11,7 @@ import { colors } from '../../theme.js';
 import { LiveInputCheckCard } from '../monitors/LiveInputCheckCard.js';
 import { useInputCheckSurface } from '../monitors/liveInputCheckContext.js';
 import { InputThumbnail } from './InputThumbnail.js';
+import { InputAudioMeter } from './InputAudioMeter.js';
 import {
   commitSourceBand,
   currentPlateBand,
@@ -170,6 +171,11 @@ export function SourcesSection({
                       Unavailable
                     </Tag>
                   )}
+                  <InputAudioMeter
+                    sourceId={source.id}
+                    channel={source.status === undefined ? channel : undefined}
+                    name={source.name}
+                  />
                 </div>
                 <div className="cg-resource__detail">
                   <span style={styles.part}>

@@ -317,8 +317,13 @@ export function LivePlatesSection({
                 }
               >
                 {/* `PLAYOUT-SOURCES-01` §2.B — the source as `SourceLabel` names it everywhere. */}
-                on air: <SourceLabel sourceId={onAir.sourceId} fallback="nothing" /> (patched on
-                this row)
+                on air:{' '}
+                <SourceLabel
+                  sourceId={onAir.sourceId}
+                  fallback="nothing"
+                  meterChannel={channel}
+                />{' '}
+                (patched on this row)
               </span>
             )}
             {/*
@@ -349,8 +354,9 @@ export function LivePlatesSection({
                   `again to adopt it, or set this look’s input below to change it now.`
                 }
               >
-                this row: <SourceLabel sourceId={frozen.sourceId} fallback="nothing" /> (frozen at
-                take)
+                this row:{' '}
+                <SourceLabel sourceId={frozen.sourceId} fallback="nothing" meterChannel={channel} />{' '}
+                (frozen at take)
               </span>
             )}
           </div>

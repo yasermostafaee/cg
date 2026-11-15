@@ -10,6 +10,8 @@ import {
   controlLiveLayoutFocusTarget,
   controlLiveLayoutFontFamily,
   controlLiveLayoutRects,
+  controlLiveLayoutTitleHidden,
+  liveRevealSceneRect,
   requiredRuntimeVersionForScene,
   type AssetEntry,
   type Composition,
@@ -19,6 +21,8 @@ import {
   type ControlLiveLayoutBackground,
   type ControlLiveLayoutFont,
   type ControlLiveLayoutFrame,
+  type ControlLiveLayoutFrameAttachment,
+  type ControlLiveLayoutPreset,
   type ControlLiveLayoutTitleStyle,
   type DynamicField,
   type Element,
@@ -36,6 +40,12 @@ import { buildVcgIndexHtml, cgCss, cgJs } from '@cg/single-file-export';
 import { pack, sha256Hex, unpack, verify } from '@cg/vcg-format';
 import { uuid } from '../../lib/uuid.js';
 import { liveLayoutArtwork } from '../../theme.js';
+import {
+  frameAttachmentArchivePath,
+  frameAttachmentPlateRect,
+  unpackControlLiveLayoutFrameAttachment,
+  type ControlLiveLayoutFrameAttachmentSource,
+} from './controlLiveLayoutFrameAttachments.js';
 
 const BACKGROUND_ASSET = 'control-live-layout-background';
 const FRAME_RANGE = { in: 0, out: 1 };
@@ -69,7 +79,15 @@ export function createControlLiveLayout(
   resolution: Resolution = { width: 1920, height: 1080 },
   frameRate: FrameRate = 25,
 ): ControlLiveLayout {
-  const frames = Array.from({ length: 2 }, () => ({ id: 'frame-' + uuid(), title: '' }));
+  const frames = Array.from(
+    { length: 2 },
+    (): ControlLiveLayoutFrame => ({
+      id: 'frame-' + uuid(),
+      title: '',
+      operatorPlacement: 'locked',
+      operatorMove: false,
+    }),
+  );
   const presetId = 'preset-' + uuid();
   const gap = Math.round(Math.min(resolution.width, resolution.height) * 0.025);
   return {
@@ -78,6 +96,24 @@ export function createControlLiveLayout(
     resolution,
     frameRate,
     frames,
+    titleStyle: {
+      xPercent: 0,
+      yPercent: 100,
+      widthPercent: 100,
+      heightPercent: 12,
+      padding: 0,
+      textOffsetY: 0,
+      sizePercent: 4.5,
+      borderRadius: 0,
+      fontFamily: 'Exo 2',
+      fontWeight: 700,
+      fontStyle: 'normal',
+      align: 'center',
+      verticalAlign: 'middle',
+      color: liveLayoutArtwork.titleText,
+      backgroundColor: liveLayoutArtwork.newTitleBackground,
+      wrap: true,
+    },
     presets: [
       {
         id: presetId,
@@ -307,12 +343,29 @@ interface FrameText {
   style: ControlLiveLayoutTitleStyle;
 }
 
+type CaptionLayout = Pick<ControlLiveLayout, 'resolution' | 'titleStyle' | 'additionalTextStyles'>;
+
+/** Default extra-text placement leaves room for the other blocks in the frame. */
+export function controlLiveLayoutAdditionalTextStyle(
+  layout: CaptionLayout,
+  frameStyle: ControlLiveLayoutTitleStyle | undefined,
+  index: number,
+): ControlLiveLayoutTitleStyle {
+  const base = { ...layout.titleStyle, ...frameStyle };
+  const { yPercent, heightPercent } = controlLiveLayoutTitleGeometry(layout.resolution, base);
+  return {
+    ...base,
+    yPercent: Math.max(0, yPercent - (index + 1) * (heightPercent + 2)),
+    ...layout.additionalTextStyles?.[index],
+  };
+}
+
 /** Effective caption blocks in paint order, shared by the editor and the compiled artwork. */
 export function controlLiveLayoutFrameTexts(
   frame: ControlLiveLayoutFrame,
-  layoutTitleStyle?: ControlLiveLayoutTitleStyle,
+  layout: CaptionLayout,
 ): FrameText[] {
-  const style = { ...layoutTitleStyle, ...frame.titleStyle };
+  const style = { ...layout.titleStyle, ...frame.titleStyle };
   return [
     { id: frame.id + '-title', fieldId: 'title', label: 'Title', text: frame.title, style },
     ...(frame.additionalTexts ?? []).map((entry, index) => ({
@@ -320,7 +373,10 @@ export function controlLiveLayoutFrameTexts(
       fieldId: 'text-' + entry.id,
       label: 'Text ' + String(index + 2),
       text: entry.text,
-      style: { ...style, ...entry.style },
+      style: {
+        ...controlLiveLayoutAdditionalTextStyle(layout, frame.titleStyle, index),
+        ...entry.style,
+      },
     })),
   ].filter(({ text }) => text.trim() !== '');
 }
@@ -359,12 +415,22 @@ function frameTitle(block: FrameText, resolution: Resolution, zIndex: number): T
   };
 }
 
+interface ResolvedAttachment {
+  attachment: ControlLiveLayoutFrameAttachment;
+  source: ControlLiveLayoutFrameAttachmentSource;
+}
+
+function maskedAttachmentPlateId(attachmentId: string): string {
+  return 'attachment-plate-' + attachmentId;
+}
+
 function frameComposition(
   frame: ControlLiveLayoutFrame,
-  resolution: Scene['resolution'],
+  layout: CaptionLayout,
   fullFrame: LiveSourceRect,
-  titleStyle: ControlLiveLayoutTitleStyle | undefined,
+  attachments: readonly ResolvedAttachment[],
 ): Composition {
+  const { resolution } = layout;
   const resize = frame.operatorPlacement ?? 'free';
   const operatorMove = frame.operatorMove ?? (resize === 'locked' ? true : undefined);
   const children: Element[] = [
@@ -380,6 +446,37 @@ function frameComposition(
       showFallback: false,
     },
   ];
+  attachments.forEach(({ attachment, source }, index) => {
+    const plate = source.plate?.element;
+    if (plate !== undefined) {
+      children.push({
+        ...elementBase(
+          maskedAttachmentPlateId(attachment.id),
+          'Masked live input',
+          frameAttachmentPlateRect(fullFrame, attachment, source),
+        ),
+        type: 'video-placeholder',
+        routeKey: frame.id,
+        fitMode: plate.fitMode ?? frame.fitMode ?? DEFAULT_LIVE_FIT_MODE,
+        ...(plate.liveMask !== undefined && { liveMask: plate.liveMask }),
+        ...(resize !== 'locked' && { operatorPlacement: resize }),
+        ...(operatorMove !== undefined && { operatorMove }),
+        ...(frame.allowOperatorMaskEdit === true && { allowOperatorMaskEdit: true }),
+        showFallback: false,
+      });
+    }
+    children.push({
+      ...elementBase(
+        'attachment-art-' + attachment.id,
+        attachment.name,
+        liveRevealSceneRect(fullFrame, attachment.rect),
+        index + 1,
+      ),
+      type: 'composition',
+      compositionId: source.scene.id,
+      liveForeground: true,
+    });
+  });
   const base: Composition = {
     id: 'layout-frame-' + frame.id,
     name: 'Live frame',
@@ -388,9 +485,9 @@ function frameComposition(
     editorBackdrop: 'transparent',
     layers: [layer(frame.id + '-layer', 'Frame', children)],
   };
-  const captions = controlLiveLayoutFrameTexts(frame, titleStyle).map((block, index) => ({
+  const captions = controlLiveLayoutFrameTexts(frame, layout).map((block, index) => ({
     block,
-    element: frameTitle(block, resolution, index + 1),
+    element: frameTitle(block, resolution, attachments.length + index + 1),
   }));
   if (captions.length === 0) return base;
   children.push(...captions.map(({ element }) => element));
@@ -417,17 +514,41 @@ function frameComposition(
 }
 
 /** Compile a regular multi-look scene. Each look instances the same per-frame composition. */
-export function buildControlLiveLayoutScene(authored: ControlLiveLayout): Scene {
+export function buildControlLiveLayoutScene(
+  authored: ControlLiveLayout,
+  attachmentSources?: ReadonlyMap<string, ControlLiveLayoutFrameAttachmentSource>,
+): Scene {
   const layout = ControlLiveLayoutSchema.parse(authored);
   const { resolution, frames } = layout;
   const fullFrame = { x: 0, y: 0, ...resolution };
+  const allAttachments = layout.presets.flatMap((preset) => preset.frameAttachments ?? []);
+  if (new Set(allAttachments.map(({ id }) => id)).size !== allAttachments.length)
+    throw new Error('Frame graphic IDs must be unique within the layout.');
+  const byFrame = new Map<string, ResolvedAttachment[]>();
+  const sources = new Map<string, ControlLiveLayoutFrameAttachmentSource>();
+  for (const attachment of allAttachments) {
+    const source = attachmentSources?.get(attachment.sourceId);
+    if (source === undefined || source.id !== attachment.sourceId)
+      throw new Error(`Frame graphic “${attachment.name}” is unavailable.`);
+    sources.set(source.id, source);
+    const definitions = byFrame.get(attachment.frameId) ?? [];
+    definitions.push({ attachment, source });
+    byFrame.set(attachment.frameId, definitions);
+  }
   const frameCompositions = new Map(
     frames.map((frame) => [
       frame.id,
-      frameComposition(frame, resolution, fullFrame, layout.titleStyle),
+      frameComposition(frame, layout, fullFrame, byFrame.get(frame.id) ?? []),
     ]),
   );
   const compositions = [...frameCompositions.values()];
+  for (const { scene } of sources.values()) {
+    const { id, name, resolution, layers } = scene;
+    compositions.push(
+      { id, name, resolution, layers, frameRange: FRAME_RANGE, editorBackdrop: 'transparent' },
+      ...(scene.compositions ?? []),
+    );
+  }
   const rootInstances: CompositionElement[] = [];
   const looks: Look[] = [];
 
@@ -435,14 +556,30 @@ export function buildControlLiveLayoutScene(authored: ControlLiveLayout): Scene 
     id: string,
     name: string,
     rects: Readonly<Record<string, LiveSourceRect>>,
-    hiddenTitleIds: readonly string[],
-    allowsAutoLayout: boolean,
+    preset: ControlLiveLayoutPreset,
+    focused: boolean,
   ) => {
     const instanceId = 'layout-look-' + id;
     const children = frames.flatMap((frame, index): CompositionElement[] => {
       const rect = rects[frame.id];
       if (rect === undefined) return [];
-      const hiddenTextIds = hiddenTitleIds.includes(frame.id)
+      const attachments = byFrame.get(frame.id) ?? [];
+      const included = new Set(preset.frameAttachments?.map(({ id }) => id));
+      const hiddenChildIds: string[] = [];
+      let hasMaskedInput = false;
+      for (const { attachment, source } of attachments) {
+        if (!included.has(attachment.id)) {
+          hiddenChildIds.push('attachment-art-' + attachment.id);
+          if (source.plate !== undefined)
+            hiddenChildIds.push(maskedAttachmentPlateId(attachment.id));
+        } else if (source.plate !== undefined) {
+          if (hasMaskedInput)
+            throw new Error('Use one masked input template per frame and preset.');
+          hasMaskedInput = true;
+          hiddenChildIds.push(frame.id + '-plate');
+        }
+      }
+      const hiddenTextIds = controlLiveLayoutTitleHidden(preset, frame.id, focused)
         ? frameCompositions
             .get(frame.id)
             ?.layers[0]?.children.flatMap((element) =>
@@ -454,6 +591,7 @@ export function buildControlLiveLayoutScene(authored: ControlLiveLayout): Scene 
           ...elementBase('instance-' + frame.id, frame.id, rect, index),
           type: 'composition',
           compositionId: 'layout-frame-' + frame.id,
+          ...(hiddenChildIds.length > 0 && { hiddenChildIds }),
           ...(hiddenTextIds !== undefined && hiddenTextIds.length > 0 && { hiddenTextIds }),
         },
       ];
@@ -476,18 +614,12 @@ export function buildControlLiveLayoutScene(authored: ControlLiveLayout): Scene 
       name,
       instanceId,
       entered: CUT_LOOK_TRANSITION,
-      allowOperatorAutoLayout: allowsAutoLayout,
+      allowOperatorAutoLayout: !focused,
     });
   };
 
   for (const preset of layout.presets) {
-    addLook(
-      preset.id,
-      preset.name,
-      controlLiveLayoutRects(layout, preset),
-      preset.hiddenTitles,
-      true,
-    );
+    addLook(preset.id, preset.name, controlLiveLayoutRects(layout, preset), preset, false);
   }
   for (const preset of layout.presets) {
     frames.forEach((frame, index) => {
@@ -495,8 +627,8 @@ export function buildControlLiveLayoutScene(authored: ControlLiveLayout): Scene 
         controlLiveLayoutFocusLookId(preset.id, frame.id),
         'Focus · Frame ' + (index + 1),
         { [frame.id]: fullFrame },
-        preset.hiddenFocusTitles,
-        false,
+        preset,
+        true,
       );
     });
   }
@@ -524,13 +656,16 @@ export function buildControlLiveLayoutScene(authored: ControlLiveLayout): Scene 
     ],
     fields: [],
     bindings: [],
-    fonts: (layout.fonts ?? []).map(({ id, name }) => ({
-      family: controlLiveLayoutFontFamily(id),
-      source: 'bundled',
-      bundledPath: name,
-      weights: [400],
-      styles: ['normal'],
-    })),
+    fonts: [
+      ...(layout.fonts ?? []).map(({ id, name }) => ({
+        family: controlLiveLayoutFontFamily(id),
+        source: 'bundled' as const,
+        bundledPath: name,
+        weights: [400],
+        styles: ['normal' as const],
+      })),
+      ...[...sources.values()].flatMap(({ scene }) => scene.fonts),
+    ],
     compositions,
     lookGroups: [{ id: 'live-layout', looks, defaultLookId: layout.defaultPresetId }],
     metadata: { createdAt: now, updatedAt: now },
@@ -576,8 +711,9 @@ export async function compileControlLiveLayout(
   layout: ControlLiveLayout,
   asset?: Blob,
   fontFiles?: ReadonlyMap<string, Blob>,
+  attachmentSources?: ReadonlyMap<string, ControlLiveLayoutFrameAttachmentSource>,
 ): Promise<Uint8Array> {
-  const scene = buildControlLiveLayoutScene(layout);
+  const scene = buildControlLiveLayoutScene(layout, attachmentSources);
   const background = layout.background;
   const fontAssets = layout.fonts ?? [];
   const fontBytes = fontAssets.reduce((sum, { id }) => sum + (fontFiles?.get(id)?.size ?? 0), 0);
@@ -590,6 +726,31 @@ export async function compileControlLiveLayout(
   const fontIndex: AssetEntry[] = [];
   const assets = new Map<string, Uint8Array>();
   const fonts = new Map<string, Uint8Array>();
+  const usedAttachmentIds = new Set(
+    layout.presets.flatMap((preset) =>
+      (preset.frameAttachments ?? []).map(({ sourceId }) => sourceId),
+    ),
+  );
+  let attachmentBytes = 0;
+  for (const id of usedAttachmentIds) {
+    const source = attachmentSources?.get(id);
+    if (source === undefined || sha256Hex(source.bytes) !== id)
+      throw new Error('A frame graphic does not match the saved template.');
+    assets.set(frameAttachmentArchivePath(id), source.bytes);
+    attachmentBytes += source.bytes.length;
+    for (const { entry, bytes } of source.assets) {
+      attachmentBytes += bytes.length;
+      if (entry.kind === 'font') {
+        fontIndex.push(entry);
+        fonts.set(entry.path, bytes);
+      } else {
+        assetIndex.push(entry);
+        assets.set(entry.path, bytes);
+      }
+    }
+  }
+  if ((asset?.size ?? 0) + fontBytes + attachmentBytes > TEMPLATE_SOURCE_MAX_BYTES)
+    throw layoutTooLarge();
   if (background.kind !== 'color') {
     if (asset === undefined || asset.size === 0) throw new Error('Choose the background file.');
     if (asset.size > TEMPLATE_SOURCE_MAX_BYTES) throw backgroundTooLarge();
@@ -640,7 +801,8 @@ export async function compileControlLiveLayout(
         exportedAt: scene.metadata.updatedAt,
       },
       compatibility: {
-        minRuntimeVersion: requiredRuntimeVersionForScene(scene, true),
+        minRuntimeVersion:
+          usedAttachmentIds.size > 0 ? '1.2.7' : requiredRuntimeVersionForScene(scene, true),
         minCasparCGVersion: '2.3.0',
       },
       fontDeps: scene.fonts,
@@ -656,15 +818,28 @@ export async function compileControlLiveLayout(
   return packageBytes;
 }
 
-export async function readControlLiveLayout(
-  bytes: Uint8Array,
-): Promise<{ layout: ControlLiveLayout; asset?: Blob; fonts: Map<string, Blob> }> {
+export async function readControlLiveLayout(bytes: Uint8Array): Promise<{
+  layout: ControlLiveLayout;
+  asset?: Blob;
+  fonts: Map<string, Blob>;
+  attachments: Map<string, ControlLiveLayoutFrameAttachmentSource>;
+}> {
   if (!(await verify(bytes)).ok) throw new Error('The saved live layout could not be verified.');
   const { scene, manifest, files } = await unpack(bytes);
   const layout = scene.controlLiveLayout;
   if (layout === undefined)
     throw new Error('This template does not contain an editable live layout.');
   const fonts = new Map<string, Blob>();
+  const attachments = new Map<string, ControlLiveLayoutFrameAttachmentSource>();
+  for (const preset of layout.presets) {
+    for (const { sourceId, name } of preset.frameAttachments ?? []) {
+      if (attachments.has(sourceId)) continue;
+      const raw = files.get(frameAttachmentArchivePath(sourceId));
+      if (raw === undefined || sha256Hex(raw) !== sourceId)
+        throw new Error(`The saved frame graphic “${name}” is unavailable.`);
+      attachments.set(sourceId, await unpackControlLiveLayoutFrameAttachment(raw));
+    }
+  }
   for (const font of layout.fonts ?? []) {
     const entry = manifest.assetIndex.find(({ id, kind }) => id === font.id && kind === 'font');
     const data = entry === undefined ? undefined : files.get(entry.path);
@@ -672,10 +847,15 @@ export async function readControlLiveLayout(
       throw new Error(`The saved font file “${font.name}” is unavailable.`);
     fonts.set(font.id, new Blob([new Uint8Array(data)], { type: font.mime }));
   }
-  if (layout.background.kind === 'color') return { layout, fonts };
+  if (layout.background.kind === 'color') return { layout, fonts, attachments };
   const entry = manifest.assetIndex.find(({ id }) => id === BACKGROUND_ASSET);
   const data = entry === undefined ? undefined : files.get(entry.path);
   if (entry === undefined || data === undefined || entry.mime !== layout.background.mime)
     throw new Error('The saved background file is unavailable.');
-  return { layout, asset: new Blob([new Uint8Array(data)], { type: entry.mime }), fonts };
+  return {
+    layout,
+    asset: new Blob([new Uint8Array(data)], { type: entry.mime }),
+    fonts,
+    attachments,
+  };
 }

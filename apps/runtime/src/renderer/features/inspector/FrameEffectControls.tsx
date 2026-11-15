@@ -12,6 +12,8 @@ import {
   useFrameTransitionPreference,
 } from './frameTransitionPreference.js';
 
+import { setRowEffectOverrides, useRowEffectOverrides } from './rowEffectOverrides.js';
+
 const MOTION_LABELS: Record<FrameTransition['motion'], string> = {
   cut: 'Cut',
   linear: 'Linear',
@@ -25,12 +27,21 @@ const MOTION_LABELS: Record<FrameTransition['motion'], string> = {
 export function FrameEffectControls({
   disabled,
   label = 'Frame effect',
+  preset,
 }: {
   disabled: boolean;
   label?: string;
+  preset?: { itemId: string; value: FrameTransition } | undefined;
 }): JSX.Element {
   const controlId = useId();
-  const { motion, fade, durationMs } = useFrameTransitionPreference();
+  const consoleDefault = useFrameTransitionPreference();
+  const override = useRowEffectOverrides(preset?.itemId ?? '')?.preset;
+  const effect = preset === undefined ? consoleDefault : (override ?? preset.value);
+  const { motion, fade, durationMs } = effect;
+  function changeEffect(change: Partial<FrameTransition>): void {
+    if (preset === undefined) setFrameTransitionPreference(change);
+    else setRowEffectOverrides(preset.itemId, { preset: { ...effect, ...change } });
+  }
   const [typedDuration, setTypedDuration] = useState<string | null>(null);
   const hasEffect = motion !== 'cut' || fade;
 
@@ -38,7 +49,7 @@ export function FrameEffectControls({
     setTypedDuration(value);
     const duration = Number(value);
     if (duration >= FRAME_TRANSITION_MIN_MS && duration <= FRAME_TRANSITION_MAX_MS)
-      setFrameTransitionPreference({ durationMs: duration });
+      changeEffect({ durationMs: duration });
   }
 
   return (
@@ -48,12 +59,20 @@ export function FrameEffectControls({
         Motion
         <select
           className="cg-field"
-          value={motion}
+          value={preset !== undefined && override === undefined ? 'default' : motion}
           onChange={(event) => {
-            const next = FrameTransitionSchema.shape.motion.safeParse(event.currentTarget.value);
-            if (next.success) setFrameTransitionPreference({ motion: next.data });
+            if (event.currentTarget.value === 'default' && preset !== undefined) {
+              setRowEffectOverrides(preset.itemId, { preset: undefined });
+              setTypedDuration(null);
+            } else {
+              const next = FrameTransitionSchema.shape.motion.safeParse(event.currentTarget.value);
+              if (next.success) changeEffect({ motion: next.data });
+            }
           }}
         >
+          {preset !== undefined && (
+            <option value="default">Layout default ({MOTION_LABELS[preset.value.motion]})</option>
+          )}
           {FrameTransitionSchema.shape.motion.options.map((value) => (
             <option key={value} value={value}>
               {MOTION_LABELS[value]}
@@ -65,7 +84,7 @@ export function FrameEffectControls({
         <Checkbox
           id={`${controlId}-fade`}
           checked={fade}
-          onChange={(next) => setFrameTransitionPreference({ fade: next })}
+          onChange={(next) => changeEffect({ fade: next })}
         />
         Fade
       </label>

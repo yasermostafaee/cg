@@ -106,6 +106,7 @@ interface Props {
   /** Every rehearsing row's plates, already placed in RASTER pixels. */
   placements: readonly PlatePlacement[];
   sourceFrames?: ReadonlyMap<string, PvwSourceFrame>;
+  channel?: number | undefined;
   /** The channel's real raster — the overlay box is sized to it, like the frames. */
   raster: ChannelRaster;
   /** The stage's FIT scale. The ONE it gives the frames; never re-measured here. */
@@ -198,6 +199,7 @@ function regionCaveat(
 export function LivePlateOverlay({
   placements,
   sourceFrames,
+  channel,
   raster,
   fit,
   zIndex,
@@ -324,7 +326,11 @@ export function LivePlateOverlay({
                 {assigned ? (
                   // `PLAYOUT-SOURCES-01` §2.B — the name as every surface names it.
                   <span style={styles.source}>
-                    <SourceLabel sourceId={p.sourceId} fallback={p.sourceName ?? undefined} />
+                    <SourceLabel
+                      sourceId={p.sourceId}
+                      fallback={p.sourceName ?? undefined}
+                      meterChannel={channel}
+                    />
                   </span>
                 ) : (
                   <span style={styles.unassigned} data-live-plate-unassigned="">

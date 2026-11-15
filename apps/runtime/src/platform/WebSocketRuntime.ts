@@ -237,6 +237,7 @@ const OPTIONAL_CHANNELS = new Set([
   SourcesMediaThumbnailChannel.name,
   ipcChannels.SourcePreviewPvwChannel.name,
   ipcChannels.SourcePreviewThumbnailsChannel.name,
+  ipcChannels.SourceAudioLevelsChannel.name,
   ipcChannels.PlaylistGainGetChannel.name,
   ipcChannels.PlaylistGainSetChannel.name,
   ipcChannels.SetupCheckStandaloneChannel.name,
@@ -2428,6 +2429,10 @@ export class WebSocketRuntime implements RuntimeBridge {
   };
 
   readonly sourcePreviews: RuntimeBridge['sourcePreviews'] = {
+    audioLevels: async (req) =>
+      (await this.#optionalChannelMissing(ipcChannels.SourceAudioLevelsChannel.name))
+        ? { readings: [] }
+        : this.#invoke(ipcChannels.SourceAudioLevelsChannel, req),
     pvw: async (req) =>
       (await this.#optionalChannelMissing(ipcChannels.SourcePreviewPvwChannel.name))
         ? { frames: [] }

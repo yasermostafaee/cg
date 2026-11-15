@@ -1,0 +1,78 @@
+.cg-live-layout-effects > summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2rem;
+  list-style: none;
+}
+
+.cg-live-layout-effects > summary::-webkit-details-marker {
+  display: none;
+}
+
+.cg-live-layout-effects > summary > svg:first-child {
+  color: var(--r-accent);
+}
+
+.cg-live-layout-effects > summary > svg:last-child {
+  color: var(--r-text-secondary);
+}
+
+.cg-live-layout-effects[open] > summary > svg:last-child {
+  transform: rotate(180deg);
+}
+
+.cg-live-layout-effect-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: 0.6rem;
+}
+
+.cg-live-layout-effects .cg-live-layout-effect-controls {
+  display: block;
+  margin: 0.4rem 0 0;
+  padding: 0.35rem 0.6rem 0.6rem;
+  border: 1px solid var(--r-border-soft);
+  border-radius: var(--r-radius-md);
+  background: var(--r-surface-sunken);
+}
+
+.cg-live-layout-effects .cg-live-layout-effect-controls > legend {
+  padding: 0 0.3rem;
+  margin: 0;
+  font-size: var(--r-text-sm);
+}
+
+.cg-live-layout-effect-controls > legend > svg {
+  display: inline-block;
+  margin-inline-end: 0.2rem;
+  color: var(--r-accent);
+  vertical-align: text-bottom;
+}
+
+.cg-live-layout-effect-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  align-items: end;
+}
+
+.cg-live-layout-effect-fields > label {
+  display: grid;
+  min-width: 0;
+  gap: 0.24rem;
+  color: var(--r-text-secondary);
+  font-size: var(--r-text-sm);
+}
+
+.cg-live-layout-effect-method {
+  grid-column: 1 / -1;
+}
+
+.cg-live-layout-effect-fields > .cg-live-layout-effect-fade {
+  display: flex;
+  align-items: center;
+  min-height: 2rem;
+  gap: 0.45rem;
+}

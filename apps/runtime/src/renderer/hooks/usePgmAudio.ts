@@ -88,6 +88,36 @@ function localPcmMeter() {
   };
 }
 
+function programmeAudioUrl(
+  channel: number,
+  engine: PgmEngine,
+  resourceKey?: string,
+): Promise<string | null> {
+  return resourceKey === undefined
+    ? window.cg.pgmReturn.audioUrl(channel, engine)
+    : window.cg.pgmReturn.audioUrl(channel, engine, resourceKey);
+}
+
+/** Read stereo peaks without creating a speaker or borrowing the selected audio path. */
+export function usePgmMeterPeaks(
+  channel: number | null,
+  engine: PgmEngine,
+  resourceKey?: string,
+): MeterStore['watchAudio'] {
+  const live = useLink() === 'live';
+  const [meter] = useState(localPcmMeter);
+  useEffect(() => {
+    if (!live || channel === null) return undefined;
+    const player = new PgmAudioPlayer({
+      url: () => programmeAudioUrl(channel, engine, resourceKey),
+    });
+    player.setPeakWriter((dbfs) => meter.publish(channel, engine, dbfs));
+    player.start();
+    return () => player.stop();
+  }, [channel, engine, live, meter, resourceKey]);
+  return meter.watch;
+}
+
 export function usePgmAudio(
   channel: number | null,
   engine: PgmEngine = 'A',
@@ -107,10 +137,7 @@ export function usePgmAudio(
       channel === null
         ? null
         : new PgmAudioPlayer({
-            url: () =>
-              resourceKey === undefined
-                ? window.cg.pgmReturn.audioUrl(channel, engine)
-                : window.cg.pgmReturn.audioUrl(channel, engine, resourceKey),
+            url: () => programmeAudioUrl(channel, engine, resourceKey),
             onState: setState,
           }),
     [channel, engine, resourceKey],

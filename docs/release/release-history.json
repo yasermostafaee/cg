@@ -3,6 +3,65 @@
   "product": "APASAI CG",
   "releases": [
     {
+      "version": "1.2.7",
+      "title": {
+        "fa": "نسخهٔ ۱.۲.۷",
+        "en": "Release 1.2.7"
+      },
+      "date": "2026-11-15",
+      "status": "prepared",
+      "summary": {
+        "fa": "ویومتر هم‌زمان موتورهای پخش، تنظیم دقیق‌تر چیدمان زنده و رفع خطای تغییر قاب روی آنتن.",
+        "en": "Simultaneous programme meters, finer live layout controls and a fix for on-air frame placement."
+      },
+      "features": [
+        {
+          "fa": "در PGM با تنظیم VU، سطح صدای موتور انتخاب‌شده یا همهٔ موتورهای شناخته‌شده را هم‌زمان ببینید. صدای مانیتور جداگانه انتخاب می‌شود.",
+          "en": "In PGM, choose a compact meter for the selected source or simultaneous meters for all known engines. Monitor sound is selected separately."
+        },
+        {
+          "fa": "کنار ورودی‌ها نشانگر باریک صدا دیده می‌شود. Check input سطح اندازه‌گیری‌شدهٔ همان ورودی را نشان می‌دهد. تصویر ثابت و ورودی بدون داده نشان‌های جدا دارند.",
+          "en": "Input lists and assignments show a compact audio indicator. Check input supplies measured levels for the checked source. Confirmed stills and unavailable levels have distinct states."
+        },
+        {
+          "fa": "در New live layout ماسک را روی پیش‌نمایش جابه‌جا کنید یا با دستگیره‌ها تغییر اندازه دهید. در Advanced می‌توان چند گرافیک ثابت VCG و یک قاب ماسک‌دار Designer را به هر قاب در یک پریست افزود.",
+          "en": "Drag or resize a mask inside New live layout. In Advanced, a frame can carry multiple still VCG graphics and one Designer masked-input template in a preset."
+        },
+        {
+          "fa": "متن‌های اضافه استایل مشترک یا تکی دارند. در قاب‌های جدید Allow move خاموش و Resize روی Locked است.",
+          "en": "Additional text has shared and individual styling. New frames have Allow move off and Resize set to Locked."
+        },
+        {
+          "fa": "در پنجرهٔ چیدمان زنده، پیش‌نمایش بالاتر آمده و تنظیمات قاب، چینش و افکت‌ها خواناتر شده‌اند. آیکون‌های Arrange جای واقعی قاب‌ها را نشان می‌دهند.",
+          "en": "Live layout places the preview first and organizes frame, arrangement and effect controls. Arrangement icons depict the actual frame positions."
+        }
+      ],
+      "fixes": [
+        {
+          "fa": "جابه‌جایی، تغییر اندازه و برش قاب روی آنتن با اتصال تأییدشدهٔ A/B از Update on air اعمال می‌شوند.",
+          "en": "On-air frame position, size and crop can be applied with Update on air on verified A/B connections."
+        },
+        {
+          "fa": "در مودال ساخت چیدمان و PVW، گذار پریست‌ها و Focus روی قاب‌های قفل‌شده هم اجرا می‌شود. تصویر ورودی‌های مشترک در این گذارها حفظ می‌شود.",
+          "en": "Preset and Focus transitions work for locked frames in the editor and PVW. Shared input pictures stay visible while switching."
+        },
+        {
+          "fa": "Show title in Focus در پریست تک‌قاب هم اعمال می‌شود. دکمه‌های Focus در ردیف لایه هم‌ترازند و قاب فعال PGM سبز است.",
+          "en": "Show title in Focus also applies to one-frame presets. Layer Focus controls align with presets and the active PGM Focus is green."
+        },
+        {
+          "fa": "آیکون «مانیتور و لایهٔ انتخاب‌شده» در نمای بزرگ‌شده، جای لایه زیر مانیتور را نشان می‌دهد.",
+          "en": "The maximized monitor's selected-layer icon shows the layer below the monitor."
+        },
+        {
+          "fa": "پس از بارگذاری چیدمان، Input effect و Preset effect انتخاب‌شده در Inspector برای همان ردیف اعمال می‌شوند. Default تنظیم ذخیره‌شدهٔ چیدمان را برمی‌گرداند.",
+          "en": "Inspector Input effect and Preset effect choices apply to the loaded row. Default restores the saved layout setting."
+        }
+      ],
+      "planned": [],
+      "downloadBaseUrl": null
+    },
+    {
       "version": "1.2.6",
       "title": {
         "fa": "نسخهٔ ۱.۲.۶",

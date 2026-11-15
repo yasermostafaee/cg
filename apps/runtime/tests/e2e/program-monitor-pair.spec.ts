@@ -437,3 +437,79 @@ test('Follow and explicit B show its stereo peaks without a separate meter sessi
   await expect.poll(async () => (await audio()).active).toEqual(['B/reserve']);
   expect((await audio()).maxConcurrent).toBe(1);
 });
+
+test('compact meters show all four engines with independent programme sound', async ({ page }) => {
+  await open(page, {
+    backupChannel: null,
+    topology: {
+      channel: 1,
+      active: 'C',
+      members: [
+        { engine: 'A', name: 'Main', physicalChannel: 1, resourceKey: 'main', meterEngine: 'A' },
+        {
+          engine: 'B',
+          name: 'Reserve',
+          physicalChannel: 2,
+          resourceKey: 'reserve',
+          meterEngine: 'B',
+        },
+        { engine: 'C', name: 'East', physicalChannel: 3, resourceKey: 'east' },
+        { engine: 'D', name: 'South', physicalChannel: 4, resourceKey: 'south' },
+      ],
+    },
+    readings: [
+      { kind: 'audio', engine: 'A', channel: 1, dbfs: [-30, -30] },
+      { kind: 'audio', engine: 'B', channel: 1, dbfs: [-12, -9] },
+    ],
+  });
+  const activeStreams = () =>
+    page.evaluate(() =>
+      [
+        ...(window as unknown as { programmeAudio: TestProgrammeAudioState }).programmeAudio.active,
+      ].sort(),
+    );
+  const sound = page.getByRole('button', { name: 'Programme sound', exact: true });
+  const all = page.getByRole('button', { name: 'All programme meters', exact: true });
+  const show = page.getByRole('button', { name: 'VU meter', exact: true });
+  const bank = page.getByRole('group', { name: 'Programme meters', exact: true });
+  const vu = page.locator('[data-vu-meter]');
+  await expect(vu).toHaveCount(1);
+  await expect.poll(activeStreams).toEqual(['C/east']);
+  expect((await vu.boundingBox())?.width).toBeLessThan(50);
+  await all.click();
+  await expect(bank).toBeVisible();
+  await expect(vu).toHaveCount(4);
+  expect((await bank.boundingBox())?.width).toBeLessThan(100);
+  for (const [engine, name, clip] of [
+    ['A', 'Main', 'inset(50% 0px 0px)'],
+    ['B', 'Reserve', 'inset(20% 0px 0px)'],
+    ['C', 'East', 'inset(20.07% 0px 0px)'],
+    ['D', 'South', 'inset(20.07% 0px 0px)'],
+  ] as const) {
+    const meter = bank.locator(`[data-vu-engine="${engine}"]`);
+    await expect(meter).toHaveAttribute('aria-label', new RegExp(name));
+    await expect(meter.locator('[data-vu-bar="1"] .cg-vu__fill')).toHaveCSS('clip-path', clip);
+    await expect(meter.locator('[data-vu-bar]').filter({ visible: true })).toHaveCount(2);
+    await expect(meter.getByText('−60', { exact: true })).toBeVisible();
+  }
+  await expect.poll(activeStreams).toEqual(['C/east', 'D/south']);
+  await expect(sound).toHaveAttribute('aria-pressed', 'false');
+  await page.getByLabel('Programme sound source').selectOption('B');
+  await sound.click();
+  await expect(sound).toHaveAttribute('data-pgm-audio', 'playing');
+  await expect.poll(activeStreams).toEqual(['B/reserve', 'C/east', 'D/south']);
+  await expect(vu).toHaveCount(4);
+  await show.click();
+  await expect(vu).toHaveCount(0);
+  await expect.poll(activeStreams).toEqual(['B/reserve']);
+  await page.reload();
+  await page.getByRole('button', { name: 'Show monitors' }).click();
+  await expect(all).toHaveAttribute('aria-pressed', 'true');
+  await expect(show).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByLabel('Programme sound source')).toHaveValue('B');
+  await show.click();
+  await expect(vu).toHaveCount(4);
+  await all.click();
+  await expect(vu).toHaveCount(1);
+  await expect(vu).toHaveAttribute('data-vu-engine', 'B');
+});

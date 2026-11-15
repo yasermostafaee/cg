@@ -1,0 +1,60 @@
+.cg-live-layout-arrange .cg-live-layout-arrange-buttons > .cg-btn {
+  min-height: 2.35rem;
+  gap: 0.45rem;
+  padding-inline: 0.5rem;
+  text-align: start;
+}
+
+.cg-live-layout-arrangement-glyph {
+  position: relative;
+  inline-size: 1.8rem;
+  block-size: 1.1rem;
+  flex-shrink: 0;
+  border-radius: var(--r-radius-sm);
+  background: var(--r-surface-sunken);
+}
+
+.cg-live-layout-arrangement-glyph > span {
+  position: absolute;
+  border: 1px solid var(--r-surface-sunken);
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.74;
+}
+
+.cg-live-layout-arrange-buttons [aria-pressed='true'] .cg-live-layout-arrangement-glyph {
+  color: var(--r-accent);
+}
+
+.cg-live-layout-arrange .cg-live-layout-gaps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.65rem;
+  margin-block-start: 0.2rem;
+}
+
+.cg-live-layout-gap-control {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  color: var(--r-text-secondary);
+}
+
+.cg-live-layout-gap-control > label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.cg-live-layout-gap-control .cg-field {
+  width: 4rem;
+  min-width: 0;
+}
+
+.cg-live-layout-gap-control > span {
+  font-size: var(--r-text-sm);
+}

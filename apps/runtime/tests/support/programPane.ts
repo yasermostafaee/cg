@@ -20,10 +20,12 @@ export const PRIMARY_MONITOR_PREFERENCES: ProgramMonitorPreferences = {
   audioEngine: 'A',
   layout: 'horizontal',
   showMeter: true,
+  meterMode: 'selected',
   setDisplay: () => undefined,
   setAudio: () => undefined,
   setLayout: () => undefined,
   setShowMeter: () => undefined,
+  setMeterMode: () => undefined,
 };
 
 export function stubMeters(): void {

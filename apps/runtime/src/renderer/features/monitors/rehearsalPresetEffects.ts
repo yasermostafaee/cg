@@ -219,26 +219,34 @@ export function runRehearsalEffect(
   return (commit = false) => finish(commit);
 }
 
+/** The deepest authored artwork wrapper that owns a frame's path. */
+export function presetFrameArtwork(
+  wrappers: Iterable<HTMLElement>,
+  path: string,
+): HTMLElement | undefined {
+  let result: HTMLElement | undefined;
+  let depth = 0;
+  for (const wrapper of wrappers) {
+    const key = wrapper.dataset['cgFrameArtwork'];
+    if (key !== undefined && key.length > depth && (path === key || path.startsWith(key + '/'))) {
+      result = wrapper;
+      depth = key.length;
+    }
+  }
+  return result;
+}
+
 /** Lift only the retained branches above the departing artwork in a local rehearsal. */
 export function retainPresetArtwork(doc: Document, plan: PresetPlan): () => void {
   const restore: (() => void)[] = [];
-  const wrappers = Array.from(doc.querySelectorAll<HTMLElement>('[data-cg-frame-artwork]'));
-  const wrapperFor = (path: string): HTMLElement | undefined =>
-    wrappers
-      .flatMap((wrapper) => {
-        const key = wrapper.dataset['cgFrameArtwork'];
-        return key !== undefined && (path === key || path.startsWith(key + '/'))
-          ? [{ wrapper, length: key.length }]
-          : [];
-      })
-      .sort((a, b) => b.length - a.length)[0]?.wrapper;
+  const wrappers = doc.querySelectorAll<HTMLElement>('[data-cg-frame-artwork]');
   const departingKeys = new Set((plan.exit[0]?.opacityArtwork ?? []).map(({ key }) => key));
   const departing = Array.from(
     doc.querySelectorAll<HTMLElement>('[data-cg-preset-departure-key]'),
   ).filter((node) => departingKeys.has(node.dataset['cgPresetDepartureKey'] ?? ''));
   const lifted = new Set<HTMLElement>();
   for (const frame of plan.retained) {
-    const current = wrapperFor(frame);
+    const current = presetFrameArtwork(wrappers, frame);
     if (current === undefined) continue;
     if (departing.length === 0) continue;
     for (

@@ -13,7 +13,7 @@ import type { CSSProperties } from 'react';
 // those four pure functions add 3.5 kB to the built SPA (1,271.6 → 1,275.1 kB with
 // them stubbed out and back), because nothing else in the package is reachable
 // from them and both imports go through subpaths rather than the entry index.
-import { activeLookOf, type ChannelRaster } from '@cg/shared-ipc';
+import { activeLookOf, resolvePlateSourcesForLook, type ChannelRaster } from '@cg/shared-ipc';
 import {
   CG_LIVE_FRAME_TRANSITION_PAGE_MARKER,
   liveMaskPlacementKey,
@@ -522,19 +522,35 @@ export function RehearsalStage({
     [renderable, raster],
   );
   const channel = renderable[0]?.subject.channel;
-  const sourceFrames = usePvwSourceFrames(
-    channel,
-    playing
-      ? placements.flatMap((plate) =>
-          plate.channel === channel && plate.sourceId !== null && plateInRaster(plate, raster)
-            ? [plate.sourceId]
-            : [],
-        )
-      : [],
-    visible,
-  );
-  const hasSourcePicture = [...sourceFrames.values()].some(
-    (frame) => frame.jpegBase64 !== undefined,
+  const previewSourceIds = useMemo(() => {
+    if (!playing || channel === undefined) return [];
+    const showing = placements.flatMap((plate) =>
+      plate.channel === channel && plate.sourceId !== null && plateInRaster(plate, raster)
+        ? [plate.sourceId]
+        : [],
+    );
+    const warming = renderable.flatMap(({ subject }) => {
+      const { controlLiveLayout: layout, plateSources: bindings } = subject;
+      if (layout === undefined || subject.channel !== channel) return [];
+      const origin = bindings.bindingLookId ?? subject.activeLookId ?? layout.defaultPresetId;
+      // Focus can choose any of this layout's frames, including one outside the origin.
+      const candidates = [
+        { id: origin, frameIds: layout.frames.map(({ id }) => id) },
+        ...layout.presets.filter(({ id }) => id !== origin),
+      ];
+      return candidates.flatMap(({ id, frameIds }) =>
+        [
+          ...resolvePlateSourcesForLook({ ...bindings, lookId: id, plateIds: frameIds }).values(),
+        ].filter(
+          (sourceId): sourceId is string => sourceId !== null && bindings.nameOf(sourceId) !== null,
+        ),
+      );
+    });
+    return [...showing, ...warming];
+  }, [channel, placements, playing, raster, renderable]);
+  const sourceFrames = usePvwSourceFrames(channel, previewSourceIds, visible);
+  const hasSourcePicture = placements.some(
+    ({ sourceId }) => sourceId !== null && sourceFrames.get(sourceId)?.jpegBase64 !== undefined,
   );
   const showLiveSourceNote =
     playing &&
@@ -829,6 +845,7 @@ export function RehearsalStage({
         {playing && (
           <LivePlateOverlay
             placements={editablePlacements}
+            channel={channel ?? undefined}
             sourceFrames={sourceFrames}
             raster={raster}
             fit={fit}

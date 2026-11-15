@@ -201,6 +201,13 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
       expect(res.error, `${channel} is a READ and must answer while locked`).toBeUndefined();
     }
 
+    const audio = await ask(ws, frames, 'audio', 'sourcePreviews.audioLevels', {
+      channel: 1,
+      sourceIds: ['missing-source'],
+    });
+    expect(audio.error).toBeUndefined();
+    expect(audio.payload).toEqual({ readings: [] });
+
     const wrong = await ask(ws, frames, 'w', 'lock.release', { pin: '9999' });
     expect(wrong.error, 'release must not be refused BY THE LOCK').toBeUndefined();
     expect(wrong.payload).toMatchObject({ ok: false, reason: 'pin-mismatch' });
@@ -357,6 +364,7 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         'sharedFiles.template-folder',
         'sharedFiles.template-read',
         'sharedFiles.template-thumbnail',
+        'sourcePreviews.audioLevels',
         'sources.assignments',
         'sources.config',
         // `PLAYOUT-SOURCES-01` — the picker's media search, thumbnail and D10 refresh are reads.

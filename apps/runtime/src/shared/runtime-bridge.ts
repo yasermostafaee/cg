@@ -64,6 +64,7 @@ import type {
   PgmTopology,
   LivePreviewHandle,
   LivePreviewStartChannel,
+  SourceAudioLevelsChannel,
   SourcePreviewPvwChannel,
   SourcePreviewThumbnailsChannel,
   PlaylistGainGetChannel,
@@ -859,6 +860,9 @@ export interface RuntimeBridge {
   };
 
   sourcePreviews: {
+    audioLevels?(
+      req: ChannelRequest<typeof SourceAudioLevelsChannel>,
+    ): Promise<ChannelResponse<typeof SourceAudioLevelsChannel>>;
     pvw(
       req: ChannelRequest<typeof SourcePreviewPvwChannel>,
     ): Promise<ChannelResponse<typeof SourcePreviewPvwChannel>>;

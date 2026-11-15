@@ -1859,6 +1859,8 @@ export const CompositionElementSchema = ElementBaseSchema.extend({
   compositionId: IdSchema,
   /** Direct text layers hidden on this instance of the otherwise shared composition. */
   hiddenTextIds: z.array(IdSchema).optional(),
+  /** Direct children omitted by this instance of a shared composition. */
+  hiddenChildIds: z.array(IdSchema).optional(),
   /**
    * D-112 — per-INSTANCE hold overrides. Keyed by a nested content element's stable id; the value
    * is whether that element drives THIS instance's parent hold. Absent key ⇒ fall back to the

@@ -53,8 +53,9 @@ import type { Scene } from './scene.js';
  * 1.2.3 carries authored paint order for overlapping Live plates.
  * 1.2.5 applies the direct text visibility of individual composition instances.
  * 1.2.6 applies the vertical offset of text inside its box.
+ * 1.2.7 applies per-instance frame art and masked input variants.
  */
-export const CG_RUNTIME_VERSION = '1.2.6';
+export const CG_RUNTIME_VERSION = '1.2.7';
 
 /** Declare the minimum runtime that can reproduce all authored behavior in a package. */
 export function requiredRuntimeVersionForScene(
@@ -67,6 +68,8 @@ export function requiredRuntimeVersionForScene(
       matches(element) || (element.type === 'container' && element.children.some(visit));
     return compositions.some((comp) => comp.layers.some((layer) => layer.children.some(visit)));
   };
+  if (hasElement((element) => element.type === 'composition' && !!element.hiddenChildIds?.length))
+    return '1.2.7';
   if (
     hasElement(
       (element) =>

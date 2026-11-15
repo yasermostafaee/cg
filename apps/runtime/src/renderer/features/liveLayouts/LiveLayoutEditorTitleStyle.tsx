@@ -1,5 +1,5 @@
 import { useId, useRef, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Type } from 'lucide-react';
 import {
   CONTROL_LIVE_LAYOUT_TITLE_FONTS,
   CONTROL_LIVE_LAYOUT_TITLE_SIZE_MAX_PERCENT,
@@ -21,6 +21,7 @@ import {
   controlLiveLayoutTitleGeometry,
 } from './controlLiveLayoutCompiler.js';
 import { LiveLayoutEditorNumber } from './LiveLayoutEditorNumber.js';
+import { LiveLayoutEditorSectionHeading } from './LiveLayoutEditorSectionHeading.js';
 import './live-layout-title-style.css';
 
 type StyleChange = (patch: ControlLiveLayoutTitleStyle) => void;
@@ -217,6 +218,7 @@ export function LiveLayoutEditorTitleStyle({
   frameNumber,
   heading = 'Title style',
   shared,
+  individualBase = shared,
   override,
   fonts,
   readingFont,
@@ -230,6 +232,7 @@ export function LiveLayoutEditorTitleStyle({
   frameNumber: number;
   heading?: string;
   shared: ControlLiveLayoutTitleStyle | undefined;
+  individualBase?: ControlLiveLayoutTitleStyle | undefined;
   override: ControlLiveLayoutTitleStyle | undefined;
   fonts: readonly ControlLiveLayoutFont[];
   readingFont: boolean;
@@ -245,7 +248,7 @@ export function LiveLayoutEditorTitleStyle({
   const onChange = sharedSelection ? onSharedChange : onOverrideChange;
   const title = controlLiveLayoutTitleGeometry(
     raster,
-    sharedSelection ? shared : { ...shared, ...override },
+    sharedSelection ? shared : { ...individualBase, ...override },
   );
   const fontChoices = [
     ...fonts.map(({ id, name }) => ({ value: controlLiveLayoutFontFamily(id), label: name })),
@@ -270,9 +273,9 @@ export function LiveLayoutEditorTitleStyle({
 
   return (
     <details className="cg-live-layout-title-style">
-      <summary>{heading}</summary>
+      <LiveLayoutEditorSectionHeading icon={Type} label={heading} />
       {onSharedChange !== undefined && (
-        <div className="cg-live-layout-title-scope" role="group" aria-label="Title style scope">
+        <div className="cg-live-layout-title-scope" role="group" aria-label={heading + ' scope'}>
           <Button
             active={sharedSelection}
             aria-pressed={sharedSelection}

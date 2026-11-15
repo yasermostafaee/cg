@@ -4905,9 +4905,8 @@ appears; WHEN import settles THEN loading clears into the existing success or re
 **What:** PROGRAM always offers **A**, **B** and **A + B**, even before a reserve Playout or channel mapping
 is configured. An unavailable B remains a black, labelled no-signal position and opens no stream. In the
 combined mode the two programme pictures can be arranged horizontally or vertically, each labelled with its physical
-server/channel and its own signal state. There is still exactly one local monitor-audio path:
-the operator explicitly chooses A or B, and the speaker, loudness and VU meter follow that choice; the two
-engines are never mixed and this control never changes the on-air audio.
+server/channel and its own signal state. The operator chooses the engine for the one local speaker
+and loudness badge. VU can show that selection or compact stereo scales for all known engines at once.
 **Why:** during the client demo the backup Playout could not be verified beside the active output, so an
 operator had to fail over before seeing whether its programme picture and sound were healthy.
 **Acceptance:**
@@ -4921,8 +4920,10 @@ operator had to fail over before seeing whether its programme picture and sound 
   labels, and either feed independently hides a stale frame and reports its own signal state
 - WHEN A + B is selected THEN the operator can arrange the two pictures horizontally or vertically and the
   selected layout is remembered on that console without reconnecting either feed
-- WHEN monitor sound is enabled THEN exactly one chosen engine is heard and metered; changing the source moves
-  sound, loudness and VU together without mixing or changing any on-air audio
+- WHEN monitor sound is enabled THEN exactly one chosen engine is heard; changing the source moves the sound,
+  loudness and the default selected-source VU without changing any on-air audio
+- WHEN All meters is enabled THEN a compact, labelled scale shows each known engine's own levels, including an
+  empty scale for an engine with no data. The console remembers display mode and VU visibility independently.
 - WHEN failover changes the current primary THEN the physical A/B labels remain stable and the default/follow
   audio source follows the current primary unless the operator explicitly selects another source
 - WHEN B is requested THEN CG Bridge authorizes the logical channel, maps it to B's physical channel, uses B's
@@ -5214,6 +5215,7 @@ Send CG commands to the active engine after its external-graphics transfer contr
 - WHEN Fade is enabled with Cut THEN the frame fades out, switches geometry, then fades in. WHEN Fade is enabled with motion THEN opacity dips while the frame moves.
 - WHEN the effect runs THEN the seated image, mask and attached artwork follow the same placement and the input and its audio continue. Stop, Clear and emergency silence retain priority.
 - WHEN a running template lacks effect support THEN regular frame placement remains available under its existing guards.
+- WHEN applying an on-air frame placement with mirror-sync THEN the verified active page moves in place. Any configured effect runs on the active engine, and matching reserve pages and seats receive the settled result.
 - WHEN switching between presets that share the same authored plate and running input THEN the shared frame moves and resizes from the outgoing placement to the incoming placement without starting the source again. The same applies to the reverse switch.
 - WHEN a verified departing masked group would be painted in the wrong order during the reverse movement THEN the entire group exits before the shared frame moves. Returning to the previous preset restores its mask and plate order.
 - WHEN previewing a preset or input change THEN the selected effect runs on PVW independently of PGM. Direct dragging and sizing stay immediate.
@@ -5250,7 +5252,7 @@ Send CG commands to the active engine after its external-graphics transfer contr
 - WHEN arranging a preset with at least two frames THEN its horizontal and vertical gaps are visible beside the arrangement tools.
 - WHEN one layout is on air THEN the operator can create and edit another one or duplicate the running layout for the next programme. Designer-authored layouts remain available through the existing workflow.
 
-## [ ] R-121 — Edit masks and attach frame templates inside New live layout ⟨priority: medium — owner, 2026-11-15⟩
+## [~] R-121 — Edit masks and attach frame templates inside New live layout ⟨priority: medium — owner, 2026-11-15⟩
 
 **What:** Reuse Designer VCGs as graphics or masked live inputs on frames in a preset. Adjust its placement and the direct frame mask in the New live layout preview.
 **Why:** An operator can fit prepared artwork around a captured subtitle strip or a live shot while keeping the shared layout editable.
@@ -5262,3 +5264,15 @@ Send CG commands to the active engine after its external-graphics transfer contr
 - WHEN moving a frame or switching Focus and Return THEN its applicable artwork follows the frame, regular presets restore their exact saved placements, and the shared input mask remains consistent across presets.
 
 **Feasibility:** Assess corner radius for the live picture itself. Verify a rounded alpha aperture in PVW and on the target Playout Engine, including overlapping plates and frame transitions.
+
+The frame graphics importer renders verified still artwork and can carry one masked plate per frame and preset.
+A masked attachment uses the frame's selected input. Save keeps the original attachment sources so Edit and Duplicate
+remain self-contained. Repeatable playback and independent timeline animation within imported artwork need a separate
+runtime design.
+
+### Pre-air source audio indicators
+
+The source picker, assigned-input fields, and Station setup show a compact audio indicator next to the source.
+The visible entries share one bounded, authenticated batch. A currently checked input shows fresh measured peaks
+from its own existing preview lease. A still asset with confirmed no audio has a distinct state. Other sources
+stay unknown until the Playout exposes independent source telemetry or authoritative audio-stream metadata.

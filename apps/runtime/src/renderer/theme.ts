@@ -51,6 +51,7 @@ export const liveLayoutArtwork = {
   titleText: '#FFFFFF',
   titleShadow: '#00000080',
   titleBackground: '#101B28DE',
+  newTitleBackground: '#00000099',
 } as const;
 
 /*

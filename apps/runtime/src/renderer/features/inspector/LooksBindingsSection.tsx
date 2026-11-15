@@ -364,7 +364,9 @@ export function LooksBindingsSection({
             `would use.`
           }
         >
-          on air: <SourceLabel sourceId={onAir.sourceId} fallback="nothing" /> (patched on this row)
+          on air:{' '}
+          <SourceLabel sourceId={onAir.sourceId} fallback="nothing" meterChannel={channel} />{' '}
+          (patched on this row)
         </span>
       );
     }
@@ -384,7 +386,9 @@ export function LooksBindingsSection({
             `the row again to adopt it, or set this look’s input to change it now.`
           }
         >
-          this row: <SourceLabel sourceId={frozen.sourceId} fallback="nothing" /> (frozen at take)
+          this row:{' '}
+          <SourceLabel sourceId={frozen.sourceId} fallback="nothing" meterChannel={channel} />{' '}
+          (frozen at take)
         </span>
       );
     }
@@ -436,7 +440,7 @@ export function LooksBindingsSection({
         />
       </div>
       <LiveInputCheckCard surface={surface} />
-      <InputEffectControls />
+      <InputEffectControls key={item.itemId} itemId={item.itemId} layout={layout} />
       {/*
         🔴 **§3d — "above" USED TO POINT AT THE LIVE PLATES SECTION, WHICH IS NOW GONE HERE.**
 
@@ -632,7 +636,8 @@ export function LooksBindingsSection({
                   {masked && (
                     <>
                       <span style={styles.masked} data-look-binding-patched={plate.sourceId}>
-                        not in force — patched to <SourceLabel sourceId={patch} />
+                        not in force — patched to{' '}
+                        <SourceLabel sourceId={patch} meterChannel={channel} />
                       </span>
                       {/*
                         §2.2 — ENDING THE PATCH IS REACHABLE FROM WHERE IT IS SEEN. It applies
@@ -651,7 +656,7 @@ export function LooksBindingsSection({
                               itemId: item.itemId,
                               plateId: plate.sourceId,
                               sourceId: null,
-                              ...inputTransitionRequest(),
+                              ...inputTransitionRequest(item.itemId, layout),
                             })
                             .then((res) => {
                               if (!res.ok)

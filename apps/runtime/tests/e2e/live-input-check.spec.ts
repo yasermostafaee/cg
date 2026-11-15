@@ -248,11 +248,21 @@ test('C-023 · inspect input picture from PVW and source controls without changi
     await expect(setup.locator(thumbnail)).toHaveCount(
       await setup.locator('[data-source-input]').count(),
     );
+    const setupMeter = setup
+      .locator('[data-source-input]', {
+        has: page.getByRole('button', { name: 'Check input · Studio 1', exact: true }),
+      })
+      .locator('[data-source-audio-meter]');
+    await expect(setupMeter).toHaveAccessibleName('Studio 1 · Audio level unavailable');
     expect(preview.starts).toHaveLength(4);
     await setupTile.click();
     await expect(
       setup.getByRole('region', { name: 'PVW input check' }).locator(picture),
     ).toBeVisible();
+    await setupMeter.scrollIntoViewIfNeeded();
+    await expect(setupMeter).toBeInViewport();
+    await expect(setupMeter).toHaveAccessibleName('Studio 1 · Audio peak -18 dBFS');
+    expect(preview.starts).toHaveLength(5);
     await page.keyboard.press('Escape');
     await expect(setup).toBeHidden();
     await expect.poll(() => preview.leases.size).toBe(0);

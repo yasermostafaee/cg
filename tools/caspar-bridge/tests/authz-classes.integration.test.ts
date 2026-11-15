@@ -298,6 +298,8 @@ describe('C-038 — the census: every route, classified', () => {
       'sharedFiles.template-folder',
       'sharedFiles.template-read',
       'sharedFiles.template-thumbnail',
+      // Source metering reads cached levels and catalogue audio information.
+      'sourcePreviews.audioLevels',
       'sources.assignments',
       'sources.config',
       /*

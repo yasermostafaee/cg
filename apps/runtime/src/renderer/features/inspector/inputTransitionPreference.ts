@@ -4,8 +4,11 @@ import {
   FRAME_TRANSITION_DEFAULT_MS,
   InputTransitionSchema,
   isInputSlideMode,
+  type ControlLiveLayout,
   type InputTransition,
 } from '@cg/shared-schema';
+
+import { rowEffectOverrides } from './rowEffectOverrides.js';
 
 const STORAGE_KEY = 'cg.runtime.input-transition.v1';
 const DEFAULT: InputTransition = { mode: 'cut', durationMs: FRAME_TRANSITION_DEFAULT_MS };
@@ -29,8 +32,22 @@ function subscribe(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-export function inputTransitionPreference(): InputTransition {
+function inputTransitionPreference(): InputTransition {
   return preference;
+}
+
+export function authoredInputTransition(layout: ControlLiveLayout): InputTransition {
+  const { mode, direction, durationMs } = layout.effects.switch;
+  return { mode: mode === 'motion' ? 'cut' : mode, direction, durationMs };
+}
+
+export function effectiveInputTransition(
+  itemId: string,
+  layout: ControlLiveLayout | undefined,
+): InputTransition {
+  return layout === undefined
+    ? preference
+    : (rowEffectOverrides(itemId)?.input ?? authoredInputTransition(layout));
 }
 
 export function useInputTransitionPreference(): InputTransition {
@@ -47,9 +64,15 @@ export function setInputTransitionPreference(change: Partial<InputTransition>): 
   for (const listener of listeners) listener();
 }
 
-/** Requests that omit the new option keep the same immediate Cut on all bridge versions. */
-export function inputTransitionRequest(): { inputTransition?: InputTransition } {
-  const { mode, durationMs, direction = DEFAULT_INPUT_SLIDE_DIRECTION } = preference;
-  if (mode === 'cut') return {};
+export function inputTransitionRequest(
+  itemId: string,
+  layout: ControlLiveLayout | undefined,
+): { inputTransition?: InputTransition } {
+  const {
+    mode,
+    durationMs,
+    direction = DEFAULT_INPUT_SLIDE_DIRECTION,
+  } = effectiveInputTransition(itemId, layout);
+  if (mode === 'cut' && layout === undefined) return {};
   return { inputTransition: { mode, durationMs, ...(isInputSlideMode(mode) && { direction }) } };
 }

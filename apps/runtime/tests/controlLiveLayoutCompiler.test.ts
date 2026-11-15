@@ -10,12 +10,13 @@ import {
   controlLiveLayoutRects,
   elementDigitsOf,
   fieldDigitsOf,
+  flattenElements,
   type ControlLiveLayout,
   type ControlLiveLayoutPreset,
   type ControlLiveLayoutTitleStyle,
   type LivePlateMask,
 } from '@cg/shared-schema';
-import { buildTemplateLiveSources, sha256Hex, unpack } from '@cg/vcg-format';
+import { buildTemplateLiveSources, pack, sha256Hex, unpack } from '@cg/vcg-format';
 import {
   buildControlLiveLayoutScene,
   compileControlLiveLayout,
@@ -27,9 +28,10 @@ import {
 } from '../src/renderer/features/liveLayouts/controlLiveLayoutCompiler.js';
 import { sharedFrameTitlesOf } from '../src/renderer/features/inspector/sharedFrameTitles.js';
 import { produceTemplateDelivery } from '../src/renderer/features/library/templateDelivery.js';
+import { unpackControlLiveLayoutFrameAttachment } from '../src/renderer/features/liveLayouts/controlLiveLayoutFrameAttachments.js';
 
 function layoutFixture(): ControlLiveLayout {
-  const layout = createControlLiveLayout();
+  const { titleStyle: _newTitleStyle, ...layout } = createControlLiveLayout();
   const wide: ControlLiveLayoutPreset = {
     id: 'preset-wide',
     name: 'News panel',
@@ -57,6 +59,130 @@ function layoutFixture(): ControlLiveLayout {
 }
 
 describe('CG Control authored live layouts', () => {
+  it('packages ordered preset graphics and one masked input without duplicating the native seat', async () => {
+    const layout = layoutFixture();
+    const scene = buildControlLiveLayoutScene(layout);
+    const masked: LivePlateMask = {
+      mode: 'inside',
+      rects: [{ x: 0.1, y: 0.7, width: 0.8, height: 0.25 }],
+    };
+    const {
+      lookGroups: _looks,
+      controlLiveLayout: _layout,
+      compositions: _comps,
+      ...graphic
+    } = scene;
+    const shape = scene.layers[0]!.children[0]!;
+    const plate = flattenElements(scene).find(
+      ({ element }) => element.type === 'video-placeholder',
+    )?.element;
+    if (plate?.type !== 'video-placeholder') throw new Error('Fixture has no plate');
+    const asAttachment = async (name: string, withInput: boolean) =>
+      unpackControlLiveLayoutFrameAttachment(
+        await pack({
+          scene: {
+            ...graphic,
+            name,
+            layers: [
+              {
+                ...scene.layers[0]!,
+                children: withInput ? [shape, { ...plate, liveMask: masked }] : [shape],
+              },
+            ],
+          },
+          manifestExtras: {
+            id: graphic.id,
+            name,
+            authoring: {
+              designerVersion: '1.2.6',
+              createdAt: graphic.metadata.createdAt,
+              exportedAt: graphic.metadata.updatedAt,
+            },
+            compatibility: { minRuntimeVersion: '1.2.6', minCasparCGVersion: '2.3.0' },
+            fontDeps: [],
+            assetIndex: [],
+          },
+          indexHtml: '<script>throw Error("foreign page")</script>',
+          cgJs: '',
+          cgCss: '',
+        }),
+      );
+    const logo = await asAttachment('Logo', false);
+    const strip = await asAttachment('Subtitle strip', true);
+    const [wide, pair] = layout.presets;
+    if (wide === undefined || pair === undefined) throw new Error('Fixture has no presets');
+    const rect = { x: 0.15, y: 0.15, width: 0.7, height: 0.7 };
+    wide.frameAttachments = [
+      { id: 'strip', name: strip.name, frameId: 'frame-left', sourceId: strip.id, rect },
+      { id: 'logo', name: logo.name, frameId: 'frame-left', sourceId: logo.id, rect },
+    ];
+    const sources = new Map([
+      [logo.id, logo],
+      [strip.id, strip],
+    ]);
+    const bytes = await compileControlLiveLayout(layout, undefined, undefined, sources);
+    const { scene: saved, manifest, files } = await unpack(bytes);
+    expect(manifest.compatibility.minRuntimeVersion).toBe('1.2.7');
+    expect(new TextDecoder().decode(files.get('index.html'))).not.toContain('foreign page');
+    const reopened = await readControlLiveLayout(bytes);
+    expect(reopened.layout.presets[0]?.frameAttachments).toEqual(wide.frameAttachments);
+    expect([...reopened.attachments.keys()]).toEqual([strip.id, logo.id]);
+    const carrier = buildTemplateLiveSources(saved);
+    const normal = carrier.looks?.find(({ id }) => id === wide.id);
+    const other = carrier.looks?.find(({ id }) => id === pair.id);
+    const solo = carrier.looks?.find(
+      ({ id }) => id === controlLiveLayoutFocusLookId(wide.id, 'frame-left'),
+    );
+    expect(normal?.masks?.['frame-left']).toEqual(masked);
+    expect(solo?.masks?.['frame-left']).toEqual(masked);
+    expect(other?.masks?.['frame-left']).toBeUndefined();
+    expect(normal?.transitionFrames?.['frame-left']?.artworkId).toBe(
+      other?.transitionFrames?.['frame-left']?.artworkId,
+    );
+    const templatesIn = (presetId: string) =>
+      flattenElements(saved).filter(
+        ({ key, element }) =>
+          key.startsWith(`layout-look-${presetId}/instance-frame-left/attachment-art-`) &&
+          element.type === 'composition',
+      );
+    expect(templatesIn(wide.id).map(({ element }) => element.id)).toEqual([
+      'attachment-art-strip',
+      'attachment-art-logo',
+    ]);
+    expect(templatesIn(pair.id)).toHaveLength(0);
+  });
+
+  it('authors the new caption and frame settings without reinterpreting legacy layouts', () => {
+    const layout = createControlLiveLayout();
+    expect(
+      layout.frames.map(({ operatorMove, operatorPlacement }) => [operatorMove, operatorPlacement]),
+    ).toEqual([
+      [false, 'locked'],
+      [false, 'locked'],
+    ]);
+    expect(controlLiveLayoutTitleGeometry(layout.resolution, layout.titleStyle)).toMatchObject({
+      xPercent: 0,
+      yPercent: 100,
+      widthPercent: 100,
+      heightPercent: 12,
+      padding: 0,
+      textOffsetY: 0,
+      sizePercent: 4.5,
+      borderRadius: 0,
+      fontFamily: 'Exo 2',
+      fontWeight: 700,
+      fontStyle: 'normal',
+      align: 'center',
+      verticalAlign: 'middle',
+      color: '#FFFFFF',
+      backgroundColor: '#00000099',
+      wrap: true,
+    });
+    expect(controlLiveLayoutTitleGeometry(layout.resolution)).toMatchObject({
+      widthPercent: 66,
+      fontFamily: 'Vazirmatn',
+    });
+  });
   it('saves grid direction, order and gap using the existing Auto layout geometry', () => {
     const layout = layoutFixture();
     const preset = layout.presets[0]!;
@@ -290,6 +416,48 @@ describe('CG Control authored live layouts', () => {
     expect(individual).not.toHaveProperty('shadow');
   });
 
+  it.each([
+    { presetHidden: false, focusHidden: false },
+    { presetHidden: false, focusHidden: true },
+    { presetHidden: true, focusHidden: false },
+  ])(
+    'respects preset and Focus title visibility independently: $presetHidden / $focusHidden',
+    ({ presetHidden, focusHidden }) => {
+      const base = layoutFixture();
+      const firstPreset = base.presets[0];
+      if (firstPreset === undefined) throw new Error('Missing preset fixture');
+      const frameId = 'frame-left';
+      const multi = {
+        ...firstPreset,
+        hiddenTitles: presetHidden ? [frameId] : [],
+        hiddenFocusTitles: focusHidden ? [frameId] : [],
+      };
+      const single = { ...multi, id: 'preset-solo', name: 'Solo', frameIds: [frameId] };
+      const scene = buildControlLiveLayoutScene({
+        ...base,
+        frames: base.frames.map((frame) =>
+          frame.id === frameId
+            ? { ...frame, additionalTexts: [{ id: 'position', text: 'Presenter' }] }
+            : frame,
+        ),
+        presets: [multi, single],
+      });
+      const captions = ['frame-left-title', 'layout-text:frame-left:position'];
+      const hiddenIn = (lookId: string) => {
+        const frame = scene.compositions
+          ?.find(({ id }) => id === `layout-look-${lookId}-contents`)
+          ?.layers[0]?.children.find(({ id }) => id === `instance-${frameId}`);
+        if (frame?.type !== 'composition') throw new Error('Missing frame instance');
+        return frame.hiddenTextIds;
+      };
+      expect(hiddenIn(multi.id)).toEqual(presetHidden ? captions : undefined);
+      expect(hiddenIn(single.id)).toEqual(presetHidden || focusHidden ? captions : undefined);
+      expect(hiddenIn(controlLiveLayoutFocusLookId(multi.id, frameId))).toEqual(
+        focusHidden ? captions : undefined,
+      );
+    },
+  );
+
   it('keeps uploaded fonts editable and inlines their bytes into the programme page', async () => {
     const base = layoutFixture();
     const mime = 'font/woff2' as const;
@@ -377,6 +545,7 @@ describe('CG Control authored live layouts', () => {
     const layout: ControlLiveLayout = {
       ...base,
       titleStyle: { digits: 'persian', align: 'center' },
+      additionalTextStyles: [{ sizePercent: 7, yPercent: 67 }],
       frames: base.frames.map((frame) => {
         if (frame.id === 'frame-left') {
           return {
@@ -404,8 +573,13 @@ describe('CG Control authored live layouts', () => {
     expect((await readControlLiveLayout(bytes)).layout).toEqual(layout);
     const { scene } = await unpack(bytes);
     const left = layout.frames.find(({ id }) => id === 'frame-left')!;
-    const texts = controlLiveLayoutFrameTexts(left, layout.titleStyle);
+    const texts = controlLiveLayoutFrameTexts(left, layout);
     expect(texts.map(({ fieldId }) => fieldId)).toEqual(['title', 'text-role', 'text-location']);
+    expect(texts[1]?.style).toMatchObject({ sizePercent: 7, yPercent: 10 });
+    const right = layout.frames.find(({ id }) => id === 'frame-right')!;
+    expect(controlLiveLayoutFrameTexts(right, layout).map(({ style }) => style)).toMatchObject([
+      { sizePercent: 7, yPercent: 67 },
+    ]);
     const composition = (id: string) => scene.compositions?.find((entry) => entry.id === id);
     expect(composition('layout-frame-frame-left')).toMatchObject({
       layers: [

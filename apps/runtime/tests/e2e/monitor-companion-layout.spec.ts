@@ -90,6 +90,11 @@ for (const name of ['PROGRAM (PGM)', 'PREVIEW (PVW)']) {
     if (name === 'PROGRAM (PGM)') {
       await panel.getByRole('button', { name: 'A+B', exact: true }).click();
     }
+    const layerOnly = panel.getByRole('button', {
+      name: 'Monitor and selected layer',
+      exact: true,
+    });
+    await expect(layerOnly.locator('svg.lucide-panel-bottom')).toBeVisible();
     const showBoth = page.getByRole('button', { name: 'Monitor, selected layer and Inspector' });
     await showBoth.click();
     const layer = page.locator('[data-monitor-layer-companion]');

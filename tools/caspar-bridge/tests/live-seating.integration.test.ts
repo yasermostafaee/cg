@@ -703,6 +703,39 @@ it('dissolves Control Focus in both mixer layer orders and cuts the reserve to t
   ).toBe(false);
 });
 
+it('uses an explicit Focus input dissolve and Cut in place of authored motion', async () => {
+  const r = await bootControlFocus(false, true);
+  const upper = r.liveLayers().get('item-1')!.at(-1)!;
+  const next = controlLiveLayoutFocusLookId(soloPreset, upper.sourceId);
+  const fadeStart = (await recvLines()).length;
+  expect(
+    await r.setActiveLook('item-1', next, focusMotion, undefined, {
+      mode: 'fade',
+      durationMs: 160,
+    }),
+  ).toEqual({ ok: true });
+  expect((await recvLines()).slice(fadeStart)).toContain(
+    'MIXER 1-' + String(upper.slot.layer) + ' OPACITY 1 4 linear DEFER',
+  );
+
+  const cut = controlLiveLayoutFocusLookId(soloPreset, focusFrameIds[0]);
+  const cutStart = (await recvLines()).length;
+  expect(
+    await r.setActiveLook('item-1', cut, focusMotion, undefined, {
+      mode: 'cut',
+      durationMs: 160,
+    }),
+  ).toEqual({ ok: true });
+  expect(r.activeLookId('item-1')).toBe(cut);
+  expect(
+    (await recvLines())
+      .slice(cutStart)
+      .some((line) =>
+        / (?:FILL|CLIP|OPACITY) .+ [1-9]\d* (?:linear|easeinoutquad) DEFER$/.test(line),
+      ),
+  ).toBe(false);
+});
+
 it('cuts directly between focused frames without tweening either input', async () => {
   const r = await bootControlFocus(false, true, 'cut');
   const next = controlLiveLayoutFocusLookId(soloPreset, focusFrameIds[1]);
@@ -3472,7 +3505,7 @@ it('applies free resizing to the exact Look instance with the foreground page re
   });
 });
 
-it('keeps a placement off-air only when a backup engine is declared', async () => {
+it('applies placement on the active engine without writing to an unmapped reserve', async () => {
   const r = await boot({
     template: template([{ id: 'guest-1', rect: BOX, operatorFrame: FRAME }]),
     html: FRAME_HTML,
@@ -3482,16 +3515,126 @@ it('keeps a placement off-air only when a backup engine is declared', async () =
   await r.load(itemId, 'lower-third', {});
   await expect(r.setFramePlacements(itemId, [MOVED_FRAME])).resolves.toEqual({ accepted: true });
   await expect(r.take(itemId)).resolves.toMatchObject({ accepted: true });
-  const before = (await recvLines()).length;
-  expect(r.stackSnapshot()[0]?.onAirFramePlacement).toBeUndefined();
-  await expect(r.setFramePlacements(itemId, [AUTHORED_FRAME])).resolves.toMatchObject({
-    accepted: false,
-    errorCode: 'frame-placement-on-air-unavailable',
-  });
+  await expect.poll(() => r.stackSnapshot()[0]?.onAirFramePlacement).toBe(true);
+  const reserve = backup;
+  if (reserve === null) throw new Error('Missing backup fixture');
+  const before = reserve.receivedCommands().length;
+  await expect(r.setFramePlacements(itemId, [AUTHORED_FRAME])).resolves.toEqual({ accepted: true });
   expect(
-    (await recvLines()).slice(before).filter((line) => /^(CG |MIXER |PLAY |CLEAR )/.test(line)),
+    reserve
+      .receivedCommands()
+      .slice(before)
+      .filter(({ line }) => /^(CG |MIXER |PLAY |CLEAR )/.test(line)),
   ).toEqual([]);
-  expect(r.stackSnapshot()[0]?.framePlacements).toEqual([MOVED_FRAME]);
+  expect(r.stackSnapshot()[0]?.framePlacements).toEqual([AUTHORED_FRAME]);
+  expect(mock?.layerState({ channel: 1, layer: BAND.start })?.clip).toEqual({
+    x: 0.25,
+    y: 0.25,
+    width: 0.5,
+    height: 0.5,
+  });
+});
+
+async function bootPairedFramePlacement(html: string): Promise<CasparRuntime> {
+  const runtime = await boot({
+    template: template([{ id: 'guest-1', rect: BOX, operatorFrame: FRAME }], true),
+    html,
+    mirrorChannel: 2,
+    catalog: catalog({
+      sources: [{ id: 'src-ndi', name: 'Camera', producer: { kind: 'ndi', source: 'Camera' } }],
+    }),
+    assignments: assign([['guest-1', 'src-ndi']]),
+  });
+  expect(await loadAndTake(runtime)).toMatchObject({ accepted: true });
+  await expect.poll(() => runtime.stackSnapshot()[0]).toMatchObject({ onAirFramePlacement: true });
+  return runtime;
+}
+
+it.each([false, true])(
+  'moves and settles the same resident frames across a verified A/B pair (effect: %s)',
+  async (animate) => {
+    const r = await bootPairedFramePlacement(animate ? EFFECT_HTML : FRAME_HTML);
+    const itemId = 'item-1';
+    const active = mock;
+    const reserve = backup;
+    if (active === null || reserve === null) throw new Error('Missing mirrored engine fixture');
+    const clip = { x: 0.5, y: 0.5, width: 0.25, height: 0.25 };
+    const reservePlate = { channel: 2, layer: BAND.start };
+    const activePlate = { channel: 1, layer: BAND.start };
+    const reservePage = { channel: 2, layer: 10 };
+    const initialReserve = reserve.layerState(reservePlate);
+    expect(initialReserve?.producer).toBe('ndi');
+    const start = reserve.receivedCommands().length;
+    const activeStart = (await recvLines()).length;
+    const transition: FrameTransition | undefined = animate
+      ? { motion: 'ease-in', fade: false, durationMs: 160 }
+      : undefined;
+    if (animate) expect(r.stackSnapshot()[0]?.onAirFrameTransition).toBe(true);
+    await expect(
+      r.setFramePlacements(itemId, [MOVED_FRAME], undefined, transition),
+    ).resolves.toEqual({ accepted: true });
+    expect(active.layerState(activePlate)?.clip).toEqual(clip);
+    expect(reserve.layerState(reservePlate)).toMatchObject({
+      clip,
+      producer: initialReserve?.producer,
+      volume: initialReserve?.volume,
+    });
+    const reserveLines = reserve
+      .receivedCommands()
+      .slice(start)
+      .map(({ line }) => line);
+    expect(
+      reserveLines.filter((line) => /^(PLAY|CLEAR|CG .* (ADD|PLAY|STOP))\b/.test(line)),
+    ).toEqual([]);
+    expect(reserveLines.some((line) => /DEFER$|COMMIT$|easeinquad/.test(line))).toBe(false);
+    expect(JSON.parse(reserve.lastCgUpdate(reservePage)?.data ?? '{}')).toMatchObject({
+      __cg: { framePlacements: [MOVED_FRAME] },
+    });
+    const activeLines = (await recvLines()).slice(activeStart);
+    expect(activeLines.some((line) => /FILL .*easeinquad DEFER$/.test(line))).toBe(animate);
+    expect(r.stackSnapshot()[0]?.framePlacements).toEqual([MOVED_FRAME]);
+  },
+);
+
+it('never applies an interrupted frame effect to a newly promoted reserve', async () => {
+  const r = await bootPairedFramePlacement(EFFECT_HTML);
+  const active = mock;
+  const reserve = backup;
+  const mixer = defaultHandlers().get('MIXER');
+  if (active === null || reserve === null || mixer === undefined)
+    throw new Error('Missing mirrored engine fixture');
+  let finishStage: (() => void) | undefined;
+  active.setHandler('MIXER', async (request, context, connection) => {
+    const result = mixer(request, context, connection);
+    if (finishStage === undefined && /FILL .*easeinquad DEFER$/.test(request.raw)) {
+      await new Promise<void>((resolve) => {
+        finishStage = resolve;
+      });
+    }
+    return result;
+  });
+  const slot = { channel: 2, layer: BAND.start };
+  const originalReserve = reserve.layerState(slot);
+  const start = reserve.receivedCommands().length;
+  const edit = r.setFramePlacements('item-1', [MOVED_FRAME], undefined, {
+    motion: 'ease-in',
+    fade: false,
+    durationMs: 160,
+  });
+  try {
+    await expect.poll(() => finishStage !== undefined, { timeout: HEALTH_MS }).toBe(true);
+    expect(await r.failover()).toEqual({ ok: true, newPrimary: 'B' });
+  } finally {
+    finishStage?.();
+  }
+  expect(await edit).toMatchObject({ accepted: false });
+  expect(reserve.layerState(slot)).toEqual(originalReserve);
+  expect(
+    reserve
+      .receivedCommands()
+      .slice(start)
+      .filter(({ line }) => /^(CG|MIXER) 2/.test(line)),
+  ).toEqual([]);
 });
 
 it('D-202 — multiple reveals are refused atomically when only one extra seat fits', async () => {

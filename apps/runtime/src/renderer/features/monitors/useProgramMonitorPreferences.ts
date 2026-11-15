@@ -4,6 +4,7 @@ import { PgmEngineSchema, type PgmEngine } from '@cg/shared-ipc';
 export type ProgramDisplayMode = PgmEngine | 'both';
 export type ProgramAudioChoice = 'follow' | PgmEngine;
 export type ProgramPictureLayout = 'horizontal' | 'vertical';
+export type ProgramMeterMode = 'selected' | 'all';
 
 const STORAGE_KEY = 'cg.runtime.pgm-monitor.v1';
 
@@ -12,6 +13,7 @@ interface StoredPreferences {
   readonly audio?: ProgramAudioChoice;
   readonly layout?: ProgramPictureLayout;
   readonly showMeter?: boolean;
+  readonly meterMode?: ProgramMeterMode;
 }
 
 function read(): Required<StoredPreferences> {
@@ -27,9 +29,16 @@ function read(): Required<StoredPreferences> {
       audio: PgmEngineSchema.safeParse(audio).data ?? 'follow',
       layout: layout === 'vertical' ? 'vertical' : 'horizontal',
       showMeter: parsed.showMeter !== false,
+      meterMode: parsed.meterMode === 'all' ? 'all' : 'selected',
     };
   } catch {
-    return { display: 'A', audio: 'follow', layout: 'horizontal', showMeter: true };
+    return {
+      display: 'A',
+      audio: 'follow',
+      layout: 'horizontal',
+      showMeter: true,
+      meterMode: 'selected',
+    };
   }
 }
 
@@ -47,10 +56,12 @@ export interface ProgramMonitorPreferences {
   readonly audioEngine: PgmEngine | null;
   readonly layout: ProgramPictureLayout;
   readonly showMeter: boolean;
+  readonly meterMode: ProgramMeterMode;
   setDisplay(mode: ProgramDisplayMode): void;
   setAudio(choice: ProgramAudioChoice): void;
   setLayout(layout: ProgramPictureLayout): void;
   setShowMeter(show: boolean): void;
+  setMeterMode(mode: ProgramMeterMode): void;
 }
 
 export function useProgramMonitorPreferences(
@@ -61,7 +72,7 @@ export function useProgramMonitorPreferences(
     setStored(next);
     write(next);
   }, []);
-  const { display, audio, layout, showMeter } = stored;
+  const { display, audio, layout, showMeter, meterMode } = stored;
   const audioEngine = audio === 'follow' ? currentPrimary : audio;
   return useMemo(
     () => ({
@@ -70,11 +81,13 @@ export function useProgramMonitorPreferences(
       audioEngine,
       layout,
       showMeter,
+      meterMode,
       setDisplay: (mode: ProgramDisplayMode) => update({ ...stored, display: mode }),
       setAudio: (choice: ProgramAudioChoice) => update({ ...stored, audio: choice }),
       setLayout: (next: ProgramPictureLayout) => update({ ...stored, layout: next }),
       setShowMeter: (show: boolean) => update({ ...stored, showMeter: show }),
+      setMeterMode: (mode: ProgramMeterMode) => update({ ...stored, meterMode: mode }),
     }),
-    [audio, audioEngine, display, layout, showMeter, stored, update],
+    [audio, audioEngine, display, layout, showMeter, meterMode, stored, update],
   );
 }

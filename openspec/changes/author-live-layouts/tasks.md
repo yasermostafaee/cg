@@ -32,4 +32,8 @@
 - [x] Verify a Focus alias and a chosen frame slot in the editor, PVW and PGM.
 - [x] Verify additional text values, styles, and bindings survive Save and Duplicate.
 - [x] Linux Playwright E2E passed for advanced frame controls, titles, fonts, digits and rehearsal on [bf51a5d7](https://github.com/yasermostafaee/cg/actions/runs/43719150757/job/132827188641#step:13:1).
-- [ ] Record the carrying Linux Playwright result after Focus labels and additional text.
+- [x] Linux Playwright E2E and the Linux gate passed for Focus labels, arbitrary preset positions and additional text on [e5d44f80](https://github.com/yasermostafaee/cg/actions/runs/43724416876/job/132843185179#step:13:1). The local Windows installer stamps, checksums and staged native smoke passed on the same build.
+- [x] Match the requested title defaults and give additional text shared and individual style scopes.
+- [x] Verify preset and solo motion in the editor and PVW, default placement locks, retained source images, and drag/resize of a direct rectangular mask in Chromium.
+- [x] Add multiple ordered still-art VCG attachments and one masked source per frame and preset, with direct manipulation and self-contained storage.
+- [ ] Verify the Designer-authored masked input and attached graphic together on the target Playout Engine.

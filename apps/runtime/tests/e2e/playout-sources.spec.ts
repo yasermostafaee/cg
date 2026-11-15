@@ -372,6 +372,149 @@ test('Media: visible posters decode separately, and a clip without a poster can 
   expect((await readState()).inputChecks).toBe(0);
 });
 
+interface SourceMeterProbe {
+  batches: { channel: number; ids: string[] }[];
+  checked: string[];
+  hold: boolean;
+  release?: () => void;
+}
+
+test.describe('source audio meters', () => {
+  test.use({
+    playoutSources: {
+      ...E2E_PLAYOUT,
+      media: [
+        {
+          id: 'm-meter-silent',
+          name: 'Meter fixture still',
+          clip: 'D:/Media Library/silent.png',
+          type: 'still',
+        },
+        {
+          id: 'm-meter-sound',
+          name: 'Meter fixture sound clip',
+          clip: 'D:/Media Library/sound.mov',
+          type: 'video',
+        },
+        ...(E2E_PLAYOUT.media ?? []),
+      ],
+    },
+  });
+
+  test('picker and Setup show current input levels independently of Check input', async ({
+    app,
+  }) => {
+    const page = app.page;
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const dialog = await openDefaults(app);
+    await page.evaluate(() => {
+      const state: SourceMeterProbe = { batches: [], checked: [], hold: false };
+      Object.assign(window, { sourceMeterTest: state });
+      window.cg.sourcePreviews.audioLevels = ({ channel, sourceIds }) => {
+        state.batches.push({ channel, ids: sourceIds });
+        if (state.hold) {
+          return new Promise((resolve) => {
+            state.release = () => resolve({ readings: [] });
+          });
+        }
+        return Promise.resolve({
+          readings: sourceIds.map((sourceId) =>
+            sourceId === 'in-studio-1'
+              ? { sourceId, state: 'measured', dbFs: [-21, -17], validForMs: 300 }
+              : {
+                  sourceId,
+                  state:
+                    sourceId === 'in-studio-2'
+                      ? 'no-audio'
+                      : sourceId === 'md-m-meter-sound'
+                        ? 'has-audio'
+                        : 'unknown',
+                },
+          ),
+        });
+      };
+      const startCheck = window.cg.livePreview.start;
+      window.cg.livePreview.start = (request) => {
+        state.checked.push(request.sourceId);
+        return startCheck(request);
+      };
+    });
+    const readState = () =>
+      page.evaluate(() => {
+        const { batches, checked, release } = (
+          window as unknown as { sourceMeterTest: SourceMeterProbe }
+        ).sourceMeterTest;
+        return { batches, checked, pending: release !== undefined };
+      });
+    await dialog.locator('[data-defaults-select="l-1"]').click();
+    const panel = picker(page);
+    const controls = '[data-source-audio-meter]';
+    const meter = (id: string) => panel.locator(`[data-picker-input="${id}"] ${controls}`);
+    const peak = meter('in-studio-1');
+    const level = peak.locator('.cg-input-meter__level');
+    await expect(peak).toHaveAccessibleName('Studio 1 · Audio peak -17 dBFS');
+    await expect(panel.locator('[data-picker-input="in-studio-1"]')).toHaveAccessibleName(
+      'Studio 1',
+    );
+    await expect(level).toHaveCSS('clip-path', /^inset\(0px 28\.33\d*% 0px 0px\)$/);
+    const bounds = await peak.boundingBox();
+    if (bounds === null) throw new Error('Visible source meter has no size');
+    expect(bounds.width).toBeGreaterThanOrEqual(24);
+    expect(bounds.width).toBeLessThanOrEqual(36);
+    expect(bounds.height).toBeGreaterThanOrEqual(5);
+    await test.info().attach('source-meter-size', {
+      body: `${String(bounds.width)} × ${String(bounds.height)} px`,
+      contentType: 'text/plain',
+    });
+    await expect(meter('in-studio-2')).toHaveAttribute('title', 'No audio stream');
+    await expect(meter('in-studio-2')).toHaveCSS('border-top-style', 'dashed');
+    await expect(meter('in-input-4')).toHaveAttribute('title', 'Audio level unavailable');
+    await expect(panel.locator('[data-picker-input="in-input-4"]')).toContainText('Unavailable');
+    const initial = await readState();
+    expect(initial.batches.every(({ channel }) => channel === 1)).toBe(true);
+    expect(initial.batches.flatMap(({ ids }) => ids)).not.toContain('in-input-4');
+    expect(initial.checked).toEqual([]);
+
+    await page.evaluate(() => {
+      (window as unknown as { sourceMeterTest: SourceMeterProbe }).sourceMeterTest.hold = true;
+    });
+    await expect.poll(async () => (await readState()).pending).toBe(true);
+    await expect(peak).toHaveAttribute('title', 'Audio level unavailable');
+    await expect(level).toHaveCSS('clip-path', 'inset(0px 100% 0px 0px)');
+    await page.evaluate(() => {
+      const state = (window as unknown as { sourceMeterTest: SourceMeterProbe }).sourceMeterTest;
+      state.hold = false;
+      state.release?.();
+      delete state.release;
+    });
+    await expect(peak).toHaveAttribute('title', 'Audio peak -17 dBFS');
+
+    await panel.getByRole('tab', { name: /^Media/ }).click();
+    await panel.getByRole('textbox', { name: 'Search media' }).fill('Meter fixture');
+    const silentClip = panel.locator(`[data-picker-media="md-m-meter-silent"] ${controls}`);
+    const soundClip = panel.locator(`[data-picker-media="md-m-meter-sound"] ${controls}`);
+    await expect(silentClip).toHaveAttribute('title', 'No audio stream');
+    await expect(soundClip).toHaveAttribute('title', 'Audio stream present, level unavailable');
+    await expect
+      .poll(async () => (await readState()).batches.flatMap(({ ids }) => ids))
+      .toContain('md-m-meter-sound');
+    expect((await readState()).batches.flatMap(({ ids }) => ids)).not.toContain(
+      'md-m-meter-silent',
+    );
+    expect((await readState()).checked).toEqual([]);
+
+    await page.keyboard.press('Escape');
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await app.openStationSetupAt('Live sources');
+    const sources = page.getByRole('region', { name: 'Inputs from the Playout' });
+    await expect(
+      sources.getByRole('img', { name: 'Studio 1 · Audio peak -17 dBFS' }),
+    ).toBeVisible();
+    await expect(sources.getByRole('img', { name: 'Studio 2 · No audio stream' })).toBeVisible();
+    expect((await readState()).checked).toEqual([]);
+  });
+});
+
 test.describe('live source thumbnails', () => {
   test.use({
     playoutSources: {

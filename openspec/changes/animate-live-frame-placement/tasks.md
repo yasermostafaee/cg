@@ -83,3 +83,9 @@
       recovery after both engines changed roles.
 - [ ] Recheck eligible masked edges and unsupported directions on the target engine.
 - [x] [Linux Playwright](https://github.com/yasermostafaee/cg/actions/runs/43686444415/job/132727854018) ran the complete E2E step successfully on `119eb4e1`.
+
+## Frame placement with a configured reserve
+
+- [x] Verify an older Cut-only page and a page with an effect can update their resident frames on the active engine and settle verified reserve seats in place.
+- [x] Verify no placement is sent to an unmapped reserve or to an engine promoted while the active effect is in flight.
+- [x] Rerun the full Bridge live-seating integration suite and typecheck on Windows.

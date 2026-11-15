@@ -3129,6 +3129,7 @@ export class MockRuntime {
       items: page.map((m) => ({
         id: mediaSourceId(m.id),
         name: m.name,
+        ...(m.type === 'still' && { hasAudio: false }),
         ...(m.durationMs !== undefined ? { durationMs: m.durationMs } : {}),
         ...(m.width !== undefined ? { width: m.width } : {}),
         ...(m.height !== undefined ? { height: m.height } : {}),

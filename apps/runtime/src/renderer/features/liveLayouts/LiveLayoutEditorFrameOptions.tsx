@@ -1,5 +1,5 @@
-import { useId, useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { useId } from 'react';
+import { Move, Plus, SlidersHorizontal, Trash2 } from 'lucide-react';
 import {
   DEFAULT_LIVE_FIT_MODE,
   LIVE_REVEAL_MAX_RECTS,
@@ -11,6 +11,7 @@ import { Button } from '../../ui/Button.js';
 import { Checkbox } from '../../ui/Checkbox.js';
 import { Icon } from '../../ui/Icon.js';
 import { LiveLayoutEditorNumber } from './LiveLayoutEditorNumber.js';
+import { LiveLayoutEditorSectionHeading } from './LiveLayoutEditorSectionHeading.js';
 import './live-layout-frame-options.css';
 
 const FIT_CHOICES = [
@@ -33,26 +34,27 @@ const MASK_FIELDS = [
 
 export function LiveLayoutEditorFrameOptions({
   frame,
+  activeIndex,
+  canEditMask,
+  editingMask,
+  onSelectMaskWindow,
+  onMaskEditingChange,
   onChange,
 }: {
   frame: ControlLiveLayoutFrame;
+  activeIndex: number;
+  canEditMask: boolean;
+  editingMask: boolean;
+  onSelectMaskWindow: (index: number) => void;
+  onMaskEditingChange: (editing: boolean) => void;
   onChange: (patch: Partial<ControlLiveLayoutFrame>) => void;
 }): JSX.Element {
   const id = useId();
-  const [selection, setSelection] = useState<{ frameId: string; index: number }>();
   const fit = frame.fitMode ?? DEFAULT_LIVE_FIT_MODE;
   const resize = frame.operatorPlacement ?? 'free';
   const mask = frame.liveMask;
   const windows = mask?.rects ?? [];
-  const activeIndex = Math.min(
-    selection?.frameId === frame.id ? selection.index : 0,
-    windows.length - 1,
-  );
   const activeWindow = windows[activeIndex];
-
-  function chooseWindow(index: number): void {
-    setSelection({ frameId: frame.id, index });
-  }
 
   function addWindow(): void {
     if (windows.length >= LIVE_REVEAL_MAX_RECTS) return;
@@ -63,14 +65,15 @@ export function LiveLayoutEditorFrameOptions({
       height: 0.5,
     };
     onChange({ liveMask: { mode: mask?.mode ?? 'inside', rects: [...windows, next] } });
-    chooseWindow(windows.length);
+    onSelectMaskWindow(windows.length);
   }
 
   function removeWindow(): void {
     if (mask === undefined || activeWindow === undefined) return;
     const rects = windows.filter((_, index) => index !== activeIndex);
     onChange(rects.length === 0 ? { liveMask: undefined } : { liveMask: { ...mask, rects } });
-    chooseWindow(Math.max(0, Math.min(activeIndex, rects.length - 1)));
+    onSelectMaskWindow(Math.max(0, Math.min(activeIndex, rects.length - 1)));
+    if (rects.length === 0) onMaskEditingChange(false);
   }
 
   function changeWindow(
@@ -86,8 +89,13 @@ export function LiveLayoutEditorFrameOptions({
   }
 
   return (
-    <details className="cg-live-layout-frame-options">
-      <summary>Advanced frame controls</summary>
+    <details
+      className="cg-live-layout-frame-options"
+      onToggle={(event) => {
+        if (!event.currentTarget.open && editingMask) onMaskEditingChange(false);
+      }}
+    >
+      <LiveLayoutEditorSectionHeading icon={SlidersHorizontal} label="Advanced frame controls" />
       <div className="cg-live-layout-frame-option-group" role="group" aria-label="Input fit">
         <span>Input fit</span>
         <div className="cg-live-layout-frame-option-buttons">
@@ -137,10 +145,27 @@ export function LiveLayoutEditorFrameOptions({
             Add mask window
           </Button>
           {mask !== undefined && (
-            <Button variant="secondary" onClick={removeWindow}>
-              <Icon icon={Trash2} size={14} />
-              Remove mask window
-            </Button>
+            <>
+              <Button variant="secondary" onClick={removeWindow}>
+                <Icon icon={Trash2} size={14} />
+                Remove mask window
+              </Button>
+              <Button
+                variant="secondary"
+                disabled={!canEditMask}
+                active={editingMask}
+                aria-pressed={editingMask}
+                title={
+                  canEditMask
+                    ? 'Move or resize the mask in Preview'
+                    : 'Show this frame in Preview to edit its mask'
+                }
+                onClick={() => onMaskEditingChange(!editingMask)}
+              >
+                <Icon icon={Move} size={14} />
+                Edit mask in preview
+              </Button>
+            </>
           )}
         </div>
         {mask !== undefined && activeWindow !== undefined && (
@@ -177,7 +202,7 @@ export function LiveLayoutEditorFrameOptions({
                     aria-label={'Mask window ' + (index + 1)}
                     active={index === activeIndex}
                     aria-pressed={index === activeIndex}
-                    onClick={() => chooseWindow(index)}
+                    onClick={() => onSelectMaskWindow(index)}
                   >
                     {index + 1}
                   </Button>

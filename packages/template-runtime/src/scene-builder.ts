@@ -1,9 +1,11 @@
 import {
+  controlLiveLayoutTitleHidden,
   elementDigitsOf,
   followsComposition,
   isCompositionTextHidden,
   largestLivePlateMaskRegion,
   liveRevealRects,
+  lookGroupOf,
   pathVisualBBox,
   repeaterRowLimit,
   sequencePictureFit,
@@ -101,6 +103,8 @@ interface BuildCtx {
   presetDepartureKeys?: ReadonlySet<string> | undefined;
   instancePrefix: string;
   instance?: CompositionElement;
+  hiddenSoloLookInstances?: ReadonlySet<string> | undefined;
+  hideSoloTitles?: boolean;
 }
 
 function newScope(container: HTMLElement, source: LifecycleSource): FieldScope {
@@ -123,6 +127,30 @@ function newScope(container: HTMLElement, source: LifecycleSource): FieldScope {
 }
 
 const MAX_COMPOSITION_DEPTH = 8;
+
+/** Retained live-layout packages may predate the single-frame preset's Focus visibility. */
+function hiddenSoloLookInstances(scene: Scene): ReadonlySet<string> | undefined {
+  const layout = scene.controlLiveLayout;
+  if (layout === undefined) return undefined;
+  const hiddenPresets = new Set<string>();
+  for (const preset of layout.presets) {
+    const frameId = preset.frameIds[0];
+    if (
+      preset.frameIds.length === 1 &&
+      (preset.frameAttachments?.length ?? 0) === 0 &&
+      frameId !== undefined &&
+      controlLiveLayoutTitleHidden(preset, frameId, false)
+    ) {
+      hiddenPresets.add(preset.id);
+    }
+  }
+  if (hiddenPresets.size === 0) return undefined;
+  return new Set(
+    lookGroupOf(scene)?.looks.flatMap(({ id, instanceId }) =>
+      hiddenPresets.has(id) ? [instanceId] : [],
+    ),
+  );
+}
 
 export function buildScene(
   scene: Scene,
@@ -167,6 +195,7 @@ export function buildScene(
     frameArtworkKeys,
     presetDepartureKeys,
     instancePrefix: '',
+    hiddenSoloLookInstances: hiddenSoloLookInstances(scene),
   };
 
   for (const layer of scene.layers) {
@@ -196,13 +225,16 @@ function buildLayer(layer: Layer, ctx: BuildCtx): HTMLElement {
   // Sort by zIndex so DOM order matches z-stack semantics.
   const sorted = [...layer.children].sort((a, b) => a.zIndex - b.zIndex);
   for (const element of sorted) {
+    if (ctx.instance?.hiddenChildIds?.includes(element.id)) continue;
     // An element authored hidden that a step SHOWS is built as a visible element held transparent
     // by its wrapper until its step (step-css.ts `shown`): its own content is already running when
     // it appears, and the step's fade has something to fade.
     const built = plan.shown.has(element.id)
       ? ({ ...element, visible: true } as typeof element)
       : element;
-    const instanceHiddenText = isCompositionTextHidden(ctx.instance, element);
+    const instanceHiddenText =
+      isCompositionTextHidden(ctx.instance, element) ||
+      (ctx.hideSoloTitles === true && element.type === 'text');
     const drawn = instanceHiddenText ? { ...built, visible: false } : built;
     const elementNode = buildElement(drawn, ctx);
     if (elementNode === null) continue;
@@ -437,6 +469,9 @@ function buildComposition(element: CompositionElement, ctx: BuildCtx): HTMLEleme
     resolutionWidth: comp.resolution.width,
     instancePrefix: ctx.instancePrefix + element.id + '/',
     instance: element,
+    hideSoloTitles:
+      ctx.hideSoloTitles === true ||
+      (ctx.depth === 0 && ctx.hiddenSoloLookInstances?.has(element.id) === true),
   };
   for (const layer of comp.layers) {
     inner.appendChild(buildLayer(layer, childCtx));

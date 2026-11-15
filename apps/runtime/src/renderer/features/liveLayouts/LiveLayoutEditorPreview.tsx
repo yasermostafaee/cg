@@ -1,8 +1,9 @@
-import { useLayoutEffect, useRef, type CSSProperties } from 'react';
+import { useLayoutEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { Maximize2 } from 'lucide-react';
 import {
   DEFAULT_LIVE_FIT_MODE,
   controlLiveLayoutPresetFrameIds,
+  controlLiveLayoutTitleHidden,
   fitPictureToBox,
   frameTransitionPhases,
   inputSlideVector,
@@ -30,12 +31,18 @@ import {
   controlLiveLayoutFrameTexts,
   controlLiveLayoutTitleGeometry,
 } from './controlLiveLayoutCompiler.js';
+import {
+  frameAttachmentPlateRect,
+  type ControlLiveLayoutFrameAttachmentSource,
+} from './controlLiveLayoutFrameAttachments.js';
+import { LiveLayoutFrameAttachmentArt } from './LiveLayoutFrameAttachmentArt.js';
 
 type Rects = Readonly<Record<string, LiveSourceRect>>;
 
 interface View {
   presetId: string;
   focused: string | undefined;
+  soloFrameId: string | undefined;
   rects: Rects;
 }
 
@@ -65,23 +72,28 @@ function blendRect(from: LiveSourceRect, to: LiveSourceRect, amount: number): Li
 }
 
 function ShotInput({
+  channel,
   source,
   input,
   frame,
   fallback,
+  pictureBox,
 }: {
+  channel: number;
   source: PvwSourceFrame | undefined;
   input: ControlLiveLayoutFrame;
   frame: LiveSourceRect;
   fallback: string;
+  pictureBox?: LiveSourceRect | undefined;
 }): JSX.Element {
   const { width, height } = frame;
   const box = { x: 0, y: 0, width, height };
+  const seat = pictureBox ?? box;
   const mask = input.liveMask;
   const windows =
     mask === undefined
-      ? [box]
-      : livePlateMaskRegions(mask).map((rect) => liveRevealSceneRect(box, rect));
+      ? [seat]
+      : livePlateMaskRegions(mask).map((rect) => liveRevealSceneRect(seat, rect));
   if (source?.jpegBase64 === undefined) {
     const label = largestLivePlateMaskRegion(mask);
     return (
@@ -96,9 +108,13 @@ function ShotInput({
         {label !== null && (
           <div
             className="cg-live-layout-shot-label"
-            style={cssRect(liveRevealSceneRect(box, label), box)}
+            style={cssRect(liveRevealSceneRect(seat, label), box)}
           >
-            <SourceLabel sourceId={input.sourceId ?? ''} fallback={fallback} />
+            <SourceLabel
+              sourceId={input.sourceId ?? ''}
+              fallback={fallback}
+              meterChannel={channel}
+            />
           </div>
         )}
       </>
@@ -111,7 +127,7 @@ function ShotInput({
       ? source.width / source.height
       : null);
   const { picture, visible } = fitPictureToBox(
-    box,
+    seat,
     sourceAspect,
     input.fitMode ?? DEFAULT_LIVE_FIT_MODE,
   );
@@ -233,6 +249,7 @@ function motionKeys(
 }
 
 export function LiveLayoutEditorPreview({
+  channel,
   layout,
   preset,
   geometry,
@@ -240,8 +257,11 @@ export function LiveLayoutEditorPreview({
   focused,
   backgroundUrl,
   sourceFrames,
+  attachmentSources,
   onFocus,
+  placementEditor,
 }: {
+  channel: number;
   layout: ControlLiveLayout;
   preset: ControlLiveLayoutPreset;
   geometry: Rects;
@@ -249,7 +269,9 @@ export function LiveLayoutEditorPreview({
   focused: string | undefined;
   backgroundUrl: string | undefined;
   sourceFrames: ReadonlyMap<string, PvwSourceFrame>;
+  attachmentSources: ReadonlyMap<string, ControlLiveLayoutFrameAttachmentSource>;
   onFocus: (frameId: string) => void;
+  placementEditor?: ReactNode;
 }): JSX.Element {
   const stage = useRef<HTMLDivElement>(null);
   const active = useRef<Animation[]>([]);
@@ -276,7 +298,7 @@ export function LiveLayoutEditorPreview({
   // frame clock and focus effects without calling a play or preset command.
   useLayoutEffect(() => {
     const before = previous.current;
-    previous.current = { presetId: preset.id, focused, rects: visible };
+    previous.current = { presetId: preset.id, focused, soloFrameId, rects: visible };
     if (
       stage.current === null ||
       before === undefined ||
@@ -288,13 +310,14 @@ export function LiveLayoutEditorPreview({
     active.current = [];
     // This is a rehearsal of the chosen broadcast effect, including on systems
     // where the operator has reduced the console's own interface animations.
-    if (before.presetId !== preset.id) return;
-
     const shots = [...stage.current.querySelectorAll<HTMLElement>('[data-layout-preview-shot]')];
     const { focus, switch: change } = layout.effects;
-    const previousSingle = before.focused ?? soloFrameId;
+    const previousSingle = before.focused ?? before.soloFrameId;
     const switching =
-      focused !== undefined && previousSingle !== undefined && focused !== previousSingle;
+      before.presetId === preset.id &&
+      focused !== undefined &&
+      previousSingle !== undefined &&
+      focused !== previousSingle;
 
     if (switching && change.mode !== 'motion') {
       if (change.mode === 'cut') return;
@@ -341,7 +364,10 @@ export function LiveLayoutEditorPreview({
       const shownAfter = visible[id] !== undefined;
       const from = before.rects[id] ?? geometry[id] ?? collapsed;
       const to = visible[id] ?? geometry[id] ?? collapsed;
-      const zIndex = focused === id || previousSingle === id ? '3' : '1';
+      const shared = shownBefore && shownAfter;
+      const activeFocus =
+        focused === id || (before.focused === id && before.presetId === preset.id);
+      const zIndex = activeFocus || shared ? '3' : shownAfter ? '2' : '1';
       const { keys, duration } = motionKeys(
         from,
         to,
@@ -389,9 +415,28 @@ export function LiveLayoutEditorPreview({
           const activeShot = visible[id] !== undefined;
           const rect = visible[id] ?? geometry[id] ?? full;
           const preview = sourceId === undefined ? undefined : sourceFrames.get(sourceId);
-          const titleHidden = (
-            focused === undefined ? preset.hiddenTitles : preset.hiddenFocusTitles
-          ).includes(id);
+          const titleHidden = controlLiveLayoutTitleHidden(preset, id, focused !== undefined);
+          const graphics = (preset.frameAttachments ?? []).filter(({ frameId }) => frameId === id);
+          const graphicWithInput = graphics.find(
+            ({ sourceId }) => attachmentSources.get(sourceId)?.plate !== undefined,
+          );
+          const imported =
+            graphicWithInput === undefined
+              ? undefined
+              : attachmentSources.get(graphicWithInput.sourceId);
+          const pictureBox =
+            graphicWithInput === undefined || imported === undefined
+              ? undefined
+              : frameAttachmentPlateRect({ ...rect, x: 0, y: 0 }, graphicWithInput, imported);
+          const importedPlate = imported?.plate?.element;
+          const previewInput =
+            importedPlate === undefined
+              ? input
+              : {
+                  ...input,
+                  liveMask: importedPlate.liveMask,
+                  fitMode: importedPlate.fitMode ?? input.fitMode,
+                };
           return (
             <div
               key={id}
@@ -408,11 +453,35 @@ export function LiveLayoutEditorPreview({
                 zIndex: focused === id ? '3' : '1',
               }}
             >
-              <ShotInput source={preview} input={input} frame={rect} fallback={`Frame ${number}`} />
-              {!titleHidden &&
-                controlLiveLayoutFrameTexts(input, layout.titleStyle).map(({ id, text, style }) => (
-                  <ShotTitle key={id} title={text} style={style} raster={raster} />
-                ))}
+              <ShotInput
+                channel={channel}
+                source={preview}
+                input={previewInput}
+                frame={rect}
+                pictureBox={pictureBox}
+                fallback={`Frame ${number}`}
+              />
+              {graphics.map((attachment) => {
+                const source = attachmentSources.get(attachment.sourceId);
+                if (source === undefined) return null;
+                return (
+                  <div
+                    key={attachment.id}
+                    className="cg-live-layout-frame-graphic"
+                    data-layout-frame-graphic={attachment.id}
+                    style={cssRect(attachment.rect, { width: 1, height: 1 })}
+                  >
+                    <LiveLayoutFrameAttachmentArt source={source} />
+                  </div>
+                );
+              })}
+              {!titleHidden && (
+                <div className="cg-live-layout-shot-titles">
+                  {controlLiveLayoutFrameTexts(input, layout).map(({ id, text, style }) => (
+                    <ShotTitle key={id} title={text} style={style} raster={raster} />
+                  ))}
+                </div>
+              )}
               {activeSingle === undefined && activeShot && (
                 <div className="cg-live-layout-focus-action">
                   <Button
@@ -426,6 +495,7 @@ export function LiveLayoutEditorPreview({
                   </Button>
                 </div>
               )}
+              {activeShot && selectedFrameId === id && placementEditor}
             </div>
           );
         })}

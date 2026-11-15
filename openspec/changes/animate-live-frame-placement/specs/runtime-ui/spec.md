@@ -40,6 +40,14 @@ Fade disabled. The effect duration SHALL be configurable from 100 to 1000 ms.
 - **AND** it retains its input and existing audio policy
 - **AND** the switch completes with only the incoming preset visible
 
+#### Scenario: Move an on-air frame with a reserve configured
+
+- **GIVEN** a mirror-sync station with a verified resident active page
+- **WHEN** the operator applies a supported frame move or resize on air
+- **THEN** the active engine applies the placement and any configured effect in place
+- **AND** the reserve receives the settled geometry only on its verified page and matching seats
+- **AND** when the active engine changes during an effect, the old effect cannot send commands to the promoted engine
+
 #### Scenario: Animate a verified preset with a configured backup
 
 - **GIVEN** a legacy mirror station with a verified active programme page and reusable live seats

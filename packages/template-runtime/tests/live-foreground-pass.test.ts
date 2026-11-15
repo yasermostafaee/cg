@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS,
   withCgControl,
   type FrameTransitionPhase,
   type LiveFramePlacement,
@@ -294,83 +295,115 @@ describe('D-201 — synchronized live-input foreground pass', () => {
     },
   );
 
-  it('hides an authored title on only one shared frame instance and keeps its data bound', async () => {
-    const scene = movableFrameScene();
-    const layer = scene.layers[0];
-    const box = layer?.children[0];
-    const child = scene.compositions?.[0];
-    if (layer === undefined || box?.type !== 'composition' || child === undefined)
-      throw new Error('Missing frame fixture');
+  it.each([false, true])(
+    'hides a scoped title and keeps its data bound (legacy solo: %s)',
+    async (legacySolo) => {
+      const scene = movableFrameScene();
+      const layer = scene.layers[0];
+      const box = layer?.children[0];
+      const child = scene.compositions?.[0];
+      if (layer === undefined || box?.type !== 'composition' || child === undefined)
+        throw new Error('Missing frame fixture');
 
-    const presets = [
-      { id: 'title-on', name: 'Title on', frame: { ...box } },
-      { id: 'title-off', name: 'Title off', frame: { ...box, hiddenTextIds: ['name', 'plate'] } },
-    ];
-    for (const { id, name, frame } of presets) {
-      scene.compositions?.push({ ...child, id, name, layers: [{ ...layer, children: [frame] }] });
-    }
-    layer.children = presets.map(({ id, name }) => ({
-      ...box,
-      id,
-      name,
-      compositionId: id,
-      // A direct-text override on the preset root may not reach into its child frame.
-      ...(id === 'title-on' && { hiddenTextIds: ['name'] }),
-    }));
-    scene.lookGroups = [
-      {
-        id: 'presets',
-        defaultLookId: 'title-off',
-        looks: presets.map(({ id, name }) => ({
-          id,
-          name,
-          instanceId: id,
-          entered: { mode: 'cut' },
-        })),
-      },
-    ];
+      const presets = [
+        { id: 'title-on', name: 'Title on', frame: { ...box } },
+        {
+          id: 'title-off',
+          name: 'Title off',
+          frame: { ...box, ...(!legacySolo && { hiddenTextIds: ['name', 'plate'] }) },
+        },
+      ];
+      for (const { id, name, frame } of presets) {
+        scene.compositions?.push({ ...child, id, name, layers: [{ ...layer, children: [frame] }] });
+      }
+      layer.children = presets.map(({ id, name }) => ({
+        ...box,
+        id,
+        name,
+        compositionId: id,
+        // A direct-text override on the preset root may not reach into its child frame.
+        ...(id === 'title-on' && { hiddenTextIds: ['name'] }),
+      }));
+      scene.lookGroups = [
+        {
+          id: 'presets',
+          defaultLookId: 'title-off',
+          looks: presets.map(({ id, name }) => ({
+            id,
+            name,
+            instanceId: id,
+            entered: { mode: 'cut' },
+          })),
+        },
+      ];
+      if (legacySolo) {
+        scene.controlLiveLayout = {
+          id: scene.id,
+          name: scene.name,
+          resolution: scene.resolution,
+          frameRate: scene.frameRate,
+          frames: [{ id: 'guest', title: 'Guest' }],
+          presets: presets.map(({ id, name }) => ({
+            id,
+            name,
+            frameIds: ['guest'],
+            arrangement: 'side-by-side',
+            horizontalGap: 0,
+            verticalGap: 0,
+            reverse: false,
+            hiddenTitles: [],
+            hiddenFocusTitles: id === 'title-off' ? ['guest'] : [],
+          })),
+          defaultPresetId: 'title-off',
+          background: { kind: 'color', color: '#000000' },
+          effects: CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS,
+        };
+      }
 
-    const thumbnail = buildThumbnailScene(scene, document);
-    expect(
-      thumbnail.querySelector<HTMLElement>('[data-cg-element-id="title-off"]')?.style.display,
-    ).not.toBe('none');
-    expect(
-      thumbnail.querySelector('[data-cg-instance-hidden-text]')?.getAttribute('data-cg-element-id'),
-    ).toBe('name');
-    expect(
-      thumbnail
-        .querySelector('[data-cg-element-id="plate"]')
-        ?.hasAttribute('data-cg-instance-hidden-text'),
-    ).toBe(false);
+      const thumbnail = buildThumbnailScene(scene, document);
+      expect(
+        thumbnail.querySelector<HTMLElement>('[data-cg-element-id="title-off"]')?.style.display,
+      ).not.toBe('none');
+      expect(
+        thumbnail
+          .querySelector('[data-cg-instance-hidden-text]')
+          ?.getAttribute('data-cg-element-id'),
+      ).toBe('name');
+      expect(
+        thumbnail
+          .querySelector('[data-cg-element-id="plate"]')
+          ?.hasAttribute('data-cg-instance-hidden-text'),
+      ).toBe(false);
 
-    const runtime = createRuntime(scene, {
-      outputPass: 'foreground',
-      skipFontLoad: true,
-      installGlobals: false,
-    });
-    const title = (id: string) =>
-      document.querySelector<HTMLElement>(
-        `[data-cg-element-id="${id}"] [data-cg-element-id="name"]`,
-      );
-    const hidden = title('title-off');
-    const visible = title('title-on');
-    if (hidden === null || visible === null) throw new Error('Missing scoped titles');
-    expect(hidden.getAttribute('data-cg-instance-hidden-text')).toBe('');
-    expect(visible.hasAttribute('data-cg-instance-hidden-text')).toBe(false);
-    await runtime.play({});
-    expect(hidden.style.display).toBe('none');
-    await runtime.update({
-      'Title off': { box: { anchor: 'مهمان' } },
-      'Title on': { box: { anchor: 'مهمان' } },
-    });
-    expect(hidden.textContent).toContain('مهمان');
-    expect(visible.textContent).toContain('مهمان');
-    expect(runtime.setActiveLook('title-on')).toBe(true);
-    expect(getComputedStyle(visible).display).not.toBe('none');
-    expect(runtime.setActiveLook('title-off')).toBe(true);
-    expect(getComputedStyle(hidden).display).toBe('none');
-    runtime.remove();
-  });
+      const runtime = createRuntime(scene, {
+        outputPass: 'foreground',
+        skipFontLoad: true,
+        installGlobals: false,
+      });
+      const title = (id: string) =>
+        document.querySelector<HTMLElement>(
+          `[data-cg-element-id="${id}"] [data-cg-element-id="name"]`,
+        );
+      const hidden = title('title-off');
+      const visible = title('title-on');
+      if (hidden === null || visible === null) throw new Error('Missing scoped titles');
+      expect(hidden.getAttribute('data-cg-instance-hidden-text')).toBe('');
+      expect(visible.hasAttribute('data-cg-instance-hidden-text')).toBe(false);
+      await runtime.play({});
+      expect(hidden.style.display).toBe('none');
+      await runtime.update({
+        'Title off': { box: { anchor: 'مهمان' } },
+        'Title on': { box: { anchor: 'مهمان' } },
+      });
+      expect(hidden.textContent).toContain('مهمان');
+      expect(visible.textContent).toContain('مهمان');
+      expect(runtime.setActiveLook('title-on')).toBe(true);
+      expect(getComputedStyle(visible).display).not.toBe('none');
+      expect(runtime.setActiveLook('title-off')).toBe(true);
+      expect(getComputedStyle(hidden).display).toBe('none');
+      runtime.remove();
+    },
+  );
 
   it.each([true, false])(
     'uses the full plate for foreground ordering with mask editing %s',
