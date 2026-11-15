@@ -17,6 +17,14 @@ export type ServerLabel = 'A' | 'B';
  * 2026-09-28). The one exception a caller may ask for is `mirror: false`, which IS read.
  */
 export interface SendOptions extends EnqueueOptions {
+  /** Send a settled value to the same verified peer without replaying it on the active engine. */
+  replica?: {
+    primary: ServerSession;
+    peer: ServerSession;
+    queue: ServerSession['queue'];
+  };
+  /** A primary-only operation pinned to the engine and connection that started it. */
+  primaryOwner?: { session: ServerSession; queue: ServerSession['queue'] };
   /**
    * 🔴 `ROUTE-PLATES-01` / contract v1.3 C4 — `false`: this line reaches the PRIMARY ONLY, under
    * every strategy, and is NEVER journaled — so neither a failover replay nor a corrective resend can
@@ -70,4 +78,6 @@ export interface FailoverEvent {
  */
 export interface RedundancySendResult extends QueueResult {
   winner: ServerLabel;
+  /** Both sessions explicitly acknowledged this mirror-sync command. */
+  mirrorConfirmed?: true;
 }

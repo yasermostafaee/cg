@@ -68,12 +68,15 @@ const HTML =
 
 let bridge: BridgeHandle | null = null;
 let mock: MockHandle | null = null;
+let backupMock: MockHandle | null = null;
 
 test.afterEach(async () => {
   await bridge?.close();
   bridge = null;
   await mock?.stop();
   mock = null;
+  await backupMock?.stop();
+  backupMock = null;
 });
 
 // A real bridge and a real mock per test: serial, as a LOAD bound (`retention-honesty.spec.ts`).
@@ -90,7 +93,11 @@ function freeUdpPort(): Promise<number> {
   });
 }
 
-async function boot(withCropSource = false, textSourceRoot?: string): Promise<BridgeHandle> {
+async function boot(
+  withCropSource = false,
+  textSourceRoot?: string,
+  withBackup = false,
+): Promise<BridgeHandle> {
   const oscPort = await freeUdpPort();
   mock = await createMock({
     amcpPort: 0,
@@ -104,10 +111,36 @@ async function boot(withCropSource = false, textSourceRoot?: string): Promise<Br
     strategy: 'mirror-sync',
     autoFailoverEnabled: false,
   };
+  if (withBackup) {
+    const backupOscPort = await freeUdpPort();
+    backupMock = await createMock({
+      amcpPort: 0,
+      channels: 2,
+      oscPort: backupOscPort,
+      oscHost: '127.0.0.1',
+      oscHz: 10,
+    });
+    connection.servers.B = {
+      host: '127.0.0.1',
+      amcpPort: backupMock.amcpPort,
+      oscPort: backupOscPort,
+    };
+  }
   bridge = await createBridge({
     port: 0,
     connection,
     fixedLayers: BANK,
+    ...(withBackup && {
+      backupChannelMap: {
+        channelOnB: (channel) => (channel === 1 ? 2 : null),
+        channelOnBAtTake: (channel) => (channel === 1 ? 2 : null),
+        stationChannelOf: (channel) => (channel === 2 ? 1 : null),
+        release: () => undefined,
+      },
+      coreGuardOptions: {
+        fetchImpl: () => Promise.resolve(new Response(null, { status: 404 })),
+      },
+    }),
     ...(textSourceRoot === undefined ? {} : { textSourceRoot }),
     ...(withCropSource && {
       sourceCatalog: {
@@ -1586,6 +1619,87 @@ test('R-117 drafts Position in PVW and moves the resident page on Update on air'
   }
 });
 
+test('R-117 keeps Position editable on air with a verified backup', async ({ page }) => {
+  const handle = await boot(false, undefined, true);
+  const active = mock;
+  const reserve = backupMock;
+  if (active === null || reserve === null) throw new Error('Expected two test engines');
+  await handle.runtime.whenServerHealthy(15_000);
+  await expect
+    .poll(() => handle.runtime.health().backup?.state, { timeout: 15_000 })
+    .toBe('healthy');
+  await waitForStartupVolumes(active);
+
+  const templateId = 'tpl-paired-live-position';
+  const { scene } = await unpack(await buildPositionedVcg(templateId));
+  const { html } = await new ExporterSingleFile({
+    cgJsIife,
+    cgCss,
+    fontsCss: '',
+    assets: { get: () => Promise.resolve(null), bytes: () => Promise.resolve(null) },
+  }).produce(scene);
+  handle.runtime.templateImport(
+    {
+      ...TEMPLATE,
+      templateId,
+      name: 'Paired Position',
+      liveSources: buildTemplateLiveSources(scene),
+    },
+    html,
+    1,
+  );
+  const activeSlot = { channel: 1, layer: ROW };
+  const reserveSlot = { channel: 2, layer: ROW };
+  expect(
+    await handle.runtime.loadFixed(activeSlot, 'paired-position', templateId, {}),
+  ).toMatchObject({
+    accepted: true,
+  });
+  await openConsole(page, handle.url);
+  await showMonitors(page);
+  const layer = row(page);
+  await layer.locator('[data-row-body]').click();
+  await layer.getByRole('button', { name: 'ON PVW', exact: true }).click();
+  await page
+    .getByRole('region', { name: 'PREVIEW (PVW)' })
+    .getByRole('button', { name: 'PLAY', exact: true })
+    .click();
+  await layer.getByRole('button', { name: 'PLAY', exact: true }).click();
+  await expect(layer).toHaveAttribute('aria-label', /ON AIR$/);
+  expect(reserve.lastCgAdd(reserveSlot)?.template).toBe(active.lastCgAdd(activeSlot)?.template);
+  expect(reserve.lastCgAdd(reserveSlot)).toBeDefined();
+
+  const inspector = page.getByRole('complementary', { name: 'Inspector' });
+  const x = inspector.getByLabel('Position offset X', { exact: true });
+  await expect(x).toBeEnabled();
+  const pageWrites = (engine: MockHandle) =>
+    engine.receivedCommands().filter(({ line }) => /^CG (1|2)-99 (ADD|PLAY|UPDATE) /.test(line));
+  const beforeActive = pageWrites(active);
+  const beforeReserve = pageWrites(reserve);
+  await inspector.getByRole('button', { name: 'Anchor top-left', exact: true }).click();
+  await x.fill('80');
+  await inspector.getByLabel('Position offset Y', { exact: true }).fill('40');
+  await expect(layer.getByText('● draft', { exact: true })).toBeVisible();
+  await expect(frames(page).contentFrame().locator('.cg-stage')).toHaveCSS(
+    'transform',
+    'matrix(1, 0, 0, 1, 80, 40)',
+  );
+  expect(pageWrites(active)).toEqual(beforeActive);
+  expect(pageWrites(reserve)).toEqual(beforeReserve);
+
+  await inspector.getByRole('button', { name: 'Apply staged edits to the on-air row' }).click();
+  const position = { anchor: 'top-left', offset: { x: 80, y: 40 } };
+  await expect(layer.getByText('● draft', { exact: true })).toHaveCount(0);
+  expect(JSON.parse(active.lastCgUpdate(activeSlot)?.data ?? '{}')).toMatchObject({
+    __cg: { position },
+  });
+  expect(JSON.parse(reserve.lastCgUpdate(reserveSlot)?.data ?? '{}')).toMatchObject({
+    __cg: { position },
+  });
+  expect(pageWrites(active).slice(beforeActive.length)).toHaveLength(1);
+  expect(pageWrites(reserve).slice(beforeReserve.length)).toHaveLength(1);
+});
+
 test('Frames drafts the authored box and whole-template Position moves the retained live seat', async ({
   page,
 }) => {
@@ -2673,6 +2787,10 @@ test('Auto layout stages both frame boxes and keeps each styled title with its i
 test('R-119 applies the selected effect to both directions of a live preset switch', ({ page }) =>
   exercisePresetSwitch(page, false));
 
+test('R-119 animates the active preset with a configured backup and mirrors the settled preset', ({
+  page,
+}) => exercisePresetSwitch(page, false, undefined, true));
+
 test('R-119 hides all fragments of a departing masked frame before the shared frame crosses it', ({
   page,
 }) => exercisePresetSwitch(page, true));
@@ -2688,11 +2806,18 @@ async function exercisePresetSwitch(
   page: Page,
   crossing: boolean,
   preview?: 'effects' | 'interruption',
+  withBackup = false,
 ): Promise<void> {
-  const handle = await boot(true);
+  const handle = await boot(true, undefined, withBackup);
   const engine = mock;
-  if (engine === null) throw new Error('Test engine is unavailable');
+  const reserve = backupMock;
+  if (engine === null || (withBackup && reserve === null))
+    throw new Error('Test engine is unavailable');
   await handle.runtime.whenServerHealthy(15_000);
+  if (withBackup)
+    await expect
+      .poll(() => handle.runtime.health().backup?.state, { timeout: 15_000 })
+      .toBe('healthy');
   await waitForStartupVolumes(engine);
   const templateId = 'tpl-preset-transition';
   const itemId = 'item-preset-transition';
@@ -2889,10 +3014,14 @@ async function exercisePresetSwitch(
   await openConsole(page, handle.url);
   const row = page.getByRole('region', { name: 'Layers' }).locator('[data-layer="59"]');
   await row.locator('[data-row-body]').click();
-  const effect = page.getByRole('group', { name: 'Frame and preset effects' });
-  await expect(effect).toHaveCount(0);
+  // Before Take the local Preview preset controls can exist independently.
+  await expect(
+    page.getByRole('group', { name: 'Frame and preset effects', exact: true }),
+  ).toHaveCount(0);
+  const effect = page.getByRole('group', { name: /preset effects?/i });
   await row.getByRole('button', { name: 'PLAY', exact: true }).click();
   await expect(row).toHaveAttribute('aria-label', /ON AIR$/);
+  if (reserve !== null) expect(reserve.lastCgAdd({ channel: 2, layer: 59 })).toBeDefined();
   const common = handle.runtime
     .liveLayers()
     .get(itemId)
@@ -2948,6 +3077,7 @@ async function exercisePresetSwitch(
       masksBeforeReturn.push(...departing.map(({ clip }) => clip));
     }
     const start = engine.receivedCommands().length;
+    const reserveStart = reserve?.receivedCommands().length ?? 0;
     const preset = row.locator('[data-look-id="' + lookId + '"]');
     await preset.click();
     await expect(preset).toHaveAttribute('aria-pressed', 'true');
@@ -3010,6 +3140,20 @@ async function exercisePresetSwitch(
       );
     }
     expect(wire.some((line) => line.includes('presetTransitionCommit'))).toBe(true);
+    if (reserve !== null) {
+      const reserved = reserve
+        .receivedCommands()
+        .slice(reserveStart)
+        .map(({ line }) => line);
+      expect(reserved).toContainEqual(
+        expect.stringMatching(/^CG 2-59 UPDATE .*presetTransitionCommit/),
+      );
+      expect(reserved.some((line) => line.includes('hidePresetTitlePlateIds'))).toBe(false);
+      expect(reserved.some((line) => /\s\d+ ease(?:in|out)quad DEFER$/i.test(line))).toBe(false);
+      expect(reserve.layerState({ channel: 2, layer: commonSlot.layer })?.clip).toEqual(
+        engine.layerState(commonSlot)?.clip,
+      );
+    }
     const clip = engine.layerState(commonSlot)?.clip;
     if (clip === undefined) throw new Error('Missing clip for the common input');
     const expected =

@@ -34,14 +34,8 @@ import { lookSwitchBanner, lookSwitchRefusal } from './lookSwitch.js';
 import { LivePlateAudioDialog } from './LivePlateAudioDialog.js';
 import { announcePlateAudio, audioSummary, type RowPlateAudio } from './plateAudio.js';
 import { rowState, type RowBinding } from './rowState.js';
-import {
-  BACKUP_UNMIRRORED_LINE,
-  BackupNoCopyText,
-  backupNoCopyLine,
-  plateLabelOf,
-  takeRefusalLine,
-  TakeRefusalText,
-} from './takeRefusalLine.js';
+import { BackupStatus } from './BackupStatus.js';
+import { plateLabelOf, takeRefusalLine, TakeRefusalText } from './takeRefusalLine.js';
 import { currentSourceCatalog } from '../sources/sourceStore.js';
 import { followAcceptedLayerPreset } from '../inspector/draftStore.js';
 import { frameTransitionPreference } from '../inspector/frameTransitionPreference.js';
@@ -461,10 +455,6 @@ export function LayerRow({
           engineName: engine,
         })
       : null;
-  // `ROUTE-PLATES-01` C4 — the backup carries this row without its live boxes: one line, here.
-  const backupLine = item?.backupUnmirrored === true ? BACKUP_UNMIRRORED_LINE : null;
-  // `PLAYOUT-FEATURES-01` A (`B-286`) — the clips server B was sent nothing for: one line, here.
-  const noCopyLine = backupNoCopyLine(item?.backupNoCopy ?? []);
 
   const templateLabel =
     template !== null
@@ -1091,6 +1081,7 @@ export function LayerRow({
           <bdi dir={directionOf(rowName)}>{rowName}</bdi>
           {dirty && <DraftChip label={`${rowName} has unapplied edits`} />}
         </span>
+        {item !== null && <BackupStatus item={item} template={template} compact />}
         {/*
           🔴 `add-multibox-audio` — THE ROW'S AUDIO SUMMARY, READ-ONLY, AND **OUTSIDE THE VERB
           BLOCK**.
@@ -1244,26 +1235,6 @@ export function LayerRow({
             dir="ltr"
           >
             <TakeRefusalText line={refusalLine} />
-          </span>
-        ) : noCopyLine !== null ? (
-          <span
-            style={styles.secondary}
-            data-backup-no-copy=""
-            title={
-              templateLabel === null ? noCopyLine.text : `${noCopyLine.text} — ${templateLabel}`
-            }
-            dir="ltr"
-          >
-            <BackupNoCopyText line={noCopyLine} />
-          </span>
-        ) : backupLine !== null ? (
-          <span
-            style={styles.secondary}
-            data-backup-unmirrored=""
-            title={templateLabel === null ? backupLine : `${backupLine} — ${templateLabel}`}
-            dir="ltr"
-          >
-            {backupLine}
           </span>
         ) : templateLabel !== null ? (
           <span

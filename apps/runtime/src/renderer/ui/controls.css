@@ -9647,6 +9647,47 @@ input[type='checkbox']:disabled:checked {
   grid-row: 1 / span 2;
 }
 
+.cg-backup-status.cg-btn {
+  align-self: flex-start;
+  flex: 0 0 auto;
+  min-height: var(--r-pvw-transport-h);
+  padding: 0 var(--r-space-2);
+  font-size: var(--r-text-xs);
+}
+
+.cg-backup-details {
+  display: grid;
+  gap: var(--r-space-3);
+  padding: var(--r-space-3);
+  overflow-wrap: anywhere;
+  font-size: var(--r-text-sm);
+}
+
+.cg-backup-details p,
+.cg-backup-details__clips {
+  margin: 0;
+}
+
+.cg-backup-details__clips {
+  display: grid;
+  gap: var(--r-space-2);
+  padding: 0;
+  list-style: none;
+}
+
+.cg-backup-details__clips li {
+  display: grid;
+  gap: var(--r-space-1);
+}
+
+.cg-backup-details__clips li > span {
+  color: var(--r-text-muted);
+}
+
+.cg-backup-details > .cg-btn {
+  justify-self: end;
+}
+
 /* `B-303` — a choice's `Unavailable` keeps the gap `SourceLabel`'s flex row gives its own tag. */
 .cg-choice-label > .cg-source-tag {
   margin-inline-start: var(--r-space-1);

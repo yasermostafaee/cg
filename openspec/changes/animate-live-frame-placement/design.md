@@ -54,6 +54,13 @@ reasserts the prior mixer ledger. A guarded update restores the previous preset 
 artwork passes. The page accepts recovery only for the effect it received. A new take, Stop, or
 loss of the resident pages ends that ownership.
 
+With a legacy mirror-sync backup, a supported transition between already seated inputs animates
+in the captured active engine session. The reserve receives the absolute final preset after
+settlement and only with confirmed resident artwork and native seat ownership. Inputs with no
+backup copy and Playout routes stay absent there. A new input that would require preparing new
+seats while switching both engines uses the existing Cut path. After a role change, a deferred
+batch owned by the former engine cannot be committed by another channel operation on its reserve.
+
 ## Rehearsal
 
 Preview uses the exact exported page and the same phase planner. The Inspector can choose a PVW

@@ -55,3 +55,14 @@
 - [x] Verify linked title suppression and release in both output passes and preservation of other
       text. Runtime DOM and Windows Chromium cover title visibility and the confirmed PGM follow.
 - [x] [Linux Playwright](https://github.com/yasermostafaee/cg/actions/runs/43659813628/job/132646426527) passed on the combined effects and monitor follow-up at `76a76c80`.
+
+## Preset effects with a configured backup
+
+- [x] Reproduce the installed 3ghab effect eligibility loss with B configured.
+- [x] Verify the active engine's effect and guarded settled mirror for eligible presets.
+      Windows Chromium and the owner's original 3ghab package passed on two isolated test engines.
+      Four preset switches used active tweens and settled the backup on channel 2.
+- [x] Verify missing backup inputs and interruption do not write transient geometry to another engine.
+      The paired wire cases verify missing media, mapping, a refused active commit, a reconnect and
+      ownership transfer after a deferred mixer write.
+- [ ] Record the carrying Linux Playwright result.

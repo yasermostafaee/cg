@@ -40,6 +40,14 @@ Fade disabled. The effect duration SHALL be configurable from 100 to 1000 ms.
 - **AND** it retains its input and existing audio policy
 - **AND** the switch completes with only the incoming preset visible
 
+#### Scenario: Animate a verified preset with a configured backup
+
+- **GIVEN** a legacy mirror station with a verified active programme page and reusable live seats
+- **WHEN** the operator switches presets with a motion or Fade effect
+- **THEN** the active programme renders the effect and the reserve settles on the same preset through its verified mirror
+- **AND** missing backup inputs remain empty while other eligible inputs and artwork are updated
+- **AND** transient mixer batches cannot be committed to another engine after ownership changes
+
 #### Scenario: Rehearse a preset selection
 
 - **GIVEN** Preview is playing a live layout

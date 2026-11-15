@@ -34,3 +34,10 @@
       the real CG Bridge and Control on an isolated redundant channel.
 - [ ] Verify the managed export adapter with real graphics and collect acceptance for cold
       recovery, masked multi-plate presets, authored outros and physical programme output.
+
+## Backup input status
+
+- [x] Observe the long media warning replacing the template name on the target station.
+- [x] Keep the name and compact status visible and show specific causes on demand.
+- [x] Verify combined missing media and live input warnings in Layers and Inspector. Four Windows Chromium cases and 14 warning tests passed.
+- [ ] Record the carrying Linux Playwright result.

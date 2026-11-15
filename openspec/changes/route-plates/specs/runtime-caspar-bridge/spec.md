@@ -107,8 +107,8 @@ exempt for that exact coordinate only.
 
 A route line SHALL reach the primary only: it SHALL never be mirrored, never journaled, and never sent to a
 backup promoted by a failover. While a backup is declared, a row whose seats include a Playout route SHALL say so
-on the row and in its Inspector, in its channel's view: `Backup: live boxes not mirrored.` Every other plate SHALL
-mirror as before.
+on the row through the backup status and in its Inspector details, in its channel's view. Every
+other plate SHALL mirror as before.
 
 #### Scenario: Backup
 

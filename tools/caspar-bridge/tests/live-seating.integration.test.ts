@@ -210,18 +210,23 @@ async function bootPresetDeparture(
   html: string,
   withRetainedInGroup = false,
   additionalArrivalFragment = false,
+  mirror?: { missingMedia?: true; nextTake?: true },
 ) {
   const base = presetEffectTemplate();
   const live = base.liveSources!;
   const [solo, duo] = live.looks!;
   const left = { x: 0, y: 270, width: 960, height: 540 };
   const right = { x: 960, y: 270, width: 960, height: 540 };
-  const nativeBand = html === PRESET_RECOVERY_HTML ? PRESET_RECOVERY_BAND : DEPARTURE_BAND;
+  const nativeBand =
+    html === PRESET_RECOVERY_HTML || mirror !== undefined ? PRESET_RECOVERY_BAND : DEPARTURE_BAND;
   const makeInput = (id: string): SourceCatalog['sources'][number] => ({
     id,
     name: id,
     format: '1080i5000',
-    producer: { kind: 'ndi', source: id },
+    producer:
+      mirror?.missingMedia === true && id === 'src-b'
+        ? { kind: 'media', file: 'missing-on-backup.mov' }
+        : { kind: 'ndi', source: id },
   });
   const r = await boot({
     template: {
@@ -262,17 +267,30 @@ async function bootPresetDeparture(
       },
     },
     html,
+    ...(mirror === undefined
+      ? {}
+      : { mirrorChannel: 2, missingBackupMedia: mirror.missingMedia === true }),
     catalog: catalog({
-      sources: ['src-a', 'src-b', 'src-c'].map(makeInput),
-      layerRange: additionalArrivalFragment
-        ? { ...nativeBand, end: nativeBand.end + 1 }
-        : nativeBand,
+      sources: ['src-a', 'src-b', 'src-c', ...(mirror?.nextTake === true ? ['src-d'] : [])].map(
+        makeInput,
+      ),
+      layerRange:
+        additionalArrivalFragment || mirror?.nextTake === true
+          ? { ...nativeBand, end: nativeBand.end + 1 }
+          : nativeBand,
     }),
-    assignments: assign([
-      ['guest-1', 'src-a'],
-      ['guest-2', 'src-b'],
-      ['guest-3', 'src-c'],
-    ]),
+    assignments: {
+      assignments: [
+        ...assign([
+          ['guest-1', 'src-a'],
+          ['guest-2', 'src-b'],
+          ['guest-3', 'src-c'],
+        ]).assignments,
+        ...(mirror?.nextTake === true
+          ? [{ templateId: 'other-layout', plateId: 'guest-4', sourceId: 'src-d' }]
+          : []),
+      ],
+    },
   });
   expect(await loadAndTake(r)).toMatchObject({ accepted: true });
   await expect.poll(() => r.stackSnapshot()[0]).toMatchObject({ onAirPresetTransition: true });
@@ -327,6 +345,8 @@ async function boot(options: {
   assignments?: SourceAssignments;
   html?: string;
   redundant?: boolean;
+  mirrorChannel?: number;
+  missingBackupMedia?: boolean;
 }): Promise<CasparRuntime> {
   const oscPort = await freeUdpPort();
   tracePath = path.join(
@@ -335,13 +355,14 @@ async function boot(options: {
   );
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30, tracePath });
   const config = singleServer(mock.amcpPort, oscPort);
-  if (options.redundant === true) {
+  if (options.redundant === true || options.mirrorChannel !== undefined) {
     const backupOscPort = await freeUdpPort();
     backup = await createMock({
       amcpPort: 0,
       oscPort: backupOscPort,
       oscHost: '127.0.0.1',
       oscHz: 30,
+      ...(options.mirrorChannel !== undefined && { channels: options.mirrorChannel }),
     });
     config.servers.B = { host: '127.0.0.1', amcpPort: backup.amcpPort, oscPort: backupOscPort };
   }
@@ -353,9 +374,19 @@ async function boot(options: {
       sweepMs: 150,
       sourceCatalog: options.catalog ?? catalog(),
       sourceAssignments: options.assignments ?? assign([['guest-1', 'src-a']]),
+      ...(options.mirrorChannel !== undefined && {
+        backupChannels: {
+          channelOnB: (channel: number) => (channel === 1 ? options.mirrorChannel! : null),
+          channelOnBAtTake: (channel: number) => (channel === 1 ? options.mirrorChannel! : null),
+          stationChannelOf: (channel: number) => (channel === options.mirrorChannel ? 1 : null),
+          release: () => undefined,
+        },
+      }),
     },
   );
   runtime = r;
+  if (options.missingBackupMedia === true)
+    r.useBackupMedia(() => ({ kind: 'refused', reason: 'no-copy' }));
   r.start();
   await r.startServing();
   r.templateImport(
@@ -363,6 +394,8 @@ async function boot(options: {
     options.html ?? '<!doctype html><html><body>served</body></html>',
   );
   await r.whenServerHealthy(HEALTH_MS);
+  if (options.mirrorChannel !== undefined)
+    await expect.poll(() => r.health().backup?.state, { timeout: HEALTH_MS }).toBe('healthy');
   // The refusal cases below assert "NOTHING reaches the wire" from a `before`
   // baseline — valid only once R-030's timer-driven one-shot `INFO` has drained
   // (flake family 3, support/harness.ts).
@@ -2033,6 +2066,254 @@ it('dips the retained picture when Fade is checked and releases linked titles on
 });
 
 it.each([false, true])(
+  'animates the active engine and sends only the settled preset to B (missing B media: %s)',
+  async (missingMedia) => {
+    const r = await bootPresetDeparture(
+      PRESET_TITLE_HOLD_HTML,
+      false,
+      false,
+      missingMedia ? { missingMedia: true } : {},
+    );
+    const itemId = 'item-1';
+    const b = backup!;
+    const quietBefore = b.receivedCommands().length;
+    const activeBefore = mock!.receivedCommands().length;
+    const media = r
+      .liveLayers()
+      .get(itemId)
+      ?.find(({ sourceId }) => sourceId === 'guest-2');
+    expect(media).toBeDefined();
+    const shared = r
+      .liveLayers()
+      .get(itemId)
+      ?.find(({ sourceId }) => sourceId === 'guest-1');
+    expect(shared).toBeDefined();
+    const reserveShared = { channel: 2, layer: shared!.slot.layer };
+    const initialFill = b.layerState(reserveShared)?.fill;
+    expect(await r.setActiveLook(itemId, 'solo', PRESET_EFFECT)).toEqual({ ok: true });
+    expect(b.layerState(reserveShared)?.fill).not.toEqual(initialFill);
+    expect(b.layerState(reserveShared)?.fill).toEqual(mock!.layerState(shared!.slot)?.fill);
+    expect(b.layerState(reserveShared)?.clip).toEqual(mock!.layerState(shared!.slot)?.clip);
+    expect(await r.setActiveLook(itemId, 'duo', PRESET_EFFECT)).toEqual({ ok: true });
+    expect(b.layerState(reserveShared)?.fill).toEqual(initialFill);
+    const activeLines = mock!
+      .receivedCommands()
+      .slice(activeBefore)
+      .map(({ line }) => line);
+    const backupLines = b
+      .receivedCommands()
+      .slice(quietBefore)
+      .map(({ line }) => line);
+    expect(activeLines).toContainEqual(expect.stringMatching(/FILL .*easeinquad DEFER$/));
+    expect(activeLines).toContainEqual(expect.stringContaining('hidePresetTitlePlateIds'));
+    expect(
+      backupLines.some((line) =>
+        /authoredPreset|presetEffectId|easeinquad|easeoutquad| DEFER$| COMMIT$/.test(line),
+      ),
+    ).toBe(false);
+    for (const layer of [10, PRESET_RECOVERY_BAND.end]) {
+      const compared = backupLines.filter((line) => line.startsWith(`CG 2-${layer} UPDATE `));
+      expect(compared).toHaveLength(2);
+      expect(compared[0]).toContain('solo');
+      expect(compared[1]).toContain('duo');
+      expect(JSON.parse(b.lastCgUpdate({ channel: 2, layer })?.data ?? '{}')).toMatchObject({
+        __cg: { look: 'duo', frameTransition: null, presetTransitionCommit: true },
+      });
+    }
+    if (missingMedia) {
+      expect(r.stackSnapshot()[0]?.backupNoCopy).toBeDefined();
+      expect(b.layerState({ channel: 2, layer: media!.slot.layer })?.producer ?? 'empty').toBe(
+        'empty',
+      );
+    }
+  },
+);
+
+it.each([false, true])(
+  'never commits an interrupted active-engine preset phase to the promoted reserve (recovery refused: %s)',
+  async (rejectRecovery) => {
+    const r = await bootPresetDeparture(PRESET_TITLE_HOLD_HTML, false, false, { nextTake: true });
+    const b = backup!;
+    const prior = b.receivedCommands().length;
+    const departing = r
+      .liveLayers()
+      .get('item-1')!
+      .find(({ sourceId }) => sourceId === 'guest-2')!;
+    const priorOpacity = mock!.layerState(departing.slot)?.opacity;
+    const normal = defaultHandlers().get('MIXER')!;
+    let resume: (() => void) | undefined;
+    mock!.setHandler('MIXER', async (request, context, connection) => {
+      const result = normal(request, context, connection);
+      if (resume === undefined && / OPACITY 0 [1-9]\d* linear DEFER$/.test(request.raw))
+        await new Promise<void>((resolve) => {
+          resume = resolve;
+        });
+      return result;
+    });
+    const operation = r.setActiveLook('item-1', 'solo', PRESET_EFFECT);
+    let demotedLineCount = 0;
+    try {
+      await expect.poll(() => resume !== undefined, { timeout: HEALTH_MS }).toBe(true);
+      expect(await r.failover()).toEqual({ ok: true, newPrimary: 'B' });
+      demotedLineCount = mock!.receivedCommands().length;
+    } finally {
+      resume?.();
+    }
+    expect(await operation).toMatchObject({ ok: false });
+    expect(r.activeLookId('item-1')).toBe('duo');
+    const promotedLines = b
+      .receivedCommands()
+      .slice(prior)
+      .map(({ line }) => line);
+    expect(
+      promotedLines.some((line) => line.startsWith('MIXER 2') || line.startsWith('CG 2')),
+    ).toBe(false);
+    const independent = { ...template([{ id: 'guest-4', rect: BOX }]), templateId: 'other-layout' };
+    expect(r.templateImport(independent, '<!doctype html><html>Next Take</html>').registered).toBe(
+      true,
+    );
+    await r.load('item-2', independent.templateId, {});
+    expect(await r.take('item-2')).toMatchObject({ accepted: true });
+    expect(
+      b
+        .receivedCommands()
+        .slice(prior)
+        .some(({ line }) => line === 'MIXER 2 COMMIT'),
+    ).toBe(true);
+    expect(
+      mock!
+        .receivedCommands()
+        .slice(demotedLineCount)
+        .filter(({ line }) => /^(?:MIXER|PLAY|CG) 1(?:[- ]|$)/.test(line)),
+    ).toEqual([]);
+    const beforeRecoveryA = mock!.receivedCommands().length;
+    const beforeRecoveryB = b.receivedCommands().length;
+    const repairLinePrefix = `MIXER 1-${String(departing.slot.layer)} FILL `;
+    if (rejectRecovery) {
+      mock!.setHandler('MIXER', (request, context, connection) => {
+        if (request.raw.startsWith(repairLinePrefix))
+          return { kind: 'err', code: 502, verb: 'MIXER' };
+        return normal(request, context, connection);
+      });
+    }
+    expect(await r.failover()).toEqual({ ok: true, newPrimary: 'A' });
+    const restored = () =>
+      mock!
+        .receivedCommands()
+        .slice(beforeRecoveryA)
+        .map(({ line }) => line);
+    const reserveMixer = () =>
+      b
+        .receivedCommands()
+        .slice(beforeRecoveryB)
+        .map(({ line }) => line)
+        .filter((line) => /^MIXER 2[- ]/.test(line));
+    if (rejectRecovery) {
+      await expect
+        .poll(() => restored().some((line) => line.startsWith(repairLinePrefix)), {
+          timeout: HEALTH_MS,
+        })
+        .toBe(true);
+      expect(reserveMixer()).toEqual([]);
+      await r.setActiveLook('item-1', 'solo');
+      expect(restored().filter((line) => line.endsWith(' DEFER'))).toHaveLength(1);
+      expect(restored()).not.toContain('MIXER 1 COMMIT');
+      expect(reserveMixer().filter((line) => / (?:DEFER|COMMIT)$/.test(line))).toEqual([]);
+    } else {
+      await expect.poll(restored, { timeout: HEALTH_MS }).toContain('MIXER 1 COMMIT');
+      const reassertion = restored().indexOf(
+        `MIXER 1-${String(departing.slot.layer)} OPACITY 1 DEFER`,
+      );
+      expect(reassertion).toBeGreaterThanOrEqual(0);
+      expect(reassertion).toBeLessThan(restored().indexOf('MIXER 1 COMMIT'));
+      expect(reserveMixer()).toEqual([]);
+    }
+    expect(mock!.layerState(departing.slot)?.opacity).toBe(priorOpacity);
+  },
+);
+
+it('animates the active programme without changing an unconfirmed reserve after it reconnects', async () => {
+  const r = await bootPresetDeparture(PRESET_TITLE_HOLD_HTML, false, false, {});
+  const b = backup!;
+  const versions = () => b.receivedCommands().filter(({ line }) => line === 'VERSION').length;
+  const initialConnections = versions();
+  b.closeAllAmcpConnections();
+  await expect.poll(versions, { timeout: HEALTH_MS }).toBeGreaterThan(initialConnections);
+  await expect.poll(() => r.health().backup?.state, { timeout: HEALTH_MS }).toBe('healthy');
+  expect(b.layerState({ channel: 2, layer: 10 })?.producer).toBe('html');
+  const previousSeats = r
+    .liveLayers()
+    .get('item-1')!
+    .map(({ slot }) => {
+      const reserveSlot = { channel: 2, layer: slot.layer };
+      return [reserveSlot, b.layerState(reserveSlot)] as const;
+    });
+  const before = b.receivedCommands().length;
+  const activeBefore = mock!.receivedCommands().length;
+  expect(await r.setActiveLook('item-1', 'solo', PRESET_EFFECT)).toEqual({ ok: true });
+  expect(r.activeLookId('item-1')).toBe('solo');
+  expect(
+    mock!
+      .receivedCommands()
+      .slice(activeBefore)
+      .map(({ line }) => line),
+  ).toContainEqual(expect.stringMatching(/FILL .*easeinquad DEFER$/));
+  const latest = b
+    .receivedCommands()
+    .slice(before)
+    .map(({ line }) => line);
+  expect(
+    latest.filter((line) => /^(CG|MIXER|PLAY|PAUSE|RESUME|CLEAR) 2(?: |-|$)/.test(line)),
+  ).toEqual([]);
+  for (const [slot, state] of previousSeats) expect(b.layerState(slot)).toEqual(state);
+});
+
+it('keeps the reserve unchanged when the active engine refuses the final preset commit', async () => {
+  const r = await bootPresetDeparture(PRESET_TITLE_HOLD_HTML, false, false, {});
+  const b = backup!;
+  const itemId = 'item-1';
+  const previousSeats = r
+    .liveLayers()
+    .get(itemId)!
+    .map(({ slot }) => {
+      const reserveSlot = { channel: 2, layer: slot.layer };
+      return [reserveSlot, b.layerState(reserveSlot)] as const;
+    });
+  const before = b.receivedCommands().length;
+  const normalCg = defaultHandlers().get('CG')!;
+  const normalMixer = defaultHandlers().get('MIXER')!;
+  let destinationTold = false;
+  let refused = false;
+  mock!.setHandler('CG', (request, context, connection) => {
+    if (
+      request.raw.startsWith(`CG 1-${PRESET_RECOVERY_BAND.end} UPDATE `) &&
+      request.raw.includes('presetTransitionCommit') &&
+      request.raw.includes('solo')
+    )
+      destinationTold = true;
+    return normalCg(request, context, connection);
+  });
+  mock!.setHandler('MIXER', (request, context, connection) => {
+    if (destinationTold && !refused && request.raw === 'MIXER 1 COMMIT') {
+      refused = true;
+      return { kind: 'err', code: 502, verb: 'MIXER' };
+    }
+    return normalMixer(request, context, connection);
+  });
+  expect(await r.setActiveLook(itemId, 'solo', PRESET_EFFECT)).toMatchObject({
+    ok: false,
+    reason: 'amcp-502',
+  });
+  expect(refused).toBe(true);
+  expect(r.activeLookId(itemId)).toBe('duo');
+  const latest = b.receivedCommands().slice(before);
+  expect(
+    latest.some(({ line }) => /^(CG|MIXER|PLAY|PAUSE|RESUME|CLEAR) 2(?: |-|$)/.test(line)),
+  ).toBe(false);
+  for (const [slot, state] of previousSeats) expect(b.layerState(slot)).toEqual(state);
+});
+
+it.each([false, true])(
   'guards interrupted preset recovery on reconnect (producer removed: %s)',
   async (removed) => {
     const r = await bootPresetDeparture(PRESET_RECOVERY_HTML);
@@ -2394,6 +2675,160 @@ it('restores staged mixer geometry when Reload changes the layout during an on-a
 
 const LIVE_POSITION_HTML = FRAME_HTML.replace('</head>', CG_LIVE_POSITION_PAGE_MARKER + '</head>');
 const WHOLE_POSITION = { anchor: 'center', offset: { x: 192, y: 108 } } as const;
+
+it('moves paired programme Position while keeping an input with no backup copy isolated', async () => {
+  const guests = [
+    { id: 'guest-1', rect: { ...BOX, x: 0 } },
+    { id: 'guest-2', rect: { ...BOX, x: BOX.width } },
+  ];
+  const r = await boot({
+    template: template(guests, true),
+    html: LIVE_POSITION_HTML,
+    mirrorChannel: 2,
+    missingBackupMedia: true,
+    catalog: catalog({
+      sources: [
+        { id: 'src-ndi', name: 'Camera', producer: { kind: 'ndi', source: 'Camera' } },
+        { id: 'src-media', name: 'Clip', producer: { kind: 'media', file: 'clip.mov' } },
+      ],
+    }),
+    assignments: assign([
+      ['guest-1', 'src-ndi'],
+      ['guest-2', 'src-media'],
+    ]),
+  });
+  const primary = mock;
+  const peer = backup;
+  if (primary === null || peer === null) throw new Error('Missing paired engine');
+  const itemId = 'item-1';
+  await expect(loadAndTake(r, itemId)).resolves.toMatchObject({ accepted: true });
+  await expect
+    .poll(() => r.stackSnapshot()[0])
+    .toMatchObject({ status: 'on-air', onAirPosition: true });
+  const seats = r.liveLayers().get(itemId) ?? [];
+  const camera = seats.find(({ sourceId }) => sourceId === 'guest-1');
+  const media = seats.find(({ sourceId }) => sourceId === 'guest-2');
+  if (camera === undefined || media?.backupRefused === undefined)
+    throw new Error('Expected one mirrored seat and one missing backup copy');
+  const backupCamera = { ...camera.slot, channel: 2 };
+  const beforeCamera = peer.layerState(backupCamera);
+  const before = peer.receivedCommands().length;
+  await expect(r.update(itemId, {}, 'merge', undefined, WHOLE_POSITION)).resolves.toEqual({
+    accepted: true,
+  });
+  expect(r.stackSnapshot()[0]?.position).toEqual(WHOLE_POSITION);
+  expect(peer.layerState(backupCamera)?.clip).not.toEqual(beforeCamera?.clip);
+  expect(peer.layerState(backupCamera)?.clip).toEqual(primary.layerState(camera.slot)?.clip);
+  expect(peer.layerState(backupCamera)?.fill).toEqual(primary.layerState(camera.slot)?.fill);
+  const peerWrites = peer
+    .receivedCommands()
+    .slice(before)
+    .map(({ line }) => line);
+  expect(peerWrites.some((line) => line.startsWith(`MIXER 2-${String(media.slot.layer)} `))).toBe(
+    false,
+  );
+  expect(JSON.parse(peer.lastCgUpdate({ channel: 2, layer: 10 })?.data ?? '{}')).toEqual({
+    __cg: { position: WHOLE_POSITION },
+  });
+
+  const mixer = defaultHandlers().get('MIXER');
+  if (mixer === undefined) throw new Error('Missing mixer handler');
+  const settled = peer.layerState(backupCamera);
+  const next = { anchor: 'center', offset: { x: 278, y: 156 } } as const;
+  const beforeRefusedCommit = peer.receivedCommands().length;
+  let refusedCommit = false;
+  primary.setHandler('MIXER', (request, context, connection) => {
+    if (!refusedCommit && request.raw === 'MIXER 1 COMMIT') {
+      refusedCommit = true;
+      return { kind: 'err', code: 403, verb: 'MIXER', detail: 'COMMIT REFUSED' };
+    }
+    return mixer(request, context, connection);
+  });
+  // The established backup gets no writes while the new active position is unconfirmed.
+  await expect(r.update(itemId, {}, 'merge', undefined, next)).resolves.toMatchObject({
+    accepted: false,
+  });
+  expect(refusedCommit).toBe(true);
+  expect(r.stackSnapshot()[0]?.position).toEqual(WHOLE_POSITION);
+  expect(primary.layerState(camera.slot)?.fill).toEqual(settled?.fill);
+  expect(primary.layerState(camera.slot)?.clip).toEqual(settled?.clip);
+  expect(
+    peer
+      .receivedCommands()
+      .slice(beforeRefusedCommit)
+      .map(({ line }) => line)
+      .filter((line) => /^(CG|MIXER) /.test(line)),
+  ).toEqual([]);
+
+  // A refused backup CLIP restores the preceding FILL and does not undo the active change.
+  let refused = false;
+  peer.setHandler('MIXER', (request, context, connection) => {
+    if (!refused && request.raw.startsWith(`MIXER 2-${String(camera.slot.layer)} CLIP `)) {
+      refused = true;
+      return { kind: 'err', code: 403, verb: 'MIXER', detail: 'CLIP REFUSED' };
+    }
+    return mixer(request, context, connection);
+  });
+  await expect(r.update(itemId, {}, 'merge', undefined, next)).resolves.toEqual({
+    accepted: true,
+  });
+  expect(refused).toBe(true);
+  expect(r.stackSnapshot()[0]?.position).toEqual(next);
+  expect(peer.layerState(backupCamera)?.fill).toEqual(settled?.fill);
+  expect(peer.layerState(backupCamera)?.clip).toEqual(settled?.clip);
+  expect(primary.layerState(camera.slot)?.fill).not.toEqual(settled?.fill);
+});
+
+it('does not move a same-kind backup input whose PLAY was refused', async () => {
+  const r = await boot({
+    template: template([{ id: 'guest-1', rect: { ...BOX, x: 0 } }], true),
+    html: LIVE_POSITION_HTML,
+    mirrorChannel: 2,
+    catalog: catalog({
+      sources: [{ id: 'src-ndi', name: 'Camera', producer: { kind: 'ndi', source: 'Camera' } }],
+    }),
+    assignments: assign([['guest-1', 'src-ndi']]),
+  });
+  const primary = mock;
+  const peer = backup;
+  if (primary === null || peer === null) throw new Error('Missing paired engine');
+  const itemId = 'item-1';
+  const peerSlot = { channel: 2, layer: BAND.start };
+  const play = defaultHandlers().get('PLAY');
+  if (play === undefined) throw new Error('Missing PLAY handler');
+  let refused = false;
+  peer.setHandler('PLAY', (request, context, connection) => {
+    if (request.raw.startsWith(`PLAY 2-${String(peerSlot.layer)} [NDI] `)) {
+      // An earlier, unrelated feed occupies the layer and reports the same producer kind.
+      refused = true;
+      context.setLayer(peerSlot, { producer: 'ndi', filePath: 'other-camera', onAir: true });
+      return { kind: 'err', code: 403, verb: 'PLAY', detail: 'BACKUP PLAY REFUSED' };
+    }
+    return play(request, context, connection);
+  });
+  await expect(loadAndTake(r, itemId)).resolves.toMatchObject({ accepted: true });
+  expect(refused).toBe(true);
+  await expect
+    .poll(() => r.stackSnapshot()[0])
+    .toMatchObject({ status: 'on-air', onAirPosition: true });
+  const seat = r.liveLayers().get(itemId)?.[0];
+  if (seat === undefined) throw new Error('Expected a live seat');
+  expect(seat.slot.layer).toBe(peerSlot.layer);
+  expect(peer.layerState(peerSlot)?.producer).toBe(primary.layerState(seat.slot)?.producer);
+  const baseline = peer.receivedCommands().length;
+  await expect(r.update(itemId, {}, 'merge', undefined, WHOLE_POSITION)).resolves.toEqual({
+    accepted: true,
+  });
+  expect(r.stackSnapshot()[0]?.position).toEqual(WHOLE_POSITION);
+  expect(peer.layerState(peerSlot)?.filePath).toBe('other-camera');
+  expect(
+    peer
+      .receivedCommands()
+      .slice(baseline)
+      .map(({ line }) => line)
+      .filter((line) => line.startsWith(`MIXER 2-${String(peerSlot.layer)} `)),
+  ).toEqual([]);
+});
 
 it('moves an on-air Live layer and its fields without restarting the foreground or inactive seats, keeping saved Pan', async () => {
   const itemId = 'item-1';

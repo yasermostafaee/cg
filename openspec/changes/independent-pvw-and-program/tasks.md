@@ -43,3 +43,13 @@
       labels and independent Move template gestures with a test Bridge.
 - [ ] Verify reported lower-third pixels in the supplied affected template on the target engine.
 - [ ] Record the carrying Linux Playwright result for B-441.
+
+## Position with a configured backup
+
+- [x] Verify the reported Position lock on the installed 3ghab row with B signed in and mapped.
+- [x] Apply Position with a verified active page and eligible backup outputs.
+      Windows Chromium verified distinct channel numbers, independent PVW and an explicit on-air Update.
+- [x] Verify legacy mirror updates, retained producers and refusal or interruption with two engines.
+      Focused Bridge cases verified missing media, an active commit refusal, a backup refusal with
+      compensation and a stale same-kind producer without a matching backup PLAY acknowledgement.
+- [ ] Record the carrying Linux Playwright result.

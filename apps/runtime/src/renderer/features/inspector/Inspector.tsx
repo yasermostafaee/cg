@@ -42,14 +42,8 @@ import { EDITOR_DIR } from '../../ui/editorTextDirection.js';
 import { writeFieldText } from '../../ui/fieldDigitsInput.js';
 import { templateDisplayName } from '../library/templateName.js';
 import { layerDetail } from '../stack/layerLabel.js';
-import {
-  BACKUP_UNMIRRORED_LINE,
-  BackupNoCopyText,
-  backupNoCopyLine,
-  plateLabelOf,
-  takeRefusalLine,
-  TakeRefusalText,
-} from '../layers/takeRefusalLine.js';
+import { BackupStatus } from '../layers/BackupStatus.js';
+import { plateLabelOf, takeRefusalLine, TakeRefusalText } from '../layers/takeRefusalLine.js';
 import { currentSourceCatalog } from '../sources/sourceStore.js';
 import { appliedPositionOf, defaultPositionOf } from '../stack/defaultPositionStore.js';
 import {
@@ -309,7 +303,6 @@ const styles = {
   /** `FIELD-FIXES-01` B — a refused take's line, in the error WORD's ink, as the file error is. */
   refusal: { fontSize: 'var(--r-text-sm)', color: colors.errorText, margin: 0 },
   /** `ROUTE-PLATES-01` C4 — the backup line: a state fact, not an error, so in the muted ink. */
-  backupLine: { fontSize: 'var(--r-text-sm)', color: colors.textMuted, margin: 0 },
 } as const;
 
 /**
@@ -821,21 +814,7 @@ export function Inspector({
             />
           </p>
         )}
-        {/* `PLAYOUT-FEATURES-01` A (`B-286`) — the clips server B was sent nothing for. */}
-        {(() => {
-          const noCopy = backupNoCopyLine(item.backupNoCopy ?? []);
-          return noCopy === null ? null : (
-            <p style={styles.backupLine} data-inspector-backup-no-copy="" dir="ltr">
-              <BackupNoCopyText line={noCopy} />
-            </p>
-          );
-        })()}
-        {/* `ROUTE-PLATES-01` C4 — the backup carries this row without its live boxes. */}
-        {item.backupUnmirrored === true && (
-          <p style={styles.backupLine} data-inspector-backup-unmirrored="" dir="ltr">
-            {BACKUP_UNMIRRORED_LINE}
-          </p>
-        )}
+        <BackupStatus item={item} template={resolvedInfo} />
         {/* R-011 — per-item on-air position; keyed so item switches re-seed. */}
         <PositionPicker
           key={`pos-${itemId}`}

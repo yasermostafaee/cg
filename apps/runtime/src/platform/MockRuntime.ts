@@ -732,12 +732,8 @@ export class MockRuntime {
     );
     // C-015 parity — the take is what SEATS the plates.
     this.#seatLivePlates(itemId);
-    /*
-      `ROUTE-PLATES-01` C4 parity — the bridge publishes `backupUnmirrored` while a backup is
-      declared and the row's seats include a Playout route. The mock has neither, so the fact is
-      e2e-seeded ({@link takeNextBackupUnmirrored}) and withdrawn with the row's seats.
-    */
-    if (takeNextBackupUnmirrored()) this.#patch(itemId, { backupUnmirrored: true });
+    const backupWarnings = takeNextBackupWarnings();
+    if (backupWarnings !== null) this.#patch(itemId, backupWarnings);
     this.#settle(itemId, 'on-air');
     return { accepted: true };
   }
@@ -2117,17 +2113,18 @@ export class MockRuntime {
   }
 
   #releaseLivePlates(itemId: string): void {
-    this.#withdrawBackupLine(itemId);
+    this.#withdrawBackupWarnings(itemId);
     if (!this.#liveSeatedItems.delete(itemId)) return;
     this.liveLayersChanged.emit(this.liveLayersState());
   }
 
-  /** `ROUTE-PLATES-01` C4 parity — the backup line goes with the row's seats, as on the bridge. */
-  #withdrawBackupLine(itemId: string): void {
-    if (this.#find(itemId)?.backupUnmirrored === undefined) return;
+  /** Backup warnings go with the row's seats, as on the bridge. */
+  #withdrawBackupWarnings(itemId: string): void {
+    const item = this.#find(itemId);
+    if (item?.backupUnmirrored === undefined && item?.backupNoCopy === undefined) return;
     this.#stack = this.#stack.map((i) => {
       if (i.itemId !== itemId) return i;
-      const { backupUnmirrored: _line, ...rest } = i;
+      const { backupUnmirrored: _live, backupNoCopy: _clips, ...rest } = i;
       return rest;
     });
     this.#emitStack();
@@ -3581,17 +3578,21 @@ function takeNextWireRefusal(): TakeRefusal | null {
   return armed;
 }
 
-/**
- * `ROUTE-PLATES-01` C4 — the e2e seam for the backup line, one-shot: a spec sets
- * `window.CG_E2E_BACKUP_UNMIRRORED_NEXT_TAKE = true`, and the next take that lands publishes the
- * fact the bridge publishes for a row whose seats include a Playout route while a backup is
- * declared. Unset — the default everywhere but a spec — no row carries it.
- */
-function takeNextBackupUnmirrored(): boolean {
-  const w = globalThis as { CG_E2E_BACKUP_UNMIRRORED_NEXT_TAKE?: boolean };
-  const armed = w.CG_E2E_BACKUP_UNMIRRORED_NEXT_TAKE === true;
+/** Tests can seed the bridge's backup status for one successful Take. */
+function takeNextBackupWarnings(): Pick<
+  StackItemState,
+  'backupUnmirrored' | 'backupNoCopy'
+> | null {
+  const w = globalThis as {
+    CG_E2E_BACKUP_UNMIRRORED_NEXT_TAKE?: boolean;
+    CG_E2E_BACKUP_NO_COPY_NEXT_TAKE?: StackItemState['backupNoCopy'];
+  };
+  const live = w.CG_E2E_BACKUP_UNMIRRORED_NEXT_TAKE === true;
+  const clips = w.CG_E2E_BACKUP_NO_COPY_NEXT_TAKE;
   delete w.CG_E2E_BACKUP_UNMIRRORED_NEXT_TAKE;
-  return armed;
+  delete w.CG_E2E_BACKUP_NO_COPY_NEXT_TAKE;
+  if (!live && !clips?.length) return null;
+  return { ...(live && { backupUnmirrored: true }), ...(clips?.length && { backupNoCopy: clips }) };
 }
 
 /**

@@ -109,6 +109,23 @@ function setSessionState(session: ServerSession, to: ServerSessionState): void {
 }
 
 describe('RedundancyAdapter — mirror-sync', () => {
+  it('cancels a queued replica instead of dispatching it after reserve promotion', async () => {
+    const { adapter, mocks, queues, sessions } = await setup('mirror-sync');
+    const peer = queues[1];
+    peer.pause();
+    const stale = 'MIXER 1-60 OPACITY 0';
+    const pending = adapter.send(stale, {
+      replica: { primary: sessions.A, peer: sessions.B, queue: peer },
+    });
+    const rejected = expect(pending).rejects.toThrow(/abort/i);
+    expect(peer.depth).toBe(1);
+    expect(await adapter.failover('manual')).toBe(true);
+    peer.resume();
+    await rejected;
+    expect((await adapter.send('INFO 1', { mirror: false })).winner).toBe('B');
+    expect(mocks[1].receivedCommands().map(({ line }) => line)).toEqual(['INFO 1']);
+  });
+
   it('fans out to both sessions and returns the primary ack', async () => {
     const { adapter, mocks } = await setup('mirror-sync');
     const seenA: string[] = [];

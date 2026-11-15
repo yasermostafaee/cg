@@ -9,13 +9,19 @@ rules. Off-air Update saves a Pan crop for Take. The explicit Update on air path
 verified crop to an existing seat under the Pan routing contract.
 
 The resident managed HTML page advertises support for live positioning. Bridge publishes positive
-eligibility on a single-primary station after verifying the page, any paired foreground and
-its visible live seats. The console stages the anchor and pixel offsets like field values.
+eligibility after verifying the active page, any paired foreground and its visible live seats. The console stages the anchor and pixel offsets like field values.
 Explicit Update on air sends one field update with a typed position control. The output runtime
 reuses its stage translation and the paired foreground receives the same position. Bridge
 stages corresponding FILL and CLIP changes on the existing visible seats and commits them after
 the page update. The authored canvas, crop and running producers are preserved. Saved crops
 follow the position across authored Looks, and parked seats receive no commands for the move.
+
+On legacy mirror-sync stations, Bridge confirms the active page and its mixer commit before
+updating the reserve. Replica writes require the same channel mapping and command queue, an
+acknowledged resident ADD for each artwork pass and a positive mirrored PLAY for each moved native
+input. A portable input on the active channel can still move when its matching reserve media is
+unavailable. A failed reserve update compensates any acknowledged partial changes while its
+original output can still be verified.
 
 Bridge validates the translated geometry and the same seat identities before sending. It
 refuses a move that places a visible seat entirely outside the channel raster. An unsupported

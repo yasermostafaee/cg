@@ -18,7 +18,9 @@ The independent preview entry and exit SHALL change only preview records. They S
 ### Requirement: A verified resident page can move on air
 
 Bridge SHALL advertise live Position for a confirmed, owned programme producer that supports
-in-place Position on a single-primary station. For a live layout, Bridge SHALL verify the
+in-place Position. The presence of a backup SHALL NOT alone lock Position. The Bridge SHALL
+only touch the verified resident pages and input seats eligible on each engine. For a live layout,
+Bridge SHALL verify the
 resident page, any paired foreground, and each visible live seat. When an explicit
 `stack.update` carries a position, Bridge SHALL verify those identities and the translated
 geometry before sending programme changes. It SHALL send the position and fields to the same

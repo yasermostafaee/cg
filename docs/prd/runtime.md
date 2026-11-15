@@ -5163,12 +5163,13 @@ is no verified ownership map.
   Position. Applying or discarding the draft clears the badge when no other drafts remain.
 - WHEN an older Bridge does not advertise independent PVW THEN its existing rehearsal protections remain in force. An off-air Update waiting for its reply does not end legacy rehearsal or restore its layer volume.
 - WHEN Layers shows a bound row THEN the ON PVW column precedes Play, and the toolbar offers Stop All and Clear All. Row Remove remains available under its existing guard.
-- WHEN Bridge verifies a supported resident page on a single-primary station THEN its Position
-  anchor and offsets can be drafted in PVW and applied with Update on air.
+- WHEN Bridge verifies a supported resident page THEN its Position anchor and offsets can be
+  drafted in PVW and applied with Update on air. A configured backup does not alone lock Position.
 - WHEN the resident row has Live Source plates and Bridge verifies all of its visible seats THEN
   Update on air moves the artwork and occupied frames together, retaining the input producers and
-  crop. A configured backup, unverified ownership or a move that sends a visible seat entirely
-  outside the raster prevents the corresponding on-air Position update. When the Update also
+  crop. The Bridge respects each engine's verified channel, page and input ownership. Unverified
+  ownership or a move that sends a visible seat entirely outside the raster prevents the
+  corresponding on-air Position update. When the Update also
   changes source bindings or an input crop, the console applies changed fields and bindings first,
   then the crop, then Position against the verified seats. A draft that fails or has not been sent
   remains available.
@@ -5198,6 +5199,8 @@ Send CG commands to the active engine after its external-graphics transfer contr
 - WHEN the operator selects a verified B return or Follow resolves to it THEN the PGM meter shows that return's levels. A return without Playout meter telemetry uses its own stereo PCM peaks. The operator can show or hide the meter independently of listening. While shown, missing data leaves an empty meter scale.
 - WHEN an opt-in channel is served by External CG v2 and ownership is confirmed THEN CG commands reach only the active engine's managed API.
 - WHEN a prepared replica becomes the owner THEN the existing graphic remains available and the former owner's fence cannot change that output. Verify with the real CG Bridge and Control.
+- WHEN a backup is healthy but a row has media or live inputs unavailable there THEN Layers keeps
+  the template name and a short backup status. Inspector expands to show the affected inputs and reasons.
 
 ## [~] R-119 — Animate on-air live frame placement ⟨priority: high — owner, 2026-11-14⟩ — `openspec/changes/animate-live-frame-placement/`
 
@@ -5216,6 +5219,9 @@ Send CG commands to the active engine after its external-graphics transfer contr
 - WHEN previewing a preset or input change THEN the selected effect runs on PVW independently of PGM. Direct dragging and sizing stay immediate.
 - WHEN a preset adds or removes frames THEN the incoming and outgoing pictures and masks animate. Shared frames stay above departing frames during movement. Once the effect settles, linked titles follow the destination preset's authored visibility.
 - WHEN the operator enables the preset Fade option THEN the shared picture also fades while changing position or size. Independent Preview uses the same channel-frame budget. Preview follows a confirmed programme switch without replaying its effect.
+- WHEN the active engine has a verified resident preset and can animate a legacy A/B switch
+  safely THEN a configured B alone does not force the active engine to Cut. The reserve receives
+  the corresponding settled preset through the Bridge's guarded mirror.
 - WHEN a plate has a mask THEN its operator Crop is unavailable. Its mask and the Crop of an eligible unmasked neighbor remain editable.
 - WHEN swapping one independently seated input in the same plate THEN Cut or Fade applies. An eligible held input or a single preserved mask rectangle can be used by the Fade. If it is refused THEN the working input remains applied.
 - WHEN a row preset is confirmed THEN the local PVW follows it unless the operator has chosen another Inspector preset since the row request began. A refused update keeps the existing PVW cue.

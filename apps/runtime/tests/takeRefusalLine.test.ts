@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  backupNoCopyLine,
   takeRefusalChannels,
   takeRefusalLine,
 } from '../src/renderer/features/layers/takeRefusalLine.js';
@@ -188,38 +187,5 @@ describe('where it is said', () => {
     ];
     const slots = [{ channel: 1, binding: { itemId: 'b' } }];
     expect(takeRefusalChannels(items, slots)).toEqual([2, 1]);
-  });
-});
-
-describe('`PLAYOUT-FEATURES-01` A (`B-286`) — the clips server B was sent nothing for', () => {
-  it('🔴 one clip: `Backup has no copy of “Sting”; this box stays empty on the backup`', () => {
-    const line = backupNoCopyLine([{ plateId: 'l2', name: 'Sting', reason: 'no-copy' }]);
-    expect(line?.text).toBe('Backup has no copy of “Sting”; this box stays empty on the backup');
-  });
-
-  it('a reason other than a missing copy is named after its clip; two clips are “these boxes”', () => {
-    const line = backupNoCopyLine([
-      { plateId: 'l1', name: 'پرومو', reason: 'backup-old' },
-      { plateId: 'l2', name: 'Bare', reason: 'no-fingerprint' },
-    ]);
-    expect(line?.text).toBe(
-      'Backup has no copy of “پرومو” (its Playout is older than 2.9.1), “Bare” (the Playout gave it no fingerprint); these boxes stay empty on the backup',
-    );
-    expect(line?.clips.map((c) => c.name)).toEqual(['پرومو', 'Bare']);
-  });
-
-  it('control: none — no line', () => {
-    expect(backupNoCopyLine([])).toBeNull();
-  });
-
-  it('🔴 `RELEASE-0111-01-A` A3 — a backup that refused the primary’s token: each clip says its list was not read', () => {
-    // What the bridge records when the backup's D11 answers `401` (`backup-media.integration`, A3).
-    const line = backupNoCopyLine([
-      { plateId: 'l1', name: 'پرومو', reason: 'backup-unread' },
-      { plateId: 'l2', name: 'Sting', reason: 'backup-unread' },
-    ]);
-    expect(line?.text).toBe(
-      'Backup has no copy of “پرومو” (its media list has not been read), “Sting” (its media list has not been read); these boxes stay empty on the backup',
-    );
   });
 });

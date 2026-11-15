@@ -1,3 +1,4 @@
+import type { StackItemState } from '@cg/shared-schema';
 import { expect, test } from './fixtures/runtime.js';
 
 /**
@@ -8,7 +9,7 @@ import { expect, test } from './fixtures/runtime.js';
  *     could not be confirmed stays empty, and says so;
  *   - rule 1: `<row> · Plate N: “ورودی ۴” can't be shown on CH n.` — an input the Playout does not
  *     offer for this row's channel is refused before any AMCP;
- *   - C4: `Backup: live boxes not mirrored.` — a backup is declared and the row carries a route.
+ *   - C4: the backup details explain when a row carries a route on the primary.
  *
  * The wire half of each is `tools/caspar-bridge/tests/route-plates.integration.test.ts`; what only
  * this can prove is what the operator SEES. The two refusals come from the mock's one-shot switch
@@ -23,7 +24,7 @@ import { expect, test } from './fixtures/runtime.js';
 // `live-3` is the seeded template's third plate, and the `right` look needs it.
 const WAITING_TAIL = / · Plate 3: waiting for the Playout's input list\.$/;
 const NOT_SHOWABLE_TAIL = / · Plate 3: “ورودی ۴” can't be shown on CH 1\.$/;
-const BACKUP_LINE = 'Backup: live boxes not mirrored.';
+const LIVE_INPUT_NOTE = 'Live inputs routed through Playout remain on the primary engine.';
 
 for (const { what, refusal, tail } of [
   {
@@ -81,15 +82,14 @@ for (const { what, refusal, tail } of [
   });
 }
 
-test('🔴 C4 — a row whose live boxes are not mirrored says so, on the row and in its Inspector; control: it goes with the row’s seats', async ({
+test('backup coverage keeps the row short and explains live inputs from both surfaces', async ({
   app,
 }) => {
   const { page } = app;
-  // Row 96 is the seed's idle TICKER row, on channel 1.
   const row = app.layerRow(96);
-  // THE BASELINE, measured: no row carries the line before the take.
-  await expect(page.locator('[data-backup-unmirrored]')).toHaveCount(0);
-
+  const status = row.getByRole('button', { name: 'Backup incomplete' });
+  const details = page.getByRole('dialog', { name: 'Backup details' });
+  await expect(status).toHaveCount(0);
   await page.evaluate(() => {
     (
       window as unknown as { CG_E2E_BACKUP_UNMIRRORED_NEXT_TAKE?: boolean }
@@ -97,27 +97,75 @@ test('🔴 C4 — a row whose live boxes are not mirrored says so, on the row an
   });
   await row.getByRole('button', { name: 'PLAY' }).click();
   await expect(row).toContainText('ON AIR');
-  await expect(row.locator('[data-backup-unmirrored]')).toHaveText(BACKUP_LINE);
-  // It is a state fact, not a refusal: no banner raises it.
+  await expect(status).toHaveText('B');
+  await expect(row).not.toContainText(LIVE_INPUT_NOTE);
   await expect(page.locator('[data-refusal]')).toHaveCount(0);
-  await app.selectLayerRow(96);
-  await expect(page.locator('[data-inspector-backup-unmirrored]')).toHaveText(BACKUP_LINE);
-  await app.toggleLayerRow(96); // toggles it closed again
-  const line = row.locator('[data-backup-unmirrored]');
-  await expect(line).toHaveText(BACKUP_LINE);
-  // The cell keeps the template's name on its title (`<line> — <template>`): the control's anchor.
-  const template = ((await line.getAttribute('title')) ?? '').split(' — ').slice(1).join(' — ');
-  expect(template, 'the cell names its template on the title').not.toBe('');
+  await status.focus();
+  await page.keyboard.press('Enter');
+  await expect(details).toContainText(LIVE_INPUT_NOTE);
+  await page.keyboard.press('Escape');
+  await expect(details).toHaveCount(0);
+  await expect(status).toBeFocused();
 
-  // CONTROL — the row comes off air, its seats go, and the line goes with them; the same cell now
-  // draws the template's name, so the absence is read off a cell that is there.
+  await app.selectLayerRow(96);
+  const inspectorStatus = app.inspector.getByRole('button', { name: 'Backup incomplete' });
+  await expect(inspectorStatus).toHaveText('Backup incomplete');
+  await inspectorStatus.click();
+  await expect(details).toContainText(LIVE_INPUT_NOTE);
+  await details.getByRole('button', { name: 'Close', exact: true }).click();
+  await app.toggleLayerRow(96);
   await row.getByRole('button', { name: 'CLEAR' }).click();
   await page
     .getByRole('dialog', { name: /^Clear / })
     .getByRole('button', { name: 'Clear layer', exact: true })
     .click();
-  await expect(line).toHaveCount(0);
-  await expect(row).toContainText(template);
-  await app.selectLayerRow(96);
-  await expect(page.locator('[data-inspector-backup-unmirrored]')).toHaveCount(0);
+  await expect(status).toHaveCount(0);
+});
+
+test('backup media details retain full names and distinguish unread catalogues from missing copies', async ({
+  app,
+}) => {
+  const { page } = app;
+  const row = app.layerRow(96);
+  const clips: NonNullable<StackItemState['backupNoCopy']> = [
+    {
+      plateId: 'p1',
+      name: 'بخش ویژهٔ خبر شبانگاهی — News-Programme_Final-نسخه کامل.mov',
+      reason: 'no-copy',
+    },
+    { plateId: 'p2', name: 'ستون خبری-Backup-15032026.mp4', reason: 'backup-unread' },
+    { plateId: 'p3', name: 'Studio-fingerprint.mov', reason: 'no-fingerprint' },
+    { plateId: 'p4', name: 'Studio-legacy-backup.mov', reason: 'backup-old' },
+  ];
+  await page.evaluate((next) => {
+    const globals = window as unknown as {
+      CG_E2E_BACKUP_NO_COPY_NEXT_TAKE?: StackItemState['backupNoCopy'];
+      CG_E2E_BACKUP_UNMIRRORED_NEXT_TAKE?: boolean;
+    };
+    globals.CG_E2E_BACKUP_NO_COPY_NEXT_TAKE = next;
+    globals.CG_E2E_BACKUP_UNMIRRORED_NEXT_TAKE = true;
+  }, clips);
+  await row.getByRole('button', { name: 'PLAY' }).click();
+  const status = row.getByRole('button', { name: 'Backup incomplete' });
+  await expect(status).toHaveCount(1);
+  await expect(row).not.toContainText(clips[0]!.name);
+  await status.click();
+
+  const details = page.getByRole('dialog', { name: 'Backup details' });
+  await expect(details.getByRole('listitem')).toHaveCount(4);
+  const reasons = [
+    'Matching copy missing from the backup media library.',
+    'Backup media library unread.',
+    'Primary media fingerprint missing.',
+    'Backup Playout is older than 2.9.1.',
+  ];
+  for (const [index, clip] of clips.entries()) {
+    const detail = details.getByRole('listitem').filter({ hasText: clip.name });
+    await expect(detail.getByText(clip.name, { exact: true })).toBeVisible();
+    await expect(detail).toContainText(reasons[index]!);
+  }
+  await expect(details).toContainText('Add the same file to the backup media library');
+  await expect(details).toContainText('Check the backup engine connection and Bridge sign-in.');
+  await expect(details).toContainText(LIVE_INPUT_NOTE);
+  await expect(page.locator('[data-refusal]')).toHaveCount(0);
 });

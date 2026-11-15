@@ -50,6 +50,8 @@ export interface RedundancyAdapterOptions {
    * it throws, so no road to B can exist untranslated. Server A's line never passes through it.
    */
   serverBLine?: (line: string) => string | null;
+  /** A station line may be held back while that reserve has an unresolved mixer batch. */
+  allowReserveLine?: (session: ServerSession, line: string) => boolean;
 }
 
 export interface RedundancyAdapterEvents {
@@ -115,6 +117,8 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
   private readonly now: () => number;
   /** `B-316` — see {@link RedundancyAdapterOptions.serverBLine}; `null` only with no server B. */
   private readonly serverBLine: ((line: string) => string | null) | null;
+  private readonly allowReserveLine: NonNullable<RedundancyAdapterOptions['allowReserveLine']>;
+  private roleChanges = new AbortController();
 
   private consecutiveTimeouts = 0;
   /** `B-313` — servers never failed over onto ({@link setHeld}). */
@@ -133,6 +137,7 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
     // A single-server config can only start on A — there is no B to prefer.
     this.primary = options.sessions.B === undefined ? 'A' : (options.initialPrimary ?? 'A');
     this.journal = options.journal ?? new InMemoryJournal();
+    this.allowReserveLine = options.allowReserveLine ?? (() => true);
     this.autoFailoverEnabled = options.autoFailoverEnabled ?? true;
     this.commandTimeoutBudget = options.commandTimeoutBudget ?? 3;
     this.fiveXxWindowMs = options.fiveXxWindowMs ?? 30_000;
@@ -187,11 +192,21 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
    */
   private lineFor(label: ServerLabel, line: string, options: SendOptions): string | null {
     // `B-313` — a HELD server is sent nothing, and its absence is no divergence (`null`, as `B-286`'s).
-    if (this.held.has(label) && label !== this.primary) return null;
+    if (label !== this.primary && !this.canReachReserve(label, line)) return null;
     return this.ownLine(
       { line, ...(options.serverB !== undefined ? { lineB: options.serverB } : {}) },
       label,
     );
+  }
+
+  private canReachReserve(label: ServerLabel, line: string): boolean {
+    const reserve = this.sessions[label];
+    return reserve !== undefined && !this.held.has(label) && this.allowReserveLine(reserve, line);
+  }
+
+  private roleSignal(caller: AbortSignal | undefined): AbortSignal {
+    const role = this.roleChanges.signal;
+    return caller === undefined ? role : AbortSignal.any([role, caller]);
   }
 
   /**
@@ -216,6 +231,26 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
    *   journal-replay : send to primary only; journal
    */
   async send(line: string, options: SendOptions = {}): Promise<RedundancySendResult> {
+    if (options.replica !== undefined) {
+      const { primary, peer, queue } = options.replica;
+      const label = this.backupLabel;
+      const translated = this.lineFor(label, line, options);
+      if (
+        this.strategy !== 'mirror-sync' ||
+        primary !== this.primarySession ||
+        peer !== this.backupSession ||
+        queue !== peer.queue ||
+        peer.state !== 'healthy' ||
+        translated === null
+      ) {
+        throw new Error('The verified mirror session has changed.');
+      }
+      const result = await queue.enqueue(translated, {
+        ...options,
+        signal: this.roleSignal(options.signal),
+      });
+      return { ...result, winner: label };
+    }
     /*
       `PLAYOUT-FEATURES-01` A (`B-286`) — a line server B has no version of cannot be sent while B is the
       primary: nothing is sent, and the caller (which checks this first) refuses it as it refuses a PLAY.
@@ -269,6 +304,9 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
         await this.replayJournalTo(to);
       }
       this.primary = to;
+      const previousRole = this.roleChanges;
+      this.roleChanges = new AbortController();
+      previousRole.abort();
       this.resetFailoverCounters();
       this.emit('failover-complete', { ...event, at: this.now() });
       return true;
@@ -349,7 +387,14 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
         this.reportDivergence(seq, pRes.value.response.code, bRes.value.response.code);
       }
       this.recordPrimaryResult(pRes.value);
-      return { ...pRes.value, winner: this.primary };
+      return {
+        ...pRes.value,
+        winner: this.primary,
+        ...(pRes.value.response.kind !== 'err' &&
+          bRes.value.response.kind !== 'err' && {
+            mirrorConfirmed: true as const,
+          }),
+      };
     }
     if (pRes.status === 'fulfilled') {
       this.journal.resolve(seq, 'ok', pRes.value.response.code);
@@ -414,12 +459,22 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
     primaryLine: string,
     options: SendOptions,
   ): Promise<RedundancySendResult> {
+    const label = this.primary;
+    const owner = options.primaryOwner;
+    const queue = this.primarySession.queue;
+    if (owner !== undefined && (owner.session !== this.primarySession || owner.queue !== queue)) {
+      throw new Error('The verified primary session has changed.');
+    }
+    const signal = owner === undefined ? options.signal : this.roleSignal(options.signal);
     try {
-      const result = await this.primarySession.queue.enqueue(primaryLine, options);
-      this.recordPrimaryResult(result);
-      return { ...result, winner: this.primary };
+      const result = await queue.enqueue(primaryLine, {
+        ...options,
+        ...(signal !== undefined && { signal }),
+      });
+      if (label === this.primary) this.recordPrimaryResult(result);
+      return { ...result, winner: label };
     } catch (err) {
-      this.recordPrimaryFailure();
+      if (label === this.primary && signal?.aborted !== true) this.recordPrimaryFailure();
       throw err instanceof Error ? err : new Error(String(err));
     }
   }
@@ -544,11 +599,12 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
       const entries = this.journal.all().filter((e) => e.outcome === 'ok');
       for (const entry of entries) {
         // `B-286` / `B-316` — the server's OWN line, with its own channel NOW; none — not replayed to it.
+        if (target !== this.backupLabel || !this.canReachReserve(target, entry.line)) continue;
         const own = this.ownLine(entry, target);
         if (own === null) continue;
         this.emit('corrective-resend', { seq: entry.seq, line: own, target });
         try {
-          await queue.enqueue(own, { priority: 'urgent' });
+          await queue.enqueue(own, { priority: 'urgent', signal: this.roleSignal(undefined) });
         } catch {
           // Replay best-effort. The next divergence burst will fire again.
         }
@@ -621,6 +677,7 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
     const entries = this.journal.all().filter((e) => e.outcome === 'ok');
     for (const entry of entries) {
       // `B-286` / `B-316` — the server's OWN line, with its own channel NOW; none — not replayed to it.
+      if (!this.canReachReserve(label, entry.line)) continue;
       const own = this.ownLine(entry, label);
       if (own === null) continue;
       try {

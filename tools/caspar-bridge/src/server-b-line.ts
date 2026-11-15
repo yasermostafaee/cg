@@ -88,6 +88,15 @@ const LINE_SHAPE = /^(\S+)(\s+)(\S+)([\s\S]*)$/;
 const TARGET = /^(\d+)(?:-(\d+))?$/;
 const ROUTE = /route:\/\//i;
 
+/** Logical channel addressed by an AMCP write, or absent for reads and untargeted verbs. */
+export function stationMutationChannel(line: string): number | undefined {
+  const match = LINE_SHAPE.exec(line);
+  const verb = match?.[1]?.toUpperCase();
+  if (verb === undefined || verb === 'INFO' || !TARGETED_VERBS.has(verb)) return undefined;
+  const target = TARGET.exec(match?.[3] ?? '');
+  return target === null ? undefined : Number(target[1]);
+}
+
 /** A line that names no channel at all: it reaches B as it is. */
 function isChannelFree(line: string): boolean {
   const tokens = line.trim().split(/\s+/);

@@ -14,6 +14,19 @@ CG Control SHALL identify the active engine when the Playout answers establish i
 - **THEN** four named, independently monitored pictures appear in a two-by-two grid
 - **AND** a stalled or missing feed affects only its own tile
 
+### Requirement: A backup warning keeps template identity visible
+
+CG Control SHALL keep the template name visible when individual inputs cannot play on the
+backup. It SHALL provide a compact status on the row and expandable details in Inspector
+identifying affected media and reasons and distinguishing live inputs limited to the primary.
+
+#### Scenario: Inspect missing backup media and live inputs
+
+- **GIVEN** a row has named media missing on the backup and an input limited to the primary
+- **WHEN** the operator views the row and its Inspector
+- **THEN** the template name and short backup status are visible
+- **AND** expanding Inspector details identifies the affected media and reports the live input separately
+
 ### Requirement: Programme sound follows one verified engine
 
 CG Control SHALL offer one console-local sound source, chosen by the operator or by

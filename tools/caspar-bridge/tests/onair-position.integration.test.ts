@@ -211,24 +211,61 @@ it('keeps Position available while unchanged HTML occupancy remains fresh after 
   }
 });
 
-it('retains the on-air position lock when another programme server is declared', async () => {
+it('applies on-air Position to the active page and its verified programme mirror', async () => {
   await boot(POSITION_TEMPLATE, POSITION_HTML, true);
+  await expect.poll(() => runtime!.health().backup?.state).toBe('healthy');
   await expect(runtime!.load('item1', 'lower-third', {})).resolves.toMatchObject({
     accepted: true,
   });
   await expect(runtime!.take('item1')).resolves.toMatchObject({ accepted: true });
   const row = () => runtime!.stackSnapshot().find((item) => item.itemId === 'item1');
-  await expect.poll(() => row()?.status).toBe('on-air');
-  expect(row()?.onAirPosition).toBeUndefined();
+  await expect.poll(row).toMatchObject({ status: 'on-air', onAirPosition: true });
   expect(backup!.lastCgAdd(SLOT)).toBeDefined();
-  const before = mock!.lastCgUpdate(SLOT);
-  const backupBefore = backup!.lastCgUpdate(SLOT);
-  await expect(runtime!.update('item1', {}, 'merge', undefined, POSITION)).resolves.toMatchObject({
-    accepted: false,
-    errorCode: 'live-position-unavailable',
+  await expect(runtime!.update('item1', {}, 'merge', undefined, POSITION)).resolves.toEqual({
+    accepted: true,
   });
-  expect(mock!.lastCgUpdate(SLOT)).toEqual(before);
+  expect(row()?.position).toEqual(POSITION);
+  expect(JSON.parse(mock!.lastCgUpdate(SLOT)?.data ?? '{}')).toEqual({
+    __cg: { position: POSITION },
+  });
+  expect(JSON.parse(backup!.lastCgUpdate(SLOT)?.data ?? '{}')).toEqual({
+    __cg: { position: POSITION },
+  });
+  const next = { anchor: 'center', offset: { x: 30, y: 40 } } as const;
+  const backupBefore = backup!.lastCgUpdate(SLOT);
+  mock!.setHandler('CG', () => ({ kind: 'err', code: 403, verb: 'CG', detail: 'UPDATE FAILED' }));
+  await expect(runtime!.update('item1', {}, 'merge', undefined, next)).resolves.toMatchObject({
+    accepted: false,
+    errorCode: 'amcp-403',
+  });
+  expect(row()?.position).toEqual(POSITION);
   expect(backup!.lastCgUpdate(SLOT)).toEqual(backupBefore);
+});
+
+it('keeps Position available on the active engine if the backup did not accept the served page', async () => {
+  await boot(POSITION_TEMPLATE, POSITION_HTML, true);
+  await expect.poll(() => runtime!.health().backup?.state).toBe('healthy');
+  backup!.setHandler('CG', () => ({ kind: 'err', code: 403, verb: 'CG', detail: 'NO MATCH' }));
+  await expect(runtime!.load('item1', 'lower-third', {})).resolves.toMatchObject({
+    accepted: true,
+  });
+  await expect(runtime!.take('item1')).resolves.toMatchObject({ accepted: true });
+  await expect
+    .poll(() => runtime!.stackSnapshot().find((item) => item.itemId === 'item1'))
+    .toMatchObject({ status: 'on-air', onAirPosition: true });
+  const before = backup!.receivedCommands().length;
+  await expect(runtime!.update('item1', {}, 'merge', undefined, POSITION)).resolves.toEqual({
+    accepted: true,
+  });
+  expect(JSON.parse(mock!.lastCgUpdate(SLOT)?.data ?? '{}')).toEqual({
+    __cg: { position: POSITION },
+  });
+  expect(
+    backup!
+      .receivedCommands()
+      .slice(before)
+      .some(({ line }) => line.startsWith('CG ')),
+  ).toBe(false);
 });
 
 it('R-011: a stored position rides the ADD URL query; no override, no query; the take re-ADD inherits it; setConfig survives', async () => {
