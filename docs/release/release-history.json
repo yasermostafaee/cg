@@ -32,8 +32,12 @@
           "en": "Use New live layout in CG Control to create frames, presets and a background. Focus animates into a single frame, Return restores the previous arrangement, and Duplicate layout creates a separate copy to prepare while a programme is running."
         },
         {
-          "fa": "در چیدمان زنده، جای عنوان، اندازه، فونت و پس‌زمینه برای هر قاب مستقل است. فاصله‌ها در Arrange هر پریست و Cut و Fade در افکت تغییر تک‌قاب در دسترس‌اند.",
-          "en": "Live layouts support individual frame title position, size, font and background. Arrange shows the preset's gaps. Cut and Fade are available when switching between solo frames."
+          "fa": "استایل عنوان را یک‌بار برای همهٔ قاب‌ها تنظیم کنید یا هر قاب را جداگانه تغییر دهید. اندازه و فاصلهٔ داخلی کادر، تراز و جابه‌جایی متن، فونت‌های افزوده‌شده، دورخط، گوشه‌ها و سایه‌ها در VCG ذخیره می‌شوند.",
+          "en": "Set a shared title style or override it for one frame. Title box size, padding, alignment, vertical offset, added fonts, stroke, corners and shadows are saved in the VCG."
+        },
+        {
+          "fa": "مودال New live layout پیش‌نمایش بزرگ‌تری دارد و قاب و پریست انتخاب‌شده را مشخص نشان می‌دهد. فاصله‌های هر پریست در Arrange تنظیم می‌شوند.",
+          "en": "New live layout has a larger preview and clearly marks the selected frame and preset. Preset gaps are set in Arrange."
         },
         {
           "fa": "Position برای حرکت قاب و گذار پریست، Cut، Linear، Ease، Bounce و Elastic را همراه Fade اختیاری ارائه می‌کند. افکت پریست و حرکت قاب را می‌توان روی PVW تمرین کرد.",
@@ -69,6 +73,10 @@
         }
       ],
       "fixes": [
+        {
+          "fa": "گذار انتخاب‌شده بین قاب‌های Focus در پیش‌نمایش مودال و PVW هم اجرا می‌شود. نمایش عنوان در تک‌قاب از Show title in Focus پیروی می‌کند.",
+          "en": "The selected solo switch is rehearsed in the editor and PVW. Show title in Focus controls title visibility in the solo shot."
+        },
         {
           "fa": "بعد از تأیید Clear برای لایهٔ خارج از استک، نشان Play ردیف همان لایه خاموش می‌شود.",
           "en": "After an untracked layer is cleared, the Play indicator switches off for the corresponding row."
