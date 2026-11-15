@@ -16,6 +16,7 @@ import {
 import { activeRangeOf, hasNextStep, hasSoundEffects, type Scene } from '@cg/shared-schema';
 import { resumeCanvasSound } from '../canvas/canvasSound.js';
 import { sendCanvasPlayoutCommand } from '../canvas/canvasPlayoutCommands.js';
+import { formatElapsed } from '../fields/PreviewTransport.js';
 import {
   canvasDisplayFrame,
   canvasDisplayLimitMs,
@@ -412,6 +413,10 @@ export function TransportBar({ scene }: Props): JSX.Element {
 
   return (
     <div className={s.bar} aria-label="Playback transport">
+      <PlaybackElapsed
+        key={playbackMode ?? 'idle'}
+        running={playing || (playbackMode === 'lifecycle' && playoutStopping)}
+      />
       <div className={s.group}>
         {playoutPreview ? (
           <>
@@ -561,5 +566,34 @@ export function TransportBar({ scene }: Props): JSX.Element {
         frame {currentFrame} / {totalOut}
       </span>
     </div>
+  );
+}
+
+/** A monotonic session clock, independent of the frame painted on the timeline. */
+function PlaybackElapsed({ running }: { running: boolean }): JSX.Element {
+  const accumulated = useRef(0);
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    setElapsed(accumulated.current);
+    if (!running) return;
+    const startedAt = performance.now();
+    const sample = (): number => accumulated.current + performance.now() - startedAt;
+    const timer = window.setInterval(() => setElapsed(sample()), 50);
+    return () => {
+      window.clearInterval(timer);
+      accumulated.current = sample();
+    };
+  }, [running]);
+
+  return (
+    <span
+      className={s.elapsedReadout}
+      role="timer"
+      aria-label="Elapsed playback time"
+      title="Playback time (minutes:seconds:hundredths)"
+    >
+      Elapsed <strong>{formatElapsed(elapsed)}</strong>
+    </span>
   );
 }

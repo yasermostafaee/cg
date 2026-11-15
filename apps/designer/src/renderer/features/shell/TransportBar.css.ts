@@ -63,4 +63,16 @@ export const frameReadout = style({
   gridColumn: 3,
 });
 
+export const elapsedReadout = style({
+  display: 'inline-flex',
+  flexWrap: 'wrap',
+  alignItems: 'baseline',
+  columnGap: '0.35rem',
+  gridColumn: 1,
+  justifySelf: 'start',
+  color: colors.textMuted,
+  fontSize: '0.72rem',
+  fontVariantNumeric: 'tabular-nums',
+});
+
 export const icon = style({ display: 'block' });

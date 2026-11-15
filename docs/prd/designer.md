@@ -7003,3 +7003,14 @@ stays with the project and exported template.
 - WHEN the project contains added fonts THEN Project fonts is the first option group in Text,
   Ticker, Clock and Sequence.
 - WHEN new fonts appear THEN the current font selection remains in force.
+
+## [~] D-217 — Show elapsed playback in Designer ⟨priority: medium — owner, 2026-11-15⟩ — `openspec/changes/show-designer-playback-elapsed/`
+
+**What:** Show the time spent playing next to the actual frame readout, in ordinary playback and
+Rehearse. Keep the elapsed readout available while stopped.
+
+**Acceptance**
+
+- WHEN the playhead freezes and the ticker keeps moving THEN elapsed time continues.
+- WHEN the operator pauses ordinary playback THEN elapsed time stands still until Resume.
+- WHEN playback ends, including after a Rehearse outro, THEN elapsed time resets.

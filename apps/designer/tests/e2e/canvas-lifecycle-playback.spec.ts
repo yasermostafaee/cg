@@ -1,4 +1,13 @@
+import type { Locator } from '@playwright/test';
 import { expect, test, type DesignerApp } from './fixtures/designer.js';
+
+function elapsedPlaybackMs(clock: Locator): Promise<number> {
+  return clock.locator('strong').evaluate((node) => {
+    const parts = (node.textContent ?? '').split(':').map(Number);
+    const hundredths = parts.pop() ?? 0;
+    return parts.reduce((seconds, part) => seconds * 60 + part, 0) * 1000 + hundredths * 10;
+  });
+}
 
 test('B-419 — inline text editing opens at the painted keyframed position', async ({ app }) => {
   await app.newProject('Animated text editing');
@@ -68,6 +77,8 @@ test.describe('D-199 — main Canvas separates timeline playback from Rehearse p
     await expect(app.inspector.getByText('50 fps', { exact: true })).toBeVisible();
 
     const transport = app.page.getByLabel('Playback transport');
+    const elapsed = transport.getByRole('timer', { name: 'Elapsed playback time' });
+    await expect(elapsed).toHaveText('Elapsed 00:00:00');
     const ruler = app.page.getByRole('slider', { name: 'Frame ruler' });
     await expect(ruler).toHaveAttribute('aria-valuemax', '50');
 
@@ -110,6 +121,8 @@ test.describe('D-199 — main Canvas separates timeline playback from Rehearse p
     // Pause is proved against browser animation frames, rather than an exact wall-clock sleep.
     await transport.getByRole('button', { name: 'Pause', exact: true }).click();
     await expect(transport.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
+    await expect.poll(() => elapsedPlaybackMs(elapsed)).toBeGreaterThan(0);
+    const pausedAt = await elapsedPlaybackMs(elapsed);
     const pausedFrame = Number((await ruler.getAttribute('aria-valuenow')) ?? '-1');
     expect(pausedFrame).toBeGreaterThan(0);
     expect(pausedFrame).toBeLessThan(50);
@@ -122,12 +135,15 @@ test.describe('D-199 — main Canvas separates timeline playback from Rehearse p
       return samples;
     });
     expect(heldFrames.every((frame) => frame === pausedFrame)).toBe(true);
+    expect(await elapsedPlaybackMs(elapsed)).toBe(pausedAt);
 
     await transport.getByRole('button', { name: 'Play', exact: true }).click();
     await expect
       .poll(async () => Number((await ruler.getAttribute('aria-valuenow')) ?? '-1'))
       .toBeGreaterThan(pausedFrame);
+    await expect.poll(() => elapsedPlaybackMs(elapsed)).toBeGreaterThan(pausedAt);
     await expect(ruler).toHaveAttribute('aria-valuenow', '50');
+    await expect(elapsed).toHaveText('Elapsed 00:00:00');
 
     // A deliberate rewind followed by a fresh Play must create another 0 → middle → end run;
     // stale completion state from the first pass must not leave the empty scene parked at 50.
@@ -147,6 +163,40 @@ test.describe('D-199 — main Canvas separates timeline playback from Rehearse p
     const secondEnd = secondRun.indexOf(50);
     expect(secondMiddle).toBeGreaterThan(0);
     if (secondEnd >= 0) expect(secondMiddle).toBeLessThan(secondEnd);
+  });
+
+  test('Rehearse elapsed continues while a frozen Loop-cycle cursor holds and the ticker crawls', async ({
+    app,
+  }) => {
+    await app.newProject('Frozen loop elapsed');
+    await app.setSceneDuration(50);
+    await app.addTicker();
+    await app.addOutPoint();
+    await app.setPlayoutTiming('loop-cycle');
+    await app.setHoldSource('timed');
+    await app.page.getByRole('combobox', { name: 'On hold' }).selectOption('freeze');
+    const duration = app.page.getByLabel('Hold duration in milliseconds');
+    await duration.fill('6000');
+    await duration.press('Enter');
+
+    const transport = app.page.getByLabel('Playback transport');
+    const elapsed = transport.getByRole('timer', { name: 'Elapsed playback time' });
+    const ruler = app.page.getByRole('slider', { name: 'Frame ruler' });
+    await transport.getByRole('button', { name: 'Rehearse preview' }).click();
+    await transport.getByRole('button', { name: 'Play', exact: true }).click();
+    await expect(ruler).toHaveAttribute('aria-valuenow', '38');
+
+    const ticker = app.canvasFrame.locator('.cg-ticker-track').first();
+    await expect(ticker).toHaveAttribute('style', /translateX/);
+    const frozenAt = await elapsedPlaybackMs(elapsed);
+    const tickerPosition = await ticker.getAttribute('style');
+    await expect.poll(() => elapsedPlaybackMs(elapsed)).toBeGreaterThan(frozenAt + 150);
+    await expect(ticker).not.toHaveAttribute('style', tickerPosition ?? '');
+    await expect(ruler).toHaveAttribute('aria-valuenow', '38');
+
+    await transport.getByRole('button', { name: 'Stop', exact: true }).click();
+    await expect(elapsed).toHaveText('Elapsed 00:00:00');
+    await expect(transport.getByRole('button', { name: 'Play', exact: true })).toBeEnabled();
   });
 
   test('ordinary Play does not start a ticker lifecycle', async ({ app }) => {
