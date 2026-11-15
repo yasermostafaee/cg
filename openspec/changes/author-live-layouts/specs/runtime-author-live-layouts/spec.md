@@ -10,10 +10,27 @@ CG Control SHALL author multiple frames and presets in the channel's template ca
 - **THEN** they can add and remove frames and presets, attach a station input and title to each frame, and select each preset's membership and arrangement
 - **AND** each preset stores the selected variant of Auto layout and its spacing
 
-#### Scenario: Style the title and arrange the gap
+#### Scenario: Style titles together and override a frame
 
-- **WHEN** the operator edits a frame title and switches between its presets
-- **THEN** its position, size, font and background follow that frame
+- **WHEN** the operator edits the shared title style
+- **THEN** all titles inherit the style and individual frame overrides take precedence in every preset
+- **AND** the operator can adjust box size, padding, vertical offset, alignment, text and background colors, stroke, shadows, corner radius and wrapping
+- **AND** fonts added to the layout are available to its titles and remain embedded when the layout is saved and reopened
+- **AND** Advanced Digits formats titles and operator edits in Persian, Latin or Arabic-Indic, with Keyboard retaining the entered digits
+
+#### Scenario: Author advanced frame geometry
+
+- **WHEN** the operator opens Advanced frame controls
+- **THEN** they can choose Fit or Crop edges, set Move and Resize permissions, and define rectangular mask windows
+- **AND** the canvas reflects the input fit and masks
+- **AND** the live layer uses the existing PVW tools for allowed edits
+- **AND** a shared frame uses its authored geometry settings in each regular preset and Focus look
+
+#### Scenario: See the current editing selection
+
+- **WHEN** the operator selects a preset or a frame in the editor
+- **THEN** the selected entry stays visibly distinct when focus moves away
+- **AND** the editor gives the preview room to show the layout while keeping its controls reachable
 - **AND** a preset with more than one frame shows its own horizontal and vertical gap controls beside Arrange
 
 #### Scenario: Save shared artwork and effects
@@ -43,3 +60,5 @@ The console SHALL let an operator focus a frame and return to its originating pr
 - **THEN** they can switch directly to that frame with the saved Cut, Fade, Motion, Push or Slide over effect
 - **AND** their originating preset is still the destination of Return
 - **AND** the switch keeps the configured inputs for both frames
+- **AND** the editor rehearsal and PVW show the selected effect between the two solo views, including when the console's interface uses reduced motion
+- **AND** a title hidden by Show title in Focus stays hidden in the solo view and keeps its regular preset visibility on Return

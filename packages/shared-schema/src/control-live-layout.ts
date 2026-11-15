@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { LiveSourceIdSchema } from './elements.js';
+import { FontWeightSchema, LivePlateMaskSchema, LiveSourceIdSchema } from './elements.js';
+import { FieldDigitsSchema } from './fields.js';
 import {
   FRAME_TRANSITION_DEFAULT_MS,
   FRAME_TRANSITION_MAX_MS,
@@ -10,6 +11,7 @@ import {
   DEFAULT_INPUT_SLIDE_DIRECTION,
   InputTransitionDirectionSchema,
 } from './input-transition.js';
+import { LiveFitModeSchema, LiveFrameResizeSchema } from './live-fit.js';
 import { calculateLiveSourceAutoLayout } from './live-source-auto-layout.js';
 import type { LiveSourceRect } from './live-source.js';
 import {
@@ -17,6 +19,8 @@ import {
   HexColorSchema,
   IdSchema,
   ResolutionSchema,
+  ShadowSchema,
+  StrokeSchema,
   type Resolution,
 } from './primitives.js';
 
@@ -30,6 +34,18 @@ const isFieldNamespaceId = (id: string): boolean =>
   !Object.prototype.hasOwnProperty.call(Object.prototype, id);
 
 const ControlLiveLayoutFrameIdSchema = LiveSourceIdSchema.max(64).refine(isFieldNamespaceId);
+const ControlLiveLayoutFontIdSchema = z.string().regex(/^[a-f0-9]{64}$/);
+const ControlLiveLayoutFontSchema = z.object({
+  id: ControlLiveLayoutFontIdSchema,
+  name: z.string().min(1).max(255),
+  mime: z.enum(['font/ttf', 'font/otf', 'font/woff', 'font/woff2']),
+});
+export type ControlLiveLayoutFont = z.infer<typeof ControlLiveLayoutFontSchema>;
+
+/** Same asset family namespace as Designer's packaged and single-file templates. */
+export function controlLiveLayoutFontFamily(id: string): string {
+  return 'asset-' + id;
+}
 
 export const ControlLiveLayoutTitleStyleSchema = z.object({
   // Position percentages span the available travel of the entire title box.
@@ -40,8 +56,26 @@ export const ControlLiveLayoutTitleStyleSchema = z.object({
     .min(CONTROL_LIVE_LAYOUT_TITLE_SIZE_MIN_PERCENT)
     .max(CONTROL_LIVE_LAYOUT_TITLE_SIZE_MAX_PERCENT)
     .optional(),
-  fontFamily: z.enum(CONTROL_LIVE_LAYOUT_TITLE_FONTS).optional(),
+  widthPercent: z.number().min(1).max(100).optional(),
+  heightPercent: z.number().min(1).max(100).optional(),
+  padding: z.number().finite().nonnegative().optional(),
+  textOffsetY: z.number().finite().optional(),
+  align: z.enum(['start', 'end', 'center', 'justify']).optional(),
+  verticalAlign: z.enum(['top', 'middle', 'bottom']).optional(),
+  color: HexColorSchema.optional(),
+  fontFamily: z
+    .union([z.enum(CONTROL_LIVE_LAYOUT_TITLE_FONTS), z.string().regex(/^asset-[a-f0-9]{64}$/)])
+    .optional(),
+  fontWeight: FontWeightSchema.optional(),
+  fontStyle: z.enum(['normal', 'italic']).optional(),
+  digits: FieldDigitsSchema.optional(),
   backgroundColor: HexColorSchema.optional(),
+  // Null explicitly disables a style inherited from the layout.
+  stroke: StrokeSchema.nullable().optional(),
+  textShadow: ShadowSchema.nullable().optional(),
+  boxShadow: ShadowSchema.nullable().optional(),
+  borderRadius: z.number().finite().nonnegative().optional(),
+  wrap: z.boolean().optional(),
 });
 export type ControlLiveLayoutTitleStyle = z.infer<typeof ControlLiveLayoutTitleStyleSchema>;
 
@@ -51,6 +85,11 @@ const ControlLiveLayoutFrameSchema = z.object({
   sourceId: z.string().min(1).max(64).optional(),
   title: z.string().max(120),
   titleStyle: ControlLiveLayoutTitleStyleSchema.optional(),
+  fitMode: LiveFitModeSchema.optional(),
+  operatorMove: z.boolean().optional(),
+  operatorPlacement: z.union([z.literal('locked'), LiveFrameResizeSchema]).optional(),
+  liveMask: LivePlateMaskSchema.optional(),
+  allowOperatorMaskEdit: z.boolean().optional(),
 });
 export type ControlLiveLayoutFrame = z.infer<typeof ControlLiveLayoutFrameSchema>;
 
@@ -126,7 +165,7 @@ export const CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS: Readonly<ControlLiveLayoutEffe
   },
 };
 
-/** A saved CG Control authoring document. The optional background binary lives in its .vcg. */
+/** A saved CG Control authoring document. Optional background and font assets live in its .vcg. */
 export const ControlLiveLayoutSchema = z
   .object({
     id: IdSchema,
@@ -134,6 +173,8 @@ export const ControlLiveLayoutSchema = z
     resolution: ResolutionSchema,
     frameRate: FrameRateSchema,
     frames: z.array(ControlLiveLayoutFrameSchema).min(1).max(CONTROL_LIVE_LAYOUT_MAX_FRAMES),
+    titleStyle: ControlLiveLayoutTitleStyleSchema.optional(),
+    fonts: z.array(ControlLiveLayoutFontSchema).optional(),
     presets: z.array(ControlLiveLayoutPresetSchema).min(1),
     defaultPresetId: z.string().min(1),
     background: ControlLiveLayoutBackgroundSchema,
@@ -144,6 +185,22 @@ export const ControlLiveLayoutSchema = z
     const presetIds = new Set(layout.presets.map(({ id }) => id));
     const issue = (path: (string | number)[], message: string) =>
       ctx.addIssue({ code: z.ZodIssueCode.custom, path, message });
+
+    const fonts = layout.fonts ?? [];
+    const families = new Set(fonts.map(({ id }) => controlLiveLayoutFontFamily(id)));
+    if (families.size !== fonts.length) issue(['fonts'], 'Fonts must have distinct ids.');
+    const validateFont = (
+      style: ControlLiveLayoutTitleStyle | undefined,
+      path: (string | number)[],
+    ) => {
+      const family = style?.fontFamily;
+      if (family?.startsWith('asset-') && !families.has(family))
+        issue([...path, 'fontFamily'], 'This title refers to a missing font.');
+    };
+    validateFont(layout.titleStyle, ['titleStyle']);
+    layout.frames.forEach((frame, index) =>
+      validateFont(frame.titleStyle, ['frames', index, 'titleStyle']),
+    );
 
     if (frameIds.size !== layout.frames.length) issue(['frames'], 'Frames must have distinct ids.');
     if (presetIds.size !== layout.presets.length)

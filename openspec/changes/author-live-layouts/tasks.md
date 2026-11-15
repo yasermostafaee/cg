@@ -17,3 +17,15 @@
 - [x] Verify Cut and stationary Fade in Chromium and Bridge's A/B mock, with both physical seat orders.
 - [x] Verify editable title position, size, font and background in the editor and compiled layout.
 - [x] Verify per-preset gap controls, native input styling, and compact Focus/Return in Chromium and the standalone HTML review.
+
+## Shared title styles and rehearsal
+
+- [x] Persist a shared style, per-frame overrides and uploaded fonts in the VCG.
+- [x] Edit title box sizing, padding, typography, alignment, wrapping, stroke, shadows and corner radius.
+- [x] Make selected presets and frames distinct and give the modal a larger responsive preview.
+- [x] Verify configured solo switch effects in editor rehearsal, PVW and the existing AMCP mock for PGM.
+- [x] Verify a styled layout and its uploaded font after Save, Edit and Duplicate.
+- [x] Verify hidden Focus titles stay absent in the editor and PVW and restore on Return.
+- [x] Verify the Advanced Digits control in authoring, the VCG and PVW.
+- [x] Verify Advanced frame controls persist fit, permissions and masks for every preset and Focus.
+- [ ] Record the carrying Linux Playwright run for shared title styles and rehearsal.

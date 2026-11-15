@@ -1,8 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { Check, ImagePlus, LayoutGrid, Plus, RotateCcw, Trash2, Video } from 'lucide-react';
+import { Check, ImagePlus, LayoutGrid, Pencil, Plus, RotateCcw, Trash2, Video } from 'lucide-react';
 import {
   CONTROL_LIVE_LAYOUT_MAX_FRAMES,
   ControlLiveLayoutSchema,
+  controlLiveLayoutFontFamily,
   controlLiveLayoutRects,
   type ControlLiveLayout,
   type ControlLiveLayoutArrangement,
@@ -21,12 +22,14 @@ import { liveLayoutArtwork } from '../../theme.js';
 import {
   CONTROL_LIVE_LAYOUT_BACKGROUND_ACCEPT,
   readControlLiveLayoutBackgroundFile,
+  readControlLiveLayoutFontFile,
 } from './controlLiveLayoutCompiler.js';
 import { usePvwSourceFrames } from '../monitors/usePvwSourceFrames.js';
 import { SourceLabel } from '../sources/SourceLabel.js';
 import { SourcePicker } from '../sources/SourcePicker.js';
 import { LiveLayoutEditorArrange } from './LiveLayoutEditorArrange.js';
 import { LiveLayoutEditorEffects } from './LiveLayoutEditorEffects.js';
+import { LiveLayoutEditorFrameOptions } from './LiveLayoutEditorFrameOptions.js';
 import { LiveLayoutEditorPreview } from './LiveLayoutEditorPreview.js';
 import { LiveLayoutEditorTitleStyle } from './LiveLayoutEditorTitleStyle.js';
 import './live-layout-editor.css';
@@ -35,8 +38,13 @@ interface LiveLayoutEditorProps {
   channel: number;
   initial: ControlLiveLayout;
   initialBackground?: Blob | undefined;
+  initialFonts?: ReadonlyMap<string, Blob> | undefined;
   mode: 'create' | 'edit' | 'duplicate';
-  onSave: (layout: ControlLiveLayout, background?: Blob) => Promise<void>;
+  onSave: (
+    layout: ControlLiveLayout,
+    background: Blob | undefined,
+    fonts: ReadonlyMap<string, Blob>,
+  ) => Promise<void>;
   onClose: () => void;
 }
 
@@ -83,20 +91,26 @@ export function LiveLayoutEditor({
   channel,
   initial,
   initialBackground,
+  initialFonts,
   mode,
   onSave,
   onClose,
 }: LiveLayoutEditorProps): JSX.Element | null {
   const [layout, setLayout] = useState(initial);
   const [asset, setAsset] = useState(initialBackground);
+  const [fontAssets, setFontAssets] = useState<ReadonlyMap<string, Blob>>(
+    () => initialFonts ?? new Map(),
+  );
   const [presetId, setPresetId] = useState(initial.defaultPresetId);
   const [frameId, setFrameId] = useState(initial.frames[0]?.id);
   const [focusId, setFocusId] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [readingMedia, setReadingMedia] = useState(false);
+  const [readingFont, setReadingFont] = useState(false);
   const [refusal, setRefusal] = useState<string>();
   const saveInFlight = useRef(false);
   const mediaRead = useRef(0);
+  const fontRead = useRef(0);
   const mediaPick = useRef<HTMLInputElement>(null);
   const titleInput = useRef<HTMLInputElement>(null);
   const presetName = useRef<HTMLInputElement>(null);
@@ -118,9 +132,32 @@ export function LiveLayoutEditor({
     return () => URL.revokeObjectURL(url);
   }, [asset]);
 
+  useEffect(() => {
+    let disposed = false;
+    const faces = new Set<FontFace>();
+    for (const [id, blob] of fontAssets) {
+      void blob
+        .arrayBuffer()
+        .then((buffer) => new FontFace(controlLiveLayoutFontFamily(id), buffer).load())
+        .then((face) => {
+          if (disposed) return;
+          document.fonts.add(face);
+          faces.add(face);
+        })
+        .catch(() => {
+          if (!disposed) setRefusal('A title font could not be loaded for preview.');
+        });
+    }
+    return () => {
+      disposed = true;
+      for (const face of faces) document.fonts.delete(face);
+    };
+  }, [fontAssets]);
+
   useEffect(
     () => () => {
       mediaRead.current += 1;
+      fontRead.current += 1;
     },
     [],
   );
@@ -295,8 +332,44 @@ export function LiveLayoutEditor({
     }
   }
 
+  async function addFont(file: File, scope: 'shared' | 'frame'): Promise<void> {
+    const revision = ++fontRead.current;
+    const target = frame?.id;
+    setReadingFont(true);
+    setRefusal(undefined);
+    try {
+      const font = await readControlLiveLayoutFontFile(file);
+      if (revision !== fontRead.current) return;
+      const fontFamily = controlLiveLayoutFontFamily(font.id);
+      setFontAssets((current) => new Map(current).set(font.id, file));
+      setLayout((current) => {
+        const previousFonts = current.fonts ?? [];
+        const fonts = previousFonts.some(({ id }) => id === font.id)
+          ? previousFonts
+          : [...previousFonts, font];
+        return scope === 'shared'
+          ? { ...current, fonts, titleStyle: { ...current.titleStyle, fontFamily } }
+          : {
+              ...current,
+              fonts,
+              frames: current.frames.map((candidate) =>
+                candidate.id === target
+                  ? { ...candidate, titleStyle: { ...candidate.titleStyle, fontFamily } }
+                  : candidate,
+              ),
+            };
+      });
+    } catch (cause) {
+      if (revision === fontRead.current) {
+        setRefusal(cause instanceof Error ? cause.message : 'The font could not be read.');
+      }
+    } finally {
+      if (revision === fontRead.current) setReadingFont(false);
+    }
+  }
+
   async function save(): Promise<void> {
-    if (!canSave || saveInFlight.current || readingMedia) return;
+    if (!canSave || saveInFlight.current || readingMedia || readingFont) return;
     const draft = ControlLiveLayoutSchema.safeParse({
       ...layout,
       name: layout.name.trim(),
@@ -310,7 +383,7 @@ export function LiveLayoutEditor({
     saveInFlight.current = true;
     setBusy(true);
     try {
-      await onSave(draft.data, asset);
+      await onSave(draft.data, asset, fontAssets);
     } catch (cause) {
       setRefusal(cause instanceof Error ? cause.message : 'The layout could not be saved.');
     } finally {
@@ -324,7 +397,7 @@ export function LiveLayoutEditor({
       title={titles[mode]}
       subtitle={`Channel ${String(channel)}`}
       emblem={LayoutGrid}
-      size="wide"
+      size="library"
       onClose={onClose}
       busy={busy}
       {...(refusal === undefined ? {} : { message: { role: 'refusal' as const, text: refusal } })}
@@ -336,7 +409,7 @@ export function LiveLayoutEditor({
           <ModalAction
             actionRole="primary"
             onClick={() => void save()}
-            disabled={!canSave || busy || readingMedia}
+            disabled={!canSave || busy || readingMedia || readingFont}
           >
             <Icon icon={Check} size={15} /> {busy ? 'Saving…' : 'Save layout'}
           </ModalAction>
@@ -407,10 +480,14 @@ export function LiveLayoutEditor({
             {layout.presets.map((candidate, index) => (
               <Button
                 key={candidate.id}
+                className="cg-live-layout-preset-choice"
                 active={candidate.id === preset.id}
                 aria-pressed={candidate.id === preset.id}
                 onClick={() => choosePreset(candidate)}
               >
+                <span className="cg-live-layout-selection-mark" aria-hidden="true">
+                  <Icon icon={Check} size={15} />
+                </span>
                 <IsolatedName>
                   {candidate.name.trim() || `Preset ${String(index + 1)}`}
                 </IsolatedName>
@@ -452,6 +529,7 @@ export function LiveLayoutEditor({
               layout={layout}
               preset={preset}
               geometry={geometry}
+              selectedFrameId={frame.id}
               focused={focusId}
               backgroundUrl={assetUrl}
               sourceFrames={sourceFrames}
@@ -489,6 +567,7 @@ export function LiveLayoutEditor({
                 return (
                   <div className="cg-live-layout-frame-row" key={candidate.id}>
                     <Button
+                      className="cg-live-layout-frame-choice"
                       aria-label={`Edit frame ${String(index + 1)}`}
                       active={candidate.id === frame.id}
                       aria-pressed={candidate.id === frame.id}
@@ -504,6 +583,9 @@ export function LiveLayoutEditor({
                       <span className="cg-live-layout-frame-label">
                         <IsolatedName>{name}</IsolatedName>
                         <SourceLabel sourceId={candidate.sourceId ?? ''} fallback="Unassigned" />
+                      </span>
+                      <span className="cg-live-layout-selection-mark" aria-hidden="true">
+                        <Icon icon={Pencil} size={14} />
                       </span>
                     </Button>
                     <Checkbox
@@ -555,14 +637,29 @@ export function LiveLayoutEditor({
                 />
               </label>
               <LiveLayoutEditorTitleStyle
-                style={frame.titleStyle}
                 raster={layout.resolution}
-                onChange={(patch) =>
+                frameId={frame.id}
+                frameNumber={frameNumber}
+                shared={layout.titleStyle}
+                override={frame.titleStyle}
+                fonts={layout.fonts ?? []}
+                readingFont={readingFont}
+                onSharedChange={(patch) =>
+                  setLayout((current) => ({
+                    ...current,
+                    titleStyle: { ...current.titleStyle, ...patch },
+                  }))
+                }
+                onOverrideChange={(patch) =>
                   updateFrame((candidate) => ({
                     ...candidate,
                     titleStyle: { ...candidate.titleStyle, ...patch },
                   }))
                 }
+                onResetOverride={() =>
+                  updateFrame(({ titleStyle: _override, ...candidate }) => candidate)
+                }
+                onAddFont={(file, scope) => void addFont(file, scope)}
               />
               <label className="cg-live-layout-toggle" htmlFor={`${fieldsId}-title-preset`}>
                 <Checkbox
@@ -588,6 +685,10 @@ export function LiveLayoutEditor({
                 />
                 Show title in Focus
               </label>
+              <LiveLayoutEditorFrameOptions
+                frame={frame}
+                onChange={(patch) => updateFrame((candidate) => ({ ...candidate, ...patch }))}
+              />
             </div>
             <div className="cg-live-layout-fields">
               <label htmlFor={`${fieldsId}-preset-name`}>

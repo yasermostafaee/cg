@@ -1,0 +1,28 @@
+.cg-live-layout-frame-options {
+  border-top: 1px solid var(--r-border-soft);
+}
+
+.cg-live-layout-frame-option-group,
+.cg-live-layout-frame-mask {
+  display: grid;
+  gap: 0.3rem;
+  margin-top: 0.45rem;
+  color: var(--r-text-secondary);
+  font-size: var(--r-text-sm);
+}
+
+.cg-live-layout-frame-option-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.cg-live-layout-frame-options .cg-live-layout-frame-option-check {
+  display: flex;
+  flex-flow: row wrap;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 1.75rem;
+  font-size: var(--r-text-sm);
+}

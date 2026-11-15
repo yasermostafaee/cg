@@ -36,6 +36,10 @@
           "en": "Set a shared title style or override it for one frame. Title box size, padding, alignment, vertical offset, added fonts, stroke, corners and shadows are saved in the VCG."
         },
         {
+          "fa": "در Advanced عنوان، رقم‌های فارسی، لاتین و عربی قابل انتخاب‌اند. تنظیم‌های پیشرفتهٔ قاب هم Fit، مجوز جابه‌جایی، Resize و ماسک را در اختیار اپراتور می‌گذارند.",
+          "en": "Title style Advanced offers Persian, Latin and Arabic-Indic digits. Advanced frame controls set input fit, move and resize permissions, and rectangular masks."
+        },
+        {
           "fa": "مودال New live layout پیش‌نمایش بزرگ‌تری دارد و قاب و پریست انتخاب‌شده را مشخص نشان می‌دهد. فاصله‌های هر پریست در Arrange تنظیم می‌شوند.",
           "en": "New live layout has a larger preview and clearly marks the selected frame and preset. Preset gaps are set in Arrange."
         },

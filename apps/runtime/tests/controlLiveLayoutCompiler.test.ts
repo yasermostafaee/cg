@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import {
   aggregateBoundCompositionFields,
@@ -5,11 +6,16 @@ import {
   calculateLiveSourceAutoLayout,
   controlLiveLayoutFocusLookId,
   controlLiveLayoutFocusTarget,
+  controlLiveLayoutFontFamily,
   controlLiveLayoutRects,
+  elementDigitsOf,
+  fieldDigitsOf,
   type ControlLiveLayout,
   type ControlLiveLayoutPreset,
+  type ControlLiveLayoutTitleStyle,
+  type LivePlateMask,
 } from '@cg/shared-schema';
-import { buildTemplateLiveSources, unpack } from '@cg/vcg-format';
+import { buildTemplateLiveSources, sha256Hex, unpack } from '@cg/vcg-format';
 import {
   buildControlLiveLayoutScene,
   compileControlLiveLayout,
@@ -19,6 +25,7 @@ import {
   readControlLiveLayout,
 } from '../src/renderer/features/liveLayouts/controlLiveLayoutCompiler.js';
 import { sharedFrameTitlesOf } from '../src/renderer/features/inspector/sharedFrameTitles.js';
+import { produceTemplateDelivery } from '../src/renderer/features/library/templateDelivery.js';
 
 function layoutFixture(): ControlLiveLayout {
   const layout = createControlLiveLayout();
@@ -150,6 +157,218 @@ describe('CG Control authored live layouts', () => {
       backgroundColor: '#101B28DE',
       padding: height * 0.012,
     });
+  });
+
+  it('exports the same authored mask and frame permissions in each preset and Focus', async () => {
+    const base = layoutFixture();
+    const liveMask: LivePlateMask = {
+      mode: 'inside',
+      rects: [
+        { x: 0.125, y: 0.25, width: 0.5, height: 0.5 },
+        { x: 0.75, y: 0.125, width: 0.125, height: 0.125 },
+      ],
+    };
+    const layout: ControlLiveLayout = {
+      ...base,
+      frames: base.frames.map((frame) => {
+        if (frame.id === 'frame-left') {
+          return {
+            ...frame,
+            fitMode: 'cover',
+            operatorMove: false,
+            operatorPlacement: 'proportional',
+            liveMask,
+            allowOperatorMaskEdit: true,
+          };
+        }
+        if (frame.id === 'frame-right') return { ...frame, operatorPlacement: 'locked' };
+        return frame;
+      }),
+    };
+    const bytes = await compileControlLiveLayout(layout);
+    expect((await readControlLiveLayout(bytes)).layout).toEqual(layout);
+    const { template } = await produceTemplateDelivery(bytes);
+    const look = (id: string) => template.liveSources?.looks?.find((entry) => entry.id === id);
+    for (const id of [
+      'preset-wide',
+      'preset-pair',
+      controlLiveLayoutFocusLookId('preset-wide', 'frame-left'),
+      controlLiveLayoutFocusLookId('preset-pair', 'frame-left'),
+    ]) {
+      expect(look(id)).toMatchObject({
+        fits: { 'frame-left': 'cover' },
+        masks: { 'frame-left': liveMask },
+        maskElementIds: { 'frame-left': 'frame-left-plate' },
+        operatorMaskEdits: ['frame-left'],
+        operatorFrames: {
+          'frame-left': {
+            artworkKey: expect.stringMatching(/\/instance-frame-left$/),
+            resize: 'proportional',
+            move: false,
+          },
+        },
+      });
+    }
+    const wide = look('preset-wide');
+    expect(wide?.fits?.['frame-anchor']).toBe('contain');
+    expect(wide?.operatorFrames?.['frame-anchor']).toMatchObject({ resize: 'free' });
+    expect(wide?.operatorFrames?.['frame-anchor']).not.toHaveProperty('move');
+    expect(wide?.operatorFrames?.['frame-right']).toMatchObject({ resize: 'move-only' });
+    expect(look(controlLiveLayoutFocusLookId('preset-wide', 'frame-right'))).not.toHaveProperty(
+      'operatorMaskEdits',
+    );
+  });
+
+  it('inherits common title styling and allows an individual frame to disable part of it', () => {
+    const layout = layoutFixture();
+    const shadow = { offsetX: 3, offsetY: 4, blur: 6, color: '#00000099' };
+    const titleStyle: ControlLiveLayoutTitleStyle = {
+      widthPercent: 100,
+      heightPercent: 100,
+      padding: 24,
+      textOffsetY: -8,
+      verticalAlign: 'bottom',
+      align: 'center',
+      color: '#DDEEFF',
+      fontWeight: 700,
+      fontStyle: 'italic',
+      backgroundColor: '#001122CC',
+      stroke: { width: 2, color: '#33BB88' },
+      textShadow: shadow,
+      boxShadow: { ...shadow, spread: 4 },
+      borderRadius: 12,
+      wrap: true,
+    };
+    const override = { stroke: null, boxShadow: null, wrap: false, color: '#FFFFFF' };
+    const scene = buildControlLiveLayoutScene({
+      ...layout,
+      titleStyle,
+      frames: layout.frames.map((frame) =>
+        frame.id === 'frame-right' ? { ...frame, titleStyle: override } : frame,
+      ),
+    });
+    expect(controlLiveLayoutTitleGeometry(layout.resolution, titleStyle)).toMatchObject({
+      x: 0,
+      y: 0,
+      xPercent: 0,
+      yPercent: 0,
+      width: 1920,
+      height: 1080,
+    });
+    const getTitle = (frameId: string) =>
+      scene.compositions?.find(({ id }) => id === `layout-frame-${frameId}`)?.layers[0]
+        ?.children[1];
+    const shared = getTitle('frame-left');
+    expect(shared).toMatchObject({
+      transform: { position: { x: 0, y: 0 }, size: { w: 1920, h: 1080 } },
+      font: { weight: 700, style: 'italic' },
+      color: '#DDEEFF',
+      backgroundColor: '#001122CC',
+      stroke: { width: 2, color: '#33BB88' },
+      textShadow: shadow,
+      shadow: { ...shadow, spread: 4 },
+      cornerRadius: 12,
+      padding: 24,
+      textOffsetY: -8,
+      verticalAlign: 'bottom',
+      align: 'center',
+      wrap: true,
+      overflow: 'clip',
+    });
+    expect(shared).not.toHaveProperty('maxLines');
+    const individual = getTitle('frame-right');
+    expect(individual).toMatchObject({
+      color: '#FFFFFF',
+      textOffsetY: -8,
+      textShadow: shadow,
+      maxLines: 1,
+      wrap: false,
+      overflow: 'ellipsis',
+    });
+    expect(individual).not.toHaveProperty('stroke');
+    expect(individual).not.toHaveProperty('shadow');
+  });
+
+  it('keeps uploaded fonts editable and inlines their bytes into the programme page', async () => {
+    const base = layoutFixture();
+    const mime = 'font/woff2' as const;
+    const fonts = new Map<string, Blob>();
+    const assets = await Promise.all(
+      ['vazirmatn-arabic-400-normal.woff2', 'vazirmatn-latin-700-normal.woff2'].map(
+        async (name) => {
+          const bytes = new Uint8Array(
+            await readFile(new URL(`../public/fonts/vazirmatn/${name}`, import.meta.url)),
+          );
+          const id = sha256Hex(bytes);
+          fonts.set(id, new Blob([bytes], { type: mime }));
+          return { id, name, mime };
+        },
+      ),
+    );
+    const primaryFamily = controlLiveLayoutFontFamily(assets[0]!.id);
+    const secondaryFamily = controlLiveLayoutFontFamily(assets[1]!.id);
+    const layout: ControlLiveLayout = {
+      ...base,
+      fonts: assets,
+      titleStyle: { fontFamily: primaryFamily },
+      frames: base.frames.map((frame) =>
+        frame.id === 'frame-right'
+          ? { ...frame, titleStyle: { fontFamily: secondaryFamily } }
+          : frame,
+      ),
+    };
+    expect(
+      ControlLiveLayoutSchema.safeParse({ ...layout, fonts: assets.slice(0, 1) }).success,
+    ).toBe(false);
+    await expect(compileControlLiveLayout(layout)).rejects.toThrow('Choose the font file');
+    const bytes = await compileControlLiveLayout(layout, undefined, fonts);
+    const reopened = await readControlLiveLayout(bytes);
+    expect(reopened.layout).toEqual(layout);
+    const { manifest, files } = await unpack(bytes);
+    const indexHtml = new TextDecoder().decode(files.get('index.html'));
+    const { html } = await produceTemplateDelivery(bytes);
+    for (const asset of assets) {
+      expect(manifest.assetIndex).toContainEqual(
+        expect.objectContaining({ id: asset.id, kind: 'font', mime, sha256: asset.id }),
+      );
+      const reopenedFont = reopened.fonts.get(asset.id);
+      expect(reopenedFont?.type).toBe(mime);
+      expect(sha256Hex(new Uint8Array(await reopenedFont!.arrayBuffer()))).toBe(asset.id);
+      expect(indexHtml).toContain(`font-family: "${controlLiveLayoutFontFamily(asset.id)}"`);
+      expect(html).toContain(
+        `font-family:"${controlLiveLayoutFontFamily(asset.id)}";font-display:swap;src:url(data:${mime};base64,`,
+      );
+    }
+  });
+
+  it('uses each frame’s digit choice for both authored and operator-entered titles', async () => {
+    const base = layoutFixture();
+    const typed = 'استودیو 12/۳٤';
+    const overrides = [undefined, 'latin', 'arabic-indic', 'as-typed'] as const;
+    const layout: ControlLiveLayout = {
+      ...base,
+      titleStyle: { digits: 'persian' },
+      frames: [...base.frames, { id: 'frame-spare', title: typed }].map((frame, index) => ({
+        ...frame,
+        title: typed,
+        ...(overrides[index] !== undefined && { titleStyle: { digits: overrides[index] } }),
+      })),
+    };
+    const bytes = await compileControlLiveLayout(layout);
+    expect((await readControlLiveLayout(bytes)).layout).toEqual(layout);
+    const { scene } = await unpack(bytes);
+    for (const [index, frame] of layout.frames.entries()) {
+      const composition = scene.compositions?.find(({ id }) => id === `layout-frame-${frame.id}`);
+      const title = composition?.layers[0]?.children[1];
+      const field = composition?.fields?.[0];
+      if (title?.type !== 'text' || field?.type !== 'text')
+        throw new Error('Expected a bound title');
+      expect(title.text).toBe(typed);
+      expect(field.default).toBe(typed);
+      const digits = overrides[index] ?? 'persian';
+      expect(elementDigitsOf(title)).toBe(digits);
+      expect(fieldDigitsOf(field)).toBe(digits);
+    }
   });
 
   it.each(['cut', 'fade'] as const)(

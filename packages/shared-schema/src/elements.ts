@@ -189,7 +189,7 @@ export const ElementBaseSchema = z.object({
 });
 export type ElementBase = z.infer<typeof ElementBaseSchema>;
 
-const FontWeightSchema = z
+export const FontWeightSchema = z
   .number()
   .int()
   .refine((n) => [100, 200, 300, 400, 500, 600, 700, 800, 900].includes(n), {

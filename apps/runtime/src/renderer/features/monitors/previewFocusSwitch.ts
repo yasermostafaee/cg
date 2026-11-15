@@ -175,7 +175,8 @@ function directionalMotion(
 /**
  * Animate the two authored full-frame looks in the retained iframe. The old
  * look stays visible while the next snapshot is fetched. The callback commits
- * the page locally once, then the captured picture/title planes own the effect.
+ * the page locally once, then the captured picture/title planes own the
+ * operator-selected effect independently of the console's UI motion setting.
  */
 export function previewFocusSwitch({
   doc,
@@ -239,8 +240,7 @@ export function previewFocusSwitch({
       outgoing === undefined ||
       incoming === undefined ||
       incomingNode === undefined ||
-      typeof incoming.node.animate !== 'function' ||
-      doc.defaultView?.matchMedia('(prefers-reduced-motion: reduce)').matches === true
+      typeof incoming.node.animate !== 'function'
     ) {
       finish(true);
       return;

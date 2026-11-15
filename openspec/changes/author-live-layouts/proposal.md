@@ -6,7 +6,9 @@ Panel programmes need quick layout authoring and focus changes in the same conso
 
 - Add a Live layout editor and duplicate action to the CG Control catalogue.
 - Author frames, preset membership, arrangements, title visibility and background media.
-- Configure motion and solo-to-solo effects once per layout.
+- Configure and rehearse motion and solo-to-solo effects once per layout.
+- Style titles for the whole layout with per-frame overrides, packaged fonts and digit sets.
+- Author optional frame fit, placement permissions and masks in the advanced frame controls.
 - Add independent PVW Focus and explicit programme Focus and Return.
 
 ## Capabilities

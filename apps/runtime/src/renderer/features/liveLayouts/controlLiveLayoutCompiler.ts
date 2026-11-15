@@ -5,8 +5,10 @@ import {
   CONTROL_LIVE_LAYOUT_TITLE_SIZE_DEFAULT_PERCENT,
   ControlLiveLayoutSchema,
   CUT_LOOK_TRANSITION,
+  DEFAULT_LIVE_FIT_MODE,
   controlLiveLayoutFocusLookId,
   controlLiveLayoutFocusTarget,
+  controlLiveLayoutFontFamily,
   controlLiveLayoutRects,
   requiredRuntimeVersionForScene,
   type AssetEntry,
@@ -15,6 +17,7 @@ import {
   type CompositionFieldGroup,
   type ControlLiveLayout,
   type ControlLiveLayoutBackground,
+  type ControlLiveLayoutFont,
   type ControlLiveLayoutFrame,
   type ControlLiveLayoutTitleStyle,
   type Element,
@@ -45,8 +48,18 @@ const BACKGROUND_FORMATS = {
 } as const;
 type BackgroundFormat = (typeof BACKGROUND_FORMATS)[keyof typeof BACKGROUND_FORMATS];
 const backgroundFormats = Object.values(BACKGROUND_FORMATS);
+const FONT_FORMATS = {
+  ttf: { mime: 'font/ttf', signatures: ['\u0000\u0001\u0000\u0000', 'true'] },
+  otf: { mime: 'font/otf', signatures: ['OTTO', '\u0000\u0001\u0000\u0000'] },
+  woff: { mime: 'font/woff', signatures: ['wOFF'] },
+  woff2: { mime: 'font/woff2', signatures: ['wOF2'] },
+} as const;
 
 export const CONTROL_LIVE_LAYOUT_BACKGROUND_ACCEPT = Object.keys(BACKGROUND_FORMATS)
+  .map((extension) => '.' + extension)
+  .join(',');
+
+export const CONTROL_LIVE_LAYOUT_FONT_ACCEPT = Object.keys(FONT_FORMATS)
   .map((extension) => '.' + extension)
   .join(',');
 
@@ -144,6 +157,34 @@ export async function readControlLiveLayoutBackgroundFile(
   }
 }
 
+/** Read only fonts that the browser can render. The same bytes travel in the VCG. */
+export async function readControlLiveLayoutFontFile(file: File): Promise<ControlLiveLayoutFont> {
+  const extension = file.name.split('.').at(-1)?.toLowerCase();
+  const format = Object.entries(FONT_FORMATS).find(([suffix]) => suffix === extension)?.[1];
+  if (format === undefined) throw new Error('Choose a TTF, OTF, WOFF or WOFF2 font.');
+  if (file.size > TEMPLATE_SOURCE_MAX_BYTES) throw layoutTooLarge();
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  if (!fontSignatureMatches(bytes, format.signatures))
+    throw new Error('This font file does not match its format.');
+  const id = sha256Hex(bytes);
+  try {
+    const fontFace = new FontFace(controlLiveLayoutFontFamily(id), buffer);
+    await fontFace.load();
+  } catch {
+    throw new Error('This font could not be loaded.');
+  }
+  return { id, name: file.name, mime: format.mime };
+}
+
+function fontSignatureMatches(bytes: Uint8Array, signatures: readonly string[]) {
+  return signatures.includes(String.fromCharCode(...bytes.subarray(0, 4)));
+}
+
+function layoutTooLarge() {
+  return new Error('This layout exceeds the saved file size limit. Choose smaller media or fonts.');
+}
+
 function elementBase(id: string, name: string, rect: LiveSourceRect, zIndex = 0): ElementBase {
   return {
     id,
@@ -206,55 +247,90 @@ export function controlLiveLayoutTitleGeometry(
   const sizePercent = style?.sizePercent ?? CONTROL_LIVE_LAYOUT_TITLE_SIZE_DEFAULT_PERCENT;
   const fontScale = sizePercent / 100;
   const inset = frame.height * 0.035;
-  const width = frame.width * 0.66;
+  const widthPercent = style?.widthPercent ?? 66;
+  const width = frame.width * (widthPercent / 100);
   // Keep the existing default caption band and grow it if the chosen line needs more room.
   const lineHeight = 1.18;
   const paddingScale = 0.012;
-  const height = frame.height * Math.max(0.085, fontScale * lineHeight + 2 * paddingScale);
+  const padding = style?.padding ?? Math.max(1, frame.height * paddingScale);
+  const naturalHeight =
+    style?.padding === undefined
+      ? frame.height * Math.max(0.085, fontScale * lineHeight + 2 * paddingScale)
+      : Math.max(frame.height * 0.085, frame.height * fontScale * lineHeight + 2 * padding);
+  const height =
+    style?.heightPercent === undefined
+      ? Math.min(frame.height, naturalHeight)
+      : frame.height * (style.heightPercent / 100);
   const travelX = frame.width - width;
   const travelY = frame.height - height;
-  const x = style?.xPercent === undefined ? inset : travelX * (style.xPercent / 100);
-  const y = style?.yPercent === undefined ? travelY - inset : travelY * (style.yPercent / 100);
+  const x =
+    style?.xPercent === undefined ? Math.min(inset, travelX) : travelX * (style.xPercent / 100);
+  const y =
+    style?.yPercent === undefined ? Math.max(0, travelY - inset) : travelY * (style.yPercent / 100);
   return {
     x,
     y,
     width,
     height,
-    xPercent: style?.xPercent ?? (100 * x) / travelX,
-    yPercent: style?.yPercent ?? (100 * y) / travelY,
+    xPercent: style?.xPercent ?? (travelX === 0 ? 0 : (100 * x) / travelX),
+    yPercent: style?.yPercent ?? (travelY === 0 ? 0 : (100 * y) / travelY),
+    widthPercent,
+    heightPercent: style?.heightPercent ?? (100 * height) / frame.height,
     sizePercent,
     fontFamily: style?.fontFamily ?? CONTROL_LIVE_LAYOUT_TITLE_FONTS[0],
+    fontWeight: style?.fontWeight ?? 600,
+    fontStyle: style?.fontStyle ?? 'normal',
+    digits: style?.digits ?? 'as-typed',
     fontSize: Math.max(1, frame.height * fontScale),
     lineHeight,
-    padding: Math.max(1, frame.height * paddingScale),
+    padding,
+    textOffsetY: style?.textOffsetY ?? 0,
+    align: style?.align ?? 'start',
+    verticalAlign: style?.verticalAlign ?? 'middle',
+    color: style?.color ?? liveLayoutArtwork.titleText,
     backgroundColor: style?.backgroundColor ?? liveLayoutArtwork.titleBackground,
+    stroke: style?.stroke ?? null,
+    textShadow: style?.textShadow ?? null,
+    boxShadow: style?.boxShadow ?? null,
+    borderRadius: style?.borderRadius ?? 0,
+    wrap: style?.wrap ?? false,
   };
 }
 
-function frameTitle(frame: ControlLiveLayoutFrame, resolution: Resolution): TextElement {
-  const title = controlLiveLayoutTitleGeometry(resolution, frame.titleStyle);
+function frameTitle(
+  frame: ControlLiveLayoutFrame,
+  resolution: Resolution,
+  titleStyle: ControlLiveLayoutTitleStyle | undefined,
+): TextElement {
+  const title = controlLiveLayoutTitleGeometry(resolution, { ...titleStyle, ...frame.titleStyle });
   return {
     ...elementBase(frame.id + '-title', 'Title', title, 1),
     type: 'text',
     text: frame.title,
     font: {
       family: title.fontFamily,
-      weight: 600,
-      style: 'normal',
+      weight: title.fontWeight,
+      style: title.fontStyle,
       size: title.fontSize,
       lineHeight: title.lineHeight,
       letterSpacing: 0,
     },
-    color: liveLayoutArtwork.titleText,
+    color: title.color,
     backgroundColor: title.backgroundColor,
     padding: title.padding,
-    align: 'start',
+    align: title.align,
     direction: 'auto',
-    maxLines: 1,
-    wrap: false,
-    verticalAlign: 'middle',
+    ...(title.digits !== 'as-typed' && { digits: title.digits }),
+    ...(!title.wrap && { maxLines: 1 }),
+    wrap: title.wrap,
+    verticalAlign: title.verticalAlign,
+    ...(title.textOffsetY !== 0 && { textOffsetY: title.textOffsetY }),
+    ...(title.stroke !== null && { stroke: title.stroke }),
+    ...(title.textShadow !== null && { textShadow: title.textShadow }),
+    ...(title.boxShadow !== null && { shadow: title.boxShadow }),
+    ...(title.borderRadius !== 0 && { cornerRadius: title.borderRadius }),
     fitMode: 'shrink-to-fit',
-    overflow: 'ellipsis',
+    overflow: title.wrap ? 'clip' : 'ellipsis',
     liveForeground: true,
   };
 }
@@ -263,14 +339,20 @@ function frameComposition(
   frame: ControlLiveLayoutFrame,
   resolution: Scene['resolution'],
   fullFrame: LiveSourceRect,
+  titleStyle: ControlLiveLayoutTitleStyle | undefined,
 ): Composition {
+  const resize = frame.operatorPlacement ?? 'free';
+  const operatorMove = frame.operatorMove ?? (resize === 'locked' ? true : undefined);
   const children: Element[] = [
     {
       ...elementBase(frame.id + '-plate', 'Live input', fullFrame),
       type: 'video-placeholder',
       routeKey: frame.id,
-      fitMode: 'contain',
-      operatorPlacement: 'free',
+      fitMode: frame.fitMode ?? DEFAULT_LIVE_FIT_MODE,
+      ...(resize !== 'locked' && { operatorPlacement: resize }),
+      ...(operatorMove !== undefined && { operatorMove }),
+      ...(frame.liveMask !== undefined && { liveMask: frame.liveMask }),
+      ...(frame.allowOperatorMaskEdit === true && { allowOperatorMaskEdit: true }),
       showFallback: false,
     },
   ];
@@ -283,7 +365,7 @@ function frameComposition(
     layers: [layer(frame.id + '-layer', 'Frame', children)],
   };
   if (frame.title.trim() === '') return base;
-  const title = frameTitle(frame, resolution);
+  const title = frameTitle(frame, resolution, titleStyle);
   children.push(title);
   return {
     ...base,
@@ -295,6 +377,7 @@ function frameComposition(
         default: frame.title,
         required: false,
         direction: 'auto',
+        ...(title.digits !== undefined && { digits: title.digits }),
       },
     ],
     bindings: [{ fieldId: 'title', target: { kind: 'text', elementId: title.id } }],
@@ -306,7 +389,9 @@ export function buildControlLiveLayoutScene(authored: ControlLiveLayout): Scene 
   const layout = ControlLiveLayoutSchema.parse(authored);
   const { resolution, frames } = layout;
   const fullFrame = { x: 0, y: 0, ...resolution };
-  const compositions = frames.map((frame) => frameComposition(frame, resolution, fullFrame));
+  const compositions = frames.map((frame) =>
+    frameComposition(frame, resolution, fullFrame, layout.titleStyle),
+  );
   const rootInstances: CompositionElement[] = [];
   const looks: Look[] = [];
 
@@ -397,7 +482,13 @@ export function buildControlLiveLayoutScene(authored: ControlLiveLayout): Scene 
     ],
     fields: [],
     bindings: [],
-    fonts: [],
+    fonts: (layout.fonts ?? []).map(({ id, name }) => ({
+      family: controlLiveLayoutFontFamily(id),
+      source: 'bundled',
+      bundledPath: name,
+      weights: [400],
+      styles: ['normal'],
+    })),
     compositions,
     lookGroups: [{ id: 'live-layout', looks, defaultLookId: layout.defaultPresetId }],
     metadata: { createdAt: now, updatedAt: now },
@@ -442,11 +533,21 @@ function mediaFormat(mime: BackgroundFormat['mime']): BackgroundFormat {
 export async function compileControlLiveLayout(
   layout: ControlLiveLayout,
   asset?: Blob,
+  fontFiles?: ReadonlyMap<string, Blob>,
 ): Promise<Uint8Array> {
   const scene = buildControlLiveLayoutScene(layout);
   const background = layout.background;
+  const fontAssets = layout.fonts ?? [];
+  const fontBytes = fontAssets.reduce((sum, { id }) => sum + (fontFiles?.get(id)?.size ?? 0), 0);
+  if (
+    (background.kind === 'color' ? 0 : (asset?.size ?? 0)) + fontBytes >
+    TEMPLATE_SOURCE_MAX_BYTES
+  )
+    throw layoutTooLarge();
   const assetIndex: AssetEntry[] = [];
+  const fontIndex: AssetEntry[] = [];
   const assets = new Map<string, Uint8Array>();
+  const fonts = new Map<string, Uint8Array>();
   if (background.kind !== 'color') {
     if (asset === undefined || asset.size === 0) throw new Error('Choose the background file.');
     if (asset.size > TEMPLATE_SOURCE_MAX_BYTES) throw backgroundTooLarge();
@@ -465,6 +566,26 @@ export async function compileControlLiveLayout(
     });
     assets.set(path, bytes);
   }
+  for (const font of fontAssets) {
+    const file = fontFiles?.get(font.id);
+    if (file === undefined) throw new Error(`Choose the font file “${font.name}” again.`);
+    const format = Object.entries(FONT_FORMATS).find(([, { mime }]) => mime === font.mime);
+    if (format === undefined) throw new Error(`The font format of “${font.name}” is unavailable.`);
+    const [extension, { signatures }] = format;
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    if (!fontSignatureMatches(bytes, signatures) || sha256Hex(bytes) !== font.id)
+      throw new Error(`The font file “${font.name}” does not match the saved font.`);
+    const path = `fonts/${font.id}.${extension}`;
+    fontIndex.push({
+      id: font.id,
+      path,
+      kind: 'font',
+      mime: font.mime,
+      bytes: bytes.length,
+      sha256: font.id,
+    });
+    fonts.set(path, bytes);
+  }
 
   const packageBytes = await pack({
     scene,
@@ -481,29 +602,38 @@ export async function compileControlLiveLayout(
         minCasparCGVersion: '2.3.0',
       },
       fontDeps: scene.fonts,
-      assetIndex,
+      assetIndex: [...assetIndex, ...fontIndex],
     },
-    indexHtml: buildVcgIndexHtml(scene, assetIndex, [], false),
+    indexHtml: buildVcgIndexHtml(scene, assetIndex, fontIndex, false),
     cgJs,
     cgCss,
     assets,
+    fonts,
   });
-  if (packageBytes.byteLength > TEMPLATE_SOURCE_MAX_BYTES) throw backgroundTooLarge();
+  if (packageBytes.byteLength > TEMPLATE_SOURCE_MAX_BYTES) throw layoutTooLarge();
   return packageBytes;
 }
 
 export async function readControlLiveLayout(
   bytes: Uint8Array,
-): Promise<{ layout: ControlLiveLayout; asset?: Blob }> {
+): Promise<{ layout: ControlLiveLayout; asset?: Blob; fonts: Map<string, Blob> }> {
   if (!(await verify(bytes)).ok) throw new Error('The saved live layout could not be verified.');
   const { scene, manifest, files } = await unpack(bytes);
   const layout = scene.controlLiveLayout;
   if (layout === undefined)
     throw new Error('This template does not contain an editable live layout.');
-  if (layout.background.kind === 'color') return { layout };
+  const fonts = new Map<string, Blob>();
+  for (const font of layout.fonts ?? []) {
+    const entry = manifest.assetIndex.find(({ id, kind }) => id === font.id && kind === 'font');
+    const data = entry === undefined ? undefined : files.get(entry.path);
+    if (data === undefined || entry?.mime !== font.mime || sha256Hex(data) !== font.id)
+      throw new Error(`The saved font file “${font.name}” is unavailable.`);
+    fonts.set(font.id, new Blob([new Uint8Array(data)], { type: font.mime }));
+  }
+  if (layout.background.kind === 'color') return { layout, fonts };
   const entry = manifest.assetIndex.find(({ id }) => id === BACKGROUND_ASSET);
   const data = entry === undefined ? undefined : files.get(entry.path);
   if (entry === undefined || data === undefined || entry.mime !== layout.background.mime)
     throw new Error('The saved background file is unavailable.');
-  return { layout, asset: new Blob([new Uint8Array(data)], { type: entry.mime }) };
+  return { layout, asset: new Blob([new Uint8Array(data)], { type: entry.mime }), fonts };
 }

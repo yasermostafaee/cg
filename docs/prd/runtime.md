@@ -5239,6 +5239,11 @@ Send CG commands to the active engine after its external-graphics transfer contr
 - WHEN choosing a background or layout-wide effect THEN the operator can preview it and reuse it across that layout's presets.
 - WHEN focusing a frame or returning THEN PVW and PGM use the configured effect and Return restores the original preset, positions, titles and inputs.
 - WHEN another frame is selected during Focus THEN the chosen Cut, Fade, Motion, Push or Slide over plays directly between solo views with their existing inputs.
-- WHEN the operator styles a frame title THEN Position, Font, Size and Background follow that frame in every preset.
+- WHEN the operator styles titles THEN the layout-wide style applies to every frame and individual frames may override it. Box dimensions, padding, alignment, vertical offset, text color, background, stroke, shadows, corner radius and wrap save with the layout. Imported fonts are packaged in the VCG.
+- WHEN choosing Digits under Title style Advanced THEN Persian, Latin or Arabic-Indic digits appear in authored titles, the exported VCG, and dynamic title updates.
+- WHEN opening advanced frame controls THEN the operator can choose Fit, Move and Resize permissions, and the frame mask. The same frame configuration applies across its presets and Focus.
+- WHEN selecting a preset or frame THEN the editor marks the selected item and leaves enough space to see the composition.
+- WHEN rehearsing a direct solo frame switch in the editor or PVW THEN the configured switch effect plays.
+- WHEN Show title in Focus is off THEN the title is absent from its solo view and follows the regular preset visibility on Return.
 - WHEN arranging a preset with at least two frames THEN its horizontal and vertical gaps are visible beside the arrangement tools.
 - WHEN one layout is on air THEN the operator can create and edit another one or duplicate the running layout for the next programme. Designer-authored layouts remain available through the existing workflow.
