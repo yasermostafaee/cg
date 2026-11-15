@@ -37,3 +37,11 @@ Windows Chromium with the real Bridge and test engine passed the focused accepta
       Details. The bounded reader also recovered the 2040 × 980 first JPEG in both original local
       Quran packages, which carry no embedded thumbnail.
 - [ ] Record the carrying Linux Playwright result.
+
+## Shared folder ordering and window size
+
+- [x] Include package modification timestamps while preserving older Bridge compatibility.
+- [x] Show newest packages first, reverse order from the header, and distinguish folders.
+- [x] Verify modification order, selection, navigation and stable dialog dimensions in Windows Chromium.
+      All three focused browser tests passed, including imported previews and shared-source reload.
+- [ ] Record the carrying Linux Playwright result.

@@ -4982,6 +4982,9 @@ authored scene where available. The whole preview fits inside each Shared folder
 artwork near the edges of a legacy scene. Templates imported here support Reload and Reload all from their
 original shared path, using the same identity and row-data decisions as chooser imports.
 The selected template's Plates value is the number of declared live plates.
+The Shared folder browser lists subfolders first, with larger yellow folder icons, then packages by
+most recent file modification. The header reverses the package order. The enlarged dialog has a
+fixed viewport-bounded size and scrolls the list internally, including when switching to an empty folder.
 
 **Imported template previews.** The main Templates list shows a thumbnail for each visible
 imported template with preview data. Details shows a larger preview of the selected template and

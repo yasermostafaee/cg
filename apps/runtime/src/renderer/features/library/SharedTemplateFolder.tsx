@@ -1,5 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
-import { ArrowUp, Check, FileUp, Folder, RotateCw } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ArrowDownWideNarrow,
+  ArrowUp,
+  ArrowUpNarrowWide,
+  Check,
+  FileUp,
+  Folder,
+  RotateCw,
+} from 'lucide-react';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
@@ -13,6 +21,31 @@ const FOLDER_KEY = 'cg.runtime.shared-template-folder.v1';
 type FolderListing = Awaited<ReturnType<typeof window.cg.sharedFiles.templateFolder>>;
 type Thumbnail = Awaited<ReturnType<typeof window.cg.sharedFiles.templateThumbnail>>['thumbnail'];
 type ThumbnailRequest = Parameters<typeof window.cg.sharedFiles.templateThumbnail>[0];
+
+const entryNames = new Intl.Collator('fa', { numeric: true, sensitivity: 'base' });
+
+function compareEntryNames(a: string, b: string): number {
+  return entryNames.compare(a, b) || (a < b ? -1 : a > b ? 1 : 0);
+}
+
+function orderedEntries(
+  entries: readonly FolderListing['entries'][number][],
+  newestFirst: boolean,
+): FolderListing['entries'] {
+  return [...entries].sort((a, b) => {
+    if (a.kind !== b.kind) return a.kind === 'folder' ? -1 : 1;
+    if (a.kind === 'package' && b.kind === 'package') {
+      const first = a.modifiedAtMs;
+      const second = b.modifiedAtMs;
+      if (first !== second) {
+        if (first === undefined) return 1;
+        if (second === undefined) return -1;
+        return newestFirst ? second - first : first - second;
+      }
+    }
+    return compareEntryNames(a.name, b.name);
+  });
+}
 
 function folderParts(folder: string): string[] {
   return folder.split(/[/\\]/).filter(Boolean);
@@ -92,6 +125,7 @@ export function SharedTemplateFolder({
   const [revision, setRevision] = useState(0);
   const [listing, setListing] = useState<FolderListing | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [newestFirst, setNewestFirst] = useState(true);
   const [loading, setLoading] = useState(true);
   const [reading, setReading] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -103,6 +137,10 @@ export function SharedTemplateFolder({
   const currentFolder = listing?.folder ?? folder;
   const trail = folderParts(currentFolder);
   const parent = trail.slice(0, -1).join('/');
+  const entries = useMemo(
+    () => (listing === null ? [] : orderedEntries(listing.entries, newestFirst)),
+    [listing, newestFirst],
+  );
 
   useEffect(() => {
     let active = true;
@@ -156,6 +194,8 @@ export function SharedTemplateFolder({
     <Modal
       title="Shared template folder"
       layer="sub"
+      size="wide"
+      frame="fixed"
       onClose={() => {
         if (!reading) onClose();
       }}
@@ -175,85 +215,111 @@ export function SharedTemplateFolder({
         </>
       }
     >
-      <div className="cg-setup-filter">
-        <Button
-          variant="neutral"
-          disabled={trail.length === 0}
-          title={trail.length === 0 ? 'At the Shared files root' : 'Open parent folder'}
-          onClick={() => setFolder(parent)}
-        >
-          <Icon icon={ArrowUp} size={14} /> Up
-        </Button>
-        <Button
-          variant="neutral"
-          disabled={loading || reading}
-          onClick={() => setRevision((value) => value + 1)}
-        >
-          <Icon icon={RotateCw} size={14} /> Refresh
-        </Button>
-      </div>
-      <p className="cg-shared-template-location" role="status" aria-label="Shared folder location">
-        <IsolatedName title={listing?.root ?? 'Shared files'}>Shared files</IsolatedName>
-        {trail.map((part, index) => (
-          <span key={trail.slice(0, index + 1).join('/')}>
-            <span aria-hidden="true"> / </span>
-            <IsolatedName>{part}</IsolatedName>
-          </span>
-        ))}
-      </p>
-      {loading && <p>Reading folder…</p>}
-      {listing?.entries.length === 0 && <p>No folders or .vcg packages here.</p>}
-      {listing !== null && listing.entries.length > 0 && (
-        <div className="cg-table-scroll">
-          <table className="cg-table" aria-label="Shared template packages">
-            <tbody>
-              {listing.entries.map(({ kind, name }) => {
-                const withPreview = kind === 'package' && listing.thumbnails === true;
-                return (
-                  <tr key={name}>
-                    <td>
-                      <div className="cg-shared-template-entry-row">
-                        <Button
-                          variant="ghost"
-                          className="cg-shared-template-entry"
-                          aria-pressed={kind === 'package' ? selected === name : undefined}
-                          disabled={reading}
-                          onClick={() => {
-                            if (kind === 'folder') setFolder([...trail, name].join('/'));
-                            else setSelected(name);
-                          }}
-                        >
-                          {withPreview ? (
-                            <span
-                              className="cg-shared-template-entry__preview-space"
-                              aria-hidden="true"
-                            />
-                          ) : (
-                            <Icon icon={kind === 'folder' ? Folder : FileUp} size={14} />
-                          )}
-                          <IsolatedName className="cg-shared-template-entry__name">
-                            {name}
-                          </IsolatedName>
-                          {selected === name && <Icon icon={Check} size={14} />}
-                        </Button>
-                        {withPreview && (
-                          <VisiblePackageThumbnail
-                            key={JSON.stringify([listing.root, currentFolder, revision, name])}
-                            folder={currentFolder}
-                            name={name}
-                            expectedRoot={listing.root}
-                            load={loadThumbnail}
-                          />
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      <div className="cg-shared-template-browser" data-shared-template-browser="">
+        <div className="cg-setup-filter cg-shared-template-toolbar">
+          <Button
+            variant="neutral"
+            disabled={trail.length === 0}
+            title={trail.length === 0 ? 'At the Shared files root' : 'Open parent folder'}
+            onClick={() => setFolder(parent)}
+          >
+            <Icon icon={ArrowUp} size={14} /> Up
+          </Button>
+          <Button
+            variant="neutral"
+            disabled={loading || reading}
+            onClick={() => setRevision((value) => value + 1)}
+          >
+            <Icon icon={RotateCw} size={14} /> Refresh
+          </Button>
+          <Button
+            variant="neutral"
+            className="cg-shared-template-sort"
+            disabled={reading}
+            aria-label={
+              newestFirst ? 'Newest first. Show oldest first' : 'Oldest first. Show newest first'
+            }
+            title="Sort templates by date modified"
+            onClick={() => setNewestFirst((current) => !current)}
+          >
+            <Icon icon={newestFirst ? ArrowDownWideNarrow : ArrowUpNarrowWide} size={14} />
+            {newestFirst ? 'Newest first' : 'Oldest first'}
+          </Button>
         </div>
-      )}
+        <p
+          className="cg-shared-template-location"
+          role="status"
+          aria-label="Shared folder location"
+        >
+          <IsolatedName title={listing?.root ?? 'Shared files'}>Shared files</IsolatedName>
+          {trail.map((part, index) => (
+            <span key={trail.slice(0, index + 1).join('/')}>
+              <span aria-hidden="true"> / </span>
+              <IsolatedName>{part}</IsolatedName>
+            </span>
+          ))}
+        </p>
+        <div className="cg-table-scroll cg-shared-template-list" data-shared-template-list="">
+          {loading && <p>Reading folder…</p>}
+          {listing?.entries.length === 0 && <p>No folders or .vcg packages here.</p>}
+          {listing !== null && entries.length > 0 && (
+            <table className="cg-table" aria-label="Shared template packages">
+              <tbody>
+                {entries.map(({ kind, name }) => {
+                  const withPreview = kind === 'package' && listing.thumbnails === true;
+                  return (
+                    <tr key={name}>
+                      <td>
+                        <div className="cg-shared-template-entry-row">
+                          <Button
+                            variant="ghost"
+                            className="cg-shared-template-entry"
+                            aria-pressed={kind === 'package' ? selected === name : undefined}
+                            disabled={reading}
+                            onClick={() => {
+                              if (kind === 'folder') setFolder([...trail, name].join('/'));
+                              else setSelected(name);
+                            }}
+                          >
+                            {withPreview ? (
+                              <span
+                                className="cg-shared-template-entry__preview-space"
+                                aria-hidden="true"
+                              />
+                            ) : kind === 'folder' ? (
+                              <span
+                                className="cg-shared-template-entry__folder-icon"
+                                aria-hidden="true"
+                              >
+                                <Icon icon={Folder} size={28} />
+                              </span>
+                            ) : (
+                              <Icon icon={FileUp} size={14} />
+                            )}
+                            <IsolatedName className="cg-shared-template-entry__name">
+                              {name}
+                            </IsolatedName>
+                            {selected === name && <Icon icon={Check} size={14} />}
+                          </Button>
+                          {withPreview && (
+                            <VisiblePackageThumbnail
+                              key={JSON.stringify([listing.root, currentFolder, revision, name])}
+                              folder={currentFolder}
+                              name={name}
+                              expectedRoot={listing.root}
+                              load={loadThumbnail}
+                            />
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
     </Modal>
   );
 }

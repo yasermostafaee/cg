@@ -54,4 +54,4 @@
       the same tick budget as unfaded movement.
 - [x] Verify linked title suppression and release in both output passes and preservation of other
       text. Runtime DOM and Windows Chromium cover title visibility and the confirmed PGM follow.
-- [ ] Run the combined Linux Playwright verification after the follow-up changes.
+- [x] [Linux Playwright](https://github.com/yasermostafaee/cg/actions/runs/43659813628/job/132646426527) passed on the combined effects and monitor follow-up at `76a76c80`.

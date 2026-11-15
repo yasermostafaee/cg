@@ -1,5 +1,5 @@
 import * as dgram from 'node:dgram';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Browser, Locator, Page } from '@playwright/test';
@@ -866,12 +866,14 @@ test('shared folder lists Bridge packages and imports through the template catal
 }) => {
   const shared = await mkdtemp(join(tmpdir(), 'cg-shared-vcg-'));
   try {
-    await mkdir(join(shared, 'خبر', 'ورزش'), { recursive: true });
+    const news = join(shared, 'خبر');
+    const folders = ['ورزش', 'Archive', 'Events'];
+    for (const subfolder of folders) await mkdir(join(news, subfolder), { recursive: true });
     const packageId = 'tpl-shared-folder';
-    await writeFile(join(shared, 'خبر', 'خبر.vcg'), await buildValidVcg(packageId));
-    await writeFile(join(shared, 'خبر', 'خراب.vcg'), 'invalid package');
+    await writeFile(join(news, 'خبر.vcg'), await buildValidVcg(packageId));
+    await writeFile(join(news, 'خراب.vcg'), 'invalid package');
     await writeFile(
-      join(shared, 'خبر', 'تصویر.vcg'),
+      join(news, 'تصویر.vcg'),
       await buildValidVcg(
         'tpl-shared-embedded',
         Buffer.from(
@@ -880,7 +882,16 @@ test('shared folder lists Bridge packages and imports through the template catal
         ),
       ),
     );
-    await writeFile(join(shared, 'خبر', 'notes.txt'), 'not a template package');
+    await writeFile(join(news, 'notes.txt'), 'not a template package');
+    const latestFirst = ['خراب.vcg', 'تصویر.vcg', 'خبر.vcg'];
+    for (const [index, name] of latestFirst.entries()) {
+      const modified = new Date(Date.UTC(2025, 0, 3 - index));
+      await utimes(join(news, name), modified, modified);
+    }
+    for (const [index, name] of folders.entries()) {
+      const modified = new Date(Date.UTC(2025, 1, 1 + index));
+      await utimes(join(news, name), modified, modified);
+    }
     const handle = await boot(false, shared);
     await openConsole(page, handle.url);
     await page.getByRole('button', { name: 'Open templates', exact: true }).click();
@@ -892,8 +903,33 @@ test('shared folder lists Bridge packages and imports through the template catal
     await expect(location).toHaveText('Shared files');
     await folder.getByRole('button', { name: 'خبر', exact: true }).click();
     await expect(up).toBeEnabled();
-    await folder.getByRole('button', { name: 'ورزش', exact: true }).click();
+    const titles = folder.getByRole('table').getByRole('row').getByRole('button');
+    const newest = folder.getByRole('button', { name: /^Newest first/ });
+    const oldest = folder.getByRole('button', { name: /^Oldest first/ });
+    await expect(newest).toBeVisible();
+    await expect(titles).toHaveText([...folders, ...latestFirst]);
+    await newest.click();
+    await expect(oldest).toBeVisible();
+    await expect(titles).toHaveText([...folders, ...latestFirst.toReversed()]);
+    await oldest.click();
+    await expect(titles).toHaveText([...folders, ...latestFirst]);
+
+    const populated = await folder.boundingBox();
+    if (populated === null) throw new Error('The shared template folder is not laid out');
+    expect(populated.width).toBeGreaterThan(700);
+    expect(populated.height).toBeGreaterThan(500);
+    const sports = folder.getByRole('button', { name: 'ورزش', exact: true });
+    const icon = sports.locator('.cg-shared-template-entry__folder-icon svg');
+    await expect(icon).toBeVisible();
+    await expect(icon).toHaveAttribute('width', '28');
+    await expect(icon).toHaveCSS('fill', 'rgb(255, 212, 108)');
+    await sports.click();
     await expect(location).toHaveText('Shared files / خبر / ورزش');
+    await expect(folder.getByText('No folders or .vcg packages here.')).toBeVisible();
+    expect(await folder.boundingBox()).toEqual(populated);
+    await expect(
+      folder.getByRole('button', { name: 'Import package', exact: true }),
+    ).toBeDisabled();
     await expect(up).toBeEnabled();
     await up.click();
     await expect(location).toHaveText('Shared files / خبر');
@@ -929,6 +965,8 @@ test('shared folder lists Bridge packages and imports through the template catal
     await up.hover();
     await expect(file).toHaveAttribute('aria-pressed', 'true');
     await expect(file).not.toHaveCSS('background-color', restingColor);
+    await newest.click();
+    await expect(file).toHaveAttribute('aria-pressed', 'true');
     await expect(corrupt).toHaveAttribute('aria-pressed', 'false');
     await expect(folder.getByText('notes.txt')).toHaveCount(0);
     await folder.getByRole('button', { name: 'Import package', exact: true }).click();

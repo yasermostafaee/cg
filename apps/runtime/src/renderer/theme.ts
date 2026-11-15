@@ -1951,6 +1951,10 @@ export const cssVars = {
    */
   '--r-caution-line': '#655334',
 
+  // Shared template browser directory icon.
+  '--r-shared-folder-outline': '#C38B2B',
+  '--r-shared-folder-fill': '#FFD46C',
+
   /*
    * THE ADD BUTTONS — the owner's own acceptance test for this section:
    * «if later we want to change the colour of the Add buttons, we change one

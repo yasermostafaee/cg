@@ -75,7 +75,14 @@ export const SharedTemplateFolderChannel = defineChannel(
   z.object({
     root: z.string(),
     folder: z.string(),
-    entries: z.array(z.object({ name: z.string(), kind: z.enum(['folder', 'package']) })),
+    entries: z.array(
+      z.object({
+        name: z.string(),
+        kind: z.enum(['folder', 'package']),
+        // Optional for older Bridges and packages whose filesystem metadata is unavailable.
+        modifiedAtMs: z.number().finite().optional(),
+      }),
+    ),
     thumbnails: z.literal(true).optional(),
   }),
 );

@@ -3,6 +3,8 @@
 The Templates picker can browse the Shared files folder configured on the CG Bridge machine.
 Operators can navigate its subfolders and select a `.vcg` package for ordinary import on the
 active channel. The console remembers the last folder it could read.
+The enlarged folder browser keeps its size as the listing changes, highlights subfolders with
+larger yellow folder icons, and lists the latest modified packages first with a reversible sort.
 
 The main Templates catalogue shows previews for imported packages in its visible rows. Selecting
 a template shows a larger preview in Details. The Bridge can read a PNG saved for the listed

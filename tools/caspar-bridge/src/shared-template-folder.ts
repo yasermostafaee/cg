@@ -2,11 +2,19 @@ import { constants } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { BridgeTextSourcePathSchema } from '@cg/shared-schema';
-import { TEMPLATE_SOURCE_MAX_BYTES, type SharedTemplateThumbnail } from '@cg/shared-ipc';
+import {
+  TEMPLATE_SOURCE_MAX_BYTES,
+  type ChannelResponse,
+  type SharedTemplateFolderChannel,
+  type SharedTemplateThumbnail,
+} from '@cg/shared-ipc';
 import { readSharedVcgThumbnail } from './shared-template-thumbnail.js';
 
 const MAX_CONCURRENT_THUMBNAILS = 4;
+const MAX_CONCURRENT_PACKAGE_STATS = 16;
 let activeThumbnailReads = 0;
+
+type FolderListing = ChannelResponse<typeof SharedTemplateFolderChannel>;
 
 async function resolveWithinShare(
   root: string,
@@ -33,19 +41,49 @@ async function resolveWithinShare(
   return { root: realRoot, target };
 }
 
-export async function listSharedTemplateFolder(root: string, folder: string) {
+export async function listSharedTemplateFolder(
+  root: string,
+  folder: string,
+): Promise<FolderListing> {
   const normalized = folder.replaceAll('\\', '/');
   const resolved = await resolveWithinShare(root, normalized);
+  const before = await fs.lstat(resolved.target).catch(() => undefined);
   const entries = (await fs.readdir(resolved.target, { withFileTypes: true }))
     .filter(({ name }) => !name.includes(':') && BridgeTextSourcePathSchema.safeParse(name).success)
-    .flatMap<{ name: string; kind: 'folder' | 'package' }>((entry) => {
+    .flatMap<FolderListing['entries'][number]>((entry) => {
       if (entry.isDirectory()) return [{ name: entry.name, kind: 'folder' as const }];
       if (entry.isFile() && /\.vcg$/i.test(entry.name))
         return [{ name: entry.name, kind: 'package' as const }];
       return [];
     });
   entries.sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name));
-  return { root: resolved.root, folder: normalized, entries, thumbnails: true as const };
+  const packages = entries.filter(({ kind }) => kind === 'package');
+  if (before?.isDirectory() && packages.length > 0) {
+    const dates = new Map<string, number>();
+    for (let offset = 0; offset < packages.length; offset += MAX_CONCURRENT_PACKAGE_STATS) {
+      await Promise.all(
+        packages.slice(offset, offset + MAX_CONCURRENT_PACKAGE_STATS).map(async ({ name }) => {
+          // The entry may have been replaced since readdir. Never follow a symlink here.
+          const info = await fs.lstat(path.join(resolved.target, name)).catch(() => undefined);
+          if (info?.isFile() && Number.isFinite(info.mtimeMs)) dates.set(name, info.mtimeMs);
+        }),
+      );
+    }
+    // If the requested folder was redirected or replaced, use the listing without times.
+    const current = await resolveWithinShare(root, normalized, resolved.root).catch(
+      () => undefined,
+    );
+    if (current?.target === resolved.target) {
+      const after = await fs.lstat(current.target).catch(() => undefined);
+      if (after?.isDirectory() && before.dev === after.dev && before.ino === after.ino) {
+        for (const entry of packages) {
+          const modifiedAtMs = dates.get(entry.name);
+          if (modifiedAtMs !== undefined) entry.modifiedAtMs = modifiedAtMs;
+        }
+      }
+    }
+  }
+  return { root: resolved.root, folder: normalized, entries, thumbnails: true };
 }
 
 export async function readSharedTemplatePackage(

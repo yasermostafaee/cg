@@ -40,6 +40,24 @@ of listing and import. The browser SHALL treat preview content as data.
 - **WHEN** the Shared folder lists a lower-third package with an embedded thumbnail or an authored still
 - **THEN** its artwork is visible inside the compact preview, with the checkerboard behind transparent pixels
 
+### Requirement: Shared packages can be ordered by modification date
+
+CG Bridge SHALL include the file modification time for packages where it is available. The folder
+browser SHALL default to newest first and provide a header action to reverse the package order.
+Subfolders SHALL appear first in name order with distinct yellow folder icons. Undated packages
+SHALL remain selectable after dated packages. The enlarged dialog SHALL keep a fixed viewport-bounded
+size for empty and populated folders, with scrolling inside the list.
+
+#### Scenario: Browse recent packages and reverse the order
+
+- **GIVEN** a shared folder contains two dated packages and a subfolder
+- **WHEN** the operator opens it
+- **THEN** the subfolder appears first, followed by the newer package and the older package
+- **WHEN** the operator reverses the date order from the header
+- **THEN** the older package precedes the newer package and the current selection is preserved
+- **WHEN** the operator opens an empty subfolder
+- **THEN** the dialog keeps the same dimensions
+
 ### Requirement: The imported Templates catalogue displays package previews
 
 With a capable Bridge, CG Control SHALL show a thumbnail in each visible imported template row
