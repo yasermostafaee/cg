@@ -82,4 +82,4 @@
       the active engine. Bridge integration verified the reserve cut, refused commands and
       recovery after both engines changed roles.
 - [ ] Recheck eligible masked edges and unsupported directions on the target engine.
-- [ ] Record the carrying Linux Playwright result.
+- [x] [Linux Playwright](https://github.com/yasermostafaee/cg/actions/runs/43686444415/job/132727854018) ran the complete E2E step successfully on `119eb4e1`.
