@@ -39,7 +39,11 @@ import type { TimingToSend } from '../inspector/timingToSend.js';
 import { frameBox } from './rehearsalFrames.js';
 import { measureRehearsalBounds } from './rehearsalBounds.js';
 import type { PlatePlacement } from './livePlateGeometry.js';
-import { paintPvwPlatePictures, paintPvwSourceDissolve } from './pvwPlatePictures.js';
+import {
+  paintPvwPlatePictures,
+  paintPvwSourceTransition,
+  type PvwInputEffect,
+} from './pvwPlatePictures.js';
 import type { PvwSourceFrame } from './usePvwSourceFrames.js';
 import type { RehearsalBook } from '../layers/bookOf.js';
 import { MISSING_PICTURE_URL, pageExtOf, pictureDataUrl } from '../book/pagePictures.js';
@@ -269,7 +273,7 @@ export function RehearsalFrame({
     cancel: (commit?: boolean) => void;
     preset?: RehearsalPresetCue;
   }>();
-  const dissolveCleanup = useRef<() => void>();
+  const inputEffect = useRef<PvwInputEffect>();
   const replayEffectRef = useRef<() => void>();
 
   /*
@@ -424,7 +428,7 @@ export function RehearsalFrame({
     () => ({
       play: () => {
         runningEffect.current?.cancel(true);
-        dissolveCleanup.current?.();
+        inputEffect.current?.cancel();
         const doc = frameRef.current?.contentDocument;
         setLocalPage(undefined);
         if (
@@ -466,7 +470,7 @@ export function RehearsalFrame({
       replayEffect: () => replayEffectRef.current?.(),
       stop: () => {
         runningEffect.current?.cancel(true);
-        dissolveCleanup.current?.();
+        inputEffect.current?.cancel();
         pendingBookPlay.current = undefined;
         templateWindow()?.stop?.();
       },
@@ -583,7 +587,7 @@ export function RehearsalFrame({
       };
       return;
     }
-    dissolveCleanup.current?.();
+    inputEffect.current?.cancel();
     const restore = retainPresetArtwork(doc, plan);
     const cue: RehearsalPresetCue = { doc, lookId, payload, commit: push };
     let appliedPayload: string | undefined;
@@ -647,7 +651,7 @@ export function RehearsalFrame({
         frameTransitionPreference(),
       );
       if (phases.length === 0) return;
-      dissolveCleanup.current?.();
+      inputEffect.current?.cancel();
       onTransitionChange?.(itemId, true);
       runningEffect.current = {
         cancel: runRehearsalEffect(
@@ -868,18 +872,28 @@ export function RehearsalFrame({
     if (doc == null || runningEffect.current !== undefined) return;
     if (composed.current?.doc === doc) composed.current.livePlates = livePlates;
     const input = inputTransitionPreference();
-    if (playing && input.mode === 'fade') {
-      paintPvwSourceDissolve(doc, livePlates, sourceFrames, input.durationMs, dissolveCleanup);
+    if (playing && input.mode !== 'cut') {
+      const durationMs =
+        input.mode === 'fade' || presetFramePeriodMs === undefined
+          ? input.durationMs
+          : Math.max(1, Math.round(input.durationMs / presetFramePeriodMs)) * presetFramePeriodMs;
+      paintPvwSourceTransition(
+        doc,
+        livePlates,
+        sourceFrames,
+        { ...input, durationMs },
+        inputEffect,
+      );
     } else {
-      dissolveCleanup.current?.();
+      inputEffect.current?.cancel();
       paintPvwPlatePictures(doc, livePlates, sourceFrames);
     }
-  }, [visible, ready, playing, livePlates, sourceFrames]);
+  }, [visible, ready, playing, livePlates, sourceFrames, presetFramePeriodMs]);
 
   useEffect(
     () => () => {
       runningEffect.current?.cancel();
-      dissolveCleanup.current?.();
+      inputEffect.current?.cancel();
     },
     [html],
   );

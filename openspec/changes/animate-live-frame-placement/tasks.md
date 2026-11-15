@@ -68,3 +68,18 @@
 - [x] [Linux Playwright](https://github.com/yasermostafaee/cg/actions/runs/43667950106/job/132671500381) ran the complete E2E step successfully on `194e37ac`.
 - [x] Built CG Control, CG Designer and CG Bridge installers locally from this verified commit.
       Verified the packed setup payloads and SHA-256 in `installers/1.2.5/194e37ac`.
+
+## Directional input changes
+
+- [x] Offer Push and Slide over in all four directions through Input effect.
+- [x] Rehearse both effects inside a fixed plate without programme writes.
+      Chromium verified the horizontal and vertical paint order and the stationary viewport.
+- [x] Verify concealed pre-roll, on-air movement, clipping, neighbouring plates and rollback.
+      Bridge integration covers both modes in all four directions. A local reference-engine
+      capture verified Push and Slide over using the owner's original 3ghab-crop.
+- [x] Verify Fade and directional effects with mirror-sync, including a mapped reserve and
+      independent ownership or failure at the two engines. Windows Chromium verified Fade on
+      the active engine. Bridge integration verified the reserve cut, refused commands and
+      recovery after both engines changed roles.
+- [ ] Recheck eligible masked edges and unsupported directions on the target engine.
+- [ ] Record the carrying Linux Playwright result.

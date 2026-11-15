@@ -100,11 +100,34 @@ Fade disabled. The effect duration SHALL be configurable from 100 to 1000 ms.
 
 #### Scenario: Change the input without moving its frame
 
-- **WHEN** the operator changes an input with Input effect set to Cut or Fade
-- **THEN** the change uses the selected effect inside the same frame
+- **WHEN** the operator changes one independently seated input in a single-plate or multi-plate layout
+- **THEN** the new picture uses the chosen Input effect inside that plate
+- **AND** any other plates remain applied and their pictures keep playing
 - **AND** an eligible source parked for another preset can be reused and any still-needed outgoing source remains parked
-- **AND** a single stable rectangular mask keeps its clip while its input dissolves
-- **AND** a refused Fade preserves the previously applied source
+- **AND** a refused effect preserves the previously applied source
+
+#### Scenario: Control how a picture enters and covers another
+
+- **WHEN** the operator selects Push or Slide over and chooses From left, From right, From top or From bottom
+- **THEN** the prepared picture enters from the chosen edge in independent PVW and on supported programme output
+- **AND** Push shifts both pictures in the same direction, carrying the old picture out
+- **AND** Slide over keeps the old picture stationary beneath the moving picture
+- **AND** the visible movement stays inside the plate or its fixed rectangular clip throughout
+- **AND** only the explicit programme input change can send playout commands
+
+#### Scenario: Protect a cropped picture during a directional change
+
+- **WHEN** a moving input's source fill exceeds the frame across the selected direction and the native mixer cannot safely hold the aperture
+- **THEN** Bridge preserves the previous programme input and explains that the operator can select an eligible direction, Fade or Cut
+- **AND** the refused move sends no programme writes
+
+#### Scenario: Change a programme input with mirror-sync backup enabled
+
+- **WHEN** an eligible input is changed using Fade, Push or Slide over on a mirror-sync station
+- **THEN** the active engine shows the selected effect
+- **AND** a verified reserve receives the settled input using its own confirmed layer and media
+- **AND** the reserve receives no temporary transition phases
+- **AND** a refused active change leaves the previous input applied
 
 #### Scenario: Reframe beside a masked plate
 

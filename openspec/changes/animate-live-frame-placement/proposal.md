@@ -5,7 +5,8 @@ can use Fade on its own or combine it with movement. A live preset switch can us
 effect to carry a shared authored plate from its outgoing placement to the incoming placement.
 Animate departing and arriving plates, with shared plates above departing plates during motion.
 Run the preset effect in PVW and keep direct gestures immediate. Add Cut and Fade for one
-plate's source change and Bounce and Elastic for frame motion. Preserve eligible held sources
+plate's source change and Bounce and Elastic for frame motion. Add Push and Slide over to the
+input effect, with entry from either side, top or bottom of the fixed plate. Preserve eligible held sources
 and a single visible mask rectangle during a source dissolve. Keep a masked plate's input
 framing fixed while leaving its mask editable. A successful row preset change releases an old
 Inspector preview cue unless the operator has selected a new cue in the meantime.

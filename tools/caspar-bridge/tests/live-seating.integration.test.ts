@@ -2,7 +2,7 @@ import * as dgram from 'node:dgram';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { createMock, defaultHandlers, type MockHandle } from '@cg/amcp-mock';
 import {
   TAKE_ON_AIR_CODE,
@@ -3871,6 +3871,292 @@ it('remove() takes the plates with the item', async () => {
 
 const INPUT_FADE = { mode: 'fade' as const, durationMs: 160 };
 
+const INPUT_SLIDE_DIRECTIONS = [
+  { direction: 'left', start: '-0.25 0.25', end: '0.75 0.25', outside: '0.25 0.25 0.00001 0.5' },
+  {
+    direction: 'right',
+    start: '0.75 0.25',
+    end: '-0.25 0.25',
+    outside: '0.74999 0.25 0.00001 0.5',
+  },
+  { direction: 'up', start: '0.25 -0.25', end: '0.25 0.75', outside: '0.25 0.25 0.5 0.00001' },
+  { direction: 'down', start: '0.25 0.75', end: '0.25 -0.25', outside: '0.25 0.74999 0.5 0.00001' },
+] as const;
+
+describe.each(['push', 'slide-over'] as const)('%s input', (mode) => {
+  it.each(INPUT_SLIDE_DIRECTIONS)('enters from $direction inside one frame', async (effect) => {
+    const r = await boot({
+      template: template([
+        { id: 'guest-1', rect: BOX },
+        { id: 'guest-2', rect: { x: 0, y: 0, width: 320, height: 180 } },
+      ]),
+      assignments: assign([
+        ['guest-1', 'src-a'],
+        ['guest-2', 'src-c'],
+      ]),
+    });
+    expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+    expect(await r.setLivePlateVolume('item-1', 'guest-1', 0.4)).toMatchObject({ ok: true });
+    const previous = r.liveLayers().get('item-1')!;
+    const primary = previous.find(({ sourceId }) => sourceId === 'guest-1')!;
+    const neighbor = previous.find(({ sourceId }) => sourceId === 'guest-2')!;
+    const oldNeighbor = mock!.layerState(neighbor.slot);
+    const mark = (await recvLines()).length;
+    expect(
+      await r.swapLiveSource('item-1', 'guest-1', 'src-b', undefined, {
+        mode,
+        direction: effect.direction,
+        durationMs: 160,
+      }),
+    ).toEqual({ ok: true });
+    const incoming = r
+      .liveLayers()
+      .get('item-1')!
+      .find(({ sourceId }) => sourceId === 'guest-1')!;
+    const current = `1-${String(incoming.slot.layer)}`;
+    const outgoing = `1-${String(primary.slot.layer)}`;
+    const lines = (await recvLines()).slice(mark);
+    const clippedAt = at(lines, `MIXER ${current} CLIP ${effect.outside} DEFER`);
+    const playedAt = at(lines, `PLAY ${current} `);
+    const revealedAt = at(lines, `MIXER ${current} OPACITY 1 DEFER`);
+    expect(at(lines, `MIXER ${current} FILL ${effect.start} 0.5 0.5 DEFER`)).toBeGreaterThanOrEqual(
+      0,
+    );
+    expect(clippedAt).toBeGreaterThanOrEqual(0);
+    expect(playedAt).toBeGreaterThan(clippedAt);
+    expect(revealedAt).toBeGreaterThan(playedAt);
+    expect(lines).toContainEqual(
+      expect.stringMatching(
+        new RegExp(`^MIXER ${current} CLIP 0.25 0.25 0.5 0.5 \\d+ linear DEFER$`),
+      ),
+    );
+    const exit = lines.find((line) =>
+      line.startsWith(`MIXER ${outgoing} FILL ${effect.end} 0.5 0.5 `),
+    );
+    if (mode === 'push') expect(exit).toMatch(/\d+ linear DEFER$/);
+    else {
+      expect(exit).toBeUndefined();
+      expect(incoming.slot.layer).toBeGreaterThan(primary.slot.layer);
+    }
+    expect(mock!.layerState(incoming.slot)).toMatchObject({ opacity: 1, volume: 0.4 });
+    expect(mock!.layerRenderedRect(incoming.slot)).toEqual(primary.clip);
+    expect(mock!.layerState(neighbor.slot)).toEqual(oldNeighbor);
+    expect(lines.some((line) => line.startsWith(`MIXER 1-${String(neighbor.slot.layer)} `))).toBe(
+      false,
+    );
+  });
+});
+
+it('restores the outgoing input geometry when the engine refuses Push', async () => {
+  const r = await boot({ template: template([{ id: 'guest-1', rect: BOX }]) });
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  expect(await r.setLivePlateVolume('item-1', 'guest-1', 0.4)).toMatchObject({ ok: true });
+  const previous = r.liveLayers().get('item-1');
+  const oldSlot = { channel: 1, layer: BAND.start };
+  const oldPicture = mock!.layerState(oldSlot);
+  const mixer = defaultHandlers().get('MIXER')!;
+  let refused = false;
+  mock!.setHandler('MIXER', (request, context, connection) => {
+    if (!refused && /^MIXER 1-30 CLIP .* [1-9]\d* linear DEFER$/.test(request.raw)) {
+      refused = true;
+      return { kind: 'err', code: 502, verb: 'MIXER' };
+    }
+    return mixer(request, context, connection);
+  });
+  expect(
+    await r.swapLiveSource('item-1', 'guest-1', 'src-b', undefined, {
+      mode: 'push',
+      durationMs: 160,
+    }),
+  ).toMatchObject({ ok: false, reason: 'input-slide-unavailable' });
+  expect(refused).toBe(true);
+  expect(r.liveLayers().get('item-1')).toEqual(previous);
+  expect(mock!.layerState(oldSlot)).toEqual(oldPicture);
+  expect(mock!.layerState({ channel: 1, layer: BAND.start + 1 })?.producer).toBe('empty');
+  expect(mock!.stagedMixerCount(1)).toBe(0);
+});
+
+it('quarantines a partially refused input restoration until the same engine owns output again', async () => {
+  const { r, active, old } = await bootPairedInput();
+  const before = active.layerState(old.slot);
+  const mix = defaultHandlers().get('MIXER')!;
+  let transitionRefused = false;
+  let restoreRefused = false;
+  active.setHandler('MIXER', (request, context, connection) => {
+    if (!transitionRefused && /^MIXER 1-30 CLIP .* \d+ linear DEFER$/.test(request.raw)) {
+      transitionRefused = true;
+      return { kind: 'err', code: 502, verb: 'MIXER' };
+    }
+    if (
+      transitionRefused &&
+      !restoreRefused &&
+      /^MIXER 1-30 FILL 0.25 0.25 0.5 0.5 DEFER$/.test(request.raw)
+    ) {
+      restoreRefused = true;
+      return { kind: 'err', code: 502, verb: 'MIXER' };
+    }
+    return mix(request, context, connection);
+  });
+  expect(
+    await r.swapLiveSource('item-1', 'guest-1', 'src-b', undefined, {
+      mode: 'push',
+      durationMs: 160,
+    }),
+  ).toMatchObject({ ok: false });
+  expect(transitionRefused).toBe(true);
+  expect(restoreRefused).toBe(true);
+  expect(active.layerState(old.slot)).toEqual(before);
+  expect(active.stagedMixerCount(1)).toBeGreaterThan(0);
+  active.closeAllAmcpConnections();
+  await expect.poll(() => r.health().currentPrimary, { timeout: HEALTH_MS }).toBe('B');
+  await expect.poll(() => r.health().backup?.state, { timeout: HEALTH_MS }).toBe('healthy');
+  expect(active.stagedMixerCount(1)).toBeGreaterThan(0);
+  expect(await r.failover()).toEqual({ ok: true, newPrimary: 'A' });
+  await expect.poll(() => active.stagedMixerCount(1), { timeout: HEALTH_MS }).toBe(0);
+  expect(active.layerState(old.slot)).toEqual(before);
+  expect(active.layerState({ channel: 1, layer: BAND.start + 1 })?.producer).toBe('empty');
+});
+
+it('keeps every Push tween inside one mask when the contained source aspect changes', async () => {
+  const base = template([{ id: 'guest-1', rect: BOX }]);
+  const station = catalog();
+  const r = await boot({
+    template: {
+      ...base,
+      liveSources: {
+        ...base.liveSources!,
+        defaultLookId: 'solo',
+        looks: [
+          {
+            id: 'solo',
+            name: 'Solo',
+            entered: { mode: 'cut' },
+            rects: { 'guest-1': BOX },
+            masks: {
+              'guest-1': { mode: 'inside', rects: [{ x: 0.125, y: 0, width: 0.75, height: 1 }] },
+            },
+          },
+        ],
+      },
+    },
+    catalog: {
+      ...station,
+      sources: station.sources.map((source) =>
+        source.id === 'src-b' ? { ...source, aspect: 1, format: undefined } : source,
+      ),
+    },
+  });
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  const before = (await recvLines()).length;
+  expect(
+    await r.update('item-1', {}, 'merge', { solo: { 'guest-1': 'src-b' } }, undefined, {
+      mode: 'push',
+      direction: 'right',
+      durationMs: 600,
+    }),
+  ).toMatchObject({ accepted: true });
+  const lines = (await recvLines()).slice(before);
+  const clips = lines.flatMap((line) => {
+    const match = /^MIXER 1-(30|31) CLIP ([.\d -]+) linear DEFER$/.exec(line);
+    return match?.[1] !== undefined && match[2] !== undefined
+      ? [{ layer: match[1], values: match[2].split(' ').map(Number) }]
+      : [];
+  });
+  for (const { values } of clips) {
+    const [x = 0, y = 0, width = 0, height = 0] = values;
+    expect(x).toBeGreaterThanOrEqual(0.3125);
+    expect(x + width).toBeLessThanOrEqual(0.687501);
+    expect(y).toBe(0.25);
+    expect(height).toBe(0.5);
+  }
+  const incoming = clips.filter(({ layer }) => layer === '31');
+  expect(incoming.length).toBeGreaterThan(1);
+  expect(incoming.reduce((total, { values }) => total + (values[4] ?? 0), 0)).toBe(15);
+  expect(mock!.layerRenderedRect({ channel: 1, layer: 31 })).toMatchObject({
+    x: 0.359375,
+    width: 0.28125,
+  });
+});
+
+it('refuses moving overscan before writing while allowing the safe perpendicular direction', async () => {
+  const station = catalog();
+  const r = await boot({
+    template: template([{ id: 'guest-1', rect: BOX, fitMode: 'cover' }]),
+    catalog: {
+      ...station,
+      sources: station.sources.map((source) =>
+        source.id === 'src-b' ? { ...source, aspect: 4 / 3, format: undefined } : source,
+      ),
+    },
+  });
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  const mark = (await recvLines()).length;
+  for (const mode of ['push', 'slide-over'] as const) {
+    expect(
+      await r.swapLiveSource('item-1', 'guest-1', 'src-b', undefined, {
+        mode,
+        direction: 'left',
+        durationMs: 160,
+      }),
+    ).toMatchObject({
+      ok: false,
+      reason: 'input-slide-unavailable',
+      message: expect.stringContaining('Choose another direction, Fade or Cut.'),
+    });
+  }
+  expect(
+    (await recvLines()).slice(mark).filter((line) => /^(MIXER|CG|PLAY|CLEAR) /.test(line)),
+  ).toEqual([]);
+  expect(
+    await r.swapLiveSource('item-1', 'guest-1', 'src-b', undefined, {
+      mode: 'push',
+      direction: 'up',
+      durationMs: 160,
+    }),
+  ).toEqual({ ok: true });
+  expect(mock!.layerRenderedRect({ channel: 1, layer: 31 })).toEqual({
+    x: 0.25,
+    y: 0.25,
+    width: 0.5,
+    height: 0.5,
+  });
+  expect(
+    await r.swapLiveSource('item-1', 'guest-1', 'src-a', undefined, {
+      mode: 'slide-over',
+      direction: 'left',
+      durationMs: 160,
+    }),
+  ).toEqual({ ok: true });
+});
+
+it('requires a safe higher layer for Slide Over and allows Push from the lower spare', async () => {
+  const r = await boot({
+    template: template([{ id: 'guest-1', rect: BOX }]),
+    catalog: catalog({ layerRange: { start: BAND.start, end: BAND.start + 1 } }),
+  });
+  expect(await loadAndTake(r)).toMatchObject({ accepted: true });
+  expect(await r.swapLiveSource('item-1', 'guest-1', 'src-b', undefined, INPUT_FADE)).toEqual({
+    ok: true,
+  });
+  const before = (await recvLines()).length;
+  expect(
+    await r.swapLiveSource('item-1', 'guest-1', null, undefined, {
+      mode: 'slide-over',
+      durationMs: 160,
+    }),
+  ).toMatchObject({ ok: false, reason: 'input-slide-unavailable' });
+  expect(
+    (await recvLines()).slice(before).filter((line) => /^(PLAY|MIXER|CLEAR) /.test(line)),
+  ).toEqual([]);
+  expect(
+    await r.swapLiveSource('item-1', 'guest-1', null, undefined, {
+      mode: 'push',
+      durationMs: 160,
+    }),
+  ).toEqual({ ok: true });
+  expect(r.liveLayers().get('item-1')).toMatchObject([{ slot: { layer: BAND.start } }]);
+});
+
 it('dissolves a direct input swap in both layer directions without replacing the old producer first', async () => {
   const r = await boot({
     template: template([{ id: 'guest-1', rect: BOX }]),
@@ -4240,24 +4526,262 @@ it('restores the old feed and cancels a staged input Fade when the same engine r
   });
 });
 
-it('keeps Cut available when source Fade cannot be confirmed on a mirrored station', async () => {
+async function bootPairedInput(missing = false) {
   const r = await boot({
-    template: template([{ id: 'guest-1', rect: BOX }]),
-    redundant: true,
+    template: template([{ id: 'guest-1', rect: BOX }], true),
+    html: LIVE_POSITION_HTML,
+    mirrorChannel: 2,
+    catalog: catalog({
+      sources: [
+        { id: 'src-a', name: 'Camera', producer: { kind: 'ndi', source: 'Camera' } },
+        { id: 'src-b', name: 'Clip', producer: { kind: 'media', file: 'active.mov' } },
+      ],
+    }),
   });
+  const peer = backup;
+  const active = mock;
+  if (peer === null || active === null) throw new Error('Missing paired test engines');
+  r.useBackupMedia(() =>
+    missing ? { kind: 'refused', reason: 'no-copy' } : { kind: 'copy', clip: 'reserve.mov' },
+  );
   expect(await loadAndTake(r)).toMatchObject({ accepted: true });
-  const before = (await recvLines()).length;
+  await expect.poll(() => r.stackSnapshot()[0]).toMatchObject({ onAirPosition: true });
+  expect(await r.setLivePlateVolume('item-1', 'guest-1', 0.4)).toMatchObject({ ok: true });
+  const old = r.liveLayers().get('item-1')![0]!;
+  const reserveOld = { channel: 2, layer: old.slot.layer };
+  return { r, active, peer, old, reserveOld };
+}
+
+it.each(['fade', 'push', 'slide-over'] as const)(
+  'animates %s on the active input and cuts the reserve to its own prepared clip',
+  async (mode) => {
+    const { r, peer, active, reserveOld } = await bootPairedInput();
+    const mark = peer.receivedCommands().length;
+    expect(
+      await r.swapLiveSource('item-1', 'guest-1', 'src-b', undefined, {
+        mode,
+        direction: 'left',
+        durationMs: 160,
+      }),
+    ).toEqual({ ok: true });
+    const [next] = r.liveLayers().get('item-1')!;
+    const reserveNext = { channel: 2, layer: next!.slot.layer };
+    const lines = peer
+      .receivedCommands()
+      .slice(mark)
+      .map(({ line }) => line);
+    expect(active.layerState(next!.slot)).toMatchObject({
+      filePath: 'active.mov',
+      opacity: 1,
+      volume: 0.4,
+    });
+    expect(peer.layerState(reserveNext)).toMatchObject({
+      filePath: 'reserve.mov',
+      opacity: 1,
+      volume: 0.4,
+    });
+    expect(peer.layerRenderedRect(reserveNext)).toEqual(active.layerRenderedRect(next!.slot));
+    expect(peer.layerState(reserveOld)?.producer).toBe('empty');
+    expect(lines.some((line) => /\d+ linear DEFER$/.test(line))).toBe(false);
+    const committedAt = lines.indexOf('MIXER 2 COMMIT');
+    expect(committedAt).toBeGreaterThan(
+      at(lines, `MIXER 2-${String(reserveNext.layer)} VOLUME 0.4 DEFER`),
+    );
+    expect(at(lines, `CLEAR 2-${String(reserveOld.layer)}`)).toBeGreaterThan(committedAt);
+  },
+);
+
+it('preserves the previous reserve feed when its replacement Play refuses', async () => {
+  const { r, peer, reserveOld } = await bootPairedInput();
+  const previous = peer.layerState(reserveOld);
+  const play = defaultHandlers().get('PLAY')!;
+  let refused = false;
+  peer.setHandler('PLAY', (request, context, connection) => {
+    if (!refused && request.raw.includes('reserve.mov')) {
+      refused = true;
+      return { kind: 'err', code: 404, verb: 'PLAY' };
+    }
+    return play(request, context, connection);
+  });
+  const mark = peer.receivedCommands().length;
+  expect(await r.swapLiveSource('item-1', 'guest-1', 'src-b', undefined, INPUT_FADE)).toEqual({
+    ok: true,
+  });
+  expect(refused).toBe(true);
+  const [next] = r.liveLayers().get('item-1')!;
+  expect(peer.layerState({ channel: 2, layer: next!.slot.layer })?.producer).toBe('empty');
+  expect(peer.layerState(reserveOld)).toEqual(previous);
+  expect(
+    peer
+      .receivedCommands()
+      .slice(mark)
+      .some(({ line }) => /^CG 2-\d+ UPDATE /.test(line)),
+  ).toBe(false);
+});
+
+it('restores the reserve mixer as one batch when its final input Commit is refused', async () => {
+  const { r, peer, reserveOld } = await bootPairedInput();
+  const previous = peer.layerState(reserveOld);
+  const mix = defaultHandlers().get('MIXER')!;
+  let refused = false;
+  peer.setHandler('MIXER', (request, context, connection) => {
+    if (!refused && request.raw === 'MIXER 2 COMMIT') {
+      refused = true;
+      return { kind: 'err', code: 502, verb: 'MIXER' };
+    }
+    return mix(request, context, connection);
+  });
+  expect(await r.swapLiveSource('item-1', 'guest-1', 'src-b', undefined, INPUT_FADE)).toEqual({
+    ok: true,
+  });
+  expect(refused).toBe(true);
+  const [next] = r.liveLayers().get('item-1')!;
+  expect(peer.layerState({ channel: 2, layer: next!.slot.layer })?.producer).toBe('empty');
+  expect(peer.layerState(reserveOld)).toEqual(previous);
+  expect(peer.stagedMixerCount(2)).toBe(0);
+});
+
+it('retries retiring the reserve input once while its exact source and connection are verified', async () => {
+  const { r, peer, reserveOld } = await bootPairedInput();
+  const clear = defaultHandlers().get('CLEAR')!;
+  let refused = false;
+  peer.setHandler('CLEAR', (request, context, connection) => {
+    if (!refused && request.raw === `CLEAR 2-${String(reserveOld.layer)}`) {
+      refused = true;
+      return { kind: 'err', code: 502, verb: 'CLEAR' };
+    }
+    return clear(request, context, connection);
+  });
+  const before = peer.receivedCommands().length;
+  expect(await r.swapLiveSource('item-1', 'guest-1', 'src-b', undefined, INPUT_FADE)).toEqual({
+    ok: true,
+  });
+  expect(refused).toBe(true);
+  expect(peer.layerState(reserveOld)?.producer).toBe('empty');
+  const lines = peer
+    .receivedCommands()
+    .slice(before)
+    .map(({ line }) => line);
+  expect(lines.filter((line) => line === `CLEAR 2-${String(reserveOld.layer)}`)).toHaveLength(2);
+  expect(lines.some((line) => /^CG 2-\d+ UPDATE/.test(line))).toBe(true);
+});
+
+it('settles the active source without sending an unlisted media path to the reserve', async () => {
+  const { r, peer, reserveOld } = await bootPairedInput(true);
+  const mark = peer.receivedCommands().length;
+  expect(await r.swapLiveSource('item-1', 'guest-1', 'src-b', undefined, INPUT_FADE)).toEqual({
+    ok: true,
+  });
+  const [next] = r.liveLayers().get('item-1')!;
+  expect(next?.backupRefused).toMatchObject({ reason: 'no-copy' });
+  expect(peer.layerState(reserveOld)?.producer).toBe('empty');
+  expect(
+    peer
+      .receivedCommands()
+      .slice(mark)
+      .some(({ line }) => /^PLAY 2-/.test(line)),
+  ).toBe(false);
+});
+
+it('sends no input settlement to the reserve when the active transition is refused', async () => {
+  const { r, active, peer, reserveOld } = await bootPairedInput();
+  const previous = peer.layerState(reserveOld);
+  const mark = peer.receivedCommands().length;
+  const mix = defaultHandlers().get('MIXER')!;
+  let refused = false;
+  active.setHandler('MIXER', (request, context, connection) => {
+    if (!refused && /OPACITY 1 \d+ linear DEFER$/.test(request.raw)) {
+      refused = true;
+      return { kind: 'err', code: 501, verb: 'MIXER' };
+    }
+    return mix(request, context, connection);
+  });
   expect(await r.swapLiveSource('item-1', 'guest-1', 'src-b', undefined, INPUT_FADE)).toMatchObject(
-    {
-      ok: false,
-      reason: 'input-fade-unavailable',
-      message: expect.stringContaining('Choose Cut'),
-    },
+    { ok: false, reason: 'input-fade-unavailable' },
   );
-  expect((await recvLines()).slice(before).some((line) => /^(PLAY |MIXER )/.test(line))).toBe(
-    false,
-  );
-  expect(await r.swapLiveSource('item-1', 'guest-1', 'src-b')).toMatchObject({ ok: true });
+  expect(refused).toBe(true);
+  expect(peer.layerState(reserveOld)).toEqual(previous);
+  expect(
+    peer
+      .receivedCommands()
+      .slice(mark)
+      .filter(({ line }) => /^(CG|PLAY|MIXER|CLEAR) /.test(line)),
+  ).toEqual([]);
+});
+
+it('keeps the reserve picture and audio together while it is promoted during input settlement', async () => {
+  const { r, peer, reserveOld } = await bootPairedInput();
+  const before = peer.layerState(reserveOld);
+  const mix = defaultHandlers().get('MIXER')!;
+  let release: (() => void) | undefined;
+  peer.setHandler('MIXER', async (request, context, connection) => {
+    const answer = mix(request, context, connection);
+    if (
+      release === undefined &&
+      request.raw === `MIXER 2-${String(reserveOld.layer)} VOLUME 0 DEFER`
+    )
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+    return answer;
+  });
+  const change = r.swapLiveSource('item-1', 'guest-1', 'src-b', undefined, INPUT_FADE);
+  try {
+    await expect.poll(() => release !== undefined, { timeout: HEALTH_MS }).toBe(true);
+    const [next] = r.liveLayers().get('item-1')!;
+    const reserveNext = { channel: 2, layer: next!.slot.layer };
+    expect(peer.layerState(reserveOld)).toEqual(before);
+    expect(peer.layerState(reserveNext)).toMatchObject({ volume: 0, opacity: 0 });
+    expect(await r.failover()).toEqual({ ok: true, newPrimary: 'B' });
+    expect(peer.layerState(reserveOld)).toEqual(before);
+    expect(peer.layerState(reserveNext)).toMatchObject({ volume: 0, opacity: 0 });
+  } finally {
+    release?.();
+  }
+  expect(await change).toEqual({ ok: true });
+  const [next] = r.liveLayers().get('item-1')!;
+  const reserveNext = { channel: 2, layer: next!.slot.layer };
+  await expect
+    .poll(() => peer.layerState(reserveNext), { timeout: HEALTH_MS })
+    .toMatchObject({
+      filePath: 'reserve.mov',
+      opacity: 1,
+      volume: 0.4,
+    });
+  await expect.poll(() => peer.layerState(reserveOld)?.producer).toBe('empty');
+  expect(peer.stagedMixerCount(2)).toBe(0);
+});
+
+it('does not resume a staged input effect after the active role changes away and back', async () => {
+  const { r, active, peer, old } = await bootPairedInput();
+  const before = active.layerState(old.slot);
+  const wireStart = active.receivedCommands().length;
+  const swap = r.swapLiveSource('item-1', 'guest-1', 'src-b', undefined, {
+    mode: 'push',
+    durationMs: 800,
+  });
+  await expect
+    .poll(
+      () =>
+        active
+          .receivedCommands()
+          .slice(wireStart)
+          .some(({ line }) => /FILL .* \d+ linear DEFER$/.test(line)),
+      { timeout: HEALTH_MS },
+    )
+    .toBe(true);
+  const peerStart = peer.receivedCommands().length;
+  expect(await r.failover()).toEqual({ ok: true, newPrimary: 'B' });
+  expect(await r.failover()).toEqual({ ok: true, newPrimary: 'A' });
+  expect(await swap).toMatchObject({ ok: false });
+  await expect.poll(() => active.layerState(old.slot), { timeout: HEALTH_MS }).toEqual(before);
+  await expect.poll(() => active.stagedMixerCount(1), { timeout: HEALTH_MS }).toBe(0);
+  expect(
+    peer
+      .receivedCommands()
+      .slice(peerStart)
+      .filter(({ line }) => /^(PLAY|MIXER|CLEAR|CG) /.test(line)),
+  ).toEqual([]);
 });
 
 it('a template with NO carrier takes exactly as before and seats nothing', async () => {

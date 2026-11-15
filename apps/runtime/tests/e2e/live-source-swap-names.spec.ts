@@ -11,6 +11,7 @@ import type {
   SourceCatalog,
   TemplateInfo,
 } from '@cg/shared-ipc';
+import { CG_LIVE_POSITION_PAGE_MARKER } from '@cg/shared-schema';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { textRunX } from './fixtures/runtime.js';
 
@@ -103,6 +104,7 @@ function freeUdpPort(): Promise<number> {
 }
 
 let mock: MockHandle | null = null;
+let backupMock: MockHandle | null = null;
 let bridge: BridgeHandle | null = null;
 let scratch: string | null = null;
 
@@ -111,6 +113,8 @@ test.afterEach(async () => {
   bridge = null;
   await mock?.stop();
   mock = null;
+  await backupMock?.stop();
+  backupMock = null;
   if (scratch !== null) fs.rmSync(scratch, { recursive: true, force: true });
   scratch = null;
 });
@@ -132,6 +136,8 @@ async function swapDialogOnAir(
   page: Page,
   bank: FixedLayerBank,
   inputCount = 2,
+  withBackup = false,
+  singlePlateFit: 'contain' | 'cover' = 'contain',
 ): Promise<{ mock: MockHandle; row: Locator; dialog: Locator }> {
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 10, channels: 1 });
@@ -141,9 +147,35 @@ async function swapDialogOnAir(
     strategy: 'mirror-sync',
     autoFailoverEnabled: false,
   };
+  if (withBackup) {
+    const backupOscPort = await freeUdpPort();
+    backupMock = await createMock({
+      amcpPort: 0,
+      oscPort: backupOscPort,
+      oscHost: '127.0.0.1',
+      oscHz: 10,
+      channels: 2,
+    });
+    connection.servers.B = {
+      host: '127.0.0.1',
+      amcpPort: backupMock.amcpPort,
+      oscPort: backupOscPort,
+    };
+  }
   bridge = await createBridge({
     port: 0,
     connection,
+    ...(withBackup && {
+      backupChannelMap: {
+        channelOnB: (channel) => (channel === 1 ? 2 : null),
+        channelOnBAtTake: (channel) => (channel === 1 ? 2 : null),
+        stationChannelOf: (channel) => (channel === 2 ? 1 : null),
+        release: () => undefined,
+      },
+      coreGuardOptions: {
+        fetchImpl: () => Promise.resolve(new Response(null, { status: 404 })),
+      },
+    }),
     fixedLayers: bank,
     sourceCatalog: CATALOG,
     sourceAssignments: ASSIGNMENTS,
@@ -158,12 +190,18 @@ async function swapDialogOnAir(
           liveSources: {
             ...carrier,
             sources: carrier.sources.slice(0, 1),
-            looks: [{ ...carrier.looks![0]!, rects: { l1: LEFT } }],
+            looks: [{ ...carrier.looks![0]!, rects: { l1: LEFT }, fits: { l1: singlePlateFit } }],
           },
         }
       : TWO_BOX,
-    HTML,
+    withBackup ? HTML.replace('</head>', `${CG_LIVE_POSITION_PAGE_MARKER}</head>`) : HTML,
   );
+  if (withBackup) {
+    const handle = bridge;
+    await expect
+      .poll(() => handle.runtime.health().backup?.state, { timeout: 15_000 })
+      .toBe('healthy');
+  }
   await page.setViewportSize({ width: 1400, height: 900 });
   await page.addInitScript(`window.__CG_BRIDGE_URL__ = ${JSON.stringify(bridge.url)};`);
   await page.goto('/');
@@ -229,7 +267,9 @@ async function swapDialogOnAir(
     onAir: true,
     opacity: 1,
   });
-  expect(mock.layerRenderedRect(PHYSICAL_SEAT)).toEqual(LEFT_RENDERED);
+  expect(mock.layerRenderedRect(PHYSICAL_SEAT)).toEqual(
+    singlePlateFit === 'contain' ? LEFT_RENDERED : { ...LEFT_RENDERED, y: 0, height: 1 },
+  );
   if (inputCount === 2) {
     expect(mock.layerState(COPY_SEAT)).toMatchObject({
       producer: 'route',
@@ -418,4 +458,99 @@ test('R-119 selects Fade for a source change and dissolves inside the live frame
   expect(faded).toBeGreaterThan(started);
   expect(lines.indexOf('CLEAR 1-60')).toBeGreaterThan(faded);
   expect(mock.layerRenderedRect(COPY_SEAT)).toEqual(LEFT_RENDERED);
+});
+
+for (const fixture of [
+  { mode: 'push', direction: 'right', departingMoves: true },
+  { mode: 'slide-over', direction: 'down', departingMoves: false },
+]) {
+  test(`R-119 changes an on-air input with ${fixture.mode} from ${fixture.direction}`, async ({
+    page,
+  }) => {
+    const { mock, dialog } = await swapDialogOnAir(page, BANK, 1);
+    const transition = dialog.getByRole('combobox', { name: 'Input transition' });
+    const direction = dialog.getByRole('combobox', { name: 'Input direction' });
+    await expect(direction).toHaveCount(0);
+    await transition.selectOption(fixture.mode);
+    await expect(direction.locator('option')).toHaveText([
+      'From left',
+      'From right',
+      'From top',
+      'From bottom',
+    ]);
+    await direction.selectOption(fixture.direction);
+    await expect(dialog.getByLabel('Duration (ms)')).toHaveValue('400');
+
+    const before = mock.receivedCommands().length;
+    await dialog.getByRole('combobox', { name: 'Live source for Plate 1' }).click();
+    await page.locator('[data-picker-input]').filter({ hasText: 'CAM 2' }).first().click();
+    await expect(dialog.locator('[data-swap-plate="l1"]')).toContainText('swapped for this row');
+    const lines = mock
+      .receivedCommands()
+      .slice(before)
+      .map(({ line }) => line);
+    const preRoll = lines.indexOf('PLAY 1-61 DECKLINK DEVICE 2');
+    const move = lines.findIndex((line) => /^MIXER 1-61 FILL .* \d+ linear DEFER$/.test(line));
+    expect(preRoll).toBeGreaterThan(lines.indexOf('MIXER 1-61 OPACITY 0 DEFER'));
+    expect(move).toBeGreaterThan(preRoll);
+    expect(lines.some((line) => /^MIXER 1-60 FILL .* \d+ linear DEFER$/.test(line))).toBe(
+      fixture.departingMoves,
+    );
+    expect(lines.indexOf('CLEAR 1-60')).toBeGreaterThan(move);
+    expect(mock.layerRenderedRect(COPY_SEAT)).toEqual(LEFT_RENDERED);
+  });
+}
+
+test('R-119 protects a cropped programme input from an unsupported slide direction', async ({
+  page,
+}) => {
+  const { mock, dialog } = await swapDialogOnAir(page, BANK, 1, false, 'cover');
+  const beforePicture = mock.layerRenderedRect(PHYSICAL_SEAT);
+  await dialog.getByRole('combobox', { name: 'Input transition' }).selectOption('slide-over');
+  await dialog.getByRole('combobox', { name: 'Input direction' }).selectOption('up');
+  const before = mock.receivedCommands().length;
+  await dialog.getByRole('combobox', { name: 'Live source for Plate 1' }).click();
+  await page.locator('[data-picker-input]').filter({ hasText: 'CAM 2' }).first().click();
+  await expect(
+    dialog.getByText('Choose another direction, Fade or Cut.', { exact: false }),
+  ).toBeVisible();
+  const lines = mock
+    .receivedCommands()
+    .slice(before)
+    .map(({ line }) => line);
+  expect(lines.filter((line) => /^(?:PLAY|CLEAR|MIXER|CG) /i.test(line))).toEqual([]);
+  expect(mock.layerRenderedRect(PHYSICAL_SEAT)).toEqual(beforePicture);
+});
+
+test('R-119 applies a source Fade to the active output with mirror-sync enabled', async ({
+  page,
+}) => {
+  const { mock, dialog } = await swapDialogOnAir(page, BANK, 1, true);
+  const reserve = backupMock;
+  if (reserve === null) throw new Error('Missing configured reserve');
+  expect(reserve.layerState({ channel: 2, layer: 60 })).toMatchObject({
+    producer: 'decklink',
+    onAir: true,
+    opacity: 1,
+  });
+  await dialog.getByRole('combobox', { name: 'Input transition' }).selectOption('fade');
+  const beforeActive = mock.receivedCommands().length;
+  const beforeReserve = reserve.receivedCommands().length;
+  await dialog.getByRole('combobox', { name: 'Live source for Plate 1' }).click();
+  await page.locator('[data-picker-input]').filter({ hasText: 'CAM 2' }).first().click();
+  await expect(dialog.locator('[data-swap-plate="l1"]')).toContainText('swapped for this row');
+
+  const active = mock
+    .receivedCommands()
+    .slice(beforeActive)
+    .map(({ line }) => line);
+  const settled = reserve
+    .receivedCommands()
+    .slice(beforeReserve)
+    .map(({ line }) => line);
+  expect(active).toContainEqual(expect.stringMatching(/^MIXER 1-61 OPACITY 1 \d+ linear DEFER$/));
+  expect(settled).toContain('PLAY 2-61 DECKLINK DEVICE 2');
+  expect(settled.some((line) => /\s\d+ linear DEFER$/.test(line))).toBe(false);
+  expect(reserve.layerState({ channel: 2, layer: 60 })?.producer ?? 'empty').toBe('empty');
+  expect(reserve.layerRenderedRect({ channel: 2, layer: 61 })).toEqual(LEFT_RENDERED);
 });

@@ -1,11 +1,14 @@
 import {
   DEFAULT_LIVE_FIT_MODE,
   fitPictureToBox,
+  inputSlideVector,
   intersectNormalizedRects,
+  isInputSlideMode,
   livePlateMaskRegions,
   liveRevealRects,
   liveRevealSceneRect,
   type FitRect,
+  type InputTransition,
 } from '@cg/shared-schema';
 import type { PlatePlacement } from './livePlateGeometry.js';
 import type { PvwSourceFrame } from './usePvwSourceFrames.js';
@@ -54,6 +57,18 @@ function placeWithin(el: HTMLElement, rect: FitRect, box: FitRect): void {
   el.style.height = percent(rect.height, box.height);
 }
 
+function pictureWindows(plate: PlatePlacement): readonly FitRect[] {
+  return plate.mask === undefined
+    ? [plate]
+    : livePlateMaskRegions(plate.mask).map((rect) => liveRevealSceneRect(plate, rect));
+}
+
+function paintSnapshot(image: HTMLImageElement, picture: Picture, window: FitRect): void {
+  placeWithin(image, picture.jpeg, window);
+  const url = `data:image/jpeg;base64,${picture.jpegBase64}`;
+  if (image.getAttribute('src') !== url) image.src = url;
+}
+
 function sameBox(node: HTMLElement, plate: PlatePlacement): boolean {
   const bounds = node.getBoundingClientRect();
   return (
@@ -66,15 +81,22 @@ function sameBox(node: HTMLElement, plate: PlatePlacement): boolean {
   );
 }
 
-const pendingInputPicture = new WeakMap<HTMLElement, string>();
+const pendingInputPicture = new WeakMap<HTMLElement, { sourceId: string }>();
+type Picture = NonNullable<ReturnType<typeof pictureFor>>;
+const paintedPictures = new WeakMap<HTMLElement, { picture: Picture; plate: PlatePlacement }>();
 
-/** Keep a previous source in the same plate until a replacement snapshot can be dissolved in. */
-export function paintPvwSourceDissolve(
+export interface PvwInputEffect {
+  cancel(): void;
+  refresh?(plates: readonly PlatePlacement[], frames: ReadonlyMap<string, PvwSourceFrame>): void;
+}
+
+/** Hold the prior picture while the requested source's first usable snapshot arrives. */
+export function paintPvwSourceTransition(
   doc: Document,
   plates: readonly PlatePlacement[],
   frames: ReadonlyMap<string, PvwSourceFrame>,
-  durationMs: number,
-  active: { current: (() => void) | undefined },
+  effect: InputTransition,
+  active: { current: PvwInputEffect | undefined },
 ): void {
   const changing = new Map(
     plates.filter(({ sourceId }) => sourceId !== null).map((plate) => [plate.plateId, plate]),
@@ -93,49 +115,175 @@ export function paintPvwSourceDissolve(
       !sameBox(node, plate)
     )
       return [];
-    return [{ part, node, sourceId: plate.sourceId }];
+    return [{ part, node, plate, sourceId: plate.sourceId }];
   });
-  const pending = new Set(
-    outgoing.filter(({ sourceId }) => !frames.has(sourceId)).map(({ part }) => part),
-  );
+  const ready = (plate: PlatePlacement): boolean => pictureFor(plate, frames) !== undefined;
+  const pending = new Set(outgoing.filter(({ plate }) => !ready(plate)).map(({ part }) => part));
   for (const { part, sourceId } of outgoing) {
     if (!pending.has(part)) {
       pendingInputPicture.delete(part);
-    } else if (pendingInputPicture.get(part) !== sourceId) {
-      pendingInputPicture.set(part, sourceId);
+    } else if (pendingInputPicture.get(part)?.sourceId !== sourceId) {
+      const request = { sourceId };
+      pendingInputPicture.set(part, request);
       // A source can be outside the monitor's snapshot budget or have no preview service.
       setTimeout(() => {
-        if (pendingInputPicture.get(part) !== sourceId) return;
+        if (pendingInputPicture.get(part) !== request) return;
         pendingInputPicture.delete(part);
         part.remove();
       }, 2_500);
     }
   }
-  const incoming = outgoing.filter(
-    ({ sourceId }) => frames.get(sourceId)?.jpegBase64 !== undefined,
-  );
-  if (incoming.length > 0) active.current?.();
-  const clones = incoming.map(({ part, node }) => {
-    const copy = part.cloneNode(true) as HTMLElement;
-    delete copy.dataset['cgPvwPicturePart'];
-    copy.dataset['cgPvwSourceDissolve'] = '';
-    return { copy, node };
-  });
+  const incoming = outgoing.filter(({ part }) => !pending.has(part));
+  if (incoming.length > 0) active.current?.cancel();
+  const clones =
+    effect.mode !== 'fade'
+      ? []
+      : incoming.map(({ part, node }) => {
+          const copy = part.cloneNode(true) as HTMLElement;
+          delete copy.dataset['cgPvwPicturePart'];
+          copy.dataset['cgPvwSourceDissolve'] = '';
+          return { copy, node };
+        });
+  const change = incoming.length === 1 ? incoming[0] : undefined;
+  if (change !== undefined && outgoing.length === 1 && isInputSlideMode(effect.mode)) {
+    const before = paintedPictures.get(change.part);
+    if (
+      before !== undefined &&
+      sameBox(change.node, before.plate) &&
+      JSON.stringify(before.plate.mask) === JSON.stringify(change.plate.mask)
+    ) {
+      const next = startPvwSlide(
+        doc,
+        change.node,
+        change.plate,
+        plates,
+        before.picture,
+        frames,
+        effect,
+        active,
+      );
+      if (next !== undefined) active.current = next;
+    }
+  }
   paintPvwPlatePictures(doc, plates, frames, pending);
+  active.current?.refresh?.(plates, frames);
   if (clones.length === 0) return;
   const animations = clones.map(({ copy, node }) => {
     node.append(copy);
-    return { copy, animation: copy.animate?.([{ opacity: 1 }, { opacity: 0 }], durationMs) };
+    return { copy, animation: copy.animate?.([{ opacity: 1 }, { opacity: 0 }], effect.durationMs) };
   });
   const cleanup = () => {
     for (const { copy, animation } of animations) {
       animation?.cancel();
       copy.remove();
     }
-    if (active.current === cleanup) active.current = undefined;
+    if (active.current?.cancel === cleanup) active.current = undefined;
   };
-  active.current = cleanup;
+  active.current = { cancel: cleanup };
   void Promise.all(animations.map(({ animation }) => animation?.finished)).then(cleanup, cleanup);
+}
+
+/** Independent picture fits move inside one unmoving plate or mask rectangle. */
+function startPvwSlide(
+  doc: Document,
+  node: HTMLElement,
+  plate: PlatePlacement,
+  plates: readonly PlatePlacement[],
+  before: Picture,
+  frames: ReadonlyMap<string, PvwSourceFrame>,
+  effect: InputTransition,
+  active: { current: PvwInputEffect | undefined },
+): PvwInputEffect | undefined {
+  const after = pictureFor(plate, frames);
+  if (
+    after === undefined ||
+    typeof node.animate !== 'function' ||
+    plate.reveal !== undefined ||
+    plates.some(({ reveal }) => reveal?.targetSourceId === plate.plateId)
+  )
+    return undefined;
+  const view = doc.defaultView;
+  const windows = pictureWindows(plate);
+  const window = windows.length === 1 ? windows[0] : undefined;
+  if (view === null || window === undefined) return undefined;
+  const viewportRect = intersectNormalizedRects(window, {
+    x: 0,
+    y: 0,
+    width: view.innerWidth,
+    height: view.innerHeight,
+  });
+  if (viewportRect === null) return undefined;
+  const viewport = doc.createElement('div');
+  viewport.dataset['cgPvwInputMotion'] = effect.mode;
+  viewport.style.cssText = 'position:absolute;overflow:hidden;pointer-events:none';
+  viewport.setAttribute('aria-hidden', 'true');
+  placeWithin(viewport, viewportRect, plate);
+
+  const plane = (role: 'outgoing' | 'incoming', picture: Picture) => {
+    const layer = doc.createElement('div');
+    layer.dataset['cgPvwInputMotionPlane'] = role;
+    layer.style.cssText = 'position:absolute;inset:0;overflow:hidden;pointer-events:none';
+    const part = doc.createElement('div');
+    part.style.cssText = 'position:absolute;overflow:hidden';
+    const image = doc.createElement('img');
+    image.alt = '';
+    image.draggable = false;
+    image.style.cssText = 'position:absolute;display:block;max-width:none;max-height:none';
+    part.append(image);
+    layer.append(part);
+    viewport.append(layer);
+    const paint = (value: Picture): void => {
+      placeWithin(part, value.visible, viewportRect);
+      paintSnapshot(image, value, value.visible);
+    };
+    paint(picture);
+    return { layer, paint };
+  };
+  const outgoing = plane('outgoing', before);
+  const incoming = plane('incoming', after);
+  // If a JPEG refresh replaced the underlying part, the overlay continues to own the picture.
+  const hidden = new Map<HTMLElement, string>();
+  const animations: Animation[] = [];
+  const cancel = () => {
+    if (viewport.parentElement === null) return;
+    for (const animation of animations) animation.cancel();
+    for (const [part, value] of hidden) part.style.visibility = value;
+    viewport.remove();
+    if (active.current?.cancel === cancel) active.current = undefined;
+  };
+  const refresh: NonNullable<PvwInputEffect['refresh']> = (nextPlates, nextFrames) => {
+    const current = nextPlates.find(({ plateId }) => plateId === plate.plateId);
+    if (
+      current?.sourceId !== after.sourceId ||
+      JSON.stringify(current.mask) !== JSON.stringify(plate.mask) ||
+      !sameBox(node, plate)
+    ) {
+      cancel();
+      return;
+    }
+    for (const part of node.querySelectorAll<HTMLElement>(
+      ':scope > [data-cg-pvw-picture-kind="own"]',
+    )) {
+      if (!hidden.has(part)) hidden.set(part, part.style.visibility);
+      part.style.visibility = 'hidden';
+    }
+    const latest = pictureFor(current, nextFrames);
+    if (latest !== undefined) incoming.paint(latest);
+  };
+  const direction = inputSlideVector(effect.direction);
+  const offset = (multiplier: number): string =>
+    `translate(${String(direction.x * multiplier * 100)}%, ${String(direction.y * multiplier * 100)}%)`;
+  node.append(viewport);
+  const tween = (layer: HTMLElement, from: number, to: number) =>
+    layer.animate([{ transform: offset(from) }, { transform: offset(to) }], {
+      duration: effect.durationMs,
+      fill: 'both',
+      easing: 'linear',
+    });
+  animations.push(tween(incoming.layer, 1, 0));
+  if (effect.mode === 'push') animations.push(tween(outgoing.layer, 0, -1));
+  void Promise.all(animations.map(({ finished }) => finished)).then(cancel, cancel);
+  return { cancel, refresh };
 }
 
 /** Mount preview-only pixels in the exact plate node, preserving the page's own paint order. */
@@ -190,13 +338,12 @@ export function paintPvwPlatePictures(
       node.append(part);
     }
     pendingInputPicture.delete(part);
+    paintedPictures.set(part, { picture: fit, plate });
     retained.delete(key);
     placeWithin(part, visible, plate);
     const image = part.querySelector('img');
     if (image === null) return;
-    placeWithin(image, fit.jpeg, visible);
-    const url = `data:image/jpeg;base64,${fit.jpegBase64}`;
-    if (image.getAttribute('src') !== url) image.src = url;
+    paintSnapshot(image, fit, visible);
   }
 
   for (const plate of plates) {
@@ -207,10 +354,7 @@ export function paintPvwPlatePictures(
     if (node === undefined) continue;
     const own = fitted.get(plate.plateId);
     if (own !== undefined) {
-      const windows =
-        plate.mask === undefined
-          ? [plate]
-          : livePlateMaskRegions(plate.mask).map((rect) => liveRevealSceneRect(plate, rect));
+      const windows = pictureWindows(plate);
       for (const [index, window] of windows.entries()) {
         addPicture(plate, node, JSON.stringify([plate.plateId, 'own', index]), own, window, 'own');
       }

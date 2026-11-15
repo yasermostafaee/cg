@@ -232,9 +232,12 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
    */
   async send(line: string, options: SendOptions = {}): Promise<RedundancySendResult> {
     if (options.replica !== undefined) {
-      const { primary, peer, queue } = options.replica;
+      const { primary, peer, queue, settleMixer } = options.replica;
       const label = this.backupLabel;
-      const translated = this.lineFor(label, line, options);
+      const translated =
+        settleMixer === true && line.startsWith('MIXER ') && !this.held.has(label)
+          ? this.ownLine({ line }, label)
+          : this.lineFor(label, line, options);
       if (
         this.strategy !== 'mirror-sync' ||
         primary !== this.primarySession ||

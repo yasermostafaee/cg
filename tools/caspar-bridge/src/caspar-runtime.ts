@@ -35,6 +35,8 @@ import {
   frameTransitionPhases,
   presetTransitionDurations,
   isFieldNamespace,
+  inputSlideVector,
+  isInputSlideMode,
   isRestorable,
   intersectNormalizedRects,
   livePlateMaskRegions,
@@ -338,6 +340,11 @@ import {
 } from './route-plates.js';
 import { resolvePlateAspect, resolvePlateFitMode } from './live-plate-fit.js';
 import {
+  inputSlideAperture,
+  inputSlideFitsAcrossAperture,
+  planInputSlide,
+} from './input-slide-geometry.js';
+import {
   allocateLiveLayers,
   allocateOrderedLiveLayers,
   liveBandExhaustedMessage,
@@ -590,7 +597,7 @@ interface LiveMixerTransitionGuard {
   readonly hiddenSlots: ReadonlySet<string>;
   readonly departingInputSlot?: string;
   readonly signal?: AbortSignal;
-  readonly terminalTarget?: { primaryOnly: ServerSession; primaryQueue?: ServerSession['queue'] };
+  readonly terminalTarget?: PrimaryMixerTarget;
   readonly current: () => boolean;
 }
 
@@ -600,10 +607,29 @@ interface ProvisionalInputSeat {
   readonly heldBefore?: LiveLayerRecord;
   readonly slot: CommandSlot;
   readonly session: ServerSession;
+  readonly scopedMixer?: true;
   readonly release: () => void;
   producerMayExist: boolean;
   restoreOutgoing: boolean;
   cleanupPending: boolean;
+}
+
+interface InputSeatReplica {
+  readonly page: ResidentOutputPage;
+  readonly peer: NonNullable<ResidentOutputPage['mirror']>;
+  readonly outgoingProducer: string;
+  readonly foreground?: CommandSlot;
+}
+
+interface SettledInputOutput {
+  readonly target: PrimaryMixerTarget;
+  readonly replica?: InputSeatReplica;
+  readonly current: () => boolean;
+}
+
+interface PendingInputReplicaMixer {
+  readonly slots: readonly CommandSlot[];
+  readonly restore: (target: PrimaryMixerTarget, batch: MixerBatch) => Promise<boolean>;
 }
 
 interface ProvisionalPresetSeat {
@@ -630,6 +656,11 @@ interface MixerBatch {
   channel?: number;
   release?: () => void;
   staged?: boolean;
+}
+
+interface PrimaryMixerTarget {
+  readonly primaryOnly: ServerSession;
+  readonly primaryQueue?: ServerSession['queue'];
 }
 
 function cropKey(lookId: string | undefined, plateId: string): string {
@@ -936,6 +967,8 @@ interface LivePlatePlacement {
   };
   /** `FILL` and `CLIP`, from ONE computation — never assembled separately. */
   readonly fit: { readonly fill: NormalizedRect; readonly clip: NormalizedRect };
+  /** The visible authored frame or single mask rectangle before the source's own fit. */
+  readonly inputSlideViewport?: NormalizedRect | undefined;
   /**
    * This seat is needed by SOME look but is not punched by the one being entered — §12.4's
    * hold, and session BM's PRESET, which are the same state reached from two directions.
@@ -1160,6 +1193,7 @@ function isSameVisibleCropSeat(
 /** What one live-plate apply answered — and, when refused, the seat it stopped on. */
 interface LivePlateApplyResult {
   readonly ok: boolean;
+  readonly inputOutput?: SettledInputOutput;
   /** The final geometry batch, excluding any pre-seat or recovery commit, landed on the primary. */
   readonly mixerCommitted?: boolean;
   readonly errorCode?: string;
@@ -2725,6 +2759,10 @@ export class CasparRuntime {
   readonly #orphanedMixerChannels = new Set<number>();
   /** Scoped staging is recorded before the first DEFER, so a role change cannot mirror into it. */
   readonly #orphanedPrimaryMixers = new Map<ServerSession, Map<number, Set<number>>>();
+  readonly #pendingInputReplicaMixers = new Map<
+    ServerSession,
+    Map<number, PendingInputReplicaMixer>
+  >();
   // CasparCG's per-channel DEFER buffer survives reconnects. Emergency Out/Stop/Clear bypass it.
   readonly #mixerBatchTails = new Map<number, Promise<void>>();
   readonly #sessionTuning: {
@@ -3343,7 +3381,8 @@ export class CasparRuntime {
         from: event.from,
         to: event.to,
       };
-      if (this.#orphanedPrimaryMixers.has(this.#adapter.primarySession))
+      if (this.#inputFadeCleanupPending()) void this.#mixerStateOnHealthy(false);
+      else if (this.#orphanedPrimaryMixers.has(this.#adapter.primarySession))
         void this.#flushOrphanedStaging();
       this.healthChanged.emit(this.health());
     });
@@ -8282,6 +8321,7 @@ export class CasparRuntime {
       change. The texts and the inputs land together or neither does, which is what makes one
       press of UPDATE an atomic operator action rather than two commands sharing a button.
     */
+    let inputOutput: SettledInputOutput | undefined;
     if (lookBindings !== undefined) {
       /*
         🔴 `PLAYOUT-SOURCES-01` — a binding the row NEWLY makes must be to something bindable: never
@@ -8327,6 +8367,7 @@ export class CasparRuntime {
           ...(applied.message !== undefined && { message: applied.message }),
         };
       }
+      inputOutput = applied.inputOutput;
     }
 
     const seq = this.#nextSeq();
@@ -8348,7 +8389,7 @@ export class CasparRuntime {
     // The intent is settled IN-PROCESS: a no-send path has no wire ack, and
     // B-044 forbids resting non-terminal (an unsettled `updating` is precisely
     // the zombie `pending` that used to block R-011's setPosition forever).
-    if (!this.#loaded.has(itemId)) {
+    if (!this.#loaded.has(itemId) && inputOutput === undefined) {
       this.#reconciler.applyAck(seq, true);
       return { accepted: true };
     }
@@ -8368,10 +8409,11 @@ export class CasparRuntime {
         }),
     };
     this.#armExpiry(seq);
-    const { ok, errorCode, command } = await this.#send(
+    const { ok, errorCode, command } = await this.#sendSettledInputUpdate(
       this.#builder.update(slot, withCgControl(merged, control)),
       seq,
       'normal',
+      inputOutput,
     );
     return ok
       ? { accepted: true }
@@ -9537,6 +9579,9 @@ export class CasparRuntime {
     const keys = new Set<string>(includePending ? this.#pendingSeatLayers : []);
     if (includePending) {
       for (const key of this.#provisionalPresetSeats.keys()) keys.add(key);
+      for (const pending of this.#pendingInputReplicaMixers.values())
+        for (const { slots } of pending.values())
+          for (const slot of slots) keys.add(adoptionKey(slot));
     }
     for (const records of this.#liveLayers.values()) {
       for (const record of records) keys.add(adoptionKey(record.slot));
@@ -9547,10 +9592,12 @@ export class CasparRuntime {
     return keys;
   }
 
-  #claimSeatLayers(plan: LivePlateApplyPlan): () => void {
+  #claimSeatLayers(plan: LivePlateApplyPlan, extra?: CommandSlot): () => void {
     const claimed = new Set<string>();
-    for (const placement of [...plan.placements, ...plan.parked]) {
-      const key = adoptionKey(placement.slot);
+    const slots = [...plan.placements, ...plan.parked].map(({ slot }) => slot);
+    if (extra !== undefined) slots.push(extra);
+    for (const slot of slots) {
+      const key = adoptionKey(slot);
       if (this.#pendingSeatLayers.has(key)) continue;
       claimed.add(key);
       this.#pendingSeatLayers.add(key);
@@ -10087,6 +10134,7 @@ export class CasparRuntime {
       producer: SourceProducer;
       source: LivePlatePlacement['source'];
       fit: LivePlatePlacement['fit'];
+      inputSlideViewport?: NormalizedRect | undefined;
       held: boolean;
       revealOverlay?: true;
       playback?: MediaPlayback;
@@ -10370,6 +10418,12 @@ export class CasparRuntime {
         source: sourceLabelOf(frame.source),
         ...tap,
         fit: { fill: fit.fill, clip: fit.clip },
+        inputSlideViewport:
+          this.liveSourceFitFor({
+            ...fitInput,
+            sourceAspect: null,
+            alignFullPlateToPixels: !keepContinuous,
+          }).clip ?? undefined,
         held: false,
         ...clip,
       });
@@ -10459,7 +10513,7 @@ export class CasparRuntime {
       const rect = desired[plateId];
       if (main === undefined || rect === undefined) continue;
       const { fill, clip } = main.fit;
-      const clips = livePlateMaskRegions(mask).flatMap((region) => {
+      const windows = livePlateMaskRegions(mask).flatMap((region) => {
         const window = this.liveSourceFitFor({
           channel: slot.channel,
           itemId,
@@ -10469,7 +10523,13 @@ export class CasparRuntime {
           positionOverride: positionProposal?.position,
           sourceAspect: null,
         }).clip;
-        if (window === null) return [];
+        return window === null ? [] : [window];
+      });
+      main.inputSlideViewport =
+        windows.length === 1 && windows[0] !== undefined && main.inputSlideViewport !== undefined
+          ? (intersectNormalizedRects(main.inputSlideViewport, windows[0]) ?? undefined)
+          : undefined;
+      const clips = windows.flatMap((window) => {
         const visible = intersectNormalizedRects(clip, window);
         return visible === null ? [] : [visible];
       });
@@ -11027,7 +11087,7 @@ export class CasparRuntime {
       bindings: LookSourceBindings | undefined;
     },
     inputTransition?: InputTransition,
-  ): Promise<{ ok: boolean; reason?: string; message?: string }> {
+  ): Promise<{ ok: boolean; reason?: string; message?: string; inputOutput?: SettledInputOutput }> {
     const refusal = this.#refuseBindingChange(itemId, slot, next);
     if (refusal !== null) return { ok: false, ...refusal };
 
@@ -11087,16 +11147,22 @@ export class CasparRuntime {
       };
     }
     this.#applySourceOverride(itemId, next.overrides ?? {}, next.bindings);
-    return { ok: true };
+    return {
+      ok: true,
+      ...(reconciled.inputOutput !== undefined && { inputOutput: reconciled.inputOutput }),
+    };
   }
 
   /** Stage a replacement picture without replacing any producer already on air. */
-  async #applyInputFade(
+  async #applyInputTransition(
     itemId: string,
     slot: CommandSlot,
     plan: Extract<LiveSeatingPlan, { ok: true }>,
-    durationMs: number,
+    transition: InputTransition,
   ): Promise<LivePlateApplyResult | undefined> {
+    const moving = isInputSlideMode(transition.mode);
+    const slideOver = transition.mode === 'slide-over';
+    const effectName = slideOver ? 'Slide Over' : moving ? 'Push' : 'Fade';
     const baseline = this.#liveLayers.get(itemId);
     if (baseline === undefined) return undefined;
     const visible = baseline.filter((record) => record.held !== true);
@@ -11117,16 +11183,23 @@ export class CasparRuntime {
     );
     const unavailable = (message: string): LivePlateApplyResult => ({
       ok: false,
-      errorCode: 'input-fade-unavailable',
+      errorCode: moving ? 'input-slide-unavailable' : 'input-fade-unavailable',
       message,
     });
     if (arrivals.length !== 1 || incoming === undefined || outgoing === undefined)
-      return unavailable('Fade changes one on-air frame at a time. Choose Cut for this change.');
+      return unavailable(
+        `${effectName} changes one on-air frame at a time. Choose Cut for this change.`,
+      );
 
     const allSeats = [...plan.placements, ...plan.parked];
     const priorBySeat = new Map(baseline.map((record) => [liveSeatId(record), record]));
     const priorIncoming = priorBySeat.get(incoming.seatId);
     const commonClip = intersectNormalizedRects(incoming.fit.clip, outgoing.clip);
+    const direction = inputSlideVector(transition.direction);
+    const raster = this.#channelSettings.rasterFor(slot.channel);
+    const viewport = moving
+      ? inputSlideAperture(incoming.inputSlideViewport, incoming.fit.clip, outgoing.clip, raster)
+      : undefined;
     const row = this.#reconciler.get(itemId);
     const carrier =
       row === null ? undefined : this.#templates.getOn(slot.channel, row.templateId)?.liveSources;
@@ -11151,7 +11224,7 @@ export class CasparRuntime {
         'This frame uses routed copies or multiple mask regions. Choose Cut for this input change.',
       );
     if (
-      commonClip === null ||
+      (moving ? viewport === undefined : commonClip === null) ||
       !this.#isVerifiedCropSlot(outgoing.slot) ||
       (priorIncoming !== undefined &&
         (!isSeatUnchanged('switch', priorIncoming, incoming) ||
@@ -11166,28 +11239,47 @@ export class CasparRuntime {
       )
     )
       return unavailable(
-        'Fade cannot use the current input layers. Choose Cut for this input change.',
+        `${effectName} cannot use the current input layers. Choose Cut for this input change.`,
+      );
+    if (
+      viewport !== undefined &&
+      !inputSlideFitsAcrossAperture(
+        viewport,
+        slideOver ? [incoming.fit.fill] : [incoming.fit.fill, outgoing.fill],
+        direction,
+        raster,
+      )
+    )
+      return unavailable(
+        `${effectName} cannot keep this cropped input inside the frame in this direction. Choose another direction, Fade or Cut.`,
       );
 
     const { channel } = slot;
     const band = this.#plateBand();
-    if (band === undefined) return unavailable('No live input layer is available for Fade.');
-    if (this.#sessions.B !== undefined)
+    if (band === undefined)
+      return unavailable(`No live input layer is available for ${effectName}.`);
+    const paired = this.#sessions.B !== undefined;
+    if (paired && this.#adapter.strategy !== 'mirror-sync')
       return unavailable(
-        'Fade for a source change requires a single connected engine. Choose Cut on this station.',
+        `${effectName} for a source change requires synchronous backup. Choose Cut on this station.`,
       );
     if (this.#inputFadeCleanupPending(channel) || this.#presetSeatCleanupPending(channel))
       return unavailable(
-        'The previous Fade is still recovering. Check the programme picture and retry.',
+        'The previous input effect is still recovering. Check the programme picture and retry.',
       );
     const session = this.#adapter.primarySession;
+    const queue = session.queue;
+    const phaseTarget = paired ? { primaryOnly: session, primaryQueue: queue } : undefined;
     const primary = this.#adapter.currentPrimary;
     const generation = this.#amcpGeneration;
+    const failover = this.#lastFailover;
     const takeToken = this.#takeTokens.get(itemId);
     const cancel = new AbortController();
     const sameEngine = () =>
       this.#adapter.primarySession === session &&
+      session.queue === queue &&
       this.#adapter.currentPrimary === primary &&
+      this.#lastFailover === failover &&
       this.#amcpGeneration === generation;
     const sameOutput = () =>
       sameEngine() &&
@@ -11201,31 +11293,41 @@ export class CasparRuntime {
       this.#adapter.primarySession.state === 'healthy' &&
       (incoming.epoch === undefined || this.#routeEpochIsCurrent(incoming.epoch));
     const rowLeft = { ok: false, errorCode: 'not-live', message: ROW_LEFT_AIR_MID_SWITCH };
-    const occupied = await this.#readInputFadeOccupancy(session, channel, cancel.signal);
+    const channelOnB = this.#backupChannels.channelOnB(channel);
+    const activeChannel = primary === 'A' ? channel : channelOnB;
+    const occupied =
+      activeChannel === null
+        ? null
+        : await this.#readInputFadeOccupancy(session, activeChannel, cancel.signal);
     if (!current()) return rowLeft;
     if (occupied === null)
-      return unavailable('The engine could not verify a free layer for Fade. Choose Cut or retry.');
+      return unavailable(
+        `The engine could not verify a free layer for ${effectName}. Choose Cut or retry.`,
+      );
+    const replica = paired ? this.#currentInputReplica(itemId, outgoing) : undefined;
+    const peer = paired ? this.#adapter.backupSession : null;
+    const peerChannel = primary === 'A' ? channelOnB : channel;
+    const peerOccupied =
+      priorIncoming === undefined && peer?.state === 'healthy' && peerChannel !== null
+        ? await this.#readInputFadeOccupancy(peer, peerChannel, cancel.signal)
+        : null;
+    if (!current()) return rowLeft;
     // Crossing above an overlapping neighbour would invert its authored paint order.
+    const overlapsPlate = ({ clip }: LiveLayerRecord): boolean =>
+      viewport === undefined
+        ? intersectNormalizedRects(clip, incoming.fit.clip) !== null ||
+          intersectNormalizedRects(clip, outgoing.clip) !== null
+        : intersectNormalizedRects(clip, viewport) !== null;
     const nextAbove = Math.min(
       this.#foregroundPages.get(itemId)?.layer ?? band.end + 1,
       ...visible
-        .filter(
-          (record) =>
-            record.slot.layer > outgoing.slot.layer &&
-            (intersectNormalizedRects(record.clip, incoming.fit.clip) !== null ||
-              intersectNormalizedRects(record.clip, outgoing.clip) !== null),
-        )
+        .filter((record) => record.slot.layer > outgoing.slot.layer && overlapsPlate(record))
         .map((record) => record.slot.layer),
     );
     const previousBelow = Math.max(
       band.start - 1,
       ...visible
-        .filter(
-          (record) =>
-            record.slot.layer < outgoing.slot.layer &&
-            (intersectNormalizedRects(record.clip, incoming.fit.clip) !== null ||
-              intersectNormalizedRects(record.clip, outgoing.clip) !== null),
-        )
+        .filter((record) => record.slot.layer < outgoing.slot.layer && overlapsPlate(record))
         .map((record) => record.slot.layer),
     );
     const used = new Set(allSeats.filter((p) => p !== incoming).map((p) => p.slot.layer));
@@ -11233,42 +11335,58 @@ export class CasparRuntime {
       if (rowSlot.channel === channel) used.add(rowSlot.layer);
     const layers = Array.from({ length: band.end - band.start + 1 }, (_, i) => band.start + i);
     const inPaintOrder = (layer: number) => layer > previousBelow && layer < nextAbove;
+    const occupiedNow = this.#liveLayerKeys(true);
     const free = (layer: number) =>
       inPaintOrder(layer) &&
       !used.has(layer) &&
       !occupied.has(layer) &&
+      peerOccupied?.has(layer) !== true &&
+      !occupiedNow.has(adoptionKey({ channel, layer })) &&
       this.#declaredLayerClass(channel, layer) === null;
     const layer =
       priorIncoming === undefined
         ? (layers.find((layer) => layer > outgoing.slot.layer && free(layer)) ??
-          layers.reverse().find((layer) => layer < outgoing.slot.layer && free(layer)))
+          (slideOver
+            ? undefined
+            : layers.reverse().find((layer) => layer < outgoing.slot.layer && free(layer))))
         : priorIncoming.slot.layer;
     if (
       priorIncoming !== undefined &&
-      (!occupied.has(priorIncoming.slot.layer) || !inPaintOrder(priorIncoming.slot.layer))
+      (!occupied.has(priorIncoming.slot.layer) ||
+        !inPaintOrder(priorIncoming.slot.layer) ||
+        (slideOver && priorIncoming.slot.layer <= outgoing.slot.layer))
     )
       return unavailable(
         'The prepared input is unavailable in the required picture order. Choose Cut for this change.',
       );
     if (layer === undefined)
       return unavailable(
-        'There is no free layer in the picture’s paint order for Fade. Choose Cut for this input change.',
+        `There is no free layer in the picture’s paint order for ${effectName}. Choose Cut for this input change.`,
       );
     const destination = { channel, layer };
     const incomingOnTop = layer > outgoing.slot.layer;
+    const period = this.#channelFrameMsFor(channel);
+    const frames = Math.max(1, Math.round(transition.durationMs / period));
+    const movement =
+      viewport === undefined
+        ? undefined
+        : planInputSlide(incoming.fit, outgoing, viewport, direction, !slideOver, frames);
 
     const replacement = { ...incoming, slot: destination };
+    const initial =
+      movement === undefined ? replacement : { ...replacement, fit: movement.initial };
     const finalPlan = {
       ...plan,
       placements: plan.placements.map((p) => (p === incoming ? replacement : p)),
     };
-    const releaseClaims = this.#claimSeatLayers(finalPlan);
+    const releaseClaims = this.#claimSeatLayers(finalPlan, paired ? outgoing.slot : undefined);
     const provisional: ProvisionalInputSeat = {
       itemId,
       outgoing,
       ...(priorIncoming !== undefined && { heldBefore: priorIncoming }),
       slot: destination,
       session,
+      ...(paired && { scopedMixer: true }),
       release: releaseClaims,
       producerMayExist: priorIncoming === undefined,
       restoreOutgoing: false,
@@ -11276,17 +11394,17 @@ export class CasparRuntime {
     };
     const provisionalKey = adoptionKey(destination);
     this.#provisionalInputSeats.set(provisionalKey, provisional);
-    const batch: MixerBatch = {};
+    const batch: MixerBatch = { ...phaseTarget };
     let settled = false;
     this.#frameTransitionInterrupts.set(itemId, cancel);
     try {
       const seats =
         priorIncoming === undefined
-          ? await this.#seatPlates(
-              [{ placement: replacement, hide: true, optional: false }],
-              batch,
-              { signal: cancel.signal, requirePrimary: true },
-            )
+          ? await this.#seatPlates([{ placement: initial, hide: true, optional: false }], batch, {
+              signal: cancel.signal,
+              requirePrimary: true,
+              ...(phaseTarget !== undefined && { target: phaseTarget }),
+            })
           : undefined;
       const seat = seats?.get(replacement.seatId);
       provisional.producerMayExist = seat?.sent === true && seat.outcome !== 'refused';
@@ -11294,27 +11412,26 @@ export class CasparRuntime {
       if (priorIncoming === undefined && seat?.outcome !== 'landed')
         return {
           ok: false,
-          errorCode: seat?.errorCode ?? 'input-fade-preroll',
+          errorCode: seat?.errorCode ?? (moving ? 'input-slide-preroll' : 'input-fade-preroll'),
           message: 'The new input could not be prepared. The current input is still on air.',
         };
 
-      const period = this.#channelFrameMsFor(channel);
       if (priorIncoming !== undefined) {
-        // A producer parked by another preset can start the dissolve without reopening the input.
+        // A producer parked by another preset can switch without reopening the input.
         await this.#leaseMixerChannel(batch, channel);
-        if (!current() || this.#orphanedMixerChannels.has(channel)) return rowLeft;
+        if (!current() || this.#hasOrphanedMixer(channel)) return rowLeft;
         for (const line of [
           this.#builder.mixerVolume(destination, 0),
           this.#builder.mixerOpacity(destination, 0),
-          ...this.#builder.mixerFit(destination, replacement.fit),
+          ...this.#builder.mixerFit(destination, initial.fit),
         ]) {
           const sent = await this.#sendDeferredMixer(batch, channel, line, cancel.signal);
           if (!current()) return rowLeft;
           if (!sent.ok || !sent.onPrimary)
-            return unavailable('The prepared input could not be positioned for Fade.');
+            return unavailable(`The prepared input could not be positioned for ${effectName}.`);
         }
         if (!(await this.#commitStagedMixer(batch, { retainOnFailure: true })).landed)
-          return unavailable('The engine could not prepare the input for Fade.');
+          return unavailable(`The engine could not prepare the input for ${effectName}.`);
       }
       const preroll = Math.max(
         priorIncoming === undefined
@@ -11334,14 +11451,12 @@ export class CasparRuntime {
       };
       if (!(await wait(preroll))) return rowLeft;
 
-      const frames = Math.max(1, Math.round(durationMs / period));
-      await this.#leaseMixerChannel(batch, channel);
-      if (!current() || this.#orphanedMixerChannels.has(channel)) return rowLeft;
       const tween = { frames, easing: 'linear' as const };
       const outgoingOnly = !sameMixerRect(outgoing.clip, commonClip, 1e-8);
       const incomingOnly = !sameMixerRect(incoming.fit.clip, commonClip, 1e-8);
-      provisional.restoreOutgoing = !incomingOnTop || outgoingOnly;
-      const lines = incomingOnTop
+      provisional.restoreOutgoing =
+        movement === undefined ? !incomingOnTop || outgoingOnly : !slideOver;
+      const fadeLines = incomingOnTop
         ? [
             this.#builder.mixerOpacity(destination, 1, tween),
             ...(outgoingOnly ? [this.#builder.mixerOpacity(outgoing.slot, 0, tween)] : []),
@@ -11350,16 +11465,38 @@ export class CasparRuntime {
             this.#builder.mixerOpacity(destination, 1, incomingOnly ? tween : undefined),
             this.#builder.mixerOpacity(outgoing.slot, 0, tween),
           ];
-      for (const line of lines) {
-        const opacity = await this.#sendDeferredMixer(batch, channel, line, cancel.signal);
-        if (!current()) return rowLeft;
-        if (!opacity.ok || !opacity.onPrimary)
-          return unavailable('The engine refused Fade. The previous input remains selected.');
+      const steps = movement?.steps.map((step, index) => {
+        const phase = { frames: step.frames, easing: 'linear' as const };
+        return {
+          frames: step.frames,
+          lines: [
+            ...(index === 0 ? [this.#builder.mixerOpacity(destination, 1)] : []),
+            ...this.#builder.mixerFit(destination, step.incoming, phase),
+            ...(step.outgoing === undefined
+              ? []
+              : this.#builder.mixerFit(outgoing.slot, step.outgoing, phase)),
+          ],
+        };
+      }) ?? [{ frames, lines: fadeLines }];
+      for (const [index, step] of steps.entries()) {
+        await this.#leaseMixerChannel(batch, channel);
+        if (!current() || this.#hasOrphanedMixer(channel)) return rowLeft;
+        for (const line of step.lines) {
+          const staged = await this.#sendDeferredMixer(batch, channel, line, cancel.signal);
+          if (!current()) return rowLeft;
+          if (!staged.ok || !staged.onPrimary)
+            return unavailable(
+              `The engine refused ${effectName}. The previous input remains selected.`,
+            );
+        }
+        const committed = await this.#commitStagedMixer(batch, { retainOnFailure: true });
+        if (!committed.landed)
+          return unavailable(
+            `The engine could not confirm ${effectName}. Check the programme picture.`,
+          );
+        if (!(await wait(Math.ceil((step.frames + (index === steps.length - 1 ? 1 : 0)) * period))))
+          return rowLeft;
       }
-      const committed = await this.#commitStagedMixer(batch, { retainOnFailure: true });
-      if (!committed.landed)
-        return unavailable('The engine could not confirm Fade. Check the programme picture.');
-      if (!(await wait(Math.ceil((frames + 1) * period)))) return rowLeft;
 
       provisional.restoreOutgoing = true;
       const result = await this.#applyLivePlates(itemId, finalPlan, 'switch', seats, baseline, {
@@ -11367,10 +11504,41 @@ export class CasparRuntime {
         signal: cancel.signal,
         hiddenSlots: new Set(),
         departingInputSlot: adoptionKey(outgoing.slot),
+        ...(phaseTarget !== undefined && { terminalTarget: phaseTarget }),
       });
       settled = result.ok;
+      let mirrored = false;
+      const records = this.#liveLayers.get(itemId);
+      const ownsSettledRow = () =>
+        records !== undefined &&
+        this.#liveLayers.get(itemId) === records &&
+        this.#takeTokens.get(itemId) === takeToken &&
+        this.#reconciler.get(itemId)?.status !== 'exiting';
+      const ownsSettledOutput = () => !cancel.signal.aborted && sameEngine() && ownsSettledRow();
+      if (settled && replica !== undefined && peerChannel !== null) {
+        mirrored = await this.#mirrorSettledInput(
+          replica,
+          outgoing,
+          replacement,
+          priorIncoming,
+          records ?? [],
+          peerChannel,
+          ownsSettledOutput,
+          ownsSettledRow,
+          cancel.signal,
+        );
+      }
       return settled
-        ? result
+        ? {
+            ...result,
+            ...(phaseTarget !== undefined && {
+              inputOutput: {
+                target: phaseTarget,
+                current: ownsSettledOutput,
+                ...(mirrored && replica !== undefined && { replica }),
+              },
+            }),
+          }
         : {
             ...result,
             message: 'The input change could not be completed. Check the programme picture.',
@@ -11387,6 +11555,249 @@ export class CasparRuntime {
         await this.#commitStagedMixer(batch);
         if (this.#frameTransitionInterrupts.get(itemId) === cancel)
           this.#frameTransitionInterrupts.delete(itemId);
+      }
+    }
+  }
+
+  #currentInputReplica(itemId: string, outgoing: LiveLayerRecord): InputSeatReplica | undefined {
+    const page = this.#liveFramePages.get(itemId) ?? this.#livePositionPages.get(itemId);
+    if (
+      page === undefined ||
+      this.#slots.get(itemId) !== page.slot ||
+      this.#templates.heldVersion(itemId) !== page.version ||
+      !this.#hasResidentSeatMirror(page, outgoing)
+    )
+      return undefined;
+    const peer = this.#residentMirror(page);
+    if (peer === undefined) return undefined;
+    const outgoingProducer = this.#observedProducer(peer.session, outgoing.slot);
+    const foreground = this.#foregroundPages.get(itemId);
+    if (outgoingProducer === undefined || peer.foreground !== foreground) return undefined;
+    const result = {
+      page,
+      peer,
+      outgoingProducer,
+      ...(foreground !== undefined && { foreground }),
+    };
+    return this.#inputReplicaHasPages(result) ? result : undefined;
+  }
+
+  #inputReplicaHasPages({ page, peer, foreground }: InputSeatReplica): boolean {
+    const hasHtml = (slot: CommandSlot) =>
+      oscProducerKind(this.#observedProducer(peer.session, slot) ?? '') === 'html';
+    return (
+      this.#residentMirror(page) === peer &&
+      peer.foreground === foreground &&
+      hasHtml(page.slot) &&
+      (foreground === undefined || hasHtml(foreground))
+    );
+  }
+
+  /** After the active effect lands, cut only the exact verified reserve to its settled state. */
+  async #mirrorSettledInput(
+    replica: InputSeatReplica,
+    outgoing: LiveLayerRecord,
+    replacement: LivePlatePlacement,
+    priorIncoming: LiveLayerRecord | undefined,
+    settled: readonly LiveLayerRecord[],
+    peerChannel: number,
+    ownsOutput: () => boolean,
+    ownsRow: () => boolean,
+    signal: AbortSignal,
+  ): Promise<boolean> {
+    const { page, peer } = replica;
+    const { slot } = replacement;
+    const current = () => ownsOutput() && this.#inputReplicaHasPages(replica);
+    const ownsOldPeer = () =>
+      current() && this.#observedProducer(peer.session, outgoing.slot) === replica.outgoingProducer;
+    const next = settled.find((record) => adoptionKey(record.slot) === adoptionKey(slot));
+    const held = settled.find((record) => liveSeatId(record) === liveSeatId(outgoing));
+    if (next === undefined || !ownsOldPeer()) return false;
+    const play = { loop: replacement.playback?.loop === true };
+    const backup = this.#backupPlayFor(replacement, play);
+    const unavailableOnPeer =
+      (this.#adapter.currentPrimary === 'A' && backup.serverB === null) ||
+      placementIsPlayoutRoute(replacement);
+    const send = async (line: string, serverB?: string): Promise<boolean> =>
+      current() &&
+      (
+        await this.#send(line, this.#nextSeq(), 'urgent', {
+          pageReplica: page,
+          signal,
+          ...(serverB !== undefined && { serverB }),
+        })
+      ).ok;
+    const mixer: MixerBatch = {};
+    await this.#leaseMixerChannel(mixer, slot.channel);
+    let newTouched = false;
+    let staged = false;
+    let commitConfirmed = false;
+    const holdOld = [
+      this.#builder.mixerVolume(outgoing.slot, 0),
+      this.#builder.mixerOpacity(outgoing.slot, held === undefined ? 0 : wireOpacityOf(held)),
+      ...(held === undefined ? [] : this.#builder.mixerFit(held.slot, held)),
+    ];
+    const volume = wireVolumeOf(next);
+    const showNew = unavailableOnPeer
+      ? []
+      : [
+          this.#builder.mixerOpacity(slot, wireOpacityOf(next)),
+          this.#builder.mixerVolume(slot, volume, plateVolumeFrames(next.origin, volume)),
+        ];
+    const hideNew = unavailableOnPeer
+      ? []
+      : [this.#builder.mixerOpacity(slot, 0), this.#builder.mixerVolume(slot, 0)];
+    const restoreOld = [
+      ...this.#builder.mixerFit(outgoing.slot, outgoing),
+      this.#builder.mixerOpacity(outgoing.slot, wireOpacityOf(outgoing)),
+      this.#builder.mixerVolume(outgoing.slot, wireVolumeOf(outgoing)),
+    ];
+    const sendMixer = async (line: string): Promise<boolean> =>
+      current() &&
+      (
+        await this.#send(line, this.#nextSeq(), 'urgent', {
+          pageReplica: page,
+          settleReplicaMixer: true,
+          mixerBatch: mixer,
+          signal,
+        })
+      ).ok;
+    const sendBatch = async (lines: readonly string[]): Promise<boolean> => {
+      for (const line of lines)
+        if (!(await sendMixer(this.#builder.deferMixer(line)))) return false;
+      return sendMixer(this.#builder.mixerCommit(slot.channel));
+    };
+    const retire = async (write: (line: string) => Promise<boolean>): Promise<boolean> => {
+      if (held !== undefined) {
+        if (held.transport?.paused !== undefined && outgoing.transport?.paused === undefined)
+          return write(this.#builder.pause(held.slot));
+        return true;
+      }
+      if (this.#observedProducer(peer.session, outgoing.slot) !== replica.outgoingProducer)
+        return true;
+      if (!(await write(this.#builder.out(outgoing.slot)))) return false;
+      await write(this.#builder.mixerClear(outgoing.slot));
+      return true;
+    };
+    const restoreOnPromotedPeer: PendingInputReplicaMixer = {
+      slots: [outgoing.slot, slot],
+      restore: async (target, batch) => {
+        const supportsNext =
+          unavailableOnPeer || this.#observedProducer(target.primaryOnly, slot) !== undefined;
+        const stillOwnsRow = ownsRow();
+        const finish = supportsNext && stillOwnsRow;
+        const keepOld =
+          !finish &&
+          stillOwnsRow &&
+          this.#observedProducer(target.primaryOnly, outgoing.slot) === replica.outgoingProducer;
+        // A promoted engine may finish the confirmed selection while the same row still owns
+        // it. A stopped/replaced row must never reveal a half-written transition.
+        for (const line of [...(keepOld ? restoreOld : holdOld), ...(finish ? showNew : hideNew)]) {
+          const sent = await this.#sendDeferredMixer(batch, slot.channel, line);
+          if (!sent.ok || !sent.onPrimary) return false;
+        }
+        if (!(await this.#commitStagedMixer(batch, { retainOnFailure: true })).landed) return false;
+        const retired =
+          keepOld ||
+          (await retire(async (line) => {
+            const sent = await this.#send(line, this.#nextSeq(), 'urgent', target);
+            return sent.ok && sent.onPrimary;
+          }));
+        if (!retired) {
+          this.#rememberPrimaryMixer(slot.channel, target.primaryOnly, outgoing.slot.layer);
+          return false;
+        }
+        return true;
+      },
+    };
+    try {
+      if (!ownsOldPeer() || this.#orphanedPrimaryMixers.get(peer.session)?.has(slot.channel))
+        return false;
+      if (!unavailableOnPeer) {
+        if (priorIncoming === undefined) {
+          const occupied = await this.#readInputFadeOccupancy(peer.session, peerChannel, signal);
+          if (!ownsOldPeer() || occupied === null || occupied.has(slot.layer)) return false;
+        } else if (!this.#hasResidentSeatMirror(page, priorIncoming)) {
+          return false;
+        }
+        newTouched = true;
+        for (const line of [
+          this.#builder.mixerOpacity(slot, 0),
+          this.#builder.mixerVolume(slot, 0),
+          ...this.#builder.mixerFit(slot, next),
+        ]) {
+          if (!(await send(line))) return false;
+        }
+        if (priorIncoming === undefined) {
+          const played = await send(
+            this.#builder.playSource(slot, replacement.producer, play),
+            backup.serverB ?? undefined,
+          );
+          if (!played) return false;
+          try {
+            await waitForTimer(this.#channelFrameMsFor(slot.channel) * 2, undefined, { signal });
+          } catch (error) {
+            if (!signal.aborted) throw error;
+            return false;
+          }
+        }
+      }
+      if (!ownsOldPeer()) return false;
+      this.#rememberInputReplicaMixer(peer.session, slot.channel, restoreOnPromotedPeer);
+      staged = true;
+      commitConfirmed = await sendBatch([...holdOld, ...showNew]);
+      if (!commitConfirmed) return false;
+      this.#forgetInputReplicaMixer(peer.session, slot.channel);
+      if (!(await retire(send)) && !(await retire(send))) {
+        this.#rememberInputReplicaMixer(peer.session, slot.channel, restoreOnPromotedPeer);
+        process.stderr.write('[caspar-bridge] reserve input retirement remains unconfirmed\n');
+        return false;
+      }
+      if (!current()) return false;
+      if (!unavailableOnPeer)
+        this.#mirroredLiveSeats.set(adoptionKey(slot), {
+          primary: page.session,
+          primaryQueue: page.session.queue,
+          peer: peer.session,
+          peerQueue: peer.queue,
+          peerChannel: peer.channelOnB,
+          producer: next.producer,
+        });
+      return true;
+    } finally {
+      try {
+        // The active engine has already settled. A refusal on the standby keeps its old
+        // feed unless the replacement has been confirmed visible on that exact standby.
+        if (
+          !commitConfirmed &&
+          ownsOldPeer() &&
+          (!staged ||
+            (await sendBatch([...restoreOld, ...hideNew])) ||
+            (await sendBatch([...restoreOld, ...hideNew])))
+        ) {
+          if (staged) this.#forgetInputReplicaMixer(peer.session, slot.channel);
+          if (newTouched && current()) {
+            await send(this.#builder.mixerOpacity(slot, 0));
+            await send(this.#builder.mixerVolume(slot, 0));
+            if (priorIncoming === undefined) {
+              await send(this.#builder.out(slot));
+            } else {
+              for (const line of this.#builder.mixerFit(slot, priorIncoming)) await send(line);
+              await send(this.#builder.mixerOpacity(slot, wireOpacityOf(priorIncoming)));
+            }
+          }
+        }
+      } finally {
+        await this.#commitStagedMixer(mixer);
+        if (
+          peer.session === this.#adapter.primarySession &&
+          this.#pendingInputReplicaMixers.get(peer.session)?.has(slot.channel)
+        )
+          void this.#flushOrphanedStaging();
+        else if (this.#pendingInputReplicaMixers.get(peer.session)?.has(slot.channel))
+          process.stderr.write(
+            '[caspar-bridge] reserve input settlement awaits guarded recovery\n',
+          );
       }
     }
   }
@@ -11421,9 +11832,12 @@ export class CasparRuntime {
     seat.release();
   }
 
-  #inputFadeCleanupPending(channel: number): boolean {
+  #inputFadeCleanupPending(channel?: number): boolean {
     return [...this.#provisionalInputSeats.values()].some(
-      (seat) => seat.slot.channel === channel && seat.cleanupPending,
+      (seat) =>
+        (channel === undefined || seat.slot.channel === channel) &&
+        seat.session === this.#adapter.primarySession &&
+        seat.cleanupPending,
     );
   }
 
@@ -11431,13 +11845,19 @@ export class CasparRuntime {
   async #restoreProvisionalInputSeat(
     key: string,
     seat: ProvisionalInputSeat,
-    batch: MixerBatch = {},
+    providedBatch?: MixerBatch,
   ): Promise<void> {
     const { slot, outgoing, heldBefore, itemId, session } = seat;
     const { channel } = slot;
+    const target = {
+      primaryOnly: session,
+      primaryQueue: providedBatch?.primaryQueue ?? session.queue,
+    };
+    const batch: MixerBatch = providedBatch ?? { ...target };
     await this.#leaseMixerChannel(batch, channel);
     try {
       if (this.#provisionalInputSeats.get(key) !== seat) return;
+      if (seat.scopedMixer && this.#adapter.primarySession !== session) return;
       if (
         this.#adapter.primarySession !== session ||
         !this.#isOwnConfiguredLayer(channel, slot.layer)
@@ -11446,7 +11866,9 @@ export class CasparRuntime {
         this.#releaseProvisionalInputSeat(key, seat);
         return;
       }
-      if (!isLiveState(session.state)) return;
+      if (!isLiveState(session.state) || session.queue !== target.primaryQueue) return;
+      batch.primaryOnly = target.primaryOnly;
+      batch.primaryQueue = target.primaryQueue;
       if (!seat.producerMayExist && !seat.restoreOutgoing && heldBefore === undefined) {
         if ((await this.#commitStagedMixer(batch)).landed)
           this.#releaseProvisionalInputSeat(key, seat);
@@ -11489,16 +11911,24 @@ export class CasparRuntime {
       }
       const committed = await this.#commitStagedMixer(batch, { clearsOrphan: true });
       if (!committed.landed) return;
+      this.#orphanedMixerChannels.delete(channel);
       const cleared = seat.producerMayExist
         ? await this.#clearAfterRefusal(
             slot,
             { outcome: 'unknown', heldBefore: false },
             'plate',
             true,
+            target,
           )
         : true;
       if (cleared) this.#releaseProvisionalInputSeat(key, seat);
     } finally {
+      if (batch.staged === true) {
+        // Never flush a partially restored input into the programme picture.
+        this.#rememberPrimaryMixer(channel, session, outgoing.slot.layer);
+        this.#rememberPrimaryMixer(channel, session, slot.layer);
+        delete batch.staged;
+      }
       await this.#commitStagedMixer(batch);
     }
   }
@@ -13385,13 +13815,15 @@ export class CasparRuntime {
   async #tellPagePlateFits(
     itemId: string,
     slot: CommandSlot,
+    inputOutput?: SettledInputOutput,
   ): Promise<{ ok: boolean; errorCode?: string }> {
     const plateFits = this.#plateFits.get(itemId);
     if (plateFits === undefined || Object.keys(plateFits).length === 0) return { ok: true };
-    const told = await this.#send(
+    const told = await this.#sendSettledInputUpdate(
       this.#builder.update(slot, withCgControl({}, { plates: { ...plateFits } })),
       this.#nextSeq(),
       'urgent',
+      inputOutput,
     );
     return told.ok
       ? { ok: true }
@@ -13399,6 +13831,30 @@ export class CasparRuntime {
           ok: false,
           ...(told.errorCode !== undefined && { errorCode: told.errorCode }),
         };
+  }
+
+  async #sendSettledInputUpdate(
+    line: string,
+    seq: number,
+    priority: 'urgent' | 'normal',
+    output?: SettledInputOutput,
+  ): Promise<{ ok: boolean; errorCode?: string; command?: string }> {
+    if (output !== undefined && !output.current()) {
+      this.#clearExpiry(seq);
+      this.#reconciler.applyAck(seq, false, 'not-live');
+      return { ok: false, errorCode: 'not-live' };
+    }
+    const sent = await this.#send(line, seq, priority, output?.target);
+    const replica = output?.replica;
+    if (
+      replica !== undefined &&
+      sent.ok &&
+      sent.onPrimary &&
+      output?.current() === true &&
+      this.#inputReplicaHasPages(replica)
+    )
+      await this.#send(line, this.#nextSeq(), priority, { pageReplica: replica.page });
+    return sent;
   }
 
   /**
@@ -14243,6 +14699,7 @@ export class CasparRuntime {
     },
   ): Promise<{
     ok: boolean;
+    inputOutput?: SettledInputOutput;
     mixerCommitted?: boolean;
     errorCode?: string;
     message?: string;
@@ -14327,11 +14784,20 @@ export class CasparRuntime {
       page untouched and nothing on air changed; accepted, the seats ride into the apply, which
       reveals them in the switch's one commit instead of `PLAY`ing inside it.
     */
-    if (opts.mode === 'live' && opts.inputTransition?.mode === 'fade') {
-      const faded = await this.#applyInputFade(itemId, slot, plan, opts.inputTransition.durationMs);
-      if (faded !== undefined) {
-        if (faded.ok) this.#plateFits.set(itemId, { ...plan.plateFits });
-        return faded;
+    if (
+      opts.mode === 'live' &&
+      opts.inputTransition !== undefined &&
+      opts.inputTransition.mode !== 'cut'
+    ) {
+      const transitioned = await this.#applyInputTransition(
+        itemId,
+        slot,
+        plan,
+        opts.inputTransition,
+      );
+      if (transitioned !== undefined) {
+        if (transitioned.ok) this.#plateFits.set(itemId, { ...plan.plateFits });
+        return transitioned;
       }
     }
     const releaseClaims = this.#claimSeatLayers(plan);
@@ -14677,6 +15143,25 @@ export class CasparRuntime {
     this.#orphanedPrimaryMixers.set(session, channels);
   }
 
+  #rememberInputReplicaMixer(
+    session: ServerSession,
+    channel: number,
+    pending: PendingInputReplicaMixer,
+  ): void {
+    const channels =
+      this.#pendingInputReplicaMixers.get(session) ?? new Map<number, PendingInputReplicaMixer>();
+    channels.set(channel, pending);
+    this.#pendingInputReplicaMixers.set(session, channels);
+    for (const { layer } of pending.slots) this.#rememberPrimaryMixer(channel, session, layer);
+  }
+
+  #forgetInputReplicaMixer(session: ServerSession, channel: number): void {
+    const channels = this.#pendingInputReplicaMixers.get(session);
+    channels?.delete(channel);
+    if (channels?.size === 0) this.#pendingInputReplicaMixers.delete(session);
+    this.#forgetOrphanedMixer(channel, session);
+  }
+
   #allowReserveLine(session: ServerSession, line: string): boolean {
     const channels = this.#orphanedPrimaryMixers.get(session);
     if (channels === undefined) return true;
@@ -14770,6 +15255,11 @@ export class CasparRuntime {
       const layers = this.#orphanedPrimaryMixers.get(owner)?.get(channel);
       try {
         if (layers === undefined || !isLiveState(owner.state)) continue;
+        const pending = this.#pendingInputReplicaMixers.get(owner)?.get(channel);
+        if (pending !== undefined) {
+          if (await pending.restore(target, batch)) this.#forgetInputReplicaMixer(owner, channel);
+          continue;
+        }
         for (const records of this.#liveLayers.values()) {
           for (const record of records) {
             if (record.slot.channel !== channel || !layers.has(record.slot.layer)) continue;
@@ -14925,11 +15415,12 @@ export class CasparRuntime {
     seat: RefusalSeat,
     what: 'plate' | 'page',
     requirePrimary = false,
+    target?: PrimaryMixerTarget,
   ): Promise<boolean> {
     if (!mayClearAfterRefusal(seat)) return false;
-    const cleared = await this.#send(this.#builder.out(slot), this.#nextSeq(), 'urgent');
+    const cleared = await this.#send(this.#builder.out(slot), this.#nextSeq(), 'urgent', target);
     if (what === 'plate') {
-      await this.#resetPlateMixerIfCleared(slot, cleared);
+      await this.#resetPlateMixerIfCleared(slot, cleared, target);
     } else {
       if (cleared.ok && cleared.onPrimary) this.#markAdoptedOnPrimary(slot);
       await this.#resetEmptiedLayerMixer(slot, cleared);
@@ -14973,7 +15464,15 @@ export class CasparRuntime {
   async #seatPlates(
     requests: readonly SeatRequest[],
     batch: MixerBatch,
-    { signal, requirePrimary = false }: { signal?: AbortSignal; requirePrimary?: boolean } = {},
+    {
+      signal,
+      requirePrimary = false,
+      target,
+    }: {
+      signal?: AbortSignal;
+      requirePrimary?: boolean;
+      target?: PrimaryMixerTarget;
+    } = {},
   ): Promise<Map<string, SeatResult>> {
     const results = new Map<string, SeatResult>();
     if (requests.length === 0) return results;
@@ -15049,7 +15548,7 @@ export class CasparRuntime {
         if (!r.optional) break;
         continue;
       }
-      const sent = await this.#startSeatProducer(r.placement, signal);
+      const sent = await this.#startSeatProducer(r.placement, signal, target);
       // `ROUTE-PLATES-01` — a route names its own outcome when its `LOADBG` landed (`loaded`).
       const outcome = sent.outcome ?? outcomeOf(sent);
       results.set(r.placement.seatId, {
@@ -15122,6 +15621,7 @@ export class CasparRuntime {
   async #startSeatProducer(
     placement: LivePlatePlacement,
     signal?: AbortSignal,
+    target?: PrimaryMixerTarget,
   ): Promise<{
     ok: boolean;
     onPrimary: boolean;
@@ -15137,7 +15637,8 @@ export class CasparRuntime {
     const key = adoptionKey(placement.slot);
     this.#mirroredLiveSeats.delete(key);
     // `ROUTE-PLATES-01` — a Playout route is started by its own pair, here and nowhere else.
-    if (placementIsPlayoutRoute(placement)) return this.#startRouteProducer(placement, signal);
+    if (placementIsPlayoutRoute(placement))
+      return this.#startRouteProducer(placement, signal, target);
     // `MEDIA-PLATES-01` §1.B — a clip whose Loop is on is played with `LOOP`; one that is not freezes
     // on its last frame at its end (2.5.0's ffmpeg producer — nothing more is needed for that).
     const play = { loop: placement.playback?.loop === true };
@@ -15145,6 +15646,7 @@ export class CasparRuntime {
     // cache (never awaited): B's own path, or nothing at all with the reason for the row.
     const backup = this.#backupPlayFor(placement, play);
     const sendOptions = {
+      ...target,
       ...(backup.serverB === undefined ? {} : { serverB: backup.serverB }),
       ...(signal === undefined ? {} : { signal }),
     };
@@ -15242,6 +15744,7 @@ export class CasparRuntime {
   async #startRouteProducer(
     placement: LivePlatePlacement,
     signal?: AbortSignal,
+    target?: PrimaryMixerTarget,
   ): Promise<{
     ok: boolean;
     onPrimary: boolean;
@@ -15260,7 +15763,7 @@ export class CasparRuntime {
       that never came stays `unknown` — the `PLAY` may have promoted it.
     */
     let backgroundLoaded = false;
-    const sendOptions = { routeEpoch, ...(signal !== undefined && { signal }) };
+    const sendOptions = { ...target, routeEpoch, ...(signal !== undefined && { signal }) };
     const afterLoad = (sent: { ok: boolean; errorCode?: string }): SeatOutcome | undefined => {
       if (!backgroundLoaded) return undefined;
       const outcome = outcomeOf(sent);
@@ -16917,7 +17420,7 @@ export class CasparRuntime {
         // The external producer is already switched. This best-effort tell only sizes the
         // authored Bars/colour/image bed for a later loss-of-picture event, so its refusal
         // cannot truthfully turn a landed swap into a refused operator action.
-        const told = await this.#tellPagePlateFits(itemId, itemSlot);
+        const told = await this.#tellPagePlateFits(itemId, itemSlot, applied.inputOutput);
         if (!told.ok) {
           process.stderr.write(
             `[caspar-bridge] live fallback fit refresh failed for ${itemId}: ${told.errorCode ?? 'amcp-error'}\n`,
@@ -18002,9 +18505,10 @@ export class CasparRuntime {
   async #resetPlateMixerIfCleared(
     slot: CommandSlot,
     cleared: { readonly ok: boolean; readonly onPrimary: boolean },
+    target?: PrimaryMixerTarget,
   ): Promise<void> {
     if (!cleared.ok || !cleared.onPrimary) return;
-    await this.#send(this.#builder.mixerClear(slot), this.#nextSeq(), 'urgent');
+    await this.#send(this.#builder.mixerClear(slot), this.#nextSeq(), 'urgent', target);
   }
 
   /**
@@ -19708,6 +20212,7 @@ export class CasparRuntime {
     this.#livePositionPages.clear();
     this.#liveFramePages.clear();
     this.#orphanedPrimaryMixers.clear();
+    this.#pendingInputReplicaMixers.clear();
     this.#pendingPresetArtworkRestores.clear();
     this.#adopted.clear();
     // The last failover described the old server pair — a new era starts clean.
@@ -22060,6 +22565,7 @@ export class CasparRuntime {
       readonly signal?: AbortSignal;
       /** A confirmed Position may be mirrored only to this page's established peer. */
       readonly pageReplica?: ResidentOutputPage;
+      readonly settleReplicaMixer?: true;
       /** A transient effect may write only to the engine session it verified. */
       readonly primaryOnly?: ServerSession;
       readonly primaryQueue?: ServerSession['queue'];
@@ -22241,7 +22747,13 @@ export class CasparRuntime {
         replicaPage !== undefined && peer !== undefined
           ? {
               ...sendOptions,
-              replica: { primary: replicaPage.session, peer: peer.session, queue: peer.queue },
+              replica: {
+                primary: replicaPage.session,
+                peer: peer.session,
+                queue: peer.queue,
+                ...(options.settleReplicaMixer === true && { settleMixer: true }),
+              },
+              ...(options.serverB !== undefined && { serverB: options.serverB }),
             }
           : options.primaryOnly !== undefined
             ? {

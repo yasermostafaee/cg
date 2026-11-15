@@ -5204,7 +5204,7 @@ Send CG commands to the active engine after its external-graphics transfer contr
 
 ## [~] R-119 — Animate on-air live frame placement ⟨priority: high — owner, 2026-11-14⟩ — `openspec/changes/animate-live-frame-placement/`
 
-**What:** Let the operator select Cut, Linear, Ease in, Ease out, Ease in/out, Bounce or Elastic and independently enable Fade for live frame placement and preset switches. Let the operator use Cut or Fade for an input change in the same frame.
+**What:** Let the operator select Cut, Linear, Ease in, Ease out, Ease in/out, Bounce or Elastic and independently enable Fade for live frame placement and preset switches. Let the operator use Cut, Fade, Push or Slide over for an input change in the same frame.
 
 **Why:** Operators need to reframe a running shot without restarting its input or abruptly changing the layout.
 
@@ -5223,6 +5223,8 @@ Send CG commands to the active engine after its external-graphics transfer contr
   safely THEN a configured B alone does not force the active engine to Cut. The reserve receives
   the corresponding settled preset through the Bridge's guarded mirror.
 - WHEN a plate has a mask THEN its operator Crop is unavailable. Its mask and the Crop of an eligible unmasked neighbor remain editable.
-- WHEN swapping one independently seated input in the same plate THEN Cut or Fade applies. An eligible held input or a single preserved mask rectangle can be used by the Fade. If it is refused THEN the working input remains applied.
+- WHEN swapping one independently seated input THEN the operator can use Cut, Fade, Push or Slide over inside that plate, including in a multi-plate layout. Push and Slide over enter from the chosen side and keep the plate, artwork and neighbouring inputs fixed. An eligible held input or a single preserved mask rectangle may be reused. A refused effect keeps the working input applied.
+- WHEN a moving source fill overhangs the programme aperture perpendicular to travel THEN Bridge refuses that direction before writing to the engine and points to an eligible direction, Fade or Cut.
+- WHEN a verified mirror-sync pair is active THEN the engine holding programme runs the input effect and the verified reserve receives the settled input using its own media.
 - WHEN a row preset is confirmed THEN the local PVW follows it unless the operator has chosen another Inspector preset since the row request began. A refused update keeps the existing PVW cue.
 - WHEN the same engine reconnects after a preset effect was interrupted THEN the previous arrangement and its resident artwork recover together, and only temporary arriving seats are muted and cleared.

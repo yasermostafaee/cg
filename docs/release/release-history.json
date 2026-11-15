@@ -657,8 +657,8 @@
           "en": "Position offers Cut, Linear, Ease, Bounce and Elastic with optional Fade. Operators can rehearse preset switches and frame movement in PVW."
         },
         {
-          "fa": "Input effect برای تعویض ورودی داخل همان قاب Cut یا Fade دارد. Fade در قاب مستقل دارای ماسک تک‌ناحیه‌ای و با ورودی آمادهٔ پریست دیگر هم کار می‌کند.",
-          "en": "Input effect offers Cut or Fade inside the same plate, including independent single-region masks and eligible inputs prepared for other presets."
+          "fa": "در Input effect می‌توان ورودی یک قاب را با Cut، Fade، Push یا Slide over عوض کرد. برای Push و Slide over جهت ورود را انتخاب کنید. در چیدمان A/B با Mirror sync، موتور فعال افکت را اجرا می‌کند و رزرو تأییدشده ورودی نهایی را می‌گیرد.",
+          "en": "Input effect offers Cut, Fade, Push and Slide over for one plate. Choose the entry direction for Push or Slide over. With A/B mirror-sync, the active engine applies the effect and the verified reserve receives the settled input."
         },
         {
           "fa": "در تغییر پریست، Fade روی قاب مشترک هم دیده می‌شود. عنوان‌های وابسته هنگام گذار پنهان می‌شوند و در پایان طبق طراحی پریست برمی‌گردند. PVW پس از تغییر موفق روی لایه، نتیجه را بدون اجرای دوبارهٔ افکت نشان می‌دهد.",
@@ -686,6 +686,10 @@
         }
       ],
       "fixes": [
+        {
+          "fa": "بعد از تأیید Clear برای لایهٔ خارج از استک، نشان Play ردیف همان لایه خاموش می‌شود.",
+          "en": "After an untracked layer is cleared, the Play indicator switches off for the corresponding row."
+        },
         {
           "fa": "ورود و خروج قاب‌ها هنگام گذار پریست افکت دارد. قاب مشترک همراه عنوان و ماسک حرکت می‌کند و تنظیم نمایش عنوان در پریست مقصد اعمال می‌شود. Crop input برای قاب ماسک‌دار در دسترس نیست.",
           "en": "Preset transitions animate arriving and departing plates. Shared plates move with their titles and masks and use the destination preset's title visibility. Crop input is unavailable for masked plates."

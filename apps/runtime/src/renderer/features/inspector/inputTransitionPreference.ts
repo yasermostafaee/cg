@@ -1,7 +1,9 @@
 import { useSyncExternalStore } from 'react';
 import {
+  DEFAULT_INPUT_SLIDE_DIRECTION,
   FRAME_TRANSITION_DEFAULT_MS,
   InputTransitionSchema,
+  isInputSlideMode,
   type InputTransition,
 } from '@cg/shared-schema';
 
@@ -47,5 +49,7 @@ export function setInputTransitionPreference(change: Partial<InputTransition>): 
 
 /** Requests that omit the new option keep the same immediate Cut on all bridge versions. */
 export function inputTransitionRequest(): { inputTransition?: InputTransition } {
-  return preference.mode === 'fade' ? { inputTransition: preference } : {};
+  const { mode, durationMs, direction = DEFAULT_INPUT_SLIDE_DIRECTION } = preference;
+  if (mode === 'cut') return {};
+  return { inputTransition: { mode, durationMs, ...(isInputSlideMode(mode) && { direction }) } };
 }

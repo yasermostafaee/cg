@@ -79,8 +79,29 @@ parked for another preset. The working source stays visible during preparation. 
 dissolve precedes the audio handover. If a different preset still needs the outgoing input, the
 terminal mixer change parks and mutes that input for recall. A single independent mask rectangle
 keeps its authored clip while the picture changes. The binding transaction restores previous
-geometry and audio on refusal, including a dropped connection to the same engine. Shared/routed
-input copies, multi-piece masks, and mirrored output require Cut.
+geometry and audio on refusal, including a dropped connection to the same engine.
+
+Push and Slide over use the same prepared-seat ownership and rollback. Both move the new
+picture through a stationary aperture. Push moves the old picture in the same direction until
+it leaves. Slide over keeps the old picture underneath and requires a verified higher seat.
+The selected direction names the entry edge. The mixer clips each translated picture to the
+fixed plate. Preview animates image pixels inside the same aperture and starts only once the
+replacement picture is ready. An eligible single rectangular mask remains in place.
+Shared/routed input copies and multi-piece masks retain the Cut path.
+
+On programme output, a moving picture whose source fill overhangs the aperture across the
+selected direction cannot safely use the moving mixer clip. The native rasterizer's edge
+tolerance increases as that clip narrows. Bridge refuses that direction before preparing a
+seat, leaving the previous input in place. Other eligible directions, Fade and Cut remain
+available.
+
+With a legacy mirror-sync backup, the active session owns the animated source change from
+preroll through terminal geometry and any rollback. Bridge settles a verified reserve directly
+after the active change succeeds. The reserve uses its own channel mapping, free or already
+verified spare layer, and its own media path. Reserve writes use the captured replica and are
+fenced by the same resident page and queues. A failed reserve preparation leaves its previous
+picture in place. A known missing media copy remains absent on the reserve. Other backup
+strategies keep their existing immediate input path.
 
 The Bridge omits mask-owning plates from the crop targets, and the Preview and Inspector use
 the same eligibility. The authored fit and focus continue to guide a masked plate's picture.

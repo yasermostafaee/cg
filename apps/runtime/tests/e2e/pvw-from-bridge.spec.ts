@@ -3051,6 +3051,7 @@ async function exercisePresetSwitch(
   if (preview === 'effects') {
     await verifyLocalPresetEffects(page, row);
     expect(requests).toEqual([]);
+    expect(inputUpdates).toEqual([]);
     expect(handle.runtime.activeLookId(itemId)).toBe('solo');
     expect(
       programmeCommands(beforeChoice).filter((line) => /^(CG |PLAY |CLEAR |MIXER )/.test(line)),
@@ -3467,6 +3468,8 @@ async function verifyLocalPresetEffects(page: Page, row: Locator): Promise<void>
   await expect(frame('solo').locator('[data-cg-pvw-source-dissolve]')).toHaveCount(1);
   await expect(frame('solo').locator('[data-cg-pvw-source-dissolve]')).toHaveCount(0);
 
+  await verifyLocalInputSlides(page, inspector, frame('solo'), picture('solo'));
+
   await inspector.getByRole('combobox', { name: 'Motion' }).selectOption('bounce');
   await pv.getByRole('button', { name: 'Edit frames in Preview' }).click();
   const move = pv.getByRole('button', { name: 'Move frame for extra' });
@@ -3506,6 +3509,107 @@ async function verifyLocalPresetEffects(page: Page, row: Locator): Promise<void>
   await replay.click();
   await expect(body).toHaveAttribute('data-saw-replay-rebound', 'true');
   await expect.poll(() => left('solo')).toBeCloseTo(draftLeft, 1);
+}
+
+async function verifyLocalInputSlides(
+  page: Page,
+  inspector: Locator,
+  plate: Locator,
+  picture: Locator,
+): Promise<void> {
+  const effect = inspector.getByRole('group', { name: 'Input effect' });
+  const input = inspector.getByRole('combobox', { name: 'Input for common in look Solo' });
+  const rect = (locator: Locator) =>
+    locator.evaluate((element) => {
+      const { x, y, width, height } = element.getBoundingClientRect();
+      return { x, y, width, height };
+    });
+
+  for (const { mode, direction, sourceId } of [
+    { mode: 'push', direction: 'right', sourceId: 'common' },
+    { mode: 'slide-over', direction: 'up', sourceId: 'extra' },
+  ] as const) {
+    await effect.getByRole('combobox', { name: 'Input transition' }).selectOption(mode);
+    await effect.getByRole('combobox', { name: 'Input direction' }).selectOption(direction);
+    const before = await rect(plate);
+    await plate.evaluate((element) => {
+      const observer = new MutationObserver(() => {
+        const viewport = element.querySelector<HTMLElement>('[data-cg-pvw-input-motion]');
+        if (viewport === null) return;
+        const animations = viewport.getAnimations({ subtree: true });
+        if (animations.length === 0) return;
+        // Sample the picture the browser really paints at half travel with no wall-clock race.
+        for (const animation of animations) {
+          const duration = animation.effect?.getComputedTiming().duration;
+          if (typeof duration !== 'number') throw new Error('Missing source effect duration');
+          animation.pause();
+          animation.currentTime = duration / 2;
+        }
+        viewport.dataset['sampledMidpoint'] = 'true';
+        observer.disconnect();
+      });
+      observer.observe(element, { childList: true });
+    });
+    await input.click();
+    await page.locator(`[data-picker-input="${sourceId}"]`).click();
+    const viewport = plate.locator(`[data-cg-pvw-input-motion="${mode}"]`);
+    await expect(viewport).toHaveAttribute('data-sampled-midpoint', 'true');
+    await expect(viewport).toHaveCSS('overflow', 'hidden');
+    expect(await rect(plate)).toEqual(before);
+    expect(await rect(viewport)).toEqual(before);
+    const incoming = await rect(viewport.locator('[data-cg-pvw-input-motion-plane="incoming"]'));
+    const outgoing = await rect(viewport.locator('[data-cg-pvw-input-motion-plane="outgoing"]'));
+    if (mode === 'push') {
+      expect(incoming.x - before.x).toBeCloseTo(before.width / 2, 1);
+      expect(outgoing.x - before.x).toBeCloseTo(-before.width / 2, 1);
+      expect(incoming.y).toBeCloseTo(before.y, 1);
+    } else {
+      expect(incoming.y - before.y).toBeCloseTo(-before.height / 2, 1);
+      expect(incoming.x).toBeCloseTo(before.x, 1);
+      expect(outgoing).toEqual(before);
+    }
+
+    const png = await viewport.screenshot();
+    const colors = await page.evaluate(
+      async ({ encoded, horizontal }) => {
+        const bytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
+        const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
+        const canvas = document.createElement('canvas');
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        const context = canvas.getContext('2d');
+        if (context === null) throw new Error('Missing screenshot canvas');
+        context.drawImage(bitmap, 0, 0);
+        // Sample each half clear of the monitor's template-name and input badges.
+        const points = horizontal
+          ? ([
+              [0.25, 0.5],
+              [0.75, 0.5],
+            ] as const)
+          : ([
+              [0.75, 0.25],
+              [0.75, 0.68],
+            ] as const);
+        return points.map(([x, y]) => {
+          const [red = 0, green = 0] = context.getImageData(
+            x * canvas.width,
+            y * canvas.height,
+            1,
+            1,
+          ).data;
+          return red > 180 && green < 80 ? 'red' : green > 180 && red < 80 ? 'green' : 'other';
+        });
+      },
+      { encoded: png.toString('base64'), horizontal: mode === 'push' },
+    );
+    expect(colors).toEqual(['red', 'green']);
+    await viewport.evaluate((element) => {
+      for (const animation of element.getAnimations({ subtree: true })) animation.finish();
+    });
+    await expect(viewport).toHaveCount(0);
+    await expect(picture).toHaveAttribute('data-source-id', sourceId);
+    await expect(picture).toBeVisible();
+  }
 }
 
 test('Auto layout follows the active preset permission and retains separate controls and drafts', async ({

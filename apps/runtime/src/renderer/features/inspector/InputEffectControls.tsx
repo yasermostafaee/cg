@@ -1,8 +1,12 @@
 import { useId, useState } from 'react';
 import {
+  DEFAULT_INPUT_SLIDE_DIRECTION,
   FRAME_TRANSITION_MAX_MS,
   FRAME_TRANSITION_MIN_MS,
+  InputTransitionDirectionSchema,
   InputTransitionSchema,
+  isInputSlideMode,
+  type InputTransitionDirection,
 } from '@cg/shared-schema';
 import { NumericInput } from '../../ui/NumericInput.js';
 import {
@@ -10,9 +14,20 @@ import {
   useInputTransitionPreference,
 } from './inputTransitionPreference.js';
 
+const DIRECTION_LABELS: Record<InputTransitionDirection, string> = {
+  left: 'From left',
+  right: 'From right',
+  up: 'From top',
+  down: 'From bottom',
+};
+
 export function InputEffectControls(): JSX.Element {
   const durationId = useId();
-  const { mode, durationMs } = useInputTransitionPreference();
+  const {
+    mode,
+    durationMs,
+    direction = DEFAULT_INPUT_SLIDE_DIRECTION,
+  } = useInputTransitionPreference();
   const [typedDuration, setTypedDuration] = useState<string | null>(null);
   return (
     <fieldset className="cg-position-effect">
@@ -31,9 +46,31 @@ export function InputEffectControls(): JSX.Element {
         >
           <option value="cut">Cut</option>
           <option value="fade">Fade</option>
+          <option value="push">Push</option>
+          <option value="slide-over">Slide over</option>
         </select>
       </label>
-      {mode === 'fade' && (
+      {isInputSlideMode(mode) && (
+        <label>
+          Direction
+          <select
+            aria-label="Input direction"
+            className="cg-field"
+            value={direction}
+            onChange={(event) => {
+              const next = InputTransitionDirectionSchema.safeParse(event.currentTarget.value);
+              if (next.success) setInputTransitionPreference({ direction: next.data });
+            }}
+          >
+            {InputTransitionDirectionSchema.options.map((value) => (
+              <option key={value} value={value}>
+                {DIRECTION_LABELS[value]}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {mode !== 'cut' && (
         <label htmlFor={durationId}>
           Duration (ms)
           <NumericInput

@@ -3,6 +3,9 @@ import {
   CG_CONTROL_KEY,
   FrameTransitionPhaseSchema,
   FrameTransitionSchema,
+  InputTransitionDirectionSchema,
+  InputTransitionSchema,
+  inputSlideVector,
   frameTransitionPhases,
   frameTransitionProgress,
   presetTransitionDurations,
@@ -145,5 +148,29 @@ describe('live frame transitions', () => {
       move: 6,
       enter: 5,
     });
+  });
+});
+
+describe('input transitions', () => {
+  it('accepts older Fade requests and four unambiguous input entry directions', () => {
+    expect(InputTransitionSchema.parse({ mode: 'fade', durationMs: 400 })).toEqual({
+      mode: 'fade',
+      durationMs: 400,
+    });
+    expect(inputSlideVector()).toEqual({ x: -1, y: 0 });
+    expect(
+      InputTransitionDirectionSchema.options.map((direction) => inputSlideVector(direction)),
+    ).toEqual([
+      { x: -1, y: 0 },
+      { x: 1, y: 0 },
+      { x: 0, y: -1 },
+      { x: 0, y: 1 },
+    ]);
+    expect(
+      InputTransitionSchema.safeParse({ mode: 'push', durationMs: 400, direction: 'top' }).success,
+    ).toBe(false);
+    expect(
+      InputTransitionSchema.parse({ mode: 'slide-over', durationMs: 600, direction: 'down' }),
+    ).toEqual({ mode: 'slide-over', durationMs: 600, direction: 'down' });
   });
 });
