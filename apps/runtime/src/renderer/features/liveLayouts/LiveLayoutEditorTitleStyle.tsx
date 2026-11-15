@@ -215,6 +215,7 @@ export function LiveLayoutEditorTitleStyle({
   raster,
   frameId,
   frameNumber,
+  heading = 'Title style',
   shared,
   override,
   fonts,
@@ -227,11 +228,12 @@ export function LiveLayoutEditorTitleStyle({
   raster: Resolution;
   frameId: string;
   frameNumber: number;
+  heading?: string;
   shared: ControlLiveLayoutTitleStyle | undefined;
   override: ControlLiveLayoutTitleStyle | undefined;
   fonts: readonly ControlLiveLayoutFont[];
   readingFont: boolean;
-  onSharedChange: StyleChange;
+  onSharedChange?: StyleChange;
   onOverrideChange: StyleChange;
   onResetOverride: () => void;
   onAddFont: (file: File, scope: StyleScope) => void;
@@ -239,11 +241,11 @@ export function LiveLayoutEditorTitleStyle({
   const [scope, setScope] = useState<StyleScope>('shared');
   const id = useId();
   const fontInput = useRef<HTMLInputElement>(null);
-  const editFrame = scope === 'frame';
-  const onChange = editFrame ? onOverrideChange : onSharedChange;
+  const sharedSelection = onSharedChange !== undefined && scope === 'shared';
+  const onChange = sharedSelection ? onSharedChange : onOverrideChange;
   const title = controlLiveLayoutTitleGeometry(
     raster,
-    editFrame ? { ...shared, ...override } : shared,
+    sharedSelection ? shared : { ...shared, ...override },
   );
   const fontChoices = [
     ...fonts.map(({ id, name }) => ({ value: controlLiveLayoutFontFamily(id), label: name })),
@@ -268,21 +270,36 @@ export function LiveLayoutEditorTitleStyle({
 
   return (
     <details className="cg-live-layout-title-style">
-      <summary>Title style</summary>
-      <div className="cg-live-layout-title-scope" role="group" aria-label="Title style scope">
-        <Button active={!editFrame} aria-pressed={!editFrame} onClick={() => setScope('shared')}>
-          All frames
-        </Button>
-        <Button active={editFrame} aria-pressed={editFrame} onClick={() => setScope('frame')}>
-          Frame {frameNumber}
-        </Button>
-        {editFrame && override !== undefined && (
-          <Button variant="secondary" onClick={onResetOverride}>
-            Use shared style
+      <summary>{heading}</summary>
+      {onSharedChange !== undefined && (
+        <div className="cg-live-layout-title-scope" role="group" aria-label="Title style scope">
+          <Button
+            active={sharedSelection}
+            aria-pressed={sharedSelection}
+            onClick={() => setScope('shared')}
+          >
+            All frames
           </Button>
-        )}
-      </div>
-      <div key={editFrame ? frameId : scope}>
+          <Button
+            active={!sharedSelection}
+            aria-pressed={!sharedSelection}
+            onClick={() => setScope('frame')}
+          >
+            Frame {frameNumber}
+          </Button>
+          {!sharedSelection && override !== undefined && (
+            <Button variant="secondary" onClick={onResetOverride}>
+              Use shared style
+            </Button>
+          )}
+        </div>
+      )}
+      {onSharedChange === undefined && override !== undefined && (
+        <Button variant="secondary" onClick={onResetOverride}>
+          Use frame style
+        </Button>
+      )}
+      <div key={sharedSelection ? 'shared' : frameId}>
         <div className="cg-live-layout-title-fields">
           {numbers.map(({ label, key, min, max }) => (
             <LiveLayoutEditorNumber
@@ -314,7 +331,7 @@ export function LiveLayoutEditorTitleStyle({
               onChange={(event) => {
                 const file = event.currentTarget.files?.[0];
                 event.currentTarget.value = '';
-                if (file !== undefined) onAddFont(file, scope);
+                if (file !== undefined) onAddFont(file, sharedSelection ? 'shared' : 'frame');
               }}
             />
           </div>

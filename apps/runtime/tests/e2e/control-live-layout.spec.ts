@@ -250,6 +250,9 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await editor.getByRole('button', { name: 'Add preset' }).click();
     await editor.getByRole('textbox', { name: 'Preset name' }).fill('Interview');
     await editor.getByRole('checkbox', { name: 'Frame 3 in preset' }).uncheck();
+    const positionPicker = editor.getByRole('group', { name: 'Position in preset', exact: true });
+    await frame2.click();
+    await positionPicker.getByRole('button', { name: 'Position 1', exact: true }).click();
     await horizontalGap.fill('12');
     await horizontalGap.press('Tab');
     await editor.getByRole('button', { name: 'Add preset' }).click();
@@ -266,6 +269,18 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect(editor.getByRole('checkbox', { name: 'Frame 3 in preset' })).toBeChecked();
     await expect(horizontalGap).toHaveValue('48');
     await expect(verticalGap).toHaveValue('36');
+    await frame2.click();
+    await positionPicker.getByRole('button', { name: 'Position 3', exact: true }).click();
+    await expect(stage.locator('[data-frame-number="2"]')).toHaveAttribute(
+      'data-preset-position',
+      '3',
+    );
+    await expect(stage.locator('[data-frame-number="3"]')).toHaveAttribute(
+      'data-preset-position',
+      '2',
+    );
+    await positionPicker.getByRole('button', { name: 'Position 2', exact: true }).click();
+    await frame1.click();
     const png = await page.evaluate(
       () => document.createElement('canvas').toDataURL('image/png').split(',')[1]!,
     );
@@ -342,6 +357,16 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect(thirdShot).toHaveAttribute('aria-hidden', 'false');
     await expect.poll(() => windowRatios(pictureWindows)).toEqual([50, 50]);
     await editor.getByRole('button', { name: 'Return to Three-up' }).click();
+    await editor.getByRole('textbox', { name: 'Focus label', exact: true }).fill('خبرخوان');
+    await expect(thirdShot.getByRole('button', { name: /Focus frame 3.*خبرخوان/ })).toBeVisible();
+    const additionalText = editor.getByText('Additional text', { exact: true }).locator('..');
+    await additionalText.getByText('Additional text', { exact: true }).click();
+    await additionalText.getByRole('button', { name: 'Add text', exact: true }).click();
+    await additionalText.getByRole('textbox', { name: 'Text 2', exact: true }).fill('سطر دوم 7۸٩');
+    await additionalText.getByText('Text style', { exact: true }).click();
+    await additionalText.getByLabel('Title Y (%)', { exact: true }).fill('43');
+    await expect(thirdShot).toContainText('سطر دوم ۷۸۹');
+    await expect(thirdShot).toContainText('علی نظری ۱۲۳');
     await editor.getByRole('button', { name: 'Save layout' }).click();
     await expect(editor).toBeHidden();
 
@@ -362,6 +387,11 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
       throw new Error('The authored layout package was not retained');
     }
     const authored = listed.controlLiveLayout;
+    expect(authored.presets[1]?.frameIds).toEqual([authored.frames[1]?.id, authored.frames[0]?.id]);
+    expect(authored.frames[2]?.focusAlias).toBe('خبرخوان');
+    expect(authored.frames[2]?.additionalTexts).toMatchObject([
+      { text: 'سطر دوم 7۸٩', style: { yPercent: 43 } },
+    ]);
     expect(authored.titleStyle).toMatchObject({
       widthPercent: 70,
       heightPercent: 13,
@@ -414,6 +444,9 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     const pvw = page.getByRole('region', { name: 'PREVIEW (PVW)' });
     const localFocus = page.getByRole('group', { name: 'Preview Focus', exact: true });
     await expect(localFocus).toBeVisible();
+    await expect(
+      localFocus.getByRole('button', { name: /Focus frame 3 in Preview.*خبرخوان/ }),
+    ).toBeVisible();
     await pvw.getByRole('button', { name: 'PLAY', exact: true }).click();
     const previewFrame = page.frameLocator('iframe[data-rehearsal-frame="panel"]');
     await expect(
@@ -429,6 +462,9 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
       .first();
     await expect(title).toHaveCSS('font-family', /Exo 2/);
     await expect(title).toContainText('٤٥٦');
+    await expect(
+      previewFrame.getByText('سطر دوم ۷۸۹', { exact: true }).filter({ visible: true }),
+    ).toBeVisible();
     const previewStart = engine.receivedCommands().length;
     await localFocus.getByRole('button', { name: 'Focus frame 1 in Preview' }).click();
     await expect(localFocus.getByRole('button', { name: 'Return to Three-up' })).toBeVisible();
@@ -463,6 +499,9 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await row.getByRole('button', { name: /^PLAY/ }).click();
     await expect(row.getByText('ON AIR', { exact: true })).toBeVisible({ timeout: 12_000 });
     const programme = row.getByRole('group', { name: 'Programme Focus', exact: true });
+    await expect(
+      programme.getByRole('button', { name: /Focus frame 3 in Programme.*خبرخوان/ }),
+    ).toBeVisible();
     const active = () => runtime.activeLookId('panel');
     const seats = () =>
       runtime
@@ -515,6 +554,14 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await copy.getByText('Advanced', { exact: true }).click();
     await expect(copy.getByRole('combobox', { name: 'Digits', exact: true })).toHaveValue(
       'persian',
+    );
+    await copy.getByRole('button', { name: 'Edit frame 3', exact: true }).click();
+    await expect(copy.getByRole('textbox', { name: 'Focus label', exact: true })).toHaveValue(
+      'خبرخوان',
+    );
+    await copy.getByText('Additional text', { exact: true }).click();
+    await expect(copy.getByRole('textbox', { name: 'Text 2', exact: true })).toHaveValue(
+      'سطر دوم 7۸٩',
     );
     await copy.getByRole('textbox', { name: 'Layout name' }).fill('Next programme');
     const beforeSave = engine.receivedCommands().length;

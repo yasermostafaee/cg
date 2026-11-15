@@ -44,6 +44,10 @@
           "en": "New live layout has a larger preview and clearly marks the selected frame and preset. Preset gaps are set in Arrange."
         },
         {
+          "fa": "برای هر قاب می‌توان نام کوتاه Focus و چند متن مستقل تعریف کرد. جای هر قاب هم در هر پریست جداگانه قابل انتخاب است.",
+          "en": "Give each frame a Focus label and multiple independent texts. Assign the frame's position separately in each preset."
+        },
+        {
           "fa": "Position برای حرکت قاب و گذار پریست، Cut، Linear، Ease، Bounce و Elastic را همراه Fade اختیاری ارائه می‌کند. افکت پریست و حرکت قاب را می‌توان روی PVW تمرین کرد.",
           "en": "Position offers Cut, Linear, Ease, Bounce and Elastic with optional Fade. Operators can rehearse preset switches and frame movement in PVW."
         },

@@ -18,6 +18,18 @@ CG Control SHALL author multiple frames and presets in the channel's template ca
 - **AND** fonts added to the layout are available to its titles and remain embedded when the layout is saved and reopened
 - **AND** Advanced Digits formats titles and operator edits in Persian, Latin or Arabic-Indic, with Keyboard retaining the entered digits
 
+#### Scenario: Add several texts to one frame
+
+- **WHEN** the operator adds a second text to the frame
+- **THEN** it has its own editable value, placement and overrides
+- **AND** each added text inherits the frame title style and remains bound to the frame in each preset and Focus
+
+#### Scenario: Choose a frame's position and Focus label
+
+- **WHEN** the operator selects another position in the current preset
+- **THEN** the frames in those two positions swap, including while Reverse is enabled
+- **AND** a frame's Focus label is used in both Preview and Programme with its number available when the label is blank
+
 #### Scenario: Author advanced frame geometry
 
 - **WHEN** the operator opens Advanced frame controls

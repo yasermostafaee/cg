@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, type CSSProperties } from 'react';
 import { Maximize2 } from 'lucide-react';
 import {
   DEFAULT_LIVE_FIT_MODE,
+  controlLiveLayoutPresetFrameIds,
   fitPictureToBox,
   frameTransitionPhases,
   inputSlideVector,
@@ -25,7 +26,10 @@ import { liveLayoutArtwork } from '../../theme.js';
 import { fullJpegRect } from '../monitors/pvwPlatePictures.js';
 import type { PvwSourceFrame } from '../monitors/usePvwSourceFrames.js';
 import { SourceLabel } from '../sources/SourceLabel.js';
-import { controlLiveLayoutTitleGeometry } from './controlLiveLayoutCompiler.js';
+import {
+  controlLiveLayoutFrameTexts,
+  controlLiveLayoutTitleGeometry,
+} from './controlLiveLayoutCompiler.js';
 
 type Rects = Readonly<Record<string, LiveSourceRect>>;
 
@@ -252,7 +256,19 @@ export function LiveLayoutEditorPreview({
   const previous = useRef<View>();
   const raster = layout.resolution;
   const full: LiveSourceRect = { x: 0, y: 0, width: raster.width, height: raster.height };
-  const soloFrameId = preset.frameIds.length === 1 ? preset.frameIds[0] : undefined;
+  const frameOrder = controlLiveLayoutPresetFrameIds(preset);
+  const editorFrames = layout.frames.map((input, index) => {
+    const number = String(index + 1);
+    const alias = input.focusAlias?.trim();
+    return {
+      input,
+      number,
+      position: frameOrder.indexOf(input.id) + 1,
+      focusLabel: alias || number,
+      focusName: alias ? `Focus frame ${number}: ${alias}` : `Focus frame ${number}`,
+    };
+  });
+  const soloFrameId = frameOrder.length === 1 ? frameOrder[0] : undefined;
   const activeSingle = focused ?? soloFrameId;
   const visible: Rects = focused === undefined ? geometry : { [focused]: full };
 
@@ -368,8 +384,8 @@ export function LiveLayoutEditorPreview({
         {backgroundUrl !== undefined && layout.background.kind === 'video' && (
           <video src={backgroundUrl} muted loop playsInline autoPlay aria-hidden="true" />
         )}
-        {layout.frames.map((input, index) => {
-          const { id, title, titleStyle, sourceId } = input;
+        {editorFrames.map(({ input, number, position, focusLabel, focusName }) => {
+          const { id, sourceId } = input;
           const activeShot = visible[id] !== undefined;
           const rect = visible[id] ?? geometry[id] ?? full;
           const preview = sourceId === undefined ? undefined : sourceFrames.get(sourceId);
@@ -381,7 +397,8 @@ export function LiveLayoutEditorPreview({
               key={id}
               className="cg-live-layout-shot"
               data-layout-preview-shot={id}
-              data-frame-number={index + 1}
+              data-frame-number={number}
+              data-preset-position={position || undefined}
               data-editing={activeShot && selectedFrameId === id ? '' : undefined}
               aria-hidden={!activeShot}
               style={{
@@ -391,28 +408,21 @@ export function LiveLayoutEditorPreview({
                 zIndex: focused === id ? '3' : '1',
               }}
             >
-              <ShotInput
-                source={preview}
-                input={input}
-                frame={rect}
-                fallback={`Frame ${String(index + 1)}`}
-              />
-              {!titleHidden && title.trim() !== '' && (
-                <ShotTitle
-                  title={title}
-                  style={{ ...layout.titleStyle, ...titleStyle }}
-                  raster={raster}
-                />
-              )}
+              <ShotInput source={preview} input={input} frame={rect} fallback={`Frame ${number}`} />
+              {!titleHidden &&
+                controlLiveLayoutFrameTexts(input, layout.titleStyle).map(({ id, text, style }) => (
+                  <ShotTitle key={id} title={text} style={style} raster={raster} />
+                ))}
               {activeSingle === undefined && activeShot && (
                 <div className="cg-live-layout-focus-action">
                   <Button
                     variant="secondary"
-                    aria-label={`Focus frame ${String(index + 1)}`}
+                    aria-label={focusName}
+                    title={focusName}
                     data-layout-focus={id}
                     onClick={() => onFocus(id)}
                   >
-                    <Icon icon={Maximize2} size={13} /> Focus
+                    <Icon icon={Maximize2} size={13} /> <IsolatedName>{focusLabel}</IsolatedName>
                   </Button>
                 </div>
               )}
@@ -422,20 +432,25 @@ export function LiveLayoutEditorPreview({
       </div>
       {activeSingle !== undefined && layout.frames.length > 1 && (
         <div className="cg-live-layout-switch" role="group" aria-label="Switch focused frame">
-          {layout.frames.map(({ id, title }, index) => (
-            <Button
-              key={id}
-              aria-label={`Focus frame ${String(index + 1)}`}
-              active={activeSingle === id}
-              aria-pressed={activeSingle === id}
-              data-layout-focus={id}
-              onClick={() => {
-                if (id !== activeSingle) onFocus(id);
-              }}
-            >
-              <IsolatedName>{title.trim() || `Frame ${String(index + 1)}`}</IsolatedName>
-            </Button>
-          ))}
+          {[...editorFrames]
+            .sort(
+              (a, b) => (a.position || layout.frames.length) - (b.position || layout.frames.length),
+            )
+            .map(({ input: { id }, focusLabel, focusName }) => (
+              <Button
+                key={id}
+                aria-label={focusName}
+                title={focusName}
+                active={activeSingle === id}
+                aria-pressed={activeSingle === id}
+                data-layout-focus={id}
+                onClick={() => {
+                  if (id !== activeSingle) onFocus(id);
+                }}
+              >
+                <IsolatedName>{focusLabel}</IsolatedName>
+              </Button>
+            ))}
         </div>
       )}
     </>

@@ -68,7 +68,10 @@
 }
 
 .cg-live-layout-preset-choice[aria-pressed='true'],
-.cg-live-layout-frame-choice[aria-pressed='true'] {
+.cg-live-layout-frame-choice[aria-pressed='true'],
+.cg-live-layout-frame-position > .cg-btn[aria-pressed='true'],
+.cg-live-layout-switch > .cg-btn[aria-pressed='true'],
+.cg-live-layout-frame-option-buttons > .cg-btn[aria-pressed='true'] {
   background: var(--r-accent-fill);
   border-color: var(--r-accent);
   color: var(--r-accent-ink);
@@ -76,7 +79,10 @@
 }
 
 .cg-live-layout-preset-choice[aria-pressed='true']:hover:not(:disabled),
-.cg-live-layout-frame-choice[aria-pressed='true']:hover:not(:disabled) {
+.cg-live-layout-frame-choice[aria-pressed='true']:hover:not(:disabled),
+.cg-live-layout-frame-position > .cg-btn[aria-pressed='true']:hover:not(:disabled),
+.cg-live-layout-switch > .cg-btn[aria-pressed='true']:hover:not(:disabled),
+.cg-live-layout-frame-option-buttons > .cg-btn[aria-pressed='true']:hover:not(:disabled) {
   background: var(--r-accent-fill-hover);
   border-color: var(--r-accent);
 }
@@ -237,21 +243,25 @@
   top: 0.28rem;
   right: 0.28rem;
   display: flex;
+  max-width: calc(100% - 0.56rem);
 }
 
 .cg-live-layout-switch,
-.cg-live-layout-arrange-buttons {
+.cg-live-layout-arrange-buttons,
+.cg-live-layout-frame-position {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
 }
 
-.cg-live-layout-switch > .cg-btn {
+.cg-live-layout-switch > .cg-btn,
+.cg-live-layout-focus-action > .cg-btn {
   min-width: 0;
   max-width: 100%;
 }
 
-.cg-live-layout-switch > .cg-btn > span {
+.cg-live-layout-switch > .cg-btn > span,
+.cg-live-layout-focus-action > .cg-btn > span {
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -367,6 +377,21 @@
   min-width: 0;
 }
 
+.cg-live-layout-fields > .cg-live-layout-focus-label,
+.cg-live-layout-position-picker {
+  display: flex;
+  flex-flow: row wrap;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--r-text-secondary);
+  font-size: var(--r-text-sm);
+}
+
+.cg-live-layout-fields > .cg-live-layout-focus-label > .cg-field {
+  flex: 1 1 5rem;
+  width: auto;
+}
+
 .cg-live-layout-fields > .cg-live-layout-toggle,
 .cg-live-layout-effect-controls > .cg-live-layout-toggle {
   flex: 0 0 auto;
@@ -433,10 +458,19 @@
 .cg-live-layout-frame-label {
   display: flex;
   min-width: 0;
+  flex: 1;
   flex-direction: column;
   align-items: flex-start;
   text-align: start;
   gap: 0.1rem;
+}
+
+.cg-live-layout-frame-position-marker {
+  flex: none;
+  color: var(--r-text-secondary);
+  font-size: var(--r-text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .cg-live-layout-frame-label > span {

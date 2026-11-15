@@ -19,6 +19,7 @@ import { buildTemplateLiveSources, sha256Hex, unpack } from '@cg/vcg-format';
 import {
   buildControlLiveLayoutScene,
   compileControlLiveLayout,
+  controlLiveLayoutFrameTexts,
   controlLiveLayoutTitleGeometry,
   createControlLiveLayout,
   labelControlLiveLayoutFieldGroups,
@@ -369,6 +370,100 @@ describe('CG Control authored live layouts', () => {
       expect(elementDigitsOf(title)).toBe(digits);
       expect(fieldDigitsOf(field)).toBe(digits);
     }
+  });
+
+  it('exports independent caption fields and hides every caption together in presets and Focus', async () => {
+    const base = layoutFixture();
+    const layout: ControlLiveLayout = {
+      ...base,
+      titleStyle: { digits: 'persian', align: 'center' },
+      frames: base.frames.map((frame) => {
+        if (frame.id === 'frame-left') {
+          return {
+            ...frame,
+            titleStyle: { color: '#CAAC22', digits: 'latin' },
+            additionalTexts: [
+              { id: 'role', text: 'Expert 24', style: { yPercent: 10, digits: 'arabic-indic' } },
+              { id: 'spare', text: '  ' },
+              { id: 'location', text: 'Studio 8', style: { yPercent: 20 } },
+            ],
+          };
+        }
+        if (frame.id === 'frame-right') {
+          return { ...frame, title: '', additionalTexts: [{ id: 'role', text: 'Correspondent' }] };
+        }
+        return frame;
+      }),
+      presets: base.presets.map((preset) =>
+        preset.id === 'preset-pair'
+          ? { ...preset, hiddenTitles: ['frame-left', 'frame-right'] }
+          : preset,
+      ),
+    };
+    const bytes = await compileControlLiveLayout(layout);
+    expect((await readControlLiveLayout(bytes)).layout).toEqual(layout);
+    const { scene } = await unpack(bytes);
+    const left = layout.frames.find(({ id }) => id === 'frame-left')!;
+    const texts = controlLiveLayoutFrameTexts(left, layout.titleStyle);
+    expect(texts.map(({ fieldId }) => fieldId)).toEqual(['title', 'text-role', 'text-location']);
+    const composition = (id: string) => scene.compositions?.find((entry) => entry.id === id);
+    expect(composition('layout-frame-frame-left')).toMatchObject({
+      layers: [
+        {
+          children: [
+            expect.objectContaining({ type: 'video-placeholder' }),
+            expect.objectContaining({ id: 'frame-left-title', digits: 'latin', zIndex: 1 }),
+            expect.objectContaining({
+              id: texts[1]?.id,
+              digits: 'arabic-indic',
+              align: 'center',
+              color: '#CAAC22',
+              zIndex: 2,
+            }),
+            expect.objectContaining({ id: texts[2]?.id, digits: 'latin', zIndex: 3 }),
+          ],
+        },
+      ],
+      fields: [
+        expect.objectContaining({ id: 'title', default: left.title, digits: 'latin' }),
+        expect.objectContaining({ id: 'text-role', default: 'Expert 24', digits: 'arabic-indic' }),
+        expect.objectContaining({ id: 'text-location', default: 'Studio 8', digits: 'latin' }),
+      ],
+      bindings: texts.map(({ id, fieldId }) => ({
+        fieldId,
+        target: { kind: 'text', elementId: id },
+      })),
+    });
+
+    const presetFrame = (lookId: string, frameId: string) =>
+      composition(`layout-look-${lookId}-contents`)?.layers[0]?.children.find(
+        ({ id }) => id === `instance-${frameId}`,
+      );
+    expect(presetFrame('preset-wide', 'frame-left')).not.toHaveProperty('hiddenTextIds');
+    expect(presetFrame('preset-pair', 'frame-left')).toMatchObject({
+      hiddenTextIds: texts.map(({ id }) => id),
+    });
+    expect(presetFrame('preset-pair', 'frame-right')).toMatchObject({
+      hiddenTextIds: ['layout-text:frame-right:role'],
+    });
+    const focus = controlLiveLayoutFocusLookId('preset-wide', 'frame-left');
+    expect(presetFrame(focus, 'frame-left')).toMatchObject({
+      hiddenTextIds: texts.map(({ id }) => id),
+    });
+    const imported = await produceTemplateDelivery(bytes);
+    expect(imported.template.sharedFrameTitles).toContainEqual(
+      expect.arrayContaining([
+        ['preset-wide', 'frame-left', 'text-role'],
+        ['preset-pair', 'frame-left', 'text-role'],
+        [focus, 'frame-left', 'text-role'],
+      ]),
+    );
+    expect(imported.template.sharedFrameTitles).toContainEqual(
+      expect.arrayContaining([
+        ['preset-wide', 'frame-left', 'text-location'],
+        ['preset-pair', 'frame-left', 'text-location'],
+      ]),
+    );
   });
 
   it.each(['cut', 'fade'] as const)(

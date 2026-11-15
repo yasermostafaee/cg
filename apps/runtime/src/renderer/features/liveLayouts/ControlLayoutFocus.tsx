@@ -2,6 +2,7 @@ import { CornerUpLeft } from 'lucide-react';
 import {
   controlLiveLayoutFocusLookId,
   controlLiveLayoutFocusTarget,
+  controlLiveLayoutPresetFrameIds,
   type ControlLiveLayout,
 } from '@cg/shared-schema';
 import { Button } from '../../ui/Button.js';
@@ -28,8 +29,18 @@ export function ControlLayoutFocus({
     layout.presets.find(({ id }) => id === (focus?.presetId ?? current)) ??
     layout.presets.find(({ id }) => id === layout.defaultPresetId);
   if (preset === undefined) return <></>;
-  const soloFrame =
-    focus?.frameId ?? (preset.frameIds.length === 1 ? preset.frameIds[0] : undefined);
+  const presetFrames = controlLiveLayoutPresetFrameIds(preset);
+  const soloFrame = focus?.frameId ?? (presetFrames.length === 1 ? presetFrames[0] : undefined);
+  const frameIds =
+    soloFrame === undefined
+      ? presetFrames
+      : [
+          ...presetFrames,
+          ...layout.frames.map(({ id }) => id).filter((id) => !presetFrames.includes(id)),
+        ];
+  const frames = new Map(
+    layout.frames.map((frame, index) => [frame.id, { frame, number: index + 1 }]),
+  );
   return (
     <div
       className="cg-control-layout-focus"
@@ -40,22 +51,29 @@ export function ControlLayoutFocus({
       <span className="cg-monitor-fact">
         {target === 'Preview' ? 'Focus · PVW' : 'Focus · PGM'}
       </span>
-      {layout.frames.map((frame, index) => {
-        if (soloFrame === undefined && !preset.frameIds.includes(frame.id)) return null;
-        const active = frame.id === soloFrame;
-        const label = frame.title.trim() || `Frame ${index + 1}`;
+      {frameIds.map((id) => {
+        const option = frames.get(id);
+        if (option === undefined) return null;
+        const { frame, number } = option;
+        const active = id === soloFrame;
+        const alias = frame.focusAlias?.trim() || undefined;
+        const label = frame.title.trim() || `Frame ${number}`;
+        const caption =
+          alias === undefined ? label : alias === label ? alias : `${alias} · ${label}`;
+        const accessibleName = `Focus frame ${number} in ${target}`;
         return (
           <Button
-            key={frame.id}
+            key={id}
             variant="icon"
-            aria-label={`Focus frame ${index + 1} in ${target}`}
+            className={alias === undefined ? undefined : 'cg-control-layout-focus__named'}
+            aria-label={alias === undefined ? accessibleName : `${accessibleName} · ${alias}`}
             aria-pressed={active}
             active={active}
             disabled={disabled || active}
-            title={label}
-            onClick={() => onSelect(controlLiveLayoutFocusLookId(preset.id, frame.id))}
+            title={caption}
+            onClick={() => onSelect(controlLiveLayoutFocusLookId(preset.id, id))}
           >
-            {index + 1}
+            {alias === undefined ? number : <bdi>{alias}</bdi>}
           </Button>
         );
       })}

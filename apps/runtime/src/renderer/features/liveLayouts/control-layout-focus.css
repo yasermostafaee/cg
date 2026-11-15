@@ -16,6 +16,20 @@
   padding: 0;
 }
 
+.cg-control-layout-focus > .cg-control-layout-focus__named {
+  flex: 0 1 auto;
+  width: auto;
+  min-width: 28px;
+  max-width: 8rem;
+  padding-inline: 0.45rem;
+}
+
+.cg-control-layout-focus__named > bdi {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .cg-control-layout-focus__row {
   min-width: 0;
   margin-inline-start: 4px;

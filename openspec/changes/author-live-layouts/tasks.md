@@ -28,4 +28,8 @@
 - [x] Verify hidden Focus titles stay absent in the editor and PVW and restore on Return.
 - [x] Verify the Advanced Digits control in authoring, the VCG and PVW.
 - [x] Verify Advanced frame controls persist fit, permissions and masks for every preset and Focus.
-- [ ] Record the carrying Linux Playwright run for shared title styles and rehearsal.
+- [x] Windows build `bf51a5d7` passed packaged Bridge and Control smoke, retained VCG/font verification, application stamp checks, and installer checksums.
+- [x] Verify a Focus alias and a chosen frame slot in the editor, PVW and PGM.
+- [x] Verify additional text values, styles, and bindings survive Save and Duplicate.
+- [x] Linux Playwright E2E passed for advanced frame controls, titles, fonts, digits and rehearsal on [bf51a5d7](https://github.com/yasermostafaee/cg/actions/runs/43719150757/job/132827188641#step:13:1).
+- [ ] Record the carrying Linux Playwright result after Focus labels and additional text.

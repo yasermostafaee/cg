@@ -25,6 +25,7 @@ import {
 } from './primitives.js';
 
 export const CONTROL_LIVE_LAYOUT_MAX_FRAMES = 4;
+export const CONTROL_LIVE_LAYOUT_FOCUS_ALIAS_MAX_LENGTH = 24;
 export const CONTROL_LIVE_LAYOUT_TITLE_FONTS = ['Vazirmatn', 'Tahoma', 'Arial', 'Exo 2'] as const;
 export const CONTROL_LIVE_LAYOUT_TITLE_SIZE_MIN_PERCENT = 1;
 export const CONTROL_LIVE_LAYOUT_TITLE_SIZE_MAX_PERCENT = 20;
@@ -79,12 +80,27 @@ export const ControlLiveLayoutTitleStyleSchema = z.object({
 });
 export type ControlLiveLayoutTitleStyle = z.infer<typeof ControlLiveLayoutTitleStyleSchema>;
 
+const ControlLiveLayoutAdditionalTextSchema = z.object({
+  id: ControlLiveLayoutFrameIdSchema,
+  text: z.string(),
+  style: ControlLiveLayoutTitleStyleSchema.optional(),
+});
+export type ControlLiveLayoutAdditionalText = z.infer<typeof ControlLiveLayoutAdditionalTextSchema>;
+
 const ControlLiveLayoutFrameSchema = z.object({
   id: ControlLiveLayoutFrameIdSchema,
   /** Catalog id chosen by the operator. The logical frame id stays stable across all presets. */
   sourceId: z.string().min(1).max(64).optional(),
   title: z.string().max(120),
+  /** A short button caption. An empty caption uses the layout's frame number. */
+  focusAlias: z.string().trim().max(CONTROL_LIVE_LAYOUT_FOCUS_ALIAS_MAX_LENGTH).optional(),
   titleStyle: ControlLiveLayoutTitleStyleSchema.optional(),
+  additionalTexts: z
+    .array(ControlLiveLayoutAdditionalTextSchema)
+    .refine((texts) => new Set(texts.map(({ id }) => id)).size === texts.length, {
+      message: 'Text blocks on the same frame must have distinct ids.',
+    })
+    .optional(),
   fitMode: LiveFitModeSchema.optional(),
   operatorMove: z.boolean().optional(),
   operatorPlacement: z.union([z.literal('locked'), LiveFrameResizeSchema]).optional(),
@@ -198,9 +214,12 @@ export const ControlLiveLayoutSchema = z
         issue([...path, 'fontFamily'], 'This title refers to a missing font.');
     };
     validateFont(layout.titleStyle, ['titleStyle']);
-    layout.frames.forEach((frame, index) =>
-      validateFont(frame.titleStyle, ['frames', index, 'titleStyle']),
-    );
+    layout.frames.forEach((frame, index) => {
+      validateFont(frame.titleStyle, ['frames', index, 'titleStyle']);
+      frame.additionalTexts?.forEach((entry, textIndex) =>
+        validateFont(entry.style, ['frames', index, 'additionalTexts', textIndex, 'style']),
+      );
+    });
 
     if (frameIds.size !== layout.frames.length) issue(['frames'], 'Frames must have distinct ids.');
     if (presetIds.size !== layout.presets.length)
@@ -256,15 +275,39 @@ export function controlLiveLayoutSoloTarget(
     : undefined;
 }
 
+/** Frame ids in effective on-screen arrangement order. */
+export function controlLiveLayoutPresetFrameIds({
+  frameIds,
+  reverse,
+}: Pick<ControlLiveLayoutPreset, 'frameIds' | 'reverse'>): string[] {
+  const ids = [...frameIds];
+  return reverse ? ids.reverse() : ids;
+}
+
+/** Swap the requested frame into a zero-based on-screen seat, keeping Reverse unchanged. */
+export function controlLiveLayoutMovePresetFrame(
+  preset: Pick<ControlLiveLayoutPreset, 'frameIds' | 'reverse'>,
+  frameId: string,
+  position: number,
+): string[] | undefined {
+  const ids = controlLiveLayoutPresetFrameIds(preset);
+  const from = ids.indexOf(frameId);
+  const displaced = ids[position];
+  if (from < 0 || displaced === undefined) return undefined;
+  ids[from] = displaced;
+  ids[position] = frameId;
+  return preset.reverse ? ids.reverse() : ids;
+}
+
 /** Output-pixel rectangles. The compiler and authoring preview share this calculation. */
 export function controlLiveLayoutRects(
   { resolution }: { resolution: Resolution },
   preset: ControlLiveLayoutPreset,
 ): Record<string, LiveSourceRect> {
   const { width, height } = resolution;
-  const { frameIds, horizontalGap, verticalGap, arrangement, reverse } = preset;
+  const { horizontalGap, verticalGap, arrangement } = preset;
   const aspect = width / height;
-  const ids = reverse ? [...frameIds].reverse() : frameIds;
+  const ids = controlLiveLayoutPresetFrameIds(preset);
   const count = ids.length;
   const [first, ...guests] = ids;
   const rects = Object.create(null) as Record<string, LiveSourceRect>;

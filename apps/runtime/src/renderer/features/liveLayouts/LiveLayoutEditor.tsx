@@ -1,9 +1,12 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Check, ImagePlus, LayoutGrid, Pencil, Plus, RotateCcw, Trash2, Video } from 'lucide-react';
 import {
+  CONTROL_LIVE_LAYOUT_FOCUS_ALIAS_MAX_LENGTH,
   CONTROL_LIVE_LAYOUT_MAX_FRAMES,
   ControlLiveLayoutSchema,
   controlLiveLayoutFontFamily,
+  controlLiveLayoutMovePresetFrame,
+  controlLiveLayoutPresetFrameIds,
   controlLiveLayoutRects,
   type ControlLiveLayout,
   type ControlLiveLayoutArrangement,
@@ -31,6 +34,7 @@ import { LiveLayoutEditorArrange } from './LiveLayoutEditorArrange.js';
 import { LiveLayoutEditorEffects } from './LiveLayoutEditorEffects.js';
 import { LiveLayoutEditorFrameOptions } from './LiveLayoutEditorFrameOptions.js';
 import { LiveLayoutEditorPreview } from './LiveLayoutEditorPreview.js';
+import { LiveLayoutEditorTexts } from './LiveLayoutEditorTexts.js';
 import { LiveLayoutEditorTitleStyle } from './LiveLayoutEditorTitleStyle.js';
 import './live-layout-editor.css';
 
@@ -102,7 +106,12 @@ export function LiveLayoutEditor({
     () => initialFonts ?? new Map(),
   );
   const [presetId, setPresetId] = useState(initial.defaultPresetId);
-  const [frameId, setFrameId] = useState(initial.frames[0]?.id);
+  const [frameId, setFrameId] = useState(() => {
+    const startingPreset = initial.presets.find(({ id }) => id === initial.defaultPresetId);
+    return startingPreset === undefined
+      ? initial.frames[0]?.id
+      : controlLiveLayoutPresetFrameIds(startingPreset)[0];
+  });
   const [focusId, setFocusId] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [readingMedia, setReadingMedia] = useState(false);
@@ -166,6 +175,8 @@ export function LiveLayoutEditor({
   const frame = layout.frames.find(({ id }) => id === frameId) ?? layout.frames[0];
   if (preset === undefined || frame === undefined) return null;
   const frameNumber = layout.frames.indexOf(frame) + 1;
+  const presetFrameIds = controlLiveLayoutPresetFrameIds(preset);
+  const framePosition = presetFrameIds.indexOf(frame.id);
   const geometry = controlLiveLayoutRects(layout, preset);
   const canSave =
     layout.name.trim() !== '' &&
@@ -189,7 +200,8 @@ export function LiveLayoutEditor({
   function choosePreset(next: ControlLiveLayoutPreset): void {
     setFocusId(undefined);
     setPresetId(next.id);
-    if (frameId === undefined || !next.frameIds.includes(frameId)) setFrameId(next.frameIds[0]);
+    if (frameId === undefined || !next.frameIds.includes(frameId))
+      setFrameId(controlLiveLayoutPresetFrameIds(next)[0]);
   }
 
   function appendPreset(): void {
@@ -332,7 +344,7 @@ export function LiveLayoutEditor({
     }
   }
 
-  async function addFont(file: File, scope: 'shared' | 'frame'): Promise<void> {
+  async function addFont(file: File, scope: 'shared' | 'frame', textId?: string): Promise<void> {
     const revision = ++fontRead.current;
     const target = frame?.id;
     setReadingFont(true);
@@ -352,11 +364,18 @@ export function LiveLayoutEditor({
           : {
               ...current,
               fonts,
-              frames: current.frames.map((candidate) =>
-                candidate.id === target
-                  ? { ...candidate, titleStyle: { ...candidate.titleStyle, fontFamily } }
-                  : candidate,
-              ),
+              frames: current.frames.map((candidate) => {
+                if (candidate.id !== target) return candidate;
+                if (textId === undefined) {
+                  return { ...candidate, titleStyle: { ...candidate.titleStyle, fontFamily } };
+                }
+                return {
+                  ...candidate,
+                  additionalTexts: candidate.additionalTexts?.map((item) =>
+                    item.id === textId ? { ...item, style: { ...item.style, fontFamily } } : item,
+                  ),
+                };
+              }),
             };
       });
     } catch (cause) {
@@ -562,13 +581,20 @@ export function LiveLayoutEditor({
               </div>
               {layout.frames.map((candidate, index) => {
                 const name = candidate.title.trim() || `Frame ${String(index + 1)}`;
-                const included = preset.frameIds.includes(candidate.id);
+                const position = presetFrameIds.indexOf(candidate.id) + 1;
+                const included = position > 0;
+                const positionId = `${fieldsId}-position-${String(index + 1)}`;
                 const picture = sourceFrames.get(candidate.sourceId ?? '')?.jpegBase64;
                 return (
-                  <div className="cg-live-layout-frame-row" key={candidate.id}>
+                  <div
+                    className="cg-live-layout-frame-row"
+                    key={candidate.id}
+                    data-preset-position={included ? position : undefined}
+                  >
                     <Button
                       className="cg-live-layout-frame-choice"
                       aria-label={`Edit frame ${String(index + 1)}`}
+                      aria-describedby={included ? positionId : undefined}
                       active={candidate.id === frame.id}
                       aria-pressed={candidate.id === frame.id}
                       onClick={() => setFrameId(candidate.id)}
@@ -584,6 +610,15 @@ export function LiveLayoutEditor({
                         <IsolatedName>{name}</IsolatedName>
                         <SourceLabel sourceId={candidate.sourceId ?? ''} fallback="Unassigned" />
                       </span>
+                      {included && (
+                        <span
+                          className="cg-live-layout-frame-position-marker"
+                          id={positionId}
+                          title={`Position ${String(position)} in this preset`}
+                        >
+                          Pos {position}
+                        </span>
+                      )}
                       <span className="cg-live-layout-selection-mark" aria-hidden="true">
                         <Icon icon={Pencil} size={14} />
                       </span>
@@ -636,6 +671,52 @@ export function LiveLayoutEditor({
                   onChange={(title) => updateFrame((candidate) => ({ ...candidate, title }))}
                 />
               </label>
+              <label
+                className="cg-live-layout-focus-label"
+                htmlFor={`${fieldsId}-focus-label`}
+                title="Label on Focus buttons"
+              >
+                Focus label
+                <TextInput
+                  id={`${fieldsId}-focus-label`}
+                  value={frame.focusAlias ?? ''}
+                  placeholder={String(frameNumber)}
+                  dir="auto"
+                  maxLength={CONTROL_LIVE_LAYOUT_FOCUS_ALIAS_MAX_LENGTH}
+                  onChange={(focusAlias) =>
+                    updateFrame((candidate) => ({ ...candidate, focusAlias }))
+                  }
+                />
+              </label>
+              {framePosition >= 0 && presetFrameIds.length > 1 && (
+                <div className="cg-live-layout-position-picker">
+                  <span id={`${fieldsId}-position-label`}>Position in preset</span>
+                  <div
+                    className="cg-live-layout-frame-position"
+                    role="group"
+                    aria-labelledby={`${fieldsId}-position-label`}
+                  >
+                    {presetFrameIds.map((_, index) => (
+                      <Button
+                        key={index}
+                        aria-label={`Position ${String(index + 1)}`}
+                        aria-pressed={framePosition === index}
+                        onClick={() => {
+                          if (index === framePosition) return;
+                          const frameIds = controlLiveLayoutMovePresetFrame(
+                            preset,
+                            frame.id,
+                            index,
+                          );
+                          if (frameIds !== undefined) rebuildArrangement({ frameIds });
+                        }}
+                      >
+                        {index + 1}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <LiveLayoutEditorTitleStyle
                 raster={layout.resolution}
                 frameId={frame.id}
@@ -685,6 +766,17 @@ export function LiveLayoutEditor({
                 />
                 Show title in Focus
               </label>
+              <LiveLayoutEditorTexts
+                key={frame.id}
+                layout={layout}
+                frame={frame}
+                frameNumber={frameNumber}
+                readingFont={readingFont}
+                onChange={(additionalTexts) =>
+                  updateFrame((candidate) => ({ ...candidate, additionalTexts }))
+                }
+                onAddFont={(file, textId) => void addFont(file, 'frame', textId)}
+              />
               <LiveLayoutEditorFrameOptions
                 frame={frame}
                 onChange={(patch) => updateFrame((candidate) => ({ ...candidate, ...patch }))}

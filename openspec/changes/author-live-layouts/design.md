@@ -17,7 +17,9 @@ The row's applied look remains the authoritative programme state.
 ## Layout settings
 
 Use the shared Auto layout calculations. Presets store their own arrangement, membership,
-ordering and spacing. Transition settings are shared by all presets in the saved layout.
+ordering and spacing. Selecting a numbered position swaps the two frames in that preset's
+effective order, including while Reverse is enabled. Focus labels live on the shared frame and
+its stable identifier travels on Preview and Programme commands. Transition settings are shared by all presets in the saved layout.
 Cut swaps the already-seated solo plate directly. Fade blends two stationary, full-frame seats
 before committing the target. Both retain the same Return destination.
 
@@ -26,7 +28,8 @@ Position and box dimensions are relative to the frame so titles scale with the f
 The compiler uses the fixed text renderer for glyph positioning, wrapping, borders and shadows.
 Added font files travel with the saved VCG and appear first in the font list. Older frame styles
 remain readable as overrides. Digits use the existing Designer text and binding notation so the
-chosen set applies to the authored title and later operator values.
+chosen set applies to the authored title and later operator values. Each additional text has its
+own stable binding and inherits the frame title style before applying its own override.
 
 Frame fit, Move, Resize and mask settings are authoring options on the shared frame. Compilation
 gives the existing PVW operations the same permissions and mask metadata as a Designer plate.

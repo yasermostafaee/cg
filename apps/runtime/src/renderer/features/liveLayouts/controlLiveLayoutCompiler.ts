@@ -20,8 +20,10 @@ import {
   type ControlLiveLayoutFont,
   type ControlLiveLayoutFrame,
   type ControlLiveLayoutTitleStyle,
+  type DynamicField,
   type Element,
   type ElementBase,
+  type FieldBinding,
   type FrameRate,
   type Layer,
   type LiveSourceRect,
@@ -297,16 +299,38 @@ export function controlLiveLayoutTitleGeometry(
   };
 }
 
-function frameTitle(
+interface FrameText {
+  id: string;
+  fieldId: string;
+  label: string;
+  text: string;
+  style: ControlLiveLayoutTitleStyle;
+}
+
+/** Effective caption blocks in paint order, shared by the editor and the compiled artwork. */
+export function controlLiveLayoutFrameTexts(
   frame: ControlLiveLayoutFrame,
-  resolution: Resolution,
-  titleStyle: ControlLiveLayoutTitleStyle | undefined,
-): TextElement {
-  const title = controlLiveLayoutTitleGeometry(resolution, { ...titleStyle, ...frame.titleStyle });
+  layoutTitleStyle?: ControlLiveLayoutTitleStyle,
+): FrameText[] {
+  const style = { ...layoutTitleStyle, ...frame.titleStyle };
+  return [
+    { id: frame.id + '-title', fieldId: 'title', label: 'Title', text: frame.title, style },
+    ...(frame.additionalTexts ?? []).map((entry, index) => ({
+      id: `layout-text:${frame.id}:${entry.id}`,
+      fieldId: 'text-' + entry.id,
+      label: 'Text ' + String(index + 2),
+      text: entry.text,
+      style: { ...style, ...entry.style },
+    })),
+  ].filter(({ text }) => text.trim() !== '');
+}
+
+function frameTitle(block: FrameText, resolution: Resolution, zIndex: number): TextElement {
+  const title = controlLiveLayoutTitleGeometry(resolution, block.style);
   return {
-    ...elementBase(frame.id + '-title', 'Title', title, 1),
+    ...elementBase(block.id, block.label, title, zIndex),
     type: 'text',
-    text: frame.title,
+    text: block.text,
     font: {
       family: title.fontFamily,
       weight: title.fontWeight,
@@ -364,23 +388,31 @@ function frameComposition(
     editorBackdrop: 'transparent',
     layers: [layer(frame.id + '-layer', 'Frame', children)],
   };
-  if (frame.title.trim() === '') return base;
-  const title = frameTitle(frame, resolution, titleStyle);
-  children.push(title);
+  const captions = controlLiveLayoutFrameTexts(frame, titleStyle).map((block, index) => ({
+    block,
+    element: frameTitle(block, resolution, index + 1),
+  }));
+  if (captions.length === 0) return base;
+  children.push(...captions.map(({ element }) => element));
   return {
     ...base,
-    fields: [
-      {
-        id: 'title',
+    fields: captions.map(
+      ({ block, element }): DynamicField => ({
+        id: block.fieldId,
         type: 'text',
-        label: 'Title',
-        default: frame.title,
+        label: block.label,
+        default: block.text,
         required: false,
         direction: 'auto',
-        ...(title.digits !== undefined && { digits: title.digits }),
-      },
-    ],
-    bindings: [{ fieldId: 'title', target: { kind: 'text', elementId: title.id } }],
+        ...(element.digits !== undefined && { digits: element.digits }),
+      }),
+    ),
+    bindings: captions.map(
+      ({ block, element }): FieldBinding => ({
+        fieldId: block.fieldId,
+        target: { kind: 'text', elementId: element.id },
+      }),
+    ),
   };
 }
 
@@ -389,9 +421,13 @@ export function buildControlLiveLayoutScene(authored: ControlLiveLayout): Scene 
   const layout = ControlLiveLayoutSchema.parse(authored);
   const { resolution, frames } = layout;
   const fullFrame = { x: 0, y: 0, ...resolution };
-  const compositions = frames.map((frame) =>
-    frameComposition(frame, resolution, fullFrame, layout.titleStyle),
+  const frameCompositions = new Map(
+    frames.map((frame) => [
+      frame.id,
+      frameComposition(frame, resolution, fullFrame, layout.titleStyle),
+    ]),
   );
+  const compositions = [...frameCompositions.values()];
   const rootInstances: CompositionElement[] = [];
   const looks: Look[] = [];
 
@@ -406,13 +442,19 @@ export function buildControlLiveLayoutScene(authored: ControlLiveLayout): Scene 
     const children = frames.flatMap((frame, index): CompositionElement[] => {
       const rect = rects[frame.id];
       if (rect === undefined) return [];
-      const hidden = frame.title.trim() !== '' && hiddenTitleIds.includes(frame.id);
+      const hiddenTextIds = hiddenTitleIds.includes(frame.id)
+        ? frameCompositions
+            .get(frame.id)
+            ?.layers[0]?.children.flatMap((element) =>
+              element.type === 'text' ? [element.id] : [],
+            )
+        : undefined;
       return [
         {
           ...elementBase('instance-' + frame.id, frame.id, rect, index),
           type: 'composition',
           compositionId: 'layout-frame-' + frame.id,
-          ...(hidden && { hiddenTextIds: [frame.id + '-title'] }),
+          ...(hiddenTextIds !== undefined && hiddenTextIds.length > 0 && { hiddenTextIds }),
         },
       ];
     });
