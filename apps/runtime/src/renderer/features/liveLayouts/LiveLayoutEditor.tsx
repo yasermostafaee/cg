@@ -17,7 +17,9 @@ import {
   CONTROL_LIVE_LAYOUT_MAX_FRAMES,
   ControlLiveLayoutSchema,
   LiveRevealRectSchema,
+  controlLiveLayoutAttachments,
   controlLiveLayoutFontFamily,
+  controlLiveLayoutFrameAttachments,
   controlLiveLayoutMovePresetFrame,
   controlLiveLayoutPresetFrameIds,
   controlLiveLayoutRects,
@@ -52,6 +54,7 @@ import { LiveLayoutEditorEffects } from './LiveLayoutEditorEffects.js';
 import { LiveLayoutEditorFrameAttachments } from './LiveLayoutEditorFrameAttachments.js';
 import { LiveLayoutEditorFrameOptions } from './LiveLayoutEditorFrameOptions.js';
 import {
+  promoteFrameAttachments,
   readControlLiveLayoutFrameAttachment,
   type ControlLiveLayoutFrameAttachmentSource,
 } from './controlLiveLayoutFrameAttachments.js';
@@ -140,7 +143,9 @@ export function LiveLayoutEditor({
   onSave,
   onClose,
 }: LiveLayoutEditorProps): JSX.Element | null {
-  const [layout, setLayout] = useState(initial);
+  const [layout, setLayout] = useState<ControlLiveLayout>(() =>
+    mode === 'create' ? { ...initial, frames: [], presets: [], defaultPresetId: '' } : initial,
+  );
   const [asset, setAsset] = useState(initialBackground);
   const [fontAssets, setFontAssets] = useState<ReadonlyMap<string, Blob>>(
     () => initialFonts ?? new Map(),
@@ -148,11 +153,11 @@ export function LiveLayoutEditor({
   const [attachmentAssets, setAttachmentAssets] = useState(
     () => initialAttachments ?? new Map<string, ControlLiveLayoutFrameAttachmentSource>(),
   );
-  const [presetId, setPresetId] = useState(initial.defaultPresetId);
+  const [presetId, setPresetId] = useState<string | undefined>(layout.defaultPresetId || undefined);
   const [frameId, setFrameId] = useState(() => {
-    const startingPreset = initial.presets.find(({ id }) => id === initial.defaultPresetId);
+    const startingPreset = layout.presets.find(({ id }) => id === layout.defaultPresetId);
     return startingPreset === undefined
-      ? initial.frames[0]?.id
+      ? layout.frames[0]?.id
       : controlLiveLayoutPresetFrameIds(startingPreset)[0];
   });
   const [focusId, setFocusId] = useState<string>();
@@ -225,16 +230,16 @@ export function LiveLayoutEditor({
 
   const preset = layout.presets.find(({ id }) => id === presetId) ?? layout.presets[0];
   const frame = layout.frames.find(({ id }) => id === frameId) ?? layout.frames[0];
-  if (preset === undefined || frame === undefined) return null;
-  const frameNumber = layout.frames.indexOf(frame) + 1;
-  const presetFrameIds = controlLiveLayoutPresetFrameIds(preset);
-  const framePosition = presetFrameIds.indexOf(frame.id);
-  const geometry = controlLiveLayoutRects(layout, preset);
+  const frameNumber = frame === undefined ? 0 : layout.frames.indexOf(frame) + 1;
+  const presetFrameIds = preset === undefined ? [] : controlLiveLayoutPresetFrameIds(preset);
+  const framePosition = frame === undefined ? -1 : presetFrameIds.indexOf(frame.id);
+  const geometry: ReturnType<typeof controlLiveLayoutRects> =
+    preset === undefined ? {} : controlLiveLayoutRects(layout, preset);
   const frameShown =
-    focusId === undefined ? geometry[frame.id] !== undefined : focusId === frame.id;
-  const frameAttachments = (preset.frameAttachments ?? []).filter(
-    ({ frameId }) => frameId === frame.id,
-  );
+    frame !== undefined &&
+    (focusId === undefined ? geometry[frame.id] !== undefined : focusId === frame.id);
+  const frameAttachments =
+    frame === undefined ? [] : controlLiveLayoutFrameAttachments(layout, preset, frame.id);
   const activeAttachment =
     frameAttachments.find(({ id }) => id === attachmentId) ?? frameAttachments[0];
   const editingAttachment =
@@ -243,17 +248,23 @@ export function LiveLayoutEditor({
     attachmentEditing &&
     activeAttachment !== undefined &&
     activeAttachment.id === attachmentId;
-  const maskWindows = frame.liveMask?.rects ?? [];
+  const maskWindows = frame?.liveMask?.rects ?? [];
   const maskIndex = Math.min(
-    maskSelection?.frameId === frame.id ? maskSelection.index : 0,
+    maskSelection !== undefined && maskSelection.frameId === frame?.id ? maskSelection.index : 0,
     maskWindows.length - 1,
   );
   const canEditMask = maskWindows.length > 0 && frameShown;
-  const editingMask = canEditMask && maskEditFrameId === frame.id && !busy;
+  const editingMask = canEditMask && maskEditFrameId === frame?.id && !busy;
   const canSave =
     layout.name.trim() !== '' &&
-    layout.presets.every(({ name }) => name.trim() !== '') &&
-    Object.keys(geometry).length === preset.frameIds.length;
+    layout.frames.length > 0 &&
+    layout.presets.length > 0 &&
+    layout.presets.every(
+      (candidate) =>
+        candidate.name.trim() !== '' &&
+        candidate.frameIds.length > 0 &&
+        Object.keys(controlLiveLayoutRects(layout, candidate)).length === candidate.frameIds.length,
+    );
 
   function updatePreset(changes: Partial<ControlLiveLayoutPreset>): void {
     setLayout((current) => ({
@@ -278,19 +289,30 @@ export function LiveLayoutEditor({
   }
 
   function appendPreset(): void {
-    if (preset === undefined) return;
-    const next = {
-      ...preset,
+    const next: ControlLiveLayoutPreset = {
+      ...(preset ?? {
+        frameIds: layout.frames.map(({ id }) => id),
+        arrangement: 'side-by-side',
+        horizontalGap: initial.presets[0]?.horizontalGap ?? 0,
+        verticalGap: initial.presets[0]?.verticalGap ?? 0,
+        reverse: false,
+        hiddenTitles: [],
+        hiddenFocusTitles: [],
+      }),
       id: `preset-${uuid()}`,
       name: nextPresetName(layout.presets),
-      ...(preset.frameAttachments !== undefined && {
+      ...(preset?.frameAttachments !== undefined && {
         frameAttachments: preset.frameAttachments.map((attachment) => ({
           ...attachment,
           id: uuid(),
         })),
       }),
     };
-    setLayout((current) => ({ ...current, presets: [...current.presets, next] }));
+    setLayout((current) => ({
+      ...current,
+      presets: [...current.presets, next],
+      defaultPresetId: current.defaultPresetId || next.id,
+    }));
     choosePreset(next);
     requestAnimationFrame(() => {
       presetName.current?.focus();
@@ -299,20 +321,26 @@ export function LiveLayoutEditor({
   }
 
   function deletePreset(): void {
-    if (preset === undefined || layout.presets.length <= 1) return;
+    if (preset === undefined || (mode !== 'create' && layout.presets.length <= 1)) return;
     const presets = layout.presets.filter(({ id }) => id !== preset.id);
     const next = presets[Math.min(layout.presets.indexOf(preset), presets.length - 1)];
-    if (next === undefined) return;
     setLayout((current) => ({
       ...current,
       presets,
-      defaultPresetId: current.defaultPresetId === preset.id ? next.id : current.defaultPresetId,
+      defaultPresetId:
+        current.defaultPresetId === preset.id ? (next?.id ?? '') : current.defaultPresetId,
     }));
-    choosePreset(next);
+    if (next === undefined) {
+      setPresetId(undefined);
+      setFocusId(undefined);
+      setAttachmentEditing(false);
+    } else {
+      choosePreset(next);
+    }
   }
 
   function appendFrame(): void {
-    if (preset === undefined || layout.frames.length >= CONTROL_LIVE_LAYOUT_MAX_FRAMES) return;
+    if (layout.frames.length >= CONTROL_LIVE_LAYOUT_MAX_FRAMES) return;
     const id = `frame-${uuid()}`;
     setFocusId(undefined);
     setFrameId(id);
@@ -323,7 +351,7 @@ export function LiveLayoutEditor({
         { id, title: '', operatorMove: false, operatorPlacement: 'locked' },
       ],
       presets: current.presets.map((candidate) => {
-        if (candidate.id !== preset.id) return candidate;
+        if (candidate.id !== preset?.id) return candidate;
         const frameIds = [...candidate.frameIds, id];
         return {
           ...candidate,
@@ -336,18 +364,21 @@ export function LiveLayoutEditor({
   }
 
   function deleteFrame(): void {
-    if (frame === undefined || layout.frames.length <= 1) return;
+    if (frame === undefined || (mode !== 'create' && layout.frames.length <= 1)) return;
     const frames = layout.frames.filter(({ id }) => id !== frame.id);
     const next = frames[Math.min(layout.frames.indexOf(frame), frames.length - 1)];
-    if (next === undefined) return;
     setFocusId(undefined);
-    setFrameId(next.id);
+    setFrameId(next?.id);
     setLayout((current) => ({
       ...current,
       frames,
+      ...(current.frameAttachments !== undefined && {
+        frameAttachments: current.frameAttachments.filter(({ frameId }) => frameId !== frame.id),
+      }),
       presets: current.presets.map((candidate) => {
         const remaining = candidate.frameIds.filter((id) => id !== frame.id);
-        const frameIds = remaining.length === 0 ? [next.id] : remaining;
+        const frameIds =
+          remaining.length === 0 && next !== undefined && mode !== 'create' ? [next.id] : remaining;
         return {
           ...candidate,
           frameIds,
@@ -365,7 +396,8 @@ export function LiveLayoutEditor({
   }
 
   function includeFrame(id: string, included: boolean): void {
-    if (preset === undefined || (!included && preset.frameIds.length === 1)) return;
+    if (preset === undefined || (mode !== 'create' && !included && preset.frameIds.length === 1))
+      return;
     const frameIds = included
       ? [...preset.frameIds, id]
       : preset.frameIds.filter((value) => value !== id);
@@ -380,24 +412,32 @@ export function LiveLayoutEditor({
   }
 
   function changeAttachments(
+    id: string,
     change: (
       attachments: readonly ControlLiveLayoutFrameAttachment[],
     ) => ControlLiveLayoutFrameAttachment[],
   ): void {
+    if (frame === undefined) return;
     const currentPresetId = preset?.id;
-    setLayout((current) => ({
-      ...current,
-      presets: current.presets.map((candidate) =>
-        candidate.id === currentPresetId
-          ? { ...candidate, frameAttachments: change(candidate.frameAttachments ?? []) }
-          : candidate,
-      ),
-    }));
+    const currentFrameId = frame.id;
+    setLayout((current) => {
+      const promoted = promoteFrameAttachments(current, currentFrameId, attachmentAssets, id);
+      if (promoted.frameAttachments?.some((attachment) => attachment.id === id) === true)
+        return { ...promoted, frameAttachments: change(promoted.frameAttachments) };
+      const changed = {
+        ...promoted,
+        presets: promoted.presets.map((candidate) =>
+          candidate.id === currentPresetId
+            ? { ...candidate, frameAttachments: change(candidate.frameAttachments ?? []) }
+            : candidate,
+        ),
+      };
+      return promoteFrameAttachments(changed, currentFrameId, attachmentAssets);
+    });
   }
 
   async function importAttachment(file: File): Promise<void> {
-    if (preset === undefined || frame === undefined || !preset.frameIds.includes(frame.id)) return;
-    const { id: presetId } = preset;
+    if (frame === undefined) return;
     const { id: frameId } = frame;
     const request = ++attachmentRead.current;
     setReadingAttachment(true);
@@ -407,9 +447,13 @@ export function LiveLayoutEditor({
       if (request !== attachmentRead.current) return;
       if (
         source.plate !== undefined &&
-        frameAttachments.some(({ sourceId }) => attachmentAssets.get(sourceId)?.plate !== undefined)
+        controlLiveLayoutAttachments(layout).some(
+          (attachment) =>
+            attachment.frameId === frameId &&
+            attachmentAssets.get(attachment.sourceId)?.plate !== undefined,
+        )
       )
-        throw new Error('This frame already has a graphic with a live input in this preset.');
+        throw new Error('This frame already has a graphic with a live input.');
       const attachment: ControlLiveLayoutFrameAttachment = {
         id: uuid(),
         frameId,
@@ -422,17 +466,14 @@ export function LiveLayoutEditor({
         rect: { x: 0.125, y: 0.125, width: 0.75, height: 0.75 },
       };
       setAttachmentAssets((current) => new Map(current).set(source.id, source));
-      setLayout((current) => ({
-        ...current,
-        presets: current.presets.map((candidate) =>
-          candidate.id === presetId && candidate.frameIds.includes(frameId)
-            ? {
-                ...candidate,
-                frameAttachments: [...(candidate.frameAttachments ?? []), attachment],
-              }
-            : candidate,
-        ),
-      }));
+      setLayout((current) => {
+        if (!current.frames.some(({ id }) => id === frameId)) return current;
+        const promoted = promoteFrameAttachments(current, frameId, attachmentAssets);
+        return {
+          ...promoted,
+          frameAttachments: [...(promoted.frameAttachments ?? []), attachment],
+        };
+      });
       setAttachmentEditing(false);
       setAttachmentId(attachment.id);
     } catch (cause) {
@@ -445,7 +486,7 @@ export function LiveLayoutEditor({
 
   function placeAttachment(id: string, rect: LiveRevealRect): void {
     if (!LiveRevealRectSchema.safeParse(rect).success) return;
-    changeAttachments((attachments) =>
+    changeAttachments(id, (attachments) =>
       attachments.map((attachment) =>
         attachment.id === id && !sameLiveMaskRect(attachment.rect, rect)
           ? { ...attachment, rect }
@@ -455,7 +496,7 @@ export function LiveLayoutEditor({
   }
 
   function reorderAttachment(id: string, direction: -1 | 1): void {
-    changeAttachments((attachments) => {
+    changeAttachments(id, (attachments) => {
       const next = [...attachments];
       const slots = attachments.flatMap((attachment, index) =>
         attachment.frameId === frame?.id ? [{ attachment, index }] : [],
@@ -678,7 +719,7 @@ export function LiveLayoutEditor({
               </>
             )}
             <Button
-              variant="secondary"
+              variant="neutral"
               aria-label="Choose background image or video"
               onClick={() => mediaPick.current?.click()}
             >
@@ -708,8 +749,8 @@ export function LiveLayoutEditor({
               <Button
                 key={candidate.id}
                 className="cg-live-layout-preset-choice"
-                active={candidate.id === preset.id}
-                aria-pressed={candidate.id === preset.id}
+                active={candidate.id === preset?.id}
+                aria-pressed={candidate.id === preset?.id}
                 onClick={() => choosePreset(candidate)}
               >
                 <span className="cg-live-layout-selection-mark" aria-hidden="true">
@@ -720,7 +761,7 @@ export function LiveLayoutEditor({
                 </IsolatedName>
               </Button>
             ))}
-            <Button variant="add" onClick={appendPreset}>
+            <Button variant="neutral" onClick={appendPreset}>
               <Icon icon={Plus} size={15} /> Add preset
             </Button>
             <Button
@@ -728,7 +769,7 @@ export function LiveLayoutEditor({
               variant="icon"
               title="Delete preset"
               aria-label="Delete preset"
-              disabled={layout.presets.length <= 1}
+              disabled={preset === undefined || (mode !== 'create' && layout.presets.length <= 1)}
               onClick={deletePreset}
             >
               <Icon icon={Trash2} size={15} />
@@ -739,23 +780,23 @@ export function LiveLayoutEditor({
             <TextInput
               id={`${fieldsId}-preset-name`}
               ref={presetName}
-              value={preset.name}
+              value={preset?.name ?? ''}
+              disabled={preset === undefined}
               dir="auto"
               maxLength={80}
               onChange={(name) => updatePreset({ name })}
             />
-            {preset.id === layout.defaultPresetId ? (
-              <span className="cg-live-layout-starting-preset">
-                <Icon icon={Flag} size={13} /> Starting preset
-              </span>
-            ) : (
-              <Button
-                variant="secondary"
-                onClick={() => setLayout((current) => ({ ...current, defaultPresetId: preset.id }))}
-              >
-                <Icon icon={Flag} size={13} /> Start with this preset
-              </Button>
-            )}
+            <Button
+              variant="neutral"
+              aria-pressed={preset?.id === layout.defaultPresetId}
+              disabled={preset === undefined || preset.id === layout.defaultPresetId}
+              onClick={() => {
+                if (preset !== undefined)
+                  setLayout((current) => ({ ...current, defaultPresetId: preset.id }));
+              }}
+            >
+              <Icon icon={Flag} size={13} /> Start with this preset
+            </Button>
           </div>
         </div>
 
@@ -765,52 +806,68 @@ export function LiveLayoutEditor({
               <h3>
                 <Icon icon={Monitor} size={16} /> Preview · PVW
               </h3>
-              {focusId !== undefined && (
-                <Button ref={returnButton} variant="secondary" onClick={returnToPreset}>
+              {focusId !== undefined && preset !== undefined && (
+                <Button ref={returnButton} variant="neutral" onClick={returnToPreset}>
                   <Icon icon={RotateCcw} size={15} /> Return to{' '}
                   <IsolatedName>{preset.name || 'preset'}</IsolatedName>
                 </Button>
               )}
             </div>
-            <LiveLayoutEditorPreview
-              channel={channel}
-              layout={layout}
-              preset={preset}
-              geometry={geometry}
-              selectedFrameId={frame.id}
-              focused={focusId}
-              backgroundUrl={assetUrl}
-              sourceFrames={sourceFrames}
-              attachmentSources={attachmentAssets}
-              onFocus={focusFrame}
-              placementEditor={
-                editingMask ? (
-                  <LiveLayoutEditorRectOverlay
-                    key={'mask:' + frame.id}
-                    kind="mask"
-                    rects={maskWindows}
-                    selectedIndex={maskIndex}
-                    onSelect={selectMaskWindow}
-                    onChange={updateMaskWindow}
-                  />
-                ) : editingAttachment ? (
-                  <LiveLayoutEditorRectOverlay
-                    key={'graphic:' + activeAttachment.id}
-                    kind="graphic"
-                    rects={[activeAttachment.rect]}
-                    selectedIndex={0}
-                    onSelect={() => setAttachmentId(activeAttachment.id)}
-                    onChange={(_, rect) => placeAttachment(activeAttachment.id, rect)}
-                  />
-                ) : undefined
-              }
-            />
-            <div className="cg-live-layout-preview-controls">
-              <LiveLayoutEditorArrange
+            {preset !== undefined && frame !== undefined && presetFrameIds.length > 0 ? (
+              <LiveLayoutEditorPreview
+                channel={channel}
                 layout={layout}
                 preset={preset}
-                onChange={rebuildArrangement}
+                geometry={geometry}
+                selectedFrameId={frame.id}
+                focused={focusId}
+                backgroundUrl={assetUrl}
+                sourceFrames={sourceFrames}
+                attachmentSources={attachmentAssets}
+                onFocus={focusFrame}
+                placementEditor={
+                  editingMask ? (
+                    <LiveLayoutEditorRectOverlay
+                      key={'mask:' + frame.id}
+                      kind="mask"
+                      rects={maskWindows}
+                      selectedIndex={maskIndex}
+                      onSelect={selectMaskWindow}
+                      onChange={updateMaskWindow}
+                    />
+                  ) : editingAttachment ? (
+                    <LiveLayoutEditorRectOverlay
+                      key={'graphic:' + activeAttachment.id}
+                      kind="graphic"
+                      rects={[activeAttachment.rect]}
+                      selectedIndex={0}
+                      onSelect={() => setAttachmentId(activeAttachment.id)}
+                      onChange={(_, rect) => placeAttachment(activeAttachment.id, rect)}
+                    />
+                  ) : undefined
+                }
               />
+            ) : (
+              <div
+                className="cg-live-layout-stage cg-live-layout-empty-preview"
+                data-layout-preview=""
+                style={{ aspectRatio: layout.resolution.width / layout.resolution.height }}
+              >
+                {layout.frames.length === 0
+                  ? 'Add a frame to begin.'
+                  : preset === undefined
+                    ? 'Add a preset to preview these frames.'
+                    : 'Choose frames for this preset.'}
+              </div>
+            )}
+            <div className="cg-live-layout-preview-controls">
+              {preset !== undefined && (
+                <LiveLayoutEditorArrange
+                  layout={layout}
+                  preset={preset}
+                  onChange={rebuildArrangement}
+                />
+              )}
               <LiveLayoutEditorEffects
                 effects={layout.effects}
                 onChange={(effects) => setLayout((current) => ({ ...current, effects }))}
@@ -824,245 +881,256 @@ export function LiveLayoutEditor({
                 <Icon icon={LayoutGrid} size={16} /> Frames
               </h3>
               <Button
-                variant="add"
+                variant="neutral"
                 disabled={layout.frames.length >= CONTROL_LIVE_LAYOUT_MAX_FRAMES}
                 onClick={appendFrame}
               >
                 <Icon icon={Plus} size={15} /> Add frame
               </Button>
             </div>
-            <div className="cg-live-layout-frame-list">
-              <div
-                className="cg-live-layout-frame-row cg-live-layout-frame-header"
-                aria-hidden="true"
-              >
-                <span>Frame</span>
-                <span>In preset</span>
-              </div>
-              {layout.frames.map((candidate, index) => {
-                const name = candidate.title.trim() || `Frame ${String(index + 1)}`;
-                const position = presetFrameIds.indexOf(candidate.id) + 1;
-                const included = position > 0;
-                const positionId = `${fieldsId}-position-${String(index + 1)}`;
-                const picture = sourceFrames.get(candidate.sourceId ?? '')?.jpegBase64;
-                return (
-                  <div
-                    className="cg-live-layout-frame-row"
-                    key={candidate.id}
-                    data-preset-position={included ? position : undefined}
-                  >
-                    <Button
-                      className="cg-live-layout-frame-choice"
-                      aria-label={`Edit frame ${String(index + 1)}`}
-                      aria-describedby={included ? positionId : undefined}
-                      active={candidate.id === frame.id}
-                      aria-pressed={candidate.id === frame.id}
-                      onClick={() => setFrameId(candidate.id)}
-                    >
-                      <span className="cg-live-layout-frame-thumbnail" aria-hidden="true">
-                        {picture === undefined ? (
-                          <Icon icon={Video} size={16} />
-                        ) : (
-                          <img src={`data:image/jpeg;base64,${picture}`} alt="" />
-                        )}
-                      </span>
-                      <span className="cg-live-layout-frame-label">
-                        <IsolatedName>{name}</IsolatedName>
-                        <SourceLabel
-                          sourceId={candidate.sourceId ?? ''}
-                          fallback="Unassigned"
-                          meterChannel={channel}
-                        />
-                      </span>
-                      {included && (
-                        <span
-                          className="cg-live-layout-frame-position-marker"
-                          id={positionId}
-                          title={`Position ${String(position)} in this preset`}
-                        >
-                          Pos {position}
-                        </span>
-                      )}
-                      <span className="cg-live-layout-selection-mark" aria-hidden="true">
-                        <Icon icon={Pencil} size={14} />
-                      </span>
-                    </Button>
-                    <Checkbox
-                      checked={included}
-                      disabled={included && preset.frameIds.length <= 1}
-                      onChange={(next) => includeFrame(candidate.id, next)}
-                      aria-label={`Frame ${String(index + 1)} in preset`}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-            <div className="cg-live-layout-fields">
-              <div className="cg-live-layout-panel-head">
-                <h3>Frame {frameNumber}</h3>
-                <Button
-                  className="cg-list-remove"
-                  variant="icon"
-                  aria-label="Delete frame"
-                  title="Delete frame"
-                  disabled={layout.frames.length <= 1}
-                  onClick={deleteFrame}
+            {frame !== undefined && (
+              <div className="cg-live-layout-frame-list">
+                <div
+                  className="cg-live-layout-frame-row cg-live-layout-frame-header"
+                  aria-hidden="true"
                 >
-                  <Icon icon={Trash2} size={15} />
-                </Button>
-              </div>
-              <div className="cg-live-layout-frame-field">
-                <label htmlFor={`${fieldsId}-input`}>Input</label>
-                <SourcePicker
-                  id={`${fieldsId}-input`}
-                  aria-label="Frame input"
-                  channel={channel}
-                  value={frame.sourceId ?? ''}
-                  choices={[{ value: '', label: 'Unassigned' }]}
-                  onChange={(sourceId) =>
-                    updateFrame(({ sourceId: _old, ...candidate }) =>
-                      sourceId === '' ? candidate : { ...candidate, sourceId },
-                    )
-                  }
-                />
-              </div>
-              <label className="cg-live-layout-frame-field" htmlFor={`${fieldsId}-title`}>
-                Title
-                <TextInput
-                  id={`${fieldsId}-title`}
-                  ref={titleInput}
-                  value={frame.title}
-                  dir="auto"
-                  maxLength={120}
-                  onChange={(title) => updateFrame((candidate) => ({ ...candidate, title }))}
-                />
-              </label>
-              <label
-                className="cg-live-layout-frame-field cg-live-layout-focus-label"
-                htmlFor={`${fieldsId}-focus-label`}
-                title="Label on Focus buttons"
-              >
-                Focus label
-                <TextInput
-                  id={`${fieldsId}-focus-label`}
-                  value={frame.focusAlias ?? ''}
-                  placeholder={String(frameNumber)}
-                  dir="auto"
-                  maxLength={CONTROL_LIVE_LAYOUT_FOCUS_ALIAS_MAX_LENGTH}
-                  onChange={(focusAlias) =>
-                    updateFrame((candidate) => ({ ...candidate, focusAlias }))
-                  }
-                />
-              </label>
-              {framePosition >= 0 && presetFrameIds.length > 1 && (
-                <div className="cg-live-layout-position-picker">
-                  <span id={`${fieldsId}-position-label`}>Position in preset</span>
-                  <div
-                    className="cg-live-layout-frame-position"
-                    role="group"
-                    aria-labelledby={`${fieldsId}-position-label`}
-                  >
-                    {presetFrameIds.map((_, index) => (
-                      <Button
-                        key={index}
-                        aria-label={`Position ${String(index + 1)}`}
-                        aria-pressed={framePosition === index}
-                        onClick={() => {
-                          if (index === framePosition) return;
-                          const frameIds = controlLiveLayoutMovePresetFrame(
-                            preset,
-                            frame.id,
-                            index,
-                          );
-                          if (frameIds !== undefined) rebuildArrangement({ frameIds });
-                        }}
-                      >
-                        {index + 1}
-                      </Button>
-                    ))}
-                  </div>
+                  <span>Frame</span>
+                  {preset !== undefined && <span>In preset</span>}
                 </div>
-              )}
-              <LiveLayoutEditorTitleStyle
-                raster={layout.resolution}
-                frameId={frame.id}
-                frameNumber={frameNumber}
-                shared={layout.titleStyle}
-                override={frame.titleStyle}
-                fonts={layout.fonts ?? []}
-                readingFont={readingFont}
-                onSharedChange={(patch) =>
-                  setLayout((current) => ({
-                    ...current,
-                    titleStyle: { ...current.titleStyle, ...patch },
-                  }))
-                }
-                onOverrideChange={(patch) =>
-                  updateFrame((candidate) => ({
-                    ...candidate,
-                    titleStyle: { ...candidate.titleStyle, ...patch },
-                  }))
-                }
-                onResetOverride={() =>
-                  updateFrame(({ titleStyle: _override, ...candidate }) => candidate)
-                }
-                onAddFont={(file, scope) => void addFont(file, scope)}
-              />
-              <div className="cg-live-layout-title-visibility">
-                <label className="cg-live-layout-toggle" htmlFor={`${fieldsId}-title-preset`}>
-                  <Checkbox
-                    id={`${fieldsId}-title-preset`}
-                    checked={!preset.hiddenTitles.includes(frame.id)}
-                    onChange={(show) =>
-                      updatePreset({
-                        hiddenTitles: visibleTitle(preset.hiddenTitles, frame.id, show),
-                      })
-                    }
-                  />
-                  Show title in preset
-                </label>
-                <label className="cg-live-layout-toggle" htmlFor={`${fieldsId}-title-focus`}>
-                  <Checkbox
-                    id={`${fieldsId}-title-focus`}
-                    checked={!preset.hiddenFocusTitles.includes(frame.id)}
-                    onChange={(show) =>
-                      updatePreset({
-                        hiddenFocusTitles: visibleTitle(preset.hiddenFocusTitles, frame.id, show),
-                      })
-                    }
-                  />
-                  Show title in Focus
-                </label>
+                {layout.frames.map((candidate, index) => {
+                  const name = candidate.title.trim() || `Frame ${String(index + 1)}`;
+                  const position = presetFrameIds.indexOf(candidate.id) + 1;
+                  const included = position > 0;
+                  const positionId = `${fieldsId}-position-${String(index + 1)}`;
+                  const picture = sourceFrames.get(candidate.sourceId ?? '')?.jpegBase64;
+                  return (
+                    <div
+                      className="cg-live-layout-frame-row"
+                      key={candidate.id}
+                      data-preset-position={included ? position : undefined}
+                    >
+                      <Button
+                        className="cg-live-layout-frame-choice"
+                        aria-label={`Edit frame ${String(index + 1)}`}
+                        aria-describedby={included ? positionId : undefined}
+                        active={candidate.id === frame.id}
+                        aria-pressed={candidate.id === frame.id}
+                        onClick={() => setFrameId(candidate.id)}
+                      >
+                        <span className="cg-live-layout-frame-thumbnail" aria-hidden="true">
+                          {picture === undefined ? (
+                            <Icon icon={Video} size={16} />
+                          ) : (
+                            <img src={`data:image/jpeg;base64,${picture}`} alt="" />
+                          )}
+                        </span>
+                        <span className="cg-live-layout-frame-label">
+                          <IsolatedName>{name}</IsolatedName>
+                          <SourceLabel
+                            sourceId={candidate.sourceId ?? ''}
+                            fallback="Unassigned"
+                            meterChannel={channel}
+                          />
+                        </span>
+                        {included && (
+                          <span
+                            className="cg-live-layout-frame-position-marker"
+                            id={positionId}
+                            title={`Position ${String(position)} in this preset`}
+                          >
+                            Pos {position}
+                          </span>
+                        )}
+                        <span className="cg-live-layout-selection-mark" aria-hidden="true">
+                          <Icon icon={Pencil} size={14} />
+                        </span>
+                      </Button>
+                      {preset !== undefined && (
+                        <Checkbox
+                          checked={included}
+                          disabled={mode !== 'create' && included && preset.frameIds.length <= 1}
+                          onChange={(next) => includeFrame(candidate.id, next)}
+                          aria-label={`Frame ${String(index + 1)} in preset`}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-              <LiveLayoutEditorTexts
-                key={frame.id}
-                layout={layout}
-                frame={frame}
-                frameNumber={frameNumber}
-                readingFont={readingFont}
-                onChange={(additionalTexts) =>
-                  updateFrame((candidate) => ({ ...candidate, additionalTexts }))
-                }
-                onSharedStyle={(index, patch) =>
-                  setLayout((current) => withAdditionalTextStyle(current, index, patch))
-                }
-                onAddFont={(file, scope, extra) => void addFont(file, scope, extra)}
-              />
-              <LiveLayoutEditorFrameOptions
-                frame={frame}
-                activeIndex={maskIndex}
-                canEditMask={canEditMask}
-                editingMask={editingMask}
-                onSelectMaskWindow={selectMaskWindow}
-                onMaskEditingChange={(editing) => {
-                  if (editing) setAttachmentEditing(false);
-                  setMaskEditFrameId(editing ? frame.id : undefined);
-                }}
-                onChange={(patch) => updateFrame((candidate) => ({ ...candidate, ...patch }))}
-              />
-              {framePosition >= 0 && (
+            )}
+            {frame !== undefined && (
+              <div className="cg-live-layout-fields">
+                <div className="cg-live-layout-panel-head">
+                  <h3>Frame {frameNumber}</h3>
+                  <Button
+                    className="cg-list-remove"
+                    variant="icon"
+                    aria-label="Delete frame"
+                    title="Delete frame"
+                    disabled={mode !== 'create' && layout.frames.length <= 1}
+                    onClick={deleteFrame}
+                  >
+                    <Icon icon={Trash2} size={15} />
+                  </Button>
+                </div>
+                <div className="cg-live-layout-frame-field">
+                  <label htmlFor={`${fieldsId}-input`}>Input</label>
+                  <SourcePicker
+                    id={`${fieldsId}-input`}
+                    aria-label="Frame input"
+                    channel={channel}
+                    value={frame.sourceId ?? ''}
+                    choices={[{ value: '', label: 'Unassigned' }]}
+                    onChange={(sourceId) =>
+                      updateFrame(({ sourceId: _old, ...candidate }) =>
+                        sourceId === '' ? candidate : { ...candidate, sourceId },
+                      )
+                    }
+                  />
+                </div>
+                <label className="cg-live-layout-frame-field" htmlFor={`${fieldsId}-title`}>
+                  Title
+                  <TextInput
+                    id={`${fieldsId}-title`}
+                    ref={titleInput}
+                    value={frame.title}
+                    dir="auto"
+                    maxLength={120}
+                    onChange={(title) => updateFrame((candidate) => ({ ...candidate, title }))}
+                  />
+                </label>
+                <label
+                  className="cg-live-layout-frame-field cg-live-layout-focus-label"
+                  htmlFor={`${fieldsId}-focus-label`}
+                  title="Label on Focus buttons"
+                >
+                  Focus label
+                  <TextInput
+                    id={`${fieldsId}-focus-label`}
+                    value={frame.focusAlias ?? ''}
+                    placeholder={String(frameNumber)}
+                    dir="auto"
+                    maxLength={CONTROL_LIVE_LAYOUT_FOCUS_ALIAS_MAX_LENGTH}
+                    onChange={(focusAlias) =>
+                      updateFrame((candidate) => ({ ...candidate, focusAlias }))
+                    }
+                  />
+                </label>
+                {preset !== undefined && framePosition >= 0 && presetFrameIds.length > 1 && (
+                  <div className="cg-live-layout-position-picker">
+                    <span id={`${fieldsId}-position-label`}>Position in preset</span>
+                    <div
+                      className="cg-live-layout-frame-position"
+                      role="group"
+                      aria-labelledby={`${fieldsId}-position-label`}
+                    >
+                      {presetFrameIds.map((_, index) => (
+                        <Button
+                          key={index}
+                          aria-label={`Position ${String(index + 1)}`}
+                          aria-pressed={framePosition === index}
+                          onClick={() => {
+                            if (index === framePosition) return;
+                            const frameIds = controlLiveLayoutMovePresetFrame(
+                              preset,
+                              frame.id,
+                              index,
+                            );
+                            if (frameIds !== undefined) rebuildArrangement({ frameIds });
+                          }}
+                        >
+                          {index + 1}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <LiveLayoutEditorTitleStyle
+                  raster={layout.resolution}
+                  frameId={frame.id}
+                  frameNumber={frameNumber}
+                  shared={layout.titleStyle}
+                  override={frame.titleStyle}
+                  fonts={layout.fonts ?? []}
+                  readingFont={readingFont}
+                  onSharedChange={(patch) =>
+                    setLayout((current) => ({
+                      ...current,
+                      titleStyle: { ...current.titleStyle, ...patch },
+                    }))
+                  }
+                  onOverrideChange={(patch) =>
+                    updateFrame((candidate) => ({
+                      ...candidate,
+                      titleStyle: { ...candidate.titleStyle, ...patch },
+                    }))
+                  }
+                  onResetOverride={() =>
+                    updateFrame(({ titleStyle: _override, ...candidate }) => candidate)
+                  }
+                  onAddFont={(file, scope) => void addFont(file, scope)}
+                />
+                {preset !== undefined && (
+                  <div className="cg-live-layout-title-visibility">
+                    <label className="cg-live-layout-toggle" htmlFor={`${fieldsId}-title-preset`}>
+                      <Checkbox
+                        id={`${fieldsId}-title-preset`}
+                        checked={!preset.hiddenTitles.includes(frame.id)}
+                        onChange={(show) =>
+                          updatePreset({
+                            hiddenTitles: visibleTitle(preset.hiddenTitles, frame.id, show),
+                          })
+                        }
+                      />
+                      Show title in preset
+                    </label>
+                    <label className="cg-live-layout-toggle" htmlFor={`${fieldsId}-title-focus`}>
+                      <Checkbox
+                        id={`${fieldsId}-title-focus`}
+                        checked={!preset.hiddenFocusTitles.includes(frame.id)}
+                        onChange={(show) =>
+                          updatePreset({
+                            hiddenFocusTitles: visibleTitle(
+                              preset.hiddenFocusTitles,
+                              frame.id,
+                              show,
+                            ),
+                          })
+                        }
+                      />
+                      Show title in Focus
+                    </label>
+                  </div>
+                )}
+                <LiveLayoutEditorTexts
+                  key={frame.id}
+                  layout={layout}
+                  frame={frame}
+                  frameNumber={frameNumber}
+                  readingFont={readingFont}
+                  onChange={(additionalTexts) =>
+                    updateFrame((candidate) => ({ ...candidate, additionalTexts }))
+                  }
+                  onSharedStyle={(index, patch) =>
+                    setLayout((current) => withAdditionalTextStyle(current, index, patch))
+                  }
+                  onAddFont={(file, scope, extra) => void addFont(file, scope, extra)}
+                />
+                <LiveLayoutEditorFrameOptions
+                  frame={frame}
+                  activeIndex={maskIndex}
+                  canEditMask={canEditMask}
+                  editingMask={editingMask}
+                  onSelectMaskWindow={selectMaskWindow}
+                  onMaskEditingChange={(editing) => {
+                    if (editing) setAttachmentEditing(false);
+                    setMaskEditFrameId(editing ? frame.id : undefined);
+                  }}
+                  onChange={(patch) => updateFrame((candidate) => ({ ...candidate, ...patch }))}
+                />
                 <LiveLayoutEditorFrameAttachments
                   attachments={frameAttachments}
+                  legacyIds={preset?.frameAttachments?.map(({ id }) => id)}
                   selectedId={activeAttachment?.id}
                   selectedMask={maskWindows[maskIndex]}
                   importing={readingAttachment}
@@ -1073,7 +1141,7 @@ export function LiveLayoutEditor({
                   onReorder={reorderAttachment}
                   onRemove={(id) => {
                     if (id === attachmentId) setAttachmentEditing(false);
-                    changeAttachments((current) =>
+                    changeAttachments(id, (current) =>
                       current.filter((attachment) => attachment.id !== id),
                     );
                   }}
@@ -1086,8 +1154,8 @@ export function LiveLayoutEditor({
                   }}
                   onRectChange={placeAttachment}
                 />
-              )}
-            </div>
+              </div>
+            )}
           </aside>
         </div>
       </fieldset>

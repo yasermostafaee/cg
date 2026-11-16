@@ -38,7 +38,7 @@ async function visibleCheckThumbnail(list: Locator, sourceName: string): Promise
   return tile;
 }
 
-test('C-023 · inspect input picture from PVW and source controls without changing a binding', async ({
+test('C-023 · inspect input picture from source controls without changing a binding', async ({
   page,
 }) => {
   test.setTimeout(75_000);
@@ -98,50 +98,7 @@ test('C-023 · inspect input picture from PVW and source controls without changi
     await expect
       .poll(() => bridge.runtime.sourceCatalog().sources.map((source) => source.id))
       .toContain('in-li-studio1');
-    const check = pv.getByRole('combobox', { name: 'Check input' });
-    await check.click();
-    const chooser = page.getByRole('dialog', { name: 'Choose an input to check' });
-    await expect(chooser.locator('[data-picker-input="in-pl-apasai"]')).toHaveCount(0);
-    await chooser.getByRole('option', { name: 'Studio 1', exact: true }).click();
-
-    const card = pv.getByRole('region', { name: 'PVW input check' });
-    await expect(card).toContainText('PVW INPUT · CH 1 · Studio 1');
-    await expect(card.locator(state)).toHaveAttribute('data-input-check-state', 'ready');
-    await expect(card.locator(picture)).toBeVisible();
-    const pixels = await card.locator(picture).evaluate((canvas: HTMLCanvasElement) => {
-      return canvas.getContext('2d')?.getImageData(0, 0, 1, 1).data[3];
-    });
-    expect(pixels).toBe(255);
-    const meter = card.locator('[data-input-meter] .cg-vu__fill').first();
-    await expect
-      .poll(() => meter.evaluate((bar) => (bar as HTMLElement).style.clipPath))
-      .toMatch(/^inset\(35(?:\.00)?% /);
-    const sound = card.getByRole('button', { name: 'Input preview sound' });
-    await expect(sound).toHaveAttribute('aria-pressed', 'false');
-    expect(preview.audioOpens).toBe(0);
-    await sound.click();
-    await expect(sound).toHaveAttribute('aria-pressed', 'true');
-    await expect.poll(() => preview.audioOpens).toBe(1);
-
-    preview.staleMeter = true;
-    await expect
-      .poll(() => meter.evaluate((bar) => (bar as HTMLElement).style.clipPath))
-      .toMatch(/^inset\(100(?:\.00)?% /);
-    await expect(card.locator(picture)).toBeVisible();
-    preview.stalledVideo = true;
-    await expect(card.locator(state)).toHaveAttribute('data-input-check-state', 'stalled');
-    await expect(card.locator(picture)).toBeHidden();
-    await expect(card.getByText('No current picture', { exact: true })).toBeVisible();
-    await expect(sound).toHaveAttribute('aria-pressed', 'false');
-    await expect.poll(() => preview.audioCloses).toBe(1);
-    await expect(pgm).toHaveAttribute('src', pgmUrl ?? '');
-    expect(await page.evaluate((key) => localStorage.getItem(key), PGM_PREFERENCE)).toBe(
-      '{"on":true}',
-    );
-    await card.getByRole('button', { name: 'Close input check' }).click();
-
-    preview.staleMeter = false;
-    preview.stalledVideo = false;
+    await expect(pv.getByRole('combobox', { name: 'Check input' })).toHaveCount(0);
     const loaded = await page.evaluate(
       ({ id, template }) =>
         window.cg.fixedLayers.load({
@@ -181,6 +138,46 @@ test('C-023 · inspect input picture from PVW and source controls without changi
     await expect(passiveTile).toBeVisible();
     await expect(passiveTile).toHaveText('No signal');
     await expect(passiveTile).not.toHaveRole('button');
+    await studioTile.click();
+    const card = defaults.getByRole('region', { name: 'PVW input check' });
+    await expect(card).toContainText('PVW INPUT · CH 1 · Studio 1');
+    await expect(card.locator(state)).toHaveAttribute('data-input-check-state', 'ready');
+    await expect(card.locator(picture)).toBeVisible();
+    const pixels = await card.locator(picture).evaluate((canvas: HTMLCanvasElement) => {
+      return canvas.getContext('2d')?.getImageData(0, 0, 1, 1).data[3];
+    });
+    expect(pixels).toBe(255);
+    const meter = card.locator('[data-input-meter] .cg-vu__fill').first();
+    await expect
+      .poll(() => meter.evaluate((bar) => (bar as HTMLElement).style.clipPath))
+      .toMatch(/^inset\(35(?:\.00)?% /);
+    const sound = card.getByRole('button', { name: 'Input preview sound' });
+    await expect(sound).toHaveAttribute('aria-pressed', 'false');
+    expect(preview.audioOpens).toBe(0);
+    await sound.click();
+    await expect(sound).toHaveAttribute('aria-pressed', 'true');
+    await expect.poll(() => preview.audioOpens).toBe(1);
+
+    preview.staleMeter = true;
+    await expect
+      .poll(() => meter.evaluate((bar) => (bar as HTMLElement).style.clipPath))
+      .toMatch(/^inset\(100(?:\.00)?% /);
+    await expect(card.locator(picture)).toBeVisible();
+    preview.stalledVideo = true;
+    await expect(card.locator(state)).toHaveAttribute('data-input-check-state', 'stalled');
+    await expect(card.locator(picture)).toBeHidden();
+    await expect(card.getByText('No current picture', { exact: true })).toBeVisible();
+    await expect(sound).toHaveAttribute('aria-pressed', 'false');
+    await expect.poll(() => preview.audioCloses).toBe(1);
+    await expect(pgm).toHaveAttribute('src', pgmUrl ?? '');
+    expect(await page.evaluate((key) => localStorage.getItem(key), PGM_PREFERENCE)).toBe(
+      '{"on":true}',
+    );
+    await card.getByRole('button', { name: 'Close input check' }).click();
+    await field.click();
+
+    preview.staleMeter = false;
+    preview.stalledVideo = false;
     expect(preview.starts).toHaveLength(1);
     await studio1.click();
     await expect(field).toHaveAttribute('data-picker-value', 'in-li-studio1');
@@ -220,12 +217,22 @@ test('C-023 · inspect input picture from PVW and source controls without changi
     await lookCheck.getByRole('button', { name: 'Close input check' }).click();
 
     const swap = page.getByRole('dialog', { name: 'Live source for this row' });
+    const sourceAction = page
+      .getByRole('menu', { name: 'Live layer 59 actions', exact: true })
+      .getByRole('menuitem', { name: 'SOURCE', exact: true });
+    const bridgeLink = page.getByRole('status', { name: 'Bridge link' });
+    await expect(bridgeLink).toHaveText(/BRIDGE LIVE$/);
+    // Finish scrolling the row into view before opening its keyboard menu.
+    // The menu closes on scroll. Bound each attempt so one close cannot consume the retry window.
+    await row.scrollIntoViewIfNeeded();
+    await row.focus();
     await expect(async () => {
       if (await swap.isVisible()) return;
-      await row.click({ button: 'right' });
-      await page.getByRole('menuitem', { name: 'SOURCE', exact: true }).click({ force: true });
-      await expect(swap).toBeVisible();
+      await row.press('ContextMenu', { timeout: 2_000 });
+      await sourceAction.press('Enter', { timeout: 2_000 });
+      await expect(swap).toBeVisible({ timeout: 2_000 });
     }).toPass({ timeout: 10_000 });
+    await expect(bridgeLink).toHaveText(/BRIDGE LIVE$/);
     const swapField = swap.getByRole('combobox', { name: 'Live source for Plate 1' });
     await swapField.click();
     const swapTile = await visibleCheckThumbnail(options, 'Studio 1');

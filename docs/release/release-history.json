@@ -3,6 +3,45 @@
   "product": "APASAI CG",
   "releases": [
     {
+      "version": "1.2.8",
+      "title": {
+        "fa": "نسخهٔ ۱.۲.۸",
+        "en": "Release 1.2.8"
+      },
+      "date": "2026-11-16",
+      "status": "prepared",
+      "summary": {
+        "fa": "ساخت چیدمان زنده از صفحهٔ خالی، اتصال گرافیک به قاب و نمایش ویومتر کنار تصویر.",
+        "en": "Empty live layout drafts, frame-bound graphics and audio meters alongside their pictures."
+      },
+      "features": [
+        {
+          "fa": "New live layout از چیدمان خالی شروع می‌شود. چینش در بخش اصلی پنجره است و هر قاب در نمای چندقاب دکمهٔ Focus دارد.",
+          "en": "New live layout starts empty. Arrange scrolls with the editor, and each frame has a Focus button in the multiframe preview."
+        },
+        {
+          "fa": "گرافیک VCG به خود قاب متصل می‌شود و در پریست‌ها و Focus با حرکت و افکت همان قاب نمایش داده می‌شود.",
+          "en": "A VCG graphic attaches to the frame and follows its motion and effect across presets and Focus."
+        },
+        {
+          "fa": "ویومتر هر موتور کنار تصویر PGM خودش است. سطح صدای ورودی‌ها کنار قاب و تصویر انتخاب ورودی به‌صورت عمودی دیده می‌شود.",
+          "en": "Each engine's PGM meter sits next to its own picture. Input levels appear vertically next to frames and input thumbnails."
+        }
+      ],
+      "fixes": [
+        {
+          "fa": "در PVW چیدمان زنده، عنوان قاب بدون شناسهٔ فنی خوانده می‌شود. بررسی ورودی از پنجرهٔ انتخاب منبع در دسترس است.",
+          "en": "Authored live layout titles stay clear of technical IDs in PVW. Check input is available from the input picker."
+        },
+        {
+          "fa": "در Shared files می‌توان دسترسی Bridge به مسیر ذخیره‌شده را بررسی کرد. اگر مسیری زمان نصب وارد نشده باشد، Bridge پوشهٔ محلی پیش‌فرضش را می‌سازد.",
+          "en": "Shared files can recheck the Bridge's access to the saved path. When Setup has no shared path, the Bridge creates its built-in local folder."
+        }
+      ],
+      "planned": [],
+      "downloadBaseUrl": null
+    },
+    {
       "version": "1.2.7",
       "title": {
         "fa": "نسخهٔ ۱.۲.۷",

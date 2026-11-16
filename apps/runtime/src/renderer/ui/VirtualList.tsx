@@ -37,6 +37,7 @@ export interface VirtualRow {
   readonly ariaLabel?: string;
   /** A separate action in a grid, or a decorative slot alongside a listbox option. */
   readonly trailing?: ReactNode;
+  readonly trailingAccessible?: boolean;
   /** An option that cannot be picked: shown, with its reason in `title`. */
   readonly disabled?: boolean | undefined;
   readonly selected?: boolean | undefined;
@@ -212,7 +213,10 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
               style={style}
             >
               {option}
-              <div role={withActions ? 'gridcell' : undefined} aria-hidden={!withActions}>
+              <div
+                role={withActions ? 'gridcell' : undefined}
+                aria-hidden={!withActions && row.trailingAccessible !== true}
+              >
                 {row.trailing}
               </div>
             </div>

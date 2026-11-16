@@ -55,7 +55,7 @@ import type { Scene } from './scene.js';
  * 1.2.6 applies the vertical offset of text inside its box.
  * 1.2.7 applies per-instance frame art and masked input variants.
  */
-export const CG_RUNTIME_VERSION = '1.2.7';
+export const CG_RUNTIME_VERSION = '1.2.8';
 
 /** Declare the minimum runtime that can reproduce all authored behavior in a package. */
 export function requiredRuntimeVersionForScene(

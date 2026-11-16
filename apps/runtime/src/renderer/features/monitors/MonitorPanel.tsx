@@ -82,6 +82,13 @@ const styles = {
     minWidth: 0,
     gap: '0.35rem',
   },
+  tile: {
+    display: 'flex',
+    flex: 1,
+    minHeight: 0,
+    minWidth: 0,
+    direction: 'ltr' as const,
+  },
   /** The video area. Black because that is what a video area is. */
   screen: {
     position: 'relative' as const,
@@ -336,6 +343,8 @@ export function MonitorPanel({
       : []),
   ];
   const showAllMeters = monitorPreferences.meterMode === 'all' && meterTargets.length > 0;
+  const meterPictureEngine =
+    returns.find(({ engine }) => engine === selectedAudio)?.engine ?? returns[0]?.engine;
   const grid = returns.length > 2;
   const displayControls = (
     <div
@@ -389,7 +398,7 @@ export function MonitorPanel({
       <select
         className="cg-pgm-audio-select"
         aria-label="Programme sound source"
-        title={legacy ? 'Local programme sound and meter source' : 'Local programme sound source'}
+        title="Local programme sound source"
         value={monitorPreferences.audio}
         onChange={(event) =>
           monitorPreferences.setAudio(event.currentTarget.value as ProgramAudioChoice)
@@ -434,7 +443,7 @@ export function MonitorPanel({
           aria-label="All programme meters"
           aria-pressed={showAllMeters}
           data-toggle-on={showAllMeters ? '' : undefined}
-          title={showAllMeters ? 'Show selected source meter' : 'Show meters for all servers'}
+          title={showAllMeters ? 'Show selected source meter' : 'Show a meter beside each return'}
           onClick={() => monitorPreferences.setMeterMode(showAllMeters ? 'selected' : 'all')}
         >
           <Icon icon={LayoutGrid} size={13} />
@@ -535,81 +544,86 @@ export function MonitorPanel({
                   gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
                   gridTemplateRows: 'repeat(2, minmax(0, 1fr))',
                 }
-              : { flexDirection: monitorPreferences.layout === 'vertical' ? 'column' : 'row' }),
+              : {}),
           }}
           className="cg-pgm-pictures"
           data-pgm-picture-count={returns.length}
           data-pgm-layout={grid ? 'grid' : monitorPreferences.layout}
+          data-pgm-meter-mode={showAllMeters ? 'all' : 'selected'}
+          role={showAllMeters ? 'group' : undefined}
+          aria-label={showAllMeters ? 'Programme meters' : undefined}
         >
-          {returns.map(({ engine, physicalChannel, programReturn, name, active }) => {
+          {returns.map((tile) => {
+            const { engine, physicalChannel, programReturn, name, active } = tile;
             const { src, signal, onError } = programReturn;
             const tileWords = PROGRAM_SIGNAL_WORDS[signal];
+            const member = meterTargets.find((target) => target.engine === engine) ?? tile;
+            const showTileMeter =
+              monitorPreferences.showMeter && (showAllMeters || engine === meterPictureEngine);
             return (
-              <div
-                key={engine}
-                style={styles.screen}
-                role="img"
-                aria-label={`${title} ${selectName(engine)} CH ${String(physicalChannel ?? '—')}${active === true ? ' Active' : ''} — ${tileWords}`}
-                data-pgm-screen={engine}
-                data-pgm-active={active === true ? '' : undefined}
-              >
-                <span style={styles.tileLabel} className="cg-pgm-tile-label" dir="ltr">
-                  {engine} · CH {physicalChannel ?? '—'}
-                  {name !== undefined && (
+              <div key={engine} style={styles.tile} data-pgm-tile={engine}>
+                <div
+                  style={styles.screen}
+                  role="img"
+                  aria-label={`${title} ${selectName(engine)} CH ${String(physicalChannel ?? '—')}${active === true ? ' Active' : ''} — ${tileWords}`}
+                  data-pgm-screen={engine}
+                  data-pgm-active={active === true ? '' : undefined}
+                >
+                  <span style={styles.tileLabel} className="cg-pgm-tile-label" dir="ltr">
+                    {engine} · CH {physicalChannel ?? '—'}
+                    {name !== undefined && (
+                      <>
+                        {' '}
+                        · <IsolatedName title={name}>{name}</IsolatedName>
+                      </>
+                    )}
+                    {active === true && <span className="cg-pgm-tile-active">Active</span>}
+                  </span>
+                  {src !== null && (
+                    <ProgramPicture
+                      key={src}
+                      src={src}
+                      visible={signal === 'live'}
+                      onError={onError}
+                    />
+                  )}
+                  {signal !== 'live' && (
                     <>
-                      {' '}
-                      · <IsolatedName title={name}>{name}</IsolatedName>
+                      <Icon icon={MonitorOff} size={22} />
+                      <span style={styles.label}>{tileWords}</span>
                     </>
                   )}
-                  {active === true && <span className="cg-pgm-tile-active">Active</span>}
-                </span>
-                {src !== null && (
-                  <ProgramPicture
-                    key={src}
-                    src={src}
-                    visible={signal === 'live'}
-                    onError={onError}
-                  />
-                )}
-                {signal !== 'live' && (
-                  <>
-                    <Icon icon={MonitorOff} size={22} />
-                    <span style={styles.label}>{tileWords}</span>
-                  </>
-                )}
+                </div>
+                {showTileMeter &&
+                  (showAllMeters ? (
+                    <ProgrammeMemberMeter
+                      key={member.resourceKey ?? engine}
+                      member={member}
+                      channel={channel}
+                      name={selectName(engine)}
+                      selectedPeaks={engine === selectedAudio ? programSound.watchPeaks : undefined}
+                    />
+                  ) : engine !== selectedAudio ? (
+                    <VuMeter
+                      channel={null}
+                      engine={null}
+                      {...(selectedAudio !== null && { displayEngine: engine })}
+                    />
+                  ) : (
+                    <VuMeter
+                      key={stereoMeter === undefined ? undefined : meterMember?.resourceKey}
+                      channel={stereoMeter === undefined ? meterChannel : channel}
+                      engine={meterEngine ?? selectedAudio}
+                      {...(stereoMeter !== undefined && { watchPeaks: stereoMeter })}
+                    />
+                  ))}
               </div>
             );
           })}
         </div>
-        {/* `PLAYOUT-FEATURES-01` E — the programme meter, the Playout's own levels, beside the picture. */}
-        {monitorPreferences.showMeter &&
-          (showAllMeters ? (
-            <div
-              className="cg-pgm-meter-bank"
-              role="group"
-              aria-label="Programme meters"
-              data-vu-count={meterTargets.length}
-            >
-              {meterTargets.map((member) => (
-                <ProgrammeMemberMeter
-                  key={member.resourceKey ?? member.engine}
-                  member={member}
-                  channel={channel}
-                  name={selectName(member.engine)}
-                  selectedPeaks={
-                    member.engine === selectedAudio ? programSound.watchPeaks : undefined
-                  }
-                />
-              ))}
-            </div>
-          ) : (
-            <VuMeter
-              key={stereoMeter === undefined ? undefined : meterMember?.resourceKey}
-              channel={stereoMeter === undefined ? meterChannel : channel}
-              engine={meterEngine ?? selectedAudio}
-              {...(stereoMeter !== undefined && { watchPeaks: stereoMeter })}
-            />
-          ))}
+        {monitorPreferences.showMeter && returns.length === 0 && (
+          <VuMeter channel={null} engine={null} />
+        )}
       </div>
       {/*
         🔴 `RELEASE-0113-01` (`B-316`, `R-089`) — WHERE THIS CHANNEL'S LINES GO ON THE BACKUP ENGINE, in this

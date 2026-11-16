@@ -541,10 +541,6 @@
   background: var(--r-monitor-strip-bg);
   flex-shrink: 0;
 }
-.cg-monitor-strip__spacer {
-  flex: 1;
-}
-
 .cg-pvw-template-outlines {
   overflow: hidden;
   pointer-events: none;
@@ -943,6 +939,10 @@
   color: var(--r-accent);
 }
 
+.cg-pgm-pictures[data-pgm-layout='vertical'] {
+  flex-direction: column;
+}
+
 /* `R-104` — two programme returns stay side by side until each tile would be too small to read. */
 @container (max-width: 520px) {
   .cg-pgm-pictures[data-pgm-picture-count='2'] {
@@ -970,18 +970,8 @@
   background: var(--r-meter-ground);
   border: 1px solid var(--r-meter-frame);
 }
-.cg-pgm-meter-bank {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-auto-rows: minmax(0, 1fr);
-  flex: 0 0 auto;
-  gap: calc(var(--r-meter-pad) / 2);
-  min-height: 0;
-}
-.cg-pgm-meter-bank[data-vu-count='1'] {
-  grid-template-columns: minmax(0, 1fr);
-}
-.cg-pgm-meter-bank .cg-vu__bar:nth-child(n + 3) {
+.cg-pgm-pictures[data-pgm-meter-mode='all'] .cg-vu__bar:nth-child(n + 3),
+.cg-pgm-pictures:not([data-pgm-picture-count='1']) .cg-vu__bar:nth-child(n + 3) {
   display: none;
 }
 .cg-vu__unit {
@@ -9561,11 +9551,6 @@ input[type='checkbox']:disabled:checked {
 }
 .cg-pvw-stage > :first-child {
   min-width: 0;
-}
-.cg-monitor-strip .cg-input-check-picker {
-  flex: none;
-  width: auto;
-  min-height: 0;
 }
 .cg-input-check {
   display: flex;

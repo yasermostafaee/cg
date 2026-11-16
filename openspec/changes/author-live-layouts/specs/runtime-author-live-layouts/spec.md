@@ -7,7 +7,8 @@ CG Control SHALL author multiple frames and presets in the channel's template ca
 #### Scenario: Build and edit a panel layout
 
 - **WHEN** the operator opens New live layout
-- **THEN** they can add and remove frames and presets, attach a station input and title to each frame, and select each preset's membership and arrangement
+- **THEN** it has no frames or presets, and either can be added first
+- **AND** they can add and remove frames and presets, attach a station input and title to each frame, and select each preset's membership and arrangement
 - **AND** each preset stores the selected variant of Auto layout and its spacing
 
 #### Scenario: Style titles together and override a frame
@@ -43,7 +44,15 @@ CG Control SHALL author multiple frames and presets in the channel's template ca
 - **WHEN** the operator selects a preset or a frame in the editor
 - **THEN** the selected entry stays visibly distinct when focus moves away
 - **AND** the editor gives the preview room to show the layout while keeping its controls reachable
-- **AND** a preset with more than one frame shows its own horizontal and vertical gap controls beside Arrange
+- **AND** a preset with more than one frame shows its own horizontal and vertical gap controls beside Arrange in the main scroll area
+- **AND** Start with this preset stays in the same place when the current preset changes
+
+#### Scenario: Attach a graphic to a frame
+
+- **WHEN** the operator attaches a VCG in Frame graphics
+- **THEN** the graphic is present on that frame in each regular preset and Focus view that includes it
+- **AND** it moves and transitions with that frame in PVW and PGM
+- **AND** reopening a package with legacy preset-specific artwork preserves the earlier placements
 
 #### Scenario: Save shared artwork and effects
 
@@ -64,6 +73,7 @@ The console SHALL let an operator focus a frame and return to its originating pr
 
 - **WHEN** the operator chooses Focus and later Return
 - **THEN** the selected frame expands and the exact originating preset is restored with its applied arrangement and inputs
+- **AND** every frame in a multi-frame editor rehearsal shows its own Focus action
 - **AND** the browser's Preview stays independent of all programme commands
 
 #### Scenario: Switch between solo guests

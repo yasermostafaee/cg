@@ -28,7 +28,10 @@ import {
 } from '../src/renderer/features/liveLayouts/controlLiveLayoutCompiler.js';
 import { sharedFrameTitlesOf } from '../src/renderer/features/inspector/sharedFrameTitles.js';
 import { produceTemplateDelivery } from '../src/renderer/features/library/templateDelivery.js';
-import { unpackControlLiveLayoutFrameAttachment } from '../src/renderer/features/liveLayouts/controlLiveLayoutFrameAttachments.js';
+import {
+  promoteFrameAttachments,
+  unpackControlLiveLayoutFrameAttachment,
+} from '../src/renderer/features/liveLayouts/controlLiveLayoutFrameAttachments.js';
 
 function layoutFixture(): ControlLiveLayout {
   const { titleStyle: _newTitleStyle, ...layout } = createControlLiveLayout();
@@ -150,6 +153,62 @@ describe('CG Control authored live layouts', () => {
       'attachment-art-logo',
     ]);
     expect(templatesIn(pair.id)).toHaveLength(0);
+
+    const clone = { ...wide.frameAttachments[0]!, id: 'strip-clone' };
+    const shared = promoteFrameAttachments(
+      { ...reopened.layout, presets: [wide, { ...pair, frameAttachments: [clone] }] },
+      'frame-left',
+      reopened.attachments,
+      clone.id,
+    );
+    expect(shared.frameAttachments?.map(({ id }) => id)).toEqual(['strip-clone', 'logo']);
+    expect(shared.presets.every(({ frameAttachments }) => frameAttachments === undefined)).toBe(
+      true,
+    );
+    const globalBytes = await compileControlLiveLayout(shared, undefined, undefined, sources);
+    const global = await readControlLiveLayout(globalBytes);
+    expect(global.layout.frameAttachments).toEqual(shared.frameAttachments);
+    expect([...global.attachments.keys()]).toEqual([strip.id, logo.id]);
+    const { scene: globalScene, manifest: globalManifest } = await unpack(globalBytes);
+    expect(globalManifest.compatibility.minRuntimeVersion).toBe('1.2.8');
+    const globalCarrier = buildTemplateLiveSources(globalScene);
+    const leaves = flattenElements(globalScene);
+    const showingFrame = [
+      wide.id,
+      pair.id,
+      controlLiveLayoutFocusLookId(wide.id, 'frame-left'),
+      controlLiveLayoutFocusLookId(pair.id, 'frame-left'),
+    ];
+    for (const id of showingFrame) {
+      const look = globalCarrier.looks?.find((entry) => entry.id === id);
+      expect(look?.masks?.['frame-left']).toEqual(masked);
+      expect(look?.transitionFrames?.['frame-left']?.artworkId).toBe(
+        normal?.transitionFrames?.['frame-left']?.artworkId,
+      );
+      expect(
+        leaves
+          .filter(
+            ({ key, element }) =>
+              key.startsWith('layout-look-' + id + '/instance-frame-left/attachment-art-') &&
+              element.type === 'composition',
+          )
+          .map(({ element }) => element.id),
+      ).toEqual(['attachment-art-strip-clone', 'attachment-art-logo']);
+    }
+
+    const conflict = {
+      ...reopened.layout,
+      presets: [wide, { ...pair, frameAttachments: [{ ...clone, rect: { ...rect, x: 0.25 } }] }],
+    };
+    expect(promoteFrameAttachments(conflict, 'frame-left', sources)).toBe(conflict);
+    const conflictCarrier = buildTemplateLiveSources(
+      buildControlLiveLayoutScene(conflict, sources),
+    );
+    const conflictNormal = conflictCarrier.looks?.find(({ id }) => id === wide.id);
+    const conflictOther = conflictCarrier.looks?.find(({ id }) => id === pair.id);
+    expect(conflictNormal?.masks?.['frame-left']).toEqual(masked);
+    expect(conflictOther?.masks?.['frame-left']).toEqual(masked);
+    expect(conflictNormal?.rects['frame-left']?.x).not.toBe(conflictOther?.rects['frame-left']?.x);
   });
 
   it('authors the new caption and frame settings without reinterpreting legacy layouts', () => {

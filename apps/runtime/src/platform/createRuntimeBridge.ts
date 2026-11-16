@@ -464,12 +464,14 @@ export function createMockBridge(): RuntimeBridge {
       setEntries: () => Promise.resolve({ ok: false, message: 'Test mode has no backup engine.' }),
     },
 
-    // `PLAYOUT-FEATURES-01` E — test mode has no Playout, so no meters: the meter sits at the floor.
+    // Explicit test telemetry follows the same recurring cadence as the monitored inputs.
     meters: {
       onReading: (handler) => {
-        for (const reading of programMonitor?.readings ?? [])
-          queueMicrotask(() => handler(reading));
-        return () => undefined;
+        const readings = programMonitor?.readings;
+        if (readings === undefined || readings.length === 0) return () => undefined;
+        const emit = (): void => readings.forEach(handler);
+        const interval = setInterval(emit, 50);
+        return () => clearInterval(interval);
       },
     },
 

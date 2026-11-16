@@ -2,8 +2,10 @@ import { TEMPLATE_SOURCE_MAX_BYTES } from '@cg/shared-ipc';
 import {
   flattenElements,
   liveRevealSceneRect,
+  sameLiveMaskRect,
   type AssetEntry,
   type Composition,
+  type ControlLiveLayout,
   type ControlLiveLayoutFrameAttachment,
   type Element,
   type Layer,
@@ -32,6 +34,56 @@ export interface ControlLiveLayoutFrameAttachmentSource {
   scene: Scene;
   assets: { entry: AssetEntry; bytes: Uint8Array }[];
   plate?: { element: VideoPlaceholderElement; rect: LiveSourceRect };
+}
+
+function sameFrameGraphic(
+  left: ControlLiveLayoutFrameAttachment,
+  right: ControlLiveLayoutFrameAttachment,
+): boolean {
+  return (
+    left.frameId === right.frameId &&
+    left.sourceId === right.sourceId &&
+    sameLiveMaskRect(left.rect, right.rect)
+  );
+}
+
+/** Promote legacy graphics when their frame is edited and at most one masked input remains. */
+export function promoteFrameAttachments(
+  layout: ControlLiveLayout,
+  frameId: string,
+  sources: ReadonlyMap<string, ControlLiveLayoutFrameAttachmentSource>,
+  selectedId?: string,
+): ControlLiveLayout {
+  const legacy = layout.presets.flatMap(({ frameAttachments }) =>
+    (frameAttachments ?? []).filter((attachment) => attachment.frameId === frameId),
+  );
+  if (legacy.length === 0 || legacy.some(({ sourceId }) => !sources.has(sourceId))) return layout;
+  const shared = [...(layout.frameAttachments ?? [])];
+  for (const attachment of legacy) {
+    const duplicate = shared.findIndex((candidate) => sameFrameGraphic(candidate, attachment));
+    if (duplicate < 0) shared.push(attachment);
+    else if (attachment.id === selectedId) shared[duplicate] = attachment;
+  }
+  const masked = shared.filter(
+    (attachment) =>
+      attachment.frameId === frameId && sources.get(attachment.sourceId)?.plate !== undefined,
+  );
+  if (masked.length > 1) return layout;
+  return {
+    ...layout,
+    frameAttachments: shared,
+    presets: layout.presets.map((preset) => {
+      const frameAttachments = preset.frameAttachments?.filter(
+        (attachment) => attachment.frameId !== frameId,
+      );
+      if (frameAttachments?.length === preset.frameAttachments?.length) return preset;
+      const { frameAttachments: _legacy, ...other } = preset;
+      return {
+        ...other,
+        ...(frameAttachments !== undefined && frameAttachments.length > 0 && { frameAttachments }),
+      };
+    }),
+  };
 }
 
 export function frameAttachmentArchivePath(id: string): string {

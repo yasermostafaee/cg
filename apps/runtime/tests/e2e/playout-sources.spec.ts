@@ -449,19 +449,25 @@ test.describe('source audio meters', () => {
     await dialog.locator('[data-defaults-select="l-1"]').click();
     const panel = picker(page);
     const controls = '[data-source-audio-meter]';
-    const meter = (id: string) => panel.locator(`[data-picker-input="${id}"] ${controls}`);
+    const meter = (id: string) =>
+      panel
+        .locator('.cg-vlist-action-row', { has: page.locator(`[data-picker-input="${id}"]`) })
+        .locator(controls);
     const peak = meter('in-studio-1');
     const level = peak.locator('.cg-input-meter__level');
     await expect(peak).toHaveAccessibleName('Studio 1 · Audio peak -17 dBFS');
     await expect(panel.locator('[data-picker-input="in-studio-1"]')).toHaveAccessibleName(
       'Studio 1',
     );
-    await expect(level).toHaveCSS('clip-path', /^inset\(0px 28\.33\d*% 0px 0px\)$/);
+    await expect(level).toHaveCSS('clip-path', /^inset\(28\.33\d*% 0px 0px\)$/);
     const bounds = await peak.boundingBox();
     if (bounds === null) throw new Error('Visible source meter has no size');
-    expect(bounds.width).toBeGreaterThanOrEqual(24);
-    expect(bounds.width).toBeLessThanOrEqual(36);
-    expect(bounds.height).toBeGreaterThanOrEqual(5);
+    const thumbnail = await peak.locator('..').locator('[data-input-thumbnail]').boundingBox();
+    if (thumbnail === null) throw new Error('Input thumbnail has no size');
+    expect(bounds.width).toBeLessThanOrEqual(8);
+    expect(bounds.height).toBeGreaterThan(24);
+    expect(bounds.height).toBeCloseTo(thumbnail.height, 0);
+    expect(Math.abs(bounds.x - thumbnail.x - thumbnail.width)).toBeLessThan(5);
     await test.info().attach('source-meter-size', {
       body: `${String(bounds.width)} × ${String(bounds.height)} px`,
       contentType: 'text/plain',
@@ -480,7 +486,7 @@ test.describe('source audio meters', () => {
     });
     await expect.poll(async () => (await readState()).pending).toBe(true);
     await expect(peak).toHaveAttribute('title', 'Audio level unavailable');
-    await expect(level).toHaveCSS('clip-path', 'inset(0px 100% 0px 0px)');
+    await expect(level).toHaveCSS('clip-path', 'inset(100% 0px 0px)');
     await page.evaluate(() => {
       const state = (window as unknown as { sourceMeterTest: SourceMeterProbe }).sourceMeterTest;
       state.hold = false;

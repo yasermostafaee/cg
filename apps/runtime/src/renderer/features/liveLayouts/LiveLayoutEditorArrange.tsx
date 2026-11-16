@@ -47,7 +47,7 @@ export function LiveLayoutEditorArrange({
           <Icon icon={LayoutGrid} size={16} /> Arrange
         </h3>
         <Button
-          variant="secondary"
+          variant="neutral"
           active={preset.reverse}
           aria-pressed={preset.reverse}
           onClick={() => changeGeometry({ reverse: !preset.reverse })}

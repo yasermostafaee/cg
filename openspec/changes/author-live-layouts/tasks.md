@@ -35,5 +35,7 @@
 - [x] Linux Playwright E2E and the Linux gate passed for Focus labels, arbitrary preset positions and additional text on [e5d44f80](https://github.com/yasermostafaee/cg/actions/runs/43724416876/job/132843185179#step:13:1). The local Windows installer stamps, checksums and staged native smoke passed on the same build.
 - [x] Match the requested title defaults and give additional text shared and individual style scopes.
 - [x] Verify preset and solo motion in the editor and PVW, default placement locks, retained source images, and drag/resize of a direct rectangular mask in Chromium.
-- [x] Add multiple ordered still-art VCG attachments and one masked source per frame and preset, with direct manipulation and self-contained storage.
+- [x] Add multiple ordered still-art VCG attachments and one masked source per shared frame, with direct manipulation and self-contained storage.
+- [x] Verify stable frame graphics identity and mask across presets and Focus, preserving older scoped packages.
+- [x] Verify an empty editor, steady Start with this preset, Arrange in the main scroll, and Focus controls for every frame in Windows Chromium.
 - [ ] Verify the Designer-authored masked input and attached graphic together on the target Playout Engine.

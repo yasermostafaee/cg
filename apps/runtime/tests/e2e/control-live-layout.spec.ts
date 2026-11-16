@@ -180,6 +180,14 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await layers.getByRole('button', { name: 'New live layout' }).click();
     const editor = page.getByRole('dialog', { name: 'New live layout' });
     const stage = editor.locator('[data-layout-preview]');
+    const saveLayout = editor.getByRole('button', { name: 'Save layout', exact: true });
+    const startPreset = editor.getByRole('button', { name: 'Start with this preset', exact: true });
+    const addFrame = editor.getByRole('button', { name: 'Add frame', exact: true });
+    const addPreset = editor.getByRole('button', { name: 'Add preset', exact: true });
+    await expect(editor.getByRole('button', { name: /^Edit frame / })).toHaveCount(0);
+    await expect(editor.locator('.cg-live-layout-preset-choice')).toHaveCount(0);
+    await expect(startPreset).toBeDisabled();
+    await expect(saveLayout).toBeDisabled();
     expect((await editor.boundingBox())?.width ?? 0).toBeGreaterThan(1080);
     expect((await editor.boundingBox())?.height ?? 0).toBeGreaterThan(900);
     expect((await stage.boundingBox())?.width ?? 0).toBeGreaterThan(640);
@@ -204,13 +212,35 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await page.setViewportSize({ width: 1440, height: 1000 });
     const layoutName = editor.getByRole('textbox', { name: 'Layout name' });
     await layoutName.fill('Studio panel');
-    await editor.getByRole('button', { name: 'Add frame' }).click();
-    await editor.getByRole('button', { name: 'Add frame' }).click();
+    await addPreset.click();
+    await expect(startPreset).toBeDisabled();
+    await expect(saveLayout).toBeDisabled();
+    await editor.getByRole('button', { name: 'Delete preset', exact: true }).click();
+    await addFrame.click();
+    await addFrame.click();
+    await expect(saveLayout).toBeDisabled();
+    await addPreset.click();
+    await expect(saveLayout).toBeEnabled();
+    await expect(startPreset).toBeDisabled();
+    const startWidth = (await startPreset.boundingBox())!.width;
+    await addFrame.click();
+    await addFrame.click();
     await editor.getByRole('button', { name: 'Delete frame' }).click();
     await expect(editor.getByRole('button', { name: 'Edit frame 4', exact: true })).toHaveCount(0);
+    await expect(editor.locator('.cg-live-layout-preview-controls')).toHaveCSS(
+      'overflow-y',
+      'visible',
+    );
+    for (const number of [1, 2, 3]) {
+      await expect(
+        editor.getByRole('button', { name: `Focus frame ${String(number)}`, exact: true }),
+      ).toBeVisible();
+    }
     await setInput(page, editor, 0, 'مجری برنامه 4۵٦');
     await setInput(page, editor, 1, 'سارا احمدی');
     await setInput(page, editor, 2, 'علی نظری 1۲٣');
+    const verticalMeter = '[data-source-audio-meter][data-input-meter-orientation="vertical"]';
+    await expect(stage.locator(`[data-layout-preview-shot] ${verticalMeter}`)).toHaveCount(3);
     const frame1 = editor.getByRole('button', { name: 'Edit frame 1', exact: true });
     const frame2 = editor.getByRole('button', { name: 'Edit frame 2', exact: true });
     await frame1.click();
@@ -317,6 +347,8 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await verticalGap.fill('36');
     await verticalGap.press('Tab');
     await editor.getByRole('button', { name: 'Add preset' }).click();
+    await expect(startPreset).toBeEnabled();
+    expect((await startPreset.boundingBox())!.width).toBeCloseTo(startWidth, 1);
     await editor.getByRole('textbox', { name: 'Preset name' }).fill('Interview');
     await editor.getByRole('checkbox', { name: 'Frame 3 in preset' }).uncheck();
     const positionPicker = editor.getByRole('group', { name: 'Position in preset', exact: true });
@@ -544,6 +576,15 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await editor.getByRole('button', { name: 'Align to mask', exact: true }).click();
     await expect(editor.getByLabel('Graphic X (%)', { exact: true })).toHaveValue('25');
     await expect(editor.getByLabel('Graphic width (%)', { exact: true })).toHaveValue('50');
+    await interview.click();
+    await editor.getByRole('checkbox', { name: 'Frame 3 in preset' }).check();
+    await expect(frameArt.locator('[data-cg-element-id="frame-graphic-accent"]')).toBeVisible();
+    await editor.getByRole('button', { name: /Focus frame 3.*خبرخوان/ }).click();
+    await expect(frameArt.locator('[data-cg-element-id="frame-graphic-accent"]')).toBeVisible();
+    await editor.getByRole('button', { name: 'Return to Interview' }).click();
+    await editor.getByRole('checkbox', { name: 'Frame 3 in preset' }).uncheck();
+    await threeUp.click();
+    await expect(frameArt.locator('[data-cg-element-id="frame-graphic-accent"]')).toBeVisible();
     await editor.getByRole('button', { name: 'Save layout' }).click();
     await expect(editor).toBeHidden();
 
@@ -565,7 +606,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
       throw new Error('The authored layout package was not retained');
     }
     const authored = listed.controlLiveLayout;
-    expect(authored.presets[0]?.frameAttachments).toMatchObject([
+    expect(authored.frameAttachments).toMatchObject([
       {
         name: 'Studio logo',
         frameId: authored.frames[2]?.id,
@@ -636,6 +677,14 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
       localFocus.getByRole('button', { name: /Focus frame 3 in Preview.*خبرخوان/ }),
     ).toBeVisible();
     await pvw.getByRole('button', { name: 'PLAY', exact: true }).click();
+    await expect(pvw.locator(`[data-live-plate-overlay] ${verticalMeter}`)).toHaveCount(3);
+    const authoredPlate = pvw.locator(`[data-live-plate="${authored.frames[0]!.id}"]`);
+    await expect(authoredPlate).toHaveAttribute('aria-label', /مجری برنامه/);
+    await expect(authoredPlate).not.toHaveAttribute(
+      'aria-label',
+      new RegExp(authored.frames[0]!.id),
+    );
+    await expect(authoredPlate).not.toContainText(authored.frames[0]!.id);
     const previewFrame = page.frameLocator('iframe[data-rehearsal-frame="panel"]');
     await expect(
       previewFrame.locator('[data-cg-pvw-picture-part][data-source-id="feed-1"]').first(),

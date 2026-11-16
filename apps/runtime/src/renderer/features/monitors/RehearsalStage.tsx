@@ -502,6 +502,12 @@ export function RehearsalStage({
       renderable.flatMap(({ subject }) => {
         const live = subject.liveSources;
         if (live === undefined || live.sources.length === 0) return [];
+        const frameLabels = new Map(
+          subject.controlLiveLayout?.frames.map(({ id, focusAlias, title }, i) => [
+            id,
+            focusAlias?.trim() || title.trim() || `Frame ${i + 1}`,
+          ]),
+        );
         return platePlacements(
           live,
           raster,
@@ -512,12 +518,16 @@ export function RehearsalStage({
           subject.appliedFramePlacements,
           subject.maskPlacements,
           subject.appliedMaskPlacements,
-        ).map((p) => ({
-          ...p,
-          itemId: subject.itemId,
-          channel: subject.channel,
-          elementId: `${subject.itemId}:${p.elementId}`,
-        }));
+        ).map((p) => {
+          const frameLabel = frameLabels.get(p.plateId);
+          return {
+            ...p,
+            ...(frameLabel !== undefined && { frameLabel }),
+            itemId: subject.itemId,
+            channel: subject.channel,
+            elementId: `${subject.itemId}:${p.elementId}`,
+          };
+        });
       }),
     [renderable, raster],
   );

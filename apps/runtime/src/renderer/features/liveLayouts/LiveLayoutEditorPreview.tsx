@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, type CSSProperties, type ReactNode } from 'rea
 import { Maximize2 } from 'lucide-react';
 import {
   DEFAULT_LIVE_FIT_MODE,
+  controlLiveLayoutFrameAttachments,
   controlLiveLayoutPresetFrameIds,
   controlLiveLayoutTitleHidden,
   fitPictureToBox,
@@ -26,7 +27,8 @@ import { IsolatedName } from '../../ui/OperatorNames.js';
 import { liveLayoutArtwork } from '../../theme.js';
 import { fullJpegRect } from '../monitors/pvwPlatePictures.js';
 import type { PvwSourceFrame } from '../monitors/usePvwSourceFrames.js';
-import { SourceLabel } from '../sources/SourceLabel.js';
+import { InputAudioMeter } from '../sources/InputAudioMeter.js';
+import { SourceLabel, labelledSource } from '../sources/SourceLabel.js';
 import {
   controlLiveLayoutFrameTexts,
   controlLiveLayoutTitleGeometry,
@@ -72,14 +74,12 @@ function blendRect(from: LiveSourceRect, to: LiveSourceRect, amount: number): Li
 }
 
 function ShotInput({
-  channel,
   source,
   input,
   frame,
   fallback,
   pictureBox,
 }: {
-  channel: number;
   source: PvwSourceFrame | undefined;
   input: ControlLiveLayoutFrame;
   frame: LiveSourceRect;
@@ -110,11 +110,7 @@ function ShotInput({
             className="cg-live-layout-shot-label"
             style={cssRect(liveRevealSceneRect(seat, label), box)}
           >
-            <SourceLabel
-              sourceId={input.sourceId ?? ''}
-              fallback={fallback}
-              meterChannel={channel}
-            />
+            <SourceLabel sourceId={input.sourceId ?? ''} fallback={fallback} />
           </div>
         )}
       </>
@@ -415,8 +411,9 @@ export function LiveLayoutEditorPreview({
           const activeShot = visible[id] !== undefined;
           const rect = visible[id] ?? geometry[id] ?? full;
           const preview = sourceId === undefined ? undefined : sourceFrames.get(sourceId);
+          const source = labelledSource(sourceId);
           const titleHidden = controlLiveLayoutTitleHidden(preset, id, focused !== undefined);
-          const graphics = (preset.frameAttachments ?? []).filter(({ frameId }) => frameId === id);
+          const graphics = controlLiveLayoutFrameAttachments(layout, preset, id);
           const graphicWithInput = graphics.find(
             ({ sourceId }) => attachmentSources.get(sourceId)?.plate !== undefined,
           );
@@ -454,13 +451,22 @@ export function LiveLayoutEditorPreview({
               }}
             >
               <ShotInput
-                channel={channel}
                 source={preview}
                 input={previewInput}
                 frame={rect}
                 pictureBox={pictureBox}
                 fallback={`Frame ${number}`}
               />
+              {activeShot && sourceId !== undefined && (
+                <InputAudioMeter
+                  sourceId={sourceId}
+                  channel={source?.unavailable === true ? undefined : channel}
+                  name={source?.name ?? `Frame ${number}`}
+                  hasAudio={source?.hasAudio}
+                  orientation="vertical"
+                  edge
+                />
+              )}
               {graphics.map((attachment) => {
                 const source = attachmentSources.get(attachment.sourceId);
                 if (source === undefined) return null;
@@ -483,17 +489,16 @@ export function LiveLayoutEditorPreview({
                 </div>
               )}
               {activeSingle === undefined && activeShot && (
-                <div className="cg-live-layout-focus-action">
-                  <Button
-                    variant="secondary"
-                    aria-label={focusName}
-                    title={focusName}
-                    data-layout-focus={id}
-                    onClick={() => onFocus(id)}
-                  >
-                    <Icon icon={Maximize2} size={13} /> <IsolatedName>{focusLabel}</IsolatedName>
-                  </Button>
-                </div>
+                <Button
+                  className="cg-live-layout-focus-action"
+                  variant="neutral"
+                  aria-label={focusName}
+                  title={focusName}
+                  data-layout-focus={id}
+                  onClick={() => onFocus(id)}
+                >
+                  <Icon icon={Maximize2} size={13} /> <IsolatedName>{focusLabel}</IsolatedName>
+                </Button>
               )}
               {activeShot && selectedFrameId === id && placementEditor}
             </div>

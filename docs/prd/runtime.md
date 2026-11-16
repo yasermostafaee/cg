@@ -5237,7 +5237,7 @@ Send CG commands to the active engine after its external-graphics transfer contr
 **Why:** Operators need to prepare a programme and move between panel and individual guest shots during a show.
 **Acceptance:**
 
-- WHEN building a live layout THEN the operator can add and remove frames and presets, choose each preset's members and grid arrangement, and bind a title and input to each frame.
+- WHEN opening a new live layout THEN it starts with no frames or presets. The operator can add either first, choose each preset's members and grid arrangement, and bind a title and input to each frame.
 - WHEN choosing a background or layout-wide effect THEN the operator can preview it and reuse it across that layout's presets.
 - WHEN focusing a frame or returning THEN PVW and PGM use the configured effect and Return restores the original preset, positions, titles and inputs.
 - WHEN another frame is selected during Focus THEN the chosen Cut, Fade, Motion, Push or Slide over plays directly between solo views with their existing inputs.
@@ -5246,7 +5246,7 @@ Send CG commands to the active engine after its external-graphics transfer contr
 - WHEN opening advanced frame controls THEN the operator can choose Fit, Move and Resize permissions, and the frame mask. The same frame configuration applies across its presets and Focus.
 - WHEN selecting a position in a preset THEN the selected frame swaps with its occupant. A frame's optional Focus label identifies it on both PVW and PGM controls.
 - WHEN adding text to a frame THEN each text can inherit the frame's style and have its own editable value, position and overrides.
-- WHEN selecting a preset or frame THEN the editor marks the selected item and leaves enough space to see the composition.
+- WHEN selecting a preset or frame THEN the editor marks the selection with a steady header and keeps Arrange in the editor's main scroll area. Focus remains available for each frame of a panel or solo preview.
 - WHEN rehearsing a direct solo frame switch in the editor or PVW THEN the configured switch effect plays.
 - WHEN Show title in Focus is off THEN the title is absent from its solo view and follows the regular preset visibility on Return.
 - WHEN arranging a preset with at least two frames THEN its horizontal and vertical gaps are visible beside the arrangement tools.
@@ -5254,25 +5254,28 @@ Send CG commands to the active engine after its external-graphics transfer contr
 
 ## [~] R-121 — Edit masks and attach frame templates inside New live layout ⟨priority: medium — owner, 2026-11-15⟩
 
-**What:** Reuse Designer VCGs as graphics or masked live inputs on frames in a preset. Adjust its placement and the direct frame mask in the New live layout preview.
+**What:** Reuse Designer VCGs as graphics or masked live inputs bound to a frame across presets. Adjust their placement and the direct frame mask in the New live layout preview.
 **Why:** An operator can fit prepared artwork around a captured subtitle strip or a live shot while keeping the shared layout editable.
 **Acceptance:**
 
-- WHEN an operator selects a frame and opens Advanced THEN they can edit a rectangular input mask with handles and numeric values, or attach a Designer VCG to the chosen frame and preset.
+- WHEN an operator selects a frame and opens Advanced THEN they can edit a rectangular input mask with handles and numeric values, or attach a Designer VCG to the chosen frame across its presets and Focus views.
 - WHEN the attached VCG is artwork THEN it renders over the current frame input. WHEN it uses a masked live plate THEN the selected input feeds that plate and the authored artwork, mask and relative geometry are preserved.
 - WHEN the operator attaches multiple graphics THEN they can reorder and position them independently. WHEN the operator moves or resizes an attachment THEN the preview updates and Save, Edit and Duplicate preserve the order, placement and packaged assets.
-- WHEN moving a frame or switching Focus and Return THEN its applicable artwork follows the frame, regular presets restore their exact saved placements, and the shared input mask remains consistent across presets.
+- WHEN moving a frame or switching preset, Focus or Return THEN its artwork moves and takes the same effect with it. Regular presets restore their saved placements and the shared input mask follows the same frame.
 
 **Feasibility:** Assess corner radius for the live picture itself. Verify a rounded alpha aperture in PVW and on the target Playout Engine, including overlapping plates and frame transitions.
 
-The frame graphics importer renders verified still artwork and can carry one masked plate per frame and preset.
+The frame graphics importer renders verified still artwork and can carry one shared masked plate per frame.
 A masked attachment uses the frame's selected input. Save keeps the original attachment sources so Edit and Duplicate
-remain self-contained. Repeatable playback and independent timeline animation within imported artwork need a separate
-runtime design.
+remain self-contained. Older presets keep their authored placements until that frame's graphics are edited.
+Distinct existing masks retain their preset bindings where making them shared would change the picture.
+Repeatable playback and independent timeline animation within imported artwork need a separate runtime design.
 
 ### Pre-air source audio indicators
 
 The source picker, assigned-input fields, and Station setup show a compact audio indicator next to the source.
+Source cards and live frames show their meters vertically beside their pictures. PGM meters stay with their
+respective engine pictures, including when all pictures and meters are visible.
 The visible entries share one bounded, authenticated batch. A currently checked input shows fresh measured peaks
 from its own existing preview lease. A still asset with confirmed no audio has a distinct state. Other sources
 stay unknown until the Playout exposes independent source telemetry or authoritative audio-stream metadata.

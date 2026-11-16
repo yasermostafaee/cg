@@ -291,14 +291,14 @@ export function LiveLayoutEditorTitleStyle({
             Frame {frameNumber}
           </Button>
           {!sharedSelection && override !== undefined && (
-            <Button variant="secondary" onClick={onResetOverride}>
+            <Button variant="neutral" onClick={onResetOverride}>
               Use shared style
             </Button>
           )}
         </div>
       )}
       {onSharedChange === undefined && override !== undefined && (
-        <Button variant="secondary" onClick={onResetOverride}>
+        <Button variant="neutral" onClick={onResetOverride}>
           Use frame style
         </Button>
       )}
@@ -323,7 +323,11 @@ export function LiveLayoutEditorTitleStyle({
             onChange={(fontFamily) => onChange({ fontFamily })}
           />
           <div className="cg-live-layout-font-add">
-            <Button variant="add" disabled={readingFont} onClick={() => fontInput.current?.click()}>
+            <Button
+              variant="neutral"
+              disabled={readingFont}
+              onClick={() => fontInput.current?.click()}
+            >
               <Icon icon={Plus} size={14} /> {readingFont ? 'Reading font…' : 'Add font'}
             </Button>
             <FileInput

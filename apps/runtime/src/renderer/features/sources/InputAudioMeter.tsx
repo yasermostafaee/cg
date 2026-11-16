@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { SourceAudioReading } from '@cg/shared-ipc';
 import { meterPercent } from '../monitors/meterScale.js';
 import { subscribeInputAudio } from './inputAudioDemand.js';
@@ -9,11 +9,17 @@ export function InputAudioMeter({
   channel,
   name,
   hasAudio,
+  orientation = 'horizontal',
+  edge = false,
+  style,
 }: {
   sourceId: string;
   channel: number | undefined;
   name: string;
   hasAudio?: boolean | undefined;
+  orientation?: 'horizontal' | 'vertical';
+  edge?: boolean;
+  style?: CSSProperties;
 }): JSX.Element {
   const ref = useRef<HTMLSpanElement>(null);
   const [snapshot, setSnapshot] = useState<{ channel: number; data: SourceAudioReading }>();
@@ -75,15 +81,25 @@ export function InputAudioMeter({
       ref={ref}
       className="cg-input-meter"
       data-source-audio-meter={state}
+      data-input-meter-orientation={orientation}
+      data-input-meter-edge={edge ? '' : undefined}
       role="img"
       aria-label={`${name} · ${label}`}
       title={label}
       dir="ltr"
+      style={style}
     >
       <span
         className="cg-input-meter__level"
         style={
-          level === null ? undefined : { clipPath: `inset(0 ${100 - meterPercent(level)}% 0 0)` }
+          level === null
+            ? undefined
+            : {
+                clipPath:
+                  orientation === 'vertical'
+                    ? `inset(${100 - meterPercent(level)}% 0 0)`
+                    : `inset(0 ${100 - meterPercent(level)}% 0 0)`,
+              }
         }
       />
     </span>

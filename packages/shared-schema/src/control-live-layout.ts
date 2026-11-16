@@ -150,6 +150,7 @@ const ControlLiveLayoutPresetSchema = z.object({
   reverse: z.boolean(),
   hiddenTitles: z.array(ControlLiveLayoutFrameIdSchema).max(CONTROL_LIVE_LAYOUT_MAX_FRAMES),
   hiddenFocusTitles: z.array(ControlLiveLayoutFrameIdSchema).max(CONTROL_LIVE_LAYOUT_MAX_FRAMES),
+  // Retained for packages that authored graphics separately for each preset.
   frameAttachments: z.array(ControlLiveLayoutFrameAttachmentSchema).optional(),
 });
 export type ControlLiveLayoutPreset = z.infer<typeof ControlLiveLayoutPresetSchema>;
@@ -206,6 +207,7 @@ export const ControlLiveLayoutSchema = z
     resolution: ResolutionSchema,
     frameRate: FrameRateSchema,
     frames: z.array(ControlLiveLayoutFrameSchema).min(1).max(CONTROL_LIVE_LAYOUT_MAX_FRAMES),
+    frameAttachments: z.array(ControlLiveLayoutFrameAttachmentSchema).optional(),
     titleStyle: ControlLiveLayoutTitleStyleSchema.optional(),
     additionalTextStyles: z.array(ControlLiveLayoutTitleStyleSchema.nullable()).optional(),
     fonts: z.array(ControlLiveLayoutFontSchema).optional(),
@@ -243,6 +245,11 @@ export const ControlLiveLayoutSchema = z
     });
 
     if (frameIds.size !== layout.frames.length) issue(['frames'], 'Frames must have distinct ids.');
+    const sharedAttachments = layout.frameAttachments ?? [];
+    if (new Set(sharedAttachments.map(({ id }) => id)).size !== sharedAttachments.length)
+      issue(['frameAttachments'], 'Frame attachments must have distinct ids.');
+    if (sharedAttachments.some(({ frameId }) => !frameIds.has(frameId)))
+      issue(['frameAttachments'], 'Frame attachments must belong to a frame in this layout.');
     if (presetIds.size !== layout.presets.length)
       issue(['presets'], 'Presets must have distinct ids.');
     if (!presetIds.has(layout.defaultPresetId))
@@ -267,6 +274,25 @@ export const ControlLiveLayoutSchema = z
     }
   });
 export type ControlLiveLayout = z.infer<typeof ControlLiveLayoutSchema>;
+
+export function controlLiveLayoutAttachments(
+  layout: Pick<ControlLiveLayout, 'frameAttachments' | 'presets'>,
+): ControlLiveLayoutFrameAttachment[] {
+  return [
+    ...(layout.frameAttachments ?? []),
+    ...layout.presets.flatMap(({ frameAttachments }) => frameAttachments ?? []),
+  ];
+}
+
+export function controlLiveLayoutFrameAttachments(
+  layout: Pick<ControlLiveLayout, 'frameAttachments'>,
+  preset: Pick<ControlLiveLayoutPreset, 'frameAttachments'> | undefined,
+  frameId: string,
+): ControlLiveLayoutFrameAttachment[] {
+  return [...(layout.frameAttachments ?? []), ...(preset?.frameAttachments ?? [])].filter(
+    (attachment) => attachment.frameId === frameId,
+  );
+}
 
 const FOCUS_LOOK_PREFIX = 'control-focus:';
 

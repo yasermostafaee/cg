@@ -6,6 +6,7 @@ import {
   ControlLiveLayoutSchema,
   CUT_LOOK_TRANSITION,
   DEFAULT_LIVE_FIT_MODE,
+  controlLiveLayoutAttachments,
   controlLiveLayoutFocusLookId,
   controlLiveLayoutFocusTarget,
   controlLiveLayoutFontFamily,
@@ -521,7 +522,8 @@ export function buildControlLiveLayoutScene(
   const layout = ControlLiveLayoutSchema.parse(authored);
   const { resolution, frames } = layout;
   const fullFrame = { x: 0, y: 0, ...resolution };
-  const allAttachments = layout.presets.flatMap((preset) => preset.frameAttachments ?? []);
+  const allAttachments = controlLiveLayoutAttachments(layout);
+  const sharedAttachmentIds = (layout.frameAttachments ?? []).map(({ id }) => id);
   if (new Set(allAttachments.map(({ id }) => id)).size !== allAttachments.length)
     throw new Error('Frame graphic IDs must be unique within the layout.');
   const byFrame = new Map<string, ResolvedAttachment[]>();
@@ -564,7 +566,10 @@ export function buildControlLiveLayoutScene(
       const rect = rects[frame.id];
       if (rect === undefined) return [];
       const attachments = byFrame.get(frame.id) ?? [];
-      const included = new Set(preset.frameAttachments?.map(({ id }) => id));
+      const included = new Set([
+        ...sharedAttachmentIds,
+        ...(preset.frameAttachments ?? []).map(({ id }) => id),
+      ]);
       const hiddenChildIds: string[] = [];
       let hasMaskedInput = false;
       for (const { attachment, source } of attachments) {
@@ -727,9 +732,7 @@ export async function compileControlLiveLayout(
   const assets = new Map<string, Uint8Array>();
   const fonts = new Map<string, Uint8Array>();
   const usedAttachmentIds = new Set(
-    layout.presets.flatMap((preset) =>
-      (preset.frameAttachments ?? []).map(({ sourceId }) => sourceId),
-    ),
+    controlLiveLayoutAttachments(layout).map(({ sourceId }) => sourceId),
   );
   let attachmentBytes = 0;
   for (const id of usedAttachmentIds) {
@@ -790,6 +793,12 @@ export async function compileControlLiveLayout(
     fonts.set(path, bytes);
   }
 
+  let minRuntimeVersion = requiredRuntimeVersionForScene(scene, true);
+  if ((layout.frameAttachments?.length ?? 0) > 0) {
+    minRuntimeVersion = '1.2.8';
+  } else if (usedAttachmentIds.size > 0) {
+    minRuntimeVersion = '1.2.7';
+  }
   const packageBytes = await pack({
     scene,
     manifestExtras: {
@@ -801,8 +810,7 @@ export async function compileControlLiveLayout(
         exportedAt: scene.metadata.updatedAt,
       },
       compatibility: {
-        minRuntimeVersion:
-          usedAttachmentIds.size > 0 ? '1.2.7' : requiredRuntimeVersionForScene(scene, true),
+        minRuntimeVersion,
         minCasparCGVersion: '2.3.0',
       },
       fontDeps: scene.fonts,
@@ -831,14 +839,12 @@ export async function readControlLiveLayout(bytes: Uint8Array): Promise<{
     throw new Error('This template does not contain an editable live layout.');
   const fonts = new Map<string, Blob>();
   const attachments = new Map<string, ControlLiveLayoutFrameAttachmentSource>();
-  for (const preset of layout.presets) {
-    for (const { sourceId, name } of preset.frameAttachments ?? []) {
-      if (attachments.has(sourceId)) continue;
-      const raw = files.get(frameAttachmentArchivePath(sourceId));
-      if (raw === undefined || sha256Hex(raw) !== sourceId)
-        throw new Error(`The saved frame graphic “${name}” is unavailable.`);
-      attachments.set(sourceId, await unpackControlLiveLayoutFrameAttachment(raw));
-    }
+  for (const { sourceId, name } of controlLiveLayoutAttachments(layout)) {
+    if (attachments.has(sourceId)) continue;
+    const raw = files.get(frameAttachmentArchivePath(sourceId));
+    if (raw === undefined || sha256Hex(raw) !== sourceId)
+      throw new Error(`The saved frame graphic “${name}” is unavailable.`);
+    attachments.set(sourceId, await unpackControlLiveLayoutFrameAttachment(raw));
   }
   for (const font of layout.fonts ?? []) {
     const entry = manifest.assetIndex.find(({ id, kind }) => id === font.id && kind === 'font');

@@ -59,6 +59,8 @@
   height: auto;
   min-height: var(--r-look-btn-h);
   padding-block: 0.25rem;
+  font-size: var(--r-look-btn-text);
+  font-weight: 400;
 }
 
 [data-control-layout-focus='programme'] .cg-btn[data-focus-onair]:disabled {

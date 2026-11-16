@@ -4,7 +4,8 @@ import type { ChannelRaster } from '@cg/shared-ipc';
 import { largestLivePlateMaskRegion } from '@cg/shared-schema';
 import { colors, cssVars } from '../../theme.js';
 import { Icon } from '../../ui/Icon.js';
-import { SourceLabel } from '../sources/SourceLabel.js';
+import { InputAudioMeter } from '../sources/InputAudioMeter.js';
+import { SourceLabel, labelledSource } from '../sources/SourceLabel.js';
 import { frameBox } from './rehearsalFrames.js';
 import type { PlatePlacement } from './livePlateGeometry.js';
 import type { PvwSourceFrame } from './usePvwSourceFrames.js';
@@ -73,15 +74,8 @@ const styles = {
 /**
  * `add-multibox-audio` — **HOW A BOX SAYS WHETHER IT HAS SOUND.**
  *
- * ── 🔴 A PILL, NEVER A METER, AND ON THIS SURFACE THAT MATTERS MOST ─────────
- *
- * This whole overlay exists because a placeholder that READS AS A PICTURE is worse than the
- * blank region it replaces — it converts *"I can't see it"* into *"I saw it and it was fine"*.
- * An audio BAR here would be the identical mistake on the identical surface, one sense over:
- * it would convert *"I can't hear it"* into *"I watched the level and it was fine"*, while the
- * console in fact knows only what was ASKED FOR. CasparCG's programme channel reports ONE peak
- * pair for the whole channel, so a per-box level does not exist to be drawn (`add-multibox-audio`
- * design.md §6). Word plus dot; nothing that could be mistaken for a measurement.
+ * This glyph describes the plate's configured audio state. The vertical rail
+ * shows separately measured input levels when the source supplies them.
  *
  * ── COLOUR FOLLOWS THIS FILE'S EXISTING RULE, NOT A NEW ONE ────────────────
  *
@@ -223,12 +217,16 @@ export function LivePlateOverlay({
     >
       {placements.map((p) => {
         const assigned = p.sourceName !== null;
+        const source = labelledSource(p.sourceId);
         const preview = p.sourceId === null ? undefined : sourceFrames?.get(p.sourceId);
         const hasPicture = preview?.jpegBase64 !== undefined;
         const audio = p.audio === undefined ? undefined : AUDIO_GLYPH[p.audio];
         const region = largestLivePlateMaskRegion(p.mask);
         const roomForLabel = regionFitsCaveat(p.width * (region?.width ?? 0) * fit);
-        const showPlateId = p.mask !== undefined || roomForLabel;
+        const authoredFrame = p.frameLabel !== undefined;
+        const plateLabel = p.frameLabel ?? p.plateId;
+        // A live layout already paints its own frame caption. Keep status chrome clear of it.
+        const showPlateId = !authoredFrame && (p.mask !== undefined || roomForLabel);
         const labelAnchor: CSSProperties =
           region === null || p.mask === undefined
             ? {}
@@ -249,7 +247,7 @@ export function LivePlateOverlay({
               were laid out.
             */
             role="img"
-            aria-label={regionCaveat(p.plateId, p.sourceName, p.audio, p.cropEdges, preview)}
+            aria-label={regionCaveat(plateLabel, p.sourceName, p.audio, p.cropEdges, preview)}
             style={{
               position: 'absolute',
               left: `${String(p.x)}px`,
@@ -266,15 +264,33 @@ export function LivePlateOverlay({
               overflow: 'hidden',
             }}
           >
+            {region !== null && p.sourceId !== null && (
+              <InputAudioMeter
+                sourceId={p.sourceId}
+                channel={source?.unavailable === true ? undefined : channel}
+                name={source?.name ?? p.plateId}
+                hasAudio={source?.hasAudio}
+                orientation="vertical"
+                edge
+                style={{
+                  insetInlineEnd: 3 * inv,
+                  inlineSize: 6 * inv,
+                  borderWidth: inv,
+                  maxBlockSize: 96 * inv,
+                }}
+              />
+            )}
             {region === null ? null : hasPicture ? (
               (showPlateId || audio !== undefined) && (
                 <div
                   data-live-plate-label=""
                   style={{
                     ...styles.chip,
-                    ...(p.mask === undefined
-                      ? { left: 'auto', top: 'auto', bottom: 4 * inv, right: 4 * inv }
-                      : labelAnchor),
+                    ...(p.mask !== undefined
+                      ? labelAnchor
+                      : authoredFrame
+                        ? { left: 'auto', top: 4 * inv, right: 4 * inv }
+                        : { left: 'auto', top: 'auto', bottom: 4 * inv, right: 4 * inv }),
                     padding: '2px 4px',
                     gap: '4px',
                     flexDirection: 'row',
@@ -282,14 +298,19 @@ export function LivePlateOverlay({
                     transform:
                       (p.mask === undefined ? '' : 'translate(-50%, -50%) ') +
                       `scale(${String(inv)})`,
-                    transformOrigin: p.mask === undefined ? 'right bottom' : 'center center',
+                    transformOrigin:
+                      p.mask !== undefined
+                        ? 'center center'
+                        : authoredFrame
+                          ? 'right top'
+                          : 'right bottom',
                   }}
                 >
                   {showPlateId && (
                     <span
                       style={{ ...styles.source, overflow: 'hidden', textOverflow: 'ellipsis' }}
                     >
-                      {p.plateId}
+                      {plateLabel}
                     </span>
                   )}
                   {roomForLabel && p.cropEdges && <span style={styles.fit}>Crop edges</span>}
@@ -321,16 +342,14 @@ export function LivePlateOverlay({
                     {preview?.signal === 'absent' ? 'No signal' : REGION_CAVEAT}
                   </span>
                 )}
-                <span style={styles.plate}>{p.plateId}</span>
+                <span style={styles.plate}>
+                  <bdi>{plateLabel}</bdi>
+                </span>
                 {p.cropEdges === true && <span style={styles.fit}>Crop edges</span>}
                 {assigned ? (
                   // `PLAYOUT-SOURCES-01` §2.B — the name as every surface names it.
                   <span style={styles.source}>
-                    <SourceLabel
-                      sourceId={p.sourceId}
-                      fallback={p.sourceName ?? undefined}
-                      meterChannel={channel}
-                    />
+                    <SourceLabel sourceId={p.sourceId} fallback={p.sourceName ?? undefined} />
                   </span>
                 ) : (
                   <span style={styles.unassigned} data-live-plate-unassigned="">

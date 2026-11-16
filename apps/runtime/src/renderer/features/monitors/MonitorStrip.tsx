@@ -156,7 +156,9 @@ export function MonitorStrip({
   const usePcmMeter =
     !legacy &&
     audioChannel !== null &&
-    audioTarget?.meterEngine === undefined &&
+    audioTarget !== undefined &&
+    visible.has(audioTarget.engine) &&
+    audioTarget.meterEngine === undefined &&
     monitorPreferences.showMeter;
   const programSound = usePgmAudio(
     audioChannel,

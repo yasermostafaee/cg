@@ -37,3 +37,12 @@ The normal preset and Focus look reference the same frame definition.
 
 The editor and browser PVW honor the saved broadcast effect when rehearsing a Focus change.
 Keep the editing selection distinct from the temporary focus on the rehearsal canvas.
+
+Use an empty editor draft until the operator adds frames and presets. Offer Start with this preset
+in a fixed position and keep Arrange in the main editor scroll area. Show Focus controls for all
+visible frames even when a different frame or the preset itself is selected.
+
+Store newly attached graphics on the shared frame identity. Preserve each attachment's stable
+artwork identity and frame-relative coordinates in preset and Focus compositions so the frame
+transition carries its graphics. Existing scoped attachments remain readable. Explicit edits share
+legacy attachments unless incompatible masked placements would change a preset's picture.

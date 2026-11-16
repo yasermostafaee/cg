@@ -64,9 +64,8 @@ import { RehearsalStage, type RehearsalTransport } from './RehearsalStage.js';
 import { templateName } from '../../ui/operatorNaming.js';
 import type { PvwPage } from '../../../shared/pvwPage.js';
 import { rowNameFor, subjectsFor, type RehearsalSubject } from './rehearsalFrames.js';
-import { SourcePicker } from '../sources/SourcePicker.js';
 import { LiveInputCheckCard } from './LiveInputCheckCard.js';
-import { PVW_INPUT_SURFACE, useLiveInputCheck } from './liveInputCheckContext.js';
+import { PVW_INPUT_SURFACE } from './liveInputCheckContext.js';
 import { usePreserveFrameAspect } from './previewResizePreferences.js';
 import { useFrameTransitionPreference } from '../inspector/frameTransitionPreference.js';
 import { ControlLayoutFocus } from '../liveLayouts/ControlLayoutFocus.js';
@@ -729,8 +728,6 @@ export function PreviewPanel({
         <span className="cg-monitor-fact" data-rehearsal-caption="">
           {rehearsalCaption(renderableCount, subjects.length)}
         </span>
-        <span className="cg-monitor-strip__spacer" />
-        <CheckInput channel={viewChannel} />
       </div>
       {selectedLayout?.controlLiveLayout !== undefined && (
         <ControlLayoutFocus
@@ -785,24 +782,5 @@ export function PreviewPanel({
         <LiveInputCheckCard surface={PVW_INPUT_SURFACE} />
       </div>
     </Panel>
-  );
-}
-
-function CheckInput({ channel }: { channel: number | null }): JSX.Element | null {
-  const control = useLiveInputCheck();
-  if (channel === null || control?.enabled !== true) return null;
-  return (
-    <SourcePicker
-      aria-label="Check input"
-      value=""
-      choices={[{ value: '', label: 'Check input' }]}
-      className="cg-input-check-picker"
-      channel={channel}
-      checkOnly
-      onChange={(id) => {
-        const source = currentSourceCatalog().sources.find((item) => item.id === id);
-        if (source !== undefined) control.start(PVW_INPUT_SURFACE, channel, source);
-      }}
-    />
   );
 }

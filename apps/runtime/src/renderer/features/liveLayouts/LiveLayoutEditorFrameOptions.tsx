@@ -137,7 +137,7 @@ export function LiveLayoutEditorFrameOptions({
       <section className="cg-live-layout-frame-mask" aria-label="Frame mask">
         <div className="cg-live-layout-frame-option-buttons">
           <Button
-            variant="add"
+            variant="neutral"
             disabled={windows.length >= LIVE_REVEAL_MAX_RECTS}
             onClick={addWindow}
           >
@@ -146,12 +146,12 @@ export function LiveLayoutEditorFrameOptions({
           </Button>
           {mask !== undefined && (
             <>
-              <Button variant="secondary" onClick={removeWindow}>
+              <Button variant="neutral" onClick={removeWindow}>
                 <Icon icon={Trash2} size={14} />
                 Remove mask window
               </Button>
               <Button
-                variant="secondary"
+                variant="neutral"
                 disabled={!canEditMask}
                 active={editingMask}
                 aria-pressed={editingMask}

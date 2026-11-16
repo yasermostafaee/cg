@@ -18,6 +18,7 @@ const FIELDS = [
 
 interface Props {
   attachments: readonly ControlLiveLayoutFrameAttachment[];
+  legacyIds?: readonly string[] | undefined;
   selectedId: string | undefined;
   selectedMask: LiveRevealRect | undefined;
   importing: boolean;
@@ -33,6 +34,7 @@ interface Props {
 
 export function LiveLayoutEditorFrameAttachments({
   attachments,
+  legacyIds,
   selectedId,
   selectedMask,
   importing,
@@ -48,6 +50,15 @@ export function LiveLayoutEditorFrameAttachments({
   const picker = useRef<HTMLInputElement>(null);
   const selectedIndex = attachments.findIndex(({ id }) => id === selectedId);
   const selected = attachments[selectedIndex];
+  const isLegacy = (id: string): boolean => legacyIds?.includes(id) === true;
+  function canReorder(direction: -1 | 1): boolean {
+    const neighbor = attachments[selectedIndex + direction];
+    return (
+      selected !== undefined &&
+      neighbor !== undefined &&
+      isLegacy(selected.id) === isLegacy(neighbor.id)
+    );
+  }
 
   return (
     <details
@@ -82,10 +93,16 @@ export function LiveLayoutEditorFrameAttachments({
             if (file !== undefined) void onImport(file);
           }}
         />
-        <Button variant="add" disabled={importing} onClick={() => picker.current?.click()}>
+        <Button variant="neutral" disabled={importing} onClick={() => picker.current?.click()}>
           <Icon icon={ImagePlus} size={14} /> {importing ? 'Reading graphic…' : 'Add .vcg graphic'}
         </Button>
       </div>
+      {selected !== undefined && isLegacy(selected.id) && (
+        <p className="cg-live-layout-effect-help">
+          This graphic was saved for this preset. Editing shares it if the frame has no conflicting
+          masked input graphics.
+        </p>
+      )}
       {selected !== undefined && (
         <>
           <div
@@ -94,25 +111,25 @@ export function LiveLayoutEditorFrameAttachments({
             aria-label="Graphic actions"
           >
             <Button
-              variant="secondary"
+              variant="neutral"
               aria-label="Bring graphic forward"
               title="Bring graphic forward"
-              disabled={selectedIndex >= attachments.length - 1}
+              disabled={!canReorder(1)}
               onClick={() => onReorder(selected.id, 1)}
             >
               <Icon icon={ArrowUp} size={14} />
             </Button>
             <Button
-              variant="secondary"
+              variant="neutral"
               aria-label="Send graphic backward"
               title="Send graphic backward"
-              disabled={selectedIndex === 0}
+              disabled={!canReorder(-1)}
               onClick={() => onReorder(selected.id, -1)}
             >
               <Icon icon={ArrowDown} size={14} />
             </Button>
             <Button
-              variant="secondary"
+              variant="neutral"
               aria-label="Remove graphic"
               title="Remove graphic"
               onClick={() => onRemove(selected.id)}
@@ -120,12 +137,12 @@ export function LiveLayoutEditorFrameAttachments({
               <Icon icon={Trash2} size={14} />
             </Button>
             {selectedMask !== undefined && (
-              <Button variant="secondary" onClick={() => onRectChange(selected.id, selectedMask)}>
+              <Button variant="neutral" onClick={() => onRectChange(selected.id, selectedMask)}>
                 <Icon icon={Scan} size={14} /> Align to mask
               </Button>
             )}
             <Button
-              variant="secondary"
+              variant="neutral"
               active={editing}
               aria-pressed={editing}
               disabled={!canEdit}

@@ -295,9 +295,11 @@ describe('D-201 — synchronized live-input foreground pass', () => {
     },
   );
 
-  it.each([false, true])(
-    'hides a scoped title and keeps its data bound (legacy solo: %s)',
-    async (legacySolo) => {
+  it.each(['scoped', 'legacy solo', 'shared graphic'] as const)(
+    'hides a scoped title and keeps its data bound (%s)',
+    async (mode) => {
+      const legacySolo = mode === 'legacy solo';
+      const sharedGraphic = mode === 'shared graphic';
       const scene = movableFrameScene();
       const layer = scene.layers[0];
       const box = layer?.children[0];
@@ -336,13 +338,47 @@ describe('D-201 — synchronized live-input foreground pass', () => {
           })),
         },
       ];
-      if (legacySolo) {
+      if (sharedGraphic) {
+        const shot = child.layers[0];
+        const title = shot?.children.find((element) => element.type === 'text');
+        if (shot === undefined || title === undefined || scene.compositions === undefined)
+          throw new Error('Missing graphic fixture');
+        scene.compositions.push({
+          ...child,
+          id: 'graphic-overlay',
+          layers: [
+            {
+              ...shot,
+              children: [{ ...title, id: 'graphic-caption', liveForeground: true }],
+            },
+          ],
+        });
+        shot.children.push({
+          ...box,
+          id: 'graphic-instance',
+          compositionId: 'graphic-overlay',
+          liveForeground: true,
+        });
+      }
+
+      if (legacySolo || sharedGraphic) {
         scene.controlLiveLayout = {
           id: scene.id,
           name: scene.name,
           resolution: scene.resolution,
           frameRate: scene.frameRate,
           frames: [{ id: 'guest', title: 'Guest' }],
+          ...(sharedGraphic && {
+            frameAttachments: [
+              {
+                id: 'graphic',
+                frameId: 'guest',
+                sourceId: 'a'.repeat(64),
+                name: 'Graphic',
+                rect: { x: 0, y: 0, width: 1, height: 1 },
+              },
+            ],
+          }),
           presets: presets.map(({ id, name }) => ({
             id,
             name,
@@ -391,6 +427,14 @@ describe('D-201 — synchronized live-input foreground pass', () => {
       expect(visible.hasAttribute('data-cg-instance-hidden-text')).toBe(false);
       await runtime.play({});
       expect(hidden.style.display).toBe('none');
+      if (sharedGraphic) {
+        const graphicCaption = document.querySelector<HTMLElement>(
+          '[data-cg-element-id="title-off"] [data-cg-element-id="graphic-caption"]',
+        );
+        expect(graphicCaption).not.toBeNull();
+        expect(graphicCaption?.hasAttribute('data-cg-instance-hidden-text')).toBe(false);
+        expect(graphicCaption?.style.display).not.toBe('none');
+      }
       await runtime.update({
         'Title off': { box: { anchor: 'مهمان' } },
         'Title on': { box: { anchor: 'مهمان' } },

@@ -167,7 +167,6 @@ export interface SourcePickerProps {
   channel?: number | undefined;
   /** Snapshot authority when the choices themselves do not have channel gating. */
   previewChannel?: number | undefined;
-  checkOnly?: boolean | undefined;
   inputCheck?: { channel: number; start: (source: SourceDefinition) => void } | undefined;
   'aria-label': string;
   id?: string | undefined;
@@ -205,7 +204,6 @@ export function SourcePicker({
   choices,
   channel,
   previewChannel,
-  checkOnly = false,
   inputCheck,
   'aria-label': ariaLabel,
   id,
@@ -273,41 +271,22 @@ export function SourcePicker({
           anchor={field}
           onClose={close}
           id={panelId}
-          aria-label={checkOnly ? 'Choose an input to check' : 'Choose a source'}
+          aria-label="Choose a source"
           minWidth={PICKER_MIN_WIDTH}
           maxHeight={PICKER_MAX_HEIGHT}
           variant="raised"
           initialFocusSelector={isMediaId(value) ? '[data-picker-search]' : '[data-picker-list]'}
         >
-          {checkOnly ? (
-            <div className="cg-picker">
-              <InputsTab
-                listId={`${base}-inputs`}
-                inputs={currentSourceCatalog().sources.filter(
-                  (source) =>
-                    source.origin === 'input' &&
-                    !isPlaylistOutput(source) &&
-                    source.departed !== true,
-                )}
-                value=""
-                channel={channel}
-                previewChannel={thumbnailChannel}
-                onPick={pick}
-                checkOnly
-              />
-            </div>
-          ) : (
-            <PickerPanel
-              base={base}
-              value={value}
-              choices={choices}
-              channel={channel}
-              previewChannel={thumbnailChannel}
-              onPick={pick}
-              initialTab={isMediaId(value) ? 'media' : 'inputs'}
-              inputCheck={check}
-            />
-          )}
+          <PickerPanel
+            base={base}
+            value={value}
+            choices={choices}
+            channel={channel}
+            previewChannel={thumbnailChannel}
+            onPick={pick}
+            initialTab={isMediaId(value) ? 'media' : 'inputs'}
+            inputCheck={check}
+          />
         </Popover>
       )}
     </>
@@ -476,7 +455,6 @@ function InputsTab({
   channel,
   previewChannel,
   onPick,
-  checkOnly = false,
   inputCheck,
 }: {
   listId: string;
@@ -485,7 +463,6 @@ function InputsTab({
   channel: number | undefined;
   previewChannel: number | undefined;
   onPick: (value: string) => void;
-  checkOnly?: boolean;
   inputCheck?: SourcePickerProps['inputCheck'];
 }): JSX.Element {
   const [filter, setFilter] = useState('');
@@ -507,7 +484,7 @@ function InputsTab({
     const bindable = sourceBindable(source);
     const selected = source.id === value;
     const checkable = canCheckLiveInput(source, inputCheck?.channel ?? channel ?? 0);
-    const disabled = checkOnly ? !checkable : !bindable || offChannel || loops || playlistDown;
+    const disabled = !bindable || offChannel || loops || playlistDown;
     return {
       kind: 'option',
       key: source.id,
@@ -522,12 +499,21 @@ function InputsTab({
             ? { title: source.reason }
             : {}),
       data: { 'data-picker-input': source.id },
+      trailingAccessible: true,
       trailing: (
-        <InputThumbnail
-          source={source}
-          channel={previewChannel}
-          onCheck={checkable ? inputCheck?.start : undefined}
-        />
+        <span className="cg-picker-thumbnail-meter">
+          <InputThumbnail
+            source={source}
+            channel={previewChannel}
+            onCheck={checkable ? inputCheck?.start : undefined}
+          />
+          <InputAudioMeter
+            sourceId={source.id}
+            channel={offChannel || source.status === 'unavailable' ? undefined : previewChannel}
+            name={source.name}
+            orientation="vertical"
+          />
+        </span>
       ),
       content: (
         <span className="cg-picker-row">
@@ -536,11 +522,6 @@ function InputsTab({
           <bdi className="cg-picker-row__name" dir={directionOf(source.name)}>
             {source.name}
           </bdi>
-          <InputAudioMeter
-            sourceId={source.id}
-            channel={offChannel || source.status === 'unavailable' ? undefined : previewChannel}
-            name={source.name}
-          />
           {source.status === 'unavailable' && (
             <Tag className="cg-source-tag cg-source-tag--unavailable">Unavailable</Tag>
           )}
@@ -718,12 +699,6 @@ function mediaRow(
             <bdi className="cg-picker-row__name" dir={directionOf(item.name)}>
               {item.name}
             </bdi>
-            <InputAudioMeter
-              sourceId={item.id}
-              channel={item.unavailable === true ? undefined : channel}
-              name={item.name}
-              hasAudio={item.hasAudio}
-            />
             {item.unavailable === true && (
               <Tag className="cg-source-tag cg-source-tag--unavailable">Unavailable</Tag>
             )}
@@ -741,7 +716,19 @@ function mediaRow(
             ))}
           </span>
         </span>
-        <MediaThumbnail id={item.unavailable === true ? undefined : item.id} load={loadThumbnail} />
+        <span className="cg-picker-thumbnail-meter">
+          <MediaThumbnail
+            id={item.unavailable === true ? undefined : item.id}
+            load={loadThumbnail}
+          />
+          <InputAudioMeter
+            sourceId={item.id}
+            channel={item.unavailable === true ? undefined : channel}
+            name={item.name}
+            hasAudio={item.hasAudio}
+            orientation="vertical"
+          />
+        </span>
       </span>
     ),
   };

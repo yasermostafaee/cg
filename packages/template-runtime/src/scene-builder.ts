@@ -1,4 +1,5 @@
 import {
+  controlLiveLayoutFrameAttachments,
   controlLiveLayoutTitleHidden,
   elementDigitsOf,
   followsComposition,
@@ -137,8 +138,8 @@ function hiddenSoloLookInstances(scene: Scene): ReadonlySet<string> | undefined 
     const frameId = preset.frameIds[0];
     if (
       preset.frameIds.length === 1 &&
-      (preset.frameAttachments?.length ?? 0) === 0 &&
       frameId !== undefined &&
+      controlLiveLayoutFrameAttachments(layout, preset, frameId).length === 0 &&
       controlLiveLayoutTitleHidden(preset, frameId, false)
     ) {
       hiddenPresets.add(preset.id);

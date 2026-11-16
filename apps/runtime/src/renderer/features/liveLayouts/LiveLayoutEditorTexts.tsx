@@ -65,7 +65,7 @@ export function LiveLayoutEditorTexts({
             Text {index + 2}
           </Button>
         ))}
-        <Button variant="add" onClick={addText}>
+        <Button variant="neutral" onClick={addText}>
           <Icon icon={Plus} size={14} /> Add text
         </Button>
       </div>
