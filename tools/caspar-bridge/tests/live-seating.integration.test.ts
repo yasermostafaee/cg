@@ -1,4 +1,3 @@
-import * as dgram from 'node:dgram';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -83,20 +82,9 @@ afterEach(async () => {
   tracePath = null;
 });
 
-function freeUdpPort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const sock = dgram.createSocket('udp4');
-    sock.once('error', reject);
-    sock.bind(0, '127.0.0.1', () => {
-      const port = sock.address().port;
-      sock.close(() => resolve(port));
-    });
-  });
-}
-
-function singleServer(amcpPort: number, oscPort: number): ConnectionConfig {
+function singleServer(amcpPort: number): ConnectionConfig {
   return {
-    servers: { A: { host: '127.0.0.1', amcpPort, oscPort } },
+    servers: { A: { host: '127.0.0.1', amcpPort, oscPort: 0 } },
     strategy: 'mirror-sync',
     autoFailoverEnabled: true,
   };
@@ -360,23 +348,22 @@ async function boot(options: {
   mirrorChannel?: number;
   missingBackupMedia?: boolean;
 }): Promise<CasparRuntime> {
-  const oscPort = await freeUdpPort();
   tracePath = path.join(
     os.tmpdir(),
     `cg-liveseat-${String(process.pid)}-${String(Date.now())}-${String(Math.round(performance.now() * 1000))}.ndjson`,
   );
-  mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30, tracePath });
-  const config = singleServer(mock.amcpPort, oscPort);
+  // The Bridge binds an ephemeral UDP port and tells each core where to send OSC. Probing
+  // and releasing a port before startup lets another parallel fixture claim it before the bind.
+  mock = await createMock({ amcpPort: 0, oscPort: 0, oscHz: 30, tracePath });
+  const config = singleServer(mock.amcpPort);
   if (options.redundant === true || options.mirrorChannel !== undefined) {
-    const backupOscPort = await freeUdpPort();
     backup = await createMock({
       amcpPort: 0,
-      oscPort: backupOscPort,
-      oscHost: '127.0.0.1',
+      oscPort: 0,
       oscHz: 30,
       ...(options.mirrorChannel !== undefined && { channels: options.mirrorChannel }),
     });
-    config.servers.B = { host: '127.0.0.1', amcpPort: backup.amcpPort, oscPort: backupOscPort };
+    config.servers.B = { host: '127.0.0.1', amcpPort: backup.amcpPort, oscPort: 0 };
   }
   const r = new CasparRuntime(
     config,
