@@ -1,4 +1,5 @@
 import {
+  CG_LIVE_FOCUS_SLIDE_PAGE_MARKER,
   CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER,
   CG_LIVE_FRAME_TRANSITION_PAGE_MARKER,
   CG_LIVE_MASK_PLACEMENT_PAGE_MARKER,
@@ -479,6 +480,7 @@ function buildSingleFileHtml(parts: HtmlParts): string {
     ${CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER}
     ${CG_LIVE_PRESET_RECOVERY_PAGE_MARKER}
     ${CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER}
+    ${CG_LIVE_FOCUS_SLIDE_PAGE_MARKER}
     ${CG_LIVE_MASK_PLACEMENT_PAGE_MARKER}
     <meta name="viewport" content="width=${w}, initial-scale=1" />
     <!-- Permissive CSP: a single self-contained file needs inline script/style

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { VideoOff } from 'lucide-react';
 import {
   sourceSeatable,
   sourceShowableOn,
@@ -6,6 +7,8 @@ import {
   type SourcePreviewFrame,
 } from '@cg/shared-ipc';
 import { Button } from '../../ui/Button.js';
+import { Icon } from '../../ui/Icon.js';
+import { InputAudioMeter } from './InputAudioMeter.js';
 import { subscribeInputThumbnail } from './inputThumbnailDemand.js';
 
 const PLACEHOLDER_DESCRIPTION = 'Picture placeholder. Input signal status is unknown.';
@@ -14,10 +17,14 @@ const PLACEHOLDER_DESCRIPTION = 'Picture placeholder. Input signal status is unk
 export function InputThumbnail({
   source,
   channel,
+  meterChannel,
+  compact = false,
   onCheck,
 }: {
   source: SourceDefinition;
   channel?: number | undefined;
+  meterChannel: number | undefined;
+  compact?: boolean;
   onCheck?: ((source: SourceDefinition) => void) | undefined;
 }): JSX.Element {
   const previewChannel =
@@ -91,40 +98,47 @@ export function InputThumbnail({
   const className =
     picture === null ? 'cg-input-thumbnail' : 'cg-input-thumbnail cg-media-thumbnail';
   const content =
-    picture === null ? (
-      'No signal'
-    ) : (
+    picture !== null ? (
       <img src={picture} alt="" onError={() => setBrokenPicture(picture)} />
+    ) : compact ? (
+      <Icon icon={VideoOff} size={12} />
+    ) : (
+      'No signal'
     );
 
-  if (onCheck === undefined) {
-    return (
+  const thumbnail =
+    onCheck === undefined ? (
       <span
         ref={attach}
         className={className}
         data-input-thumbnail="passive"
+        data-input-thumbnail-compact={compact ? '' : undefined}
         role="img"
         aria-label={description}
         title={description}
       >
         {content}
       </span>
+    ) : (
+      <Button
+        ref={attach}
+        variant="ghost"
+        className={className}
+        data-input-thumbnail="checkable"
+        aria-label={`Check input · ${source.name}`}
+        title={`${description} Select to check this input.`}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
+        }}
+        onClick={() => onCheck(source)}
+      >
+        {content}
+      </Button>
     );
-  }
   return (
-    <Button
-      ref={attach}
-      variant="ghost"
-      className={className}
-      data-input-thumbnail="checkable"
-      aria-label={`Check input · ${source.name}`}
-      title={`${description} Select to check this input.`}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
-      }}
-      onClick={() => onCheck(source)}
-    >
-      {content}
-    </Button>
+    <span className="cg-input-picture-meter">
+      {thumbnail}
+      <InputAudioMeter sourceId={sourceId} channel={meterChannel} name={source.name} />
+    </span>
   );
 }

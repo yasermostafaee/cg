@@ -69,3 +69,28 @@ authentication and catalogues. Verify CG against an upgraded target with a signe
 including authorized channel scope, the exact retained-page composition and Take fit, receiver
 compatibility, and the programme gain owner path. Treat live pictures in PVW and gain on air as
 separate acceptance checks.
+
+## Source meters in Playout 2.19.0-externalcg.11
+
+On 2026-11-16, both station engines reported `2.19.0-externalcg.11`. The installed API accepts
+`POST /api/v1/channels/{code}/source-audio/meters`. A well-formed unauthenticated request
+returned 401. The contract in the distributed installer describes authenticated, passive reads
+from supported, already-open native receivers. Confirming actual receiver readings at the
+station still requires a signed-in operator.
+
+- Bridge uses the station's configured catalogue Engine over its pinned HTTP transport. It
+  uses the console's authorized operator session and D4 channel code. A live selector carries
+  the saved D10 input ID. A Playlist selector carries the exact D10 host/channel pair, with a
+  grant also required for that source channel. Bridge excludes library media from this poll.
+- The API accepts up to eight distinct selectors in a batch and ten requests per second per
+  token. Bridge shares duplicate socket reads, serializes batches for the same token and
+  cancels polls on logout or disconnect. Responses must match the station's channel code and
+  requested source selectors. Bearers and upstream addresses stay in Bridge.
+- The feed reports pre-mixer peak dBFS per channel. Measurements can have up to 32 channels
+  and have a 500 ms upstream lifetime. Bridge deducts request time and forwards at most
+  300 ms of remaining freshness. A closed or unsupported source may report metadata or
+  unknown. The existing Check Input observation can still supply its own fresh sample.
+  PGM audio levels follow the separate programme monitor path.
+- A new Control requests up to 32 channels. Older Control clients receive up to 16 from a
+  new Bridge. When an older Engine has no source audio API, the same Control request still
+  uses available Check Input observations.

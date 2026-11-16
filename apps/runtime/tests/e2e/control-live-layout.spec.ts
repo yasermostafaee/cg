@@ -251,23 +251,31 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     for (const meter of [rightMeter, comboMeter]) {
       await expect(meter.locator('[data-input-meter-channel="L"]')).toBeVisible();
       await expect(meter.locator('[data-input-meter-channel="R"]')).toBeVisible();
+      const gap = await meter.evaluate((node) => {
+        const picture = node.previousElementSibling?.getBoundingClientRect();
+        if (picture === undefined) throw new Error('Input meter has no adjacent picture');
+        return node.getBoundingClientRect().left - picture.right;
+      });
+      expect(Math.abs(gap)).toBeLessThan(0.5);
     }
     await meterToggle.click();
     await expect(meterToggle).toHaveAttribute('aria-pressed', 'true');
     await expect(previewMeters).toHaveCount(3);
     for (const frameMeter of await previewMeters.all()) {
+      await expect(frameMeter.locator('[data-input-meter-channel="L"]')).toBeVisible();
+      await expect(frameMeter.locator('[data-input-meter-channel="R"]')).toBeVisible();
       const shot = await frameMeter.evaluate((node) => {
         const bounds = node.closest('[data-layout-preview-shot]')?.getBoundingClientRect();
         if (bounds === undefined) throw new Error('Preview meter has no frame');
-        return { y: bounds.y, height: bounds.height };
+        const meter = node.getBoundingClientRect();
+        return {
+          height: bounds.height,
+          outerHeight: meter.height,
+          gap: bounds.right - meter.right,
+        };
       });
-      for (const channel of ['L', 'R']) {
-        const rail = frameMeter.locator(`[data-input-meter-channel="${channel}"]`);
-        await expect(rail).toBeVisible();
-        const bounds = (await rail.boundingBox())!;
-        expect(Math.abs(bounds.y - shot.y)).toBeLessThanOrEqual(1);
-        expect(Math.abs(bounds.height - shot.height)).toBeLessThanOrEqual(1);
-      }
+      expect(Math.abs(shot.outerHeight - shot.height)).toBeLessThanOrEqual(1);
+      expect(Math.abs(shot.gap)).toBeLessThan(0.5);
     }
     await meterToggle.click();
     await expect(meterToggle).toHaveAttribute('aria-pressed', 'false');
@@ -765,6 +773,19 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
       localFocus.getByRole('button', { name: 'Focus frame 2 in Preview' }),
     ).toHaveAttribute('aria-pressed', 'true');
     await expect(previewFrame.locator('[data-cg-pvw-focus-switch="push"]')).toHaveCount(0);
+    await localFocus.getByRole('button', { name: /Focus frame 3 in Preview/ }).click();
+    const push = previewFrame.locator('[data-cg-pvw-focus-switch="push"]');
+    const graphic = '[data-cg-element-id="frame-graphic-accent"]';
+    await expect(
+      push.locator('[data-cg-pvw-focus-plane="incoming"]').locator(graphic),
+    ).toBeVisible();
+    await expect(push).toHaveCount(0);
+    await localFocus.getByRole('button', { name: 'Focus frame 2 in Preview' }).click();
+    await expect(
+      push.locator('[data-cg-pvw-focus-plane="outgoing"]').locator(graphic),
+    ).toBeVisible();
+    await expect(push).toHaveCount(0);
+    await expect(previewFrame.locator(graphic).filter({ visible: true })).toHaveCount(0);
     await localFocus.getByRole('button', { name: 'Return to Three-up' }).click();
     await expect(localFocus.getByRole('button', { name: 'Return to Three-up' })).toHaveCount(0);
     // Bridge can still be restoring default volumes to the fixed rows after connection.
@@ -823,6 +844,28 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
 
     const inputEffect = inspector.getByRole('combobox', { name: 'Input transition' });
     await expect(inputEffect.locator('option:checked')).toHaveText('Layout default (Push)');
+    await inputEffect.selectOption('slide-over');
+    await localFocus.getByRole('button', { name: /Focus frame 3 in Preview/ }).click();
+    await expect(
+      previewFrame.locator(`[data-cg-element-id="layout-look-${focus(2)}"]`),
+    ).toBeVisible();
+    await localFocus.getByRole('button', { name: 'Focus frame 2 in Preview' }).click();
+    const slide = previewFrame.locator('[data-cg-pvw-focus-switch="slide-over"]');
+    const covered = slide.locator('[data-cg-pvw-focus-plane="outgoing"]');
+    await expect(covered.locator(graphic)).toBeVisible();
+    const coversOldGraphic = await covered.evaluate((node) =>
+      node.getAnimations().some((animation) => {
+        const effect = animation.effect;
+        return (
+          effect instanceof KeyframeEffect &&
+          effect.getKeyframes().some((frame) => typeof frame['clipPath'] === 'string')
+        );
+      }),
+    );
+    expect(coversOldGraphic).toBe(true);
+    await expect(slide).toHaveCount(0);
+    await expect(previewFrame.locator(graphic).filter({ visible: true })).toHaveCount(0);
+    await localFocus.getByRole('button', { name: 'Return to Three-up' }).click();
     await inputEffect.selectOption('fade');
     await localFocus.getByRole('button', { name: 'Focus frame 1 in Preview' }).click();
     await expect(

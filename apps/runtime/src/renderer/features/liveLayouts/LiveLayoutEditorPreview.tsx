@@ -28,6 +28,7 @@ import { liveLayoutArtwork } from '../../theme.js';
 import { fullJpegRect } from '../monitors/pvwPlatePictures.js';
 import type { PvwSourceFrame } from '../monitors/usePvwSourceFrames.js';
 import { InputAudioMeter } from '../sources/InputAudioMeter.js';
+import { focusSlideOcclusion } from './focusSlideClip.js';
 import { SourceLabel, labelledSource } from '../sources/SourceLabel.js';
 import {
   controlLiveLayoutFrameTexts,
@@ -336,10 +337,15 @@ export function LiveLayoutEditorPreview({
                   { ...box, transform: translation(1) },
                   { ...box, transform: 'none' },
                 ]
-              : [
-                  { ...box, transform: 'none' },
-                  { ...box, transform: change.mode === 'push' ? translation(-1) : 'none' },
-                ];
+              : change.mode === 'push'
+                ? [
+                    { ...box, transform: 'none' },
+                    { ...box, transform: translation(-1) },
+                  ]
+                : [
+                    { ...box, clipPath: 'inset(0 0 0 0)' },
+                    { ...box, clipPath: focusSlideOcclusion(change.direction) },
+                  ];
         if (typeof shot.animate === 'function') {
           active.current.push(shot.animate(keys, { duration: change.durationMs }));
         }

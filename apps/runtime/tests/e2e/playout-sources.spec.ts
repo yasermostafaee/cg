@@ -373,9 +373,10 @@ test('Media: visible posters decode separately, and a clip without a poster can 
 });
 
 interface SourceMeterProbe {
-  batches: { channel: number; ids: string[] }[];
+  batches: { channel: number; ids: string[]; maxChannels: number | undefined }[];
   checked: string[];
   hold: boolean;
+  wide: boolean;
   release?: () => void;
 }
 
@@ -408,19 +409,26 @@ test.describe('source audio meters', () => {
     await page.setViewportSize({ width: 1280, height: 900 });
     const dialog = await openDefaults(app);
     await page.evaluate(() => {
-      const state: SourceMeterProbe = { batches: [], checked: [], hold: false };
+      const state: SourceMeterProbe = { batches: [], checked: [], hold: false, wide: false };
       Object.assign(window, { sourceMeterTest: state });
-      window.cg.sourcePreviews.audioLevels = ({ channel, sourceIds }) => {
-        state.batches.push({ channel, ids: sourceIds });
+      window.cg.sourcePreviews.audioLevels = ({ channel, sourceIds, maxChannels }) => {
+        state.batches.push({ channel, ids: sourceIds, maxChannels });
         if (state.hold) {
           return new Promise((resolve) => {
             state.release = () => resolve({ readings: [] });
           });
         }
+        const dbFs = [-21, -17, -39, -48, -9, -57];
+        if (state.wide) dbFs.push(...Array.from({ length: 26 }, () => -30));
         return Promise.resolve({
           readings: sourceIds.map((sourceId) =>
             sourceId === 'in-studio-1'
-              ? { sourceId, state: 'measured', dbFs: [-21, -17], validForMs: 300 }
+              ? {
+                  sourceId,
+                  state: 'measured',
+                  dbFs,
+                  validForMs: 300,
+                }
               : {
                   sourceId,
                   state: sourceId === 'in-studio-2' ? 'no-audio' : 'unknown',
@@ -450,35 +458,73 @@ test.describe('source audio meters', () => {
         .locator('.cg-vlist-action-row', { has: page.locator(`[data-picker-input="${id}"]`) })
         .locator(controls);
     const peak = meter('in-studio-1');
-    const left = peak.locator('[data-input-meter-channel="L"] .cg-input-meter__level');
-    const right = peak.locator('[data-input-meter-channel="R"] .cg-input-meter__level');
-    await expect(peak).toHaveAccessibleName('Studio 1 · Audio peak -17 dBFS');
+    const rails = peak.locator('[data-input-meter-channel]');
+    const expectAttached = async (locator: typeof peak): Promise<void> => {
+      const geometry = await locator.evaluate((element) => {
+        const meterBox = element.getBoundingClientRect();
+        const picture = element.previousElementSibling?.getBoundingClientRect();
+        if (picture === undefined) throw new Error('An input meter must have its own picture');
+        return {
+          gap: meterBox.left - picture.right,
+          dy: meterBox.top - picture.top,
+          heightDifference: meterBox.height - picture.height,
+        };
+      });
+      expect(Math.abs(geometry.gap)).toBeLessThan(0.5);
+      expect(Math.abs(geometry.dy)).toBeLessThan(0.5);
+      expect(Math.abs(geometry.heightDifference)).toBeLessThan(0.5);
+    };
+    await expect(peak).toHaveAccessibleName('Studio 1 · Audio peak -9 dBFS');
     await expect(panel.locator('[data-picker-input="in-studio-1"]')).toHaveAccessibleName(
       'Studio 1',
     );
-    await expect(left).toHaveCSS('clip-path', 'inset(35% 0px 0px)');
-    await expect(right).toHaveCSS('clip-path', /^inset\(28\.33\d*% 0px 0px\)$/);
+    await expect(rails).toHaveCount(6);
+    const mappedClips = [
+      /^inset\(35%/,
+      /^inset\(28\.33/,
+      /^inset\(65%/,
+      /^inset\(80%/,
+      /^inset\(15%/,
+      /^inset\(95%/,
+    ];
+    for (const [index, expected] of mappedClips.entries()) {
+      await expect(rails.nth(index)).toHaveAttribute('data-input-meter-channel', String(index + 1));
+      await expect(rails.nth(index).locator('.cg-input-meter__level')).toHaveCSS(
+        'clip-path',
+        expected,
+      );
+    }
+    const columns = await rails.evaluateAll((nodes) =>
+      nodes.map((node) => {
+        const box = node.getBoundingClientRect();
+        return { x: box.x, width: box.width };
+      }),
+    );
+    for (const [index, column] of columns.entries()) {
+      if (index === 0) continue;
+      const previous = columns[index - 1]!;
+      expect(column.width).toBeCloseTo(previous.width, 1);
+      expect(column.x).toBeCloseTo(previous.x + previous.width + 1, 1);
+    }
+    await expect(peak).toHaveCSS('column-gap', '1px');
+    await expectAttached(peak);
     const bounds = await peak.boundingBox();
     if (bounds === null) throw new Error('Visible source meter has no size');
-    const thumbnail = await peak.locator('..').locator('[data-input-thumbnail]').boundingBox();
-    if (thumbnail === null) throw new Error('Input thumbnail has no size');
-    expect(bounds.width).toBeLessThanOrEqual(12);
+    expect(bounds.width).toBeLessThanOrEqual(32);
     expect(bounds.height).toBeGreaterThan(24);
-    expect(bounds.height).toBeCloseTo(thumbnail.height, 0);
-    expect(Math.abs(bounds.x - thumbnail.x - thumbnail.width)).toBeLessThan(5);
     await test.info().attach('source-meter-size', {
       body: `${String(bounds.width)} × ${String(bounds.height)} px`,
       contentType: 'text/plain',
     });
     await expect(meter('in-studio-2')).toHaveAttribute('title', 'No audio stream');
-    await expect(meter('in-studio-2').locator('[data-input-meter-channel="L"]')).toHaveCSS(
-      'border-top-style',
-      'dashed',
-    );
+    await expect(meter('in-studio-2')).toHaveCSS('border-top-style', 'dashed');
+    await expect(meter('in-studio-2').locator('[data-input-meter-channel]')).toHaveCount(2);
     await expect(meter('in-input-4')).toHaveAttribute('title', 'Audio level unavailable');
     await expect(panel.locator('[data-picker-input="in-input-4"]')).toContainText('Unavailable');
     const initial = await readState();
-    expect(initial.batches.every(({ channel }) => channel === 1)).toBe(true);
+    expect(
+      initial.batches.every(({ channel, maxChannels }) => channel === 1 && maxChannels === 32),
+    ).toBe(true);
     expect(initial.batches.flatMap(({ ids }) => ids)).not.toContain('in-input-4');
     expect(initial.checked).toEqual([]);
 
@@ -487,23 +533,41 @@ test.describe('source audio meters', () => {
     });
     await expect.poll(async () => (await readState()).pending).toBe(true);
     await expect(peak).toHaveAttribute('title', 'Audio level unavailable');
-    await expect(left).toHaveCSS('clip-path', 'inset(100% 0px 0px)');
-    await expect(right).toHaveCSS('clip-path', 'inset(100% 0px 0px)');
+    await expect(rails).toHaveCount(6);
+    for (const rail of await rails.all()) {
+      await expect(rail.locator('.cg-input-meter__level')).toHaveCSS(
+        'clip-path',
+        'inset(100% 0px 0px)',
+      );
+    }
     await page.evaluate(() => {
       const state = (window as unknown as { sourceMeterTest: SourceMeterProbe }).sourceMeterTest;
       state.hold = false;
       state.release?.();
       delete state.release;
     });
-    await expect(peak).toHaveAttribute('title', 'Audio peak -17 dBFS');
+    await expect(peak).toHaveAttribute('title', 'Audio peak -9 dBFS');
 
     await panel.locator('[data-picker-input="in-studio-1"]').click();
     const fieldMeter = field.locator(controls);
     await expect(fieldMeter).toHaveAttribute('data-input-meter-orientation', 'vertical');
-    await expect(fieldMeter.locator('[data-input-meter-channel]')).toHaveCount(2);
-    const fieldMeterSize = await fieldMeter.boundingBox();
-    if (fieldMeterSize === null) throw new Error('The selected input meter has no box');
-    expect(fieldMeterSize.height).toBeGreaterThan(fieldMeterSize.width);
+    await expect(fieldMeter.locator('[data-input-meter-channel]')).toHaveCount(6);
+    await expectAttached(fieldMeter);
+    await page.evaluate(() => {
+      (window as unknown as { sourceMeterTest: SourceMeterProbe }).sourceMeterTest.wide = true;
+    });
+    const comboRails = fieldMeter.locator('[data-input-meter-channel]');
+    await expect(comboRails).toHaveCount(32);
+    await expect(comboRails.last()).toHaveAttribute('data-input-meter-channel', '32');
+    await expect(comboRails.last().locator('.cg-input-meter__level')).toHaveCSS(
+      'clip-path',
+      'inset(50% 0px 0px)',
+    );
+    await expectAttached(fieldMeter);
+    const comboBounds = (await fieldMeter.boundingBox())!;
+    expect(comboBounds.width).toBeLessThanOrEqual(80);
+    const fieldBounds = (await field.boundingBox())!;
+    expect(comboBounds.x + comboBounds.width).toBeLessThan(fieldBounds.x + fieldBounds.width);
     await field.click();
     await panel.getByRole('tab', { name: /^Media/ }).click();
     await panel.getByRole('textbox', { name: 'Search media' }).fill('Meter fixture');
@@ -525,9 +589,10 @@ test.describe('source audio meters', () => {
     await dialog.getByRole('button', { name: 'Cancel' }).click();
     await app.openStationSetupAt('Live sources');
     const sources = page.getByRole('region', { name: 'Inputs from the Playout' });
-    await expect(
-      sources.getByRole('img', { name: 'Studio 1 · Audio peak -17 dBFS' }),
-    ).toBeVisible();
+    const setupMeter = sources.getByRole('img', { name: 'Studio 1 · Audio peak -9 dBFS' });
+    await expect(setupMeter).toBeVisible();
+    await expect(setupMeter.locator('[data-input-meter-channel]')).toHaveCount(32);
+    await expectAttached(setupMeter);
     await expect(sources.getByRole('img', { name: 'Studio 2 · No audio stream' })).toBeVisible();
     expect((await readState()).checked).toEqual([]);
   });

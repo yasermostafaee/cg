@@ -1,4 +1,8 @@
-import { MAX_SOURCE_AUDIO_BATCH, type SourceAudioReading } from '@cg/shared-ipc';
+import {
+  MAX_SOURCE_AUDIO_BATCH,
+  MAX_SOURCE_AUDIO_CHANNELS,
+  type SourceAudioReading,
+} from '@cg/shared-ipc';
 
 interface Demand {
   channel: number;
@@ -36,7 +40,11 @@ async function read(): Promise<void> {
   });
   inFlight = true;
   try {
-    const { readings } = await api.audioLevels({ channel, sourceIds: [...ids] });
+    const { readings } = await api.audioLevels({
+      channel,
+      sourceIds: [...ids],
+      maxChannels: MAX_SOURCE_AUDIO_CHANNELS,
+    });
     if (window.cg?.sourcePreviews !== api) return;
     const byId = new Map(readings.map((reading) => [reading.sourceId, reading]));
     for (const demand of batch) if (visible.has(demand)) demand.publish(byId.get(demand.sourceId));

@@ -231,7 +231,7 @@ export function LiveFrameAdjustments({
           <FrameEffectControls
             disabled={!canEdit}
             {...(presetEffect && {
-              label: frameEffect ? 'Frame and preset effects' : 'Preset effect',
+              label: frameEffect ? 'Move / resize and preset effects' : 'Preset effect',
             })}
           />
         )

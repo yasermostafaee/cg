@@ -21,6 +21,7 @@ export const CG_LIVE_PRESET_RECOVERY_PAGE_MARKER =
   '<meta name="cg-live-preset-recovery" content="1">';
 export const CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER =
   '<meta name="cg-live-preset-title-hold" content="1">';
+export const CG_LIVE_FOCUS_SLIDE_PAGE_MARKER = '<meta name="cg-live-focus-slide" content="1">';
 export const CG_LIVE_MASK_PLACEMENT_PAGE_MARKER =
   '<meta name="cg-live-mask-placement" content="1">';
 

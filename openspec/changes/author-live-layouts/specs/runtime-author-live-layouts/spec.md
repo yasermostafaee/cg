@@ -68,8 +68,9 @@ CG Control SHALL author multiple frames and presets in the channel's template ca
 #### Scenario: Read a frame's input levels in the editor
 
 - **WHEN** the operator enables VU meters above the layout preview
-- **THEN** live inputs and Playlist output show separate full-height vertical left and right rails beside their frames
-- **AND** opening the editor starts with preview meters off and the frame list and picker keep compact vertical meters for eligible sources
+- **THEN** live inputs and Playlist output show equal-width, full-height vertical rails for each measured channel flush with their frames
+- **AND** the meter shows two empty rails before the first measurement and retains the last measured channel count with empty rails while the reading is stale
+- **AND** opening the editor starts with preview meters off and Station setup, the frame list and each input picker attach compact vertical meters to their source thumbnails
 - **AND** a frame assigned a media asset has no meter
 
 #### Scenario: Prepare another programme
@@ -96,4 +97,5 @@ The console SHALL let an operator focus a frame and return to its originating pr
 - **AND** their originating preset is still the destination of Return
 - **AND** the switch keeps the configured inputs for both frames
 - **AND** the editor rehearsal and PVW show the selected effect between the two solo views, including when the console's interface uses reduced motion
+- **AND** on Push and Slide over, artwork attached to either frame follows its movement and disappears behind the same edge as its picture on PVW and Programme
 - **AND** a title hidden by Show title in Focus stays hidden in the solo view and keeps its regular preset visibility on Return

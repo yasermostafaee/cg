@@ -48,21 +48,26 @@ export const SourcePreviewThumbnailsChannel = defineChannel(
 );
 
 export const MAX_SOURCE_AUDIO_BATCH = 32;
+export const MAX_SOURCE_AUDIO_CHANNELS = 32;
 
 const sourceAudioReading = z.discriminatedUnion('state', [
   z.object({ sourceId, state: z.enum(['unknown', 'has-audio', 'no-audio']) }),
   z.object({
     sourceId,
     state: z.literal('measured'),
-    dbFs: z.array(z.number().finite()).min(1).max(16),
+    dbFs: z.array(z.number().finite()).min(1).max(MAX_SOURCE_AUDIO_CHANNELS),
     validForMs: z.number().positive().max(300),
   }),
 ]);
 export type SourceAudioReading = z.infer<typeof sourceAudioReading>;
 
-/** Existing authenticated meter data and catalogue facts; an absent source reading is unknown. */
+/** Authenticated source meter data and catalogue facts; an absent reading is unknown. */
 export const SourceAudioLevelsChannel = defineChannel(
   'sourcePreviews.audioLevels',
-  z.object({ channel, sourceIds: z.array(sourceId).min(1).max(MAX_SOURCE_AUDIO_BATCH) }),
+  z.object({
+    channel,
+    sourceIds: z.array(sourceId).min(1).max(MAX_SOURCE_AUDIO_BATCH),
+    maxChannels: z.number().int().min(1).max(MAX_SOURCE_AUDIO_CHANNELS).optional(),
+  }),
   z.object({ readings: z.array(sourceAudioReading).max(MAX_SOURCE_AUDIO_BATCH) }),
 );

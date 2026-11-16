@@ -7,6 +7,7 @@ import {
 } from '@cg/shared-schema';
 import type { TemplateLook } from '@cg/shared-ipc';
 import { presetFrameArtwork } from './rehearsalPresetEffects.js';
+import { focusSlideOcclusion } from '../liveLayouts/focusSlideClip.js';
 
 type Effects = ControlLiveLayout['effects'];
 interface FrameSide {
@@ -32,10 +33,14 @@ function artworkNode(doc: Document, side: FrameSide): HTMLElement | undefined {
     side.look.transitionFrames?.[side.frameId]?.frameKey ??
     side.look.operatorFrames?.[side.frameId]?.frameKey;
   if (key === undefined) return undefined;
-  const wrapper = presetFrameArtwork(
-    doc.querySelectorAll<HTMLElement>('[data-cg-frame-artwork]'),
-    key,
-  );
+  // Active masks can give one logical frame two authored plate leaves. The
+  // general placement target may then own only the active leaf. Capture its
+  // full frame branch so the attached graphic and captions travel as well.
+  const branchKey = key.split('/').slice(0, 2).join('/');
+  const wrapper =
+    Array.from(doc.querySelectorAll<HTMLElement>('[data-cg-preset-departure-key]')).find(
+      (node) => node.dataset['cgPresetDepartureKey'] === branchKey,
+    ) ?? presetFrameArtwork(doc.querySelectorAll<HTMLElement>('[data-cg-frame-artwork]'), key);
   // The layout-transparent wrapper can have zero height. The composed frame
   // under it has the rendered picture bounds and includes its linked title.
   return wrapper?.querySelector<HTMLElement>(':scope > [data-cg-element-id]') ?? undefined;
@@ -172,6 +177,13 @@ function directionalMotion(
         duration,
         fill: 'both',
       }),
+    );
+  } else {
+    animations.push(
+      outgoing.node.animate(
+        [{ clipPath: 'inset(0 0 0 0)' }, { clipPath: focusSlideOcclusion(effect.direction) }],
+        { duration, fill: 'both' },
+      ),
     );
   }
   return animations;

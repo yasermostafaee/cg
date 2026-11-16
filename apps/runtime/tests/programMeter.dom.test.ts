@@ -17,7 +17,7 @@ import { PRIMARY_MONITOR_PREFERENCES } from './support/programPane.js';
  * is the only one drawn; the speaker is off by default, remembered per console, and asks CG Bridge for the
  * sound only once it is on and the browser has let the sound start.
  *
- * What a bar LOOKS like (the gradient, the segments, the two-bar fallback) is paint, and is measured in a
+ * What a bar LOOKS like (the gradient, the segments, compact multichannel layout) is paint, and is measured in a
  * real engine (`programme-sound.spec.ts`); here only the attribute and style values the code writes.
  */
 
@@ -125,16 +125,18 @@ const speaker = (): HTMLButtonElement =>
 describe('the programme meter and the loudness badge', () => {
   it('🔴 readings land on the bars and the badge with NO React commit per reading; only the channel on screen', async () => {
     const { commits } = await mount(1);
-    // Eight bars, at the floor until a reading arrives; the badge says it knows nothing.
-    expect(bars()).toHaveLength(8);
+    expect(bars()).toHaveLength(2);
     expect(bars().every((b) => b.style.clipPath === 'inset(100.00% 0 0 0)')).toBe(true);
     expect(badge().textContent).toBe('— LUFS');
     expect(badge().dataset['loudnessTone']).toBe('unknown');
 
+    const sample = [-18, -7.2, 0, -60, -30, -30, -30, -30, -12];
+    await act(async () => emit({ kind: 'audio', channel: 1, dbfs: sample }));
+    expect(bars()).toHaveLength(sample.length);
     const before = commits();
     await act(async () => {
       for (let i = 0; i < 40; i++) {
-        emit({ kind: 'audio', channel: 1, dbfs: [-18, -7.2, 0, -60, -30, -30, -30, -30, -12] });
+        emit({ kind: 'audio', channel: 1, dbfs: sample });
         emit({
           kind: 'loudness',
           channel: 1,
@@ -154,6 +156,7 @@ describe('the programme meter and the loudness badge', () => {
       'inset(50.00% 0 0 0)',
       'inset(50.00% 0 0 0)',
       'inset(50.00% 0 0 0)',
+      'inset(20.00% 0 0 0)',
     ]);
     expect(badge().textContent).toBe('−23.1 LUFS');
     expect(badge().dataset['loudnessTone']).toBe('on-target');

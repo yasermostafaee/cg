@@ -471,7 +471,7 @@ test('compact meters show all four engines with independent programme sound', as
       ],
     },
     readings: [
-      { kind: 'audio', engine: 'A', channel: 1, dbfs: [-30, -30] },
+      { kind: 'audio', engine: 'A', channel: 1, dbfs: [-30, -30, -60, -60, -60, -12] },
       { kind: 'audio', engine: 'B', channel: 1, dbfs: [-12, -9] },
     ],
   });
@@ -506,7 +506,9 @@ test('compact meters show all four engines with independent programme sound', as
     const meter = tile.locator(`[data-vu-engine="${engine}"]`);
     await expect(meter).toHaveAttribute('aria-label', new RegExp(name));
     await expect(meter.locator('[data-vu-bar="1"] .cg-vu__fill')).toHaveCSS('clip-path', clip);
-    await expect(meter.locator('[data-vu-bar]').filter({ visible: true })).toHaveCount(2);
+    await expect(meter.locator('[data-vu-bar]').filter({ visible: true })).toHaveCount(
+      engine === 'A' ? 6 : 2,
+    );
     await expect(meter.getByText('−60', { exact: true })).toBeVisible();
     const picture = await tile.locator('[data-pgm-screen]').boundingBox();
     const bounds = await meter.boundingBox();
@@ -516,6 +518,10 @@ test('compact meters show all four engines with independent programme sound', as
     expect(bounds.y).toBeCloseTo(picture.y, 0);
     expect(bounds.height).toBeCloseTo(picture.height, 0);
   }
+  await expect(bank.locator('[data-pgm-tile="A"] [data-vu-bar="6"] .cg-vu__fill')).toHaveCSS(
+    'clip-path',
+    'inset(20% 0px 0px)',
+  );
   await expect.poll(activeStreams).toEqual(['C/east', 'D/south']);
   await expect(sound).toHaveAttribute('aria-pressed', 'false');
   await page.getByLabel('Programme sound source').selectOption('B');

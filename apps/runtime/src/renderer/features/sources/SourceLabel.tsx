@@ -4,7 +4,8 @@ import type { SourceDefinition } from '@cg/shared-ipc';
 import { Icon } from '../../ui/Icon.js';
 import { directionOf } from '../../ui/OperatorNames.js';
 import { Tag } from '../../ui/Tag.js';
-import { InputAudioMeter } from './InputAudioMeter.js';
+import { inputAudioSource } from './InputAudioMeter.js';
+import { InputThumbnail } from './InputThumbnail.js';
 import {
   currentSourceCatalog,
   seenMediaItem,
@@ -101,6 +102,7 @@ export function SourceLabel({
     );
   }
   const media = source.origin === 'media';
+  const input = meterChannel !== undefined && sourceId ? inputAudioSource(sourceId) : undefined;
   return (
     <span
       className="cg-source-label"
@@ -119,12 +121,8 @@ export function SourceLabel({
       {media && meta && source.durationMs !== undefined && (
         <span className="cg-source-label__meta">{formatMediaDuration(source.durationMs)}</span>
       )}
-      {meterChannel !== undefined && sourceId && (
-        <InputAudioMeter
-          sourceId={sourceId}
-          channel={source.unavailable ? undefined : meterChannel}
-          name={source.name}
-        />
+      {input !== undefined && (
+        <InputThumbnail source={input} channel={meterChannel} meterChannel={meterChannel} compact />
       )}
       {source.unavailable && (
         <Tag className="cg-source-tag cg-source-tag--unavailable" title={source.reason}>

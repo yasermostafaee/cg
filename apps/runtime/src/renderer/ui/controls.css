@@ -979,10 +979,6 @@
   background: var(--r-meter-ground);
   border: 1px solid var(--r-meter-frame);
 }
-.cg-pgm-pictures[data-pgm-meter-mode='all'] .cg-vu__bar:nth-child(n + 3),
-.cg-pgm-pictures:not([data-pgm-picture-count='1']) .cg-vu__bar:nth-child(n + 3) {
-  display: none;
-}
 .cg-vu__unit {
   font-size: var(--r-meter-scale-text);
   line-height: 1;
@@ -1044,17 +1040,19 @@
   white-space: nowrap;
   transform: translateY(50%);
 }
-/*
- * TOO NARROW FOR EIGHT: the picture is bound by the panel's HEIGHT (161 px at the desktop's smallest window,
- * 1100 × 700, so 287 px wide at 16:9), and eight bars (130 px) fit beside it down to a stage of about 420 px
- * — measured 536 px at 1100 × 700, so the desktop always shows eight. Below that (a browser console narrower
- * than the desktop minimum) eight would squeeze the picture, so the meter shows the first TWO — the
- * programme's left and right — and hides the rest.
- */
-@container (max-width: 420px) {
-  .cg-vu__bar:nth-child(n + 3) {
-    display: none;
-  }
+.cg-vu:is([data-vu-meter], [data-input-meter]) .cg-vu__bars {
+  gap: 0;
+  max-inline-size: 64px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.cg-vu:is([data-vu-meter], [data-input-meter]) .cg-vu__bar {
+  flex: 0 0 clamp(2.5px, 0.85cqw, 4px);
+  width: auto;
+  box-shadow: inset -1px 0 var(--r-meter-frame);
+}
+.cg-pgm-pictures:not([data-pgm-picture-count='1']) .cg-vu[data-vu-meter] .cg-vu__bar {
+  flex-basis: 3px;
 }
 @media (prefers-reduced-motion: reduce) {
   .cg-vu__fill {
@@ -9456,7 +9454,7 @@ input[type='checkbox']:disabled:checked {
   font-weight: var(--r-weight-medium);
   white-space: nowrap;
 }
-[data-source-input] > .cg-input-thumbnail {
+[data-source-input] .cg-input-thumbnail {
   inline-size: 5.5rem;
 }
 .cg-input-thumbnail.cg-btn:hover:not(:disabled) {
@@ -9618,6 +9616,10 @@ input[type='checkbox']:disabled:checked {
   padding: var(--r-space-1) var(--r-space-2);
   color: var(--r-text-muted);
   font-size: var(--r-text-xs);
+}
+.cg-input-check [data-input-meter] {
+  padding-inline-start: 0;
+  border-inline-start: 0;
 }
 .cg-input-check [data-input-meter] .cg-vu__fill {
   transition: none;

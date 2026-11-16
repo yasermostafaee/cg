@@ -4326,10 +4326,9 @@ the stream. Built to that, reusing their method and never a second one: CG Bridg
 measured on the dev host), and reads the meters stream ONCE with its own session, relaying each reading only
 to a console holding its channel. The console plays the sound by their client's buffer rules (30 → 90 ms, the
 150 ms cap), behind a speaker on the PROGRAM strip that is off by default and remembered per console, and
-draws their `VuMeterTall` beside the picture — eight bars and a linear dBFS scale, written to the DOM with no
-render per reading — with the short-term loudness badge in their three tones, pulsing while the limiter
-works. Eight bars fit at the desktop's smallest window (measured: the picture is height-bound there); two show
-only in a narrower browser. Tests: `pgm-audio.test.ts`, `playout-meters.integration.test.ts`,
+draws the measured output buses beside the picture on a linear dBFS scale. The bus count follows the feed.
+Levels update the DOM directly and a stale feed keeps its last count with the bars at the floor. The short-term
+loudness badge keeps its three tones and pulses while the limiter works. Tests: `pgm-audio.test.ts`, `playout-meters.integration.test.ts`,
 `pgmAudioPlayer.test.ts`, `meterScale.test.ts`, `programMeter.dom.test.ts`, e2e `programme-sound.spec.ts`.
 **Owed:** `2.9.2` on `.111` (the meters endpoint), and a listen on the plant.
 
@@ -5245,6 +5244,7 @@ Send CG commands to the active engine after its external-graphics transfer contr
 - WHEN choosing Background → None THEN the space around the frames remains transparent in previews and the exported package, including during Focus and Return.
 - WHEN focusing a frame or returning THEN PVW and PGM use the configured effect and Return restores the original preset, positions, titles and inputs.
 - WHEN another frame is selected during Focus THEN the chosen Cut, Fade, Motion, Push or Slide over plays directly between solo views with their existing inputs.
+- WHEN Focus switches with Push or Slide over THEN each frame's attached graphics follow its movement and clip to the same visible area as the picture in PVW and PGM.
 - WHEN the operator styles titles THEN the layout-wide style applies to every frame and individual frames may override it. Box dimensions, padding, alignment, vertical offset, text color, background, stroke, shadows, corner radius and wrap save with the layout. Imported fonts are packaged in the VCG.
 - WHEN choosing Digits under Title style Advanced THEN Persian, Latin or Arabic-Indic digits appear in authored titles, the exported VCG, and dynamic title updates.
 - WHEN opening advanced frame controls THEN the operator can choose Fit, Move and Resize permissions, and the frame mask. The same frame configuration applies across its presets and Focus.
@@ -5277,12 +5277,15 @@ Repeatable playback and independent timeline animation within imported artwork n
 
 ### Pre-air source audio indicators
 
-The source picker, assigned-input fields, and Station setup show compact vertical stereo audio indicators
-next to live inputs and Playlist output. The New live layout preview offers an off-by-default VU toggle.
+The source picker, assigned-input fields, and Station setup show vertical source meters flush with the
+picture of each live input and Playlist output. Equal-width rails display every channel delivered with
+the measurement. An input with no channel count yet shows two empty rails. The New live layout preview
+offers an off-by-default VU toggle.
 When on, meters beside eligible frames use their full frame height. PGM meters stay with their respective
 engine pictures, including when all pictures and meters are visible.
 Source defaults, the picker, and Station setup identify the last server to supply the input list. A cached
 list keeps its own server identity even if the active programme engine changes.
-The visible entries share one bounded, authenticated batch. A currently checked input shows fresh measured peaks
-from its own existing preview lease. Media clips and stills have no meter in the layout or input picker. Other sources
-stay unknown until the Playout exposes independent source telemetry or authoritative audio-stream metadata.
+The Bridge groups visible live inputs and Playlist outputs into bounded, authenticated requests to the
+engine that supplied the source list. On an engine without independent source telemetry, a currently
+checked input can use fresh readings from its preview lease. Unavailable or stale readings leave the
+meter empty. Media clips and stills have no meter in the layout or input picker.

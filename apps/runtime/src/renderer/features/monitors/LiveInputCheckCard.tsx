@@ -50,7 +50,13 @@ function InputCard({
   const canvas = useRef<HTMLCanvasElement>(null);
   const ready = view.state === 'ready';
   const [decoded, setDecoded] = useState(false);
+  const [busCount, setBusCount] = useState(2);
+  const measuredBuses = view.dbFs?.length ?? 0;
   const pictureLive = ready && decoded;
+
+  useLayoutEffect(() => {
+    if (measuredBuses > 0) setBusCount(Math.max(2, measuredBuses));
+  }, [measuredBuses]);
 
   useEffect(() => {
     if (!ready) return undefined;
@@ -205,9 +211,9 @@ function InputCard({
             dBFS
           </span>
           <div className="cg-vu__body">
-            <div className="cg-vu__bars">
-              {[0, 1].map((index) => (
-                <span key={index} className="cg-vu__bar">
+            <div className="cg-vu__bars" tabIndex={busCount > 16 ? 0 : undefined}>
+              {Array.from({ length: busCount }, (_, index) => (
+                <span key={index} className="cg-vu__bar" title={`Bus ${index + 1}`}>
                   <span
                     className="cg-vu__fill"
                     style={{

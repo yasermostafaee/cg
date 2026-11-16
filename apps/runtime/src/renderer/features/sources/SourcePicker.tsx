@@ -30,7 +30,7 @@ import { TabPanel, TabStrip } from '../../ui/Tabs.js';
 import { Tag } from '../../ui/Tag.js';
 import { TextInput } from '../../ui/TextInput.js';
 import { VirtualList, type VirtualListHandle, type VirtualRow } from '../../ui/VirtualList.js';
-import { InputAudioMeter } from './InputAudioMeter.js';
+import { inputAudioSource } from './InputAudioMeter.js';
 import { InputCatalogueServer } from './InputCatalogueServer.js';
 import { InputThumbnail } from './InputThumbnail.js';
 import {
@@ -126,23 +126,22 @@ export function ChoiceLabel({
   const source = labelledSource(choice.names);
   const name = source?.name ?? NOT_LISTED;
   const offered = source !== null && !source.unavailable;
+  const input = meterChannel === undefined ? undefined : inputAudioSource(choice.names);
   return (
     <span
       className="cg-choice-label"
       data-choice-names={choice.names}
       {...(source === null ? { title: choice.names } : {})}
     >
-      {`${choice.label} (`}
-      <bdi dir={directionOf(name)} data-choice-name="">
-        {name}
-      </bdi>
-      {')'}
-      {meterChannel !== undefined && (
-        <InputAudioMeter
-          sourceId={choice.names}
-          channel={offered ? meterChannel : undefined}
-          name={name}
-        />
+      <span className="cg-choice-label__words">
+        {`${choice.label} (`}
+        <bdi dir={directionOf(name)} data-choice-name="">
+          {name}
+        </bdi>
+        {')'}
+      </span>
+      {input !== undefined && (
+        <InputThumbnail source={input} channel={meterChannel} meterChannel={meterChannel} compact />
       )}
       {!offered && (
         <Tag
@@ -504,18 +503,12 @@ function InputsTab({
       data: { 'data-picker-input': source.id },
       trailingAccessible: true,
       trailing: (
-        <span className="cg-picker-thumbnail-meter">
-          <InputThumbnail
-            source={source}
-            channel={previewChannel}
-            onCheck={checkable ? inputCheck?.start : undefined}
-          />
-          <InputAudioMeter
-            sourceId={source.id}
-            channel={offChannel || source.status === 'unavailable' ? undefined : previewChannel}
-            name={source.name}
-          />
-        </span>
+        <InputThumbnail
+          source={source}
+          channel={previewChannel}
+          meterChannel={offChannel ? undefined : previewChannel}
+          onCheck={checkable ? inputCheck?.start : undefined}
+        />
       ),
       content: (
         <span className="cg-picker-row">

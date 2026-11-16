@@ -950,20 +950,22 @@ export function LiveLayoutEditor({
                         aria-pressed={candidate.id === frame.id}
                         onClick={() => setFrameId(candidate.id)}
                       >
-                        <span className="cg-live-layout-frame-thumbnail" aria-hidden="true">
-                          {picture === undefined ? (
-                            <Icon icon={Video} size={16} />
-                          ) : (
-                            <img src={`data:image/jpeg;base64,${picture}`} alt="" />
+                        <span className="cg-input-picture-meter">
+                          <span className="cg-live-layout-frame-thumbnail" aria-hidden="true">
+                            {picture === undefined ? (
+                              <Icon icon={Video} size={16} />
+                            ) : (
+                              <img src={`data:image/jpeg;base64,${picture}`} alt="" />
+                            )}
+                          </span>
+                          {candidate.sourceId !== undefined && (
+                            <InputAudioMeter
+                              sourceId={candidate.sourceId}
+                              channel={channel}
+                              name={source?.name ?? name}
+                            />
                           )}
                         </span>
-                        {candidate.sourceId !== undefined && (
-                          <InputAudioMeter
-                            sourceId={candidate.sourceId}
-                            channel={channel}
-                            name={source?.name ?? name}
-                          />
-                        )}
                         <span className="cg-live-layout-frame-label">
                           <IsolatedName>{name}</IsolatedName>
                           <SourceLabel sourceId={candidate.sourceId} fallback="Unassigned" />

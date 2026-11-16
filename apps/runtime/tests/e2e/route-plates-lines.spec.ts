@@ -164,7 +164,7 @@ test('backup media details retain full names and distinguish unread catalogues f
     await expect(detail.getByText(clip.name, { exact: true })).toBeVisible();
     await expect(detail).toContainText(reasons[index]!);
   }
-  await expect(details).toContainText('Add the same file to the backup media library');
+  await expect(details).toContainText('Check media synchronization and library indexing');
   await expect(details).toContainText('Check the backup engine connection and Bridge sign-in.');
   await expect(details).toContainText(LIVE_INPUT_NOTE);
   await expect(page.locator('[data-refusal]')).toHaveCount(0);

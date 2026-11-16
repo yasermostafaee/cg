@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CG_LIVE_FOCUS_SLIDE_PAGE_MARKER,
   CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER,
   CG_LIVE_FRAME_TRANSITION_PAGE_MARKER,
   CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER,
@@ -74,8 +75,8 @@ describe('PAGE-REBUILD-01 — the page runtime fingerprint', () => {
       rebuilds its pages with the new shell on its next upgrade.
     */
     expect({ revision: EXPORTER_SHELL_REVISION, shell: await shellHash() }).toEqual({
-      revision: 12,
-      shell: '950b9c23f4cd848791f885e95706d7d3d298e24d7d31a0142d1d0852b2f50203',
+      revision: 13,
+      shell: '6cedd404a8dd3026487cf36c2b73f91dcd1acc162f3042b453f58e05d972e8e7',
     });
   });
 
@@ -93,6 +94,7 @@ describe('PAGE-REBUILD-01 — the page runtime fingerprint', () => {
       expect(head).toContain(CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER);
       expect(head).toContain(CG_LIVE_PRESET_RECOVERY_PAGE_MARKER);
       expect(head).toContain(CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER);
+      expect(head).toContain(CG_LIVE_FOCUS_SLIDE_PAGE_MARKER);
     }
   });
 });

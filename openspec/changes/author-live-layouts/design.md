@@ -12,6 +12,10 @@ Compile registered single-frame destinations for each origin preset and frame. K
 preset in the destination identity and resolve its input bindings for Focus. Return selects the
 same origin with its already stored placement, crop and title state. Both frame motion and a
 directional change use the existing guarded preset paths. Preview retains its browser-only cue.
+For Focus Push and Slide over, derive the page's clipping aperture and motion progress from the
+verified mixer geometry. Clip both solo views along the same moving edge and animate each complete
+frame subtree so attached graphics stay with the frame. The committed look restores ordinary
+visibility and clears the temporary clips.
 The row's applied look remains the authoritative programme state.
 
 ## Layout settings

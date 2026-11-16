@@ -43,6 +43,7 @@ test('C-023 · inspect input picture from source controls without changing a bin
 }) => {
   test.setTimeout(75_000);
   const preview = new FakeLivePreview();
+  preview.meterLevels = [-21, -18, -27, -30];
   const playout = await startFakePlayout({ livePreview: preview.handle });
   const programme = await startFakePgmFeed({ port: 0 });
   const oscPort = await freeUdpPort();
@@ -150,7 +151,10 @@ test('C-023 · inspect input picture from source controls without changing a bin
       return canvas.getContext('2d')?.getImageData(0, 0, 1, 1).data[3];
     });
     expect(pixels).toBe(255);
-    const meter = card.locator('[data-input-meter] .cg-vu__fill').first();
+    const meterBars = card.locator('[data-input-meter] .cg-vu__fill');
+    await expect(meterBars).toHaveCount(4);
+    await expect(meterBars.nth(3)).toHaveCSS('clip-path', 'inset(50% 0px 0px)');
+    const meter = meterBars.first();
     await expect
       .poll(() => meter.evaluate((bar) => (bar as HTMLElement).style.clipPath))
       .toMatch(/^inset\(35(?:\.00)?% /);

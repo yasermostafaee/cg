@@ -24,9 +24,6 @@ export const METER_RED_FROM_DBFS = -7.2;
 /** The bar is drawn as this many segments (their default). */
 export const METER_SEGMENTS = 32;
 
-/** How many buses the programme meter draws — the first eight, as the Playout's does. */
-export const METER_BARS = 8;
-
 /** A reading older than this is not a level: the bars fall to the floor. */
 export const METER_STALE_MS = 500;
 

@@ -251,6 +251,10 @@ background as a regular VCG scene and asset bundle. The catalogue retains the so
 revision for editing and duplication. Each preset gives Focus a stable origin. The PVW frame
 applies its own preview state, and Bridge applies the Programme transition to the already-seated
 inputs and restores that origin's placements on Return.
+On Push and Slide over, the retained page receives the same aperture and progress as the native
+mixer. It moves the pictures' attached graphics with their frames and clips the departing artwork
+as the entering frame reveals itself. Existing pages receive this phase after their runtime rebuild
+adds the Focus slide capability marker.
 
 **Countdown steps (`D-141`, `DELTA-RUN-NEXT-VERSION-01-A` … `-F`) are compiled by the runtime, from
 the scene.** A countdown flips one attribute on its scope root per step crossing; `step-css.ts` turns

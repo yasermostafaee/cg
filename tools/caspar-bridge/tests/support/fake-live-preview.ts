@@ -28,6 +28,7 @@ export class FakeLivePreview {
   pending = false;
   staleMeter = false;
   otherMeter = false;
+  meterLevels = [-21, -18];
   stalledVideo = false;
   audioOpens = 0;
   audioCloses = 0;
@@ -153,7 +154,7 @@ export class FakeLivePreview {
       return json(res, 200, {
         ...identity(lease),
         ...(this.otherMeter ? { leaseId: 'other-lease' } : {}),
-        dbFs: [-21, -18],
+        dbFs: this.meterLevels,
         meterFreshness: this.staleMeter ? 'stale' : 'fresh',
         oscFresh: !this.staleMeter,
         sampleAgeMs: this.staleMeter ? 500 : 8,

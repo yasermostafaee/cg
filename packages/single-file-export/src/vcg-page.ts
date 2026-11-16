@@ -1,4 +1,5 @@
 import {
+  CG_LIVE_FOCUS_SLIDE_PAGE_MARKER,
   CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER,
   CG_LIVE_FRAME_TRANSITION_PAGE_MARKER,
   CG_LIVE_MASK_PLACEMENT_PAGE_MARKER,
@@ -48,6 +49,7 @@ export function buildVcgIndexHtml(
     ${CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER}
     ${CG_LIVE_PRESET_RECOVERY_PAGE_MARKER}
     ${CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER}
+    ${CG_LIVE_FOCUS_SLIDE_PAGE_MARKER}
     ${CG_LIVE_MASK_PLACEMENT_PAGE_MARKER}
     <meta name="viewport" content="width=${String(scene.resolution.width)}, initial-scale=1" />
     <title>${escapeHtml(scene.name)}</title>

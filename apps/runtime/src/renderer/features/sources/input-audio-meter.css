@@ -1,21 +1,29 @@
 .cg-input-meter {
   position: relative;
-  display: inline-flex;
+  display: inline-grid;
   flex: none;
-  gap: var(--cg-input-meter-gap, 1px);
-  inline-size: 0.625rem;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  column-gap: var(--cg-input-meter-divider, 1px);
+  box-sizing: border-box;
+  inline-size: min(
+    var(--cg-input-meter-max-width, 6rem),
+    calc(
+      var(--cg-input-meter-channel-count, 2) *
+        (var(--cg-input-meter-track, 4px) + var(--cg-input-meter-divider, 1px)) + 1px
+    )
+  );
   min-block-size: 0.85rem;
   align-self: stretch;
   vertical-align: middle;
+  overflow: hidden;
+  border: 1px solid var(--r-meter-frame);
+  border-radius: 2px;
+  background: var(--r-meter-frame);
 }
 
 .cg-input-meter__rail {
   position: relative;
-  flex: 1;
-  min-inline-size: 0;
-  overflow: hidden;
-  border: var(--cg-input-meter-rail-border, 1px) solid var(--r-meter-frame);
-  border-radius: 2px;
   background: var(--r-meter-ground);
 }
 
@@ -34,22 +42,59 @@
 .cg-input-meter[data-input-meter-edge] {
   position: absolute;
   inset-block: 0;
-  inset-inline-end: 0.22rem;
+  inset-inline-end: 0;
+  max-inline-size: 100%;
   min-block-size: 0;
   pointer-events: none;
 }
 
-.cg-picker-thumbnail-meter {
+.cg-input-picture-meter {
   display: inline-flex;
   align-items: stretch;
-  flex: 0 0 auto;
-  gap: 0.2rem;
+  flex: none;
+  vertical-align: middle;
 }
 
-.cg-input-meter[data-source-audio-meter='has-audio'] .cg-input-meter__rail {
+.cg-input-picture-meter:has(> .cg-input-meter) > :first-child {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+
+.cg-input-picture-meter > .cg-input-meter {
+  border-inline-start: 0;
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+}
+
+.cg-input-thumbnail[data-input-thumbnail-compact] {
+  inline-size: 2rem;
+  padding: 0;
+}
+
+.cg-input-thumbnail[data-input-thumbnail-compact] + .cg-input-meter {
+  --cg-input-meter-track: 3px;
+  --cg-input-meter-max-width: 5rem;
+}
+
+.cg-input-meter[data-source-audio-meter='has-audio'] {
   border-color: var(--r-meter-safe);
 }
 
-.cg-input-meter[data-source-audio-meter='no-audio'] .cg-input-meter__rail {
+.cg-input-meter[data-source-audio-meter='no-audio'] {
   border-style: dashed;
+}
+
+.cg-choice-label {
+  display: inline-flex;
+  align-items: center;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  gap: var(--r-space-1);
+  vertical-align: middle;
+}
+
+.cg-choice-label__words {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

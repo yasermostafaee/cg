@@ -163,6 +163,12 @@ authored preset. It leaves unrelated text in place and keeps the destination tit
 when the final release removes the hold. Background and foreground receive the same phase,
 including a title-only phase when the look itself is committed.
 
+For a Control-authored Focus Push or Slide over, the Bridge sends the scene-space aperture,
+direction and progress of each native mixer segment in the `focusSlide` artwork phase.
+The page clips both solo compositions to their visible part of the aperture and translates the
+complete frame artwork, including attached graphics and visible titles. Look commit and recovery
+release the temporary clips and transforms.
+
 `CgControl.maskPlacements` replaces the fallback's editable clip windows by exact plate, preset and
 authored window. A shared plate arrives as one placement per eligible preset. The SVG clip is
 updated in place while the fallback and the plate stay mounted.

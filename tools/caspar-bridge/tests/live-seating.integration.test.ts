@@ -3,7 +3,13 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createMock, defaultHandlers, type MockHandle } from '@cg/amcp-mock';
+import {
+  createMock,
+  decodeCgData,
+  defaultHandlers,
+  parseAmcpLine,
+  type MockHandle,
+} from '@cg/amcp-mock';
 import {
   TAKE_ON_AIR_CODE,
   type ConnectionConfig,
@@ -12,6 +18,7 @@ import {
   type TemplateInfo,
 } from '@cg/shared-ipc';
 import {
+  CG_LIVE_FOCUS_SLIDE_PAGE_MARKER,
   CG_LIVE_FRAME_PLACEMENT_PAGE_MARKER,
   CG_LIVE_FRAME_TRANSITION_PAGE_MARKER,
   CG_LIVE_MASK_PLACEMENT_PAGE_MARKER,
@@ -26,6 +33,7 @@ import {
   controlLiveLayoutRects,
   RetainedStackItemSchema,
   retainedFromStackItem,
+  readCgControl,
   type FrameTransition,
   type ControlLiveLayout,
   type LiveFitMode,
@@ -523,7 +531,7 @@ async function bootControlFocus(
       })),
     }),
     assignments: { assignments: [] },
-    html: PRESET_TITLE_HOLD_HTML,
+    html: PRESET_TITLE_HOLD_HTML + CG_LIVE_FOCUS_SLIDE_PAGE_MARKER,
     ...(paired && { mirrorChannel: 2 }),
   });
   expect(await loadAndTake(r)).toMatchObject({ accepted: true });
@@ -566,7 +574,8 @@ it('moves between bound Control Focus frames and restores the exact prior arrang
     }),
   ).toEqual({ ok: true });
   expect(mock!.layerRenderedRect(third!.slot)).toEqual({ x: 0, y: 0, width: 1, height: 1 });
-  expect((await recvLines()).slice(beforePush)).toEqual(
+  const pushLines = (await recvLines()).slice(beforePush);
+  expect(pushLines).toEqual(
     expect.arrayContaining([
       expect.stringMatching(
         new RegExp('MIXER 1-' + second!.slot.layer + ' FILL -1 0 1 1 .+ linear DEFER$'),
@@ -581,6 +590,7 @@ it('moves between bound Control Focus frames and restores the exact prior arrang
     .slice(peerBefore)
     .map(({ line }) => line);
   expect(peerLines.some((line) => /\d+ linear DEFER$/.test(line))).toBe(false);
+  expect(peerLines.some((line) => line.includes('focusSlide'))).toBe(false);
   expect(backup!.layerRenderedRect({ channel: 2, layer: third!.slot.layer })).toEqual(
     mock!.layerRenderedRect(third!.slot),
   );
@@ -592,7 +602,8 @@ it('moves between bound Control Focus frames and restores the exact prior arrang
       durationMs: 160,
     }),
   ).toEqual({ ok: true });
-  expect((await recvLines()).slice(beforeSlide)).toEqual(
+  const slideLines = (await recvLines()).slice(beforeSlide);
+  expect(slideLines).toEqual(
     expect.arrayContaining([
       expect.stringMatching(
         new RegExp('MIXER 1-' + third!.slot.layer + ' FILL 0 0 1 1 .+ linear DEFER$'),
@@ -602,6 +613,28 @@ it('moves between bound Control Focus frames and restores the exact prior arrang
       ),
     ]),
   );
+  for (const [lines, mode, axis, sign, destinationLookId] of [
+    [pushLines, 'push', 'x', 1, focusLooks[2]!],
+    [slideLines, 'slide-over', 'y', -1, focusLooks[0]!],
+  ] as const) {
+    const paints = lines.flatMap((line, index) => {
+      if (!line.includes('focusSlide')) return [];
+      const decoded = decodeCgData(parseAmcpLine(line)!.args[3]!);
+      if (decoded.data === null) throw new Error('Cannot decode Focus artwork phase');
+      return [{ line, index, phase: readCgControl(JSON.parse(decoded.data))?.frameTransition }];
+    });
+    expect(paints.length).toBeGreaterThan(1);
+    expect(paints[0]?.phase?.focusSlide).toMatchObject({ fromProgress: 0, toProgress: 0 });
+    expect(paints.at(-1)?.phase?.focusSlide?.toProgress).toBe(1);
+    for (const { index, phase, line } of paints) {
+      expect(phase).toMatchObject({
+        destinationLookId,
+        focusSlide: { mode, axis, sign, viewport: { x: 0, y: 0, ...SCENE } },
+      });
+      expect(line).not.toContain('hidePresetTitlePlateIds');
+      expect(lines.slice(index + 1)).toContain('MIXER 1 COMMIT');
+    }
+  }
   expect(await r.setActiveLook('item-1', focusPreset, focusMotion)).toEqual({ ok: true });
   expect(records.map((record) => mock!.layerRenderedRect(record.slot))).toEqual(initial);
   expect(

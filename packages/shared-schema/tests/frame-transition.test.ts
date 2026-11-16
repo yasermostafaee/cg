@@ -15,6 +15,37 @@ import {
 } from '../src/index.js';
 
 describe('live frame transitions', () => {
+  it('accepts only a dedicated authored Focus slide phase with forward progress', () => {
+    const focusSlide: NonNullable<FrameTransitionPhase['focusSlide']> = {
+      viewport: { x: 40, y: 20, width: 1840, height: 1040 },
+      axis: 'x',
+      sign: 1,
+      mode: 'push',
+      fromProgress: 0.5,
+      toProgress: 1,
+    };
+    const phase: FrameTransitionPhase = {
+      authoredPreset: true,
+      destinationLookId: 'guest-two',
+      durationMs: 200,
+      easing: 'linear',
+      frames: [],
+      focusSlide,
+    };
+    expect(readCgControl(withCgControl({}, { frameTransition: phase }))?.frameTransition).toEqual(
+      phase,
+    );
+    for (const invalid of [
+      { ...phase, destinationLookId: undefined },
+      { ...phase, authoredPreset: undefined },
+      { ...phase, hidePresetTitlePlateIds: ['guest'] },
+      { ...phase, focusSlide: { ...focusSlide, toProgress: 0 } },
+      { ...phase, focusSlide: { ...focusSlide, sign: 0 } },
+    ]) {
+      expect(FrameTransitionPhaseSchema.safeParse(invalid).success).toBe(false);
+    }
+  });
+
   it('cuts by default and switches geometry at zero opacity for Fade alone', () => {
     expect(frameTransitionPhases({ motion: 'cut', fade: false, durationMs: 400 }, 10)).toEqual([]);
     expect(frameTransitionPhases({ motion: 'cut', fade: true, durationMs: 400 }, 10)).toEqual([

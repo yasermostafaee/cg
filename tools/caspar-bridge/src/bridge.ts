@@ -333,6 +333,8 @@ import { PgmAudioRelay } from './pgm-audio.js';
 import { PlayoutPgmMonitors } from './playout-pgm-monitors.js';
 import type { readPlayoutPgmTopology } from './playout-pgm-topology.js';
 import { LivePreviewService, type LivePreviewTarget } from './live-preview.js';
+import type { SourcePreviewSelector } from './playout-source-previews.js';
+import { SourceAudioService } from './source-audio.js';
 import { SourcePreviewService } from './source-preview-service.js';
 import { PlaylistGainService, playlistFrameUsage } from './playlist-gain-service.js';
 import { PlayoutMetersReader, type PlayoutMetersTuning } from './playout-meters.js';
@@ -3200,7 +3202,11 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     (id) => runtime.sourceCatalog().sources.find((source) => source.id === id),
     (row) => runtime.recordLivePreview(row),
   );
-  const sourcePreviews = new SourcePreviewService(previewTarget, (owner, channel, id) => {
+  const previewSelector = (
+    owner: AuthSession,
+    channel: number,
+    id: string,
+  ): SourcePreviewSelector | null => {
     const source = runtime.sourceCatalog().sources.find((entry) => entry.id === id);
     if (source === undefined || !sourceSeatable(source) || !sourceShowableOn(source, channel))
       return null;
@@ -3232,7 +3238,9 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     }
     const inputId = playoutInputIdOf(source.id);
     return inputId === null ? null : { kind: 'live', inputId };
-  });
+  };
+  const sourcePreviews = new SourcePreviewService(previewTarget, previewSelector);
+  const sourceAudio = new SourceAudioService(previewTarget, previewSelector);
   const playlistGainOrigin =
     primaryEngineAddress === null ? null : new URL(primaryEngineAddress).origin;
   const playlistGain = new PlaylistGainService(
@@ -3309,6 +3317,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     issueTicket: (grant) => tickets.issue(grant),
     livePreview,
     sourcePreviews,
+    sourceAudio,
     playlistGain,
     logsAvailable: options.logsDir !== undefined,
     setupPhase,
@@ -3809,6 +3818,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     const dropSocket = (): void => {
       livePreview.disconnect(session);
       void sourcePreviews.drop(session);
+      sourceAudio.drop(session);
       playlistGain.drop(session);
       for (const off of unsubscribers) off();
       /*
@@ -4052,6 +4062,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     },
     async close() {
       for (const client of wss.clients) client.terminate();
+      sourceAudio.dispose();
       await livePreview.dispose();
       await sourcePreviews.dispose();
       // `CENTRAL-BRIDGE-01` — the stack's last change is on disk before anything stops.
@@ -4871,6 +4882,7 @@ export function buildRoutes(
     issueTicket?: (grant: TicketGrant) => string;
     livePreview?: LivePreviewService;
     sourcePreviews?: SourcePreviewService;
+    sourceAudio?: SourceAudioService;
     playlistGain?: PlaylistGainService;
     /** Does this bridge keep a log folder to download? */
     logsAvailable?: boolean;
@@ -5140,6 +5152,7 @@ export function buildRoutes(
       if (session !== null) {
         paths.livePreview?.drop(session);
         void paths.sourcePreviews?.drop(session);
+        paths.sourceAudio?.drop(session);
         paths.playlistGain?.drop(session);
       }
       const leaving = session?.token?.principal ?? null;
@@ -5633,8 +5646,23 @@ export function buildRoutes(
       SourceAudioLevelsChannel,
       'read',
       'read',
-      (req: ChannelRequest<typeof SourceAudioLevelsChannel>) =>
-        paths.livePreview?.audioLevels(currentAuthSession(), req) ?? { readings: [] },
+      async (req: ChannelRequest<typeof SourceAudioLevelsChannel>) => {
+        const owner = currentAuthSession();
+        const native = (await paths.sourceAudio?.read(owner, req)) ?? [];
+        const fallback = paths.livePreview?.audioLevels(owner, req).readings ?? [];
+        const readings = new Map(native.map((reading) => [reading.sourceId, reading]));
+        for (const reading of fallback) {
+          const current = readings.get(reading.sourceId);
+          if (
+            current === undefined ||
+            (reading.state === 'measured' &&
+              (current.state === 'has-audio' || current.state === 'unknown'))
+          ) {
+            readings.set(reading.sourceId, reading);
+          }
+        }
+        return { readings: [...readings.values()] };
+      },
     ),
     route(
       SourcePreviewPvwChannel,

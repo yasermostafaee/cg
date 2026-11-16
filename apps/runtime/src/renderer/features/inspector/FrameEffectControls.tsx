@@ -26,7 +26,7 @@ const MOTION_LABELS: Record<FrameTransition['motion'], string> = {
 
 export function FrameEffectControls({
   disabled,
-  label = 'Frame effect',
+  label = 'Move / resize effect',
   preset,
 }: {
   disabled: boolean;

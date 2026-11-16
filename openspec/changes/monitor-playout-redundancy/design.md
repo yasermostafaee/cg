@@ -64,3 +64,21 @@ The v2 mask is a normalized rectangle and Stop cuts picture and sound. Current m
 mask fragments, coordinated preset effects and authored outros require an explicit
 contract and matching acceptance tests. Two members both have to vote for a new owner.
 A four-member group has quorum with three members, and auto-acquire is disabled by default.
+
+## Installed station, 2026-11-16
+
+Both station members at `192.168.21.32` and `192.168.21.43` report
+`2.19.0-externalcg.11`. For the actual channel code `apasai`, the deployed owner and state
+endpoints on both members answer `404 cg.channelNotMigrated`. The command path on CG Bridge
+1.2.8 is the legacy mirror. Playout reports `192.168.21.43` as the playlist owner at the same
+time that Bridge reports A as its primary command target.
+
+The reviewed v2 command request addresses one layer and defines absolute HTML or live-input state.
+A live layout includes multiple input and HTML layers and can also bind local media plates.
+Require a supported representation for these media plates and a synchronized state change
+across the layout's layers before accepting this workflow on a migrated channel. Validate with
+the Bridge adapter and mapped sources on an isolated channel before production migration.
+
+The legacy backup-media match still needs a readable entry with the same D11 fingerprint in
+the backup library. A healthy Playout redundancy status alone does not establish whether a
+specific file has a matching D11 entry. The status message directs operators to the sync and index.

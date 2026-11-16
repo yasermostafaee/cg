@@ -574,7 +574,7 @@
 
 .cg-live-layout-frame-thumbnail {
   display: grid;
-  flex: 0 0 2.65rem;
+  inline-size: 2.65rem;
   aspect-ratio: 16 / 9;
   place-items: center;
   overflow: hidden;

@@ -434,6 +434,55 @@ describe('D-201 — synchronized live-input foreground pass', () => {
         expect(graphicCaption).not.toBeNull();
         expect(graphicCaption?.hasAttribute('data-cg-instance-hidden-text')).toBe(false);
         expect(graphicCaption?.style.display).not.toBe('none');
+        const oldView = document.querySelector<HTMLElement>('[data-cg-element-id="title-off"]')!;
+        const newView = document.querySelector<HTMLElement>('[data-cg-element-id="title-on"]')!;
+        const oldArt = oldView.querySelector<HTMLElement>('.cg-comp-inner')!;
+        const newArt = newView.querySelector<HTMLElement>('.cg-comp-inner')!;
+        const oldTransform = oldArt.style.transform;
+        const newTransform = newArt.style.transform;
+        for (const [mode, axis, sign, oldShift, newShift] of [
+          ['push', 'x', 1, 'translateX(-960px)', 'translateX(960px)'],
+          ['slide-over', 'y', -1, oldTransform, 'translateY(-540px)'],
+        ] as const) {
+          await runtime.update(
+            withCgControl(
+              {},
+              {
+                frameTransition: {
+                  authoredPreset: true,
+                  destinationLookId: 'title-on',
+                  durationMs: 0,
+                  easing: 'linear',
+                  frames: [],
+                  focusSlide: {
+                    viewport: { x: 0, y: 0, width: 1920, height: 1080 },
+                    axis,
+                    sign,
+                    mode,
+                    fromProgress: 0.5,
+                    toProgress: 0.5,
+                  },
+                },
+              },
+            ),
+          );
+          expect(oldArt.contains(graphicCaption)).toBe(true);
+          if (mode === 'slide-over') expect(oldArt.style.transform).toBe(oldShift);
+          else expect(oldArt.style.transform).toContain(oldShift);
+          expect(newArt.style.transform).toContain(newShift);
+          expect(newView.style.display).not.toBe('none');
+          const edge = axis === 'x' ? '960px' : '540px';
+          expect(oldView.style.clipPath).toContain(edge);
+          expect(newView.style.clipPath).toContain(edge);
+        }
+        expect(runtime.setActiveLook('title-on')).toBe(true);
+        expect(oldView.style.display).toBe('none');
+        expect(newView.style.display).not.toBe('none');
+        expect(oldView.style.clipPath).toBe('');
+        expect(newView.style.clipPath).toBe('');
+        expect(oldArt.style.transform).toBe(oldTransform);
+        expect(newArt.style.transform).toBe(newTransform);
+        expect(runtime.setActiveLook('title-off')).toBe(true);
       }
       await runtime.update({
         'Title off': { box: { anchor: 'مهمان' } },

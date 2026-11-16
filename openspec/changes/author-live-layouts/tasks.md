@@ -8,6 +8,7 @@
 
 - [x] Verify independent Preview and guarded Programme Focus, Return, Motion, Push and Slide over.
 - [x] Verify exact origin and input continuity in the Bridge tests, including A/B and a one-frame originating preset.
+- [x] Verify Focus artwork translation, clipping and look cleanup in the page runtime, and verify the Push and Slide over phases precede their native mixer commits on the active engine.
 - [x] Windows Chromium: `control-live-layout.spec.ts` passed for authoring, independent PVW/PGM, Designer catalogue compatibility, and preparing a second layout while the first is on air.
 - [x] Linux Playwright `E2E` passed on [`875d5fe6`](https://github.com/yasermostafaee/cg/actions/runs/43706081250/job/132795662584).
 - [ ] Verify effects on the target Playout Engine.

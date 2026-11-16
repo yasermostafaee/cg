@@ -89,6 +89,8 @@ export interface PlayoutFetchInit extends RequestInit {
    * (`CONNECT_TIMEOUT`). The connection check sets it; the background reads rely on their signal.
    */
   readonly connectTimeoutMs?: number;
+  /** Stop buffering at the caller's response size limit. */
+  readonly maxResponseBytes?: number;
 }
 
 /**
@@ -132,7 +134,20 @@ export async function playoutFetch(
 ): Promise<Response> {
   const res = await openPlayoutResponse(input, init);
   const chunks: Buffer[] = [];
-  for await (const chunk of res) chunks.push(chunk as Buffer);
+  const maxBytes = init.maxResponseBytes ?? Infinity;
+  if (Number(res.headers['content-length']) > maxBytes) {
+    res.destroy();
+    throw new PlayoutRequestError('FAILED', 'the Playout response exceeded its size limit');
+  }
+  let bytes = 0;
+  for await (const chunk of res as AsyncIterable<Buffer>) {
+    bytes += chunk.length;
+    if (bytes > maxBytes) {
+      res.destroy();
+      throw new PlayoutRequestError('FAILED', 'the Playout response exceeded its size limit');
+    }
+    chunks.push(chunk);
+  }
   const status = res.statusCode ?? 0;
   if (status < 200 || status > 599) {
     throw new PlayoutRequestError('FAILED', `the Playout answered status ${String(status)}`);
@@ -142,7 +157,7 @@ export async function playoutFetch(
     if (value === undefined) continue;
     for (const one of Array.isArray(value) ? value : [value]) out.append(name, one);
   }
-  return new Response(NULL_BODY.has(status) ? null : new Uint8Array(Buffer.concat(chunks)), {
+  return new Response(NULL_BODY.has(status) ? null : new Uint8Array(Buffer.concat(chunks, bytes)), {
     status,
     statusText: res.statusMessage ?? '',
     headers: out,

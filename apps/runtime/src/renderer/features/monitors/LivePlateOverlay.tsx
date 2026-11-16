@@ -270,9 +270,13 @@ export function LivePlateOverlay({
                 channel={source?.unavailable === true ? undefined : channel}
                 name={source?.name ?? p.plateId}
                 edge
-                style={{
-                  inlineSize: 12 * inv,
-                }}
+                style={
+                  {
+                    '--cg-input-meter-track': `${4 * inv}px`,
+                    '--cg-input-meter-divider': `${inv}px`,
+                    '--cg-input-meter-max-width': `${96 * inv}px`,
+                  } as CSSProperties
+                }
               />
             )}
             {region === null ? null : hasPicture ? (

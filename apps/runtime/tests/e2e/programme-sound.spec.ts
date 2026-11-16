@@ -19,7 +19,7 @@ import { cssColour, expect, test } from './fixtures/runtime.js';
  * Playout's own look; the loudness badge in its tone; and the speaker, which asks CG Bridge for the core's
  * `/audio.wav` only once pressed and plays it through Web Audio.
  *
- * Paint is not a jsdom fact (golden rule 12), so the gradient, the tones, the clip and the two-bar fallback
+ * Paint is not a jsdom fact (golden rule 12), so the gradient, tones and the compact multichannel view
  * are read from the engine here. The core's feed is an ephemeral port through the bridge's own test seam
  * (`pgmReturn.portFor`), so this file never contends for the rule port `pgm-return.spec.ts` holds.
  *
@@ -39,9 +39,9 @@ test.afterEach(async () => {
   playout = null;
 });
 
-/** Bus levels on channel 1: the programme's left and right, and six quieter buses. */
+/** Bus levels on channel 1, including a non-silent bus beyond the former display limit. */
 const LEVELS = {
-  dbfs: [-18, -7.2, -30, -30, -40, -40, -60, -60, -60, -60, -60, -60, -60, -60, -60, -60],
+  dbfs: [-18, -7.2, -30, -30, -40, -40, -60, -60, -60, -60, -60, -60, -60, -60, -60, -15],
   loudness: { momentary: -22.6, shortterm: -23.2, limiterGrDb: -0.4 },
 };
 
@@ -113,6 +113,7 @@ test('E — the Playout’s levels beside PROGRAM in its own look; the badge’s
     .toBe('inset(30% 0px 0px)');
   await expect(fill(page, 2)).toHaveCSS('clip-path', 'inset(12% 0px 0px)');
   await expect(fill(page, 7)).toHaveCSS('clip-path', 'inset(100% 0px 0px)');
+  await expect(fill(page, 16)).toHaveCSS('clip-path', 'inset(25% 0px 0px)');
   const [one, two] = await Promise.all([fill(page, 1).boundingBox(), fill(page, 2).boundingBox()]);
   expect((one?.x ?? 0) < (two?.x ?? 0), 'bus 1 is the left bar').toBe(true);
   expect(one?.height ?? 0, 'a bar tall enough to read').toBeGreaterThan(60);
@@ -153,9 +154,8 @@ test('E — the Playout’s levels beside PROGRAM in its own look; the badge’s
   (playout as FakePlayout).setMeterCoreDown(false);
   await expect(fill(page, 1)).toHaveCSS('clip-path', 'inset(30% 0px 0px)');
 
-  // Eight bars at this window…
-  expect(await visibleBars(page)).toBe(8);
-  await shot(page.locator('[data-pgm-stage]'), 'e-1-meter-eight-bars');
+  expect(await visibleBars(page)).toBe(16);
+  await shot(page.locator('[data-pgm-stage]'), 'e-1-meter-sixteen-bars');
   await shot(page.locator('[data-monitor-pgm-strip]'), 'e-2-strip-badge-and-speaker-off');
 
   // THE SPEAKER — off by default: nothing has asked the core for sound.
@@ -213,12 +213,7 @@ test('E — the Playout’s levels beside PROGRAM in its own look; the badge’s
   expect((feed as FakePgmFeed).audioConnections.length).toBeGreaterThanOrEqual(readersBefore);
   await expect(volumeButton).toHaveAttribute('title', 'Monitor volume 1% · this console only');
 
-  /*
-    THE SMALLEST DESKTOP WINDOW (1100 × 700): the picture is bound by the panel's HEIGHT, so eight bars fit
-    beside it and it keeps its full size — measured 287 × 161 drawn in a 407 × 161 box, stage 536 px. The
-    two-bar fallback is for a layout narrower than that (a browser console below the desktop minimum), where
-    eight would squeeze the picture: at 800 × 700 the stage is 386 px and the first two show.
-  */
+  // Keep the whole meter beside the picture at the desktop minimum and in a narrower web console.
   const drawn = (): Promise<number[]> =>
     page.locator('[data-pgm-picture]').evaluate((img: HTMLImageElement) => {
       const r = img.getBoundingClientRect();
@@ -240,17 +235,17 @@ test('E — the Playout’s levels beside PROGRAM in its own look; the badge’s
     )
     .toBeGreaterThan(0);
   await page.setViewportSize({ width: 1100, height: 700 });
-  await expect.poll(() => visibleBars(page)).toBe(8);
+  await expect.poll(() => visibleBars(page)).toBe(16);
   expect((await page.locator('[data-vu-meter]').boundingBox())?.width).toBeLessThan(100);
   const [w1100, h1100, box1100] = await drawn();
-  expect(h1100, 'the picture fills the panel’s height beside eight bars').toBe(box1100);
-  await shot(page.locator('[data-pgm-stage]'), 'e-4-meter-eight-bars-at-1100');
+  expect(h1100, 'the picture fills the panel’s height beside sixteen bars').toBe(box1100);
+  await shot(page.locator('[data-pgm-stage]'), 'e-4-meter-sixteen-bars-at-1100');
 
   await page.setViewportSize({ width: 800, height: 700 });
-  await expect.poll(() => visibleBars(page)).toBe(2);
+  await expect.poll(() => visibleBars(page)).toBe(16);
   const [w800, h800, box800] = await drawn();
-  expect(h800, 'two bars, and the picture still fills the height').toBe(box800);
+  expect(h800, 'compact bars leave enough room for the picture to fill the height').toBe(box800);
   expect(w800).toBe(w1100);
   expect(h800).toBe(h1100);
-  await shot(page.locator('[data-pgm-stage]'), 'e-5-meter-two-bars-at-800');
+  await shot(page.locator('[data-pgm-stage]'), 'e-5-meter-sixteen-bars-at-800');
 });

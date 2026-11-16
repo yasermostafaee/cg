@@ -53,6 +53,7 @@ import {
   type FieldDocLite,
 } from './bindings.js';
 import { applyArrangementToNodes } from './arrangement-view.js';
+import { animateFocusSlide } from './focus-slide.js';
 import { createFramePlacementRenderer } from './frame-placement.js';
 import { createMaskPlacementRenderer } from './mask-placement.js';
 import { LookMediaPark } from './look-media.js';
@@ -656,7 +657,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const renderMaskPlacements = createMaskPlacementRenderer(built.container, flattened, lookGroup);
   let framePlacements: readonly LiveFramePlacement[] = [];
   let maskPlacements: readonly LiveMaskPlacement[] = [];
-  let frameTransitionHold: { nodes: HTMLElement[]; timer: unknown } | undefined;
+  let frameTransitionHold:
+    | { nodes: HTMLElement[]; timer: unknown; restore?: (() => void) | undefined }
+    | undefined;
   let presetEffectId: string | undefined;
 
   /**
@@ -758,6 +761,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   };
   const applyLook = (look: Look): void => {
     if (lookGroup === undefined) return;
+    clearFrameTransitionHold();
     currentLookId = look.id;
     /*
       🔴 `SKEW-INTERSECT-01` — **`from` NARROWS THE MASK; it does not change which look is
@@ -3026,6 +3030,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     for (const node of frameTransitionHold.nodes) {
       node.removeAttribute('data-cg-frame-transition-hidden');
     }
+    frameTransitionHold.restore?.();
     frameTransitionHold = undefined;
   }
   function applyFramePlacements(): void {
@@ -3083,6 +3088,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       }
       const destination = lookGroup?.looks.find(({ id }) => id === phase.destinationLookId);
       if (
+        phase.focusSlide === undefined &&
         phase.hidePresetTitlePlateIds === undefined &&
         destination !== undefined &&
         destination.instanceId !== instance
@@ -3115,8 +3121,20 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       }
     }
     for (const node of nodes) node.setAttribute('data-cg-frame-transition-hidden', '');
+    const target = lookGroup?.looks.find(({ id }) => id === phase.destinationLookId);
+    const outgoing = instance === undefined ? undefined : built.elementMap.get(instance);
+    const incoming = target === undefined ? undefined : built.elementMap.get(target.instanceId);
+    const restore =
+      phase.focusSlide !== undefined &&
+      scene.controlLiveLayout !== undefined &&
+      outgoing !== undefined &&
+      incoming !== undefined &&
+      incoming !== outgoing
+        ? animateFocusSlide(outgoing, incoming, phase, options.clock)
+        : undefined;
     frameTransitionHold = {
       nodes,
+      restore,
       timer: scheduleTimeout(
         applyFramePlacements,
         (phase.delayMs ?? 0) + phase.durationMs + LIVE_FALLBACK_WATCHDOG_MS,

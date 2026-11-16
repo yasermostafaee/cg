@@ -13,7 +13,7 @@ type Clips = NonNullable<StackItemState['backupNoCopy']>;
 const MEDIA_ISSUES: Readonly<Record<Clips[number]['reason'], { reason: string; next: string }>> = {
   'no-copy': {
     reason: 'Matching copy missing from the backup media library.',
-    next: 'Add the same file to the backup media library, then take the graphic again.',
+    next: 'Check media synchronization and library indexing in the backup Playout before taking the graphic again.',
   },
   'no-fingerprint': {
     reason: 'Primary media fingerprint missing.',

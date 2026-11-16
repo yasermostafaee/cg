@@ -47,6 +47,17 @@ export function presetTransitionDurations(
 const EasingSchema = z.enum(['linear', 'easeinquad', 'easeoutquad', 'easeinoutquad']);
 type Easing = z.infer<typeof EasingSchema>;
 
+const FocusSlideArtworkSchema = z
+  .object({
+    viewport: LiveFramePlacementSchema.shape.rect,
+    axis: z.enum(['x', 'y']),
+    sign: z.union([z.literal(-1), z.literal(1)]),
+    mode: z.enum(['push', 'slide-over']),
+    fromProgress: z.number().min(0).max(1),
+    toProgress: z.number().min(0).max(1),
+  })
+  .refine(({ fromProgress, toProgress }) => fromProgress <= toProgress);
+
 export const FrameTransitionPhaseSchema = z
   .object({
     authoredPreset: z.literal(true).optional(),
@@ -54,6 +65,7 @@ export const FrameTransitionPhaseSchema = z
     durationMs: z.number().finite().min(0).max(2_000),
     delayMs: z.number().finite().min(0).max(250).optional(),
     easing: EasingSchema,
+    focusSlide: FocusSlideArtworkSchema.optional(),
     frames: z
       .array(
         LiveFramePlacementSchema.omit({ rect: true }).extend({
@@ -87,18 +99,27 @@ export const FrameTransitionPhaseSchema = z
       authoredPreset,
       destinationLookId,
       frames,
+      focusSlide,
       opacityArtwork,
       hidePresetArtworkKeys,
       hidePresetTitlePlateIds,
     }) =>
       (frames.length > 0 ||
+        focusSlide !== undefined ||
         opacityArtwork !== undefined ||
         (hidePresetArtworkKeys?.length ?? 0) > 0 ||
         hidePresetTitlePlateIds !== undefined) &&
       ((opacityArtwork === undefined &&
         destinationLookId === undefined &&
         hidePresetTitlePlateIds === undefined) ||
-        authoredPreset === true),
+        authoredPreset === true) &&
+      (focusSlide === undefined ||
+        (authoredPreset === true &&
+          destinationLookId !== undefined &&
+          frames.length === 0 &&
+          opacityArtwork === undefined &&
+          hidePresetArtworkKeys === undefined &&
+          hidePresetTitlePlateIds === undefined)),
   );
 export type FrameTransitionPhase = z.infer<typeof FrameTransitionPhaseSchema>;
 

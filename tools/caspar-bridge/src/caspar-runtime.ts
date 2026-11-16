@@ -26,6 +26,7 @@ import {
   CG_LIVE_PRESET_ARTWORK_FADE_PAGE_MARKER,
   CG_LIVE_PRESET_RECOVERY_PAGE_MARKER,
   CG_LIVE_PRESET_TITLE_HOLD_PAGE_MARKER,
+  CG_LIVE_FOCUS_SLIDE_PAGE_MARKER,
   CG_LIVE_PRESET_TRANSITION_PAGE_MARKER,
   DEFAULT_LIVE_CROP_FOCUS,
   LiveRevealRectSchema,
@@ -46,6 +47,9 @@ import {
   liveRevealRects,
   liveRevealSceneRect,
   liveSourceFit,
+  outputLetterbox,
+  outputScale,
+  outputTranslate,
   positionQuery,
   resolveDefaultPosition,
   sameLiveMaskRect,
@@ -560,6 +564,13 @@ interface FocusSwapEffect {
   readonly incoming: LiveLayerRecord;
   readonly outgoing: LiveLayerRecord;
   readonly initial: LivePlatePlacement['fit'];
+  readonly slide?: {
+    readonly destinationLookId: string;
+    readonly artwork: Omit<
+      NonNullable<FrameTransitionPhase['focusSlide']>,
+      'fromProgress' | 'toProgress'
+    >;
+  };
   readonly steps: readonly {
     frames: number;
     easing: MixerFramePhase['easing'];
@@ -6541,7 +6552,7 @@ export class CasparRuntime {
 
   async #runFocusSwap(
     channel: number,
-    { incoming, outgoing, initial, steps }: FocusSwapEffect,
+    { incoming, outgoing, initial, steps, slide }: FocusSwapEffect,
     plates: readonly string[],
     { batch, wait, stage, tell }: LiveFrameEffectTransport,
   ): Promise<FrameEffectReply> {
@@ -6552,6 +6563,25 @@ export class CasparRuntime {
       return (await wait(0)) && !this.#hasOrphanedMixer(channel);
     };
     const linear = 'linear' as const;
+    const hold = Math.min(250, this.#lookMixerHoldMsFor(channel));
+    const slidePhase = (
+      fromProgress: number,
+      toProgress: number,
+      durationMs: number,
+    ): FrameTransitionPhase => ({
+      authoredPreset: true,
+      durationMs,
+      easing: linear,
+      frames: [],
+      hideFallbackPlateIds: [...plates],
+      ...(slide === undefined
+        ? { hidePresetTitlePlateIds: [...plates] }
+        : {
+            destinationLookId: slide.destinationLookId,
+            focusSlide: { ...slide.artwork, fromProgress, toProgress },
+            ...(durationMs > 0 && hold > 0 && { delayMs: hold }),
+          }),
+    });
 
     if (!(await claimBatch())) return interrupted;
     const prepared = await stage(incoming, initial, {
@@ -6564,17 +6594,13 @@ export class CasparRuntime {
     if (!parked.landed) return { ...parked, ok: false };
     if (!(await wait(period))) return interrupted;
 
-    const told = await tell({
-      authoredPreset: true,
-      durationMs: 0,
-      easing: linear,
-      frames: [],
-      hideFallbackPlateIds: [...plates],
-      hidePresetTitlePlateIds: [...plates],
-    });
+    const told = await tell(slidePhase(0, 0, 0));
     if (!told.ok) return told;
-    if (!(await wait(this.#lookMixerHoldMsFor(channel)))) return interrupted;
+    if (!(await wait(slide === undefined ? this.#lookMixerHoldMsFor(channel) : hold)))
+      return interrupted;
 
+    const frames = steps.reduce((total, step) => total + step.frames, 0);
+    let elapsed = 0;
     for (const [index, step] of steps.entries()) {
       if (!(await claimBatch())) return interrupted;
       if (index === 0 && step.incomingOpacity === undefined) {
@@ -6603,10 +6629,18 @@ export class CasparRuntime {
         });
         if (!retired.ok) return retired;
       }
+      if (slide !== undefined) {
+        const painted = await tell(
+          slidePhase(elapsed / frames, (elapsed + step.frames) / frames, step.frames * period),
+        );
+        if (!painted.ok) return painted;
+        if (!(await wait(hold))) return interrupted;
+      }
       const commit = await this.#commitStagedMixer(batch, { retainOnFailure: true });
       if (!commit.landed) return { ...commit, ok: false };
       const finalTick = index + 1 === steps.length ? 1 : 0;
       if (!(await wait((step.frames + finalTick) * period))) return interrupted;
+      elapsed += step.frames;
     }
     return { ok: true };
   }
@@ -13189,7 +13223,20 @@ export class CasparRuntime {
     );
     const movement =
       focusSlide !== undefined
-        ? this.#planFocusSlide(channel, next, outgoing, focusSlide, frames)
+        ? this.#planFocusSlide(
+            channel,
+            next,
+            outgoing,
+            focusSlide,
+            frames,
+            this.#liveFramePage(item, CG_LIVE_FOCUS_SLIDE_PAGE_MARKER, true, true) === undefined
+              ? undefined
+              : {
+                  destinationLookId: toLook.id,
+                  resolution: layout.resolution,
+                  position: this.#effectivePosition(itemId, metadata?.liveSources?.defaultPosition),
+                },
+          )
         : dissolve
           ? this.#planFocusDissolve(next, outgoing, frames)
           : this.#planFocusMotion(
@@ -13243,7 +13290,12 @@ export class CasparRuntime {
     outgoing: LiveLayerRecord,
     transition: InputSlideTransition,
     frames: number,
-  ): Pick<FocusSwapEffect, 'initial' | 'steps'> | undefined {
+    artwork?: {
+      destinationLookId: string;
+      resolution: { width: number; height: number };
+      position: Position;
+    },
+  ): Pick<FocusSwapEffect, 'initial' | 'steps' | 'slide'> | undefined {
     const raster = this.#channelSettings.rasterFor(channel);
     const viewport = inputSlideAperture(
       incoming.inputSlideViewport,
@@ -13259,8 +13311,30 @@ export class CasparRuntime {
       return undefined;
     const push = transition.mode === 'push';
     const plan = planInputSlide(incoming.fit, outgoing, viewport, direction, push, frames, !push);
+    let slide: FocusSwapEffect['slide'];
+    if (artwork !== undefined) {
+      const scale = outputScale(raster);
+      const pad = outputLetterbox(raster);
+      const origin = outputTranslate(artwork, artwork.position);
+      const axis = direction.x === 0 ? 'y' : 'x';
+      slide = {
+        destinationLookId: artwork.destinationLookId,
+        artwork: {
+          viewport: {
+            x: (viewport.x * raster.width - pad.x) / scale - origin.x,
+            y: (viewport.y * raster.height - pad.y) / scale - origin.y,
+            width: (viewport.width * raster.width) / scale,
+            height: (viewport.height * raster.height) / scale,
+          },
+          axis,
+          sign: direction[axis] < 0 ? -1 : 1,
+          mode: transition.mode,
+        },
+      };
+    }
     return {
       initial: plan.initial,
+      ...(slide !== undefined && { slide }),
       steps: plan.steps.map((step) => ({
         frames: step.frames,
         easing: 'linear',
@@ -13526,7 +13600,7 @@ export class CasparRuntime {
     );
     const movingPlateIds = effect.moveFrames === 0 ? [] : effect.plateIds;
     const holdTitles = (exclusive: readonly string[] | undefined) => {
-      if (!supportsTitleHold) return {};
+      if (!supportsTitleHold || effect.focusSwap?.slide !== undefined) return {};
       const ids = [...new Set([...movingPlateIds, ...(exclusive ?? [])])];
       return ids.length === 0 ? {} : { hidePresetTitlePlateIds: ids };
     };

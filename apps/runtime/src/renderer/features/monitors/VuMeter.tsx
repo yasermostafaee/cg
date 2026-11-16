@@ -1,10 +1,9 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { METER_FLOOR_DBFS, type PgmEngine, type PgmLoudness } from '@cg/shared-ipc';
 import {
   isLimiting,
   loudnessText,
   loudnessTone,
-  METER_BARS,
   METER_SCALE_MARKS,
   meterClip,
   meterPercent,
@@ -12,16 +11,11 @@ import {
 import { meterStore, type MeterStore } from './meterStore.js';
 
 /**
- * 🔴 `PLAYOUT-FEATURES-01` E (`R-076`) — **THE PROGRAMME METER, BESIDE THE PROGRAM MONITOR**: eight bars (the
- * first eight buses, as the Playout's own screen draws them) and a linear dBFS scale.
+ * The programme meter shows one bar per measured output bus and a linear dBFS scale.
  *
  * The level is written straight onto each bar's `clip-path` by the store's writer — no React state, no
- * re-render per reading (`meterStore.ts`). The gradient is fixed in CSS; the clip reveals it from the
- * bottom. The bars run left to right whatever the page's direction (bus 1 is always the left one).
- *
- * ⚠ Where the PROGRAM panel is too narrow for eight beside a full-height picture — never at the desktop's
- * smallest window (1100 × 700, measured), only in a narrower browser — a container query in `controls.css`
- * shows the first TWO (the programme's left and right) and hides the rest.
+ * re-render per reading (`meterStore.ts`). React only updates when the number of output buses
+ * changes. The last known count remains visible at the floor when readings go stale.
  */
 export function VuMeter({
   channel,
@@ -37,8 +31,20 @@ export function VuMeter({
   watchPeaks?: MeterStore['watchAudio'];
 }): JSX.Element {
   const fills = useRef<(HTMLSpanElement | null)[]>([]);
+  const latest = useRef<readonly number[] | null>(null);
+  const countRef = useRef(2);
+  const [busCount, setBusCount] = useState(2);
   useLayoutEffect(() => {
+    if (countRef.current !== 2) {
+      countRef.current = 2;
+      setBusCount(2);
+    }
     const write = (dbfs: readonly number[] | null): void => {
+      latest.current = dbfs;
+      if (dbfs !== null && dbfs.length > 0 && countRef.current !== dbfs.length) {
+        countRef.current = dbfs.length;
+        setBusCount(dbfs.length);
+      }
       fills.current.forEach((el, i) => {
         if (el !== null) el.style.clipPath = meterClip(dbfs?.[i] ?? METER_FLOOR_DBFS);
       });
@@ -77,13 +83,15 @@ export function VuMeter({
         {displayEngine === undefined ? 'dBFS' : `${displayEngine} · dBFS`}
       </span>
       <div className="cg-vu__body">
-        <div className="cg-vu__bars">
-          {Array.from({ length: watchPeaks === undefined ? METER_BARS : 2 }, (_, i) => (
-            <span key={i} className="cg-vu__bar" data-vu-bar={i + 1}>
+        <div className="cg-vu__bars" tabIndex={busCount > 16 ? 0 : undefined}>
+          {Array.from({ length: busCount }, (_, i) => (
+            <span key={i} className="cg-vu__bar" data-vu-bar={i + 1} title={`Bus ${i + 1}`}>
               <span
                 className="cg-vu__fill"
                 ref={(el) => {
                   fills.current[i] = el;
+                  if (el !== null)
+                    el.style.clipPath = meterClip(latest.current?.[i] ?? METER_FLOOR_DBFS);
                 }}
               />
             </span>

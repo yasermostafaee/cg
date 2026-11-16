@@ -297,7 +297,7 @@ export class LivePreviewService {
   /** A list reads authorised facts and the current check's cache without opening or keeping a lease. */
   audioLevels(
     owner: AuthSession | null,
-    { channel, sourceIds }: ChannelRequest<typeof SourceAudioLevelsChannel>,
+    { channel, sourceIds, maxChannels = 16 }: ChannelRequest<typeof SourceAudioLevelsChannel>,
   ): ChannelResponse<typeof SourceAudioLevelsChannel> {
     const readings: ChannelResponse<typeof SourceAudioLevelsChannel>['readings'] = [];
     if (this.#closed || owner === null || this.#disconnected.has(owner)) return { readings };
@@ -318,7 +318,12 @@ export class LivePreviewService {
         const { dbFs } = current.view;
         const validForMs = current.meterUntil - performance.now();
         if (dbFs !== null && dbFs.length > 0 && validForMs > 0) {
-          readings.push({ sourceId, state: 'measured', dbFs, validForMs });
+          readings.push({
+            sourceId,
+            state: 'measured',
+            dbFs: dbFs.slice(0, maxChannels),
+            validForMs,
+          });
           continue;
         }
       }

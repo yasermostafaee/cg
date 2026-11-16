@@ -1801,7 +1801,7 @@ test('Frames drafts the authored box and whole-template Position moves the retai
   await showMonitors(page);
   const plateRow = page.getByRole('region', { name: 'Layers' }).locator('[data-layer="59"]');
   await plateRow.locator('[data-row-body]').click();
-  const frameEffect = page.getByRole('group', { name: 'Frame effect' });
+  const frameEffect = page.getByRole('group', { name: 'Move / resize effect' });
   await expect(frameEffect).toHaveCount(0);
   const pvw = page.getByRole('region', { name: 'PREVIEW (PVW)' });
   const pan = pvw.getByRole('button', { name: 'Crop input in Preview', exact: true });
@@ -3016,7 +3016,7 @@ async function exercisePresetSwitch(
   await row.locator('[data-row-body]').click();
   // Before Take the local Preview preset controls can exist independently.
   await expect(
-    page.getByRole('group', { name: 'Frame and preset effects', exact: true }),
+    page.getByRole('group', { name: 'Move / resize and preset effects', exact: true }),
   ).toHaveCount(0);
   const effect = page.getByRole('group', { name: /preset effects?/i });
   await row.getByRole('button', { name: 'PLAY', exact: true }).click();
