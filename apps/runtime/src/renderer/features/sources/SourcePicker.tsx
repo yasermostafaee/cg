@@ -142,7 +142,6 @@ export function ChoiceLabel({
           sourceId={choice.names}
           channel={offered ? meterChannel : undefined}
           name={name}
-          hasAudio={source?.hasAudio}
         />
       )}
       {!offered && (
@@ -371,7 +370,6 @@ function PickerPanel({
             media={media}
             onPick={onPick}
             loadThumbnail={loadThumbnail}
-            channel={previewChannel}
           />
         )}
       </TabPanel>
@@ -516,7 +514,6 @@ function InputsTab({
             sourceId={source.id}
             channel={offChannel || source.status === 'unavailable' ? undefined : previewChannel}
             name={source.name}
-            orientation="vertical"
           />
         </span>
       ),
@@ -676,14 +673,12 @@ function mediaRow(
     readonly name: string;
     readonly folder?: string | undefined;
     readonly durationMs?: number | undefined;
-    readonly hasAudio?: boolean | undefined;
     readonly width?: number | undefined;
     readonly height?: number | undefined;
     readonly unavailable?: boolean | undefined;
   },
   value: string,
   loadThumbnail: MediaThumbnailLoader,
-  channel: number | undefined,
 ): VirtualRow {
   const selected = item.id === value;
   const facts = [
@@ -722,19 +717,7 @@ function mediaRow(
             ))}
           </span>
         </span>
-        <span className="cg-picker-thumbnail-meter">
-          <MediaThumbnail
-            id={item.unavailable === true ? undefined : item.id}
-            load={loadThumbnail}
-          />
-          <InputAudioMeter
-            sourceId={item.id}
-            channel={item.unavailable === true ? undefined : channel}
-            name={item.name}
-            hasAudio={item.hasAudio}
-            orientation="vertical"
-          />
-        </span>
+        <MediaThumbnail id={item.unavailable === true ? undefined : item.id} load={loadThumbnail} />
       </span>
     ),
   };
@@ -746,14 +729,12 @@ function MediaTab({
   media,
   onPick,
   loadThumbnail,
-  channel,
 }: {
   listId: string;
   value: string;
   media: MediaState;
   onPick: (value: string) => void;
   loadThumbnail: MediaThumbnailLoader;
-  channel: number | undefined;
 }): JSX.Element {
   const list = useRef<VirtualListHandle>(null);
   const search = useRef<HTMLInputElement>(null);
@@ -789,7 +770,6 @@ function MediaTab({
               id: value,
               name: current.name,
               durationMs: current.durationMs,
-              hasAudio: current.hasAudio,
               folder: entry?.media?.folder,
               width: entry?.media?.width,
               height: entry?.media?.height,
@@ -797,7 +777,6 @@ function MediaTab({
             },
             value,
             loadThumbnail,
-            channel,
           ),
         );
       }
@@ -812,7 +791,6 @@ function MediaTab({
               id: r.id,
               name: r.name,
               durationMs: r.media?.durationMs,
-              hasAudio: r.media?.hasAudio,
               folder: r.media?.folder,
               width: r.media?.width,
               height: r.media?.height,
@@ -820,17 +798,16 @@ function MediaTab({
             },
             value,
             loadThumbnail,
-            channel,
           ),
         );
       }
       out.push({ kind: 'heading', key: 'All media', content: 'All media' });
     }
     for (const item of media.items) {
-      out.push(mediaRow(`all:${item.id}`, item, value, loadThumbnail, channel));
+      out.push(mediaRow(`all:${item.id}`, item, value, loadThumbnail));
     }
     return out;
-  }, [media.items, media.q, catalog, value, loadThumbnail, channel]);
+  }, [media.items, media.q, catalog, value, loadThumbnail]);
 
   const idOf = (index: number): string | null => {
     const key = rows[index]?.key;

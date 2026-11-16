@@ -240,7 +240,38 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await setInput(page, editor, 1, 'سارا احمدی');
     await setInput(page, editor, 2, 'علی نظری 1۲٣');
     const verticalMeter = '[data-source-audio-meter][data-input-meter-orientation="vertical"]';
-    await expect(stage.locator(`[data-layout-preview-shot] ${verticalMeter}`)).toHaveCount(3);
+    const previewMeters = stage.locator(`[data-layout-preview-shot] ${verticalMeter}`);
+    const meterToggle = editor.getByRole('button', { name: 'VU meters', exact: true });
+    const rightMeter = editor
+      .getByRole('button', { name: 'Edit frame 3', exact: true })
+      .locator(verticalMeter);
+    const comboMeter = editor.getByRole('combobox', { name: 'Frame input' }).locator(verticalMeter);
+    await expect(meterToggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(previewMeters).toHaveCount(0);
+    for (const meter of [rightMeter, comboMeter]) {
+      await expect(meter.locator('[data-input-meter-channel="L"]')).toBeVisible();
+      await expect(meter.locator('[data-input-meter-channel="R"]')).toBeVisible();
+    }
+    await meterToggle.click();
+    await expect(meterToggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(previewMeters).toHaveCount(3);
+    for (const frameMeter of await previewMeters.all()) {
+      const shot = await frameMeter.evaluate((node) => {
+        const bounds = node.closest('[data-layout-preview-shot]')?.getBoundingClientRect();
+        if (bounds === undefined) throw new Error('Preview meter has no frame');
+        return { y: bounds.y, height: bounds.height };
+      });
+      for (const channel of ['L', 'R']) {
+        const rail = frameMeter.locator(`[data-input-meter-channel="${channel}"]`);
+        await expect(rail).toBeVisible();
+        const bounds = (await rail.boundingBox())!;
+        expect(Math.abs(bounds.y - shot.y)).toBeLessThanOrEqual(1);
+        expect(Math.abs(bounds.height - shot.height)).toBeLessThanOrEqual(1);
+      }
+    }
+    await meterToggle.click();
+    await expect(meterToggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(previewMeters).toHaveCount(0);
     const frame1 = editor.getByRole('button', { name: 'Edit frame 1', exact: true });
     const frame2 = editor.getByRole('button', { name: 'Edit frame 2', exact: true });
     await frame1.click();

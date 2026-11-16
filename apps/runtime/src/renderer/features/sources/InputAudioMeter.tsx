@@ -1,33 +1,37 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import type { SourceAudioReading } from '@cg/shared-ipc';
+import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
+import { isPlaylistOutput, type SourceAudioReading } from '@cg/shared-ipc';
 import { meterPercent } from '../monitors/meterScale.js';
 import { subscribeInputAudio } from './inputAudioDemand.js';
+import { currentSourceCatalog, sourcesVersion, subscribeSources } from './sourceStore.js';
 import './input-audio-meter.css';
+
+const channels = ['L', 'R'] as const;
 
 export function InputAudioMeter({
   sourceId,
   channel,
   name,
-  hasAudio,
-  orientation = 'horizontal',
   edge = false,
   style,
 }: {
   sourceId: string;
   channel: number | undefined;
   name: string;
-  hasAudio?: boolean | undefined;
-  orientation?: 'horizontal' | 'vertical';
   edge?: boolean;
   style?: CSSProperties;
-}): JSX.Element {
+}): JSX.Element | null {
+  useSyncExternalStore(subscribeSources, sourcesVersion);
+  const source = currentSourceCatalog().sources.find((entry) => entry.id === sourceId);
+  const eligible =
+    source !== undefined &&
+    (isPlaylistOutput(source) || (source.origin !== 'media' && source.producer.kind !== 'media'));
+  const meterChannel = eligible && source.status !== 'unavailable' ? channel : undefined;
   const ref = useRef<HTMLSpanElement>(null);
   const [snapshot, setSnapshot] = useState<{ channel: number; data: SourceAudioReading }>();
   useEffect(() => {
     const element = ref.current;
     if (
-      hasAudio === false ||
-      channel === undefined ||
+      meterChannel === undefined ||
       element === null ||
       typeof IntersectionObserver === 'undefined'
     )
@@ -37,7 +41,7 @@ export function InputAudioMeter({
     let disposed = false;
     const publish = (data: SourceAudioReading | undefined): void => {
       clearTimeout(expiry);
-      setSnapshot(data === undefined ? undefined : { channel, data });
+      setSnapshot(data === undefined ? undefined : { channel: meterChannel, data });
       if (data?.state === 'measured') {
         expiry = setTimeout(() => setSnapshot(undefined), data.validForMs);
       }
@@ -45,7 +49,7 @@ export function InputAudioMeter({
     const observer = new IntersectionObserver((entries) => {
       if (disposed) return;
       if (entries.at(-1)?.isIntersecting === true) {
-        stop ??= subscribeInputAudio({ channel, sourceId, publish });
+        stop ??= subscribeInputAudio({ channel: meterChannel, sourceId, publish });
       } else if (stop !== undefined) {
         stop();
         stop = undefined;
@@ -59,29 +63,31 @@ export function InputAudioMeter({
       stop?.();
       clearTimeout(expiry);
     };
-  }, [channel, sourceId, hasAudio]);
+  }, [meterChannel, sourceId]);
+  if (!eligible) return null;
   const reading =
-    hasAudio !== false && snapshot?.channel === channel && snapshot?.data.sourceId === sourceId
+    meterChannel !== undefined &&
+    snapshot?.channel === meterChannel &&
+    snapshot.data.sourceId === sourceId
       ? snapshot.data
       : undefined;
-  const fact = hasAudio === undefined ? 'unknown' : hasAudio ? 'has-audio' : 'no-audio';
-  const state = reading?.state === undefined || reading.state === 'unknown' ? fact : reading.state;
-  const peak = reading?.state === 'measured' ? Math.max(...reading.dbFs) : null;
-  const level = peak !== null && Number.isFinite(peak) ? peak : null;
+  const state = reading?.state ?? 'unknown';
+  const levels = reading?.state === 'measured' ? reading.dbFs.slice(0, channels.length) : [];
+  const peak = levels.length === 0 ? null : Math.max(...levels);
   const label =
     state === 'no-audio'
       ? 'No audio stream'
       : state === 'has-audio'
         ? 'Audio stream present, level unavailable'
-        : level === null
+        : peak === null
           ? 'Audio level unavailable'
-          : `Audio peak ${level.toFixed(0)} dBFS`;
+          : `Audio peak ${peak.toFixed(0)} dBFS`;
   return (
     <span
       ref={ref}
       className="cg-input-meter"
       data-source-audio-meter={state}
-      data-input-meter-orientation={orientation}
+      data-input-meter-orientation="vertical"
       data-input-meter-edge={edge ? '' : undefined}
       role="img"
       aria-label={`${name} · ${label}`}
@@ -89,19 +95,23 @@ export function InputAudioMeter({
       dir="ltr"
       style={style}
     >
-      <span
-        className="cg-input-meter__level"
-        style={
-          level === null
-            ? undefined
-            : {
-                clipPath:
-                  orientation === 'vertical'
-                    ? `inset(${100 - meterPercent(level)}% 0 0)`
-                    : `inset(0 ${100 - meterPercent(level)}% 0 0)`,
+      {channels.map((side, index) => {
+        const level = levels[index];
+        return (
+          <span key={side} className="cg-input-meter__rail" data-input-meter-channel={side}>
+            <span
+              className="cg-input-meter__level"
+              style={
+                level === undefined
+                  ? undefined
+                  : {
+                      clipPath: `inset(${100 - meterPercent(level)}% 0 0)`,
+                    }
               }
-        }
-      />
+            />
+          </span>
+        );
+      })}
     </span>
   );
 }

@@ -253,6 +253,7 @@ export function LiveLayoutEditorPreview({
   focused,
   backgroundUrl,
   sourceFrames,
+  showMeters,
   attachmentSources,
   onFocus,
   placementEditor,
@@ -265,6 +266,7 @@ export function LiveLayoutEditorPreview({
   focused: string | undefined;
   backgroundUrl: string | undefined;
   sourceFrames: ReadonlyMap<string, PvwSourceFrame>;
+  showMeters: boolean;
   attachmentSources: ReadonlyMap<string, ControlLiveLayoutFrameAttachmentSource>;
   onFocus: (frameId: string) => void;
   placementEditor?: ReactNode;
@@ -460,13 +462,11 @@ export function LiveLayoutEditorPreview({
                 pictureBox={pictureBox}
                 fallback={`Frame ${number}`}
               />
-              {activeShot && sourceId !== undefined && (
+              {showMeters && activeShot && sourceId !== undefined && (
                 <InputAudioMeter
                   sourceId={sourceId}
-                  channel={source?.unavailable === true ? undefined : channel}
+                  channel={channel}
                   name={source?.name ?? `Frame ${number}`}
-                  hasAudio={source?.hasAudio}
-                  orientation="vertical"
                   edge
                 />
               )}

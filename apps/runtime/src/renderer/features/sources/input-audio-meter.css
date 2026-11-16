@@ -1,37 +1,27 @@
 .cg-input-meter {
   position: relative;
-  display: inline-block;
-  flex: 0 0 2rem;
-  inline-size: 2rem;
-  block-size: 0.375rem;
-  align-self: center;
+  display: inline-flex;
+  flex: none;
+  gap: var(--cg-input-meter-gap, 1px);
+  inline-size: 0.625rem;
+  min-block-size: 0.85rem;
+  align-self: stretch;
+  vertical-align: middle;
+}
+
+.cg-input-meter__rail {
+  position: relative;
+  flex: 1;
+  min-inline-size: 0;
   overflow: hidden;
-  border: 1px solid var(--r-meter-frame);
+  border: var(--cg-input-meter-rail-border, 1px) solid var(--r-meter-frame);
   border-radius: 2px;
   background: var(--r-meter-ground);
-  vertical-align: middle;
 }
 
 .cg-input-meter__level {
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    to right,
-    var(--r-meter-safe) 0 70%,
-    var(--r-meter-warn) 70% 88%,
-    var(--r-meter-over) 88% 100%
-  );
-  clip-path: inset(0 100% 0 0);
-}
-
-.cg-input-meter[data-input-meter-orientation='vertical'] {
-  flex: 0 0 auto;
-  inline-size: 0.375rem;
-  block-size: auto;
-  align-self: stretch;
-}
-
-.cg-input-meter[data-input-meter-orientation='vertical'] .cg-input-meter__level {
   background: linear-gradient(
     to top,
     var(--r-meter-safe) 0 70%,
@@ -43,10 +33,9 @@
 
 .cg-input-meter[data-input-meter-edge] {
   position: absolute;
+  inset-block: 0;
   inset-inline-end: 0.22rem;
-  inset-block-start: 28%;
-  block-size: 56%;
-  max-block-size: 6rem;
+  min-block-size: 0;
   pointer-events: none;
 }
 
@@ -57,10 +46,10 @@
   gap: 0.2rem;
 }
 
-.cg-input-meter[data-source-audio-meter='has-audio'] {
+.cg-input-meter[data-source-audio-meter='has-audio'] .cg-input-meter__rail {
   border-color: var(--r-meter-safe);
 }
 
-.cg-input-meter[data-source-audio-meter='no-audio'] {
+.cg-input-meter[data-source-audio-meter='no-audio'] .cg-input-meter__rail {
   border-style: dashed;
 }

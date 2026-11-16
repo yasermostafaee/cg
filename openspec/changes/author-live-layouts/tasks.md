@@ -40,4 +40,5 @@
 - [x] Verify an empty editor, steady Start with this preset, Arrange in the main scroll, and Focus controls for every frame in Windows Chromium.
 - [x] Verify Background None preserves transparency in authored presets and Focus and survives Save and Edit.
 - [x] Carry the input catalogue server through successful D10 reads, refresh failures and Bridge restarts.
+- [x] Verify vertical stereo input meters, frame-height rails when enabled, a default-off editor preview, and no meters on media in Chromium.
 - [ ] Verify the Designer-authored masked input and attached graphic together on the target Playout Engine.

@@ -65,6 +65,13 @@ CG Control SHALL author multiple frames and presets in the channel's template ca
 - **THEN** the areas outside the frames and artwork are transparent in every preset and Focus
 - **AND** saving and reopening the layout restores the transparent background choice
 
+#### Scenario: Read a frame's input levels in the editor
+
+- **WHEN** the operator enables VU meters above the layout preview
+- **THEN** live inputs and Playlist output show separate full-height vertical left and right rails beside their frames
+- **AND** opening the editor starts with preview meters off and the frame list and picker keep compact vertical meters for eligible sources
+- **AND** a frame assigned a media asset has no meter
+
 #### Scenario: Prepare another programme
 
 - **WHEN** the operator creates a layout or duplicates a listed layout while a different row is on air

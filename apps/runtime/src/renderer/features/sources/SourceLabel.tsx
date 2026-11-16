@@ -46,7 +46,6 @@ export interface LabelledSource {
   readonly name: string;
   readonly origin: 'input' | 'media' | undefined;
   readonly durationMs?: number | undefined;
-  readonly hasAudio?: boolean | undefined;
   readonly unavailable: boolean;
   readonly reason?: string | undefined;
 }
@@ -62,7 +61,6 @@ export function labelledSource(sourceId: string | null | undefined): LabelledSou
       name: entry.name,
       origin: entry.origin,
       durationMs: entry.media?.durationMs,
-      hasAudio: entry.media?.hasAudio,
       unavailable: entry.status === 'unavailable',
       reason: entry.reason,
     };
@@ -73,7 +71,6 @@ export function labelledSource(sourceId: string | null | undefined): LabelledSou
       name: seen.name,
       origin: 'media',
       durationMs: seen.durationMs,
-      hasAudio: seen.hasAudio,
       unavailable: false,
     };
   }
@@ -127,7 +124,6 @@ export function SourceLabel({
           sourceId={sourceId}
           channel={source.unavailable ? undefined : meterChannel}
           name={source.name}
-          hasAudio={source.hasAudio}
         />
       )}
       {source.unavailable && (

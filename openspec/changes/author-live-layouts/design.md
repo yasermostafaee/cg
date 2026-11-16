@@ -45,6 +45,10 @@ visible frames even when a different frame or the preset itself is selected.
 A layout with no background omits the background element and leaves its canvas transparent.
 The editor uses its preview checkerboard to show the uncovered area.
 
+The editor keeps compact input meters in the frame list and selector. Its preview has an optional
+VU switch. Enabled meters use two vertical L/R rails aligned to the frame height. Only live
+inputs and Playlist output use input meters.
+
 Store newly attached graphics on the shared frame identity. Preserve each attachment's stable
 artwork identity and frame-relative coordinates in preset and Focus compositions so the frame
 transition carries its graphics. Existing scoped attachments remain readable. Explicit edits share

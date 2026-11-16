@@ -24,8 +24,8 @@
           "en": "A VCG graphic attaches to the frame and follows its motion and effect across presets and Focus."
         },
         {
-          "fa": "ویومتر هر موتور کنار تصویر PGM خودش است. سطح صدای ورودی‌ها کنار قاب و تصویر انتخاب ورودی به‌صورت عمودی دیده می‌شود.",
-          "en": "Each engine's PGM meter sits next to its own picture. Input levels appear vertically next to frames and input thumbnails."
+          "fa": "ویومتر هر موتور کنار تصویر PGM خودش است. ورودی زنده و خروجی Playlist ویومتر عمودی چپ و راست دارند و در پیش‌نمایش ساخت چیدمان می‌توان نمایش آن را روشن کرد.",
+          "en": "Each engine's PGM meter sits next to its own picture. Live inputs and Playlist output have vertical stereo meters, with a preview toggle in the layout editor."
         },
         {
           "fa": "تصویر موتور فعال در PGM کادر دارد. Source defaults، انتخاب‌گر ورودی و Settings نشانی سروری را نشان می‌دهند که فهرست ورودی را فرستاده است.",

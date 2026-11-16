@@ -423,12 +423,7 @@ test.describe('source audio meters', () => {
               ? { sourceId, state: 'measured', dbFs: [-21, -17], validForMs: 300 }
               : {
                   sourceId,
-                  state:
-                    sourceId === 'in-studio-2'
-                      ? 'no-audio'
-                      : sourceId === 'md-m-meter-sound'
-                        ? 'has-audio'
-                        : 'unknown',
+                  state: sourceId === 'in-studio-2' ? 'no-audio' : 'unknown',
                 },
           ),
         });
@@ -446,7 +441,8 @@ test.describe('source audio meters', () => {
         ).sourceMeterTest;
         return { batches, checked, pending: release !== undefined };
       });
-    await dialog.locator('[data-defaults-select="l-1"]').click();
+    const field = dialog.locator('[data-defaults-select="l-1"]');
+    await field.click();
     const panel = picker(page);
     const controls = '[data-source-audio-meter]';
     const meter = (id: string) =>
@@ -454,17 +450,19 @@ test.describe('source audio meters', () => {
         .locator('.cg-vlist-action-row', { has: page.locator(`[data-picker-input="${id}"]`) })
         .locator(controls);
     const peak = meter('in-studio-1');
-    const level = peak.locator('.cg-input-meter__level');
+    const left = peak.locator('[data-input-meter-channel="L"] .cg-input-meter__level');
+    const right = peak.locator('[data-input-meter-channel="R"] .cg-input-meter__level');
     await expect(peak).toHaveAccessibleName('Studio 1 · Audio peak -17 dBFS');
     await expect(panel.locator('[data-picker-input="in-studio-1"]')).toHaveAccessibleName(
       'Studio 1',
     );
-    await expect(level).toHaveCSS('clip-path', /^inset\(28\.33\d*% 0px 0px\)$/);
+    await expect(left).toHaveCSS('clip-path', 'inset(35% 0px 0px)');
+    await expect(right).toHaveCSS('clip-path', /^inset\(28\.33\d*% 0px 0px\)$/);
     const bounds = await peak.boundingBox();
     if (bounds === null) throw new Error('Visible source meter has no size');
     const thumbnail = await peak.locator('..').locator('[data-input-thumbnail]').boundingBox();
     if (thumbnail === null) throw new Error('Input thumbnail has no size');
-    expect(bounds.width).toBeLessThanOrEqual(8);
+    expect(bounds.width).toBeLessThanOrEqual(12);
     expect(bounds.height).toBeGreaterThan(24);
     expect(bounds.height).toBeCloseTo(thumbnail.height, 0);
     expect(Math.abs(bounds.x - thumbnail.x - thumbnail.width)).toBeLessThan(5);
@@ -473,7 +471,10 @@ test.describe('source audio meters', () => {
       contentType: 'text/plain',
     });
     await expect(meter('in-studio-2')).toHaveAttribute('title', 'No audio stream');
-    await expect(meter('in-studio-2')).toHaveCSS('border-top-style', 'dashed');
+    await expect(meter('in-studio-2').locator('[data-input-meter-channel="L"]')).toHaveCSS(
+      'border-top-style',
+      'dashed',
+    );
     await expect(meter('in-input-4')).toHaveAttribute('title', 'Audio level unavailable');
     await expect(panel.locator('[data-picker-input="in-input-4"]')).toContainText('Unavailable');
     const initial = await readState();
@@ -486,7 +487,8 @@ test.describe('source audio meters', () => {
     });
     await expect.poll(async () => (await readState()).pending).toBe(true);
     await expect(peak).toHaveAttribute('title', 'Audio level unavailable');
-    await expect(level).toHaveCSS('clip-path', 'inset(100% 0px 0px)');
+    await expect(left).toHaveCSS('clip-path', 'inset(100% 0px 0px)');
+    await expect(right).toHaveCSS('clip-path', 'inset(100% 0px 0px)');
     await page.evaluate(() => {
       const state = (window as unknown as { sourceMeterTest: SourceMeterProbe }).sourceMeterTest;
       state.hold = false;
@@ -495,21 +497,31 @@ test.describe('source audio meters', () => {
     });
     await expect(peak).toHaveAttribute('title', 'Audio peak -17 dBFS');
 
+    await panel.locator('[data-picker-input="in-studio-1"]').click();
+    const fieldMeter = field.locator(controls);
+    await expect(fieldMeter).toHaveAttribute('data-input-meter-orientation', 'vertical');
+    await expect(fieldMeter.locator('[data-input-meter-channel]')).toHaveCount(2);
+    const fieldMeterSize = await fieldMeter.boundingBox();
+    if (fieldMeterSize === null) throw new Error('The selected input meter has no box');
+    expect(fieldMeterSize.height).toBeGreaterThan(fieldMeterSize.width);
+    await field.click();
     await panel.getByRole('tab', { name: /^Media/ }).click();
     await panel.getByRole('textbox', { name: 'Search media' }).fill('Meter fixture');
-    const silentClip = panel.locator(`[data-picker-media="md-m-meter-silent"] ${controls}`);
-    const soundClip = panel.locator(`[data-picker-media="md-m-meter-sound"] ${controls}`);
-    await expect(silentClip).toHaveAttribute('title', 'No audio stream');
-    await expect(soundClip).toHaveAttribute('title', 'Audio stream present, level unavailable');
-    await expect
-      .poll(async () => (await readState()).batches.flatMap(({ ids }) => ids))
-      .toContain('md-m-meter-sound');
+    const still = panel.locator('[data-picker-media="md-m-meter-silent"]');
+    const clip = panel.locator('[data-picker-media="md-m-meter-sound"]');
+    await expect(still).toBeVisible();
+    await expect(clip).toBeVisible();
+    await expect(still.locator(controls)).toHaveCount(0);
+    await expect(clip.locator(controls)).toHaveCount(0);
+    await clip.click();
+    await expect(field).toHaveAttribute('data-picker-value', 'md-m-meter-sound');
+    await expect(fieldMeter).toHaveCount(0);
     expect((await readState()).batches.flatMap(({ ids }) => ids)).not.toContain(
       'md-m-meter-silent',
     );
+    expect((await readState()).batches.flatMap(({ ids }) => ids)).not.toContain('md-m-meter-sound');
     expect((await readState()).checked).toEqual([]);
 
-    await page.keyboard.press('Escape');
     await dialog.getByRole('button', { name: 'Cancel' }).click();
     await app.openStationSetupAt('Live sources');
     const sources = page.getByRole('region', { name: 'Inputs from the Playout' });
@@ -613,6 +625,9 @@ test.describe('live source thumbnails', () => {
     const playlist = tile('in-fixture-playlist').locator('img');
     await expect(live).toHaveAttribute('src', `data:image/jpeg;base64,${liveJpeg}`);
     await expect(playlist).toHaveAttribute('src', `data:image/jpeg;base64,${playlistJpeg}`);
+    await expect(
+      tile('in-fixture-playlist').locator('..').locator('[data-input-meter-channel]'),
+    ).toHaveCount(2);
     expect(
       await live.evaluate(async (image: HTMLImageElement) => {
         await image.decode();

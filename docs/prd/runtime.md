@@ -5277,11 +5277,12 @@ Repeatable playback and independent timeline animation within imported artwork n
 
 ### Pre-air source audio indicators
 
-The source picker, assigned-input fields, and Station setup show a compact audio indicator next to the source.
-Source cards and live frames show their meters vertically beside their pictures. PGM meters stay with their
-respective engine pictures, including when all pictures and meters are visible.
+The source picker, assigned-input fields, and Station setup show compact vertical stereo audio indicators
+next to live inputs and Playlist output. The New live layout preview offers an off-by-default VU toggle.
+When on, meters beside eligible frames use their full frame height. PGM meters stay with their respective
+engine pictures, including when all pictures and meters are visible.
 Source defaults, the picker, and Station setup identify the last server to supply the input list. A cached
 list keeps its own server identity even if the active programme engine changes.
 The visible entries share one bounded, authenticated batch. A currently checked input shows fresh measured peaks
-from its own existing preview lease. A still asset with confirmed no audio has a distinct state. Other sources
+from its own existing preview lease. Media clips and stills have no meter in the layout or input picker. Other sources
 stay unknown until the Playout exposes independent source telemetry or authoritative audio-stream metadata.

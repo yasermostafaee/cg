@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import {
+  AudioLines,
   Check,
   Flag,
   ImagePlus,
@@ -48,7 +49,8 @@ import {
   readControlLiveLayoutFontFile,
 } from './controlLiveLayoutCompiler.js';
 import { usePvwSourceFrames } from '../monitors/usePvwSourceFrames.js';
-import { SourceLabel } from '../sources/SourceLabel.js';
+import { InputAudioMeter } from '../sources/InputAudioMeter.js';
+import { labelledSource, SourceLabel } from '../sources/SourceLabel.js';
 import { SourcePicker } from '../sources/SourcePicker.js';
 import { LiveLayoutEditorArrange } from './LiveLayoutEditorArrange.js';
 import { LiveLayoutEditorEffects } from './LiveLayoutEditorEffects.js';
@@ -165,6 +167,7 @@ export function LiveLayoutEditor({
       : controlLiveLayoutPresetFrameIds(startingPreset)[0];
   });
   const [focusId, setFocusId] = useState<string>();
+  const [showPreviewMeters, setShowPreviewMeters] = useState(false);
   const [maskSelection, setMaskSelection] = useState<{ frameId: string; index: number }>();
   const [maskEditFrameId, setMaskEditFrameId] = useState<string>();
   const [attachmentId, setAttachmentId] = useState<string>();
@@ -822,12 +825,23 @@ export function LiveLayoutEditor({
               <h3>
                 <Icon icon={Monitor} size={16} /> Preview · PVW
               </h3>
-              {focusId !== undefined && preset !== undefined && (
-                <Button ref={returnButton} variant="neutral" onClick={returnToPreset}>
-                  <Icon icon={RotateCcw} size={15} /> Return to{' '}
-                  <IsolatedName>{preset.name || 'preset'}</IsolatedName>
+              <div className="cg-live-layout-preview-actions">
+                {focusId !== undefined && preset !== undefined && (
+                  <Button ref={returnButton} variant="neutral" onClick={returnToPreset}>
+                    <Icon icon={RotateCcw} size={15} /> Return to{' '}
+                    <IsolatedName>{preset.name || 'preset'}</IsolatedName>
+                  </Button>
+                )}
+                <Button
+                  variant="neutral"
+                  aria-pressed={showPreviewMeters}
+                  active={showPreviewMeters}
+                  title={showPreviewMeters ? 'Hide preview VU meters' : 'Show preview VU meters'}
+                  onClick={() => setShowPreviewMeters((visible) => !visible)}
+                >
+                  <Icon icon={AudioLines} size={15} /> VU meters
                 </Button>
-              )}
+              </div>
             </div>
             {preset !== undefined && frame !== undefined && presetFrameIds.length > 0 ? (
               <LiveLayoutEditorPreview
@@ -839,6 +853,7 @@ export function LiveLayoutEditor({
                 focused={focusId}
                 backgroundUrl={assetUrl}
                 sourceFrames={sourceFrames}
+                showMeters={showPreviewMeters}
                 attachmentSources={attachmentAssets}
                 onFocus={focusFrame}
                 placementEditor={
@@ -920,6 +935,7 @@ export function LiveLayoutEditor({
                   const included = position > 0;
                   const positionId = `${fieldsId}-position-${String(index + 1)}`;
                   const picture = sourceFrames.get(candidate.sourceId ?? '')?.jpegBase64;
+                  const source = labelledSource(candidate.sourceId);
                   return (
                     <div
                       className="cg-live-layout-frame-row"
@@ -941,13 +957,16 @@ export function LiveLayoutEditor({
                             <img src={`data:image/jpeg;base64,${picture}`} alt="" />
                           )}
                         </span>
+                        {candidate.sourceId !== undefined && (
+                          <InputAudioMeter
+                            sourceId={candidate.sourceId}
+                            channel={channel}
+                            name={source?.name ?? name}
+                          />
+                        )}
                         <span className="cg-live-layout-frame-label">
                           <IsolatedName>{name}</IsolatedName>
-                          <SourceLabel
-                            sourceId={candidate.sourceId ?? ''}
-                            fallback="Unassigned"
-                            meterChannel={channel}
-                          />
+                          <SourceLabel sourceId={candidate.sourceId} fallback="Unassigned" />
                         </span>
                         {included && (
                           <span

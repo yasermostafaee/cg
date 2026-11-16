@@ -269,14 +269,9 @@ export function LivePlateOverlay({
                 sourceId={p.sourceId}
                 channel={source?.unavailable === true ? undefined : channel}
                 name={source?.name ?? p.plateId}
-                hasAudio={source?.hasAudio}
-                orientation="vertical"
                 edge
                 style={{
-                  insetInlineEnd: 3 * inv,
-                  inlineSize: 6 * inv,
-                  borderWidth: inv,
-                  maxBlockSize: 96 * inv,
+                  inlineSize: 12 * inv,
                 }}
               />
             )}
