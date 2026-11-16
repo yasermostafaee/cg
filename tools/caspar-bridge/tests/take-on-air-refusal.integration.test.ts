@@ -1,8 +1,5 @@
 import * as dgram from 'node:dgram';
-import * as fs from 'node:fs';
-import * as os from 'node:os';
-import * as path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 import { createMock, defaultHandlers, type MockHandle } from '@cg/amcp-mock';
 import { DEFAULT_LAYER_POLICY } from '@cg/caspar-client';
@@ -19,7 +16,6 @@ import { CasparRuntime } from '../src/caspar-runtime.js';
 import { validateFixedBank } from '../src/fixed-layers-store.js';
 import { awaitChannelModeRead, HEALTH_MS, track } from './support/harness.js';
 import { standardBank, twoChannelRig, writes } from './support/two-channel-rig.js';
-import { recvLines } from './support/wire-trace.js';
 
 /**
  * 🔴 `FIELD-FIXES-01-A` DECISION 2 — **A TAKE OF A ROW ALREADY ON AIR IS REFUSED BY THE BRIDGE, WITH
@@ -116,15 +112,12 @@ describe('Decision 2 — the bridge refuses a take of a row already on air, for 
 
 let mock: MockHandle | null = null;
 let runtime: CasparRuntime | null = null;
-let tracePath: string | null = null;
 
 afterEach(async () => {
   await runtime?.stop();
   runtime = null;
   await mock?.stop();
   mock = null;
-  if (tracePath !== null && fs.existsSync(tracePath)) fs.rmSync(tracePath);
-  tracePath = null;
 });
 
 function freeUdpPort(): Promise<number> {
@@ -141,33 +134,26 @@ function freeUdpPort(): Promise<number> {
 const BANK: FixedLayerBank = { channel: 1, start: 80, count: 20, low: { start: 50, count: 10 } };
 const LOGO: TemplateInfo = { templateId: 'logo', templateType: 'logo', fields: [] };
 const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
-/** The injected bound, and a reply slower than it but inside the AMCP queue's own 2 s. */
 const BOUND_MS = 300;
-const REPLY_MS = 1100;
+const PLAY = 'CG 1-99 PLAY 0';
 
-async function sent(from: number): Promise<string[]> {
-  if (mock === null || tracePath === null) throw new Error('no trace');
-  await mock.traceFlush();
-  // `B-307` — the one reader: complete lines only.
-  return recvLines(tracePath).slice(from);
-}
-
-async function bootSlow(): Promise<CasparRuntime> {
+async function bootSlow(replyMayArrive: Promise<void>): Promise<{
+  r: CasparRuntime;
+  core: MockHandle;
+}> {
   const oscPort = await freeUdpPort();
-  tracePath = path.join(
-    os.tmpdir(),
-    `cg-take-slow-${String(process.pid)}-${String(Date.now())}-${String(Math.round(performance.now() * 1000))}.ndjson`,
-  );
-  mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30, tracePath });
+  const core = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30 });
+  mock = core;
   const cg = defaultHandlers().get('CG');
   if (cg === undefined) throw new Error('no default CG');
-  // The graphic's `CG PLAY` answers late — later than the bound, inside the queue's own timeout.
-  mock.setHandler('CG', async (req, ctx) => {
-    if (/^CG 1-99 PLAY/.test(req.raw)) await delay(REPLY_MS);
-    return cg(req, ctx);
+  // Run PLAY on the core and hold its reply until the test has checked the overdue take.
+  core.setHandler('CG', async (req, ctx) => {
+    const response = await cg(req, ctx);
+    if (req.raw === PLAY) await replyMayArrive;
+    return response;
   });
   const config: ConnectionConfig = {
-    servers: { A: { host: '127.0.0.1', amcpPort: mock.amcpPort, oscPort } },
+    servers: { A: { host: '127.0.0.1', amcpPort: core.amcpPort, oscPort } },
     strategy: 'mirror-sync',
     autoFailoverEnabled: true,
   };
@@ -189,7 +175,7 @@ async function bootSlow(): Promise<CasparRuntime> {
   await r.whenServerHealthy(HEALTH_MS);
   await awaitChannelModeRead(r);
   await delay(250);
-  return r;
+  return { r, core };
 }
 
 const statusOf = (r: CasparRuntime): string | undefined =>
@@ -210,27 +196,38 @@ const readsOnAir = (r: CasparRuntime): boolean => {
 
 describe('Decision 2 — a slow reply leaves the take unresolved, never "loaded"', () => {
   it('🔴 past the bound the row reads UNCONFIRMED and a take is refused with nothing sent; when the reply arrives the row reads ON AIR', async () => {
-    const r = await bootSlow();
+    let releaseReply = (): void => undefined;
+    const replyMayArrive = new Promise<void>((resolve) => {
+      releaseReply = resolve;
+    });
+    const { r, core } = await bootSlow(replyMayArrive);
     expect(await r.loadFixed({ channel: 1, layer: 99 }, 'logo-1', 'logo', {})).toEqual({
       accepted: true,
     });
 
     const first = r.take('logo-1');
-    // Past the bound, with the reply still to come.
-    await delay(BOUND_MS + 250);
-    expect(statusOf(r)).toBe('unconfirmed');
-    expect(statusOf(r)).not.toBe('loaded');
+    try {
+      await vi.waitFor(
+        () => {
+          expect(core.layerState({ channel: 1, layer: 99 })?.onAir).toBe(true);
+          expect(statusOf(r)).toBe('unconfirmed');
+        },
+        { interval: 10, timeout: 1500 },
+      );
 
-    // A take meanwhile — a second console, or the operator pressing again — is refused, and
-    // sends nothing at all.
-    const from = (await sent(0)).length;
-    expect(await r.take('logo-1')).toMatchObject({ accepted: false, errorCode: TAKE_ON_AIR_CODE });
-    expect(await sent(from)).toEqual([]);
+      const from = core.receivedCommands().length;
+      expect(await r.take('logo-1')).toMatchObject({
+        accepted: false,
+        errorCode: TAKE_ON_AIR_CODE,
+      });
 
-    // CONTROL — the reply arrives: the first take resolves and the row reads on air.
-    expect(await first).toEqual({ accepted: true });
-    expect(statusOf(r)).not.toBe('unconfirmed');
-    expect(readsOnAir(r)).toBe(true);
-    expect(mock?.layerState({ channel: 1, layer: 99 })?.onAir).toBe(true);
+      releaseReply();
+      expect(await first).toEqual({ accepted: true });
+      expect(core.receivedCommands().slice(from)).toEqual([]);
+      expect(statusOf(r)).not.toBe('unconfirmed');
+      expect(readsOnAir(r)).toBe(true);
+    } finally {
+      releaseReply();
+    }
   }, 30_000);
 });
