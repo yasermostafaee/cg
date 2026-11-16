@@ -14080,6 +14080,8 @@ outline for missing assignments. Show Crop edges below the plate name when the a
 
 **Expected / regression:** WHEN the Bridge service can read a valid UNC share THEN save it. WHEN it cannot THEN preserve the previous root and show a legible reason without disturbing the input layout; verify service identity and share access on the target station.
 
+An accessible local Windows path is valid on the Bridge server. From Station setup, Check access rechecks the saved path. When installation supplies no path, the service creates its own default directory. Shared template folder reports the same missing-path or access diagnosis.
+
 ## [~] B-426 — An intentional Crop edges assignment refuses a mismatched source ⟨priority: high — owner, 2026-11-10⟩ — `openspec/changes/allow-intentional-live-plate-crop/`
 
 **Repro / Actual:** Load ghab-test.vcg, assign a 16:9 source to a 4:3 Crop edges plate and switch to preset-2. The mismatch refusal blocks the switch even though the preset explicitly requests cropping.

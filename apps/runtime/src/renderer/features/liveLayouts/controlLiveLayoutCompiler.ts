@@ -61,6 +61,7 @@ const BACKGROUND_FORMATS = {
 } as const;
 type BackgroundFormat = (typeof BACKGROUND_FORMATS)[keyof typeof BACKGROUND_FORMATS];
 const backgroundFormats = Object.values(BACKGROUND_FORMATS);
+type MediaBackground = Extract<ControlLiveLayoutBackground, { kind: 'image' | 'video' }>;
 const FONT_FORMATS = {
   ttf: { mime: 'font/ttf', signatures: ['\u0000\u0001\u0000\u0000', 'true'] },
   otf: { mime: 'font/otf', signatures: ['OTTO', '\u0000\u0001\u0000\u0000'] },
@@ -139,9 +140,7 @@ function backgroundTooLarge() {
 }
 
 /** Validate that the browser can actually read a selected image or video. */
-export async function readControlLiveLayoutBackgroundFile(
-  file: File,
-): Promise<ControlLiveLayoutBackground> {
+export async function readControlLiveLayoutBackgroundFile(file: File): Promise<MediaBackground> {
   if (file.size > TEMPLATE_SOURCE_MAX_BYTES) throw backgroundTooLarge();
   const extension = file.name.split('.').at(-1)?.toLowerCase();
   const format =
@@ -246,8 +245,10 @@ function layer(id: string, name: string, children: Element[]): Layer {
   return { id, name, children, blendMode: 'normal', visible: true, locked: false };
 }
 
-function backgroundElements(layout: ControlLiveLayout, fullFrame: LiveSourceRect): Element[] {
-  const background = layout.background;
+function backgroundElements(
+  background: Exclude<ControlLiveLayoutBackground, { kind: 'none' }>,
+  fullFrame: LiveSourceRect,
+): Element[] {
   const base: Element = {
     ...elementBase('background-color', 'Background', fullFrame),
     type: 'shape',
@@ -639,6 +640,7 @@ export function buildControlLiveLayoutScene(
   }
 
   const now = new Date().toISOString();
+  const background = layout.background;
   return {
     schemaVersion: 1,
     id: layout.id,
@@ -648,7 +650,7 @@ export function buildControlLiveLayoutScene(
     frameRate: layout.frameRate,
     safeAreas: { title: 5, action: 3 },
     frameRange: FRAME_RANGE,
-    ...(layout.background.kind === 'video'
+    ...(background.kind === 'video'
       ? {
           lifecycle: { outPoint: 0, contentStart: 0 },
           playout: { mode: 'static', holdBehavior: 'loop' },
@@ -656,7 +658,9 @@ export function buildControlLiveLayoutScene(
       : { playout: { mode: 'static' } }),
     editorBackdrop: 'transparent',
     layers: [
-      layer('layout-background', 'Background', backgroundElements(layout, fullFrame)),
+      ...(background.kind === 'none'
+        ? []
+        : [layer('layout-background', 'Background', backgroundElements(background, fullFrame))]),
       layer('layout-presets', 'Presets', rootInstances),
     ],
     fields: [],
@@ -720,13 +724,11 @@ export async function compileControlLiveLayout(
 ): Promise<Uint8Array> {
   const scene = buildControlLiveLayoutScene(layout, attachmentSources);
   const background = layout.background;
+  const hasBackgroundAsset = background.kind === 'image' || background.kind === 'video';
+  const backgroundBytes = hasBackgroundAsset ? (asset?.size ?? 0) : 0;
   const fontAssets = layout.fonts ?? [];
   const fontBytes = fontAssets.reduce((sum, { id }) => sum + (fontFiles?.get(id)?.size ?? 0), 0);
-  if (
-    (background.kind === 'color' ? 0 : (asset?.size ?? 0)) + fontBytes >
-    TEMPLATE_SOURCE_MAX_BYTES
-  )
-    throw layoutTooLarge();
+  if (backgroundBytes + fontBytes > TEMPLATE_SOURCE_MAX_BYTES) throw layoutTooLarge();
   const assetIndex: AssetEntry[] = [];
   const fontIndex: AssetEntry[] = [];
   const assets = new Map<string, Uint8Array>();
@@ -752,9 +754,9 @@ export async function compileControlLiveLayout(
       }
     }
   }
-  if ((asset?.size ?? 0) + fontBytes + attachmentBytes > TEMPLATE_SOURCE_MAX_BYTES)
+  if (backgroundBytes + fontBytes + attachmentBytes > TEMPLATE_SOURCE_MAX_BYTES)
     throw layoutTooLarge();
-  if (background.kind !== 'color') {
+  if (hasBackgroundAsset) {
     if (asset === undefined || asset.size === 0) throw new Error('Choose the background file.');
     if (asset.size > TEMPLATE_SOURCE_MAX_BYTES) throw backgroundTooLarge();
     const format = mediaFormat(background.mime);
@@ -794,7 +796,7 @@ export async function compileControlLiveLayout(
   }
 
   let minRuntimeVersion = requiredRuntimeVersionForScene(scene, true);
-  if ((layout.frameAttachments?.length ?? 0) > 0) {
+  if (layout.background.kind === 'none' || (layout.frameAttachments?.length ?? 0) > 0) {
     minRuntimeVersion = '1.2.8';
   } else if (usedAttachmentIds.size > 0) {
     minRuntimeVersion = '1.2.7';
@@ -853,7 +855,8 @@ export async function readControlLiveLayout(bytes: Uint8Array): Promise<{
       throw new Error(`The saved font file “${font.name}” is unavailable.`);
     fonts.set(font.id, new Blob([new Uint8Array(data)], { type: font.mime }));
   }
-  if (layout.background.kind === 'color') return { layout, fonts, attachments };
+  if (layout.background.kind === 'color' || layout.background.kind === 'none')
+    return { layout, fonts, attachments };
   const entry = manifest.assetIndex.find(({ id }) => id === BACKGROUND_ASSET);
   const data = entry === undefined ? undefined : files.get(entry.path);
   if (entry === undefined || data === undefined || entry.mime !== layout.background.mime)

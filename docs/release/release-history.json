@@ -16,8 +16,8 @@
       },
       "features": [
         {
-          "fa": "New live layout از چیدمان خالی شروع می‌شود. چینش در بخش اصلی پنجره است و هر قاب در نمای چندقاب دکمهٔ Focus دارد.",
-          "en": "New live layout starts empty. Arrange scrolls with the editor, and each frame has a Focus button in the multiframe preview."
+          "fa": "New live layout از چیدمان خالی شروع می‌شود و می‌توان آن را بدون پس‌زمینه ساخت. چینش در بخش اصلی پنجره است و هر قاب در نمای چندقاب دکمهٔ Focus دارد.",
+          "en": "New live layout starts empty and supports a transparent background. Arrange scrolls with the editor, and each frame has a Focus button in the multiframe preview."
         },
         {
           "fa": "گرافیک VCG به خود قاب متصل می‌شود و در پریست‌ها و Focus با حرکت و افکت همان قاب نمایش داده می‌شود.",

@@ -4922,8 +4922,9 @@ operator had to fail over before seeing whether its programme picture and sound 
   selected layout is remembered on that console without reconnecting either feed
 - WHEN monitor sound is enabled THEN exactly one chosen engine is heard; changing the source moves the sound,
   loudness and the default selected-source VU without changing any on-air audio
-- WHEN All meters is enabled THEN a compact, labelled scale shows each known engine's own levels, including an
-  empty scale for an engine with no data. The console remembers display mode and VU visibility independently.
+- WHEN All meters is enabled THEN each visible picture has its own compact, labelled scale, including an empty
+  scale for an engine with no data. An empty scale also stays beside the picture when the selected sound engine
+  is out of view in selected-meter mode. Display, sound and meter visibility are independent.
 - WHEN failover changes the current primary THEN the physical A/B labels remain stable and the default/follow
   audio source follows the current primary unless the operator explicitly selects another source
 - WHEN B is requested THEN CG Bridge authorizes the logical channel, maps it to B's physical channel, uses B's
@@ -5233,12 +5234,13 @@ Send CG commands to the active engine after its external-graphics transfer contr
 
 ## [~] R-120 — Author Live layouts in CG Control ⟨priority: high — owner, 2026-11-15⟩ — `openspec/changes/author-live-layouts/`
 
-**What:** Create, edit and duplicate live layouts from CG Control. Store stable frame inputs and titles, reusable preset arrangements, a color/image/video background and layout-wide effects.
+**What:** Create, edit and duplicate live layouts from CG Control. Store stable frame inputs and titles, reusable preset arrangements, an optional color/image/video background and layout-wide effects.
 **Why:** Operators need to prepare a programme and move between panel and individual guest shots during a show.
 **Acceptance:**
 
 - WHEN opening a new live layout THEN it starts with no frames or presets. The operator can add either first, choose each preset's members and grid arrangement, and bind a title and input to each frame.
 - WHEN choosing a background or layout-wide effect THEN the operator can preview it and reuse it across that layout's presets.
+- WHEN choosing Background → None THEN the space around the frames remains transparent in previews and the exported package, including during Focus and Return.
 - WHEN focusing a frame or returning THEN PVW and PGM use the configured effect and Return restores the original preset, positions, titles and inputs.
 - WHEN another frame is selected during Focus THEN the chosen Cut, Fade, Motion, Push or Slide over plays directly between solo views with their existing inputs.
 - WHEN the operator styles titles THEN the layout-wide style applies to every frame and individual frames may override it. Box dimensions, padding, alignment, vertical offset, text color, background, stroke, shadows, corner radius and wrap save with the layout. Imported fonts are packaged in the VCG.

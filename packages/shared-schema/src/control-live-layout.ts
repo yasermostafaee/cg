@@ -156,6 +156,7 @@ const ControlLiveLayoutPresetSchema = z.object({
 export type ControlLiveLayoutPreset = z.infer<typeof ControlLiveLayoutPresetSchema>;
 
 const ControlLiveLayoutBackgroundSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('none') }),
   z.object({ kind: z.literal('color'), color: HexColorSchema }),
   z.object({
     kind: z.literal('image'),

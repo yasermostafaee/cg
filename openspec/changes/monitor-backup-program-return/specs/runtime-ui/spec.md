@@ -58,7 +58,7 @@ While on, it SHALL play the resolved engine's mapped channel sound by the Playou
 
 The one meter SHALL draw that same resolved engine/channel's first 8 bus levels and scale as the Playout's `VuMeterTall` does: a fixed green / yellow / red gradient revealed by `clip-path` (green to −18 dBFS, yellow to −7.2 dBFS, red above), 32 segment lines, a linear −60…0 scale labelled 0, −6, −12, −18, −30, −40, −60 under `dBFS`, values written to the DOM with no render per tick, no peak hold, bus 1 the left bar whatever the page's direction, and in the meter's own three hues, never the air green. Where the panel is too narrow for eight bars it SHALL show the first two. A stale stream SHALL read −60. The loudness badge SHALL show the same selected source's short-term loudness with one decimal: green within −23 ± 1, amber within ± 2, red outside, pulsing while the limiter reduces gain by more than 0.1 dB, silence at or below −70, and unknown when no loudness has arrived for a second.
 
-The saved VU scope SHALL offer selected source and all known programme engines, independent of the speaker and VU visibility. All meters SHALL show compact, individually labelled stereo dBFS bars. Each meter SHALL use its matching mapped native level or passive PCM return where supported. It SHALL remain visible and empty without data, and hiding VU SHALL release connections opened only for metering.
+The saved VU scope SHALL offer selected source and all visible programme engines, independent of the speaker and VU visibility. All meters SHALL show compact, individually labelled stereo dBFS bars beside each engine's own picture. Each meter SHALL use its matching mapped native level or passive PCM return where supported. It SHALL remain visible and empty without data. If the selected sound source is outside the picture selection, selected-source mode SHALL show an empty scale beside a visible picture. Hiding VU SHALL release connections opened only for metering.
 
 #### Scenario: Selected-source metering follows local sound selection
 
@@ -67,8 +67,8 @@ The saved VU scope SHALL offer selected source and all known programme engines, 
 
 #### Scenario: All four programme engines are metered while listening to B
 
-- **WHEN** the station exposes A through D and the operator chooses all meters with B sound
-- **THEN** every engine has its own labelled compact meter, only B is heard, and a missing return affects only its own meter
+- **WHEN** the station exposes A through D and the operator chooses all pictures and all meters with B sound
+- **THEN** every engine has its own labelled compact meter beside its picture, only B is heard, and a missing return affects only its own meter
 
 #### Scenario: Follow primary changes without mixing
 

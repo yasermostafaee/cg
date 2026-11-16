@@ -742,6 +742,33 @@ describe('CG Control authored live layouts', () => {
     },
   );
 
+  it('keeps the space around named and focused frames transparent without packaging an asset', async () => {
+    const layout: ControlLiveLayout = { ...layoutFixture(), background: { kind: 'none' } };
+    const previousMedia = new Blob([new Uint8Array([12, 34, 56])], { type: 'image/png' });
+    const bytes = await compileControlLiveLayout(layout, previousMedia);
+    const { scene, manifest } = await unpack(bytes);
+    expect(scene.layers.map(({ id }) => id)).toEqual(['layout-presets']);
+    expect(scene.editorBackdrop).toBe('transparent');
+    expect(manifest.compatibility.minRuntimeVersion).toBe('1.2.8');
+    expect(manifest.assetIndex).toEqual([]);
+    expect(await readControlLiveLayout(bytes)).toEqual({
+      layout,
+      fonts: new Map(),
+      attachments: new Map(),
+    });
+
+    const { html, template } = await produceTemplateDelivery(bytes);
+    expect(html).not.toContain('layout-background');
+    expect(html).toContain('background:transparent');
+    expect(template.liveSources?.looks?.map(({ id }) => id)).toEqual(
+      expect.arrayContaining([
+        layout.defaultPresetId,
+        'preset-pair',
+        controlLiveLayoutFocusLookId(layout.defaultPresetId, 'frame-left'),
+      ]),
+    );
+  });
+
   it.each([
     { kind: 'image', name: 'studio.png', mime: 'image/png' },
     { kind: 'video', name: 'studio.webm', mime: 'video/webm', durationMs: 2_000 },

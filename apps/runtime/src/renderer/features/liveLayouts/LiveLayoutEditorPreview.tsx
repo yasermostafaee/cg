@@ -389,14 +389,17 @@ export function LiveLayoutEditorPreview({
         className="cg-live-layout-stage"
         data-layout-preview=""
         data-focused-frame={focused}
+        data-transparent-background={layout.background.kind === 'none' ? '' : undefined}
         style={
           {
             '--cg-live-layout-aspect': raster.width / raster.height,
             aspectRatio: `${String(raster.width)} / ${String(raster.height)}`,
             backgroundColor:
-              layout.background.kind === 'color'
-                ? layout.background.color
-                : liveLayoutArtwork.mediaBackdrop,
+              layout.background.kind === 'none'
+                ? undefined
+                : layout.background.kind === 'color'
+                  ? layout.background.color
+                  : liveLayoutArtwork.mediaBackdrop,
           } as CSSProperties
         }
       >

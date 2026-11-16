@@ -25,6 +25,7 @@ import {
   controlLiveLayoutRects,
   sameLiveMaskRect,
   type ControlLiveLayout,
+  type ControlLiveLayoutBackground,
   type ControlLiveLayoutArrangement,
   type ControlLiveLayoutFrameAttachment,
   type ControlLiveLayoutPreset,
@@ -147,6 +148,9 @@ export function LiveLayoutEditor({
     mode === 'create' ? { ...initial, frames: [], presets: [], defaultPresetId: '' } : initial,
   );
   const [asset, setAsset] = useState(initialBackground);
+  const lastSolidColor = useRef(
+    initial.background.kind === 'color' ? initial.background.color : liveLayoutArtwork.background,
+  );
   const [fontAssets, setFontAssets] = useState<ReadonlyMap<string, Blob>>(
     () => initialFonts ?? new Map(),
   );
@@ -538,12 +542,15 @@ export function LiveLayoutEditor({
     });
   }
 
-  function setBackgroundColor(color: string): void {
+  function setNonMediaBackground(
+    background: Extract<ControlLiveLayoutBackground, { kind: 'color' | 'none' }>,
+  ): void {
     mediaRead.current += 1;
     setReadingMedia(false);
     setAsset(undefined);
     setRefusal(undefined);
-    setLayout((current) => ({ ...current, background: { kind: 'color', color } }));
+    if (background.kind === 'color') lastSolidColor.current = background.color;
+    setLayout((current) => ({ ...current, background }));
   }
 
   function focusFrame(id: string): void {
@@ -696,36 +703,45 @@ export function LiveLayoutEditor({
           </label>
           <div className="cg-live-layout-background" role="group" aria-label="Background">
             <span>Background</span>
-            {layout.background.kind === 'color' ? (
-              <ColorInput
-                value={layout.background.color.slice(0, 7)}
-                onChange={setBackgroundColor}
-                aria-label="Background color"
-              />
-            ) : (
-              <>
-                <IsolatedName className="cg-live-layout-file">
-                  {layout.background.name}
-                </IsolatedName>
-                <Button
-                  className="cg-list-remove"
-                  variant="icon"
-                  title="Remove background media"
-                  aria-label="Remove background media"
-                  onClick={() => setBackgroundColor(liveLayoutArtwork.background)}
-                >
-                  <Icon icon={Trash2} size={14} />
-                </Button>
-              </>
-            )}
+            <Button
+              variant="neutral"
+              aria-pressed={layout.background.kind === 'none'}
+              onClick={() => setNonMediaBackground({ kind: 'none' })}
+            >
+              None
+            </Button>
+            <Button
+              variant="neutral"
+              aria-pressed={layout.background.kind === 'color'}
+              onClick={() =>
+                setNonMediaBackground({ kind: 'color', color: lastSolidColor.current })
+              }
+            >
+              Solid color
+            </Button>
             <Button
               variant="neutral"
               aria-label="Choose background image or video"
+              aria-pressed={
+                layout.background.kind === 'image' || layout.background.kind === 'video'
+              }
               onClick={() => mediaPick.current?.click()}
             >
               <Icon icon={ImagePlus} size={15} />
               {readingMedia ? 'Reading…' : 'Image or video'}
             </Button>
+            {layout.background.kind === 'color' && (
+              <ColorInput
+                value={layout.background.color.slice(0, 7)}
+                onChange={(color) => setNonMediaBackground({ kind: 'color', color })}
+                aria-label="Background color"
+              />
+            )}
+            {(layout.background.kind === 'image' || layout.background.kind === 'video') && (
+              <IsolatedName className="cg-live-layout-file" title={layout.background.name}>
+                {layout.background.name}
+              </IsolatedName>
+            )}
             <FileInput
               hidden
               ref={mediaPick}
@@ -851,6 +867,7 @@ export function LiveLayoutEditor({
               <div
                 className="cg-live-layout-stage cg-live-layout-empty-preview"
                 data-layout-preview=""
+                data-transparent-background={layout.background.kind === 'none' ? '' : undefined}
                 style={{ aspectRatio: layout.resolution.width / layout.resolution.height }}
               >
                 {layout.frames.length === 0

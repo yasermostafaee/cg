@@ -38,4 +38,5 @@
 - [x] Add multiple ordered still-art VCG attachments and one masked source per shared frame, with direct manipulation and self-contained storage.
 - [x] Verify stable frame graphics identity and mask across presets and Focus, preserving older scoped packages.
 - [x] Verify an empty editor, steady Start with this preset, Arrange in the main scroll, and Focus controls for every frame in Windows Chromium.
+- [x] Verify Background None preserves transparency in authored presets and Focus and survives Save and Edit.
 - [ ] Verify the Designer-authored masked input and attached graphic together on the target Playout Engine.

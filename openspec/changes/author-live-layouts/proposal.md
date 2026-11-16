@@ -5,7 +5,7 @@ Panel programmes need quick layout authoring and focus changes in the same conso
 ## What Changes
 
 - Add a Live layout editor and duplicate action to the CG Control catalogue.
-- Start with an empty layout and author frames, preset membership, arrangements, title visibility and background media.
+- Start with an empty layout and author frames, preset membership, arrangements, title visibility and an optional background.
 - Bind reusable VCG artwork to its frame across presets and Focus so it shares the frame transition.
 - Configure and rehearse motion and solo-to-solo effects once per layout.
 - Name Focus controls and place each frame in the desired position of each preset.

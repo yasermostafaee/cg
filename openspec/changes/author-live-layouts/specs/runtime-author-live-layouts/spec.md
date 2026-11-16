@@ -59,6 +59,12 @@ CG Control SHALL author multiple frames and presets in the channel's template ca
 - **WHEN** the operator saves a layout with a color, image or video background and effect settings
 - **THEN** the saved template renders the selected background and uses the stored effects across its presets
 
+#### Scenario: Save a layout with no background
+
+- **WHEN** the operator selects None for the background
+- **THEN** the areas outside the frames and artwork are transparent in every preset and Focus
+- **AND** saving and reopening the layout restores the transparent background choice
+
 #### Scenario: Prepare another programme
 
 - **WHEN** the operator creates a layout or duplicates a listed layout while a different row is on air

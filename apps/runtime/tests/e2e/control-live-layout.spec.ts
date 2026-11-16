@@ -867,6 +867,17 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect(copy.getByRole('textbox', { name: 'Text 2', exact: true })).toHaveValue(
       'سطر دوم 7۸٩',
     );
+    const noBackground = (dialog: Locator) =>
+      dialog
+        .getByRole('group', { name: 'Background', exact: true })
+        .getByRole('button', { name: 'None', exact: true });
+    const copiedStage = copy.locator('[data-layout-preview]');
+    await noBackground(copy).click();
+    await expect(noBackground(copy)).toHaveAttribute('aria-pressed', 'true');
+    await expect(copy.getByText('panel.png', { exact: true })).toHaveCount(0);
+    await expect(copiedStage).toHaveAttribute('data-transparent-background', '');
+    await expect(copiedStage).toHaveCSS('background-image', /gradient/);
+    await expect(copiedStage.locator(':scope > img, :scope > video')).toHaveCount(0);
     await copy.getByRole('textbox', { name: 'Layout name' }).fill('Next programme');
     const beforeSave = engine.receivedCommands().length;
     await copy.getByRole('button', { name: 'Save layout' }).click();
@@ -874,9 +885,10 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect
       .poll(() => runtime.templateList(1).find(({ name }) => name === 'Next programme')?.templateId)
       .toBeDefined();
-    expect(
-      runtime.templateList(1).find(({ name }) => name === 'Next programme')?.templateId,
-    ).not.toBe(listed.templateId);
+    const nextTemplate = runtime.templateList(1).find(({ name }) => name === 'Next programme');
+    if (nextTemplate === undefined) throw new Error('The second live layout was not saved');
+    expect(nextTemplate.templateId).not.toBe(listed.templateId);
+    expect(nextTemplate.controlLiveLayout?.background).toEqual({ kind: 'none' });
     expect(runtime.templateGet(listed.templateId, 1)?.controlLiveLayoutSource).toBe(
       listed.controlLiveLayoutSource,
     );
@@ -887,6 +899,47 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
         .slice(beforeSave)
         .filter(({ line }) => /^(?:CG|PLAY|CLEAR|MIXER) /.test(line)),
     ).toEqual([]);
+    await library.getByRole('button', { name: 'Select Next programme', exact: true }).click();
+    await library.getByRole('button', { name: 'Edit layout', exact: true }).click();
+    await expect(noBackground(lockedEdit)).toHaveAttribute('aria-pressed', 'true');
+    await expect(lockedEdit.locator('[data-layout-preview]')).toHaveAttribute(
+      'data-transparent-background',
+      '',
+    );
+    await expect(lockedEdit.getByText('panel.png', { exact: true })).toHaveCount(0);
+    await lockedEdit.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await library.getByRole('button', { name: 'Close', exact: true }).first().click();
+
+    const loaded = await page.evaluate(
+      (templateId) =>
+        window.cg.fixedLayers.load({
+          channel: 1,
+          layer: 58,
+          itemId: 'transparent-panel',
+          templateId,
+          fields: {},
+        }),
+      nextTemplate.templateId,
+    );
+    expect(loaded).toMatchObject({ accepted: true });
+    await layers
+      .locator('[data-layer="58"]')
+      .getByRole('button', { name: /^ON PVW/ })
+      .click();
+    await pvw.getByRole('button', { name: 'PLAY all 2 rehearsing', exact: true }).click();
+    const transparentFrame = pvw.frameLocator('iframe[data-rehearsal-frame="transparent-panel"]');
+    await expect(
+      transparentFrame.locator('[data-cg-pvw-picture-part][data-source-id="feed-1"]').first(),
+    ).toBeVisible();
+    await expect(transparentFrame.locator('body')).toHaveCSS(
+      'background-color',
+      'rgba(0, 0, 0, 0)',
+    );
+    await expect(
+      transparentFrame.locator(
+        '[data-cg-element-id="background-color"], [data-cg-element-id="background-media"]',
+      ),
+    ).toHaveCount(0);
   } finally {
     await bridge?.close();
     await mock?.stop();
