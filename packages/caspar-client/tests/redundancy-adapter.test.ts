@@ -145,6 +145,47 @@ describe('RedundancyAdapter — mirror-sync', () => {
     expect(adapter.journal.all()[0]?.outcome).toBe('ok');
   });
 
+  it('promotes preloaded media with LOOP on both engines but journals only path-qualified PLAY', async () => {
+    const { adapter, mocks } = await setup('mirror-sync');
+    const line = 'PLAY 1-60 "A:/clip.mp4" LOOP';
+    const serverB = 'PLAY 1-60 "B:/clip.mp4" LOOP';
+    const result = await adapter.send(line, { serverB, mediaPreload: () => true });
+    expect(result.mirrorConfirmed).toBe(true);
+    expect(mocks[0].receivedCommands().map(({ line }) => line)).toEqual([
+      'LOADBG 1-60 "A:/clip.mp4" LOOP',
+      'PLAY 1-60',
+    ]);
+    expect(mocks[1].receivedCommands().map(({ line }) => line)).toEqual([
+      'LOADBG 1-60 "B:/clip.mp4" LOOP',
+      'PLAY 1-60',
+    ]);
+    expect(mocks[0].layerState({ channel: 1, layer: 60 })).toMatchObject({ loop: true });
+    expect(mocks[1].layerState({ channel: 1, layer: 60 })).toMatchObject({ loop: true });
+    expect(adapter.journal.all()).toEqual([
+      expect.objectContaining({ line, lineB: serverB, outcome: 'ok' }),
+    ]);
+  });
+
+  it('abandons the prepared media without sending or recording PLAY if the backup becomes held', async () => {
+    const { adapter, mocks } = await setup('mirror-sync');
+    mocks[1].setHandler('LOADBG', () => {
+      adapter.setHeld('B', true);
+      return { kind: 'ok', code: 202, verb: 'LOADBG' };
+    });
+    const line = 'PLAY 1-60 "A:/clip.mp4"';
+    const serverB = 'PLAY 1-60 "B:/clip.mp4"';
+    await expect(adapter.send(line, { serverB, mediaPreload: () => true })).rejects.toThrow(
+      /abort/i,
+    );
+    expect(mocks[0].receivedCommands().map(({ line }) => line)).toEqual([
+      'LOADBG 1-60 "A:/clip.mp4"',
+    ]);
+    expect(mocks[1].receivedCommands().map(({ line }) => line)).toEqual([
+      'LOADBG 1-60 "B:/clip.mp4"',
+    ]);
+    expect(adapter.journal.all()).toEqual([]);
+  });
+
   it('emits mirror-divergence when ack codes differ', async () => {
     const { adapter, mocks } = await setup('mirror-sync');
     mocks[0].setHandler('PLAY', () => ({ kind: 'ok', code: 202, verb: 'PLAY' }));

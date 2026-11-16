@@ -9,8 +9,8 @@ import { E2E_PLAYOUT, expect, test } from './fixtures/runtime.js';
  * why, the keyboard, a choice returned once. It cannot answer what this file is for, because jsdom
  * has no layout (golden rule 12c) and its virtualised list therefore scrolls nothing:
  *
- *   1. the panel HANGS FROM ITS FIELD, at least 440 px wide and at most 480 tall, OVER the dialog it
- *      was opened from rather than as a second modal — and Escape closes it alone;
+ *   1. a large source library shows larger pictures inside the viewport, and its keyboard
+ *      interaction stays in the top dialog until it closes;
  *   2. the Media list, scrolled for real, PAGES through the whole library — every item once, never
  *      audio — while the Playout does the searching (Persian normalisation included);
  *   3. inputs and media NEVER MEET, and no address reaches the page;
@@ -24,25 +24,6 @@ import { E2E_PLAYOUT, expect, test } from './fixtures/runtime.js';
 test.use({ playoutSources: E2E_PLAYOUT });
 
 const TPL = 'tpl-e2e-picker';
-
-function colourContrast(a: string, b: string): number {
-  const luminance = (value: string): number => {
-    const channels = value
-      .match(/[\d.]+/g)
-      ?.slice(0, 3)
-      .map(Number);
-    if (channels === undefined || channels.length !== 3 || channels.some(Number.isNaN)) {
-      throw new Error(`cannot read colour ${value}`);
-    }
-    const [r, g, blue] = channels.map((channel) => {
-      const unit = channel / 255;
-      return unit <= 0.04045 ? unit / 12.92 : ((unit + 0.055) / 1.055) ** 2.4;
-    });
-    return 0.2126 * (r ?? 0) + 0.7152 * (g ?? 0) + 0.0722 * (blue ?? 0);
-  };
-  const [lighter, darker] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-  return ((lighter ?? 0) + 0.05) / ((darker ?? 0) + 0.05);
-}
 
 /** Two plates, one look placing both — the shape Plate inputs exists for. */
 async function registerTemplate(page: Page): Promise<void> {
@@ -100,7 +81,7 @@ async function openDefaults(app: {
 
 const picker = (page: Page): Locator => page.getByRole('dialog', { name: 'Choose a source' });
 
-test('the picker hangs from its field, over the dialog — not a second modal — and Escape closes it alone', async ({
+test('the large source picker shows larger pictures and restores the parent dialog focus', async ({
   app,
 }) => {
   const page = app.page;
@@ -112,57 +93,38 @@ test('the picker hangs from its field, over the dialog — not a second modal �
   const panel = picker(page);
   await expect(panel).toBeVisible();
   await expect(field).toHaveAttribute('aria-expanded', 'true');
-  // The dialog it was opened from is still there, under it: the picker is not a modal.
   await expect(dialog).toBeVisible();
-  await expect(panel).not.toHaveAttribute('aria-modal', 'true');
-
-  // Owner follow-up, 2026-10-26 — the menu must read as a surface ABOVE the dialog beneath it,
-  // not as one more patch of the same dark ground. This is measured in Chrome: jsdom cannot prove
-  // painted contrast, and a class-name assertion would stay green if its tokens regressed.
-  const [panelPaint, dialogPaint] = await Promise.all([
-    panel.evaluate((el) => {
-      const style = getComputedStyle(el);
-      return {
-        background: style.backgroundColor,
-        border: style.borderTopColor,
-        shadow: style.boxShadow,
-      };
-    }),
-    dialog.evaluate((el) => getComputedStyle(el).backgroundColor),
-  ]);
-  expect(colourContrast(panelPaint.background, dialogPaint)).toBeGreaterThan(1.1);
-  expect(colourContrast(panelPaint.border, panelPaint.background)).toBeGreaterThan(1.8);
-  expect(panelPaint.shadow).not.toBe('none');
-
-  // §2.A geometry — measured, because jsdom cannot: ≥ 440 wide, ≤ 480 tall, hanging BELOW its field.
-  const [fieldBox, panelBox] = [await field.boundingBox(), await panel.boundingBox()];
-  if (fieldBox === null || panelBox === null)
-    throw new Error('the field and the panel must both have a box');
-  expect(panelBox.width).toBeGreaterThanOrEqual(440);
-  expect(panelBox.height).toBeLessThanOrEqual(480);
-  expect(panelBox.y, 'below its field — there is room there').toBeGreaterThanOrEqual(
-    fieldBox.y + fieldBox.height,
-  );
-  await expect(panel).toHaveAttribute('data-popover-side', 'below');
+  await expect(panel).toHaveAttribute('aria-modal', 'true');
+  const panelBox = await panel.boundingBox();
+  if (panelBox === null) throw new Error('the picker must have a box');
+  expect(panelBox.width).toBeGreaterThanOrEqual(800);
+  expect(panelBox.height).toBeGreaterThanOrEqual(500);
+  expect(panelBox.x).toBeGreaterThanOrEqual(0);
+  expect(panelBox.y).toBeGreaterThanOrEqual(0);
+  expect(panelBox.x + panelBox.width).toBeLessThanOrEqual(1280);
+  expect(panelBox.y + panelBox.height).toBeLessThanOrEqual(900);
 
   // The tabs carry their counts: the Playout's seven inputs, and its 124 video items (never audio).
   await expect(panel.getByRole('tab', { name: 'Inputs 7' })).toBeVisible();
   await expect(panel.getByRole('tab', { name: 'Media 124' })).toBeVisible();
 
-  /*
-    🔴 `B-302` — THE TABS START WHERE THE ROWS START. The owner's screenshot (2026-09-30): `Inputs 0` sat
-    flush against the panel's left edge. Measured here because jsdom has no layout (golden rule 12c): the
-    first tab's box (a tab has no inline padding of its own, so its box IS its text) against the panel's
-    edge, and against where a row's content starts (its box plus its own padding).
-  */
-  const firstTab = await panel.getByRole('tab', { name: 'Inputs 7' }).boundingBox();
-  const row = panel.locator('[data-picker-input="in-studio-1"]');
-  const rowBox = await row.boundingBox();
-  const rowPad = await row.evaluate((el) => parseFloat(getComputedStyle(el).paddingLeft));
-  if (firstTab === null || rowBox === null) throw new Error('the tab and the row must have a box');
-  const tabInset = firstTab.x - panelBox.x;
-  expect(tabInset, 'the tab is inset from the panel edge').toBeGreaterThanOrEqual(8);
-  expect(Math.abs(tabInset - (rowBox.x + rowPad - panelBox.x))).toBeLessThanOrEqual(1.5);
+  const thumbnail = await panel.locator('[data-input-thumbnail]').first().boundingBox();
+  if (thumbnail === null) throw new Error('the first input must have a visible picture slot');
+  expect(thumbnail.width).toBeGreaterThanOrEqual(112);
+  expect(thumbnail.width / thumbnail.height).toBeCloseTo(16 / 9, 1);
+
+  const focus = () =>
+    panel.evaluate((element) => ({
+      inside: element.contains(document.activeElement),
+      accessibleName: document.activeElement?.getAttribute('aria-label'),
+      text: document.activeElement?.textContent,
+    }));
+  const initialFocus = await focus();
+  expect(initialFocus.inside).toBe(true);
+  await page.keyboard.press('Tab');
+  const nextFocus = await focus();
+  expect(nextFocus.inside).toBe(true);
+  expect(nextFocus).not.toEqual(initialFocus);
 
   // 🔴 Escape closes the PICKER — the dialog under it survives, and focus is back on the field.
   await page.keyboard.press('Escape');
@@ -243,7 +205,7 @@ test('Media: searched on the Playout’s side, Persian included; the list pages 
     one audio item never.
   */
   await search.fill('');
-  const list = panel.locator('[data-picker-tab="media"] [role="listbox"]');
+  const list = panel.locator('[data-picker-tab="media"] [role="grid"]');
   await expect(list.locator('[data-picker-media]').first()).toBeVisible();
   const byIndex = new Map<number, string>();
   let idleAtEnd = 0;
@@ -361,6 +323,7 @@ test('Media: visible posters decode separately, and a clip without a poster can 
   expect(redPixel[2]).toBeLessThan(15);
   expect(bluePixel[0]).toBeLessThan(15);
   expect(bluePixel[2]).toBeGreaterThan(220);
+  await missing.scrollIntoViewIfNeeded();
   await expect(missing).toHaveText('No poster');
   await expect(missing.locator('img')).toHaveCount(0);
   await expect.poll(async () => (await readState()).reads).toContain('md-m-clip-003');
@@ -370,6 +333,75 @@ test('Media: visible posters decode separately, and a clip without a poster can 
   await expect(panel).toHaveCount(0);
   await expect(field).toHaveAttribute('data-picker-value', 'md-m-clip-003');
   expect((await readState()).inputChecks).toBe(0);
+});
+
+test('Media: play, pause, drag to seek and stop a preview without choosing the clip', async ({
+  app,
+}) => {
+  const page = app.page;
+  const dialog = await openDefaults(app);
+  const field = dialog.locator('[data-defaults-select="l-1"]');
+  const jpegBase64 = FRAME_A.toString('base64');
+  await page.evaluate((jpegBase64) => {
+    const positions: number[] = [];
+    Object.assign(window, { sourcePreviewPositions: positions });
+    window.cg.sourcePreviews.thumbnails = ({ mediaPosition }) => {
+      if (mediaPosition === undefined) return Promise.resolve({ frames: [] });
+      const { sourceId, atMs } = mediaPosition;
+      positions.push(atMs);
+      return Promise.resolve({
+        frames: [],
+        mediaFrame: {
+          sourceId,
+          signal: 'present',
+          jpegBase64,
+          width: 64,
+          height: 36,
+          previewPositionMs: atMs,
+        },
+      });
+    };
+  }, jpegBase64);
+  const positions = () =>
+    page.evaluate(
+      () => (window as unknown as { sourcePreviewPositions: number[] }).sourcePreviewPositions,
+    );
+
+  await field.click();
+  const panel = picker(page);
+  await panel.getByRole('tab', { name: /^Media/ }).click();
+  await panel.getByRole('textbox', { name: 'Search media' }).fill('Studio');
+  await panel.getByRole('button', { name: 'Preview · Studio 1' }).click();
+  const play = panel.getByRole('button', { name: 'Play preview' });
+  const pause = panel.getByRole('button', { name: 'Pause preview' });
+  const stop = panel.getByRole('button', { name: 'Stop preview' });
+  const seek = panel.getByRole('slider', { name: 'Preview position' });
+  await expect(play).toBeEnabled();
+  await play.click();
+  await expect(pause).toBeEnabled();
+  await expect.poll(async () => (await positions()).some((position) => position > 0)).toBe(true);
+  await pause.click();
+  await expect(play).toBeEnabled();
+  const playingPosition = Number(await seek.inputValue());
+  expect(playingPosition).toBeGreaterThan(0);
+
+  const seekBox = await seek.boundingBox();
+  if (seekBox === null) throw new Error('the video preview must have a seek bar');
+  const y = seekBox.y + seekBox.height / 2;
+  await page.mouse.move(seekBox.x + seekBox.width / 4, y);
+  await page.mouse.down();
+  await page.mouse.move(seekBox.x + (seekBox.width * 3) / 4, y, { steps: 6 });
+  await page.mouse.up();
+  const max = Number(await seek.getAttribute('max'));
+  await expect.poll(async () => (await positions()).at(-1)).toBeGreaterThan(max / 2);
+  await stop.click();
+  await expect(seek).toHaveValue('0');
+  await expect(field).toHaveAttribute('data-picker-value', '');
+
+  await page.keyboard.press('Escape');
+  await expect(panel).toHaveCount(0);
+  await expect(field).toBeFocused();
+  await expect(field).toHaveAttribute('data-picker-value', '');
 });
 
 interface SourceMeterProbe {

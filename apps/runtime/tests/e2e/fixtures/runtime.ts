@@ -2091,21 +2091,20 @@ const exactly = (text: string): RegExp =>
 
 /**
  * 🔴 `PLAYOUT-SOURCES-01` §2.A — **CHOOSE IN A SOURCE PICKER.** Every binding site — the template
- * defaults, a look's input, the live swap — is one field that opens one anchored panel: the call
+ * defaults, a look's input, the live swap or a layout frame — opens one source dialog: the call
  * site's own choices on a row above two tabs, `Inputs` and `Media`. One helper, because the next
  * change to the panel should cost one edit, not one per spec.
  *
  * An input and a call-site choice are named EXACTLY; a media row's accessible name also carries its
  * folder and facts, so it is matched on its name element. `search` types into the Media search first
- * (a library longer than a page does not show every item at once). Waits for the panel to close,
+ * (a library longer than a page does not show every item at once). Waits for the dialog to close,
  * which is what a pick does.
  */
 export async function chooseSource(page: Page, field: Locator, pick: SourcePick): Promise<void> {
   const panel = page.getByRole('dialog', { name: 'Choose a source' });
   const expected = 'choice' in pick ? pick.choice : 'input' in pick ? pick.input : pick.media;
-  // Test-mode source discovery may publish a fresh catalog while the picker is open. That
-  // intentionally remounts the anchored panel; retry the user gesture instead of letting a stale
-  // tab locator consume the whole test timeout.
+  // Source discovery can publish a fresh catalog while the picker is open in test mode.
+  // Retry the selection instead of letting a stale locator consume the whole timeout.
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       await field.click({ timeout: 2_000 });

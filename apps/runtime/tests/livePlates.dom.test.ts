@@ -457,7 +457,7 @@ describe('the Inspector binds THIS template plates', () => {
     expect(panel.textContent).not.toContain('src-');
     // Escape closes the panel — and only the panel: the dialog it opened from stays.
     await closePicker();
-    expect(document.querySelector('[data-popover]')).toBeNull();
+    expect(panel.isConnected).toBe(false);
     expect(dialog.isConnected).toBe(true);
   });
 

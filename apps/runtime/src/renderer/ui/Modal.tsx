@@ -650,6 +650,8 @@ export interface ModalMessage {
 }
 
 interface ModalProps {
+  /** Optional target for a launcher’s aria-controls. */
+  id?: string | undefined;
   /**
    * SENTENCE case, not shouting — see the module note. The primitive supplies the
    * one treatment; the string supplies the words.
@@ -828,6 +830,7 @@ const WIDTHS: Record<'prose' | 'wide' | 'fixed' | 'ledger' | 'library' | 'record
 };
 
 export function Modal({
+  id,
   title,
   subtitle,
   emblem,
@@ -935,12 +938,19 @@ export function Modal({
       }
       role="presentation"
       data-modal-layer={layerLevel}
-      onClick={busy ? undefined : onClose}
-      onContextMenu={(e) => e.preventDefault()}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!busy && e.target === e.currentTarget) onClose();
+      }}
+      onKeyDown={(e) => e.stopPropagation()}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
     >
-      {/* The scrim cancels; a click INSIDE the dialog must not. */}
       <div
         ref={ref}
+        id={id}
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel ?? title}
@@ -953,7 +963,6 @@ export function Modal({
           ...(size === 'record' ? styles.dialogRecord : {}),
           width: WIDTHS[size],
         }}
-        onClick={(e) => e.stopPropagation()}
       >
         <div
           style={fixed ? { ...styles.titleRow, ...styles.titleRowFixed } : styles.titleRow}

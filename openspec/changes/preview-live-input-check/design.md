@@ -69,10 +69,13 @@ view, channel change or loss of access. Match each accepted frame to its source 
 before painting. Show an empty tile for a source whose
 frame is absent or stale. Distinguish verified loss of signal from unknown status, and preserve
 valid black frames. Thumbnails are silent. They use neither the explicit Check lease nor a new
-receiver. Station setup uses a larger slot than the source pickers. Both retain 16:9. Until the feeds
+receiver. The source library dialog sizes pictures for comparison while Station setup keeps its
+existing compact cards. Both retain 16:9. Until the feeds
 are available, show the reserved slot labelled `No signal` and let it
 open the existing Check action where the source is checkable. The label describes the picture
 slot. The row keeps its catalogue availability and selecting the source still uses the row action.
+The Media tab opens its adjacent player only through a separate Preview action. The player uses
+authenticated position-aware preview frames and releases its demand on tab or dialog close.
 
 The explicit programme-channel check lease provides one distinct saved D10 input at a time.
 The station's Playlist output and D11 clip are not valid input IDs for that lease. The two-viewer

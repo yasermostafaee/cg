@@ -49,3 +49,22 @@
 - [x] Keep the name and compact status visible and show specific causes on demand.
 - [x] Verify combined missing media and live input warnings in Layers and Inspector. Four Windows Chromium cases and 14 warning tests passed.
 - [x] [Linux Playwright](https://github.com/yasermostafaee/cg/actions/runs/43667950106/job/132671500381) ran the complete E2E step successfully on `194e37ac`.
+- [x] Confirmed by the operator on CG 1.2.10: the two media clips appear in the
+      reserve's programme return after the D11 replica ID correction.
+
+## Legacy reserve picture and sound follow-up
+
+- [x] Prepare both fresh, hidden A/B media seats before dispatch when both members
+      can confirm readiness. Verify preparation and the independent fallback in Bridge tests.
+- [x] Run eligible resident preset and Focus effects on the mapped reserve.
+      Bridge tests cover reserve faults and stale queues, seats and mapping.
+- [x] Diagnose the reserve's own D10 readiness with read-only lookups on the mapped
+      reserve session. Cover missing and unavailable sources in Bridge tests.
+- [ ] Verify media phase and preset/Focus transitions separately from monitor-return
+      latency on an isolated real engine pair.
+- [ ] Verify the reserve's own D10 clean Playlist source and engine-local holder.
+      Gate the route on authenticated availability and prove B-local playback and
+      audio on a mapped, isolated channel.
+- [x] Verify each PGM meter is bound to its actual engine and source in Chromium.
+- [ ] Compare measured A/B PGM levels with deterministic aligned media and equal
+      programme settings on a real engine pair.

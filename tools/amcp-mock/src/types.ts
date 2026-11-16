@@ -96,6 +96,8 @@ export interface LayerState {
   backgroundProducer: ProducerKind;
   /** `ROUTE-PLATES-01` — the argument the background producer was loaded with (`''` when empty). */
   backgroundFilePath: string;
+  /** The LOOP flag held by a prepared file until the background is promoted. */
+  backgroundLoop: boolean;
   /** Play/pause flag — `false` means playing. */
   paused: boolean;
   /**

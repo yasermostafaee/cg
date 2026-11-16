@@ -519,7 +519,10 @@ describe('Media — searched on the Playout’s side, a page at a time', () => {
     const pagesBefore = searches.filter((s) => s.cursor !== undefined).length;
     await act(async () => {
       if (list === null) return;
-      Object.defineProperty(list, 'scrollTop', { value: 50 * 46, configurable: true });
+      const rowHeight = Number.parseFloat(
+        list.querySelector<HTMLElement>('.cg-vlist-action-row')?.style.height ?? '',
+      );
+      Object.defineProperty(list, 'scrollTop', { value: 50 * rowHeight, configurable: true });
       list.dispatchEvent(new Event('scroll', { bubbles: true }));
       await Promise.resolve();
     });
@@ -543,6 +546,27 @@ describe('Media — searched on the Playout’s side, a page at a time', () => {
     expect(panel.querySelector('[data-picker-empty="media"]')?.textContent).toBe(
       'No media matches “zzzz”.',
     );
+  });
+
+  it('previews a media choice in the library dialog before returning the assignment', async () => {
+    const onChange = vi.fn();
+    const field = await render({ onChange });
+    const panel = await openPicker(field);
+    await pickerTab(panel, 'Media');
+    expect(panel.getAttribute('aria-modal')).toBe('true');
+    expect(panel.getAttribute('data-modal-size')).toBe('library');
+    const id = 'md-m-studio1';
+    const preview = panel.querySelector<HTMLButtonElement>(`[data-picker-preview="${id}"]`);
+    expect(preview).not.toBeNull();
+    await act(async () => preview?.click());
+    expect(preview?.getAttribute('aria-pressed')).toBe('true');
+    expect(panel.querySelector('[data-picker-preview-empty]')).toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
+    await act(async () => panel.querySelector<HTMLElement>(`[data-picker-media="${id}"]`)?.click());
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith(id);
+    expect(panel.isConnected).toBe(false);
+    expect(document.activeElement).toBe(field);
   });
 
   it('a Playout that does not answer says so, with Retry', async () => {
@@ -654,40 +678,32 @@ describe('the keyboard, and a choice returned ONCE', () => {
     await settle();
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange).toHaveBeenCalledWith('in-pl-apasai');
-    expect(document.querySelector('[data-popover]')).toBeNull();
+    expect(panel.isConnected).toBe(false);
   });
 
   it('Escape closes the panel and returns focus to the field', async () => {
     const field = await render({});
-    await openPicker(field);
+    const panel = await openPicker(field);
     await closePicker();
-    expect(document.querySelector('[data-popover]')).toBeNull();
+    expect(panel.isConnected).toBe(false);
     expect(document.activeElement).toBe(field);
   });
 
-  it('keeps the picker open for a pending scroll that was already measured', async () => {
+  it('keeps the centered picker open across list scrolling and viewport changes', async () => {
     const field = await render({});
-    const bounds = vi
-      .spyOn(field, 'getBoundingClientRect')
-      .mockReturnValue(new DOMRect(20, 420, 200, 30));
     const panel = await openPicker(field);
     const list = panel.querySelector('[data-picker-list]');
 
     await act(async () => {
       field.parentElement?.dispatchEvent(new Event('scroll'));
-    });
-    expect(document.querySelector('[data-popover]')).toBe(panel);
-
-    bounds.mockReturnValue(new DOMRect(20, 400, 200, 30));
-    await act(async () => {
       list?.dispatchEvent(new Event('scroll'));
+      window.dispatchEvent(new Event('resize'));
     });
-    expect(document.querySelector('[data-popover]')).toBe(panel);
-
-    await act(async () => {
-      field.parentElement?.dispatchEvent(new Event('scroll'));
-    });
-    expect(document.querySelector('[data-popover]')).toBeNull();
+    expect(panel.isConnected).toBe(true);
+    await act(async () =>
+      panel.querySelector<HTMLButtonElement>('[data-modal-role="cancel"]')?.click(),
+    );
+    expect(panel.isConnected).toBe(false);
   });
 
   it('choosing the value already bound returns nothing — only a change is a choice', async () => {
@@ -759,7 +775,7 @@ describe('the keyboard, and a choice returned ONCE', () => {
     expect(beneath.menu).not.toHaveBeenCalled();
     // A right-press INSIDE neither closes the panel nor opens a menu.
     expect((menuEvent as MouseEvent | null)?.defaultPrevented).toBe(true);
-    expect(document.querySelector('[data-popover]')).not.toBeNull();
+    expect(panel.isConnected).toBe(true);
     await closePicker();
   });
 });

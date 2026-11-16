@@ -127,3 +127,39 @@ dependency for unattended on-air use. A Bridge may report and hold the unresolve
 command while testing; an operator may not bypass it by issuing a new ID or clearing the
 journal. Replica readiness is per member and per applied revision. A successful result
 on the owner does not imply every reserve is ready to take control.
+
+## Legacy reserve observations after the D11 fix
+
+The operator confirmed both files now render on B with CG 1.2.10. Their A/B programme
+images show a different point in the media, and B has a blank clean Playlist plate.
+The remaining issues are in the legacy command path on Playout `.11`.
+
+The existing media command names a local file separately on each engine. File opening
+and decoding take place after dispatch on independent cores. The programme pictures use
+separate MJPEG feeds with no shared capture timestamp. Comparing two pictures in the
+console does not measure native phase. Test source alignment with fresh producer
+playheads or a frame-number clip on an isolated pair, and record return delay separately.
+
+For fresh hidden media seats, a verified and idle mirror pair first prepares each
+engine's own file and starts both prepared producers after both acknowledgements.
+Other seats retain the explicit self-contained start command. Eligible preset and
+Focus transitions follow the active phases on the mapped, verified reserve page.
+Reserve stage and recovery commands remain bound to that session and queue. The
+active engine does not wait for the reserve before advancing its effect.
+
+Legacy clean Playlist routing uses A's D10 and its generation. A route names an
+engine-local channel/layer. B needs its own authenticated D10 and a unique ready
+Playlist entry for the validated B channel, with a current local epoch. The `.12`
+example advertises different A and B route coordinates. It does not prove that either
+station member currently has the expected ready source. The legacy Take reads B's
+readiness passively and logs the result. B-local Playlist seating remains pending
+verification of the source and the holder and recovery lifecycle.
+
+The PGM monitor uses an independent meter stream for each engine, keyed by verified
+engine/channel. A verified return without that meter binding can use stereo PCM peaks
+from its own audio stream. The LUFS badge shows the selected source; the separate dBFS
+bars in all-engine mode show each engine's measured programme. The six Chromium
+programme/monitor cases passed with distinct readings and correct B/Follow routing.
+On the station, programme-gain reads require the corresponding engine's authenticated
+session. Compare equal gain, per-source audio and aligned source material before
+diagnosing level parity on a real output.

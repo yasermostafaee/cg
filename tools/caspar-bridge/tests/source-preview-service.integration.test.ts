@@ -3,13 +3,15 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   SourcePreviewPvwChannel,
   SourcePreviewThumbnailsChannel,
+  SourcesMediaSearchChannel,
   inputSourceId,
+  mediaSourceId,
   type ChannelResponse,
 } from '@cg/shared-ipc';
 import { describe, expect, it } from 'vitest';
 import type { SourcePreviewSelector } from '../src/playout-source-previews.js';
 import { openClient, type Client } from './support/auth-harness.js';
-import { startFakePlayout } from './support/fake-playout.js';
+import { FAKE_MEDIA_IDS, startFakePlayout } from './support/fake-playout.js';
 import { FRAME_A, FRAME_B } from './support/fake-pgm-feed.js';
 import { track } from './support/harness.js';
 import { twoChannelRig, waitUntil } from './support/two-channel-rig.js';
@@ -207,6 +209,73 @@ const thumbnails = (client: Client, sourceIds: string[]) =>
   );
 
 describe('C-023 independent source previews through authenticated Bridge WebSocket', () => {
+  it('seeks an authorized D11 search result without a lease, media binding or AMCP write', async () => {
+    const preview = new FakeSourcePreviews();
+    const playout = track(await startFakePlayout({ sourcePreviews: preview.handle }), (p) =>
+      p.stop(),
+    );
+    const rig = await twoChannelRig({
+      bridge: { playout: { auth: 'playout', address: playout.baseUrl, issuer: playout.issuer } },
+    });
+    const before = (await rig.lines()).length;
+    const client = await openClient(rig.handle);
+    const id = mediaSourceId(FAKE_MEDIA_IDS.studio1);
+    const request = (sourceId: string, atMs: number, channel = 1) => ({
+      channel,
+      sourceIds: [],
+      mediaPosition: { sourceId, atMs },
+    });
+    const askFrame = (sourceId: string, atMs: number) =>
+      ask<ChannelResponse<typeof SourcePreviewThumbnailsChannel>>(
+        client,
+        SourcePreviewThumbnailsChannel.name,
+        request(sourceId, atMs),
+      );
+    const target = request(id, 3_250);
+    expect(
+      (await client.ask(randomUUID(), SourcePreviewThumbnailsChannel.name, target)).error,
+    ).toEqual(expect.any(String));
+    const token = (await playout.issueToken({ user: 'operator' })).token;
+    expect((await client.authenticate(randomUUID(), token)).error).toBeUndefined();
+    await waitUntil(() => playout.channelsBearers.length > 0, 'D4 channel identity');
+    expect(await askFrame(id, 3_250)).toEqual({ frames: [] });
+    expect(
+      await ask<ChannelResponse<typeof SourcesMediaSearchChannel>>(
+        client,
+        SourcesMediaSearchChannel.name,
+        { q: 'Studio 1' },
+      ),
+    ).toMatchObject({ ok: true, items: expect.arrayContaining([expect.objectContaining({ id })]) });
+    expect(
+      (await client.ask(randomUUID(), SourcePreviewThumbnailsChannel.name, request(id, 3_250, 2)))
+        .error,
+    ).toEqual(expect.any(String));
+    expect(await askFrame(LIVE, 3_250)).toEqual({ frames: [] });
+    expect(await askFrame(id, 30_000)).toEqual({ frames: [] });
+    expect(preview.snapshots).toEqual([]);
+    expect(await askFrame(id, 3_250)).toEqual({
+      frames: [],
+      mediaFrame: {
+        sourceId: id,
+        previewPositionMs: 3_250,
+        signal: 'unknown',
+        jpegBase64: FRAME_B.toString('base64'),
+        width: 64,
+        height: 36,
+      },
+    });
+    expect(preview.snapshots).toEqual([
+      [{ kind: 'media', mediaId: FAKE_MEDIA_IDS.studio1, atMs: 3_250 }],
+    ]);
+    expect(preview.starts).toEqual([]);
+    expect(rig.handle.runtime.sourceCatalog().sources.some((entry) => entry.id === id)).toBe(false);
+    expect(
+      (await rig.lines())
+        .slice(before)
+        .filter((line) => /^(?:CG|PLAY|STOP|CLEAR|MIXER|LOAD|LOADBG)\b/i.test(line)),
+    ).toEqual([]);
+  });
+
   it('keeps exact authorized PVW sources separate, masks stale JPEGs and closes only owned leases', async () => {
     const preview = new FakeSourcePreviews();
     const playout = track(await startFakePlayout({ sourcePreviews: preview.handle }), (p) =>

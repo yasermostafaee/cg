@@ -258,7 +258,7 @@ test('C-023 · inspect input picture from source controls without changing a bin
     await expect(setup.locator('[data-inputs-server]')).toHaveText(inputServer);
     const setupTile = await visibleCheckThumbnail(setup, 'Studio 1');
     const setupBox = (await setupTile.boundingBox())!;
-    expect(setupBox.width).toBeGreaterThan(tileBox.width);
+    expect(tileBox.width).toBeGreaterThan(setupBox.width);
     expect(Math.abs(setupBox.height - (setupBox.width * 9) / 16)).toBeLessThan(1);
     await expect(setup.locator(thumbnail)).toHaveCount(
       await setup.locator('[data-source-input]').count(),

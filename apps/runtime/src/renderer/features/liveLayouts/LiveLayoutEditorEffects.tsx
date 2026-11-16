@@ -95,7 +95,7 @@ export function LiveLayoutEditorEffects({
         </fieldset>
         <fieldset className="cg-live-layout-effect-controls">
           <legend>
-            <Icon icon={ArrowLeftRight} size={14} /> Switch focused frame
+            <Icon icon={ArrowLeftRight} size={14} /> Switch focused plate
           </legend>
           <div className="cg-live-layout-effect-fields">
             <label className="cg-live-layout-effect-method">

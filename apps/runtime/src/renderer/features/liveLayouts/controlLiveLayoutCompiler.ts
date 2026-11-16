@@ -10,6 +10,7 @@ import {
   controlLiveLayoutFocusLookId,
   controlLiveLayoutFocusTarget,
   controlLiveLayoutFontFamily,
+  controlLiveLayoutPlateBorder,
   controlLiveLayoutRects,
   controlLiveLayoutTitleHidden,
   liveRevealSceneRect,
@@ -481,18 +482,34 @@ function frameComposition(
   });
   const base: Composition = {
     id: 'layout-frame-' + frame.id,
-    name: 'Live frame',
+    name: 'Live plate',
     resolution,
     frameRange: FRAME_RANGE,
     editorBackdrop: 'transparent',
-    layers: [layer(frame.id + '-layer', 'Frame', children)],
+    layers: [layer(frame.id + '-layer', 'Plate', children)],
   };
   const captions = controlLiveLayoutFrameTexts(frame, layout).map((block, index) => ({
     block,
     element: frameTitle(block, resolution, attachments.length + index + 1),
   }));
-  if (captions.length === 0) return base;
   children.push(...captions.map(({ element }) => element));
+  const border = controlLiveLayoutPlateBorder(frame, resolution);
+  if (border !== undefined) {
+    children.push({
+      ...elementBase(
+        frame.id + '-border',
+        'Plate border',
+        fullFrame,
+        attachments.length + captions.length + 1,
+      ),
+      type: 'shape',
+      shape: 'rect',
+      stroke: { color: border.color, width: border.width },
+      cornerRadius: border.radius,
+      liveForeground: true,
+    });
+  }
+  if (captions.length === 0) return base;
   return {
     ...base,
     fields: captions.map(
@@ -526,13 +543,13 @@ export function buildControlLiveLayoutScene(
   const allAttachments = controlLiveLayoutAttachments(layout);
   const sharedAttachmentIds = (layout.frameAttachments ?? []).map(({ id }) => id);
   if (new Set(allAttachments.map(({ id }) => id)).size !== allAttachments.length)
-    throw new Error('Frame graphic IDs must be unique within the layout.');
+    throw new Error('Plate graphic IDs must be unique within the layout.');
   const byFrame = new Map<string, ResolvedAttachment[]>();
   const sources = new Map<string, ControlLiveLayoutFrameAttachmentSource>();
   for (const attachment of allAttachments) {
     const source = attachmentSources?.get(attachment.sourceId);
     if (source === undefined || source.id !== attachment.sourceId)
-      throw new Error(`Frame graphic “${attachment.name}” is unavailable.`);
+      throw new Error(`Plate graphic “${attachment.name}” is unavailable.`);
     sources.set(source.id, source);
     const definitions = byFrame.get(attachment.frameId) ?? [];
     definitions.push({ attachment, source });
@@ -580,7 +597,7 @@ export function buildControlLiveLayoutScene(
             hiddenChildIds.push(maskedAttachmentPlateId(attachment.id));
         } else if (source.plate !== undefined) {
           if (hasMaskedInput)
-            throw new Error('Use one masked input template per frame and preset.');
+            throw new Error('Use one masked input template per plate and preset.');
           hasMaskedInput = true;
           hiddenChildIds.push(frame.id + '-plate');
         }
@@ -608,7 +625,7 @@ export function buildControlLiveLayoutScene(
       resolution,
       frameRange: FRAME_RANGE,
       editorBackdrop: 'transparent',
-      layers: [layer(instanceId + '-layer', 'Frames', children)],
+      layers: [layer(instanceId + '-layer', 'Plates', children)],
     });
     rootInstances.push({
       ...elementBase(instanceId, id, fullFrame, 2),
@@ -631,7 +648,7 @@ export function buildControlLiveLayoutScene(
     frames.forEach((frame, index) => {
       addLook(
         controlLiveLayoutFocusLookId(preset.id, frame.id),
-        'Focus · Frame ' + (index + 1),
+        'Focus · Plate ' + (index + 1),
         { [frame.id]: fullFrame },
         preset,
         true,
@@ -692,7 +709,7 @@ export function labelControlLiveLayoutFieldGroups(
 ): CompositionFieldGroup[] {
   const names = new Map(layout.presets.map(({ id, name }) => [id, name]));
   const frameNames = new Map(
-    layout.frames.map(({ id, title }, index) => [id, title.trim() || 'Frame ' + (index + 1)]),
+    layout.frames.map(({ id, title }, index) => [id, title.trim() || 'Plate ' + (index + 1)]),
   );
   return groups.map((group) => {
     const focus = controlLiveLayoutFocusTarget(layout, group.name);
@@ -740,7 +757,7 @@ export async function compileControlLiveLayout(
   for (const id of usedAttachmentIds) {
     const source = attachmentSources?.get(id);
     if (source === undefined || sha256Hex(source.bytes) !== id)
-      throw new Error('A frame graphic does not match the saved template.');
+      throw new Error('A plate graphic does not match the saved template.');
     assets.set(frameAttachmentArchivePath(id), source.bytes);
     attachmentBytes += source.bytes.length;
     for (const { entry, bytes } of source.assets) {
@@ -845,7 +862,7 @@ export async function readControlLiveLayout(bytes: Uint8Array): Promise<{
     if (attachments.has(sourceId)) continue;
     const raw = files.get(frameAttachmentArchivePath(sourceId));
     if (raw === undefined || sha256Hex(raw) !== sourceId)
-      throw new Error(`The saved frame graphic “${name}” is unavailable.`);
+      throw new Error(`The saved plate graphic “${name}” is unavailable.`);
     attachments.set(sourceId, await unpackControlLiveLayoutFrameAttachment(raw));
   }
   for (const font of layout.fonts ?? []) {

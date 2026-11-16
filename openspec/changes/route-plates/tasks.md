@@ -121,10 +121,7 @@
   - 2026-11-12: reuse the ordering in Station setup → Live sources. The regression reproduced
     both Playlist rows below the other inputs before the change. Windows Chromium passed all seven
     focused cases afterward, including the order and availability label in Settings.
-- [x] 6.6h Record the owner's SourcePicker surface decision in the PRD, proposal, design and
-      `runtime-playout-sources` delta: Inputs and Media opt into a token-only `raised` Popover variant
-      (`--r-surface-raised`, `--r-border-strong`, `--r-shadow-menu`), with no scrim, geometry, source behaviour or
-      keyboard change
-- [x] 6.6i Implement that opt-in variant only on `SourcePicker`; prove in Chromium that its painted
-      background differs from the host surface, its edge remains legible and its shadow is present, while the
-      existing placement, modal and keyboard assertions stay green
+- [x] 6.6h Apply the owner's newer SourcePicker surface decision to the shared library modal with
+      bigger pictures and a separate Media preview action.
+- [x] 6.6i Verify modal sizing, selection, preview, keyboard, and nested dismissal in Windows
+      Chromium. Nine focused tests passed.

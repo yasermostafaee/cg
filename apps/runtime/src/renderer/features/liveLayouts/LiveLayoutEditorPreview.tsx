@@ -3,6 +3,7 @@ import { Maximize2 } from 'lucide-react';
 import {
   DEFAULT_LIVE_FIT_MODE,
   controlLiveLayoutFrameAttachments,
+  controlLiveLayoutPlateBorder,
   controlLiveLayoutPresetFrameIds,
   controlLiveLayoutTitleHidden,
   fitPictureToBox,
@@ -150,6 +151,29 @@ function ShotInput({
   );
 }
 
+function ShotBorder({
+  input,
+  raster,
+}: {
+  input: ControlLiveLayoutFrame;
+  raster: Resolution;
+}): JSX.Element | null {
+  const border = controlLiveLayoutPlateBorder(input, raster);
+  if (border === undefined) return null;
+  const scaled = (pixels: number) => `${String((pixels / raster.height) * 100)}cqh`;
+  return (
+    <div className="cg-live-layout-shot-decoration" aria-hidden="true">
+      <div
+        className="cg-live-layout-shot-border"
+        style={{
+          border: `${scaled(border.width)} solid ${border.color}`,
+          borderRadius: scaled(border.radius),
+        }}
+      />
+    </div>
+  );
+}
+
 function ShotTitle({
   title,
   style,
@@ -286,7 +310,7 @@ export function LiveLayoutEditorPreview({
       number,
       position: frameOrder.indexOf(input.id) + 1,
       focusLabel: alias || number,
-      focusName: alias ? `Focus frame ${number}: ${alias}` : `Focus frame ${number}`,
+      focusName: alias ? `Focus plate ${number}: ${alias}` : `Focus plate ${number}`,
     };
   });
   const soloFrameId = frameOrder.length === 1 ? frameOrder[0] : undefined;
@@ -466,13 +490,13 @@ export function LiveLayoutEditorPreview({
                 input={previewInput}
                 frame={rect}
                 pictureBox={pictureBox}
-                fallback={`Frame ${number}`}
+                fallback={`Plate ${number}`}
               />
               {showMeters && activeShot && sourceId !== undefined && (
                 <InputAudioMeter
                   sourceId={sourceId}
                   channel={channel}
-                  name={source?.name ?? `Frame ${number}`}
+                  name={source?.name ?? `Plate ${number}`}
                   edge
                 />
               )}
@@ -497,6 +521,7 @@ export function LiveLayoutEditorPreview({
                   ))}
                 </div>
               )}
+              <ShotBorder input={input} raster={raster} />
               {activeSingle === undefined && activeShot && (
                 <Button
                   className="cg-live-layout-focus-action"
@@ -515,7 +540,7 @@ export function LiveLayoutEditorPreview({
         })}
       </div>
       {activeSingle !== undefined && layout.frames.length > 1 && (
-        <div className="cg-live-layout-switch" role="group" aria-label="Switch focused frame">
+        <div className="cg-live-layout-switch" role="group" aria-label="Switch focused plate">
           {[...editorFrames]
             .sort(
               (a, b) => (a.position || layout.frames.length) - (b.position || layout.frames.length),

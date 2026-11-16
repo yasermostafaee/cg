@@ -113,7 +113,7 @@ export function frameAttachmentPlateRect(
 export async function readControlLiveLayoutFrameAttachment(
   file: Blob,
 ): Promise<ControlLiveLayoutFrameAttachmentSource> {
-  if (file.size > TEMPLATE_SOURCE_MAX_BYTES) throw new Error('The frame graphic is too large.');
+  if (file.size > TEMPLATE_SOURCE_MAX_BYTES) throw new Error('The plate graphic is too large.');
   return unpackControlLiveLayoutFrameAttachment(new Uint8Array(await file.arrayBuffer()));
 }
 
@@ -121,7 +121,7 @@ export async function unpackControlLiveLayoutFrameAttachment(
   bytes: Uint8Array,
 ): Promise<ControlLiveLayoutFrameAttachmentSource> {
   if (bytes.length > TEMPLATE_SOURCE_MAX_BYTES || !(await verify(bytes)).ok)
-    throw new Error('Choose a complete, verified VCG frame graphic.');
+    throw new Error('Choose a complete, verified VCG plate graphic.');
   const { scene: authored, manifest, files } = await unpack(bytes);
   const scene =
     authored.entryCompositionId === undefined
@@ -129,7 +129,7 @@ export async function unpackControlLiveLayoutFrameAttachment(
       : projectCompositionForExport(authored, authored.entryCompositionId);
   if (scene === null) throw new Error('The template has no valid entry composition.');
   if ((scene.lookGroups?.length ?? 0) > 0 || (scene.arrangements?.length ?? 0) > 0)
-    throw new Error('Export one graphic or one masked frame from Designer.');
+    throw new Error('Export one graphic or one masked plate from Designer.');
 
   const id = sha256Hex(bytes);
   const namespace = `frame-art-${id}`;
@@ -174,7 +174,7 @@ export async function unpackControlLiveLayoutFrameAttachment(
       children: layer.children.flatMap((element): Element[] => {
         if (element.animation !== undefined && Object.keys(element.animation.tracks).length > 0)
           throw new Error(
-            'Frame graphics use static artwork. Remove timeline animation and export again.',
+            'Plate graphics use static artwork. Remove timeline animation and export again.',
           );
         if (element.type === 'video-placeholder') return [];
         if (element.type === 'composition') {
@@ -219,7 +219,7 @@ export async function unpackControlLiveLayoutFrameAttachment(
         }
         if (element.type === 'shape' || element.type === 'path') return [element];
         throw new Error(
-          'Frame graphics support images, shapes, paths, text and a single masked live frame.',
+          'Plate graphics support images, shapes, paths, text and a single masked live plate.',
         );
       }),
     }));
@@ -246,7 +246,7 @@ export async function unpackControlLiveLayoutFrameAttachment(
       rect.x + rect.width > scene.resolution.width + 1e-9 ||
       rect.y + rect.height > scene.resolution.height + 1e-9
     )
-      throw new Error('Export one visible, unrotated live frame with an input mask from Designer.');
+      throw new Error('Export one visible, unrotated live plate with an input mask from Designer.');
     plate = { element, rect };
   }
   const layers = copyLayers(scene, new Set());

@@ -9,7 +9,7 @@ import {
   type KeyboardEvent,
   type RefObject,
 } from 'react';
-import { Cable, Check, Film } from 'lucide-react';
+import { Cable, Check, Film, Play } from 'lucide-react';
 import {
   canCheckLiveInput,
   INPUT_GONE_REASON,
@@ -24,8 +24,8 @@ import {
 import { Button } from '../../ui/Button.js';
 import { ComboField } from '../../ui/ComboField.js';
 import { Icon } from '../../ui/Icon.js';
+import { Modal, ModalAction } from '../../ui/Modal.js';
 import { directionOf } from '../../ui/OperatorNames.js';
-import { Popover } from '../../ui/Popover.js';
 import { TabPanel, TabStrip } from '../../ui/Tabs.js';
 import { Tag } from '../../ui/Tag.js';
 import { TextInput } from '../../ui/TextInput.js';
@@ -39,6 +39,7 @@ import {
   type MediaThumbnailLoader,
 } from './MediaThumbnail.js';
 import { SourceLabel, formatMediaDuration, labelledSource } from './SourceLabel.js';
+import { SourceMediaPreview } from './SourceMediaPreview.js';
 import {
   currentSourceCatalog,
   playoutInputsForDisplay,
@@ -66,17 +67,17 @@ import {
  * `Unavailable` when the Playout stopped offering it — or the call site's own choice (`None`,
  * `Default (Studio 1)`).
  *
- * ── OPEN: AN ANCHORED PANEL, NOT A MODAL ────────────────────────────────────────────────
+ * ── OPEN: A SOURCE LIBRARY DIALOG ───────────────────────────────────────────────────────
  *
- * Two of the call sites are dialogs already (`Popover`). The call site's special choices sit in
+ * A picker opened from an existing dialog uses the shared nested modal focus trap. Its choices sit in
  * one row above the tabs, the same in both. `Inputs n` puts playlist outputs first, then everything
  * else, preserving the Playout's order inside each group. It lists each source by NAME only — never
  * the kind, never an address; one this product cannot play, or not on this row's channel (v1.3 rule
  * 1), is listed DISABLED with the reason in its `title`, not hidden, so nobody wonders where it went.
  * `Media n` searches the library: pages of 50, a virtualised list, the next page fetched near the end,
  * typing debounced 250 ms, earlier results kept under a thin line while the next ones load. Media
- * never appear under Inputs and inputs never under Media — a media item named `Studio 1` is a media
- * row, with the media icon.
+ * never appear under Inputs. Previewing a media row in the adjacent player leaves the assignment
+ * intact until the operator chooses the row.
  */
 
 export interface SourceChoice {
@@ -176,13 +177,9 @@ export interface SourcePickerProps {
   data?: Readonly<Record<`data-${string}`, string>> | undefined;
 }
 
-/** The panel's size (§2.A): at least this wide, at most this tall. */
-export const PICKER_MIN_WIDTH = 440;
-export const PICKER_MAX_HEIGHT = 480;
-/** How tall the list is inside the panel, and each kind of row. */
-const LIST_HEIGHT = 300;
-const INPUT_ROW = 52;
-const MEDIA_ROW = 46;
+const LIST_HEIGHT = 420;
+const INPUT_ROW = 116;
+const MEDIA_ROW = 88;
 /** A media page, and how near the end the next one is asked for. */
 export const MEDIA_PAGE = 50;
 const NEAR_END_ROWS = 10;
@@ -243,6 +240,7 @@ export function SourcePicker({
         expanded={open}
         controls={panelId}
         onOpen={() => {
+          field.current?.focus();
           refreshPlayoutSources();
           setOpen(true);
         }}
@@ -266,15 +264,19 @@ export function SourcePicker({
         )}
       </ComboField>
       {open && (
-        <Popover
-          anchor={field}
-          onClose={close}
+        <Modal
           id={panelId}
-          aria-label="Choose a source"
-          minWidth={PICKER_MIN_WIDTH}
-          maxHeight={PICKER_MAX_HEIGHT}
-          variant="raised"
-          initialFocusSelector={isMediaId(value) ? '[data-picker-search]' : '[data-picker-list]'}
+          title="Choose a source"
+          subtitle={ariaLabel}
+          emblem={Cable}
+          size="library"
+          layer="sub"
+          onClose={close}
+          footer={
+            <ModalAction actionRole="cancel" onClick={close}>
+              Cancel
+            </ModalAction>
+          }
         >
           <PickerPanel
             base={base}
@@ -286,7 +288,7 @@ export function SourcePicker({
             initialTab={isMediaId(value) ? 'media' : 'inputs'}
             inputCheck={check}
           />
-        </Popover>
+        </Modal>
       )}
     </>
   );
@@ -312,6 +314,7 @@ function PickerPanel({
   inputCheck: SourcePickerProps['inputCheck'];
 }): JSX.Element {
   const [tab, setTab] = useState<Tab>(initialTab);
+  const tabChanged = useRef(false);
   const media = useMediaSearch();
   const loadThumbnail = useMemo(createMediaThumbnailLoader, []);
   const catalog = currentSourceCatalog();
@@ -346,7 +349,11 @@ function PickerPanel({
       <TabStrip
         tabs={tabs}
         activeId={tab}
-        onSelect={(next) => setTab(next === 'media' ? 'media' : 'inputs')}
+        onSelect={(next) => {
+          if (next === tab) return;
+          tabChanged.current = true;
+          setTab(next === 'media' ? 'media' : 'inputs');
+        }}
         ariaLabel="Source kind"
         idPrefix={prefix}
       />
@@ -367,6 +374,8 @@ function PickerPanel({
             listId={`${base}-media`}
             value={value}
             media={media}
+            previewChannel={previewChannel}
+            focusSearch={tabChanged.current}
             onPick={onPick}
             loadThumbnail={loadThumbnail}
           />
@@ -563,7 +572,7 @@ function InputsTab({
             if (row !== undefined) onPick(row.key);
           }}
           onKeyDown={(e) => keys.onKeyDown(e)}
-          data={{ 'data-picker-list': '' }}
+          data={{ 'data-picker-list': '', 'data-modal-autofocus': '' }}
           withActions={inputCheck !== undefined}
         />
       )}
@@ -659,19 +668,23 @@ function useMediaSearch(): MediaState {
   };
 }
 
+interface MediaChoice {
+  readonly id: string;
+  readonly name: string;
+  readonly folder?: string | undefined;
+  readonly durationMs?: number | undefined;
+  readonly width?: number | undefined;
+  readonly height?: number | undefined;
+  readonly unavailable?: boolean | undefined;
+}
+
 function mediaRow(
   key: string,
-  item: {
-    readonly id: string;
-    readonly name: string;
-    readonly folder?: string | undefined;
-    readonly durationMs?: number | undefined;
-    readonly width?: number | undefined;
-    readonly height?: number | undefined;
-    readonly unavailable?: boolean | undefined;
-  },
+  item: MediaChoice,
   value: string,
   loadThumbnail: MediaThumbnailLoader,
+  preview: MediaChoice | undefined,
+  setPreview: (item: MediaChoice) => void,
 ): VirtualRow {
   const selected = item.id === value;
   const facts = [
@@ -685,8 +698,22 @@ function mediaRow(
     key,
     selected,
     data: { 'data-picker-media': item.id },
+    trailing: item.unavailable !== true && (
+      <Button
+        variant="neutral"
+        className="cg-picker-preview-button"
+        aria-label={`Preview · ${item.name}`}
+        aria-pressed={preview?.id === item.id}
+        data-picker-preview={item.id}
+        onClick={() => setPreview(item)}
+      >
+        <Icon icon={Play} size={14} />
+        <span>Preview</span>
+      </Button>
+    ),
     content: (
       <span className="cg-picker-media">
+        <MediaThumbnail id={item.unavailable === true ? undefined : item.id} load={loadThumbnail} />
         <span className="cg-picker-media__text">
           <span className="cg-picker-row">
             <Icon icon={Film} size={14} />
@@ -710,7 +737,6 @@ function mediaRow(
             ))}
           </span>
         </span>
-        <MediaThumbnail id={item.unavailable === true ? undefined : item.id} load={loadThumbnail} />
       </span>
     ),
   };
@@ -720,23 +746,28 @@ function MediaTab({
   listId,
   value,
   media,
+  previewChannel,
+  focusSearch,
   onPick,
   loadThumbnail,
 }: {
   listId: string;
   value: string;
   media: MediaState;
+  previewChannel: number | undefined;
+  focusSearch: boolean;
   onPick: (value: string) => void;
   loadThumbnail: MediaThumbnailLoader;
 }): JSX.Element {
   const list = useRef<VirtualListHandle>(null);
   const search = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<MediaChoice>();
   const catalog = currentSourceCatalog();
 
-  // The search field takes focus when the tab opens.
+  // On initial open the modal's trap records and restores the launcher before moving focus.
   useEffect(() => {
-    search.current?.focus();
-  }, []);
+    if (focusSearch) search.current?.focus();
+  }, [focusSearch]);
 
   const rows = useMemo<VirtualRow[]>(() => {
     const out: VirtualRow[] = [];
@@ -770,6 +801,8 @@ function MediaTab({
             },
             value,
             loadThumbnail,
+            preview,
+            setPreview,
           ),
         );
       }
@@ -791,16 +824,18 @@ function MediaTab({
             },
             value,
             loadThumbnail,
+            preview,
+            setPreview,
           ),
         );
       }
       out.push({ kind: 'heading', key: 'All media', content: 'All media' });
     }
     for (const item of media.items) {
-      out.push(mediaRow(`all:${item.id}`, item, value, loadThumbnail));
+      out.push(mediaRow(`all:${item.id}`, item, value, loadThumbnail, preview, setPreview));
     }
     return out;
-  }, [media.items, media.q, catalog, value, loadThumbnail]);
+  }, [media.items, media.q, catalog, value, loadThumbnail, preview]);
 
   const idOf = (index: number): string | null => {
     const key = rows[index]?.key;
@@ -813,80 +848,100 @@ function MediaTab({
 
   const empty = !media.loading && media.failed === null && media.items.length === 0;
   return (
-    <div className="cg-picker-tab" data-picker-tab="media">
-      <div className="cg-picker-controls">
-        <TextInput
-          ref={search}
-          value={media.q}
-          onChange={media.setQuery}
-          placeholder="Search media"
-          aria-label="Search media"
-          dir="auto"
-          className="cg-picker-search"
-          onKeyDown={(e) => keys.onKeyDown(e, true)}
-          data={{ 'data-picker-search': '' }}
-        />
-        <div className="cg-picker-sort" role="group" aria-label="Sort">
-          {(['name', 'recent'] as const).map((order) => (
-            <Button
-              key={order}
-              variant="neutral"
-              active={media.sort === order}
-              aria-pressed={media.sort === order}
-              data-picker-sort={order}
-              onClick={() => media.setSort(order)}
-            >
-              {order === 'name' ? 'Name' : 'Recent'}
+    <div className="cg-picker-tab cg-picker-tab--media" data-picker-tab="media">
+      <div className="cg-picker-media-results">
+        <div className="cg-picker-controls">
+          <TextInput
+            ref={search}
+            value={media.q}
+            onChange={media.setQuery}
+            placeholder="Search media"
+            aria-label="Search media"
+            dir="auto"
+            className="cg-picker-search"
+            onKeyDown={(e) => keys.onKeyDown(e, true)}
+            data={{ 'data-picker-search': '', 'data-modal-autofocus': '' }}
+          />
+          <div className="cg-picker-sort" role="group" aria-label="Sort">
+            {(['name', 'recent'] as const).map((order) => (
+              <Button
+                key={order}
+                variant="neutral"
+                active={media.sort === order}
+                aria-pressed={media.sort === order}
+                data-picker-sort={order}
+                onClick={() => media.setSort(order)}
+              >
+                {order === 'name' ? 'Name' : 'Recent'}
+              </Button>
+            ))}
+          </div>
+        </div>
+        {media.loading && (
+          <div
+            className="cg-picker-progress"
+            role="progressbar"
+            aria-label="Loading media"
+            data-picker-loading=""
+          />
+        )}
+        {media.failed !== null ? (
+          <div className="cg-picker-empty" data-picker-failed="">
+            <span>{media.failed}</span>
+            <Button variant="neutral" data-picker-retry="" onClick={media.retry}>
+              Retry
             </Button>
-          ))}
-        </div>
+          </div>
+        ) : empty && rows.length === 0 ? (
+          <p className="cg-picker-empty" data-picker-empty="media">
+            {media.q === '' ? 'No media from the Playout.' : `No media matches “${media.q}”.`}
+          </p>
+        ) : (
+          <VirtualList
+            ref={list}
+            id={listId}
+            aria-label="Media"
+            rows={rows}
+            rowHeight={MEDIA_ROW}
+            height={LIST_HEIGHT}
+            activeIndex={keys.active}
+            onActiveChange={keys.setActive}
+            onPick={(index) => {
+              const picked = idOf(index);
+              if (picked !== null) onPick(picked);
+            }}
+            onKeyDown={(e) => {
+              if (e.target instanceof Element && e.target.closest('button') !== null) return;
+              // Typing in the list goes to the search field.
+              if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                search.current?.focus();
+                return;
+              }
+              keys.onKeyDown(e);
+            }}
+            onNearEnd={media.loadMore}
+            nearEndRows={NEAR_END_ROWS}
+            data={{ 'data-picker-list': '' }}
+            withActions
+          />
+        )}
       </div>
-      {media.loading && (
-        <div
-          className="cg-picker-progress"
-          role="progressbar"
-          aria-label="Loading media"
-          data-picker-loading=""
-        />
-      )}
-      {media.failed !== null ? (
-        <div className="cg-picker-empty" data-picker-failed="">
-          <span>{media.failed}</span>
-          <Button variant="neutral" data-picker-retry="" onClick={media.retry}>
-            Retry
-          </Button>
-        </div>
-      ) : empty && rows.length === 0 ? (
-        <p className="cg-picker-empty" data-picker-empty="media">
-          {media.q === '' ? 'No media from the Playout.' : `No media matches “${media.q}”.`}
-        </p>
-      ) : (
-        <VirtualList
-          ref={list}
-          id={listId}
-          aria-label="Media"
-          rows={rows}
-          rowHeight={MEDIA_ROW}
-          height={LIST_HEIGHT}
-          activeIndex={keys.active}
-          onActiveChange={keys.setActive}
-          onPick={(index) => {
-            const picked = idOf(index);
-            if (picked !== null) onPick(picked);
-          }}
-          onKeyDown={(e) => {
-            // Typing in the list goes to the search field.
-            if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-              search.current?.focus();
-              return;
-            }
-            keys.onKeyDown(e);
-          }}
-          onNearEnd={media.loadMore}
-          nearEndRows={NEAR_END_ROWS}
-          data={{ 'data-picker-list': '' }}
-        />
-      )}
+      <section className="cg-picker-player" aria-label="Media preview">
+        {preview === undefined ? (
+          <div className="cg-picker-player__empty" data-picker-preview-empty="">
+            <Icon icon={Film} size={28} />
+            <p>Use Preview on a media item to watch it here.</p>
+          </div>
+        ) : (
+          <SourceMediaPreview
+            key={preview.id}
+            id={preview.id}
+            name={preview.name}
+            durationMs={preview.durationMs}
+            channel={previewChannel}
+          />
+        )}
+      </section>
     </div>
   );
 }

@@ -655,10 +655,15 @@ function handlePlay(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
       filePath: layer.backgroundFilePath,
       backgroundProducer: 'empty',
       backgroundFilePath: '',
+      backgroundLoop: false,
       paused: false,
       onAir: true,
       pageResolution: 'resolved',
-      ...clipClockAtPlay(layer.backgroundProducer, ['', layer.backgroundFilePath], ctx),
+      ...clipClockAtPlay(
+        layer.backgroundProducer,
+        ['', layer.backgroundFilePath, ...(layer.backgroundLoop ? ['LOOP'] : [])],
+        ctx,
+      ),
     });
     return { kind: 'ok', code: 202, verb: 'PLAY' };
   }
@@ -677,6 +682,9 @@ function handlePlay(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   ctx.setLayer(slot, {
     producer: verdict.kind,
     filePath: url,
+    backgroundProducer: 'empty',
+    backgroundFilePath: '',
+    backgroundLoop: false,
     paused: false,
     onAir: true,
     pageResolution: 'resolved',
@@ -842,7 +850,12 @@ function handleLoadBg(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   if (missingFile(verdict, req.args, ctx)) {
     return { kind: 'err', code: 404, verb: 'LOADBG', detail: 'File not found.' };
   }
-  ctx.setLayer(slot, { backgroundProducer: verdict.kind, backgroundFilePath: req.args[1] ?? '' });
+  ctx.setLayer(slot, {
+    backgroundProducer: verdict.kind,
+    backgroundFilePath: req.args[1] ?? '',
+    backgroundLoop:
+      verdict.kind === 'ffmpeg' && req.args.slice(2).some((a) => a.toUpperCase() === 'LOOP'),
+  });
   return { kind: 'ok', code: 202, verb: 'LOADBG' };
 }
 
@@ -886,6 +899,7 @@ function clearLayer(ctx: HandlerContext, slot: LayerSlot): void {
     filePath: '',
     backgroundProducer: 'empty',
     backgroundFilePath: '',
+    backgroundLoop: false,
     paused: false,
     onAir: false,
     pageResolution: 'resolved',

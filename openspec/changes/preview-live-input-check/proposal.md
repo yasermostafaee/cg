@@ -39,6 +39,7 @@ describes the final programme mix. Re-labelling that meter as an input meter wou
 - Reserve a thumbnail slot on each input row and give Station setup a larger 16:9 slot. Show `No signal` in the slot until the independent feed is
   available, and open the existing one-input check when the operator activates an eligible slot.
 - Use Playout's existing static library poster for Media items in the source pickers.
+- Offer a separate seekable media preview inside the full-size picker, with transport controls.
 - With a compatible read-only Playout capability, show each visible eligible input's live thumbnail in that slot
   as soon as the source list opens.
 - Place independent silent snapshots into the assigned PVW plates on a compatible 2.18.17 station.

@@ -62,6 +62,34 @@ function layoutFixture(): ControlLiveLayout {
 }
 
 describe('CG Control authored live layouts', () => {
+  it('ships a saved plate border in the shared artwork used by presets and Focus', async () => {
+    const layout = layoutFixture();
+    const plate = layout.frames[1]!;
+    const border = { color: '#fec352', width: 18, radius: 36 };
+    plate.border = border;
+    const bytes = await compileControlLiveLayout(layout);
+    const reopened = await readControlLiveLayout(bytes);
+    expect(reopened.layout.frames[1]?.border).toEqual(border);
+    const { scene } = await unpack(bytes);
+    const artwork = scene.compositions?.find(({ id }) => id === 'layout-frame-' + plate.id);
+    expect(
+      artwork?.layers[0]?.children.find(({ id }) => id === plate.id + '-border'),
+    ).toMatchObject({
+      type: 'shape',
+      stroke: { color: border.color, width: border.width },
+      cornerRadius: border.radius,
+      liveForeground: true,
+    });
+    const looks = buildTemplateLiveSources(scene).looks ?? [];
+    const art = looks.find(({ id }) => id === layout.defaultPresetId)?.transitionFrames?.[plate.id]
+      ?.artworkId;
+    expect(art).toEqual(expect.any(String));
+    const focus = looks.find(
+      ({ id }) => id === controlLiveLayoutFocusLookId(layout.defaultPresetId, plate.id),
+    );
+    expect(focus?.transitionFrames?.[plate.id]?.artworkId).toBe(art);
+  });
+
   it('packages ordered preset graphics and one masked input without duplicating the native seat', async () => {
     const layout = layoutFixture();
     const scene = buildControlLiveLayoutScene(layout);

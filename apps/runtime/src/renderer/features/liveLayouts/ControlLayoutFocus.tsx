@@ -58,10 +58,10 @@ export function ControlLayoutFocus({
           const { frame, number } = option;
           const active = id === soloFrame;
           const alias = frame.focusAlias?.trim() || undefined;
-          const label = frame.title.trim() || `Frame ${number}`;
+          const label = frame.title.trim() || `Plate ${number}`;
           const caption =
             alias === undefined ? label : alias === label ? alias : `${alias} · ${label}`;
-          const accessibleName = `Focus frame ${number} in ${target}`;
+          const accessibleName = `Focus plate ${number} in ${target}`;
           return (
             <Button
               key={id}

@@ -4301,10 +4301,13 @@ unavailable. Station setup → Live sources uses the same order (owner follow-up
 Their D10 order, and the D10 order of every remaining input, is preserved. The separate
 `None` choice, Media tab, availability reasons and compatible-channel rules are unchanged.
 
-**Owner follow-up (2026-10-26; specified by `route-plates` §6.6h).** WHEN the shared SourcePicker opens
-on either Inputs or Media THEN its panel is visibly raised from the surface beneath it, using the existing
-raised-surface, strong-border and menu-shadow tokens. It adds no scrim and changes no size, placement,
-source behaviour, selection behaviour, focus, Tab or Escape contract.
+**Owner follow-up (2026-11-17).** The shared SourcePicker opens a large modal with Inputs
+and Media. Show larger 16:9 source pictures and library posters. Keep the source names,
+availability, origin and input audio levels visible while choosing. Media preview within the
+modal offers Play, Pause, Stop and a seek bar. Where Playout provides only timed snapshots,
+label the preview as sampled and silent. Preview operations leave the assigned source, PVW
+and PGM intact. Applying a choice follows the existing caller's draft or source-selection
+rules. Escape or Cancel restores focus to the field and abandons the preview.
 
 ## [x] R-076 — PGM audio in CG Control, in sync with the PGM picture, with a VU meter ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §6.2 · ANSWERED by `PLAYOUT-CG-RESPONSE-PLAYLIST-AUDIO-v1.md` §2 (Playout `2.9.2`) · BUILT by `PLAYOUT-FEATURES-01` E (§5) · archived 2026-10-03 (`openspec/changes/archive/2026-10-03-playout-features`) · owed: `2.9.2` on `.111`
 
@@ -4905,7 +4908,8 @@ appears; WHEN import settles THEN loading clears into the existing success or re
 is configured. An unavailable B remains a black, labelled no-signal position and opens no stream. In the
 combined mode the two programme pictures can be arranged horizontally or vertically, each labelled with its physical
 server/channel and its own signal state. The operator chooses the engine for the one local speaker
-and loudness badge. VU can show that selection or compact stereo scales for all known engines at once.
+and loudness badge. VU can show that selection or compact scales for all known engines at once,
+with the channel count measured for each output.
 **Why:** during the client demo the backup Playout could not be verified beside the active output, so an
 operator had to fail over before seeing whether its programme picture and sound were healthy.
 **Acceptance:**
@@ -4930,6 +4934,12 @@ operator had to fail over before seeing whether its programme picture and sound 
   audio source follows the current primary unless the operator explicitly selects another source
 - WHEN B is requested THEN CG Bridge authorizes the logical channel, maps it to B's physical channel, uses B's
   core programme port and B engine's own meter session, and never exposes another channel or token
+
+**Reserve programme parity, 2026-11-17.** With the media ID fix in 1.2.10, the operator sees media on
+both programme returns. The reserve still needs equivalent clip phase, eligible preset/Focus
+effects, and its own verified clean Playlist route. The PGM meters report each engine's
+actual output. Test agreement with reference media and equivalent audio routing and gain.
+See `openspec/changes/monitor-playout-redundancy/` for the current legacy and External CG v2 stages.
 
 ## [~] R-105 — A healthy but empty live source shows its authored fallback on air ⟨priority: high — the owner, 2026-11-02; clarified 2026-11-08 and 2026-11-10⟩ — `openspec/changes/black-empty-live-plate/`
 
@@ -5247,7 +5257,8 @@ Send CG commands to the active engine after its external-graphics transfer contr
 - WHEN Focus switches with Push or Slide over THEN each frame's attached graphics follow its movement and clip to the same visible area as the picture in PVW and PGM.
 - WHEN the operator styles titles THEN the layout-wide style applies to every frame and individual frames may override it. Box dimensions, padding, alignment, vertical offset, text color, background, stroke, shadows, corner radius and wrap save with the layout. Imported fonts are packaged in the VCG.
 - WHEN choosing Digits under Title style Advanced THEN Persian, Latin or Arabic-Indic digits appear in authored titles, the exported VCG, and dynamic title updates.
-- WHEN opening advanced frame controls THEN the operator can choose Fit, Move and Resize permissions, and the frame mask. The same frame configuration applies across its presets and Focus.
+- WHEN opening Advanced plate controls THEN the operator can choose Fit, Move and Resize permissions, and the plate mask. The same plate configuration applies across its presets and Focus. The editor and its Focus controls use Plate consistently with Designer.
+- WHEN setting a plate border THEN the operator can set its color, width and corner radius. Width zero hides the border. The visible border follows the plate through presets and Focus, saves with the VCG, and leaves the input crop and mask independent.
 - WHEN selecting a position in a preset THEN the selected frame swaps with its occupant. A frame's optional Focus label identifies it on both PVW and PGM controls.
 - WHEN adding text to a frame THEN each text can inherit the frame's style and have its own editable value, position and overrides.
 - WHEN selecting a preset or frame THEN the editor marks the selection with a steady header and keeps Arrange in the editor's main scroll area. Focus remains available for each frame of a panel or solo preview.

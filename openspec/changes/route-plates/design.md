@@ -126,11 +126,9 @@ Live sources both read that order from the selector. The underlying catalogue ke
 An unavailable Playlist output keeps its rank and its status. Playwright checks both surfaces in
 `playlist-output.spec.ts`.
 
-**SourcePicker raised above its host.** Inputs and Media are two tabs of the same anchored panel, so the
-visual distinction belongs to an opt-in `raised` variant on the shared `Popover`, selected only by
-`SourcePicker`; changing the default would silently restyle date/time, playback and error popovers too. The
-variant changes only paint, using the existing `--r-surface-raised` background, `--r-border-strong` edge and
-`--r-shadow-menu` elevation. The backdrop remains transparent — no modal scrim — and the current width, height,
-placement, portal, list contents, click selection, focus trap, Tab containment, Escape/outside-press closing,
-scroll/resize closing and focus restoration stay byte-for-byte in behaviour. No token or second popover is
-introduced.
+**Source library dialog (2026-11-17).** The shared `SourcePicker` uses the existing library modal
+and nested focus trap. Its viewport-relative frame remains open while the operator scrolls or
+resizes. Cancel, Escape and the scrim dismiss the picker and return focus to its launcher. Published
+input names, source availability, channel compatibility, search and virtualized paging are shared
+across callers. Selecting a row returns the assignment immediately to its original caller.
+Preview is a separate Media row action which updates the adjacent player with the selected clip.

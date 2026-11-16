@@ -9359,7 +9359,7 @@ input[type='checkbox']:disabled:checked {
   display: flex;
   flex-wrap: wrap;
   gap: var(--r-space-1);
-  padding: var(--r-space-2);
+  padding: var(--r-space-2) var(--r-space-3);
   border-bottom: 1px solid var(--r-border);
 }
 .cg-picker-choice {
@@ -9370,10 +9370,64 @@ input[type='checkbox']:disabled:checked {
   flex-direction: column;
   min-height: 0;
 }
+.cg-picker-tab--media {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  align-items: start;
+}
+.cg-picker-media-results {
+  min-inline-size: 0;
+}
+.cg-picker-player {
+  align-self: stretch;
+  min-inline-size: 0;
+  padding: var(--r-space-3);
+  border-inline-start: 1px solid var(--r-border);
+}
+.cg-picker-player__empty {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: var(--r-space-2);
+  aspect-ratio: 16 / 9;
+  padding: var(--r-space-3);
+  border: 1px solid var(--r-border);
+  border-radius: var(--r-radius-field);
+  background: var(--r-video-ground);
+  color: var(--r-text-muted);
+  text-align: center;
+}
+.cg-picker-player__empty p {
+  margin: 0;
+}
+.cg-picker [data-picker-tab='inputs'] .cg-vlist-action-row .cg-input-thumbnail {
+  inline-size: clamp(6.5rem, 14vw, 11rem);
+}
+.cg-picker .cg-picker-media .cg-media-thumbnail {
+  inline-size: clamp(4.25rem, 10vw, 8rem);
+}
+.cg-picker .cg-vlist-action-row:has(.cg-vlist-option[aria-selected='true']) {
+  background: var(--r-menu-hover-fill);
+}
+.cg-picker .cg-vlist-action-row:has(.cg-vlist-option[aria-selected='true']) .cg-vlist-option {
+  box-shadow: inset 3px 0 0 var(--r-accent);
+}
+.cg-picker-preview-button svg {
+  flex: none;
+}
+@media (max-width: 720px) {
+  .cg-picker-tab--media {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cg-picker-player {
+    grid-row: 1;
+    border-inline-start: 0;
+    border-bottom: 1px solid var(--r-border);
+  }
+}
 /*
   `B-302` — the shared tab strip has no inline padding (in a bar it starts where the bar starts), and
-  the popover pads nothing either: every part of the panel pads ITSELF. So `Inputs` sat flush against
-  the panel's edge. Here, and only here, the tabs take the rows' own inset — `.cg-vlist-option`'s
+  the library dialog body pads nothing either. The tabs take the rows' own inset — `.cg-vlist-option`'s
   `--r-space-3` — so a tab's text starts where a row's does. The divider still runs edge to edge.
 */
 .cg-picker .cg-tab-strip {

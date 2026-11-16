@@ -32,9 +32,15 @@ function freeUdpPort(): Promise<number> {
 }
 
 async function setInput(page: Page, editor: Locator, index: number, title: string): Promise<void> {
-  await editor.getByRole('button', { name: `Edit frame ${index + 1}`, exact: true }).click();
-  await editor.getByRole('combobox', { name: 'Frame input' }).click();
-  await page.locator('[data-picker-input]').filter({ hasText: inputNames[index]! }).first().click();
+  await editor.getByRole('button', { name: `Edit plate ${index + 1}`, exact: true }).click();
+  await editor.getByRole('combobox', { name: 'Plate input' }).click();
+  const chooser = page.getByRole('dialog', { name: 'Choose a source' });
+  await chooser
+    .locator('[data-picker-input]')
+    .filter({ hasText: inputNames[index]! })
+    .first()
+    .click();
+  await expect(chooser).toBeHidden();
   await editor.getByRole('textbox', { name: 'Title', exact: true }).fill(title);
 }
 
@@ -167,24 +173,31 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
           height: canvas.height,
         };
       });
-      window.cg.sourcePreviews.pvw = ({ sourceIds }) =>
-        Promise.resolve({
-          frames: sourceIds.map((sourceId) => ({
+      const pictureFrames = (sourceIds: readonly string[], passive: boolean) => ({
+        frames: sourceIds.map((sourceId) => {
+          const index = Number(sourceId.split('-').at(-1)) - 1;
+          const snapshot = snapshots[passive && index === 0 ? 1 : index];
+          return {
             sourceId,
-            ...snapshots[Number(sourceId.split('-').at(-1)) - 1]!,
+            ...snapshot,
             signal: 'present' as const,
-            capturedAt: new Date().toISOString(),
-          })),
-        });
+          };
+        }),
+      });
+      const stalled = () => document.body.hasAttribute('data-test-pvw-lease-stalled');
+      window.cg.sourcePreviews.pvw = ({ sourceIds }) =>
+        Promise.resolve(stalled() ? { frames: [] } : pictureFrames(sourceIds, false));
+      window.cg.sourcePreviews.thumbnails = ({ sourceIds }) =>
+        Promise.resolve(stalled() ? pictureFrames(sourceIds, true) : { frames: [] });
     });
     await layers.getByRole('button', { name: 'New live layout' }).click();
     const editor = page.getByRole('dialog', { name: 'New live layout' });
     const stage = editor.locator('[data-layout-preview]');
     const saveLayout = editor.getByRole('button', { name: 'Save layout', exact: true });
     const startPreset = editor.getByRole('button', { name: 'Start with this preset', exact: true });
-    const addFrame = editor.getByRole('button', { name: 'Add frame', exact: true });
+    const addFrame = editor.getByRole('button', { name: 'Add plate', exact: true });
     const addPreset = editor.getByRole('button', { name: 'Add preset', exact: true });
-    await expect(editor.getByRole('button', { name: /^Edit frame / })).toHaveCount(0);
+    await expect(editor.getByRole('button', { name: /^Edit plate / })).toHaveCount(0);
     await expect(editor.locator('.cg-live-layout-preset-choice')).toHaveCount(0);
     await expect(startPreset).toBeDisabled();
     await expect(saveLayout).toBeDisabled();
@@ -225,15 +238,15 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     const startWidth = (await startPreset.boundingBox())!.width;
     await addFrame.click();
     await addFrame.click();
-    await editor.getByRole('button', { name: 'Delete frame' }).click();
-    await expect(editor.getByRole('button', { name: 'Edit frame 4', exact: true })).toHaveCount(0);
+    await editor.getByRole('button', { name: 'Delete plate' }).click();
+    await expect(editor.getByRole('button', { name: 'Edit plate 4', exact: true })).toHaveCount(0);
     await expect(editor.locator('.cg-live-layout-preview-controls')).toHaveCSS(
       'overflow-y',
       'visible',
     );
     for (const number of [1, 2, 3]) {
       await expect(
-        editor.getByRole('button', { name: `Focus frame ${String(number)}`, exact: true }),
+        editor.getByRole('button', { name: `Focus plate ${String(number)}`, exact: true }),
       ).toBeVisible();
     }
     await setInput(page, editor, 0, 'مجری برنامه 4۵٦');
@@ -243,9 +256,9 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     const previewMeters = stage.locator(`[data-layout-preview-shot] ${verticalMeter}`);
     const meterToggle = editor.getByRole('button', { name: 'VU meters', exact: true });
     const rightMeter = editor
-      .getByRole('button', { name: 'Edit frame 3', exact: true })
+      .getByRole('button', { name: 'Edit plate 3', exact: true })
       .locator(verticalMeter);
-    const comboMeter = editor.getByRole('combobox', { name: 'Frame input' }).locator(verticalMeter);
+    const comboMeter = editor.getByRole('combobox', { name: 'Plate input' }).locator(verticalMeter);
     await expect(meterToggle).toHaveAttribute('aria-pressed', 'false');
     await expect(previewMeters).toHaveCount(0);
     for (const meter of [rightMeter, comboMeter]) {
@@ -280,8 +293,8 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await meterToggle.click();
     await expect(meterToggle).toHaveAttribute('aria-pressed', 'false');
     await expect(previewMeters).toHaveCount(0);
-    const frame1 = editor.getByRole('button', { name: 'Edit frame 1', exact: true });
-    const frame2 = editor.getByRole('button', { name: 'Edit frame 2', exact: true });
+    const frame1 = editor.getByRole('button', { name: 'Edit plate 1', exact: true });
+    const frame2 = editor.getByRole('button', { name: 'Edit plate 2', exact: true });
     await frame1.click();
     await editor.getByRole('textbox', { name: 'Title', exact: true }).focus();
     await expect(frame1).toHaveAttribute('aria-pressed', 'true');
@@ -290,7 +303,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect(frame2.locator('.cg-live-layout-selection-mark')).toBeHidden();
     expect(await fieldAppearance(frame1)).not.toEqual(await fieldAppearance(frame2));
     await expect(stage.locator('[data-frame-number="1"][data-editing]')).toBeVisible();
-    await expect(editor.getByRole('checkbox', { name: 'Frame 2 in preset' })).toBeChecked();
+    await expect(editor.getByRole('checkbox', { name: 'Plate 2 in preset' })).toBeChecked();
     await editor.getByText('Title style', { exact: true }).click();
     await expect(editor.getByLabel('Box width (%)', { exact: true })).toHaveValue('100');
     await expect(editor.getByLabel('Box height (%)', { exact: true })).toHaveValue('12');
@@ -356,7 +369,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
       .toBe(true);
     await editor
       .getByRole('group', { name: 'Title style scope' })
-      .getByRole('button', { name: 'Frame 1', exact: true })
+      .getByRole('button', { name: 'Plate 1', exact: true })
       .click();
     await expect(editor.getByLabel('Title padding (px)', { exact: true })).toHaveValue('18');
     await editor.getByLabel('Title X (%)', { exact: true }).fill('30');
@@ -389,7 +402,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect(startPreset).toBeEnabled();
     expect((await startPreset.boundingBox())!.width).toBeCloseTo(startWidth, 1);
     await editor.getByRole('textbox', { name: 'Preset name' }).fill('Interview');
-    await editor.getByRole('checkbox', { name: 'Frame 3 in preset' }).uncheck();
+    await editor.getByRole('checkbox', { name: 'Plate 3 in preset' }).uncheck();
     const positionPicker = editor.getByRole('group', { name: 'Position in preset', exact: true });
     await frame2.click();
     await positionPicker.getByRole('button', { name: 'Position 1', exact: true }).click();
@@ -406,7 +419,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect(threeUp.locator('.cg-live-layout-selection-mark')).toBeVisible();
     await expect(interview.locator('.cg-live-layout-selection-mark')).toBeHidden();
     expect(await fieldAppearance(threeUp)).not.toEqual(await fieldAppearance(interview));
-    await expect(editor.getByRole('checkbox', { name: 'Frame 3 in preset' })).toBeChecked();
+    await expect(editor.getByRole('checkbox', { name: 'Plate 3 in preset' })).toBeChecked();
     await expect(horizontalGap).toHaveValue('48');
     await expect(verticalGap).toHaveValue('36');
     await frame2.click();
@@ -449,7 +462,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect(sharedShot.locator('img')).toBeVisible();
     await threeUp.click();
     const soloEffect = editor
-      .getByRole('group', { name: 'Switch focused frame' })
+      .getByRole('group', { name: 'Switch focused plate' })
       .getByLabel('Effect');
     await expect(soloEffect.getByRole('option', { name: 'Cut', exact: true })).toHaveCount(1);
     await expect(soloEffect.getByRole('option', { name: 'Fade', exact: true })).toHaveCount(1);
@@ -459,14 +472,14 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     ).toEqual(await fieldAppearance(layoutName));
     await editor.getByLabel('Switch duration (ms)', { exact: true }).fill('1000');
     const editorStage = editor.locator('[data-layout-preview]');
-    await editor.getByRole('button', { name: 'Focus frame 1', exact: true }).click();
+    await editor.getByRole('button', { name: 'Focus plate 1', exact: true }).click();
     const focusedTitle = editorStage.locator(
       '[data-layout-preview-shot][data-frame-number="1"] .cg-live-layout-shot-title',
     );
     await expect(focusedTitle).toBeVisible();
     await editor.getByRole('checkbox', { name: 'Show title in Focus' }).uncheck();
     await expect(focusedTitle).toHaveCount(0);
-    await editor.getByRole('button', { name: 'Focus frame 2', exact: true }).click();
+    await editor.getByRole('button', { name: 'Focus plate 2', exact: true }).click();
     const arrival = editorStage.locator('[data-layout-preview-shot][aria-hidden="false"]');
     await expect
       .poll(() =>
@@ -484,10 +497,16 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await editor.getByRole('button', { name: 'Return to Three-up' }).click();
     await expect(focusedTitle).toBeVisible();
 
-    await editor.getByRole('button', { name: 'Edit frame 3', exact: true }).click();
+    await editor.getByRole('button', { name: 'Edit plate 3', exact: true }).click();
     await expect(editor.getByRole('group', { name: 'Input fit', exact: true })).toBeHidden();
-    await editor.getByText('Advanced frame controls', { exact: true }).click();
+    await editor.getByText('Advanced plate controls', { exact: true }).click();
     const thirdShot = editorStage.locator('[data-layout-preview-shot][data-frame-number="3"]');
+    await editor.getByLabel('Border color', { exact: true }).fill('#fec352');
+    await editor.getByLabel('Border width (px)', { exact: true }).fill('18');
+    await editor.getByLabel('Border radius (px)', { exact: true }).fill('36');
+    const authoredBorder = thirdShot.locator('.cg-live-layout-shot-border');
+    await expect(authoredBorder).toHaveCSS('border-top-color', 'rgb(254, 195, 82)');
+    await expect(authoredBorder).toHaveCSS('border-top-left-radius', /[1-9][0-9.]*px/);
     const pictureWindows = thirdShot.locator('.cg-live-layout-shot-picture');
     const windowRatios = (window: Locator) =>
       window.evaluate((node) => {
@@ -564,33 +583,33 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect(pictureWindows).toHaveCount(4);
     await editor.getByRole('button', { name: 'Show inside', exact: true }).click();
     await editor.getByRole('checkbox', { name: 'Allow mask editing in CG Control' }).check();
-    await editor.getByRole('button', { name: 'Focus frame 3', exact: true }).click();
+    await editor.getByRole('button', { name: 'Focus plate 3', exact: true }).click();
     await expect(thirdShot).toHaveAttribute('aria-hidden', 'false');
     await expect.poll(() => windowRatios(pictureWindows)).toEqual([50, 50]);
     await editor.getByRole('button', { name: 'Return to Three-up' }).click();
     await editor.getByRole('textbox', { name: 'Focus label', exact: true }).fill('خبرخوان');
-    await expect(thirdShot.getByRole('button', { name: /Focus frame 3.*خبرخوان/ })).toBeVisible();
+    await expect(thirdShot.getByRole('button', { name: /Focus plate 3.*خبرخوان/ })).toBeVisible();
     const additionalText = editor.getByText('Additional text', { exact: true }).locator('..');
     await additionalText.getByText('Additional text', { exact: true }).click();
     await additionalText.getByRole('button', { name: 'Add text', exact: true }).click();
     await additionalText.getByRole('textbox', { name: 'Text 2', exact: true }).fill('سطر دوم 7۸٩');
     await additionalText.getByText('Text style', { exact: true }).click();
     const textScope = additionalText.getByRole('group', { name: 'Text style scope' });
-    await expect(textScope.getByRole('button', { name: 'All frames' })).toHaveAttribute(
+    await expect(textScope.getByRole('button', { name: 'All plates' })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
     await additionalText.getByLabel('Title Y (%)', { exact: true }).fill('59');
-    await textScope.getByRole('button', { name: 'Frame 3', exact: true }).click();
+    await textScope.getByRole('button', { name: 'Plate 3', exact: true }).click();
     await expect(additionalText.getByLabel('Title Y (%)', { exact: true })).toHaveValue('59');
     await additionalText.getByLabel('Title Y (%)', { exact: true }).fill('43');
     await expect(thirdShot).toContainText('سطر دوم ۷۸۹');
     await expect(thirdShot).toContainText('علی نظری ۱۲۳');
     await editor.getByRole('button', { name: 'Add preset', exact: true }).click();
     await editor.getByRole('textbox', { name: 'Preset name' }).fill('Studio solo');
-    await editor.getByRole('checkbox', { name: 'Frame 2 in preset' }).uncheck();
-    await editor.getByRole('checkbox', { name: 'Frame 3 in preset' }).uncheck();
-    await editor.getByRole('button', { name: 'Edit frame 1', exact: true }).click();
+    await editor.getByRole('checkbox', { name: 'Plate 2 in preset' }).uncheck();
+    await editor.getByRole('checkbox', { name: 'Plate 3 in preset' }).uncheck();
+    await editor.getByRole('button', { name: 'Edit plate 1', exact: true }).click();
     const soloFocusTitle = editor.getByRole('checkbox', { name: 'Show title in Focus' });
     await expect(editor.getByRole('checkbox', { name: 'Show title in preset' })).toBeChecked();
     await soloFocusTitle.check();
@@ -599,8 +618,8 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect(focusedTitle).toHaveCount(0);
     await editor.getByRole('button', { name: 'Three-up', exact: true }).click();
     await expect(focusedTitle).toBeVisible();
-    await editor.getByRole('button', { name: 'Edit frame 3', exact: true }).click();
-    await editor.getByText('Frame graphics', { exact: true }).click();
+    await editor.getByRole('button', { name: 'Edit plate 3', exact: true }).click();
+    await editor.getByText('Plate graphics', { exact: true }).click();
     const [graphicPicker] = await Promise.all([
       page.waitForEvent('filechooser'),
       editor.getByRole('button', { name: 'Add .vcg graphic', exact: true }).click(),
@@ -616,12 +635,12 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect(editor.getByLabel('Graphic X (%)', { exact: true })).toHaveValue('25');
     await expect(editor.getByLabel('Graphic width (%)', { exact: true })).toHaveValue('50');
     await interview.click();
-    await editor.getByRole('checkbox', { name: 'Frame 3 in preset' }).check();
+    await editor.getByRole('checkbox', { name: 'Plate 3 in preset' }).check();
     await expect(frameArt.locator('[data-cg-element-id="frame-graphic-accent"]')).toBeVisible();
-    await editor.getByRole('button', { name: /Focus frame 3.*خبرخوان/ }).click();
+    await editor.getByRole('button', { name: /Focus plate 3.*خبرخوان/ }).click();
     await expect(frameArt.locator('[data-cg-element-id="frame-graphic-accent"]')).toBeVisible();
     await editor.getByRole('button', { name: 'Return to Interview' }).click();
-    await editor.getByRole('checkbox', { name: 'Frame 3 in preset' }).uncheck();
+    await editor.getByRole('checkbox', { name: 'Plate 3 in preset' }).uncheck();
     await threeUp.click();
     await expect(frameArt.locator('[data-cg-element-id="frame-graphic-accent"]')).toBeVisible();
     await editor.getByRole('button', { name: 'Save layout' }).click();
@@ -713,7 +732,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     const localFocus = page.getByRole('group', { name: 'Preview Focus', exact: true });
     await expect(localFocus).toBeVisible();
     await expect(
-      localFocus.getByRole('button', { name: /Focus frame 3 in Preview.*خبرخوان/ }),
+      localFocus.getByRole('button', { name: /Focus plate 3 in Preview.*خبرخوان/ }),
     ).toBeVisible();
     await pvw.getByRole('button', { name: 'PLAY', exact: true }).click();
     await expect(pvw.locator(`[data-live-plate-overlay] ${verticalMeter}`)).toHaveCount(3);
@@ -725,9 +744,26 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     );
     await expect(authoredPlate).not.toContainText(authored.frames[0]!.id);
     const previewFrame = page.frameLocator('iframe[data-rehearsal-frame="panel"]');
-    await expect(
-      previewFrame.locator('[data-cg-pvw-picture-part][data-source-id="feed-1"]').first(),
-    ).toBeVisible();
+    const studioPicture = previewFrame
+      .locator('[data-cg-pvw-picture-part][data-source-id="feed-1"]')
+      .first()
+      .locator('img');
+    await expect(studioPicture).toBeVisible();
+    const originalStudioPicture = await studioPicture.getAttribute('src');
+    await page.evaluate(() => document.body.setAttribute('data-test-pvw-lease-stalled', ''));
+    await expect
+      .poll(
+        async () => {
+          const src = await studioPicture.evaluateAll(
+            (images) => images[0]?.getAttribute('src') ?? null,
+          );
+          return src !== null && src !== originalStudioPicture;
+        },
+        { timeout: 10_000 },
+      )
+      .toBe(true);
+    await page.evaluate(() => document.body.removeAttribute('data-test-pvw-lease-stalled'));
+    await expect(studioPicture).toHaveAttribute('src', originalStudioPicture!);
     const maskedPvwPicture = previewFrame.locator(
       '[data-cg-pvw-picture-part][data-source-id="feed-3"]',
     );
@@ -757,7 +793,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await previewPreset(origin).click();
     await expect(title).toBeVisible();
     const previewStart = engine.receivedCommands().length;
-    await localFocus.getByRole('button', { name: 'Focus frame 1 in Preview' }).click();
+    await localFocus.getByRole('button', { name: 'Focus plate 1 in Preview' }).click();
     await expect(localFocus.getByRole('button', { name: 'Return to Three-up' })).toBeVisible();
     await expect(
       previewFrame.locator(`[data-cg-element-id="layout-look-${focus(0)}"]`),
@@ -767,23 +803,30 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
       .locator(`[data-cg-element-id="${authored.frames[0]!.id}-title"]`);
     await expect(hiddenTitle).toHaveAttribute('data-cg-instance-hidden-text', '');
     await expect(hiddenTitle).toBeHidden();
-    await localFocus.getByRole('button', { name: 'Focus frame 2 in Preview' }).click();
+    await localFocus.getByRole('button', { name: 'Focus plate 2 in Preview' }).click();
     await expect(previewFrame.locator('[data-cg-pvw-focus-switch="push"]').first()).toBeVisible();
     await expect(
-      localFocus.getByRole('button', { name: 'Focus frame 2 in Preview' }),
+      localFocus.getByRole('button', { name: 'Focus plate 2 in Preview' }),
     ).toHaveAttribute('aria-pressed', 'true');
     await expect(previewFrame.locator('[data-cg-pvw-focus-switch="push"]')).toHaveCount(0);
-    await localFocus.getByRole('button', { name: /Focus frame 3 in Preview/ }).click();
+    await localFocus.getByRole('button', { name: /Focus plate 3 in Preview/ }).click();
     const push = previewFrame.locator('[data-cg-pvw-focus-switch="push"]');
     const graphic = '[data-cg-element-id="frame-graphic-accent"]';
-    await expect(
-      push.locator('[data-cg-pvw-focus-plane="incoming"]').locator(graphic),
-    ).toBeVisible();
+    const thirdPlateBorder = `[data-cg-element-id="${authored.frames[2]!.id}-border"]`;
+    const incoming = push.locator('[data-cg-pvw-focus-plane="incoming"]');
+    await Promise.all([
+      expect(incoming.locator(graphic)).toBeVisible(),
+      expect(incoming.locator(thirdPlateBorder)).toBeVisible(),
+    ]);
     await expect(push).toHaveCount(0);
-    await localFocus.getByRole('button', { name: 'Focus frame 2 in Preview' }).click();
-    await expect(
-      push.locator('[data-cg-pvw-focus-plane="outgoing"]').locator(graphic),
-    ).toBeVisible();
+    const focusedBorder = previewFrame.locator(thirdPlateBorder).filter({ visible: true });
+    await expect(focusedBorder).toHaveCSS('border-top-left-radius', '36px');
+    await localFocus.getByRole('button', { name: 'Focus plate 2 in Preview' }).click();
+    const outgoing = push.locator('[data-cg-pvw-focus-plane="outgoing"]');
+    await Promise.all([
+      expect(outgoing.locator(graphic)).toBeVisible(),
+      expect(outgoing.locator(thirdPlateBorder)).toBeVisible(),
+    ]);
     await expect(push).toHaveCount(0);
     await expect(previewFrame.locator(graphic).filter({ visible: true })).toHaveCount(0);
     await localFocus.getByRole('button', { name: 'Return to Three-up' }).click();
@@ -804,14 +847,14 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect(row.getByText('ON AIR', { exact: true })).toBeVisible({ timeout: 12_000 });
     const programme = row.getByRole('group', { name: 'Programme Focus', exact: true });
     await expect(
-      programme.getByRole('button', { name: /Focus frame 3 in Programme.*خبرخوان/ }),
+      programme.getByRole('button', { name: /Focus plate 3 in Programme.*خبرخوان/ }),
     ).toBeVisible();
     const presetType = await row.locator(`[data-look-id="${origin}"]`).evaluate((button) => {
       const style = getComputedStyle(button);
       return { size: style.fontSize, weight: style.fontWeight };
     });
     for (const group of [localFocus, programme]) {
-      const button = group.getByRole('button', { name: /Focus frame 3 .*خبرخوان/ });
+      const button = group.getByRole('button', { name: /Focus plate 3 .*خبرخوان/ });
       await expect(button).toHaveCSS('font-size', presetType.size);
       await expect(button).toHaveCSS('font-weight', presetType.weight);
     }
@@ -825,10 +868,10 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect.poll(() => seats()?.length).toBe(3);
     const initial = seats();
     const wireStart = engine.receivedCommands().length;
-    await programme.getByRole('button', { name: 'Focus frame 1 in Programme' }).click();
+    await programme.getByRole('button', { name: 'Focus plate 1 in Programme' }).click();
     await expect.poll(active).toBe(focus(0));
     await expect(localFocus.getByRole('button', { name: 'Return to Three-up' })).toHaveCount(0);
-    await programme.getByRole('button', { name: 'Focus frame 2 in Programme' }).click();
+    await programme.getByRole('button', { name: 'Focus plate 2 in Programme' }).click();
     await expect.poll(active).toBe(focus(1));
     await programme.getByRole('button', { name: 'Return to Three-up' }).click();
     await expect.poll(active).toBe(origin);
@@ -845,11 +888,11 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     const inputEffect = inspector.getByRole('combobox', { name: 'Input transition' });
     await expect(inputEffect.locator('option:checked')).toHaveText('Layout default (Push)');
     await inputEffect.selectOption('slide-over');
-    await localFocus.getByRole('button', { name: /Focus frame 3 in Preview/ }).click();
+    await localFocus.getByRole('button', { name: /Focus plate 3 in Preview/ }).click();
     await expect(
       previewFrame.locator(`[data-cg-element-id="layout-look-${focus(2)}"]`),
     ).toBeVisible();
-    await localFocus.getByRole('button', { name: 'Focus frame 2 in Preview' }).click();
+    await localFocus.getByRole('button', { name: 'Focus plate 2 in Preview' }).click();
     const slide = previewFrame.locator('[data-cg-pvw-focus-switch="slide-over"]');
     const covered = slide.locator('[data-cg-pvw-focus-plane="outgoing"]');
     await expect(covered.locator(graphic)).toBeVisible();
@@ -867,22 +910,22 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect(previewFrame.locator(graphic).filter({ visible: true })).toHaveCount(0);
     await localFocus.getByRole('button', { name: 'Return to Three-up' }).click();
     await inputEffect.selectOption('fade');
-    await localFocus.getByRole('button', { name: 'Focus frame 1 in Preview' }).click();
+    await localFocus.getByRole('button', { name: 'Focus plate 1 in Preview' }).click();
     await expect(
       previewFrame.locator(`[data-cg-element-id="layout-look-${focus(0)}"]`),
     ).toBeVisible();
     await expect(
-      localFocus.getByRole('button', { name: 'Focus frame 1 in Preview' }),
+      localFocus.getByRole('button', { name: 'Focus plate 1 in Preview' }),
     ).toHaveAttribute('aria-pressed', 'true');
-    await localFocus.getByRole('button', { name: 'Focus frame 2 in Preview' }).click();
+    await localFocus.getByRole('button', { name: 'Focus plate 2 in Preview' }).click();
     await expect(previewFrame.locator('[data-cg-pvw-focus-switch="fade"]')).toBeVisible();
     await expect(previewFrame.locator('[data-cg-pvw-focus-switch="fade"]')).toHaveCount(0);
     await localFocus.getByRole('button', { name: 'Return to Three-up' }).click();
 
-    await programme.getByRole('button', { name: 'Focus frame 1 in Programme' }).click();
+    await programme.getByRole('button', { name: 'Focus plate 1 in Programme' }).click();
     await expect.poll(active).toBe(focus(0));
     const fadeStart = engine.receivedCommands().length;
-    await programme.getByRole('button', { name: 'Focus frame 2 in Programme' }).click();
+    await programme.getByRole('button', { name: 'Focus plate 2 in Programme' }).click();
     await expect.poll(active).toBe(focus(1));
     expect(
       engine
@@ -903,7 +946,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect.poll(active).toBe(solo.id);
     await row.locator(`[data-look-id="${origin}"]`).click();
     await expect.poll(active).toBe(origin);
-    await programme.getByRole('button', { name: 'Focus frame 1 in Programme' }).click();
+    await programme.getByRole('button', { name: 'Focus plate 1 in Programme' }).click();
     await expect.poll(active).toBe(focus(0));
     expect(
       engine
@@ -942,7 +985,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect(copy.getByRole('combobox', { name: 'Digits', exact: true })).toHaveValue(
       'persian',
     );
-    await copy.getByRole('button', { name: 'Edit frame 3', exact: true }).click();
+    await copy.getByRole('button', { name: 'Edit plate 3', exact: true }).click();
     await expect(copy.getByRole('textbox', { name: 'Focus label', exact: true })).toHaveValue(
       'خبرخوان',
     );

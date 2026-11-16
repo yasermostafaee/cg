@@ -67,8 +67,8 @@ export function LiveLayoutEditorFrameAttachments({
         if (!event.currentTarget.open && editing) onEditChange(false);
       }}
     >
-      <LiveLayoutEditorSectionHeading icon={Image} label="Frame graphics" />
-      <div className="cg-live-layout-title-scope" role="group" aria-label="Frame graphics">
+      <LiveLayoutEditorSectionHeading icon={Image} label="Plate graphics" />
+      <div className="cg-live-layout-title-scope" role="group" aria-label="Plate graphics">
         {attachments.map((attachment) => (
           <Button
             key={attachment.id}
@@ -86,7 +86,7 @@ export function LiveLayoutEditorFrameAttachments({
           ref={picker}
           accept=".vcg"
           hidden
-          aria-label="Choose frame graphic VCG"
+          aria-label="Choose plate graphic VCG"
           onChange={(event) => {
             const file = event.currentTarget.files?.[0];
             event.currentTarget.value = '';
@@ -99,7 +99,7 @@ export function LiveLayoutEditorFrameAttachments({
       </div>
       {selected !== undefined && isLegacy(selected.id) && (
         <p className="cg-live-layout-effect-help">
-          This graphic was saved for this preset. Editing shares it if the frame has no conflicting
+          This graphic was saved for this preset. Editing shares it if the plate has no conflicting
           masked input graphics.
         </p>
       )}

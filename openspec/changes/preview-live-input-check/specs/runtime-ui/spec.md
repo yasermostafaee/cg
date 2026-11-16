@@ -43,7 +43,7 @@ source's own status and eligibility for selection intact.
 
 - **WHEN** the operator opens a source picker or Station setup → Live sources
 - **THEN** the input rows show their `No signal` thumbnail slots without starting a check
-- **AND** Station setup shows larger 16:9 slots than the pickers
+- **AND** both surfaces keep 16:9 slots, with larger pictures in the source library dialog
 - **AND** activating an eligible slot opens the corresponding explicit check without selecting the row
 
 ### Requirement: Media rows show their Playout library posters
@@ -63,6 +63,20 @@ SHALL start neither playback nor an input-check lease.
 
 - **WHEN** the poster is missing or Bridge does not offer poster reads
 - **THEN** the Media row shows `No poster` and remains selectable
+
+### Requirement: Preview a media clip from its source library row
+
+The Media tab SHALL host a preview player for the operator's chosen clip. Play, Pause, Stop and a
+seek slider SHALL control the local preview. The player SHALL use the station's authorized media
+preview capability and identify snapshot playback when continuous video is unavailable. Playback
+and scrubbing SHALL preserve the binding, the row's PVW and PGM.
+
+#### Scenario: Seek in a library clip without applying it
+
+- **WHEN** the operator previews and scrubs an available media item
+- **THEN** the player shows the available picture for the requested position
+- **AND** the surrounding assignment and any on-air graphics are preserved
+- **AND** closing the picker stops local playback and frame demand
 
 ### Requirement: A supported source list SHALL show independently refreshed live thumbnails
 

@@ -346,6 +346,7 @@ import {
   type PlayoutVersionReaderOptions,
 } from './playout-version.js';
 import { BackupMediaLookup } from './backup-media.js';
+import { describeBackupPlaylistRoute } from './backup-playlist-route.js';
 import { BackupEngine, backupSessionPath, type BackupEngineOptions } from './backup-engine.js';
 import { engineState } from './engine-state.js';
 import { CoreGuard, type CoreGuardOptions } from './core-guard.js';
@@ -2630,6 +2631,58 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       backupChannelsInForce.release(channel);
     },
   });
+  if (backupEngine !== null) {
+    const lastByPlaylist = new Map<string, string>();
+    runtime.useBackupPlaylistDiagnostics((destination, playlist) => {
+      const map = runtime.backupChannelMap();
+      const destinationChannel = map.channelOnB(destination);
+      const playlistChannel = map.channelOnB(playlist);
+      const endpoint = serverBEndpoint();
+      const address = backupEngine.address();
+      if (endpoint === undefined || address === null) return;
+      const say = (detail: string): void => {
+        const key = `${address}:${String(destination)}:${String(playlist)}`;
+        if (lastByPlaylist.get(key) === detail) return;
+        lastByPlaylist.set(key, detail);
+        process.stderr.write(
+          `[caspar-bridge] Backup Playlist ${String(playlist)} for CH ${String(destination)}: ${detail}\n`,
+        );
+      };
+      if (destinationChannel === null || playlistChannel === null) {
+        say('The backup Playlist or destination channel is unmapped or held.');
+        return;
+      }
+      void backupEngine.readPlaylistInputs().then((read) => {
+        const currentEndpoint = serverBEndpoint();
+        if (
+          currentEndpoint?.host !== endpoint.host ||
+          currentEndpoint.amcpPort !== endpoint.amcpPort ||
+          backupEngine.address() !== address ||
+          runtime.backupChannelMap() !== map ||
+          map.channelOnB(destination) !== destinationChannel ||
+          map.channelOnB(playlist) !== playlistChannel
+        ) {
+          return;
+        }
+        const videoMode = backupEngine
+          .rows()
+          ?.find(
+            (row) =>
+              row.casparChannel === destinationChannel &&
+              hostJoinsStation(row.casparHost, [endpoint.host]),
+          )?.videoMode;
+        say(
+          describeBackupPlaylistRoute(read, {
+            host: endpoint.host,
+            apiHost: new URL(address).hostname,
+            destinationChannel,
+            playlistChannel,
+            destinationVideoMode: videoMode ?? undefined,
+          }),
+        );
+      });
+    });
+  }
   const recomputeBackupChannels = (): void => {
     backupChannels.recompute();
   };
@@ -3239,7 +3292,11 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     const inputId = playoutInputIdOf(source.id);
     return inputId === null ? null : { kind: 'live', inputId };
   };
-  const sourcePreviews = new SourcePreviewService(previewTarget, previewSelector);
+  const sourcePreviews = new SourcePreviewService(
+    previewTarget,
+    previewSelector,
+    (sourceId, atMs) => playoutSources?.mediaPreviewId(sourceId, atMs) ?? null,
+  );
   const sourceAudio = new SourceAudioService(previewTarget, previewSelector);
   const playlistGainOrigin =
     primaryEngineAddress === null ? null : new URL(primaryEngineAddress).origin;

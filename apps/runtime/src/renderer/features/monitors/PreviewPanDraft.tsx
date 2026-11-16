@@ -23,6 +23,7 @@ import {
 import type { PlatePlacement } from './livePlateGeometry.js';
 import { PAN_CORNERS, clampCropFraction, resizePanCrop, type PanCorner } from './previewPanCrop.js';
 import { fullJpegRect } from './pvwPlatePictures.js';
+import type { PvwSourceFrame } from './usePvwSourceFrames.js';
 
 const PRACTICE_SOURCE_ASPECT = 16 / 9;
 
@@ -37,10 +38,11 @@ interface SourcePicture {
 }
 
 function previewPicture(
-  frame: SourcePreviewFrame | undefined,
+  frame: PvwSourceFrame | undefined,
   sourceId: string | null,
 ): SourcePicture | undefined {
-  if (frame?.jpegBase64 === undefined || frame.sourceId !== sourceId) return undefined;
+  if (frame?.jpegBase64 === undefined || frame.snapshotOnly || frame.sourceId !== sourceId)
+    return undefined;
   const aspect = frame.geometry?.sourceAspect ?? (frame.width ?? 0) / (frame.height ?? 0);
   if (!Number.isFinite(aspect) || aspect <= 0) return undefined;
   return { jpegBase64: frame.jpegBase64, aspect, geometry: frame.geometry };
@@ -151,7 +153,7 @@ export function PreviewPanRow({
   onAir?: boolean;
   cropRead: PreviewCropRead | undefined;
   plates: readonly PreviewPanPlacement[];
-  sourceFrames: ReadonlyMap<string, SourcePreviewFrame>;
+  sourceFrames: ReadonlyMap<string, PvwSourceFrame>;
   fit: number;
 }): JSX.Element {
   const engineName = useEngineName();

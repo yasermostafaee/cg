@@ -35,6 +35,7 @@ export const CONTROL_LIVE_LAYOUT_TITLE_FONTS = ['Vazirmatn', 'Tahoma', 'Arial', 
 export const CONTROL_LIVE_LAYOUT_TITLE_SIZE_MIN_PERCENT = 1;
 export const CONTROL_LIVE_LAYOUT_TITLE_SIZE_MAX_PERCENT = 20;
 export const CONTROL_LIVE_LAYOUT_TITLE_SIZE_DEFAULT_PERCENT = 4.2;
+export const CONTROL_LIVE_LAYOUT_PLATE_BORDER_MAX_PX = 2160;
 
 const isFieldNamespaceId = (id: string): boolean =>
   !Object.prototype.hasOwnProperty.call(Object.prototype, id);
@@ -111,8 +112,26 @@ const ControlLiveLayoutFrameSchema = z.object({
   operatorPlacement: z.union([z.literal('locked'), LiveFrameResizeSchema]).optional(),
   liveMask: LivePlateMaskSchema.optional(),
   allowOperatorMaskEdit: z.boolean().optional(),
+  border: z
+    .object({
+      color: HexColorSchema,
+      width: z.number().min(0).max(CONTROL_LIVE_LAYOUT_PLATE_BORDER_MAX_PX),
+      radius: z.number().min(0).max(CONTROL_LIVE_LAYOUT_PLATE_BORDER_MAX_PX),
+    })
+    .optional(),
 });
 export type ControlLiveLayoutFrame = z.infer<typeof ControlLiveLayoutFrameSchema>;
+
+export function controlLiveLayoutPlateBorder(frame: ControlLiveLayoutFrame, raster: Resolution) {
+  const border = frame.border;
+  if (border === undefined || border.width === 0) return undefined;
+  const max = Math.min(raster.width, raster.height) / 2;
+  return {
+    color: border.color,
+    width: Math.min(border.width, max),
+    radius: Math.min(border.radius, max),
+  };
+}
 
 const ControlLiveLayoutArrangementSchema = z.enum([
   'side-by-side',

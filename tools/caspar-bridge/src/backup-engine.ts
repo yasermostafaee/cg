@@ -21,6 +21,8 @@ import {
 import { playout292Url, playoutEndpointsFor, type PlayoutEndpoints } from './playout-config.js';
 import { playoutFetch } from './playout-http.js';
 import { PlayoutLicenseReader, type PlayoutLicenseReaderOptions } from './playout-license.js';
+import { HttpPlayoutSources, SOURCES_POLL_MS } from './playout-sources.js';
+import type { BackupPlaylistInputRead } from './backup-playlist-route.js';
 import {
   PlayoutVersionReader,
   playoutVersionUrl,
@@ -38,6 +40,7 @@ import {
  *
  *   - D11 `?fingerprint=` (`B-286`: the backup's own clip path) — through {@link accessToken};
  *   - D4, its `casparHost` resolved to the backup engine's host (rule 9);
+ *   - D10 for a clean Playlist diagnostic, with the same bound and cadence as on the primary;
  *   - `/api/cg/license` — reported on the backup's line, never a refusal of anything;
  *   - one server-side D9 read per access token gained — the introduction that lets this machine into the
  *     backup core's AMCP when the account holds `station-admin` (`BIA` 61-69);
@@ -200,6 +203,31 @@ export class BackupEngine {
   /** 🔴 The ONLY bearer for the backup engine's reads: its own session's, or `null`. */
   accessToken(): string | null {
     return this.#parts?.session?.accessToken() ?? null;
+  }
+
+  #playlistRead:
+    | {
+        readonly token: string;
+        readonly at: number;
+        readonly response: Promise<BackupPlaylistInputRead>;
+      }
+    | undefined;
+
+  /** Read the reserve list for diagnostics only, without changing the primary source catalogue. */
+  readPlaylistInputs(): Promise<BackupPlaylistInputRead> {
+    const parts = this.#parts;
+    const token = this.accessToken();
+    if (parts === null || token === null) return Promise.resolve({ kind: 'no-session' });
+    const now = this.#now();
+    const held = this.#playlistRead;
+    if (held?.token === token && now - held.at < SOURCES_POLL_MS) return held.response;
+    const reader = new HttpPlayoutSources(parts.endpoints, () => token, this.#opts.readFetch);
+    const response = reader.readInputs(null).then((answer): BackupPlaylistInputRead => {
+      if (this.#parts !== parts || this.accessToken() !== token) return { kind: 'no-session' };
+      return answer.kind === 'ok' ? { kind: 'list', body: answer.body } : { kind: 'unreadable' };
+    });
+    this.#playlistRead = { token, at: now, response };
+    return response;
   }
 
   session(): BridgeSessionState {
@@ -366,6 +394,7 @@ export class BackupEngine {
   #disposeParts(): void {
     const parts = this.#parts;
     this.#parts = null;
+    this.#playlistRead = undefined;
     if (parts === null) return;
     for (const off of parts.unsubscribe) off();
     parts.session?.dispose();

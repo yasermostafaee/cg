@@ -80,3 +80,9 @@
       passed on `e5474cc1` for composite PVW and source thumbnails.
 - [x] 6.7 Chromium verified distinct PVW pictures, foreground and mask pixels, applied source
       changes, removal of a stale image on signal loss, and visible-only thumbnail demand.
+- [x] 6.8 Use the shared Inspectors and pickers snapshot budget to keep visible PVW inputs
+      and media posters available during a delayed lease read. A fresh lease frame wins,
+      explicit absence takes precedence, and Pan continues to require lease geometry.
+- [ ] 6.9 Verify PVW picture continuity on the target station across preset and Focus changes.
+- [x] 6.10 Verify the Media tab's separate preview, Play/Pause/Stop and scrub interaction in
+      Chromium with authorized frame responses. Verify preview leaves the source assignment intact.

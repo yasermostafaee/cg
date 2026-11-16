@@ -576,12 +576,22 @@ it('moves between bound Control Focus frames and restores the exact prior arrang
     .receivedCommands()
     .slice(peerBefore)
     .map(({ line }) => line);
-  expect(peerLines.some((line) => /\d+ linear DEFER$/.test(line))).toBe(false);
-  expect(peerLines.some((line) => line.includes('focusSlide'))).toBe(false);
+  expect(peerLines).toEqual(
+    expect.arrayContaining([
+      expect.stringMatching(
+        new RegExp('MIXER 2-' + second!.slot.layer + ' FILL -1 0 1 1 .+ linear DEFER$'),
+      ),
+      expect.stringMatching(
+        new RegExp('MIXER 2-' + third!.slot.layer + ' FILL 0 0 1 1 .+ linear DEFER$'),
+      ),
+    ]),
+  );
+  expect(peerLines.filter((line) => line.includes('focusSlide')).length).toBeGreaterThan(1);
   expect(backup!.layerRenderedRect({ channel: 2, layer: third!.slot.layer })).toEqual(
     mock!.layerRenderedRect(third!.slot),
   );
   const beforeSlide = (await recvLines()).length;
+  const peerBeforeSlide = backup!.receivedCommands().length;
   expect(
     await r.setActiveLook('item-1', focusLooks[0]!, undefined, {
       mode: 'slide-over',
@@ -590,6 +600,10 @@ it('moves between bound Control Focus frames and restores the exact prior arrang
     }),
   ).toEqual({ ok: true });
   const slideLines = (await recvLines()).slice(beforeSlide);
+  const peerSlideLines = backup!
+    .receivedCommands()
+    .slice(peerBeforeSlide)
+    .map(({ line }) => line);
   expect(slideLines).toEqual(
     expect.arrayContaining([
       expect.stringMatching(
@@ -600,9 +614,11 @@ it('moves between bound Control Focus frames and restores the exact prior arrang
       ),
     ]),
   );
-  for (const [lines, mode, axis, sign, destinationLookId] of [
-    [pushLines, 'push', 'x', 1, focusLooks[2]!],
-    [slideLines, 'slide-over', 'y', -1, focusLooks[0]!],
+  for (const [lines, channel, mode, axis, sign, destinationLookId] of [
+    [pushLines, 1, 'push', 'x', 1, focusLooks[2]!],
+    [peerLines, 2, 'push', 'x', 1, focusLooks[2]!],
+    [slideLines, 1, 'slide-over', 'y', -1, focusLooks[0]!],
+    [peerSlideLines, 2, 'slide-over', 'y', -1, focusLooks[0]!],
   ] as const) {
     const paints = lines.flatMap((line, index) => {
       if (!line.includes('focusSlide')) return [];
@@ -619,7 +635,7 @@ it('moves between bound Control Focus frames and restores the exact prior arrang
         focusSlide: { mode, axis, sign, viewport: { x: 0, y: 0, ...SCENE } },
       });
       expect(line).not.toContain('hidePresetTitlePlateIds');
-      expect(lines.slice(index + 1)).toContain('MIXER 1 COMMIT');
+      expect(lines.slice(index + 1)).toContain(`MIXER ${channel} COMMIT`);
     }
   }
   expect(await r.setActiveLook('item-1', focusPreset, focusMotion)).toEqual({ ok: true });
@@ -672,7 +688,7 @@ it('refuses a Control Focus slide transaction and restores the previously shown 
   expect(mock!.stagedMixerCount(1)).toBe(0);
 });
 
-it('dissolves Control Focus in both mixer layer orders and cuts the reserve to the settled picture', async () => {
+it('dissolves Control Focus in both mixer layer orders on the active and reserve engines', async () => {
   const r = await bootControlFocus(true, false, 'fade');
   const records = r.liveLayers().get('item-1')!;
   const priorRects = records.map((record) => mock!.layerRenderedRect(record.slot));
@@ -692,6 +708,7 @@ it('dissolves Control Focus in both mixer layer orders and cuts the reserve to t
     [lowerLook, lower!, 0],
   ] as const) {
     const mark = (await recvLines()).length;
+    const reserveMark = backup!.receivedCommands().length;
     expect(await r.setActiveLook('item-1', look, fade)).toEqual({ ok: true });
     expect(mock!.layerRenderedRect(appearing.slot)).toEqual(focusBox);
     const lines = (await recvLines()).slice(mark);
@@ -701,6 +718,16 @@ it('dissolves Control Focus in both mixer layer orders and cuts the reserve to t
     expect(lines.some((line) => / (?:FILL|CLIP) .+ [1-9]\d* linear DEFER$/.test(line))).toBe(false);
     expect(backup!.layerRenderedRect({ channel: 2, layer: appearing.slot.layer })).toEqual(
       focusBox,
+    );
+    const reserveLines = backup!
+      .receivedCommands()
+      .slice(reserveMark)
+      .map(({ line }) => line);
+    expect(reserveLines.filter((line) => / OPACITY .+ [1-9]\d* linear DEFER$/.test(line))).toEqual([
+      'MIXER 2-' + String(upper.slot.layer) + ' OPACITY ' + String(opacity) + ' 4 linear DEFER',
+    ]);
+    expect(reserveLines.some((line) => / (?:FILL|CLIP) .+ [1-9]\d* linear DEFER$/.test(line))).toBe(
+      false,
     );
   }
 
@@ -717,9 +744,7 @@ it('dissolves Control Focus in both mixer layer orders and cuts the reserve to t
     backup!
       .receivedCommands()
       .slice(replicaStart)
-      .some(({ line }) =>
-        / (?:FILL|CLIP|OPACITY) .+ [1-9]\d* (?:linear|easeinoutquad) DEFER$/.test(line),
-      ),
+      .some(({ line }) => /^(?:PLAY|CLEAR) /.test(line)),
   ).toBe(false);
 });
 
@@ -2463,7 +2488,7 @@ it('dips the retained picture when Fade is checked and releases linked titles on
 });
 
 it.each([false, true])(
-  'animates the active engine and sends only the settled preset to B (missing B media: %s)',
+  'animates native pictures and artwork across a verified A/B pair (missing B media: %s)',
   async (missingMedia) => {
     const r = await bootPresetDeparture(
       PRESET_TITLE_HOLD_HTML,
@@ -2491,6 +2516,17 @@ it.each([false, true])(
     expect(b.layerState(reserveShared)?.fill).not.toEqual(initialFill);
     expect(b.layerState(reserveShared)?.fill).toEqual(mock!.layerState(shared!.slot)?.fill);
     expect(b.layerState(reserveShared)?.clip).toEqual(mock!.layerState(shared!.slot)?.clip);
+    const reserveMotion = b
+      .receivedCommands()
+      .slice(quietBefore)
+      .find(({ line }) => /^MIXER 2-\d+ FILL .*easeinquad DEFER$/.test(line));
+    const activeRelease = mock!
+      .receivedCommands()
+      .slice(activeBefore)
+      .find(({ line }) => line.includes('frameTransition') && line.includes('null'));
+    expect(reserveMotion).toBeDefined();
+    expect(activeRelease).toBeDefined();
+    expect(reserveMotion!.at).toBeLessThan(activeRelease!.at);
     expect(await r.setActiveLook(itemId, 'duo', PRESET_EFFECT)).toEqual({ ok: true });
     expect(b.layerState(reserveShared)?.fill).toEqual(initialFill);
     const activeLines = mock!
@@ -2503,16 +2539,15 @@ it.each([false, true])(
       .map(({ line }) => line);
     expect(activeLines).toContainEqual(expect.stringMatching(/FILL .*easeinquad DEFER$/));
     expect(activeLines).toContainEqual(expect.stringContaining('hidePresetTitlePlateIds'));
-    expect(
-      backupLines.some((line) =>
-        /authoredPreset|presetEffectId|easeinquad|easeoutquad| DEFER$| COMMIT$/.test(line),
-      ),
-    ).toBe(false);
+    expect(backupLines).toContainEqual(
+      expect.stringMatching(/^MIXER 2-\d+ FILL .*easeinquad DEFER$/),
+    );
+    expect(backupLines).toContainEqual(expect.stringContaining('hidePresetTitlePlateIds'));
+    expect(backupLines.filter((line) => line === 'MIXER 2 COMMIT').length).toBeGreaterThan(1);
     for (const layer of [10, PRESET_RECOVERY_BAND.end]) {
       const compared = backupLines.filter((line) => line.startsWith(`CG 2-${layer} UPDATE `));
-      expect(compared).toHaveLength(2);
-      expect(compared[0]).toContain('solo');
-      expect(compared[1]).toContain('duo');
+      expect(compared.find((line) => line.includes('solo'))).toContain('solo');
+      expect(compared.at(-1)).toContain('duo');
       expect(JSON.parse(b.lastCgUpdate({ channel: 2, layer })?.data ?? '{}')).toMatchObject({
         __cg: { look: 'duo', frameTransition: null, presetTransitionCommit: true },
       });
@@ -2525,6 +2560,78 @@ it.each([false, true])(
     }
   },
 );
+
+it('commits the active preset while an acknowledged reserve phase waits for its reply', async () => {
+  const r = await bootPresetDeparture(PRESET_TITLE_HOLD_HTML, false, false, {});
+  const b = backup!;
+  const normal = defaultHandlers().get('MIXER')!;
+  let release: (() => void) | undefined;
+  b.setHandler('MIXER', async (request, context, connection) => {
+    const reply = normal(request, context, connection);
+    if (release === undefined && request.raw.endsWith('linear DEFER')) {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+    }
+    return reply;
+  });
+  const applied = r.setActiveLook('item-1', 'solo', PRESET_EFFECT);
+  try {
+    await expect.poll(() => release !== undefined, { timeout: HEALTH_MS }).toBe(true);
+    await expect.poll(() => r.activeLookId('item-1'), { timeout: HEALTH_MS }).toBe('solo');
+    await expect(applied).resolves.toEqual({ ok: true });
+  } finally {
+    release?.();
+  }
+  await expect
+    .poll(() => b.lastCgUpdate({ channel: 2, layer: 10 })?.data, { timeout: HEALTH_MS })
+    .toContain('solo');
+  const start = b.receivedCommands().length;
+  await expect(r.setActiveLook('item-1', 'duo', PRESET_EFFECT)).resolves.toEqual({ ok: true });
+  expect(
+    b
+      .receivedCommands()
+      .slice(start)
+      .some(({ line }) => line === 'MIXER 2 COMMIT'),
+  ).toBe(true);
+});
+
+it('clears the reserve during a stalled preset phase and drains its staged geometry', async () => {
+  const r = await bootPresetDeparture(PRESET_TITLE_HOLD_HTML, false, false, {});
+  const b = backup!;
+  const itemId = 'item-1';
+  const normal = defaultHandlers().get('MIXER')!;
+  let release: (() => void) | undefined;
+  b.setHandler('MIXER', async (request, context, connection) => {
+    const response = normal(request, context, connection);
+    if (release === undefined && request.raw.endsWith('linear DEFER')) {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+    }
+    return response;
+  });
+  const edit = r.setActiveLook(itemId, 'solo', PRESET_EFFECT);
+  try {
+    await expect.poll(() => release !== undefined, { timeout: HEALTH_MS }).toBe(true);
+    const from = b.receivedCommands().length;
+    const out = r.out(itemId);
+    release?.();
+    await expect(out).resolves.toMatchObject({ accepted: true });
+    await expect(edit).resolves.toMatchObject({ ok: false });
+    const wire = () =>
+      b
+        .receivedCommands()
+        .slice(from)
+        .map(({ line }) => line);
+    await expect.poll(wire, { timeout: HEALTH_MS }).toContain('CLEAR 2-10');
+    await expect.poll(wire, { timeout: HEALTH_MS }).toContain('MIXER 2 COMMIT');
+    expect(b.layerState({ channel: 2, layer: 10 })?.producer ?? 'empty').toBe('empty');
+    expect(wire().some((line) => line.includes('authoredPreset'))).toBe(false);
+  } finally {
+    release?.();
+  }
+});
 
 it.each([false, true])(
   'never commits an interrupted active-engine preset phase to the promoted reserve (recovery refused: %s)',
@@ -2665,7 +2772,7 @@ it('animates the active programme without changing an unconfirmed reserve after 
   for (const [slot, state] of previousSeats) expect(b.layerState(slot)).toEqual(state);
 });
 
-it('keeps the reserve unchanged when the active engine refuses the final preset commit', async () => {
+it('restores the original preset on the reserve when the active engine refuses the final commit', async () => {
   const r = await bootPresetDeparture(PRESET_TITLE_HOLD_HTML, false, false, {});
   const b = backup!;
   const itemId = 'item-1';
@@ -2704,9 +2811,8 @@ it('keeps the reserve unchanged when the active engine refuses the final preset 
   expect(refused).toBe(true);
   expect(r.activeLookId(itemId)).toBe('duo');
   const latest = b.receivedCommands().slice(before);
-  expect(
-    latest.some(({ line }) => /^(CG|MIXER|PLAY|PAUSE|RESUME|CLEAR) 2(?: |-|$)/.test(line)),
-  ).toBe(false);
+  expect(latest.some(({ line }) => line.includes('authoredPreset'))).toBe(true);
+  expect(latest.some(({ line }) => line.includes('restorePresetEffectId'))).toBe(true);
   for (const [slot, state] of previousSeats) expect(b.layerState(slot)).toEqual(state);
 });
 

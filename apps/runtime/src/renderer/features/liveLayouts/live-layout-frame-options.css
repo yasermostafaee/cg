@@ -18,6 +18,23 @@
   gap: 0.35rem;
 }
 
+.cg-live-layout-plate-border-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.cg-live-layout-plate-border-fields > * {
+  display: grid;
+  align-content: end;
+  gap: 0.2rem;
+}
+
+.cg-live-layout-plate-border-fields .cg-field {
+  width: 100%;
+  min-width: 0;
+}
+
 .cg-live-layout-frame-options .cg-live-layout-frame-option-check {
   display: flex;
   flex-flow: row wrap;

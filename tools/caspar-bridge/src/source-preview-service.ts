@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type {
   ChannelRequest,
+  MediaPreviewFrame,
   SourcePreviewFrame,
   SourcePreviewPvwChannel,
   SourcePreviewThumbnailsChannel,
@@ -17,8 +18,10 @@ import {
 
 type PvwRequest = ChannelRequest<typeof SourcePreviewPvwChannel>;
 type ThumbnailRequest = ChannelRequest<typeof SourcePreviewThumbnailsChannel>;
+type MediaPosition = NonNullable<ThumbnailRequest['mediaPosition']>;
 interface Frames {
   frames: SourcePreviewFrame[];
+  mediaFrame?: MediaPreviewFrame;
 }
 type Target = LivePreviewTarget;
 type SelectorFor = (
@@ -159,15 +162,18 @@ export class SourcePreviewService {
   readonly #lastBatch = new Map<string, number>();
   readonly #targetFor: (owner: AuthSession, channel: number) => Target | null;
   readonly #selectorFor: SelectorFor;
+  readonly #mediaPreviewId: (sourceId: string, atMs: number) => string | null;
   readonly #timer: ReturnType<typeof setInterval>;
   #disposed = false;
 
   constructor(
     targetFor: (owner: AuthSession, channel: number) => Target | null,
     selectorFor: SelectorFor,
+    mediaPreviewId: (sourceId: string, atMs: number) => string | null,
   ) {
     this.#targetFor = targetFor;
     this.#selectorFor = selectorFor;
+    this.#mediaPreviewId = mediaPreviewId;
     this.#timer = setInterval(() => this.#sweep(), 1000);
     this.#timer.unref();
   }
@@ -232,17 +238,37 @@ export class SourcePreviewService {
     const ownerKey = owner.token?.jti;
     if (scope === null || ownerKey == null) return EMPTY;
     const requested = [...this.#selectors(owner, req.channel, req.sourceIds)];
-    if (requested.length === 0 || Date.now() < (this.#lastBatch.get(ownerKey) ?? 0)) return EMPTY;
+    const media = req.mediaPosition;
+    const mediaId = media === undefined ? null : this.#mediaPreviewId(media.sourceId, media.atMs);
+    if (
+      (requested.length === 0 && mediaId === null) ||
+      Date.now() < (this.#lastBatch.get(ownerKey) ?? 0)
+    )
+      return EMPTY;
     const capability = await this.#capability(scope);
     if (capability === null || !this.#authorized(owner, req.channel, scope)) return EMPTY;
+    const positioned =
+      media !== undefined && mediaId !== null && capability.sourceKinds.includes('media')
+        ? { kind: 'media' as const, mediaId, atMs: media.atMs }
+        : undefined;
     const wanted = requested
       .filter(([, source]) => capability.sourceKinds.includes(source.kind))
-      .slice(0, capability.maxBatchSources);
+      .slice(0, capability.maxBatchSources - Number(positioned !== undefined));
+    const selectors = wanted.map(([, source]) => source);
+    if (positioned !== undefined) selectors.push(positioned);
     const now = Date.now();
-    if (wanted.length === 0 || now < (this.#lastBatch.get(ownerKey) ?? 0)) return EMPTY;
+    if (selectors.length === 0 || now < (this.#lastBatch.get(ownerKey) ?? 0)) return EMPTY;
     this.#lastBatch.set(ownerKey, now + 1000);
-    const result = await scope.client.snapshots(wanted.map(([, source]) => source));
+    const result = await scope.client.snapshots(selectors);
     if (!result.ok || !this.#authorized(owner, req.channel, scope)) return EMPTY;
+    const mediaFrame =
+      positioned === undefined || media === undefined
+        ? undefined
+        : this.#positionedFrame(
+            media,
+            positioned.mediaId,
+            result.value.items[wanted.length]?.frame,
+          );
     return {
       frames: wanted.flatMap(([sourceId, source], index) => {
         const frame = result.value.items[index]?.frame;
@@ -250,7 +276,22 @@ export class SourcePreviewService {
           ? []
           : [projectFrame(sourceId, frame, source.kind)];
       }),
+      ...(mediaFrame === undefined ? {} : { mediaFrame }),
     };
+  }
+
+  #positionedFrame(
+    media: MediaPosition,
+    mediaId: string,
+    frame: UpstreamFrame | null | undefined,
+  ): MediaPreviewFrame | undefined {
+    if (
+      frame == null ||
+      this.#mediaPreviewId(media.sourceId, media.atMs) !== mediaId ||
+      (frame.requestedPositionMs != null && frame.requestedPositionMs !== media.atMs)
+    )
+      return undefined;
+    return { ...projectFrame(media.sourceId, frame, 'media'), previewPositionMs: media.atMs };
   }
 
   async drop(owner: AuthSession): Promise<void> {

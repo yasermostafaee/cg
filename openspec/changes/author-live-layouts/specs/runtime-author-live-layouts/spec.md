@@ -33,11 +33,18 @@ CG Control SHALL author multiple frames and presets in the channel's template ca
 
 #### Scenario: Author advanced frame geometry
 
-- **WHEN** the operator opens Advanced frame controls
+- **WHEN** the operator opens Advanced plate controls
 - **THEN** they can choose Fit or Crop edges, set Move and Resize permissions, and define rectangular mask windows
 - **AND** the canvas reflects the input fit and masks
 - **AND** the live layer uses the existing PVW tools for allowed edits
 - **AND** a shared frame uses its authored geometry settings in each regular preset and Focus look
+
+#### Scenario: Style the plate border
+
+- **WHEN** the operator opens Advanced plate controls and enters border color, width and radius
+- **THEN** the outline is drawn inside the plate and follows it across preview, presets and Focus
+- **AND** a zero-width border is hidden
+- **AND** the border is saved in the VCG without changing the input crop or mask
 
 #### Scenario: See the current editing selection
 
@@ -49,7 +56,7 @@ CG Control SHALL author multiple frames and presets in the channel's template ca
 
 #### Scenario: Attach a graphic to a frame
 
-- **WHEN** the operator attaches a VCG in Frame graphics
+- **WHEN** the operator attaches a VCG in Plate graphics
 - **THEN** the graphic is present on that frame in each regular preset and Focus view that includes it
 - **AND** it moves and transitions with that frame in PVW and PGM
 - **AND** reopening a package with legacy preset-specific artwork preserves the earlier placements

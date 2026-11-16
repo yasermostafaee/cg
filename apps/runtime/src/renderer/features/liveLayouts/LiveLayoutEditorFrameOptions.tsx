@@ -1,6 +1,7 @@
 import { useId } from 'react';
 import { Move, Plus, SlidersHorizontal, Trash2 } from 'lucide-react';
 import {
+  CONTROL_LIVE_LAYOUT_PLATE_BORDER_MAX_PX,
   DEFAULT_LIVE_FIT_MODE,
   LIVE_REVEAL_MAX_RECTS,
   LiveRevealRectSchema,
@@ -9,6 +10,7 @@ import {
 } from '@cg/shared-schema';
 import { Button } from '../../ui/Button.js';
 import { Checkbox } from '../../ui/Checkbox.js';
+import { ColorInput } from '../../ui/ColorInput.js';
 import { Icon } from '../../ui/Icon.js';
 import { LiveLayoutEditorNumber } from './LiveLayoutEditorNumber.js';
 import { LiveLayoutEditorSectionHeading } from './LiveLayoutEditorSectionHeading.js';
@@ -24,6 +26,8 @@ const RESIZE_CHOICES = [
   ['proportional', 'Keep aspect'],
   ['free', 'Free'],
 ] as const;
+
+const DEFAULT_BORDER = { color: '#ffffff', width: 0, radius: 0 };
 
 const MASK_FIELDS = [
   { key: 'x', limit: 'width', label: 'Mask X (%)', min: 0 },
@@ -53,6 +57,7 @@ export function LiveLayoutEditorFrameOptions({
   const fit = frame.fitMode ?? DEFAULT_LIVE_FIT_MODE;
   const resize = frame.operatorPlacement ?? 'free';
   const mask = frame.liveMask;
+  const border = frame.border ?? DEFAULT_BORDER;
   const windows = mask?.rects ?? [];
   const activeWindow = windows[activeIndex];
 
@@ -95,7 +100,7 @@ export function LiveLayoutEditorFrameOptions({
         if (!event.currentTarget.open && editingMask) onMaskEditingChange(false);
       }}
     >
-      <LiveLayoutEditorSectionHeading icon={SlidersHorizontal} label="Advanced frame controls" />
+      <LiveLayoutEditorSectionHeading icon={SlidersHorizontal} label="Advanced plate controls" />
       <div className="cg-live-layout-frame-option-group" role="group" aria-label="Input fit">
         <span>Input fit</span>
         <div className="cg-live-layout-frame-option-buttons">
@@ -134,7 +139,35 @@ export function LiveLayoutEditorFrameOptions({
         />
         Allow move
       </label>
-      <section className="cg-live-layout-frame-mask" aria-label="Frame mask">
+      <section className="cg-live-layout-frame-option-group" aria-label="Plate border">
+        <span>Border</span>
+        <div className="cg-live-layout-plate-border-fields">
+          <div>
+            <span>Color</span>
+            <ColorInput
+              className="cg-field"
+              aria-label="Border color"
+              value={border.color.slice(0, 7)}
+              onChange={(color) => onChange({ border: { ...border, color } })}
+            />
+          </div>
+          <LiveLayoutEditorNumber
+            label="Border width (px)"
+            min={0}
+            max={CONTROL_LIVE_LAYOUT_PLATE_BORDER_MAX_PX}
+            value={border.width}
+            onChange={(width) => onChange({ border: { ...border, width } })}
+          />
+          <LiveLayoutEditorNumber
+            label="Border radius (px)"
+            min={0}
+            max={CONTROL_LIVE_LAYOUT_PLATE_BORDER_MAX_PX}
+            value={border.radius}
+            onChange={(radius) => onChange({ border: { ...border, radius } })}
+          />
+        </div>
+      </section>
+      <section className="cg-live-layout-frame-mask" aria-label="Plate mask">
         <div className="cg-live-layout-frame-option-buttons">
           <Button
             variant="neutral"
@@ -158,7 +191,7 @@ export function LiveLayoutEditorFrameOptions({
                 title={
                   canEditMask
                     ? 'Move or resize the mask in Preview'
-                    : 'Show this frame in Preview to edit its mask'
+                    : 'Show this plate in Preview to edit its mask'
                 }
                 onClick={() => onMaskEditingChange(!editingMask)}
               >

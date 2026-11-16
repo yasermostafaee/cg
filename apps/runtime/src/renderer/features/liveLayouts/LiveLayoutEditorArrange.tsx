@@ -90,7 +90,7 @@ export function LiveLayoutEditorArrange({
             </Button>
           ))}
       </div>
-      <div className="cg-live-layout-gaps" role="group" aria-label="Frame gaps, pixels">
+      <div className="cg-live-layout-gaps" role="group" aria-label="Plate gaps, pixels">
         <div className="cg-live-layout-gap-control">
           <Icon icon={MoveHorizontal} size={14} />
           <LiveLayoutEditorNumber

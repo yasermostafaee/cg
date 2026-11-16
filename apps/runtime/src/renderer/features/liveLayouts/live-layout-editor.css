@@ -336,11 +336,18 @@
 }
 
 /* Scale the captions to the shot without containing its interactive controls. */
-.cg-live-layout-shot-titles {
+.cg-live-layout-shot-titles,
+.cg-live-layout-shot-decoration {
   position: absolute;
   inset: 0;
   container-type: size;
   pointer-events: none;
+}
+
+.cg-live-layout-shot-border {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
 }
 
 .cg-live-layout-shot-title {

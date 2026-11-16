@@ -150,7 +150,7 @@ export function LiveLayoutEditorRectOverlay({
     >
       {rects.map((rect, index) => {
         const selected = selectedIndex === index;
-        const name = kind === 'mask' ? 'mask window ' + String(index + 1) : 'frame graphic';
+        const name = kind === 'mask' ? 'mask window ' + String(index + 1) : 'plate graphic';
         return (
           <div
             key={index}

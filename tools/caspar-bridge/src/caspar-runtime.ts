@@ -660,6 +660,7 @@ interface SettledInputOutput {
 
 interface PendingInputReplicaMixer {
   readonly slots: readonly CommandSlot[];
+  readonly allowStop?: true;
   readonly restore: (target: PrimaryMixerTarget, batch: MixerBatch) => Promise<boolean>;
 }
 
@@ -684,6 +685,7 @@ interface PresetFrameEffect extends LiveMixerTransitionGuard {
 interface MixerBatch {
   primaryOnly?: ServerSession;
   primaryQueue?: ServerSession['queue'];
+  replicaCommit?: () => void;
   channel?: number;
   release?: () => void;
   staged?: boolean;
@@ -6748,6 +6750,15 @@ export class CasparRuntime {
   /** `PLAYOUT-FEATURES-01` A — hand the runtime the backup's own media lookup. */
   useBackupMedia(lookup: ((fingerprint: string | undefined) => BackupClip) | null): void {
     this.#backupClip = lookup;
+  }
+
+  #observeBackupPlaylist: ((destinationChannel: number, playlistChannel: number) => void) | null =
+    null;
+
+  useBackupPlaylistDiagnostics(
+    observe: (destinationChannel: number, playlistChannel: number) => void,
+  ): void {
+    this.#observeBackupPlaylist = observe;
   }
 
   /**
@@ -13665,7 +13676,6 @@ export class CasparRuntime {
       this.#provisionalPresetSeats.set(key, seat);
     }
     const touched = new Set<LiveLayerRecord>();
-    const batch: MixerBatch = { ...phaseTarget };
     const cancel = new AbortController();
     let pageAttempted = false;
     const unavailable = { ok: false, errorCode: 'frame-transition-interrupted' };
@@ -13695,6 +13705,238 @@ export class CasparRuntime {
       );
     };
     const current = () => !cancel.signal.aborted && stillOwnsOutput();
+
+    // Follow accepted phases on the exact resident peer. A does not wait on the peer's queue.
+    // Reserve staging is quarantined until the effect is settled or restored, so the next
+    // unrelated mirrored COMMIT cannot publish a partial effect.
+    const effectPeer = paired ? this.#residentMirror(page) : undefined;
+    const peerHasPages = () =>
+      effectPeer !== undefined &&
+      this.#residentMirror(page) === effectPeer &&
+      effectPeer.foreground === foreground &&
+      pageSlots.every(
+        (slot) =>
+          oscProducerKind(this.#observedProducer(effectPeer.session, slot) ?? '') === 'html',
+      );
+    const peerSeats = affected.filter(
+      (record) => record.backupRefused === undefined && !isPlayoutRouteRecord(record),
+    );
+    const animatePeer =
+      effectPeer !== undefined &&
+      peerHasPages() &&
+      !this.#orphanedPrimaryMixers.get(effectPeer.session)?.has(channel) &&
+      peerSeats.every((record) => this.#hasResidentSeatMirror(page, record));
+    const stagedPeer = new Set<LiveLayerRecord>();
+    const peerPageAttempts = new Set<CommandSlot>();
+    const peerBatch: MixerBatch = { channel };
+    let peerTail = Promise.resolve();
+    let peerFailed = false;
+    let peerStaged = false;
+    let peerArmed = false;
+    let peerSettled = false;
+    let mirrorForward = true;
+    const peerDeadline = Math.max(80, Math.min(200, this.#channelFrameMsFor(channel) * 4));
+    const sameTake = () => {
+      const row = this.#reconciler.get(itemId);
+      return (
+        row !== null &&
+        row.lastIntentSeq === item.lastIntentSeq &&
+        (isOnAirStatus(row) || row.status === 'unverified') &&
+        row.status !== 'exiting' &&
+        this.#slots.get(itemId) === page.slot &&
+        this.#takeTokens.get(itemId) === take &&
+        this.#templates.heldVersion(itemId) === page.version &&
+        this.#foregroundPages.get(itemId) === foreground
+      );
+    };
+    const recoveryLook = (slot: CommandSlot, afterResponse: boolean) => {
+      const applied = afterResponse ? this.activeLookId(itemId) : undefined;
+      return peerSettled || (applied !== undefined && applied !== fromLook)
+        ? this.#builder.updateLook(
+            slot,
+            applied ?? toLook,
+            {},
+            this.#plateFits.get(itemId),
+            undefined,
+            this.#framePlacements.get(itemId),
+            this.#maskPlacements.get(itemId),
+            true,
+          )
+        : restoreLook(slot);
+    };
+    const recoverPeer = async (
+      own: () => boolean,
+      write: (line: string) => Promise<boolean>,
+      commit: () => Promise<boolean>,
+      session: ServerSession,
+      afterResponse = false,
+    ) => {
+      if (!own()) return false;
+      const held = sameTake();
+      if (!held && !session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs)) return false;
+      const records = this.#liveLayers.get(itemId);
+      const ownsRecovery = () =>
+        own() && sameTake() === held && (!held || this.#liveLayers.get(itemId) === records);
+      const ledger = new Map(records?.map((record) => [liveSeatId(record), record]));
+      const recoverySeats = held && (peerSettled || afterResponse) ? peerSeats : [...stagedPeer];
+      for (const before of recoverySeats) {
+        const record = held ? ledger.get(liveSeatId(before)) : before;
+        const observed = this.#observedProducer(session, before.slot);
+        if (
+          record === undefined ||
+          adoptionKey(record.slot) !== adoptionKey(before.slot) ||
+          (held
+            ? observed !== peerProducers.get(before)
+            : observed !== undefined || this.#holdsSeatedPlate(before.slot))
+        )
+          return false;
+        for (const line of [
+          ...this.#builder.mixerFit(record.slot, record),
+          this.#builder.mixerOpacity(record.slot, held ? wireOpacityOf(record) : 0),
+          this.#builder.mixerVolume(record.slot, held ? wireVolumeOf(record) : 0),
+        ]) {
+          if (!ownsRecovery() || !(await write(line))) return false;
+        }
+      }
+      if (recoverySeats.length > 0 && (!ownsRecovery() || !(await commit()))) return false;
+      if (!held) return ownsRecovery();
+      for (const slot of peerSettled || afterResponse ? pageSlots : peerPageAttempts) {
+        if (
+          !ownsRecovery() ||
+          oscProducerKind(this.#observedProducer(session, slot) ?? '') !== 'html'
+        )
+          return false;
+        if (!(await write(recoveryLook(slot, afterResponse)))) return false;
+      }
+      return ownsRecovery();
+    };
+    const peerProducers = new Map(
+      animatePeer
+        ? peerSeats.map((record) => [
+            record,
+            this.#observedProducer(effectPeer.session, record.slot),
+          ])
+        : [],
+    );
+    const pendingPeer: PendingInputReplicaMixer = {
+      slots: peerSeats.map(({ slot }) => slot),
+      allowStop: true,
+      restore: async (target, repairBatch) => {
+        const owns = () =>
+          this.#adapter.primarySession === target.primaryOnly &&
+          target.primaryQueue === target.primaryOnly.queue;
+        return recoverPeer(
+          owns,
+          async (line) => {
+            const sent = line.startsWith('MIXER ')
+              ? await this.#sendDeferredMixer(repairBatch, channel, line)
+              : await this.#send(line, this.#nextSeq(), 'urgent', target);
+            return sent.ok && sent.onPrimary;
+          },
+          async () =>
+            (await this.#commitStagedMixer(repairBatch, { retainOnFailure: true })).landed,
+          target.primaryOnly,
+          true,
+        );
+      },
+    };
+    const sendPeer = async (line: string, signal: AbortSignal) =>
+      (
+        await this.#send(line, this.#nextSeq(), 'urgent', {
+          pageReplica: page,
+          settleReplicaMixer: true,
+          mixerBatch: peerBatch,
+          signal,
+        })
+      ).ok;
+    const queuePeer = (line: string, target?: LiveLayerRecord | CommandSlot) => {
+      if (!animatePeer || !mirrorForward || peerFailed) return;
+      if (target !== undefined && 'sourceId' in target && !peerProducers.has(target)) return;
+      const signal = AbortSignal.any([cancel.signal, AbortSignal.timeout(peerDeadline)]);
+      peerTail = peerTail
+        .then(async () => {
+          if (peerFailed || !current() || !peerHasPages() || signal.aborted) {
+            peerFailed = true;
+            return;
+          }
+          if (target !== undefined && 'sourceId' in target) {
+            if (!this.#hasResidentSeatMirror(page, target)) {
+              peerFailed = true;
+              return;
+            }
+            stagedPeer.add(target);
+            peerStaged = true;
+          } else if (target !== undefined) {
+            peerPageAttempts.add(target);
+          } else if (!peerStaged) {
+            return;
+          }
+          if (!peerArmed) {
+            if (this.#orphanedPrimaryMixers.get(effectPeer.session)?.has(channel)) {
+              peerFailed = true;
+              return;
+            }
+            this.#rememberInputReplicaMixer(effectPeer.session, channel, pendingPeer);
+            peerArmed = true;
+          }
+          peerFailed = !(await sendPeer(line, signal));
+          if (!peerFailed && target === undefined) peerStaged = false;
+        })
+        .catch(() => {
+          peerFailed = true;
+        });
+    };
+    const batch: MixerBatch = {
+      ...phaseTarget,
+      replicaCommit: () => queuePeer(this.#builder.mixerCommit(channel)),
+    };
+    const peerNeedsRepair = () =>
+      effectPeer !== undefined &&
+      this.#pendingInputReplicaMixers.get(effectPeer.session)?.get(channel) === pendingPeer;
+    const repairPeer = async (afterResponse: boolean): Promise<boolean> => {
+      if (effectPeer === undefined) return false;
+      const signal = AbortSignal.timeout(peerDeadline);
+      const owns = () =>
+        !signal.aborted && peerNeedsRepair() && this.#residentMirror(page) === effectPeer;
+      if (!owns()) return false;
+      const recovered = await recoverPeer(
+        owns,
+        (line) =>
+          sendPeer(line.startsWith('MIXER ') ? this.#builder.deferMixer(line) : line, signal),
+        () => sendPeer(this.#builder.mixerCommit(channel), signal),
+        effectPeer.session,
+        afterResponse,
+      );
+      if (!recovered) return false;
+      this.#forgetInputReplicaMixer(effectPeer.session, channel);
+      return true;
+    };
+    const finishPeer = async (settled: boolean): Promise<void> => {
+      peerSettled = settled;
+      mirrorForward = false;
+      await peerTail;
+      if (
+        effectPeer === undefined ||
+        !peerNeedsRepair() ||
+        this.#residentMirror(page) !== effectPeer
+      )
+        return;
+      if (settled && !peerStaged && !peerFailed) {
+        this.#forgetInputReplicaMixer(effectPeer.session, channel);
+        return;
+      }
+      if (await repairPeer(false)) return;
+      // An aborted ACK can still be in the socket's FIFO. Once it clears, restore a
+      // current row or drained seats on the same peer without delaying programme.
+      void (async () => {
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          await waitForTimer(peerDeadline * (attempt + 1), undefined, { ref: false });
+          if (!peerNeedsRepair() || this.#residentMirror(page) !== effectPeer) return;
+          if (await repairPeer(true)) return;
+        }
+      })().catch(() => undefined);
+    };
+
     const invalidate = ({ itemId: changed }: { itemId: string }) => {
       if (changed === itemId && !stillOwnsOutput()) cancel.abort();
     };
@@ -13737,6 +13979,7 @@ export class CasparRuntime {
           rollback ? undefined : cancel.signal,
         );
         if (!sent.ok || !sent.onPrimary) return { ...sent, ok: false };
+        if (!rollback) queuePeer(this.#builder.deferMixer(line), record);
       }
       return { ok: true };
     };
@@ -13748,7 +13991,8 @@ export class CasparRuntime {
       for (const slot of pageSlots) {
         if (!stillOwnsOutput(rollback) || (!rollback && cancel.signal.aborted)) return unavailable;
         pageAttempted = true;
-        const sent = await this.#send(build(slot), this.#nextSeq(), 'urgent', {
+        const line = build(slot);
+        const sent = await this.#send(line, this.#nextSeq(), 'urgent', {
           ...phaseTarget,
           ...(!rollback && { signal: cancel.signal }),
         });
@@ -13756,6 +14000,7 @@ export class CasparRuntime {
           failed ??= { ...sent, ok: false };
           if (!rollback) break;
         }
+        if (sent.ok && sent.onPrimary && !rollback) queuePeer(line, slot);
       }
       return failed ?? { ok: true };
     };
@@ -13887,6 +14132,7 @@ export class CasparRuntime {
         return (await wait(enter * period + period)) ? { ok: true } : interrupted;
       },
       restore: async () => {
+        mirrorForward = false;
         let restored = stillOwnsOutput(true);
         if (restored && pageAttempted) {
           const old = await sendPages(restoreLook, true);
@@ -13988,6 +14234,7 @@ export class CasparRuntime {
         }
         if (!settled && freshSeats.size > 0) await this.#cleanupPresetSeats(channel, batch);
         else await this.#commitStagedMixer(batch);
+        await finishPeer(settled);
         if (settled && (paired || holdsDestinationTitles)) {
           // The mixer ACK accepts the final geometry before the next output tick paints it.
           await waitForTimer(this.#channelFrameMsFor(channel));
@@ -14019,6 +14266,7 @@ export class CasparRuntime {
             );
           }
           const replica = paired ? this.#residentMirror(page) : undefined;
+          if (peerNeedsRepair()) return;
           const replicaIsResident = () => {
             if (
               replica === undefined ||
@@ -15530,6 +15778,7 @@ export class CasparRuntime {
         batch.primaryOnly,
         batch.primaryQueue,
       );
+      if (outcome.landed) batch.replicaCommit?.();
       if (outcome.landed && clearsOrphan)
         this.#forgetOrphanedMixer(batch.channel, batch.primaryOnly);
       release = !retainOnFailure || outcome.landed;
@@ -15616,7 +15865,13 @@ export class CasparRuntime {
     const channels = this.#orphanedPrimaryMixers.get(session);
     if (channels === undefined) return true;
     const channel = stationMutationChannel(line);
-    return channel === undefined || !channels.has(channel);
+    if (channel === undefined || !channels.has(channel)) return true;
+    // Let an emergency stop or clear remove the known producers without touching a
+    // quarantined DEFER buffer. The preset's repair drains it after observing the empty seats.
+    return (
+      this.#pendingInputReplicaMixers.get(session)?.get(channel)?.allowStop === true &&
+      /^(?:CLEAR \d+-\d+$|CG \d+-\d+ (?:STOP|REMOVE) \d+$)/.test(line)
+    );
   }
 
   #hasOrphanedMixer(channel: number): boolean {
@@ -15998,7 +16253,7 @@ export class CasparRuntime {
         if (!r.optional) break;
         continue;
       }
-      const sent = await this.#startSeatProducer(r.placement, signal, target);
+      const sent = await this.#startSeatProducer(r.placement, r.hide, signal, target);
       // `ROUTE-PLATES-01` — a route names its own outcome when its `LOADBG` landed (`loaded`).
       const outcome = sent.outcome ?? outcomeOf(sent);
       results.set(r.placement.seatId, {
@@ -16070,6 +16325,7 @@ export class CasparRuntime {
    */
   async #startSeatProducer(
     placement: LivePlatePlacement,
+    hiddenSeat: boolean,
     signal?: AbortSignal,
     target?: PrimaryMixerTarget,
   ): Promise<{
@@ -16087,14 +16343,33 @@ export class CasparRuntime {
     const key = adoptionKey(placement.slot);
     this.#mirroredLiveSeats.delete(key);
     // `ROUTE-PLATES-01` — a Playout route is started by its own pair, here and nowhere else.
-    if (placementIsPlayoutRoute(placement))
-      return this.#startRouteProducer(placement, signal, target);
+    if (placementIsPlayoutRoute(placement)) {
+      const route = await this.#startRouteProducer(placement, signal, target);
+      if (route.ok && route.onPrimary && placement.source.playlistOf !== undefined)
+        this.#observeBackupPlaylist?.(placement.slot.channel, placement.source.playlistOf);
+      return route;
+    }
     // `MEDIA-PLATES-01` §1.B — a clip whose Loop is on is played with `LOOP`; one that is not freezes
     // on its last frame at its end (2.5.0's ffmpeg producer — nothing more is needed for that).
     const play = { loop: placement.playback?.loop === true };
     // 🔴 `PLAYOUT-FEATURES-01` A (`B-286`) — server B's OWN line for a clip, read off the backup lookup's
     // cache (never awaited): B's own path, or nothing at all with the reason for the row.
     const backup = this.#backupPlayFor(placement, play);
+    const adapter = this.#adapter;
+    const generation = this.#amcpGeneration;
+    const peerChannel = this.#backupChannels.channelOnB(placement.slot.channel);
+    const mediaPreload =
+      hiddenSeat &&
+      target === undefined &&
+      placement.source.origin === 'media' &&
+      typeof backup.serverB === 'string' &&
+      peerChannel !== null
+        ? () =>
+            this.#adapter === adapter &&
+            this.#amcpGeneration === generation &&
+            this.#backupChannels.channelOnB(placement.slot.channel) === peerChannel &&
+            this.#backupPlayFor(placement, play).serverB === backup.serverB
+        : undefined;
     const sendOptions = {
       ...target,
       ...(backup.serverB === undefined ? {} : { serverB: backup.serverB }),
@@ -16108,7 +16383,6 @@ export class CasparRuntime {
     const primaryQueue = primary.queue;
     const peer = this.#adapter.backupSession;
     const peerQueue = peer?.queue;
-    const peerChannel = this.#backupChannels.channelOnB(placement.slot.channel);
     const recordMirror = (
       result: { mirrorConfirmed?: true; onPrimary: boolean },
       producer: string,
@@ -16140,7 +16414,7 @@ export class CasparRuntime {
       this.#builder.playSource(placement.slot, placement.producer, play),
       this.#nextSeq(),
       'urgent',
-      sendOptions,
+      { ...sendOptions, ...(mediaPreload !== undefined && { mediaPreload }) },
     );
     recordMirror(first, placement.producerArg);
     /*
@@ -23058,6 +23332,8 @@ export class CasparRuntime {
        * nothing (the adapter's `SendOptions.serverB`). Absent on every line but a clip's `PLAY`.
        */
       readonly serverB?: string | null;
+      /** Whether both hidden media seats still belong to the same prepared channel. */
+      readonly mediaPreload?: () => boolean;
       /** Cancel a position write if its resident programme page changes while queued. */
       readonly signal?: AbortSignal;
       /** A confirmed Position may be mirrored only to this page's established peer. */
@@ -23227,6 +23503,7 @@ export class CasparRuntime {
       const sendOptions = {
         priority,
         ...(options.signal !== undefined && { signal: options.signal }),
+        ...(options.mediaPreload !== undefined && { mediaPreload: options.mediaPreload }),
       };
       const matchesPrimary = () =>
         (options.primaryOnly === undefined ||

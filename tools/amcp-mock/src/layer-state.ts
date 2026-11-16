@@ -20,6 +20,7 @@ export class LayerRegistry {
       filePath: '',
       backgroundProducer: 'empty',
       backgroundFilePath: '',
+      backgroundLoop: false,
       paused: false,
       onAir: false,
       pageResolution: 'resolved',

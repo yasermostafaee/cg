@@ -836,6 +836,27 @@ describe('§1.F — C4: a route plate is never mirrored to the backup', () => {
     await delay(100);
     expect(row(r)?.backupUnmirrored).toBeUndefined();
   });
+
+  it('reports the clean Playlist requested by a successful Take without sending a B route', async () => {
+    const playlist = {
+      ...holderInput('pl-ch2', 'Playlist channel 2', 5),
+      producer: { kind: 'route' as const, channel: 2, layer: 5 },
+      playlistOf: { casparHost: '127.0.0.1', casparChannel: 2 },
+    };
+    const provider = new LocalPlayoutSources({ inputs: [...INPUTS, playlist] });
+    const { r, backupLines } = await boot({
+      assignments: bind('single', { l1: inputSourceId(playlist.id) }),
+      backup: true,
+      provider,
+    });
+    const inspected: { destination: number; playlist: number }[] = [];
+    r.useBackupPlaylistDiagnostics((destination, playlistChannel) => {
+      inspected.push({ destination, playlist: playlistChannel });
+    });
+    await take(r, 'single');
+    expect(inspected).toEqual([{ destination: 2, playlist: 2 }]);
+    expect(routeLines(await backupLines())).toEqual([]);
+  });
 });
 
 // ── FIELD-FIXES-01-A, on route plates ────────────────────────────────────────────────────────

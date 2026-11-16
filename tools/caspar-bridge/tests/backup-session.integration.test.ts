@@ -8,6 +8,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { BackupChannelsState, EngineSessions } from '@cg/shared-ipc';
 import type { AuditEntry } from '@cg/shared-schema';
 import { loadBridgeSession } from '../src/bridge-session.js';
+import { BackupEngine } from '../src/backup-engine.js';
 import { createBridge, type BridgeHandle, type BridgeOptions } from '../src/bridge.js';
 import { openClient, waitFor, type Client } from './support/auth-harness.js';
 import { FAKE_ADMIN, startFakePlayout, type FakePlayout } from './support/fake-playout.js';
@@ -230,6 +231,34 @@ async function take(handle: BridgeHandle, row: string): Promise<void> {
 }
 
 describe('🔴 R-085 — one Playout session per engine, each with its own account', () => {
+  it('reads D10 for Playlist diagnostics only with B’s own authenticated session, at the D10 cadence', async () => {
+    const { a, b } = await engines();
+    const backup = track(
+      new BackupEngine({
+        primaryAddress: a.baseUrl,
+        addressOverride: b.baseUrl,
+        backupHost: () => '127.0.0.1',
+        sessionFile: path.join(scratch(), 'backup-playlist-session.json'),
+        audience: 'cg-control',
+      }),
+      (engine) => engine.dispose(),
+    );
+    backup.start();
+    expect(await backup.readPlaylistInputs()).toEqual({ kind: 'no-session' });
+    expect(b.requestCounts.inputs).toBe(0);
+    expect(await backup.signIn(FAKE_ADMIN.username, PASS_B)).toEqual({ ok: true });
+    const [first, concurrent] = await Promise.all([
+      backup.readPlaylistInputs(),
+      backup.readPlaylistInputs(),
+    ]);
+    expect(first).toMatchObject({ kind: 'list', body: { inputs: expect.any(Array) } });
+    expect(concurrent).toEqual(first);
+    expect(await backup.readPlaylistInputs()).toEqual(first);
+    expect(b.requestCounts.inputs).toBe(1);
+    expect(a.requestCounts.inputs).toBe(0);
+    expect(b.foreignRefusals).toBe(0);
+  });
+
   it('each engine signs in with ITS OWN password — the other’s is refused — and every request carries that engine’s own token, never the other’s', async () => {
     const p = await pair();
     const admin = await adminConsole(p);

@@ -40,6 +40,11 @@ Place the JPEG in the corresponding plate's authored stacking and clipping conte
 the fallback under the picture, text and shapes above it, and all mask windows. Keep the status
 overlay separate. An opaque overlay above the entire template would cover authored foregrounds.
 
+When the PVW lease stops refreshing in time, CG Control uses the shared snapshot batch to
+read the remaining visible sources, including media posters. Fresh lease frames have priority.
+Explicit absence clears the fallback and cached pictures expire. Snapshot pictures are for
+viewing; precise Pan geometry still comes from the PVW lease.
+
 Use each JPEG with its own geometry. Undo CSS scaling, then invert the delivered transform and
 clamp to the visible source rectangle. Validate sample aspect ratio, active and visible rectangles,
 full coverage and rotation before enabling precise crop saving. A change of source, producer or

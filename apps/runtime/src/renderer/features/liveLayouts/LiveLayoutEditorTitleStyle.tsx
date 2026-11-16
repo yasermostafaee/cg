@@ -281,14 +281,14 @@ export function LiveLayoutEditorTitleStyle({
             aria-pressed={sharedSelection}
             onClick={() => setScope('shared')}
           >
-            All frames
+            All plates
           </Button>
           <Button
             active={!sharedSelection}
             aria-pressed={!sharedSelection}
             onClick={() => setScope('frame')}
           >
-            Frame {frameNumber}
+            Plate {frameNumber}
           </Button>
           {!sharedSelection && override !== undefined && (
             <Button variant="neutral" onClick={onResetOverride}>
@@ -299,7 +299,7 @@ export function LiveLayoutEditorTitleStyle({
       )}
       {onSharedChange === undefined && override !== undefined && (
         <Button variant="neutral" onClick={onResetOverride}>
-          Use frame style
+          Use plate style
         </Button>
       )}
       <div key={sharedSelection ? 'shared' : frameId}>

@@ -42,4 +42,6 @@
 - [x] Verify Background None preserves transparency in authored presets and Focus and survives Save and Edit.
 - [x] Carry the input catalogue server through successful D10 reads, refresh failures and Bridge restarts.
 - [x] Verify vertical stereo input meters, frame-height rails when enabled, a default-off editor preview, and no meters on media in Chromium.
+- [x] Align New live layout labels with Designer's Plate terminology.
+- [x] Save and render a per-plate border with editable color, width and radius.
 - [ ] Verify the Designer-authored masked input and attached graphic together on the target Playout Engine.

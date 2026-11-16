@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import { isServerReachable } from '@cg/shared-ipc';
 import type { ServerSession, ServerSessionState } from '../session/server-session.js';
 import type { CommandQueue, QueueResult } from '../queue/command-queue.js';
+import { AmcpAbortedError } from '../queue/errors.js';
 import { InMemoryJournal, journalLineFor, type CommandJournal } from './journal.js';
 import type {
   FailoverEvent,
@@ -235,7 +236,7 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
       const { primary, peer, queue, settleMixer } = options.replica;
       const label = this.backupLabel;
       const translated =
-        settleMixer === true && line.startsWith('MIXER ') && !this.held.has(label)
+        settleMixer === true && /^(?:MIXER |CG \d+-\d+ UPDATE )/.test(line) && !this.held.has(label)
           ? this.ownLine({ line }, label)
           : this.lineFor(label, line, options);
       if (
@@ -370,14 +371,70 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
   ): Promise<RedundancySendResult> {
     const backup = this.backupSession;
     if (backup === null) return this.sendJournalReplay(line, primaryLine, options);
-    const seq = this.journal.append(line, 'both', options.serverB);
-    const primaryQ = this.primarySession.queue;
+    const primary = this.primarySession;
+    const primaryQ = primary.queue;
     const backupQ = backup.queue;
     // `B-286` / `B-316` — each server its OWN line; a backup with none is sent nothing, and is no divergence.
     const backupLine = this.lineFor(this.backupLabel, line, options);
+    let primaryWrite = primaryLine;
+    let backupWrite = backupLine;
+    let writeOptions = options;
+    const canPreload = options.mediaPreload;
+    if (canPreload !== undefined && backupLine !== null && canPreload()) {
+      const playA = /^PLAY (\d+-\d+) "/.exec(primaryLine)?.[1];
+      const playB = /^PLAY (\d+-\d+) "/.exec(backupLine)?.[1];
+      const ready = () =>
+        primary.state === 'healthy' &&
+        backup.state === 'healthy' &&
+        !primaryQ.isPaused &&
+        !backupQ.isPaused &&
+        primaryQ.depth === 0 &&
+        backupQ.depth === 0;
+      if (playA !== undefined && playB !== undefined && ready()) {
+        const preloadSignal = this.roleSignal(options.signal);
+        const preloadOptions = {
+          ...(options.priority !== undefined && { priority: options.priority }),
+          signal: preloadSignal,
+        };
+        const prepared = await Promise.allSettled([
+          primaryQ.enqueue('LOADBG ' + primaryLine.slice(5), preloadOptions),
+          backupQ.enqueue('LOADBG ' + backupLine.slice(5), preloadOptions),
+        ]);
+        if (
+          preloadSignal.aborted ||
+          !canPreload() ||
+          primary !== this.primarySession ||
+          backup !== this.backupSession ||
+          primaryQ !== primary.queue ||
+          backupQ !== backup.queue ||
+          this.lineFor(this.backupLabel, line, options) !== backupLine
+        ) {
+          throw new AmcpAbortedError(
+            0,
+            line,
+            'The verified media seats changed during preparation.',
+          );
+        }
+        writeOptions = { ...options, signal: preloadSignal };
+        // A refusal may have left an older background producer. Only promote explicitly
+        // acknowledged copies, and only when both queued promotions can leave immediately.
+        if (
+          ready() &&
+          prepared.every(
+            (reply) => reply.status === 'fulfilled' && reply.value.response.code === 202,
+          )
+        ) {
+          primaryWrite = `PLAY ${playA}`;
+          backupWrite = `PLAY ${playB}`;
+        }
+      }
+    }
+    // Replay always addresses the file directly. A retained bare PLAY could promote a
+    // different producer after reconnect because its LOADBG would no longer be proven.
+    const seq = this.journal.append(line, 'both', options.serverB);
     const [pRes, bRes] = await Promise.allSettled([
-      primaryQ.enqueue(primaryLine, options),
-      backupLine === null ? Promise.resolve(null) : backupQ.enqueue(backupLine, options),
+      primaryQ.enqueue(primaryWrite, writeOptions),
+      backupWrite === null ? Promise.resolve(null) : backupQ.enqueue(backupWrite, writeOptions),
     ]);
     if (pRes.status === 'fulfilled' && bRes.status === 'fulfilled' && bRes.value === null) {
       this.journal.resolve(seq, 'ok', pRes.value.response.code);

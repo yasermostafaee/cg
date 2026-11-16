@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createMock, type MockHandle } from '@cg/amcp-mock';
+import { createMock, defaultHandlers, type MockHandle } from '@cg/amcp-mock';
 import { DEFAULT_LAYER_POLICY } from '@cg/caspar-client';
 import {
   fixedBanksSlots,
@@ -187,6 +187,8 @@ async function linesOf(m: MockHandle, trace: string): Promise<string[]> {
 
 interface Rig {
   readonly r: CasparRuntime;
+  readonly primary: MockHandle;
+  readonly backup: MockHandle;
   readonly backupPlayout: FakePlayout;
   readonly lookup: BackupMediaLookup;
   aLines(): Promise<string[]>;
@@ -299,6 +301,8 @@ async function boot(
   }
   return {
     r,
+    primary: a.mock,
+    backup: b.mock,
     backupPlayout,
     lookup,
     aLines: () => linesOf(a.mock, a.trace),
@@ -306,10 +310,11 @@ async function boot(
   };
 }
 
-const plays = (lines: readonly string[]): string[] => lines.filter((l) => /^PLAY 2-\d+ "/.test(l));
-/** `B-316` — server B's plays are on ITS channel 4; any `PLAY 2-` there would be the defect. */
+const plays = (lines: readonly string[]): string[] =>
+  lines.filter((l) => /^(PLAY|LOADBG) 2-\d+ "/.test(l));
+/** `B-316` — server B's media starts on ITS channel 4; any write to channel 2 is a defect. */
 const playsB = (lines: readonly string[]): string[] =>
-  lines.filter((l) => /^PLAY [24]-\d+ "/.test(l));
+  lines.filter((l) => /^(PLAY|LOADBG) [24]-\d+ "/.test(l));
 const item0 = (r: CasparRuntime) => r.stackSnapshot().find((i) => i.itemId === ROW);
 
 async function take(r: CasparRuntime): Promise<{ ms: number }> {
@@ -332,12 +337,77 @@ describe('PLAYOUT-FEATURES-01 A (B-286) — the backup’s own clip, by fingerpr
     expect(a.some((l) => l.includes('"C:/Apasai CIaB/Promo/sting.mov"'))).toBe(true);
     // B: PROMO at B's own path, on B's OWN channel 4; STING — which B lacks — never.
     expect(b.filter((l) => l.includes('promo'))).toEqual([
-      expect.stringMatching(/^PLAY 4-\d+ "E:\/Backup Library\/promo\.mp4"/),
+      expect.stringMatching(/^(PLAY|LOADBG) 4-\d+ "E:\/Backup Library\/promo\.mp4"/),
     ]);
     expect(b.some((l) => l.includes('sting'))).toBe(false);
     // 🔴 No line B received ever carries a primary path.
     expect((await bLines()).filter((l) => l.includes('C:/Apasai CIaB'))).toEqual([]);
     expect(item0(r)?.backupNoCopy).toEqual([{ plateId: 'l2', name: 'Sting', reason: 'no-copy' }]);
+  });
+
+  it('waits for the slow reserve to load its matching media file before promoting either hidden seat', async () => {
+    const { r, primary, backup } = await boot();
+    await expect.poll(() => r.health().backup?.state).toBe('healthy');
+    const load = defaultHandlers().get('LOADBG');
+    if (load === undefined) throw new Error('The mock must implement LOADBG');
+    let allowReserveLoad = (): void => undefined;
+    const reserveLoad = new Promise<void>((resolve) => {
+      allowReserveLoad = resolve;
+    });
+    backup.setHandler('LOADBG', async (req, context, connection) => {
+      await reserveLoad;
+      return load(req, context, connection);
+    });
+    const commands = (mock: MockHandle) => mock.receivedCommands().map(({ line }) => line);
+    const actual = take(r);
+    let slot = '';
+    try {
+      await expect
+        .poll(() => commands(backup).find((line) => line.startsWith('LOADBG 4-')))
+        .toBeDefined();
+      const prepare = commands(primary).find((line) => line.startsWith('LOADBG 2-'));
+      const found = /^LOADBG 2-(\d+) /.exec(prepare ?? '')?.[1];
+      if (found === undefined) throw new Error('The take must preload on the primary as well.');
+      slot = found;
+      expect(commands(primary)).not.toContain(`PLAY 2-${slot}`);
+      expect(commands(backup)).not.toContain(`PLAY 4-${slot}`);
+      expect(primary.layerState({ channel: 2, layer: Number(slot) })).toMatchObject({
+        producer: 'empty',
+        opacity: 0,
+        volume: 0,
+      });
+    } finally {
+      allowReserveLoad();
+      await actual;
+    }
+    expect(commands(primary)).toContain(`PLAY 2-${slot}`);
+    expect(commands(backup)).toContain(`PLAY 4-${slot}`);
+    expect(primary.layerState({ channel: 2, layer: Number(slot) })?.filePath).toBe(PROMO.clip);
+    expect(backup.layerState({ channel: 4, layer: Number(slot) })?.filePath).toBe(
+      'E:/Backup Library/promo.mp4',
+    );
+  });
+
+  it('keeps the primary take working without promoting an unverified backup background', async () => {
+    const { r, primary, backup } = await boot();
+    await expect.poll(() => r.health().backup?.state).toBe('healthy');
+    backup.setHandler('LOADBG', () => ({ kind: 'err', code: 404, verb: 'LOADBG' }));
+    backup.setHandler('PLAY', () => ({ kind: 'err', code: 404, verb: 'PLAY' }));
+    await take(r);
+    const record = r
+      .liveLayers()
+      .get(ROW)
+      ?.find((entry) => entry.sourceId === 'l1');
+    if (record === undefined) throw new Error('The primary must still play its valid local clip.');
+    const layer = record.slot.layer;
+    expect(primary.layerState(record.slot)?.filePath).toBe(PROMO.clip);
+    expect(backup.receivedCommands().map(({ line }) => line)).toContainEqual(
+      expect.stringMatching(/^LOADBG 4-\d+ "E:\/Backup Library\/promo\.mp4"/),
+    );
+    expect(backup.receivedCommands().map(({ line }) => line)).not.toContain(
+      `PLAY 4-${String(layer)}`,
+    );
+    expect(backup.layerState({ channel: 4, layer })?.producer).toBe('empty');
   });
 
   it('🔴 a clip the primary’s Playout gave NO fingerprint is sent to B not at all — the reason is named', async () => {

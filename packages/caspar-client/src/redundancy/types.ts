@@ -17,6 +17,8 @@ export type ServerLabel = 'A' | 'B';
  * 2026-09-28). The one exception a caller may ask for is `mirror: false`, which IS read.
  */
 export interface SendOptions extends EnqueueOptions {
+  /** Prepare both copies of a fresh hidden media seat before promoting it on both engines. */
+  mediaPreload?: () => boolean;
   /** Send a settled value to the same verified peer without replaying it on the active engine. */
   replica?: {
     primary: ServerSession;

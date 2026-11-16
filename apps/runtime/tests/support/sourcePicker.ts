@@ -13,9 +13,7 @@ async function settle(): Promise<void> {
 }
 
 /**
- * Press the field; answer the open panel — the NEWEST one: a spec whose earlier render was never
- * unmounted can leave a panel in `body`, and pressing an option in that one would edit a tree
- * nobody is looking at.
+ * Press the field and read the dialog identified by its launcher.
  */
 export async function openPicker(field: HTMLElement): Promise<HTMLElement> {
   await act(async () => {
@@ -23,8 +21,8 @@ export async function openPicker(field: HTMLElement): Promise<HTMLElement> {
     await Promise.resolve();
   });
   await settle();
-  const panel = [...document.querySelectorAll<HTMLElement>('[data-popover]')].at(-1);
-  if (panel === undefined) throw new Error('the source picker did not open');
+  const panel = document.getElementById(field.getAttribute('aria-controls') ?? '');
+  if (panel === null) throw new Error('the source picker did not open');
   return panel;
 }
 

@@ -460,7 +460,7 @@ export function LiveLayoutEditor({
             attachmentAssets.get(attachment.sourceId)?.plate !== undefined,
         )
       )
-        throw new Error('This frame already has a graphic with a live input.');
+        throw new Error('This plate already has a graphic with a live input.');
       const attachment: ControlLiveLayoutFrameAttachment = {
         id: uuid(),
         frameId,
@@ -468,7 +468,7 @@ export function LiveLayoutEditor({
         name: (
           source.name.trim() ||
           file.name.replace(/\.vcg$/i, '').trim() ||
-          'Frame graphic'
+          'Plate graphic'
         ).slice(0, 255),
         rect: { x: 0.125, y: 0.125, width: 0.75, height: 0.75 },
       };
@@ -485,7 +485,7 @@ export function LiveLayoutEditor({
       setAttachmentId(attachment.id);
     } catch (cause) {
       if (request === attachmentRead.current)
-        setRefusal(cause instanceof Error ? cause.message : 'The frame graphic could not be read.');
+        setRefusal(cause instanceof Error ? cause.message : 'The plate graphic could not be read.');
     } finally {
       if (request === attachmentRead.current) setReadingAttachment(false);
     }
@@ -652,7 +652,7 @@ export function LiveLayoutEditor({
       presets: layout.presets.map((candidate) => ({ ...candidate, name: candidate.name.trim() })),
     });
     if (!draft.success) {
-      setRefusal('Check that every preset has a name and a valid frame arrangement.');
+      setRefusal('Check that every preset has a name and a valid plate arrangement.');
       return;
     }
     setRefusal(undefined);
@@ -886,10 +886,10 @@ export function LiveLayoutEditor({
                 style={{ aspectRatio: layout.resolution.width / layout.resolution.height }}
               >
                 {layout.frames.length === 0
-                  ? 'Add a frame to begin.'
+                  ? 'Add a plate to begin.'
                   : preset === undefined
-                    ? 'Add a preset to preview these frames.'
-                    : 'Choose frames for this preset.'}
+                    ? 'Add a preset to preview these plates.'
+                    : 'Choose plates for this preset.'}
               </div>
             )}
             <div className="cg-live-layout-preview-controls">
@@ -907,17 +907,17 @@ export function LiveLayoutEditor({
             </div>
           </section>
 
-          <aside className="cg-live-layout-frames" aria-label="Frames">
+          <aside className="cg-live-layout-frames" aria-label="Plates">
             <div className="cg-live-layout-panel-head">
               <h3>
-                <Icon icon={LayoutGrid} size={16} /> Frames
+                <Icon icon={LayoutGrid} size={16} /> Plates
               </h3>
               <Button
                 variant="neutral"
                 disabled={layout.frames.length >= CONTROL_LIVE_LAYOUT_MAX_FRAMES}
                 onClick={appendFrame}
               >
-                <Icon icon={Plus} size={15} /> Add frame
+                <Icon icon={Plus} size={15} /> Add plate
               </Button>
             </div>
             {frame !== undefined && (
@@ -926,11 +926,11 @@ export function LiveLayoutEditor({
                   className="cg-live-layout-frame-row cg-live-layout-frame-header"
                   aria-hidden="true"
                 >
-                  <span>Frame</span>
+                  <span>Plate</span>
                   {preset !== undefined && <span>In preset</span>}
                 </div>
                 {layout.frames.map((candidate, index) => {
-                  const name = candidate.title.trim() || `Frame ${String(index + 1)}`;
+                  const name = candidate.title.trim() || `Plate ${String(index + 1)}`;
                   const position = presetFrameIds.indexOf(candidate.id) + 1;
                   const included = position > 0;
                   const positionId = `${fieldsId}-position-${String(index + 1)}`;
@@ -944,7 +944,7 @@ export function LiveLayoutEditor({
                     >
                       <Button
                         className="cg-live-layout-frame-choice"
-                        aria-label={`Edit frame ${String(index + 1)}`}
+                        aria-label={`Edit plate ${String(index + 1)}`}
                         aria-describedby={included ? positionId : undefined}
                         active={candidate.id === frame.id}
                         aria-pressed={candidate.id === frame.id}
@@ -988,7 +988,7 @@ export function LiveLayoutEditor({
                           checked={included}
                           disabled={mode !== 'create' && included && preset.frameIds.length <= 1}
                           onChange={(next) => includeFrame(candidate.id, next)}
-                          aria-label={`Frame ${String(index + 1)} in preset`}
+                          aria-label={`Plate ${String(index + 1)} in preset`}
                         />
                       )}
                     </div>
@@ -999,12 +999,12 @@ export function LiveLayoutEditor({
             {frame !== undefined && (
               <div className="cg-live-layout-fields">
                 <div className="cg-live-layout-panel-head">
-                  <h3>Frame {frameNumber}</h3>
+                  <h3>Plate {frameNumber}</h3>
                   <Button
                     className="cg-list-remove"
                     variant="icon"
-                    aria-label="Delete frame"
-                    title="Delete frame"
+                    aria-label="Delete plate"
+                    title="Delete plate"
                     disabled={mode !== 'create' && layout.frames.length <= 1}
                     onClick={deleteFrame}
                   >
@@ -1015,7 +1015,7 @@ export function LiveLayoutEditor({
                   <label htmlFor={`${fieldsId}-input`}>Input</label>
                   <SourcePicker
                     id={`${fieldsId}-input`}
-                    aria-label="Frame input"
+                    aria-label="Plate input"
                     channel={channel}
                     value={frame.sourceId ?? ''}
                     choices={[{ value: '', label: 'Unassigned' }]}

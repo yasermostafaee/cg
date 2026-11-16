@@ -41,10 +41,25 @@ export const SourcePreviewPvwChannel = defineChannel(
   frames,
 );
 
+export const MAX_MEDIA_PREVIEW_POSITION_MS = 86_400_000;
+const previewPosition = z.number().int().nonnegative().max(MAX_MEDIA_PREVIEW_POSITION_MS);
+const mediaPosition = z.object({ sourceId, atMs: previewPosition });
+const mediaPreviewFrame = frame.and(z.object({ previewPositionMs: previewPosition }));
+export type MediaPreviewFrame = z.infer<typeof mediaPreviewFrame>;
+
 export const SourcePreviewThumbnailsChannel = defineChannel(
   'sourcePreviews.thumbnails',
-  z.object({ channel, sourceIds: z.array(sourceId).min(1).max(8) }),
-  frames,
+  z
+    .object({
+      channel,
+      sourceIds: z.array(sourceId).max(8),
+      mediaPosition: mediaPosition.optional(),
+    })
+    .refine((value) => {
+      const count = value.sourceIds.length + Number(value.mediaPosition !== undefined);
+      return count >= 1 && count <= 8;
+    }),
+  frames.extend({ mediaFrame: mediaPreviewFrame.optional() }),
 );
 
 export const MAX_SOURCE_AUDIO_BATCH = 32;

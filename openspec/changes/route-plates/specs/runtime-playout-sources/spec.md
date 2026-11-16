@@ -73,11 +73,9 @@ keep their D10 order. An unavailable Playlist row SHALL remain first but disable
 Station setup → Live sources SHALL display its read-only Inputs list in the same order.
 The separate `None` choice, Media tab, availability and compatible-channel behaviour SHALL NOT change.
 
-The anchored SourcePicker panel shared by the Inputs and Media tabs SHALL opt into the Popover's `raised`
-visual variant. That variant SHALL use only the existing raised-surface, strong-border and menu-shadow
-tokens so the picker is visibly distinct from the surface beneath it. It SHALL paint no scrim and SHALL NOT
-change the panel's size or placement, its source and selection behaviour, or its focus, Tab, Escape and close
-contracts.
+Inputs and Media SHALL share a viewport-bound library modal with larger 16:9 input thumbnails
+and Media posters. The modal SHALL keep the existing eligibility, source choice and assignment
+semantics. Each available Media row SHALL offer a separate Preview action.
 
 #### Scenario: The playlist output in the Inputs tab
 
@@ -95,10 +93,15 @@ contracts.
 - **AND** an unavailable Playlist output remains first and disabled with its reason
 - **AND** the read-only Inputs list in Station setup shows the same order and marks unavailable outputs
 
-#### Scenario: Inputs and Media are visibly raised without becoming modal
+#### Scenario: Open a source library from an Inspector or a dialog
 
 - **WHEN** a SourcePicker opens on either the Inputs or Media tab
-- **THEN** its panel uses the existing raised surface, strong border and menu shadow
-- **AND** no scrim is painted and its size and placement are unchanged
-- **AND** source selection, focus, Tab, Escape, outside-press, scroll/resize close and focus-restoration
-  behaviour are unchanged
+- **THEN** a centered library modal displays the tab, with focus inside the modal
+- **AND** scrolling or resizing leaves it open
+- **AND** Escape closes it, keeps the underlying dialog open and restores the launcher focus
+
+#### Scenario: Preview a clip before choosing it
+
+- **WHEN** the operator presses Preview on a Media row
+- **THEN** the player shows that clip while the current assignment is preserved
+- **AND WHEN** the operator chooses the row **THEN** its caller receives that choice and the modal closes

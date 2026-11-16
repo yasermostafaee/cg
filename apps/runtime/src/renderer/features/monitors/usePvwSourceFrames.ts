@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { SourcePreviewFrame } from '@cg/shared-ipc';
+import { playoutMediaIdOf, type SourcePreviewFrame } from '@cg/shared-ipc';
 import type { RuntimeBridge } from '../../../shared/runtime-bridge.js';
 import { uuid } from '../../lib/uuid.js';
+import { subscribeInputThumbnail } from '../sources/inputThumbnailDemand.js';
 
-export type PvwSourceFrame = SourcePreviewFrame;
+export type PvwSourceFrame = SourcePreviewFrame & { snapshotOnly?: true };
 
 type ReadFrames = RuntimeBridge['sourcePreviews']['pvw'];
 type Frames = ReadonlyMap<string, PvwSourceFrame>;
@@ -22,11 +23,18 @@ interface Demand {
   sourceIds: string[];
   key: string;
 }
+interface CachedFrame {
+  frame: PvwSourceFrame;
+  expires: number;
+}
 
 const EMPTY_FRAMES: Frames = new Map();
 const EMPTY_SNAPSHOT: Snapshot = { channel: undefined, frames: EMPTY_FRAMES };
 const POLL_MS = 500;
 const EXPIRE_MS = 2500;
+const SNAPSHOT_LEAD_MS = 1250;
+const SNAPSHOT_EXPIRE_MS = 5000;
+const POSTER_EXPIRE_MS = 15000;
 const MAX_SOURCES = 4;
 const feeds = new WeakMap<ReadFrames, PreviewFeed>();
 
@@ -34,7 +42,9 @@ const feeds = new WeakMap<ReadFrames, PreviewFeed>();
 class PreviewFeed {
   readonly #viewId = uuid();
   readonly #readers = new Set<Reader>();
-  readonly #cache = new Map<string, { frame: PvwSourceFrame; expires: number }>();
+  readonly #cache = new Map<string, CachedFrame>();
+  readonly #snapshots = new Map<string, CachedFrame>();
+  readonly #snapshotReaders = new Map<string, () => void>();
   #demand: Demand | undefined;
   #sentChannel: number | undefined;
   #snapshot = EMPTY_SNAPSHOT;
@@ -76,7 +86,14 @@ class PreviewFeed {
     if (demand?.key === this.#demand?.key) return;
     // Closing/reopening effects in the same render can briefly remove the last reader.
     // Keep its pictures until the corresponding empty release actually starts.
-    if (channel !== undefined && channel !== this.#snapshot.channel) this.#cache.clear();
+    if (channel !== this.#snapshot.channel) {
+      for (const stop of this.#snapshotReaders.values()) stop();
+      this.#snapshotReaders.clear();
+      if (channel !== undefined) {
+        this.#cache.clear();
+        this.#snapshots.clear();
+      }
+    }
     this.#demand = demand;
     if (demand !== undefined) this.#publish();
     this.#schedule(0);
@@ -85,17 +102,75 @@ class PreviewFeed {
   #publish(): void {
     clearTimeout(this.#expiryTimer);
     const now = Date.now();
-    for (const [id, entry] of this.#cache) {
-      if (entry.expires <= now) this.#cache.delete(id);
+    for (const cache of [this.#cache, this.#snapshots])
+      for (const [id, entry] of cache) if (entry.expires <= now) cache.delete(id);
+    const nextSnapshotCheck = this.#reconcileSnapshots(now);
+    const frames = new Map([...this.#cache].map(([id, { frame }]) => [id, frame]));
+    for (const [id, { frame }] of this.#snapshots) {
+      const current = frames.get(id);
+      if (current?.signal !== 'absent' && current?.jpegBase64 === undefined) frames.set(id, frame);
     }
     this.#snapshot = {
       channel: this.#demand?.channel,
-      frames: new Map([...this.#cache].map(([id, { frame }]) => [id, frame])),
+      frames,
     };
     for (const reader of this.#readers) reader.receive(this.#snapshot);
-    const expires = Math.min(...[...this.#cache.values()].map((entry) => entry.expires));
+    const expires = Math.min(
+      nextSnapshotCheck,
+      ...[...this.#cache.values(), ...this.#snapshots.values()].map((entry) => entry.expires),
+    );
     if (Number.isFinite(expires))
       this.#expiryTimer = setTimeout(() => this.#publish(), expires - now);
+  }
+
+  /** A stalled PVW lease must not hide snapshots already available to the input picker. */
+  #reconcileSnapshots(now: number): number {
+    const channel = this.#demand?.channel;
+    const ids = this.#demand?.sourceIds ?? [];
+    for (const id of this.#snapshots.keys()) if (!ids.includes(id)) this.#snapshots.delete(id);
+    const needsSnapshot = new Set<string>();
+    let nextCheck = Infinity;
+    for (const id of ids) {
+      const primary = this.#cache.get(id);
+      if (primary?.frame.signal === 'absent') {
+        this.#snapshots.delete(id);
+        continue;
+      }
+      if (primary?.frame.jpegBase64 === undefined || primary.expires - SNAPSHOT_LEAD_MS <= now) {
+        needsSnapshot.add(id);
+      } else {
+        nextCheck = Math.min(nextCheck, primary.expires - SNAPSHOT_LEAD_MS);
+      }
+    }
+    for (const [id, stop] of this.#snapshotReaders) {
+      if (needsSnapshot.has(id)) continue;
+      stop();
+      this.#snapshotReaders.delete(id);
+    }
+    if (channel === undefined || window.cg?.sourcePreviews?.thumbnails === undefined)
+      return Infinity;
+    for (const id of needsSnapshot) {
+      if (this.#snapshotReaders.has(id)) continue;
+      const stop = subscribeInputThumbnail({
+        channel,
+        sourceId: id,
+        publish: (frame) => {
+          if (frame === undefined) return;
+          if (frame.signal === 'absent') {
+            if (this.#snapshots.delete(id)) this.#publish();
+          } else if (frame.jpegBase64 !== undefined) {
+            const expires = playoutMediaIdOf(id) === null ? SNAPSHOT_EXPIRE_MS : POSTER_EXPIRE_MS;
+            this.#snapshots.set(id, {
+              frame: { ...frame, snapshotOnly: true },
+              expires: Date.now() + expires,
+            });
+            this.#publish();
+          }
+        },
+      });
+      this.#snapshotReaders.set(id, stop);
+    }
+    return nextCheck;
   }
 
   #schedule(delay: number): void {
@@ -111,6 +186,7 @@ class PreviewFeed {
     this.#sentChannel = demand?.channel;
     if (demand === undefined) {
       this.#cache.clear();
+      this.#snapshots.clear();
       this.#publish();
     }
     try {
