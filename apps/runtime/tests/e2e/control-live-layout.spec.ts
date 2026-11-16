@@ -754,6 +754,15 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect(
       programme.getByRole('button', { name: /Focus frame 3 in Programme.*خبرخوان/ }),
     ).toBeVisible();
+    const presetType = await row.locator(`[data-look-id="${origin}"]`).evaluate((button) => {
+      const style = getComputedStyle(button);
+      return { size: style.fontSize, weight: style.fontWeight };
+    });
+    for (const group of [localFocus, programme]) {
+      const button = group.getByRole('button', { name: /Focus frame 3 .*خبرخوان/ });
+      await expect(button).toHaveCSS('font-size', presetType.size);
+      await expect(button).toHaveCSS('font-weight', presetType.weight);
+    }
     const active = () => runtime.activeLookId('panel');
     const seats = () =>
       runtime
