@@ -455,9 +455,10 @@ describe('the bridge’s routes, as a console reaches them', () => {
       }),
       (p) => p.stop(),
     );
-    const media = playout.mediaItem(FAKE_MEDIA_IDS.studio1);
-    if (media === undefined) throw new Error('The test clip is missing');
-    playout.setMedia([{ ...media, fingerprint }]);
+    const original = playout.mediaItem(FAKE_MEDIA_IDS.studio1);
+    if (original === undefined) throw new Error('The test clip is missing');
+    const media = { ...original, id: 'replica-' + 'e'.repeat(64), fingerprint };
+    playout.setMedia([media]);
     const handle = track(
       await createBridge({
         port: 0,
@@ -533,6 +534,50 @@ describe('the bridge’s routes, as a console reaches them', () => {
       file: playout.mediaItem(FAKE_MEDIA_IDS.studio1)?.clip,
     });
     expect(JSON.stringify(ps.catalog())).not.toContain('not-this.mov');
+  });
+
+  it('searches and binds a D11 replica, persisting its frame rate and playback settings', async () => {
+    const boundMediaPath = path.join(tmpDir(), 'media.json');
+    const { handle, playout } = await startAuthedBridge({ boundMediaPath });
+    track(handle, (h) => h.close());
+    const original = playout.mediaItem(FAKE_MEDIA_IDS.studio1);
+    if (original === undefined) throw new Error('The test clip is missing');
+    const clip = {
+      ...original,
+      id: 'replica-43564423a0707662019d6630a6ced3a60e0260707a31081dee4d5f76bf6eecf8',
+      framesPerSecond: 25,
+    };
+    const sourceId = mediaSourceId(clip.id);
+    playout.setMedia([clip]);
+    const admin = await playout.issueToken({ user: 'admin' });
+    const client = await openClient(handle);
+    expect((await client.authenticate('login', admin.token)).error).toBeUndefined();
+
+    const bound = await client.ask('assign', 'sources.set-assignments', {
+      assignments: [{ templateId: 'tpl-1', plateId: 'guest-1', sourceId }],
+    });
+    expect(bound.payload).toMatchObject({ ok: true });
+    expect(playout.requestCounts.mediaIds).toBeGreaterThan(0);
+    const result = await client.ask('search', 'sources.media-search', { q: clip.name });
+    expect(result.payload).toMatchObject({ ok: true, items: [{ id: sourceId, name: clip.name }] });
+    expect(JSON.stringify(result.payload)).not.toContain('framesPerSecond');
+    const playback = await client.ask('playback', 'sources.set-media-playback', {
+      mediaId: sourceId,
+      loop: true,
+      whenHidden: 'pause',
+    });
+    expect(playback.payload).toMatchObject({ ok: true });
+    const catalogue = await client.ask('catalogue', 'sources.config');
+    expect(catalogue.payload).toMatchObject({
+      sources: expect.arrayContaining([
+        expect.objectContaining({ id: sourceId, media: expect.objectContaining({ loop: true }) }),
+      ]),
+    });
+    expect(
+      BoundMediaStateSchema.parse(JSON.parse(fs.readFileSync(boundMediaPath, 'utf8'))),
+    ).toMatchObject({
+      items: [{ id: clip.id, framesPerSecond: 25, loop: true }],
+    });
   });
 
   it('`sources.refresh` answers at once, and the read it asked for arrives by itself — never sooner than 5 s after the last', async () => {

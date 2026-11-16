@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PlayoutMediaIdSchema } from '@cg/shared-schema';
 import {
   LIVE_SOURCE_FORMATS,
   MEDIA_PLAYBACK_DEFAULTS,
@@ -41,7 +42,7 @@ export function redactUrlCredentials(text: string): string {
 
 // ── D10: the inputs ─────────────────────────────────────────────────────────
 
-/** A Playout id: stable forever, `[A-Za-z0-9_-]`, 1–48 characters (both D10 and D11). */
+/** A D10 input id: stable forever, `[A-Za-z0-9_-]`, 1–48 characters. */
 export const PlayoutIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,48}$/);
 
 /** A v1.3 `compatibleChannels` member: a channel of a core this input may be routed onto. */
@@ -185,13 +186,17 @@ export const PlayoutFingerprintSchema = z
   .regex(/^[0-9a-fA-F]{64}$/)
   .transform((s) => s.toLowerCase());
 
+// The managed External CG video payload accepts rates from 1 to 240 fps.
+const PlayoutMediaFrameRateSchema = z.number().min(1).max(240).optional().catch(undefined);
+
 /** ONE D11 item as received. `clip` is an ABSOLUTE path with `/` (their answer §2.1). */
 export const PlayoutMediaItemSchema = z.object({
-  id: PlayoutIdSchema,
+  id: PlayoutMediaIdSchema,
   name: z.string().trim().min(1),
   clip: z.string().min(1),
   type: z.string().min(1),
   durationMs: z.number().nonnegative().optional().catch(undefined),
+  framesPerSecond: PlayoutMediaFrameRateSchema,
   width: z.number().int().positive().optional().catch(undefined),
   height: z.number().int().positive().optional().catch(undefined),
   folder: z.string().optional().catch(undefined),
@@ -290,11 +295,12 @@ export function foldPlayoutInputsRead(
  * playable now" — their answer §2.1), and cleared when one lists it again.
  */
 export const BoundMediaItemSchema = z.object({
-  id: PlayoutIdSchema,
+  id: PlayoutMediaIdSchema,
   name: z.string().min(1),
   clip: z.string().min(1),
   type: z.string().min(1),
   durationMs: z.number().nonnegative().optional(),
+  framesPerSecond: PlayoutMediaFrameRateSchema,
   width: z.number().int().positive().optional(),
   height: z.number().int().positive().optional(),
   folder: z.string().optional(),
@@ -334,6 +340,7 @@ export function toBoundMedia(
     clip: item.clip,
     type: item.type,
     ...(item.durationMs !== undefined ? { durationMs: item.durationMs } : {}),
+    ...(item.framesPerSecond !== undefined ? { framesPerSecond: item.framesPerSecond } : {}),
     ...(item.width !== undefined ? { width: item.width } : {}),
     ...(item.height !== undefined ? { height: item.height } : {}),
     ...(item.folder !== undefined ? { folder: item.folder } : {}),

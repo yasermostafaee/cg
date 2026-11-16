@@ -916,7 +916,12 @@
         "en": "This section tracks outstanding acceptance checks and features still in progress."
       },
       "features": [],
-      "fixes": [],
+      "fixes": [
+        {
+          "fa": "CG Bridge شناسه‌های بلند کپی مدیا را از مخزن Playout می‌خواند و در صورت تطبیق اثرانگشت، مسیر خود سرور رزرو را برای پخش به کار می‌برد.",
+          "en": "CG Bridge accepts the longer replica media IDs from Playout and uses the reserve's local playback path when the fingerprints match."
+        }
+      ],
       "planned": [
         {
           "fa": "روی خروجی PGM ایستگاه Playout، نمایش عنوان و شکل روی قاب، حفظ اتصال ورودی هنگام تغییر پریست، ماسک و Revert و پس‌زمینهٔ قاب بررسی شوند.",

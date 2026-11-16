@@ -82,3 +82,48 @@ the Bridge adapter and mapped sources on an isolated channel before production m
 The legacy backup-media match still needs a readable entry with the same D11 fingerprint in
 the backup library. A healthy Playout redundancy status alone does not establish whether a
 specific file has a matching D11 entry. The status message directs operators to the sync and index.
+
+## External CG v2 layout contract, 2026-11-17
+
+The Playout `2.19.0-externalcg.12` handoff includes an OpenAPI contract, actual HTTP exchanges
+and captures from two and four real Core processes. It proves one coordinated Live, video and
+HTML layout per Core and delivery of a newly synced media file under a different cache path
+on each reserve. The documented minimum is Engine `.12` plus Core with `ApasaiCIaB-CgLayout1`
+on every member. The tested return is Core PGM and the host is an isolated Kestrel harness.
+Windows Service, real CG Bridge and a physical programme return remain acceptance work.
+
+The authenticated D11 exchange uses `replica-<64 hex>` IDs on reserves. The previous CG
+cap of 48 characters discarded those otherwise valid rows before checking the fingerprint.
+D11 now uses its separate limit of 128 characters. The bridge still uses only an exact
+fingerprint match and sends the reserve's own clip path. D10 input IDs keep their prior limit.
+The new optional D11 frame rate is available to a future managed video layout command.
+The real station records for the two reported clips have replica IDs, but no authenticated
+D11 response for those clips was captured there. Their exact station outcome remains open.
+
+A managed layout replaces the entire set of external layers on the channel. It uses
+`operation: "layout"`, the lowest configured allowed layer as its target anchor, no `state`
+property, and complete absolute state for each layer. The bridge will need a whole-channel
+ledger and station-approved layer allocations before using it. Native reserves resolve Live
+by logical input ID and video by verified D11 fingerprint and frame range. Verify a clean
+Playlist output source explicitly. The current managed media operation covers video.
+
+For each new command, require a fresh self-confirmed active owner at that member's configured
+endpoint and use its own operator session, revision, physical channel and unmodified fence.
+Service and monitoring tokens do not authorize writes. Persist the exact request and its ID
+before sending. After transport ambiguity, inspect the original result and reconcile its
+native receipt; the original command ID must never be reused with a new payload or fence.
+An unresolved result holds new writes. On migrated channels there is no raw AMCP fallback.
+
+Each member prepares the same hashed manifest. To resume an HTML producer at the applied
+state without replaying its entrance, the exported page needs an absolute `APASAI_STATE`
+handler. The overall layout must preserve the authored behavior needed by the migrated
+channel, including title and field state, absolute sequence page, masking and stable
+instance identity. Managed effects need explicit equivalence to the existing PVW and PGM
+behavior before use on air.
+
+The `.12` rollback test preserves the previous picture but leaves the command unresolved.
+Terminal recovery with evidence of the applied or restored revision remains an Engine
+dependency for unattended on-air use. A Bridge may report and hold the unresolved
+command while testing; an operator may not bypass it by issuing a new ID or clearing the
+journal. Replica readiness is per member and per applied revision. A successful result
+on the owner does not imply every reserve is ready to take control.

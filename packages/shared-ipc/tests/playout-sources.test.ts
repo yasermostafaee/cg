@@ -24,6 +24,7 @@ import {
   unseatableClause,
   unseatableWords,
   boundMediaPlayback,
+  BoundMediaStateSchema,
   toBoundMedia,
   type BoundMediaItem,
   type PlayoutCatalogInput,
@@ -133,6 +134,48 @@ describe('D11: parsePlayoutMediaPage', () => {
     expect(page?.items.map((i) => i.id)).toEqual(['m-1']);
     expect(page?.total).toBe(2);
     expect(page?.nextCursor).toBe('abc');
+  });
+
+  it('keeps replica and 128-character media IDs without widening D10 input IDs', () => {
+    const replicaId = 'replica-43564423a0707662019d6630a6ced3a60e0260707a31081dee4d5f76bf6eecf8';
+    const maximumId = 'a'.repeat(128);
+    const item = { name: 'Followup local clip', clip: 'C:/Cache/clip.mkv', type: 'video' };
+    const page = parsePlayoutMediaPage({
+      items: [
+        { ...item, id: replicaId },
+        { ...item, id: maximumId },
+        { ...item, id: maximumId + 'a' },
+        { ...item, id: 'replica-../path' },
+      ],
+    });
+    expect(page?.items.map(({ id }) => id)).toEqual([replicaId, maximumId]);
+    expect(parsePlayoutInputs({ inputs: [{ ...studio, id: replicaId }] })?.inputs).toEqual([]);
+  });
+
+  it('keeps a usable frame rate in bound media and accepts older or incomplete D11 results', () => {
+    const item = { name: 'Followup local clip', clip: 'C:/Cache/clip.mkv', type: 'video' };
+    const items = parsePlayoutMediaPage({
+      items: [25, 29.97, undefined, null, 0, 241, '25'].map((framesPerSecond, index) => ({
+        ...item,
+        id: 'm-' + String(index),
+        framesPerSecond,
+      })),
+    })?.items;
+    expect(items?.map((media) => media.framesPerSecond)).toEqual([
+      25,
+      29.97,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    const at = '2026-11-16T19:46:39Z';
+    const persisted = BoundMediaStateSchema.parse({
+      items: items?.map((media) => toBoundMedia(media, at)),
+    });
+    expect(persisted.items[1]).toMatchObject({ id: 'm-1', framesPerSecond: 29.97 });
+    expect(persisted.items[2]).not.toHaveProperty('framesPerSecond');
   });
 });
 

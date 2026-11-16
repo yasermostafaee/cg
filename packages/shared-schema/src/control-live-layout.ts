@@ -18,7 +18,7 @@ import {
 } from './input-transition.js';
 import { LiveFitModeSchema, LiveFrameResizeSchema } from './live-fit.js';
 import { calculateLiveSourceAutoLayout } from './live-source-auto-layout.js';
-import type { LiveSourceRect } from './live-source.js';
+import { PlayoutMediaSourceIdSchema, type LiveSourceRect } from './live-source.js';
 import {
   FrameRateSchema,
   HexColorSchema,
@@ -95,7 +95,7 @@ export type ControlLiveLayoutAdditionalText = z.infer<typeof ControlLiveLayoutAd
 const ControlLiveLayoutFrameSchema = z.object({
   id: ControlLiveLayoutFrameIdSchema,
   /** Catalog id chosen by the operator. The logical frame id stays stable across all presets. */
-  sourceId: z.string().min(1).max(64).optional(),
+  sourceId: z.string().min(1).max(64).or(PlayoutMediaSourceIdSchema).optional(),
   title: z.string().max(120),
   /** A short button caption. An empty caption uses the layout's frame number. */
   focusAlias: z.string().trim().max(CONTROL_LIVE_LAYOUT_FOCUS_ALIAS_MAX_LENGTH).optional(),

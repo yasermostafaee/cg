@@ -458,7 +458,7 @@ function decodeCursor(raw: string): FakeMediaCursor | null {
 }
 
 const FA_COLLATOR = new Intl.Collator('fa-IR');
-const CONTRACT_ID = /^[A-Za-z0-9_-]{1,48}$/;
+const D11_MEDIA_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const MEDIA_TYPES = new Set(['video', 'audio', 'still']);
 
 /** A D11 page as the Playout answers it. */
@@ -506,7 +506,7 @@ export function answerFakeMediaQuery(
   const idsParam = query.get('ids');
   if (idsParam !== null) {
     const ids = idsParam.split(',').filter((id) => id !== '');
-    if (ids.length === 0 || ids.length > 100 || !ids.every((id) => CONTRACT_ID.test(id))) {
+    if (ids.length === 0 || ids.length > 100 || !ids.every((id) => D11_MEDIA_ID.test(id))) {
       return null;
     }
     const byId = new Map(all.map((m) => [m.id, m] as const));

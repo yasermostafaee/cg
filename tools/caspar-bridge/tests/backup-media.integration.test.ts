@@ -114,10 +114,21 @@ const STING = item(
 );
 const BARE = item('m-bare', 'Bare', 'C:/Apasai CIaB/Promo/bare.mov');
 const PRIMARY_MEDIA = [PROMO, STING, BARE];
-// The BACKUP's library: PROMO at ANOTHER path (the same bytes, the same fingerprint); STING missing.
+// D11 emits opaque replica-<64 hex> IDs for the reserve's synced catalogue.
+// The primary used a short m-* ID. Only the matching fingerprint links the two.
 const BACKUP_MEDIA = [
-  item('b-promo', 'پرومو', 'E:/Backup Library/promo.mp4', fakeFingerprint('m-promo')),
-  item('b-other', 'Other', 'E:/Backup Library/other.mp4', fakeFingerprint('m-other')),
+  item(
+    `replica-${fakeFingerprint('replica-promo')}`,
+    'پرومو',
+    'E:/Backup Library/promo.mp4',
+    fakeFingerprint('m-promo'),
+  ),
+  item(
+    `replica-${fakeFingerprint('replica-other')}`,
+    'Sting',
+    'E:/Backup Library/other.mp4',
+    fakeFingerprint('m-other'),
+  ),
 ];
 
 const SCENE = { width: 1920, height: 1080 };
@@ -311,7 +322,7 @@ async function take(r: CasparRuntime): Promise<{ ms: number }> {
 }
 
 describe('PLAYOUT-FEATURES-01 A (B-286) — the backup’s own clip, by fingerprint', () => {
-  it('🔴 server B gets ITS OWN path for a clip it holds — CONTROL: a clip it lacks is sent to B not at all, while A airs both, and the row says so', async () => {
+  it('🔴 server B gets ITS OWN path for a replica ID with matching content, never for a same-name clip with different content', async () => {
     const { r, aLines, bLines } = await boot();
     await take(r);
     const a = plays(await aLines());

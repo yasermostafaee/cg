@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { IdSchema, LiveFitModeSchema, LiveSourceIdSchema } from '@cg/shared-schema';
+import {
+  IdSchema,
+  LiveFitModeSchema,
+  LiveSourceIdSchema,
+  PlayoutMediaSourceIdSchema,
+} from '@cg/shared-schema';
 import { fixedBankEnd, lowBankEnd, type FixedLayerBank } from './fixedLayers.js';
 import { LAYER_BANDS } from '../layer-bands.js';
 import { defineChannel } from '../channel.js';
@@ -288,6 +293,8 @@ export const SourceDefinitionIdSchema = z
   .max(64)
   .regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/, 'a source id is alphanumeric with "_" and "-"');
 
+const SourceCatalogIdSchema = SourceDefinitionIdSchema.or(PlayoutMediaSourceIdSchema);
+
 /**
  * 🔴 `MEDIA-PLATES-01` — **WHAT A MEDIA CLIP DOES WHEN A LOOK HIDES ITS PLATE**, per clip and
  * station-wide (the market's common shape: vMix's Auto Pause / Auto Restart, Cinegy's Free Run):
@@ -305,8 +312,8 @@ export type MediaWhenHidden = z.infer<typeof MediaWhenHiddenSchema>;
 
 /** ONE live this installation has, defined without reference to any template. */
 export const SourceDefinitionSchema = z.object({
-  /** Installation-generated and STABLE — see {@link SourceDefinitionIdSchema}. */
-  id: SourceDefinitionIdSchema,
+  /** Stable local definition or Playout catalogue id. */
+  id: SourceCatalogIdSchema,
   /**
    * What this source IS, in the operator's words: `Studio A`, `Baku`, `Skype 1`.
    *
@@ -598,7 +605,7 @@ export const TemplateSourceAssignmentSchema = z.object({
   channel: z.number().int().positive().optional(),
   templateId: IdSchema,
   plateId: LiveSourceIdSchema,
-  sourceId: SourceDefinitionIdSchema,
+  sourceId: SourceCatalogIdSchema,
   /**
    * ⭐ `C-028` — **the OPERATOR's fit-mode override for this plate, and the reason the
    * mode chain runs the opposite way round from the aspect chain.**
@@ -1365,7 +1372,7 @@ export const SourcesSetConfigChannel = defineChannel(
  * is played is the bridge's own read, never anything a console sends back.
  */
 export const ConsoleMediaItemSchema = z.object({
-  id: SourceDefinitionIdSchema,
+  id: SourceCatalogIdSchema,
   name: z.string().min(1),
   hasAudio: z.boolean().optional(),
   durationMs: z.number().nonnegative().optional(),
@@ -1414,7 +1421,7 @@ export const MEDIA_THUMBNAIL_DATA_URL_PREFIX = 'data:image/jpeg;base64,';
 /** Read the Playout's existing poster for a D11 media row known to the Bridge. */
 export const SourcesMediaThumbnailChannel = defineChannel(
   'sources.media-thumbnail',
-  z.object({ id: SourceDefinitionIdSchema }),
+  z.object({ id: SourceCatalogIdSchema }),
   z.object({
     ok: z.boolean(),
     dataUrl: z
@@ -1454,7 +1461,7 @@ export const MEDIA_PLAYBACK_REFUSALS = ['unknown-media'] as const;
 export const SourcesSetMediaPlaybackChannel = defineChannel(
   'sources.set-media-playback',
   z.object({
-    mediaId: z.string().min(1).max(64),
+    mediaId: z.string().min(1).max(64).or(PlayoutMediaSourceIdSchema),
     loop: z.boolean(),
     whenHidden: MediaWhenHiddenSchema,
   }),

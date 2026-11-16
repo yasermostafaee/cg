@@ -32,7 +32,11 @@
       durable command IDs, ambiguous results and replica readiness.
 - [x] Check the installed `2.19.0-externalcg.11` endpoints on both engines. Channel
       `apasai` returned `cg.channelNotMigrated` on owner and state on both engines.
-- [ ] Verify whole-layout state and a mirrored media plate with the managed contract.
+- [x] Review the `.12` OpenAPI, actual requests and two/four Core evidence. The Playout
+      harness applied the complete Live, video and HTML layout, transferred control and
+      preserved the previous image on a forced rollback. Real CG acceptance remains open.
+- [ ] Verify whole-layout state and a mirrored media plate with the real CG Bridge and the
+      managed contract on an isolated channel.
 - [ ] Inspect B's authenticated D11 match for the flagged media on the target station.
 - [ ] Integrate the managed route and verify Take, Update, Next, Stop, Clear and transfer with
       the real CG Bridge and Control on an isolated redundant channel.

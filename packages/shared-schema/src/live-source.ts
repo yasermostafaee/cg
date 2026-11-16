@@ -3,6 +3,11 @@ import { IdSchema } from './primitives.js';
 import { LivePlateMaskSchema, LiveRevealMaskSchema, LiveSourceIdSchema } from './elements.js';
 import { LiveCropFocusSchema, LiveFitModeSchema, LiveFrameTargetSchema } from './live-fit.js';
 
+// Playout D11 replica IDs include a 64-character hex suffix. The catalogue adds md-.
+const D11_MEDIA_ID = '[A-Za-z0-9_-]{1,128}';
+export const PlayoutMediaIdSchema = z.string().regex(new RegExp(`^${D11_MEDIA_ID}$`));
+export const PlayoutMediaSourceIdSchema = z.string().regex(new RegExp(`^md-${D11_MEDIA_ID}$`));
+
 /**
  * D-137 / C-015 — the flattened axis-aligned rect a Live Source occupies, in the
  * SCENE's own pixel space (the entry composition's `resolution`), NOT in the

@@ -12820,6 +12820,15 @@ the origin the Playout's CORS list admits. Tests: `dev-station.spec.ts` (through
 
 ## [x] B-286 — a backup server is sent the primary's media paths, byte for byte ⟨priority: medium⟩ — FILED 2026-09-27 by `PLAYOUT-SOURCES-01` §0.8 · CLOSED IN CODE 2026-09-30 by `PLAYOUT-FEATURES-01` A (§4) · archived 2026-10-03 (`openspec/changes/archive/2026-10-03-playout-features`) · owed: a Playout pair on `2.9.1`
 
+**2026-11-17 follow-up.** An authenticated D11 response from Playout
+`2.19.0-externalcg.12` returned a synced video under a 72-character `replica-…` ID.
+CG's 48-character D10 limit previously discarded the row before the exact fingerprint
+match. The D11-specific schema now accepts valid IDs through the reported 128-character
+limit and preserves the ID through source binding. The Bridge test with two physical
+channel numbers reproduces the missing B `PLAY` on the old parser, then requires B's
+local path and refuses a same-name video with a different fingerprint. The reported
+station's own authenticated D11 result remains to be collected.
+
 The bridge builds each AMCP line once, and `RedundancyAdapter.send` mirrors that SAME string to
 server B (`mirror-sync`, the default — `redundancy-adapter.ts:250-253`) or replays the journaled
 string at failover (`:195-199`, `:492-503`). There is one source catalogue per bridge, and a

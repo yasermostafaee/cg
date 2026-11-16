@@ -95,6 +95,20 @@ describe('authored frame graphics', () => {
     effects: CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS,
   };
 
+  it('persists a Playout replica media catalogue id on a frame', () => {
+    const sourceId = 'md-replica-43564423a0707662019d6630a6ced3a60e0260707a31081dee4d5f76bf6eecf8';
+    const withSourceId = (id: string) => ({
+      ...layout,
+      frames: layout.frames.map((frame) => ({ ...frame, sourceId: id })),
+    });
+    expect(ControlLiveLayoutSchema.parse(withSourceId(sourceId)).frames[0]?.sourceId).toBe(
+      sourceId,
+    );
+    expect(ControlLiveLayoutSchema.safeParse(withSourceId('in-' + 'a'.repeat(70))).success).toBe(
+      false,
+    );
+  });
+
   it('returns shared and preset-local graphics in the order the player uses', () => {
     const saved = ControlLiveLayoutSchema.parse(layout);
     expect(controlLiveLayoutAttachments(saved)).toEqual([logo, guestBug, legacy]);
