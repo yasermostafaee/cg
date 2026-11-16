@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
+import { lookPlateFits } from '@cg/shared-ipc';
 import {
   aggregateBoundCompositionFields,
   ControlLiveLayoutSchema,
@@ -11,6 +12,7 @@ import {
   elementDigitsOf,
   fieldDigitsOf,
   flattenElements,
+  runtimeShortfall,
   type ControlLiveLayout,
   type ControlLiveLayoutPreset,
   type ControlLiveLayoutTitleStyle,
@@ -62,6 +64,69 @@ function layoutFixture(): ControlLiveLayout {
 }
 
 describe('CG Control authored live layouts', () => {
+  it('delivers independent preset aspect and fit while keeping each plate and linked artwork shared', async () => {
+    const layout = layoutFixture();
+    const [panel, solo] = layout.presets;
+    if (panel === undefined || solo === undefined) throw new Error('Fixture has no presets');
+    const plate = layout.frames[1]!;
+    panel.plateAspectRatio = 3 / 4;
+    panel.plateFitMode = 'cover';
+    panel.plateOverrides = {
+      'frame-right': { aspectRatio: 4 / 3, fitMode: 'contain' },
+    };
+    solo.name = 'Single';
+    solo.frameIds = [plate.id];
+    solo.plateAspectRatio = 16 / 9;
+    solo.plateFitMode = 'contain';
+
+    const bytes = await compileControlLiveLayout(layout);
+    const { manifest } = await unpack(bytes);
+    expect(manifest.compatibility.minRuntimeVersion).toBe('1.2.11');
+    expect(runtimeShortfall(manifest.compatibility.minRuntimeVersion, '1.2.8')).not.toBeNull();
+    expect((await readControlLiveLayout(bytes)).layout).toEqual(layout);
+
+    const { template } = await produceTemplateDelivery(bytes);
+    const carrier = template.liveSources!;
+    const active = carrier.looks?.find(({ id }) => id === panel.id);
+    const single = carrier.looks?.find(({ id }) => id === solo.id);
+    const focusId = controlLiveLayoutFocusLookId(panel.id, plate.id);
+    const focused = carrier.looks?.find(({ id }) => id === focusId);
+    const aspectOf = (rect: { width: number; height: number } | undefined) =>
+      rect === undefined ? undefined : rect.width / rect.height;
+    expect(aspectOf(active?.rects[plate.id])).toBeCloseTo(3 / 4);
+    expect(aspectOf(active?.rects['frame-right'])).toBeCloseTo(4 / 3);
+    expect(aspectOf(single?.rects[plate.id])).toBeCloseTo(16 / 9);
+    expect(focused?.rects[plate.id]).toEqual({ ...layout.resolution, x: 0, y: 0 });
+    expect(lookPlateFits(carrier, panel.id)).toEqual({
+      'frame-anchor': 'cover',
+      'frame-left': 'cover',
+      'frame-right': 'contain',
+    });
+    expect(lookPlateFits(carrier, solo.id)).toEqual({ [plate.id]: 'contain' });
+    expect(lookPlateFits(carrier, focusId)).toEqual({ [plate.id]: 'contain' });
+
+    const artwork = active?.transitionFrames?.[plate.id];
+    expect(artwork).toMatchObject({
+      artworkId: 'layout-frame-' + plate.id,
+      elementId: plate.id + '-plate',
+    });
+    expect(single?.transitionFrames?.[plate.id]).toMatchObject({
+      artworkId: artwork?.artworkId,
+      elementId: artwork?.elementId,
+    });
+    expect(focused?.transitionFrames?.[plate.id]).toMatchObject({
+      artworkId: artwork?.artworkId,
+      elementId: artwork?.elementId,
+    });
+    expect(carrier.sources.filter(({ sourceId }) => sourceId === plate.id)).toHaveLength(1);
+    expect(template.sharedFrameTitles).toContainEqual(
+      expect.arrayContaining([
+        [panel.id, plate.id, 'title'],
+        [solo.id, plate.id, 'title'],
+      ]),
+    );
+  });
+
   it('ships a saved plate border in the shared artwork used by presets and Focus', async () => {
     const layout = layoutFixture();
     const plate = layout.frames[1]!;

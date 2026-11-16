@@ -10,6 +10,8 @@ export interface LiveSourceLayoutOptions {
   verticalGap?: number;
   /** Two plates may sit side by side or one above the other. */
   twoPlateLayout?: TwoPlateLayout;
+  /** An authored grid can keep its chosen membership in each row. */
+  rowCounts?: readonly number[];
   /** Reverse seat order without changing layer/z order. */
   reverse?: boolean;
 }
@@ -136,6 +138,13 @@ export function liveSourceAutoLayoutRowCounts(
     sources.some(({ aspect }) => !Number.isFinite(aspect) || aspect <= 0)
   ) {
     return [];
+  }
+  if (options.rowCounts !== undefined) {
+    const { rowCounts } = options;
+    return rowCounts.every((count) => Number.isSafeInteger(count) && count > 0) &&
+      rowCounts.reduce((sum, count) => sum + count, 0) === sources.length
+      ? rowCounts
+      : [];
   }
   if (sources.length === 2) {
     return liveSourceRowCounts(sources.length, bias, options.twoPlateLayout ?? 'horizontal');

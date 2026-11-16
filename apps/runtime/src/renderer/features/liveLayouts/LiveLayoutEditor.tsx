@@ -29,6 +29,7 @@ import {
   type ControlLiveLayoutBackground,
   type ControlLiveLayoutArrangement,
   type ControlLiveLayoutFrameAttachment,
+  type ControlLiveLayoutPlateOverride,
   type ControlLiveLayoutPreset,
   type ControlLiveLayoutTitleStyle,
   type LiveRevealRect,
@@ -134,6 +135,16 @@ function arrangementForCount(
   if (count > 2 && arrangement === 'top-and-bottom') return 'grid-top';
   if (count === 4 && arrangement === 'grid-bottom') return 'grid-top';
   return arrangement;
+}
+
+function omitPlateOverride(
+  preset: ControlLiveLayoutPreset,
+  plateId: string,
+): Pick<ControlLiveLayoutPreset, 'plateOverrides'> {
+  const overrides = preset.plateOverrides;
+  if (overrides === undefined || !Object.hasOwn(overrides, plateId)) return {};
+  const { [plateId]: _removed, ...remaining } = overrides;
+  return { plateOverrides: Object.keys(remaining).length > 0 ? remaining : undefined };
 }
 
 export function LiveLayoutEditor({
@@ -287,6 +298,22 @@ export function LiveLayoutEditor({
     updatePreset(changes);
   }
 
+  function updatePlateOverride(patch: ControlLiveLayoutPlateOverride): void {
+    if (preset === undefined || frame === undefined || !preset.frameIds.includes(frame.id)) return;
+    const selection = { ...preset.plateOverrides?.[frame.id], ...patch };
+    const changes =
+      selection.aspectRatio === undefined && selection.fitMode === undefined
+        ? omitPlateOverride(preset, frame.id)
+        : { plateOverrides: { ...preset.plateOverrides, [frame.id]: selection } };
+    if (
+      Object.keys(controlLiveLayoutRects(layout, { ...preset, ...changes })).length !==
+      preset.frameIds.length
+    )
+      return;
+    if ('aspectRatio' in patch) rebuildArrangement(changes);
+    else updatePreset(changes);
+  }
+
   function choosePreset(next: ControlLiveLayoutPreset): void {
     setFocusId(undefined);
     setAttachmentEditing(false);
@@ -389,6 +416,7 @@ export function LiveLayoutEditor({
         return {
           ...candidate,
           frameIds,
+          ...omitPlateOverride(candidate, frame.id),
           arrangement: arrangementForCount(candidate.arrangement, frameIds.length),
           hiddenTitles: candidate.hiddenTitles.filter((id) => id !== frame.id),
           hiddenFocusTitles: candidate.hiddenFocusTitles.filter((id) => id !== frame.id),
@@ -410,6 +438,7 @@ export function LiveLayoutEditor({
       : preset.frameIds.filter((value) => value !== id);
     rebuildArrangement({
       frameIds,
+      ...(!included && omitPlateOverride(preset, id)),
       arrangement: arrangementForCount(preset.arrangement, frameIds.length),
       ...(!included &&
         preset.frameAttachments !== undefined && {
@@ -898,6 +927,7 @@ export function LiveLayoutEditor({
                   layout={layout}
                   preset={preset}
                   onChange={rebuildArrangement}
+                  onFitChange={(plateFitMode) => updatePreset({ plateFitMode })}
                 />
               )}
               <LiveLayoutEditorEffects
@@ -1156,6 +1186,19 @@ export function LiveLayoutEditor({
                 />
                 <LiveLayoutEditorFrameOptions
                   frame={frame}
+                  presetOverrides={
+                    preset === undefined || !preset.frameIds.includes(frame.id)
+                      ? undefined
+                      : {
+                          id: preset.id,
+                          value: preset.plateOverrides?.[frame.id],
+                          inheritedAspect:
+                            preset.plateAspectRatio ??
+                            layout.resolution.width / layout.resolution.height,
+                          inheritedFit: preset.plateFitMode ?? frame.fitMode,
+                          onChange: updatePlateOverride,
+                        }
+                  }
                   activeIndex={maskIndex}
                   canEditMask={canEditMask}
                   editingMask={editingMask}

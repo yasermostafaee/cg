@@ -16,8 +16,14 @@ import {
   DEFAULT_INPUT_SLIDE_DIRECTION,
   InputTransitionDirectionSchema,
 } from './input-transition.js';
-import { LiveFitModeSchema, LiveFrameResizeSchema } from './live-fit.js';
-import { calculateLiveSourceAutoLayout } from './live-source-auto-layout.js';
+import {
+  DEFAULT_LIVE_FIT_MODE,
+  fitPictureToBox,
+  LiveFitModeSchema,
+  LiveFrameResizeSchema,
+  type LiveFitMode,
+} from './live-fit.js';
+import { calculateLiveSourceAutoLayout, liveSourceRowCounts } from './live-source-auto-layout.js';
 import { PlayoutMediaSourceIdSchema, type LiveSourceRect } from './live-source.js';
 import {
   FrameRateSchema,
@@ -36,6 +42,8 @@ export const CONTROL_LIVE_LAYOUT_TITLE_SIZE_MIN_PERCENT = 1;
 export const CONTROL_LIVE_LAYOUT_TITLE_SIZE_MAX_PERCENT = 20;
 export const CONTROL_LIVE_LAYOUT_TITLE_SIZE_DEFAULT_PERCENT = 4.2;
 export const CONTROL_LIVE_LAYOUT_PLATE_BORDER_MAX_PX = 2160;
+export const CONTROL_LIVE_LAYOUT_PLATE_ASPECT_MIN = 0.25;
+export const CONTROL_LIVE_LAYOUT_PLATE_ASPECT_MAX = 4;
 
 const isFieldNamespaceId = (id: string): boolean =>
   !Object.prototype.hasOwnProperty.call(Object.prototype, id);
@@ -153,6 +161,16 @@ export type ControlLiveLayoutFrameAttachment = z.infer<
   typeof ControlLiveLayoutFrameAttachmentSchema
 >;
 
+const ControlLiveLayoutPlateAspectSchema = z
+  .number()
+  .min(CONTROL_LIVE_LAYOUT_PLATE_ASPECT_MIN)
+  .max(CONTROL_LIVE_LAYOUT_PLATE_ASPECT_MAX);
+const ControlLiveLayoutPlateOverrideSchema = z.object({
+  aspectRatio: ControlLiveLayoutPlateAspectSchema.optional(),
+  fitMode: LiveFitModeSchema.optional(),
+});
+export type ControlLiveLayoutPlateOverride = z.infer<typeof ControlLiveLayoutPlateOverrideSchema>;
+
 const ControlLiveLayoutPresetSchema = z.object({
   // Preset ids and frame ids exclude the separator used by the derived Focus ids.
   id: z
@@ -169,10 +187,37 @@ const ControlLiveLayoutPresetSchema = z.object({
   reverse: z.boolean(),
   hiddenTitles: z.array(ControlLiveLayoutFrameIdSchema).max(CONTROL_LIVE_LAYOUT_MAX_FRAMES),
   hiddenFocusTitles: z.array(ControlLiveLayoutFrameIdSchema).max(CONTROL_LIVE_LAYOUT_MAX_FRAMES),
+  plateAspectRatio: ControlLiveLayoutPlateAspectSchema.optional(),
+  plateFitMode: LiveFitModeSchema.optional(),
+  plateOverrides: z
+    .record(ControlLiveLayoutFrameIdSchema, ControlLiveLayoutPlateOverrideSchema)
+    .optional(),
   // Retained for packages that authored graphics separately for each preset.
   frameAttachments: z.array(ControlLiveLayoutFrameAttachmentSchema).optional(),
 });
 export type ControlLiveLayoutPreset = z.infer<typeof ControlLiveLayoutPresetSchema>;
+
+/** The authored shape of a plate in this preset, independent of its input signal. */
+export function controlLiveLayoutPlateAspect(
+  preset: ControlLiveLayoutPreset,
+  frameId: string,
+  { width, height }: Resolution,
+): number {
+  return preset.plateOverrides?.[frameId]?.aspectRatio ?? preset.plateAspectRatio ?? width / height;
+}
+
+/** The selected picture fit inherits the plate's previous setting for older layouts. */
+export function controlLiveLayoutPlateFit(
+  preset: ControlLiveLayoutPreset,
+  frame: Pick<ControlLiveLayoutFrame, 'id' | 'fitMode'>,
+): LiveFitMode {
+  return (
+    preset.plateOverrides?.[frame.id]?.fitMode ??
+    preset.plateFitMode ??
+    frame.fitMode ??
+    DEFAULT_LIVE_FIT_MODE
+  );
+}
 
 const ControlLiveLayoutBackgroundSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('none') }),
@@ -281,6 +326,8 @@ export const ControlLiveLayoutSchema = z
         if (preset[key].some((id) => !frameIds.has(id)))
           issue(['presets', index, key], 'This preset refers to a removed frame.');
       }
+      if (Object.keys(preset.plateOverrides ?? {}).some((id) => !preset.frameIds.includes(id)))
+        issue(['presets', index, 'plateOverrides'], 'Plate overrides must belong to this preset.');
       const attachments = preset.frameAttachments ?? [];
       if (new Set(attachments.map(({ id }) => id)).size !== attachments.length)
         issue(['presets', index, 'frameAttachments'], 'Frame attachments must have distinct ids.');
@@ -392,24 +439,34 @@ export function controlLiveLayoutRects(
 ): Record<string, LiveSourceRect> {
   const { width, height } = resolution;
   const { horizontalGap, verticalGap, arrangement } = preset;
-  const aspect = width / height;
   const ids = controlLiveLayoutPresetFrameIds(preset);
-  const count = ids.length;
-  const [first, ...guests] = ids;
+  const plates = ids.map((id) => ({
+    id,
+    aspect: controlLiveLayoutPlateAspect(preset, id, resolution),
+  }));
+  const count = plates.length;
+  const [first, ...guests] = plates;
   const rects = Object.create(null) as Record<string, LiveSourceRect>;
   if (first === undefined) return rects;
+  const canvas = { x: 0, y: 0, width, height };
   if (count === 1) {
-    rects[first] = { x: 0, y: 0, width, height };
+    rects[first.id] =
+      first.aspect === width / height
+        ? canvas
+        : fitPictureToBox(canvas, first.aspect, 'contain').visible;
     return rects;
   }
 
   if (arrangement === 'grid-top' || arrangement === 'grid-bottom') {
-    const cells = calculateLiveSourceAutoLayout(
-      ids.map((id) => ({ id, aspect })),
-      resolution,
-      arrangement === 'grid-bottom' ? 'more-bottom' : 'more-top',
-      { horizontalGap, verticalGap },
-    );
+    const bias = arrangement === 'grid-bottom' ? 'more-bottom' : 'more-top';
+    const authoredShape =
+      preset.plateAspectRatio !== undefined ||
+      ids.some((id) => preset.plateOverrides?.[id]?.aspectRatio !== undefined);
+    const cells = calculateLiveSourceAutoLayout(plates, resolution, bias, {
+      horizontalGap,
+      verticalGap,
+      ...(authoredShape && { rowCounts: liveSourceRowCounts(count, bias) }),
+    });
     for (const { id, ...rect } of cells) rects[id] = rect;
     return rects;
   }
@@ -419,44 +476,45 @@ export function controlLiveLayoutRects(
   const availableHeight = height - margin * 2;
   if (arrangement === 'host-and-guests' && guests.length > 1) {
     const gapBudget = verticalGap * (guests.length - 1);
+    const inverseAspectSum = guests.reduce((sum, { aspect }) => sum + 1 / aspect, 0);
+    // The guest column has the host's height, including its vertical gaps.
     const hostHeight = Math.min(
       availableHeight,
-      ((availableWidth - horizontalGap) / aspect + gapBudget / guests.length) /
-        (1 + 1 / guests.length),
+      (availableWidth - horizontalGap + gapBudget / inverseAspectSum) /
+        (first.aspect + 1 / inverseAspectSum),
     );
-    const guestHeight = (hostHeight - gapBudget) / guests.length;
-    if (guestHeight <= 0) return rects;
-    const hostWidth = hostHeight * aspect;
-    const guestWidth = guestHeight * aspect;
+    const guestWidth = (hostHeight - gapBudget) / inverseAspectSum;
+    if (guestWidth <= 0) return rects;
+    const hostWidth = hostHeight * first.aspect;
     const x = (width - hostWidth - guestWidth - horizontalGap) / 2;
-    const y = (height - hostHeight) / 2;
-    rects[first] = { x, y, width: hostWidth, height: hostHeight };
-    guests.forEach((id, index) => {
-      rects[id] = {
-        x: x + hostWidth + horizontalGap,
-        y: y + index * (guestHeight + verticalGap),
-        width: guestWidth,
-        height: guestHeight,
-      };
-    });
+    let y = (height - hostHeight) / 2;
+    rects[first.id] = { x, y, width: hostWidth, height: hostHeight };
+    for (const { id, aspect } of guests) {
+      const guestHeight = guestWidth / aspect;
+      rects[id] = { x: x + hostWidth + horizontalGap, y, width: guestWidth, height: guestHeight };
+      y += guestHeight + verticalGap;
+    }
     return rects;
   }
 
   const vertical = arrangement === 'top-and-bottom' && count === 2;
-  const frameHeight = vertical
-    ? Math.min(availableWidth / aspect, (availableHeight - verticalGap * (count - 1)) / count)
-    : Math.min(availableHeight, (availableWidth - horizontalGap * (count - 1)) / (count * aspect));
-  if (frameHeight <= 0) return rects;
-  const frameWidth = frameHeight * aspect;
-  const groupWidth = vertical ? frameWidth : frameWidth * count + horizontalGap * (count - 1);
-  const groupHeight = vertical ? frameHeight * count + verticalGap * (count - 1) : frameHeight;
-  ids.forEach((id, index) => {
-    rects[id] = {
-      x: (width - groupWidth) / 2 + (vertical ? 0 : index * (frameWidth + horizontalGap)),
-      y: (height - groupHeight) / 2 + (vertical ? index * (frameHeight + verticalGap) : 0),
-      width: frameWidth,
-      height: frameHeight,
-    };
-  });
+  const gap = vertical ? verticalGap : horizontalGap;
+  const totalWeight = plates.reduce((sum, { aspect }) => sum + (vertical ? 1 / aspect : aspect), 0);
+  const totalGap = gap * (count - 1);
+  const mainLimit = vertical ? availableHeight : availableWidth;
+  const crossLimit = vertical ? availableWidth : availableHeight;
+  const crossSize = Math.min(crossLimit, (mainLimit - totalGap) / totalWeight);
+  if (crossSize <= 0) return rects;
+  const mainSize = vertical ? height : width;
+  const crossCanvas = vertical ? width : height;
+  let cursor = (mainSize - (crossSize * totalWeight + totalGap)) / 2;
+  const cross = (crossCanvas - crossSize) / 2;
+  for (const { id, aspect } of plates) {
+    const size = crossSize * (vertical ? 1 / aspect : aspect);
+    rects[id] = vertical
+      ? { x: cross, y: cursor, width: crossSize, height: size }
+      : { x: cursor, y: cross, width: size, height: crossSize };
+    cursor += size + gap;
+  }
   return rects;
 }

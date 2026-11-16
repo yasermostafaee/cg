@@ -52,6 +52,7 @@ export const liveLayoutArtwork = {
   titleShadow: '#00000080',
   titleBackground: '#101B28DE',
   newTitleBackground: '#00000099',
+  plateBorder: '#ffffff',
 } as const;
 
 /*

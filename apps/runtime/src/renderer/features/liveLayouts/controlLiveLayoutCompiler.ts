@@ -6,11 +6,13 @@ import {
   ControlLiveLayoutSchema,
   CUT_LOOK_TRANSITION,
   DEFAULT_LIVE_FIT_MODE,
+  LIVE_PRESET_FIT_RUNTIME_VERSION,
   controlLiveLayoutAttachments,
   controlLiveLayoutFocusLookId,
   controlLiveLayoutFocusTarget,
   controlLiveLayoutFontFamily,
   controlLiveLayoutPlateBorder,
+  controlLiveLayoutPlateFit,
   controlLiveLayoutRects,
   controlLiveLayoutTitleHidden,
   liveRevealSceneRect,
@@ -32,6 +34,7 @@ import {
   type FieldBinding,
   type FrameRate,
   type Layer,
+  type LiveFitMode,
   type LiveSourceRect,
   type Look,
   type Resolution,
@@ -580,9 +583,17 @@ export function buildControlLiveLayoutScene(
     focused: boolean,
   ) => {
     const instanceId = 'layout-look-' + id;
+    const plateFits: Record<string, LiveFitMode> = {};
     const children = frames.flatMap((frame, index): CompositionElement[] => {
       const rect = rects[frame.id];
       if (rect === undefined) return [];
+      if (
+        !focused &&
+        (preset.plateOverrides?.[frame.id]?.fitMode !== undefined ||
+          preset.plateFitMode !== undefined)
+      ) {
+        plateFits[frame.id] = controlLiveLayoutPlateFit(preset, frame);
+      }
       const attachments = byFrame.get(frame.id) ?? [];
       const included = new Set([
         ...sharedAttachmentIds,
@@ -638,6 +649,7 @@ export function buildControlLiveLayoutScene(
       instanceId,
       entered: CUT_LOOK_TRANSITION,
       allowOperatorAutoLayout: !focused,
+      ...(Object.keys(plateFits).length > 0 && { plateFits }),
     });
   };
 
@@ -813,9 +825,12 @@ export async function compileControlLiveLayout(
   }
 
   let minRuntimeVersion = requiredRuntimeVersionForScene(scene, true);
-  if (layout.background.kind === 'none' || (layout.frameAttachments?.length ?? 0) > 0) {
+  if (
+    minRuntimeVersion !== LIVE_PRESET_FIT_RUNTIME_VERSION &&
+    (layout.background.kind === 'none' || (layout.frameAttachments?.length ?? 0) > 0)
+  ) {
     minRuntimeVersion = '1.2.8';
-  } else if (usedAttachmentIds.size > 0) {
+  } else if (minRuntimeVersion !== LIVE_PRESET_FIT_RUNTIME_VERSION && usedAttachmentIds.size > 0) {
     minRuntimeVersion = '1.2.7';
   }
   const packageBytes = await pack({

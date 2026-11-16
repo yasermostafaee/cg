@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { LiveSourceIdSchema } from './elements.js';
+import { LiveFitModeSchema } from './live-fit.js';
 import { IdSchema } from './primitives.js';
 
 /**
@@ -89,6 +91,8 @@ export const LookSchema = z.object({
   entered: LookTransitionSchema.default(CUT_LOOK_TRANSITION),
   /** Whether this preset grants CG Control's Auto layout tool. Omission uses the legacy output setting. */
   allowOperatorAutoLayout: z.boolean().optional(),
+  /** Overrides for reused plate artwork whose input fit differs in this look. */
+  plateFits: z.record(LiveSourceIdSchema, LiveFitModeSchema).optional(),
 });
 export type Look = z.infer<typeof LookSchema>;
 

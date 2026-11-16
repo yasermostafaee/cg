@@ -4,6 +4,7 @@ import {
   DEFAULT_LIVE_FIT_MODE,
   controlLiveLayoutFrameAttachments,
   controlLiveLayoutPlateBorder,
+  controlLiveLayoutPlateFit,
   controlLiveLayoutPresetFrameIds,
   controlLiveLayoutTitleHidden,
   fitPictureToBox,
@@ -461,7 +462,7 @@ export function LiveLayoutEditorPreview({
               ? undefined
               : frameAttachmentPlateRect({ ...rect, x: 0, y: 0 }, graphicWithInput, imported);
           const importedPlate = imported?.plate?.element;
-          const previewInput =
+          const authoredInput =
             importedPlate === undefined
               ? input
               : {
@@ -469,6 +470,10 @@ export function LiveLayoutEditorPreview({
                   liveMask: importedPlate.liveMask,
                   fitMode: importedPlate.fitMode ?? input.fitMode,
                 };
+          const previewInput =
+            focused === undefined
+              ? { ...authoredInput, fitMode: controlLiveLayoutPlateFit(preset, authoredInput) }
+              : authoredInput;
           return (
             <div
               key={id}

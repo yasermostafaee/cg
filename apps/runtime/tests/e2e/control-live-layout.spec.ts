@@ -498,7 +498,9 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await expect(focusedTitle).toBeVisible();
 
     await editor.getByRole('button', { name: 'Edit plate 3', exact: true }).click();
-    await expect(editor.getByRole('group', { name: 'Input fit', exact: true })).toBeHidden();
+    await expect(
+      editor.getByRole('group', { name: 'Plate input fit across presets', exact: true }),
+    ).toBeHidden();
     await editor.getByText('Advanced plate controls', { exact: true }).click();
     const thirdShot = editorStage.locator('[data-layout-preview-shot][data-frame-number="3"]');
     await editor.getByLabel('Border color', { exact: true }).fill('#fec352');
@@ -998,6 +1000,44 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
         .getByRole('group', { name: 'Background', exact: true })
         .getByRole('button', { name: 'None', exact: true });
     const copiedStage = copy.locator('[data-layout-preview]');
+    const aspect = (target: Locator) =>
+      target.evaluate((node) => {
+        const { width, height } = node.getBoundingClientRect();
+        return width / height;
+      });
+    const copiedPlate = (number: number) =>
+      copiedStage.locator(`[data-layout-preview-shot][data-frame-number="${number}"]`);
+    const presetAspect = copy.getByLabel('Preset plate aspect ratio', { exact: true });
+    const presetFit = copy.getByLabel('Preset input fit', { exact: true });
+    await copy.getByRole('button', { name: 'Three-up', exact: true }).click();
+    await presetAspect.selectOption({ label: '3:4' });
+    await presetFit.selectOption('cover');
+    for (const number of [1, 2, 3]) {
+      await expect.poll(() => aspect(copiedPlate(number))).toBeCloseTo(0.75, 2);
+    }
+    const portraitImage = copiedPlate(1).locator('.cg-live-layout-shot-picture img');
+    const imageOverflow = (target: Locator) =>
+      target.evaluate((node) => {
+        const image = node.getBoundingClientRect();
+        const box = node.parentElement!.getBoundingClientRect();
+        return [box.left - image.left, image.right - box.right] as const;
+      });
+    const [croppedLeft, croppedRight] = await imageOverflow(portraitImage);
+    expect(croppedLeft).toBeGreaterThan(0);
+    expect(croppedRight).toBeGreaterThan(0);
+    expect(croppedLeft).toBeCloseTo(croppedRight, 1);
+    await copy.getByRole('button', { name: 'Edit plate 2', exact: true }).click();
+    await copy.getByText('Advanced plate controls', { exact: true }).click();
+    await copy.getByLabel('Plate aspect ratio', { exact: true }).selectOption({ label: '4:3' });
+    await copy.getByLabel('Plate input fit', { exact: true }).selectOption('contain');
+    await expect.poll(() => aspect(copiedPlate(2))).toBeCloseTo(4 / 3, 2);
+    await expect.poll(() => aspect(copiedPlate(1))).toBeCloseTo(0.75, 2);
+    await copy.getByRole('button', { name: 'Studio solo', exact: true }).click();
+    await presetAspect.selectOption({ label: '16:9' });
+    await presetFit.selectOption('contain');
+    await expect.poll(() => aspect(copiedPlate(1))).toBeCloseTo(16 / 9, 2);
+    await expect.poll(() => imageOverflow(portraitImage)).toEqual([0, 0]);
+    await copy.getByRole('button', { name: 'Three-up', exact: true }).click();
     await noBackground(copy).click();
     await expect(noBackground(copy)).toHaveAttribute('aria-pressed', 'true');
     await expect(copy.getByText('panel.png', { exact: true })).toHaveCount(0);
@@ -1015,6 +1055,17 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     if (nextTemplate === undefined) throw new Error('The second live layout was not saved');
     expect(nextTemplate.templateId).not.toBe(listed.templateId);
     expect(nextTemplate.controlLiveLayout?.background).toEqual({ kind: 'none' });
+    const nextLayout = nextTemplate.controlLiveLayout!;
+    const thirdUp = nextLayout.presets.find(({ name }) => name === 'Three-up');
+    expect(thirdUp).toMatchObject({
+      plateAspectRatio: 0.75,
+      plateFitMode: 'cover',
+      plateOverrides: { [nextLayout.frames[1]!.id]: { aspectRatio: 4 / 3, fitMode: 'contain' } },
+    });
+    expect(nextLayout.presets.find(({ name }) => name === 'Studio solo')).toMatchObject({
+      plateAspectRatio: 16 / 9,
+      plateFitMode: 'contain',
+    });
     expect(runtime.templateGet(listed.templateId, 1)?.controlLiveLayoutSource).toBe(
       listed.controlLiveLayoutSource,
     );
@@ -1054,9 +1105,11 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
       .click();
     await pvw.getByRole('button', { name: 'PLAY all 2 rehearsing', exact: true }).click();
     const transparentFrame = pvw.frameLocator('iframe[data-rehearsal-frame="transparent-panel"]');
-    await expect(
-      transparentFrame.locator('[data-cg-pvw-picture-part][data-source-id="feed-1"]').first(),
-    ).toBeVisible();
+    const transparentPicture = transparentFrame
+      .locator('[data-cg-pvw-picture-part][data-source-id="feed-1"]')
+      .first();
+    await expect(transparentPicture).toBeVisible();
+    await expect.poll(() => aspect(transparentPicture)).toBeCloseTo(0.75, 2);
     await expect(transparentFrame.locator('body')).toHaveCSS(
       'background-color',
       'rgba(0, 0, 0, 0)',

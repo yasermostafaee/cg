@@ -6,13 +6,16 @@ import {
   LIVE_REVEAL_MAX_RECTS,
   LiveRevealRectSchema,
   type ControlLiveLayoutFrame,
+  type ControlLiveLayoutPlateOverride,
   type LiveRevealRect,
 } from '@cg/shared-schema';
 import { Button } from '../../ui/Button.js';
 import { Checkbox } from '../../ui/Checkbox.js';
 import { ColorInput } from '../../ui/ColorInput.js';
 import { Icon } from '../../ui/Icon.js';
+import { liveLayoutArtwork } from '../../theme.js';
 import { LiveLayoutEditorNumber } from './LiveLayoutEditorNumber.js';
+import { LiveLayoutEditorPlatePresentation } from './LiveLayoutEditorPlatePresentation.js';
 import { LiveLayoutEditorSectionHeading } from './LiveLayoutEditorSectionHeading.js';
 import './live-layout-frame-options.css';
 
@@ -27,7 +30,7 @@ const RESIZE_CHOICES = [
   ['free', 'Free'],
 ] as const;
 
-const DEFAULT_BORDER = { color: '#ffffff', width: 0, radius: 0 };
+const DEFAULT_BORDER = { color: liveLayoutArtwork.plateBorder, width: 0, radius: 0 };
 
 const MASK_FIELDS = [
   { key: 'x', limit: 'width', label: 'Mask X (%)', min: 0 },
@@ -38,6 +41,7 @@ const MASK_FIELDS = [
 
 export function LiveLayoutEditorFrameOptions({
   frame,
+  presetOverrides,
   activeIndex,
   canEditMask,
   editingMask,
@@ -46,6 +50,15 @@ export function LiveLayoutEditorFrameOptions({
   onChange,
 }: {
   frame: ControlLiveLayoutFrame;
+  presetOverrides?:
+    | {
+        id: string;
+        value: ControlLiveLayoutPlateOverride | undefined;
+        inheritedAspect: number;
+        inheritedFit: ControlLiveLayoutFrame['fitMode'];
+        onChange: (patch: ControlLiveLayoutPlateOverride) => void;
+      }
+    | undefined;
   activeIndex: number;
   canEditMask: boolean;
   editingMask: boolean;
@@ -101,8 +114,25 @@ export function LiveLayoutEditorFrameOptions({
       }}
     >
       <LiveLayoutEditorSectionHeading icon={SlidersHorizontal} label="Advanced plate controls" />
-      <div className="cg-live-layout-frame-option-group" role="group" aria-label="Input fit">
-        <span>Input fit</span>
+      {presetOverrides !== undefined && (
+        <div className="cg-live-layout-frame-option-group" role="group" aria-label="This preset">
+          <span>This preset</span>
+          <LiveLayoutEditorPlatePresentation
+            key={`${presetOverrides.id}:${frame.id}`}
+            scope="plate"
+            value={presetOverrides.value}
+            inheritedAspect={presetOverrides.inheritedAspect}
+            inheritedFit={`Preset default · ${presetOverrides.inheritedFit === 'cover' ? 'Crop edges' : 'Fit whole picture'}`}
+            onChange={presetOverrides.onChange}
+          />
+        </div>
+      )}
+      <div
+        className="cg-live-layout-frame-option-group"
+        role="group"
+        aria-label="Plate input fit across presets"
+      >
+        <span>Plate default fit</span>
         <div className="cg-live-layout-frame-option-buttons">
           {FIT_CHOICES.map(([fitMode, label]) => (
             <Button

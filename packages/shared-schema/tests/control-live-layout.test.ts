@@ -6,8 +6,11 @@ import {
   controlLiveLayoutAttachments,
   controlLiveLayoutFrameAttachments,
   controlLiveLayoutMovePresetFrame,
+  controlLiveLayoutPlateAspect,
+  controlLiveLayoutPlateFit,
   controlLiveLayoutPresetFrameIds,
   controlLiveLayoutRects,
+  type ControlLiveLayoutArrangement,
   type ControlLiveLayoutFrameAttachment,
   type ControlLiveLayoutPreset,
 } from '../src/index.js';
@@ -65,6 +68,122 @@ describe('authored live layout frame order', () => {
     for (const seat of [-1, 0.5, 4]) {
       expect(controlLiveLayoutMovePresetFrame(preset, 'host', seat)).toBeUndefined();
     }
+  });
+});
+
+describe('live layout preset and plate shape', () => {
+  const mixed = {
+    ...preset,
+    plateAspectRatio: 4 / 3,
+    plateFitMode: 'cover' as const,
+    plateOverrides: {
+      'guest-c': { aspectRatio: 9 / 16, fitMode: 'contain' as const },
+      'guest-a': { aspectRatio: 16 / 9 },
+    },
+  };
+
+  it('uses the preset defaults and the selected plate overrides independently', () => {
+    const host = { id: 'host', fitMode: 'contain' as const };
+    const guest = { id: 'guest-c', fitMode: 'cover' as const };
+    expect(controlLiveLayoutPlateAspect(mixed, host.id, resolution)).toBe(4 / 3);
+    expect(controlLiveLayoutPlateAspect(mixed, guest.id, resolution)).toBe(9 / 16);
+    expect(controlLiveLayoutPlateFit(mixed, host)).toBe('cover');
+    expect(controlLiveLayoutPlateFit(mixed, guest)).toBe('contain');
+    expect(controlLiveLayoutPlateFit(preset, guest)).toBe('cover');
+    expect(controlLiveLayoutPlateFit(preset, { id: 'host' })).toBe('contain');
+  });
+
+  it('centres a solo portrait plate and keeps a legacy solo plate full frame', () => {
+    const solo = { ...preset, frameIds: ['guest-c'] };
+    expect(controlLiveLayoutRects({ resolution }, solo)['guest-c']).toEqual({
+      x: 0,
+      y: 0,
+      ...resolution,
+    });
+    const portrait = { ...mixed, frameIds: solo.frameIds };
+    expect(controlLiveLayoutRects({ resolution }, portrait)['guest-c']).toEqual({
+      x: 656.25,
+      y: 0,
+      width: 607.5,
+      height: 1080,
+    });
+  });
+
+  it.each([
+    ['side-by-side', 4],
+    ['top-and-bottom', 2],
+    ['grid-top', 3],
+    ['grid-bottom', 3],
+    ['grid-top', 4],
+    ['host-and-guests', 4],
+  ] satisfies [ControlLiveLayoutArrangement, number][])(
+    'preserves individual aspect ratios within the canvas for %s with %s plates',
+    (arrangement, count) => {
+      const candidate = { ...mixed, arrangement, frameIds: mixed.frameIds.slice(0, count) };
+      const rects = Object.entries(controlLiveLayoutRects({ resolution }, candidate));
+      expect(rects).toHaveLength(count);
+      for (const [index, [id, rect]] of rects.entries()) {
+        expect(rect.width / rect.height).toBeCloseTo(
+          controlLiveLayoutPlateAspect(candidate, id, resolution),
+          8,
+        );
+        expect(rect.x).toBeGreaterThanOrEqual(0);
+        expect(rect.y).toBeGreaterThanOrEqual(0);
+        expect(rect.x + rect.width).toBeLessThanOrEqual(resolution.width);
+        expect(rect.y + rect.height).toBeLessThanOrEqual(resolution.height);
+        for (const [, other] of rects.slice(index + 1)) {
+          const horizontal =
+            Math.max(rect.x, other.x) - Math.min(rect.x + rect.width, other.x + other.width);
+          const vertical =
+            Math.max(rect.y, other.y) - Math.min(rect.y + rect.height, other.y + other.height);
+          expect(
+            horizontal >= mixed.horizontalGap - 1e-8 || vertical >= mixed.verticalGap - 1e-8,
+          ).toBe(true);
+        }
+      }
+    },
+  );
+
+  it('keeps the requested fuller row for narrow plates and rejects an impossible gap', () => {
+    const narrow = { ...preset, plateAspectRatio: 9 / 16, frameIds: preset.frameIds.slice(0, 3) };
+    const rows = (arrangement: ControlLiveLayoutArrangement) =>
+      Object.values(controlLiveLayoutRects({ resolution }, { ...narrow, arrangement })).map(
+        ({ y }) => y,
+      );
+    const [topFirst, topSecond, topThird] = rows('grid-top');
+    const [bottomFirst, bottomSecond, bottomThird] = rows('grid-bottom');
+    if (topFirst === undefined || bottomFirst === undefined)
+      throw new Error('Both grid modes must place their first plate');
+    expect(topFirst).toBe(topSecond);
+    expect(topThird).toBeGreaterThan(topFirst);
+    expect(bottomSecond).toBe(bottomThird);
+    expect(bottomSecond).toBeGreaterThan(bottomFirst);
+    expect(
+      controlLiveLayoutRects({ resolution }, { ...mixed, horizontalGap: resolution.width }),
+    ).toEqual({});
+  });
+
+  it('round-trips settings and rejects invalid aspects and overrides for excluded plates', () => {
+    const create = (candidate: ControlLiveLayoutPreset) => ({
+      id: 'mixed-layout',
+      name: 'Panel',
+      resolution,
+      frameRate: 25,
+      frames: preset.frameIds.map((id) => ({ id, title: id })),
+      presets: [candidate],
+      defaultPresetId: candidate.id,
+      background: { kind: 'none' },
+      effects: CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS,
+    });
+    expect(ControlLiveLayoutSchema.parse(create(mixed)).presets).toEqual([mixed]);
+    for (const plateAspectRatio of [0, 1 / 5, 5, Infinity]) {
+      expect(
+        ControlLiveLayoutSchema.safeParse(create({ ...mixed, plateAspectRatio })).success,
+      ).toBe(false);
+    }
+    expect(
+      ControlLiveLayoutSchema.safeParse(create({ ...mixed, frameIds: ['host'] })).success,
+    ).toBe(false);
   });
 });
 

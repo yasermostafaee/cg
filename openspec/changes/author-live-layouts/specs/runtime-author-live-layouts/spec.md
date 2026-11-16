@@ -46,6 +46,14 @@ CG Control SHALL author multiple frames and presets in the channel's template ca
 - **AND** a zero-width border is hidden
 - **AND** the border is saved in the VCG without changing the input crop or mask
 
+#### Scenario: Frame one input differently in two presets
+
+- **WHEN** the operator gives a three-plate preset a 3:4 aspect ratio and Crop edges
+- **THEN** each plate uses a centered crop to fill its portrait box
+- **AND** each plate can override the preset ratio and input fit
+- **AND** a separate single-plate preset can show the same input at 16:9 with Fit whole picture
+- **AND** the editor, PVW and Programme use the saved preset framing
+
 #### Scenario: See the current editing selection
 
 - **WHEN** the operator selects a preset or a frame in the editor

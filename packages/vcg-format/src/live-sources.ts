@@ -571,9 +571,13 @@ export function collectLookCarrier(scene: Scene): {
         WINS this look, so reading the mode off any other element would seat one plate's picture
         under another plate's fit.
       */
-      if (el.fitMode !== undefined) {
+      const fitMode =
+        look.plateFits !== undefined && Object.hasOwn(look.plateFits, routeKey)
+          ? look.plateFits[routeKey]
+          : el.fitMode;
+      if (fitMode !== undefined) {
         const fits = fitsByLook.get(look.id);
-        if (fits !== undefined) fits[routeKey] = el.fitMode;
+        if (fits !== undefined) fits[routeKey] = fitMode;
       }
       if (el.cropFocus !== undefined) {
         const focuses = focusesByLook.get(look.id);
