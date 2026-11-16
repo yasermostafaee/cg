@@ -3,6 +3,41 @@
   "product": "APASAI CG",
   "releases": [
     {
+      "version": "1.2.9",
+      "title": {
+        "fa": "نسخهٔ ۱.۲.۹",
+        "en": "Release 1.2.9"
+      },
+      "date": "2026-11-16",
+      "status": "prepared",
+      "summary": {
+        "fa": "ویومتر چندکاناله و حرکت هماهنگ گرافیک با قاب در گذار Focus.",
+        "en": "Multichannel metering and frame-bound artwork during Focus transitions."
+      },
+      "features": [
+        {
+          "fa": "ویومتر در تنظیمات و انتخاب‌گر ورودی به تصویر ورودی می‌چسبد و کانال‌های گزارش‌شده را نشان می‌دهد. ویومتر PGM هم کانال‌های گزارش‌شدهٔ همان موتور را نشان می‌دهد.",
+          "en": "Input meters sit flush with the source picture in Settings and pickers. Input and programme meters show the audio channels each source or engine reports."
+        },
+        {
+          "fa": "Bridge می‌تواند سطح صدای ورودی زنده و خروجی Playlist را از API صوتی Playout دریافت کند.",
+          "en": "Bridge can read live-input and clean Playlist levels through the Playout source audio API."
+        }
+      ],
+      "fixes": [
+        {
+          "fa": "در گذار Push و Slide over بین قاب‌های Focus، گرافیک متصل با همان قاب حرکت می‌کند و همراه آن برش می‌خورد.",
+          "en": "Attached artwork moves and clips with its frame during Push and Slide over Focus switches."
+        },
+        {
+          "fa": "در Inspector، Move / resize effect افکت تغییر جای قاب و اندازهٔ آن را مشخص می‌کند و Preset effect به گذار پریست‌ها مربوط است.",
+          "en": "The Inspector labels geometry motion as Move / resize effect and uses Preset effect for preset transitions."
+        }
+      ],
+      "planned": [],
+      "downloadBaseUrl": null
+    },
+    {
       "version": "1.2.8",
       "title": {
         "fa": "نسخهٔ ۱.۲.۸",
