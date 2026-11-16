@@ -3,6 +3,28 @@
   "product": "APASAI CG",
   "releases": [
     {
+      "version": "1.2.10",
+      "title": {
+        "fa": "نسخهٔ ۱.۲.۱۰",
+        "en": "Release 1.2.10"
+      },
+      "date": "2026-11-17",
+      "status": "prepared",
+      "summary": {
+        "fa": "اصلاح شناسایی مدیای همگام‌شده روی سرور رزرو.",
+        "en": "Fixes identification of synced media on the backup engine."
+      },
+      "features": [],
+      "fixes": [
+        {
+          "fa": "CG Bridge شناسه‌های بلند کپی مدیا را از مخزن Playout می‌خواند و در صورت تطبیق اثرانگشت، مسیر خود سرور رزرو را برای پخش به کار می‌برد.",
+          "en": "CG Bridge accepts the longer replica media IDs from Playout and uses the reserve's local playback path when the fingerprints match."
+        }
+      ],
+      "planned": [],
+      "downloadBaseUrl": null
+    },
+    {
       "version": "1.2.9",
       "title": {
         "fa": "نسخهٔ ۱.۲.۹",
@@ -916,12 +938,7 @@
         "en": "This section tracks outstanding acceptance checks and features still in progress."
       },
       "features": [],
-      "fixes": [
-        {
-          "fa": "CG Bridge شناسه‌های بلند کپی مدیا را از مخزن Playout می‌خواند و در صورت تطبیق اثرانگشت، مسیر خود سرور رزرو را برای پخش به کار می‌برد.",
-          "en": "CG Bridge accepts the longer replica media IDs from Playout and uses the reserve's local playback path when the fingerprints match."
-        }
-      ],
+      "fixes": [],
       "planned": [
         {
           "fa": "روی خروجی PGM ایستگاه Playout، نمایش عنوان و شکل روی قاب، حفظ اتصال ورودی هنگام تغییر پریست، ماسک و Revert و پس‌زمینهٔ قاب بررسی شوند.",
