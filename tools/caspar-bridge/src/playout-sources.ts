@@ -89,10 +89,13 @@ export type MediaSearchAnswer =
  */
 export interface PlayoutSourcesProvider {
   /** D10. `etag` is the one held, for `If-None-Match`. */
-  readInputs(
-    etag: string | null,
-  ): Promise<
-    | { readonly kind: 'ok'; readonly body: unknown; readonly etag: string | null }
+  readInputs(etag: string | null): Promise<
+    | {
+        readonly kind: 'ok';
+        readonly body: unknown;
+        readonly etag: string | null;
+        readonly inputsServer?: string;
+      }
     | { readonly kind: 'not-modified' }
     | { readonly kind: 'failed' }
   >;
@@ -148,6 +151,7 @@ export class HttpPlayoutSources implements PlayoutSourcesProvider {
         kind: 'ok',
         body: parsePlayoutJson(await res.text()),
         etag: res.headers.get('etag'),
+        inputsServer: new URL(this.#inputsUrl).host,
       };
     } catch {
       return { kind: 'failed' };
@@ -488,7 +492,7 @@ export class PlayoutSources {
           );
         }
       }
-      this.#inputs = foldPlayoutInputsRead(this.#inputs, read, at);
+      this.#inputs = foldPlayoutInputsRead(this.#inputs, read, at, result.inputsServer);
       this.#etag = result.etag;
     }
     saveStore(this.#inputsPath, this.#inputs);

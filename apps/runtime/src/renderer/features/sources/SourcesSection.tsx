@@ -11,6 +11,7 @@ import { colors } from '../../theme.js';
 import { LiveInputCheckCard } from '../monitors/LiveInputCheckCard.js';
 import { useInputCheckSurface } from '../monitors/liveInputCheckContext.js';
 import { InputThumbnail } from './InputThumbnail.js';
+import { InputCatalogueServer } from './InputCatalogueServer.js';
 import { InputAudioMeter } from './InputAudioMeter.js';
 import {
   commitSourceBand,
@@ -122,15 +123,18 @@ export function SourcesSection({
 
   return (
     <>
-      <div className="cg-setup-list-head">
+      <div className="cg-setup-list-head cg-input-catalogue-heading">
         <h3>
           Inputs from the Playout <span className="cg-setup-count">{String(inputs.length)}</span>
         </h3>
-        <span className="cg-setup-read" data-sources-read="">
-          {catalog.inputsReadAt === undefined
-            ? 'Not read yet'
-            : `Last read ${READ_TIME.format(new Date(catalog.inputsReadAt))}`}
-        </span>
+        <div className="cg-input-catalogue-read">
+          <InputCatalogueServer server={catalog.inputsServer} />
+          <span className="cg-setup-read" data-sources-read="">
+            {catalog.inputsReadAt === undefined
+              ? 'Not read yet'
+              : `Last read ${READ_TIME.format(new Date(catalog.inputsReadAt))}`}
+          </span>
+        </div>
       </div>
       <LiveInputCheckCard surface={surface} />
       <section className="cg-card cg-resource-list" aria-label="Inputs from the Playout">

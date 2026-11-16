@@ -939,6 +939,15 @@
   color: var(--r-accent);
 }
 
+[data-pgm-screen][data-pgm-active]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border: 2px solid var(--r-accent);
+  pointer-events: none;
+}
+
 .cg-pgm-pictures[data-pgm-layout='vertical'] {
   flex-direction: column;
 }

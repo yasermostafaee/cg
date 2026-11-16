@@ -117,10 +117,13 @@ test('C-023 · inspect input picture from source controls without changing a bin
     await expect(pv.locator('[data-rehearsal-frame]')).toHaveCount(1);
     await page.locator('[data-open-template-defaults]').click();
     const defaults = page.getByRole('dialog', { name: 'Source defaults' });
+    const inputServer = `Input server · ${new URL(playout.baseUrl).host}`;
+    await expect(defaults.locator('[data-inputs-server]')).toHaveText(inputServer);
     const field = defaults.locator('[data-defaults-select="plate-1"]');
     const save = defaults.getByRole('button', { name: 'Save defaults' });
     await field.click();
     const options = page.getByRole('dialog', { name: 'Choose a source' });
+    await expect(options.locator('[data-inputs-server]')).toHaveText(inputServer);
     const studio1 = options.locator('[data-picker-input="in-li-studio1"]');
     const studioTile = await visibleCheckThumbnail(options, 'Studio 1');
     await expect(options.locator(thumbnail)).toHaveCount(
@@ -248,6 +251,7 @@ test('C-023 · inspect input picture from source controls without changing a bin
     await page.getByRole('button', { name: 'Open Station setup' }).click();
     const setup = page.getByRole('dialog', { name: 'Station setup' });
     await setup.getByRole('tab', { name: /^Live sources/ }).click();
+    await expect(setup.locator('[data-inputs-server]')).toHaveText(inputServer);
     const setupTile = await visibleCheckThumbnail(setup, 'Studio 1');
     const setupBox = (await setupTile.boundingBox())!;
     expect(setupBox.width).toBeGreaterThan(tileBox.width);

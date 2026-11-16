@@ -1,0 +1,30 @@
+.cg-input-catalogue-server {
+  display: block;
+  color: var(--r-text-muted);
+  font-size: var(--r-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.cg-input-catalogue-server > bdi {
+  color: var(--r-text-secondary);
+}
+
+.cg-input-catalogue-heading {
+  flex-wrap: wrap;
+}
+
+.cg-input-catalogue-read {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--r-space-1) var(--r-space-3);
+  min-width: 0;
+}
+
+[data-defaults-body] > .cg-input-catalogue-server {
+  margin-bottom: var(--r-space-3);
+}
+
+.cg-picker-tab > .cg-input-catalogue-server {
+  padding: var(--r-space-1) var(--r-space-3);
+}

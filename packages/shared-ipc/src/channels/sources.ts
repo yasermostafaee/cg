@@ -485,6 +485,14 @@ export const SUGGESTED_LIVE_SOURCE_LAYER_RANGE: LiveSourceLayerRange = {
   end: LAYER_BANDS.plate.end,
 };
 
+/** The D10 API URL's host and optional port, with no credentials or route. */
+export const PlayoutInputsServerSchema = z
+  .string()
+  .max(260)
+  .regex(/^(?:[a-z0-9._-]+|\[[a-f0-9:.]+\])(?::[0-9]+)?$/i)
+  .optional()
+  .catch(undefined);
+
 /**
  * The installation's LIST of lives, replaced at once.
  *
@@ -501,6 +509,8 @@ export const SourceCatalogSchema = z.object({
    * Station setup's read-only list. Absent = never read.
    */
   inputsReadAt: z.string().optional(),
+  /** The API endpoint that supplied this input snapshot. Absent if provenance is unknown. */
+  inputsServer: PlayoutInputsServerSchema,
   /**
    * `ROUTE-PLATES-01` — the `epoch` of the D10 answer this catalogue was built from, canonical
    * ({@link canonicalPlayoutEpoch}): every `route` producer in it names a holder layer of THAT epoch

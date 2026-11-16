@@ -31,6 +31,7 @@ import { Tag } from '../../ui/Tag.js';
 import { TextInput } from '../../ui/TextInput.js';
 import { VirtualList, type VirtualListHandle, type VirtualRow } from '../../ui/VirtualList.js';
 import { InputAudioMeter } from './InputAudioMeter.js';
+import { InputCatalogueServer } from './InputCatalogueServer.js';
 import { InputThumbnail } from './InputThumbnail.js';
 import {
   createMediaThumbnailLoader,
@@ -315,7 +316,8 @@ function PickerPanel({
   const [tab, setTab] = useState<Tab>(initialTab);
   const media = useMediaSearch();
   const loadThumbnail = useMemo(createMediaThumbnailLoader, []);
-  const inputs = playoutInputsForDisplay(currentSourceCatalog().sources);
+  const catalog = currentSourceCatalog();
+  const inputs = playoutInputsForDisplay(catalog.sources);
   const tabs = [
     { id: 'inputs', label: `Inputs ${String(inputs.length)}` },
     {
@@ -355,6 +357,7 @@ function PickerPanel({
           <InputsTab
             listId={`${base}-inputs`}
             inputs={inputs}
+            server={catalog.inputsServer}
             value={value}
             channel={channel}
             previewChannel={previewChannel}
@@ -451,6 +454,7 @@ function useListKeys(
 function InputsTab({
   listId,
   inputs,
+  server,
   value,
   channel,
   previewChannel,
@@ -459,6 +463,7 @@ function InputsTab({
 }: {
   listId: string;
   inputs: readonly SourceDefinition[];
+  server: string | undefined;
   value: string;
   channel: number | undefined;
   previewChannel: number | undefined;
@@ -536,6 +541,7 @@ function InputsTab({
   });
   return (
     <div className="cg-picker-tab" data-picker-tab="inputs">
+      <InputCatalogueServer server={server} />
       {inputs.length > FILTER_OVER && (
         <div className="cg-picker-controls">
           <TextInput

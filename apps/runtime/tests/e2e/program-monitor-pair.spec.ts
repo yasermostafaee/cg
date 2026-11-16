@@ -275,6 +275,15 @@ test('four named programme returns share a 2x2 view and one selected sound strea
   const all = page.getByRole('button', { name: 'All', exact: true });
   await all.click();
   const tiles = page.locator('[data-pgm-screen]');
+  const outlinedEngines = () =>
+    tiles.evaluateAll((screens) =>
+      screens.flatMap((screen) => {
+        const outline = getComputedStyle(screen, '::after');
+        return outline.borderTopStyle === 'solid' && Number.parseFloat(outline.borderTopWidth) > 0
+          ? [screen.getAttribute('data-pgm-screen')]
+          : [];
+      }),
+    );
   await expect(tiles).toHaveCount(4);
   await expect(page.locator('[data-pgm-picture-count]')).toHaveAttribute('data-pgm-layout', 'grid');
   for (const { engine, name, physicalChannel } of members) {
@@ -298,6 +307,7 @@ test('four named programme returns share a 2x2 view and one selected sound strea
   await expect(page.locator('[data-pgm-screen="B"]')).toContainText('Return feed stalled');
   await expect(page.locator('[data-pgm-screen="D"]')).toContainText('No return signal');
   await expect(page.locator('[data-pgm-screen="C"]')).toHaveAttribute('data-pgm-active', '');
+  await expect.poll(outlinedEngines).toEqual(['C']);
 
   const sound = page.getByRole('button', { name: 'Programme sound', exact: true });
   const audioSource = page.getByLabel('Programme sound source');
@@ -321,6 +331,7 @@ test('four named programme returns share a 2x2 view and one selected sound strea
   });
   await expect.poll(async () => (await audio()).active, { timeout: 10_000 }).toEqual(['D/south-4']);
   await expect(page.locator('[data-pgm-screen="D"]')).toHaveAttribute('data-pgm-active', '');
+  await expect.poll(outlinedEngines).toEqual(['D']);
   await audioSource.selectOption('A');
   await expect.poll(async () => (await audio()).active).toEqual(['A/main-1']);
   await expect(vu).toHaveAttribute('data-vu-engine', 'A');
@@ -353,6 +364,7 @@ test('four named programme returns share a 2x2 view and one selected sound strea
     state.programmeTopology = { ...state.programmeTopology, active: null };
   });
   await expect(page.locator('[data-pgm-active]')).toHaveCount(0, { timeout: 10_000 });
+  await expect.poll(outlinedEngines).toEqual([]);
   expect((await audio()).active).toEqual(['D/south-4']);
   await audioSource.selectOption('follow');
   await expect.poll(async () => (await audio()).active).toEqual([]);

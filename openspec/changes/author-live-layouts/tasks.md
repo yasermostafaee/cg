@@ -39,4 +39,5 @@
 - [x] Verify stable frame graphics identity and mask across presets and Focus, preserving older scoped packages.
 - [x] Verify an empty editor, steady Start with this preset, Arrange in the main scroll, and Focus controls for every frame in Windows Chromium.
 - [x] Verify Background None preserves transparency in authored presets and Focus and survives Save and Edit.
+- [x] Carry the input catalogue server through successful D10 reads, refresh failures and Bridge restarts.
 - [ ] Verify the Designer-authored masked input and attached graphic together on the target Playout Engine.

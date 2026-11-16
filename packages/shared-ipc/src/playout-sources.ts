@@ -3,6 +3,7 @@ import {
   LIVE_SOURCE_FORMATS,
   MEDIA_PLAYBACK_DEFAULTS,
   MediaWhenHiddenSchema,
+  PlayoutInputsServerSchema,
   checkSourceCatalog,
   mediaPlaybackOf,
   type ConsoleSourceCatalog,
@@ -251,6 +252,7 @@ export function parsePlayoutMediaPage(body: unknown): {
 export const PlayoutInputsStateSchema = z.object({
   /** ISO time of the last SUCCESSFUL read (a `304` counts). Absent = never read. */
   readAt: z.string().optional(),
+  inputsServer: PlayoutInputsServerSchema,
   epoch: PlayoutEpochSchema.optional(),
   inputs: z.array(PlayoutInputSchema),
   departed: z.array(PlayoutInputSchema),
@@ -267,6 +269,7 @@ export function foldPlayoutInputsRead(
   held: PlayoutInputsState,
   read: { readonly inputs: readonly PlayoutInput[]; readonly epoch?: PlayoutEpoch },
   readAt: string,
+  inputsServer?: string,
 ): PlayoutInputsState {
   const now = new Set(read.inputs.map((i) => i.id));
   const departed = new Map(held.departed.map((i) => [i.id, i] as const));
@@ -274,6 +277,7 @@ export function foldPlayoutInputsRead(
   for (const id of now) departed.delete(id);
   return {
     readAt,
+    ...(inputsServer !== undefined && { inputsServer }),
     ...(read.epoch !== undefined ? { epoch: read.epoch } : {}),
     inputs: [...read.inputs],
     departed: [...departed.values()],
@@ -563,6 +567,7 @@ export function buildPlayoutSourceCatalog(input: PlayoutCatalogInput): SourceCat
     sources,
     ...(input.layerRange !== undefined ? { layerRange: input.layerRange } : {}),
     ...(input.inputs.readAt !== undefined ? { inputsReadAt: input.inputs.readAt } : {}),
+    ...(input.inputs.inputsServer !== undefined && { inputsServer: input.inputs.inputsServer }),
     ...(inputsEpoch !== undefined ? { inputsEpoch } : {}),
   };
 }

@@ -3,9 +3,12 @@ import {
   CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS,
   CONTROL_LIVE_LAYOUT_FOCUS_ALIAS_MAX_LENGTH,
   ControlLiveLayoutSchema,
+  controlLiveLayoutAttachments,
+  controlLiveLayoutFrameAttachments,
   controlLiveLayoutMovePresetFrame,
   controlLiveLayoutPresetFrameIds,
   controlLiveLayoutRects,
+  type ControlLiveLayoutFrameAttachment,
   type ControlLiveLayoutPreset,
 } from '../src/index.js';
 
@@ -62,6 +65,57 @@ describe('authored live layout frame order', () => {
     for (const seat of [-1, 0.5, 4]) {
       expect(controlLiveLayoutMovePresetFrame(preset, 'host', seat)).toBeUndefined();
     }
+  });
+});
+
+describe('authored frame graphics', () => {
+  const rect = { x: 0.1, y: 0.2, width: 0.5, height: 0.4 };
+  const attachment = (id: string, frameId: string): ControlLiveLayoutFrameAttachment => ({
+    id,
+    frameId,
+    name: id,
+    sourceId: '0'.repeat(64),
+    rect,
+  });
+  const logo = attachment('logo', 'host');
+  const guestBug = attachment('guest-bug', 'guest-a');
+  const legacy = attachment('legacy-caption', 'host');
+  const pane = { ...preset, frameAttachments: [legacy] };
+  const solo = { ...preset, id: 'solo-a', frameIds: ['host'] };
+  const layout = {
+    id: 'test-layout',
+    name: 'Panel',
+    resolution,
+    frameRate: 25,
+    frames: preset.frameIds.map((id) => ({ id, title: id })),
+    presets: [pane, solo],
+    defaultPresetId: pane.id,
+    background: { kind: 'none' },
+    frameAttachments: [logo, guestBug],
+    effects: CONTROL_LIVE_LAYOUT_DEFAULT_EFFECTS,
+  };
+
+  it('returns shared and preset-local graphics in the order the player uses', () => {
+    const saved = ControlLiveLayoutSchema.parse(layout);
+    expect(controlLiveLayoutAttachments(saved)).toEqual([logo, guestBug, legacy]);
+    expect(controlLiveLayoutFrameAttachments(saved, pane, 'host')).toEqual([logo, legacy]);
+    expect(controlLiveLayoutFrameAttachments(saved, solo, 'host')).toEqual([logo]);
+    expect(controlLiveLayoutFrameAttachments(saved, undefined, 'guest-a')).toEqual([guestBug]);
+  });
+
+  it('validates that a shared attachment has a unique id and belongs to a frame in the layout', () => {
+    const parsed = ControlLiveLayoutSchema.safeParse({
+      ...layout,
+      frameAttachments: [logo, { ...logo, frameId: 'missing' }],
+    });
+    if (parsed.success) throw new Error('Invalid frame attachments were accepted');
+    expect(parsed.error.issues).toMatchObject([
+      { path: ['frameAttachments'], message: 'Frame attachments must have distinct ids.' },
+      {
+        path: ['frameAttachments'],
+        message: 'Frame attachments must belong to a frame in this layout.',
+      },
+    ]);
   });
 });
 

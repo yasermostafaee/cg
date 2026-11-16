@@ -47,7 +47,7 @@ Bridge را روی یک سرور جدا نصب کنید. هنگام نصب Playo
 
 ### ساخت و پخش Live layout
 
-1. در **کانال آزمایشی خارج از پخش**، `Layers` ← `New live layout` را باز کنید. یک قاب و یک پریست اضافه کنید. ورودی و عنوان قاب‌ها، اعضای پریست (`In preset`) و چینش (`Arrange`) را تعیین کنید و `Save layout` را بزنید.
+1. در **کانال آزمایشی خارج از پخش**، `Layers` ← `New live layout` را باز کنید. قاب‌ها و پریست را بسازید، ورودی، عنوان، `In preset` و `Arrange` را تنظیم کنید و `Save layout` را بزنید.
 2. در ردیف خالی **Live layer**، با `LOAD` و `Load onto Live layer …` چیدمان را بار کنید. `ON PVW` را بزنید و با `PLAY` پنل PVW پیش‌نمایش را اجرا کنید.
 3. روی **خود ردیف** `PLAY` را بزنید و `PROGRAM` را بررسی کنید. در `Focus · PVW` یا `Focus · PGM` شمارهٔ قاب و پیکان `Return to …` را امتحان کنید. با `Update on air` تغییر Inspector را اعمال کنید و در پایان `CLEAR` را بزنید.
 
@@ -55,5 +55,6 @@ Bridge را روی یک سرور جدا نصب کنید. هنگام نصب Playo
 
 ### اگر اتصال برقرار نشد
 
-- در `SETTINGS` ← `Connection`، آدرس‌ها را بررسی کنید و `Check` را بزنید. اگر ایستگاه اشتباه است، `Set up again` را بزنید.
-- در `SETTINGS` ← `Shared files`، `Check access` را بزنید. حساب `NT SERVICE\CGBridge` روی پوشهٔ محلی به مجوز `Read & execute` نیاز دارد. روی Share شبکه، حسابی که سرویس با آن وصل می‌شود به مجوز `Read` در `Sharing` و `Security` نیاز دارد.
+- در `SETTINGS` ← `Connection`، `Check` و برای ایستگاه دیگر `Set up again` را بزنید.
+- در `Shared files`، `Check access` را بزنید. هویت سرویس CG Bridge برای پوشهٔ محلی به `Read & execute` و برای UNC به `Read` در `Sharing` و `Security` نیاز دارد.
+- گزارش خطا از `LOG` ← `Download logs` دریافت می‌شود.

@@ -26,6 +26,10 @@
         {
           "fa": "ویومتر هر موتور کنار تصویر PGM خودش است. سطح صدای ورودی‌ها کنار قاب و تصویر انتخاب ورودی به‌صورت عمودی دیده می‌شود.",
           "en": "Each engine's PGM meter sits next to its own picture. Input levels appear vertically next to frames and input thumbnails."
+        },
+        {
+          "fa": "تصویر موتور فعال در PGM کادر دارد. Source defaults، انتخاب‌گر ورودی و Settings نشانی سروری را نشان می‌دهند که فهرست ورودی را فرستاده است.",
+          "en": "PGM outlines the active engine. Source defaults, the input picker and Settings show which server supplied the input list."
         }
       ],
       "fixes": [

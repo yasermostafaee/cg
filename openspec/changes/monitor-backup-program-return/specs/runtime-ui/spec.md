@@ -74,6 +74,7 @@ The saved VU scope SHALL offer selected source and all visible programme engines
 
 - **WHEN** the audio source is Follow primary and current primary changes from A to B
 - **THEN** A's decoder stops before B's starts, meter/loudness reset while B is acquired, and no interval contains mixed A+B audio
+- **AND** the visible active-engine outline moves from A to B
 
 #### Scenario: Explicit source remains physical
 

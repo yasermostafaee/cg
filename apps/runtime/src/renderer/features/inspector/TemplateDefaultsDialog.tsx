@@ -5,11 +5,13 @@ import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { SourcePicker } from '../sources/SourcePicker.js';
+import { InputCatalogueServer } from '../sources/InputCatalogueServer.js';
 import { MediaPlaybackControl } from '../sources/MediaPlayback.js';
 import { controlLiveLayoutDefaults, withChannelDefaults } from '@cg/shared-ipc';
 import {
   commitSourceAssignments,
   currentSourceAssignments,
+  currentSourceCatalog,
   sourcesVersion,
   subscribeSources,
 } from '../sources/sourceStore.js';
@@ -218,6 +220,7 @@ export function TemplateDefaultsDialog({
           </p>
         ) : (
           <>
+            <InputCatalogueServer server={currentSourceCatalog().inputsServer} />
             {plates.map((plate, i) => {
               const authored = authoredDefaults?.[plate.sourceId];
               const picked = valueOf(plate.sourceId);

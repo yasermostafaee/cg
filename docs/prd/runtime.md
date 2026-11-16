@@ -4918,6 +4918,8 @@ operator had to fail over before seeing whether its programme picture and sound 
   that console
 - WHEN A + B is selected THEN both programme pictures are visible at once with stable A/B and physical-channel
   labels, and either feed independently hides a stale frame and reports its own signal state
+- WHEN a programme picture belongs to the engine reported as active THEN a visible outline identifies that
+  picture and follows an active-engine change without resizing the tiles.
 - WHEN A + B is selected THEN the operator can arrange the two pictures horizontally or vertically and the
   selected layout is remembered on that console without reconnecting either feed
 - WHEN monitor sound is enabled THEN exactly one chosen engine is heard; changing the source moves the sound,
@@ -5278,6 +5280,8 @@ Repeatable playback and independent timeline animation within imported artwork n
 The source picker, assigned-input fields, and Station setup show a compact audio indicator next to the source.
 Source cards and live frames show their meters vertically beside their pictures. PGM meters stay with their
 respective engine pictures, including when all pictures and meters are visible.
+Source defaults, the picker, and Station setup identify the last server to supply the input list. A cached
+list keeps its own server identity even if the active programme engine changes.
 The visible entries share one bounded, authenticated batch. A currently checked input shows fresh measured peaks
 from its own existing preview lease. A still asset with confirmed no audio has a distinct state. Other sources
 stay unknown until the Playout exposes independent source telemetry or authoritative audio-stream metadata.

@@ -93,7 +93,9 @@ describe('D10 over HTTP', () => {
   it('reads the list, keeps the Playout’s order, and marks unusable what cannot be bound', async () => {
     const playout = await fakePlayout();
     const r = reader(playout);
+    expect(r.catalog().inputsServer).toBeUndefined();
     await r.refresh(0);
+    expect(r.catalog().inputsServer).toBe(new URL(playout.inputsUrl).host);
     const names = r.catalog().sources.map((s) => s.name);
     expect(names).toEqual([
       'Studio 1',
@@ -123,6 +125,7 @@ describe('D10 over HTTP', () => {
     const last = playout.requestLog.filter((q) => q.path === '/api/cg/inputs').at(-1);
     expect(last?.headers['if-none-match']).toBe('"inputs-0"');
     expect(JSON.stringify(r.catalog().sources)).toBe(before);
+    expect(r.catalog().inputsServer).toBe(new URL(playout.inputsUrl).host);
   });
 
   it('🔴 `404` — CG Control switched off on the Playout — is a failed read and changes nothing', async () => {
@@ -199,15 +202,27 @@ describe('D10 over HTTP', () => {
     const playout = await fakePlayout();
     const first = reader(playout, { inputsPath });
     await first.refresh(0);
+    const originalServer = new URL(playout.inputsUrl).host;
+    expect(
+      PlayoutInputsStateSchema.parse(JSON.parse(fs.readFileSync(inputsPath, 'utf8'))),
+    ).toMatchObject({ inputsServer: originalServer });
     first.dispose();
 
+    const replacement = await fakePlayout();
+    expect(new URL(replacement.inputsUrl).host).not.toBe(originalServer);
+    replacement.setCgEnabled(false);
     await playout.goOffline();
-    const second = reader(playout, { inputsPath });
+    const second = reader(replacement, { inputsPath });
     await second.refresh(0);
     const studio = second.catalog().sources.find((s) => s.id === inputSourceId('li-studio1'));
     expect(studio?.status).toBeUndefined();
     expect(studio?.producer).toEqual({ kind: 'ndi', source: 'STUDIO-PC (Cam 1)' });
     expect(second.catalog().inputsReadAt).toBeDefined();
+    expect(second.catalog().inputsServer).toBe(originalServer);
+
+    replacement.setCgEnabled(true);
+    await second.refresh(0);
+    expect(second.catalog().inputsServer).toBe(new URL(replacement.inputsUrl).host);
   });
 
   it('the cadence: a picker opening reads again only after 5 s; the tick only after 30 s', async () => {
@@ -529,8 +544,22 @@ describe('the bridge’s routes, as a console reaches them', () => {
     const viewer = await playout.issueToken({ user: 'viewer' });
     const client = await openClient(handle);
     expect((await client.authenticate('a1', viewer.token)).error).toBeUndefined();
-    // The sign-in's own read (positive control: the instrument counts).
+    // The sign-in reads and publishes the same D10 provenance the console can fetch.
     await waitFor(() => playout.requestCounts.inputs === 1);
+    const inputsServer = new URL(playout.inputsUrl).host;
+    await waitFor(() =>
+      client
+        .publishes()
+        .some(
+          (frame) =>
+            frame.type === 'publish' &&
+            frame.channel === 'sources.config-changed' &&
+            (frame.payload as { inputsServer?: string }).inputsServer === inputsServer,
+        ),
+    );
+    expect((await client.ask('catalogue', 'sources.config')).payload).toMatchObject({
+      inputsServer,
+    });
 
     // Inside 5 s of it, a picker opening asks and nothing is read.
     expect((await client.ask('r1', 'sources.refresh')).payload).toEqual({ ok: true });
