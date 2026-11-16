@@ -67,3 +67,17 @@ it('returns file modification times over the existing folder wire contract', asy
     await rm(scratch, { recursive: true, force: true });
   }
 });
+
+it('tells the operator whether the server root or a remembered subfolder went missing', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'cg-shared-missing-'));
+  try {
+    await expect(listSharedTemplateFolder(root, 'previous-folder')).rejects.toThrow(
+      'CG Bridge could not find the selected subfolder. Use Up',
+    );
+    await expect(listSharedTemplateFolder(join(root, 'missing-root'), '')).rejects.toThrow(
+      'CG Bridge could not find this folder.',
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

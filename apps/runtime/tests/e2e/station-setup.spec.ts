@@ -132,8 +132,10 @@ test('B-357 — Shared files shows and saves the path on the CG Control server',
     .getByRole('tab', { name: 'Shared files' })
     .click();
 
-  const pathField = dialog.getByLabel('Path on CG Control server');
+  const pathField = dialog.getByLabel('Path on CG Bridge server');
   await expect(pathField).toHaveValue(String.raw`D:\CG Shared`);
+  await dialog.getByRole('button', { name: 'Check access' }).click();
+  await expect(dialog.getByText('CG Bridge can read this folder.')).toBeVisible();
 
   const pathRow = dialog.locator('.cg-shared-files-fields');
   const saveAction = dialog.locator('.cg-shared-files-action');
@@ -201,7 +203,7 @@ test('B-425 — a rejected UNC save keeps the path input at its usual width', as
   const dialog = page.getByRole('dialog', { name: 'Station setup' });
   await dialog.getByRole('tab', { name: 'Shared files' }).click();
 
-  const input = dialog.getByLabel('Path on CG Control server');
+  const input = dialog.getByLabel('Path on CG Bridge server');
   const candidate = String.raw`\\NEWS\CG Shared` + '\\';
   await input.fill(candidate);
   const before = await input.boundingBox();

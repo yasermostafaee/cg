@@ -358,6 +358,20 @@ const textSourceRoot =
     ? args['text-source-root']
     : path.join(stateHome, 'text-sources');
 
+if (
+  serviceConfig !== null &&
+  serviceConfig.config.textSourceRoot === undefined &&
+  textSourceRoot === path.join(serviceConfig.stateHome, 'text-sources')
+) {
+  try {
+    fs.mkdirSync(textSourceRoot, { recursive: true });
+  } catch (err) {
+    console.error(
+      `[caspar-bridge] Cannot create the default Shared files folder: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
 /*
   `B-357` — CG Control may change the station's shared-files path after installation. The path is
   interpreted HERE, on the Bridge server. A remote console never browses or validates its own disk.

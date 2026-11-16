@@ -9,6 +9,7 @@ import {
   type SharedTemplateThumbnail,
 } from '@cg/shared-ipc';
 import { readSharedVcgThumbnail } from './shared-template-thumbnail.js';
+import { folderReadRefusal } from './shared-files.js';
 
 const MAX_CONCURRENT_THUMBNAILS = 4;
 const MAX_CONCURRENT_PACKAGE_STATS = 16;
@@ -19,17 +20,25 @@ type FolderListing = ChannelResponse<typeof SharedTemplateFolderChannel>;
 async function resolveWithinShare(
   root: string,
   relative: string,
+  child: 'subfolder' | 'package',
   expectedRoot?: string,
 ): Promise<{ root: string; target: string }> {
   if (relative.includes(':')) throw new Error('Use a relative path below Shared files.');
   if (relative !== '') BridgeTextSourcePathSchema.parse(relative);
-  const realRoot = await fs.realpath(root);
+  const realRoot = await fs.realpath(root).catch((error: unknown) => {
+    throw new Error(folderReadRefusal(root, error));
+  });
   if (expectedRoot !== undefined && expectedRoot !== realRoot) {
     throw new Error(
       'The Shared files path has changed. Select the package again from Shared folder.',
     );
   }
-  const target = await fs.realpath(path.resolve(realRoot, relative));
+  const target =
+    relative === ''
+      ? realRoot
+      : await fs.realpath(path.resolve(realRoot, relative)).catch((error: unknown) => {
+          throw new Error(folderReadRefusal(root, error, child));
+        });
   const difference = path.relative(realRoot, target);
   if (
     difference === '..' ||
@@ -46,9 +55,14 @@ export async function listSharedTemplateFolder(
   folder: string,
 ): Promise<FolderListing> {
   const normalized = folder.replaceAll('\\', '/');
-  const resolved = await resolveWithinShare(root, normalized);
+  const resolved = await resolveWithinShare(root, normalized, 'subfolder');
   const before = await fs.lstat(resolved.target).catch(() => undefined);
-  const entries = (await fs.readdir(resolved.target, { withFileTypes: true }))
+  const contents = await fs
+    .readdir(resolved.target, { withFileTypes: true })
+    .catch((error: unknown) => {
+      throw new Error(folderReadRefusal(root, error, normalized === '' ? undefined : 'subfolder'));
+    });
+  const entries = contents
     .filter(({ name }) => !name.includes(':') && BridgeTextSourcePathSchema.safeParse(name).success)
     .flatMap<FolderListing['entries'][number]>((entry) => {
       if (entry.isDirectory()) return [{ name: entry.name, kind: 'folder' as const }];
@@ -70,7 +84,7 @@ export async function listSharedTemplateFolder(
       );
     }
     // If the requested folder was redirected or replaced, use the listing without times.
-    const current = await resolveWithinShare(root, normalized, resolved.root).catch(
+    const current = await resolveWithinShare(root, normalized, 'subfolder', resolved.root).catch(
       () => undefined,
     );
     if (current?.target === resolved.target) {
@@ -94,7 +108,7 @@ export async function readSharedTemplatePackage(
 ) {
   if (!/^[^/\\]+\.vcg$/i.test(name)) throw new Error('Choose a .vcg package.');
   const relative = [folder.replaceAll('\\', '/'), name].filter(Boolean).join('/');
-  const resolved = await resolveWithinShare(root, relative, expectedRoot);
+  const resolved = await resolveWithinShare(root, relative, 'package', expectedRoot);
   const file = await fs.open(resolved.target, 'r');
   try {
     const info = await file.stat();
@@ -129,7 +143,7 @@ export async function readSharedTemplateThumbnail(
   activeThumbnailReads += 1;
   try {
     const relative = [folder.replaceAll('\\', '/'), name].filter(Boolean).join('/');
-    const { target } = await resolveWithinShare(root, relative, expectedRoot);
+    const { target } = await resolveWithinShare(root, relative, 'package', expectedRoot);
     if (!(await fs.lstat(target)).isFile()) return { thumbnail: null };
     const file = await fs.open(
       target,
@@ -138,7 +152,7 @@ export async function readSharedTemplateThumbnail(
     try {
       const info = await file.stat();
       if (!info.isFile() || info.size > 0xffffffff) return { thumbnail: null };
-      const current = await resolveWithinShare(root, relative, expectedRoot);
+      const current = await resolveWithinShare(root, relative, 'package', expectedRoot);
       const currentInfo = await fs.stat(current.target);
       if (
         current.target !== target ||

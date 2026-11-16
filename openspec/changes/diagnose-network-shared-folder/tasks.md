@@ -6,3 +6,5 @@
       measured the same input width before and after a refusal and found one message.
 - [x] 1.4 Record carrying Linux E2E. The [Linux Playwright E2E](https://github.com/yasermostafaee/cg/actions/runs/42873144431/job/130029489197) step passed on `c560f8cd`.
 - [ ] 1.5 Recheck the UNC path on customer server A under the Bridge service identity, with CG Control on B.
+- [x] 1.6 Verify the default local path is created, a custom path is never created automatically, and rechecking a saved path leaves configuration intact.
+- [x] 1.7 Distinguish an unavailable shared root from a removed child folder when browsing templates.

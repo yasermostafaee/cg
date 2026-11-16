@@ -12,3 +12,8 @@ button keeps its error state, and a long message has no place in the input-and-b
 On the customer station the Bridge and Playout Engine are on server A, and the Playout client,
 Designer and CG Control are on server B. Opening the share on B does not show whether the Bridge
 service on A can access it. Check the UNC share from A under that service's identity.
+
+For a local directory on the Bridge server, accept the Windows path after an actual read and
+canonicalization. Without a configured path, the installed service creates its own default
+`text-sources` directory under the service state folder. A saved path can be rechecked without
+rewriting configuration. The shared browser reports the same access diagnosis as Station setup.

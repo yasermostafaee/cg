@@ -61,6 +61,21 @@ describe('the live shared-files controller', () => {
     });
   });
 
+  it('rechecks the saved folder without rewriting the service configuration', async () => {
+    const root = scratch();
+    const folder = path.join(root, 'shared');
+    fs.mkdirSync(folder);
+    const config = path.join(root, 'missing-config.json');
+    const controller = createSharedFilesController({
+      initialPath: folder,
+      serviceConfigFile: config,
+    });
+    await expect(controller.setPath(folder)).resolves.toEqual({ ok: true, path: folder });
+    expect(fs.existsSync(config)).toBe(false);
+    fs.rmdirSync(folder);
+    await expect(controller.setPath(folder)).resolves.toMatchObject({ ok: false });
+  });
+
   it.each([
     ['ENOENT', /could not find.*server name, share name and folder/],
     ['EACCES', /denied access.*service identity.*Sharing and Security \(NTFS\)/],

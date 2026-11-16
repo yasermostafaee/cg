@@ -226,6 +226,8 @@ describe('🔴 a service start', () => {
         nothing), and the user's home is untouched.
       */
       const stateHome = path.dirname(file);
+      expect(fs.readdirSync(path.join(stateHome, 'text-sources'))).toEqual([]);
+      expect(JSON.parse(fs.readFileSync(file, 'utf8'))).not.toHaveProperty('textSourceRoot');
       expect(out).toContain(`AMCP log: ${path.join(stateHome, 'logs', 'amcp.log')}`);
       expect(out).toContain(path.join(stateHome, '.cg-runtime', 'bridge-live-layers.json'));
       expect(out).not.toContain(home);
@@ -365,4 +367,18 @@ describe('🔴 B-312 — the service keeps Station setup’s backup across a res
       await typed.stop();
     }
   });
+});
+
+it('leaves an explicitly configured missing shared folder for the administrator to fix', async () => {
+  const playout = await startFakePlayout();
+  playouts.push(playout);
+  const missing = path.join(scratch(), 'missing-share');
+  const file = configIn({ playoutAddress: playout.issuer, amcpPort: 1, textSourceRoot: missing });
+  const service = await startService(file);
+  try {
+    expect(fs.existsSync(missing)).toBe(false);
+    expect(fs.existsSync(path.join(path.dirname(file), 'text-sources'))).toBe(false);
+  } finally {
+    await service.stop();
+  }
 });

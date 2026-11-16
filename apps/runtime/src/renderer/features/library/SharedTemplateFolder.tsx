@@ -159,10 +159,12 @@ export function SharedTemplateFolder({
           // Listing still works for the current session.
         }
       },
-      () => {
+      (error: unknown) => {
         if (!active) return;
         setProblem(
-          'CG Bridge could not read this folder. Check the Shared files path in Station setup.',
+          error instanceof Error && error.message.startsWith('CG Bridge ')
+            ? error.message
+            : 'CG Bridge could not read this folder. Check the Shared files path in Station setup.',
         );
         setLoading(false);
       },

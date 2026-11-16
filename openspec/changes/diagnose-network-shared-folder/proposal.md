@@ -8,6 +8,8 @@ same failure also appears inline beside Save path and pushes the input out of it
 - Check the selected folder from the Bridge service and distinguish an unreachable path from an
   access denial.
 - Report a refusal once below the control row and preserve the entered path for correction.
+- Provision the built-in local folder on first service start and let Station setup recheck the saved path.
+- Show why Shared template folder could not open a saved location.
 
 ## Capabilities
 

@@ -16,6 +16,7 @@ export function SharedFilesSection({
   const admin = useHoldsStationAdmin();
   const [stored, setStored] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  const checking = draft.trim() === stored;
 
   useEffect(() => {
     let cancelled = false;
@@ -43,7 +44,8 @@ export function SharedFilesSection({
     if (result.ok && result.path !== undefined) {
       setStored(result.path);
       setDraft(result.path);
-      report(result.message === undefined ? null : { role: 'notice', text: result.message });
+      const message = result.message ?? (checking ? 'CG Bridge can read this folder.' : undefined);
+      report(message === undefined ? null : { role: 'notice', text: message });
     }
     return {
       accepted: result.ok,
@@ -60,7 +62,7 @@ export function SharedFilesSection({
         {admin ? (
           <div className="cg-setup-fields cg-shared-files-fields">
             <label className="cg-setup-field" htmlFor="shared-files-path">
-              <span className="cg-setup-field__label">Path on CG Control server</span>
+              <span className="cg-setup-field__label">Path on CG Bridge server</span>
               <TextInput
                 id="shared-files-path"
                 className="cg-field--mono"
@@ -72,11 +74,11 @@ export function SharedFilesSection({
             <div className="cg-shared-files-action">
               <AsyncButton
                 variant="primary"
-                disabled={draft.trim() === '' || draft.trim() === stored}
+                disabled={draft.trim() === '' || stored === null}
                 run={save}
                 onError={(message) => report({ role: 'refusal', text: message })}
               >
-                Save path
+                {checking ? 'Check access' : 'Save path'}
               </AsyncButton>
             </div>
           </div>

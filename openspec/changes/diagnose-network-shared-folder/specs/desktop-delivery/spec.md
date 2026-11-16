@@ -14,6 +14,12 @@ the active path and persisted configuration.
 - **THEN** the refusal directs the administrator to check the host, share and folder from the Bridge server
 - **AND** the active and persisted paths remain as they were
 
+#### Scenario: The installer was given no shared path
+
+- **WHEN** the installed service starts without an explicit Shared files path
+- **THEN** it ensures that its built-in local text-sources directory exists
+- **AND** any explicitly configured folder remains under the administrator's control
+
 #### Scenario: Access to a UNC share is denied
 
 - **WHEN** the Bridge can find a Shared files directory but cannot read it because access is denied
