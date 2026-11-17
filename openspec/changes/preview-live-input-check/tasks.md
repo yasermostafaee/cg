@@ -104,3 +104,8 @@
       480 Runtime and 2 pack-factory cases. Its sole failure was the Station setup geometry
       fixture attempting guarded backup removal with its seeded graphic on air. A carrying
       green result remains owed. [Failed job](https://github.com/yasermostafaee/cg/actions/runs/44160800438/job/134313901559).
+- [x] 7.6 Keep an unknown or unsupported input preview distinct from confirmed signal loss in the
+      large thumbnail fallback. Six scoped DOM cases passed, including unsupported NDI, missing
+      frames, confirmed absence and compact accessibility. Runtime typecheck, scoped lint, fresh
+      build and the Windows Edge live-input-check case passed with its geometry and eight-channel
+      meter assertions retained. Carrying Linux E2E remains owed under 7.5.

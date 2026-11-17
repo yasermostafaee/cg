@@ -34,7 +34,7 @@ function freeUdpPort(): Promise<number> {
 async function visibleCheckThumbnail(list: Locator, sourceName: string): Promise<Locator> {
   const tile = list.getByRole('button', { name: `Check input · ${sourceName}`, exact: true });
   await expect(tile).toHaveAttribute('data-input-thumbnail', 'checkable');
-  await expect(tile).toHaveText('No signal');
+  await expect(tile).toHaveText('Preview unavailable');
   await expect(tile).toBeVisible();
   return tile;
 }
@@ -141,7 +141,7 @@ test('C-023 · inspect input picture from source controls without changing a bin
     });
     const passiveTile = unavailableRow.locator('[data-input-thumbnail="passive"]');
     await expect(passiveTile).toBeVisible();
-    await expect(passiveTile).toHaveText('No signal');
+    await expect(passiveTile).toHaveText('Preview unavailable');
     await expect(passiveTile).not.toHaveRole('button');
     await options.getByRole('button', { name: 'Switch to list view', exact: true }).click();
     const studioRow = options.getByRole('row').filter({

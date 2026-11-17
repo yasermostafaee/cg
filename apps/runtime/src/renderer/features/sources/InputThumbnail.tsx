@@ -150,8 +150,10 @@ export function InputThumbnail({
       <img src={picture} alt="" onError={() => setBrokenPicture(picture)} />
     ) : compact ? (
       <Icon icon={VideoOff} size={12} />
-    ) : (
+    ) : frame?.signal === 'absent' ? (
       'No signal'
+    ) : (
+      'Preview unavailable'
     );
 
   const thumbnail =

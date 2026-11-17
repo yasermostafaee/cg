@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 import type { SourceDefinition } from '@cg/shared-ipc';
 import { InputThumbnail } from '../src/renderer/features/sources/InputThumbnail.js';
+import * as thumbnailDemand from '../src/renderer/features/sources/inputThumbnailDemand.js';
 import {
   MediaThumbnail,
   createMediaThumbnailLoader,
@@ -85,6 +86,82 @@ it('evicts unsuccessful poster reads and shares successful cached posters', asyn
     expect(mediaThumbnail).toHaveBeenCalledTimes(3);
   } finally {
     window.cg = previous;
+  }
+});
+
+it('keeps unsupported or unavailable input previews unknown and labels only confirmed absence as no signal', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal(
+    'IntersectionObserver',
+    class {
+      constructor(private readonly notify: (entries: { isIntersecting: boolean }[]) => void) {}
+      observe() {
+        this.notify([{ isIntersecting: true }]);
+      }
+      disconnect() {
+        return undefined;
+      }
+    },
+  );
+  const previous = window.cg;
+  const subscribe = vi
+    .spyOn(thumbnailDemand, 'subscribeInputThumbnail')
+    .mockImplementation(({ sourceId, publish }) => {
+      publish(
+        sourceId === 'missing'
+          ? undefined
+          : {
+              sourceId,
+              signal: sourceId === 'absent' ? ('absent' as const) : ('unknown' as const),
+            },
+      );
+      return () => undefined;
+    });
+  window.cg = { sourcePreviews: {} } as unknown as RuntimeBridge;
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  const tile = (id: string) =>
+    host.querySelector<HTMLElement>(`[data-case="${id}"] [data-input-thumbnail]`)!;
+  try {
+    await act(async () =>
+      root.render(
+        createElement(
+          Fragment,
+          null,
+          ...['unsupported-ndi', 'missing', 'absent', 'compact-unknown'].map((id) =>
+            createElement(
+              'span',
+              { key: id, 'data-case': id },
+              createElement(InputThumbnail, {
+                source: { ...input(id), producer: { kind: 'ndi', source: 'MTA (APASAI)' } },
+                channel: 1,
+                meterChannel: undefined,
+                compact: id === 'compact-unknown',
+              }),
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(subscribe).toHaveBeenCalledTimes(4);
+    for (const id of ['unsupported-ndi', 'missing', 'compact-unknown']) {
+      expect(tile(id).getAttribute('aria-label')).toBe(
+        'Picture placeholder. Input signal status is unknown.',
+      );
+      expect(tile(id).getAttribute('title')).toBe(tile(id).getAttribute('aria-label'));
+      expect(tile(id).textContent).toBe(id === 'compact-unknown' ? '' : 'Preview unavailable');
+    }
+    expect(tile('compact-unknown').hasAttribute('data-input-thumbnail-compact')).toBe(true);
+    expect(tile('absent').textContent).toBe('No signal');
+    expect(tile('absent').getAttribute('aria-label')).toBe('No current input signal.');
+    expect(host.querySelector('img')).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    window.cg = previous;
+    subscribe.mockRestore();
+    vi.unstubAllGlobals();
   }
 });
 

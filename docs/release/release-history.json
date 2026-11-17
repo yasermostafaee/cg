@@ -46,6 +46,10 @@
       ],
       "fixes": [
         {
+          "fa": "پیش‌نمایش ورودی با وضعیت نامشخص، از جمله NDI با پیش‌نمایش غیرفعالِ پشتیبانی‌نشده، با Preview unavailable مشخص می‌شود. پیام No signal برای قطع سیگنال تأییدشده نمایش داده می‌شود.",
+          "en": "Input thumbnails distinguish an unavailable preview from confirmed signal loss, including NDI sources whose passive preview is unsupported."
+        },
+        {
           "fa": "در حالت Off air، دکمهٔ Remove backup اتصال ذخیره‌شدهٔ سرور B را حذف می‌کند. تصویر و صدای PGM روی A و ویومتر روی حالت Selected قرار می‌گیرند. انتخاب‌ها پس از بازکردن دوبارهٔ اپ هم حفظ می‌شوند.",
           "en": "With graphics off air, Remove backup saves the removal of Server B. PGM picture and sound select A, with meters in Selected mode. These choices persist after reopening the app."
         },
