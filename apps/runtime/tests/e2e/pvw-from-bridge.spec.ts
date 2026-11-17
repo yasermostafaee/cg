@@ -2801,10 +2801,14 @@ test('R-119 rehearses presets, linked titles, and source fades locally beside pr
 test('R-119 keeps rapid preset picks coherent after a refused input Fade', ({ page }) =>
   exercisePresetSwitch(page, true, 'interruption'));
 
+test('PVW stays independent while row presets select first air, switch live and rehearse again', ({
+  page,
+}) => exercisePresetSwitch(page, true, 'selection'));
+
 async function exercisePresetSwitch(
   page: Page,
   crossing: boolean,
-  preview?: 'effects' | 'interruption',
+  preview?: 'effects' | 'interruption' | 'selection',
   withBackup = false,
 ): Promise<void> {
   const handle = await boot(true, undefined, withBackup);
@@ -3021,6 +3025,14 @@ async function exercisePresetSwitch(
   await row.getByRole('button', { name: 'PLAY', exact: true }).click();
   await expect(row).toHaveAttribute('aria-label', /ON AIR$/);
   if (reserve !== null) expect(reserve.lastCgAdd({ channel: 2, layer: 59 })).toBeDefined();
+  await expect
+    .poll(() =>
+      handle.runtime
+        .liveLayers()
+        .get(itemId)
+        ?.some(({ sourceId }) => sourceId === 'common'),
+    )
+    .toBe(true);
   const common = handle.runtime
     .liveLayers()
     .get(itemId)
@@ -3040,6 +3052,11 @@ async function exercisePresetSwitch(
       .slice(start)
       .map(({ line }) => line);
   const beforeChoice = engine.receivedCommands().length;
+  if (preview === 'selection') {
+    await verifyIndependentPresetSelection(page, row);
+    expect(inputUpdates).toEqual([]);
+    return;
+  }
   await effect.getByRole('combobox', { name: 'Motion' }).selectOption('ease-in-out');
   await effect.getByRole('checkbox', { name: 'Fade' }).check();
   await effect.getByRole('textbox', { name: 'Duration (ms)' }).fill('500');
@@ -3202,6 +3219,45 @@ async function exercisePresetSwitch(
   );
 }
 
+async function verifyIndependentPresetSelection(page: Page, row: Locator): Promise<void> {
+  await showMonitors(page);
+  await row.getByRole('button', { name: 'ON PVW', exact: true }).click();
+  const pvw = page.getByRole('region', { name: 'PREVIEW (PVW)' });
+  await pvw.getByRole('button', { name: 'PLAY', exact: true }).click();
+  const graphic = page.frameLocator('iframe[data-rehearsal-frame]');
+  const picture = (id: string) => graphic.locator(`[data-cg-element-id="show-${id}"]`);
+  const inspector = page.getByRole('complementary', { name: 'Inspector' });
+  const cue = (id: string) => inspector.locator(`[data-look-tab="${id}"]`);
+  const programme = (id: string) => row.locator(`[data-look-id="${id}"]`);
+  await cue('duo').click();
+  await expect(picture('duo')).toBeVisible();
+  await programme('solo').click();
+  await expect(picture('duo')).toBeVisible();
+  await programme('duo').click();
+  await expect(programme('duo')).toHaveAttribute('aria-pressed', 'true');
+  await cue('solo').click();
+  await expect(picture('solo')).toBeVisible();
+  await expect(cue('duo')).toContainText('ON AIR NOW');
+  await expect(cue('solo')).toContainText('SHOWING IN PVW');
+  await row.getByRole('button', { name: 'STOP', exact: true }).click();
+  await expect(row).not.toHaveAttribute('aria-label', /ON AIR$/);
+  await expect(row.locator('[data-look-picker]')).toContainText('PGM · FIRST');
+  await cue('duo').click();
+  await programme('solo').click();
+  await expect(programme('solo')).toHaveAttribute('aria-pressed', 'true');
+  await expect(picture('duo')).toBeVisible();
+  await row.getByRole('button', { name: 'PLAY', exact: true }).click();
+  await expect(row).toHaveAttribute('aria-label', /ON AIR$/);
+  await expect(programme('solo')).toHaveAttribute('aria-pressed', 'true');
+  await expect(picture('duo')).toBeVisible();
+  await row.getByRole('button', { name: 'OFF PVW', exact: true }).click();
+  await row.getByRole('button', { name: 'ON PVW', exact: true }).click();
+  await pvw.getByRole('button', { name: 'PLAY', exact: true }).click();
+  await expect(picture('duo')).toBeVisible();
+  await expect(cue('duo')).toHaveAttribute('aria-pressed', 'true');
+  await expect(programme('solo')).toHaveAttribute('aria-pressed', 'true');
+}
+
 async function verifyInterruptedPresetEffects(
   page: Page,
   row: Locator,
@@ -3247,12 +3303,13 @@ async function verifyInterruptedPresetEffects(
 
   const body = graphic.locator('body');
   await recordPvwPresetPhases(body);
-  // Even a re-press of the applied row preset confirms which preset to follow.
+  // A re-press of the applied PGM preset leaves the independent PVW cue untouched.
   await apply('solo').click();
-  await expect(preset('solo')).toBeVisible();
-  await expect(cue('solo')).toHaveAttribute('aria-pressed', 'true');
+  await expect(preset('duo')).toBeVisible();
+  await expect(cue('duo')).toHaveAttribute('aria-pressed', 'true');
   expect(await recordedPvwPresetPhases(body)).toEqual([]);
 
+  await cue('solo').click();
   await inspector.getByRole('combobox', { name: 'Input transition' }).selectOption('fade');
   const input = inspector.getByRole('combobox', { name: 'Input for Plate 1 in preset Solo' });
   await input.click();
@@ -3282,8 +3339,8 @@ async function verifyInterruptedPresetEffects(
   await expect(cue('solo')).toContainText('SHOWING IN PVW');
   await body.evaluate((el) => el.setAttribute('data-pvw-preset-phases', '[]'));
   await apply('duo').click();
-  await expect(preset('duo')).toBeVisible();
-  await expect(cue('duo')).toHaveAttribute('aria-pressed', 'true');
+  await expect(preset('solo')).toBeVisible();
+  await expect(cue('solo')).toHaveAttribute('aria-pressed', 'true');
   expect(await recordedPvwPresetPhases(body)).toEqual([]);
 }
 

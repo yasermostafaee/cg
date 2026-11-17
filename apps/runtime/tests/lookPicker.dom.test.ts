@@ -63,7 +63,7 @@ async function render(
   over: {
     activeId?: string | undefined;
     refusal?: string | undefined;
-    target?: 'air' | 'preview';
+    target?: 'air' | 'preview' | 'next';
     /** DELTA 11 — the row's rendered tone, so a case can put the row on air. */
     onAir?: boolean;
   } = {},
@@ -550,11 +550,18 @@ describe('B-151 — the picker names its TARGET, because one control serves two'
     control the hand is on, so it is legible at the point of action rather than three columns
     away.
   */
-  it('🔴 an ON-AIR row’s picker says LOOK, and does not claim to be a preview', async () => {
+  it('an ON-AIR row’s picker says PGM, and does not claim to be a preview', async () => {
     const { el } = await render({ target: 'air' });
-    expect(el.textContent).toContain('LOOK');
+    expect(el.textContent).toContain('PGM');
     expect(el.textContent).not.toContain('PVW LOOK');
     expect(el.querySelector('[data-look-target="air"]')).not.toBeNull();
+  });
+
+  it('an off-air row names its first PGM preset and keeps the buttons enabled', async () => {
+    const { el } = await render({ target: 'next' });
+    expect(el.textContent).toContain('PGM · FIRST');
+    expect(seg(el, 'right')?.disabled).toBe(false);
+    expect(el.querySelector('[data-look-target="next"]')).not.toBeNull();
   });
 
   it('🔴 a REHEARSING row’s picker says PVW LOOK', async () => {

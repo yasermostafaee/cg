@@ -251,25 +251,11 @@ interface Props {
    */
   onAir: boolean;
   /**
-   * 🔴 **WHAT THIS PRESS CHANGES — the PREVIEW, or AIR.** (`B-151`, owner patch 2026-08-21.)
-   *
-   * There is ONE control and one call: `stack.set-active-look`, whose effect follows the
-   * ROW's state — a rehearsing row is off air, so the bridge records the look and sends
-   * nothing; an on-air switch starts immediately. A duplicate picker above PVW was built and removed
-   * on the owner's correction, because _"the same LOOK buttons on the row already worked for
-   * PVW too"_ and two controls for one operation is this repo's two-spellings defect.
-   *
-   * ⚠ But a control whose effect depends on state is only safe if the operator can READ that
-   * state, and the client's requirement is that they cannot be mistaken. The row's state cell
-   * already says REHEARSING or ON AIR; this makes the picker say the same thing about
-   * ITSELF, at the point of action, so the answer is in the control the hand is on rather
-   * than in a cell three columns away.
-   *
-   * ⚠ These two are MUTUALLY EXCLUSIVE by the R-022 interlock — rehearse is refused for an
-   * on-air row and a take is refused for a rehearsing one — so there is no third state where
-   * the label would have to hedge.
+   * Row presets address PGM: first preset while off air, immediate switch while on air.
+   * The dedicated preview variant remains available to preview-only consumers. PVW's
+   * Inspector selection is independent of either PGM operation.
    */
-  target: 'air' | 'preview';
+  target: 'air' | 'preview' | 'next';
 }
 
 export function LookPicker({
@@ -282,6 +268,7 @@ export function LookPicker({
   onAir,
 }: Props): JSX.Element {
   const preview = target === 'preview';
+  const starting = target === 'next';
   return (
     <div
       style={styles.line}
@@ -321,8 +308,14 @@ export function LookPicker({
         `PVW LOOK` label is built on). `LooksBindingsSection`'s CLEAR PATCH is the precedent for
         an immediate control living beside staged ones and saying so.
       */}
-      <span style={styles.label} title={IMMEDIATE_TITLE}>
-        {preview ? 'PVW LOOK' : 'LOOK'} <span style={styles.now}>· NOW</span>
+      <span
+        style={styles.label}
+        title={
+          starting ? 'Selecting a preset chooses the first preset taken on air.' : IMMEDIATE_TITLE
+        }
+      >
+        {preview ? 'PVW LOOK' : 'PGM'}{' '}
+        <span style={styles.now}>{starting ? '· FIRST' : '· NOW'}</span>
       </span>
       <span style={styles.strip} data-look-strip="">
         {looks.map((look) => {

@@ -398,11 +398,6 @@ export function Inspector({
     info: TemplateInfo | null;
     retained: RetainedLookFields | null;
   } | null>(null);
-  const [pinnedLook, setPinnedLook] = useState<{ itemId: string; lookId: string } | null>(null);
-  const selectedItemId = item?.itemId;
-  useEffect(() => {
-    setPinnedLook((current) => (current?.itemId === selectedItemId ? current : null));
-  }, [selectedItemId]);
   /**
    * Every template this browser holds — read ONLY to answer "does another
    * template share this one's display name?". Browser-local (B-085), so it
@@ -605,17 +600,13 @@ export function Inspector({
   const schema = resolvedInfo?.fields ?? null;
   const lookCarrier = resolvedInfo?.liveSources;
   const looks = lookCarrier?.looks ?? [];
-  const previewPin = rehearsing === true ? previewLookPin(itemId, item.activeLookId) : undefined;
+  const previewPin = previewLookPin(itemId);
   const programmeFocus =
     rehearsing === true && resolvedInfo?.controlLiveLayout !== undefined
       ? controlLiveLayoutFocusTarget(resolvedInfo.controlLiveLayout, item.activeLookId)
       : undefined;
   const editingLook =
     looks.find((look) => look.id === previewPin) ??
-    looks.find(
-      (look) =>
-        rehearsing !== true && pinnedLook?.itemId === itemId && pinnedLook.lookId === look.id,
-    ) ??
     (lookCarrier === undefined
       ? undefined
       : activeLookOf(lookCarrier, programmeFocus?.presetId ?? item.activeLookId));
@@ -861,11 +852,7 @@ export function Inspector({
           channel={itemChannel}
           editingLook={editingLook}
           onEditLook={(lookId) => {
-            if (rehearsing === true) {
-              setPreviewLookPin(itemId, lookId);
-            } else {
-              setPinnedLook({ itemId, lookId });
-            }
+            setPreviewLookPin(itemId, lookId);
           }}
         />
         {/* `TIMING-WIRE-22` §4 — the template's timing: `mode`/`hold` as FACTS, and the

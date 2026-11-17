@@ -21,7 +21,7 @@ test('the look picker is on the row, shows what is live, and switches in one act
   // ── 1. THE PICKER IS THERE, always, on a row whose template authors looks ──────
   const picker = row.locator('[data-look-picker]');
   await expect(picker).toBeVisible();
-  await expect(picker).toContainText('LOOK');
+  await expect(picker).toContainText('PGM');
 
   // ── …and it IS the readout: exactly one segment marked, the authored default ───
   const seg = (id: string) => row.locator(`[data-look-id="${id}"]`);

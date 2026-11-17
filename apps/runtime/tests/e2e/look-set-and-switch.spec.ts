@@ -416,7 +416,7 @@ test('🔴 §4 — RED-FIRST: switch away and back, and the same source is on th
   expect(before['l-1']?.name).toContain('Studio 1');
 
   // AWAY — to SOLO, which places only frame 1 (full raster).
-  const seg = (id: string) => row.locator(`[data-look-id="${id}"]`);
+  const seg = (id: string) => looks.locator(`[data-look-tab="${id}"]`);
   await seg('solo').click();
   await expect(seg('solo')).toHaveAttribute('aria-pressed', 'true');
   // POSITIVE CONTROL: the switch really moved the picture — frames 3 and 5 are gone and frame

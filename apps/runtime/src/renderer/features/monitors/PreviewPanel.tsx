@@ -51,7 +51,7 @@ import {
   maskPlacementsWithDraft,
   previewLookPin,
   setPreviewLookPin,
-  prunePreviewLookPins,
+  preservePreviewLookPin,
   subscribeDrafts,
 } from '../inspector/draftStore.js';
 import {
@@ -187,9 +187,6 @@ export function PreviewPanel({
   // defeat the point — the operator is here to see the edit before it reaches
   // air.
   const draftVersion = useSyncExternalStore(subscribeDrafts, draftsVersion, draftsVersion);
-  useEffect(() => {
-    prunePreviewLookPins(new Set(rehearsals.map(({ itemId }) => itemId)), items);
-  }, [rehearsals, items, draftVersion]);
 
   /**
    * R-049 — the template registry and the sources store, joined for the live-plate
@@ -205,6 +202,24 @@ export function PreviewPanel({
   const templates = useTemplateIndex(
     items.map((i) => ({ templateId: i.templateId, channel: boundChannelOf(i, slots) })),
   );
+  useEffect(() => {
+    for (const rehearsal of rehearsals) {
+      const item = items.find(({ itemId }) => itemId === rehearsal.itemId);
+      if (item === undefined) continue;
+      const info = templates.get(item.templateId, rehearsal.channel);
+      const live = info?.liveSources;
+      const focus =
+        info?.controlLiveLayout === undefined
+          ? undefined
+          : controlLiveLayoutFocusTarget(info.controlLiveLayout, item.activeLookId);
+      preservePreviewLookPin(
+        item.itemId,
+        live === undefined
+          ? undefined
+          : activeLookOf(live, focus?.presetId ?? item.activeLookId)?.id,
+      );
+    }
+  }, [rehearsals, items, templates]);
   const sourceVersion = useSyncExternalStore(subscribeSources, sourcesVersion, sourcesVersion);
   const catalog = currentSourceCatalog();
   const panSourceAspects = useMemo(
@@ -232,7 +247,7 @@ export function PreviewPanel({
           const info = templates.get(item.templateId, r.channel) ?? null;
           const live = info?.liveSources;
           const controlLiveLayout = info?.controlLiveLayout;
-          const pinned = previewLookPin(item.itemId, item.activeLookId);
+          const pinned = previewLookPin(item.itemId);
           const cue = live?.looks?.some(({ id }) => id === pinned) ? pinned : undefined;
           const programmeFocus =
             controlLiveLayout === undefined

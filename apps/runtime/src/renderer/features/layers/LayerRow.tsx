@@ -1,7 +1,12 @@
 import { playoutEngineWording, useEngineName } from '../../ui/engineWording.js';
 import { useState } from 'react';
 import { useCanOperate } from '../../hooks/useCanOperate.js';
-import { LAYER_SHORTCUT_VERBS, type FixedSlotState, type TemplateInfo } from '@cg/shared-ipc';
+import {
+  activeLookOf,
+  LAYER_SHORTCUT_VERBS,
+  type FixedSlotState,
+  type TemplateInfo,
+} from '@cg/shared-ipc';
 import {
   controlLiveLayoutFocusTarget,
   controlLiveLayoutSoloTarget,
@@ -44,7 +49,7 @@ import { rowState, type RowBinding } from './rowState.js';
 import { BackupStatus } from './BackupStatus.js';
 import { plateLabelOf, takeRefusalLine, TakeRefusalText } from './takeRefusalLine.js';
 import { currentSourceCatalog } from '../sources/sourceStore.js';
-import { followAcceptedLayerPreset } from '../inspector/draftStore.js';
+import { preservePreviewLookPin } from '../inspector/draftStore.js';
 import {
   effectiveLayoutEffects,
   frameTransitionPreference,
@@ -378,7 +383,7 @@ export function LayerRow({
    * the binding and not this value is what gets passed to it.
    */
   const item: StackItemState | null = binding.kind === 'bound' ? binding.item : null;
-  const legacyPreview = rehearsing && !previewOnly;
+  const legacyPreview = rehearsing && !previewOnly && (item === null || !isOnAirStatus(item));
 
   const layerName = `${String(slot.channel)}-${String(slot.layer)}`;
   /**
@@ -418,7 +423,14 @@ export function LayerRow({
   const switchLook = async (item: StackItemState, lookId: string): Promise<void> => {
     if (layout !== undefined && switchingLayout) return;
     if (layout !== undefined) setSwitchingLayout(true);
-    const follow = followAcceptedLayerPreset(item.itemId, lookId);
+    const programmeFocus =
+      layout === undefined ? undefined : controlLiveLayoutFocusTarget(layout, item.activeLookId);
+    preservePreviewLookPin(
+      item.itemId,
+      template?.liveSources === undefined
+        ? undefined
+        : activeLookOf(template.liveSources, programmeFocus?.presetId ?? item.activeLookId)?.id,
+    );
     /*
       🔴 THE REJECTION IS CAUGHT, not only the `ok: false`.
 
@@ -470,7 +482,6 @@ export function LayerRow({
         ...(onProgramme && focusSlide !== undefined && { focusSlide }),
         ...(onProgramme && focusInputTransition !== undefined && { focusInputTransition }),
       });
-      if (res.ok && layout === undefined) follow();
       // `LOOK-SWITCH-01` — a refused PLATE is said on this row (`takeRefusalLine`, below), in this
       // channel's view only, so no banner repeats it (`lookSwitchBanner`).
       const banner = lookSwitchBanner(res);
@@ -1367,9 +1378,8 @@ export function LayerRow({
           looks={looks}
           activeId={item.activeLookId}
           /*
-            B-151 / R-117 — the legacy preview look writes the off-air row only.
-            Independent PVW can run beside programme. Its immediate look picker
-            retains the air target and the corresponding connection gate.
+            Off air this stores the starting PGM preset; on air it switches PGM.
+            Both leave the separately pinned Inspector/PVW selection alone.
           */
           /*
             🔴 DELTA 11 — the ROW's own rendered tone, not a second derivation of "on air".
@@ -1387,7 +1397,7 @@ export function LayerRow({
           }
           rowName={rowName}
           // The row's own state decides what the press changes, and says so on the control.
-          target={legacyPreview ? 'preview' : 'air'}
+          target={!legacyPreview && isOnAirStatus(item) ? 'air' : 'next'}
           onPick={(lookId) => {
             void switchLook(item, lookId);
           }}

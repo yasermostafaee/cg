@@ -195,11 +195,7 @@ test('the name follows a PVW LOOK switch, not just the boxes', async ({ app }) =
 
   // Switch the PVW look. `look-2` has NO binding for `l-1`, so it falls through to the
   // template default — and the name must move with the look.
-  await page
-    .locator(`[data-layer="${String(layer)}"]`)
-    .locator('[data-look-picker]')
-    .locator('[data-look-id="look-2"]')
-    .click();
+  await looks.locator('[data-look-tab="look-2"]').click();
 
   await expect(marker(page, 'l-1')).toContainText('Studio 1');
   // …and `l-2` is not in `look-2` at all, so it has no placeholder — absence, not a

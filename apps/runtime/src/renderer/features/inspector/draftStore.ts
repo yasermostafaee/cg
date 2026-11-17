@@ -10,7 +10,6 @@ import {
   type LiveMaskPlacement,
   type Position,
   type PositionAnchor,
-  type StackItemState,
   type StackItemTimingOverride,
 } from '@cg/shared-schema';
 
@@ -103,53 +102,22 @@ const plateDrafts = new Map<string, Map<string, string>>();
  * parses.
  */
 const lookBindingDrafts = new Map<string, Map<string, Map<string, string>>>();
-const previewLookPins = new Map<
-  string,
-  { lookId: string; selection: symbol; followWhenApplied?: string }
->();
+const previewLookPins = new Map<string, string>();
 
 /** A local cue on the Preview monitor, independent of the programme's applied preset. */
-export function previewLookPin(itemId: string, applied: string | undefined): string | undefined {
-  const pin = previewLookPins.get(itemId);
-  return pin?.followWhenApplied !== undefined && pin.followWhenApplied === applied
-    ? undefined
-    : pin?.lookId;
+export function previewLookPin(itemId: string): string | undefined {
+  return previewLookPins.get(itemId);
 }
 
 export function setPreviewLookPin(itemId: string, lookId: string): void {
-  previewLookPins.set(itemId, { lookId, selection: Symbol() });
+  previewLookPins.set(itemId, lookId);
   bump();
 }
 
-/** An acknowledged Layer pick follows the applied preset as soon as its stack update arrives. */
-export function followAcceptedLayerPreset(itemId: string, lookId: string): () => void {
-  const selectionAtRequest = previewLookPins.get(itemId)?.selection;
-  return () => {
-    const pin = previewLookPins.get(itemId);
-    // A more recent Inspector selection still owns the local Preview.
-    if (pin === undefined || pin.selection !== selectionAtRequest) return;
-    previewLookPins.set(itemId, { ...pin, followWhenApplied: lookId });
-    bump();
-  };
-}
-
-export function prunePreviewLookPins(
-  rehearsing: ReadonlySet<string>,
-  items: readonly Pick<StackItemState, 'itemId' | 'activeLookId'>[],
-): void {
-  let changed = false;
-  for (const itemId of previewLookPins.keys()) {
-    if (!rehearsing.has(itemId)) changed = previewLookPins.delete(itemId) || changed;
-  }
-  for (const { itemId, activeLookId } of items) {
-    if (
-      activeLookId !== undefined &&
-      previewLookPins.get(itemId)?.followWhenApplied === activeLookId
-    ) {
-      changed = previewLookPins.delete(itemId) || changed;
-    }
-  }
-  if (changed) bump();
+/** Capture the current PVW before a PGM selection changes, without replacing an Inspector cue. */
+export function preservePreviewLookPin(itemId: string, lookId: string | undefined): void {
+  if (lookId === undefined || previewLookPins.has(itemId)) return;
+  setPreviewLookPin(itemId, lookId);
 }
 
 /**
