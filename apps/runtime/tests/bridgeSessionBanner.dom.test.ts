@@ -10,6 +10,7 @@ import {
   type EngineLine,
   type EngineSessions,
 } from '@cg/shared-ipc';
+import { saveStationAddress } from '../src/platform/stationAddress.js';
 import { BridgeSessionBanner } from '../src/renderer/features/status/BridgeSessionBanner.js';
 import type { AuthSessionState } from '../src/shared/runtime-bridge.js';
 import { authStub, fillBridgeStub, signedInStub } from './support/authStub.js';
@@ -63,6 +64,7 @@ async function mount(
   engines?: {
     readonly sessions: EngineSessions;
     readonly signInBackup?: (req: { username: string; password: string }) => Promise<unknown>;
+    readonly signInUrl?: string;
   },
 ): Promise<{
   push: (next: BridgeSessionState) => Promise<void>;
@@ -72,8 +74,15 @@ async function mount(
   const listeners = new Set<(s: BridgeSessionState) => void>();
   const spy = vi.fn(signIn);
   const backupSpy = vi.fn(engines?.signInBackup ?? (() => Promise.resolve({ ok: true })));
+  const authDefaults = authStub(auth);
   const stub = {
-    auth: authStub(auth),
+    auth: {
+      ...authDefaults,
+      capabilities: () => ({
+        ...authDefaults.capabilities(),
+        signInUrl: engines?.signInUrl ?? null,
+      }),
+    },
     bridgeSession: {
       state: () => Promise.resolve(initial),
       onChanged: (l: (s: BridgeSessionState) => void) => {
@@ -357,6 +366,60 @@ describe('RELEASE-0112-01 — one sign-in per engine', () => {
       'Backup engine: The username or password is wrong.',
     );
   });
+
+  it('shows the configured Playout origin for an internal primary address and signs in through the primary route', async () => {
+    expect(
+      saveStationAddress({
+        playoutAddress: 'https://playout.example.test:8443',
+        bridgeAddress: 'bridge.example.test:5280',
+      }),
+    ).toBe(true);
+    const { signIn, signInBackup } = await mount({ state: 'needs-admin' }, ADMIN, undefined, {
+      sessions: pair(
+        { ...line('primary', 'needs-admin'), address: 'http://127.0.0.1:8080' },
+        { ...line('backup', 'needs-admin'), address: 'http://127.0.0.1:8090' },
+      ),
+      signInUrl: 'http://bridge.example.test:8080/api/cg/auth/token',
+    });
+    await act(async () => {
+      openButton()?.click();
+    });
+    expect(rows()).toEqual([
+      'Primary enginehttps://playout.example.test:8443Needs a station admin to sign in.',
+      'Backup enginehttp://127.0.0.1:8090Needs a station admin to sign in.',
+    ]);
+    const password = openDialog()?.querySelector<HTMLInputElement>('#cg-bridge-signin-pass');
+    if (password == null) throw new Error('no password field');
+    await type(password, 'the-primary-password');
+    await press('Sign in');
+    expect(signIn).toHaveBeenCalledWith({
+      username: 'cg-admin',
+      password: 'the-primary-password',
+    });
+    expect(signInBackup).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['http://playout.example.test:8180/api/cg/auth/token', 'http://playout.example.test:8180'],
+    ['http://127.0.0.1:8080/api/cg/auth/token', 'http://[::1]:8080'],
+  ])(
+    'uses the browser sign-in origin only when it names a network host (%s)',
+    async (signInUrl, origin) => {
+      await mount({ state: 'needs-admin' }, ADMIN, undefined, {
+        sessions: {
+          primary: { ...line('primary', 'needs-admin'), address: 'http://[::1]:8080' },
+          backup: null,
+        },
+        signInUrl,
+      });
+      await act(async () => {
+        openButton()?.click();
+      });
+      expect(openDialog()?.querySelector('[data-engine-row="primary"] bdi')?.textContent).toBe(
+        origin,
+      );
+    },
+  );
 
   it('🔴 C3 — the account offered is cg-bridge for a 2.9.4 engine, cg-admin for 2.9.3 — and an account the admin types is kept', async () => {
     await mount({ state: 'needs-admin' }, ADMIN, undefined, {

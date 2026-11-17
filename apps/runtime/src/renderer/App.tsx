@@ -585,6 +585,9 @@ export function App(): JSX.Element {
                       <MonitorStrip
                         companionMode={monitorCompanionMode}
                         hasSelectedLayer={selected !== null}
+                        playoutSignInUrl={
+                          capabilities?.mode === 'playout' ? capabilities.signInUrl : undefined
+                        }
                         selectedPreviewItem={selectedId}
                         onCompanionModeChange={setMonitorCompanionMode}
                         canEditPreviewPosition={canOperate}

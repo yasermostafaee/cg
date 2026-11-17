@@ -17,8 +17,10 @@ import {
   type EngineSessions,
 } from '@cg/shared-ipc';
 import { useAuthSession } from '../../hooks/useAuthSession.js';
+import { useAuthCapabilities } from '../../hooks/useAuthCapabilities.js';
 import { useEngineSessions } from '../../hooks/useEngineSessions.js';
 import { useLicense } from '../../hooks/useLicense.js';
+import { playoutOriginForLoopback } from '../../../platform/bridgeUrl.js';
 import { Tabs } from '../../ui/Tabs.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
@@ -190,6 +192,15 @@ export function localDateTime(iso: string): string {
   );
 }
 
+function engineDisplayAddress(line: EngineLine, signInUrl: string | null): string | null {
+  if (line.engine !== 'primary' || line.address === null) return line.address;
+  try {
+    return playoutOriginForLoopback(new URL(line.address).hostname, signInUrl) ?? line.address;
+  } catch {
+    return line.address;
+  }
+}
+
 /**
  * A station admin's one-time sign-in for the bridge. Holds the password only while it is open.
  *
@@ -210,6 +221,7 @@ function BridgeSignInDialog({
   onClose: () => void;
 }): JSX.Element {
   const engineName = useEngineName();
+  const signInUrl = useAuthCapabilities()?.signInUrl ?? null;
   const lines: readonly EngineLine[] =
     engines === null ? [] : [engines.primary, ...(engines.backup !== null ? [engines.backup] : [])];
   const [engine, setEngine] = useState<Engine>(
@@ -307,19 +319,22 @@ function BridgeSignInDialog({
       {lines.length > 0 && (
         // `RELEASE-0112-01` — each engine, its address and its state, in words (facts, not controls).
         <div style={styles.engines} aria-label="Engines" data-engines="">
-          {lines.map((line) => (
-            <div key={line.engine} style={styles.engineRow} data-engine-row={line.engine}>
-              <span style={styles.engineName}>{ENGINE_LABEL[line.engine]}</span>
-              {line.address !== null && (
-                <bdi style={styles.engineAddress} dir="ltr">
-                  {line.address}
-                </bdi>
-              )}
-              <span style={styles.engineState} data-engine-state={line.state}>
-                {engineStateText(line)}
-              </span>
-            </div>
-          ))}
+          {lines.map((line) => {
+            const address = engineDisplayAddress(line, signInUrl);
+            return (
+              <div key={line.engine} style={styles.engineRow} data-engine-row={line.engine}>
+                <span style={styles.engineName}>{ENGINE_LABEL[line.engine]}</span>
+                {address !== null && (
+                  <bdi style={styles.engineAddress} dir="ltr">
+                    {address}
+                  </bdi>
+                )}
+                <span style={styles.engineState} data-engine-state={line.state}>
+                  {engineStateText(line)}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
       {lines.length > 1 ? (

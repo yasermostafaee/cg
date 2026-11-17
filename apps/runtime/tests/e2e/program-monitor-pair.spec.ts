@@ -13,6 +13,7 @@ interface ProgramMonitorSeed {
   readonly statuses?: readonly PgmReturnStatus[];
   readonly readings?: readonly PgmMeterReading[];
   readonly topology?: PgmTopology;
+  readonly managedPlayoutAddress?: string;
 }
 
 interface TestProgrammeAudioState {
@@ -46,11 +47,24 @@ async function open(page: Page, seed: ProgramMonitorSeed): Promise<void> {
       w.__CG_BRIDGE_URL__ = 'ws://127.0.0.1:1';
       if (value.topology === undefined) return;
       w.programmeTopology = value.topology;
+      const playoutAddress = value.managedPlayoutAddress;
+      if (playoutAddress !== undefined) {
+        localStorage.setItem('cg.runtime.station.v1', JSON.stringify({ playoutAddress }));
+      }
       w.programmeAudio = { active: [], events: [], maxConcurrent: 0, meterSubscriptions: 0 };
       // Interpose at the RuntimeBridge seam while the app installs its normal test adapter.
       Object.defineProperty(w, 'cg', {
         configurable: true,
         set(bridge: typeof window.cg) {
+          if (playoutAddress !== undefined) {
+            bridge.auth.capabilities = () => ({
+              mode: 'playout',
+              signInUrl: 'http://127.0.0.1:8080/api/v1/auth/sign-in',
+              refreshUrl: null,
+              contractVersion: null,
+              setupPhase: null,
+            });
+          }
           bridge.pgmReturn.topology = (channel) =>
             Promise.resolve(w.programmeTopology.channel === channel ? w.programmeTopology : null);
           bridge.pgmReturn.audioUrl = (_channel, engine = 'A', resourceKey) =>
@@ -110,6 +124,41 @@ async function open(page: Page, seed: ProgramMonitorSeed): Promise<void> {
   const show = page.getByRole('button', { name: 'Show monitors' });
   await show.click();
 }
+
+test('A shows the configured Playout hostname when discovery reports a loopback address', async ({
+  page,
+}) => {
+  await open(page, {
+    backupChannel: 2,
+    managedPlayoutAddress: 'http://192.168.21.32:8080',
+    topology: {
+      channel: 1,
+      members: [
+        {
+          engine: 'A',
+          name: 'Apasai Server (127.0.0.1)',
+          physicalChannel: 1,
+          resourceKey: 'primary-1',
+        },
+        {
+          engine: 'B',
+          name: 'Apasai Server (192.168.21.43)',
+          physicalChannel: 2,
+          resourceKey: 'reserve-2',
+        },
+      ],
+      active: 'B',
+    },
+  });
+
+  await page.getByRole('button', { name: 'All', exact: true }).click();
+  await expect(page.locator('[data-pgm-screen="A"]')).toContainText(
+    'Apasai Server (192.168.21.32)',
+  );
+  const backup = page.locator('[data-pgm-screen="B"]');
+  await expect(backup).toContainText('Apasai Server (192.168.21.43)');
+  await expect(backup).toHaveAttribute('data-pgm-active', '');
+});
 
 test('A+B keeps physical labels through a B-primary state, shows one stalled feed, and binds one meter source', async ({
   page,

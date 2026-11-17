@@ -1,4 +1,9 @@
-import { DEFAULT_BRIDGE_HOST, DEFAULT_BRIDGE_PORT, splitHostPort } from '@cg/shared-ipc';
+import {
+  DEFAULT_BRIDGE_HOST,
+  DEFAULT_BRIDGE_PORT,
+  normalisePlayoutAddress,
+  splitHostPort,
+} from '@cg/shared-ipc';
 import { standaloneBridgeAddress } from '../shared/station-address.js';
 import { insideCgControl } from './desktop.js';
 import { loadStationAddress, type StationAddress } from './stationAddress.js';
@@ -102,6 +107,30 @@ export function bridgeAddressFor(playoutAddress: string, bridgeAddress: string):
 }
 
 const LOOPBACK_HOST = /^(localhost|127(?:\.\d{1,3}){3}|\[::1\]|::1)$/i;
+
+/** The primary Playout origin as seen by this console, for labels that report loopback. */
+export function playoutOriginForLoopback(
+  reportedHost: string,
+  signInUrl: string | null = null,
+): string | null {
+  if (!LOOPBACK_HOST.test(reportedHost)) return null;
+  const station = loadStationAddress();
+  if (station !== null && 'mode' in station) return null;
+  const address = station === null ? signInUrl : normalisePlayoutAddress(station.playoutAddress);
+  if (address === null) return null;
+  try {
+    const url = new URL(address);
+    if (
+      (url.protocol !== 'http:' && url.protocol !== 'https:') ||
+      LOOPBACK_HOST.test(url.hostname)
+    ) {
+      return null;
+    }
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * 🔴 `B-317` — **A LOOPBACK ADDRESS CG BRIDGE ADVERTISES NAMES CG BRIDGE'S OWN MACHINE.** CG Bridge set up

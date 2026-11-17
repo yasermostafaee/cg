@@ -54,8 +54,8 @@
           "en": "Station setup offers larger source previews in Grid and List views. Apply servers sits in Advanced, Bridge and Control version differences appear in amber, and Version history opens in a larger window."
         },
         {
-          "fa": "نوار وضعیت سرورها را با Server A و Server B نشان می‌دهد و مشخص می‌کند کدام سرور فرمان‌های گرافیک را دریافت می‌کند.",
-          "en": "The status bar identifies Server A and Server B and shows which server controls CG graphics."
+          "fa": "نوار وضعیت سرورها را با Server A و Server B نشان می‌دهد و مشخص می‌کند کدام سرور فرمان‌های گرافیک را دریافت می‌کند. در PGM و پنجرهٔ ورود Bridge، آدرس سرور Playout برای اپراتور نمایش داده می‌شود.",
+          "en": "The status bar identifies Server A and Server B and shows which server controls CG graphics. PGM and Bridge sign-in display the operator's Playout server address."
         },
         {
           "fa": "کانال رزرو از فهرست کانال‌های سازگار سرور B انتخاب می‌شود. نام قاب و ورودی در پیش‌نمایش و Live plates خواناتر است و Station layers فقط وضعیت لایه‌ها را خلاصه می‌کند.",

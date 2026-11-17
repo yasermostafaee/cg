@@ -10,6 +10,7 @@ import { useStackSnapshot } from '../../hooks/useStack.js';
 import { airTally, onChannel } from '../stack/onAir.js';
 import { MonitorPanel, type ProgrammeMonitorTarget } from './MonitorPanel.js';
 import { PreviewPanel } from './PreviewPanel.js';
+import { programmeServerDisplayName } from './programmeServerDisplayName.js';
 import { useProgramMonitorPreferences } from './useProgramMonitorPreferences.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
@@ -20,6 +21,7 @@ export type MonitorCompanionMode = 'monitor' | 'layer' | 'layer-inspector';
 interface Props {
   companionMode: MonitorCompanionMode;
   hasSelectedLayer: boolean;
+  playoutSignInUrl?: string | null | undefined;
   selectedPreviewItem?: string | null | undefined;
   canEditPreviewPosition?: boolean;
   onSelectPreviewItem?: (itemId: string) => void;
@@ -48,6 +50,7 @@ interface Props {
 export function MonitorStrip({
   companionMode,
   hasSelectedLayer,
+  playoutSignInUrl,
   selectedPreviewItem,
   onCompanionModeChange,
   canEditPreviewPosition = false,
@@ -112,6 +115,7 @@ export function MonitorStrip({
       ]
     : (topology?.members ?? []).map((member) => ({
         ...member,
+        name: programmeServerDisplayName(member, playoutSignInUrl),
         active: member.engine === topology?.active,
       }));
 
