@@ -1,11 +1,19 @@
-import { useState, type CSSProperties } from 'react';
+import { type CSSProperties } from 'react';
 import { Info, TriangleAlert } from 'lucide-react';
-import type { ConnectionHealth, FailoverInfo } from '@cg/shared-ipc';
+import type { ConnectionConfig, ConnectionHealth, FailoverInfo } from '@cg/shared-ipc';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { Tag } from '../../ui/Tag.js';
 import { colors, cssVars, NOTICE_PX } from '../../theme.js';
 import { useLink } from '../../hooks/useLink.js';
+import { useAuthCapabilities } from '../../hooks/useAuthCapabilities.js';
+import { useAuthSession } from '../../hooks/useAuthSession.js';
+import { useBridgeSnapshot } from '../../hooks/useBridgeSnapshot.js';
+import { useFailoverDismissal } from './failoverDismissal.js';
+
+const fetchConfig = (): Promise<ConnectionConfig | null> => window.cg.connections.config();
+const subscribeConfig = (changed: (config: ConnectionConfig | null) => void) =>
+  window.cg.connections.onConfigChanged(changed);
 
 interface Props {
   health: ConnectionHealth | null;
@@ -20,9 +28,9 @@ interface Props {
  *     hasn't dismissed the current event yet, OR
  *   - The active primary session is in 'degraded' / 'disconnected' state.
  *
- * Dismissal is keyed by `lastFailover.at` — a NEW failover (different timestamp) re-shows the
- * banner even if the operator dismissed the previous one. Broken state is never silently
- * hidden: an unhealthy primary has no Dismiss at all.
+ * Completed direct-CasparCG events are acknowledged per station and operator across restarts.
+ * A new event still appears. Playout owns its own transfers, so legacy CG failover events
+ * are not shown on a Playout station. An unhealthy connection cannot be dismissed.
  *
  * ── `B-172` — A STRIP WHOSE TONE IS THE SITUATION'S, NOT ONE RED SLAB ────────
  *
@@ -119,16 +127,29 @@ const styles = {
 } as const;
 
 export function FailoverBanner({ health }: Props): JSX.Element | null {
-  const [dismissedAt, setDismissedAt] = useState<string | null>(null);
   const link = useLink();
+  const capabilities = useAuthCapabilities();
+  const auth = useAuthSession();
+  const config = useBridgeSnapshot(fetchConfig, subscribeConfig, null);
+  const acknowledgement = useFailoverDismissal(
+    health?.lastFailover,
+    config,
+    auth,
+    capabilities?.signInUrl ?? null,
+  );
 
   if (link === 'offline-mock') return null;
   if (health === null) return null;
 
   const recent = health.lastFailover;
+  const playoutManaged = capabilities?.mode === 'playout';
   const primaryUnhealthy =
     health.primary.state === 'degraded' || health.primary.state === 'disconnected';
-  const showRecent = recent !== undefined && recent.at !== dismissedAt;
+  const showRecent =
+    capabilities?.mode === 'off' &&
+    recent !== undefined &&
+    acknowledgement.ready &&
+    !acknowledgement.dismissed;
 
   if (!showRecent && !primaryUnhealthy) return null;
   const awaitingSignIn = primaryUnhealthy && health.amcpAwaitsSignIn === true;
@@ -153,17 +174,21 @@ export function FailoverBanner({ health }: Props): JSX.Element | null {
       <span style={styles.text}>
         {awaitingSignIn
           ? AMCP_AWAITS_SIGN_IN
-          : message(showRecent ? recent : undefined, health, primaryUnhealthy)}
+          : message(showRecent ? recent : undefined, health, primaryUnhealthy, playoutManaged)}
       </span>
       <span style={styles.meta}>
-        <Tag style={styles.chip}>primary: {health.primary.label}</Tag>
-        <Tag style={styles.chip}>strategy: {health.strategy}</Tag>
+        {!playoutManaged && (
+          <>
+            <Tag style={styles.chip}>primary: {health.primary.label}</Tag>
+            <Tag style={styles.chip}>strategy: {health.strategy}</Tag>
+          </>
+        )}
         {/* A completed event can be acknowledged; a broken primary cannot be hidden. */}
         {showRecent && !primaryUnhealthy && (
           <Button
             variant="ghost"
             style={styles.dismiss}
-            onClick={() => setDismissedAt(recent.at)}
+            onClick={acknowledgement.dismiss}
             aria-label="Dismiss failover banner"
           >
             Dismiss
@@ -178,13 +203,16 @@ function message(
   recent: FailoverInfo | undefined,
   health: ConnectionHealth,
   primaryUnhealthy: boolean,
+  playoutManaged: boolean,
 ): string {
   const event =
     recent === undefined
       ? null
       : `${recent.reason === 'manual' ? 'Manual failover' : 'Auto-failover'} — switched from ${recent.from} to ${recent.to} (${recent.reason}) at ${formatTime(recent.at)}`;
   if (primaryUnhealthy) {
-    const alarm = `PRIMARY ${health.primary.label} unhealthy (${health.primary.state})`;
+    const alarm = playoutManaged
+      ? `Server ${health.primary.label} connection unhealthy (${health.primary.state})`
+      : `PRIMARY ${health.primary.label} unhealthy (${health.primary.state})`;
     return event === null ? alarm : `${alarm} — ${event}`;
   }
   return event ?? '';

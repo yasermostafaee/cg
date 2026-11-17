@@ -3198,7 +3198,7 @@ export class CasparRuntime {
       strategy: config.strategy,
       sessions: this.#sessions,
       initialPrimary: 'A',
-      autoFailoverEnabled: config.autoFailoverEnabled,
+      autoFailoverEnabled: !this.#playoutLinked && config.autoFailoverEnabled,
       // 🔴 `B-316` — every road to server B asks this, and only this.
       serverBLine: (line) => this.#serverBLine(line),
       allowReserveLine: (session, line) => this.#allowReserveLine(session, line),
@@ -21396,7 +21396,7 @@ export class CasparRuntime {
       strategy: next.strategy,
       sessions,
       initialPrimary: 'A',
-      autoFailoverEnabled: next.autoFailoverEnabled,
+      autoFailoverEnabled: !this.#playoutLinked && next.autoFailoverEnabled,
       // 🔴 `B-316` — every road to server B asks this, and only this.
       serverBLine: (line) => this.#serverBLine(line),
       allowReserveLine: (session, line) => this.#allowReserveLine(session, line),

@@ -131,3 +131,26 @@ it('refuses manual CG failover on a Playout station without changing the active 
     mockB!.receivedCommands().filter(({ line }) => /^(CG|PLAY|CLEAR|MIXER) /.test(line)),
   ).toEqual([]);
 });
+
+it.each([false, true])(
+  'Playout owns automatic failover despite a stored enabled setting after rebuild=%s',
+  async (rebuild) => {
+    await bootPair(true, true);
+    if (rebuild) {
+      await runtime!.setConfig({ ...runtime!.config(), strategy: 'mirror-async' });
+      await runtime!.whenServerHealthy(HEALTH_MS);
+    }
+    await mockA!.stop();
+    mockA = null;
+    await waitFor(() => {
+      const health = runtime!.health();
+      return [health.primary, health.backup].some(
+        (server) => server?.label === 'A' && server.state !== 'healthy',
+      );
+    });
+    expect(runtime!.currentPrimary).toBe('A');
+    expect(runtime!.health().lastFailover).toBeUndefined();
+    expect(await runtime!.failover()).toEqual({ ok: false, newPrimary: 'A' });
+  },
+  20_000,
+);

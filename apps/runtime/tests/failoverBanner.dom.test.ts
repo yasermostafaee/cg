@@ -3,7 +3,8 @@ import { StrictMode, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { ConnectionHealth } from '@cg/shared-ipc';
+import type { ConnectionConfig, ConnectionHealth } from '@cg/shared-ipc';
+import type { AuthSessionState } from '../src/shared/runtime-bridge.js';
 import {
   AMCP_AWAITS_SIGN_IN,
   FailoverBanner,
@@ -39,7 +40,7 @@ import { colors, cssVars } from '../src/renderer/theme.js';
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
 
-afterEach(async () => {
+async function unmount(): Promise<void> {
   if (root !== null) {
     const r = root;
     await act(async () => {
@@ -49,13 +50,50 @@ afterEach(async () => {
   root = null;
   container?.remove();
   container = null;
+}
+
+afterEach(async () => {
+  await unmount();
+  localStorage.clear();
 });
 
 async function mount(
   health: ConnectionHealth | null,
   link: 'live' | 'offline-mock' | 'disconnected' = 'live',
+  options: { mode?: 'off' | 'playout'; station?: string; user?: string } = {},
 ): Promise<{ el: HTMLElement; rerender: (next: ConnectionHealth | null) => Promise<void> }> {
   const stub = {
+    auth: {
+      capabilities: () => ({
+        mode: options.mode ?? 'off',
+        signInUrl: options.mode === 'playout' ? 'http://playout.example/api/auth/token' : null,
+      }),
+      onCapabilitiesChanged: () => () => undefined,
+      state: (): AuthSessionState =>
+        options.user === undefined
+          ? { kind: 'off' }
+          : {
+              kind: 'signed-in',
+              principal: {
+                sub: options.user,
+                name: options.user,
+                roles: ['operator'],
+                channels: '*',
+                expiresAt: '2027-01-01T00:00:00Z',
+                nameTruncated: false,
+              },
+              permittedChannels: [1],
+            },
+      onStateChanged: () => () => undefined,
+    },
+    connections: {
+      config: async (): Promise<ConnectionConfig> => ({
+        servers: { A: { host: options.station ?? '192.0.2.32', amcpPort: 5250, oscPort: 6251 } },
+        strategy: 'mirror-sync',
+        autoFailoverEnabled: true,
+      }),
+      onConfigChanged: () => () => undefined,
+    },
     link: {
       status: () => link,
       onStatusChanged: () => () => undefined,
@@ -215,6 +253,61 @@ describe('guard item 9 — the failover banner renders under its conditions, and
       lastFailover: { at: '2026-09-08T12:05:00.000Z', reason: 'manual', from: 'B', to: 'A' },
     });
     expect(strip(el), 'a new failover must re-show a dismissed banner').not.toBeNull();
+  });
+
+  it('keeps an acknowledgement across a console remount and still announces a new event', async () => {
+    const event: ConnectionHealth = {
+      ...healthy('A'),
+      lastFailover: { at: AT, reason: 'amcp-ping-fail', from: 'B', to: 'A' },
+    };
+    const first = await mount(event);
+    await act(async () =>
+      first.el.querySelector<HTMLButtonElement>('[aria-label="Dismiss failover banner"]')?.click(),
+    );
+    expect(strip(first.el)).toBeNull();
+    await unmount();
+    const again = await mount(event);
+    expect(strip(again.el)).toBeNull();
+    await again.rerender({
+      ...event,
+      lastFailover: { ...event.lastFailover!, at: '2026-09-08T12:05:00.000Z' },
+    });
+    expect(strip(again.el)?.textContent).toContain('Auto-failover');
+  });
+
+  it('scopes acknowledgements to the configured station and signed-in operator', async () => {
+    const event: ConnectionHealth = {
+      ...healthy('B'),
+      lastFailover: { at: AT, reason: 'manual', from: 'A', to: 'B' },
+    };
+    const first = await mount(event, 'live', { station: '192.0.2.32', user: 'one' });
+    await act(async () =>
+      first.el.querySelector<HTMLButtonElement>('[aria-label="Dismiss failover banner"]')?.click(),
+    );
+    await unmount();
+    expect(
+      strip((await mount(event, 'live', { station: '192.0.2.43', user: 'one' })).el),
+    ).not.toBeNull();
+    await unmount();
+    expect(
+      strip((await mount(event, 'live', { station: '192.0.2.32', user: 'two' })).el),
+    ).not.toBeNull();
+  });
+
+  it('suppresses old CG failover events in Playout mode while retaining real connection alarms', async () => {
+    const event: ConnectionHealth = {
+      ...healthy('A'),
+      lastFailover: { at: AT, reason: 'amcp-ping-fail', from: 'B', to: 'A' },
+    };
+    const rendered = await mount(event, 'live', { mode: 'playout' });
+    expect(strip(rendered.el)).toBeNull();
+    await rendered.rerender({
+      ...event,
+      primary: { label: 'A', state: 'disconnected', amcpAxisOk: false },
+    });
+    expect(strip(rendered.el)?.textContent).toContain('unhealthy');
+    expect(strip(rendered.el)?.textContent).not.toContain('Auto-failover');
+    expect(rendered.el.querySelector('[aria-label="Dismiss failover banner"]')).toBeNull();
   });
 
   it('🔴 THE SUPPRESSION — in test mode (offline-mock) it renders NOTHING, whatever the health says', async () => {
