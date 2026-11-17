@@ -109,3 +109,8 @@
       frames, confirmed absence and compact accessibility. Runtime typecheck, scoped lint, fresh
       build and the Windows Edge live-input-check case passed with its geometry and eight-channel
       meter assertions retained. Carrying Linux E2E remains owed under 7.5.
+- [x] 7.7 Diagnose the local full-gate failure on `35f178e6` in the existing Bridge restart fixture.
+      A trace retained Core playback while the OSC truth TTL changed the settled row from `on-air`
+      to `playing`. The fixture now awaits both page resolutions before shutdown and requires
+      either settled state with `pending=false` after restart. Core playback, restart notice and
+      zero-write assertions remain. The full four-case fixture, Bridge typecheck and scoped lint passed.

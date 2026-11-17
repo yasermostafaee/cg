@@ -127,7 +127,13 @@ it('🔴 the stack is kept by the bridge, restored at start, and checked with IN
     ).toBe(true);
     expect((await first.runtime.take(itemId)).accepted).toBe(true);
   }
-  await waitFor(() => m.layerState({ channel: 1, layer: 99 })?.onAir === true, 'the takes');
+  for (const layer of [99, 98]) {
+    expect(await m.waitForCgAddResolution({ channel: 1, layer })).toBe('resolved');
+  }
+  await waitFor(
+    () => [99, 98].every((layer) => m.layerState({ channel: 1, layer })?.onAir === true),
+    'both takes',
+  );
   await first.close();
   bridges.splice(bridges.indexOf(first), 1);
 
@@ -160,7 +166,11 @@ it('🔴 the stack is kept by the bridge, restored at start, and checked with IN
   expect(second.runtime.emptiedAir()?.rows.map((r) => r.itemId)).toEqual(['row-99']);
   expect(statusOf(second, 'row-99')).not.toBe('on-air');
   // …CONTROL: the row whose page still plays stays ON AIR…
-  await waitFor(() => statusOf(second, 'row-98') === 'on-air', 'row-98 ON AIR');
+  // A settled PLAY ack remains playing after the OSC truth TTL expires.
+  await waitFor(() => {
+    const row = second.runtime.stackSnapshot().find((item) => item.itemId === 'row-98');
+    return row?.pending === false && (row.status === 'on-air' || row.status === 'playing');
+  }, 'row-98 settled ON AIR');
   // …and NOTHING was sent for either: no re-ADD, no CLEAR, no PLAY.
   await delay(400);
   const writes = m
