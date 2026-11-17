@@ -46,6 +46,14 @@
       ],
       "fixes": [
         {
+          "fa": "در حالت Off air، دکمهٔ Remove backup اتصال ذخیره‌شدهٔ سرور B را حذف می‌کند و پنل و انتخاب‌های مربوط به آن را در PGM به‌روز می‌کند.",
+          "en": "With graphics off air, Remove backup saves the removal of Server B and refreshes its PGM panel and monitor choices."
+        },
+        {
+          "fa": "اندازهٔ تصویر ورودی هنگام بررسی ثابت می‌ماند. هاور کارت‌ها اسکرول را جابه‌جا نمی‌کند و انتخاب منبع مشخص می‌ماند. فرمت ورودی در تنظیمات یک‌خطی است. مدیاها یک فهرست و یک منوی مرتب‌سازی Name/Recent دارند و مسیر پوشه زیر آن‌ها حذف شده است.",
+          "en": "Input pictures retain their size during checks. Card hover keeps the scroll position steady and source selection distinct. Station input formats occupy one line. Media uses one library list and a Name/Recent order menu with compact, path-free captions."
+        },
+        {
           "fa": "PVW و New live layout در زمان وقفهٔ پیش‌نمایش می‌توانند تصویر معتبر ورودی یا پوستر مدیا را نشان دهند. در New live layout ستون Plates تا پایین پنجره در دسترس می‌ماند.",
           "en": "PVW and New live layout can show a current input snapshot or media poster during a preview interruption. The Plates column fills the height of the New live layout editor."
         },

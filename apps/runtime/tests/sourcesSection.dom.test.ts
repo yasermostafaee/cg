@@ -116,6 +116,10 @@ describe('§2.C — the Playout’s inputs, read-only', () => {
     ]);
     expect(rows[0]?.textContent).toContain('1080i · 25 fps · 50 fields/s');
     expect(rows[0]?.textContent).not.toContain('1080i5000');
+    expect(rows[0]?.querySelector('.cg-resource__detail')?.textContent).not.toContain('Format');
+    expect(rows[0]?.querySelector('.cg-setup-source-format')?.getAttribute('title')).toBe(
+      '1080i · 25 fps · 50 fields/s',
+    );
     // Media are not listed here, and neither is an input the Playout no longer lists.
     expect(section.textContent).not.toContain('Studio 1 clip');
     expect(section.textContent).not.toContain('Studio 5');

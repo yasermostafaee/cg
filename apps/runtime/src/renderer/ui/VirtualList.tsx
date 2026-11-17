@@ -247,7 +247,7 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
       style={tiled ? { maxHeight: height } : { height, maxHeight: height }}
       onScroll={tiled ? undefined : (e) => setScrollTop(e.currentTarget.scrollTop)}
       onKeyDown={onKeyDown}
-      onPointerMove={(e) => {
+      onPointerDown={(e) => {
         const index = optionAt(e.target, true);
         if (index !== null && index !== activeIndex) onActiveChange(index);
       }}

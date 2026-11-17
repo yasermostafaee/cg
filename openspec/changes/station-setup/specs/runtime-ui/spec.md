@@ -59,7 +59,26 @@ Every section of Station setup SHALL state how its edits reach the bridge. An Ap
 
 A section's stated commit contract SHALL be TRUE OF EVERY CONTROL IN IT: a section holding a control that is applied SHALL NOT say that nothing is waiting to be applied.
 
-The on-air refusal that pre-disables `Apply servers` SHALL name its scope, and no other section SHALL inherit it: the catalog, the delimiters and the candidate layers are not gated on air.
+The on-air refusal that pre-disables `Apply servers` and removal of a declared backup SHALL name its scope, and no other section SHALL inherit it: the catalog, the delimiters and the candidate layers are not gated on air.
+
+#### Scenario: Removing the declared backup commits immediately
+
+- **WHEN** a station-admin presses `Remove backup` with no CG item on air or unsettled **THEN** the console submits the applied connection configuration with B omitted through `connections.set-config`, preserving A and other applied settings
+- **AND** the accepted configuration is persisted and B's connection is torn down, without requiring `Apply servers`
+- **AND** unrelated Advanced drafts remain unapplied and retain their edited values
+- **AND** a backup that exists only in the local draft can be removed locally
+
+#### Scenario: Backup removal is refused while on air
+
+- **WHEN** any CG item is on air or unsettled **THEN** removal of a declared backup is disabled
+- **WHEN** the authoritative bridge refuses removal **THEN** its refusal is shown and the declared backup remains in force
+
+#### Scenario: Legacy programme returns follow the declared server set
+
+- **WHEN** B is removed from a legacy station's connection configuration **THEN** its PGM tile, picture option, audio option and active viewer are removed
+- **AND** a saved B-only or A+B picture choice and a saved B audio choice resolve to A and Follow respectively
+- **AND** reloading the console and restarting Bridge preserve the single-server configuration
+- **WHEN** Playout supplies authoritative programme-group topology **THEN** its members continue to follow that topology independently of the optional legacy CG backup connection
 
 #### Scenario: The on-air block is scoped to Servers
 

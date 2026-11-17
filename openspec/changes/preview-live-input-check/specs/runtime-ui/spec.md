@@ -1,5 +1,39 @@
 ## ADDED Requirements
 
+### Requirement: Source cards SHALL retain their geometry and distinct pointer and selection states
+
+The source picker SHALL keep picture dimensions stable during checks and use separate hover,
+keyboard focus and staged-selection treatments.
+
+#### Scenario: An inline check reports more audio channels than its thumbnail
+
+- **WHEN** an input card changes from a stereo thumbnail to an eight-channel inline check
+- **THEN** the picture and card retain the same dimensions and every returned audio channel is visible
+
+#### Scenario: The pointer crosses input and media cards
+
+- **WHEN** the pointer passes over cards near either edge of a scrolled source list
+- **THEN** the list retains its scroll position and keyboard target
+- **AND** the permanent selection treatment identifies the staged source
+- **WHEN** the operator navigates with the keyboard **THEN** the active option is brought into view
+
+### Requirement: Media and source captions SHALL remain compact
+
+The Media tab SHALL provide one library list and an order menu. Media captions and Station setup
+format descriptions SHALL use compact presentation with technical paths omitted from captions.
+
+#### Scenario: Media order is chosen from one menu
+
+- **WHEN** the Media tab opens **THEN** its single library list uses the selected Name or Recent order
+- **AND** one order button displays that value and opens a menu containing both choices
+- **AND** captions show duration and resolution with folder paths omitted
+- **AND** the Recent and All media group headings are omitted
+
+#### Scenario: Station setup reports an input format
+
+- **WHEN** an input has a long format description **THEN** its detail occupies one line
+- **AND** the full format remains available in the value's tooltip
+
 ### Requirement: PVW SHALL let the operator check one live input without changing rehearsal or air
 
 CG Control SHALL offer `Check input` for one Playout live source from the PVW workflow and from Source defaults,

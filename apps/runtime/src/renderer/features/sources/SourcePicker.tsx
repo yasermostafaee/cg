@@ -10,7 +10,7 @@ import {
   type KeyboardEvent,
   type RefObject,
 } from 'react';
-import { Cable, Check, Film, Play } from 'lucide-react';
+import { Cable, Check, ChevronDown, Film, Play } from 'lucide-react';
 import {
   canCheckLiveInput,
   INPUT_GONE_REASON,
@@ -27,6 +27,7 @@ import { Button } from '../../ui/Button.js';
 import { ComboField } from '../../ui/ComboField.js';
 import { Icon } from '../../ui/Icon.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
+import { Popover } from '../../ui/Popover.js';
 import { directionOf } from '../../ui/OperatorNames.js';
 import { TabPanel, TabStrip } from '../../ui/Tabs.js';
 import { Tag } from '../../ui/Tag.js';
@@ -198,8 +199,6 @@ export const MEDIA_PAGE = 50;
 const NEAR_END_ROWS = 10;
 /** Typing settles for this long before the Playout is asked. */
 export const SEARCH_DEBOUNCE_MS = 250;
-/** The `Recent` group: the media bound most recently on this station. */
-const RECENT_MAX = 8;
 /** A filter field appears only past this many inputs. */
 const FILTER_OVER = 10;
 
@@ -863,12 +862,9 @@ function mediaRow(
             {selected && <Icon icon={Check} size={14} />}
           </span>
           <span className="cg-picker-media__facts">
-            {item.folder !== undefined && item.folder !== '' && (
-              <bdi dir={directionOf(item.folder)}>{item.folder}</bdi>
-            )}
             {facts.map((f, i) => (
               <span key={f}>
-                {(i > 0 || (item.folder !== undefined && item.folder !== '')) && ' · '}
+                {i > 0 && ' · '}
                 {f}
               </span>
             ))}
@@ -902,6 +898,9 @@ function MediaTab({
 }): JSX.Element {
   const list = useRef<VirtualListHandle>(null);
   const search = useRef<HTMLInputElement>(null);
+  const sortAnchor = useRef<HTMLButtonElement>(null);
+  const sortMenuId = useId();
+  const [sortOpen, setSortOpen] = useState(false);
   const [preview, setPreview] = useState<MediaPreviewSelection>();
   const grid = view === 'grid';
   const { ref: resultsRef, width } = useElementWidth<HTMLDivElement>();
@@ -920,18 +919,8 @@ function MediaTab({
     () => catalog.sources.filter((source) => source.origin === 'media'),
     [catalog],
   );
-  const recent = useMemo(
-    () =>
-      media.q === ''
-        ? [...bound]
-            .sort((a, b) => (b.media?.lastBoundAt ?? '').localeCompare(a.media?.lastBoundAt ?? ''))
-            .slice(0, RECENT_MAX)
-        : [],
-    [bound, media.q],
-  );
   const presence = useSourcePresence(previewChannel, [
     ...media.items.map(({ id }) => id),
-    ...recent.map(({ id }) => id),
     ...(isMediaId(value) ? [value] : []),
   ]);
 
@@ -955,9 +944,8 @@ function MediaTab({
       );
     };
     const inResults = new Map(media.items.map((item) => [item.id, item]));
-    const shownIds = new Set([...inResults.keys(), ...recent.map((r) => r.id)]);
     // The current binding, pinned at the top when it is not otherwise in view.
-    if (isMediaId(value) && !shownIds.has(value)) {
+    if (isMediaId(value) && !inResults.has(value)) {
       const current = labelledSource(value);
       const entry = bound.find((s) => s.id === value);
       out.push({ kind: 'heading', key: 'Current', content: 'Current' });
@@ -971,27 +959,9 @@ function MediaTab({
         unavailable: current?.unavailable ?? true,
       });
     }
-    if (recent.length > 0) {
-      out.push({ kind: 'heading', key: 'Recent', content: 'Recent' });
-      for (const r of recent) {
-        addMedia(
-          `recent:${r.id}`,
-          inResults.get(r.id) ?? {
-            id: r.id,
-            name: r.name,
-            durationMs: r.media?.durationMs,
-            folder: r.media?.folder,
-            width: r.media?.width,
-            height: r.media?.height,
-            unavailable: r.status === 'unavailable',
-          },
-        );
-      }
-      out.push({ kind: 'heading', key: 'All media', content: 'All media' });
-    }
     for (const item of media.items) addMedia(`all:${item.id}`, item);
     return { rows: out, mediaByKey };
-  }, [media.items, bound, recent, value, loadThumbnail, preview, presence, grid, previewChannel]);
+  }, [media.items, bound, value, loadThumbnail, preview, presence, grid, previewChannel]);
 
   const chooseMedia = (index: number): void => {
     const key = rows[index]?.key;
@@ -1024,20 +994,63 @@ function MediaTab({
             onKeyDown={(e) => keys.onKeyDown(e, true)}
             data={{ 'data-picker-search': '', 'data-modal-autofocus': '' }}
           />
-          <div className="cg-picker-sort" role="group" aria-label="Sort">
-            {(['name', 'recent'] as const).map((order) => (
-              <Button
-                key={order}
-                variant="neutral"
-                active={media.sort === order}
-                aria-pressed={media.sort === order}
-                data-picker-sort={order}
-                onClick={() => media.setSort(order)}
+          <Button
+            ref={sortAnchor}
+            variant="neutral"
+            aria-label="Sort media"
+            aria-haspopup="dialog"
+            aria-expanded={sortOpen}
+            aria-controls={sortOpen ? sortMenuId : undefined}
+            data-picker-sort={media.sort}
+            onClick={() => setSortOpen(!sortOpen)}
+          >
+            {media.sort === 'name' ? 'Name' : 'Recent'}
+            <Icon icon={ChevronDown} size={14} />
+          </Button>
+          {sortOpen && (
+            <Popover
+              anchor={sortAnchor}
+              onClose={() => setSortOpen(false)}
+              id={sortMenuId}
+              aria-label="Sort media"
+              minWidth={160}
+              maxHeight={140}
+              initialFocusSelector="[aria-checked=true]"
+            >
+              <div
+                className="cg-picker-sort-options"
+                role="menu"
+                tabIndex={-1}
+                aria-label="Media order"
+                onKeyDown={(event) => {
+                  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                  event.preventDefault();
+                  const options = [
+                    ...event.currentTarget.querySelectorAll<HTMLButtonElement>('button'),
+                  ];
+                  const current = options.indexOf(document.activeElement as HTMLButtonElement);
+                  const step = event.key === 'ArrowDown' ? 1 : -1;
+                  options[(current + step + options.length) % options.length]?.focus();
+                }}
               >
-                {order === 'name' ? 'Name' : 'Recent'}
-              </Button>
-            ))}
-          </div>
+                {(['name', 'recent'] as const).map((order) => (
+                  <Button
+                    key={order}
+                    variant="ghost"
+                    role="menuitemradio"
+                    aria-checked={media.sort === order}
+                    onClick={() => {
+                      media.setSort(order);
+                      setSortOpen(false);
+                    }}
+                  >
+                    {order === 'name' ? 'Name' : 'Recent'}
+                    {media.sort === order && <Icon icon={Check} size={14} />}
+                  </Button>
+                ))}
+              </div>
+            </Popover>
+          )}
           <InputViewSwitch
             ariaLabel="Media view"
             view={view}

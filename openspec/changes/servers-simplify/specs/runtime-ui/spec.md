@@ -92,7 +92,8 @@ as CG Bridge's machine's, none marked as the answer, and no sentence on the tab 
 "this machine".
 When CG Bridge reports that the graphics host in force names another machine, the connection check SHALL carry a
 failed line naming that host, and for a station admin SHALL offer `Detect automatically`, which clears the field
-and opens `Advanced`; `Apply servers` commits it, as every edit on the tab.
+and opens `Advanced`; `Apply servers` commits this Advanced edit. Removing an already declared backup
+commits immediately through the same server-change route and on-air guard.
 
 #### Scenario: The owner's `.32` serving from `.93`
 

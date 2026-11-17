@@ -1,5 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { PgmMeterReading, PgmReturnStatus, PgmTopology } from '@cg/shared-ipc';
+import type {
+  BackupChannelsState,
+  ConnectionConfig,
+  PgmMeterReading,
+  PgmReturnStatus,
+  PgmTopology,
+} from '@cg/shared-ipc';
 import { wavHeader } from '../../../../tools/caspar-bridge/tests/support/fake-pgm-feed.js';
 
 /**
@@ -14,6 +20,7 @@ interface ProgramMonitorSeed {
   readonly readings?: readonly PgmMeterReading[];
   readonly topology?: PgmTopology;
   readonly managedPlayoutAddress?: string;
+  readonly removableBackup?: boolean;
 }
 
 interface TestProgrammeAudioState {
@@ -45,8 +52,8 @@ async function open(page: Page, seed: ProgramMonitorSeed): Promise<void> {
       w.CG_E2E_PROGRAM_MONITOR = value;
       w.__CG_SPLASH_DISABLED__ = true;
       w.__CG_BRIDGE_URL__ = 'ws://127.0.0.1:1';
-      if (value.topology === undefined) return;
-      w.programmeTopology = value.topology;
+      if (value.topology === undefined && value.removableBackup !== true) return;
+      if (value.topology !== undefined) w.programmeTopology = value.topology;
       const playoutAddress = value.managedPlayoutAddress;
       if (playoutAddress !== undefined) {
         localStorage.setItem('cg.runtime.station.v1', JSON.stringify({ playoutAddress }));
@@ -56,6 +63,49 @@ async function open(page: Page, seed: ProgramMonitorSeed): Promise<void> {
       Object.defineProperty(w, 'cg', {
         configurable: true,
         set(bridge: typeof window.cg) {
+          if (value.removableBackup === true) {
+            const storage = 'cg.test.programme-backup-config';
+            let config: ConnectionConfig = (JSON.parse(
+              localStorage.getItem(storage) ?? 'null',
+            ) as ConnectionConfig | null) ?? {
+              servers: {
+                A: { host: '127.0.0.1', amcpPort: 1, oscPort: 0 },
+                B: { host: '127.0.0.2', amcpPort: 2, oscPort: 0 },
+              },
+              strategy: 'mirror-sync',
+              autoFailoverEnabled: false,
+            };
+            const backupChannels = bridge.backupChannels.state;
+            const listeners = new Set<(state: BackupChannelsState) => void>();
+            const state = async (): Promise<BackupChannelsState> =>
+              config.servers.B === undefined ? { backup: null } : backupChannels();
+            bridge.backupChannels.state = state;
+            bridge.backupChannels.onChanged = (handler) => {
+              listeners.add(handler);
+              return () => listeners.delete(handler);
+            };
+            bridge.connections.config = () => Promise.resolve(config);
+            bridge.connections.health = () =>
+              Promise.resolve({
+                primary: { label: 'A', state: 'healthy', amcpAxisOk: true },
+                ...(config.servers.B !== undefined && {
+                  backup: { label: 'B' as const, state: 'healthy' as const, amcpAxisOk: true },
+                }),
+                currentPrimary: 'A',
+                strategy: config.strategy,
+              });
+            const setConfig = bridge.connections.setConfig;
+            bridge.connections.setConfig = async (next) => {
+              const result = await setConfig(next);
+              if (result.ok) {
+                config = next;
+                localStorage.setItem(storage, JSON.stringify(config));
+                const snapshot = await state();
+                for (const handler of listeners) handler(snapshot);
+              }
+              return result;
+            };
+          }
           if (playoutAddress !== undefined) {
             bridge.auth.capabilities = () => ({
               mode: 'playout',
@@ -66,7 +116,11 @@ async function open(page: Page, seed: ProgramMonitorSeed): Promise<void> {
             });
           }
           bridge.pgmReturn.topology = (channel) =>
-            Promise.resolve(w.programmeTopology.channel === channel ? w.programmeTopology : null);
+            Promise.resolve(
+              value.topology !== undefined && w.programmeTopology.channel === channel
+                ? w.programmeTopology
+                : null,
+            );
           bridge.pgmReturn.audioUrl = (_channel, engine = 'A', resourceKey) =>
             Promise.resolve(
               '/pgm-topology-test-audio/' + engine + '/' + (resourceKey ?? 'unbound'),
@@ -123,6 +177,64 @@ async function open(page: Page, seed: ProgramMonitorSeed): Promise<void> {
   await page.goto('/');
   const show = page.getByRole('button', { name: 'Show monitors' });
   await show.click();
+}
+
+for (const display of ['B', 'both'] as const) {
+  test(`Remove backup removes the legacy B connection and active ${display} return without Apply servers`, async ({
+    page,
+  }) => {
+    await open(page, {
+      removableBackup: true,
+      backupChannel: 2,
+      statuses: [
+        { engine: 'A', channel: 1, state: 'live' },
+        { engine: 'B', channel: 1, state: 'live' },
+      ],
+    });
+    // The normal mock seeds an on-air graphic. Keep programme streams active with its CG stack off air.
+    await page.evaluate(async () => {
+      await window.cg.stack.clearAll();
+    });
+    await page.getByRole('button', { name: display === 'both' ? 'A+B' : 'B', exact: true }).click();
+    await expect(page.locator('[data-pgm-screen="B"]')).toBeVisible();
+    const source = page.getByLabel('Programme sound source');
+    await source.selectOption('B');
+    await page.getByRole('button', { name: 'Programme sound', exact: true }).click();
+    const active = () =>
+      page.evaluate(
+        () =>
+          (window as unknown as { programmeAudio: TestProgrammeAudioState }).programmeAudio.active,
+      );
+    await expect.poll(active).toContain('B/unbound');
+    await page.getByRole('button', { name: 'Open Station setup', exact: true }).click();
+    const settings = page.getByRole('dialog', { name: 'Station setup', exact: true });
+    await settings.getByRole('tab', { name: 'Connection' }).click();
+    await expect(
+      settings.getByRole('button', { name: 'Remove backup', exact: true }),
+    ).toBeEnabled();
+    await settings.getByRole('button', { name: 'Remove backup', exact: true }).click();
+    await expect(settings.getByText('Backup connection removed.', { exact: true })).toBeVisible();
+    expect(
+      await page.evaluate(async () => (await window.cg.connections.config()).servers.B),
+    ).toBeUndefined();
+    await expect(page.locator('[data-pgm-screen="B"]')).toHaveCount(0);
+    await expect.poll(active).not.toContain('B/unbound');
+    await settings.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(page.locator('[data-pgm-screen="A"]')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'B', exact: true })).toHaveCount(0);
+    await expect(source.locator('option[value="B"]')).toHaveCount(0);
+    await page.reload();
+    const show = page.getByRole('button', { name: 'Show monitors' });
+    if (await show.count()) await show.click();
+    expect(
+      await page.evaluate(async () => (await window.cg.connections.config()).servers.B),
+    ).toBeUndefined();
+    await expect(page.locator('[data-pgm-screen="B"]')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'B', exact: true })).toHaveCount(0);
+    await expect(
+      page.getByLabel('Programme sound source').locator('option[value="B"]'),
+    ).toHaveCount(0);
+  });
 }
 
 test('A shows the configured Playout hostname when discovery reports a loopback address', async ({

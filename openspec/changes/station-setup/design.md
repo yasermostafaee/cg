@@ -30,23 +30,25 @@ edits a DRAFT of connected state applies atomically; a dialog that edits a LIST 
 independent records commits per record. One dialog now hosts both, so the contract is stated
 per section, from one table (`sections.ts`), in a legend beside the heading:
 
-| section              | commit                             | on-air guard                      |
-| -------------------- | ---------------------------------- | --------------------------------- |
-| Servers              | the footer's `APPLY SERVERS`       | inherits `set-config`'s refusal   |
-| Outputs              | read-only                          | none                              |
-| Channel raster       | READ-ONLY (`STATION-CHROME-01` §4) | n/a — nothing is set here         |
-| Live sources         | the band's own `Apply band` ¹      | none (bridge validates the band)  |
-| Text file delimiters | saves as you go                    | none                              |
-| Candidate layers     | `Apply layers` in ITS TAB's footer | none — the bridge refuses per row |
-| Station layers       | read-only                          | none                              |
+| section              | commit                                                                         | on-air guard                      |
+| -------------------- | ------------------------------------------------------------------------------ | --------------------------------- |
+| Servers              | Connect and Remove backup commit on their cards; Advanced uses `Apply servers` | inherits `set-config`'s refusal   |
+| Outputs              | read-only                                                                      | none                              |
+| Channel raster       | READ-ONLY (`STATION-CHROME-01` §4)                                             | n/a — nothing is set here         |
+| Live sources         | the band's own `Apply band` ¹                                                  | none (bridge validates the band)  |
+| Text file delimiters | saves as you go                                                                | none                              |
+| Candidate layers     | `Apply layers` in ITS TAB's footer                                             | none — the bridge refuses per row |
+| Station layers       | read-only                                                                      | none                              |
 
 ¹ Amended by `PLAYOUT-SOURCES-01` (2026-09-27): it read "saves as you go". The catalogue is the
 Playout's now, listed read-only, so the band is the one thing this tab applies.
 
-The footer has exactly two actions: `Cancel` (dismisses; drops the Servers draft; the
-sections that save as they go are already saved, and its tooltip says so) and
-`APPLY SERVERS` — `primary`, named for its scope. Sections that commit from the body grow no
-footer action; `modalDismissRole.dom.test.ts` pins the count.
+The footer closes the dialog through its existing dirty-draft guard. Advanced carries
+`Apply servers`. Removing a declared backup sends only the applied configuration with B
+omitted, so the ordinary server gate, teardown and persistence remain authoritative. Its
+configuration event preserves unrelated Advanced edits. A backup added only to the local
+draft is discarded locally. Legacy PGM targets follow the remaining declaration and normalize
+old B selections to A or Follow. Playout-supplied programme topology remains its own authority.
 
 **The on-air guard did not widen, and that is stated rather than assumed.** The old
 delimiters dialog's reason for being separate — _"a gate that is right for a host change and

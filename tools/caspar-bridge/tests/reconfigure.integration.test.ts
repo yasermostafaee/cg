@@ -373,6 +373,37 @@ it('persists the applied config across a bridge restart; explicit connection fla
   expect(JSON.parse(fs.readFileSync(persistPath, 'utf8'))).toEqual(persisted);
 }, 20000);
 
+it('removing B disconnects its session and persists a single-server configuration across restart', async () => {
+  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-remove-backup-'));
+  const persistPath = path.join(tempDir, 'connection.json');
+  const oscA = await freeUdpPort();
+  const oscB = await freeUdpPort();
+  mockA = await createMock({ amcpPort: 0, oscPort: oscA, oscHost: '127.0.0.1', oscHz: 30 });
+  mockB = await createMock({ amcpPort: 0, oscPort: oscB, oscHost: '127.0.0.1', oscHz: 30 });
+  const config: ConnectionConfig = {
+    ...singleServer(mockA.amcpPort, oscA),
+    servers: {
+      A: { host: '127.0.0.1', amcpPort: mockA.amcpPort, oscPort: oscA },
+      B: { host: '127.0.0.1', amcpPort: mockB.amcpPort, oscPort: oscB },
+    },
+  };
+  bridge = await createBridge({ port: 0, connection: config, persistPath });
+  await bridge.runtime.whenServerHealthy(HEALTH_MS);
+  await expect.poll(() => mockB?.amcpClientCount, { timeout: HEALTH_MS }).toBe(1);
+  const next: ConnectionConfig = { ...config, servers: { A: config.servers.A } };
+  expect((await wsInvoke(bridge.url, ConnectionsSetConfigChannel, next)).ok).toBe(true);
+  await expect.poll(() => mockB?.amcpClientCount).toBe(0);
+  expect(bridge.runtime.health().backup).toBeUndefined();
+  expect(await wsInvoke(bridge.url, ConnectionsConfigChannel, undefined)).toEqual(next);
+  expect(JSON.parse(fs.readFileSync(persistPath, 'utf8'))).toEqual(next);
+  await bridge.close();
+  bridge = await createBridge({ port: 0, persistPath });
+  await bridge.runtime.whenServerHealthy(HEALTH_MS);
+  expect(bridge.runtime.config().servers.B).toBeUndefined();
+  expect(bridge.runtime.health().backup).toBeUndefined();
+  expect(mockB.amcpClientCount).toBe(0);
+}, 20000);
+
 it('an invalid persisted file is warned about and ignored (defaults win)', async () => {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-r010-bad-'));
   const persistPath = path.join(tempDir, 'bridge-connection.json');

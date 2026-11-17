@@ -74,6 +74,15 @@ test('sources: Station setup lists the Playout’s inputs, read-only, and binds 
   const firstTitle = rows.first().locator('.cg-resource__name');
   await expect(listView).toHaveText('Grid');
   await expect(list).toHaveAttribute('data-input-view', 'grid');
+  const details = rows.first().locator('.cg-resource__detail');
+  await expect(details).not.toContainText('Format');
+  const detailLine = await details.evaluate((node) => ({
+    height: node.getBoundingClientRect().height,
+    lineHeight: Number.parseFloat(getComputedStyle(node).lineHeight),
+    wrap: getComputedStyle(node).flexWrap,
+  }));
+  expect(detailLine.wrap).toBe('nowrap');
+  expect(detailLine.height).toBeLessThanOrEqual(detailLine.lineHeight + 1);
   const gridPicture = await firstPicture.boundingBox();
   const gridTitle = await firstTitle.boundingBox();
   if (gridPicture === null || gridTitle === null) throw new Error('missing source tile');

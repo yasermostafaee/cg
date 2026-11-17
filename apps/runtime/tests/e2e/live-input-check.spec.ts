@@ -44,7 +44,7 @@ test('C-023 · inspect input picture from source controls without changing a bin
 }) => {
   test.setTimeout(75_000);
   const preview = new FakeLivePreview();
-  preview.meterLevels = [-21, -18, -27, -30];
+  preview.meterLevels = [-21, -18, -27, -30, -32, -34, -36, -38];
   const playout = await startFakePlayout({ livePreview: preview.handle });
   const programme = await startFakePgmFeed({ port: 0 });
   const oscPort = await freeUdpPort();
@@ -162,6 +162,11 @@ test('C-023 · inspect input picture from source controls without changing a bin
     const anotherInput = options.locator('[data-picker-input="in-li-newscam"]');
     await anotherInput.hover();
     const initialOutline = await studioRow.evaluate((row) => getComputedStyle(row).borderColor);
+    const idlePicture = (await studioTile.boundingBox())!;
+    const idleCard = (await studioRow.boundingBox())!;
+    const passiveMeter = studioRow.locator('[data-source-audio-meter]');
+    await expect(passiveMeter.locator('[data-input-meter-channel]')).toHaveCount(2);
+    const passiveMeterWidth = (await passiveMeter.boundingBox())!.width;
     await studioTile.click();
     await expect(field).toHaveAttribute('data-picker-value', '');
     await expect(studio1).toHaveAttribute('aria-selected', 'true');
@@ -173,12 +178,22 @@ test('C-023 · inspect input picture from source controls without changing a bin
     await expect(defaults.locator('[data-input-check]')).toHaveCount(0);
     await expect(card.locator(state)).toHaveAttribute('data-input-check-state', 'ready');
     await expect(card.locator(picture)).toBeVisible();
+    const checkedPicture = (await card.locator('[data-input-thumbnail="active"]').boundingBox())!;
+    const checkedCard = (await studioRow.boundingBox())!;
+    for (const side of ['x', 'y', 'width', 'height'] as const) {
+      expect(checkedPicture[side]).toBeCloseTo(idlePicture[side], 0);
+      expect(checkedCard[side]).toBeCloseTo(idleCard[side], 0);
+    }
+    expect(passiveMeterWidth).toBeLessThan(16);
     const pixels = await card.locator(picture).evaluate((canvas: HTMLCanvasElement) => {
       return canvas.getContext('2d')?.getImageData(0, 0, 1, 1).data[3];
     });
     expect(pixels).toBe(255);
     const meterBars = card.locator('[data-input-meter] .cg-input-meter__level');
-    await expect(meterBars).toHaveCount(4);
+    await expect(meterBars).toHaveCount(8);
+    const activeMeter = (await card.locator('[data-input-meter]').boundingBox())!;
+    expect(activeMeter.x).toBeCloseTo(checkedPicture.x + checkedPicture.width, 0);
+    expect(activeMeter.height).toBeCloseTo(checkedPicture.height, 0);
     await expect(meterBars.nth(3)).toHaveCSS('clip-path', 'inset(50% 0px 0px)');
     const meter = meterBars.first();
     await expect
@@ -205,6 +220,10 @@ test('C-023 · inspect input picture from source controls without changing a bin
       '{"on":true}',
     );
     await card.getByRole('button', { name: 'Close input check' }).click();
+    await expect(studioTile).toBeVisible();
+    const restoredPicture = (await studioTile.boundingBox())!;
+    expect(restoredPicture.width).toBeCloseTo(idlePicture.width, 0);
+    expect(restoredPicture.height).toBeCloseTo(idlePicture.height, 0);
     preview.staleMeter = false;
     preview.stalledVideo = false;
     expect(preview.starts).toHaveLength(1);

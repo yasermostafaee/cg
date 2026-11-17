@@ -98,6 +98,15 @@ healthy video from repeated fallback frames, so source-signal fallback requires 
 
 ## Verification
 
+Source picker input cards reserve a constant meter column beside the 16:9 picture. The meter
+fits every received channel into that allocation and keeps stereo bars thin. Pointer movement
+uses the card's transient hover treatment. Pointer press sets the active option, and keyboard
+navigation reveals the active option through the existing virtual-list path.
+
+The Media tab uses one searched library list. Its order button opens the shared anchored
+popover with Name and Recent choices and displays the selected order. Captions contain duration
+and resolution. Station setup gives the format one ellipsized line and its full value in a tooltip.
+
 Use a signed fake Playout fixture with the native HTTP shapes, independent PGM, and a real Bridge
 and browser to exercise the two doors, lease ownership, picture, optional sound and meter.
 Confirm hardware behavior separately on an approved off-air 2.18.15 channel with PGM observed

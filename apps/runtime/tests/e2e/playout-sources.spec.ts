@@ -243,6 +243,27 @@ test('the large source picker shows larger pictures and restores the parent dial
   await resizeDialog('540px');
   await expect.poll(async () => (await position(1)).x).toBeCloseTo((await position(0)).x, 0);
   await expect.poll(async () => (await position(1)).y).toBeGreaterThan((await position(0)).y);
+  await gallery.evaluate((node) => {
+    node.scrollTop = 60;
+  });
+  const beforeHover = await gallery.evaluate((node) => ({
+    top: node.scrollTop,
+    active: node.getAttribute('aria-activedescendant'),
+  }));
+  const viewBox = (await gallery.boundingBox())!;
+  for (const y of [viewBox.y + viewBox.height - 8, viewBox.y + 8]) {
+    await page.mouse.move(viewBox.x + viewBox.width / 2, y);
+    await page.waitForTimeout(80);
+    expect(await gallery.evaluate((node) => node.scrollTop)).toBe(beforeHover.top);
+    await expect(gallery).toHaveAttribute('aria-activedescendant', beforeHover.active ?? '');
+  }
+  await panel.getByRole('button', { name: 'Cancel', exact: true }).hover();
+  const unselectedBorders = await cards.evaluateAll((elements) =>
+    elements
+      .filter((node) => node.querySelector('[aria-selected="true"]') === null)
+      .map((node) => getComputedStyle(node).borderColor),
+  );
+  expect(new Set(unselectedBorders).size).toBe(1);
   await resizeDialog(dialogWidth);
 
   // 🔴 Escape closes the PICKER — the dialog under it survives, and focus is back on the field.
@@ -306,6 +327,33 @@ test('Media: searched on the Playout’s side, Persian included; the list pages 
   const search = panel.locator('[data-picker-search]');
   // The search field takes focus when the tab opens.
   await expect(search).toBeFocused();
+  await expect(panel.locator('[data-vlist-heading="Recent"]')).toHaveCount(0);
+  await expect(panel.locator('[data-vlist-heading="All media"]')).toHaveCount(0);
+  await expect(panel).not.toContainText('Media Library');
+  const sort = panel.getByRole('button', { name: 'Sort media', exact: true });
+  await expect(sort).toHaveCount(1);
+  await expect(sort).toHaveText('Name');
+  await sort.click();
+  const order = page.getByRole('menu', { name: 'Media order', exact: true });
+  await expect(order.getByRole('menuitemradio', { name: 'Name', exact: true })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  await order.getByRole('menuitemradio', { name: 'Recent', exact: true }).click();
+  await expect(sort).toHaveText('Recent');
+  await expect(order).toHaveCount(0);
+  await sort.click();
+  await expect(order.getByRole('menuitemradio', { name: 'Recent', exact: true })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  await expect(order.getByRole('menuitemradio', { name: 'Recent', exact: true })).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(order.getByRole('menuitemradio', { name: 'Name', exact: true })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(sort).toHaveText('Name');
+  await expect(order).toHaveCount(0);
+  await expect(sort).toBeFocused();
   const names = panel.locator('[data-picker-media] .cg-picker-row__name');
 
   // The contract's normalisation — Arabic ي/ك as Persian, Persian digits as Latin.

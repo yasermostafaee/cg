@@ -49,8 +49,6 @@ import './sources-section.css';
 
 const styles = {
   empty: { fontSize: '0.82rem', color: colors.textMuted },
-  /** One labelled part of the row's detail line, inline with its value. */
-  part: { display: 'inline-flex', gap: '0.35rem', alignItems: 'baseline', minWidth: 0 },
   /** The band sits its own distance below the list — the reference's `.band-card`. */
   bandCard: { marginTop: 'var(--r-setup-band-gap-above)' },
 } as const;
@@ -226,10 +224,12 @@ export function SourcesSection({
                       Unavailable
                     </Tag>
                   )}
-                  <span style={styles.part}>
-                    <span>Format</span>
-                    <bdi className="cg-resource__value">{inputFormatLabel(source.format)}</bdi>
-                  </span>
+                  <bdi
+                    className="cg-resource__value cg-setup-source-format"
+                    title={inputFormatLabel(source.format)}
+                  >
+                    {inputFormatLabel(source.format)}
+                  </bdi>
                 </div>
               </div>
             </div>

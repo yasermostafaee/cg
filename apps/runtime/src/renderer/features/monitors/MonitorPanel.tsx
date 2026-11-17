@@ -194,6 +194,8 @@ interface Props {
   programSound: PgmAudio;
   monitorPreferences: ProgramMonitorPreferences;
   backupAvailable: boolean;
+  /** A legacy station can explicitly remove its optional B endpoint. */
+  backupConfigured?: boolean | undefined;
   /**
    * 🔴 `UI-POLISH-01` G — the Playout's `output` and `playlist` for `channel` (`NO_AIR` when it said
    * nothing). `output` alone colours the head; the playlist is a neutral tag and never a colour.
@@ -306,6 +308,7 @@ export function MonitorPanel({
   programSound,
   monitorPreferences,
   backupAvailable,
+  backupConfigured,
   topologyTargets,
   air,
   backupLine = null,
@@ -320,10 +323,11 @@ export function MonitorPanel({
       ? `${String(liveCount)} of ${String(returns.length)} return signals`
       : PROGRAM_SIGNAL_WORDS[returns[0]?.programReturn.signal ?? 'none'];
   const legacy = topologyTargets === undefined;
+  const legacyEngines: readonly PgmEngine[] = backupConfigured === false ? ['A'] : ['A', 'B'];
   const pictureModes = new Set<ProgramDisplayMode>(
-    legacy ? ['A', 'B'] : topologyTargets.map(({ engine }) => engine),
+    legacy ? legacyEngines : topologyTargets.map(({ engine }) => engine),
   );
-  if (legacy || pictureModes.size > 1) {
+  if (pictureModes.size > 1) {
     if (monitorPreferences.display !== 'both') pictureModes.add(monitorPreferences.display);
     pictureModes.add('both');
   }
@@ -333,7 +337,7 @@ export function MonitorPanel({
   };
   const selectedAudio = monitorPreferences.audioEngine;
   const audioModes = new Set<PgmEngine>(
-    legacy ? ['A', 'B'] : topologyTargets.map(({ engine }) => engine),
+    legacy ? legacyEngines : topologyTargets.map(({ engine }) => engine),
   );
   if (monitorPreferences.audio !== 'follow') audioModes.add(monitorPreferences.audio);
   const meterTargets: readonly ProgrammeMonitorTarget[] = topologyTargets ?? [

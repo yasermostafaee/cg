@@ -16,6 +16,18 @@
   overflow-wrap: anywhere;
 }
 
+.cg-setup-source-caption .cg-resource__detail {
+  flex-wrap: nowrap;
+  min-inline-size: 0;
+}
+
+.cg-setup-source-format {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .cg-setup-source-catalogue .cg-input-picture-meter {
   display: flex;
   grid-area: picture;

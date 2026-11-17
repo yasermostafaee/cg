@@ -107,11 +107,14 @@ export function MonitorStrip({
         : {}),
     };
   })();
-  const monitorPreferences = useProgramMonitorPreferences(currentPrimary);
+  const savedMonitorPreferences = useProgramMonitorPreferences(currentPrimary);
+  const backupConfigured = health?.backup != null || backupState?.backup != null;
   const targets: readonly ProgrammeMonitorTarget[] = legacy
     ? [
         { engine: 'A', physicalChannel: viewChannel },
-        { engine: 'B', physicalChannel: backupLine?.channel ?? null },
+        ...(backupConfigured
+          ? [{ engine: 'B' as const, physicalChannel: backupLine?.channel ?? null }]
+          : []),
       ]
     : (topology?.members ?? []).map((member) => ({
         ...member,
@@ -119,14 +122,29 @@ export function MonitorStrip({
         active: member.engine === topology?.active,
       }));
 
-  // Keep a saved explicit selection visible even when its physical return is unavailable.
+  const declaredEngines = new Set(targets.map(({ engine }) => engine));
+  const display =
+    targets.length === 1
+      ? (targets[0]?.engine ?? 'A')
+      : savedMonitorPreferences.display === 'both' ||
+          declaredEngines.has(savedMonitorPreferences.display)
+        ? savedMonitorPreferences.display
+        : (targets[0]?.engine ?? 'A');
+  const audio =
+    savedMonitorPreferences.audio === 'follow' || declaredEngines.has(savedMonitorPreferences.audio)
+      ? savedMonitorPreferences.audio
+      : 'follow';
+  const monitorPreferences = {
+    ...savedMonitorPreferences,
+    display,
+    audio,
+    audioEngine: audio === 'follow' ? currentPrimary : audio,
+  };
+  // A declared return with no physical channel keeps its placeholder. Removed engines have no tile.
   const selectedTarget =
     targets.length === 1 || monitorPreferences.display === 'both'
       ? undefined
-      : (targets.find(({ engine }) => engine === monitorPreferences.display) ?? {
-          engine: monitorPreferences.display,
-          physicalChannel: null,
-        });
+      : targets.find(({ engine }) => engine === monitorPreferences.display);
   const visibleTargets = selectedTarget === undefined ? targets : [selectedTarget];
   const visible = new Set(visibleTargets.map(({ engine }) => engine));
   const statuses = useProgramReturnStatuses();
@@ -259,6 +277,7 @@ export function MonitorStrip({
           programSound={programSound}
           monitorPreferences={monitorPreferences}
           backupAvailable={legacy && audioTarget?.engine === 'B' && audioChannel !== null}
+          backupConfigured={legacy ? backupConfigured : undefined}
           topologyTargets={legacy ? undefined : targets}
           air={air}
           backupLine={legacy ? backupLine : null}

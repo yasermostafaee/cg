@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ConnectionHealth } from '@cg/shared-ipc';
+import type { ConnectionConfig, ConnectionHealth } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { clearPortals } from './support/dialog.js';
 import {
@@ -43,6 +43,79 @@ function applyButton(el: HTMLElement): HTMLButtonElement {
 }
 
 describe('Station setup — Servers (R-010)', () => {
+  it('removes the declared backup immediately, preserving unrelated unapplied fields', async () => {
+    const config = {
+      ...SETUP_CONFIG,
+      servers: {
+        ...SETUP_CONFIG.servers,
+        B: { host: '192.0.2.43', amcpPort: 5250, oscPort: 6252 },
+      },
+    };
+    const { setConfig } = stub({ config });
+    let publish: (value: ConnectionConfig) => void = () => undefined;
+    window.cg.connections.onConfigChanged = (handler) => {
+      publish = handler;
+      return () => undefined;
+    };
+    const commit = window.cg.connections.setConfig;
+    window.cg.connections.setConfig = async (value) => {
+      const result = await commit(value);
+      if (result.ok) publish(value);
+      return result;
+    };
+    const el = await renderStationSetup({ section: 'servers' });
+    await setSetupInput(el, 'Primary host', '192.0.2.32');
+    await act(async () =>
+      el.querySelector<HTMLButtonElement>('[aria-label="Remove backup"]')?.click(),
+    );
+    expect(setConfig).toHaveBeenCalledWith({ ...config, servers: { A: config.servers.A } });
+    expect(el.querySelector('[aria-label="Backup host"]')).toBeNull();
+    expect(el.textContent).toContain('Backup connection removed');
+    expect(el.querySelector<HTMLInputElement>('[aria-label="Primary host"]')?.value).toBe(
+      '192.0.2.32',
+    );
+    expect(applyButton(el).disabled).toBe(false);
+  });
+
+  it('keeps the declared backup when the bridge refuses removal and mirrors the on-air gate', async () => {
+    const config = {
+      ...SETUP_CONFIG,
+      servers: {
+        ...SETUP_CONFIG.servers,
+        B: { host: '192.0.2.43', amcpPort: 5250, oscPort: 6252 },
+      },
+    };
+    const { setConfig } = stub({
+      config,
+      setConfigResult: { ok: false, reason: 'on-air-block', message: 'The station is on air.' },
+    });
+    const el = await renderStationSetup({ section: 'servers' });
+    await act(async () =>
+      el.querySelector<HTMLButtonElement>('[aria-label="Remove backup"]')?.click(),
+    );
+    expect(setConfig).toHaveBeenCalledTimes(1);
+    expect(el.querySelector<HTMLInputElement>('[aria-label="Backup host"]')?.value).toBe(
+      '192.0.2.43',
+    );
+    expect(el.textContent).toContain('The station is on air.');
+  });
+
+  it('disables immediate backup removal while anything is on air', async () => {
+    const config = {
+      ...SETUP_CONFIG,
+      servers: {
+        ...SETUP_CONFIG.servers,
+        B: { host: '192.0.2.43', amcpPort: 5250, oscPort: 6252 },
+      },
+    };
+    const { setConfig } = stub({ config, items: [item('on-air')] });
+    const el = await renderStationSetup({ section: 'servers' });
+    const remove = el.querySelector<HTMLButtonElement>('[aria-label="Remove backup"]');
+    expect(remove?.disabled).toBe(true);
+    await act(async () => remove?.click());
+    expect(setConfig).not.toHaveBeenCalled();
+  });
+
   it('loads the current config into the fields', async () => {
     stub({ items: [item('idle')] });
     const el = await renderStationSetup({ section: 'servers' });

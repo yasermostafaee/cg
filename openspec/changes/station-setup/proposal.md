@@ -32,7 +32,8 @@ the bug; the first operator to use the new control would have created it.
   and SOURCES, the Layers panel's Configure (and its "What the bridge needs"), the Inspector's
   delimiter gear. None renders a second copy. The four old dialog modules are deleted.
 - **The on-air guard does not widen.** `connections.set-config`'s refusal covers the Servers
-  section alone; the footer's action is `APPLY SERVERS` and the refusal names its scope. The
+  section alone; Advanced's action is `Apply servers` and the refusal names its scope. Removing
+  a declared backup commits immediately through the same route and guard. The
   raster's refusal is the bridge's own, surfaced. Sources, delimiters and candidate layers
   commit from the body and say so in a legend beside their heading.
 - **The channel raster gets its control**: per declared channel, width × height, what the

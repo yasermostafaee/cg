@@ -84,7 +84,8 @@ export function Popover({
   const panel = useRef<HTMLDivElement>(null);
   const anchorAtOpen = useRef<DOMRect | null>(null);
   const [placement, setPlacement] = useState<Placement | null>(null);
-  const layer = useFocusTrap(panel, true, {
+  // The nominated control can receive focus after placement makes the panel visible.
+  const layer = useFocusTrap(panel, placement !== null, {
     // Focus goes back to the FIELD, not to whatever held it when the panel opened: a pointer press
     // does not focus a button everywhere (Safari), and the field is where the operator came from.
     restoreFocus: false,

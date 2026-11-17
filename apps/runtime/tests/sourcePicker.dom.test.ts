@@ -798,15 +798,14 @@ describe('Media — searched on the Playout’s side, a page at a time', () => {
     expect(onChange).toHaveBeenCalledWith(id);
   });
 
-  it('pages a Media Grid by its actual tracks while keeping group headings short', async () => {
+  it('pages a Media Grid by its actual tracks without duplicate recent groups', async () => {
     const panel = await openPicker(await render({}));
     await pickerTab(panel, 'Media');
     const grid = panel.querySelector<HTMLElement>('[data-picker-list]');
-    const heading = grid?.querySelector<HTMLElement>('[data-vlist-heading="Recent"]');
     const tile = grid?.querySelector<HTMLElement>('.cg-vlist-action-row');
-    expect(heading).not.toBeNull();
+    expect(grid?.querySelector('[data-vlist-heading="Recent"]')).toBeNull();
+    expect(grid?.querySelector('[data-vlist-heading="All media"]')).toBeNull();
     expect(tile).not.toBeNull();
-    expect(parseInt(heading!.style.height, 10)).toBeLessThan(parseInt(tile!.style.height, 10));
     const spacer = grid?.querySelector<HTMLElement>('.cg-vlist-spacer');
     const viewportHeight = Number.parseInt(grid?.style.height ?? '', 10);
     const contentHeight = Number.parseInt(spacer?.style.height ?? '', 10);
@@ -843,14 +842,35 @@ describe('Media — searched on the Playout’s side, a page at a time', () => {
     expect(panel.querySelector('[data-picker-failed]')).toBeNull();
   });
 
-  it('with an empty query, `Recent` (media bound on this station) comes first, then `All media`', async () => {
+  it('shows one library list and keeps folder paths out of media captions', async () => {
     const panel = await openPicker(await render({}));
     await pickerTab(panel, 'Media');
     await settle();
     const headings = [...panel.querySelectorAll('[data-vlist-heading]')].map((h) => h.textContent);
-    expect(headings.slice(0, 2)).toEqual(['Recent', 'All media']);
-    expect(panel.querySelector('[data-picker-media="md-m-recent"]')?.textContent).toContain(
-      'تیتراژ خبر ۲۰',
+    expect(headings).toEqual([]);
+    expect(panel.querySelector('[data-picker-media="md-m-recent"]')).toBeNull();
+    expect(panel.textContent).not.toContain('آرشیو');
+    expect(panel.querySelector('.cg-picker-media__facts')?.textContent).toContain('1920×1080');
+  });
+
+  it('chooses media order from one menu and displays the selected order on its button', async () => {
+    const panel = await openPicker(await render({}));
+    await pickerTab(panel, 'Media');
+    await settle();
+    const sort = panel.querySelector<HTMLButtonElement>('[aria-label="Sort media"]');
+    expect(sort?.textContent).toBe('Name');
+    expect(panel.querySelectorAll('[data-picker-sort]')).toHaveLength(1);
+    await act(async () => sort?.click());
+    const menu = document.querySelector<HTMLElement>('[role="menu"][aria-label="Media order"]');
+    const recent = [...(menu?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
+      (button) => button.textContent === 'Recent',
+    );
+    await act(async () => recent?.click());
+    await settle();
+    expect(sort?.textContent).toBe('Recent');
+    expect(document.querySelector('[role="menu"][aria-label="Media order"]')).toBeNull();
+    expect(window.cg.sources.mediaSearch).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sort: 'recent' }),
     );
   });
 
@@ -872,16 +892,17 @@ describe('Media — searched on the Playout’s side, a page at a time', () => {
     await settle();
 
     const rows = panel.querySelectorAll('[data-picker-media="md-m-recent"]');
-    expect(rows.length).toBe(2);
+    expect(rows.length).toBe(1);
     for (const row of rows) expect(row.textContent).not.toContain('Unavailable');
-    expect(panel.querySelector('[data-picker-media="md-m-missing"]')?.textContent).toContain(
-      'Unavailable',
-    );
+    expect(panel.querySelector('[data-picker-media="md-m-missing"]')).toBeNull();
   });
 
   it('the current binding is pinned as `Current` when it is not otherwise in view', async () => {
-    // Bound to a media item this station bound before; a query that does not match it hides both
-    // `Recent` (a query is typed) and the item (not in the results).
+    const current = CATALOG.sources.find((source) => source.id === 'md-m-recent')!;
+    __resetSourcesForTest();
+    installBridge(CATALOG, [{ id: current.id, name: current.name }, ...LIBRARY]);
+    await settle();
+    // A search can place the current binding outside the returned library page.
     const panel = await openPicker(await render({ value: 'md-m-recent' }));
     await settle();
     const search = panel.querySelector<HTMLInputElement>('[data-picker-search]');
@@ -898,7 +919,7 @@ describe('Media — searched on the Playout’s side, a page at a time', () => {
     expect(panel.querySelector('[data-picker-media="md-m-recent"]')?.textContent).toContain(
       'تیتراژ خبر ۲۰',
     );
-    // Control: when the item IS in view (no query, `Recent` holds it), nothing is pinned.
+    // The unfiltered library contains this item, so it returns to the normal list.
     await act(async () => {
       setter?.call(search, '');
       search?.dispatchEvent(new Event('input', { bubbles: true }));
@@ -912,6 +933,27 @@ describe('Media — searched on the Playout’s side, a page at a time', () => {
 });
 
 describe('the keyboard, and a choice returned ONCE', () => {
+  it('pointer movement preserves the keyboard target and staged selection', async () => {
+    const onChange = vi.fn();
+    const field = await render({ onChange, value: 'in-studio1' });
+    const panel = await openPicker(field);
+    const list = panel.querySelector<HTMLElement>('[data-picker-list]');
+    const active = list?.getAttribute('aria-activedescendant');
+    const alternate = panel.querySelector<HTMLElement>('[data-picker-input="in-newscam"]');
+    await act(async () => {
+      alternate?.dispatchEvent(new MouseEvent('pointermove', { bubbles: true }));
+    });
+    expect(list?.getAttribute('aria-activedescendant')).toBe(active);
+    expect(alternate?.getAttribute('aria-selected')).toBe('false');
+    expect(
+      panel.querySelector('[data-picker-input="in-studio1"]')?.getAttribute('aria-selected'),
+    ).toBe('true');
+    expect(onChange).not.toHaveBeenCalled();
+    await act(async () => alternate?.click());
+    expect(alternate?.getAttribute('aria-selected')).toBe('true');
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('↓ moves the active option, Enter stages it, and Select confirms it', async () => {
     const onChange = vi.fn();
     const field = await render({ onChange });

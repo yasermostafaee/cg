@@ -90,3 +90,13 @@
       passed on `ca38e1551cb4f261101ea7f0e264c7d1b7e81348`, including source-picker reopening on the
       current inherited selection, the matching tab and visible selected row, the single Grid/List
       toggle, and separate Media preview without a binding change or automatic input check.
+
+## 7. Source card feedback
+
+- [x] 7.1 Windows Edge verified steady input picture bounds between a passive stereo tile and an eight-channel check.
+- [x] 7.2 Windows Edge verified pointer hover leaves scroll and keyboard target steady and selection remains distinct.
+- [x] 7.3 Windows Edge verified one Name/Recent order menu, one media list and compact path-free media captions.
+      The menu receives focus after placement makes it visible, including keyboard selection and focus return.
+- [x] 7.4 Windows Edge verified Station setup input formats occupy one line with the full value in the tooltip.
+      The combined source/monitor run passed 24 tests. SourcePicker and nested-focus DOM checks passed 57 tests.
+- [ ] 7.5 Read the full gate and actual Linux E2E for the carrying commit.

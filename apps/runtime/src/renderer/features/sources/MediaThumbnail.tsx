@@ -8,7 +8,7 @@ const POSTER_RETRY_DELAY_MS = 1_000;
 
 export type MediaThumbnailLoader = (id: string) => Promise<string | null>;
 
-/** Reuse poster reads for Recent and All media while this picker is open. */
+/** Reuse poster reads for visible media cards while this picker is open. */
 export function createMediaThumbnailLoader(): MediaThumbnailLoader {
   const cache = new Map<string, Promise<string | null>>();
   return (id) => {

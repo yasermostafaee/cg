@@ -559,6 +559,7 @@ export function StationSetupDialog({
    * nothing has been typed is worse than no dot.
    */
   const [loaded, setLoaded] = useState<ConnectionConfig | null>(null);
+  const removingBackupConfig = useRef<ConnectionConfig | null>(null);
   /** One standing message per section — a refusal or an outcome, replaced by the next. */
   const [sectionMessages, setSectionMessages] = useState<
     Partial<Record<StationSetupSection, ModalMessage>>
@@ -760,7 +761,13 @@ export function StationSetupDialog({
     let cancelled = false;
     const applyConfig = (config: ConnectionConfig): void => {
       if (cancelled) return;
-      restoreServersDraft(config);
+      if (
+        removingBackupConfig.current !== null &&
+        sameServerConfig(removingBackupConfig.current, config)
+      ) {
+        setBackupEnabled(false);
+        setBackup(UNREAD_SERVERS.backup);
+      } else restoreServersDraft(config);
       setLoaded(config);
       // `B-325` — the CG Bridge this baseline came from.
       loadedFrom.current = window.cg.link.bridgeAddress?.() ?? null;
@@ -1774,11 +1781,51 @@ export function StationSetupDialog({
                       Not applied
                     </Tag>
                   )}
-                  {/* `MULTI-CHANNEL-01` §2 I — adding or removing a server is a Servers commit. */}
+                  {/* Removing a declared backup commits only that endpoint through the server gate. */}
                   {holdsStationAdmin && backupEnabled && (
-                    <Button aria-label="Remove backup" onClick={() => setBackupEnabled(false)}>
+                    <AsyncButton
+                      aria-label="Remove backup"
+                      disabled={
+                        loaded === null || (loaded.servers.B !== undefined && onAirCount > 0)
+                      }
+                      title="Removes the backup connection. Refused while anything is on air."
+                      onError={(message) => setRefusal((previous) => previous ?? message)}
+                      run={async () => {
+                        if (loaded === null) return { accepted: false };
+                        if (loaded.servers.B === undefined) {
+                          setBackupEnabled(false);
+                          setBackup(UNREAD_SERVERS.backup);
+                          return { accepted: true };
+                        }
+                        const next: ConnectionConfig = {
+                          ...loaded,
+                          servers: { A: loaded.servers.A },
+                        };
+                        setRefusal(null);
+                        setStatus(null);
+                        removingBackupConfig.current = next;
+                        try {
+                          const result = await window.cg.connections.setConfig(next);
+                          if (!result.ok) {
+                            setRefusal(result.message ?? 'The bridge refused backup removal.');
+                            return { accepted: false, errorCode: result.reason ?? 'refused' };
+                          }
+                          setLoaded(next);
+                          setBackupEnabled(false);
+                          setBackup(UNREAD_SERVERS.backup);
+                          setStatus('Backup connection removed.');
+                          void window.cg.connections
+                            .templateServe()
+                            .then(setServeInfo)
+                            .catch(() => undefined);
+                          return { accepted: true };
+                        } finally {
+                          removingBackupConfig.current = null;
+                        }
+                      }}
+                    >
                       Remove backup
-                    </Button>
+                    </AsyncButton>
                   )}
                 </div>
                 {backupEnabled ? (

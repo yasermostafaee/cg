@@ -1933,7 +1933,7 @@ export interface PlayoutSeed {
   readonly departed?: readonly unknown[];
   /** The D11 library. */
   readonly media?: readonly unknown[];
-  /** Media ids already bound on this station (the `Recent` group). */
+  /** Media ids already bound on this station. */
   readonly bound?: readonly string[];
   /** Bound media ids the Playout no longer offers. */
   readonly unavailable?: readonly string[];

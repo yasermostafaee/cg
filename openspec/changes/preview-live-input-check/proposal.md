@@ -58,6 +58,10 @@ describes the final programme mix. Re-labelling that meter as an input meter wou
 
 ## Impact
 
+- Keep input picture bounds steady when an inline check opens and show transient pointer hover.
+- Present media in one library list with a Name/Recent order menu and compact captions.
+- Present Station setup input formats on one line with the complete value available on hover.
+
 - Production areas include Runtime PVW and SourcePicker/Source-defaults UI,
   shared IPC schemas, bridge Playout client, preview relay and lifecycle manager.
 - The official Playout `live-preview` API and preview feed are the intended plant path; no new CasparCG monitor

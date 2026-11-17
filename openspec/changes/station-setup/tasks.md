@@ -1,5 +1,18 @@
 # Tasks — Station setup (`STATION-SETUP-02`)
 
+## Backup connection removal (2026-11-17)
+
+- [x] Remove a declared B immediately through the existing configuration route and on-air guard,
+      preserving A, applied settings and unrelated Advanced drafts.
+- [x] Remove an undeclared legacy B from PGM targets and controls, resolving saved B/both/audio-B
+      monitor preferences to the remaining declaration while retaining Playout topology authority.
+- [x] Pass 27 scoped Runtime DOM tests, including removal success, refusal and on-air gating.
+- [x] Pass 1 targeted real-Bridge regression proving B AMCP disconnect and persisted single-server
+      configuration after restart.
+- [x] Windows Edge passed both B and A+B selected cases with active B sound, immediate removal and
+      reload. The combined programme-monitor and source UI run passed all 24 cases.
+- [ ] Record a completed green Linux E2E carrying this change.
+
 ## 0. Premises
 
 - [x] 0.1 Pulled to `576a72eb`; the modal contract exists (`runtime-modal-contract`) and the
