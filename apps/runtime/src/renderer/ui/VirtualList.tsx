@@ -50,6 +50,7 @@ export interface VirtualListHandle {
   /** Bring one row into view. */
   scrollToIndex(index: number): void;
   focus(): void;
+  columnCount(): number;
 }
 
 export interface VirtualListProps {
@@ -73,6 +74,8 @@ export interface VirtualListProps {
   /** A finder's attributes on the listbox (`data-*`). */
   data?: Readonly<Record<`data-${string}`, string>> | undefined;
   withActions?: boolean;
+  /** Lay out a short catalogue in responsive tiles. Large libraries use virtual rows. */
+  tiled?: boolean;
 }
 
 /** The option id for a row, for a field's `aria-activedescendant`. */
@@ -95,6 +98,7 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
     nearEndRows = 10,
     overscan = 6,
     withActions = false,
+    tiled = false,
     data,
   },
   ref,
@@ -109,6 +113,13 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
       scrollToIndex(index: number): void {
         const el = viewport.current;
         if (el === null) return;
+        if (tiled) {
+          const option = el.querySelector(`[data-vlist-index="${String(index)}"]`);
+          (option?.closest('[data-vlist-tile-index]') ?? option)?.scrollIntoView?.({
+            block: 'nearest',
+          });
+          return;
+        }
         const top = index * rowHeight;
         if (top < el.scrollTop) el.scrollTop = top;
         else if (top + rowHeight > el.scrollTop + height) el.scrollTop = top + rowHeight - height;
@@ -117,12 +128,19 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
       focus(): void {
         viewport.current?.focus();
       },
+      columnCount(): number {
+        const tiles = viewport.current?.firstElementChild;
+        if (!tiled || tiles == null) return 1;
+        return Math.max(1, getComputedStyle(tiles).gridTemplateColumns.trim().split(/\s+/).length);
+      },
     }),
-    [rowHeight, height],
+    [rowHeight, height, tiled],
   );
 
-  const first = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
-  const last = Math.min(rows.length, Math.ceil((scrollTop + height) / rowHeight) + overscan);
+  const first = tiled ? 0 : Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
+  const last = tiled
+    ? rows.length
+    : Math.min(rows.length, Math.ceil((scrollTop + height) / rowHeight) + overscan);
 
   // The next page: once per approach to the end, re-armed when the list grows.
   useEffect(() => {
@@ -138,9 +156,12 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
   }, [scrollTop, height, rowHeight, rows.length, nearEndRows, onNearEnd]);
 
   const pickFrom = (target: EventTarget | null): number | null => {
-    const el = target instanceof Element ? target.closest<HTMLElement>('[data-vlist-index]') : null;
+    if (!(target instanceof Element) || (tiled && target.closest('button') !== null)) return null;
+    const el = target.closest<HTMLElement>(
+      tiled ? '[data-vlist-index], [data-vlist-tile-index]' : '[data-vlist-index]',
+    );
     if (el === null) return null;
-    const index = Number(el.dataset['vlistIndex']);
+    const index = Number(el.dataset['vlistIndex'] ?? el.dataset['vlistTileIndex']);
     const row = rows[index];
     if (row === undefined || row.kind !== 'option' || row.disabled === true) return null;
     return index;
@@ -154,10 +175,10 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
       aria-label={ariaLabel}
       tabIndex={0}
       {...(activeIndex !== null ? { 'aria-activedescendant': optionId(id, activeIndex) } : {})}
-      className="cg-vlist"
+      className={tiled ? 'cg-vlist cg-vlist--tiles' : 'cg-vlist'}
       {...(data ?? {})}
-      style={{ height, maxHeight: height }}
-      onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+      style={tiled ? { maxHeight: height } : { height, maxHeight: height }}
+      onScroll={tiled ? undefined : (e) => setScrollTop(e.currentTarget.scrollTop)}
       onKeyDown={onKeyDown}
       onPointerMove={(e) => {
         const index = pickFrom(e.target);
@@ -168,10 +189,13 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
         if (index !== null) onPick(index);
       }}
     >
-      <div className="cg-vlist-spacer" style={{ height: rows.length * rowHeight }}>
+      <div
+        className="cg-vlist-spacer"
+        style={tiled ? undefined : { height: rows.length * rowHeight }}
+      >
         {rows.slice(first, last).map((row, offset) => {
           const index = first + offset;
-          const style = { top: index * rowHeight, height: rowHeight };
+          const style = tiled ? undefined : { top: index * rowHeight, height: rowHeight };
           if (row.kind === 'heading') {
             return (
               <div
@@ -210,6 +234,7 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
               key={`o:${row.key}`}
               role={withActions ? 'row' : 'presentation'}
               className="cg-vlist-action-row"
+              data-vlist-tile-index={tiled ? index : undefined}
               style={style}
             >
               {option}

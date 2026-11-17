@@ -4309,6 +4309,10 @@ label the preview as sampled and silent. Preview operations leave the assigned s
 and PGM intact. Applying a choice follows the existing caller's draft or source-selection
 rules. Escape or Cancel restores focus to the field and abandons the preview.
 
+Inputs opens in Grid view, with the source name under its picture and the vertical meter beside
+the picture. Grid adapts to the window width. List view is available in the same tab. Both views
+use the same source order, filtering, selection and input check actions.
+
 ## [x] R-076 — PGM audio in CG Control, in sync with the PGM picture, with a VU meter ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §6.2 · ANSWERED by `PLAYOUT-CG-RESPONSE-PLAYLIST-AUDIO-v1.md` §2 (Playout `2.9.2`) · BUILT by `PLAYOUT-FEATURES-01` E (§5) · archived 2026-10-03 (`openspec/changes/archive/2026-10-03-playout-features`) · owed: `2.9.2` on `.111`
 
 **What.** The programme's sound in CG Control, in sync with the PGM monitor's picture, and a VU meter

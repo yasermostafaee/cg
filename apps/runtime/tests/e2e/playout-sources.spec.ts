@@ -91,6 +91,9 @@ test('the large source picker shows larger pictures and restores the parent dial
 
   await field.click();
   const panel = picker(page);
+  const inputs = panel.locator('[data-picker-tab="inputs"]');
+  const gridView = inputs.getByRole('button', { name: 'Grid view', exact: true });
+  const listView = inputs.getByRole('button', { name: 'List view', exact: true });
   await expect(panel).toBeVisible();
   await expect(field).toHaveAttribute('aria-expanded', 'true');
   await expect(dialog).toBeVisible();
@@ -107,11 +110,42 @@ test('the large source picker shows larger pictures and restores the parent dial
   // The tabs carry their counts: the Playout's seven inputs, and its 124 video items (never audio).
   await expect(panel.getByRole('tab', { name: 'Inputs 7' })).toBeVisible();
   await expect(panel.getByRole('tab', { name: 'Media 124' })).toBeVisible();
+  await expect(inputs).toHaveAttribute('data-input-view', 'grid');
+  await expect(gridView).toHaveAttribute('aria-pressed', 'true');
+  await expect(listView).toHaveAttribute('aria-pressed', 'false');
 
-  const thumbnail = await panel.locator('[data-input-thumbnail]').first().boundingBox();
+  const cards = inputs.locator('.cg-vlist-action-row');
+  const card = cards.first();
+  const thumbnail = await card.locator('[data-input-thumbnail]').boundingBox();
   if (thumbnail === null) throw new Error('the first input must have a visible picture slot');
   expect(thumbnail.width).toBeGreaterThanOrEqual(112);
   expect(thumbnail.width / thumbnail.height).toBeCloseTo(16 / 9, 1);
+  const title = await card.locator('.cg-picker-row__name').boundingBox();
+  if (title === null) throw new Error('the first input must have a visible title');
+  expect(title.y).toBeGreaterThanOrEqual(thumbnail.y + thumbnail.height);
+  const meter = await card.locator('[data-source-audio-meter]').boundingBox();
+  if (meter === null) throw new Error('the first input must have a visible meter');
+  expect(Math.abs(meter.x - (thumbnail.x + thumbnail.width))).toBeLessThanOrEqual(2);
+  expect(meter.y).toBeCloseTo(thumbnail.y, 0);
+  expect(meter.height).toBeCloseTo(thumbnail.height, 0);
+
+  const position = (index: number) =>
+    cards.nth(index).evaluate((element) => {
+      const { x, y } = element.getBoundingClientRect();
+      return { x, y };
+    });
+  const [first, second, third, fourth] = await Promise.all([
+    position(0),
+    position(1),
+    position(2),
+    position(3),
+  ]);
+  expect(second.x).toBeGreaterThan(first.x);
+  expect(third.x).toBeGreaterThan(second.x);
+  expect(second.y).toBeCloseTo(first.y, 0);
+  expect(third.y).toBeCloseTo(first.y, 0);
+  expect(fourth.x).toBeCloseTo(first.x, 0);
+  expect(fourth.y).toBeGreaterThan(first.y);
 
   const focus = () =>
     panel.evaluate((element) => ({
@@ -125,6 +159,35 @@ test('the large source picker shows larger pictures and restores the parent dial
   const nextFocus = await focus();
   expect(nextFocus.inside).toBe(true);
   expect(nextFocus).not.toEqual(initialFocus);
+
+  await listView.click();
+  await expect(inputs).toHaveAttribute('data-input-view', 'list');
+  await expect(listView).toHaveAttribute('aria-pressed', 'true');
+  await expect(gridView).toHaveAttribute('aria-pressed', 'false');
+  const [listFirst, listSecond] = await Promise.all([position(0), position(1)]);
+  expect(listSecond.x).toBeCloseTo(listFirst.x, 0);
+  expect(listSecond.y).toBeGreaterThan(listFirst.y);
+  await gridView.click();
+  await expect(inputs).toHaveAttribute('data-input-view', 'grid');
+
+  const gallery = inputs.locator('[data-picker-list]');
+  await gallery.focus();
+  await gallery.press('Home');
+  await gallery.press('ArrowRight');
+  await expect(gallery).toHaveAttribute('aria-activedescendant', /-opt-1$/);
+  await gallery.press('ArrowDown');
+  await expect(gallery).toHaveAttribute('aria-activedescendant', /-opt-4$/);
+
+  const dialogWidth = await panel.evaluate((node: HTMLElement) => node.style.width);
+  const resizeDialog = (width: string) =>
+    panel.evaluate((node: HTMLElement, size) => (node.style.width = size), width);
+  await resizeDialog('820px');
+  await expect.poll(async () => (await position(2)).x).toBeCloseTo((await position(0)).x, 0);
+  await expect.poll(async () => (await position(2)).y).toBeGreaterThan((await position(0)).y);
+  await resizeDialog('540px');
+  await expect.poll(async () => (await position(1)).x).toBeCloseTo((await position(0)).x, 0);
+  await expect.poll(async () => (await position(1)).y).toBeGreaterThan((await position(0)).y);
+  await resizeDialog(dialogWidth);
 
   // 🔴 Escape closes the PICKER — the dialog under it survives, and focus is back on the field.
   await page.keyboard.press('Escape');

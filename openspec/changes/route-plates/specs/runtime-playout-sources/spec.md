@@ -100,6 +100,13 @@ semantics. Each available Media row SHALL offer a separate Preview action.
 - **AND** scrolling or resizing leaves it open
 - **AND** Escape closes it, keeps the underlying dialog open and restores the launcher focus
 
+#### Scenario: View the inputs as cards or rows
+
+- **WHEN** the operator opens Inputs in a new source picker
+- **THEN** Grid view shows responsive cards with the name below the picture and a vertical meter directly beside it
+- **AND** the operator can switch to List view without choosing a source
+- **AND** the same order, filter results, source actions and eligibility apply in both views
+
 #### Scenario: Preview a clip before choosing it
 
 - **WHEN** the operator presses Preview on a Media row

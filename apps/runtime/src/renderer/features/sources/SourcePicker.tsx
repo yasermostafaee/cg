@@ -9,7 +9,7 @@ import {
   type KeyboardEvent,
   type RefObject,
 } from 'react';
-import { Cable, Check, Film, Play } from 'lucide-react';
+import { Cable, Check, Film, LayoutGrid, List, Play } from 'lucide-react';
 import {
   canCheckLiveInput,
   INPUT_GONE_REASON,
@@ -179,6 +179,7 @@ export interface SourcePickerProps {
 
 const LIST_HEIGHT = 420;
 const INPUT_ROW = 116;
+const INPUT_GRID_HEIGHT = 520;
 const MEDIA_ROW = 88;
 /** A media page, and how near the end the next one is asked for. */
 export const MEDIA_PAGE = 50;
@@ -191,6 +192,7 @@ const RECENT_MAX = 8;
 const FILTER_OVER = 10;
 
 type Tab = 'inputs' | 'media';
+type InputView = 'grid' | 'list';
 
 const isMediaId = (id: string): boolean => id.startsWith('md-');
 
@@ -314,6 +316,7 @@ function PickerPanel({
   inputCheck: SourcePickerProps['inputCheck'];
 }): JSX.Element {
   const [tab, setTab] = useState<Tab>(initialTab);
+  const [inputView, setInputView] = useState<InputView>('grid');
   const tabChanged = useRef(false);
   const media = useMediaSearch();
   const loadThumbnail = useMemo(createMediaThumbnailLoader, []);
@@ -368,6 +371,8 @@ function PickerPanel({
             previewChannel={previewChannel}
             onPick={onPick}
             inputCheck={inputCheck}
+            view={inputView}
+            onViewChange={setInputView}
           />
         ) : (
           <MediaTab
@@ -391,10 +396,10 @@ function PickerPanel({
 function nextPickable(
   rows: readonly VirtualRow[],
   from: number | null,
-  step: 1 | -1,
+  step: number,
 ): number | null {
   for (
-    let i = (from ?? (step === 1 ? -1 : rows.length)) + step;
+    let i = from === null ? (step > 0 ? 0 : rows.length - 1) : from + step;
     i >= 0 && i < rows.length;
     i += step
   ) {
@@ -408,6 +413,7 @@ function useListKeys(
   rows: readonly VirtualRow[],
   list: RefObject<VirtualListHandle>,
   pickAt: (index: number) => void,
+  tiled = false,
 ): {
   active: number | null;
   setActive: (index: number) => void;
@@ -423,16 +429,25 @@ function useListKeys(
     if (active !== null && active >= rows.length) setActiveState(null);
   }, [rows.length, active]);
   const onKeyDown = (e: KeyboardEvent<HTMLElement>, fromField = false): void => {
+    const verticalStep = tiled && !fromField ? (list.current?.columnCount() ?? 1) : 1;
     const move = (to: number | null): void => {
       e.preventDefault();
       if (to !== null) setActive(to);
     };
     switch (e.key) {
       case 'ArrowDown':
-        move(nextPickable(rows, active, 1));
+        move(nextPickable(rows, active, active === null ? 1 : verticalStep));
         return;
       case 'ArrowUp':
-        move(nextPickable(rows, active, -1));
+        move(nextPickable(rows, active, active === null ? -1 : -verticalStep));
+        return;
+      case 'ArrowLeft':
+      case 'ArrowRight':
+        if (tiled && !fromField) {
+          const forward =
+            (e.key === 'ArrowRight') !== (getComputedStyle(e.currentTarget).direction === 'rtl');
+          move(nextPickable(rows, active, forward ? 1 : -1));
+        }
         return;
       case 'Home':
         if (fromField) return; // the field's own caret
@@ -466,6 +481,8 @@ function InputsTab({
   previewChannel,
   onPick,
   inputCheck,
+  view,
+  onViewChange,
 }: {
   listId: string;
   inputs: readonly SourceDefinition[];
@@ -475,9 +492,12 @@ function InputsTab({
   previewChannel: number | undefined;
   onPick: (value: string) => void;
   inputCheck?: SourcePickerProps['inputCheck'];
+  view: InputView;
+  onViewChange: (view: InputView) => void;
 }): JSX.Element {
   const [filter, setFilter] = useState('');
   const list = useRef<VirtualListHandle>(null);
+  const tiled = view === 'grid';
   const needle = filter.trim().toLowerCase();
   const shown =
     needle === '' ? inputs : inputs.filter((s) => s.name.toLowerCase().includes(needle));
@@ -534,13 +554,34 @@ function InputsTab({
       ),
     };
   });
-  const keys = useListKeys(rows, list, (index) => {
+  const pick = (index: number): void => {
     const row = rows[index];
     if (row !== undefined && row.disabled !== true) onPick(row.key);
-  });
+  };
+  const keys = useListKeys(rows, list, pick, tiled);
   return (
-    <div className="cg-picker-tab" data-picker-tab="inputs">
-      <InputCatalogueServer server={server} />
+    <div className="cg-picker-tab" data-picker-tab="inputs" data-input-view={view}>
+      <div className="cg-picker-input-bar">
+        <InputCatalogueServer server={server} />
+        <div className="cg-picker-input-view" role="group" aria-label="Input view">
+          <Button
+            aria-label="Grid view"
+            aria-pressed={tiled}
+            active={tiled}
+            onClick={() => onViewChange('grid')}
+          >
+            <Icon icon={LayoutGrid} size={15} /> Grid
+          </Button>
+          <Button
+            aria-label="List view"
+            aria-pressed={!tiled}
+            active={!tiled}
+            onClick={() => onViewChange('list')}
+          >
+            <Icon icon={List} size={15} /> List
+          </Button>
+        </div>
+      </div>
       {inputs.length > FILTER_OVER && (
         <div className="cg-picker-controls">
           <TextInput
@@ -559,21 +600,22 @@ function InputsTab({
         </p>
       ) : (
         <VirtualList
+          key={view}
           ref={list}
           id={listId}
           aria-label="Inputs"
           rows={rows}
           rowHeight={INPUT_ROW}
-          height={Math.min(LIST_HEIGHT, Math.max(rows.length, 1) * INPUT_ROW)}
+          height={
+            tiled ? INPUT_GRID_HEIGHT : Math.min(LIST_HEIGHT, Math.max(rows.length, 1) * INPUT_ROW)
+          }
           activeIndex={keys.active}
           onActiveChange={keys.setActive}
-          onPick={(index) => {
-            const row = rows[index];
-            if (row !== undefined) onPick(row.key);
-          }}
+          onPick={pick}
           onKeyDown={(e) => keys.onKeyDown(e)}
           data={{ 'data-picker-list': '', 'data-modal-autofocus': '' }}
           withActions={inputCheck !== undefined}
+          tiled={tiled}
         />
       )}
     </div>

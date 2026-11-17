@@ -125,3 +125,5 @@
       bigger pictures and a separate Media preview action.
 - [x] 6.6i Verify modal sizing, selection, preview, keyboard, and nested dismissal in Windows
       Chromium. Nine focused tests passed.
+- [x] 6.6j Make Grid the default Inputs view with picture, name and adjacent meter. Windows
+      Chromium verified three, two and one column layouts, List view, keyboard selection and input check.

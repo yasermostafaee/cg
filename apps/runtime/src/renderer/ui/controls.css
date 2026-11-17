@@ -9443,6 +9443,19 @@ input[type='checkbox']:disabled:checked {
   flex: 1;
   min-width: 0;
 }
+.cg-picker-input-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--r-space-2);
+  padding: var(--r-space-1) var(--r-space-3);
+}
+.cg-picker-input-view {
+  display: flex;
+  gap: var(--r-space-1);
+  margin-inline-start: auto;
+}
 .cg-picker-sort,
 .cg-playback__choices {
   display: flex;
@@ -9602,6 +9615,69 @@ input[type='checkbox']:disabled:checked {
   font-weight: var(--r-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+.cg-vlist--tiles {
+  container: input-tiles / inline-size;
+}
+.cg-vlist--tiles > .cg-vlist-spacer {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  gap: var(--r-space-3);
+  padding: var(--r-space-2) var(--r-space-3) var(--r-space-3);
+}
+.cg-vlist--tiles .cg-vlist-option,
+.cg-vlist--tiles .cg-vlist-heading,
+.cg-vlist--tiles .cg-vlist-action-row {
+  position: static;
+}
+.cg-vlist--tiles .cg-vlist-heading {
+  grid-column: 1 / -1;
+}
+.cg-vlist--tiles .cg-vlist-action-row {
+  flex-direction: column-reverse;
+  align-items: stretch;
+  align-self: stretch;
+  min-inline-size: 0;
+  padding: var(--r-space-1);
+  border: 1px solid var(--r-border);
+  border-radius: var(--r-radius-field);
+  background: var(--r-surface-raised);
+}
+.cg-vlist--tiles .cg-vlist-action-row:has([aria-disabled='false']) {
+  cursor: pointer;
+}
+.cg-vlist--tiles .cg-vlist-action-row:has(.is-active, [aria-selected='true']) {
+  border-color: var(--r-accent);
+}
+.cg-picker .cg-vlist--tiles .cg-vlist-action-row .cg-vlist-option {
+  height: auto;
+  min-block-size: 2.25rem;
+  padding: var(--r-space-1) var(--r-space-2);
+  background: transparent;
+  box-shadow: none;
+}
+.cg-vlist--tiles .cg-picker-row > :not(.cg-picker-row__name) {
+  flex: none;
+}
+.cg-vlist--tiles .cg-input-picture-meter {
+  display: flex;
+  inline-size: 100%;
+}
+.cg-picker [data-picker-tab='inputs'] .cg-vlist--tiles .cg-input-thumbnail {
+  flex: 1 1 0;
+  inline-size: auto;
+  min-inline-size: 0;
+}
+@container input-tiles (max-width: 880px) {
+  .cg-vlist--tiles > .cg-vlist-spacer {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container input-tiles (max-width: 560px) {
+  .cg-vlist--tiles > .cg-vlist-spacer {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* C-023 · the input check sits beside the PVW composition, or in its open source dialog. */

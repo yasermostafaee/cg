@@ -134,7 +134,7 @@ test('C-023 · inspect input picture from source controls without changing a bin
     const tileBox = (await studioTile.boundingBox())!;
     const nameBox = (await studioLabel.boundingBox())!;
     expect(Math.abs(tileBox.height - (tileBox.width * 9) / 16)).toBeLessThan(1);
-    expect(tileBox.x).toBeGreaterThanOrEqual(nameBox.x + nameBox.width);
+    expect(nameBox.y).toBeGreaterThanOrEqual(tileBox.y + tileBox.height);
     const unavailableRow = options.getByRole('row').filter({
       has: page.locator('[data-picker-input="in-li-input4"]'),
     });
