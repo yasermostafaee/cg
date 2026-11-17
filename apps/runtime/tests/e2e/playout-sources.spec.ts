@@ -504,6 +504,24 @@ test.describe('source audio meters', () => {
     await page.setViewportSize({ width: 1280, height: 900 });
     const dialog = await openDefaults(app);
     await page.evaluate(() => {
+      const capabilities = window.cg.auth.capabilities();
+      if (capabilities === null) throw new Error('Expected station capabilities');
+      window.cg.auth.capabilities = () => ({ ...capabilities, sourcePresence: true });
+      window.cg.link.status = () => 'live';
+      window.cg.sources.presence = ({ sourceIds }) =>
+        Promise.resolve({
+          engines: ['A', 'B'],
+          sources: Object.fromEntries(
+            sourceIds.map((id) => [
+              id,
+              id === 'in-studio-1'
+                ? { A: 'present', B: 'missing' }
+                : id === 'md-m-meter-sound'
+                  ? { A: 'present', B: 'present' }
+                  : {},
+            ]),
+          ),
+        });
       const state: SourceMeterProbe = { batches: [], checked: [], hold: false, wide: false };
       Object.assign(window, { sourceMeterTest: state });
       window.cg.sourcePreviews.audioLevels = ({ channel, sourceIds, maxChannels }) => {
@@ -576,6 +594,23 @@ test.describe('source audio meters', () => {
     await expect(peak).toHaveAccessibleName('Studio 1 · Audio peak -9 dBFS');
     await expect(panel.locator('[data-picker-input="in-studio-1"]')).toHaveAccessibleName(
       'Studio 1',
+    );
+    const presence = (row: Locator, server: 'A' | 'B') =>
+      row.locator('[data-source-presence-server="' + server + '"]');
+    await expect(presence(inputRow('in-studio-1'), 'A')).toHaveAttribute(
+      'data-source-presence-state',
+      'present',
+    );
+    await expect(presence(inputRow('in-studio-1'), 'B')).toHaveAttribute(
+      'title',
+      'Server B: unavailable',
+    );
+    await expect(presence(inputRow('in-studio-2'), 'B')).toHaveAttribute(
+      'data-source-presence-state',
+      'unknown',
+    );
+    await expect(panel.locator('[data-picker-input="in-studio-1"]')).toHaveAccessibleDescription(
+      'Server A: available. Server B: unavailable',
     );
     await expect(rails).toHaveCount(6);
     const mappedClips = [
@@ -677,6 +712,7 @@ test.describe('source audio meters', () => {
     expect((await readState()).checked).toEqual([]);
 
     await panel.locator('[data-picker-input="in-studio-1"]').click();
+    await expect(presence(field, 'B')).toHaveAttribute('title', 'Server B: unavailable');
     const fieldMeter = field.locator(controls);
     await expect(fieldMeter).toHaveAttribute('data-input-meter-orientation', 'vertical');
     await expect(fieldMeter.locator('[data-input-meter-channel]')).toHaveCount(6);
@@ -703,6 +739,7 @@ test.describe('source audio meters', () => {
     const clip = panel.locator('[data-picker-media="md-m-meter-sound"]');
     await expect(still).toBeVisible();
     await expect(clip).toBeVisible();
+    await expect(presence(clip, 'B')).toHaveAttribute('title', 'Server B: available');
     await expect(still.locator(controls)).toHaveCount(0);
     await expect(clip.locator(controls)).toHaveCount(0);
     await clip.click();
@@ -720,6 +757,9 @@ test.describe('source audio meters', () => {
     const setupMeter = sources.getByRole('img', { name: 'Studio 1 · Audio peak -9 dBFS' });
     await expect(setupMeter).toBeVisible();
     await expect(setupMeter.locator('[data-input-meter-channel]')).toHaveCount(32);
+    await expect(
+      sources.getByRole('img', { name: 'Server A: available. Server B: unavailable' }),
+    ).toBeVisible();
     await expectAttached(setupMeter);
     const silent = sources.getByRole('img', { name: 'Studio 2 · No audio stream' });
     const withoutLevel = sources.getByRole('img', {

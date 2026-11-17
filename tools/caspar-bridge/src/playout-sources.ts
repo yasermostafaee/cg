@@ -10,6 +10,7 @@ import {
   PlayoutInputsStateSchema,
   boundMediaPlayback,
   buildPlayoutSourceCatalog,
+  canonicalPlayoutEpoch,
   foldPlayoutInputsRead,
   mediaSourceId,
   parsePlayoutInputs,
@@ -338,11 +339,22 @@ export class PlayoutSources {
   readonly #log: (line: string) => void;
 
   #inputs: PlayoutInputsState;
+  #inputsComplete: boolean | undefined;
+  #inputsConfirmed = false;
   #etag: string | null = null;
   readonly #media = new Map<string, BoundMediaItem>();
   readonly #mediaObservationById = new Map<string, number>();
   #mediaObservation = 0;
   readonly #recent = new Map<string, PlayoutMediaItem>();
+  readonly #mediaPresence = new Map<
+    string,
+    {
+      readonly at: number;
+      readonly observation: number;
+      readonly present: boolean;
+      readonly fingerprint: string | undefined;
+    }
+  >();
   #layerRange: LiveSourceLayerRange | undefined;
   #catalog: SourceCatalog;
   #lastInputsReadMs = Number.NEGATIVE_INFINITY;
@@ -381,6 +393,39 @@ export class PlayoutSources {
   /** The catalogue in force — synchronous; nothing waits on the Playout. */
   catalog(): SourceCatalog {
     return this.#catalog;
+  }
+
+  /** The live catalogue for this engine, backed by a successful current-process D10 read. */
+  async inputsForPresence() {
+    if (this.#provider === null || !this.#signedIn()) return null;
+    await this.#refreshInputs(PICKER_FRESH_MS);
+    return this.#inputsComplete === undefined || !this.#inputsConfirmed || !this.#signedIn()
+      ? null
+      : {
+          inputs: this.#inputs.inputs,
+          complete: this.#inputsComplete,
+          hasEpoch: canonicalPlayoutEpoch(this.#inputs.epoch) !== undefined,
+        };
+  }
+
+  /** Search results and bound media may be queried, but arbitrary upstream IDs may not. */
+  mediaForPresence(sourceId: string) {
+    const id = playoutMediaIdOf(sourceId);
+    if (id === null) return null;
+    const media = this.#media.get(id) ?? this.#recent.get(id);
+    if (media === undefined) return null;
+    const observed = this.#mediaPresence.get(id);
+    return {
+      fingerprint: observed?.present === true ? observed.fingerprint : media.fingerprint,
+      state:
+        this.#signedIn() &&
+        observed !== undefined &&
+        this.#now() - observed.at < 2 * SOURCES_POLL_MS
+          ? observed.present
+            ? 'present'
+            : 'missing'
+          : 'unknown',
+    } as const;
   }
 
   /** D10 requests actually issued — a cadence test's positive control. */
@@ -476,12 +521,20 @@ export class PlayoutSources {
     const held = this.#inputs.readAt === undefined ? null : this.#etag;
     const result = await provider.readInputs(held);
     const at = new Date(this.#now()).toISOString();
-    if (result.kind === 'failed') return false; // A failed read changes nothing — rule 14.
+    if (result.kind === 'failed') {
+      this.#inputsConfirmed = false;
+      return false; // A failed read does not change the available bindings.
+    }
     if (result.kind === 'not-modified') {
       this.#inputs = { ...this.#inputs, readAt: at };
     } else {
       const read = parsePlayoutInputs(result.body);
-      if (read === null) return false; // A body we cannot read is a failed read.
+      if (read === null) {
+        this.#inputsConfirmed = false;
+        return false;
+      }
+      const raw = result.body as { readonly inputs: readonly unknown[] };
+      this.#inputsComplete = raw.inputs.length === new Set(read.inputs.map(({ id }) => id)).size;
       // §1.B — an unknown format is read as AUTO plus the Playout's aspect, and reported.
       const known = new Set(LIVE_SOURCE_FORMATS.map((f) => f.toLowerCase()));
       for (const input of read.inputs) {
@@ -495,6 +548,7 @@ export class PlayoutSources {
       this.#inputs = foldPlayoutInputsRead(this.#inputs, read, at, result.inputsServer);
       this.#etag = result.etag;
     }
+    this.#inputsConfirmed = true;
     saveStore(this.#inputsPath, this.#inputs);
     this.#rebuild();
     return true;
@@ -555,6 +609,7 @@ export class PlayoutSources {
           allOk = false;
           continue;
         }
+        this.#recordMediaPresence(id, fresh, observation);
         changed = this.#observeBoundMedia(id, fresh, observation) || changed;
       }
     }
@@ -606,7 +661,7 @@ export class PlayoutSources {
     }
     let changed = false;
     for (const item of page.items) {
-      this.#remember(item);
+      this.#remember(item, observation);
       changed = this.#observeBoundMedia(item.id, item, observation) || changed;
     }
     if (changed) {
@@ -663,13 +718,29 @@ export class PlayoutSources {
       : { ok: true, dataUrl: MEDIA_THUMBNAIL_DATA_URL_PREFIX + bytes.toString('base64') };
   }
 
-  #remember(item: PlayoutMediaItem): void {
+  #remember(item: PlayoutMediaItem, observation: number): void {
+    this.#recordMediaPresence(item.id, item, observation);
     this.#recent.delete(item.id);
     this.#recent.set(item.id, item);
     while (this.#recent.size > RECENT_ANSWERS_MAX) {
       const oldest = this.#recent.keys().next().value;
       if (oldest === undefined) break;
       this.#recent.delete(oldest);
+    }
+  }
+
+  #recordMediaPresence(id: string, item: PlayoutMediaItem | undefined, observation: number): void {
+    if (observation < (this.#mediaPresence.get(id)?.observation ?? 0)) return;
+    this.#mediaPresence.delete(id);
+    this.#mediaPresence.set(id, {
+      at: this.#now(),
+      observation,
+      present: item !== undefined,
+      fingerprint: item?.fingerprint,
+    });
+    if (this.#mediaPresence.size > RECENT_ANSWERS_MAX) {
+      const oldest = this.#mediaPresence.keys().next().value;
+      if (oldest !== undefined) this.#mediaPresence.delete(oldest);
     }
   }
 
@@ -696,9 +767,11 @@ export class PlayoutSources {
     let item = this.#recent.get(playoutId);
     if (item === undefined && this.#provider !== null) {
       this.#mediaReads += 1;
+      const observation = ++this.#mediaObservation;
       const result = await this.#provider.readMediaByIds([playoutId], HTTP_TIMEOUT_MS);
       const page = result.kind === 'ok' ? parsePlayoutMediaPage(result.body) : null;
       item = page?.items.find((i) => i.id === playoutId);
+      if (item !== undefined) this.#recordMediaPresence(item.id, item, observation);
     }
     if (item === undefined) {
       return { ok: false, message: 'That media item could not be checked with the Playout.' };

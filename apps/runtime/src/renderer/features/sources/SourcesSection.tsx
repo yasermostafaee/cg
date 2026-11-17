@@ -14,6 +14,8 @@ import { LiveInputCheckCard } from '../monitors/LiveInputCheckCard.js';
 import { useInputCheckSurface } from '../monitors/liveInputCheckContext.js';
 import { videoModeWords } from '../stationSetup/videoModeWords.js';
 import { InputThumbnail } from './InputThumbnail.js';
+import { useSourcePresence } from '../../hooks/useSourcePresence.js';
+import { SourcePresenceBadges } from './SourcePresenceBadges.js';
 import { InputCatalogueServer } from './InputCatalogueServer.js';
 import { InputViewSwitch, type InputView } from './InputViewSwitch.js';
 import {
@@ -84,6 +86,10 @@ export function SourcesSection({
   const { surface, inputCheck } = useInputCheckSurface(channel);
   const catalog = currentSourceCatalog();
   const inputs = playoutInputsForDisplay(catalog.sources);
+  const sourcePresence = useSourcePresence(
+    channel,
+    inputs.map(({ id }) => id),
+  );
   const [view, setView] = useState<InputView>('grid');
   const [bandStart, setBandStart] = useState<string | null>(null);
   const [bandEnd, setBandEnd] = useState<string | null>(null);
@@ -199,6 +205,7 @@ export function SourcesSection({
                   <bdi className="cg-resource__name" dir={directionOf(source.name)}>
                     {sourceDisplayName(source.name, source.origin)}
                   </bdi>
+                  <SourcePresenceBadges presence={sourcePresence} sourceId={source.id} />
                   <span
                     className="cg-resource__type"
                     data-source-kind={KIND_WORD[source.producer.kind]}

@@ -207,26 +207,28 @@ export class BackupEngine {
 
   #playlistRead:
     | {
+        readonly parts: Parts;
         readonly token: string;
         readonly at: number;
         readonly response: Promise<BackupPlaylistInputRead>;
       }
     | undefined;
 
-  /** Read the reserve list for diagnostics only, without changing the primary source catalogue. */
+  /** Read the reserve list for diagnostics and presence without changing the primary catalogue. */
   readPlaylistInputs(): Promise<BackupPlaylistInputRead> {
     const parts = this.#parts;
     const token = this.accessToken();
     if (parts === null || token === null) return Promise.resolve({ kind: 'no-session' });
     const now = this.#now();
     const held = this.#playlistRead;
-    if (held?.token === token && now - held.at < SOURCES_POLL_MS) return held.response;
+    if (held?.parts === parts && held.token === token && now - held.at < SOURCES_POLL_MS)
+      return held.response;
     const reader = new HttpPlayoutSources(parts.endpoints, () => token, this.#opts.readFetch);
     const response = reader.readInputs(null).then((answer): BackupPlaylistInputRead => {
       if (this.#parts !== parts || this.accessToken() !== token) return { kind: 'no-session' };
       return answer.kind === 'ok' ? { kind: 'list', body: answer.body } : { kind: 'unreadable' };
     });
-    this.#playlistRead = { token, at: now, response };
+    this.#playlistRead = { parts, token, at: now, response };
     return response;
   }
 

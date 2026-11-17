@@ -52,6 +52,8 @@ import {
 import { usePvwSourceFrames } from '../monitors/usePvwSourceFrames.js';
 import { InputAudioMeter } from '../sources/InputAudioMeter.js';
 import { labelledSource, SourceLabel } from '../sources/SourceLabel.js';
+import { sourcePresenceDescription } from '../sources/SourcePresenceBadges.js';
+import { useSourcePresence } from '../../hooks/useSourcePresence.js';
 import { SourcePicker } from '../sources/SourcePicker.js';
 import { LiveLayoutEditorArrange } from './LiveLayoutEditorArrange.js';
 import { LiveLayoutEditorEffects } from './LiveLayoutEditorEffects.js';
@@ -200,12 +202,11 @@ export function LiveLayoutEditor({
   const focusOrigin = useRef<string>();
   const fieldsId = useId();
   const [assetUrl, setAssetUrl] = useState<string>();
-  const sourceFrames = usePvwSourceFrames(
-    channel,
-    layout.frames.flatMap(({ sourceId }) => (sourceId === undefined ? [] : [sourceId])),
-    true,
-    'editor',
+  const frameSources = layout.frames.flatMap(({ sourceId }) =>
+    sourceId === undefined ? [] : [sourceId],
   );
+  const sourceFrames = usePvwSourceFrames(channel, frameSources, true, 'editor');
+  const sourcePresence = useSourcePresence(channel, frameSources);
 
   useEffect(() => {
     setAssetUrl(undefined);
@@ -966,6 +967,17 @@ export function LiveLayoutEditor({
                   const positionId = `${fieldsId}-position-${String(index + 1)}`;
                   const picture = sourceFrames.get(candidate.sourceId ?? '')?.jpegBase64;
                   const source = labelledSource(candidate.sourceId);
+                  const presenceDescription = sourcePresenceDescription(
+                    sourcePresence,
+                    candidate.sourceId,
+                  );
+                  const presenceId = `${positionId}-source-presence`;
+                  const frameDescription = [
+                    included ? positionId : undefined,
+                    presenceDescription === undefined ? undefined : presenceId,
+                  ]
+                    .filter(Boolean)
+                    .join(' ');
                   return (
                     <div
                       className="cg-live-layout-frame-row"
@@ -975,7 +987,7 @@ export function LiveLayoutEditor({
                       <Button
                         className="cg-live-layout-frame-choice"
                         aria-label={`Edit plate ${String(index + 1)}`}
-                        aria-describedby={included ? positionId : undefined}
+                        aria-describedby={frameDescription || undefined}
                         active={candidate.id === frame.id}
                         aria-pressed={candidate.id === frame.id}
                         onClick={() => setFrameId(candidate.id)}
@@ -998,7 +1010,17 @@ export function LiveLayoutEditor({
                         </span>
                         <span className="cg-live-layout-frame-label">
                           <IsolatedName>{name}</IsolatedName>
-                          <SourceLabel sourceId={candidate.sourceId} fallback="Unassigned" />
+                          <SourceLabel
+                            sourceId={candidate.sourceId}
+                            fallback="Unassigned"
+                            presence={sourcePresence}
+                            presenceAccessible={false}
+                          />
+                          {presenceDescription !== undefined && (
+                            <span id={presenceId} hidden>
+                              {presenceDescription}
+                            </span>
+                          )}
                         </span>
                         {included && (
                           <span

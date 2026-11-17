@@ -35,6 +35,7 @@ export interface VirtualRow {
   readonly content: ReactNode;
   /** Use a stable option name when its auxiliary reading changes over time. */
   readonly ariaLabel?: string;
+  readonly ariaDescription?: string | undefined;
   /** A separate action in a grid, or a decorative slot alongside a listbox option. */
   readonly trailing?: ReactNode;
   readonly trailingAccessible?: boolean;
@@ -211,6 +212,7 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
             );
           }
           const active = index === activeIndex;
+          const descriptionId = `${optionId(id, index)}-description`;
           const hasTrailing = withActions || row.trailing !== undefined;
           const option = (
             <div
@@ -218,6 +220,7 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
               id={optionId(id, index)}
               role={withActions ? 'gridcell' : 'option'}
               aria-label={row.ariaLabel}
+              aria-describedby={row.ariaDescription === undefined ? undefined : descriptionId}
               aria-selected={row.selected === true}
               aria-disabled={row.disabled === true}
               className={`cg-vlist-option${active ? ' is-active' : ''}`}
@@ -227,6 +230,11 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
               {...(row.data ?? {})}
             >
               {row.content}
+              {row.ariaDescription !== undefined && (
+                <span id={descriptionId} hidden>
+                  {row.ariaDescription}
+                </span>
+              )}
             </div>
           );
           if (!hasTrailing) return option;

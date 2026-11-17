@@ -91,6 +91,11 @@ export const PlayoutInputSchema = z.object({
    * channel: a `route` to that channel's playout layer L (read from `producer.layer`, never assumed).
    */
   playlistOf: PlayoutCompatibleChannelSchema.optional().catch(undefined),
+  /** The stable logical IDs this engine resolves for its local channels (D10 v2). */
+  logicalMappings: z
+    .array(z.object({ channelCode: z.string().min(1), logicalInputId: PlayoutIdSchema }))
+    .optional()
+    .catch(undefined),
 });
 export type PlayoutInput = z.infer<typeof PlayoutInputSchema>;
 

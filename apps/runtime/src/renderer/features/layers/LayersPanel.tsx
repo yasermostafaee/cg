@@ -1974,6 +1974,8 @@ export function LayersPanel({
               setActiveTab('layers');
             }}
             onApplyVolumes={applyPlateVolumes}
+            sourceChannel={scopeChannel ?? defaultsChannel}
+            sourceIdOf={(itemId, plateId) => liveSourceEntry(itemId, plateId)?.id}
             plateLabelOf={(itemId, plateId) => {
               const owner = itemById.get(itemId);
               const template =

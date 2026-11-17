@@ -4,12 +4,21 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createMock } from '@cg/amcp-mock';
-import type { BackupChannelsState } from '@cg/shared-ipc';
+import {
+  inputSourceId,
+  mediaSourceId,
+  PlayoutSourcePresenceChannel,
+  type BackupChannelsState,
+} from '@cg/shared-ipc';
 import type { AuditEntry } from '@cg/shared-schema';
 import { createBridge, type BridgeHandle } from '../src/bridge.js';
 import { openClient, type Client } from './support/auth-harness.js';
 import { startFakePgmFeed } from './support/fake-pgm-feed.js';
-import { FAKE_PLAYOUT_PASSWORD, startFakePlayout } from './support/fake-playout.js';
+import {
+  FAKE_PLAYOUT_PASSWORD,
+  fakeFingerprint,
+  startFakePlayout,
+} from './support/fake-playout.js';
 import {
   FAKE_BACKUP_PASSWORD,
   pairBackupCatalogue,
@@ -82,7 +91,7 @@ interface Pair {
   restart(): Promise<BridgeHandle>;
 }
 
-async function pairStation(dir = scratch()): Promise<Pair> {
+async function pairStation(dir = scratch(), configure?: (st: FakeStation) => void): Promise<Pair> {
   const traceA = path.join(dir, 'a.ndjson');
   const traceB = path.join(dir, 'b.ndjson');
   const [oscA, oscB] = [await freeUdpPort(), await freeUdpPort()];
@@ -92,6 +101,7 @@ async function pairStation(dir = scratch()): Promise<Pair> {
     { tracePath: traceA, backup: { amcp: 0, password: FAKE_BACKUP_PASSWORD, tracePath: traceB } },
   );
   const st = station;
+  configure?.(st);
   const backup = st.backup;
   if (backup === undefined) throw new Error('no backup engine');
   const start = async (): Promise<BridgeHandle> =>
@@ -162,6 +172,94 @@ const channelOf = (line: string): number | null => {
 };
 
 describe('🔴 R-089 — the fake pair maps itself from the backup engine’s own D4, through a real CG Bridge', () => {
+  it('reads physical A/B catalogue presence with scoped logical identity and fingerprints', async () => {
+    const stream = { kind: 'stream', url: 'rtsp://user:password@example.test/live' };
+    const playlist = (channel: number) => ({
+      id: `pl-engine-${String(channel)}`,
+      name: 'Playlist',
+      playlistOf: { casparHost: '127.0.0.1', casparChannel: channel },
+      producer: { kind: 'route', channel, layer: 5 },
+      available: true,
+    });
+    const media = (id: string, fingerprint: string) => ({
+      id,
+      fingerprint,
+      name: 'Two unrelated files may share this display name',
+      clip: `D:/Private/${id}.mp4`,
+      type: 'video' as const,
+      folder: 'Media',
+      updatedAt: '2026-11-17T00:00:00Z',
+    });
+    const p = await pairStation(scratch(), (st) => {
+      st.playout.setInputs([
+        { id: 'camera', name: 'Camera', producer: stream },
+        { id: 'another', name: 'Same name', producer: stream },
+        playlist(1),
+      ]);
+      st.playout.setMedia([
+        media('media', fakeFingerprint('media')),
+        media('absent', fakeFingerprint('absent')),
+      ]);
+      st.backup?.playout.setInputs([
+        {
+          id: 'replica-camera',
+          name: 'Video on B',
+          producer: stream,
+          logicalMappings: [{ channelCode: 'fake-programme-r2', logicalInputId: 'camera' }],
+        },
+        {
+          id: 'replica-unrelated',
+          name: 'Same name',
+          producer: stream,
+          logicalMappings: [{ channelCode: 'fake-programme-r2', logicalInputId: 'unrelated' }],
+        },
+        { ...playlist(2), available: false },
+      ]);
+      st.backup?.playout.setMedia([
+        media(`replica-${fakeFingerprint('replica')}`, fakeFingerprint('media')),
+        media('same-name', fakeFingerprint('not-the-source')),
+      ]);
+    });
+    await until(
+      async () => (await stateOf(p.admin)).backup?.channels[0]?.state === 'mapped',
+      'B channel mapped',
+    );
+    await until(
+      async () =>
+        p.bridge.runtime.sourceCatalog().sources.some((i) => i.id === inputSourceId('camera')),
+      'A inputs confirmed',
+    );
+    expect((await p.admin.ask(id(), 'sources.media-search', { q: '' })).error).toBeUndefined();
+    const fromA = inputSourceId('camera');
+    const absentInput = inputSourceId('another');
+    const playlistId = inputSourceId('pl-engine-1');
+    const matchedMedia = mediaSourceId('media');
+    const absentMedia = mediaSourceId('absent');
+    const ask = {
+      channel: 1,
+      sourceIds: [fromA, absentInput, playlistId, matchedMedia, absentMedia],
+    };
+    const answer = await p.admin.ask(id(), PlayoutSourcePresenceChannel.name, ask);
+    expect(answer.error).toBeUndefined();
+    expect(answer.payload).toEqual({
+      engines: ['A', 'B'],
+      sources: {
+        [fromA]: { A: 'present', B: 'present' },
+        [absentInput]: { A: 'present', B: 'missing' },
+        [playlistId]: { A: 'present', B: 'missing' },
+        [matchedMedia]: { A: 'present', B: 'present' },
+        [absentMedia]: { A: 'present', B: 'missing' },
+      },
+    });
+    expect(JSON.stringify(answer.payload)).not.toMatch(/password|D:\/Private|example\.test/);
+    const channelTwo = await openClient(p.bridge);
+    const { token } = await p.st.playout.issueToken({ user: 'channelTwo' });
+    expect((await channelTwo.authenticate(id(), token)).error).toBeUndefined();
+    expect(
+      (await channelTwo.ask(id(), PlayoutSourcePresenceChannel.name, ask)).error,
+    ).toBeDefined();
+  }, 25_000);
+
   it('signed in on both engines: CH 1 maps to B’s 2; its programme ticket stays logical; a take reaches B’s 2 and never B’s 1', async () => {
     const p = await pairStation();
     await until(

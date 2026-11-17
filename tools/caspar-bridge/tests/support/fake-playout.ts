@@ -116,6 +116,7 @@ export interface FakeInput {
   readonly ownOutputOf?: { casparHost: string; casparChannel: number };
   /** `PLAYOUT-FEATURES-01` C (`2.9.2`) — this row is a programme channel's PLAYLIST output. */
   readonly playlistOf?: { casparHost: string; casparChannel: number };
+  readonly logicalMappings?: readonly { channelCode: string; logicalInputId: string }[];
 }
 
 /**

@@ -62,6 +62,10 @@
           "en": "Backup channels are selected from compatible channels on Server B. Input lists show their Playout address and align previews. Live plates uses readable plate names, and Station layers summarises layer status."
         },
         {
+          "fa": "اگر سرور رزرو تنظیم شده باشد، کنار ورودی و مدیا نشان‌های A و B وضعیت دسترسی هر سرور را نمایش می‌دهند. اگر کاتالوگ خوانده نشده یا اثرانگشت معلوم نباشد، وضعیت نامشخص دیده می‌شود.",
+          "en": "When a backup is configured, small A and B badges show each server’s source or media availability. An unread catalogue or unknown fingerprint appears as unverified."
+        },
+        {
           "fa": "نصاب شمارهٔ نسخه و پیشرفت عملیات را در تمام مراحل نشان می‌دهد. آیکون‌های Designer و Control با رنگ‌های متمایز به‌روز شده‌اند.",
           "en": "Setup shows the version and progress throughout the installation. Designer and Control have refreshed, distinct icon accents."
         }

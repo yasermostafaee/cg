@@ -790,6 +790,7 @@ describe('R-066 — the MODE comes from `bridge.capabilities`, and `unknown` is 
       layerProfiles: true,
       sharedTemplateFolder: true,
       templateThumbnails: true,
+      sourcePresence: true,
     });
     expect(runtime.auth.state()).toEqual({ kind: 'signed-in', principal, permittedChannels: [1] });
   });
@@ -821,6 +822,7 @@ describe('R-066 — the MODE comes from `bridge.capabilities`, and `unknown` is 
       layerProfiles: true,
       sharedTemplateFolder: true,
       templateThumbnails: true,
+      sourcePresence: true,
     });
     expect(runtime.auth.state()).toEqual({ kind: 'off' });
   });

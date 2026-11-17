@@ -22,6 +22,7 @@ import {
   PgmReturnStatusChangedChannel,
   PgmReturnStatusChannel,
   PgmTopologyChannel,
+  PlayoutSourcePresenceChannel,
   type PgmTopology,
   PlayoutLayersStateChangedChannel,
   PlayoutLayersStateChannel,
@@ -311,6 +312,7 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'channels.list': PER_SOCKET,
   'channels.catalogue': PER_SOCKET,
   'sourcePreviews.audioLevels': PER_SOCKET,
+  [PlayoutSourcePresenceChannel.name]: PER_SOCKET,
   // `CENTRAL-BRIDGE-01` (D9) — issued only for a channel this socket's sign-in holds (the handler).
   'pgmReturn.ticket': PER_SOCKET,
   [PgmTopologyChannel.name]: scoped<PgmTopology | null>((topology, holds) =>

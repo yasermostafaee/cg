@@ -28,6 +28,7 @@ export interface ComboFieldProps {
   controls: string;
   onOpen: () => void;
   'aria-label': string;
+  'aria-describedby'?: string | undefined;
   id?: string | undefined;
   disabled?: boolean | undefined;
   /** APPENDED after `cg-field cg-combo-field`, never replacing them. */
@@ -44,6 +45,7 @@ export const ComboField = forwardRef<HTMLButtonElement, ComboFieldProps>(functio
     controls,
     onOpen,
     'aria-label': ariaLabel,
+    'aria-describedby': ariaDescribedBy,
     id,
     disabled,
     className,
@@ -61,6 +63,7 @@ export const ComboField = forwardRef<HTMLButtonElement, ComboFieldProps>(functio
       aria-expanded={expanded}
       aria-controls={controls}
       aria-label={ariaLabel}
+      aria-describedby={ariaDescribedBy}
       id={id}
       disabled={disabled}
       title={title}

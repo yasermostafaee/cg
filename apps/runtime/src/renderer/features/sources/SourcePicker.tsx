@@ -21,6 +21,7 @@ import {
   sourceShowableOn,
   type ConsoleMediaItem,
   type SourceDefinition,
+  type SourcePresenceView,
 } from '@cg/shared-ipc';
 import { Button } from '../../ui/Button.js';
 import { ComboField } from '../../ui/ComboField.js';
@@ -41,6 +42,8 @@ import {
   type MediaThumbnailLoader,
 } from './MediaThumbnail.js';
 import { SourceLabel, formatMediaDuration, labelledSource } from './SourceLabel.js';
+import { useSourcePresence } from '../../hooks/useSourcePresence.js';
+import { SourcePresenceBadges, sourcePresenceDescription } from './SourcePresenceBadges.js';
 import { SourceMediaPreview } from './SourceMediaPreview.js';
 import {
   currentSourceCatalog,
@@ -118,9 +121,13 @@ export function choiceText(choice: SourceChoice): string {
 export function ChoiceLabel({
   choice,
   meterChannel,
+  presence = null,
+  presenceAccessible = true,
 }: {
   choice: SourceChoice;
   meterChannel?: number | undefined;
+  presence?: SourcePresenceView | null;
+  presenceAccessible?: boolean;
 }): JSX.Element {
   if (choice.names === undefined) return <span className="cg-choice-label">{choice.label}</span>;
   if (choice.names === null) {
@@ -142,6 +149,11 @@ export function ChoiceLabel({
       {input !== undefined && (
         <InputThumbnail source={input} channel={meterChannel} meterChannel={meterChannel} compact />
       )}
+      <SourcePresenceBadges
+        presence={presence}
+        sourceId={choice.names}
+        accessible={presenceAccessible}
+      />
       {!offered && (
         <Tag
           className="cg-source-tag cg-source-tag--unavailable"
@@ -230,6 +242,14 @@ export function SourcePicker({
           },
         };
   const thumbnailChannel = previewChannel ?? inputCheck?.channel ?? channel;
+  const showingChoice = choice !== undefined && (value === '' || !known);
+  const selectedSource = showingChoice ? choice.names : value;
+  const selectedPresence = useSourcePresence(
+    thumbnailChannel,
+    selectedSource ? [selectedSource] : [],
+  );
+  const presenceDescription = sourcePresenceDescription(selectedPresence, selectedSource);
+  const presenceDescriptionId = `${base}-source-presence`;
 
   return (
     <>
@@ -243,24 +263,37 @@ export function SourcePicker({
           setOpen(true);
         }}
         aria-label={ariaLabel}
+        aria-describedby={presenceDescription === undefined ? undefined : presenceDescriptionId}
         id={id}
         className={className}
         title={title}
         // The bound value as a finder reads it — a catalogue id, never shown.
         data={{ ...data, 'data-picker-value': value }}
       >
-        {choice !== undefined && (value === '' || !known) ? (
+        {showingChoice ? (
           <span className="cg-source-label" data-source-label="choice">
-            <ChoiceLabel choice={choice} meterChannel={thumbnailChannel} />
+            <ChoiceLabel
+              choice={choice}
+              meterChannel={thumbnailChannel}
+              presence={selectedPresence}
+              presenceAccessible={false}
+            />
           </span>
         ) : (
           <SourceLabel
             sourceId={value}
             meterChannel={thumbnailChannel}
+            presence={selectedPresence}
+            presenceAccessible={false}
             fallback={choices[0] !== undefined ? choiceText(choices[0]) : 'None'}
           />
         )}
       </ComboField>
+      {presenceDescription !== undefined && (
+        <span id={presenceDescriptionId} hidden>
+          {presenceDescription}
+        </span>
+      )}
       {open && (
         <Modal
           id={panelId}
@@ -318,6 +351,10 @@ function PickerPanel({
   const loadThumbnail = useMemo(createMediaThumbnailLoader, []);
   const catalog = currentSourceCatalog();
   const inputs = playoutInputsForDisplay(catalog.sources);
+  const choicePresence = useSourcePresence(
+    previewChannel,
+    choices.flatMap(({ names }) => (names ? [names] : [])),
+  );
   const tabs = [
     { id: 'inputs', label: `Inputs ${String(inputs.length)}` },
     {
@@ -340,7 +377,7 @@ function PickerPanel({
               onClick={() => onPick(c.value)}
             >
               {value === c.value && <Icon icon={Check} size={13} />}
-              <ChoiceLabel choice={c} meterChannel={previewChannel} />
+              <ChoiceLabel choice={c} meterChannel={previewChannel} presence={choicePresence} />
             </Button>
           ))}
         </div>
@@ -499,6 +536,10 @@ function InputsTab({
     needle === ''
       ? inputs
       : inputs.filter((s) => sourceDisplayName(s.name, 'input').toLowerCase().includes(needle));
+  const presence = useSourcePresence(
+    previewChannel,
+    shown.map(({ id }) => id),
+  );
   const rows: VirtualRow[] = shown.map((source) => {
     // `ROUTE-PLATES-01` — v1.3 rule 1, asked of the one predicate the bridge's refusal asks.
     const offChannel = channel !== undefined && !sourceShowableOn(source, channel);
@@ -519,6 +560,7 @@ function InputsTab({
       kind: 'option',
       key: source.id,
       ariaLabel: source.status === 'unavailable' ? `${name} Unavailable` : name,
+      ariaDescription: sourcePresenceDescription(presence, source.id),
       disabled,
       selected,
       ...(loops
@@ -545,6 +587,7 @@ function InputsTab({
           <bdi className="cg-picker-row__name" dir={directionOf(name)}>
             {name}
           </bdi>
+          <SourcePresenceBadges presence={presence} sourceId={source.id} accessible={false} />
           {source.status === 'unavailable' && (
             <Tag className="cg-source-tag cg-source-tag--unavailable">Unavailable</Tag>
           )}
@@ -709,6 +752,7 @@ function mediaRow(
   loadThumbnail: MediaThumbnailLoader,
   preview: MediaChoice | undefined,
   setPreview: (item: MediaChoice) => void,
+  presence: SourcePresenceView | null,
 ): VirtualRow {
   const selected = item.id === value;
   const name = sourceDisplayName(item.name, 'media');
@@ -722,6 +766,7 @@ function mediaRow(
     kind: 'option',
     key,
     selected,
+    ariaDescription: sourcePresenceDescription(presence, item.id),
     data: { 'data-picker-media': item.id },
     trailing: item.unavailable !== true && (
       <Button
@@ -745,6 +790,7 @@ function mediaRow(
             <bdi className="cg-picker-row__name" dir={directionOf(name)}>
               {name}
             </bdi>
+            <SourcePresenceBadges presence={presence} sourceId={item.id} accessible={false} />
             {item.unavailable === true && (
               <Tag className="cg-source-tag cg-source-tag--unavailable">Unavailable</Tag>
             )}
@@ -794,17 +840,28 @@ function MediaTab({
     if (focusSearch) search.current?.focus();
   }, [focusSearch]);
 
-  const rows = useMemo<VirtualRow[]>(() => {
-    const out: VirtualRow[] = [];
-    const inResults = new Map(media.items.map((item) => [item.id, item]));
-    // `Recent`: the media bound most recently on this station, for an empty query only.
-    const bound = catalog.sources.filter((s) => s.origin === 'media');
-    const recent =
+  const bound = useMemo(
+    () => catalog.sources.filter((source) => source.origin === 'media'),
+    [catalog],
+  );
+  const recent = useMemo(
+    () =>
       media.q === ''
         ? [...bound]
             .sort((a, b) => (b.media?.lastBoundAt ?? '').localeCompare(a.media?.lastBoundAt ?? ''))
             .slice(0, RECENT_MAX)
-        : [];
+        : [],
+    [bound, media.q],
+  );
+  const presence = useSourcePresence(previewChannel, [
+    ...media.items.map(({ id }) => id),
+    ...recent.map(({ id }) => id),
+    ...(isMediaId(value) ? [value] : []),
+  ]);
+
+  const rows = useMemo<VirtualRow[]>(() => {
+    const out: VirtualRow[] = [];
+    const inResults = new Map(media.items.map((item) => [item.id, item]));
     const shownIds = new Set([...inResults.keys(), ...recent.map((r) => r.id)]);
     // The current binding, pinned at the top when it is not otherwise in view.
     if (isMediaId(value) && !shownIds.has(value)) {
@@ -828,6 +885,7 @@ function MediaTab({
             loadThumbnail,
             preview,
             setPreview,
+            presence,
           ),
         );
       }
@@ -851,16 +909,19 @@ function MediaTab({
             loadThumbnail,
             preview,
             setPreview,
+            presence,
           ),
         );
       }
       out.push({ kind: 'heading', key: 'All media', content: 'All media' });
     }
     for (const item of media.items) {
-      out.push(mediaRow(`all:${item.id}`, item, value, loadThumbnail, preview, setPreview));
+      out.push(
+        mediaRow(`all:${item.id}`, item, value, loadThumbnail, preview, setPreview, presence),
+      );
     }
     return out;
-  }, [media.items, media.q, catalog, value, loadThumbnail, preview]);
+  }, [media.items, bound, recent, value, loadThumbnail, preview, presence]);
 
   const idOf = (index: number): string | null => {
     const key = rows[index]?.key;

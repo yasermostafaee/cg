@@ -235,6 +235,83 @@ const settle = async (ms = 0): Promise<void> => {
   });
 };
 
+describe('source availability by server', () => {
+  function enablePresence(engines: ('A' | 'B')[]): void {
+    const capabilities = window.cg.auth.capabilities();
+    if (capabilities === null) throw new Error('Missing mock capabilities');
+    window.cg.auth.capabilities = () => ({ ...capabilities, sourcePresence: true });
+    Object.assign(window.cg, {
+      link: {
+        status: () => 'live',
+        onStatusChanged: () => () => undefined,
+        bridgeAddress: () => 'primary.example.test:5280',
+      },
+      connections: { onConfigChanged: () => () => undefined },
+    });
+    window.cg.sources.presence = ({ sourceIds }) =>
+      Promise.resolve({
+        engines,
+        sources: Object.fromEntries(
+          sourceIds.map((id) => [
+            id,
+            id === 'in-studio1'
+              ? { A: 'present', B: 'missing' }
+              : id === 'md-m-studio1'
+                ? { A: 'present', B: 'present' }
+                : { A: 'unknown' },
+          ]),
+        ),
+      });
+  }
+
+  function badges(scope: HTMLElement, states: readonly string[]): void {
+    const rendered = [...scope.querySelectorAll('[data-source-presence-server]')];
+    expect(rendered.map((badge) => badge.getAttribute('data-source-presence-server'))).toEqual([
+      'A',
+      'B',
+    ]);
+    expect(rendered.map((badge) => badge.getAttribute('data-source-presence-state'))).toEqual(
+      states,
+    );
+  }
+
+  it('shows A and B on the compact field, input rows, and media rows with accessible states', async () => {
+    enablePresence(['A', 'B']);
+    const field = await render({ channel: 1, value: 'in-studio1' });
+    await settle(20);
+    badges(field, ['present', 'missing']);
+    expect(document.getElementById(field.getAttribute('aria-describedby') ?? '')?.textContent).toBe(
+      'Server A: available. Server B: unavailable',
+    );
+    const panel = await openPicker(field);
+    await settle(20);
+    const studio = panel.querySelector<HTMLElement>('[data-picker-input="in-studio1"]');
+    expect(studio?.getAttribute('aria-label')).toBe('Studio 1');
+    expect(
+      document.getElementById(studio?.getAttribute('aria-describedby') ?? '')?.textContent,
+    ).toBe('Server A: available. Server B: unavailable');
+    const news = panel.querySelector<HTMLElement>('[data-picker-input="in-newscam"]');
+    expect(news).not.toBeNull();
+    badges(news!, ['unknown', 'unknown']);
+
+    await pickerTab(panel, 'Media');
+    await settle(20);
+    const clip = panel.querySelector<HTMLElement>('[data-picker-media="md-m-studio1"]');
+    expect(clip).not.toBeNull();
+    badges(clip!, ['present', 'present']);
+  });
+
+  it('keeps availability marks hidden when the station has no Server B', async () => {
+    enablePresence(['A']);
+    const field = await render({ channel: 1, value: 'in-studio1' });
+    await settle(20);
+    const panel = await openPicker(field);
+    await settle(20);
+    expect(field.querySelector('[data-source-presence]')).toBeNull();
+    expect(panel.querySelector('[data-source-presence]')).toBeNull();
+  });
+});
+
 describe('closed — it is the select it replaced', () => {
   it('shows the call site’s choice for an empty binding, and the source’s NAME for a bound one', async () => {
     const empty = await render({});

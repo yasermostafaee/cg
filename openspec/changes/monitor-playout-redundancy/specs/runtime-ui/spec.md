@@ -27,6 +27,22 @@ identifying affected media and reasons and distinguishing live inputs limited to
 - **THEN** the template name and short backup status are visible
 - **AND** expanding Inspector details identifies the affected media and reports the live input separately
 
+### Requirement: Source choices show availability on each configured server
+
+When a backup is configured, source and media choices SHALL show compact, named indicators for the physical servers. Each indicator SHALL distinguish a confirmed catalogue match, confirmed unavailability, and unverified status. The indicator SHALL provide a text equivalent as well as colour. Catalogue availability describes the engine's own source library and does not indicate programme state or command ownership.
+
+#### Scenario: One server has a verified copy of a media item
+
+- **GIVEN** server A lists a media item and server B has confirmed that it does not have the same fingerprint
+- **WHEN** the operator opens the source picker or inspects the assigned source
+- **THEN** the A indicator shows available and the B indicator shows unavailable
+- **AND** an unreadable catalogue or an unavailable fingerprint shows an unverified state for the affected server
+
+#### Scenario: A programme switch does not relabel source availability
+
+- **WHEN** programme ownership changes from server A to server B
+- **THEN** the source indicators still describe each physical server's catalogue
+
 ### Requirement: Programme sound follows one verified engine
 
 CG Control SHALL offer one console-local sound source, chosen by the operator or by

@@ -1,4 +1,4 @@
-import { parsePlayoutMediaPage } from '@cg/shared-ipc';
+import { parsePlayoutMediaPage, type SourcePresence } from '@cg/shared-ipc';
 import { playoutFetch } from './playout-http.js';
 
 /**
@@ -41,6 +41,13 @@ export const FINGERPRINTS_PER_CALL = 100;
 export const BACKUP_MEDIA_POLL_MS = 30_000;
 
 const HTTP_TIMEOUT_MS = 5_000;
+const PRESENCE_FRESH_MS = 15_000;
+const MAX_PRESENCE_RESULTS = 2_048;
+
+interface PresenceReadScope {
+  readonly url: string;
+  readonly bearer: string;
+}
 
 export interface BackupMediaLookupOptions {
   /** The BACKUP Playout's D11 URL, or `null` while no server B is configured. Read per request. */
@@ -65,6 +72,9 @@ export class BackupMediaLookup {
   #known = new Set<string>();
   #ticker: ReturnType<typeof setInterval> | null = null;
   #inFlight: Promise<void> | null = null;
+  #presenceScope: PresenceReadScope | undefined;
+  #presenceRead: Promise<void> | undefined;
+  readonly #presence = new Map<string, { readonly state: SourcePresence; readonly at: number }>();
   readonly #handlers = new Set<() => void>();
 
   constructor(options: BackupMediaLookupOptions) {
@@ -88,6 +98,79 @@ export class BackupMediaLookup {
     return answer === null
       ? { kind: 'refused', reason: 'no-copy' }
       : { kind: 'copy', clip: answer };
+  }
+
+  /** Read a visible batch on B without adding unbound media to its playback cache. */
+  async readPresence(
+    fingerprints: readonly string[],
+  ): Promise<ReadonlyMap<string, SourcePresence>> {
+    const url = this.#url();
+    const bearer = this.#bearer();
+    if (url === null || bearer === null || fingerprints.length === 0) return new Map();
+    let scope = this.#presenceScope;
+    if (scope?.url !== url || scope.bearer !== bearer) {
+      scope = { url, bearer };
+      this.#presenceScope = scope;
+      this.#presence.clear();
+      this.#presenceRead = undefined;
+    }
+    const keys = [...new Set(fingerprints)].slice(0, FINGERPRINTS_PER_CALL);
+    const current = () =>
+      this.#presenceScope === scope && this.#url() === url && this.#bearer() === bearer;
+    const entry = (key: string) => {
+      const read = this.#presence.get(key);
+      return read !== undefined && Date.now() - read.at < PRESENCE_FRESH_MS
+        ? read.state
+        : undefined;
+    };
+    if (keys.every((key) => entry(key) !== undefined))
+      return new Map(keys.map((key) => [key, entry(key) ?? 'unknown']));
+    // An overlapping request shares the current batch. Recheck once afterward so a
+    // concurrent request for another page can issue its own bounded batch.
+    const previous = this.#presenceRead;
+    if (previous !== undefined) await previous;
+    if (!current()) return new Map();
+    const due = keys.filter((key) => entry(key) === undefined);
+    if (due.length > 0 && this.#presenceRead === undefined) {
+      const pending = this.#readPresenceBatch(scope, due).finally(() => {
+        if (this.#presenceRead === pending) this.#presenceRead = undefined;
+      });
+      this.#presenceRead = pending;
+    }
+    await this.#presenceRead;
+    if (!current()) return new Map();
+    return new Map(keys.map((key) => [key, entry(key) ?? 'unknown']));
+  }
+
+  async #readPresenceBatch(scope: PresenceReadScope, chunk: readonly string[]): Promise<void> {
+    const body = await this.#readPage(scope.url, scope.bearer, chunk);
+    if (this.#presenceScope !== scope) return;
+    const page = parsePlayoutMediaPage(body);
+    const raw = body as { items: unknown[]; total?: unknown; nextCursor?: unknown };
+    // Older engines can ignore `fingerprint=` and return the first page. A positive exact
+    // match still counts. Only a complete response for our requested fingerprints proves absence.
+    const complete =
+      page !== null &&
+      raw.items.length === page.items.length &&
+      (raw.nextCursor === undefined || raw.nextCursor === null) &&
+      (raw.total === undefined || raw.total === page.items.length) &&
+      page.items.every(
+        ({ fingerprint }) => fingerprint !== undefined && chunk.includes(fingerprint),
+      );
+    const at = Date.now();
+    for (const key of chunk) {
+      const present = page?.items.some(({ fingerprint }) => fingerprint === key) === true;
+      this.#presence.delete(key);
+      this.#presence.set(key, {
+        state: present ? 'present' : complete ? 'missing' : 'unknown',
+        at,
+      });
+    }
+    while (this.#presence.size > MAX_PRESENCE_RESULTS) {
+      const oldest = this.#presence.keys().next().value;
+      if (oldest === undefined) break;
+      this.#presence.delete(oldest);
+    }
   }
 
   /** Called whenever an answer changes. Returns an unsubscribe. */
@@ -130,6 +213,9 @@ export class BackupMediaLookup {
   reset(): Promise<void> {
     this.#answers.clear();
     this.#old = false;
+    this.#presenceScope = undefined;
+    this.#presenceRead = undefined;
+    this.#presence.clear();
     for (const handler of [...this.#handlers]) handler();
     return this.refreshAll();
   }
@@ -156,22 +242,8 @@ export class BackupMediaLookup {
     const url = this.#url();
     const bearer = this.#bearer();
     if (url === null || bearer === null || chunk.length === 0) return;
-    let body: unknown;
-    try {
-      const res = await this.#fetch(`${url}?fingerprint=${chunk.join(',')}`, {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${bearer}` },
-        signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
-      });
-      if (!res.ok) {
-        this.#log(`backup media list answered ${String(res.status)} — kept what was known`);
-        return;
-      }
-      body = await res.json();
-    } catch {
-      this.#log('backup media list not reachable — kept what was known');
-      return;
-    }
+    const body = await this.#readPage(url, bearer, chunk);
+    if (this.#url() !== url || this.#bearer() !== bearer) return;
     const page = parsePlayoutMediaPage(body);
     if (page === null) return;
     let changed = false;
@@ -190,6 +262,24 @@ export class BackupMediaLookup {
       }
     }
     if (changed) for (const handler of [...this.#handlers]) handler();
+  }
+
+  async #readPage(url: string, bearer: string, chunk: readonly string[]): Promise<unknown> {
+    try {
+      const res = await this.#fetch(`${url}?fingerprint=${chunk.join(',')}`, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${bearer}` },
+        signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
+      });
+      if (!res.ok) {
+        this.#log(`backup media list answered ${String(res.status)} — kept what was known`);
+        return null;
+      }
+      return (await res.json()) as unknown;
+    } catch {
+      this.#log('backup media list not reachable — kept what was known');
+      return null;
+    }
   }
 }
 

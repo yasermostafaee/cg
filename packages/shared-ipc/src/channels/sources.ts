@@ -293,7 +293,7 @@ export const SourceDefinitionIdSchema = z
   .max(64)
   .regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/, 'a source id is alphanumeric with "_" and "-"');
 
-const SourceCatalogIdSchema = SourceDefinitionIdSchema.or(PlayoutMediaSourceIdSchema);
+export const SourceCatalogIdSchema = SourceDefinitionIdSchema.or(PlayoutMediaSourceIdSchema);
 
 /**
  * 🔴 `MEDIA-PLATES-01` — **WHAT A MEDIA CLIP DOES WHEN A LOOK HIDES ITS PLATE**, per clip and
@@ -1381,6 +1381,31 @@ export const ConsoleMediaItemSchema = z.object({
   folder: z.string().optional(),
 });
 export type ConsoleMediaItem = z.infer<typeof ConsoleMediaItemSchema>;
+
+/** A positive engine-local result, a confirmed absence, or a result that cannot be established. */
+export const SourcePresenceSchema = z.enum(['present', 'missing', 'unknown']);
+export type SourcePresence = z.infer<typeof SourcePresenceSchema>;
+export const MAX_SOURCE_PRESENCE_IDS = 64;
+
+/** Engine-local readiness for source IDs already known to the console. This is a read. */
+export const PlayoutSourcePresenceChannel = defineChannel(
+  'playout.sourcePresence',
+  z.object({
+    channel: z.number().int().positive(),
+    sourceIds: z.array(SourceCatalogIdSchema).min(1).max(MAX_SOURCE_PRESENCE_IDS),
+  }),
+  z.object({
+    engines: z.array(z.enum(['A', 'B'])).max(2),
+    sources: z.record(
+      SourceCatalogIdSchema,
+      z.object({
+        A: SourcePresenceSchema.optional(),
+        B: SourcePresenceSchema.optional(),
+      }),
+    ),
+  }),
+);
+export type SourcePresenceView = z.infer<typeof PlayoutSourcePresenceChannel.response>;
 
 /** The two named failures of a media search (the prompt's §1.A). */
 export const MEDIA_SEARCH_FAILURES = ['playout-unreachable', 'playout-refused'] as const;

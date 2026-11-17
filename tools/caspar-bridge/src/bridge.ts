@@ -95,6 +95,7 @@ import {
   LivePreviewStatusChannel,
   LivePreviewStopChannel,
   SourceAudioLevelsChannel,
+  PlayoutSourcePresenceChannel,
   SourcePreviewPvwChannel,
   SourcePreviewThumbnailsChannel,
   PlaylistGainGetChannel,
@@ -113,6 +114,7 @@ import {
   type PgmEngine,
   type PgmReturnStatus,
   type PgmTopology,
+  type SourcePresenceView,
   LOCK_ENGAGED_REFUSAL,
   LockEngageChannel,
   LockReleaseChannel,
@@ -347,6 +349,11 @@ import {
 } from './playout-version.js';
 import { BackupMediaLookup } from './backup-media.js';
 import { describeBackupPlaylistRoute } from './backup-playlist-route.js';
+import {
+  primaryInputPresence,
+  reserveInputPresence,
+  sourcePresenceInputsOf,
+} from './source-presence.js';
 import { BackupEngine, backupSessionPath, type BackupEngineOptions } from './backup-engine.js';
 import { engineState } from './engine-state.js';
 import { CoreGuard, type CoreGuardOptions } from './core-guard.js';
@@ -3298,6 +3305,124 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     (sourceId, atMs) => playoutSources?.mediaPreviewId(sourceId, atMs) ?? null,
   );
   const sourceAudio = new SourceAudioService(previewTarget, previewSelector);
+  const sourcePresence = async (
+    owner: AuthSession | null,
+    { channel, sourceIds }: ChannelRequest<typeof PlayoutSourcePresenceChannel>,
+  ): Promise<SourcePresenceView> => {
+    const config = runtime.config();
+    const serverB = config.servers.B;
+    const engines: SourcePresenceView['engines'] = serverB === undefined ? ['A'] : ['A', 'B'];
+    const catalog = runtime.sourceCatalog().sources;
+    const allowed = (number: number): boolean =>
+      (playoutAuth === null ||
+        (owner !== null && authGateState(owner, playoutAuth) === 'signed-in')) &&
+      socketScope(owner, playoutAuth, runtime)?.(number) !== false;
+    if (!runtime.isDeclaredChannel(channel) || !allowed(channel) || playoutSources === null)
+      return { engines, sources: {} };
+
+    const requested = [...new Set(sourceIds)].map((sourceId) => ({
+      sourceId,
+      input: catalog.find((source) => source.id === sourceId && source.origin === 'input'),
+      media: playoutSources.mediaForPresence(sourceId),
+    }));
+    const needsInputs = requested.some(({ input }) => input !== undefined);
+    const map = runtime.backupChannelMap();
+    const reserveChannel = map.channelOnB(channel);
+    const reserveAddress = backupEngine?.address() ?? null;
+    const reserveHost = reserveAddress === null ? null : new URL(reserveAddress).hostname;
+    const reserveCode = () => {
+      if (serverB === undefined || reserveChannel === null || reserveHost === null) return null;
+      const local = hostIsOursFor(reserveHost, () => [serverB.host]);
+      const [row, duplicate] = (backupEngine?.rows() ?? []).filter(
+        ({ casparHost, casparChannel }) => casparChannel === reserveChannel && local(casparHost),
+      );
+      return row === undefined || duplicate !== undefined ? null : row.id;
+    };
+    const channelCode = reserveCode();
+    const fingerprints = requested.flatMap(({ media }) =>
+      media?.fingerprint === undefined ? [] : [media.fingerprint],
+    );
+    const [primaryInputs, backupRead, backupClips] = await Promise.all([
+      needsInputs ? playoutSources.inputsForPresence() : null,
+      needsInputs && channelCode !== null ? backupEngine?.readPlaylistInputs() : undefined,
+      reserveHost !== null ? backupMedia?.readPresence(fingerprints) : undefined,
+    ]);
+    if (!allowed(channel) || config !== runtime.config()) return { engines, sources: {} };
+    const reserveCurrent = reserveAddress === backupEngine?.address();
+    const reserveMapCurrent =
+      reserveCurrent &&
+      map === runtime.backupChannelMap() &&
+      reserveChannel === map.channelOnB(channel) &&
+      channelCode === reserveCode();
+    const backupInputs =
+      reserveMapCurrent && backupRead?.kind === 'list'
+        ? sourcePresenceInputsOf(backupRead.body)
+        : null;
+
+    const sources: SourcePresenceView['sources'] = Object.fromEntries(
+      requested.map(({ sourceId, input, media }) => {
+        if (media !== null) {
+          const fingerprint = media.fingerprint;
+          const currentMedia = playoutSources.mediaForPresence(sourceId);
+          return [
+            sourceId,
+            {
+              A: currentMedia?.state ?? 'unknown',
+              ...(serverB !== undefined && {
+                B:
+                  reserveCurrent &&
+                  fingerprint !== undefined &&
+                  fingerprint === currentMedia?.fingerprint
+                    ? (backupClips?.get(fingerprint) ?? 'unknown')
+                    : 'unknown',
+              }),
+            },
+          ];
+        }
+        const inputId = input === undefined ? null : playoutInputIdOf(sourceId);
+        const playlistChannel = input?.playlistOf;
+        if (playlistChannel !== undefined && !allowed(playlistChannel))
+          return [
+            sourceId,
+            {
+              A: 'unknown',
+              ...(serverB !== undefined && { B: 'unknown' }),
+            },
+          ];
+        const reserve =
+          serverB !== undefined && reserveHost !== null && channelCode !== null
+            ? {
+                channelCode,
+                host: serverB.host,
+                apiHost: reserveHost,
+                playlistChannel:
+                  playlistChannel === undefined ? null : map.channelOnB(playlistChannel),
+              }
+            : null;
+        return [
+          sourceId,
+          {
+            A:
+              inputId === null
+                ? 'unknown'
+                : primaryInputPresence(primaryInputs, inputId, playlistChannel),
+            ...(serverB !== undefined && {
+              B:
+                inputId === null
+                  ? 'unknown'
+                  : reserveInputPresence(
+                      backupInputs,
+                      reserve,
+                      inputId,
+                      playlistChannel !== undefined,
+                    ),
+            }),
+          },
+        ];
+      }),
+    );
+    return { engines, sources };
+  };
   const playlistGainOrigin =
     primaryEngineAddress === null ? null : new URL(primaryEngineAddress).origin;
   const playlistGain = new PlaylistGainService(
@@ -3375,6 +3500,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     livePreview,
     sourcePreviews,
     sourceAudio,
+    sourcePresence,
     playlistGain,
     logsAvailable: options.logsDir !== undefined,
     setupPhase,
@@ -4940,6 +5066,10 @@ export function buildRoutes(
     livePreview?: LivePreviewService;
     sourcePreviews?: SourcePreviewService;
     sourceAudio?: SourceAudioService;
+    sourcePresence?: (
+      owner: AuthSession | null,
+      request: ChannelRequest<typeof PlayoutSourcePresenceChannel>,
+    ) => Promise<SourcePresenceView>;
     playlistGain?: PlaylistGainService;
     /** Does this bridge keep a log folder to download? */
     logsAvailable?: boolean;
@@ -5720,6 +5850,16 @@ export function buildRoutes(
         }
         return { readings: [...readings.values()] };
       },
+    ),
+    route(
+      PlayoutSourcePresenceChannel,
+      'read',
+      'read',
+      (req: ChannelRequest<typeof PlayoutSourcePresenceChannel>) =>
+        paths.sourcePresence?.(currentAuthSession(), req) ?? {
+          engines: b.config().servers.B === undefined ? ['A'] : ['A', 'B'],
+          sources: {},
+        },
     ),
     route(
       SourcePreviewPvwChannel,

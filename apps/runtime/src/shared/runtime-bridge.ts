@@ -159,6 +159,7 @@ import type {
   SourcesConfigChannel,
   SourcesMediaSearchChannel,
   SourcesMediaThumbnailChannel,
+  PlayoutSourcePresenceChannel,
   SourcesRefreshChannel,
   SourcesSetAssignmentsChannel,
   SourcesSetConfigChannel,
@@ -224,6 +225,7 @@ export interface AuthCapabilities {
   readonly previewMaskPlacement?: true;
   readonly livePlatePaintOrder?: true;
   readonly controlLiveLayouts?: true;
+  readonly sourcePresence?: true;
   readonly sharedTemplateFolder?: true;
   readonly templateThumbnails?: true;
   readonly fixedLayerShortcuts?: true;
@@ -1420,6 +1422,9 @@ export interface RuntimeBridge {
     mediaThumbnail(
       req: ChannelRequest<typeof SourcesMediaThumbnailChannel>,
     ): Promise<ChannelResponse<typeof SourcesMediaThumbnailChannel>>;
+    presence?(
+      req: ChannelRequest<typeof PlayoutSourcePresenceChannel>,
+    ): Promise<ChannelResponse<typeof PlayoutSourcePresenceChannel>>;
     /**
      * `PLAYOUT-SOURCES-01` §1.A — a picker opened: ask the bridge to read again if its last read is
      * older than 5 s. Answers at once; what changes arrives on {@link onConfigChanged}.

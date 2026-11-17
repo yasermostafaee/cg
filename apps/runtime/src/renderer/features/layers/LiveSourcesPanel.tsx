@@ -12,9 +12,11 @@ import { IsolatedName } from '../../ui/OperatorNames.js';
 import { sourceDisplayName } from '../../ui/operatorNaming.js';
 import { useLink } from '../../hooks/useLink.js';
 import { useCasparReach } from '../../hooks/useCasparReachable.js';
+import { useSourcePresence } from '../../hooks/useSourcePresence.js';
 import { BRIDGE_DOWN_REASON, casparRefusalReason } from '../../ui/reachWording.js';
 import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
 import { producerForDisplay } from '../sources/producerDisplay.js';
+import { SourcePresenceBadges } from '../sources/SourcePresenceBadges.js';
 import {
   liveLayerEmptyView,
   releaseScopeOf,
@@ -70,6 +72,8 @@ interface Props {
    * Absent, or answering nothing, the plates are COUNTED — a plate is never named by its id there.
    */
   plateLabelOf?: (itemId: string, plateId: string) => string | undefined;
+  sourceIdOf?: (itemId: string, plateId: string) => string | undefined;
+  sourceChannel?: number;
   /**
    * `RUNTIME-REDESIGN-01` Phase 6 — open the OWNING ROW's audio dialog on one plate. The
    * reference's right-click (and its keyboard twins, `ContextMenu` / `Shift+F10`) on a seated
@@ -252,6 +256,8 @@ export function LiveSourcesPanel({
   onSelectOwner,
   onApplyVolumes,
   plateLabelOf,
+  sourceIdOf,
+  sourceChannel,
   onOpenAudio,
   onPanic,
   panicChannel,
@@ -280,6 +286,11 @@ export function LiveSourcesPanel({
   const linkDown = useLink() === 'disconnected';
   const casparReach = useCasparReach();
   const { confirm, confirmDialog } = useConfirm();
+  const sources = rows.map((row) => sourceIdOf?.(row.itemId, row.plate));
+  const sourcePresence = useSourcePresence(
+    sourceChannel,
+    sources.filter((id): id is string => id !== undefined),
+  );
 
   /**
    * The same REACHABILITY split the station tab documents at length: the layer-state
@@ -634,7 +645,7 @@ export function LiveSourcesPanel({
           </span>
           <span role="columnheader">Audio controls</span>
         </div>
-        {rows.map((row) => {
+        {rows.map((row, index) => {
           // Every disposition but the ordinary one keeps its sentence visible (see below).
           const attention = !row.plain;
           const name = plateName(row);
@@ -705,6 +716,7 @@ export function LiveSourcesPanel({
                     {source}
                   </bdi>
                 )}
+                <SourcePresenceBadges presence={sourcePresence} sourceId={sources[index]} />
               </span>
               <span role="cell" className="cg-plate-owner">
                 {row.releasable && holdsOperator ? (

@@ -235,6 +235,7 @@ const OPTIONAL_CHANNELS = new Set([
   ipcChannels.TemplatesThumbnailPutChannel.name,
   StackPreviewPlateCropChannel.name,
   SourcesMediaThumbnailChannel.name,
+  ipcChannels.PlayoutSourcePresenceChannel.name,
   ipcChannels.SourcePreviewPvwChannel.name,
   ipcChannels.SourcePreviewThumbnailsChannel.name,
   ipcChannels.SourceAudioLevelsChannel.name,
@@ -1137,6 +1138,7 @@ export class WebSocketRuntime implements RuntimeBridge {
           }),
         ...(caps.livePlatePaintOrder === true && { livePlatePaintOrder: true }),
         ...(caps.controlLiveLayouts === true && { controlLiveLayouts: true }),
+        ...(routed.has(ipcChannels.PlayoutSourcePresenceChannel.name) && { sourcePresence: true }),
         ...(routed.has(ipcChannels.SharedTemplateFolderChannel.name) &&
         routed.has(ipcChannels.SharedTemplateReadChannel.name)
           ? { sharedTemplateFolder: true }
@@ -2776,6 +2778,12 @@ export class WebSocketRuntime implements RuntimeBridge {
       (await this.#optionalChannelMissing(SourcesMediaThumbnailChannel.name))
         ? { ok: false }
         : this.#invoke(SourcesMediaThumbnailChannel, req),
+    presence: async (
+      req: ChannelRequest<typeof ipcChannels.PlayoutSourcePresenceChannel>,
+    ): Promise<ChannelResponse<typeof ipcChannels.PlayoutSourcePresenceChannel>> =>
+      (await this.#optionalChannelMissing(ipcChannels.PlayoutSourcePresenceChannel.name))
+        ? { engines: [], sources: {} }
+        : this.#invoke(ipcChannels.PlayoutSourcePresenceChannel, req),
     refresh: () => this.#invoke(SourcesRefreshChannel, undefined),
     // `MEDIA-PLATES-01` §1.A — a bound clip's Loop and When hidden, station-wide.
     setMediaPlayback: (req: ChannelRequest<typeof SourcesSetMediaPlaybackChannel>) =>

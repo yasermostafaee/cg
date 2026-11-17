@@ -1,12 +1,13 @@
 import { sourceDisplayName } from '../../ui/operatorNaming.js';
 import { useSyncExternalStore } from 'react';
 import { Cable, Film } from 'lucide-react';
-import type { SourceDefinition } from '@cg/shared-ipc';
+import type { SourceDefinition, SourcePresenceView } from '@cg/shared-ipc';
 import { Icon } from '../../ui/Icon.js';
 import { directionOf } from '../../ui/OperatorNames.js';
 import { Tag } from '../../ui/Tag.js';
 import { inputAudioSource } from './InputAudioMeter.js';
 import { InputThumbnail } from './InputThumbnail.js';
+import { SourcePresenceBadges } from './SourcePresenceBadges.js';
 import {
   currentSourceCatalog,
   seenMediaItem,
@@ -84,6 +85,8 @@ export function SourceLabel({
   fallback = 'None',
   meta = true,
   meterChannel,
+  presence = null,
+  presenceAccessible = true,
 }: {
   /** The bound catalogue id. Empty or unknown renders {@link fallback} — never the id. */
   sourceId: string | null | undefined;
@@ -92,6 +95,8 @@ export function SourceLabel({
   /** A media item's length after its name. */
   meta?: boolean | undefined;
   meterChannel?: number | undefined;
+  presence?: SourcePresenceView | null;
+  presenceAccessible?: boolean;
 }): JSX.Element {
   useSyncExternalStore(subscribeSources, sourcesVersion);
   const source = labelledSource(sourceId);
@@ -99,6 +104,11 @@ export function SourceLabel({
     return (
       <span className="cg-source-label" data-source-label="none">
         {fallback}
+        <SourcePresenceBadges
+          presence={presence}
+          sourceId={sourceId}
+          accessible={presenceAccessible}
+        />
       </span>
     );
   }
@@ -125,6 +135,11 @@ export function SourceLabel({
       {input !== undefined && (
         <InputThumbnail source={input} channel={meterChannel} meterChannel={meterChannel} compact />
       )}
+      <SourcePresenceBadges
+        presence={presence}
+        sourceId={sourceId}
+        accessible={presenceAccessible}
+      />
       {source.unavailable && (
         <Tag className="cg-source-tag cg-source-tag--unavailable" title={source.reason}>
           Unavailable
