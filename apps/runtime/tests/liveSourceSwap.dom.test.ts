@@ -17,6 +17,10 @@ import { bindingFor, itemWith, rowDeps, templateWith } from './support/layerRow.
 import { clearPortals, openDialog } from './support/dialog.js';
 import { choosePickerOption, openPicker, pickerValue } from './support/sourcePicker.js';
 
+vi.mock('../src/renderer/hooks/useAuthCapabilities.js', () => ({
+  useAuthCapabilities: () => null,
+}));
+
 /**
  * R-048 / C-015 phase 6 (6.9 / 6.9e) — **the operator's route to a live-source
  * swap, and what the dialog has to tell them.**
