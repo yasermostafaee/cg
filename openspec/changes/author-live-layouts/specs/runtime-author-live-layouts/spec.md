@@ -37,6 +37,7 @@ CG Control SHALL author multiple frames and presets in the channel's template ca
 - **THEN** they can choose Fit or Crop edges, set Move and Resize permissions, and define rectangular mask windows
 - **AND** the canvas reflects the input fit and masks
 - **AND** the live layer uses the existing PVW tools for allowed edits
+- **AND** the editor groups the authored aspect ratio, input fit, border and mask under Plate appearance, and groups Move, Resize and mask-editing access under Operator permissions in CG Control
 - **AND** a shared frame uses its authored geometry settings in each regular preset and Focus look
 
 #### Scenario: Style the plate border
@@ -77,6 +78,12 @@ CG Control SHALL author multiple frames and presets in the channel's template ca
 
 - **WHEN** the operator saves a layout with a color, image or video background and effect settings
 - **THEN** the saved template renders the selected background and uses the stored effects across its presets
+
+#### Scenario: Export and import a saved layout
+
+- **WHEN** the operator selects a saved live layout in Templates and chooses Export .vcg
+- **THEN** CG Control saves the layout's verified package as a file
+- **AND** Import a .vcg restores the authored presets, settings, embedded assets and Edit layout action
 
 #### Scenario: Save a layout with no background
 

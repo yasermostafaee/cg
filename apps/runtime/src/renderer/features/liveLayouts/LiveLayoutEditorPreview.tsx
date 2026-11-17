@@ -432,7 +432,10 @@ export function LiveLayoutEditorPreview({
         continue;
       const shownBefore = before.rects[id] !== undefined;
       const shownAfter = visible[id] !== undefined;
-      const from = before.rects[id] ?? geometry[id] ?? collapsed;
+      const from =
+        !shownBefore && shownAfter && effect.enterDirection !== undefined
+          ? presetDepartureRect(visible[id] ?? collapsed, effect.enterDirection, raster)
+          : (before.rects[id] ?? geometry[id] ?? collapsed);
       const to =
         !shownAfter && effect.exitDirection !== undefined
           ? presetDepartureRect(from, effect.exitDirection, raster)

@@ -33,19 +33,30 @@ const DEPARTURE_LABELS: Record<InputTransitionDirection, string> = {
   down: 'Slide down + fade',
 };
 
-export function PresetDepartureControl({
+const ARRIVAL_LABELS: Record<InputTransitionDirection, string> = {
+  left: 'Slide in from left + fade',
+  right: 'Slide in from right + fade',
+  up: 'Slide in from top + fade',
+  down: 'Slide in from bottom + fade',
+};
+
+export function PresetPlateDirectionControl({
+  phase,
   direction,
   onChange,
 }: {
+  phase: 'enter' | 'exit';
   direction: InputTransitionDirection | undefined;
   onChange: (direction: InputTransitionDirection | undefined) => void;
 }): JSX.Element {
+  const label = phase === 'enter' ? 'Arriving plates' : 'Departing plates';
+  const choices = phase === 'enter' ? ARRIVAL_LABELS : DEPARTURE_LABELS;
   return (
-    <label className="cg-preset-departure-control">
-      Departing plates
+    <label className="cg-preset-plate-direction-control">
+      {label}
       <select
         className="cg-field"
-        aria-label="Departing plates"
+        aria-label={label}
         value={direction ?? ''}
         onChange={(event) => {
           const value = event.currentTarget.value;
@@ -56,7 +67,7 @@ export function PresetDepartureControl({
         <option value="">Fade</option>
         {InputTransitionDirectionSchema.options.map((option) => (
           <option key={option} value={option}>
-            {DEPARTURE_LABELS[option]}
+            {choices[option]}
           </option>
         ))}
       </select>
@@ -145,10 +156,18 @@ export function FrameEffectControls({
         </label>
       )}
       {preset !== undefined && hasEffect && (
-        <PresetDepartureControl
-          direction={effect.exitDirection}
-          onChange={(exitDirection) => changeEffect({ exitDirection })}
-        />
+        <>
+          <PresetPlateDirectionControl
+            phase="enter"
+            direction={effect.enterDirection}
+            onChange={(enterDirection) => changeEffect({ enterDirection })}
+          />
+          <PresetPlateDirectionControl
+            phase="exit"
+            direction={effect.exitDirection}
+            onChange={(exitDirection) => changeEffect({ exitDirection })}
+          />
+        </>
       )}
     </fieldset>
   );

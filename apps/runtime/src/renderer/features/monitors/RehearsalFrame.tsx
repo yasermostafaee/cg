@@ -675,6 +675,11 @@ export function RehearsalFrame({
     entries.push(() => {
       stopFollowingPictures?.();
       restore();
+      if (plan.prepareEnter !== undefined && plan.enter !== undefined) {
+        // Seat the hidden PVW pictures at their authored geometry before moving their wrappers.
+        commit(plan.prepareEnter);
+        return sendFramePhase(update, plan.enter);
+      }
       // Enter the new preset and hold its titles in the same page update.
       commit(plan.enter);
       return plan.enter?.durationMs ?? 0;

@@ -6,7 +6,7 @@ import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { SourceCatalog } from '@cg/shared-ipc';
 import { controlLiveLayoutFocusLookId, type Scene } from '@cg/shared-schema';
-import { pack } from '@cg/vcg-format';
+import { pack, sha256Hex } from '@cg/vcg-format';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 const inputNames = ['Studio camera', 'Guest line 1', 'Guest line 2'];
@@ -474,9 +474,25 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
       };
     });
     expect(departure).toEqual({ upward: true, opacity: 0 });
-    await departingPlates.selectOption('');
     await expect(sharedShot.locator('img')).toBeVisible();
+    const arrivingPlates = editor.getByRole('combobox', { name: 'Arriving plates' });
+    await arrivingPlates.selectOption('down');
+    await expect(departingPlates).toHaveValue('up');
     await threeUp.click();
+    const presetArrival = await departingShot.evaluate((node) => {
+      const effect = node.getAnimations()[0]?.effect;
+      if (!(effect instanceof KeyframeEffect)) throw new Error('Missing plate entrance');
+      const keys = effect.getKeyframes();
+      return {
+        fromBelow:
+          Number.parseFloat(String(keys[0]?.['top'])) >
+          Number.parseFloat(String(keys.at(-1)?.['top'])),
+        opacity: Number(keys[0]?.['opacity']),
+      };
+    });
+    expect(presetArrival).toEqual({ fromBelow: true, opacity: 0 });
+    await departingPlates.selectOption('');
+    await arrivingPlates.selectOption('');
     const soloEffect = editor
       .getByRole('group', { name: 'Switch focused plate' })
       .getByLabel('Effect');
@@ -518,6 +534,13 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
       editor.getByRole('group', { name: 'Plate input fit across presets', exact: true }),
     ).toBeHidden();
     await editor.getByText('Advanced plate controls', { exact: true }).click();
+    const plateAppearance = editor.getByRole('group', { name: 'Plate appearance', exact: true });
+    const operatorPermissions = editor.getByRole('group', {
+      name: 'Operator permissions in CG Control',
+      exact: true,
+    });
+    await expect(plateAppearance.getByLabel('Plate aspect ratio', { exact: true })).toBeVisible();
+    await expect(plateAppearance.getByLabel('Plate input fit', { exact: true })).toBeVisible();
     const thirdShot = editorStage.locator('[data-layout-preview-shot][data-frame-number="3"]');
     await editor.getByLabel('Border color', { exact: true }).fill('#fec352');
     await editor.getByLabel('Border width (px)', { exact: true }).fill('18');
@@ -543,14 +566,13 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
         );
       });
     await expect.poll(() => windowRatios(pictureWindows)).toEqual([75, 100]);
-    await editor.getByRole('button', { name: 'Crop edges', exact: true }).click();
+    await plateAppearance.getByRole('button', { name: 'Crop edges', exact: true }).click();
     await expect.poll(() => windowRatios(pictureWindows)).toEqual([100, 100]);
-    await expect(editor.getByRole('button', { name: 'Locked', exact: true })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-    await editor.getByRole('button', { name: 'Keep aspect', exact: true }).click();
-    const move = editor.getByRole('checkbox', { name: 'Allow move', exact: true });
+    await expect(
+      operatorPermissions.getByRole('button', { name: 'Locked', exact: true }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    await operatorPermissions.getByRole('button', { name: 'Keep aspect', exact: true }).click();
+    const move = operatorPermissions.getByRole('checkbox', { name: 'Allow move', exact: true });
     await expect(move).not.toBeChecked();
     await move.check();
     await editor.getByRole('button', { name: 'Add mask window', exact: true }).click();
@@ -608,7 +630,7 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
     await editor.getByRole('button', { name: 'Show outside', exact: true }).click();
     await expect(pictureWindows).toHaveCount(4);
     await editor.getByRole('button', { name: 'Show inside', exact: true }).click();
-    await editor.getByRole('checkbox', { name: 'Allow mask editing in CG Control' }).check();
+    await operatorPermissions.getByRole('checkbox', { name: 'Allow mask editing' }).check();
     await editor.getByRole('button', { name: 'Focus plate 3', exact: true }).click();
     await expect(thirdShot).toHaveAttribute('aria-hidden', 'false');
     await expect.poll(() => windowRatios(pictureWindows)).toEqual([50, 50]);
@@ -1127,6 +1149,36 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
         .filter(({ line }) => /^(?:CG|PLAY|CLEAR|MIXER) /.test(line)),
     ).toEqual([]);
     await library.getByRole('button', { name: 'Select Next programme', exact: true }).click();
+    await page.evaluate(() => {
+      Object.defineProperties(window, {
+        showSaveFilePicker: { value: undefined, configurable: true },
+        showOpenFilePicker: { value: undefined, configurable: true },
+      });
+    });
+    const [exported] = await Promise.all([
+      page.waitForEvent('download'),
+      library.getByRole('button', { name: 'Export .vcg', exact: true }).click(),
+    ]);
+    expect(exported.suggestedFilename()).toMatch(/\.vcg$/i);
+    const exportedPath = await exported.path();
+    if (exportedPath === null) throw new Error('Missing layout download');
+    const exportedBytes = fs.readFileSync(exportedPath);
+    expect(sha256Hex(exportedBytes)).toBe(nextTemplate.controlLiveLayoutSource);
+    expect(runtime.templateRemove(nextTemplate.templateId, 1).ok).toBe(true);
+    const again = library.getByRole('button', { name: 'Select Next programme', exact: true });
+    await expect(again).toHaveCount(0);
+    const [fileChooser] = await Promise.all([
+      page.waitForEvent('filechooser'),
+      library.getByRole('button', { name: 'Import a .vcg', exact: true }).click(),
+    ]);
+    await fileChooser.setFiles({
+      name: exported.suggestedFilename(),
+      mimeType: 'application/zip',
+      buffer: exportedBytes,
+    });
+    await expect(again).toBeVisible();
+    expect(runtime.templateGet(nextTemplate.templateId, 1)?.controlLiveLayout).toEqual(nextLayout);
+    await again.click();
     await library.getByRole('button', { name: 'Edit layout', exact: true }).click();
     await expect(noBackground(lockedEdit)).toHaveAttribute('aria-pressed', 'true');
     await expect(lockedEdit.locator('[data-layout-preview]')).toHaveAttribute(

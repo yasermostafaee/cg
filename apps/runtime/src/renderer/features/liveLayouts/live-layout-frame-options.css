@@ -2,6 +2,27 @@
   border-top: 1px solid var(--r-border-soft);
 }
 
+.cg-live-layout-frame-option-section h4 {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  color: var(--r-text);
+  font-size: var(--r-text-sm);
+  font-weight: 650;
+}
+
+.cg-live-layout-frame-option-section + .cg-live-layout-frame-option-section {
+  margin-top: 0.7rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--r-border-soft);
+}
+
+.cg-live-layout-frame-option-group > p {
+  margin: 0;
+  color: var(--r-text-secondary);
+}
+
 .cg-live-layout-frame-option-group,
 .cg-live-layout-frame-mask {
   display: grid;

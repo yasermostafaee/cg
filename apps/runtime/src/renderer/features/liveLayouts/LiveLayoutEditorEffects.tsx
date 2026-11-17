@@ -12,7 +12,7 @@ import {
 } from '@cg/shared-schema';
 import { Checkbox } from '../../ui/Checkbox.js';
 import { Icon } from '../../ui/Icon.js';
-import { PresetDepartureControl } from '../inspector/FrameEffectControls.js';
+import { PresetPlateDirectionControl } from '../inspector/FrameEffectControls.js';
 import { LiveLayoutEditorNumber } from './LiveLayoutEditorNumber.js';
 import './live-layout-effects.css';
 
@@ -93,10 +93,18 @@ export function LiveLayoutEditorEffects({
               Fade
             </label>
             {(focus.motion !== 'cut' || focus.fade) && (
-              <PresetDepartureControl
-                direction={focus.exitDirection}
-                onChange={(exitDirection) => setFocus({ exitDirection })}
-              />
+              <>
+                <PresetPlateDirectionControl
+                  phase="enter"
+                  direction={focus.enterDirection}
+                  onChange={(enterDirection) => setFocus({ enterDirection })}
+                />
+                <PresetPlateDirectionControl
+                  phase="exit"
+                  direction={focus.exitDirection}
+                  onChange={(exitDirection) => setFocus({ exitDirection })}
+                />
+              </>
             )}
           </div>
         </fieldset>

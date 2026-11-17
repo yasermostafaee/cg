@@ -978,11 +978,19 @@
       },
       "features": [
         {
-          "fa": "در Departing plates تعیین کنید قاب حذف‌شونده محو شود یا هم‌زمان به یکی از چهار سمت حرکت کند.",
-          "en": "Under Departing plates, choose Fade or slide toward any edge while fading."
+          "fa": "برای ورود و خروج قاب در گذار پریست، Fade یا اسلاید از یکی از چهار سمت همراه Fade را جداگانه انتخاب کنید.",
+          "en": "Set arriving and departing plates independently to Fade or to slide from or toward any edge while fading."
+        },
+        {
+          "fa": "چیدمان زندهٔ ذخیره‌شده را از Templates به‌صورت فایل VCG ذخیره کنید و بعداً با Import a .vcg دوباره وارد و ویرایش کنید.",
+          "en": "Export a saved live layout as a VCG file from Templates, then import and edit it again."
         }
       ],
       "fixes": [
+        {
+          "fa": "در تنظیمات پیشرفتهٔ پلیت، ظاهر قاب و مجوزهای اپراتور در دو بخش جدا دیده می‌شوند.",
+          "en": "Advanced plate controls distinguish authored appearance from operator permissions."
+        },
         {
           "fa": "حاشیهٔ قاب در ابعاد عمودی و افقی هم‌ضخامت است و نشان انتخاب در ادیتور بیرون حاشیه دیده می‌شود. تصویر در ادیتور و PVW از گوشه‌های گرد بیرون نمی‌زند.",
           "en": "Portrait and landscape plates show an even border, with editor selection outside the stroke. The editor and PVW clip pictures to rounded corners."

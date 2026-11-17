@@ -2549,7 +2549,7 @@ it('fades exiting and returning mask seats while keeping retained pictures opaqu
   }
 });
 
-it('slides the disappearing picture, its mask and artwork up in the same fade phase', async () => {
+it('slides picture, mask and artwork together with independent departure and arrival directions', async () => {
   const r = await bootPresetDeparture(PRESET_ARTWORK_FADE_HTML);
   const itemId = 'item-1';
   const visible = () => (r.liveLayers().get(itemId) ?? []).filter(({ held }) => held !== true);
@@ -2557,7 +2557,12 @@ it('slides the disappearing picture, its mask and artwork up in the same fade ph
   const retained = visible().find(({ sourceId }) => sourceId === 'guest-1')!;
   expect(extras).toHaveLength(2);
   const start = (await recvLines()).length;
-  const effect = { ...PRESET_EFFECT, fade: false, exitDirection: 'up' } as const;
+  const effect = {
+    ...PRESET_EFFECT,
+    fade: false,
+    exitDirection: 'up',
+    enterDirection: 'down',
+  } as const;
   expect(await r.setActiveLook(itemId, 'solo', effect)).toEqual({ ok: true });
   const writes = (await recvLines()).slice(start);
   const departureIndex = writes.findIndex((line) => line.includes('opacityArtwork'));
@@ -2618,7 +2623,63 @@ it('slides the disappearing picture, its mask and artwork up in the same fade ph
     });
   }
   expect(await r.setActiveLook(itemId, 'duo', effect)).toEqual({ ok: true });
-  for (const { sourceId, clip, fill } of extras) {
+  const arrivalWrites = (await recvLines()).slice(start + writes.length);
+  const arrivalArtwork = arrivalWrites
+    .filter((line) => line.includes('opacityArtwork'))
+    .map((line) => {
+      const data = decodeCgData(parseAmcpLine(line)!.args[3]!).data;
+      if (data === null) throw new Error('Cannot decode the arrival artwork');
+      return readCgControl(JSON.parse(data))?.frameTransition;
+    });
+  const preparedArtwork = arrivalArtwork.filter((phase) => phase?.durationMs === 0);
+  const animatedArtwork = arrivalArtwork.filter((phase) => (phase?.durationMs ?? 0) > 0);
+  expect(preparedArtwork).toHaveLength(2);
+  expect(animatedArtwork).toHaveLength(2);
+  const arrivalFrames = ['duo-right', 'duo-mask'].map((frameKey) => ({
+    frameKey,
+    lookId: 'duo',
+    from: { x: 960, y: 1350, width: 960, height: 540 },
+    to: { x: 960, y: 270, width: 960, height: 540 },
+    fromOpacity: 1,
+    toOpacity: 1,
+  }));
+  for (const phase of preparedArtwork) {
+    expect(phase).toMatchObject({
+      opacityArtwork: [{ key: DEPARTURE_ARTWORK, lookId: 'duo', fromOpacity: 0, toOpacity: 0 }],
+      frames: arrivalFrames.map((frame) => ({ ...frame, to: frame.from })),
+    });
+  }
+  for (const phase of animatedArtwork) {
+    expect(phase).toMatchObject({
+      opacityArtwork: [{ key: DEPARTURE_ARTWORK, lookId: 'duo', fromOpacity: 0, toOpacity: 1 }],
+      frames: arrivalFrames,
+    });
+  }
+  for (const { slot, sourceId, clip, fill } of extras) {
+    const target = 'MIXER 1-' + String(slot.layer);
+    const startHidden = arrivalWrites.indexOf(target + ' OPACITY 0 0 linear DEFER');
+    const show = arrivalWrites.findIndex((line) =>
+      new RegExp('^' + target + ' OPACITY 1 [1-9]\\d* linear DEFER$').test(line),
+    );
+    expect(startHidden).toBeGreaterThan(0);
+    const parkedCommit = arrivalWrites.indexOf('MIXER 1 COMMIT', startHidden);
+    expect(show).toBeGreaterThan(parkedCommit);
+    const native = (rect: typeof clip, offset: number) =>
+      [rect.x, rect.y + offset, rect.width, rect.height]
+        .map((value) => Number(value.toFixed(6)))
+        .join(' ');
+    const frames = arrivalWrites[show]?.split(' ')[4];
+    for (const [verb, rect] of [
+      ['FILL', fill],
+      ['CLIP', clip],
+    ] as const) {
+      expect(arrivalWrites.slice(0, startHidden)).toContain(
+        target + ' ' + verb + ' ' + native(rect, 1) + ' 0 linear DEFER',
+      );
+      expect(arrivalWrites.slice(parkedCommit + 1, show)).toContain(
+        target + ' ' + verb + ' ' + native(rect, 0) + ' ' + frames + ' linear DEFER',
+      );
+    }
     expect(visible().find((record) => record.sourceId === sourceId)).toMatchObject({ clip, fill });
   }
 });

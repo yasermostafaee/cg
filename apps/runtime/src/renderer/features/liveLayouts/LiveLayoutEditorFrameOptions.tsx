@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import { Move, Plus, SlidersHorizontal, Trash2 } from 'lucide-react';
+import { Move, Plus, ShieldCheck, SlidersHorizontal, Trash2 } from 'lucide-react';
 import {
   CONTROL_LIVE_LAYOUT_PLATE_BORDER_MAX_PX,
   DEFAULT_LIVE_FIT_MODE,
@@ -114,188 +114,208 @@ export function LiveLayoutEditorFrameOptions({
       }}
     >
       <LiveLayoutEditorSectionHeading icon={SlidersHorizontal} label="Advanced plate controls" />
-      {presetOverrides !== undefined && (
-        <div className="cg-live-layout-frame-option-group" role="group" aria-label="This preset">
-          <span>This preset</span>
-          <LiveLayoutEditorPlatePresentation
-            key={`${presetOverrides.id}:${frame.id}`}
-            scope="plate"
-            value={presetOverrides.value}
-            inheritedAspect={presetOverrides.inheritedAspect}
-            inheritedFit={`Preset default · ${presetOverrides.inheritedFit === 'cover' ? 'Crop edges' : 'Fit whole picture'}`}
-            onChange={presetOverrides.onChange}
-          />
-        </div>
-      )}
       <div
-        className="cg-live-layout-frame-option-group"
+        className="cg-live-layout-frame-option-section"
         role="group"
-        aria-label="Plate input fit across presets"
+        aria-labelledby={id + '-appearance'}
       >
-        <span>Plate default fit</span>
-        <div className="cg-live-layout-frame-option-buttons">
-          {FIT_CHOICES.map(([fitMode, label]) => (
-            <Button
-              key={fitMode}
-              active={fit === fitMode}
-              aria-pressed={fit === fitMode}
-              onClick={() => onChange({ fitMode })}
-            >
-              {label}
-            </Button>
-          ))}
+        <h4 id={id + '-appearance'}>Plate appearance</h4>
+        {presetOverrides !== undefined && (
+          <div className="cg-live-layout-frame-option-group" role="group" aria-label="This preset">
+            <span>In this preset</span>
+            <LiveLayoutEditorPlatePresentation
+              key={`${presetOverrides.id}:${frame.id}`}
+              scope="plate"
+              value={presetOverrides.value}
+              inheritedAspect={presetOverrides.inheritedAspect}
+              inheritedFit={`Inherit · ${presetOverrides.inheritedFit === 'cover' ? 'Crop edges' : 'Fit whole picture'}`}
+              onChange={presetOverrides.onChange}
+            />
+            <p>Crop edges fills the plate. Eligible plates also get Crop input in PVW.</p>
+          </div>
+        )}
+        <div
+          className="cg-live-layout-frame-option-group"
+          role="group"
+          aria-label="Plate input fit across presets"
+        >
+          <span>Default input fit</span>
+          <div className="cg-live-layout-frame-option-buttons">
+            {FIT_CHOICES.map(([fitMode, label]) => (
+              <Button
+                key={fitMode}
+                active={fit === fitMode}
+                aria-pressed={fit === fitMode}
+                onClick={() => onChange({ fitMode })}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+          <p>Used in Focus and when the current preset inherits the plate’s fit.</p>
         </div>
-      </div>
-      <div className="cg-live-layout-frame-option-group" role="group" aria-label="Resize">
-        <span>Resize</span>
-        <div className="cg-live-layout-frame-option-buttons">
-          {RESIZE_CHOICES.map(([operatorPlacement, label]) => (
-            <Button
-              key={operatorPlacement}
-              active={resize === operatorPlacement}
-              aria-pressed={resize === operatorPlacement}
-              onClick={() => onChange({ operatorPlacement })}
-            >
-              {label}
-            </Button>
-          ))}
-        </div>
-      </div>
-      <label htmlFor={id + '-move'} className="cg-live-layout-frame-option-check">
-        <Checkbox
-          id={id + '-move'}
-          checked={frame.operatorMove ?? true}
-          onChange={(operatorMove) => onChange({ operatorMove })}
-        />
-        Allow move
-      </label>
-      <section className="cg-live-layout-frame-option-group" aria-label="Plate border">
-        <span>Border</span>
-        <div className="cg-live-layout-plate-border-fields">
-          <div>
-            <span>Color</span>
-            <ColorInput
-              className="cg-field"
-              aria-label="Border color"
-              value={border.color.slice(0, 7)}
-              onChange={(color) => onChange({ border: { ...border, color } })}
+        <section className="cg-live-layout-frame-option-group" aria-label="Plate border">
+          <span>Border</span>
+          <div className="cg-live-layout-plate-border-fields">
+            <div>
+              <span>Color</span>
+              <ColorInput
+                className="cg-field"
+                aria-label="Border color"
+                value={border.color.slice(0, 7)}
+                onChange={(color) => onChange({ border: { ...border, color } })}
+              />
+            </div>
+            <LiveLayoutEditorNumber
+              label="Border width (px)"
+              min={0}
+              max={CONTROL_LIVE_LAYOUT_PLATE_BORDER_MAX_PX}
+              value={border.width}
+              onChange={(width) => onChange({ border: { ...border, width } })}
+            />
+            <LiveLayoutEditorNumber
+              label="Border radius (px)"
+              min={0}
+              max={CONTROL_LIVE_LAYOUT_PLATE_BORDER_MAX_PX}
+              value={border.radius}
+              onChange={(radius) => onChange({ border: { ...border, radius } })}
             />
           </div>
-          <LiveLayoutEditorNumber
-            label="Border width (px)"
-            min={0}
-            max={CONTROL_LIVE_LAYOUT_PLATE_BORDER_MAX_PX}
-            value={border.width}
-            onChange={(width) => onChange({ border: { ...border, width } })}
-          />
-          <LiveLayoutEditorNumber
-            label="Border radius (px)"
-            min={0}
-            max={CONTROL_LIVE_LAYOUT_PLATE_BORDER_MAX_PX}
-            value={border.radius}
-            onChange={(radius) => onChange({ border: { ...border, radius } })}
-          />
-        </div>
-      </section>
-      <section className="cg-live-layout-frame-mask" aria-label="Plate mask">
-        <div className="cg-live-layout-frame-option-buttons">
-          <Button
-            variant="neutral"
-            disabled={windows.length >= LIVE_REVEAL_MAX_RECTS}
-            onClick={addWindow}
-          >
-            <Icon icon={Plus} size={14} />
-            Add mask window
-          </Button>
-          {mask !== undefined && (
-            <>
-              <Button variant="neutral" onClick={removeWindow}>
-                <Icon icon={Trash2} size={14} />
-                Remove mask window
-              </Button>
-              <Button
-                variant="neutral"
-                disabled={!canEditMask}
-                active={editingMask}
-                aria-pressed={editingMask}
-                title={
-                  canEditMask
-                    ? 'Move or resize the mask in Preview'
-                    : 'Show this plate in Preview to edit its mask'
-                }
-                onClick={() => onMaskEditingChange(!editingMask)}
-              >
-                <Icon icon={Move} size={14} />
-                Edit mask in preview
-              </Button>
-            </>
-          )}
-        </div>
-        {mask !== undefined && activeWindow !== undefined && (
-          <>
-            <div
-              className="cg-live-layout-frame-option-buttons"
-              role="group"
-              aria-label="Mask mode"
+        </section>
+        <section className="cg-live-layout-frame-mask" aria-label="Plate mask">
+          <div className="cg-live-layout-frame-option-buttons">
+            <Button
+              variant="neutral"
+              disabled={windows.length >= LIVE_REVEAL_MAX_RECTS}
+              onClick={addWindow}
             >
-              <Button
-                active={mask.mode === 'inside'}
-                aria-pressed={mask.mode === 'inside'}
-                onClick={() => onChange({ liveMask: { ...mask, mode: 'inside' } })}
-              >
-                Show inside
-              </Button>
-              <Button
-                active={mask.mode === 'outside'}
-                aria-pressed={mask.mode === 'outside'}
-                onClick={() => onChange({ liveMask: { ...mask, mode: 'outside' } })}
-              >
-                Show outside
-              </Button>
-            </div>
-            {windows.length > 1 && (
+              <Icon icon={Plus} size={14} />
+              Add mask window
+            </Button>
+            {mask !== undefined && (
+              <>
+                <Button variant="neutral" onClick={removeWindow}>
+                  <Icon icon={Trash2} size={14} />
+                  Remove mask window
+                </Button>
+                <Button
+                  variant="neutral"
+                  disabled={!canEditMask}
+                  active={editingMask}
+                  aria-pressed={editingMask}
+                  title={
+                    canEditMask
+                      ? 'Move or resize the mask in Preview'
+                      : 'Show this plate in Preview to edit its mask'
+                  }
+                  onClick={() => onMaskEditingChange(!editingMask)}
+                >
+                  <Icon icon={Move} size={14} />
+                  Edit mask in preview
+                </Button>
+              </>
+            )}
+          </div>
+          {mask !== undefined && activeWindow !== undefined && (
+            <>
               <div
                 className="cg-live-layout-frame-option-buttons"
                 role="group"
-                aria-label="Mask windows"
+                aria-label="Mask mode"
               >
-                {windows.map((_, index) => (
-                  <Button
-                    key={index}
-                    aria-label={'Mask window ' + (index + 1)}
-                    active={index === activeIndex}
-                    aria-pressed={index === activeIndex}
-                    onClick={() => onSelectMaskWindow(index)}
-                  >
-                    {index + 1}
-                  </Button>
+                <Button
+                  active={mask.mode === 'inside'}
+                  aria-pressed={mask.mode === 'inside'}
+                  onClick={() => onChange({ liveMask: { ...mask, mode: 'inside' } })}
+                >
+                  Show inside
+                </Button>
+                <Button
+                  active={mask.mode === 'outside'}
+                  aria-pressed={mask.mode === 'outside'}
+                  onClick={() => onChange({ liveMask: { ...mask, mode: 'outside' } })}
+                >
+                  Show outside
+                </Button>
+              </div>
+              {windows.length > 1 && (
+                <div
+                  className="cg-live-layout-frame-option-buttons"
+                  role="group"
+                  aria-label="Mask windows"
+                >
+                  {windows.map((_, index) => (
+                    <Button
+                      key={index}
+                      aria-label={'Mask window ' + (index + 1)}
+                      active={index === activeIndex}
+                      aria-pressed={index === activeIndex}
+                      onClick={() => onSelectMaskWindow(index)}
+                    >
+                      {index + 1}
+                    </Button>
+                  ))}
+                </div>
+              )}
+              <div className="cg-live-layout-frame-mask-values" key={frame.id + ':' + activeIndex}>
+                {MASK_FIELDS.map(({ key, limit, label, min }) => (
+                  <LiveLayoutEditorNumber
+                    key={key}
+                    label={label}
+                    min={min}
+                    max={100}
+                    decimal
+                    value={Math.round(activeWindow[key] * 10000) / 100}
+                    onChange={(value) => changeWindow(key, limit, value)}
+                  />
                 ))}
               </div>
-            )}
-            <div className="cg-live-layout-frame-mask-values" key={frame.id + ':' + activeIndex}>
-              {MASK_FIELDS.map(({ key, limit, label, min }) => (
-                <LiveLayoutEditorNumber
-                  key={key}
-                  label={label}
-                  min={min}
-                  max={100}
-                  decimal
-                  value={Math.round(activeWindow[key] * 10000) / 100}
-                  onChange={(value) => changeWindow(key, limit, value)}
-                />
-              ))}
-            </div>
-            <label htmlFor={id + '-mask-edit'} className="cg-live-layout-frame-option-check">
-              <Checkbox
-                id={id + '-mask-edit'}
-                checked={frame.allowOperatorMaskEdit === true}
-                onChange={(allowOperatorMaskEdit) => onChange({ allowOperatorMaskEdit })}
-              />
-              Allow mask editing in CG Control
-            </label>
-          </>
+            </>
+          )}
+        </section>
+      </div>
+      <div
+        className="cg-live-layout-frame-option-section"
+        role="group"
+        aria-labelledby={id + '-operator'}
+      >
+        <h4 id={id + '-operator'}>
+          <Icon icon={ShieldCheck} size={14} /> Operator permissions in CG Control
+        </h4>
+        <div className="cg-live-layout-frame-option-group" role="group" aria-label="Resize mode">
+          <span>Resize mode</span>
+          <div className="cg-live-layout-frame-option-buttons">
+            {RESIZE_CHOICES.map(([operatorPlacement, label]) => (
+              <Button
+                key={operatorPlacement}
+                active={resize === operatorPlacement}
+                aria-pressed={resize === operatorPlacement}
+                onClick={() => onChange({ operatorPlacement })}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+        </div>
+        <label htmlFor={id + '-move'} className="cg-live-layout-frame-option-check">
+          <Checkbox
+            id={id + '-move'}
+            checked={frame.operatorMove ?? true}
+            onChange={(operatorMove) => onChange({ operatorMove })}
+          />
+          Allow move
+        </label>
+        {mask !== undefined && (
+          <label htmlFor={id + '-mask-edit'} className="cg-live-layout-frame-option-check">
+            <Checkbox
+              id={id + '-mask-edit'}
+              checked={frame.allowOperatorMaskEdit === true}
+              onChange={(allowOperatorMaskEdit) => onChange({ allowOperatorMaskEdit })}
+            />
+            Allow mask editing
+          </label>
         )}
-      </section>
+      </div>
     </details>
   );
 }

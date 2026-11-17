@@ -16,7 +16,7 @@ import {
 } from '../src/index.js';
 
 describe('live frame transitions', () => {
-  it('keeps legacy exit fade and translates explicit slide directions in scene pixels', () => {
+  it('keeps legacy fades and translates independent arrival and departure directions', () => {
     const legacy = { motion: 'ease-in-out', fade: false, durationMs: 400 } as const;
     expect(FrameTransitionSchema.parse(legacy)).toEqual(legacy);
     const from = { x: 100, y: 200, width: 500, height: 400 };
@@ -27,18 +27,23 @@ describe('live frame transitions', () => {
       up: { x: 100, y: -880 },
       down: { x: 100, y: 1280 },
     };
-    for (const exitDirection of InputTransitionDirectionSchema.options) {
-      expect(FrameTransitionSchema.parse({ ...legacy, exitDirection }).exitDirection).toBe(
-        exitDirection,
-      );
-      expect(presetDepartureRect(from, exitDirection, raster)).toEqual({
+    for (const direction of InputTransitionDirectionSchema.options) {
+      expect(
+        FrameTransitionSchema.parse({ ...legacy, exitDirection: direction }).exitDirection,
+      ).toBe(direction);
+      expect(
+        FrameTransitionSchema.parse({ ...legacy, enterDirection: direction }).enterDirection,
+      ).toBe(direction);
+      expect(presetDepartureRect(from, direction, raster)).toEqual({
         ...from,
-        ...positions[exitDirection],
+        ...positions[direction],
       });
     }
-    expect(FrameTransitionSchema.safeParse({ ...legacy, exitDirection: 'diagonal' }).success).toBe(
-      false,
-    );
+    expect(
+      FrameTransitionSchema.parse({ ...legacy, exitDirection: 'up', enterDirection: 'left' }),
+    ).toEqual({ ...legacy, exitDirection: 'up', enterDirection: 'left' });
+    for (const key of ['exitDirection', 'enterDirection'])
+      expect(FrameTransitionSchema.safeParse({ ...legacy, [key]: 'diagonal' }).success).toBe(false);
   });
 
   it('accepts only a dedicated authored Focus slide phase with forward progress', () => {

@@ -17,10 +17,12 @@ export const FrameTransitionSchema = z.object({
   durationMs: z.number().int().min(FRAME_TRANSITION_MIN_MS).max(FRAME_TRANSITION_MAX_MS),
   /** A departing plate can slide while it fades. Omission leaves its position unchanged. */
   exitDirection: ScreenDirectionSchema.optional(),
+  /** The edge an arriving plate starts from while it fades in. */
+  enterDirection: ScreenDirectionSchema.optional(),
 });
 export type FrameTransition = z.infer<typeof FrameTransitionSchema>;
 
-/** Move matching picture and artwork geometry by one output width or height. */
+/** Offstage position for the end of a departure or the start of an arrival. */
 export function presetDepartureRect(
   from: LiveSourceRect,
   direction: ScreenDirection,

@@ -16,7 +16,8 @@ export async function saveFile(
       types: { description: string; accept: Record<string, string[]> }[];
     }) => Promise<FileSystemFileHandle>;
   };
-  if (fileWindow.showSaveFilePicker !== undefined) {
+  // Fetching an archive before saving may outlast the original click's activation.
+  if (fileWindow.showSaveFilePicker !== undefined && navigator.userActivation?.isActive !== false) {
     let handle: FileSystemFileHandle;
     try {
       handle = await fileWindow.showSaveFilePicker({

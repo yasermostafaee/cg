@@ -94,6 +94,6 @@
 
 - [x] Share a phase start deadline between native pictures and the template artwork.
 - [x] Animate fill and clip of retained inputs when the destination fit changes.
-- [x] Support directional departure with fade and verify parked-seat geometry and rollback.
+- [x] Support directional entrance and departure with independent directions and fade.
 - [ ] Capture a real PGM switch with the intended station engine to measure border and input alignment.
 - [ ] Verify native input corner clipping once the Playout engine exposes a supported per-plate radius.

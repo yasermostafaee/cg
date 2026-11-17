@@ -590,6 +590,7 @@ interface PresetArtworkEffect {
   readonly fadeFrames?: number;
   readonly immediatelyHidden?: ReadonlySet<string>;
   readonly fits?: ReadonlyMap<LiveLayerRecord, LivePlatePlacement['fit']>;
+  readonly slideFits?: ReadonlyMap<LiveLayerRecord, LivePlatePlacement['fit']>;
   readonly slideFrames?: FrameTransitionPhase['frames'];
 }
 
@@ -6469,7 +6470,7 @@ export class CasparRuntime {
       }
       for (const record of departureRecords) {
         const frames = immediate?.has(record.sourceId) === true ? 0 : (fadeFrames ?? 0);
-        const slideFit = departure.fits?.get(record);
+        const slideFit = departure.slideFits?.get(record);
         const staged = await stage(record, slideFit ?? record, {
           frames,
           easing: 'linear',
@@ -13157,13 +13158,32 @@ export class CasparRuntime {
           { exit: composed.departure !== undefined, move, enter: composed.arrival !== undefined },
         );
         const departure = composed.departure;
-        const slides =
+        const arrival = composed.arrival;
+        const resolution = carrier.resolution;
+        const channel = page.slot.channel;
+        const exitSlide =
           departure !== undefined && transition.exitDirection !== undefined
-            ? this.#planPresetDepartureSlide(departure, fromLook, fromRects, visible, {
-                channel: page.slot.channel,
-                resolution: carrier.resolution,
+            ? this.#planPresetArtworkSlide(departure, fromLook, fromRects, {
+                channel,
+                resolution,
                 direction: transition.exitDirection,
                 frameLimit: 128 - frames.length,
+                retained: visible.filter(({ sourceId }) => !departure.plateIds.includes(sourceId)),
+              })
+            : undefined;
+        const enterSlide =
+          arrival !== undefined && transition.enterDirection !== undefined
+            ? this.#planPresetArtworkSlide(arrival, toLook, toRects, {
+                channel,
+                resolution,
+                direction: transition.enterDirection,
+                frameLimit: 128,
+                retained: plan.placements
+                  .filter(({ held, plateId }) => !held && !arrival.plateIds.includes(plateId))
+                  .map(({ slot, fit }) => ({ slot, clip: fit.clip })),
+                arrivalRoutes: new Map(
+                  plan.placements.map(({ slot, plateId }) => [adoptionKey(slot), plateId]),
+                ),
               })
             : undefined;
         return this.#runPresetFrameTransaction(
@@ -13181,10 +13201,10 @@ export class CasparRuntime {
             destinationLookId: toLook.id,
             moveFrames: periods.move,
             ...(departure !== undefined && {
-              departure: { ...departure, ...slides, fadeFrames: periods.exit },
+              departure: { ...departure, ...exitSlide, fadeFrames: periods.exit },
             }),
-            ...(composed.arrival !== undefined && {
-              arrival: { ...composed.arrival, fadeFrames: periods.enter },
+            ...(arrival !== undefined && {
+              arrival: { ...arrival, ...enterSlide, fadeFrames: periods.enter },
             }),
           },
         );
@@ -13501,19 +13521,21 @@ export class CasparRuntime {
     return { ...groups, records };
   }
 
-  #planPresetDepartureSlide(
-    departure: PresetArtworkEffect,
+  #planPresetArtworkSlide(
+    artwork: PresetArtworkEffect,
     look: TemplateLook,
     rects: Readonly<Record<string, NormalizedRect>>,
-    visible: readonly LiveLayerRecord[],
     options: {
       channel: number;
       resolution: TemplateLiveSources['resolution'];
       direction: NonNullable<FrameTransition['exitDirection']>;
       frameLimit: number;
+      retained: readonly Pick<LiveLayerRecord, 'slot' | 'clip'>[];
+      /** A parked record can carry an old route label when its seat is reused on arrival. */
+      arrivalRoutes?: ReadonlyMap<string, string>;
     },
-  ): Pick<PresetArtworkEffect, 'fits' | 'slideFrames'> | undefined {
-    const { channel, resolution, direction, frameLimit } = options;
+  ): Pick<PresetArtworkEffect, 'slideFits' | 'slideFrames'> | undefined {
+    const { channel, resolution, direction, frameLimit, retained, arrivalRoutes } = options;
     const raster = this.#channelSettings.rasterFor(channel);
     const scale = outputScale(raster);
     const offset = presetDepartureRect({ x: 0, y: 0, width: 1, height: 1 }, direction, resolution);
@@ -13524,31 +13546,35 @@ export class CasparRuntime {
       x: rect.x + dx,
       y: rect.y + dy,
     });
-    const retained = visible.filter(({ sourceId }) => !departure.plateIds.includes(sourceId));
-    const fits = new Map<LiveLayerRecord, LivePlatePlacement['fit']>();
+    const fitOf = (record: LiveLayerRecord): LivePlatePlacement['fit'] =>
+      artwork.fits?.get(record) ?? record;
+    const slideFits = new Map<LiveLayerRecord, LivePlatePlacement['fit']>();
     const slideFrames: FrameTransitionPhase['frames'] = [];
-    for (const key of departure.artworkKeys) {
-      if (departure.immediatelyHidden?.has(key)) continue;
+    for (const key of artwork.artworkKeys) {
+      if (artwork.immediatelyHidden?.has(key)) continue;
       const routes = look.transitionDepartureGroups?.[key] ?? [];
       const frames = routes.flatMap((plateId) => {
-        const from = rects[plateId];
-        const artwork = look.transitionFrames?.[plateId];
-        return from === undefined || artwork === undefined
-          ? []
-          : [
-              {
-                frameKey: artwork.frameKey,
-                lookId: look.id,
-                from,
-                to: presetDepartureRect(from, direction, resolution),
-                fromOpacity: 1,
-                toOpacity: 1,
-              },
-            ];
+        const rect = rects[plateId];
+        const frame = look.transitionFrames?.[plateId];
+        if (rect === undefined || frame === undefined) return [];
+        const offstage = presetDepartureRect(rect, direction, resolution);
+        return [
+          {
+            frameKey: frame.frameKey,
+            lookId: look.id,
+            from: arrivalRoutes === undefined ? rect : offstage,
+            to: arrivalRoutes === undefined ? offstage : rect,
+            fromOpacity: 1,
+            toOpacity: 1,
+          },
+        ];
       });
       if (frames.length !== routes.length) continue;
-      const records = departure.records.filter(({ sourceId }) => routes.includes(sourceId));
-      const crossesRetained = records.some(({ slot, clip }) => {
+      const records = artwork.records.filter(({ slot, sourceId }) =>
+        routes.includes(arrivalRoutes?.get(adoptionKey(slot)) ?? sourceId),
+      );
+      const crossesRetained = records.some((moving) => {
+        const { clip } = fitOf(moving);
         const swept = {
           x: clip.x + Math.min(0, dx),
           y: clip.y + Math.min(0, dy),
@@ -13557,18 +13583,21 @@ export class CasparRuntime {
         };
         return retained.some(
           (record) =>
-            slot.layer > record.slot.layer && intersectNormalizedRects(swept, record.clip) !== null,
+            moving.slot.layer > record.slot.layer &&
+            intersectNormalizedRects(swept, record.clip) !== null,
         );
       });
       // A higher native seat cannot cross a retained picture without covering it.
       if (crossesRetained) continue;
-      for (const record of records)
-        fits.set(record, { fill: shift(record.fill), clip: shift(record.clip) });
+      for (const record of records) {
+        const { fill, clip } = fitOf(record);
+        slideFits.set(record, { fill: shift(fill), clip: shift(clip) });
+      }
       slideFrames.push(...frames);
     }
     return slideFrames.length === 0 || slideFrames.length > frameLimit
       ? undefined
-      : { fits, slideFrames };
+      : { slideFits, slideFrames };
   }
 
   #preparePresetArtworkEffects(
@@ -14186,7 +14215,9 @@ export class CasparRuntime {
           durationMs: frames * period,
           ...(frames > 0 && hold > 0 && { delayMs: hold }),
           easing: 'linear',
-          frames: [],
+          frames: (arrival.slideFrames ?? []).map((frame) =>
+            frames === 0 ? { ...frame, to: frame.from } : frame,
+          ),
           opacityArtwork: presetArtworkOpacity(arrival.artworkKeys, toLook, 0, opacity),
           ...destinationTitleHold,
         });
@@ -14210,11 +14241,11 @@ export class CasparRuntime {
           await this.#leaseMixerChannel(batch, channel);
           if (!(await wait(0)) || this.#hasOrphanedMixer(channel)) return interrupted;
           for (const record of arrival.records) {
-            const ready = await stage(record, arrival.fits?.get(record) ?? record, {
-              frames: 0,
-              easing: 'linear',
-              opacity: 0,
-            });
+            const ready = await stage(
+              record,
+              arrival.slideFits?.get(record) ?? arrival.fits?.get(record) ?? record,
+              { frames: 0, easing: 'linear', opacity: 0 },
+            );
             if (!ready.ok) return ready;
           }
           const positioned = await this.#commitStagedMixer(batch, { retainOnFailure: true });
@@ -14223,11 +14254,12 @@ export class CasparRuntime {
           await this.#leaseMixerChannel(batch, channel);
           if (!(await wait(0)) || this.#hasOrphanedMixer(channel)) return interrupted;
           for (const record of arrival.records) {
-            const fading = await stage(record, record, {
+            const slides = arrival.slideFits?.has(record) === true;
+            const fading = await stage(record, arrival.fits?.get(record) ?? record, {
               frames: enter,
               easing: 'linear',
               opacity: 1,
-              opacityOnly: true,
+              ...(!slides && { opacityOnly: true }),
             });
             if (!fading.ok) return fading;
           }

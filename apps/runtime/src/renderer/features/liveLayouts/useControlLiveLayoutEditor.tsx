@@ -1,11 +1,9 @@
 import { useRef, useState } from 'react';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import type { ControlLiveLayout } from '@cg/shared-schema';
-import { sha256Hex } from '@cg/vcg-format';
 import { APP_VERSION } from '../../appVersion.js';
 import appFontsCss from '../../fonts.css?inline';
 import { uuid } from '../../lib/uuid.js';
-import { base64ToBytes } from '../library/packageBytes.js';
 import { importTemplateFromBytes } from '../library/templateDelivery.js';
 import { notifyLibraryChanged } from '../library/libraryChanged.js';
 import {
@@ -15,6 +13,7 @@ import {
 } from './controlLiveLayoutCompiler.js';
 import { LiveLayoutEditor } from './LiveLayoutEditor.js';
 import type { ControlLiveLayoutFrameAttachmentSource } from './controlLiveLayoutFrameAttachments.js';
+import { readSavedControlLiveLayoutPackage } from './savedControlLiveLayoutPackage.js';
 
 interface EditorRequest {
   channel: number;
@@ -58,16 +57,15 @@ export function useControlLiveLayoutEditor(
           settings.settings.find((item) => item.channel === channel)?.raster ??
           settings.observed.find((item) => item.channel === channel)?.raster ??
           undefined;
-        next = { channel, initial: createControlLiveLayout(raster), mode: 'create' };
+        next = {
+          channel,
+          initial: createControlLiveLayout(raster),
+          mode: 'create',
+        };
       } else {
-        const expectedSource = template.controlLiveLayoutSource;
-        if (expectedSource === undefined)
-          throw new Error('The editable layout package is unavailable.');
-        const source = await window.cg.templates.source({ sha256: expectedSource });
-        if (!source.ok) throw new Error('CG Bridge no longer has this layout package.');
-        const bytes = base64ToBytes(source.base64);
-        if (sha256Hex(bytes) !== expectedSource)
-          throw new Error('The saved layout package could not be verified.');
+        const { bytes, sha256: expectedSource } = await readSavedControlLiveLayoutPackage(
+          template.controlLiveLayoutSource,
+        );
         const { layout, asset, fonts, attachments } = await readControlLiveLayout(bytes);
         const initial = duplicate
           ? {

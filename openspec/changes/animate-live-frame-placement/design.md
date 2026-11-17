@@ -38,8 +38,10 @@ toward any screen edge. The mixed input, any mask fragments, and its artwork rec
 translation. A higher native seat that would cross a retained frame falls back to Fade in place.
 If the existing native layer order would already obscure a retained frame, the overlapping
 group is hidden before the shared motion.
-The switch parks departing seats with their normal opacity and then fades in the arriving group
-at its destination. An unsafe or unverifiable change continues to use the existing guarded
+The switch parks departing seats with their normal opacity. The arriving group fades in at its
+destination or enters from its independently selected edge while fading. Before directional
+entrance, the new group is held hidden while its pictures and artwork are prepared. An unsafe
+or unverifiable change continues to use the existing guarded
 preset path. A refused effect restores applied geometry and opacity while the row still owns
 the output. Existing manual frame permissions continue to constrain operator edits.
 

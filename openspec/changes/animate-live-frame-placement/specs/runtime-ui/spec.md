@@ -106,6 +106,13 @@ Fade disabled. The effect duration SHALL be configurable from 100 to 1000 ms.
 - **AND** when a native layer would cover a retained plate during its exit, the native group fades in place or is hidden under the existing overlap guard
 - **AND** Cut keeps its immediate switch behavior
 
+#### Scenario: Choose how a plate enters a preset
+
+- **WHEN** the preset effect uses a direction under Arriving plates
+- **THEN** an eligible arriving plate, mask and attached artwork fade in as they slide in from that edge
+- **AND** the operator can select the direction independently from Departing plates
+- **AND** Fade leaves the arriving plate in its destination as it appears
+
 #### Scenario: Keep a retained input running across a different fit
 
 - **GIVEN** an animated preset switch keeps the same source in the same authored plate

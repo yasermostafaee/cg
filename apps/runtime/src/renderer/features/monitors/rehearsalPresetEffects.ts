@@ -97,10 +97,41 @@ export function rehearsalPlacementPhases(
 interface PresetPlan {
   exit: FrameTransitionPhase[];
   enter?: FrameTransitionPhase | undefined;
+  prepareEnter?: FrameTransitionPhase;
   retained: string[];
 }
 
-/** The outgoing picture and its artwork share the page's normal placement animation. */
+function slidingArtworkFrames(
+  view: PresetView,
+  groups: readonly ArtworkOpacity[],
+  direction: FrameTransition['exitDirection'],
+  raster: Pick<LiveSourceRect, 'width' | 'height'>,
+  arriving = false,
+): FrameTransitionPhase['frames'] {
+  if (direction === undefined) return [];
+  return groups.flatMap(({ key }) => {
+    const routes = view.look.transitionDepartureGroups?.[key] ?? [];
+    const frames = routes.flatMap((plateId) => {
+      const rect = view.rects[plateId];
+      const artwork = view.look.transitionFrames?.[plateId];
+      if (rect === undefined || artwork === undefined) return [];
+      const offstage = presetDepartureRect(rect, direction, raster);
+      return [
+        {
+          frameKey: artwork.frameKey,
+          lookId: view.look.id,
+          from: arriving ? offstage : rect,
+          to: arriving ? rect : offstage,
+          fromOpacity: 1,
+          toOpacity: 1,
+        },
+      ];
+    });
+    return frames.length === routes.length ? frames : [];
+  });
+}
+
+/** The picture and its artwork share each preset's normal placement animation. */
 export function rehearsalPresetPlan(
   before: PresetView,
   after: PresetView,
@@ -151,30 +182,7 @@ export function rehearsalPresetPlan(
     holdTitles && titlePlateIds.length > 0 ? { hidePresetTitlePlateIds: titlePlateIds } : {};
   const exit: FrameTransitionPhase[] = [];
   if (ticks.exit > 0) {
-    const direction = effect.exitDirection;
-    const departingFrames =
-      direction === undefined
-        ? []
-        : outgoing.flatMap(({ key }) => {
-            const routes = before.look.transitionDepartureGroups?.[key] ?? [];
-            const frames = routes.flatMap((plateId) => {
-              const from = before.rects[plateId];
-              const artwork = before.look.transitionFrames?.[plateId];
-              return from === undefined || artwork === undefined
-                ? []
-                : [
-                    {
-                      frameKey: artwork.frameKey,
-                      lookId: before.look.id,
-                      from,
-                      to: presetDepartureRect(from, direction, raster),
-                      fromOpacity: 1,
-                      toOpacity: 1,
-                    },
-                  ];
-            });
-            return frames.length === routes.length ? frames : [];
-          });
+    const departingFrames = slidingArtworkFrames(before, outgoing, effect.exitDirection, raster);
     exit.push({
       authoredPreset: true,
       destinationLookId: after.look.id,
@@ -203,6 +211,11 @@ export function rehearsalPresetPlan(
       ...(outgoing.length > 0 && { hidePresetArtworkKeys: outgoing.map(({ key }) => key) }),
     });
   }
+  const arrivingFrames =
+    ticks.enter > 0
+      ? slidingArtworkFrames(after, incoming, effect.enterDirection, raster, true)
+      : [];
+  const slideArrival = arrivingFrames.length > 0 && arrivingFrames.length <= 128;
   return {
     exit,
     enter:
@@ -213,9 +226,19 @@ export function rehearsalPresetPlan(
             ...titleHold,
             durationMs: ticks.enter * periodMs,
             easing: 'linear',
-            frames: [],
+            frames: slideArrival ? arrivingFrames : [],
             ...(ticks.enter > 0 && { opacityArtwork: incoming }),
           },
+    ...(slideArrival && {
+      prepareEnter: {
+        authoredPreset: true,
+        ...titleHold,
+        durationMs: 0,
+        easing: 'linear',
+        frames: [],
+        opacityArtwork: incoming.map((group) => ({ ...group, toOpacity: 0 })),
+      },
+    }),
     retained,
   };
 }

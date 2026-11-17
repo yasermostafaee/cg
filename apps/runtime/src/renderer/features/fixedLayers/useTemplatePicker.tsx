@@ -13,6 +13,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Copy,
+  Download,
   FileUp,
   FolderOpen,
   Layers,
@@ -47,6 +48,7 @@ import {
   type ThumbnailLoader,
 } from '../library/templateThumbnailLoader.js';
 import { pickFile } from '../../ui/pickFile.js';
+import { saveFile } from '../../ui/saveFile.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { importVcgToStation } from './fixedSlotLoad.js';
 import { fieldPathKey } from '../inspector/listFieldTargets.js';
@@ -81,6 +83,7 @@ import {
 } from '../library/templateSourceStore.js';
 import { reloadTemplateSource, type ReloadDataPolicy } from '../library/reloadTemplateSource.js';
 import { useControlLiveLayoutEditor } from '../liveLayouts/useControlLiveLayoutEditor.js';
+import { readSavedControlLiveLayoutPackage } from '../liveLayouts/savedControlLiveLayoutPackage.js';
 // `PAGE-REBUILD-01` — the faces every page is built with: part of the runtime a plan is asked for.
 import appFontsCss from '../../fonts.css?inline';
 
@@ -559,7 +562,7 @@ export function useTemplatePicker(
   */
   const [importBusy, setImportBusy] = useState(false);
   const [importingFileName, setImportingFileName] = useState<string | null>(null);
-  const [busyLabel, setBusyLabel] = useState<'Importing' | 'Reloading'>('Importing');
+  const [busyLabel, setBusyLabel] = useState<'Importing' | 'Reloading' | 'Exporting'>('Importing');
   /** R-108 — original sources available to this console for the open channel. */
   const [templateSources, setTemplateSources] = useState<ReadonlyMap<string, TemplateSourceRecord>>(
     new Map(),
@@ -1035,13 +1038,16 @@ export function useTemplatePicker(
     nothing about what is refused changed with the gesture that starts it. It depends on the
     installed app letting an OS drag reach the page (`dragDropEnabled: false`, `FIELD-FIXES-01` F).
   */
-  const onDrop = useCallback((e: DragEvent<HTMLDivElement>): void => {
-    e.preventDefault();
-    setDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file === undefined) return;
-    void runImportRef.current(() => Promise.resolve({ file }));
-  }, []);
+  const onDrop = useCallback(
+    (e: DragEvent<HTMLDivElement>): void => {
+      e.preventDefault();
+      setDragging(false);
+      const file = e.dataTransfer.files[0];
+      if (importBusy || file === undefined) return;
+      void runImportRef.current(() => Promise.resolve({ file }));
+    },
+    [importBusy],
+  );
 
   /**
    * Can THIS template go onto THIS row? The one predicate, asked once.
@@ -1161,6 +1167,43 @@ export function useTemplatePicker(
       });
     }
   }, [runImport]);
+
+  const exportLayout = async (template: TemplateInfo): Promise<void> => {
+    if (importBusy) return;
+    const stem = templateDisplayName(template)
+      .replace(/\.vcg$/i, '')
+      .replace(/[\p{Control}\\/:*?"<>|]/gu, '-')
+      .replace(/^[. ]+|[. ]+$/g, '');
+    const reserved = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(stem);
+    const name = `${reserved ? '_' : ''}${stem || 'Live layout'}.vcg`;
+    setMessage(null);
+    setReferences([]);
+    setBusyLabel('Exporting');
+    setImportBusy(true);
+    setImportingFileName(name);
+    try {
+      const { bytes } = await readSavedControlLiveLayoutPackage(template.controlLiveLayoutSource);
+      const result = await saveFile(
+        new Blob([bytes], { type: 'application/octet-stream' }),
+        name,
+        'Apasai CG template package',
+        '.vcg',
+      );
+      if (result.kind === 'saved')
+        setMessage({ role: 'notice', text: `Saved “${result.handle.name}”.` });
+      if (result.kind === 'download')
+        setMessage({ role: 'notice', text: `Download started for “${name}”.` });
+    } catch (error) {
+      setMessage({
+        role: 'refusal',
+        text: error instanceof Error ? error.message : 'The layout could not be exported.',
+      });
+    } finally {
+      setImportBusy(false);
+      setImportingFileName(null);
+      setBusyLabel('Importing');
+    }
+  };
 
   /** R-108 — one implementation behind the per-template and Reload-all doors. */
   const runReload = useCallback(
@@ -1448,7 +1491,11 @@ export function useTemplatePicker(
               <span className="cg-tpl-import-progress__spinner" aria-hidden="true" />
               <strong>{busyLabel} template…</strong>
               <bdi title={importingFileName ?? undefined}>{importingFileName}</bdi>
-              <span>Verifying and preparing the package.</span>
+              <span>
+                {busyLabel === 'Exporting'
+                  ? 'Reading the saved package from CG Bridge.'
+                  : 'Verifying and preparing the package.'}
+              </span>
             </div>
           ) : (
             <>
@@ -1695,6 +1742,13 @@ export function useTemplatePicker(
                                 onClick={() => void layoutEditor.open(channel, selected, true)}
                               >
                                 <Icon icon={Copy} size={14} /> Duplicate layout
+                              </Button>
+                              <Button
+                                variant="neutral"
+                                disabled={layoutEditor.busy}
+                                onClick={() => void exportLayout(selected)}
+                              >
+                                <Icon icon={Download} size={14} /> Export .vcg
                               </Button>
                             </div>
                           )}
