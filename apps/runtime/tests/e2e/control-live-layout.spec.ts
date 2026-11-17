@@ -40,6 +40,7 @@ async function setInput(page: Page, editor: Locator, index: number, title: strin
     .filter({ hasText: inputNames[index]! })
     .first()
     .click();
+  await chooser.getByRole('button', { name: 'Select', exact: true }).click();
   await expect(chooser).toBeHidden();
   await editor.getByRole('textbox', { name: 'Title', exact: true }).fill(title);
 }
@@ -244,6 +245,24 @@ test('R-120 authors, focuses, returns and prepares a second layout while the fir
       'overflow-y',
       'visible',
     );
+    const workspace = editor.locator('.cg-live-layout-workspace');
+    const sidebarBounds = () =>
+      workspace.evaluate((node) => {
+        const sidebar = node.querySelector<HTMLElement>('.cg-live-layout-frames')!;
+        const parent = node.closest('[data-modal-body]')!;
+        return {
+          top: sidebar.getBoundingClientRect().top,
+          footerGap: parent.getBoundingClientRect().bottom - sidebar.getBoundingClientRect().bottom,
+        };
+      });
+    const sidebarAtStart = await sidebarBounds();
+    expect(sidebarAtStart.footerGap).toBeGreaterThanOrEqual(0);
+    expect(sidebarAtStart.footerGap).toBeLessThan(24);
+    await editor.getByText('Layout effects', { exact: true }).scrollIntoViewIfNeeded();
+    expect(await sidebarBounds()).toEqual(sidebarAtStart);
+    await workspace.getByRole('region', { name: 'Layout preview' }).evaluate((node) => {
+      node.scrollTop = 0;
+    });
     for (const number of [1, 2, 3]) {
       await expect(
         editor.getByRole('button', { name: `Focus plate ${String(number)}`, exact: true }),

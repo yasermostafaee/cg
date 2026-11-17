@@ -393,6 +393,9 @@ test('Media: visible posters decode separately, and a clip without a poster can 
   expect((await readState()).reads).not.toContain('md-m-clip-009');
   await expect(field).toHaveAttribute('data-picker-value', '');
   await missing.click();
+  await expect(panel).toBeVisible();
+  await expect(field).toHaveAttribute('data-picker-value', '');
+  await panel.getByRole('button', { name: 'Select', exact: true }).click();
   await expect(panel).toHaveCount(0);
   await expect(field).toHaveAttribute('data-picker-value', 'md-m-clip-003');
   expect((await readState()).inputChecks).toBe(0);
@@ -711,7 +714,11 @@ test.describe('source audio meters', () => {
     await expect(field).toHaveAttribute('data-picker-value', '');
     expect((await readState()).checked).toEqual([]);
 
-    await panel.locator('[data-picker-input="in-studio-1"]').click();
+    const source = panel.locator('[data-picker-input="in-studio-1"]');
+    await source.click();
+    await expect(source).toHaveAttribute('aria-selected', 'true');
+    await expect(field).toHaveAttribute('data-picker-value', '');
+    await panel.getByRole('button', { name: 'Select', exact: true }).click();
     await expect(presence(field, 'B')).toHaveAttribute('title', 'Server B: unavailable');
     const fieldMeter = field.locator(controls);
     await expect(fieldMeter).toHaveAttribute('data-input-meter-orientation', 'vertical');
@@ -743,6 +750,9 @@ test.describe('source audio meters', () => {
     await expect(still.locator(controls)).toHaveCount(0);
     await expect(clip.locator(controls)).toHaveCount(0);
     await clip.click();
+    await expect(clip).toHaveAttribute('aria-selected', 'true');
+    await expect(field).toHaveAttribute('data-picker-value', 'in-studio-1');
+    await panel.getByRole('button', { name: 'Select', exact: true }).click();
     await expect(field).toHaveAttribute('data-picker-value', 'md-m-meter-sound');
     await expect(fieldMeter).toHaveCount(0);
     expect((await readState()).batches.flatMap(({ ids }) => ids)).not.toContain(

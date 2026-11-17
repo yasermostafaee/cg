@@ -9,23 +9,28 @@ import {
 } from '@cg/shared-ipc';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
+import { LiveInputCheckTile } from '../monitors/LiveInputCheckTile.js';
+import { useLiveInputCheck, type InputCheckSurface } from '../monitors/liveInputCheckContext.js';
 import { InputAudioMeter } from './InputAudioMeter.js';
 import { subscribeInputThumbnail } from './inputThumbnailDemand.js';
 
 const PLACEHOLDER_DESCRIPTION = 'Picture placeholder. Input signal status is unknown.';
+const SNAPSHOT_HOLD_MS = 5_000;
 
-/** A silent snapshot which can also open the separate, interactive input check. */
+/** An input's silent snapshot and its interactive check share the same picture tile. */
 export function InputThumbnail({
   source,
   channel,
   meterChannel,
   compact = false,
+  inputCheck,
   onCheck,
 }: {
   source: SourceDefinition;
   channel?: number | undefined;
   meterChannel: number | undefined;
   compact?: boolean;
+  inputCheck?: InputCheckSurface | undefined;
   onCheck?: ((source: SourceDefinition) => void) | undefined;
 }): JSX.Element {
   const previewChannel =
@@ -37,15 +42,27 @@ export function InputThumbnail({
       ? channel
       : undefined;
   const sourceId = source.id;
-  const checkable = onCheck !== undefined;
+  const checkable = inputCheck !== undefined;
+  const control = useLiveInputCheck();
+  const check = control?.check;
+  const active =
+    inputCheck !== undefined &&
+    check?.surface === inputCheck.surface &&
+    check.sourceId === sourceId;
   const element = useRef<HTMLElement | null>(null);
   const attach = useCallback((tile: HTMLElement | null) => {
     element.current = tile;
   }, []);
-  const [snapshot, setSnapshot] = useState<{ channel: number; frame: SourcePreviewFrame }>();
+  const [snapshot, setSnapshot] = useState<{
+    channel: number;
+    frame: SourcePreviewFrame;
+    expiresAt: number;
+  }>();
   const [brokenPicture, setBrokenPicture] = useState<string>();
   const frame =
-    snapshot?.channel === previewChannel && snapshot?.frame.sourceId === sourceId
+    snapshot?.channel === previewChannel &&
+    snapshot?.frame.sourceId === sourceId &&
+    snapshot.expiresAt > Date.now()
       ? snapshot.frame
       : undefined;
   const src =
@@ -55,40 +72,70 @@ export function InputThumbnail({
   const picture = src === undefined || src === brokenPicture ? null : src;
 
   useEffect(() => {
+    if (snapshot === undefined) return;
+    const timer = setTimeout(
+      () => setSnapshot((previous) => (previous === snapshot ? undefined : previous)),
+      Math.max(0, snapshot.expiresAt - Date.now()),
+    );
+    return () => clearTimeout(timer);
+  }, [snapshot]);
+
+  useEffect(() => {
     const tile = element.current;
     if (
       previewChannel === undefined ||
+      active ||
       tile === null ||
       window.cg?.sourcePreviews === undefined ||
       typeof IntersectionObserver === 'undefined'
     ) {
       return;
     }
-    let active = true;
+    let observing = true;
     let unsubscribe: (() => void) | undefined;
     const observer = new IntersectionObserver((entries) => {
-      if (!active) return;
+      if (!observing) return;
       if (entries.at(-1)?.isIntersecting === true) {
         unsubscribe ??= subscribeInputThumbnail({
           channel: previewChannel,
           sourceId,
-          publish: (frame) =>
-            setSnapshot(frame === undefined ? undefined : { channel: previewChannel, frame }),
+          publish: (frame) => {
+            if (
+              frame === undefined ||
+              (frame.signal !== 'absent' && frame.jpegBase64 === undefined)
+            )
+              return;
+            const expiresAt = Date.now() + SNAPSHOT_HOLD_MS;
+            setSnapshot({ channel: previewChannel, frame, expiresAt });
+          },
         });
       } else if (unsubscribe !== undefined) {
         unsubscribe();
         unsubscribe = undefined;
-        setSnapshot(undefined);
         setBrokenPicture(undefined);
       }
     });
     observer.observe(tile);
     return () => {
-      active = false;
+      observing = false;
       observer.disconnect();
       unsubscribe?.();
     };
-  }, [previewChannel, sourceId, checkable]);
+  }, [active, previewChannel, sourceId, checkable]);
+
+  if (active && check != null && control !== null) {
+    return (
+      <LiveInputCheckTile
+        key={check.view.previewId}
+        view={check.view}
+        onClose={() => {
+          control.stop(check.surface, check.view.previewId);
+          requestAnimationFrame(() => element.current?.focus());
+        }}
+        onStall={control.stall}
+      />
+    );
+  }
 
   const description =
     picture !== null
@@ -108,7 +155,7 @@ export function InputThumbnail({
     );
 
   const thumbnail =
-    onCheck === undefined ? (
+    inputCheck === undefined ? (
       <span
         ref={attach}
         className={className}
@@ -131,7 +178,7 @@ export function InputThumbnail({
         onKeyDown={(event) => {
           if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
         }}
-        onClick={() => onCheck(source)}
+        onClick={() => (onCheck ?? inputCheck.start)(source)}
       >
         {content}
       </Button>

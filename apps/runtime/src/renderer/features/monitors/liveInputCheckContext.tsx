@@ -16,10 +16,9 @@ import { useCanOperate } from '../../hooks/useCanOperate.js';
 import { useAuthSession } from '../../hooks/useAuthSession.js';
 import { uuid } from '../../lib/uuid.js';
 
-export const PVW_INPUT_SURFACE = 'pvw';
-
 interface InputCheck {
   readonly surface: string;
+  readonly sourceId: string;
   readonly view: LivePreviewStatus;
 }
 
@@ -43,12 +42,10 @@ function isActive(view: LivePreviewStatus): boolean {
 
 export function LiveInputCheckProvider({
   channel,
-  pvwVisible,
   locked,
   children,
 }: {
   channel: number | null;
-  pvwVisible: boolean;
   locked: boolean;
   children: ReactNode;
 }): JSX.Element {
@@ -91,25 +88,32 @@ export function LiveInputCheckProvider({
 
   const start = useCallback(
     (surface: string, target: number, source: SourceDefinition): void => {
-      if (!enabled || target !== channel || (surface === PVW_INPUT_SURFACE && !pvwVisible)) return;
+      if (!enabled || target !== channel) return;
       const previous = current.current;
+      if (
+        previous?.surface === surface &&
+        previous.sourceId === source.id &&
+        isActive(previous.view)
+      )
+        return;
       if (previous !== null) stop(previous.surface, previous.view.previewId);
 
       const handle = { channel: target, previewId: uuid() };
+      const owner = { surface, sourceId: source.id };
       const connecting: LivePreviewStatus = {
         ...handle,
         sourceName: sourceDisplayName(source.name, 'input'),
         state: 'connecting',
         dbFs: null,
       };
-      publish({ surface, view: connecting });
+      publish({ ...owner, view: connecting });
 
       const failed = (state: 'unavailable' | 'stalled', message: string): void => {
         if (current.current?.view.previewId !== handle.previewId || !isActive(current.current.view))
           return;
         clearTimers();
         release(handle);
-        publish({ surface, view: { ...connecting, state, message } });
+        publish({ ...owner, view: { ...connecting, state, message } });
       };
       const accept = (view: LivePreviewStatus, elapsedMs: number): void => {
         if (current.current?.view.previewId !== handle.previewId || !isActive(current.current.view))
@@ -120,13 +124,13 @@ export function LiveInputCheckProvider({
         }
         clearTimers();
         const validFor = (view.meterValidForMs ?? 0) - elapsedMs;
-        publish({ surface, view: validFor > 0 ? view : { ...view, dbFs: null } });
+        publish({ ...owner, view: validFor > 0 ? view : { ...view, dbFs: null } });
         if (!isActive(view)) return;
         if (view.dbFs !== null && validFor > 0) {
           meter.current = setTimeout(() => {
             const active = current.current;
             if (active?.view.previewId === handle.previewId) {
-              publish({ surface, view: { ...active.view, dbFs: null } });
+              publish({ ...owner, view: { ...active.view, dbFs: null } });
             }
           }, validFor);
         }
@@ -144,7 +148,7 @@ export function LiveInputCheckProvider({
         () => failed('unavailable', 'Input preview is unavailable on this Bridge.'),
       );
     },
-    [channel, clearTimers, enabled, publish, pvwVisible, stop],
+    [channel, clearTimers, enabled, publish, stop],
   );
 
   const stall = useCallback(
@@ -179,20 +183,12 @@ export function LiveInputCheckProvider({
     [clearTimers, publish],
   );
 
-  const visible =
-    enabled &&
-    check?.view.channel === channel &&
-    (check.surface !== PVW_INPUT_SURFACE || pvwVisible);
+  const visible = enabled && check?.view.channel === channel;
   useEffect(() => {
     const active = current.current;
-    if (
-      active !== null &&
-      (!enabled ||
-        active.view.channel !== channel ||
-        (active.surface === PVW_INPUT_SURFACE && !pvwVisible))
-    )
+    if (active !== null && (!enabled || active.view.channel !== channel))
       stop(active.surface, active.view.previewId);
-  }, [channel, enabled, pvwVisible, stop]);
+  }, [channel, enabled, stop]);
 
   useEffect(() => {
     return () => {
@@ -215,7 +211,14 @@ export function useLiveInputCheck(): InputCheckControl | null {
 }
 
 /** A surface owns its check until it closes or changes channels. */
-export function useInputCheckSurface(channel: number, visible = true, scope?: string) {
+export interface InputCheckSurface {
+  readonly surface: string;
+  readonly channel: number;
+  start(source: SourceDefinition): void;
+  stop(): void;
+}
+
+export function useInputCheckSurface(channel: number | undefined, visible = true, scope?: string) {
   const surface = useId();
   const control = useLiveInputCheck();
   const stop = control?.stop;
@@ -224,9 +227,14 @@ export function useInputCheckSurface(channel: number, visible = true, scope?: st
     return () => stop?.(surface);
   }, [channel, scope, stop, surface, visible]);
 
-  const inputCheck =
-    visible && control?.enabled === true
-      ? { channel, start: (source: SourceDefinition) => control.start(surface, channel, source) }
+  const inputCheck: InputCheckSurface | undefined =
+    visible && channel !== undefined && control?.enabled === true
+      ? {
+          surface,
+          channel,
+          start: (source) => control.start(surface, channel, source),
+          stop: () => control.stop(surface),
+        }
       : undefined;
   return { surface, inputCheck };
 }

@@ -24,8 +24,8 @@
           "en": "Set a rectangular plate border's color and width. The border follows the plate during Focus transitions."
         },
         {
-          "fa": "انتخاب ورودی در پنجره‌ای با تصاویر و پوسترهای بزرگ‌تر انجام می‌شود. پیش‌نمایش مدیا دکمه‌های Play، Pause و Stop و نوار زمان قابل‌کشیدن دارد و فریم‌های نمونه‌برداری‌شدهٔ بی‌صدا را نشان می‌دهد.",
-          "en": "The source picker opens a larger dialog with input pictures and media posters. Media preview offers Play, Pause, Stop, and a draggable timeline with silent sampled frames."
+          "fa": "در پنجرهٔ انتخاب منبع، تصویر و صدای ورودی را در همان قاب بررسی کنید و با Select انتخاب را تأیید کنید. پیش‌نمایش مدیا دکمه‌های Play، Pause و Stop و نوار زمان قابل‌کشیدن دارد و فریم‌های نمونه‌برداری‌شدهٔ بی‌صدا را نشان می‌دهد.",
+          "en": "Preview and listen to live inputs in the picker tile and confirm the binding with Select. Media preview offers Play, Pause, Stop, and a draggable timeline with silent sampled frames."
         },
         {
           "fa": "برای ورود و خروج قاب در گذار پریست، Fade یا اسلاید همراه Fade را جداگانه انتخاب کنید. چیدمان زندهٔ ذخیره‌شده را هم می‌توان از Templates به‌صورت VCG صادر و دوباره وارد کرد.",
@@ -38,8 +38,8 @@
       ],
       "fixes": [
         {
-          "fa": "اگر تصویر PVW دیر برسد، همان تصویر بندانگشتی ورودی یا پوستر مدیا موقتاً داخل قاب نمایش داده می‌شود.",
-          "en": "PVW can temporarily show the source-picker image or media poster while the live preview frame is delayed."
+          "fa": "PVW و New live layout در زمان وقفهٔ پیش‌نمایش می‌توانند تصویر معتبر ورودی یا پوستر مدیا را نشان دهند. در New live layout ستون Plates تا پایین پنجره در دسترس می‌ماند.",
+          "en": "PVW and New live layout can show a current input snapshot or media poster during a preview interruption. The Plates column fills the height of the New live layout editor."
         },
         {
           "fa": "CG Bridge مدیای واجد شرایط را پیش از پخش روی هر دو موتور آماده می‌کند و افکت‌های پریست و Focus را برای رزرو تأییدشده هم اجرا می‌کند.",

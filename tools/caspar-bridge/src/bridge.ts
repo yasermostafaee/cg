@@ -3268,8 +3268,11 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     id: string,
   ): SourcePreviewSelector | null => {
     const source = runtime.sourceCatalog().sources.find((entry) => entry.id === id);
-    if (source === undefined || !sourceSeatable(source) || !sourceShowableOn(source, channel))
-      return null;
+    if (source === undefined) {
+      const mediaId = playoutSources?.mediaPreviewId(id);
+      return mediaId == null ? null : { kind: 'media', mediaId };
+    }
+    if (!sourceSeatable(source) || !sourceShowableOn(source, channel)) return null;
     if (source.origin === 'media') {
       const mediaId = playoutMediaIdOf(source.id);
       return mediaId === null ? null : { kind: 'media', mediaId };

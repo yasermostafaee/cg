@@ -10,7 +10,6 @@ import { sourceDisplayName } from '../../ui/operatorNaming.js';
 import { Tag } from '../../ui/Tag.js';
 import { useHoldsStationAdmin } from '../../hooks/useCanOperate.js';
 import { colors } from '../../theme.js';
-import { LiveInputCheckCard } from '../monitors/LiveInputCheckCard.js';
 import { useInputCheckSurface } from '../monitors/liveInputCheckContext.js';
 import { videoModeWords } from '../stationSetup/videoModeWords.js';
 import { InputThumbnail } from './InputThumbnail.js';
@@ -83,7 +82,7 @@ export function SourcesSection({
   channel: number;
 }): JSX.Element {
   useSyncExternalStore(subscribeSources, sourcesVersion);
-  const { surface, inputCheck } = useInputCheckSurface(channel);
+  const { inputCheck } = useInputCheckSurface(channel);
   const catalog = currentSourceCatalog();
   const inputs = playoutInputsForDisplay(catalog.sources);
   const sourcePresence = useSourcePresence(
@@ -162,7 +161,6 @@ export function SourcesSection({
         </div>
         <InputViewSwitch view={view} onChange={setView} />
       </div>
-      <LiveInputCheckCard surface={surface} />
       <section
         className={
           view === 'grid'
@@ -190,9 +188,9 @@ export function SourcesSection({
                 source={source}
                 channel={channel}
                 meterChannel={source.status === undefined ? channel : undefined}
-                onCheck={
+                inputCheck={
                   inputCheck !== undefined && canCheckLiveInput(source, inputCheck.channel)
-                    ? inputCheck.start
+                    ? inputCheck
                     : undefined
                 }
               />
@@ -202,10 +200,16 @@ export function SourcesSection({
               <div className="cg-setup-source-caption">
                 <div className="cg-resource__title">
                   {/* The Playout operators' NAME — data, isolated (golden rule 11). */}
-                  <bdi className="cg-resource__name" dir={directionOf(source.name)}>
+                  <bdi
+                    className="cg-resource__name"
+                    dir={directionOf(source.name)}
+                    title={sourceDisplayName(source.name, source.origin)}
+                  >
                     {sourceDisplayName(source.name, source.origin)}
                   </bdi>
                   <SourcePresenceBadges presence={sourcePresence} sourceId={source.id} />
+                </div>
+                <div className="cg-resource__detail">
                   <span
                     className="cg-resource__type"
                     data-source-kind={KIND_WORD[source.producer.kind]}
@@ -222,8 +226,6 @@ export function SourcesSection({
                       Unavailable
                     </Tag>
                   )}
-                </div>
-                <div className="cg-resource__detail">
                   <span style={styles.part}>
                     <span>Format</span>
                     <bdi className="cg-resource__value">{inputFormatLabel(source.format)}</bdi>

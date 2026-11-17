@@ -1,12 +1,19 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react';
 import { Volume2, VolumeX, X } from 'lucide-react';
-import { METER_FLOOR_DBFS, type LivePreviewStatus } from '@cg/shared-ipc';
+import type { LivePreviewStatus } from '@cg/shared-ipc';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
-import { meterClip, meterPercent, METER_SCALE_MARKS } from './meterScale.js';
 import { liveInputPictures } from './liveInputPicture.js';
-import { PVW_INPUT_SURFACE, useLiveInputCheck } from './liveInputCheckContext.js';
 import { PgmAudioPlayer, PGM_AUDIO_SAMPLE_RATE, type PcmOut } from './pgmAudioPlayer.js';
+import { InputAudioRails } from '../sources/InputAudioMeter.js';
+import './live-input-check-tile.css';
 
 const PICTURE_TIMEOUT_MS = 2_500;
 const CAPTIONS = {
@@ -20,29 +27,12 @@ const CAPTIONS = {
   forbidden: 'Access denied',
 } satisfies Record<LivePreviewStatus['state'], string>;
 
-export function LiveInputCheckCard({ surface }: { surface: string }): JSX.Element | null {
-  const control = useLiveInputCheck();
-  const check = control?.check;
-  if (control === null || check == null || check.surface !== surface) return null;
-  return (
-    <InputCard
-      key={check.view.previewId}
-      view={check.view}
-      inline={surface !== PVW_INPUT_SURFACE}
-      onClose={() => control.stop(surface, check.view.previewId)}
-      onStall={control.stall}
-    />
-  );
-}
-
-function InputCard({
+export function LiveInputCheckTile({
   view,
-  inline,
   onClose,
   onStall,
 }: {
   view: LivePreviewStatus;
-  inline: boolean;
   onClose: () => void;
   onStall: (previewId: string) => void;
 }): JSX.Element {
@@ -162,88 +152,78 @@ function InputCard({
 
   const audible = audio === 'connecting' || audio === 'playing';
   const state = view.state === 'ready' && !decoded ? 'connecting' : view.state;
+  const handleButtonKey = (event: KeyboardEvent<HTMLButtonElement>): void => {
+    if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
+  };
+  const message = [
+    CAPTIONS[state],
+    view.message,
+    audio === 'unavailable' ? 'Input sound unavailable' : undefined,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const levels = pictureLive ? (view.dbFs ?? []) : [];
   return (
-    <section
-      className={inline ? 'cg-input-check cg-input-check--inline' : 'cg-input-check'}
-      aria-label="PVW input check"
+    <span
+      className="cg-input-picture-meter"
+      role="region"
+      aria-label="Live input preview"
       data-input-check=""
     >
-      <header className="cg-input-check__head">
-        <span className="cg-input-check__name">
-          PVW INPUT · CH {channel} · <bdi dir="auto">{view.sourceName}</bdi>
-        </span>
-        <Button
-          variant="icon"
-          aria-label="Input preview sound"
-          aria-pressed={audible}
-          title={audible ? 'Mute input preview' : 'Listen to input preview'}
-          disabled={!pictureLive}
-          onClick={toggleSound}
-        >
-          <Icon icon={audible ? Volume2 : VolumeX} size={14} />
-        </Button>
-        <Button variant="icon" aria-label="Close input check" onClick={onClose}>
-          <Icon icon={X} size={14} />
-        </Button>
-      </header>
-      <div className="cg-input-check__body">
+      <span className="cg-input-thumbnail cg-input-check-tile" data-input-thumbnail="active">
         <canvas
           ref={canvas}
           hidden={!pictureLive}
-          className="cg-input-check__picture"
+          className="cg-input-check-tile__picture"
           role="img"
           aria-label={`Live input picture for ${view.sourceName}`}
           data-input-picture=""
         />
         {!pictureLive && (
-          <div className="cg-input-check__empty">
+          <span className="cg-input-check-tile__placeholder">
             {state === 'connecting' ? 'Waiting for picture' : 'No current picture'}
-          </div>
-        )}
-        <div
-          className="cg-vu"
-          role="img"
-          aria-label={`PVW INPUT level for ${view.sourceName}, dBFS`}
-          dir="ltr"
-          data-input-meter=""
-        >
-          <span className="cg-vu__unit" aria-hidden="true">
-            dBFS
           </span>
-          <div className="cg-vu__body">
-            <div className="cg-vu__bars" tabIndex={busCount > 16 ? 0 : undefined}>
-              {Array.from({ length: busCount }, (_, index) => (
-                <span key={index} className="cg-vu__bar" title={`Bus ${index + 1}`}>
-                  <span
-                    className="cg-vu__fill"
-                    style={{
-                      clipPath: meterClip(
-                        (pictureLive ? view.dbFs?.[index] : null) ?? METER_FLOOR_DBFS,
-                      ),
-                    }}
-                  />
-                </span>
-              ))}
-            </div>
-            <div className="cg-vu__scale" aria-hidden="true">
-              {METER_SCALE_MARKS.map((db) => (
-                <span
-                  key={db}
-                  className="cg-vu__mark"
-                  style={{ bottom: `${String(meterPercent(db))}%` }}
-                >
-                  {db === 0 ? '0' : `−${String(Math.abs(db))}`}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-      <span className="cg-input-check__state" role="status" data-input-check-state={state}>
-        {CAPTIONS[state]}
-        {view.message !== undefined ? ` · ${view.message}` : ''}
-        {audio === 'unavailable' ? ' · Input sound unavailable' : ''}
+        )}
+        <span className="cg-input-check-tile__top">
+          <span
+            className="cg-input-check-tile__status"
+            role="status"
+            data-input-check-state={state}
+            aria-label={message}
+            title={message}
+          >
+            {CAPTIONS[state]}
+          </span>
+          <span className="cg-input-check-tile__actions">
+            <Button
+              variant="icon"
+              aria-label="Input preview sound"
+              aria-pressed={audible}
+              title={audible ? 'Mute input preview' : 'Listen to input preview'}
+              disabled={!pictureLive}
+              onClick={toggleSound}
+              onKeyDown={handleButtonKey}
+            >
+              <Icon icon={audible ? Volume2 : VolumeX} size={14} />
+            </Button>
+            <Button
+              variant="icon"
+              aria-label="Close input check"
+              onClick={onClose}
+              onKeyDown={handleButtonKey}
+            >
+              <Icon icon={X} size={14} />
+            </Button>
+          </span>
+        </span>
       </span>
-    </section>
+      <InputAudioRails
+        name={view.sourceName}
+        count={busCount}
+        levels={levels}
+        state={levels.length > 0 ? 'measured' : 'unknown'}
+        preview
+      />
+    </span>
   );
 }

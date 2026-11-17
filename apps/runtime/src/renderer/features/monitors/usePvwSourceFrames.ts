@@ -108,7 +108,7 @@ class PreviewFeed {
     const frames = new Map([...this.#cache].map(([id, { frame }]) => [id, frame]));
     for (const [id, { frame }] of this.#snapshots) {
       const current = frames.get(id);
-      if (current?.signal !== 'absent' && current?.jpegBase64 === undefined) frames.set(id, frame);
+      if (current?.jpegBase64 === undefined) frames.set(id, frame);
     }
     this.#snapshot = {
       channel: this.#demand?.channel,
@@ -132,7 +132,9 @@ class PreviewFeed {
     let nextCheck = Infinity;
     for (const id of ids) {
       const primary = this.#cache.get(id);
-      if (primary?.frame.signal === 'absent') {
+      // The PVW decoder can lose its lease while a separate input snapshot still has signal.
+      // Media has no live-input snapshot to use after an explicit absence.
+      if (primary?.frame.signal === 'absent' && playoutMediaIdOf(id) !== null) {
         this.#snapshots.delete(id);
         continue;
       }

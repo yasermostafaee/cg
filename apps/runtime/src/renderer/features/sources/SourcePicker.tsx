@@ -44,6 +44,7 @@ import {
 import { SourceLabel, formatMediaDuration, labelledSource } from './SourceLabel.js';
 import { useSourcePresence } from '../../hooks/useSourcePresence.js';
 import { SourcePresenceBadges, sourcePresenceDescription } from './SourcePresenceBadges.js';
+import { useInputCheckSurface, type InputCheckSurface } from '../monitors/liveInputCheckContext.js';
 import { SourceMediaPreview } from './SourceMediaPreview.js';
 import {
   currentSourceCatalog,
@@ -61,9 +62,8 @@ import {
  * with the Playout's order preserved inside both groups) and its MEDIA library (thousands of items,
  * searched on the Playout's side). A native select over `catalog.sources` could show neither
  * honestly, so the three call sites — Template defaults, the Inspector's Plate inputs and the on-air
- * swap — share this one picker. Each keeps its own commit model (Save defaults · the draft with
- * Update/Discard · the swap committing on change): the picker only RETURNS A CHOICE, once, and
- * closes.
+ * swap — share this picker. An option click stages a selection in the modal. Select returns the
+ * choice to its host, where Save defaults, Update/Discard or the on-air swap has its normal scope.
  *
  * ── CLOSED ──────────────────────────────────────────────────────────────────────────────
  *
@@ -80,9 +80,8 @@ import {
  * the kind, never an address; one this product cannot play, or not on this row's channel (v1.3 rule
  * 1), is listed DISABLED with the reason in its `title`, not hidden, so nobody wonders where it went.
  * `Media n` searches the library: pages of 50, a virtualised list, the next page fetched near the end,
- * typing debounced 250 ms, earlier results kept under a thin line while the next ones load. Media
- * never appear under Inputs. Previewing a media row in the adjacent player leaves the assignment
- * intact until the operator chooses the row.
+ * typing debounced 250 ms, earlier results kept under a thin line while the next ones load. The
+ * previews and the draft live inside the modal so Cancel leaves the host's binding intact.
  */
 
 export interface SourceChoice {
@@ -169,7 +168,7 @@ export function ChoiceLabel({
 export interface SourcePickerProps {
   /** The bound catalogue id, or one of {@link choices}' values. */
   value: string;
-  /** Called ONCE per choice, with the chosen catalogue id or special value. */
+  /** Called only when Select confirms a changed catalogue id or special value. */
   onChange: (value: string) => void;
   /** The call site's own choices, shown above the tabs. */
   choices: readonly SourceChoice[];
@@ -177,7 +176,6 @@ export interface SourcePickerProps {
   channel?: number | undefined;
   /** Snapshot authority when the choices themselves do not have channel gating. */
   previewChannel?: number | undefined;
-  inputCheck?: { channel: number; start: (source: SourceDefinition) => void } | undefined;
   'aria-label': string;
   id?: string | undefined;
   /** Appended to the closed field (`is-dirty`, a struck value). */
@@ -210,7 +208,6 @@ export function SourcePicker({
   choices,
   channel,
   previewChannel,
-  inputCheck,
   'aria-label': ariaLabel,
   id,
   className,
@@ -222,26 +219,21 @@ export function SourcePicker({
   const base = useId();
   const panelId = `${base}-panel`;
   const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<string | null>(null);
 
   const choice = choices.find((c) => c.value === value);
   const known = labelledSource(value) !== null;
 
-  const close = useCallback(() => setOpen(false), []);
-  const pick = (next: string): void => {
+  const close = useCallback(() => {
+    setDraft(null);
     setOpen(false);
-    if (next !== value) onChange(next);
+  }, []);
+  const select = (): void => {
+    if (draft === null) return;
+    close();
+    if (draft !== value) onChange(draft);
   };
-  const check =
-    inputCheck === undefined
-      ? undefined
-      : {
-          channel: inputCheck.channel,
-          start: (source: SourceDefinition): void => {
-            close();
-            inputCheck.start(source);
-          },
-        };
-  const thumbnailChannel = previewChannel ?? inputCheck?.channel ?? channel;
+  const thumbnailChannel = previewChannel ?? channel;
   const showingChoice = choice !== undefined && (value === '' || !known);
   const selectedSource = showingChoice ? choice.names : value;
   const selectedPresence = useSourcePresence(
@@ -304,20 +296,24 @@ export function SourcePicker({
           layer="sub"
           onClose={close}
           footer={
-            <ModalAction actionRole="cancel" onClick={close}>
-              Cancel
-            </ModalAction>
+            <>
+              <ModalAction actionRole="cancel" onClick={close}>
+                Cancel
+              </ModalAction>
+              <ModalAction actionRole="primary" disabled={draft === null} onClick={select}>
+                Select
+              </ModalAction>
+            </>
           }
         >
           <PickerPanel
             base={base}
-            value={value}
+            value={draft ?? value}
             choices={choices}
             channel={channel}
             previewChannel={thumbnailChannel}
-            onPick={pick}
+            onPick={setDraft}
             initialTab={isMediaId(value) ? 'media' : 'inputs'}
-            inputCheck={check}
           />
         </Modal>
       )}
@@ -333,7 +329,6 @@ function PickerPanel({
   previewChannel,
   onPick,
   initialTab,
-  inputCheck,
 }: {
   base: string;
   value: string;
@@ -342,7 +337,6 @@ function PickerPanel({
   previewChannel: number | undefined;
   onPick: (value: string) => void;
   initialTab: Tab;
-  inputCheck: SourcePickerProps['inputCheck'];
 }): JSX.Element {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [inputView, setInputView] = useState<InputView>('grid');
@@ -355,6 +349,17 @@ function PickerPanel({
     previewChannel,
     choices.flatMap(({ names }) => (names ? [names] : [])),
   );
+  const { inputCheck } = useInputCheckSurface(previewChannel, tab === 'inputs');
+  const chooseInput = (value: string, sourceId = value): void => {
+    onPick(value);
+    const source = inputs.find(({ id }) => id === sourceId);
+    if (inputCheck === undefined) return;
+    if (source !== undefined && canCheckLiveInput(source, inputCheck.channel)) {
+      inputCheck.start(source);
+    } else {
+      inputCheck.stop();
+    }
+  };
   const tabs = [
     { id: 'inputs', label: `Inputs ${String(inputs.length)}` },
     {
@@ -372,9 +377,10 @@ function PickerPanel({
               key={c.value}
               variant="ghost"
               className="cg-picker-choice"
+              active={value === c.value}
               aria-pressed={value === c.value}
               data-picker-choice={c.value}
-              onClick={() => onPick(c.value)}
+              onClick={() => chooseInput(c.value, c.names ?? '')}
             >
               {value === c.value && <Icon icon={Check} size={13} />}
               <ChoiceLabel choice={c} meterChannel={previewChannel} presence={choicePresence} />
@@ -388,6 +394,7 @@ function PickerPanel({
         onSelect={(next) => {
           if (next === tab) return;
           tabChanged.current = true;
+          inputCheck?.stop();
           setTab(next === 'media' ? 'media' : 'inputs');
         }}
         ariaLabel="Source kind"
@@ -402,7 +409,7 @@ function PickerPanel({
             value={value}
             channel={channel}
             previewChannel={previewChannel}
-            onPick={onPick}
+            onPick={chooseInput}
             inputCheck={inputCheck}
             view={inputView}
             onViewChange={setInputView}
@@ -490,7 +497,9 @@ function useListKeys(
         if (fromField) return;
         move(nextPickable(rows, null, -1));
         return;
+      case ' ':
       case 'Enter':
+        if (e.key === ' ' && fromField) return;
         if (active !== null) {
           e.preventDefault();
           pickAt(active);
@@ -524,7 +533,7 @@ function InputsTab({
   channel: number | undefined;
   previewChannel: number | undefined;
   onPick: (value: string) => void;
-  inputCheck?: SourcePickerProps['inputCheck'];
+  inputCheck?: InputCheckSurface | undefined;
   view: InputView;
   onViewChange: (view: InputView) => void;
 }): JSX.Element {
@@ -577,7 +586,8 @@ function InputsTab({
           source={source}
           channel={previewChannel}
           meterChannel={offChannel ? undefined : previewChannel}
-          onCheck={checkable ? inputCheck?.start : undefined}
+          inputCheck={checkable ? inputCheck : undefined}
+          onCheck={checkable && !disabled ? () => onPick(source.id) : undefined}
         />
       ),
       content: (
@@ -637,7 +647,10 @@ function InputsTab({
           activeIndex={keys.active}
           onActiveChange={keys.setActive}
           onPick={pick}
-          onKeyDown={(e) => keys.onKeyDown(e)}
+          onKeyDown={(e) => {
+            if (e.target instanceof Element && e.target.closest('button') !== null) return;
+            keys.onKeyDown(e);
+          }}
           data={{ 'data-picker-list': '', 'data-modal-autofocus': '' }}
           withActions={inputCheck !== undefined}
           tiled={tiled}
@@ -859,8 +872,13 @@ function MediaTab({
     ...(isMediaId(value) ? [value] : []),
   ]);
 
-  const rows = useMemo<VirtualRow[]>(() => {
+  const { rows, mediaById } = useMemo(() => {
     const out: VirtualRow[] = [];
+    const mediaById = new Map<string, MediaChoice>();
+    const addMedia = (key: string, item: MediaChoice): void => {
+      mediaById.set(item.id, item);
+      out.push(mediaRow(key, item, value, loadThumbnail, preview, setPreview, presence));
+    };
     const inResults = new Map(media.items.map((item) => [item.id, item]));
     const shownIds = new Set([...inResults.keys(), ...recent.map((r) => r.id)]);
     // The current binding, pinned at the top when it is not otherwise in view.
@@ -869,68 +887,51 @@ function MediaTab({
       const entry = bound.find((s) => s.id === value);
       if (current !== null) {
         out.push({ kind: 'heading', key: 'Current', content: 'Current' });
-        out.push(
-          mediaRow(
-            `current:${value}`,
-            {
-              id: value,
-              name: current.name,
-              durationMs: current.durationMs,
-              folder: entry?.media?.folder,
-              width: entry?.media?.width,
-              height: entry?.media?.height,
-              unavailable: current.unavailable,
-            },
-            value,
-            loadThumbnail,
-            preview,
-            setPreview,
-            presence,
-          ),
-        );
+        addMedia(`current:${value}`, {
+          id: value,
+          name: current.name,
+          durationMs: current.durationMs,
+          folder: entry?.media?.folder,
+          width: entry?.media?.width,
+          height: entry?.media?.height,
+          unavailable: current.unavailable,
+        });
       }
     }
     if (recent.length > 0) {
       out.push({ kind: 'heading', key: 'Recent', content: 'Recent' });
       for (const r of recent) {
-        out.push(
-          mediaRow(
-            `recent:${r.id}`,
-            inResults.get(r.id) ?? {
-              id: r.id,
-              name: r.name,
-              durationMs: r.media?.durationMs,
-              folder: r.media?.folder,
-              width: r.media?.width,
-              height: r.media?.height,
-              unavailable: r.status === 'unavailable',
-            },
-            value,
-            loadThumbnail,
-            preview,
-            setPreview,
-            presence,
-          ),
+        addMedia(
+          `recent:${r.id}`,
+          inResults.get(r.id) ?? {
+            id: r.id,
+            name: r.name,
+            durationMs: r.media?.durationMs,
+            folder: r.media?.folder,
+            width: r.media?.width,
+            height: r.media?.height,
+            unavailable: r.status === 'unavailable',
+          },
         );
       }
       out.push({ kind: 'heading', key: 'All media', content: 'All media' });
     }
-    for (const item of media.items) {
-      out.push(
-        mediaRow(`all:${item.id}`, item, value, loadThumbnail, preview, setPreview, presence),
-      );
-    }
-    return out;
+    for (const item of media.items) addMedia(`all:${item.id}`, item);
+    return { rows: out, mediaById };
   }, [media.items, bound, recent, value, loadThumbnail, preview, presence]);
 
   const idOf = (index: number): string | null => {
     const key = rows[index]?.key;
     return key === undefined ? null : key.slice(key.indexOf(':') + 1);
   };
-  const keys = useListKeys(rows, list, (index) => {
+  const chooseMedia = (index: number): void => {
     const picked = idOf(index);
-    if (picked !== null) onPick(picked);
-  });
+    if (picked === null) return;
+    onPick(picked);
+    const item = mediaById.get(picked);
+    setPreview(item?.unavailable === true ? undefined : item);
+  };
+  const keys = useListKeys(rows, list, chooseMedia);
 
   const empty = !media.loading && media.failed === null && media.items.length === 0;
   return (
@@ -992,14 +993,11 @@ function MediaTab({
             height={LIST_HEIGHT}
             activeIndex={keys.active}
             onActiveChange={keys.setActive}
-            onPick={(index) => {
-              const picked = idOf(index);
-              if (picked !== null) onPick(picked);
-            }}
+            onPick={chooseMedia}
             onKeyDown={(e) => {
               if (e.target instanceof Element && e.target.closest('button') !== null) return;
               // Typing in the list goes to the search field.
-              if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+              if (e.key !== ' ' && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
                 search.current?.focus();
                 return;
               }

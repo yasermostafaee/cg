@@ -17,8 +17,6 @@ import {
   subscribeSources,
 } from '../sources/sourceStore.js';
 import { appliedPlateSources } from './livePlates.js';
-import { LiveInputCheckCard } from '../monitors/LiveInputCheckCard.js';
-import { useInputCheckSurface } from '../monitors/liveInputCheckContext.js';
 
 /**
  * 🔴 **`SOURCE-DEFAULTS-20` — THE TEMPLATE'S SOURCE DEFAULTS, BEHIND A LINK.**
@@ -75,7 +73,6 @@ export function TemplateDefaultsDialog({
   layout?: ControlLiveLayout | undefined;
 }): JSX.Element | null {
   useSyncExternalStore(subscribeSources, sourcesVersion);
-  const { surface, inputCheck } = useInputCheckSurface(channel, open, templateId);
   /*
     The edit is LOCAL to this dialog and committed by its own button — it does not ride the
     Inspector's draft store. That is deliberate and it is the whole point of the move: the
@@ -193,7 +190,6 @@ export function TemplateDefaultsDialog({
       }
     >
       <div data-defaults-body="">
-        <LiveInputCheckCard surface={surface} />
         {/*
           🔴 THE DRAWING'S SHAPE (gh3, owner 2026-09-14): an intro naming the template, one
           row per plate, and the timing line under them.
@@ -249,7 +245,6 @@ export function TemplateDefaultsDialog({
                           : { value: '', label: 'Use layout input', names: authored },
                       ]}
                       previewChannel={channel}
-                      inputCheck={inputCheck}
                     />
                     {/* `MEDIA-PLATES-01` §2 — a bound clip's Playback, the clip's own and station-wide. */}
                     <MediaPlaybackControl sourceId={picked || authored || ''} />

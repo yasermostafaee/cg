@@ -312,9 +312,9 @@ test('🔴 B-306 — plates are `Plate N`, sources the Playout’s names in thei
   const text = (await dialog.textContent()) ?? '';
   expect(text).not.toMatch(/\bl1\b|\bl2\b/);
   expect(text).not.toMatch(/this row only|permanent configuration/i);
-  // Each plate is `Plate N`, its id on the title.
+  // Each plate is named in operator terms, including on hover.
   const plate1 = dialog.locator('[data-swap-plate="l1"] label');
-  await expect(plate1).toHaveAttribute('title', 'l1');
+  await expect(plate1).not.toHaveAttribute('title', 'l1');
   await expect(plate1).toContainText('Plate 1');
   await expect(dialog.locator('[data-swap-plate="l2"] label')).toContainText('Plate 2');
   // The template assignment, by the Playout's name, right to left inside its English.
@@ -326,6 +326,10 @@ test('🔴 B-306 — plates are `Plate N`, sources the Playout’s names in thei
   const before = mock.receivedCommands().length;
   await dialog.locator('#swap-bed-59-l1').click();
   await page.locator('[data-picker-input]').filter({ hasText: 'CAM 2' }).first().click();
+  await page
+    .getByRole('dialog', { name: 'Choose a source' })
+    .getByRole('button', { name: 'Select', exact: true })
+    .click();
   await expect(dialog.locator('[data-swap-plate="l1"]')).toContainText('swapped for this row');
   // The field now names the new source in its own order.
   await readsRightToLeft(dialog.locator('#swap-bed-59-l1'), 'HD', 'CAM');
@@ -406,6 +410,10 @@ test('🔴 B-308 — a refused swap names the plate `Plate 1`, never its id; the
   const before = mock.receivedCommands().length;
   await dialog.locator('#swap-bed-59-l1').click();
   await page.locator('[data-picker-input]').filter({ hasText: 'CAM 2' }).first().click();
+  await page
+    .getByRole('dialog', { name: 'Choose a source' })
+    .getByRole('button', { name: 'Select', exact: true })
+    .click();
   const wire = (): string[] =>
     mock
       .receivedCommands()
@@ -441,6 +449,10 @@ test('R-119 selects Fade for a source change and dissolves inside the live frame
   const before = mock.receivedCommands().length;
   await dialog.getByRole('combobox', { name: 'Live source for Plate 1' }).click();
   await page.locator('[data-picker-input]').filter({ hasText: 'CAM 2' }).first().click();
+  await page
+    .getByRole('dialog', { name: 'Choose a source' })
+    .getByRole('button', { name: 'Select', exact: true })
+    .click();
   const wire = () =>
     mock
       .receivedCommands()
@@ -484,6 +496,10 @@ for (const fixture of [
     const before = mock.receivedCommands().length;
     await dialog.getByRole('combobox', { name: 'Live source for Plate 1' }).click();
     await page.locator('[data-picker-input]').filter({ hasText: 'CAM 2' }).first().click();
+    await page
+      .getByRole('dialog', { name: 'Choose a source' })
+      .getByRole('button', { name: 'Select', exact: true })
+      .click();
     await expect(dialog.locator('[data-swap-plate="l1"]')).toContainText('swapped for this row');
     const lines = mock
       .receivedCommands()
@@ -511,6 +527,10 @@ test('R-119 protects a cropped programme input from an unsupported slide directi
   const before = mock.receivedCommands().length;
   await dialog.getByRole('combobox', { name: 'Live source for Plate 1' }).click();
   await page.locator('[data-picker-input]').filter({ hasText: 'CAM 2' }).first().click();
+  await page
+    .getByRole('dialog', { name: 'Choose a source' })
+    .getByRole('button', { name: 'Select', exact: true })
+    .click();
   await expect(
     dialog.getByText('Choose another direction, Fade or Cut.', { exact: false }),
   ).toBeVisible();
@@ -538,6 +558,10 @@ test('R-119 applies a source Fade to the active output with mirror-sync enabled'
   const beforeReserve = reserve.receivedCommands().length;
   await dialog.getByRole('combobox', { name: 'Live source for Plate 1' }).click();
   await page.locator('[data-picker-input]').filter({ hasText: 'CAM 2' }).first().click();
+  await page
+    .getByRole('dialog', { name: 'Choose a source' })
+    .getByRole('button', { name: 'Select', exact: true })
+    .click();
   await expect(dialog.locator('[data-swap-plate="l1"]')).toContainText('swapped for this row');
 
   const active = mock

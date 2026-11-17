@@ -10,8 +10,6 @@ import { controlLiveLayoutFocusTarget, type StackItemState } from '@cg/shared-sc
 import { colors } from '../../theme.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
 import { ChoiceLabel, SourcePicker } from '../sources/SourcePicker.js';
-import { LiveInputCheckCard } from '../monitors/LiveInputCheckCard.js';
-import { useInputCheckSurface } from '../monitors/liveInputCheckContext.js';
 import { InputEffectControls } from '../inspector/InputEffectControls.js';
 import {
   currentSourceAssignments,
@@ -98,7 +96,6 @@ export function LiveSourceSwapDialog({
 }: LiveSourceSwapDialogProps): React.JSX.Element {
   const engineName = useEngineName();
   useSyncExternalStore(subscribeSources, sourcesVersion);
-  const { surface, inputCheck } = useInputCheckSurface(channel);
   const [refusal, setRefusal] = useState<string | null>(null);
   const plates = template.liveSources?.sources ?? [];
   const override = item.sourceOverride ?? {};
@@ -143,7 +140,6 @@ export function LiveSourceSwapDialog({
         </ModalAction>
       }
     >
-      <LiveInputCheckCard surface={surface} />
       <InputEffectControls itemId={item.itemId} layout={template.controlLiveLayout} />
       {plates.map((plate) => {
         const assigned = revertedSources.get(plate.sourceId) ?? null;
@@ -190,7 +186,7 @@ export function LiveSourceSwapDialog({
                 },
               ]}
               channel={item.slot?.channel}
-              inputCheck={inputCheck}
+              previewChannel={channel}
             />
           </div>
         );

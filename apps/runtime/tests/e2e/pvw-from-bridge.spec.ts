@@ -3257,6 +3257,10 @@ async function verifyInterruptedPresetEffects(
   const input = inspector.getByRole('combobox', { name: 'Input for Plate 1 in preset Solo' });
   await input.click();
   await page.locator('[data-picker-input="unavailable-preset-input"]').click();
+  await page
+    .getByRole('dialog', { name: 'Choose a source' })
+    .getByRole('button', { name: 'Select', exact: true })
+    .click();
   await cue('duo').click();
   await expect(preset('duo')).toBeVisible();
   await inspector.getByRole('button', { name: 'Apply staged edits to the on-air row' }).click();
@@ -3471,6 +3475,10 @@ async function verifyLocalPresetEffects(page: Page, row: Locator): Promise<void>
   await inspector.getByRole('combobox', { name: 'Input transition' }).selectOption('fade');
   await inspector.getByRole('combobox', { name: 'Input for Plate 1 in preset Solo' }).click();
   await page.locator('[data-picker-input="extra"]').click();
+  await page
+    .getByRole('dialog', { name: 'Choose a source' })
+    .getByRole('button', { name: 'Select', exact: true })
+    .click();
   await expect(picture('solo')).toHaveAttribute('data-source-id', 'extra');
   await expect(frame('solo').locator('[data-cg-pvw-source-dissolve]')).toHaveCount(1);
   await expect(frame('solo').locator('[data-cg-pvw-source-dissolve]')).toHaveCount(0);
@@ -3559,6 +3567,10 @@ async function verifyLocalInputSlides(
     });
     await input.click();
     await page.locator(`[data-picker-input="${sourceId}"]`).click();
+    await page
+      .getByRole('dialog', { name: 'Choose a source' })
+      .getByRole('button', { name: 'Select', exact: true })
+      .click();
     const viewport = plate.locator(`[data-cg-pvw-input-motion="${mode}"]`);
     await expect(viewport).toHaveAttribute('data-sampled-midpoint', 'true');
     await expect(viewport).toHaveCSS('overflow', 'hidden');

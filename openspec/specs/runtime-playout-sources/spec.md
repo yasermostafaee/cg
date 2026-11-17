@@ -419,3 +419,18 @@ the channels its `compatibleChannels` names, by the one predicate the picker and
   name, and binding it seats `route://1-7`
 - **AND WHEN** the row is `available: false` with `unlicensed` **THEN** it is disabled and its title says the
   Playout clears that channel
+
+### Requirement: The source picker SHALL confirm a staged choice inside the dialog
+
+Picking an input, media item, or default option SHALL mark that choice inside the dialog. Select SHALL
+commit the staged choice to the calling control. Closing the dialog without Select SHALL preserve the
+existing binding. Checking a live input SHALL render video and offer local audio in that input's tile.
+Audio SHALL start muted and SHALL stop when the check closes or another input is checked. In Station
+setup the same live check SHALL stay in the existing tile.
+
+#### Scenario: Audition an input and confirm it
+
+- **WHEN** the operator chooses a live input **THEN** the picker highlights it and the field keeps its prior value
+- **AND WHEN** the operator enables preview audio **THEN** it plays locally without changing programme audio
+- **AND WHEN** the operator presses Select **THEN** the picker closes, preview audio stops, and the field displays the chosen source
+- **AND WHEN** the operator closes another staged choice without Select **THEN** the confirmed binding is preserved

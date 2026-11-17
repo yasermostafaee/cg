@@ -221,6 +221,15 @@ it('shows the shared input snapshot and keeps the media poster while the PVW lea
     await advance(0);
     expect(shown?.get('studio')).toEqual(recovered);
     expect(shown?.get(media)).toEqual({ sourceId: media, signal: 'absent' });
+
+    const absent = { sourceId: 'studio', signal: 'absent' as const };
+    pvw.mockResolvedValue({ frames: [absent] });
+    thumbnails.mockResolvedValue({ frames: [sample('studio')] });
+    await advance(2_000);
+    expect(shown?.get('studio')).toEqual({ ...sample('studio'), snapshotOnly: true });
+    thumbnails.mockResolvedValue({ frames: [absent] });
+    await advance(2_000);
+    expect(shown?.get('studio')).toEqual(absent);
   } finally {
     stop();
     act(() => root.unmount());

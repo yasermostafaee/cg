@@ -206,10 +206,9 @@ async function b355Reply(page: Page, kind: 'update' | 'look'): Promise<Record<st
 /** The amber tag is part of this option's accessible name, so address the full rendered row. */
 async function chooseDownInput(page: Page, field: Locator): Promise<void> {
   await field.click();
-  await page
-    .getByRole('dialog', { name: 'Choose a source' })
-    .getByRole('option', { name: /^ورودی ۴/ })
-    .click();
+  const picker = page.getByRole('dialog', { name: 'Choose a source' });
+  await picker.getByRole('option', { name: /^ورودی ۴/ }).click();
+  await picker.getByRole('button', { name: 'Select', exact: true }).click();
 }
 
 const px = (s: string): number => Number.parseFloat(s);

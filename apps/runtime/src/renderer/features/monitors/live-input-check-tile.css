@@ -1,0 +1,55 @@
+.cg-input-thumbnail.cg-input-check-tile {
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+}
+
+.cg-input-check-tile__picture {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: contain;
+}
+
+.cg-input-check-tile__placeholder {
+  padding: var(--r-space-1);
+  white-space: normal;
+  text-align: center;
+}
+
+.cg-input-check-tile__top {
+  position: absolute;
+  inset: 0 0 auto;
+  display: flex;
+  align-items: start;
+  gap: var(--r-space-1);
+  padding: var(--r-space-1);
+  pointer-events: none;
+}
+
+.cg-input-check-tile__status {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  padding: 2px 4px;
+  border-radius: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: var(--r-monitor-bg);
+  color: var(--r-text);
+}
+
+.cg-input-check-tile__actions {
+  display: flex;
+  margin-inline-start: auto;
+  gap: var(--r-space-1);
+  pointer-events: auto;
+}
+
+.cg-input-check-tile__actions > .cg-btn {
+  min-inline-size: 1.65rem;
+  min-block-size: 1.65rem;
+  padding: 0;
+  background: var(--r-monitor-bg);
+  color: var(--r-text);
+}

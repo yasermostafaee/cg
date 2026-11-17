@@ -689,13 +689,14 @@ export class PlayoutSources {
     return this.#inputs.inputs.find((input) => input.id === inputId)?.playlistOf ?? null;
   }
 
-  /** Authorize a position using D11 items this station actually read, without binding the media. */
-  mediaPreviewId(sourceId: string, atMs: number): string | null {
+  /** Authorize a poster or position using a D11 item this station read, without binding it. */
+  mediaPreviewId(sourceId: string, atMs?: number): string | null {
     const id = playoutMediaIdOf(sourceId);
     if (id === null) return null;
     const bound = this.#media.get(id);
     if (bound?.unavailable === true) return null;
     const item = this.#recent.get(id) ?? bound;
+    if (atMs === undefined) return item?.type === 'video' || item?.type === 'still' ? id : null;
     return item?.type === 'video' && item.durationMs !== undefined && atMs < item.durationMs
       ? id
       : null;

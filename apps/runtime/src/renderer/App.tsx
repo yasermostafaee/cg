@@ -755,11 +755,7 @@ export function App(): JSX.Element {
     </ShellLayoutProvider>
   );
   return (
-    <LiveInputCheckProvider
-      channel={viewChannel}
-      pvwVisible={monitorsVisible && layout.focus !== 'pgm'}
-      locked={lockCovers}
-    >
+    <LiveInputCheckProvider channel={viewChannel} locked={lockCovers}>
       <EngineNameContext.Provider value={engineName}>{shell}</EngineNameContext.Provider>
     </LiveInputCheckProvider>
   );

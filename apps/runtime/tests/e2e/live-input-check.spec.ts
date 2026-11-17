@@ -15,6 +15,7 @@ import { expect, test } from './fixtures/runtime.js';
 const picture = '[data-input-picture]';
 const state = '[data-input-check-state]';
 const thumbnail = '[data-input-thumbnail]';
+const previewName = 'Live input preview';
 const PGM_PREFERENCE = 'cg.runtime.pgm-audio.v1';
 const templateId = 'tpl-live-input-check';
 const itemId = 'row-live-input-check';
@@ -157,17 +158,26 @@ test('C-023 · inspect input picture from source controls without changing a bin
     await studioTile.focus();
     await options.getByRole('button', { name: 'List view', exact: true }).hover();
     await expect(studioRow).toHaveCSS('background-color', activeBackground);
+    await options.getByRole('button', { name: 'Grid view', exact: true }).click();
+    const anotherInput = options.locator('[data-picker-input="in-li-newscam"]');
+    await anotherInput.hover();
+    const initialOutline = await studioRow.evaluate((row) => getComputedStyle(row).borderColor);
     await studioTile.click();
     await expect(field).toHaveAttribute('data-picker-value', '');
-    const card = defaults.getByRole('region', { name: 'PVW input check' });
-    await expect(card).toContainText('PVW INPUT · CH 1 · Studio 1');
+    await expect(studio1).toHaveAttribute('aria-selected', 'true');
+    await anotherInput.hover();
+    await expect(studioRow).not.toHaveCSS('border-color', initialOutline);
+    const card = studioRow.getByRole('region', { name: previewName });
+    await expect(options).toBeVisible();
+    await expect(options.getByRole('button', { name: 'Select', exact: true })).toBeEnabled();
+    await expect(defaults.locator('[data-input-check]')).toHaveCount(0);
     await expect(card.locator(state)).toHaveAttribute('data-input-check-state', 'ready');
     await expect(card.locator(picture)).toBeVisible();
     const pixels = await card.locator(picture).evaluate((canvas: HTMLCanvasElement) => {
       return canvas.getContext('2d')?.getImageData(0, 0, 1, 1).data[3];
     });
     expect(pixels).toBe(255);
-    const meterBars = card.locator('[data-input-meter] .cg-vu__fill');
+    const meterBars = card.locator('[data-input-meter] .cg-input-meter__level');
     await expect(meterBars).toHaveCount(4);
     await expect(meterBars.nth(3)).toHaveCSS('clip-path', 'inset(50% 0px 0px)');
     const meter = meterBars.first();
@@ -182,9 +192,7 @@ test('C-023 · inspect input picture from source controls without changing a bin
     await expect.poll(() => preview.audioOpens).toBe(1);
 
     preview.staleMeter = true;
-    await expect
-      .poll(() => meter.evaluate((bar) => (bar as HTMLElement).style.clipPath))
-      .toMatch(/^inset\(100(?:\.00)?% /);
+    await expect(meter).toHaveCSS('clip-path', 'inset(100% 0px 0px)');
     await expect(card.locator(picture)).toBeVisible();
     preview.stalledVideo = true;
     await expect(card.locator(state)).toHaveAttribute('data-input-check-state', 'stalled');
@@ -197,24 +205,28 @@ test('C-023 · inspect input picture from source controls without changing a bin
       '{"on":true}',
     );
     await card.getByRole('button', { name: 'Close input check' }).click();
-    await field.click();
-
     preview.staleMeter = false;
     preview.stalledVideo = false;
     expect(preview.starts).toHaveLength(1);
     await studio1.click();
+    await expect(studio1).toHaveAttribute('aria-selected', 'true');
+    await expect(field).toHaveAttribute('data-picker-value', '');
+    await expect(studioRow.locator(picture)).toBeVisible();
+    await options.getByRole('button', { name: 'Select', exact: true }).click();
     await expect(field).toHaveAttribute('data-picker-value', 'in-li-studio1');
     await expect(save).toBeEnabled();
     await field.click();
     const checkNews = await visibleCheckThumbnail(options, 'دوربین خبر');
-    expect(preview.starts).toHaveLength(1);
+    expect(preview.starts).toHaveLength(2);
     await checkNews.focus();
     await page.keyboard.press('Enter');
-    await expect(options).toHaveCount(0);
-    await expect(field).toBeFocused();
+    await expect(options).toBeVisible();
+    await expect(options.getByRole('button', { name: 'Select', exact: true })).toBeEnabled();
     await expect(defaults).toBeVisible();
-    const dialogCheck = defaults.getByRole('region', { name: 'PVW input check' });
-    await expect(dialogCheck).toContainText('دوربین خبر');
+    const dialogCheck = options.getByRole('region', { name: previewName });
+    await expect(
+      dialogCheck.getByRole('img', { name: 'Live input picture for دوربین خبر' }),
+    ).toBeVisible();
     await expect(dialogCheck.locator(state)).toHaveAttribute('data-input-check-state', 'ready');
     await expect(dialogCheck.getByRole('button', { name: 'Input preview sound' })).toHaveAttribute(
       'aria-pressed',
@@ -224,6 +236,9 @@ test('C-023 · inspect input picture from source controls without changing a bin
     await expect(save).toBeEnabled();
     await expect(pv.locator('[data-rehearsal-frame]')).toHaveCount(1);
     expect(bridge.runtime.sourceAssignments().assignments).toEqual([]);
+    await options.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(options).toHaveCount(0);
+    await expect.poll(() => preview.leases.size).toBe(0);
     await defaults.getByRole('button', { name: 'Cancel' }).click();
     await expect.poll(() => preview.leases.size).toBe(0);
 
@@ -232,12 +247,13 @@ test('C-023 · inspect input picture from source controls without changing a bin
     const previousLookValue = await lookField.getAttribute('data-picker-value');
     await lookField.click();
     const lookTile = await visibleCheckThumbnail(options, 'Studio 1');
-    expect(preview.starts).toHaveLength(2);
+    expect(preview.starts).toHaveLength(3);
     await lookTile.click();
-    const lookCheck = look.getByRole('region', { name: 'PVW input check' });
+    const lookCheck = options.getByRole('region', { name: previewName });
     await expect(lookCheck.locator(picture)).toBeVisible();
     await expect(lookField).toHaveAttribute('data-picker-value', previousLookValue ?? '');
-    await lookCheck.getByRole('button', { name: 'Close input check' }).click();
+    await options.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect.poll(() => preview.leases.size).toBe(0);
 
     const swap = page.getByRole('dialog', { name: 'Live source for this row' });
     const sourceAction = page
@@ -259,12 +275,11 @@ test('C-023 · inspect input picture from source controls without changing a bin
     const swapField = swap.getByRole('combobox', { name: 'Live source for Plate 1' });
     await swapField.click();
     const swapTile = await visibleCheckThumbnail(options, 'Studio 1');
-    expect(preview.starts).toHaveLength(3);
+    expect(preview.starts).toHaveLength(4);
     await swapTile.click();
-    await expect(
-      swap.getByRole('region', { name: 'PVW input check' }).locator(picture),
-    ).toBeVisible();
+    await expect(options.getByRole('region', { name: previewName }).locator(picture)).toBeVisible();
     await expect(swapField).toHaveAttribute('data-picker-value', '');
+    await options.getByRole('button', { name: 'Cancel', exact: true }).click();
     await swap.locator('[data-modal-role="cancel"]').click();
     await expect.poll(() => preview.leases.size).toBe(0);
 
@@ -279,25 +294,28 @@ test('C-023 · inspect input picture from source controls without changing a bin
     await expect(setup.locator(thumbnail)).toHaveCount(
       await setup.locator('[data-source-input]').count(),
     );
-    const setupMeter = setup
-      .locator('[data-source-input]', {
-        has: page.getByRole('button', { name: 'Check input · Studio 1', exact: true }),
-      })
-      .locator('[data-source-audio-meter]');
+    const setupHeights = await setup
+      .locator(thumbnail)
+      .evaluateAll((tiles) => tiles.map((tile) => tile.getBoundingClientRect().height));
+    expect(setupHeights.length).toBeGreaterThan(1);
+    expect(Math.max(...setupHeights) - Math.min(...setupHeights)).toBeLessThan(1);
+    const setupRow = setup.locator('[data-source-input]', { hasText: 'Studio 1' });
+    const setupMeter = setupRow.locator('[data-source-audio-meter]');
     await expect(setupMeter).toHaveAccessibleName('Studio 1 · Audio level unavailable');
-    expect(preview.starts).toHaveLength(4);
+    expect(preview.starts).toHaveLength(5);
     await setupTile.click();
     await expect(
-      setup.getByRole('region', { name: 'PVW input check' }).locator(picture),
+      setupRow.getByRole('region', { name: previewName }).locator(picture),
     ).toBeVisible();
     await setupMeter.scrollIntoViewIfNeeded();
     await expect(setupMeter).toBeInViewport();
     await expect(setupMeter).toHaveAccessibleName('Studio 1 · Audio peak -18 dBFS');
-    expect(preview.starts).toHaveLength(5);
+    expect(preview.starts).toHaveLength(6);
     await page.keyboard.press('Escape');
     await expect(setup).toBeHidden();
     await expect.poll(() => preview.leases.size).toBe(0);
     expect(preview.starts.map(({ body }) => body)).toMatchObject([
+      { inputId: 'li-studio1' },
       { inputId: 'li-studio1' },
       { inputId: 'li-newscam' },
       { inputId: 'li-studio1' },

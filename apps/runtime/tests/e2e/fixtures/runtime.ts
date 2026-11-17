@@ -2098,7 +2098,7 @@ const exactly = (text: string): RegExp =>
  * An input and a call-site choice are named EXACTLY; a media row's accessible name also carries its
  * folder and facts, so it is matched on its name element. `search` types into the Media search first
  * (a library longer than a page does not show every item at once). Waits for the dialog to close,
- * which is what a pick does.
+ * after confirming with Select.
  */
 export async function chooseSource(page: Page, field: Locator, pick: SourcePick): Promise<void> {
   const panel = page.getByRole('dialog', { name: 'Choose a source' });
@@ -2118,6 +2118,7 @@ export async function chooseSource(page: Page, field: Locator, pick: SourcePick)
         await panel.getByRole('tab', { name: /^Inputs/ }).click({ timeout: 2_000 });
         await panel
           .getByRole('option', { name: pick.input, exact: true })
+          .or(panel.getByRole('gridcell', { name: pick.input, exact: true }))
           .click({ timeout: 2_000 });
       } else {
         await panel.getByRole('tab', { name: /^Media/ }).click({ timeout: 2_000 });
@@ -2130,6 +2131,7 @@ export async function chooseSource(page: Page, field: Locator, pick: SourcePick)
           .first()
           .click({ timeout: 2_000 });
       }
+      await panel.getByRole('button', { name: 'Select', exact: true }).click({ timeout: 2_000 });
       await expect(panel).toHaveCount(0);
       await expect(field).toContainText(expected);
       return;

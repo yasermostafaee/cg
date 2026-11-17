@@ -7,8 +7,6 @@ import { Button } from '../../ui/Button.js';
 import { DraftChip } from '../../ui/DraftChip.js';
 import { labelledSource, SourceLabel } from '../sources/SourceLabel.js';
 import { SourcePicker } from '../sources/SourcePicker.js';
-import { LiveInputCheckCard } from '../monitors/LiveInputCheckCard.js';
-import { useInputCheckSurface } from '../monitors/liveInputCheckContext.js';
 import { MediaPlaybackControl, MediaTransport } from '../sources/MediaPlayback.js';
 import { useMediaState } from '../../hooks/useMediaState.js';
 import { sourcesVersion, subscribeSources } from '../sources/sourceStore.js';
@@ -297,7 +295,6 @@ export function LooksBindingsSection({
     layout === undefined ? undefined : controlLiveLayoutFocusTarget(layout, editingLook?.id);
   const inputLook =
     focus === undefined ? editingLook : looks.find(({ id }) => id === focus.presetId);
-  const { surface, inputCheck } = useInputCheckSurface(channel, looks.length > 0);
   // A template with no LOOKS gets no section — its plates have one answer, and the flat list
   // above already is it. An empty heading is a question the operator did not ask.
   if (carrier === undefined || inputLook === undefined) return null;
@@ -412,7 +409,6 @@ export function LooksBindingsSection({
           channel={channel}
         />
       </div>
-      <LiveInputCheckCard surface={surface} />
       <InputEffectControls key={item.itemId} itemId={item.itemId} layout={layout} />
       {/*
         🔴 **§3d — "above" USED TO POINT AT THE LIVE PLATES SECTION, WHICH IS NOW GONE HERE.**
@@ -575,7 +571,7 @@ export function LooksBindingsSection({
                       */
                       choices={[{ value: '', label: 'Default', names: templateDefault }]}
                       channel={item.slot?.channel}
-                      inputCheck={inputCheck}
+                      previewChannel={channel}
                     />
                     <MediaPlaybackControl sourceId={value !== '' ? value : templateDefault} />
                   </span>

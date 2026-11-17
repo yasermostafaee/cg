@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+  type Ref,
+} from 'react';
 import { isPlaylistOutput, type SourceAudioReading, type SourceDefinition } from '@cg/shared-ipc';
 import { meterPercent } from '../monitors/meterScale.js';
 import { subscribeInputAudio } from './inputAudioDemand.js';
@@ -96,6 +103,39 @@ export function InputAudioMeter({
   const count = current?.count ?? stereoLabels.length;
   const state = reading?.state ?? 'unknown';
   const levels = reading?.state === 'measured' ? reading.dbFs : [];
+  return (
+    <InputAudioRails
+      elementRef={ref}
+      name={name}
+      state={state}
+      levels={levels}
+      count={count}
+      edge={edge}
+      style={style}
+    />
+  );
+}
+
+/** Vertical rails shared between a passive thumbnail and its active preview. */
+export function InputAudioRails({
+  elementRef,
+  name,
+  state,
+  levels,
+  count,
+  edge = false,
+  preview = false,
+  style,
+}: {
+  elementRef?: Ref<HTMLSpanElement>;
+  name: string;
+  state: SourceAudioReading['state'] | 'unknown';
+  levels: readonly number[];
+  count: number;
+  edge?: boolean;
+  preview?: boolean;
+  style?: CSSProperties | undefined;
+}): JSX.Element {
   const peak = levels.length === 0 ? null : Math.max(...levels);
   const label =
     state === 'no-audio'
@@ -107,8 +147,9 @@ export function InputAudioMeter({
           : `Audio peak ${peak.toFixed(0)} dBFS`;
   return (
     <span
-      ref={ref}
+      ref={elementRef}
       className="cg-input-meter"
+      data-input-meter={preview ? '' : undefined}
       data-source-audio-meter={state}
       data-input-meter-orientation="vertical"
       data-input-meter-edge={edge ? '' : undefined}

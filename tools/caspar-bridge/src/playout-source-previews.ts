@@ -190,31 +190,28 @@ const frame = z
   });
 const observation = sessionIdentity.extend({ observedAt: dateTime, frame });
 const errorCode = z.string().regex(/^[A-Za-z][\w.-]{0,79}$/);
+const snapshotSource = z.object({ source: canonicalSource });
+const snapshotItem = snapshotSource
+  .extend({
+    sourceRevision: shortText.nullish(),
+    status: z.number().int().min(200).max(599),
+    error: errorCode.nullish(),
+    frame: frame.nullish(),
+  })
+  .refine((item) => (item.status === 200 ? !!(item.frame && item.sourceRevision) : !item.frame));
 const batch = z.object({
   observedAt: dateTime,
-  items: z
-    .array(
-      z
-        .object({
-          source: canonicalSource,
-          sourceRevision: shortText.nullish(),
-          status: z.number().int().min(200).max(599),
-          error: errorCode.nullish(),
-          frame: frame.nullish(),
-        })
-        .refine((item) =>
-          item.status === 200 ? !!(item.frame && item.sourceRevision) : !item.frame,
-        ),
-    )
-    .min(1)
-    .max(MAX_BATCH),
+  items: z.array(z.unknown()).max(MAX_BATCH),
 });
 
 export type SourcePreviewSelector = z.infer<typeof selector>;
 export type SourcePreviewCapability = z.infer<typeof capability>;
 export type SourcePreviewFrame = z.infer<typeof frame>;
 export type SourcePreviewObservation = z.infer<typeof observation>;
-export type SourcePreviewBatch = z.infer<typeof batch>;
+export interface SourcePreviewBatch {
+  readonly observedAt: string;
+  readonly items: z.infer<typeof snapshotItem>[];
+}
 type SessionWire = z.infer<typeof sessionShape>;
 export type SourcePreviewSession = Readonly<Omit<SessionWire, 'frameUrl'>>;
 interface OwnedSession {
@@ -368,14 +365,31 @@ export class PlayoutSourcePreviews {
       { sources: checked.data },
     );
     if (!reply.ok) return reply;
-    const remaining = [...reply.value.items];
-    if (remaining.length !== checked.data.length) return invalidResponse();
-    const items: SourcePreviewBatch['items'] = [];
-    for (const source of checked.data) {
-      const index = remaining.findIndex((item) => matchesSource(item.source, source));
-      if (index === -1) return invalidResponse();
-      items.push(...remaining.splice(index, 1));
-    }
+    // Verify and pair each item independently so one malformed frame cannot blank the others.
+    // A repeated identity is ambiguous when the request asked for only one copy.
+    const identified = reply.value.items.flatMap((raw) => {
+      const parsed = snapshotSource.safeParse(raw);
+      return parsed.success ? [{ raw, source: parsed.data.source }] : [];
+    });
+    const items = checked.data.map((source, index) => {
+      const expectedCount = checked.data
+        .slice(index)
+        .filter((candidate) => matchesSource(candidate, source)).length;
+      const matches = identified.filter((candidate) => matchesSource(candidate.source, source));
+      if (matches.length === expectedCount) {
+        const match = matches[0];
+        if (match !== undefined) {
+          identified.splice(identified.indexOf(match), 1);
+          const item = snapshotItem.safeParse(match.raw);
+          if (item.success) return item.data;
+        }
+      }
+      return {
+        source: canonicalSource.parse(source),
+        status: 502,
+        error: 'sourcePreview.invalidResponse',
+      };
+    });
     return { ok: true, value: { observedAt: reply.value.observedAt, items } };
   }
 

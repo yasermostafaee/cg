@@ -64,8 +64,6 @@ import { RehearsalStage, type RehearsalTransport } from './RehearsalStage.js';
 import { sourceDisplayName, templateName } from '../../ui/operatorNaming.js';
 import type { PvwPage } from '../../../shared/pvwPage.js';
 import { rowNameFor, subjectsFor, type RehearsalSubject } from './rehearsalFrames.js';
-import { LiveInputCheckCard } from './LiveInputCheckCard.js';
-import { PVW_INPUT_SURFACE } from './liveInputCheckContext.js';
 import { usePreserveFrameAspect } from './previewResizePreferences.js';
 import { useFrameTransitionPreference } from '../inspector/frameTransitionPreference.js';
 import { ControlLayoutFocus } from '../liveLayouts/ControlLayoutFocus.js';
@@ -782,7 +780,6 @@ export function PreviewPanel({
             panSourceAspects={panSourceAspects}
           />
         )}
-        <LiveInputCheckCard surface={PVW_INPUT_SURFACE} />
       </div>
     </Panel>
   );

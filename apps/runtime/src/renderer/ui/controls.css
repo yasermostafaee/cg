@@ -9710,7 +9710,6 @@ input[type='checkbox']:disabled:checked {
   }
 }
 
-/* C-023 · the input check sits beside the PVW composition, or in its open source dialog. */
 .cg-pvw-stage {
   display: flex;
   flex: 1;
@@ -9718,71 +9717,6 @@ input[type='checkbox']:disabled:checked {
 }
 .cg-pvw-stage > :first-child {
   min-width: 0;
-}
-.cg-input-check {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  border: 1px solid var(--r-meter-frame);
-  background: var(--r-monitor-bg);
-  color: var(--r-text);
-}
-.cg-pvw-stage > .cg-input-check {
-  flex: 0 0 46%;
-}
-.cg-input-check--inline {
-  height: clamp(9rem, 32vh, 18rem);
-  margin-bottom: var(--r-space-3);
-}
-.cg-input-check__head {
-  display: flex;
-  align-items: center;
-  gap: var(--r-space-1);
-  padding-inline: var(--r-space-2);
-}
-.cg-input-check__name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  font-size: var(--r-text-xs);
-  font-weight: var(--r-weight-semibold);
-}
-.cg-input-check__body {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  justify-content: end;
-  background: var(--r-video-ground);
-}
-.cg-input-check__empty {
-  display: grid;
-  flex: 1;
-  min-width: 0;
-  place-items: center;
-  color: var(--r-text-muted);
-  font-size: var(--r-text-xs);
-  text-align: center;
-}
-.cg-input-check__picture {
-  flex: 1;
-  width: 0;
-  min-width: 0;
-  object-fit: contain;
-}
-.cg-input-check__state {
-  padding: var(--r-space-1) var(--r-space-2);
-  color: var(--r-text-muted);
-  font-size: var(--r-text-xs);
-}
-.cg-input-check [data-input-meter] {
-  padding-inline-start: 0;
-  border-inline-start: 0;
-}
-.cg-input-check [data-input-meter] .cg-vu__fill {
-  transition: none;
 }
 
 /* ── `B-301` — the rows in error, listed from the Layers badge ──────────────────────────────── */

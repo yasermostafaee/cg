@@ -111,6 +111,10 @@ it('reads only visible media posters, reuses reads, and keeps poster clicks as s
     await act(async () => {
       result?.querySelector('img')?.click();
     });
+    expect(onChange).not.toHaveBeenCalled();
+    const select = panel.querySelector<HTMLButtonElement>('[data-modal-role="primary"]');
+    expect(select?.disabled).toBe(false);
+    await act(async () => select?.click());
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange).toHaveBeenCalledWith('md-clip-a');
   } finally {

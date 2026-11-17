@@ -48,6 +48,16 @@ export async function pickerTab(panel: HTMLElement, tab: 'Inputs' | 'Media'): Pr
   await settle();
 }
 
+export async function confirmPicker(panel: HTMLElement): Promise<void> {
+  const select = panel.querySelector<HTMLButtonElement>('[data-modal-role="primary"]');
+  if (select === null || select.disabled) throw new Error('No staged source selection');
+  await act(async () => {
+    select.click();
+    await Promise.resolve();
+  });
+  await settle();
+}
+
 /**
  * Choose `value` through the field: one of the call site's own choices (`None`, a default — its
  * value, often `''`), an input (its catalogue id), or a media item already listed.
@@ -69,7 +79,7 @@ export async function choosePickerOption(field: HTMLElement, value: string): Pro
     chosen.click();
     await Promise.resolve();
   });
-  await settle();
+  await confirmPicker(panel);
 }
 
 /** The value a picker field holds, as its finder attribute states it. */

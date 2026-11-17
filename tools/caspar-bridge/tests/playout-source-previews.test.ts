@@ -305,6 +305,30 @@ describe('C-023 Playout 2.18.17 source-preview HTTP contract', () => {
     ]);
   });
 
+  it('preserves the Playlist picture when an unrelated source returns malformed or ambiguous data', async () => {
+    const entry = (source: SourcePreviewSelector, picture: object) => ({
+      source: canonicalSource(source),
+      status: 200,
+      sourceRevision: 'catalogue-revision',
+      frame: picture,
+    });
+    const fixture = await engine((_request, response) => {
+      send(response, {
+        observedAt: OBSERVED_AT,
+        items: [
+          entry(INPUT_A, { ...frame(FRAME_A), geometry: { ...geometry, deliveredWidth: 65 } }),
+          entry(INPUT_B, frame(FRAME_A)),
+          entry(PLAYLIST, frame(FRAME_B)),
+          entry(INPUT_B, frame(FRAME_B)),
+        ],
+      });
+    });
+    const reply = value(await fixture.client.snapshots([INPUT_A, INPUT_B, PLAYLIST, MEDIA]));
+    expect(reply.items.map((item) => item.status)).toEqual([502, 502, 200, 502]);
+    expect(reply.items[2]?.frame?.jpegBase64).toBe(FRAME_B.toString('base64'));
+    expect(reply.items.filter((item) => item.frame != null)).toHaveLength(1);
+  });
+
   it('rejects replies with a different generation, source, revision or frame geometry', async () => {
     const held = session(INPUT_A, 'input-lease', 'first-input-request-1');
     const valid = observation(held, frame(FRAME_A));

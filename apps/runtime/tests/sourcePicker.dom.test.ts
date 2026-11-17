@@ -18,7 +18,13 @@ import {
 import { authStub } from './support/authStub.js';
 import { clearPortals } from './support/dialog.js';
 import { installMemoryStorage } from './support/localStorage.js';
-import { choosePickerOption, closePicker, openPicker, pickerTab } from './support/sourcePicker.js';
+import {
+  choosePickerOption,
+  closePicker,
+  confirmPicker,
+  openPicker,
+  pickerTab,
+} from './support/sourcePicker.js';
 
 /**
  * 🔴 `PLAYOUT-SOURCES-01` §2.A — **THE ONE SOURCE PICKER, driven as an operator drives it.**
@@ -489,6 +495,7 @@ describe('what cannot be chosen is SHOWN, disabled, with the reason — never hi
       up?.click();
       await Promise.resolve();
     });
+    await confirmPicker(panel);
     expect(onChange).toHaveBeenCalledWith('in-pl-apasai');
   });
 
@@ -539,6 +546,7 @@ describe('what cannot be chosen is SHOWN, disabled, with the reason — never hi
       route?.click();
       await Promise.resolve();
     });
+    await confirmPicker(panel);
     expect(onChange).toHaveBeenCalledWith('in-input3');
   });
 
@@ -665,6 +673,9 @@ describe('Media — searched on the Playout’s side, a page at a time', () => {
     expect(panel.querySelector('[data-picker-preview-empty]')).toBeNull();
     expect(onChange).not.toHaveBeenCalled();
     await act(async () => panel.querySelector<HTMLElement>(`[data-picker-media="${id}"]`)?.click());
+    expect(onChange).not.toHaveBeenCalled();
+    expect(panel.isConnected).toBe(true);
+    await confirmPicker(panel);
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange).toHaveBeenCalledWith(id);
     expect(panel.isConnected).toBe(false);
@@ -759,7 +770,7 @@ describe('Media — searched on the Playout’s side, a page at a time', () => {
 });
 
 describe('the keyboard, and a choice returned ONCE', () => {
-  it('↓ moves the active option (aria-activedescendant), Enter picks it, and the panel closes', async () => {
+  it('↓ moves the active option, Enter stages it, and Select confirms it', async () => {
     const onChange = vi.fn();
     const field = await render({ onChange });
     const panel = await openPicker(field);
@@ -777,10 +788,37 @@ describe('the keyboard, and a choice returned ONCE', () => {
       list?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
       await Promise.resolve();
     });
-    await settle();
+    expect(document.getElementById(active ?? '')?.getAttribute('aria-selected')).toBe('true');
+    expect(onChange).not.toHaveBeenCalled();
+    await confirmPicker(panel);
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange).toHaveBeenCalledWith('in-pl-apasai');
     expect(panel.isConnected).toBe(false);
+  });
+
+  it('Cancel and Escape discard staged choices and reopen with the original binding', async () => {
+    const onChange = vi.fn();
+    const field = await render({ onChange, value: 'in-studio1' });
+    const panel = await openPicker(field);
+    const select = panel.querySelector<HTMLButtonElement>('[data-modal-role="primary"]');
+    const alternate = panel.querySelector<HTMLElement>('[data-picker-input="in-newscam"]');
+    expect(select?.disabled).toBe(true);
+    await act(async () => alternate?.click());
+    expect(select?.disabled).toBe(false);
+    expect(alternate?.getAttribute('aria-selected')).toBe('true');
+    await act(async () => panel.querySelector<HTMLElement>('[data-modal-role="cancel"]')?.click());
+    expect(onChange).not.toHaveBeenCalled();
+    expect(field.getAttribute('data-picker-value')).toBe('in-studio1');
+    const reopened = await openPicker(field);
+    expect(
+      reopened.querySelector('[data-picker-input="in-studio1"]')?.getAttribute('aria-selected'),
+    ).toBe('true');
+    await act(async () =>
+      reopened.querySelector<HTMLElement>('[data-picker-input="in-newscam"]')?.click(),
+    );
+    await closePicker();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(field);
   });
 
   it('Escape closes the panel and returns focus to the field', async () => {

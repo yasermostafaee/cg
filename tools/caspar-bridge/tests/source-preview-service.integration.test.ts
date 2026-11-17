@@ -7,10 +7,12 @@ import {
   inputSourceId,
   mediaSourceId,
   type ChannelResponse,
+  type LivePreviewStatus,
 } from '@cg/shared-ipc';
 import { describe, expect, it } from 'vitest';
 import type { SourcePreviewSelector } from '../src/playout-source-previews.js';
 import { openClient, type Client } from './support/auth-harness.js';
+import { FakeLivePreview } from './support/fake-live-preview.js';
 import { FAKE_MEDIA_IDS, startFakePlayout } from './support/fake-playout.js';
 import { FRAME_A, FRAME_B } from './support/fake-pgm-feed.js';
 import { track } from './support/harness.js';
@@ -47,6 +49,7 @@ class FakeSourcePreviews {
   readonly snapshots: SourcePreviewSelector[][] = [];
   readonly leases = new Map<string, Lease>();
   liveAbsent = false;
+  liveMalformed = false;
   liveGeometry: 'unmeasured' | 'measured' | 'inconsistent' = 'unmeasured';
   liveProducerGeneration = 'live-native-generation';
   liveSample = 0;
@@ -170,7 +173,7 @@ class FakeSourcePreviews {
         sourceSar: measured ? { numerator: 4, denominator: 3 } : { numerator: 1, denominator: 1 },
         ...(measured && { sourceRotationDegrees: 0, appliedRotationDegrees: 0 }),
         visibleSourceRect: measured ? { x: 12, y: 4, width: 72, height: 54 } : raster,
-        deliveredWidth: 64,
+        deliveredWidth: isLive && this.liveMalformed ? 65 : 64,
         deliveredHeight: 36,
         activeRect: measured ? { x: 8, y: 4, width: 48, height: 27 } : raster,
         coversFullVisibleSource: true,
@@ -209,6 +212,57 @@ const thumbnails = (client: Client, sourceIds: string[]) =>
   );
 
 describe('C-023 independent source previews through authenticated Bridge WebSocket', () => {
+  it('keeps a clean Playlist thumbnail while an independent NDI check owns its preview', async () => {
+    const passive = new FakeSourcePreviews();
+    const active = new FakeLivePreview();
+    const playout = track(
+      await startFakePlayout({ sourcePreviews: passive.handle, livePreview: active.handle }),
+      (p) => p.stop(),
+    );
+    const rig = await twoChannelRig({
+      bridge: { playout: { auth: 'playout', address: playout.baseUrl, issuer: playout.issuer } },
+    });
+    const console = await openClient(rig.handle);
+    const token = (await playout.issueToken({ user: 'operator' })).token;
+    expect((await console.authenticate(randomUUID(), token)).error).toBeUndefined();
+    await waitUntil(
+      () =>
+        rig.handle.runtime.sourceCatalog().sources.some((entry) => entry.id === PLAYLIST) &&
+        playout.channelsBearers.length > 0,
+      'D4 channel and D10 Playlist identities',
+    );
+    const sourceId = inputSourceId('li-studio1');
+    const check = { channel: 1, previewId: randomUUID() };
+    const before = (await rig.lines()).length;
+    await ask<LivePreviewStatus>(console, 'livePreview.start', { ...check, sourceId });
+    await waitUntil(
+      async () =>
+        (await ask<LivePreviewStatus>(console, 'livePreview.status', check)).state === 'ready',
+      'the independent NDI check',
+    );
+    passive.liveMalformed = true;
+    expect(await thumbnails(console, [sourceId, PLAYLIST])).toEqual({
+      frames: [
+        {
+          sourceId: PLAYLIST,
+          signal: 'unknown',
+          jpegBase64: FRAME_B.toString('base64'),
+          width: 64,
+          height: 36,
+        },
+      ],
+    });
+    expect(active.starts).toHaveLength(1);
+    expect(active.leases.size).toBe(1);
+    expect(passive.starts).toEqual([]);
+    await ask(console, 'livePreview.stop', check);
+    expect(
+      (await rig.lines())
+        .slice(before)
+        .filter((line) => /^(?:CG|PLAY|STOP|CLEAR|MIXER|LOAD|LOADBG)\b/i.test(line)),
+    ).toEqual([]);
+  });
+
   it('seeks an authorized D11 search result without a lease, media binding or AMCP write', async () => {
     const preview = new FakeSourcePreviews();
     const playout = track(await startFakePlayout({ sourcePreviews: preview.handle }), (p) =>
@@ -253,8 +307,22 @@ describe('C-023 independent source previews through authenticated Bridge WebSock
     expect(await askFrame(LIVE, 3_250)).toEqual({ frames: [] });
     expect(await askFrame(id, 30_000)).toEqual({ frames: [] });
     expect(preview.snapshots).toEqual([]);
-    expect(await askFrame(id, 3_250)).toEqual({
-      frames: [],
+    expect(
+      await ask<ChannelResponse<typeof SourcePreviewThumbnailsChannel>>(
+        client,
+        SourcePreviewThumbnailsChannel.name,
+        { ...target, sourceIds: [id] },
+      ),
+    ).toEqual({
+      frames: [
+        {
+          sourceId: id,
+          signal: 'unknown',
+          jpegBase64: FRAME_B.toString('base64'),
+          width: 64,
+          height: 36,
+        },
+      ],
       mediaFrame: {
         sourceId: id,
         previewPositionMs: 3_250,
@@ -265,7 +333,10 @@ describe('C-023 independent source previews through authenticated Bridge WebSock
       },
     });
     expect(preview.snapshots).toEqual([
-      [{ kind: 'media', mediaId: FAKE_MEDIA_IDS.studio1, atMs: 3_250 }],
+      [
+        { kind: 'media', mediaId: FAKE_MEDIA_IDS.studio1 },
+        { kind: 'media', mediaId: FAKE_MEDIA_IDS.studio1, atMs: 3_250 },
+      ],
     ]);
     expect(preview.starts).toEqual([]);
     expect(rig.handle.runtime.sourceCatalog().sources.some((entry) => entry.id === id)).toBe(false);
